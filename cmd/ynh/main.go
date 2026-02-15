@@ -160,13 +160,10 @@ func cmdInstall(args []string) error {
 		return err
 	}
 
-	// Reject reserved names that would conflict with the ynh binary.
-	if p.Name == "ynh" {
-		if cloneTmpDir != "" {
-			_ = os.RemoveAll(cloneTmpDir)
-		}
-		return fmt.Errorf("persona name %q is reserved (conflicts with the ynh binary)", p.Name)
-	}
+	// Reserved name: "ynh" can be installed but gets no launcher script
+	// (it would overwrite the ynh binary in ~/.ynh/bin/).
+	// Users invoke it with: ynh run ynh
+	reservedName := p.Name == "ynh"
 
 	// Copy persona to installed directory (clean first to remove stale artifacts)
 	installDir := persona.InstalledDir(p.Name)
@@ -186,14 +183,20 @@ func cmdInstall(args []string) error {
 		_ = os.RemoveAll(cloneTmpDir)
 	}
 
-	// Generate launcher script
-	if err := generateLauncher(p.Name); err != nil {
-		return err
+	// Generate launcher script (skip for reserved names that conflict with the binary)
+	if !reservedName {
+		if err := generateLauncher(p.Name); err != nil {
+			return err
+		}
 	}
 
 	fmt.Printf("Installed persona %q\n", p.Name)
 	fmt.Printf("  Location: %s\n", installDir)
-	fmt.Printf("  Launcher: %s/%s\n", config.BinDir(), p.Name)
+	if reservedName {
+		fmt.Printf("  Launcher: (skipped — conflicts with ynh binary, use \"ynh run %s\")\n", p.Name)
+	} else {
+		fmt.Printf("  Launcher: %s/%s\n", config.BinDir(), p.Name)
+	}
 
 	if p.DefaultVendor != "" {
 		fmt.Printf("  Vendor:   %s\n", p.DefaultVendor)

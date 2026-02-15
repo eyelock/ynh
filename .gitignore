@@ -19,6 +19,8 @@ bin/
 
 # LLM
 .claude/**/*.local.*
+.claude/sessions/
+.claude/plans/
 
 # OS
 .DS_Store

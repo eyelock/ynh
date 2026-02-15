@@ -11,17 +11,21 @@ This doubles as a verification script. If any step doesn't work, something is br
 ## Prerequisites
 
 ```bash
-# Build ynh from source (must be run from the ynh project root)
-cd /path/to/ynh
-make build
+# Set this to your ynh checkout (e.g. ~/src/ynh) if not pwd
+export YNH_SRC=$(pwd)
+
+# Build and install ynh to ~/.ynh/bin
+cd "$YNH_SRC" && make install
 
 # Put ynh and its launchers on PATH (this session only)
-# IMPORTANT: Use the absolute path to the ynh project's bin/ directory.
-# $(pwd) only works if your shell is in the ynh project root.
-export PATH="/path/to/ynh/bin:$HOME/.ynh/bin:$PATH"
+export PATH="$HOME/.ynh/bin:$PATH"
+
+# Set up a scratch directory for walkthrough files (easy cleanup)
+export YNH_WALKTHROUGH=/tmp/ynh-walkthrough
+mkdir -p "$YNH_WALKTHROUGH"
 ```
 
-Replace `/path/to/ynh` with the actual path to your ynh checkout (e.g. `~/src/ynh`).
+Replace `/path/to/ynh` with the actual path to your ynh checkout.
 
 If you installed via `go install` or `brew install` instead, `ynh` is already on your PATH and you can skip the export.
 
@@ -73,13 +77,13 @@ Expected (formatted with indentation):
 ## 2. Create a persona from scratch
 
 ```bash
-mkdir -p ~/walkthrough-persona/.claude-plugin
+mkdir -p $YNH_WALKTHROUGH/walkthrough-persona/.claude-plugin
 ```
 
 Create the plugin manifest:
 
 ```bash
-cat > ~/walkthrough-persona/.claude-plugin/plugin.json << 'EOF'
+cat > $YNH_WALKTHROUGH/walkthrough-persona/.claude-plugin/plugin.json << 'EOF'
 {
   "name": "walkthrough",
   "version": "0.1.0",
@@ -91,7 +95,7 @@ EOF
 Create a metadata sidecar:
 
 ```bash
-cat > ~/walkthrough-persona/metadata.json << 'EOF'
+cat > $YNH_WALKTHROUGH/walkthrough-persona/metadata.json << 'EOF'
 {
   "ynh": {
     "default_vendor": "claude"
@@ -107,8 +111,8 @@ EOF
 ### Skill
 
 ```bash
-mkdir -p ~/walkthrough-persona/skills/greet
-cat > ~/walkthrough-persona/skills/greet/SKILL.md << 'EOF'
+mkdir -p $YNH_WALKTHROUGH/walkthrough-persona/skills/greet
+cat > $YNH_WALKTHROUGH/walkthrough-persona/skills/greet/SKILL.md << 'EOF'
 ---
 name: greet
 description: Introduce yourself with personality and flair.
@@ -122,8 +126,8 @@ EOF
 ### Agent
 
 ```bash
-mkdir -p ~/walkthrough-persona/agents
-cat > ~/walkthrough-persona/agents/nitpicker.md << 'EOF'
+mkdir -p $YNH_WALKTHROUGH/walkthrough-persona/agents
+cat > $YNH_WALKTHROUGH/walkthrough-persona/agents/nitpicker.md << 'EOF'
 ---
 name: nitpicker
 description: Pedantic code reviewer. Delegate to when reviewing code for style issues.
@@ -138,8 +142,8 @@ EOF
 ### Rule
 
 ```bash
-mkdir -p ~/walkthrough-persona/rules
-cat > ~/walkthrough-persona/rules/be-brief.md << 'EOF'
+mkdir -p $YNH_WALKTHROUGH/walkthrough-persona/rules
+cat > $YNH_WALKTHROUGH/walkthrough-persona/rules/be-brief.md << 'EOF'
 Keep responses concise. Prefer bullet points over paragraphs.
 Never say "I'd be happy to help" or similar filler.
 EOF
@@ -148,8 +152,8 @@ EOF
 ### Command
 
 ```bash
-mkdir -p ~/walkthrough-persona/commands
-cat > ~/walkthrough-persona/commands/hello.md << 'EOF'
+mkdir -p $YNH_WALKTHROUGH/walkthrough-persona/commands
+cat > $YNH_WALKTHROUGH/walkthrough-persona/commands/hello.md << 'EOF'
 Say hello and list every artifact loaded in this session:
 skills, agents, rules, and commands. Format as a table.
 EOF
@@ -158,7 +162,7 @@ EOF
 ### Project instructions
 
 ```bash
-cat > ~/walkthrough-persona/instructions.md << 'EOF'
+cat > $YNH_WALKTHROUGH/walkthrough-persona/instructions.md << 'EOF'
 You are a walkthrough test persona. Be friendly but concise.
 When asked what you are, explain that you were created by the ynh walkthrough.
 EOF
@@ -167,7 +171,7 @@ EOF
 Check the structure:
 
 ```bash
-find ~/walkthrough-persona -type f | sort
+find $YNH_WALKTHROUGH/walkthrough-persona -type f | sort
 ```
 
 Expected:
@@ -187,7 +191,7 @@ skills/greet/SKILL.md
 ## 4. Install from local path
 
 ```bash
-ynh install ~/walkthrough-persona
+ynh install $YNH_WALKTHROUGH/walkthrough-persona
 ```
 
 Expected:
@@ -322,7 +326,7 @@ Each launches the same persona through a different vendor CLI. The artifacts are
 For vendors that need symlinks into your project directory:
 
 ```bash
-mkdir -p /tmp/walkthrough-project && cd /tmp/walkthrough-project
+mkdir -p $YNH_WALKTHROUGH/project && cd $YNH_WALKTHROUGH/project
 
 # Install symlinks for Cursor
 walkthrough -v cursor --install
@@ -331,7 +335,7 @@ walkthrough -v cursor --install
 Expected:
 
 ```
-Installed N symlinks for walkthrough (cursor) in /tmp/walkthrough-project
+Installed N symlinks for walkthrough (cursor) in /tmp/ynh-walkthrough/project
 ```
 
 Check what was created:
@@ -352,7 +356,7 @@ Expected:
 
 ```
 PERSONA      VENDOR  PROJECT                   SYMLINKS
-walkthrough  cursor  /tmp/walkthrough-project  N
+walkthrough  cursor  /tmp/ynh-walkthrough/project  N
 ```
 
 ### Clean up symlinks
@@ -364,7 +368,7 @@ walkthrough -v cursor --clean
 Expected:
 
 ```
-Cleaned cursor symlinks for persona "walkthrough" in /tmp/walkthrough-project
+Cleaned cursor symlinks for persona "walkthrough" in /tmp/ynh-walkthrough/project
 ```
 
 Verify:
@@ -382,7 +386,7 @@ If a project directory is deleted while symlinks are still registered:
 
 ```bash
 # Re-install symlinks
-cd /tmp/walkthrough-project
+cd $YNH_WALKTHROUGH/project
 walkthrough -v cursor --install
 
 # Verify the installation is tracked
@@ -393,12 +397,12 @@ Expected:
 
 ```
 PERSONA      VENDOR  PROJECT                   SYMLINKS
-walkthrough  cursor  /tmp/walkthrough-project  N
+walkthrough  cursor  /tmp/ynh-walkthrough/project  N
 ```
 
 ```bash
 # Simulate orphan: delete the project
-rm -rf /tmp/walkthrough-project
+rm -rf $YNH_WALKTHROUGH/project
 
 # Prune finds and cleans the orphan
 ynh prune
@@ -407,7 +411,7 @@ ynh prune
 Expected:
 
 ```
-Removing orphaned installation: walkthrough (cursor) in /tmp/walkthrough-project
+Removing orphaned installation: walkthrough (cursor) in /tmp/ynh-walkthrough/project
 ```
 
 ---
@@ -447,15 +451,15 @@ ynh uninstall ynh
 Create a persona that composes skills from external repos:
 
 ```bash
-mkdir -p ~/composed-persona/.claude-plugin
-cat > ~/composed-persona/.claude-plugin/plugin.json << 'EOF'
+mkdir -p $YNH_WALKTHROUGH/composed-persona/.claude-plugin
+cat > $YNH_WALKTHROUGH/composed-persona/.claude-plugin/plugin.json << 'EOF'
 {
   "name": "composed",
   "version": "0.1.0"
 }
 EOF
 
-cat > ~/composed-persona/metadata.json << 'EOF'
+cat > $YNH_WALKTHROUGH/composed-persona/metadata.json << 'EOF'
 {
   "ynh": {
     "default_vendor": "claude",
@@ -483,7 +487,7 @@ This tests three include features:
 Install:
 
 ```bash
-ynh install ~/composed-persona
+ynh install $YNH_WALKTHROUGH/composed-persona
 ```
 
 Run and check that only the picked skills are available:
@@ -519,15 +523,15 @@ Updated 2 source(s) for persona "composed".
 Create a team persona that delegates to another persona. The `delegates_to` URL must point to a real Git repo containing a persona - substitute your own below:
 
 ```bash
-mkdir -p ~/team-persona/.claude-plugin
-cat > ~/team-persona/.claude-plugin/plugin.json << 'EOF'
+mkdir -p $YNH_WALKTHROUGH/team-persona/.claude-plugin
+cat > $YNH_WALKTHROUGH/team-persona/.claude-plugin/plugin.json << 'EOF'
 {
   "name": "team-test",
   "version": "0.1.0"
 }
 EOF
 
-cat > ~/team-persona/metadata.json << 'EOF'
+cat > $YNH_WALKTHROUGH/team-persona/metadata.json << 'EOF'
 {
   "ynh": {
     "default_vendor": "claude",
@@ -544,7 +548,7 @@ EOF
 Install:
 
 ```bash
-ynh install ~/team-persona
+ynh install $YNH_WALKTHROUGH/team-persona
 ynh ls
 ```
 
@@ -600,7 +604,8 @@ The `remove` alias also works:
 ## 17. Clean up
 
 ```bash
-rm -rf ~/walkthrough-persona ~/composed-persona ~/team-persona
+rm -rf "$YNH_WALKTHROUGH"
+unset YNH_WALKTHROUGH
 ```
 
 ---

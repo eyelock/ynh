@@ -102,12 +102,14 @@ func EnsureRepo(gitURL string, ref string) (string, error) {
 	return repoDir, nil
 }
 
-// gitCmd runs a git command with output directed to stderr.
+// gitCmd runs a git command, suppressing output unless it fails.
 func gitCmd(args ...string) error {
 	cmd := exec.Command("git", args...)
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w\n%s", err, out)
+	}
+	return nil
 }
 
 // NormalizeGitURL ensures a full Git URL from shorthand.

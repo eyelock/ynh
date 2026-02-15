@@ -65,10 +65,10 @@ docs/                     User guide (GitHub Pages)
 brew install go
 
 # Install dev tools (linter, formatter)
-make install
+make deps
 
-# Build
-make build
+# Build and install to ~/.ynh/bin
+make install
 
 # Run all tests
 make test
@@ -275,6 +275,24 @@ ynh-specific config lives under the `"ynh"` key, keeping the file extensible for
 └── bin/                       # Launcher scripts (add to PATH)
     └── david                  # -> exec ynh run david "$@"
 ```
+
+## Using ynh's Own Persona
+
+The ynh project ships its own persona (skills, agents, rules) for contributors. Since the persona is named `ynh` — which conflicts with the `ynh` binary in `~/.ynh/bin/` — it installs without a launcher script:
+
+```bash
+ynh install github.com/eyelock/ynh
+# Installed persona "ynh"
+#   Launcher: (skipped — conflicts with ynh binary, use "ynh run ynh")
+```
+
+To use it, run explicitly:
+
+```bash
+ynh run ynh
+```
+
+The skills and agents in this persona are development-focused and will be extracted to a separate repo in the future.
 
 ## Submitting Changes
 

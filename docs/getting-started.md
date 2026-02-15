@@ -187,8 +187,9 @@ If you prefer not to use Homebrew:
 brew install go
 git clone https://github.com/eyelock/ynh.git
 cd ynh
-make build
-./bin/ynh install ./my-persona
+make install
+export PATH="$HOME/.ynh/bin:$PATH"
+ynh install ./my-persona
 ```
 
 ## Next Steps
