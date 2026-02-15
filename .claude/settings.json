@@ -19,10 +19,23 @@
         "Bash(go mod tidy *)",
         "Bash(go build *)",
         "Bash(go test *)",
-        "Bash(go vet *)"
+        "Bash(go vet *)",
+        "Bash(gh run list *)",
+        "Bash(gh run view *)",
+        "Bash(gh run watch *)",
+        "Bash(gh pr list *)",
+        "Bash(gh pr view *)",
+        "Bash(gh pr status *)",
+        "Bash(gh pr checks *)",
+        "Bash(gh pr diff *)",
+        "Bash(gh issue list *)",
+        "Bash(gh issue view *)",
+        "Bash(gh api *)",
+        "Bash(gh repo view *)"
       ],
       "ask": [
-        "Bash(brew install *)"
+        "Bash(brew install *)",
+        "Bash(gh pr create *)"
       ]
     }
   }

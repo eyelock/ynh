@@ -28,8 +28,8 @@ module "homebrew_tap" {
 
   github_owner  = var.github_owner
   tap_name      = "tap"
-  description   = "Homebrew tap for ynh (ynh) - persona manager for AI coding assistants"
-  homepage_url  = "https://github.com/${var.github_owner}/ynh"
+  description   = "Homebrew tap for eyelock - distribution of helpful binaries"
+  homepage_url  = "https://github.com/${var.github_owner}"
   formula_names = ["ynh"]
-  topics        = ["homebrew", "homebrew_tap", "ynh", "ynh"]
+  topics        = ["homebrew", "homebrew-tap", "ynh"]
 }

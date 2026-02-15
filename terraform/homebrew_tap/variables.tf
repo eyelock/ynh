@@ -34,7 +34,7 @@ variable "homepage_url" {
 variable "topics" {
   description = "GitHub repository topics"
   type        = list(string)
-  default     = ["homebrew", "homebrew_tap"]
+  default     = ["homebrew", "homebrew-tap"]
 }
 
 variable "formula_names" {

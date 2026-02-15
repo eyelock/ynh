@@ -1,0 +1,52 @@
+version: 2
+
+project_name: ynh
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - main: ./cmd/ynh
+    binary: ynh
+    ldflags:
+      - -s -w
+      - -X github.com/eyelock/ynh/internal/config.Version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+
+brews:
+  - repository:
+      owner: eyelock
+      name: homebrew-tap
+      token: "{{ .Env.GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/eyelock/ynh"
+    description: "Persona manager for AI coding assistants"
+    license: "MIT"
+    test: |
+      system "#{bin}/ynh", "version"
+    install: |
+      bin.install "ynh"
