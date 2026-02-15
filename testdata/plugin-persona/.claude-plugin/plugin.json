@@ -1,0 +1,9 @@
+{
+  "name": "plugin-test",
+  "version": "0.1.0",
+  "description": "Test persona in plugin format",
+  "author": {
+    "name": "test"
+  },
+  "keywords": ["test"]
+}

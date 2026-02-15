@@ -1,0 +1,6 @@
+# GitHub personal access token with 'repo' scope.
+# Generate at: https://github.com/settings/tokens
+github_token = "ghp_your_token_here"
+
+# GitHub organization or username.
+github_owner = "eyelock"

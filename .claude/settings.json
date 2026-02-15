@@ -1,0 +1,29 @@
+{
+    "permissions": {
+      "allow": [
+        "Bash(brew list *)",
+        "Bash(make check)",
+        "Bash(make build)",
+        "Bash(make test)",
+        "Bash(make test FILE=*)",
+        "Bash(make format)",
+        "Bash(make lint)",
+        "Bash(make install)",
+        "Bash(make clean)",
+        "Bash(make bin)",
+        "Bash(make help)",
+        "Bash(make docs)",
+        "Bash(go mod init *)",
+        "Bash(go version:*)",
+        "Bash(go get *)",
+        "Bash(go mod tidy *)",
+        "Bash(go build *)",
+        "Bash(go test *)",
+        "Bash(go vet *)"
+      ],
+      "ask": [
+        "Bash(brew install *)"
+      ]
+    }
+  }
+  

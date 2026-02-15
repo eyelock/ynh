@@ -1,0 +1,10 @@
+# Default owners for everything in the repo
+* @eyelock
+
+# Go source code
+/cmd/ @eyelock
+/internal/ @eyelock
+
+# Build and CI
+/Makefile @eyelock
+/.github/workflows/ @eyelock
