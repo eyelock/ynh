@@ -11,14 +11,21 @@ This doubles as a verification script. If any step doesn't work, something is br
 ## Prerequisites
 
 ```bash
-# Build ynh from source
+# Build ynh from source (must be run from the ynh project root)
+cd /path/to/ynh
 make build
 
 # Put ynh and its launchers on PATH (this session only)
-export PATH="$(pwd)/bin:$HOME/.ynh/bin:$PATH"
+# IMPORTANT: Use the absolute path to the ynh project's bin/ directory.
+# $(pwd) only works if your shell is in the ynh project root.
+export PATH="/path/to/ynh/bin:$HOME/.ynh/bin:$PATH"
 ```
 
-Verify:
+Replace `/path/to/ynh` with the actual path to your ynh checkout (e.g. `~/src/ynh`).
+
+If you installed via `go install` or `brew install` instead, `ynh` is already on your PATH and you can skip the export.
+
+Verify (works from any directory):
 
 ```bash
 ynh version

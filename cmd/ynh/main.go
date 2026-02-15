@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -157,6 +158,14 @@ func cmdInstall(args []string) error {
 			_ = os.RemoveAll(cloneTmpDir)
 		}
 		return err
+	}
+
+	// Reject reserved names that would conflict with the ynh binary.
+	if p.Name == "ynh" {
+		if cloneTmpDir != "" {
+			_ = os.RemoveAll(cloneTmpDir)
+		}
+		return fmt.Errorf("persona name %q is reserved (conflicts with the ynh binary)", p.Name)
 	}
 
 	// Copy persona to installed directory (clean first to remove stale artifacts)
@@ -331,6 +340,48 @@ func cmdRun(args []string) error {
 		}
 		return cmdCleanVendor(adapter, p.Name)
 	default:
+		// For vendors that need symlinks, check if they're installed in cwd.
+		if adapter.NeedsSymlinks() {
+			projectDir, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			log, err := symlink.LoadLog()
+			if err != nil {
+				return err
+			}
+			inst := log.FindInstallation(p.Name, adapter.Name(), projectDir)
+			if inst != nil && !symlinkIntact(inst) {
+				// Log says installed but symlinks are gone — clean up stale entry.
+				log.RemoveInstallation(p.Name, adapter.Name(), projectDir)
+				_ = log.Save()
+				inst = nil
+			}
+			if inst == nil {
+				planned, err := vendor.PlanSymlinks(runDir, projectDir, adapter.ConfigDir(), adapter.ArtifactDirs())
+				if err != nil {
+					return err
+				}
+				if len(planned) > 0 {
+					fmt.Printf("%s requires symlinks in your project directory.\n", adapter.Name())
+					fmt.Printf("The following symlinks will be created in %s:\n\n", projectDir)
+					for _, entry := range planned {
+						rel, _ := filepath.Rel(projectDir, entry.Link)
+						fmt.Printf("  %s -> %s\n", rel, entry.Target)
+					}
+					fmt.Printf("\nInstall %d symlinks? [Y/n] ", len(planned))
+					reader := bufio.NewReader(os.Stdin)
+					answer, _ := reader.ReadString('\n')
+					answer = strings.TrimSpace(strings.ToLower(answer))
+					if answer == "" || answer == "y" || answer == "yes" {
+						if err := cmdInstallVendor(adapter, runDir, p.Name); err != nil {
+							return err
+						}
+					}
+				}
+			}
+		}
+
 		// Launch
 		if prompt != "" {
 			return adapter.LaunchNonInteractive(runDir, prompt, vendorArgs)
@@ -505,7 +556,11 @@ func cmdInstallVendor(adapter vendor.Adapter, stagingDir string, personaName str
 		if err := log.Save(); err != nil {
 			return err
 		}
-		fmt.Printf("Installed %d symlinks for %s (%s) in %s\n", len(entries), personaName, adapter.Name(), projectDir)
+		fmt.Printf("Installed %d symlinks for %s (%s) in %s:\n\n", len(entries), personaName, adapter.Name(), projectDir)
+		for _, entry := range entries {
+			rel, _ := filepath.Rel(projectDir, entry.Link)
+			fmt.Printf("  %s -> %s\n", rel, entry.Target)
+		}
 	}
 	return nil
 }
@@ -579,6 +634,19 @@ func cmdPrune() error {
 
 	log.RemoveOrphans(orphans)
 	return log.Save()
+}
+
+// symlinkIntact returns true if at least one symlink from the installation
+// still exists on disk. Returns false if all symlinks are missing (e.g. the
+// user deleted the vendor config directory).
+func symlinkIntact(inst *symlink.Installation) bool {
+	for _, entry := range inst.Symlinks {
+		info, err := os.Lstat(entry.Link)
+		if err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func cloneForInstall(gitURL string) (string, error) {

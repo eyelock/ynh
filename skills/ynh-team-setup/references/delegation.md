@@ -16,15 +16,15 @@ At runtime, ynh resolves each delegate persona, reads its manifest and artifacts
 
 | Format | Example | Auth |
 |--------|---------|------|
-| Shorthand | `github.com/user/repo` | HTTPS (public) |
-| SSH | `git@github.com:co/repo.git` | SSH key (private) |
+| Shorthand | `github.com/user/repo` | SSH key |
+| Full SSH | `git@github.com:co/repo.git` | SSH key |
 | Full HTTPS | `https://github.com/user/repo.git` | Credential helper |
 
 ## Private repo authentication
 
 ynh delegates to the local `git` binary. If `git clone <url>` works on the machine, ynh works too.
 
-**SSH (recommended for private repos):** Uses the user's SSH key. No extra config needed if `git clone git@...` works.
+**SSH (default for shorthand):** Uses the user's SSH key. No extra config needed if `git clone git@...` works. Shorthand like `github.com/user/repo` expands to SSH automatically.
 
 **HTTPS:** Requires a Git credential helper. `gh auth login` configures this automatically for GitHub.
 

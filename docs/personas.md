@@ -87,10 +87,10 @@ External Git sources to pull artifacts from.
 **Git URL formats:**
 
 ```
-# Shorthand - expands to https://github.com/user/repo.git
+# Shorthand - expands to git@github.com:user/repo.git (SSH)
 github.com/user/repo
 
-# SSH - use for private repos (authenticates via SSH key)
+# Full SSH
 git@github.com:company/private-repo.git
 
 # Full HTTPS - authenticates via Git credential helper

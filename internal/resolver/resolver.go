@@ -112,7 +112,7 @@ func gitCmd(args ...string) error {
 
 // NormalizeGitURL ensures a full Git URL from shorthand.
 // Local paths (starting with / or .) are returned as-is.
-// Shorthand like "github.com/user/repo" becomes "https://github.com/user/repo.git".
+// Shorthand like "github.com/user/repo" becomes "git@github.com:user/repo.git" (SSH).
 // SSH URLs (git@...) and full HTTPS URLs are passed through unchanged.
 func NormalizeGitURL(url string) string {
 	if strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "git@") {
@@ -121,7 +121,15 @@ func NormalizeGitURL(url string) string {
 	if strings.HasPrefix(url, "/") || strings.HasPrefix(url, ".") {
 		return url
 	}
-	// Shorthand like "github.com/user/repo" -> "https://github.com/user/repo.git"
+	// Shorthand like "github.com/user/repo" -> SSH URL.
+	// SSH works for both public and private repos and is the common dev setup.
+	parts := strings.SplitN(url, "/", 2)
+	if len(parts) == 2 {
+		host := parts[0]
+		path := strings.TrimSuffix(parts[1], ".git")
+		return fmt.Sprintf("git@%s:%s.git", host, path)
+	}
+	// Fallback: treat as HTTPS
 	return "https://" + url + ".git"
 }
 

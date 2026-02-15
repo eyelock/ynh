@@ -6,6 +6,34 @@ import (
 	"path/filepath"
 )
 
+// PlanSymlinks returns the symlink entries that would be created by Install,
+// without modifying the filesystem. Used to preview before prompting the user.
+func PlanSymlinks(stagingDir, projectDir, configDir string, artifactDirs map[string]string) ([]SymlinkEntry, error) {
+	var entries []SymlinkEntry
+
+	stagingConfig := filepath.Join(stagingDir, configDir)
+	projectConfig := filepath.Join(projectDir, configDir)
+
+	for _, artifactDir := range artifactDirs {
+		srcDir := filepath.Join(stagingConfig, artifactDir)
+		items, err := os.ReadDir(srcDir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, fmt.Errorf("reading %s: %w", srcDir, err)
+		}
+
+		for _, item := range items {
+			target := filepath.Join(srcDir, item.Name())
+			link := filepath.Join(projectConfig, artifactDir, item.Name())
+			entries = append(entries, SymlinkEntry{Target: target, Link: link})
+		}
+	}
+
+	return entries, nil
+}
+
 // installSymlinks creates symlinks from projectDir/<configDir>/<artifact>/<name>
 // to stagingDir/<configDir>/<artifact>/<name> for each artifact in the staging dir.
 //

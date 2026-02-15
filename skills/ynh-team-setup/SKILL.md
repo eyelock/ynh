@@ -80,8 +80,8 @@ Create the team persona directory.
 ```
 
 **Git URL format for delegates_to** - see `references/delegation.md` for the three formats:
-- Shorthand: `github.com/user/persona` (HTTPS, public repos)
-- SSH: `git@github.com:user/persona.git` (private repos)
+- Shorthand: `github.com/user/persona` (expands to SSH)
+- Full SSH: `git@github.com:user/persona.git`
 - Full HTTPS: `https://github.com/user/persona.git`
 
 If the personal persona isn't in Git yet, explain they'll need to push it first for delegation to work. Show them how:

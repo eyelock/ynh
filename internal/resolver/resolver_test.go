@@ -15,7 +15,7 @@ func TestNormalizeGitURL(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"github.com/user/repo", "https://github.com/user/repo.git"},
+		{"github.com/user/repo", "git@github.com:user/repo.git"},
 		{"https://github.com/user/repo.git", "https://github.com/user/repo.git"},
 		{"git@github.com:user/repo.git", "git@github.com:user/repo.git"},
 		{"https://gitlab.com/user/repo", "https://gitlab.com/user/repo"},
