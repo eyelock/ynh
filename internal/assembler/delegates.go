@@ -52,16 +52,28 @@ func AssembleDelegates(workDir string, adapter vendor.Adapter, delegates []perso
 }
 
 // buildDelegateAgent generates a markdown agent file for a delegate persona.
-// It includes the delegate's rules as inline context and lists available skills.
+// It includes the delegate's instructions, rules, and available skills.
 func buildDelegateAgent(p *persona.Persona, basePath string) string {
 	var b strings.Builder
 
 	b.WriteString("---\n")
 	fmt.Fprintf(&b, "name: %s\n", p.Name)
-	fmt.Fprintf(&b, "description: Delegate persona %q. Use when the user requests tasks that %s handles.\n", p.Name, p.Name)
+	if p.Description != "" {
+		fmt.Fprintf(&b, "description: %s\n", p.Description)
+	} else {
+		fmt.Fprintf(&b, "description: Delegate persona %q.\n", p.Name)
+	}
 	b.WriteString("---\n\n")
 
 	fmt.Fprintf(&b, "You are the **%s** persona, invoked as a delegate.\n\n", p.Name)
+
+	// Include persona instructions (instructions.md / CLAUDE.md)
+	instructions := readInstructionsFrom(basePath)
+	if instructions != "" {
+		b.WriteString("## Instructions\n\n")
+		b.WriteString(instructions)
+		b.WriteString("\n\n")
+	}
 
 	// Inline rules as context
 	rules := readRulesFrom(basePath)
@@ -83,6 +95,18 @@ func buildDelegateAgent(p *persona.Persona, basePath string) string {
 	}
 
 	return b.String()
+}
+
+// readInstructionsFrom reads the persona's instructions file.
+// Checks instructions.md first, then CLAUDE.md as fallback.
+func readInstructionsFrom(basePath string) string {
+	for _, name := range []string{"instructions.md", "CLAUDE.md"} {
+		data, err := os.ReadFile(filepath.Join(basePath, name))
+		if err == nil {
+			return strings.TrimSpace(string(data))
+		}
+	}
+	return ""
 }
 
 // readRulesFrom reads all rule markdown files from basePath/rules/.

@@ -32,6 +32,7 @@ type Delegate struct {
 
 type Persona struct {
 	Name          string
+	Description   string
 	DefaultVendor string
 	Includes      []Include
 	DelegatesTo   []Delegate
@@ -92,7 +93,7 @@ func LoadPluginDir(dir string) (*Persona, error) {
 		return nil, fmt.Errorf("invalid persona name %q: must match %s", pj.Name, validName.String())
 	}
 
-	p := &Persona{Name: pj.Name}
+	p := &Persona{Name: pj.Name, Description: pj.Description}
 
 	meta, err := plugin.LoadMetadataJSON(dir)
 	if err != nil {

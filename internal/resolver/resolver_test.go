@@ -53,10 +53,24 @@ func TestRepoDirName_Deterministic(t *testing.T) {
 	}
 }
 
-func TestRepoDirName_ContainsRepoName(t *testing.T) {
+func TestRepoDirName_ContainsOrgAndRepo(t *testing.T) {
 	name := repoDirName("github.com/user/my-skills", "")
-	if name[:9] != "my-skills" {
-		t.Errorf("repoDirName should start with repo name, got %q", name)
+	if !strings.HasPrefix(name, "user--my-skills--") {
+		t.Errorf("repoDirName should be org--repo--hash, got %q", name)
+	}
+}
+
+func TestRepoDirName_SSHUrl(t *testing.T) {
+	name := repoDirName("git@github.com:eyelock/claude-config.git", "")
+	if !strings.HasPrefix(name, "eyelock--claude-config--") {
+		t.Errorf("SSH URL should produce org--repo--hash, got %q", name)
+	}
+}
+
+func TestRepoDirName_HTTPSUrl(t *testing.T) {
+	name := repoDirName("https://github.com/brianlovin/claude-config.git", "")
+	if !strings.HasPrefix(name, "brianlovin--claude-config--") {
+		t.Errorf("HTTPS URL should produce org--repo--hash, got %q", name)
 	}
 }
 
@@ -106,13 +120,16 @@ func TestEnsureRepo_LocalGitRepo(t *testing.T) {
 	t.Setenv("YNH_HOME", "")
 	t.Setenv("HOME", filepath.Dir(cacheDir))
 
-	repoPath, err := EnsureRepo(srcDir, "")
+	result, err := EnsureRepo(srcDir, "")
 	if err != nil {
 		t.Fatalf("ensureRepo failed: %v", err)
 	}
+	if !result.Cloned {
+		t.Error("expected Cloned=true for first clone")
+	}
 
 	// Verify the cloned content
-	data, err := os.ReadFile(filepath.Join(repoPath, "test.txt"))
+	data, err := os.ReadFile(filepath.Join(result.Path, "test.txt"))
 	if err != nil {
 		t.Fatalf("cloned file not found: %v", err)
 	}
@@ -121,12 +138,18 @@ func TestEnsureRepo_LocalGitRepo(t *testing.T) {
 	}
 
 	// Second call should reuse cache (not error)
-	repoPath2, err := EnsureRepo(srcDir, "")
+	result2, err := EnsureRepo(srcDir, "")
 	if err != nil {
 		t.Fatalf("second ensureRepo failed: %v", err)
 	}
-	if repoPath2 != repoPath {
-		t.Errorf("cache not reused: %q != %q", repoPath2, repoPath)
+	if result2.Path != result.Path {
+		t.Errorf("cache not reused: %q != %q", result2.Path, result.Path)
+	}
+	if result2.Cloned {
+		t.Error("expected Cloned=false for cached repo")
+	}
+	if result2.Changed {
+		t.Error("expected Changed=false when nothing changed")
 	}
 }
 
@@ -354,11 +377,11 @@ func TestEnsureRepo_CacheUpdatesWorkingTree(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	// First clone
-	repoPath, err := EnsureRepo(srcDir, "")
+	result, err := EnsureRepo(srcDir, "")
 	if err != nil {
 		t.Fatalf("first ensureRepo failed: %v", err)
 	}
-	data, err := os.ReadFile(filepath.Join(repoPath, "file.txt"))
+	data, err := os.ReadFile(filepath.Join(result.Path, "file.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -374,12 +397,15 @@ func TestEnsureRepo_CacheUpdatesWorkingTree(t *testing.T) {
 	runGit(t, srcDir, "commit", "-m", "v2")
 
 	// Second call should update working tree
-	repoPath2, err := EnsureRepo(srcDir, "")
+	result2, err := EnsureRepo(srcDir, "")
 	if err != nil {
 		t.Fatalf("second ensureRepo failed: %v", err)
 	}
+	if !result2.Changed {
+		t.Error("expected Changed=true after upstream commit")
+	}
 
-	data, err = os.ReadFile(filepath.Join(repoPath2, "file.txt"))
+	data, err = os.ReadFile(filepath.Join(result2.Path, "file.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -404,10 +430,11 @@ func TestEnsureRepo_UpdateErrorsNotSwallowed(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	// First call: clone succeeds
-	repoPath, err := EnsureRepo(srcDir, "")
+	result, err := EnsureRepo(srcDir, "")
 	if err != nil {
 		t.Fatalf("initial clone failed: %v", err)
 	}
+	_ = result
 
 	// Corrupt the remote by removing the source repo's .git
 	if err := os.RemoveAll(filepath.Join(srcDir, ".git")); err != nil {
@@ -427,7 +454,7 @@ func TestEnsureRepo_UpdateErrorsNotSwallowed(t *testing.T) {
 	}
 
 	// Verify the cached repo still exists (we don't blow it away on update failure)
-	if _, statErr := os.Stat(repoPath); os.IsNotExist(statErr) {
+	if _, statErr := os.Stat(result.Path); os.IsNotExist(statErr) {
 		t.Error("cached repo should still exist after failed update")
 	}
 }

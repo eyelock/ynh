@@ -38,7 +38,8 @@
       "Bash(gh repo view *)",
       "Bash(gh run rerun *)",
       "Bash(gh release view *)",
-      "Bash(gh release list *)"
+      "Bash(gh release list *)",
+      "Bash(./bin/ynh *)"
     ],
     "ask": [
       "Bash(brew install *)",

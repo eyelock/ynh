@@ -252,25 +252,40 @@ func cmdUpdate(args []string) error {
 		return nil
 	}
 
+	checked := 0
 	updated := 0
 	for _, inc := range p.Includes {
-		fmt.Printf("Updating %s...\n", inc.Git)
-		if _, err := resolver.EnsureRepo(inc.Git, inc.Ref); err != nil {
+		fmt.Printf("Checking %s...\n", inc.Git)
+		result, err := resolver.EnsureRepo(inc.Git, inc.Ref)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "  Warning: %v\n", err)
 			continue
 		}
-		updated++
+		checked++
+		if result.Changed {
+			updated++
+			fmt.Printf("  Updated.\n")
+		} else {
+			fmt.Printf("  Already up to date.\n")
+		}
 	}
 	for _, del := range p.DelegatesTo {
-		fmt.Printf("Updating delegate %s...\n", del.Git)
-		if _, err := resolver.EnsureRepo(del.Git, del.Ref); err != nil {
+		fmt.Printf("Checking delegate %s...\n", del.Git)
+		result, err := resolver.EnsureRepo(del.Git, del.Ref)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "  Warning: %v\n", err)
 			continue
 		}
-		updated++
+		checked++
+		if result.Changed {
+			updated++
+			fmt.Printf("  Updated.\n")
+		} else {
+			fmt.Printf("  Already up to date.\n")
+		}
 	}
 
-	fmt.Printf("Updated %d source(s) for persona %q.\n", updated, name)
+	fmt.Printf("Checked %d source(s) for persona %q, %d updated.\n", checked, name, updated)
 	return nil
 }
 
@@ -301,6 +316,12 @@ func cmdRun(args []string) error {
 	adapter, err := vendor.Get(vendorName)
 	if err != nil {
 		return err
+	}
+
+	// Show progress when there are Git sources to resolve
+	sources := len(p.Includes) + len(p.DelegatesTo)
+	if sources > 0 {
+		fmt.Fprintf(os.Stderr, "Assembling %d source(s)...\n", sources)
 	}
 
 	// Resolve Git includes
@@ -420,14 +441,51 @@ func cmdList() error {
 			vendorName = "-"
 		}
 
-		includes := fmt.Sprintf("%d sources", len(p.Includes))
-		delegates := fmt.Sprintf("%d", len(p.DelegatesTo))
+		includes := formatSources(len(p.Includes), gitURLs(p.Includes, func(i persona.Include) string { return i.Git }))
+		delegates := formatSources(len(p.DelegatesTo), gitURLs(p.DelegatesTo, func(d persona.Delegate) string { return d.Git }))
 
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, vendorName, includes, delegates)
 	}
 
 	_ = w.Flush()
 	return nil
+}
+
+// gitURLs extracts Git URLs from a slice using the given accessor.
+func gitURLs[T any](items []T, getGit func(T) string) []string {
+	urls := make([]string, 0, len(items))
+	for _, item := range items {
+		urls = append(urls, getGit(item))
+	}
+	return urls
+}
+
+// formatSources formats a count with abbreviated git URLs.
+func formatSources(count int, urls []string) string {
+	if count == 0 {
+		return "0"
+	}
+	short := make([]string, 0, len(urls))
+	for _, u := range urls {
+		short = append(short, shortGitURL(u))
+	}
+	return strings.Join(short, ", ")
+}
+
+// shortGitURL abbreviates a git URL for display.
+// "github.com/eyelock/ynh" -> "eyelock/ynh"
+// "/tmp/ynh-walkthrough/foo" -> "/tmp/ynh-walkthrough/foo"
+func shortGitURL(url string) string {
+	// Local paths: keep as-is
+	if strings.HasPrefix(url, "/") || strings.HasPrefix(url, ".") {
+		return url
+	}
+	// Strip host prefix: "github.com/user/repo" -> "user/repo"
+	parts := strings.SplitN(url, "/", 2)
+	if len(parts) == 2 {
+		return parts[1]
+	}
+	return url
 }
 
 func cmdVendors() {

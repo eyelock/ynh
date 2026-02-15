@@ -212,8 +212,8 @@ ynh ls
 Expected:
 
 ```
-NAME         VENDOR  INCLUDES   DELEGATES TO
-walkthrough  claude  0 sources  0
+NAME         VENDOR  INCLUDES  DELEGATES TO
+walkthrough  claude  0         0
 ```
 
 Also try the `list` alias:
@@ -253,18 +253,18 @@ This opens an interactive Claude session. You should see your skills available (
 ### Non-interactive
 
 ```bash
-walkthrough "what artifacts do you have loaded?"
+walkthrough "what are you?"
 ```
 
-Should list the skill, agent, rule, and command from the persona.
+Should say it was created by the ynh walkthrough (from `instructions.md`). If you see that phrase, the persona instructions are working.
 
 ### With vendor flags
 
 ```bash
-walkthrough --model opus -- "explain what you are in one sentence"
+walkthrough --model opus -- "what are you? one sentence."
 ```
 
-The `--model opus` flag passes through to Claude. The prompt comes after `--`.
+The `--model opus` flag passes through to Claude. The prompt comes after `--`. Same response, different model.
 
 ---
 
@@ -433,9 +433,9 @@ ynh ls
 Expected:
 
 ```
-NAME         VENDOR  INCLUDES   DELEGATES TO
-walkthrough  claude  0 sources  0
-ynh          claude  0 sources  0
+NAME         VENDOR  INCLUDES  DELEGATES TO
+walkthrough  claude  0         0
+ynh          claude  0         0
 ```
 
 Clean up:
@@ -490,13 +490,13 @@ Install:
 ynh install $YNH_WALKTHROUGH/composed-persona
 ```
 
-Run and check that only the picked skills are available:
+Run and verify the picked skills work:
 
 ```bash
-composed "what skills do you have?"
+composed "use /simplify to rewrite: 'The process of implementation is currently being undertaken by the team'"
 ```
 
-The session should have `simplify` (from brianlovin's repo) and `ynh-validate` (from the ynh repo), but nothing else from either source.
+If the `simplify` skill was picked correctly, you'll get a shorter rewrite. This directly exercises the skill from brianlovin's repo — not just listing it.
 
 ---
 
@@ -511,19 +511,34 @@ ynh update composed
 Expected:
 
 ```
-Updating github.com/brianlovin/claude-config...
-Updating github.com/eyelock/ynh...
-Updated 2 source(s) for persona "composed".
+Checking github.com/brianlovin/claude-config...
+  Already up to date.
+Checking github.com/eyelock/ynh...
+  Already up to date.
+Checked 2 source(s) for persona "composed", 0 updated.
 ```
+
+If upstream has changed since the last fetch, you'll see `Updated.` instead of `Already up to date.`
 
 ---
 
 ## 14. Delegation
 
-Create a team persona that delegates to another persona. The `delegates_to` URL must point to a real Git repo containing a persona - substitute your own below:
+Delegation lets one persona invoke another as a subagent. Delegates must be Git repos containing a persona. We'll set up both a local and a remote delegate.
+
+Turn the walkthrough persona into a local git repo so it can be delegated to:
+
+```bash
+git -C $YNH_WALKTHROUGH/walkthrough-persona init
+git -C $YNH_WALKTHROUGH/walkthrough-persona add .
+git -C $YNH_WALKTHROUGH/walkthrough-persona commit -m "init"
+```
+
+Create a team persona that delegates to both:
 
 ```bash
 mkdir -p $YNH_WALKTHROUGH/team-persona/.claude-plugin
+
 cat > $YNH_WALKTHROUGH/team-persona/.claude-plugin/plugin.json << 'EOF'
 {
   "name": "team-test",
@@ -531,37 +546,68 @@ cat > $YNH_WALKTHROUGH/team-persona/.claude-plugin/plugin.json << 'EOF'
 }
 EOF
 
-cat > $YNH_WALKTHROUGH/team-persona/metadata.json << 'EOF'
+cat > $YNH_WALKTHROUGH/team-persona/metadata.json << EOF
 {
   "ynh": {
     "default_vendor": "claude",
     "delegates_to": [
-      {"git": "github.com/<your-user>/<your-persona-repo>"}
+      {"git": "$YNH_WALKTHROUGH/walkthrough-persona"},
+      {"git": "github.com/eyelock/ynh"}
     ]
   }
 }
 EOF
 ```
 
-**Note:** Replace `github.com/<your-user>/<your-persona-repo>` with a real Git URL containing a persona. Delegation resolves the delegate at runtime (`ynh run`), so the repo must exist and be cloneable. Installation itself only copies local files.
-
 Install:
 
 ```bash
 ynh install $YNH_WALKTHROUGH/team-persona
+```
+
+Expected:
+
+```
+Installed persona "team-test"
+  Location: /Users/<you>/.ynh/personas/team-test
+  Launcher: /Users/<you>/.ynh/bin/team-test
+  Vendor:   claude
+```
+
+Check the list:
+
+```bash
 ynh ls
 ```
 
 Expected:
 
 ```
-NAME         VENDOR  INCLUDES   DELEGATES TO
-composed     claude  2 sources  0
-team-test    claude  0 sources  1
-walkthrough  claude  0 sources  0
+NAME         VENDOR  INCLUDES                               DELEGATES TO
+composed     claude  brianlovin/claude-config, eyelock/ynh  0
+team-test    claude  0                                      /tmp/ynh-walkthrough/walkthrough-persona, eyelock/ynh
+walkthrough  claude  0                                      0
 ```
 
-When running `team-test`, ynh resolves the delegate persona, generates a vendor-native agent file, and the AI can delegate to it as a subagent.
+Delegates are resolved at runtime, not at install time. Try it:
+
+```bash
+team-test "delegate to the walkthrough agent and ask it: what are you?"
+```
+
+The walkthrough delegate should respond that it was created by the ynh walkthrough (its `instructions.md`). If you see that phrase come back through the delegation, it's working end to end.
+
+```bash
+team-test "use the walkthrough delegate to run /greet"
+```
+
+This exercises the delegate's `/greet` skill, which should introduce itself as the walkthrough persona.
+
+```bash
+team-test "ask the ynh delegate what the /ynh-validate skill does"
+```
+
+This delegates to the ynh persona and asks about a specific skill, so you can tell the response came from the delegate and not from your global config.
 
 ---
 

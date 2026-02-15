@@ -24,14 +24,14 @@ type ResolvedContent struct {
 // ResolveGitSource clones/updates a GitSource and returns the resolved base path,
 // scoped to the optional sub-path within the repo.
 func ResolveGitSource(gs persona.GitSource) (string, error) {
-	repoPath, err := EnsureRepo(gs.Git, gs.Ref)
+	result, err := EnsureRepo(gs.Git, gs.Ref)
 	if err != nil {
 		return "", fmt.Errorf("resolving %s: %w", gs.Git, err)
 	}
 
-	basePath := repoPath
+	basePath := result.Path
 	if gs.Path != "" {
-		basePath = filepath.Join(repoPath, gs.Path)
+		basePath = filepath.Join(result.Path, gs.Path)
 		if _, err := os.Stat(basePath); os.IsNotExist(err) {
 			return "", fmt.Errorf("path %q not found in %s", gs.Path, gs.Git)
 		}
@@ -59,12 +59,18 @@ func Resolve(p *persona.Persona) ([]ResolvedContent, error) {
 	return results, nil
 }
 
+// RepoResult describes the outcome of EnsureRepo.
+type RepoResult struct {
+	Path    string // path to the cached repo on disk
+	Cloned  bool   // true if freshly cloned (not previously cached)
+	Changed bool   // true if HEAD moved during update
+}
+
 // EnsureRepo clones or updates a Git repo in the cache directory.
-// Returns the path to the cached repo on disk.
-func EnsureRepo(gitURL string, ref string) (string, error) {
+func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 	cacheDir := config.CacheDir()
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		return "", err
+		return RepoResult{}, err
 	}
 
 	repoDir := filepath.Join(cacheDir, repoDirName(gitURL, ref))
@@ -78,28 +84,42 @@ func EnsureRepo(gitURL string, ref string) (string, error) {
 		}
 		args = append(args, fullURL, repoDir)
 		if err := gitCmd(args...); err != nil {
-			return "", fmt.Errorf("git clone %s: %w", fullURL, err)
+			return RepoResult{}, fmt.Errorf("git clone %s: %w", fullURL, err)
+		}
+		return RepoResult{Path: repoDir, Cloned: true, Changed: true}, nil
+	}
+
+	// Update existing clone — capture HEAD before and after
+	before := gitHead(repoDir)
+
+	if ref != "" {
+		if err := gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin", ref); err != nil {
+			return RepoResult{}, fmt.Errorf("git fetch %s ref %s: %w", fullURL, ref, err)
+		}
+		if err := gitCmd("-C", repoDir, "checkout", "FETCH_HEAD"); err != nil {
+			return RepoResult{}, fmt.Errorf("git checkout FETCH_HEAD in %s: %w", repoDir, err)
 		}
 	} else {
-		// Update existing clone
-		if ref != "" {
-			if err := gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin", ref); err != nil {
-				return "", fmt.Errorf("git fetch %s ref %s: %w", fullURL, ref, err)
-			}
-			if err := gitCmd("-C", repoDir, "checkout", "FETCH_HEAD"); err != nil {
-				return "", fmt.Errorf("git checkout FETCH_HEAD in %s: %w", repoDir, err)
-			}
-		} else {
-			if err := gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin"); err != nil {
-				return "", fmt.Errorf("git fetch %s: %w", fullURL, err)
-			}
-			if err := gitCmd("-C", repoDir, "reset", "--hard", "origin/HEAD"); err != nil {
-				return "", fmt.Errorf("git reset in %s: %w", repoDir, err)
-			}
+		if err := gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin"); err != nil {
+			return RepoResult{}, fmt.Errorf("git fetch %s: %w", fullURL, err)
+		}
+		if err := gitCmd("-C", repoDir, "reset", "--hard", "origin/HEAD"); err != nil {
+			return RepoResult{}, fmt.Errorf("git reset in %s: %w", repoDir, err)
 		}
 	}
 
-	return repoDir, nil
+	after := gitHead(repoDir)
+	return RepoResult{Path: repoDir, Changed: before != after}, nil
+}
+
+// gitHead returns the short HEAD SHA for a repo, or empty string on error.
+func gitHead(repoDir string) string {
+	cmd := exec.Command("git", "-C", repoDir, "rev-parse", "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // gitCmd runs a git command, suppressing output unless it fails.
@@ -136,12 +156,36 @@ func NormalizeGitURL(url string) string {
 }
 
 // repoDirName creates a deterministic cache directory name from a Git URL and ref.
+// Format: org--repo--<hash> with double hyphens for parsibility.
 // Including the ref ensures that the same repo at different versions gets separate cache entries.
 func repoDirName(url string, ref string) string {
 	key := url + "\x00" + ref
 	h := sha256.Sum256([]byte(key))
-	// Use the last path segment + short hash for readability
-	parts := strings.Split(strings.TrimSuffix(url, ".git"), "/")
-	name := parts[len(parts)-1]
-	return fmt.Sprintf("%s-%x", name, h[:4])
+	hash := fmt.Sprintf("%x", h[:4])
+
+	// Strip .git suffix and extract path segments
+	cleaned := strings.TrimSuffix(url, ".git")
+
+	// Handle SSH URLs: git@host:org/repo
+	if strings.HasPrefix(cleaned, "git@") {
+		if idx := strings.Index(cleaned, ":"); idx > 0 {
+			cleaned = cleaned[idx+1:]
+		}
+	}
+
+	// Handle HTTPS URLs: https://host/org/repo
+	cleaned = strings.TrimPrefix(cleaned, "https://")
+	cleaned = strings.TrimPrefix(cleaned, "http://")
+
+	parts := strings.Split(cleaned, "/")
+
+	// Use last two segments as org--repo when available
+	if len(parts) >= 2 {
+		org := parts[len(parts)-2]
+		repo := parts[len(parts)-1]
+		return fmt.Sprintf("%s--%s--%s", org, repo, hash)
+	}
+
+	// Fallback: single segment
+	return fmt.Sprintf("%s--%s", parts[len(parts)-1], hash)
 }
