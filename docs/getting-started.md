@@ -113,7 +113,7 @@ ynh uses your local `git` for all cloning. If `git clone` works on your machine,
 
 This uses your SSH key. If you can `git clone git@github.com:company/private-skills.git` from your terminal, ynh can too.
 
-**HTTPS with credential helper:**
+**Shorthand (also uses SSH):**
 
 ```json
 {
@@ -125,7 +125,7 @@ This uses your SSH key. If you can `git clone git@github.com:company/private-ski
 }
 ```
 
-The shorthand form produces an HTTPS URL. For private repos over HTTPS, Git needs a credential helper configured.
+The shorthand form expands to an SSH URL (`git@github.com:company/private-repo.git`). If your SSH key has access, no extra config is needed.
 
 **If cloning fails**, the issue is Git authentication, not ynh. Set up one of:
 

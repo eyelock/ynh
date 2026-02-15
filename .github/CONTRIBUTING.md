@@ -82,7 +82,7 @@ make format
 # Lint
 make lint
 
-# Full CI pipeline (install, format, lint, test, build)
+# Full CI pipeline (deps, format, lint, test, build)
 make check
 ```
 
@@ -143,7 +143,7 @@ The `init()` function registers the adapter automatically via Go's init mechanis
 
 ### Resolver
 
-The resolver clones Git repos into `~/.ynh/cache/` using a deterministic directory name (repo name + hash). Repos are shallow-cloned (`--depth 1`) for speed. The `path` field scopes into a subdirectory within the cloned repo for monorepo support.
+The resolver clones Git repos into `~/.ynh/cache/` using a deterministic directory name (`org--repo--hash`, with double hyphens for parsibility). Repos are shallow-cloned (`--depth 1`) for speed. The `path` field scopes into a subdirectory within the cloned repo for monorepo support.
 
 ### Assembler
 
@@ -151,6 +151,8 @@ The assembler builds a deterministic run directory (`~/.ynh/run/<name>/`) with t
 
 - **With pick list**: Only specified paths are copied
 - **Without pick list**: All recognized artifact directories are scanned and copied
+
+For delegates, the assembler generates a vendor-native agent file for each delegate persona, embedding the delegate's `plugin.json` description, `instructions.md`, rules, and skill list.
 
 ### Error Handling
 
@@ -267,7 +269,7 @@ ynh-specific config lives under the `"ynh"` key, keeping the file extensible for
 │       ├── rules/
 │       └── commands/
 ├── cache/                     # Cloned Git repos
-│   └── repo-name-a1b2c3d4/
+│   └── eyelock--shared-skills--a1b2c3d4/
 ├── run/                       # Assembled vendor config (per persona, overwritten each run)
 │   └── david/
 │       ├── .claude/           # vendor config dir with assembled artifacts

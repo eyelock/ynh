@@ -332,10 +332,13 @@ mkdir -p $YNH_WALKTHROUGH/project && cd $YNH_WALKTHROUGH/project
 walkthrough -v cursor --install
 ```
 
-Expected:
+Expected (N varies based on artifact count):
 
 ```
-Installed N symlinks for walkthrough (cursor) in /tmp/ynh-walkthrough/project
+Installed N symlinks for walkthrough (cursor) in /tmp/ynh-walkthrough/project:
+
+  agents/nitpicker.md -> /Users/<you>/.ynh/run/walkthrough/.cursor/agents/nitpicker.md
+  ...
 ```
 
 Check what was created:

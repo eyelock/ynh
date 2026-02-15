@@ -4,7 +4,7 @@
 
 ```yaml
 delegates_to:
-  - git: github.com/user/persona           # shorthand HTTPS
+  - git: github.com/user/persona           # shorthand (expands to SSH)
     ref: main                               # optional - tag, branch, commit
     path: personas/team-ops                 # optional - monorepo subdirectory
   - git: git@github.com:co/private.git     # SSH for private repos

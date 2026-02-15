@@ -23,14 +23,14 @@ Run the full CI pipeline:
 make check
 ```
 
-This runs install, format, lint, test, and build in sequence. Fix any issues before committing.
+This runs deps, format, lint, test, and build in sequence. Fix any issues before committing.
 
 ## Individual steps
 
 If you need to run steps individually:
 
 ```bash
-make install   # install prerequisites (goimports, golangci-lint)
+make deps      # install prerequisites (goimports, golangci-lint)
 make format    # goimports + gofmt
 make lint      # golangci-lint
 make test      # go test with race detection and coverage
@@ -52,6 +52,6 @@ make test FILE=./internal/assembler
 
 ## Common issues
 
-- **Tool not found**: The Makefile uses full paths to GOPATH/bin for go-installed tools. Run `make install` if tools are missing.
+- **Tool not found**: The Makefile uses full paths to GOPATH/bin for go-installed tools. Run `make deps` if tools are missing.
 - **Lint errors**: `errcheck` is strict - all returned errors must be handled, even in tests
 - **Test isolation**: Always use `t.TempDir()` and `t.Setenv("YNH_HOME", "")` to avoid leaking state

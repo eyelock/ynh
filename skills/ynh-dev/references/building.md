@@ -19,15 +19,15 @@ Recipes reference `$(GOIMPORTS)` instead of bare `goimports`. This means `make f
 
 | Command | What it does |
 |---------|-------------|
-| `make check` | Full CI pipeline: install, format, lint, test, build |
-| `make install` | Install prerequisites (goimports, golangci-lint) |
+| `make check` | Full CI pipeline: deps, format, lint, test, build |
+| `make deps` | Install prerequisites (goimports, golangci-lint) |
 | `make build` | Build binary to `bin/ynh` |
+| `make install` | Build and copy binary to `~/.ynh/bin` |
 | `make test` | Run all tests with race detection and coverage |
 | `make test FILE=./cmd/ynh` | Run tests for a specific package (verbose) |
 | `make format` | Run goimports + gofmt |
 | `make lint` | Run golangci-lint |
 | `make clean` | Remove build artifacts and caches |
-| `make bin` | Build and copy binary to `~/.ynh/bin` |
 | `make help` | List all targets |
 
 ## Permissions

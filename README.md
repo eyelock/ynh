@@ -2,6 +2,8 @@
 
 A persona manager for AI coding assistants. Bundle skills, agents, rules, and commands into named personas, then launch them with any vendor CLI.
 
+> **Note**: This is a personal project developed in my spare time. It's an exploration of the varying approaches to marketplace/distribution across AI vendors.
+
 ```bash
 ynh install github.com/david/my-persona
 david                                    # interactive session
@@ -150,7 +152,7 @@ Artifacts can live **directly in your persona** (embedded) or be **pulled from G
 }
 ```
 
-Embedded artifacts (files in the persona directory) are always included. External artifacts are fetched from Git at runtime. The URL format controls the protocol: shorthand (`github.com/...`) uses HTTPS, `git@` uses SSH.
+Embedded artifacts (files in the persona directory) are always included. External artifacts are fetched from Git at runtime. Shorthand URLs (`github.com/...`) and `git@` URLs both use SSH. Use `https://` explicitly for HTTPS.
 
 ## Vendor Support
 

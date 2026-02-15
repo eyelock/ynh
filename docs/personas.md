@@ -154,6 +154,13 @@ Other personas this one can invoke as subagents.
 
 When running as `david`, you can ask it to delegate a task to `team-dev`. The delegation happens through the vendor's native subagent system.
 
+At runtime, ynh generates a vendor-native agent file for each delegate containing:
+
+- **Description** from the delegate's `plugin.json` (helps the AI route to the right delegate)
+- **Instructions** from the delegate's `instructions.md` (gives the delegate its identity)
+- **Rules** inlined from the delegate's `rules/` directory
+- **Skills** listed from the delegate's `skills/` directory
+
 ## Embedded vs External Artifacts
 
 **Embedded** artifacts live directly in the persona directory. They're always included.
