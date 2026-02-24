@@ -1,6 +1,7 @@
 .PHONY: clean deps install build test format lint check run docs help
 
 BINARY_NAME := ynh
+BINARY_NAME_DEV := ynd
 BUILD_DIR := bin
 GO := go
 GOFLAGS := -v
@@ -24,14 +25,16 @@ deps: ## Install prerequisites (Go, linter, formatter)
 	@test -x $(GOIMPORTS) || { echo "Installing goimports..."; go install golang.org/x/tools/cmd/goimports@latest; }
 	@echo "All prerequisites installed."
 
-build: ## Build the binary
+build: ## Build all binaries
 	$(GO) build $(GOFLAGS) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/ynh
+	$(GO) build $(GOFLAGS) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME_DEV) ./cmd/ynd
 
-install: build ## Build and install binary to ~/.ynh/bin
+install: build ## Build and install binaries to ~/.ynh/bin
 	@mkdir -p $(INSTALL_DIR)
 	cp $(BUILD_DIR)/$(BINARY_NAME) $(INSTALL_DIR)/$(BINARY_NAME)
-	@echo "Installed $(BINARY_NAME) to $(INSTALL_DIR)/$(BINARY_NAME)"
-	@command -v $(BINARY_NAME) >/dev/null 2>&1 || echo "Add $(INSTALL_DIR) to your PATH: export PATH=\"$(INSTALL_DIR):\$$PATH\""
+	cp $(BUILD_DIR)/$(BINARY_NAME_DEV) $(INSTALL_DIR)/$(BINARY_NAME_DEV)
+	@echo "Installed $(BINARY_NAME) and $(BINARY_NAME_DEV) to $(INSTALL_DIR)"
+	@command -v $(BINARY_NAME_DEV) >/dev/null 2>&1 || echo "Run: export PATH=\"$(INSTALL_DIR):\$$PATH\""
 
 test: ## Run tests with coverage (use FILE=./path/to/pkg to target specific package)
 ifdef FILE
