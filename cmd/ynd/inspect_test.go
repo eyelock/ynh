@@ -685,12 +685,15 @@ func TestCmdInspect_FullFlow_SkipConfirm(t *testing.T) {
 }
 
 func TestCmdInspect_Quit(t *testing.T) {
+	origLookPath := lookPathFunc
 	originalLLM := queryLLMFunc
 	originalPrompt := promptActionFunc
 	defer func() {
+		lookPathFunc = origLookPath
 		queryLLMFunc = originalLLM
 		promptActionFunc = originalPrompt
 	}()
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 
 	queryLLMFunc = func(vendor, prompt string) (string, error) {
 		return "- Go project\n", nil
@@ -710,14 +713,17 @@ func TestCmdInspect_Quit(t *testing.T) {
 }
 
 func TestCmdInspect_Refine(t *testing.T) {
+	origLookPath := lookPathFunc
 	originalLLM := queryLLMFunc
 	originalPrompt := promptActionFunc
 	originalInput := promptInputFunc
 	defer func() {
+		lookPathFunc = origLookPath
 		queryLLMFunc = originalLLM
 		promptActionFunc = originalPrompt
 		promptInputFunc = originalInput
 	}()
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 
 	callCount := 0
 	queryLLMFunc = func(vendor, prompt string) (string, error) {
@@ -759,12 +765,15 @@ func TestCmdInspect_Refine(t *testing.T) {
 }
 
 func TestCmdInspect_GenerateYes(t *testing.T) {
+	origLookPath := lookPathFunc
 	originalLLM := queryLLMFunc
 	originalPrompt := promptActionFunc
 	defer func() {
+		lookPathFunc = origLookPath
 		queryLLMFunc = originalLLM
 		promptActionFunc = originalPrompt
 	}()
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 
 	callCount := 0
 	queryLLMFunc = func(vendor, prompt string) (string, error) {
@@ -803,12 +812,15 @@ func TestCmdInspect_GenerateYes(t *testing.T) {
 }
 
 func TestCmdInspect_Walkthrough(t *testing.T) {
+	origLookPath := lookPathFunc
 	originalLLM := queryLLMFunc
 	originalPrompt := promptActionFunc
 	defer func() {
+		lookPathFunc = origLookPath
 		queryLLMFunc = originalLLM
 		promptActionFunc = originalPrompt
 	}()
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 
 	callCount := 0
 	queryLLMFunc = func(vendor, prompt string) (string, error) {
@@ -859,12 +871,15 @@ func TestCmdInspect_Walkthrough(t *testing.T) {
 }
 
 func TestCmdInspect_WalkthroughQuit(t *testing.T) {
+	origLookPath := lookPathFunc
 	originalLLM := queryLLMFunc
 	originalPrompt := promptActionFunc
 	defer func() {
+		lookPathFunc = origLookPath
 		queryLLMFunc = originalLLM
 		promptActionFunc = originalPrompt
 	}()
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 
 	callCount := 0
 	queryLLMFunc = func(vendor, prompt string) (string, error) {
@@ -905,12 +920,15 @@ func TestCmdInspect_WalkthroughQuit(t *testing.T) {
 }
 
 func TestCmdInspect_WalkthroughSkipAfterGenerate(t *testing.T) {
+	origLookPath := lookPathFunc
 	originalLLM := queryLLMFunc
 	originalPrompt := promptActionFunc
 	defer func() {
+		lookPathFunc = origLookPath
 		queryLLMFunc = originalLLM
 		promptActionFunc = originalPrompt
 	}()
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 
 	callCount := 0
 	queryLLMFunc = func(vendor, prompt string) (string, error) {
@@ -959,12 +977,15 @@ func TestCmdInspect_WalkthroughSkipAfterGenerate(t *testing.T) {
 }
 
 func TestCmdInspect_WalkthroughLLMError(t *testing.T) {
+	origLookPath := lookPathFunc
 	originalLLM := queryLLMFunc
 	originalPrompt := promptActionFunc
 	defer func() {
+		lookPathFunc = origLookPath
 		queryLLMFunc = originalLLM
 		promptActionFunc = originalPrompt
 	}()
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 
 	callCount := 0
 	queryLLMFunc = func(vendor, prompt string) (string, error) {
@@ -1005,6 +1026,10 @@ func TestCmdInspect_WalkthroughLLMError(t *testing.T) {
 }
 
 func TestCmdInspect_NoSignals(t *testing.T) {
+	origLookPath := lookPathFunc
+	t.Cleanup(func() { lookPathFunc = origLookPath })
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
+
 	dir := t.TempDir()
 	t.Chdir(dir)
 
@@ -1126,12 +1151,15 @@ func TestReviewExistingArtifact_ReadError(t *testing.T) {
 }
 
 func TestReviewExistingArtifact_ViewThenUpdate(t *testing.T) {
+	origLookPath := lookPathFunc
 	originalLLM := queryLLMFunc
 	originalPrompt := promptActionFunc
 	defer func() {
+		lookPathFunc = origLookPath
 		queryLLMFunc = originalLLM
 		promptActionFunc = originalPrompt
 	}()
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 
 	queryLLMFunc = func(vendor, prompt string) (string, error) {
 		return "---\nname: test\ndescription: Updated.\n---\n\nUpdated.\n", nil
@@ -1189,12 +1217,15 @@ func TestCmdInspect_EmptyProposals(t *testing.T) {
 }
 
 func TestCmdInspect_SkipProposals(t *testing.T) {
+	origLookPath := lookPathFunc
 	originalLLM := queryLLMFunc
 	originalPrompt := promptActionFunc
 	defer func() {
+		lookPathFunc = origLookPath
 		queryLLMFunc = originalLLM
 		promptActionFunc = originalPrompt
 	}()
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 
 	callCount := 0
 	queryLLMFunc = func(vendor, prompt string) (string, error) {
@@ -1227,12 +1258,15 @@ func TestCmdInspect_SkipProposals(t *testing.T) {
 }
 
 func TestCmdInspect_WithExistingArtifacts(t *testing.T) {
+	origLookPath := lookPathFunc
 	originalLLM := queryLLMFunc
 	originalPrompt := promptActionFunc
 	defer func() {
+		lookPathFunc = origLookPath
 		queryLLMFunc = originalLLM
 		promptActionFunc = originalPrompt
 	}()
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 
 	callCount := 0
 	queryLLMFunc = func(vendor, prompt string) (string, error) {
@@ -1311,12 +1345,15 @@ func TestReviewExistingArtifact_View(t *testing.T) {
 }
 
 func TestReviewExistingArtifact_Update(t *testing.T) {
+	origLookPath := lookPathFunc
 	originalLLM := queryLLMFunc
 	originalPrompt := promptActionFunc
 	defer func() {
+		lookPathFunc = origLookPath
 		queryLLMFunc = originalLLM
 		promptActionFunc = originalPrompt
 	}()
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 
 	queryLLMFunc = func(vendor, prompt string) (string, error) {
 		return "---\nname: test\ndescription: Updated.\n---\n\nUpdated body.\n", nil

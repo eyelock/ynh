@@ -292,7 +292,7 @@ func buildSignalContext(root string, signals []signal, maxFiles int) string {
 		if err != nil {
 			relPath = s.Path
 		}
-		sb.WriteString(fmt.Sprintf("### %s [%s]\n", relPath, s.Category))
+		fmt.Fprintf(&sb, "### %s [%s]\n", relPath, s.Category)
 		content := readFileContext(s.Path, 2000)
 		if content != "" {
 			sb.WriteString("```\n")
