@@ -190,6 +190,23 @@ func TestCreateCommand(t *testing.T) {
 	}
 }
 
+func TestCreatePersona_InsidePersona(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	// Make CWD look like a persona
+	mkdirAll(t, filepath.Join(dir, ".claude-plugin"))
+	writeFile(t, filepath.Join(dir, ".claude-plugin", "plugin.json"), []byte(`{}`))
+
+	err := createPersona("nested")
+	if err == nil {
+		t.Fatal("expected error when creating persona inside a persona")
+	}
+	if !strings.Contains(err.Error(), "already inside a persona") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestCmdCreate_InvalidName(t *testing.T) {
 	err := cmdCreate([]string{"skill", "../bad-name"})
 	if err == nil {
@@ -217,6 +234,150 @@ func TestCmdCreate_NotEnoughArgs(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "usage") {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestCreateRule_AlreadyExists(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	if err := createRule("be-concise"); err != nil {
+		t.Fatalf("first createRule failed: %v", err)
+	}
+
+	err := createRule("be-concise")
+	if err == nil {
+		t.Fatal("expected error for duplicate rule")
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestCreateCommand_AlreadyExists(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	if err := createCommand("deploy"); err != nil {
+		t.Fatalf("first createCommand failed: %v", err)
+	}
+
+	err := createCommand("deploy")
+	if err == nil {
+		t.Fatal("expected error for duplicate command")
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestCmdCreate_SingleArg(t *testing.T) {
+	err := cmdCreate([]string{"skill"})
+	if err == nil {
+		t.Fatal("expected error for single arg")
+	}
+}
+
+func TestCreateRule_Content(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	if err := createRule("test-rule"); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "rules", "test-rule.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) == 0 {
+		t.Error("rule file is empty")
+	}
+}
+
+func TestCreateCommand_Content(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	if err := createCommand("test-cmd"); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "commands", "test-cmd.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "```bash") {
+		t.Error("missing bash code block")
+	}
+	if !strings.Contains(content, "# test-cmd") {
+		t.Error("missing heading with command name")
+	}
+}
+
+func TestCmdCreate_Skill(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	err := cmdCreate([]string{"skill", "test-skill"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "skills", "test-skill", "SKILL.md")); err != nil {
+		t.Error("expected SKILL.md to exist")
+	}
+}
+
+func TestCmdCreate_Agent(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	err := cmdCreate([]string{"agent", "test-agent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "agents", "test-agent.md")); err != nil {
+		t.Error("expected agent file to exist")
+	}
+}
+
+func TestCmdCreate_Persona(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	err := cmdCreate([]string{"persona", "test-persona"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "test-persona", ".claude-plugin", "plugin.json")); err != nil {
+		t.Error("expected plugin.json to exist")
+	}
+}
+
+func TestCmdCreate_Rule(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	err := cmdCreate([]string{"rule", "test-rule"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "rules", "test-rule.md")); err != nil {
+		t.Error("expected rule file to exist")
+	}
+}
+
+func TestCmdCreate_Command(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	err := cmdCreate([]string{"command", "test-cmd"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "commands", "test-cmd.md")); err != nil {
+		t.Error("expected command file to exist")
 	}
 }
 

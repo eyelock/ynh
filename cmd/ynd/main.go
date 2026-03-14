@@ -70,6 +70,10 @@ Options:
   [file]                     Target a specific file (default: recurse CWD)
   -v, --vendor <name>        Vendor CLI for compress/inspect (default: auto-detect)
   -y, --yes                  Skip confirmation prompts
+  -o, --output-dir <path>    Output directory for inspect artifacts (default: .{vendor}/)
+  --restore                  Restore a file from its latest compress backup
+  --list-backups             Show compress backup history for a file
+  --pick <N>                 With --restore, pick a specific backup by number
 
 Examples:
   ynd create skill commit
@@ -80,7 +84,10 @@ Examples:
   ynd fmt skills/
   ynd compress -v claude
   ynd compress instructions.md
+  ynd compress --list-backups instructions.md
+  ynd compress --restore instructions.md
   ynd inspect
   ynd inspect -v claude
+  ynd inspect -o .
 `, config.Version)
 }

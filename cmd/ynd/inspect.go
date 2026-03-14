@@ -11,7 +11,7 @@ import (
 )
 
 func cmdInspect(args []string) error {
-	vendor, skipConfirm, err := parseInspectArgs(args)
+	vendor, skipConfirm, outputDir, err := parseInspectArgs(args)
 	if err != nil {
 		return err
 	}
@@ -40,6 +40,11 @@ func cmdInspect(args []string) error {
 
 	root := "."
 
+	// Determine where to write artifacts
+	if outputDir == "" {
+		outputDir = filepath.Join(root, "."+vendor)
+	}
+
 	// Scan project signals
 	signals := scanSignals(root)
 	if len(signals) == 0 {
@@ -47,9 +52,9 @@ func cmdInspect(args []string) error {
 		return nil
 	}
 
-	// Discover existing skills and agents
-	existingSkills := discoverExistingSkills(root)
-	existingAgents := discoverExistingAgents(root)
+	// Discover existing skills and agents (check both root and vendor dirs)
+	existingSkills := discoverExistingSkillsAll(root)
+	existingAgents := discoverExistingAgentsAll(root)
 
 	// Step 1: Project understanding
 	fmt.Println("─── Step 1: Project Understanding ───")
@@ -127,31 +132,37 @@ func cmdInspect(args []string) error {
 			fmt.Println("Skipped.")
 			return nil
 		case "y":
-			return generateAllProposals(vendor, overview, proposals, root)
+			return generateAllProposals(vendor, overview, proposals, root, outputDir)
 		case "w":
-			return walkthroughProposals(vendor, overview, proposals, root)
+			return walkthroughProposals(vendor, overview, proposals, root, outputDir)
 		}
 	} else {
-		return generateAllProposals(vendor, overview, proposals, root)
+		return generateAllProposals(vendor, overview, proposals, root, outputDir)
 	}
 
 	return nil
 }
 
-func parseInspectArgs(args []string) (vendor string, skipConfirm bool, err error) {
+func parseInspectArgs(args []string) (vendor string, skipConfirm bool, outputDir string, err error) {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "-v", "--vendor":
 			if i+1 >= len(args) {
-				return "", false, fmt.Errorf("-v requires a vendor name")
+				return "", false, "", fmt.Errorf("-v requires a vendor name")
 			}
 			vendor = args[i+1]
+			i++
+		case "-o", "--output-dir":
+			if i+1 >= len(args) {
+				return "", false, "", fmt.Errorf("-o requires a directory path")
+			}
+			outputDir = args[i+1]
 			i++
 		case "-y", "--yes":
 			skipConfirm = true
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return "", false, fmt.Errorf("unknown flag: %s", args[i])
+				return "", false, "", fmt.Errorf("unknown flag: %s", args[i])
 			}
 		}
 	}
@@ -203,6 +214,57 @@ func discoverExistingAgents(root string) []string {
 		agents = append(agents, filepath.Join(agentsDir, e.Name()))
 	}
 	return agents
+}
+
+// supportedVendors lists the vendor CLI names whose config dirs we search.
+var supportedVendors = []string{"claude", "cursor", "codex"}
+
+// discoverExistingSkillsAll finds SKILL.md files in skills/ at the project root
+// and inside each supported vendor config directory (e.g. .claude/skills/).
+func discoverExistingSkillsAll(root string) []string {
+	dirs := []string{root}
+	for _, v := range supportedVendors {
+		dirs = append(dirs, filepath.Join(root, "."+v))
+	}
+	seen := make(map[string]bool)
+	var all []string
+	for _, dir := range dirs {
+		for _, s := range discoverExistingSkills(dir) {
+			key := s
+			if abs, err := filepath.Abs(s); err == nil {
+				key = abs
+			}
+			if !seen[key] {
+				seen[key] = true
+				all = append(all, s)
+			}
+		}
+	}
+	return all
+}
+
+// discoverExistingAgentsAll finds agent .md files in agents/ at the project root
+// and inside each supported vendor config directory (e.g. .claude/agents/).
+func discoverExistingAgentsAll(root string) []string {
+	dirs := []string{root}
+	for _, v := range supportedVendors {
+		dirs = append(dirs, filepath.Join(root, "."+v))
+	}
+	seen := make(map[string]bool)
+	var all []string
+	for _, dir := range dirs {
+		for _, a := range discoverExistingAgents(dir) {
+			key := a
+			if abs, err := filepath.Abs(a); err == nil {
+				key = abs
+			}
+			if !seen[key] {
+				seen[key] = true
+				all = append(all, a)
+			}
+		}
+	}
+	return all
 }
 
 // readFileContext reads a file and truncates to maxLen bytes for LLM context.
@@ -450,7 +512,7 @@ If the project is already well-covered, say "No additional artifacts needed."`, 
 }
 
 // generateAllProposals generates all proposed artifacts at once.
-func generateAllProposals(vendor, overview, proposalText, root string) error {
+func generateAllProposals(vendor, overview, proposalText, root, outputDir string) error {
 	proposals := parseProposals(proposalText)
 	if len(proposals) == 0 {
 		fmt.Println("Could not parse any proposals from the suggestions.")
@@ -467,7 +529,7 @@ func generateAllProposals(vendor, overview, proposalText, root string) error {
 		}
 
 		content = ensureFrontmatter(content, p)
-		if err := writeArtifact(content, p, root); err != nil {
+		if err := writeArtifact(content, p, outputDir); err != nil {
 			fmt.Fprintf(os.Stderr, "    Write failed: %v\n", err)
 			continue
 		}
@@ -481,7 +543,7 @@ func generateAllProposals(vendor, overview, proposalText, root string) error {
 }
 
 // walkthroughProposals walks through each proposal one by one.
-func walkthroughProposals(vendor, overview, proposalText, root string) error {
+func walkthroughProposals(vendor, overview, proposalText, root, outputDir string) error {
 	proposals := parseProposals(proposalText)
 	if len(proposals) == 0 {
 		fmt.Println("Could not parse any proposals from the suggestions.")
@@ -512,7 +574,7 @@ func walkthroughProposals(vendor, overview, proposalText, root string) error {
 
 			writeAction := promptAction("  [w]rite / [s]kip: ", "w", "s")
 			if writeAction == "w" {
-				if writeErr := writeArtifact(content, p, root); writeErr != nil {
+				if writeErr := writeArtifact(content, p, outputDir); writeErr != nil {
 					fmt.Fprintf(os.Stderr, "  Write failed: %v\n", writeErr)
 				}
 			}
@@ -529,8 +591,10 @@ type proposal struct {
 	Line string // the full original line
 }
 
-// proposalPattern matches lines like: 1. **Skill: `ynh-add-vendor`** —
-var proposalPattern = regexp.MustCompile(`(?i)^\d+\.\s+\*{0,2}(skill|agent)[:\s]+` + "`?" + `([a-zA-Z0-9][a-zA-Z0-9._-]*)` + "`?" + `\*{0,2}`)
+// proposalPattern matches lines like:
+//  1. **Skill: `ynh-add-vendor`** — description
+//  1. **Skill** — `go-dev` — description
+var proposalPattern = regexp.MustCompile(`(?i)^\d+\.\s+\*{0,2}(skill|agent)(?:\*{0,2}\s*[—–-]+\s*|[:\s]+)` + "`?" + `([a-zA-Z0-9][a-zA-Z0-9._-]*)` + "`?" + `\*{0,2}`)
 
 // parseProposals extracts typed proposals from the LLM's numbered list.
 func parseProposals(text string) []proposal {
@@ -615,7 +679,7 @@ func extractContent(raw string) string {
 
 	// Find frontmatter: look for ---\n followed by a name: field
 	// This handles preamble text, explanations, etc.
-	for i := 0; i < len(raw)-4; i++ {
+	for i := 0; i+4 <= len(raw); i++ {
 		if (i == 0 || raw[i-1] == '\n') && raw[i:i+4] == "---\n" {
 			// Check if what follows looks like frontmatter (key: value lines)
 			rest := raw[i+4:]
@@ -720,47 +784,22 @@ func writeArtifact(content string, p proposal, root string) error {
 	return nil
 }
 
-// detectVendorCLI checks for supported LLM CLIs on PATH.
-func detectVendorCLI() string {
-	for _, name := range []string{"claude", "codex"} {
-		if _, err := exec.LookPath(name); err == nil {
-			return name
-		}
-	}
-	return ""
-}
-
-// queryLLM sends a prompt to the vendor CLI and returns the response.
-func queryLLM(vendor, prompt string) (string, error) {
-	var cmd *exec.Cmd
-	switch vendor {
-	case "claude":
-		cmd = exec.Command("claude", "-p", prompt, "--output-format", "text")
-	case "codex":
-		cmd = exec.Command("codex", "-q", prompt)
-	default:
-		return "", fmt.Errorf("unsupported vendor %q", vendor)
-	}
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		msg := strings.TrimSpace(string(output))
-		if msg != "" {
-			return "", fmt.Errorf("%s", msg)
-		}
-		return "", err
-	}
-
-	result := strings.TrimSpace(string(output))
-	if result == "" {
-		return "", fmt.Errorf("LLM returned empty response")
-	}
-
-	return result, nil
-}
+// promptActionFunc and promptInputFunc are replaceable for testing.
+var promptActionFunc = promptActionImpl
+var promptInputFunc = promptInputImpl
 
 // promptAction shows a prompt and returns one of the valid choices.
 func promptAction(msg string, choices ...string) string {
+	return promptActionFunc(msg, choices...)
+}
+
+// promptInput shows a prompt and returns free-text input.
+func promptInput(msg string) string {
+	return promptInputFunc(msg)
+}
+
+// promptActionImpl is the real implementation that reads from stdin.
+func promptActionImpl(msg string, choices ...string) string {
 	reader := bufio.NewReader(os.Stdin)
 	choiceSet := make(map[string]bool, len(choices))
 	for _, c := range choices {
@@ -788,8 +827,8 @@ func promptAction(msg string, choices ...string) string {
 	}
 }
 
-// promptInput shows a prompt and returns free-text input.
-func promptInput(msg string) string {
+// promptInputImpl is the real implementation that reads from stdin.
+func promptInputImpl(msg string) string {
 	fmt.Print(msg)
 	reader := bufio.NewReader(os.Stdin)
 	answer, _ := reader.ReadString('\n')

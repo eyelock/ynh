@@ -118,6 +118,59 @@ func TestDiscoverByName(t *testing.T) {
 	}
 }
 
+func TestDiscoverByName_SingleFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "metadata.json")
+	if err := os.WriteFile(path, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := discoverByName(path, []string{"plugin.json"})
+	if err != nil {
+		t.Fatalf("discoverByName failed: %v", err)
+	}
+	if len(files) != 1 || files[0] != path {
+		t.Errorf("expected [%s], got %v", path, files)
+	}
+}
+
+func TestDiscoverAll_SingleFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.md")
+	if err := os.WriteFile(path, []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := discoverAll(path, []string{".sh"}, []string{"plugin.json"})
+	if err != nil {
+		t.Fatalf("discoverAll failed: %v", err)
+	}
+	if len(files) != 1 || files[0] != path {
+		t.Errorf("expected [%s], got %v", path, files)
+	}
+}
+
+func TestDiscoverFiles_Nonexistent(t *testing.T) {
+	_, err := discoverFiles("/nonexistent/path", []string{".md"})
+	if err == nil {
+		t.Error("expected error for nonexistent path")
+	}
+}
+
+func TestDiscoverByName_Nonexistent(t *testing.T) {
+	_, err := discoverByName("/nonexistent/path", []string{"foo.json"})
+	if err == nil {
+		t.Error("expected error for nonexistent path")
+	}
+}
+
+func TestDiscoverAll_Nonexistent(t *testing.T) {
+	_, err := discoverAll("/nonexistent/path", []string{".md"}, []string{"foo.json"})
+	if err == nil {
+		t.Error("expected error for nonexistent path")
+	}
+}
+
 func TestDiscoverAll(t *testing.T) {
 	dir := t.TempDir()
 

@@ -1,12 +1,12 @@
----
-title: Full Walkthrough
----
-
 # Full Walkthrough
 
-A hands-on walk through every feature, start to finish. By the end you'll have created a persona, run it, switched vendors, used symlinks, pulled skills from Git, set up delegation, and cleaned everything up.
+A hands-on walk through every feature, start to finish. By the end you'll have used ynh to create a persona, run it, switched vendors, used symlinks, pulled skills from Git, and set up delegation — then used ynd to scaffold, lint, validate, format, compress, and inspect.
 
 This doubles as a verification script. If any step doesn't work, something is broken.
+
+---
+
+# Part 1: ynh
 
 ## Prerequisites
 
@@ -659,10 +659,264 @@ unset YNH_WALKTHROUGH
 
 ---
 
+# Part 2: ynd
+
+ynd is the developer CLI for authoring and maintaining personas and artifacts. This section walks through scaffolding, linting, validating, formatting, compressing, and inspecting.
+
+## Prerequisites
+
+```bash
+# Build both binaries
+cd "$YNH_SRC" && make clean && make build
+export YND="$(pwd)/bin/ynd"
+
+# Set up a scratch directory
+export YND_WALKTHROUGH=/tmp/ynd-walkthrough
+mkdir -p "$YND_WALKTHROUGH" && cd "$YND_WALKTHROUGH"
+```
+
+Verify:
+
+```bash
+$YND version
+# Expected: ynd <version>
+
+$YND help
+# Expected: usage with all commands
+```
+
+---
+
+## 18. Create — scaffold a persona
+
+```bash
+$YND create persona my-team
+```
+
+Expected: a `my-team/` directory with `.claude-plugin/plugin.json`, `metadata.json`, `instructions.md`, and empty `skills/`, `agents/`, `rules/`, `commands/` directories.
+
+```bash
+find my-team -type f | sort
+# Expected:
+#   my-team/.claude-plugin/plugin.json
+#   my-team/instructions.md
+#   my-team/metadata.json
+```
+
+Error cases:
+
+```bash
+$YND create persona my-team    # expect: "already exists"
+$YND create persona ""         # expect: invalid name
+```
+
+---
+
+## 19. Create — add artifacts
+
+```bash
+cd my-team
+
+$YND create skill code-review
+$YND create agent security-reviewer
+$YND create rule always-explain
+$YND create command pre-commit
+```
+
+Each creates a scaffolded file with the correct structure. Verify:
+
+```bash
+cat skills/code-review/SKILL.md    # frontmatter with name, description
+cat agents/security-reviewer.md    # frontmatter with name, description, tools
+cat rules/always-explain.md        # placeholder text
+cat commands/pre-commit.md         # heading + bash block
+```
+
+---
+
+## 20. Author content
+
+Replace the scaffolded files with real content:
+
+```bash
+cat > skills/code-review/SKILL.md << 'EOF'
+---
+name: code-review
+description: Perform thorough code reviews with security and performance focus.
+---
+
+## When to use
+
+Use when reviewing pull requests or code changes.
+
+## Steps
+
+1. Check for OWASP top 10 vulnerabilities
+2. Look for performance bottlenecks
+3. Verify error handling patterns
+4. Check test coverage gaps
+
+Provide specific, actionable feedback with file paths and line numbers.
+EOF
+
+cat > agents/security-reviewer.md << 'EOF'
+---
+name: security-reviewer
+description: Specialized agent for security-focused code review.
+tools: Read, Grep, Glob, Bash
+---
+
+You are a security specialist. When delegated to:
+
+- Scan for hardcoded credentials and secrets
+- Check authentication and authorization patterns
+- Review input validation and sanitization
+- Identify injection vulnerabilities
+
+Report findings with severity levels and remediation steps.
+EOF
+```
+
+---
+
+## 21. Lint
+
+```bash
+$YND lint
+# Expected: "Checked N file(s) — no issues found."
+```
+
+Introduce a problem and re-lint:
+
+```bash
+printf "no trailing newline\ntrailing spaces   " > rules/dirty.md
+$YND lint
+# Expected: reports trailing whitespace and missing newline
+rm rules/dirty.md
+```
+
+---
+
+## 22. Validate
+
+```bash
+$YND validate
+# Expected: ".: valid"
+```
+
+Break something and validate:
+
+```bash
+mkdir -p skills/orphan
+$YND validate
+# Expected: INVALID, "skills/orphan/ missing SKILL.md"
+rmdir skills/orphan
+```
+
+---
+
+## 23. Format
+
+```bash
+cat > rules/messy.md << 'EOF'
+# Messy File
+
+This has trailing spaces.
+
+Multiple blank lines above.
+EOF
+
+$YND fmt
+# Expected: "Formatted rules/messy.md"
+
+$YND fmt
+# Expected: "all formatted" (no-op on second run)
+```
+
+---
+
+## 24. Compress
+
+Requires `claude` or `codex` CLI on PATH.
+
+```bash
+# Compress with auto-apply
+$YND compress -y skills/code-review/SKILL.md
+# Expected: shows char reduction, creates backup in ~/.ynd/backups/
+
+# Verify frontmatter is preserved
+$YND validate
+# Expected: ".: valid"
+```
+
+### Backup management
+
+```bash
+# List backups
+$YND compress --list-backups skills/code-review/SKILL.md
+# Expected: numbered list with timestamps and backup directory
+
+# Restore from latest backup
+$YND compress --restore skills/code-review/SKILL.md
+# Expected: "Restored ... from backup <timestamp>"
+
+# Compress again to create a second backup
+$YND compress -y skills/code-review/SKILL.md
+
+# List shows two backups
+$YND compress --list-backups skills/code-review/SKILL.md
+# Expected: 2 entries
+
+# Restore a specific backup by number
+$YND compress --restore --pick 2 skills/code-review/SKILL.md
+# Expected: restores the older backup
+```
+
+---
+
+## 25. Inspect
+
+Requires `claude` or `codex` CLI on PATH.
+
+```bash
+# Set up a project to inspect
+cd "$YND_WALKTHROUGH"
+git init test-project && cd test-project
+echo "module example.com/test" > go.mod
+echo "package main" > main.go
+git add -A && git commit -m "init"
+
+# Run inspect — artifacts go to .claude/ by default
+$YND inspect -y
+# Expected: analyzes project, proposes and generates skills/agents
+ls -R .claude/skills/ .claude/agents/ 2>/dev/null
+# Expected: generated SKILL.md and agent .md files inside .claude/
+
+# Clean up for next test
+rm -rf .claude/skills .claude/agents
+
+# Override output directory
+$YND inspect -y -o .
+# Expected: artifacts in skills/ and agents/ at project root
+rm -rf skills agents
+```
+
+---
+
+## 26. Clean up
+
+```bash
+rm -rf "$YND_WALKTHROUGH"
+unset YND_WALKTHROUGH YND
+```
+
+---
+
 ## Summary
 
 | Feature | Command | Tested |
 |---------|---------|--------|
+| **ynh** | | |
 | Initialize | `ynh init` | |
 | Create persona | mkdir + plugin.json + metadata.json | |
 | All 4 artifact types | skills/, agents/, rules/, commands/ | |
@@ -687,5 +941,18 @@ unset YNH_WALKTHROUGH
 | Help | `ynh help` / `--help` / `-h` | |
 | Uninstall | `ynh uninstall <name>` / `ynh remove <name>` | |
 | Version | `ynh version` | |
+| **ynd** | | |
+| Scaffold persona | `ynd create persona my-team` | |
+| Scaffold artifacts | `ynd create skill/agent/rule/command` | |
+| Lint | `ynd lint` | |
+| Validate | `ynd validate` | |
+| Format | `ynd fmt` | |
+| Compress | `ynd compress -y file.md` | |
+| Compress preserves frontmatter | validate passes after compress | |
+| Compress backups | `ynd compress --list-backups file.md` | |
+| Compress restore | `ynd compress --restore file.md` | |
+| Compress restore with pick | `ynd compress --restore --pick N file.md` | |
+| Inspect (vendor-specific output) | `ynd inspect -y` → `.claude/` | |
+| Inspect (custom output dir) | `ynd inspect -y -o .` | |
 
-If every row works, ynh works.
+If every row works, ynh and ynd work.

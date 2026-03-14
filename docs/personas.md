@@ -1,7 +1,3 @@
----
-title: Persona Reference
----
-
 # Persona Reference
 
 A persona is defined by a `.claude-plugin/plugin.json` manifest, an optional `metadata.json` sidecar, and artifact directories.

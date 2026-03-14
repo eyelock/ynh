@@ -396,3 +396,494 @@ func TestExpectedFrontmatterName_Agent(t *testing.T) {
 		t.Errorf("got %q, want %q", got, "reviewer")
 	}
 }
+
+func TestCmdLint_NoFiles(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	err := cmdLint(nil)
+	if err != nil {
+		t.Errorf("expected no error for empty dir, got %v", err)
+	}
+}
+
+func TestCmdLint_Clean(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	writeFile(t, filepath.Join(dir, "readme.md"), []byte("# Hello\n\nClean file.\n"))
+
+	err := cmdLint(nil)
+	if err != nil {
+		t.Errorf("expected no error for clean files, got %v", err)
+	}
+}
+
+func TestCmdLint_WithIssues(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	writeFile(t, filepath.Join(dir, "bad.md"), []byte("trailing spaces   "))
+
+	err := cmdLint(nil)
+	if err == nil {
+		t.Fatal("expected lint error")
+	}
+	if !strings.Contains(err.Error(), "lint failed") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestCmdLint_SingleFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.md")
+	writeFile(t, path, []byte("# Clean\n"))
+
+	err := cmdLint([]string{path})
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
+
+func TestCmdLint_WithShellAndJSON(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	writeFile(t, filepath.Join(dir, "test.sh"), []byte("#!/bin/bash\necho hello\n"))
+	pluginDir := filepath.Join(dir, ".claude-plugin")
+	mkdirAll(t, pluginDir)
+	writeFile(t, filepath.Join(pluginDir, "plugin.json"), []byte(`{"name":"test","version":"0.1.0"}`))
+	writeFile(t, filepath.Join(dir, "metadata.json"), []byte(`{"other":"data"}`))
+
+	err := cmdLint(nil)
+	if err != nil {
+		t.Errorf("expected no error for valid files, got %v", err)
+	}
+}
+
+func TestCmdLint_IssueWithLineNumber(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	writeFile(t, filepath.Join(dir, "test.md"), []byte("line1\nline2   \nline3\n"))
+
+	err := cmdLint(nil)
+	if err == nil {
+		t.Fatal("expected lint error")
+	}
+}
+
+func TestCmdLint_IssueWithoutLineNumber(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	pluginDir := filepath.Join(dir, ".claude-plugin")
+	mkdirAll(t, pluginDir)
+	writeFile(t, filepath.Join(pluginDir, "plugin.json"), []byte(`{}`))
+
+	err := cmdLint(nil)
+	if err == nil {
+		t.Fatal("expected lint error for plugin.json missing fields")
+	}
+}
+
+func TestLintSkillFrontmatter_Missing(t *testing.T) {
+	issues := lintSkillFrontmatter("skills/foo/SKILL.md", "Just text.\n")
+	if len(issues) == 0 {
+		t.Fatal("expected issue for missing frontmatter")
+	}
+	if !strings.Contains(issues[0].Message, "missing YAML frontmatter") {
+		t.Errorf("unexpected message: %s", issues[0].Message)
+	}
+}
+
+func TestLintSkillFrontmatter_Unclosed(t *testing.T) {
+	issues := lintSkillFrontmatter("skills/foo/SKILL.md", "---\nname: foo\nno closing\n")
+	if len(issues) == 0 {
+		t.Fatal("expected issue for unclosed frontmatter")
+	}
+	if !strings.Contains(issues[0].Message, "unclosed frontmatter") {
+		t.Errorf("unexpected message: %s", issues[0].Message)
+	}
+}
+
+func TestLintSkillFrontmatter_EmptyName(t *testing.T) {
+	content := "---\nname: \ndescription: Something\n---\n"
+	issues := lintSkillFrontmatter("skills/foo/SKILL.md", content)
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue.Message, "'name' is empty") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected empty name issue")
+	}
+}
+
+func TestLintSkillFrontmatter_MissingName(t *testing.T) {
+	content := "---\ndescription: Something\n---\n"
+	issues := lintSkillFrontmatter("skills/foo/SKILL.md", content)
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue.Message, "missing required field 'name'") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected missing name issue")
+	}
+}
+
+func TestLintSkillFrontmatter_MissingDescription(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, "skills", "foo")
+	mkdirAll(t, skillDir)
+	path := filepath.Join(skillDir, "SKILL.md")
+	content := "---\nname: foo\n---\n"
+
+	issues := lintSkillFrontmatter(path, content)
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue.Message, "missing required field 'description'") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected missing description issue")
+	}
+}
+
+func TestLintAgentFrontmatter_Unclosed(t *testing.T) {
+	issues := lintAgentFrontmatter("agents/bad.md", "---\nname: bad\nno closing\n")
+	if len(issues) == 0 {
+		t.Fatal("expected issue for unclosed frontmatter")
+	}
+	if !strings.Contains(issues[0].Message, "unclosed frontmatter") {
+		t.Errorf("unexpected message: %s", issues[0].Message)
+	}
+}
+
+func TestLintAgentFrontmatter_EmptyName(t *testing.T) {
+	content := "---\nname: \ndescription: Something\ntools: Read\n---\n"
+	issues := lintAgentFrontmatter("agents/bad.md", content)
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue.Message, "'name' is empty") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected empty name issue")
+	}
+}
+
+func TestLintMetadataJSON_YNHNotObject(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "metadata.json")
+	writeFile(t, path, []byte(`{"ynh":"string"}`))
+
+	issues := lintMetadataJSON(path)
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue.Message, "'ynh' must be an object") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected 'ynh must be object' issue")
+	}
+}
+
+func TestLintMetadataJSON_IncludesNotArray(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "metadata.json")
+	writeFile(t, path, []byte(`{"ynh":{"includes":"not-array"}}`))
+
+	issues := lintMetadataJSON(path)
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue.Message, "'ynh.includes' must be an array") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected includes not array issue")
+	}
+}
+
+func TestLintMetadataJSON_IncludesItemNotObject(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "metadata.json")
+	writeFile(t, path, []byte(`{"ynh":{"includes":["not-object"]}}`))
+
+	issues := lintMetadataJSON(path)
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue.Message, "must be an object") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected includes item not object issue")
+	}
+}
+
+func TestLintMetadataJSON_DelegatesToMissingGit(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "metadata.json")
+	writeFile(t, path, []byte(`{"ynh":{"delegates_to":[{"ref":"main"}]}}`))
+
+	issues := lintMetadataJSON(path)
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue.Message, "missing required field 'git'") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected missing git field issue")
+	}
+}
+
+func TestLintMetadataJSON_DelegatesToNotArray(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "metadata.json")
+	writeFile(t, path, []byte(`{"ynh":{"delegates_to":"not-array"}}`))
+
+	issues := lintMetadataJSON(path)
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue.Message, "'ynh.delegates_to' must be an array") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected delegates_to not array issue")
+	}
+}
+
+func TestLintMetadataJSON_DelegatesToItemNotObject(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "metadata.json")
+	writeFile(t, path, []byte(`{"ynh":{"delegates_to":["not-object"]}}`))
+
+	issues := lintMetadataJSON(path)
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue.Message, "must be an object") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected delegates_to item not object issue")
+	}
+}
+
+func TestLintMetadataJSON_ValidWithIncludes(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "metadata.json")
+	writeFile(t, path, []byte(`{"ynh":{"includes":[{"git":"https://example.com/repo"}]}}`))
+
+	issues := lintMetadataJSON(path)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues, got %v", issues)
+	}
+}
+
+func TestLintMetadataJSON_ValidWithDelegatesTo(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "metadata.json")
+	writeFile(t, path, []byte(`{"ynh":{"delegates_to":[{"git":"https://example.com/repo"}]}}`))
+
+	issues := lintMetadataJSON(path)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues, got %v", issues)
+	}
+}
+
+func TestLintPluginJSON_EmptyName(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "plugin.json")
+	writeFile(t, path, []byte(`{"name":"","version":"0.1.0"}`))
+
+	issues := lintPluginJSON(path)
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue.Message, "non-empty string") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected empty name issue")
+	}
+}
+
+func TestLintPluginJSON_EmptyVersion(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "plugin.json")
+	writeFile(t, path, []byte(`{"name":"test","version":""}`))
+
+	issues := lintPluginJSON(path)
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue.Message, "'version' must be a non-empty string") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected empty version issue")
+	}
+}
+
+func TestLintShell_SyntaxError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.sh")
+	writeFile(t, path, []byte("#!/bin/bash\nif true; then\n"))
+
+	issues := lintShell(path)
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue.Message, "syntax error") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected syntax error issue")
+	}
+}
+
+func TestCheckBashSyntax_Valid(t *testing.T) {
+	err := checkBashSyntax("echo hello")
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
+
+func TestCheckBashSyntax_Invalid(t *testing.T) {
+	err := checkBashSyntax("if true; then")
+	if err == nil {
+		t.Error("expected syntax error")
+	}
+}
+
+func TestLintMarkdown_ReadError(t *testing.T) {
+	issues := lintMarkdown("/nonexistent/path/file.md")
+	if len(issues) == 0 {
+		t.Fatal("expected read error issue")
+	}
+	if !strings.Contains(issues[0].Message, "read error") {
+		t.Errorf("unexpected message: %s", issues[0].Message)
+	}
+}
+
+func TestLintShell_ReadError(t *testing.T) {
+	issues := lintShell("/nonexistent/path/test.sh")
+	if len(issues) == 0 {
+		t.Fatal("expected read error issue")
+	}
+	if !strings.Contains(issues[0].Message, "read error") {
+		t.Errorf("unexpected message: %s", issues[0].Message)
+	}
+}
+
+func TestLintPluginJSON_ReadError(t *testing.T) {
+	issues := lintPluginJSON("/nonexistent/path/plugin.json")
+	if len(issues) == 0 {
+		t.Fatal("expected read error issue")
+	}
+	if !strings.Contains(issues[0].Message, "read error") {
+		t.Errorf("unexpected message: %s", issues[0].Message)
+	}
+}
+
+func TestLintMetadataJSON_ReadError(t *testing.T) {
+	issues := lintMetadataJSON("/nonexistent/path/metadata.json")
+	if len(issues) == 0 {
+		t.Fatal("expected read error issue")
+	}
+	if !strings.Contains(issues[0].Message, "read error") {
+		t.Errorf("unexpected message: %s", issues[0].Message)
+	}
+}
+
+func TestIsSkillFile(t *testing.T) {
+	if !isSkillFile("skills/foo/SKILL.md") {
+		t.Error("expected true for SKILL.md")
+	}
+	if isSkillFile("agents/foo.md") {
+		t.Error("expected false for non-SKILL.md")
+	}
+}
+
+func TestIsAgentFile(t *testing.T) {
+	if !isAgentFile("agents/reviewer.md") {
+		t.Error("expected true for agents/reviewer.md")
+	}
+	if isAgentFile("skills/foo/SKILL.md") {
+		t.Error("expected false for non-agent file")
+	}
+}
+
+func TestLintMarkdown_SkillContextCheck(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, "skills", "test")
+	mkdirAll(t, skillDir)
+	path := filepath.Join(skillDir, "SKILL.md")
+	writeFile(t, path, []byte("---\nname: test\ndescription: Test skill\n---\n\nBody.\n"))
+
+	issues := lintMarkdown(path)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues for valid skill, got %v", issues)
+	}
+}
+
+func TestLintMarkdown_AgentContextCheck(t *testing.T) {
+	dir := t.TempDir()
+	agentDir := filepath.Join(dir, "agents")
+	mkdirAll(t, agentDir)
+	path := filepath.Join(agentDir, "reviewer.md")
+	writeFile(t, path, []byte("---\nname: reviewer\ndescription: Reviews\ntools: Read\n---\n\nBody.\n"))
+
+	issues := lintMarkdown(path)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues for valid agent, got %v", issues)
+	}
+}
+
+func TestParseFrontmatter_Unclosed(t *testing.T) {
+	fm := parseFrontmatter("---\nname: test\nno closing\n")
+	if fm != nil {
+		t.Errorf("expected nil for unclosed frontmatter, got %v", fm)
+	}
+}
+
+func TestParseFrontmatter_QuotedValues(t *testing.T) {
+	content := "---\nname: \"quoted\"\ndescription: 'single'\n---\n"
+	fm := parseFrontmatter(content)
+	if fm == nil {
+		t.Fatal("expected frontmatter")
+	}
+	if fm["name"] != "quoted" {
+		t.Errorf("name = %q, want %q", fm["name"], "quoted")
+	}
+	if fm["description"] != "single" {
+		t.Errorf("description = %q, want %q", fm["description"], "single")
+	}
+}
+
+func TestLintShellBlocks_ShBlock(t *testing.T) {
+	content := "# Test\n\n```sh\necho hello\n```\n"
+	issues := lintShellBlocks("test.md", content)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues, got %v", issues)
+	}
+}
+
+func TestLintShellBlocks_EmptyBlock(t *testing.T) {
+	content := "# Test\n\n```bash\n```\n"
+	issues := lintShellBlocks("test.md", content)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues for empty block, got %v", issues)
+	}
+}

@@ -1,7 +1,3 @@
----
-title: Vendor Support
----
-
 # Vendor Support
 
 ynh works with multiple AI coding assistants. The vendor determines which CLI is launched and where config files are placed. Your personas and artifacts stay the same regardless of vendor.

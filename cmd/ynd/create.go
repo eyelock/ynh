@@ -108,6 +108,9 @@ Provide actionable output, not just observations.
 }
 
 func createPersona(name string) error {
+	if isPersonaRoot(".") {
+		return fmt.Errorf("already inside a persona directory — create personas from outside")
+	}
 	if _, err := os.Stat(name); err == nil {
 		return fmt.Errorf("directory %q already exists", name)
 	}

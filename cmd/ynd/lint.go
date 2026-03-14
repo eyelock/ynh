@@ -280,6 +280,9 @@ func lintShellBlocks(path, content string) []lintIssue {
 func hasTemplatePlaceholders(script string) bool {
 	for i := 0; i < len(script); i++ {
 		if script[i] == '<' {
+			// end is relative to script[i+1:], so script[i+1:i+1+end] is the
+			// content between < and > (exclusive). Safe because end is bounded
+			// by IndexByte searching within the same substring.
 			end := strings.IndexByte(script[i+1:], '>')
 			if end > 0 && end < 40 && !strings.ContainsAny(script[i+1:i+1+end], " \t\n") {
 				return true

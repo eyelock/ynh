@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test format lint check run docs help
+.PHONY: clean deps install build test test-coverage format lint check run docs help
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -41,6 +41,15 @@ ifdef FILE
 	$(GO) test $(FILE) -cover -race -v
 else
 	$(GO) test ./... -cover -race
+endif
+
+test-coverage: ## Run tests with coverage profile (use FILE=./path/to/pkg to target specific package)
+ifdef FILE
+	$(GO) test $(FILE) -coverprofile=coverage.out -count=1
+	$(GO) tool cover -func=coverage.out
+else
+	$(GO) test ./... -coverprofile=coverage.out -count=1
+	$(GO) tool cover -func=coverage.out
 endif
 
 format: ## Format code
