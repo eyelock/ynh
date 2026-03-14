@@ -31,7 +31,7 @@ func main() {
 		err = cmdCompress(os.Args[2:])
 	case "inspect":
 		err = cmdInspect(os.Args[2:])
-	case "version":
+	case "version", "--version", "-v":
 		fmt.Printf("ynd %s\n", config.Version)
 	case "help", "--help", "-h":
 		printUsage()
