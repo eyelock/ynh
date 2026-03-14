@@ -6,10 +6,13 @@ import (
 	"strings"
 )
 
+// lookPathFunc is used to check if a vendor CLI exists. Tests can replace it.
+var lookPathFunc = exec.LookPath
+
 // detectVendorCLI checks for supported LLM CLIs on PATH.
 func detectVendorCLI() string {
 	for _, name := range []string{"claude", "codex"} {
-		if _, err := exec.LookPath(name); err == nil {
+		if _, err := lookPathFunc(name); err == nil {
 			return name
 		}
 	}
@@ -29,18 +32,24 @@ func queryLLMImpl(vendor, prompt string) (string, error) {
 	var cmd *exec.Cmd
 	switch vendor {
 	case "claude":
-		cmd = exec.Command("claude", "-p", prompt, "--output-format", "text")
+		cmd = exec.Command("claude", "-p", "-", "--output-format", "text")
 	case "codex":
-		cmd = exec.Command("codex", "-q", prompt)
+		cmd = exec.Command("codex", "-q", "-")
 	default:
 		return "", fmt.Errorf("unsupported vendor %q", vendor)
 	}
 
-	output, err := cmd.CombinedOutput()
+	// Pass prompt via stdin to avoid exposing file content in process list
+	cmd.Stdin = strings.NewReader(prompt)
+
+	output, err := cmd.Output()
 	if err != nil {
-		msg := strings.TrimSpace(string(output))
-		if msg != "" {
-			return "", fmt.Errorf("%s: %w", msg, err)
+		// Check for stderr in the exit error
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			msg := strings.TrimSpace(string(exitErr.Stderr))
+			if msg != "" {
+				return "", fmt.Errorf("%s: %w", msg, err)
+			}
 		}
 		return "", err
 	}

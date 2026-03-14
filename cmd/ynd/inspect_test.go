@@ -646,6 +646,9 @@ func TestPromptInput_ReturnsText(t *testing.T) {
 }
 
 func TestCmdInspect_FullFlow_SkipConfirm(t *testing.T) {
+	origLookPath := lookPathFunc
+	t.Cleanup(func() { lookPathFunc = origLookPath })
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 	originalLLM := queryLLMFunc
 	defer func() { queryLLMFunc = originalLLM }()
 
@@ -1043,6 +1046,9 @@ func TestCmdInspect_BadFlag(t *testing.T) {
 }
 
 func TestCmdInspect_AnalysisFails(t *testing.T) {
+	origLookPath := lookPathFunc
+	t.Cleanup(func() { lookPathFunc = origLookPath })
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 	originalLLM := queryLLMFunc
 	defer func() { queryLLMFunc = originalLLM }()
 
@@ -1061,6 +1067,9 @@ func TestCmdInspect_AnalysisFails(t *testing.T) {
 }
 
 func TestCmdInspect_ProposalsFail(t *testing.T) {
+	origLookPath := lookPathFunc
+	t.Cleanup(func() { lookPathFunc = origLookPath })
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 	originalLLM := queryLLMFunc
 	defer func() { queryLLMFunc = originalLLM }()
 
@@ -1084,6 +1093,9 @@ func TestCmdInspect_ProposalsFail(t *testing.T) {
 }
 
 func TestCmdInspect_NoAdditionalArtifacts(t *testing.T) {
+	origLookPath := lookPathFunc
+	t.Cleanup(func() { lookPathFunc = origLookPath })
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 	originalLLM := queryLLMFunc
 	defer func() { queryLLMFunc = originalLLM }()
 
@@ -1151,6 +1163,9 @@ func TestReviewExistingArtifact_ViewThenUpdate(t *testing.T) {
 }
 
 func TestCmdInspect_EmptyProposals(t *testing.T) {
+	origLookPath := lookPathFunc
+	t.Cleanup(func() { lookPathFunc = origLookPath })
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 	originalLLM := queryLLMFunc
 	defer func() { queryLLMFunc = originalLLM }()
 
@@ -1348,6 +1363,9 @@ func TestReviewExistingArtifact_SkipConfirm(t *testing.T) {
 }
 
 func TestCmdInspect_OutputDir(t *testing.T) {
+	origLookPath := lookPathFunc
+	t.Cleanup(func() { lookPathFunc = origLookPath })
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 	originalLLM := queryLLMFunc
 	defer func() { queryLLMFunc = originalLLM }()
 
@@ -1443,6 +1461,9 @@ func TestDiscoverExistingAgents_SkipsNonMarkdown(t *testing.T) {
 }
 
 func TestGenerateAllProposals(t *testing.T) {
+	origLookPath2 := lookPathFunc
+	t.Cleanup(func() { lookPathFunc = origLookPath2 })
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 	original := queryLLMFunc
 	defer func() { queryLLMFunc = original }()
 
@@ -1481,6 +1502,9 @@ func TestGenerateAllProposals_NoProposals(t *testing.T) {
 }
 
 func TestGenerateAllProposals_LLMError(t *testing.T) {
+	origLookPath2 := lookPathFunc
+	t.Cleanup(func() { lookPathFunc = origLookPath2 })
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 	original := queryLLMFunc
 	defer func() { queryLLMFunc = original }()
 
@@ -1499,6 +1523,9 @@ func TestGenerateAllProposals_LLMError(t *testing.T) {
 }
 
 func TestAnalyzeProject(t *testing.T) {
+	origLookPath2 := lookPathFunc
+	t.Cleanup(func() { lookPathFunc = origLookPath2 })
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 	original := queryLLMFunc
 	defer func() { queryLLMFunc = original }()
 
@@ -1520,6 +1547,9 @@ func TestAnalyzeProject(t *testing.T) {
 }
 
 func TestRefineAnalysis(t *testing.T) {
+	origLookPath2 := lookPathFunc
+	t.Cleanup(func() { lookPathFunc = origLookPath2 })
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 	original := queryLLMFunc
 	defer func() { queryLLMFunc = original }()
 
@@ -1537,6 +1567,9 @@ func TestRefineAnalysis(t *testing.T) {
 }
 
 func TestProposeNewArtifacts(t *testing.T) {
+	origLookPath2 := lookPathFunc
+	t.Cleanup(func() { lookPathFunc = origLookPath2 })
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 	original := queryLLMFunc
 	defer func() { queryLLMFunc = original }()
 
@@ -1558,6 +1591,9 @@ func TestProposeNewArtifacts(t *testing.T) {
 }
 
 func TestGenerateSingleArtifact(t *testing.T) {
+	origLookPath2 := lookPathFunc
+	t.Cleanup(func() { lookPathFunc = origLookPath2 })
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 	original := queryLLMFunc
 	defer func() { queryLLMFunc = original }()
 
@@ -1578,6 +1614,9 @@ func TestGenerateSingleArtifact(t *testing.T) {
 }
 
 func TestProposeNewArtifacts_WithExisting(t *testing.T) {
+	origLookPath2 := lookPathFunc
+	t.Cleanup(func() { lookPathFunc = origLookPath2 })
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 	original := queryLLMFunc
 	defer func() { queryLLMFunc = original }()
 
@@ -1610,6 +1649,9 @@ func TestProposeNewArtifacts_WithExisting(t *testing.T) {
 }
 
 func TestGenerateAllProposals_AlreadyExists(t *testing.T) {
+	origLookPath2 := lookPathFunc
+	t.Cleanup(func() { lookPathFunc = origLookPath2 })
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
 	original := queryLLMFunc
 	defer func() { queryLLMFunc = original }()
 

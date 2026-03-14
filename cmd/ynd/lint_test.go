@@ -23,6 +23,20 @@ func mkdirAll(t *testing.T, path string) {
 	}
 }
 
+// mockLLM replaces queryLLMFunc and lookPathFunc for tests that use LLM commands.
+// Returns a cleanup function that restores the originals.
+func mockLLM(t *testing.T, fn func(vendor, prompt string) (string, error)) {
+	t.Helper()
+	origLLM := queryLLMFunc
+	origLookPath := lookPathFunc
+	queryLLMFunc = fn
+	lookPathFunc = func(name string) (string, error) { return "/mock/" + name, nil }
+	t.Cleanup(func() {
+		queryLLMFunc = origLLM
+		lookPathFunc = origLookPath
+	})
+}
+
 func TestLintMarkdown_TrailingWhitespace(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.md")

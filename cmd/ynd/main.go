@@ -1,11 +1,15 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/eyelock/ynh/internal/config"
 )
+
+// errHelp is returned by arg parsers when -h/--help is passed.
+var errHelp = errors.New("help requested")
 
 func main() {
 	if len(os.Args) < 2 {
@@ -37,7 +41,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err != nil {
+	if errors.Is(err, errHelp) {
+		printUsage()
+	} else if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}

@@ -150,13 +150,9 @@ func TestParseCompressArgs_PickZero(t *testing.T) {
 }
 
 func TestCompressWithLLM_PreservesFrontmatter(t *testing.T) {
-	original := queryLLMFunc
-	defer func() { queryLLMFunc = original }()
-
-	queryLLMFunc = func(vendor, prompt string) (string, error) {
-		// Simulate LLM returning compressed body
+	mockLLM(t, func(vendor, prompt string) (string, error) {
 		return "Compressed body content.", nil
-	}
+	})
 
 	input := "---\nname: test\ndescription: A test skill.\n---\n\n## Verbose Instructions\n\nDo the thing carefully and thoroughly.\n"
 	result, err := compressWithLLM("claude", input)
@@ -173,12 +169,9 @@ func TestCompressWithLLM_PreservesFrontmatter(t *testing.T) {
 }
 
 func TestCompressWithLLM_NoFrontmatter(t *testing.T) {
-	original := queryLLMFunc
-	defer func() { queryLLMFunc = original }()
-
-	queryLLMFunc = func(vendor, prompt string) (string, error) {
+	mockLLM(t, func(vendor, prompt string) (string, error) {
 		return "Short version.", nil
-	}
+	})
 
 	input := "# Long Instructions\n\nVerbose content here.\n"
 	result, err := compressWithLLM("claude", input)
@@ -195,13 +188,10 @@ func TestCompressWithLLM_NoFrontmatter(t *testing.T) {
 }
 
 func TestCompressWithLLM_LLMReturnsFrontmatter(t *testing.T) {
-	original := queryLLMFunc
-	defer func() { queryLLMFunc = original }()
-
 	// LLM returns its own frontmatter — should be stripped to avoid duplication
-	queryLLMFunc = func(vendor, prompt string) (string, error) {
+	mockLLM(t, func(vendor, prompt string) (string, error) {
 		return "---\nname: test\ndescription: LLM version\n---\n\nLLM body.", nil
-	}
+	})
 
 	input := "---\nname: test\ndescription: Original.\n---\n\nOriginal body.\n"
 	result, err := compressWithLLM("claude", input)
@@ -219,12 +209,9 @@ func TestCompressWithLLM_LLMReturnsFrontmatter(t *testing.T) {
 }
 
 func TestCompressWithLLM_Error(t *testing.T) {
-	original := queryLLMFunc
-	defer func() { queryLLMFunc = original }()
-
-	queryLLMFunc = func(vendor, prompt string) (string, error) {
+	mockLLM(t, func(vendor, prompt string) (string, error) {
 		return "", fmt.Errorf("LLM error")
-	}
+	})
 
 	_, err := compressWithLLM("claude", "content")
 	if err == nil {
@@ -233,12 +220,9 @@ func TestCompressWithLLM_Error(t *testing.T) {
 }
 
 func TestCmdCompress_FullFlow(t *testing.T) {
-	original := queryLLMFunc
-	defer func() { queryLLMFunc = original }()
-
-	queryLLMFunc = func(vendor, prompt string) (string, error) {
+	mockLLM(t, func(vendor, prompt string) (string, error) {
 		return "Compressed.", nil
-	}
+	})
 
 	dir := t.TempDir()
 	t.Chdir(dir)
@@ -266,12 +250,9 @@ func TestCmdCompress_FullFlow(t *testing.T) {
 }
 
 func TestCmdCompress_FullFlow_WithFrontmatter(t *testing.T) {
-	original := queryLLMFunc
-	defer func() { queryLLMFunc = original }()
-
-	queryLLMFunc = func(vendor, prompt string) (string, error) {
+	mockLLM(t, func(vendor, prompt string) (string, error) {
 		return "Compressed body.", nil
-	}
+	})
 
 	dir := t.TempDir()
 	t.Chdir(dir)
@@ -296,12 +277,9 @@ func TestCmdCompress_FullFlow_WithFrontmatter(t *testing.T) {
 }
 
 func TestCmdCompress_DiscoverFiles(t *testing.T) {
-	original := queryLLMFunc
-	defer func() { queryLLMFunc = original }()
-
-	queryLLMFunc = func(vendor, prompt string) (string, error) {
+	mockLLM(t, func(vendor, prompt string) (string, error) {
 		return "Short.", nil
-	}
+	})
 
 	dir := t.TempDir()
 	t.Chdir(dir)
@@ -327,14 +305,11 @@ func TestCmdCompress_DiscoverFiles(t *testing.T) {
 }
 
 func TestCmdCompress_EmptyFileSkippedWithMock(t *testing.T) {
-	original := queryLLMFunc
-	defer func() { queryLLMFunc = original }()
-
 	called := false
-	queryLLMFunc = func(vendor, prompt string) (string, error) {
+	mockLLM(t, func(vendor, prompt string) (string, error) {
 		called = true
 		return "Short.", nil
-	}
+	})
 
 	dir := t.TempDir()
 	t.Chdir(dir)
@@ -353,12 +328,9 @@ func TestCmdCompress_EmptyFileSkippedWithMock(t *testing.T) {
 }
 
 func TestCmdCompress_ReadError(t *testing.T) {
-	original := queryLLMFunc
-	defer func() { queryLLMFunc = original }()
-
-	queryLLMFunc = func(vendor, prompt string) (string, error) {
+	mockLLM(t, func(vendor, prompt string) (string, error) {
 		return "Short.", nil
-	}
+	})
 
 	// File that doesn't exist
 	err := cmdCompress([]string{"-v", "claude", "-y", "/nonexistent/file.md"})
@@ -369,12 +341,9 @@ func TestCmdCompress_ReadError(t *testing.T) {
 }
 
 func TestCmdCompress_LLMFails(t *testing.T) {
-	original := queryLLMFunc
-	defer func() { queryLLMFunc = original }()
-
-	queryLLMFunc = func(vendor, prompt string) (string, error) {
+	mockLLM(t, func(vendor, prompt string) (string, error) {
 		return "", fmt.Errorf("LLM unavailable")
-	}
+	})
 
 	dir := t.TempDir()
 	t.Setenv("YND_BACKUP_DIR", filepath.Join(dir, "backups"))
@@ -395,14 +364,11 @@ func TestCmdCompress_LLMFails(t *testing.T) {
 }
 
 func TestCmdCompress_MultipleFiles(t *testing.T) {
-	original := queryLLMFunc
-	defer func() { queryLLMFunc = original }()
-
 	callCount := 0
-	queryLLMFunc = func(vendor, prompt string) (string, error) {
+	mockLLM(t, func(vendor, prompt string) (string, error) {
 		callCount++
 		return fmt.Sprintf("Compressed %d.", callCount), nil
-	}
+	})
 
 	dir := t.TempDir()
 	t.Setenv("YND_BACKUP_DIR", filepath.Join(dir, "backups"))
@@ -423,16 +389,11 @@ func TestCmdCompress_MultipleFiles(t *testing.T) {
 }
 
 func TestCmdCompress_InteractiveApply(t *testing.T) {
-	originalLLM := queryLLMFunc
-	originalPrompt := promptActionFunc
-	defer func() {
-		queryLLMFunc = originalLLM
-		promptActionFunc = originalPrompt
-	}()
-
-	queryLLMFunc = func(vendor, prompt string) (string, error) {
+	mockLLM(t, func(vendor, prompt string) (string, error) {
 		return "Compressed.", nil
-	}
+	})
+	origPrompt := promptActionFunc
+	t.Cleanup(func() { promptActionFunc = origPrompt })
 	promptActionFunc = func(msg string, choices ...string) string {
 		return "y"
 	}
@@ -455,16 +416,11 @@ func TestCmdCompress_InteractiveApply(t *testing.T) {
 }
 
 func TestCmdCompress_InteractiveSkip(t *testing.T) {
-	originalLLM := queryLLMFunc
-	originalPrompt := promptActionFunc
-	defer func() {
-		queryLLMFunc = originalLLM
-		promptActionFunc = originalPrompt
-	}()
-
-	queryLLMFunc = func(vendor, prompt string) (string, error) {
+	mockLLM(t, func(vendor, prompt string) (string, error) {
 		return "Compressed.", nil
-	}
+	})
+	origPrompt := promptActionFunc
+	t.Cleanup(func() { promptActionFunc = origPrompt })
 	promptActionFunc = func(msg string, choices ...string) string {
 		return "n"
 	}
@@ -500,11 +456,9 @@ func TestCmdCompress_NoVendorAutoDetect(t *testing.T) {
 }
 
 func TestCmdCompress_NoFilesDiscovered(t *testing.T) {
-	original := queryLLMFunc
-	defer func() { queryLLMFunc = original }()
-	queryLLMFunc = func(vendor, prompt string) (string, error) {
+	mockLLM(t, func(vendor, prompt string) (string, error) {
 		return "Short.", nil
-	}
+	})
 
 	dir := t.TempDir()
 	t.Chdir(dir)

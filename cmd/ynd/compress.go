@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -58,7 +57,7 @@ func cmdCompress(args []string) error {
 			return nil
 		}
 	} else {
-		if _, err := exec.LookPath(opts.vendor); err != nil {
+		if _, err := lookPathFunc(opts.vendor); err != nil {
 			return fmt.Errorf("vendor CLI %q not found on PATH", opts.vendor)
 		}
 	}
@@ -165,6 +164,8 @@ func parseCompressArgs(args []string) (compressOpts, error) {
 			}
 			opts.vendor = args[i+1]
 			i++
+		case "-h", "--help":
+			return opts, errHelp
 		case "-y", "--yes":
 			opts.skipConfirm = true
 		case "--restore":
@@ -226,7 +227,7 @@ func backupFile(path string, content []byte) error {
 		return err
 	}
 
-	ts := time.Now().Format("20060102T150405")
+	ts := time.Now().Format("20060102T150405.000000000")
 	backupPath := filepath.Join(dir, ts)
 	return os.WriteFile(backupPath, content, 0o644)
 }
@@ -324,13 +325,15 @@ func restoreBackup(path string, pick int) error {
 	return nil
 }
 
-// formatTimestamp converts "20260314T153042" to "2026-03-14 15:30:42".
+// formatTimestamp converts backup filenames to human-readable timestamps.
+// Handles both "20260314T153042" and "20260314T153042.123456789" formats.
 func formatTimestamp(ts string) string {
-	t, err := time.Parse("20060102T150405", ts)
-	if err != nil {
-		return ts
+	for _, layout := range []string{"20060102T150405.000000000", "20060102T150405"} {
+		if t, err := time.Parse(layout, ts); err == nil {
+			return t.Format("2006-01-02 15:04:05")
+		}
 	}
-	return t.Format("2006-01-02 15:04:05")
+	return ts
 }
 
 func buildCompressPrompt(content string) string {

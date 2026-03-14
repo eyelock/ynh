@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -31,7 +30,7 @@ func cmdInspect(args []string) error {
 			return nil
 		}
 	} else {
-		if _, err := exec.LookPath(vendor); err != nil {
+		if _, err := lookPathFunc(vendor); err != nil {
 			return fmt.Errorf("vendor CLI %q not found on PATH", vendor)
 		}
 	}
@@ -158,12 +157,15 @@ func parseInspectArgs(args []string) (vendor string, skipConfirm bool, outputDir
 			}
 			outputDir = args[i+1]
 			i++
+		case "-h", "--help":
+			return "", false, "", errHelp
 		case "-y", "--yes":
 			skipConfirm = true
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return "", false, "", fmt.Errorf("unknown flag: %s", args[i])
 			}
+			return "", false, "", fmt.Errorf("unexpected argument: %s (inspect does not take file arguments)", args[i])
 		}
 	}
 	return
