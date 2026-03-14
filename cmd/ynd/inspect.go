@@ -810,7 +810,7 @@ func promptActionImpl(msg string, choices ...string) string {
 
 	for {
 		fmt.Print(msg)
-		answer, _ := reader.ReadString('\n')
+		answer, err := reader.ReadString('\n')
 		answer = strings.TrimSpace(strings.ToLower(answer))
 
 		if len(answer) > 0 {
@@ -820,8 +820,8 @@ func promptActionImpl(msg string, choices ...string) string {
 			}
 		}
 
-		// Default to first choice on empty input
-		if answer == "" && len(choices) > 0 {
+		// Default to first choice on empty input or EOF
+		if (answer == "" || err != nil) && len(choices) > 0 {
 			return choices[0]
 		}
 
