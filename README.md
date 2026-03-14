@@ -173,7 +173,7 @@ All flags except `-v`, `--install`, and `--clean` are passed through to the vend
 
 ```bash
 david --model opus -- "fix this bug"
-david -v codex --full-auto -- "refactor auth"
+david -v codex -- "refactor auth"
 ```
 
 ### Symlink Installation (Codex/Cursor)
@@ -200,10 +200,10 @@ Global default in `~/.ynh/config.json`:
 |---------|-------------|
 | `ynh init` | Show ynh home path and setup instructions |
 | `ynh install <source>` | Install persona from Git URL or local path |
-| `ynh uninstall <name>` | Remove an installed persona and its launcher |
+| `ynh uninstall <name>` | Remove an installed persona and its launcher (alias: `ynh remove`) |
 | `ynh update <name>` | Refresh cached Git repos for a persona |
 | `ynh run <name> [flags] [prompt]` | Launch a persona session |
-| `ynh ls` | List installed personas |
+| `ynh ls` | List installed personas (alias: `ynh list`) |
 | `ynh vendors` | List supported vendor adapters |
 | `ynh status` | Show symlink installations across projects |
 | `ynh prune` | Clean orphaned symlink installations |

@@ -18,7 +18,8 @@ ynh is a packaging and distribution tool. It has no runtime component - the AI v
 ### Package Structure
 
 ```
-cmd/ynh/                  CLI entry point and command handlers
+cmd/ynh/                  CLI entry point: persona manager (install, run, update)
+cmd/ynd/                  CLI entry point: developer tools (create, lint, validate, fmt, compress)
 internal/
   config/                 Global config (~/.ynh/) and path management
   persona/                Persona loading, format detection, name validation
@@ -67,7 +68,7 @@ brew install go
 # Install dev tools (linter, formatter)
 make deps
 
-# Build and install to ~/.ynh/bin
+# Build and install both binaries (ynh + ynd) to ~/.ynh/bin
 make install
 
 # Run all tests
@@ -75,6 +76,7 @@ make test
 
 # Run tests for a specific package
 make test FILE=./cmd/ynh
+make test FILE=./cmd/ynd
 
 # Format code
 make format
@@ -85,6 +87,24 @@ make lint
 # Full CI pipeline (deps, format, lint, test, build)
 make check
 ```
+
+### Two Binaries
+
+The project produces two binaries:
+
+- **`ynh`** (`cmd/ynh/`) - Persona manager for end users. Install, run, update, and uninstall personas.
+- **`ynd`** (`cmd/ynd/`) - Developer tools for persona authors. Scaffold, lint, validate, format, compress, and inspect persona artifacts. LLM-powered commands (compress, inspect) delegate to vendor CLIs on PATH.
+
+Both are built by `make build`, installed by `make install`, and released via goreleaser (single tag, both binaries, synced versions). They share `internal/config` for version injection but are otherwise independent.
+
+### ynd Internals
+
+ynd is self-contained in `cmd/ynd/` with its own command routing, file discovery, and signal scanning. Key patterns:
+
+- **LLM integration** (`llm.go`): Compress and inspect shell out to vendor CLIs (`claude`, `codex`) via `queryLLM()`. Auto-detection tries each CLI on PATH.
+- **Signal scanning** (`inspect.go`): Discovers project files by category (build, test, CI, lint, config) to provide context for LLM analysis.
+- **Backup system** (`compress.go`): Backups are stored in `~/.ynd/backups/` mirroring the absolute file path. Override with `YND_BACKUP_DIR` env var (used in tests).
+- **Vendor-aware output** (`inspect.go`): Inspect writes artifacts to `.{vendor}/` by default (e.g., `.claude/skills/`). Override with `-o`. Discovery searches both project root and all vendor dirs.
 
 ## Code Patterns
 
@@ -244,6 +264,7 @@ ynh-specific config lives under the `"ynh"` key, keeping the file extensible for
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `YNH_HOME` | Override the ynh home directory | `~/.ynh` |
+| `YND_BACKUP_DIR` | Override the ynd compress backup directory | `~/.ynd/backups` |
 
 ### Global Config (`~/.ynh/config.json`)
 

@@ -1,7 +1,3 @@
----
-title: Artifacts Guide
----
-
 # Artifacts Guide
 
 Artifacts are the building blocks of a persona: skills, agents, rules, and commands. ynh doesn't define their format - it uses whatever format the vendor expects and passes content through unchanged.

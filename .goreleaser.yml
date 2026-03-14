@@ -8,8 +8,23 @@ before:
     - go test ./...
 
 builds:
-  - main: ./cmd/ynh
+  - id: ynh
+    main: ./cmd/ynh
     binary: ynh
+    ldflags:
+      - -s -w
+      - -X github.com/eyelock/ynh/internal/config.Version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+  - id: ynd
+    main: ./cmd/ynd
+    binary: ynd
     ldflags:
       - -s -w
       - -X github.com/eyelock/ynh/internal/config.Version={{.Version}}
@@ -48,5 +63,7 @@ brews:
     license: "MIT"
     test: |
       system "#{bin}/ynh", "version"
+      system "#{bin}/ynd", "version"
     install: |
       bin.install "ynh"
+      bin.install "ynd"

@@ -1,5 +1,7 @@
 # Build output
 bin/
+/ynh
+/ynd
 
 # Go
 *.exe

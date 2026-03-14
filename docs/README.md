@@ -1,8 +1,3 @@
----
-title: ynh
-description: Your name here. Your AI, your way.
----
-
 # ynh
 
 **Your name. Your AI.**
@@ -21,7 +16,7 @@ That's it. `david` is now a command. It knows your skills, your team's rules, yo
 ```bash
 david                              # your personalized AI
 david "review this PR"             # it knows how you review
-david -v codex --full-auto         # same persona, different vendor
+david -v codex                     # same persona, different vendor
 ```
 
 **Compose from anywhere.** Cherry-pick skills from community repos, your team's private config, open-source libraries - and mix them with your own. Like a package manager for AI capabilities, backed by Git.
@@ -74,4 +69,6 @@ Add skills, agents, rules, and commands to the persona directory. Pull from Git 
 - **[Persona Reference](personas.md)** - Plugin manifest, metadata, includes, delegates
 - **[Artifacts Guide](artifacts.md)** - Skills, agents, rules, commands, and project instructions
 - **[Vendor Support](vendors.md)** - Claude, Codex, Cursor - capabilities and launch strategies
+- **[Agent Skills Standard](skills-standard.md)** - Cross-platform spec, frontmatter fields, catalog budget, discovery paths
 - **[Full Walkthrough](walkthrough.md)** - Hands-on test of every feature, start to finish
+- **[ynd Developer Tools](ynd.md)** - CLI for scaffolding, linting, formatting, compressing, and inspecting

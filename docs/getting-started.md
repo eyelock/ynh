@@ -1,7 +1,3 @@
----
-title: Getting Started
----
-
 # Getting Started
 
 ## Install
@@ -170,7 +166,7 @@ All flags except `-v`, `--install`, and `--clean` are passed through to the vend
 
 ```bash
 david --model opus -- "fix this bug"
-david -v codex --full-auto -- "refactor auth"
+david -v codex -- "refactor auth"
 ```
 
 When there are no vendor flags, the prompt can be a plain argument:

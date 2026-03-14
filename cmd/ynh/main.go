@@ -93,7 +93,7 @@ Examples:
   ynh run david "review this PR"
   ynh run david -v codex
   ynh run david --model opus -- "fix this bug"
-  ynh run david -v codex --full-auto -- "refactor auth"
+  ynh run david -v codex -- "refactor auth"
   ynh run david -v cursor --install
   ynh run david -v cursor --clean
 `, config.Version)
@@ -533,7 +533,7 @@ func resolveVendor(flag string, p *persona.Persona) (string, error) {
 //	ynh run david "simple prompt"
 //	ynh run david --verbose "simple prompt"
 //	ynh run david --model opus -- "fix this bug"
-//	ynh run david -v codex --full-auto -- "deploy it"
+//	ynh run david -v codex -- "deploy it"
 //	ynh run david -v cursor --install
 //
 // Without --, the first non-flag argument is treated as the prompt. Flag values

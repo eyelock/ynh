@@ -18,6 +18,13 @@ Five packages: `internal/persona/`, `internal/plugin/`, `internal/resolver/`, `i
 
 Plus `internal/config/` for global config and `internal/symlink/` for symlink transaction logging.
 
+## Two binaries
+
+- `ynh` (`cmd/ynh/`) - Persona manager: install, run, update, uninstall personas
+- `ynd` (`cmd/ynd/`) - Developer tools: create, lint, validate, fmt, compress persona artifacts
+
+Both share `internal/config` for version injection. `ynd` is self-contained in `cmd/ynd/` with its own command routing and file discovery.
+
 ## Adding a vendor adapter
 
 Read the "Vendor Adapters" section in `.github/CONTRIBUTING.md`. It has the full `Adapter` interface and working examples. Key points:

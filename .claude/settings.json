@@ -1,15 +1,19 @@
 {
   "plansDirectory": ".claude/plans",
   "companyAnnouncements": [
-    "ynh - persona manager for AI coding assistants. Alpha stage: pushing to main, PRs coming soon."
+    "ynh - persona manager for AI coding assistants."
   ],
   "permissions": {
     "allow": [
+      "Bash(./bin/ynh *)",
+      "Bash(./bin/ynd *)",
       "Bash(brew list *)",
       "Bash(make check)",
       "Bash(make build)",
       "Bash(make test)",
       "Bash(make test FILE=*)",
+      "Bash(make test-coverage)",
+      "Bash(make test-coverage FILE=*)",
       "Bash(make format)",
       "Bash(make lint)",
       "Bash(make install)",
@@ -21,9 +25,7 @@
       "Bash(go version:*)",
       "Bash(go get *)",
       "Bash(go mod tidy *)",
-      "Bash(go build *)",
-      "Bash(go test *)",
-      "Bash(go vet *)",
+      "Bash(go tool cover *)",
       "Bash(gh run list *)",
       "Bash(gh run view *)",
       "Bash(gh run watch *)",
@@ -39,7 +41,10 @@
       "Bash(gh run rerun *)",
       "Bash(gh release view *)",
       "Bash(gh release list *)",
-      "Bash(./bin/ynh *)"
+      "Bash(find *)",
+      "Bash(ls *)",
+      "Bash(sed *)",
+      "Bash(wc *)"
     ],
     "ask": [
       "Bash(brew install *)",
