@@ -93,7 +93,7 @@ git@github.com:company/private-repo.git
 https://github.com/user/repo.git
 ```
 
-See [Private Repositories](getting-started.md#private-repositories) for authentication setup.
+See [Private Repositories](getting-started.md#private-repositories) for authentication setup and [Restrict Remote Sources](getting-started.md#restrict-remote-sources) to control which Git repos are allowed.
 
 **Monorepo example:**
 

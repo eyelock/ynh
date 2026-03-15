@@ -41,10 +41,17 @@ func ResolveGitSource(gs persona.GitSource) (string, error) {
 }
 
 // Resolve fetches all includes for a persona and returns resolved content.
-func Resolve(p *persona.Persona) ([]ResolvedContent, error) {
+// If cfg is non-nil, remote sources are checked against the allowed sources list.
+func Resolve(p *persona.Persona, cfg *config.Config) ([]ResolvedContent, error) {
 	var results []ResolvedContent
 
 	for _, inc := range p.Includes {
+		if cfg != nil {
+			if err := cfg.CheckRemoteSource(inc.Git); err != nil {
+				return nil, fmt.Errorf("include %q: %w", inc.Git, err)
+			}
+		}
+
 		basePath, err := ResolveGitSource(inc.GitSource)
 		if err != nil {
 			return nil, err

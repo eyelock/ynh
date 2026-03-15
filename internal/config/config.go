@@ -14,7 +14,8 @@ const (
 )
 
 type Config struct {
-	DefaultVendor string `json:"default_vendor,omitempty"`
+	DefaultVendor        string   `json:"default_vendor,omitempty"`
+	AllowedRemoteSources []string `json:"allowed_remote_sources,omitempty"`
 }
 
 // HomeDir returns the ynh home directory.
