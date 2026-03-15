@@ -148,6 +148,49 @@ Or set a global default in `~/.ynh/config.json`:
 {"default_vendor": "codex"}
 ```
 
+## Restrict Remote Sources
+
+By default, personas can pull skills and agents from any Git repo via `includes` or `delegates_to`. You can restrict which remote sources are allowed by adding an `allowed_remote_sources` list to `~/.ynh/config.json`:
+
+```json
+{
+  "default_vendor": "claude",
+  "allowed_remote_sources": [
+    "github.com/eyelock/*",
+    "github.com/acme-corp/shared-skills",
+    "github.com/acme-corp/monorepo/**/ai-config/*"
+  ]
+}
+```
+
+**Behaviour:**
+
+| Config state | Effect |
+|---|---|
+| Field absent | All remote sources allowed (default) |
+| Empty array `[]` | All remote sources blocked |
+| Patterns present | Only matching sources allowed |
+
+Local paths (e.g. `ynh install ./my-persona`) are always trusted and bypass this check.
+
+**Pattern syntax:**
+
+| Pattern | Meaning |
+|---|---|
+| `*` | Matches a single path segment (does not cross `/`) |
+| `**` | Matches zero or more path segments |
+| Everything else | Literal, case-sensitive match |
+
+Patterns match against the normalized URL path. All Git URL formats (shorthand, SSH, HTTPS) are normalized before matching:
+
+```
+github.com/user/repo              →  github.com/user/repo
+git@github.com:user/repo.git      →  github.com/user/repo
+https://github.com/user/repo.git  →  github.com/user/repo
+```
+
+**Enforcement points:** The allow-list is checked on `ynh install`, `ynh run`, and `ynh update` — before any Git clone or fetch occurs.
+
 ### Symlink Installation (Codex/Cursor)
 
 Vendors without native plugin support need symlinks installed into your project:

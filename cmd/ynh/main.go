@@ -142,6 +142,15 @@ func cmdInstall(args []string) error {
 		}
 		srcDir = absPath
 	} else {
+		// Check remote source against allow-list
+		cfg, err := config.Load()
+		if err != nil {
+			return fmt.Errorf("loading config: %w", err)
+		}
+		if err := cfg.CheckRemoteSource(source); err != nil {
+			return err
+		}
+
 		// Resolve from Git
 		repoPath, err := cloneForInstall(source)
 		if err != nil {
@@ -252,9 +261,18 @@ func cmdUpdate(args []string) error {
 		return nil
 	}
 
+	// Load config for remote source checking
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+
 	checked := 0
 	updated := 0
 	for _, inc := range p.Includes {
+		if err := cfg.CheckRemoteSource(inc.Git); err != nil {
+			return fmt.Errorf("include %q: %w", inc.Git, err)
+		}
 		fmt.Printf("Checking %s...\n", inc.Git)
 		result, err := resolver.EnsureRepo(inc.Git, inc.Ref)
 		if err != nil {
@@ -270,6 +288,9 @@ func cmdUpdate(args []string) error {
 		}
 	}
 	for _, del := range p.DelegatesTo {
+		if err := cfg.CheckRemoteSource(del.Git); err != nil {
+			return fmt.Errorf("delegate %q: %w", del.Git, err)
+		}
 		fmt.Printf("Checking delegate %s...\n", del.Git)
 		result, err := resolver.EnsureRepo(del.Git, del.Ref)
 		if err != nil {
@@ -324,8 +345,14 @@ func cmdRun(args []string) error {
 		fmt.Fprintf(os.Stderr, "Assembling %d source(s)...\n", sources)
 	}
 
-	// Resolve Git includes
-	content, err := resolver.Resolve(p)
+	// Load config for remote source checking
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+
+	// Resolve Git includes (with remote source allow-list check)
+	content, err := resolver.Resolve(p, cfg)
 	if err != nil {
 		return fmt.Errorf("resolving includes: %w", err)
 	}
@@ -342,6 +369,13 @@ func cmdRun(args []string) error {
 	runDir := filepath.Join(config.RunDir(), name)
 	if err := assembler.AssembleTo(runDir, adapter, content); err != nil {
 		return fmt.Errorf("assembling config: %w", err)
+	}
+
+	// Check delegates against remote source allow-list
+	for _, del := range p.DelegatesTo {
+		if err := cfg.CheckRemoteSource(del.Git); err != nil {
+			return fmt.Errorf("delegate %q: %w", del.Git, err)
+		}
 	}
 
 	// Assemble delegate personas as agent files

@@ -47,7 +47,7 @@ func makeGitRepo(t *testing.T, files map[string]string) string {
 func resolveAndAssemble(t *testing.T, p *persona.Persona, extraContent ...resolver.ResolvedContent) string {
 	t.Helper()
 
-	content, err := resolver.Resolve(p)
+	content, err := resolver.Resolve(p, nil)
 	if err != nil {
 		t.Fatalf("Resolve failed: %v", err)
 	}
@@ -266,7 +266,7 @@ func TestSubpath_NonexistentPathErrors(t *testing.T) {
 		},
 	}
 
-	_, err := resolver.Resolve(p)
+	_, err := resolver.Resolve(p, nil)
 	if err == nil {
 		t.Fatal("expected error for nonexistent subpath")
 	}

@@ -90,7 +90,7 @@ func TestIntegration_MultiSourceComposition(t *testing.T) {
 	}
 
 	// Resolve all includes
-	content, err := resolver.Resolve(p)
+	content, err := resolver.Resolve(p, nil)
 	if err != nil {
 		t.Fatalf("Resolve failed: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestIntegration_MonorepoNoPickIncludesAll(t *testing.T) {
 		},
 	}
 
-	content, err := resolver.Resolve(p)
+	content, err := resolver.Resolve(p, nil)
 	if err != nil {
 		t.Fatalf("Resolve failed: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestIntegration_SkillsRepoFullInclude(t *testing.T) {
 		},
 	}
 
-	content, err := resolver.Resolve(p)
+	content, err := resolver.Resolve(p, nil)
 	if err != nil {
 		t.Fatalf("Resolve failed: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestIntegration_CrossVendorAssembly(t *testing.T) {
 		},
 	}
 
-	content, err := resolver.Resolve(p)
+	content, err := resolver.Resolve(p, nil)
 	if err != nil {
 		t.Fatalf("Resolve failed: %v", err)
 	}

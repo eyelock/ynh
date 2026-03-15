@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/persona"
 )
 
@@ -93,7 +94,7 @@ func TestResolve_EmptyIncludes(t *testing.T) {
 		Includes: nil,
 	}
 
-	results, err := Resolve(p)
+	results, err := Resolve(p, nil)
 	if err != nil {
 		t.Fatalf("Resolve failed: %v", err)
 	}
@@ -182,7 +183,7 @@ func TestResolve_WithLocalRepo(t *testing.T) {
 		},
 	}
 
-	results, err := Resolve(p)
+	results, err := Resolve(p, nil)
 	if err != nil {
 		t.Fatalf("Resolve failed: %v", err)
 	}
@@ -245,7 +246,7 @@ func TestResolve_WithPath_Monorepo(t *testing.T) {
 		},
 	}
 
-	results, err := Resolve(p)
+	results, err := Resolve(p, nil)
 	if err != nil {
 		t.Fatalf("Resolve failed: %v", err)
 	}
@@ -291,7 +292,7 @@ func TestResolve_WithPath_NotFound(t *testing.T) {
 		},
 	}
 
-	_, err := Resolve(p)
+	_, err := Resolve(p, nil)
 	if err == nil {
 		t.Fatal("expected error for nonexistent path")
 	}
@@ -335,7 +336,7 @@ func TestResolve_WithPath_NoPickIncludesAll(t *testing.T) {
 		},
 	}
 
-	results, err := Resolve(p)
+	results, err := Resolve(p, nil)
 	if err != nil {
 		t.Fatalf("Resolve failed: %v", err)
 	}
@@ -456,6 +457,110 @@ func TestEnsureRepo_UpdateErrorsNotSwallowed(t *testing.T) {
 	// Verify the cached repo still exists (we don't blow it away on update failure)
 	if _, statErr := os.Stat(result.Path); os.IsNotExist(statErr) {
 		t.Error("cached repo should still exist after failed update")
+	}
+}
+
+func TestResolve_BlockedByAllowList(t *testing.T) {
+	cfg := &config.Config{
+		AllowedRemoteSources: []string{
+			"github.com/trusted-org/*",
+		},
+	}
+
+	p := &persona.Persona{
+		Name: "test-blocked",
+		Includes: []persona.Include{
+			{
+				GitSource: persona.GitSource{Git: "github.com/untrusted-org/repo"},
+			},
+		},
+	}
+
+	_, err := Resolve(p, cfg)
+	if err == nil {
+		t.Fatal("expected error for blocked remote source")
+	}
+	if !strings.Contains(err.Error(), "not in the allowed sources list") {
+		t.Errorf("error should mention allow list, got: %v", err)
+	}
+}
+
+func TestResolve_AllowedByAllowList(t *testing.T) {
+	// Create a local git repo to use as the "allowed" source
+	srcDir := t.TempDir()
+	runGit(t, srcDir, "init")
+	runGit(t, srcDir, "config", "user.email", "test@test.com")
+	runGit(t, srcDir, "config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(srcDir, "README.md"), []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, srcDir, "add", ".")
+	runGit(t, srcDir, "commit", "-m", "init")
+
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	// The source is a local path, but we use it as the Git field.
+	// The allow-list pattern uses ** to match local paths too.
+	cfg := &config.Config{
+		AllowedRemoteSources: []string{
+			// Local paths start with / so we need a pattern that matches them.
+			// Use the exact path as a literal match.
+			srcDir,
+		},
+	}
+
+	p := &persona.Persona{
+		Name: "test-allowed",
+		Includes: []persona.Include{
+			{
+				GitSource: persona.GitSource{Git: srcDir},
+			},
+		},
+	}
+
+	results, err := Resolve(p, cfg)
+	if err != nil {
+		t.Fatalf("Resolve should succeed for allowed source: %v", err)
+	}
+	if len(results) != 1 {
+		t.Errorf("expected 1 result, got %d", len(results))
+	}
+}
+
+func TestResolve_EmptyAllowListBlocksAll(t *testing.T) {
+	cfg := &config.Config{
+		AllowedRemoteSources: []string{},
+	}
+
+	p := &persona.Persona{
+		Name: "test-empty-list",
+		Includes: []persona.Include{
+			{
+				GitSource: persona.GitSource{Git: "github.com/any-org/any-repo"},
+			},
+		},
+	}
+
+	_, err := Resolve(p, cfg)
+	if err == nil {
+		t.Fatal("empty allow list should block all remote sources")
+	}
+}
+
+func TestResolve_NilConfigAllowsAll(t *testing.T) {
+	p := &persona.Persona{
+		Name:     "test-nil",
+		Includes: nil,
+	}
+
+	// nil config should not panic or error
+	results, err := Resolve(p, nil)
+	if err != nil {
+		t.Fatalf("nil config should allow all: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 results for empty includes, got %d", len(results))
 	}
 }
 
