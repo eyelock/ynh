@@ -1,0 +1,50 @@
+services:
+  ynh:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: "${VERSION:-dev}"
+        USER_UID: "${USER_UID:-1000}"
+        USER_GID: "${USER_GID:-1000}"
+
+    environment:
+      # Vendor API keys — set in .env or export before running
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - CURSOR_API_KEY=${CURSOR_API_KEY:-}
+
+    volumes:
+      # Persona config, cache, and state
+      - ${YNH_HOME:-~/.ynh}:/home/ynh/.ynh
+
+      # Project working directory
+      - ${PROJECT_DIR:-.}:/workspace
+
+      # SSH keys for private Git repos (optional, read-only)
+      # Uncomment if your personas reference private repos:
+      # - ~/.ssh:/home/ynh/.ssh:ro
+
+    # Non-interactive by default
+    stdin_open: false
+    tty: false
+
+  # Granular volume mounts — use when you want to share cache across
+  # CI jobs but isolate config, or mount individual directories.
+  #
+  # Usage: docker compose run --rm ynh-granular run david "fix this"
+  ynh-granular:
+    extends:
+      service: ynh
+    volumes:
+      - ynh-personas:/home/ynh/.ynh/personas
+      - ynh-cache:/home/ynh/.ynh/cache
+      - ynh-run:/home/ynh/.ynh/run
+      - ynh-bin:/home/ynh/.ynh/bin
+      - ${PROJECT_DIR:-.}:/workspace
+
+volumes:
+  ynh-personas:
+  ynh-cache:
+  ynh-run:
+  ynh-bin:
