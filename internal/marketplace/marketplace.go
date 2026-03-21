@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/eyelock/ynh/internal/assembler"
@@ -157,6 +158,14 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 		return fmt.Errorf("generating README: %w", err)
 	}
 
+	// Initialize as Git repo if needed — Claude Code requires a working tree
+	// for relative plugin source paths to resolve during /plugin install.
+	if !isGitRepo(opts.OutputDir) {
+		if err := initGitRepo(opts.OutputDir); err != nil {
+			return fmt.Errorf("initializing git repo: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -214,6 +223,28 @@ func resolveEntrySource(source, configDir string) string {
 		return source
 	}
 	return filepath.Join(configDir, source)
+}
+
+// isGitRepo checks whether dir is the root of a Git repository.
+func isGitRepo(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, ".git"))
+	return err == nil
+}
+
+// initGitRepo initializes a new Git repo in dir and commits all content.
+func initGitRepo(dir string) error {
+	for _, args := range [][]string{
+		{"init"},
+		{"add", "."},
+		{"commit", "-m", "ynd marketplace build"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("git %s: %w\n%s", args[0], err, out)
+		}
+	}
+	return nil
 }
 
 func generateReadme(cfg *MarketplaceConfig, plugins []pluginInfo, outputDir string) error {

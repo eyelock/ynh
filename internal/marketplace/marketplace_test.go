@@ -3,6 +3,7 @@ package marketplace
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -425,6 +426,75 @@ func TestMarketplaceEmptyEntries(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "at least one entry") {
 		t.Errorf("error = %q, want 'at least one entry'", err.Error())
+	}
+}
+
+func TestMarketplaceBuildInitGitRepo(t *testing.T) {
+	configPath, configDir := setupMarketplace(t)
+	outputDir := t.TempDir()
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = Build(cfg, BuildOptions{
+		ConfigDir: configDir,
+		OutputDir: outputDir,
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	// Output dir should now be a Git repo
+	assertFileExists(t, filepath.Join(outputDir, ".git"))
+
+	// Verify there's at least one commit
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = outputDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git rev-parse HEAD failed: %v\n%s", err, out)
+	}
+}
+
+func TestMarketplaceBuildSkipsExistingGitRepo(t *testing.T) {
+	configPath, configDir := setupMarketplace(t)
+	outputDir := t.TempDir()
+
+	// Pre-initialize a git repo with a known commit
+	for _, args := range [][]string{
+		{"init"},
+		{"commit", "--allow-empty", "-m", "pre-existing"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = outputDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", args[0], err, out)
+		}
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = Build(cfg, BuildOptions{
+		ConfigDir: configDir,
+		OutputDir: outputDir,
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	// Should still have the original commit (Build should not re-init)
+	cmd := exec.Command("git", "log", "--oneline")
+	cmd.Dir = outputDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git log: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "pre-existing") {
+		t.Errorf("expected pre-existing commit in log, got:\n%s", out)
 	}
 }
 
