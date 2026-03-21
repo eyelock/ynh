@@ -9,9 +9,12 @@
 
   <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
 
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify-sidebar-collapse@1/dist/sidebar.min.css">
+
   <style>
     :root {
       --theme-color: #0066cc;
+      --sidebar-width: 280px;
     }
 
     .sidebar-nav > ul > li > p {
@@ -35,6 +38,58 @@
       background-color: #f8f8f8;
       color: #333;
     }
+
+    /* Sidebar collapse toggle */
+    .sidebar-toggle {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      z-index: 30;
+      width: 32px;
+      height: 32px;
+      border: 1px solid #e8e8e8;
+      border-radius: 6px;
+      background: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      transition: left 0.3s ease;
+    }
+
+    .sidebar-toggle:hover {
+      background: #f5f5f5;
+    }
+
+    .sidebar-toggle svg {
+      width: 16px;
+      height: 16px;
+      fill: #666;
+    }
+
+    body.sidebar-collapsed .sidebar {
+      transform: translateX(calc(-1 * var(--sidebar-width)));
+    }
+
+    body.sidebar-collapsed .content {
+      margin-left: 0 !important;
+    }
+
+    body.sidebar-collapsed .sidebar-toggle {
+      left: 16px;
+    }
+
+    .sidebar, .content {
+      transition: all 0.3s ease;
+    }
+
+    /* Responsive: hide toggle on mobile (docsify has its own hamburger) */
+    @media screen and (max-width: 768px) {
+      .sidebar-toggle {
+        display: none;
+      }
+    }
   </style>
 </head>
 <body>
@@ -44,6 +99,9 @@
       name: 'ynh',
       repo: 'https://github.com/eyelock/ynh',
       loadSidebar: true,
+      alias: {
+        '/tutorial/_sidebar.md': '/_sidebar.md'
+      },
       subMaxLevel: 2,
       auto2top: true,
       homepage: 'README.md',
@@ -62,10 +120,25 @@
         successText: 'Copied'
       },
 
+      sidebarDisplayLevel: 1,
+
       plugins: [
         function(hook, vm) {
           hook.afterEach(function(html, next) {
             next(html + '<hr/><footer><span>Powered by <a href="https://docsify.js.org" target="_blank">docsify</a></span></footer>');
+          });
+          hook.doneEach(function() {
+            // Add sidebar collapse toggle button (desktop only)
+            if (!document.querySelector('.sidebar-toggle')) {
+              var btn = document.createElement('button');
+              btn.className = 'sidebar-toggle';
+              btn.title = 'Toggle sidebar';
+              btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>';
+              btn.addEventListener('click', function() {
+                document.body.classList.toggle('sidebar-collapsed');
+              });
+              document.body.appendChild(btn);
+            }
           });
         }
       ]
@@ -76,6 +149,8 @@
   <script src="//cdn.jsdelivr.net/npm/docsify@4/lib/plugins/search.min.js"></script>
   <script src="//cdn.jsdelivr.net/npm/docsify-copy-code@2/dist/docsify-copy-code.min.js"></script>
 
+  <script src="//cdn.jsdelivr.net/npm/docsify-sidebar-collapse@1/dist/docsify-sidebar-collapse.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/docsify-tabs@1/dist/docsify-tabs.min.js"></script>
   <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
   <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-yaml.min.js"></script>
   <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-json.min.js"></script>
