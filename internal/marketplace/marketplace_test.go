@@ -464,7 +464,7 @@ func TestMarketplaceBuildSkipsExistingGitRepo(t *testing.T) {
 	// Pre-initialize a git repo with a known commit
 	for _, args := range [][]string{
 		{"init"},
-		{"commit", "--allow-empty", "-m", "pre-existing"},
+		{"-c", "user.name=test", "-c", "user.email=test@test", "commit", "--allow-empty", "-m", "pre-existing"},
 	} {
 		cmd := exec.Command("git", args...)
 		cmd.Dir = outputDir
