@@ -16,6 +16,9 @@ docker compose run --rm ynh ls
 
 # Install a persona from Git
 docker compose run --rm ynh install github.com/user/my-persona
+
+# Install from a monorepo subdirectory
+docker compose run --rm ynh install github.com/org/assistants --path personas/david
 ```
 
 ## API Keys
