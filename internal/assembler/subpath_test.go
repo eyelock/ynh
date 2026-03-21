@@ -43,15 +43,24 @@ func makeGitRepo(t *testing.T, files map[string]string) string {
 	return dir
 }
 
+// extractContent converts ResolveResults to ResolvedContent for the assembler.
+func extractContent(results []resolver.ResolveResult) []resolver.ResolvedContent {
+	var content []resolver.ResolvedContent
+	for _, r := range results {
+		content = append(content, r.Content)
+	}
+	return content
+}
+
 // resolveAndAssemble is a test helper that resolves and assembles a persona for Claude.
 func resolveAndAssemble(t *testing.T, p *persona.Persona, extraContent ...resolver.ResolvedContent) string {
 	t.Helper()
 
-	content, err := resolver.Resolve(p, nil)
+	resolved, err := resolver.Resolve(p, nil)
 	if err != nil {
 		t.Fatalf("Resolve failed: %v", err)
 	}
-	content = append(content, extraContent...)
+	content := append(extractContent(resolved), extraContent...)
 
 	adapter, _ := vendor.Get("claude")
 	workDir, err := Assemble(adapter, content)

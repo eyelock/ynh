@@ -18,14 +18,17 @@ ynh is a packaging and distribution tool. It has no runtime component - the AI v
 ### Package Structure
 
 ```
-cmd/ynh/                  CLI entry point: persona manager (install, run, update)
-cmd/ynd/                  CLI entry point: developer tools (create, lint, validate, fmt, compress)
+cmd/ynh/                  CLI entry point: persona manager (install, run, update, search, registry)
+cmd/ynd/                  CLI entry point: developer tools (create, lint, validate, fmt, compress, export, marketplace)
 internal/
   config/                 Global config (~/.ynh/) and path management
   persona/                Persona loading, format detection, name validation
   plugin/                 Plugin format types (plugin.json + metadata.json)
   resolver/               Git clone, cache, and content extraction
   assembler/              Build vendor config dir from resolved content
+  exporter/               Produce vendor-native plugin dirs from persona definitions
+  marketplace/            Generate marketplace indexes from sets of personas/plugins
+  registry/               Registry discovery: fetch, search, lookup across Git-hosted indexes
   symlink/                Symlink transaction log (~/.ynh/symlinks.json)
   vendor/                 Vendor adapter interface and implementations
     adapter.go            Interface definition + registry
@@ -62,13 +65,10 @@ docs/                     User guide (GitHub Pages)
 ## Development Setup
 
 ```bash
-# Prerequisites
-brew install go
-
-# Install dev tools (linter, formatter)
+# Prerequisites + dev tools (Go, linter, formatter)
 make deps
 
-# Build and install both binaries (ynh + ynd) to ~/.ynh/bin
+# Build and install binaries to ~/.ynh/bin/
 make install
 
 # Run all tests
@@ -92,8 +92,8 @@ make check
 
 The project produces two binaries:
 
-- **`ynh`** (`cmd/ynh/`) - Persona manager for end users. Install, run, update, and uninstall personas.
-- **`ynd`** (`cmd/ynd/`) - Developer tools for persona authors. Scaffold, lint, validate, format, compress, and inspect persona artifacts. LLM-powered commands (compress, inspect) delegate to vendor CLIs on PATH.
+- **`ynh`** (`cmd/ynh/`) - Persona manager for end users. Install, run, update, uninstall, search registries, and manage registry sources.
+- **`ynd`** (`cmd/ynd/`) - Developer tools for persona authors. Scaffold, lint, validate, format, compress, inspect, export vendor-native plugins, and build marketplace indexes. LLM-powered commands (compress, inspect) delegate to vendor CLIs on PATH.
 
 Both are built by `make build`, installed by `make install`, and released via goreleaser (single tag, both binaries, synced versions). They share `internal/config` for version injection but are otherwise independent.
 
@@ -105,6 +105,26 @@ ynd is self-contained in `cmd/ynd/` with its own command routing, file discovery
 - **Signal scanning** (`inspect.go`): Discovers project files by category (build, test, CI, lint, config) to provide context for LLM analysis.
 - **Backup system** (`compress.go`): Backups are stored in `~/.ynd/backups/` mirroring the absolute file path. Override with `YND_BACKUP_DIR` env var (used in tests).
 - **Vendor-aware output** (`inspect.go`): Inspect writes artifacts to `.{vendor}/` by default (e.g., `.claude/skills/`). Override with `-o`. Discovery searches both project root and all vendor dirs.
+- **Export** (`export.go`): Produces vendor-native plugin directories from persona definitions. Resolves includes, applies pick filtering, generates vendor manifests. Supports per-vendor and merged output modes.
+- **Marketplace** (`marketplace.go`): Builds marketplace indexes from `marketplace.json` config. Exports personas with merged manifests, copies standalone plugins, generates `marketplace.json` indexes for each vendor.
+
+### Exporter
+
+The exporter (`internal/exporter/`) takes the same inputs as the assembler but produces distributable, vendor-native plugin directories instead of runtime config.
+
+**Key differences from assembler:**
+- Output goes to plugin root (not inside `ConfigDir`)
+- Generates vendor-specific manifests (`.claude-plugin/plugin.json`, `.cursor-plugin/plugin.json`)
+- Codex export uses `.agents/skills/` layout (different from runtime `.codex/`)
+- Supports merged mode (dual manifests in one directory) for marketplace builds
+
+The exporter reuses `assembler.CopyPicked`, `CopyAllArtifacts`, `CopyFile`, and `BuildDelegateAgent` for content operations but owns its own layout decisions per vendor.
+
+### Registry
+
+The registry system (`internal/registry/`) enables persona discovery from Git-hosted indexes. A registry is a Git repo with a `registry.json` at its root. Registries are configured in `~/.ynh/config.json` and fetched/cached via `resolver.EnsureRepo`.
+
+The install command uses a 6-rule disambiguation chain: local path → SSH URL → HTTPS URL → `name@registry` → Git shorthand → plain name registry search. See `cmd/ynh/install_resolve.go`.
 
 ## Code Patterns
 
@@ -270,7 +290,11 @@ ynh-specific config lives under the `"ynh"` key, keeping the file extensible for
 
 ```json
 {
-  "default_vendor": "claude"
+  "default_vendor": "claude",
+  "allowed_remote_sources": ["github.com/myorg/*"],
+  "registries": [
+    {"url": "github.com/myorg/persona-registry"}
+  ]
 }
 ```
 
@@ -290,7 +314,7 @@ ynh-specific config lives under the `"ynh"` key, keeping the file extensible for
 │       ├── rules/
 │       └── commands/
 ├── cache/                     # Cloned Git repos
-│   └── eyelock--shared-skills--a1b2c3d4/
+│   └── eyelock--assistants--a1b2c3d4/
 ├── run/                       # Assembled vendor config (per persona, overwritten each run)
 │   └── david/
 │       ├── .claude/           # vendor config dir with assembled artifacts

@@ -90,10 +90,11 @@ func TestIntegration_MultiSourceComposition(t *testing.T) {
 	}
 
 	// Resolve all includes
-	content, err := resolver.Resolve(p, nil)
+	resolved, err := resolver.Resolve(p, nil)
 	if err != nil {
 		t.Fatalf("Resolve failed: %v", err)
 	}
+	content := extractContent(resolved)
 
 	// Add embedded persona content (simulating what cmdRun does)
 	content = append(content, resolver.ResolvedContent{
@@ -164,13 +165,13 @@ func TestIntegration_MonorepoNoPickIncludesAll(t *testing.T) {
 		},
 	}
 
-	content, err := resolver.Resolve(p, nil)
+	resolved, err := resolver.Resolve(p, nil)
 	if err != nil {
 		t.Fatalf("Resolve failed: %v", err)
 	}
 
 	adapter, _ := vendor.Get("claude")
-	workDir, err := Assemble(adapter, content)
+	workDir, err := Assemble(adapter, extractContent(resolved))
 	if err != nil {
 		t.Fatalf("Assemble failed: %v", err)
 	}
@@ -204,13 +205,13 @@ func TestIntegration_SkillsRepoFullInclude(t *testing.T) {
 		},
 	}
 
-	content, err := resolver.Resolve(p, nil)
+	resolved, err := resolver.Resolve(p, nil)
 	if err != nil {
 		t.Fatalf("Resolve failed: %v", err)
 	}
 
 	adapter, _ := vendor.Get("claude")
-	workDir, err := Assemble(adapter, content)
+	workDir, err := Assemble(adapter, extractContent(resolved))
 	if err != nil {
 		t.Fatalf("Assemble failed: %v", err)
 	}
@@ -245,10 +246,11 @@ func TestIntegration_CrossVendorAssembly(t *testing.T) {
 		},
 	}
 
-	content, err := resolver.Resolve(p, nil)
+	resolved, err := resolver.Resolve(p, nil)
 	if err != nil {
 		t.Fatalf("Resolve failed: %v", err)
 	}
+	content := extractContent(resolved)
 
 	// Assemble for Claude
 	claudeAdapter, _ := vendor.Get("claude")

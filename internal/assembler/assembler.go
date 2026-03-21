@@ -54,12 +54,12 @@ func assembleInto(workDir string, adapter vendor.Adapter, content []resolver.Res
 	for _, rc := range content {
 		if len(rc.Paths) == 0 {
 			// No pick list - include everything that matches artifact types
-			if err := copyAllArtifacts(rc.BasePath, configDir, artifactDirs); err != nil {
+			if err := CopyAllArtifacts(rc.BasePath, configDir, artifactDirs); err != nil {
 				return err
 			}
 		} else {
 			for _, picked := range rc.Paths {
-				if err := copyPicked(rc.BasePath, picked, configDir, artifactDirs); err != nil {
+				if err := CopyPicked(rc.BasePath, picked, configDir, artifactDirs); err != nil {
 					return err
 				}
 			}
@@ -74,7 +74,7 @@ func assembleInto(workDir string, adapter vendor.Adapter, content []resolver.Res
 			src := filepath.Join(rc.BasePath, "instructions.md")
 			if _, err := os.Stat(src); err == nil {
 				dst := filepath.Join(workDir, instructionsFile)
-				if err := copyFile(src, dst); err != nil {
+				if err := CopyFile(src, dst); err != nil {
 					return fmt.Errorf("copying instructions.md: %w", err)
 				}
 			}
@@ -89,9 +89,11 @@ func Cleanup(workDir string) {
 	_ = os.RemoveAll(workDir)
 }
 
-// copyPicked copies a specific path from the repo into the right artifact directory.
-// picked is like "skills/commit" or "agents/code-reviewer.md"
-func copyPicked(repoBase string, picked string, configDir string, artifactDirs map[string]string) error {
+// CopyPicked copies a specific path from the repo into the right artifact directory.
+// picked is like "skills/commit" or "agents/code-reviewer.md".
+// targetBaseDir is where artifact type directories live (e.g., workDir/.claude/ for runtime,
+// or pluginRoot/ for export).
+func CopyPicked(repoBase string, picked string, targetBaseDir string, artifactDirs map[string]string) error {
 	// Determine which artifact type this belongs to
 	parts := strings.SplitN(picked, "/", 2)
 	if len(parts) < 2 {
@@ -105,7 +107,7 @@ func copyPicked(repoBase string, picked string, configDir string, artifactDirs m
 	}
 
 	src := filepath.Join(repoBase, picked)
-	dst := filepath.Join(configDir, targetDir, parts[1])
+	dst := filepath.Join(targetBaseDir, targetDir, parts[1])
 
 	info, err := os.Stat(src)
 	if err != nil {
@@ -115,11 +117,13 @@ func copyPicked(repoBase string, picked string, configDir string, artifactDirs m
 	if info.IsDir() {
 		return CopyDir(src, dst)
 	}
-	return copyFile(src, dst)
+	return CopyFile(src, dst)
 }
 
-// copyAllArtifacts scans the repo for known artifact type directories and copies them.
-func copyAllArtifacts(repoBase string, configDir string, artifactDirs map[string]string) error {
+// CopyAllArtifacts scans the repo for known artifact type directories and copies them.
+// targetBaseDir is where artifact type directories live (e.g., workDir/.claude/ for runtime,
+// or pluginRoot/ for export).
+func CopyAllArtifacts(repoBase string, targetBaseDir string, artifactDirs map[string]string) error {
 	for artifactType, targetDir := range artifactDirs {
 		srcDir := filepath.Join(repoBase, artifactType)
 		if _, err := os.Stat(srcDir); os.IsNotExist(err) {
@@ -133,14 +137,14 @@ func copyAllArtifacts(repoBase string, configDir string, artifactDirs map[string
 
 		for _, entry := range entries {
 			src := filepath.Join(srcDir, entry.Name())
-			dst := filepath.Join(configDir, targetDir, entry.Name())
+			dst := filepath.Join(targetBaseDir, targetDir, entry.Name())
 
 			if entry.IsDir() {
 				if err := CopyDir(src, dst); err != nil {
 					return err
 				}
 			} else {
-				if err := copyFile(src, dst); err != nil {
+				if err := CopyFile(src, dst); err != nil {
 					return err
 				}
 			}
@@ -149,7 +153,8 @@ func copyAllArtifacts(repoBase string, configDir string, artifactDirs map[string
 	return nil
 }
 
-func copyFile(src, dst string) error {
+// CopyFile copies a single file from src to dst, creating parent directories as needed.
+func CopyFile(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
@@ -189,6 +194,6 @@ func CopyDir(src, dst string) error {
 			return os.MkdirAll(target, 0o755)
 		}
 
-		return copyFile(path, target)
+		return CopyFile(path, target)
 	})
 }

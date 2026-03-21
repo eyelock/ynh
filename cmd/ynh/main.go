@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
@@ -41,6 +40,10 @@ func main() {
 		cmdVendors()
 	case "status":
 		err = cmdStatus()
+	case "search":
+		err = cmdSearch(os.Args[2:])
+	case "registry":
+		err = cmdRegistry(os.Args[2:])
 	case "prune":
 		err = cmdPrune()
 	case "version", "--version":
@@ -73,6 +76,11 @@ Commands:
   run <name> [flags] [prompt]  Launch a persona session
   ls                           List installed personas
   vendors                      List supported vendor adapters
+  search <term>                Search registries for personas
+  registry add <url>           Add a persona registry
+  registry list                Show configured registries
+  registry remove <url>        Remove a registry
+  registry update              Refresh all cached registries
   status                       Show symlink installations across projects
   prune                        Clean orphaned symlink installations
   version                      Print version
@@ -97,6 +105,10 @@ Examples:
   ynh run david -v codex -- "refactor auth"
   ynh run david -v cursor --install
   ynh run david -v cursor --clean
+  ynh search "go development"
+  ynh registry add github.com/org/registry
+  ynh install david
+  ynh install david@my-registry
 `, config.Version)
 }
 
@@ -148,9 +160,31 @@ func cmdInstall(args []string) error {
 
 	source := remaining[0]
 
-	// Determine if local path or Git URL
+	// Determine source type using disambiguation rules:
+	// 1. Starts with . or / → local path
+	// 2. Starts with git@ → Git SSH URL
+	// 3. Starts with https:// or http:// → Git HTTPS URL
+	// 4. Contains @ (not matching 2/3) → registry lookup name@registry-name
+	// 5. Contains / → Git URL shorthand
+	// 6. Plain word → registry search
 	var srcDir string
-	var cloneTmpDir string // track for cleanup
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+
+	resolved, err := resolveInstallSource(source, pathFlag, cfg)
+	if err != nil {
+		return err
+	}
+	if resolved.gitURL != "" {
+		source = resolved.gitURL
+		if resolved.path != "" {
+			pathFlag = resolved.path
+		}
+	}
+
 	if isLocalPath(source) {
 		absPath, err := filepath.Abs(source)
 		if err != nil {
@@ -159,30 +193,22 @@ func cmdInstall(args []string) error {
 		srcDir = absPath
 	} else {
 		// Check remote source against allow-list
-		cfg, err := config.Load()
-		if err != nil {
-			return fmt.Errorf("loading config: %w", err)
-		}
 		if err := cfg.CheckRemoteSource(source); err != nil {
 			return err
 		}
 
-		// Resolve from Git
-		repoPath, err := cloneForInstall(source)
+		// Resolve from Git via cache
+		result, err := resolver.EnsureRepo(source, "")
 		if err != nil {
-			return err
+			return fmt.Errorf("resolving %s: %w", source, err)
 		}
-		cloneTmpDir = repoPath
-		srcDir = repoPath
+		srcDir = result.Path
 	}
 
 	// Scope to subdirectory if --path was specified
 	if pathFlag != "" {
 		srcDir = filepath.Join(srcDir, pathFlag)
 		if _, err := os.Stat(srcDir); os.IsNotExist(err) {
-			if cloneTmpDir != "" {
-				_ = os.RemoveAll(cloneTmpDir)
-			}
 			return fmt.Errorf("path %q not found in source", pathFlag)
 		}
 	}
@@ -190,9 +216,6 @@ func cmdInstall(args []string) error {
 	// Load persona from plugin format
 	p, err := persona.LoadPluginDir(srcDir)
 	if err != nil {
-		if cloneTmpDir != "" {
-			_ = os.RemoveAll(cloneTmpDir)
-		}
 		return err
 	}
 
@@ -212,11 +235,6 @@ func cmdInstall(args []string) error {
 
 	if err := copyTree(srcDir, installDir); err != nil {
 		return err
-	}
-
-	// Clean up temp clone directory (only set for Git installs)
-	if cloneTmpDir != "" {
-		_ = os.RemoveAll(cloneTmpDir)
 	}
 
 	// Generate launcher script (skip for reserved names that conflict with the binary)
@@ -366,12 +384,6 @@ func cmdRun(args []string) error {
 		return err
 	}
 
-	// Show progress when there are Git sources to resolve
-	sources := len(p.Includes) + len(p.DelegatesTo)
-	if sources > 0 {
-		fmt.Fprintf(os.Stderr, "Assembling %d source(s)...\n", sources)
-	}
-
 	// Load config for remote source checking
 	cfg, err := config.Load()
 	if err != nil {
@@ -379,9 +391,31 @@ func cmdRun(args []string) error {
 	}
 
 	// Resolve Git includes (with remote source allow-list check)
-	content, err := resolver.Resolve(p, cfg)
+	if len(p.Includes) > 0 {
+		fmt.Fprintf(os.Stderr, "Resolving %d include(s)...\n", len(p.Includes))
+	}
+	resolved, err := resolver.Resolve(p, cfg)
 	if err != nil {
 		return fmt.Errorf("resolving includes: %w", err)
+	}
+
+	// Print per-source status
+	for _, r := range resolved {
+		source := r.Source
+		if r.Path != "" {
+			source += " → " + r.Path
+		}
+		if r.Cloned {
+			fmt.Fprintf(os.Stderr, "  Cloned %s\n", source)
+		} else {
+			fmt.Fprintf(os.Stderr, "  Cached %s\n", source)
+		}
+	}
+
+	// Extract ResolvedContent for the assembler
+	var content []resolver.ResolvedContent
+	for _, r := range resolved {
+		content = append(content, r.Content)
 	}
 
 	// Also include any local content from the persona's installed directory
@@ -468,6 +502,7 @@ func cmdRun(args []string) error {
 		}
 
 		// Launch
+		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
 		if prompt != "" {
 			return adapter.LaunchNonInteractive(runDir, prompt, vendorArgs)
 		}
@@ -769,23 +804,4 @@ func symlinkIntact(inst *symlink.Installation) bool {
 		}
 	}
 	return false
-}
-
-func cloneForInstall(gitURL string) (string, error) {
-	fullURL := resolver.NormalizeGitURL(gitURL)
-
-	tmpDir, err := os.MkdirTemp("", "ynh-install-*")
-	if err != nil {
-		return "", err
-	}
-
-	cmd := exec.Command("git", "clone", "--depth", "1", fullURL, tmpDir)
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		_ = os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("git clone %s: %w", fullURL, err)
-	}
-
-	return tmpDir, nil
 }

@@ -31,6 +31,10 @@ func main() {
 		err = cmdCompress(os.Args[2:])
 	case "inspect":
 		err = cmdInspect(os.Args[2:])
+	case "export":
+		err = cmdExport(os.Args[2:])
+	case "marketplace":
+		err = cmdMarketplace(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Printf("ynd %s\n", config.Version)
 	case "help", "--help", "-h":
@@ -62,6 +66,8 @@ Commands:
   fmt [file]                 Format markdown files
   compress [file]            Compress prompts using LLM-powered SudoLang techniques
   inspect                    Interactive codebase walkthrough to generate/update skills and agents
+  export <source>            Export persona as vendor-native plugin directories
+  marketplace build          Build a vendor-native marketplace from marketplace.json
   version                    Print version
   help                       Show this help
 
@@ -95,5 +101,9 @@ Examples:
   ynd inspect
   ynd inspect -v claude
   ynd inspect -o .
+  ynd export ./my-persona
+  ynd export ./my-persona -v claude,cursor -o ./dist
+  ynd export ./my-persona --merged
+  ynd export github.com/user/repo --path personas/david
 `, config.Version)
 }

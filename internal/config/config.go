@@ -13,9 +13,16 @@ const (
 	ConfigFile     = "config.json"
 )
 
+// RegistrySource points to a Git repo containing a registry.json.
+type RegistrySource struct {
+	URL string `json:"url"`
+	Ref string `json:"ref,omitempty"`
+}
+
 type Config struct {
-	DefaultVendor        string   `json:"default_vendor,omitempty"`
-	AllowedRemoteSources []string `json:"allowed_remote_sources,omitempty"`
+	DefaultVendor        string           `json:"default_vendor,omitempty"`
+	AllowedRemoteSources []string         `json:"allowed_remote_sources,omitempty"`
+	Registries           []RegistrySource `json:"registries,omitempty"`
 }
 
 // HomeDir returns the ynh home directory.

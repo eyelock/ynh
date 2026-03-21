@@ -50,6 +50,24 @@ make test FILE=./internal/assembler
 2. Check test coverage - new features should include tests
 3. Review the test matrix in `references/architecture.md` if touching assembler/resolver logic
 
+## Manual testing
+
+After code changes, verify against the relevant tutorial in `docs/tutorial/`. The full test matrix is in `docs/tutorial/manual-test-plan.md` (85 tests across 8 tutorials + edge cases).
+
+To find which tutorials cover a changed area:
+
+| Package / area | Tutorial |
+|---|---|
+| `cmd/ynh` (install, run, list, uninstall) | Tutorial 1, 2 |
+| `internal/resolver` (includes, Git sources) | Tutorial 3 |
+| `internal/assembler` (delegates) | Tutorial 4 |
+| `internal/exporter` | Tutorial 5 |
+| `internal/marketplace` | Tutorial 6 |
+| `internal/registry` | Tutorial 7 |
+| `cmd/ynd` (create, lint, validate, fmt, compress, inspect) | Tutorial 8 |
+
+Run the relevant tutorial steps end-to-end before committing. Build first with `make build` so the binaries reflect your changes, then walk through the tutorial steps. The tutorials use `/tmp/ynh-tutorial/` as a scratch directory.
+
 ## Common issues
 
 - **Tool not found**: The Makefile uses full paths to GOPATH/bin for go-installed tools. Run `make deps` if tools are missing.

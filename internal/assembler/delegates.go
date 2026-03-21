@@ -31,7 +31,7 @@ func AssembleDelegates(workDir string, adapter vendor.Adapter, delegates []perso
 	}
 
 	for _, del := range delegates {
-		basePath, err := resolver.ResolveGitSource(del.GitSource)
+		basePath, _, err := resolver.ResolveGitSource(del.GitSource)
 		if err != nil {
 			return fmt.Errorf("delegate: %w", err)
 		}
@@ -41,7 +41,7 @@ func AssembleDelegates(workDir string, adapter vendor.Adapter, delegates []perso
 			return fmt.Errorf("loading delegate persona %s: %w", del.Git, err)
 		}
 
-		agentContent := buildDelegateAgent(delPersona, basePath)
+		agentContent := BuildDelegateAgent(delPersona, basePath)
 		agentFile := filepath.Join(agentsPath, delPersona.Name+".md")
 		if err := os.WriteFile(agentFile, []byte(agentContent), 0o644); err != nil {
 			return fmt.Errorf("writing delegate agent %s: %w", delPersona.Name, err)
@@ -51,9 +51,9 @@ func AssembleDelegates(workDir string, adapter vendor.Adapter, delegates []perso
 	return nil
 }
 
-// buildDelegateAgent generates a markdown agent file for a delegate persona.
+// BuildDelegateAgent generates a markdown agent file for a delegate persona.
 // It includes the delegate's instructions, rules, and available skills.
-func buildDelegateAgent(p *persona.Persona, basePath string) string {
+func BuildDelegateAgent(p *persona.Persona, basePath string) string {
 	var b strings.Builder
 
 	b.WriteString("---\n")

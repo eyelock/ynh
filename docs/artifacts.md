@@ -200,3 +200,7 @@ Referenced in `metadata.json`:
 ```
 
 All three sources are merged into the same vendor config at runtime. If two sources provide an artifact with the same name, the last one wins.
+
+## Exporting Artifacts
+
+Artifacts can be exported from ynh's persona format into vendor-native plugin layouts using `ynd export`. This resolves all remote includes, flattens the result, and writes distributable output per vendor. See the [export command reference](ynd.md#export) and [Tutorial 5](tutorial/05-export.md) for details.
