@@ -166,7 +166,7 @@ By default, personas can pull skills and agents from any Git repo via `includes`
   "default_vendor": "claude",
   "allowed_remote_sources": [
     "github.com/eyelock/*",
-    "github.com/acme-corp/shared-skills",
+    "github.com/acme-corp/assistants",
     "github.com/acme-corp/monorepo/**/ai-config/*"
   ]
 }
@@ -227,6 +227,49 @@ When there are no vendor flags, the prompt can be a plain argument:
 david "explain this function"
 ```
 
+## Discover and Install From Registries
+
+A registry is a Git repository containing a `registry.json` that indexes available personas. You can add registries to discover and install personas by name instead of URL.
+
+```bash
+# Add a registry (a Git repo with registry.json)
+ynh registry add github.com/your-org/ynh-registry
+
+# Search across all registries
+ynh search "go development"
+
+# Install by name
+ynh install go-dev
+
+# If the name exists in multiple registries, disambiguate
+ynh install go-dev@eyelock
+```
+
+### Registry management
+
+```bash
+ynh registry list              # show configured registries
+ynh registry remove <url>      # remove a registry
+ynh registry update            # refresh all cached registries
+```
+
+### Install disambiguation
+
+ynh resolves install arguments in this order:
+
+| Argument form | Resolution |
+|---|---|
+| Starts with `.` or `/` | Local path |
+| Starts with `git@` | Git SSH URL |
+| Starts with `https://` or `http://` | Git HTTPS URL |
+| Contains `@` (not SSH) | Registry lookup as `name@registry-name` |
+| Contains `/` | Git URL shorthand (e.g., `github.com/user/repo`) |
+| Plain word | Exact name search across all registries |
+
+Plain word matches: single match installs directly; multiple matches errors with disambiguation guidance; no exact match searches descriptions and suggests similar results.
+
+See [Tutorial 7: Registry & Discovery](tutorial/07-registry-and-discovery.md) for a guided walkthrough.
+
 ## Build From Source
 
 If you prefer not to use Homebrew:
@@ -245,3 +288,5 @@ ynh install ./my-persona
 - [Persona Reference](personas.md) - full manifest syntax
 - [Artifacts Guide](artifacts.md) - skills, agents, rules, commands
 - [Vendor Support](vendors.md) - supported vendors and switching between them
+- [ynd Developer Tools](ynd.md) - authoring, exporting, and marketplace building
+- [Tutorials](tutorial/README.md) - progressive walkthroughs from first persona to marketplace publishing

@@ -72,6 +72,30 @@ Resolution order: **CLI flag > persona default > global config**.
 
 **Cursor Agent** - Full interactive and non-interactive support. Uses symlink-based artifact installation. Requires `agent` CLI installed (`curl https://cursor.com/install -fsS | bash`). Uses `-p` for non-interactive prompts. See [cursor.com/cli](https://cursor.com/cli).
 
+## Export Output by Vendor
+
+`ynd export` produces vendor-native plugin layouts. Each vendor has a different file structure:
+
+| | Claude | Cursor | Codex |
+|---|---|---|---|
+| **Manifest** | `.claude-plugin/plugin.json` | `.cursor-plugin/plugin.json` | — |
+| **Skills** | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` | `.agents/skills/<name>/SKILL.md` |
+| **Agents** | `agents/<name>.md` | `agents/<name>.md` | *excluded* |
+| **Rules** | `rules/<name>.md` | `rules/<name>.md` | *excluded* |
+| **Commands** | `commands/<name>.md` | `commands/<name>.md` | *excluded* |
+| **Instructions** | `AGENTS.md` | `.cursorrules` + `AGENTS.md` | `AGENTS.md` |
+| **Marketplace** | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` | *excluded* |
+
+Key differences between runtime and export:
+
+- **Runtime** places artifacts inside the vendor config directory (e.g., `.claude/skills/`)
+- **Export** places artifacts at the plugin root (e.g., `skills/`) — the standard distributable layout
+- Claude export writes `AGENTS.md` for instructions, not `CLAUDE.md` (which would conflict with the installing project's own)
+- Codex export is limited to skills — agents, rules, commands, and delegates are excluded with warnings
+- Codex is excluded from marketplace and merged export modes (no marketplace system)
+
+See [ynd export](ynd.md#export) for full command reference.
+
 ## Adding a New Vendor
 
 See [CONTRIBUTING.md](https://github.com/eyelock/ynh/blob/main/.github/CONTRIBUTING.md) for how to implement a vendor adapter.

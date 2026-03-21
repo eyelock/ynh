@@ -42,7 +42,16 @@ team-dev                           # full team context when you need it
 
 **Zero runtime.** ynh resolves your config, assembles it, launches the vendor CLI, and gets out of the way. No process sitting between you and the AI. Each vendor gets the launch strategy that matches its capabilities - native plugin loading for Claude, symlinks for Cursor and Codex.
 
-**Git is the package manager.** No registry accounts. No lock files. No build steps. Skills from [skills.sh](https://skills.sh), agents from your team repo, rules from a company monorepo - they all work as-is. Standard-format files, versioned with Git tags.
+**Discover and share.** Search registries for personas by name or keyword, install with a single command. Export your personas as vendor-native plugins, or build a marketplace indexing multiple personas for your team or community.
+
+```bash
+ynh search "go development"       # find personas across registries
+ynh install go-dev                 # install by name
+ynd export ./my-persona            # vendor-native plugins
+ynd marketplace build              # build a shareable marketplace
+```
+
+**Git is the package manager.** No lock files. No build steps. Skills from [skills.sh](https://skills.sh), agents from your team repo, rules from a company monorepo - they all work as-is. Standard-format files, versioned with Git tags. Registries are just Git repos with a `registry.json`.
 
 ## The 60-second version
 
@@ -72,4 +81,4 @@ Add skills, agents, rules, and commands to the persona directory. Pull from Git 
 - **[Agent Skills Standard](skills-standard.md)** - Cross-platform spec, frontmatter fields, catalog budget, discovery paths
 - **[Tutorials](tutorial/README.md)** - Progressive tutorials from first persona to marketplace generation
 - **[Manual Test Plan](tutorial/manual-test-plan.md)** - 66 tests covering every feature
-- **[ynd Developer Tools](ynd.md)** - CLI for scaffolding, linting, formatting, compressing, and inspecting
+- **[ynd Developer Tools](ynd.md)** - CLI for scaffolding, linting, formatting, compressing, inspecting, exporting, and marketplace building
