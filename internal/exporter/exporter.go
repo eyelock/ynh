@@ -70,9 +70,15 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	}
 
 	// Resolve all remote includes
-	content, err := resolver.Resolve(p, opts.Config)
+	resolved, err := resolver.Resolve(p, opts.Config)
 	if err != nil {
 		return nil, fmt.Errorf("resolving includes: %w", err)
+	}
+
+	// Extract ResolvedContent for assembly
+	var content []resolver.ResolvedContent
+	for _, r := range resolved {
+		content = append(content, r.Content)
 	}
 
 	// Add SourceDir as local content (persona's own embedded artifacts)
