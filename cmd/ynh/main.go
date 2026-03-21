@@ -41,6 +41,10 @@ func main() {
 		cmdVendors()
 	case "status":
 		err = cmdStatus()
+	case "search":
+		err = cmdSearch(os.Args[2:])
+	case "registry":
+		err = cmdRegistry(os.Args[2:])
 	case "prune":
 		err = cmdPrune()
 	case "version", "--version":
@@ -73,6 +77,11 @@ Commands:
   run <name> [flags] [prompt]  Launch a persona session
   ls                           List installed personas
   vendors                      List supported vendor adapters
+  search <term>                Search registries for personas
+  registry add <url>           Add a persona registry
+  registry list                Show configured registries
+  registry remove <url>        Remove a registry
+  registry update              Refresh all cached registries
   status                       Show symlink installations across projects
   prune                        Clean orphaned symlink installations
   version                      Print version
@@ -97,6 +106,10 @@ Examples:
   ynh run david -v codex -- "refactor auth"
   ynh run david -v cursor --install
   ynh run david -v cursor --clean
+  ynh search "go development"
+  ynh registry add github.com/org/registry
+  ynh install david
+  ynh install david@my-registry
 `, config.Version)
 }
 
@@ -148,9 +161,32 @@ func cmdInstall(args []string) error {
 
 	source := remaining[0]
 
-	// Determine if local path or Git URL
+	// Determine source type using disambiguation rules:
+	// 1. Starts with . or / → local path
+	// 2. Starts with git@ → Git SSH URL
+	// 3. Starts with https:// or http:// → Git HTTPS URL
+	// 4. Contains @ (not matching 2/3) → registry lookup name@registry-name
+	// 5. Contains / → Git URL shorthand
+	// 6. Plain word → registry search
 	var srcDir string
 	var cloneTmpDir string // track for cleanup
+
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+
+	resolved, err := resolveInstallSource(source, pathFlag, cfg)
+	if err != nil {
+		return err
+	}
+	if resolved.gitURL != "" {
+		source = resolved.gitURL
+		if resolved.path != "" {
+			pathFlag = resolved.path
+		}
+	}
+
 	if isLocalPath(source) {
 		absPath, err := filepath.Abs(source)
 		if err != nil {
@@ -159,10 +195,6 @@ func cmdInstall(args []string) error {
 		srcDir = absPath
 	} else {
 		// Check remote source against allow-list
-		cfg, err := config.Load()
-		if err != nil {
-			return fmt.Errorf("loading config: %w", err)
-		}
 		if err := cfg.CheckRemoteSource(source); err != nil {
 			return err
 		}
