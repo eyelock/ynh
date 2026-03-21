@@ -192,12 +192,12 @@ func TestResolve_WithLocalRepo(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
 
-	if len(results[0].Paths) != 1 || results[0].Paths[0] != "skills/hello" {
-		t.Errorf("unexpected paths: %v", results[0].Paths)
+	if len(results[0].Content.Paths) != 1 || results[0].Content.Paths[0] != "skills/hello" {
+		t.Errorf("unexpected paths: %v", results[0].Content.Paths)
 	}
 
 	// Verify the file exists in the resolved base path
-	skillPath := filepath.Join(results[0].BasePath, "skills", "hello", "SKILL.md")
+	skillPath := filepath.Join(results[0].Content.BasePath, "skills", "hello", "SKILL.md")
 	if _, err := os.Stat(skillPath); err != nil {
 		t.Errorf("skill not found in resolved content: %v", err)
 	}
@@ -256,7 +256,7 @@ func TestResolve_WithPath_Monorepo(t *testing.T) {
 	}
 
 	// BasePath should point to the subdirectory, not the repo root
-	expectedBase := filepath.Join(results[0].BasePath)
+	expectedBase := filepath.Join(results[0].Content.BasePath)
 	skillPath := filepath.Join(expectedBase, "skills", "deploy", "SKILL.md")
 	if _, err := os.Stat(skillPath); err != nil {
 		t.Errorf("skill not found at monorepo path: %v", err)
@@ -346,16 +346,16 @@ func TestResolve_WithPath_NoPickIncludesAll(t *testing.T) {
 	}
 
 	// No pick means Paths should be empty (include all)
-	if len(results[0].Paths) != 0 {
-		t.Errorf("expected empty paths for no-pick, got %v", results[0].Paths)
+	if len(results[0].Content.Paths) != 0 {
+		t.Errorf("expected empty paths for no-pick, got %v", results[0].Content.Paths)
 	}
 
 	// Verify both artifacts are reachable from base path
-	skillPath := filepath.Join(results[0].BasePath, "skills", "lint", "SKILL.md")
+	skillPath := filepath.Join(results[0].Content.BasePath, "skills", "lint", "SKILL.md")
 	if _, err := os.Stat(skillPath); err != nil {
 		t.Errorf("skill not found: %v", err)
 	}
-	rulePath := filepath.Join(results[0].BasePath, "rules", "strict.md")
+	rulePath := filepath.Join(results[0].Content.BasePath, "rules", "strict.md")
 	if _, err := os.Stat(rulePath); err != nil {
 		t.Errorf("rule not found: %v", err)
 	}

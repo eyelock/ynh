@@ -23,7 +23,7 @@ func ExportDelegates(outputDir string, delegates []persona.Delegate) error {
 	}
 
 	for _, del := range delegates {
-		basePath, err := resolver.ResolveGitSource(del.GitSource)
+		basePath, _, err := resolver.ResolveGitSource(del.GitSource)
 		if err != nil {
 			return fmt.Errorf("delegate: %w", err)
 		}

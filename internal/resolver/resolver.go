@@ -21,29 +21,39 @@ type ResolvedContent struct {
 	Paths []string
 }
 
+// ResolveResult pairs a ResolvedContent with metadata about how it was resolved.
+type ResolveResult struct {
+	Content ResolvedContent
+	Source  string // short display name (e.g., "eyelock/assistants")
+	Path    string // subpath within repo, if any
+	Cloned  bool   // true if freshly cloned (first time)
+	Cached  bool   // true if already in cache (not first time)
+}
+
 // ResolveGitSource clones/updates a GitSource and returns the resolved base path,
 // scoped to the optional sub-path within the repo.
-func ResolveGitSource(gs persona.GitSource) (string, error) {
+func ResolveGitSource(gs persona.GitSource) (string, *RepoResult, error) {
 	result, err := EnsureRepo(gs.Git, gs.Ref)
 	if err != nil {
-		return "", fmt.Errorf("resolving %s: %w", gs.Git, err)
+		return "", nil, fmt.Errorf("resolving %s: %w", gs.Git, err)
 	}
 
 	basePath := result.Path
 	if gs.Path != "" {
 		basePath = filepath.Join(result.Path, gs.Path)
 		if _, err := os.Stat(basePath); os.IsNotExist(err) {
-			return "", fmt.Errorf("path %q not found in %s", gs.Path, gs.Git)
+			return "", nil, fmt.Errorf("path %q not found in %s", gs.Path, gs.Git)
 		}
 	}
 
-	return basePath, nil
+	return basePath, &result, nil
 }
 
-// Resolve fetches all includes for a persona and returns resolved content.
+// Resolve fetches all includes for a persona and returns resolved content
+// with resolution metadata (cloned vs cached).
 // If cfg is non-nil, remote sources are checked against the allowed sources list.
-func Resolve(p *persona.Persona, cfg *config.Config) ([]ResolvedContent, error) {
-	var results []ResolvedContent
+func Resolve(p *persona.Persona, cfg *config.Config) ([]ResolveResult, error) {
+	var results []ResolveResult
 
 	for _, inc := range p.Includes {
 		if cfg != nil {
@@ -52,18 +62,39 @@ func Resolve(p *persona.Persona, cfg *config.Config) ([]ResolvedContent, error) 
 			}
 		}
 
-		basePath, err := ResolveGitSource(inc.GitSource)
+		basePath, repoResult, err := ResolveGitSource(inc.GitSource)
 		if err != nil {
 			return nil, err
 		}
 
-		results = append(results, ResolvedContent{
-			BasePath: basePath,
-			Paths:    inc.Pick,
+		results = append(results, ResolveResult{
+			Content: ResolvedContent{
+				BasePath: basePath,
+				Paths:    inc.Pick,
+			},
+			Source: shortGitURL(inc.Git),
+			Path:   inc.Path,
+			Cloned: repoResult.Cloned,
+			Cached: !repoResult.Cloned,
 		})
 	}
 
 	return results, nil
+}
+
+// shortGitURL abbreviates a git URL for display.
+// "github.com/eyelock/assistants" -> "eyelock/assistants"
+func shortGitURL(url string) string {
+	// Local paths: keep as-is
+	if strings.HasPrefix(url, "/") || strings.HasPrefix(url, ".") {
+		return url
+	}
+	// Strip host prefix
+	parts := strings.SplitN(url, "/", 2)
+	if len(parts) == 2 {
+		return parts[1]
+	}
+	return url
 }
 
 // CloneToTemp clones a Git repo to a temporary directory (shallow, depth 1).

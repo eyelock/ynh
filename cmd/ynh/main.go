@@ -398,12 +398,6 @@ func cmdRun(args []string) error {
 		return err
 	}
 
-	// Show progress when there are Git sources to resolve
-	sources := len(p.Includes) + len(p.DelegatesTo)
-	if sources > 0 {
-		fmt.Fprintf(os.Stderr, "Assembling %d source(s)...\n", sources)
-	}
-
 	// Load config for remote source checking
 	cfg, err := config.Load()
 	if err != nil {
@@ -411,9 +405,31 @@ func cmdRun(args []string) error {
 	}
 
 	// Resolve Git includes (with remote source allow-list check)
-	content, err := resolver.Resolve(p, cfg)
+	if len(p.Includes) > 0 {
+		fmt.Fprintf(os.Stderr, "Resolving %d include(s)...\n", len(p.Includes))
+	}
+	resolved, err := resolver.Resolve(p, cfg)
 	if err != nil {
 		return fmt.Errorf("resolving includes: %w", err)
+	}
+
+	// Print per-source status
+	for _, r := range resolved {
+		source := r.Source
+		if r.Path != "" {
+			source += " → " + r.Path
+		}
+		if r.Cloned {
+			fmt.Fprintf(os.Stderr, "  Cloned %s\n", source)
+		} else {
+			fmt.Fprintf(os.Stderr, "  Cached %s\n", source)
+		}
+	}
+
+	// Extract ResolvedContent for the assembler
+	var content []resolver.ResolvedContent
+	for _, r := range resolved {
+		content = append(content, r.Content)
 	}
 
 	// Also include any local content from the persona's installed directory
@@ -500,6 +516,7 @@ func cmdRun(args []string) error {
 		}
 
 		// Launch
+		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
 		if prompt != "" {
 			return adapter.LaunchNonInteractive(runDir, prompt, vendorArgs)
 		}
