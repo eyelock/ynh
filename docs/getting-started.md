@@ -61,6 +61,15 @@ david                              # interactive session
 david "explain what this function does"   # one-shot
 ```
 
+### Install from a monorepo
+
+Use `--path` to install a persona from a subdirectory:
+
+```bash
+ynh install github.com/org/assistants --path personas/david
+ynh install ./local-monorepo --path plugins/my-plugin
+```
+
 ## Pull Skills From Git
 
 Point your metadata at any Git repo. Skills are used as-is - no wrapping, no build step:
