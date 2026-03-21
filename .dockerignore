@@ -1,0 +1,14 @@
+.git
+bin/
+*.out
+coverage.out
+.idea/
+.vscode/
+.DS_Store
+.env
+.env.*
+node_modules/
+Dockerfile
+docker-compose.yml
+.claude/sessions/
+.claude/plans/

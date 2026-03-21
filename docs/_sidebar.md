@@ -6,6 +6,7 @@
   * [Vendor Support](vendors.md)
   * [Agent Skills Standard](skills-standard.md)
   * [ynd Developer Tools](ynd.md)
+  * [Docker](docker.md)
 
 * **Tutorials**
   * [Full Walkthrough](walkthrough.md)
