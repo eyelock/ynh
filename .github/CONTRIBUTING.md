@@ -65,15 +65,11 @@ docs/                     User guide (GitHub Pages)
 ## Development Setup
 
 ```bash
-# Prerequisites + dev tools (Go, linter, formatter, direnv)
+# Prerequisites + dev tools (Go, linter, formatter)
 make deps
 
-# Add direnv to your shell (one-time)
-echo 'eval "$(direnv hook zsh)"' >> ~/.zshrc && source ~/.zshrc
-
-# Build both binaries to ./bin/
-make build
-# direnv auto-adds ./bin/ to PATH — your local build is always used
+# Build and install binaries to ~/.ynh/bin/
+make install
 
 # Run all tests
 make test

@@ -108,11 +108,7 @@ ynd marketplace build -o /tmp/ynh-tutorial/marketplace-out
 
 Expected output:
 ```
-Building marketplace "tutorial-marketplace"...
-  Copying plugin "formatter"...
-  Exporting persona "reviewer"...
-Generated marketplace for claude, cursor
-Output: /tmp/ynh-tutorial/marketplace-out/
+Marketplace built → /tmp/ynh-tutorial/marketplace-out (2 plugins)
 ```
 
 ## T6.4: Verify the output
@@ -120,10 +116,10 @@ Output: /tmp/ynh-tutorial/marketplace-out/
 ### Directory structure
 
 ```bash
-find /tmp/ynh-tutorial/marketplace-out -type f | sort
+find /tmp/ynh-tutorial/marketplace-out -not -path '*/.git/*' -type f | sort
 ```
 
-Expected:
+Expected (`.git/` excluded from listing — it's auto-created by the build):
 ```
 .claude-plugin/marketplace.json
 .cursor-plugin/marketplace.json
@@ -132,12 +128,22 @@ plugins/formatter/.cursor-plugin/plugin.json
 plugins/formatter/skills/auto-format/SKILL.md
 plugins/reviewer/.claude-plugin/plugin.json
 plugins/reviewer/.cursor-plugin/plugin.json
-plugins/reviewer/skills/dev-review/SKILL.md
-plugins/reviewer/skills/dev-quality/SKILL.md
 plugins/reviewer/.cursorrules
 plugins/reviewer/AGENTS.md
+plugins/reviewer/skills/dev-quality/SKILL.md
+plugins/reviewer/skills/dev-review/SKILL.md
 README.md
 ```
+
+### Git repo
+
+The output directory is automatically initialized as a Git repo so Claude Code can resolve relative plugin source paths:
+
+```bash
+git -C /tmp/ynh-tutorial/marketplace-out log --oneline
+```
+
+Expected: a single commit with message `ynd marketplace build`.
 
 Key points:
 - Each plugin has **both** `.claude-plugin/` and `.cursor-plugin/` manifests

@@ -39,17 +39,11 @@ Requires Go 1.25+.
 ```bash
 git clone https://github.com/eyelock/ynh.git
 cd ynh
-make deps    # installs Go, linter, direnv
-make build   # builds to ./bin/
+make deps      # installs Go, linter, formatter
+make install   # builds and installs to ~/.ynh/bin/
 ```
 
-[direnv](https://direnv.net/) automatically adds `./bin/` to your PATH when you're in the project directory. If this is your first time, add the shell hook (one-time):
-
-```bash
-echo 'eval "$(direnv hook zsh)"' >> ~/.zshrc && source ~/.zshrc
-```
-
-After `make build`, `ynh` and `ynd` resolve to your local build automatically. No aliases or PATH hacks needed.
+After `make install`, `ynh` and `ynd` resolve to your local build everywhere (assuming `~/.ynh/bin` is on your PATH).
 
 <!-- tabs:end -->
 
