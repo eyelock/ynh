@@ -18,12 +18,19 @@ LDFLAGS := -ldflags "-X github.com/eyelock/ynh/internal/config.Version=$(VERSION
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-deps: ## Install prerequisites (Go, linter, formatter)
+deps: ## Install prerequisites (Go, linter, formatter, direnv)
 	@echo "Checking prerequisites..."
 	@command -v go >/dev/null 2>&1 || { echo "Installing Go..."; brew install go; }
 	@command -v golangci-lint >/dev/null 2>&1 || { echo "Installing golangci-lint..."; brew install golangci-lint; }
 	@test -x $(GOIMPORTS) || { echo "Installing goimports..."; go install golang.org/x/tools/cmd/goimports@latest; }
+	@command -v direnv >/dev/null 2>&1 || { echo "Installing direnv..."; brew install direnv; }
+	@direnv allow . 2>/dev/null || true
 	@echo "All prerequisites installed."
+	@echo ""
+	@echo "If this is your first time, add direnv to your shell:"
+	@echo '  echo '\''eval "$$(direnv hook zsh)"'\'' >> ~/.zshrc && source ~/.zshrc'
+	@echo ""
+	@echo "Then run 'make build' — ./bin/ is auto-added to PATH by direnv."
 
 build: ## Build all binaries
 	$(GO) build $(GOFLAGS) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/ynh

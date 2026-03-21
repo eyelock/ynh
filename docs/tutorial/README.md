@@ -39,24 +39,17 @@ Requires Go 1.25+.
 ```bash
 git clone https://github.com/eyelock/ynh.git
 cd ynh
-make build
+make deps    # installs Go, linter, direnv
+make build   # builds to ./bin/
 ```
 
-This builds both binaries to `bin/`. If you also have ynh installed via Homebrew, use aliases to ensure you're running the local build:
+[direnv](https://direnv.net/) automatically adds `./bin/` to your PATH when you're in the project directory. If this is your first time, add the shell hook (one-time):
 
 ```bash
-alias ynh="$(pwd)/bin/ynh"
-alias ynd="$(pwd)/bin/ynd"
+echo 'eval "$(direnv hook zsh)"' >> ~/.zshrc && source ~/.zshrc
 ```
 
-Or install to `~/.ynh/bin/` and put it first on PATH:
-
-```bash
-make install
-export PATH="$HOME/.ynh/bin:$PATH"
-```
-
-> **Note:** Homebrew puts binaries in `/opt/homebrew/bin/` which may take precedence. Use `ynh version` to tell them apart — local builds show `dev-<branch>-<sha>` (e.g., `dev-main-f6c5a47`), Homebrew shows a clean release like `0.0.7`.
+After `make build`, `ynh` and `ynd` resolve to your local build automatically. No aliases or PATH hacks needed.
 
 <!-- tabs:end -->
 
