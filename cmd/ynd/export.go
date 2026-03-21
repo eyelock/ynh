@@ -68,12 +68,9 @@ func cmdExport(args []string) error {
 	}
 
 	// Resolve source to local path
-	srcDir, cleanup, err := resolveSource(source)
+	srcDir, err := resolveSource(source)
 	if err != nil {
 		return err
-	}
-	if cleanup != nil {
-		defer cleanup()
 	}
 
 	// Apply --path scoping
@@ -149,37 +146,33 @@ func cmdExport(args []string) error {
 }
 
 // resolveSource determines if source is a local path or Git URL and returns
-// the local directory path. For Git URLs, it clones to a temp directory and
-// returns a cleanup function.
-func resolveSource(source string) (string, func(), error) {
+// the local directory path. For Git URLs, it resolves via the shared cache.
+func resolveSource(source string) (string, error) {
 	// Local path
 	if strings.HasPrefix(source, ".") || strings.HasPrefix(source, "/") {
 		abs, err := filepath.Abs(source)
 		if err != nil {
-			return "", nil, err
+			return "", err
 		}
 		if _, err := os.Stat(abs); os.IsNotExist(err) {
-			return "", nil, fmt.Errorf("source path not found: %s", abs)
+			return "", fmt.Errorf("source path not found: %s", abs)
 		}
-		return abs, nil, nil
+		return abs, nil
 	}
 
 	// Check if it exists as a local path anyway
 	if _, err := os.Stat(source); err == nil {
 		abs, err := filepath.Abs(source)
 		if err != nil {
-			return "", nil, err
+			return "", err
 		}
-		return abs, nil, nil
+		return abs, nil
 	}
 
-	// Git URL — clone to temp
-	tmpDir, err := resolver.CloneToTemp(source)
+	// Git URL — resolve via cache
+	result, err := resolver.EnsureRepo(source, "")
 	if err != nil {
-		return "", nil, err
+		return "", fmt.Errorf("resolving %s: %w", source, err)
 	}
-	cleanup := func() {
-		_ = os.RemoveAll(tmpDir)
-	}
-	return tmpDir, cleanup, nil
+	return result.Path, nil
 }

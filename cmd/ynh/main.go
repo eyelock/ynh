@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
@@ -169,7 +168,6 @@ func cmdInstall(args []string) error {
 	// 5. Contains / → Git URL shorthand
 	// 6. Plain word → registry search
 	var srcDir string
-	var cloneTmpDir string // track for cleanup
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -199,22 +197,18 @@ func cmdInstall(args []string) error {
 			return err
 		}
 
-		// Resolve from Git
-		repoPath, err := cloneForInstall(source)
+		// Resolve from Git via cache
+		result, err := resolver.EnsureRepo(source, "")
 		if err != nil {
-			return err
+			return fmt.Errorf("resolving %s: %w", source, err)
 		}
-		cloneTmpDir = repoPath
-		srcDir = repoPath
+		srcDir = result.Path
 	}
 
 	// Scope to subdirectory if --path was specified
 	if pathFlag != "" {
 		srcDir = filepath.Join(srcDir, pathFlag)
 		if _, err := os.Stat(srcDir); os.IsNotExist(err) {
-			if cloneTmpDir != "" {
-				_ = os.RemoveAll(cloneTmpDir)
-			}
 			return fmt.Errorf("path %q not found in source", pathFlag)
 		}
 	}
@@ -222,9 +216,6 @@ func cmdInstall(args []string) error {
 	// Load persona from plugin format
 	p, err := persona.LoadPluginDir(srcDir)
 	if err != nil {
-		if cloneTmpDir != "" {
-			_ = os.RemoveAll(cloneTmpDir)
-		}
 		return err
 	}
 
@@ -244,11 +235,6 @@ func cmdInstall(args []string) error {
 
 	if err := copyTree(srcDir, installDir); err != nil {
 		return err
-	}
-
-	// Clean up temp clone directory (only set for Git installs)
-	if cloneTmpDir != "" {
-		_ = os.RemoveAll(cloneTmpDir)
 	}
 
 	// Generate launcher script (skip for reserved names that conflict with the binary)
@@ -818,23 +804,4 @@ func symlinkIntact(inst *symlink.Installation) bool {
 		}
 	}
 	return false
-}
-
-func cloneForInstall(gitURL string) (string, error) {
-	fullURL := resolver.NormalizeGitURL(gitURL)
-
-	tmpDir, err := os.MkdirTemp("", "ynh-install-*")
-	if err != nil {
-		return "", err
-	}
-
-	cmd := exec.Command("git", "clone", "--depth", "1", fullURL, tmpDir)
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		_ = os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("git clone %s: %w", fullURL, err)
-	}
-
-	return tmpDir, nil
 }
