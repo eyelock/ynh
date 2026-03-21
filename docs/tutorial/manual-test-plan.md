@@ -6,6 +6,25 @@ Run all 8 tutorials in sequence to cover the happy path. This file adds edge cas
 
 ---
 
+## Prerequisites
+
+Before running any tests, install the dev binaries so `ynh` and `ynd` resolve to your local build everywhere — including outside the repo:
+
+```bash
+make install
+```
+
+This builds both binaries and copies them to `~/.ynh/bin/`. Verify you're running the dev build:
+
+```bash
+ynd version
+# Expected: dev-<branch>-<sha> (not a release tag)
+```
+
+Re-run `make install` after any code change you want to test.
+
+---
+
 ## Test Reference
 
 ### Tutorial 1: First Persona
