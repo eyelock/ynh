@@ -305,6 +305,9 @@ The ynh project ships its own persona (skills, agents, rules) for contributors. 
 
 ```bash
 ynh install github.com/eyelock/ynh
+
+# Or install from a monorepo subdirectory:
+# ynh install github.com/org/monorepo --path personas/my-persona
 # Installed persona "ynh"
 #   Launcher: (skipped — conflicts with ynh binary, use "ynh run ynh")
 ```

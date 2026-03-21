@@ -108,6 +108,12 @@ Show them how to install:
 ynh install <output-dir>
 ```
 
+If the persona lives inside a monorepo, use `--path`:
+
+```bash
+ynh install <repo-url> --path <subdir>
+```
+
 Offer to run this command for them. Then show how to use it:
 
 ```bash

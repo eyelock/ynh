@@ -362,6 +362,61 @@ func TestCmdUpdate_NoGitSources(t *testing.T) {
 	}
 }
 
+func TestCmdInstall_PathFlag(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	// Create a monorepo-style layout with a persona in a subdirectory
+	monoDir := filepath.Join(dir, "monorepo")
+	pluginDir := filepath.Join(monoDir, "personas", "alice", ".claude-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"),
+		[]byte(`{"name":"alice","version":"0.1.0","description":"test persona"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Install with --path flag
+	err := cmdInstall([]string{monoDir, "--path", "personas/alice"})
+	if err != nil {
+		t.Fatalf("cmdInstall with --path failed: %v", err)
+	}
+
+	// Verify persona was installed
+	installDir := persona.InstalledDir("alice")
+	if _, err := os.Stat(filepath.Join(installDir, ".claude-plugin", "plugin.json")); err != nil {
+		t.Fatal("persona plugin.json not found after install")
+	}
+}
+
+func TestCmdInstall_PathFlag_NotFound(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	monoDir := filepath.Join(dir, "monorepo")
+	if err := os.MkdirAll(monoDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := cmdInstall([]string{monoDir, "--path", "nonexistent/path"})
+	if err == nil {
+		t.Fatal("expected error for nonexistent --path")
+	}
+	if !strings.Contains(err.Error(), "not found in source") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestCmdInstall_PathFlag_NoSource(t *testing.T) {
+	err := cmdInstall([]string{"--path", "some/dir"})
+	if err == nil {
+		t.Fatal("expected error when --path consumes the source arg")
+	}
+}
+
 func TestCmdStatus_Empty(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)

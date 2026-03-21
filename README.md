@@ -73,6 +73,7 @@ Optional metadata (`metadata.json`):
 
 ```bash
 ynh install ./my-persona
+ynh install github.com/org/monorepo --path personas/david
 david
 ```
 
@@ -199,7 +200,7 @@ Global default in `~/.ynh/config.json`:
 | Command | Description |
 |---------|-------------|
 | `ynh init` | Show ynh home path and setup instructions |
-| `ynh install <source>` | Install persona from Git URL or local path |
+| `ynh install <source> [--path <subdir>]` | Install persona from Git URL or local path |
 | `ynh uninstall <name>` | Remove an installed persona and its launcher (alias: `ynh remove`) |
 | `ynh update <name>` | Refresh cached Git repos for a persona |
 | `ynh run <name> [flags] [prompt]` | Launch a persona session |

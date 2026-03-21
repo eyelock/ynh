@@ -449,6 +449,48 @@ ynh uninstall ynh
 
 ---
 
+## 11b. Install from a monorepo subdirectory
+
+Use `--path` to install a persona that lives in a subdirectory of a repo:
+
+```bash
+# Create a monorepo-style layout
+mkdir -p $YNH_WALKTHROUGH/monorepo/personas/alice/.claude-plugin
+
+cat > $YNH_WALKTHROUGH/monorepo/personas/alice/.claude-plugin/plugin.json << 'EOF'
+{
+  "name": "alice",
+  "version": "0.1.0",
+  "description": "Monorepo persona"
+}
+EOF
+
+# Install from subdirectory
+ynh install $YNH_WALKTHROUGH/monorepo --path personas/alice
+```
+
+Expected:
+
+```
+Installed persona "alice"
+  Location: /Users/<you>/.ynh/personas/alice
+  Launcher: /Users/<you>/.ynh/bin/alice
+```
+
+This also works with Git URLs:
+
+```bash
+ynh install github.com/org/assistants --path personas/david
+```
+
+Clean up:
+
+```bash
+ynh uninstall alice
+```
+
+---
+
 ## 12. Pull skills from Git (with pick, path, and ref)
 
 Create a persona that composes skills from external repos:
@@ -923,6 +965,7 @@ unset YND_WALKTHROUGH YND
 | Project instructions | instructions.md -> CLAUDE.md | |
 | Install from local path | `ynh install ./path` | |
 | Install from Git URL | `ynh install github.com/user/repo` | |
+| Install from monorepo | `ynh install github.com/org/repo --path personas/name` | |
 | List personas | `ynh ls` / `ynh list` | |
 | Interactive session | `walkthrough` | |
 | Non-interactive session | `walkthrough "prompt"` | |

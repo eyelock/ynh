@@ -67,7 +67,7 @@ Usage:
 
 Commands:
   init                       Show ynh home path and setup instructions
-  install <git-url|path>     Install a persona from Git URL or local path
+  install <source> [--path <subdir>]  Install a persona from Git URL or local path
   uninstall <name>           Remove an installed persona and its launcher
   update <name>              Refresh cached Git repos for a persona
   run <name> [flags] [prompt]  Launch a persona session
@@ -89,6 +89,7 @@ Examples:
   ynh init
   ynh install github.com/david/my-persona
   ynh install ./my-local-persona
+  ynh install github.com/org/monorepo --path personas/david
   ynh run david
   ynh run david "review this PR"
   ynh run david -v codex
@@ -123,14 +124,29 @@ func cmdInit() error {
 
 func cmdInstall(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: ynh install <git-url|local-path>")
+		return fmt.Errorf("usage: ynh install <git-url|local-path> [--path <subdir>]")
 	}
 
 	if err := config.EnsureDirs(); err != nil {
 		return err
 	}
 
-	source := args[0]
+	// Parse --path flag from args
+	var pathFlag string
+	var remaining []string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--path" && i+1 < len(args) {
+			pathFlag = args[i+1]
+			i++ // skip value
+		} else {
+			remaining = append(remaining, args[i])
+		}
+	}
+	if len(remaining) < 1 {
+		return fmt.Errorf("usage: ynh install <git-url|local-path> [--path <subdir>]")
+	}
+
+	source := remaining[0]
 
 	// Determine if local path or Git URL
 	var srcDir string
@@ -158,6 +174,17 @@ func cmdInstall(args []string) error {
 		}
 		cloneTmpDir = repoPath
 		srcDir = repoPath
+	}
+
+	// Scope to subdirectory if --path was specified
+	if pathFlag != "" {
+		srcDir = filepath.Join(srcDir, pathFlag)
+		if _, err := os.Stat(srcDir); os.IsNotExist(err) {
+			if cloneTmpDir != "" {
+				_ = os.RemoveAll(cloneTmpDir)
+			}
+			return fmt.Errorf("path %q not found in source", pathFlag)
+		}
 	}
 
 	// Load persona from plugin format
