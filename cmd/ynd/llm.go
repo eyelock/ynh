@@ -11,9 +11,14 @@ var lookPathFunc = exec.LookPath
 
 // detectVendorCLI checks for supported LLM CLIs on PATH.
 func detectVendorCLI() string {
-	for _, name := range []string{"claude", "codex"} {
-		if _, err := lookPathFunc(name); err == nil {
-			return name
+	checks := []struct{ vendor, binary string }{
+		{"claude", "claude"},
+		{"codex", "codex"},
+		{"cursor", "agent"},
+	}
+	for _, c := range checks {
+		if _, err := lookPathFunc(c.binary); err == nil {
+			return c.vendor
 		}
 	}
 	return ""
@@ -35,6 +40,8 @@ func queryLLMImpl(vendor, prompt string) (string, error) {
 		cmd = exec.Command("claude", "-p", "-", "--output-format", "text")
 	case "codex":
 		cmd = exec.Command("codex", "-q", "-")
+	case "cursor":
+		cmd = exec.Command("agent", "-p", "-")
 	default:
 		return "", fmt.Errorf("unsupported vendor %q", vendor)
 	}
