@@ -232,11 +232,12 @@ func isGitRepo(dir string) bool {
 }
 
 // initGitRepo initializes a new Git repo in dir and commits all content.
+// Uses -c flags for identity so it works in environments without a global git config (e.g. CI).
 func initGitRepo(dir string) error {
 	for _, args := range [][]string{
 		{"init"},
 		{"add", "."},
-		{"commit", "-m", "ynd marketplace build"},
+		{"-c", "user.name=ynd", "-c", "user.email=ynd@localhost", "commit", "-m", "ynd marketplace build"},
 	} {
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
