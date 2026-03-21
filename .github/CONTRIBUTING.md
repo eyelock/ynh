@@ -317,7 +317,7 @@ ynh-specific config lives under the `"ynh"` key, keeping the file extensible for
 │       ├── rules/
 │       └── commands/
 ├── cache/                     # Cloned Git repos
-│   └── eyelock--shared-skills--a1b2c3d4/
+│   └── eyelock--assistants--a1b2c3d4/
 ├── run/                       # Assembled vendor config (per persona, overwritten each run)
 │   └── david/
 │       ├── .claude/           # vendor config dir with assembled artifacts

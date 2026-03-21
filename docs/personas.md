@@ -222,7 +222,7 @@ Just a named launcher. Useful as a starting point.
   "ynh": {
     "default_vendor": "claude",
     "includes": [
-      {"git": "github.com/eyelock/shared-skills"},
+      {"git": "github.com/eyelock/assistants", "path": "skills/dev"},
       {
         "git": "git@github.com:company/internal-tools.git",
         "path": "ai-config"

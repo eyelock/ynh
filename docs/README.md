@@ -25,7 +25,7 @@ david -v codex                     # same persona, different vendor
 {
   "ynh": {
     "includes": [
-      {"git": "github.com/eyelock/shared-skills", "pick": ["skills/commit", "skills/tdd"]},
+      {"git": "github.com/eyelock/assistants", "path": "skills/dev", "pick": ["skills/dev-project", "skills/dev-quality"]},
       {"git": "github.com/vercel-labs/skills", "pick": ["skills/next-app-router"]},
       {"git": "git@github.com:company/internal-tools.git", "path": "ai-config"}
     ]
@@ -70,5 +70,6 @@ Add skills, agents, rules, and commands to the persona directory. Pull from Git 
 - **[Artifacts Guide](artifacts.md)** - Skills, agents, rules, commands, and project instructions
 - **[Vendor Support](vendors.md)** - Claude, Codex, Cursor - capabilities and launch strategies
 - **[Agent Skills Standard](skills-standard.md)** - Cross-platform spec, frontmatter fields, catalog budget, discovery paths
-- **[Full Walkthrough](walkthrough.md)** - Hands-on test of every feature, start to finish
+- **[Tutorials](tutorial/README.md)** - Progressive tutorials from first persona to marketplace generation
+- **[Manual Test Plan](tutorial/manual-test-plan.md)** - 66 tests covering every feature
 - **[ynd Developer Tools](ynd.md)** - CLI for scaffolding, linting, formatting, compressing, and inspecting
