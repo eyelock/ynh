@@ -180,8 +180,8 @@ func TestCopyFilePreservesPermissions(t *testing.T) {
 	}
 
 	dstPath := filepath.Join(dstDir, "run.sh")
-	if err := copyFile(scriptPath, dstPath); err != nil {
-		t.Fatalf("copyFile failed: %v", err)
+	if err := CopyFile(scriptPath, dstPath); err != nil {
+		t.Fatalf("CopyFile failed: %v", err)
 	}
 
 	info, err := os.Stat(dstPath)

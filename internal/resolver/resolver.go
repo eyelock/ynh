@@ -66,6 +66,27 @@ func Resolve(p *persona.Persona, cfg *config.Config) ([]ResolvedContent, error) 
 	return results, nil
 }
 
+// CloneToTemp clones a Git repo to a temporary directory (shallow, depth 1).
+// The caller is responsible for removing the returned directory when done.
+func CloneToTemp(gitURL string) (string, error) {
+	fullURL := NormalizeGitURL(gitURL)
+
+	tmpDir, err := os.MkdirTemp("", "ynh-clone-*")
+	if err != nil {
+		return "", err
+	}
+
+	cmd := exec.Command("git", "clone", "--depth", "1", fullURL, tmpDir)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		_ = os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("git clone %s: %w", fullURL, err)
+	}
+
+	return tmpDir, nil
+}
+
 // RepoResult describes the outcome of EnsureRepo.
 type RepoResult struct {
 	Path    string // path to the cached repo on disk

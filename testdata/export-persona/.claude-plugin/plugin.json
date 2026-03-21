@@ -1,0 +1,9 @@
+{
+  "name": "export-test",
+  "version": "1.0.0",
+  "description": "Test persona for export",
+  "author": {
+    "name": "test"
+  },
+  "keywords": ["test", "export"]
+}
