@@ -57,6 +57,11 @@ dockers:
       - "ghcr.io/eyelock/ynh:{{ .Version }}-amd64"
     use: buildx
     dockerfile: Dockerfile
+    extra_files:
+      - go.mod
+      - go.sum
+      - cmd/
+      - internal/
     build_flag_templates:
       - "--platform=linux/amd64"
       - "--build-arg=VERSION={{ .Version }}"
@@ -66,6 +71,11 @@ dockers:
       - "ghcr.io/eyelock/ynh:{{ .Version }}-arm64"
     use: buildx
     dockerfile: Dockerfile
+    extra_files:
+      - go.mod
+      - go.sum
+      - cmd/
+      - internal/
     build_flag_templates:
       - "--platform=linux/arm64"
       - "--build-arg=VERSION={{ .Version }}"
