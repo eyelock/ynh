@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 # Stage 1: Build ynh and ynd
 FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
 
@@ -22,30 +24,42 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -v \
     -ldflags "-s -w -X github.com/eyelock/ynh/internal/config.Version=${VERSION}" \
     -o /out/ynd ./cmd/ynd
 
-# Stage 2: Runtime with vendor CLIs
-FROM node:22-alpine
-
-RUN apk add --no-cache git openssh-client tini bash curl
-
-# Pin versions for reproducible builds. Update these periodically.
+# Stage 2a: Claude Code CLI (parallel)
+FROM node:22-alpine AS claude-cli
 ARG CLAUDE_CODE_VERSION=2.1.76
-ARG CODEX_VERSION=0.114.0
-RUN npm install -g \
-    "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
-    "@openai/codex@${CODEX_VERSION}" && \
-    npm cache clean --force
+RUN --mount=type=cache,target=/root/.npm \
+    npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
 
-# Install Cursor Agent CLI and copy binary into PATH.
+# Stage 2b: Codex CLI (parallel)
+FROM node:22-alpine AS codex-cli
+ARG CODEX_VERSION=0.114.0
+RUN --mount=type=cache,target=/root/.npm \
+    npm install -g "@openai/codex@${CODEX_VERSION}"
+
+# Stage 2c: Cursor Agent CLI (parallel)
+FROM alpine AS cursor-cli
+RUN apk add --no-cache curl bash
 # NOTE: curl|bash with no checksum verification — Cursor does not publish
 # checksums. Pin by auditing the install script if reproducibility is critical.
 RUN curl https://cursor.com/install -fsS | bash && \
     cp -L /root/.local/bin/agent /usr/local/bin/agent && \
-    chmod 755 /usr/local/bin/agent && \
-    rm -rf /root/.local/share/cursor-agent /root/.local/bin/agent
+    chmod 755 /usr/local/bin/agent
+
+# Stage 3: Runtime — assemble everything
+FROM node:22-alpine
+
+RUN apk add --no-cache git openssh-client tini bash curl
+
+# Vendor CLIs from parallel stages (scoped dirs, no overlap)
+COPY --from=claude-cli /usr/local/lib/node_modules/@anthropic-ai/ /usr/local/lib/node_modules/@anthropic-ai/
+COPY --from=claude-cli /usr/local/bin/claude /usr/local/bin/claude
+COPY --from=codex-cli  /usr/local/lib/node_modules/@openai/ /usr/local/lib/node_modules/@openai/
+COPY --from=codex-cli  /usr/local/bin/codex /usr/local/bin/codex
+COPY --from=cursor-cli /usr/local/bin/agent /usr/local/bin/agent
 
 # Copy ynh binaries from builder
-COPY --from=builder /out/ynh /usr/local/bin/ynh
-COPY --from=builder /out/ynd /usr/local/bin/ynd
+COPY --link --from=builder /out/ynh /usr/local/bin/ynh
+COPY --link --from=builder /out/ynd /usr/local/bin/ynd
 
 # Configurable UID/GID to match host user (avoids permission issues with bind mounts).
 # node:22-alpine already uses GID 1000 for 'node', so we try the requested GID
@@ -73,6 +87,8 @@ USER ynh
 
 # Image metadata — versions of all packaged binaries
 ARG VERSION=dev
+ARG CLAUDE_CODE_VERSION=2.1.76
+ARG CODEX_VERSION=0.114.0
 LABEL org.opencontainers.image.title="ynh" \
       org.opencontainers.image.description="Persona manager for AI coding assistants" \
       org.opencontainers.image.source="https://github.com/eyelock/ynh" \

@@ -14,6 +14,7 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 | 6 | [Marketplace](tutorial/06-marketplace.md) | Generate marketplace indexes for team distribution |
 | 7 | [Registry & Discovery](tutorial/07-registry-and-discovery.md) | Search and install personas from curated registries |
 | 8 | [Developer Tools](tutorial/08-developer-tools.md) | Scaffold, lint, validate, format, compress, inspect with ynd |
+| 9 | [Docker Images](tutorial/09-docker-image.md) | Build persona appliance images for CI/CD |
 
 ## Manual Test Plan
 

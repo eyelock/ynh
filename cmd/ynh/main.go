@@ -48,6 +48,8 @@ func main() {
 		err = cmdSearch(os.Args[2:])
 	case "registry":
 		err = cmdRegistry(os.Args[2:])
+	case "image":
+		err = cmdImage(os.Args[2:])
 	case "prune":
 		err = cmdPrune()
 	case "version", "--version":
@@ -86,6 +88,7 @@ Commands:
   registry list                Show configured registries
   registry remove <url>        Remove a registry
   registry update              Refresh all cached registries
+  image <name> [flags]         Build a Docker image with a persona baked in
   status                       Show symlink installations across projects
   prune                        Clean orphaned symlink installations
   version                      Print version
@@ -492,20 +495,29 @@ func cmdRun(args []string) error {
 	// We use a stable path instead of a temp dir because syscall.Exec
 	// replaces this process — deferred cleanup would never run.
 	runDir := filepath.Join(config.RunDir(), name)
-	if err := assembler.AssembleTo(runDir, adapter, content); err != nil {
-		return fmt.Errorf("assembling config: %w", err)
-	}
-
-	// Check delegates against remote source allow-list
-	for _, del := range p.DelegatesTo {
-		if err := cfg.CheckRemoteSource(del.Git); err != nil {
-			return fmt.Errorf("delegate %q: %w", del.Git, err)
+	vendorRunDir := filepath.Join(runDir, vendorName)
+	if info, err := os.Stat(vendorRunDir); err == nil && info.IsDir() {
+		// Pre-assembled layout (baked persona image) — use directly.
+		// Skip AssembleTo, delegate allow-list check, AND AssembleDelegates —
+		// everything was vetted and assembled at image build time.
+		runDir = vendorRunDir
+	} else {
+		// Normal host flow — assemble now
+		if err := assembler.AssembleTo(runDir, adapter, content); err != nil {
+			return fmt.Errorf("assembling config: %w", err)
 		}
-	}
 
-	// Assemble delegate personas as agent files
-	if err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo); err != nil {
-		return fmt.Errorf("assembling delegates: %w", err)
+		// Check delegates against remote source allow-list
+		for _, del := range p.DelegatesTo {
+			if err := cfg.CheckRemoteSource(del.Git); err != nil {
+				return fmt.Errorf("delegate %q: %w", del.Git, err)
+			}
+		}
+
+		// Assemble delegate personas as agent files
+		if err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo); err != nil {
+			return fmt.Errorf("assembling delegates: %w", err)
+		}
 	}
 
 	// Dispatch based on action.
@@ -814,10 +826,13 @@ func cmdVendors() {
 	_ = w.Flush()
 }
 
-// resolveVendor picks the vendor: CLI flag > persona default > global config.
+// resolveVendor picks the vendor: CLI flag > YNH_VENDOR env > persona default > global config.
 func resolveVendor(flag string, p *persona.Persona) (string, error) {
 	if flag != "" {
 		return flag, nil
+	}
+	if v := os.Getenv("YNH_VENDOR"); v != "" {
+		return v, nil
 	}
 	if p.DefaultVendor != "" {
 		return p.DefaultVendor, nil
@@ -831,7 +846,7 @@ func resolveVendor(flag string, p *persona.Persona) (string, error) {
 		return cfg.DefaultVendor, nil
 	}
 
-	return "", fmt.Errorf("no vendor specified (use -v flag, persona default_vendor, or global config)")
+	return "", fmt.Errorf("no vendor specified (use -v flag, YNH_VENDOR env var, persona default_vendor, or global config)")
 }
 
 // parseRunArgs separates ynh's own flags from vendor pass-through args and the prompt.

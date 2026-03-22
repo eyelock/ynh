@@ -18,6 +18,7 @@
   * [6. Marketplace](tutorial/06-marketplace.md)
   * [7. Registry & Discovery](tutorial/07-registry-and-discovery.md)
   * [8. Developer Tools](tutorial/08-developer-tools.md)
+  * [9. Docker Images](tutorial/09-docker-image.md)
   * [Manual Test Plan](tutorial/manual-test-plan.md)
 
 * **Project**

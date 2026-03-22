@@ -52,6 +52,36 @@ changelog:
       - "^test:"
       - "^ci:"
 
+dockers:
+  - image_templates:
+      - "ghcr.io/eyelock/ynh:{{ .Version }}-amd64"
+    use: buildx
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--build-arg=VERSION={{ .Version }}"
+    goos: linux
+    goarch: amd64
+  - image_templates:
+      - "ghcr.io/eyelock/ynh:{{ .Version }}-arm64"
+    use: buildx
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--build-arg=VERSION={{ .Version }}"
+    goos: linux
+    goarch: arm64
+
+docker_manifests:
+  - name_template: "ghcr.io/eyelock/ynh:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/eyelock/ynh:{{ .Version }}-amd64"
+      - "ghcr.io/eyelock/ynh:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/eyelock/ynh:latest"
+    image_templates:
+      - "ghcr.io/eyelock/ynh:{{ .Version }}-amd64"
+      - "ghcr.io/eyelock/ynh:{{ .Version }}-arm64"
+
 brews:
   - repository:
       owner: eyelock
