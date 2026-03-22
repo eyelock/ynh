@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage format lint check run docs help
+.PHONY: clean deps install build test test-coverage format lint check run docs help docker-build docker-push
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -70,5 +70,15 @@ docs: ## Serve docs locally (requires npx)
 	@command -v npx >/dev/null 2>&1 || { echo "npx not found. Install Node.js to browse docs locally."; exit 1; }
 	@echo "Starting docs server at http://localhost:3000"
 	@npx --yes docsify-cli serve docs
+
+DOCKER_IMAGE := ghcr.io/eyelock/ynh
+DOCKER_TAG := $(VERSION)
+
+docker-build: ## Build base Docker image
+	docker build --build-arg VERSION=$(VERSION) -t $(DOCKER_IMAGE):$(DOCKER_TAG) -t $(DOCKER_IMAGE):latest .
+
+docker-push: ## Push base Docker image to GHCR
+	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
+	docker push $(DOCKER_IMAGE):latest
 
 check: deps format lint test build ## Run full CI pipeline

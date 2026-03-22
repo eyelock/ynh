@@ -138,6 +138,23 @@ Re-run `make install` after any code change you want to test.
 | T8.7 | Compress | [T8.7](tutorial/08-developer-tools.md#t87-compress) |
 | T8.8 | Inspect | [T8.8](tutorial/08-developer-tools.md#t88-inspect) |
 
+### Tutorial 9: Docker Images
+
+Requires Docker installed and running.
+
+| ID | Test | Tutorial step |
+|---|---|---|
+| T9.1 | Pull or build base image | [T9.1](tutorial/09-docker-image.md#t91-pull-the-base-image) |
+| T9.2 | Create and install tutorial persona | [T9.2](tutorial/09-docker-image.md#t92-create-and-install-a-tutorial-persona) |
+| T9.3 | Build a persona image | [T9.3](tutorial/09-docker-image.md#t93-build-a-persona-image) |
+| T9.4 | Run the persona image | [T9.4](tutorial/09-docker-image.md#t94-run-the-persona-image) |
+| T9.5 | Switch vendors at runtime | [T9.5](tutorial/09-docker-image.md#t95-switch-vendors-at-runtime) |
+| T9.6 | Pass vendor flags | [T9.6](tutorial/09-docker-image.md#t96-pass-vendor-flags) |
+| T9.7 | Inspect with --dry-run | [T9.7](tutorial/09-docker-image.md#t97-inspect-with---dry-run) |
+| T9.8 | Build from Git source | [T9.8](tutorial/09-docker-image.md#t98-build-from-git-source) |
+| T9.9 | Override entrypoint | [T9.9](tutorial/09-docker-image.md#t99-override-entrypoint) |
+| T9.10 | CI/CD matrix example | [T9.10](tutorial/09-docker-image.md#t910-cicd-matrix-example) |
+
 ---
 
 ## Edge Cases

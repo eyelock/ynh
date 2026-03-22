@@ -181,6 +181,57 @@ func TestResolveVendor_GlobalConfig(t *testing.T) {
 	}
 }
 
+func TestResolveVendor_EnvVar(t *testing.T) {
+	t.Setenv("YNH_VENDOR", "codex")
+
+	p := &persona.Persona{
+		Name:          "test",
+		DefaultVendor: "claude",
+	}
+
+	got, err := resolveVendor("", p)
+	if err != nil {
+		t.Fatalf("resolveVendor failed: %v", err)
+	}
+	if got != "codex" {
+		t.Errorf("got %q, want %q", got, "codex")
+	}
+}
+
+func TestResolveVendor_FlagBeatsEnvVar(t *testing.T) {
+	t.Setenv("YNH_VENDOR", "codex")
+
+	p := &persona.Persona{
+		Name:          "test",
+		DefaultVendor: "cursor",
+	}
+
+	got, err := resolveVendor("claude", p)
+	if err != nil {
+		t.Fatalf("resolveVendor failed: %v", err)
+	}
+	if got != "claude" {
+		t.Errorf("got %q, want %q", got, "claude")
+	}
+}
+
+func TestResolveVendor_EnvVarFallthrough(t *testing.T) {
+	t.Setenv("YNH_VENDOR", "")
+
+	p := &persona.Persona{
+		Name:          "test",
+		DefaultVendor: "codex",
+	}
+
+	got, err := resolveVendor("", p)
+	if err != nil {
+		t.Fatalf("resolveVendor failed: %v", err)
+	}
+	if got != "codex" {
+		t.Errorf("got %q, want %q", got, "codex")
+	}
+}
+
 func TestGenerateLauncher(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)

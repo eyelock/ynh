@@ -1,5 +1,6 @@
 services:
   ynh:
+    image: ghcr.io/eyelock/ynh:latest
     build:
       context: .
       dockerfile: Dockerfile

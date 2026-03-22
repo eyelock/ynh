@@ -18,8 +18,8 @@ ynh is a packaging and distribution tool. It has no runtime component - the AI v
 ### Package Structure
 
 ```
-cmd/ynh/                  CLI entry point: persona manager (install, run, update, search, registry)
-cmd/ynd/                  CLI entry point: developer tools (create, lint, validate, fmt, compress, export, marketplace)
+cmd/ynh/                  CLI entry point: persona manager (init, install, uninstall, update, run, ls, info, vendors, search, registry, image, status, prune)
+cmd/ynd/                  CLI entry point: developer tools (create, lint, validate, fmt, compress, export, marketplace, inspect)
 internal/
   config/                 Global config (~/.ynh/) and path management
   persona/                Persona loading, format detection, name validation
