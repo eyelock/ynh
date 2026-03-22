@@ -43,7 +43,14 @@ make deps      # installs Go, linter, formatter
 make install   # builds and installs to ~/.ynh/bin/
 ```
 
-After `make install`, `ynh` and `ynd` resolve to your local build everywhere (assuming `~/.ynh/bin` is on your PATH).
+After `make install`, verify you're running your local build:
+
+```bash
+ynh version
+# Expected: dev-<branch>-<sha> (not a release tag like v0.0.9)
+```
+
+If `ynh version` shows a release tag or stale version, ensure `~/.ynh/bin` is on your PATH and re-run `make install` after any code change you want to test.
 
 <!-- tabs:end -->
 

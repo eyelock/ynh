@@ -11,8 +11,9 @@ INSTALL_DIR := $(HOME)/.ynh/bin
 GOBIN := $(shell go env GOPATH)/bin
 GOIMPORTS := $(GOBIN)/goimports
 
-# Version from git: use exact tag if on one, otherwise branch+sha
-VERSION := $(shell git describe --tags --exact-match 2>/dev/null || echo "dev-$$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)-$$(git rev-parse --short HEAD 2>/dev/null || echo unknown)$$(git diff --quiet 2>/dev/null || echo '-dirty')")
+# Version from git: use exact tag only if clean and on that exact commit, otherwise branch+sha
+DEV_VERSION := dev-$(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)-$(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)$(shell git diff --quiet 2>/dev/null || echo '-dirty')
+VERSION := $(shell git diff --quiet 2>/dev/null && git describe --tags --exact-match 2>/dev/null || echo "$(DEV_VERSION)")
 LDFLAGS := -ldflags "-X github.com/eyelock/ynh/internal/config.Version=$(VERSION)"
 
 help: ## Show this help
