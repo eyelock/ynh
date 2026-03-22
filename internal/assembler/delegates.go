@@ -31,7 +31,7 @@ func AssembleDelegates(workDir string, adapter vendor.Adapter, delegates []perso
 	}
 
 	for _, del := range delegates {
-		basePath, _, err := resolver.ResolveGitSource(del.GitSource)
+		basePath, _, err := resolver.ResolveGitSourceFromCache(del.GitSource)
 		if err != nil {
 			return fmt.Errorf("delegate: %w", err)
 		}

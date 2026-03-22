@@ -161,7 +161,7 @@ At runtime, ynh generates a vendor-native agent file for each delegate containin
 
 **Embedded** artifacts live directly in the persona directory. They're always included.
 
-**External** artifacts are pulled from Git repos via `includes`. They're fetched at runtime, cached locally.
+**External** artifacts are pulled from Git repos via `includes`. They're fetched at install time and cached locally. At runtime, cached repos are used without network access (with a fallback fetch on cache miss).
 
 Both are assembled into the same vendor config. Use embedded for persona-specific customizations, external for shared libraries.
 

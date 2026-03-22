@@ -282,7 +282,7 @@ rm -rf broken-test
 cp ~/.ynh/config.json ~/.ynh/config.json.bak
 echo '{"default_vendor":"claude","allowed_remote_sources":[]}' > ~/.ynh/config.json
 
-# Any persona with remote includes should fail at run time
+# Any persona with remote includes should fail at both install and run time
 # (install my-dev first if not already installed)
 my-dev "hello" 2>&1 | head -1
 # Expected: Error about remote source not allowed

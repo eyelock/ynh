@@ -87,6 +87,17 @@ EOF
 
 ```bash
 ynh install /tmp/ynh-tutorial/team-lead
+```
+
+Expected install output includes delegate fetching:
+```
+Fetching 0 include(s) and 2 delegate(s)...
+  Fetched /tmp/ynh-tutorial/specialist
+  Fetched eyelock/ynh
+Installed persona "team-lead"
+```
+
+```bash
 ynh ls
 ```
 
@@ -98,7 +109,7 @@ team-lead  claude  /tmp/ynh-tutorial/team-lead      ...        0         /tmp/yn
 
 ## T4.4: Inspect delegate agent files
 
-Delegates are resolved at runtime. Run the persona to trigger resolution:
+Delegate repos are fetched at install time and cached locally. Agent files are generated at runtime from the cached repos. Run the persona to trigger assembly:
 
 ```bash
 team-lead "list your available agents"
@@ -144,7 +155,8 @@ ynh uninstall team-lead
 - Delegates must be Git repos (local or remote)
 - ynh generates vendor-native agent files from delegate personas at runtime
 - Agent files inline the delegate's instructions, rules, and skill list
-- Delegates are resolved every `ynh run` (always fresh)
+- Delegate repos are fetched at install time and cached — `ynh run` works offline
+- Use `ynh update` to refresh cached delegate repos
 
 ## Next
 

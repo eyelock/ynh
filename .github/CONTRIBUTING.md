@@ -289,10 +289,12 @@ There are two copies of `metadata.json` in a persona's life:
 During install:
 - `ynh install` copies the entire persona directory (including `metadata.json`) to `~/.ynh/personas/<name>/`.
 - After the copy, ynh injects `installed_from` provenance into the installed `metadata.json`. This records where the persona was installed from (source type, URL/path, timestamp).
+- ynh then pre-fetches all `includes` and `delegates_to` Git repos into `~/.ynh/cache/`. This ensures `ynh run` works offline and validates all Git refs at install time. If any fetch fails, the install fails with a clear error.
 - The source `metadata.json` is never modified.
 
 At runtime:
 - `ynh run` reads the installed copy at `~/.ynh/personas/<name>/metadata.json` to resolve includes, delegates, and vendor settings.
+- Cached repos are used as-is without hitting the network. If a cache entry is missing (e.g. manually cleared), ynh falls back to a network fetch with a warning.
 
 The `installed_from` field looks like:
 
