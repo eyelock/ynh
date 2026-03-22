@@ -167,7 +167,9 @@ my-persona -v claude --clean
 
 ## T2.7: Prune orphaned installations
 
-If a project directory is deleted while symlinks are still registered, `ynh prune` cleans up the stale entries.
+If a project directory is deleted while symlinks are still registered, `ynh prune` cleans up the stale entries. It also removes stale launcher scripts from `~/.ynh/bin/` when their persona no longer exists.
+
+### Prune orphaned symlinks
 
 Re-create the project and install symlinks:
 
@@ -201,10 +203,46 @@ Expected:
 Removing orphaned installation: my-persona (cursor) in /tmp/ynh-tutorial/project
 ```
 
-## Clean up
+Verify the orphan was removed:
 
 ```bash
-ynh uninstall my-persona
+ynh status
+# Expected: no cursor installation for my-persona in /tmp/ynh-tutorial/project
+```
+
+### Prune stale launchers
+
+Simulate a stale launcher by removing the persona directory but leaving its launcher script:
+
+```bash
+rm -rf ~/.ynh/personas/my-persona
+ls ~/.ynh/bin/my-persona
+# Expected: file exists (stale launcher)
+```
+
+Prune detects and removes the stale launcher:
+
+```bash
+ynh prune
+```
+
+Expected:
+```
+Removed stale launcher: /Users/<you>/.ynh/bin/my-persona
+```
+
+Verify the launcher was removed:
+
+```bash
+ls ~/.ynh/bin/my-persona 2>/dev/null
+# Expected: no such file
+```
+
+Verify ynh and ynd binaries are untouched:
+
+```bash
+ls ~/.ynh/bin/ynh ~/.ynh/bin/ynd
+# Expected: both still exist
 ```
 
 ## What you learned
@@ -215,7 +253,7 @@ ynh uninstall my-persona
 - ynh **automatically prompts** to install symlinks on first run in a project
 - `--install` and `--clean` manage symlinks explicitly without launching
 - `ynh status` shows all symlink installations across projects
-- `ynh prune` cleans orphaned entries when project directories are deleted
+- `ynh prune` cleans orphaned symlink entries and stale launcher scripts
 
 ## Next
 

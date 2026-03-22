@@ -780,17 +780,66 @@ func cmdPrune() error {
 	}
 
 	orphans := log.Prune()
-	if len(orphans) == 0 {
-		fmt.Println("No orphaned installations found.")
-		return nil
-	}
-
 	for _, inst := range orphans {
 		fmt.Printf("Removing orphaned installation: %s (%s) in %s\n", inst.Persona, inst.Vendor, inst.Project)
 	}
 
-	log.RemoveOrphans(orphans)
-	return log.Save()
+	if len(orphans) > 0 {
+		log.RemoveOrphans(orphans)
+		if err := log.Save(); err != nil {
+			return err
+		}
+	}
+
+	// Scan for stale launcher scripts in ~/.ynh/bin/
+	staleLaunchers := 0
+	binDir := config.BinDir()
+	entries, err := os.ReadDir(binDir)
+	if err == nil {
+		for _, entry := range entries {
+			name := entry.Name()
+			if name == "ynh" || name == "ynd" {
+				continue
+			}
+			if persona.DetectFormat(persona.InstalledDir(name)) == "plugin" {
+				continue
+			}
+			launcherPath := filepath.Join(binDir, name)
+			data, err := os.ReadFile(launcherPath)
+			if err != nil {
+				continue
+			}
+			if !strings.Contains(string(data), "exec ynh run") {
+				continue
+			}
+			_ = os.Remove(launcherPath)
+			fmt.Printf("Removed stale launcher: %s\n", launcherPath)
+			staleLaunchers++
+		}
+	}
+
+	// Scan for stale run directories in ~/.ynh/run/
+	staleRuns := 0
+	runDir := config.RunDir()
+	runEntries, err := os.ReadDir(runDir)
+	if err == nil {
+		for _, entry := range runEntries {
+			name := entry.Name()
+			if persona.DetectFormat(persona.InstalledDir(name)) == "plugin" {
+				continue
+			}
+			staleRun := filepath.Join(runDir, name)
+			_ = os.RemoveAll(staleRun)
+			fmt.Printf("Removed stale run dir: %s\n", staleRun)
+			staleRuns++
+		}
+	}
+
+	if len(orphans) == 0 && staleLaunchers == 0 && staleRuns == 0 {
+		fmt.Println("No orphaned installations found.")
+	}
+
+	return nil
 }
 
 // symlinkIntact returns true if at least one symlink from the installation
