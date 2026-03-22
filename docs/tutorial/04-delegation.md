@@ -92,8 +92,8 @@ ynh ls
 
 Expected:
 ```
-NAME       VENDOR  INCLUDES  DELEGATES TO
-team-lead  claude  0         /tmp/ynh-tutorial/specialist, eyelock/ynh
+NAME       VENDOR  SOURCE                          ARTIFACTS  INCLUDES  DELEGATES TO
+team-lead  claude  /tmp/ynh-tutorial/team-lead      ...        0         /tmp/ynh-tutorial/specialist, eyelock/ynh
 ```
 
 ## T4.4: Inspect delegate agent files

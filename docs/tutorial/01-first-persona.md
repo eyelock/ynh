@@ -145,8 +145,37 @@ ynh ls
 
 Expected:
 ```
-NAME        VENDOR  INCLUDES  DELEGATES TO
-my-persona  claude  0         0
+NAME        VENDOR  SOURCE                          ARTIFACTS      INCLUDES  DELEGATES TO
+my-persona  claude  /tmp/ynh-tutorial/my-persona     1s 1a 1r 1c   0         0
+```
+
+The ARTIFACTS column shows a compact count: skills (s), agents (a), rules (r), commands (c).
+The SOURCE column shows where the persona was installed from.
+
+## T1.5b: Inspect persona detail
+
+```bash
+ynh info my-persona
+```
+
+Expected:
+```
+Name:         my-persona
+Vendor:       claude
+Installed:    <timestamp>
+Source:       /tmp/ynh-tutorial/my-persona (local)
+
+Artifacts:
+  skills:    greet
+  agents:    nitpicker
+  rules:     be-brief
+  commands:  hello
+
+Includes:
+  (none)
+
+Delegates to:
+  (none)
 ```
 
 Check the launcher script:

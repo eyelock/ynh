@@ -205,6 +205,7 @@ Global default in `~/.ynh/config.json`:
 | `ynh update <name>` | Refresh cached Git repos for a persona |
 | `ynh run <name> [flags] [prompt]` | Launch a persona session |
 | `ynh ls` | List installed personas (alias: `ynh list`) |
+| `ynh info <name>` | Show detailed persona information |
 | `ynh vendors` | List supported vendor adapters |
 | `ynh status` | Show symlink installations across projects |
 | `ynh prune` | Clean orphaned symlink installations |

@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/persona"
+	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/symlink"
 	"github.com/eyelock/ynh/internal/vendor"
@@ -36,6 +38,8 @@ func main() {
 		err = cmdRun(os.Args[2:])
 	case "ls", "list":
 		err = cmdList()
+	case "info":
+		err = cmdInfo(os.Args[2:])
 	case "vendors":
 		cmdVendors()
 	case "status":
@@ -75,6 +79,7 @@ Commands:
   update <name>              Refresh cached Git repos for a persona
   run <name> [flags] [prompt]  Launch a persona session
   ls                           List installed personas
+  info <name>                  Show detailed persona information
   vendors                      List supported vendor adapters
   search <term>                Search registries for personas
   registry add <url>           Add a persona registry
@@ -159,6 +164,7 @@ func cmdInstall(args []string) error {
 	}
 
 	source := remaining[0]
+	originalSource := source
 
 	// Determine source type using disambiguation rules:
 	// 1. Starts with . or / → local path
@@ -235,6 +241,34 @@ func cmdInstall(args []string) error {
 
 	if err := copyTree(srcDir, installDir); err != nil {
 		return err
+	}
+
+	// Inject install provenance into the copied metadata.json
+	provSource := source
+	if resolved.sourceType == "local" {
+		provSource = originalSource
+	}
+	prov := &plugin.ProvenanceMeta{
+		SourceType:   resolved.sourceType,
+		Source:       provSource,
+		Path:         pathFlag,
+		RegistryName: resolved.registryName,
+		InstalledAt:  time.Now().UTC().Format(time.RFC3339),
+	}
+	// Load existing ynh metadata from the copied file (preserves includes, delegates, etc.)
+	meta, err := plugin.LoadMetadataJSON(installDir)
+	if err != nil {
+		return fmt.Errorf("loading installed metadata: %w", err)
+	}
+	var ynh *plugin.YNHMetadata
+	if meta != nil && meta.YNH != nil {
+		ynh = meta.YNH
+	} else {
+		ynh = &plugin.YNHMetadata{}
+	}
+	ynh.InstalledFrom = prov
+	if err := plugin.SaveMetadataJSON(installDir, ynh); err != nil {
+		return fmt.Errorf("saving provenance: %w", err)
 	}
 
 	// Generate launcher script (skip for reserved names that conflict with the binary)
@@ -523,12 +557,12 @@ func cmdList() error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "NAME\tVENDOR\tINCLUDES\tDELEGATES TO")
+	_, _ = fmt.Fprintln(w, "NAME\tVENDOR\tSOURCE\tARTIFACTS\tINCLUDES\tDELEGATES TO")
 
 	for _, name := range names {
 		p, err := persona.Load(name)
 		if err != nil {
-			_, _ = fmt.Fprintf(w, "%s\t(error: %v)\t\t\n", name, err)
+			_, _ = fmt.Fprintf(w, "%s\t(error: %v)\t\t\t\t\n", name, err)
 			continue
 		}
 
@@ -537,35 +571,189 @@ func cmdList() error {
 			vendorName = "-"
 		}
 
-		includes := formatSources(len(p.Includes), gitURLs(p.Includes, func(i persona.Include) string { return i.Git }))
-		delegates := formatSources(len(p.DelegatesTo), gitURLs(p.DelegatesTo, func(d persona.Delegate) string { return d.Git }))
+		source := formatProvenance(p.InstalledFrom)
+		artifacts := formatArtifactSummary(name)
+		includes := formatIncludes(p.Includes)
+		delegates := formatDelegates(p.DelegatesTo)
 
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, vendorName, includes, delegates)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", p.Name, vendorName, source, artifacts, includes, delegates)
 	}
 
 	_ = w.Flush()
 	return nil
 }
 
-// gitURLs extracts Git URLs from a slice using the given accessor.
-func gitURLs[T any](items []T, getGit func(T) string) []string {
-	urls := make([]string, 0, len(items))
-	for _, item := range items {
-		urls = append(urls, getGit(item))
+func cmdInfo(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: ynh info <persona-name>")
 	}
-	return urls
+
+	name := args[0]
+	p, err := persona.Load(name)
+	if err != nil {
+		return fmt.Errorf("persona %q not found: %w", name, err)
+	}
+
+	vendorName := p.DefaultVendor
+	if vendorName == "" {
+		vendorName = "-"
+	}
+
+	fmt.Printf("Name:         %s\n", p.Name)
+	fmt.Printf("Vendor:       %s\n", vendorName)
+
+	if p.InstalledFrom != nil {
+		fmt.Printf("Installed:    %s\n", p.InstalledFrom.InstalledAt)
+		fmt.Printf("Source:       %s (%s)\n", p.InstalledFrom.Source, p.InstalledFrom.SourceType)
+		if p.InstalledFrom.Path != "" {
+			fmt.Printf("Path:         %s\n", p.InstalledFrom.Path)
+		}
+		if p.InstalledFrom.RegistryName != "" {
+			fmt.Printf("Registry:     %s\n", p.InstalledFrom.RegistryName)
+		}
+	} else {
+		fmt.Printf("Installed:    -\n")
+		fmt.Printf("Source:       -\n")
+	}
+
+	// Local artifacts
+	arts, _ := persona.ScanArtifacts(name)
+	fmt.Println()
+	fmt.Println("Artifacts:")
+	if arts.Total() == 0 {
+		fmt.Println("  (none)")
+	} else {
+		if len(arts.Skills) > 0 {
+			fmt.Printf("  skills:    %s\n", strings.Join(arts.Skills, ", "))
+		}
+		if len(arts.Agents) > 0 {
+			fmt.Printf("  agents:    %s\n", strings.Join(arts.Agents, ", "))
+		}
+		if len(arts.Rules) > 0 {
+			fmt.Printf("  rules:     %s\n", strings.Join(arts.Rules, ", "))
+		}
+		if len(arts.Commands) > 0 {
+			fmt.Printf("  commands:  %s\n", strings.Join(arts.Commands, ", "))
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("Includes:")
+	if len(p.Includes) == 0 {
+		fmt.Println("  (none)")
+	} else {
+		for _, inc := range p.Includes {
+			line := "  " + inc.Git
+			if inc.Path != "" {
+				line += "  path=" + inc.Path
+			}
+			if inc.Ref != "" {
+				line += "  ref=" + inc.Ref
+			}
+			if len(inc.Pick) > 0 {
+				line += "  pick=[" + strings.Join(inc.Pick, ", ") + "]"
+			}
+			fmt.Println(line)
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("Delegates to:")
+	if len(p.DelegatesTo) == 0 {
+		fmt.Println("  (none)")
+	} else {
+		for _, del := range p.DelegatesTo {
+			line := "  " + del.Git
+			if del.Path != "" {
+				line += "  path=" + del.Path
+			}
+			if del.Ref != "" {
+				line += "  ref=" + del.Ref
+			}
+			fmt.Println(line)
+		}
+	}
+
+	return nil
 }
 
-// formatSources formats a count with abbreviated git URLs.
-func formatSources(count int, urls []string) string {
-	if count == 0 {
+// formatArtifactSummary formats the ARTIFACTS column for ynh ls.
+// Shows a compact summary like "1s 2a 1r 1c" (skills, agents, rules, commands).
+func formatArtifactSummary(name string) string {
+	arts, _ := persona.ScanArtifacts(name)
+	if arts.Total() == 0 {
 		return "0"
 	}
-	short := make([]string, 0, len(urls))
-	for _, u := range urls {
-		short = append(short, shortGitURL(u))
+	var parts []string
+	if len(arts.Skills) > 0 {
+		parts = append(parts, fmt.Sprintf("%ds", len(arts.Skills)))
 	}
-	return strings.Join(short, ", ")
+	if len(arts.Agents) > 0 {
+		parts = append(parts, fmt.Sprintf("%da", len(arts.Agents)))
+	}
+	if len(arts.Rules) > 0 {
+		parts = append(parts, fmt.Sprintf("%dr", len(arts.Rules)))
+	}
+	if len(arts.Commands) > 0 {
+		parts = append(parts, fmt.Sprintf("%dc", len(arts.Commands)))
+	}
+	return strings.Join(parts, " ")
+}
+
+// formatProvenance formats the SOURCE column for ynh ls.
+func formatProvenance(prov *persona.Provenance) string {
+	if prov == nil {
+		return "-"
+	}
+	short := shortGitURL(prov.Source)
+	if prov.Path != "" {
+		short += "/" + prov.Path
+	}
+	if prov.RegistryName != "" {
+		short += " (" + prov.RegistryName + ")"
+	}
+	return short
+}
+
+// formatIncludes formats the INCLUDES column for ynh ls.
+func formatIncludes(includes []persona.Include) string {
+	if len(includes) == 0 {
+		return "0"
+	}
+	parts := make([]string, 0, len(includes))
+	for _, inc := range includes {
+		s := shortGitURL(inc.Git)
+		if inc.Path != "" {
+			s += "/" + inc.Path
+		}
+		if inc.Ref != "" && inc.Ref != "main" && inc.Ref != "HEAD" {
+			s += "@" + inc.Ref
+		}
+		if len(inc.Pick) > 0 {
+			s += fmt.Sprintf(" [%d]", len(inc.Pick))
+		}
+		parts = append(parts, s)
+	}
+	return strings.Join(parts, ", ")
+}
+
+// formatDelegates formats the DELEGATES TO column for ynh ls.
+func formatDelegates(delegates []persona.Delegate) string {
+	if len(delegates) == 0 {
+		return "0"
+	}
+	parts := make([]string, 0, len(delegates))
+	for _, del := range delegates {
+		s := shortGitURL(del.Git)
+		if del.Path != "" {
+			s += "/" + del.Path
+		}
+		if del.Ref != "" && del.Ref != "main" && del.Ref != "HEAD" {
+			s += "@" + del.Ref
+		}
+		parts = append(parts, s)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // shortGitURL abbreviates a git URL for display.

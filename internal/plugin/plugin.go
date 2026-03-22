@@ -30,9 +30,19 @@ type MetadataJSON struct {
 
 // YNHMetadata holds ynh-specific persona configuration.
 type YNHMetadata struct {
-	DefaultVendor string         `json:"default_vendor,omitempty"`
-	Includes      []IncludeMeta  `json:"includes,omitempty"`
-	DelegatesTo   []DelegateMeta `json:"delegates_to,omitempty"`
+	DefaultVendor string          `json:"default_vendor,omitempty"`
+	Includes      []IncludeMeta   `json:"includes,omitempty"`
+	DelegatesTo   []DelegateMeta  `json:"delegates_to,omitempty"`
+	InstalledFrom *ProvenanceMeta `json:"installed_from,omitempty"`
+}
+
+// ProvenanceMeta records where a persona was installed from.
+type ProvenanceMeta struct {
+	SourceType   string `json:"source_type"`
+	Source       string `json:"source"`
+	Path         string `json:"path,omitempty"`
+	RegistryName string `json:"registry_name,omitempty"`
+	InstalledAt  string `json:"installed_at"`
 }
 
 // IncludeMeta is the JSON representation of a Git include.
@@ -92,4 +102,44 @@ func LoadMetadataJSON(dir string) (*MetadataJSON, error) {
 	}
 
 	return &meta, nil
+}
+
+// SaveMetadataJSON merges ynh metadata into the existing metadata.json at dir,
+// preserving any non-ynh keys. Creates the file if it doesn't exist.
+func SaveMetadataJSON(dir string, ynh *YNHMetadata) error {
+	path := filepath.Join(dir, "metadata.json")
+
+	// Read existing file into a raw map to preserve non-ynh keys.
+	existing := make(map[string]any)
+	data, err := os.ReadFile(path)
+	if err == nil {
+		if err := json.Unmarshal(data, &existing); err != nil {
+			return fmt.Errorf("parsing existing metadata.json: %w", err)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("reading metadata.json: %w", err)
+	}
+
+	// Marshal the typed YNHMetadata to a raw value, then inject into the map.
+	ynhBytes, err := json.Marshal(ynh)
+	if err != nil {
+		return fmt.Errorf("marshaling ynh metadata: %w", err)
+	}
+	var ynhRaw any
+	if err := json.Unmarshal(ynhBytes, &ynhRaw); err != nil {
+		return fmt.Errorf("converting ynh metadata: %w", err)
+	}
+	existing["ynh"] = ynhRaw
+
+	out, err := json.MarshalIndent(existing, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling metadata.json: %w", err)
+	}
+	out = append(out, '\n')
+
+	if err := os.WriteFile(path, out, 0o644); err != nil {
+		return fmt.Errorf("writing metadata.json: %w", err)
+	}
+
+	return nil
 }

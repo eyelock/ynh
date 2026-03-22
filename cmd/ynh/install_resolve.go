@@ -9,9 +9,13 @@ import (
 )
 
 // resolvedSource holds the result of disambiguating an install source.
+// sourceType is always set and is the single source of truth for provenance.
+// gitURL is only set when the source was resolved from a registry lookup.
 type resolvedSource struct {
-	gitURL string // non-empty if resolved to a Git URL (from registry)
-	path   string // monorepo subdir (from registry entry)
+	gitURL       string // non-empty if resolved to a Git URL (from registry)
+	path         string // monorepo subdir (from registry entry)
+	sourceType   string // "local", "git", "registry"
+	registryName string // non-empty for registry lookups
 }
 
 // resolveInstallSource applies disambiguation rules to determine the source type.
@@ -20,17 +24,17 @@ type resolvedSource struct {
 func resolveInstallSource(source, existingPath string, cfg *config.Config) (resolvedSource, error) {
 	// Rule 1: local path — handled by isLocalPath() in caller
 	if isLocalPath(source) {
-		return resolvedSource{}, nil
+		return resolvedSource{sourceType: "local"}, nil
 	}
 
 	// Rule 2: Git SSH URL
 	if strings.HasPrefix(source, "git@") {
-		return resolvedSource{}, nil
+		return resolvedSource{sourceType: "git"}, nil
 	}
 
 	// Rule 3: Git HTTPS/HTTP URL
 	if strings.HasPrefix(source, "https://") || strings.HasPrefix(source, "http://") {
-		return resolvedSource{}, nil
+		return resolvedSource{sourceType: "git"}, nil
 	}
 
 	// Rule 4: Contains @ → registry lookup as name@registry-name
@@ -43,7 +47,7 @@ func resolveInstallSource(source, existingPath string, cfg *config.Config) (reso
 
 	// Rule 5: Contains / → Git URL shorthand
 	if strings.Contains(source, "/") {
-		return resolvedSource{}, nil
+		return resolvedSource{sourceType: "git"}, nil
 	}
 
 	// Rule 6: Plain word → registry search
@@ -67,8 +71,10 @@ func lookupFromRegistry(name, regName string, cfg *config.Config) (resolvedSourc
 
 	entry := results[0].Entry
 	return resolvedSource{
-		gitURL: entry.Repo,
-		path:   entry.Path,
+		gitURL:       entry.Repo,
+		path:         entry.Path,
+		sourceType:   "registry",
+		registryName: regName,
 	}, nil
 }
 
@@ -89,8 +95,10 @@ func searchFromRegistry(name string, cfg *config.Config) (resolvedSource, error)
 	if len(results) == 1 {
 		entry := results[0].Entry
 		return resolvedSource{
-			gitURL: entry.Repo,
-			path:   entry.Path,
+			gitURL:       entry.Repo,
+			path:         entry.Path,
+			sourceType:   "registry",
+			registryName: results[0].RegistryName,
 		}, nil
 	}
 
