@@ -18,6 +18,9 @@ func TestResolveInstallSourceLocalPath(t *testing.T) {
 	if result.gitURL != "" {
 		t.Error("local path should not resolve to gitURL")
 	}
+	if result.sourceType != "local" {
+		t.Errorf("sourceType = %q, want %q", result.sourceType, "local")
+	}
 
 	result, err = resolveInstallSource("/abs/path", "", cfg)
 	if err != nil {
@@ -25,6 +28,9 @@ func TestResolveInstallSourceLocalPath(t *testing.T) {
 	}
 	if result.gitURL != "" {
 		t.Error("absolute path should not resolve to gitURL")
+	}
+	if result.sourceType != "local" {
+		t.Errorf("sourceType = %q, want %q", result.sourceType, "local")
 	}
 }
 
@@ -38,6 +44,9 @@ func TestResolveInstallSourceGitSSH(t *testing.T) {
 	if result.gitURL != "" {
 		t.Error("SSH URL should pass through without registry lookup")
 	}
+	if result.sourceType != "git" {
+		t.Errorf("sourceType = %q, want %q", result.sourceType, "git")
+	}
 }
 
 func TestResolveInstallSourceGitHTTPS(t *testing.T) {
@@ -50,6 +59,9 @@ func TestResolveInstallSourceGitHTTPS(t *testing.T) {
 	if result.gitURL != "" {
 		t.Error("HTTPS URL should pass through without registry lookup")
 	}
+	if result.sourceType != "git" {
+		t.Errorf("sourceType = %q, want %q", result.sourceType, "git")
+	}
 }
 
 func TestResolveInstallSourceGitShorthand(t *testing.T) {
@@ -61,6 +73,9 @@ func TestResolveInstallSourceGitShorthand(t *testing.T) {
 	}
 	if result.gitURL != "" {
 		t.Error("shorthand URL should pass through without registry lookup")
+	}
+	if result.sourceType != "git" {
+		t.Errorf("sourceType = %q, want %q", result.sourceType, "git")
 	}
 }
 
@@ -98,5 +113,8 @@ func TestResolveInstallSourceHTTPNotRegistry(t *testing.T) {
 	}
 	if result.gitURL != "" {
 		t.Error("HTTP URL should pass through")
+	}
+	if result.sourceType != "git" {
+		t.Errorf("sourceType = %q, want %q", result.sourceType, "git")
 	}
 }

@@ -279,6 +279,38 @@ The `name` field is required and becomes the launcher command name. Only fields 
 
 ynh-specific config lives under the `"ynh"` key, keeping the file extensible for other tools.
 
+### Install Lifecycle
+
+There are two copies of `metadata.json` in a persona's life:
+
+1. **Source copy** — git-tracked in the persona's repo. Author-managed. Contains `includes`, `delegates_to`, `default_vendor`.
+2. **Installed copy** — at `~/.ynh/personas/<name>/metadata.json`. Created by `ynh install` via `copyTree`. Local-only, not git-tracked.
+
+During install:
+- `ynh install` copies the entire persona directory (including `metadata.json`) to `~/.ynh/personas/<name>/`.
+- After the copy, ynh injects `installed_from` provenance into the installed `metadata.json`. This records where the persona was installed from (source type, URL/path, timestamp).
+- The source `metadata.json` is never modified.
+
+At runtime:
+- `ynh run` reads the installed copy at `~/.ynh/personas/<name>/metadata.json` to resolve includes, delegates, and vendor settings.
+
+The `installed_from` field looks like:
+
+```json
+{
+  "ynh": {
+    "installed_from": {
+      "source_type": "git",
+      "source": "github.com/eyelock/assistants",
+      "path": "ynh/david",
+      "installed_at": "2026-03-22T10:30:00Z"
+    }
+  }
+}
+```
+
+Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry installs also include `"registry_name"`.
+
 ### Environment Variables
 
 | Variable | Description | Default |

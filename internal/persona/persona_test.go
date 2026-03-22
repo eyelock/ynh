@@ -250,6 +250,190 @@ func TestInstalledDir(t *testing.T) {
 	}
 }
 
+func TestLoadPluginDir_WithProvenance(t *testing.T) {
+	dir := t.TempDir()
+	writeTestPlugin(t, dir, "prov")
+	meta := `{
+		"ynh": {
+			"default_vendor": "claude",
+			"installed_from": {
+				"source_type": "git",
+				"source": "github.com/example/repo",
+				"path": "personas/prov",
+				"installed_at": "2026-03-22T10:30:00Z"
+			}
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(dir, "metadata.json"), []byte(meta), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := LoadPluginDir(dir)
+	if err != nil {
+		t.Fatalf("LoadPluginDir failed: %v", err)
+	}
+	if p.InstalledFrom == nil {
+		t.Fatal("InstalledFrom is nil")
+	}
+	if p.InstalledFrom.SourceType != "git" {
+		t.Errorf("SourceType = %q, want %q", p.InstalledFrom.SourceType, "git")
+	}
+	if p.InstalledFrom.Source != "github.com/example/repo" {
+		t.Errorf("Source = %q, want %q", p.InstalledFrom.Source, "github.com/example/repo")
+	}
+	if p.InstalledFrom.Path != "personas/prov" {
+		t.Errorf("Path = %q, want %q", p.InstalledFrom.Path, "personas/prov")
+	}
+	if p.InstalledFrom.InstalledAt != "2026-03-22T10:30:00Z" {
+		t.Errorf("InstalledAt = %q", p.InstalledFrom.InstalledAt)
+	}
+}
+
+func TestLoadPluginDir_WithoutProvenance(t *testing.T) {
+	dir := t.TempDir()
+	writeTestPlugin(t, dir, "noprov")
+	meta := `{"ynh": {"default_vendor": "claude"}}`
+	if err := os.WriteFile(filepath.Join(dir, "metadata.json"), []byte(meta), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := LoadPluginDir(dir)
+	if err != nil {
+		t.Fatalf("LoadPluginDir failed: %v", err)
+	}
+	if p.InstalledFrom != nil {
+		t.Errorf("InstalledFrom should be nil, got %+v", p.InstalledFrom)
+	}
+}
+
+func TestLoadPluginDir_RegistryProvenance(t *testing.T) {
+	dir := t.TempDir()
+	writeTestPlugin(t, dir, "regprov")
+	meta := `{
+		"ynh": {
+			"default_vendor": "claude",
+			"installed_from": {
+				"source_type": "registry",
+				"source": "github.com/example/repo",
+				"registry_name": "my-registry",
+				"installed_at": "2026-03-22T10:30:00Z"
+			}
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(dir, "metadata.json"), []byte(meta), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := LoadPluginDir(dir)
+	if err != nil {
+		t.Fatalf("LoadPluginDir failed: %v", err)
+	}
+	if p.InstalledFrom == nil {
+		t.Fatal("InstalledFrom is nil")
+	}
+	if p.InstalledFrom.RegistryName != "my-registry" {
+		t.Errorf("RegistryName = %q, want %q", p.InstalledFrom.RegistryName, "my-registry")
+	}
+}
+
+func TestScanArtifacts(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	personaDir := filepath.Join(dir, ".ynh", "personas", "arttest")
+	writeTestPlugin(t, personaDir, "arttest")
+
+	// Create skills (directories with SKILL.md)
+	for _, skill := range []string{"greet", "review"} {
+		skillDir := filepath.Join(personaDir, "skills", skill)
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# "+skill), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Create agents, rules, commands (.md files)
+	for _, artType := range []string{"agents", "rules", "commands"} {
+		artDir := filepath.Join(personaDir, artType)
+		if err := os.MkdirAll(artDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(artDir, "test-one.md"), []byte("# test"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	arts, err := ScanArtifacts("arttest")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(arts.Skills) != 2 {
+		t.Errorf("Skills = %v, want 2", arts.Skills)
+	}
+	if arts.Skills[0] != "greet" || arts.Skills[1] != "review" {
+		t.Errorf("Skills = %v, want [greet review]", arts.Skills)
+	}
+	if len(arts.Agents) != 1 || arts.Agents[0] != "test-one" {
+		t.Errorf("Agents = %v, want [test-one]", arts.Agents)
+	}
+	if len(arts.Rules) != 1 {
+		t.Errorf("Rules = %v, want 1", arts.Rules)
+	}
+	if len(arts.Commands) != 1 {
+		t.Errorf("Commands = %v, want 1", arts.Commands)
+	}
+	if arts.Total() != 5 {
+		t.Errorf("Total() = %d, want 5", arts.Total())
+	}
+}
+
+func TestScanArtifacts_Empty(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	personaDir := filepath.Join(dir, ".ynh", "personas", "empty")
+	writeTestPlugin(t, personaDir, "empty")
+
+	arts, err := ScanArtifacts("empty")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if arts.Total() != 0 {
+		t.Errorf("Total() = %d, want 0", arts.Total())
+	}
+}
+
+func TestScanArtifacts_SkillWithoutManifest(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	personaDir := filepath.Join(dir, ".ynh", "personas", "nosk")
+	writeTestPlugin(t, personaDir, "nosk")
+
+	// Create a directory in skills/ but without SKILL.md — should not be counted
+	badSkill := filepath.Join(personaDir, "skills", "bad")
+	if err := os.MkdirAll(badSkill, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(badSkill, "README.md"), []byte("not a skill"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	arts, err := ScanArtifacts("nosk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(arts.Skills) != 0 {
+		t.Errorf("Skills = %v, want empty (no SKILL.md)", arts.Skills)
+	}
+}
+
 // writeTestPlugin creates a minimal .claude-plugin/plugin.json in dir.
 func writeTestPlugin(t *testing.T, dir, name string) {
 	t.Helper()

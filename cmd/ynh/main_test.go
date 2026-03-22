@@ -322,6 +322,218 @@ func TestCmdList_WithPersonas(t *testing.T) {
 	}
 }
 
+func TestFormatProvenance(t *testing.T) {
+	tests := []struct {
+		name string
+		prov *persona.Provenance
+		want string
+	}{
+		{"nil", nil, "-"},
+		{"local", &persona.Provenance{SourceType: "local", Source: "./my-persona"}, "./my-persona"},
+		{"git no path", &persona.Provenance{SourceType: "git", Source: "github.com/eyelock/assistants"}, "eyelock/assistants"},
+		{"git with path", &persona.Provenance{SourceType: "git", Source: "github.com/eyelock/assistants", Path: "ynh/david"}, "eyelock/assistants/ynh/david"},
+		{"registry", &persona.Provenance{SourceType: "registry", Source: "github.com/eyelock/assistants", RegistryName: "my-reg"}, "eyelock/assistants (my-reg)"},
+		{"registry with path", &persona.Provenance{SourceType: "registry", Source: "github.com/eyelock/assistants", Path: "ynh/david", RegistryName: "my-reg"}, "eyelock/assistants/ynh/david (my-reg)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatProvenance(tt.prov)
+			if got != tt.want {
+				t.Errorf("formatProvenance() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFormatIncludes(t *testing.T) {
+	tests := []struct {
+		name     string
+		includes []persona.Include
+		want     string
+	}{
+		{"empty", nil, "0"},
+		{"single no pick", []persona.Include{
+			{GitSource: persona.GitSource{Git: "github.com/example/skills", Path: "dev"}},
+		}, "example/skills/dev"},
+		{"single with pick", []persona.Include{
+			{GitSource: persona.GitSource{Git: "github.com/example/skills", Path: "dev"}, Pick: []string{"a", "b"}},
+		}, "example/skills/dev [2]"},
+		{"with ref", []persona.Include{
+			{GitSource: persona.GitSource{Git: "github.com/example/skills", Path: "dev", Ref: "v1.2.0"}},
+		}, "example/skills/dev@v1.2.0"},
+		{"main ref omitted", []persona.Include{
+			{GitSource: persona.GitSource{Git: "github.com/example/skills", Ref: "main"}},
+		}, "example/skills"},
+		{"multiple", []persona.Include{
+			{GitSource: persona.GitSource{Git: "github.com/example/skills", Path: "dev"}, Pick: []string{"a", "b"}},
+			{GitSource: persona.GitSource{Git: "github.com/example/skills", Path: "infra"}, Pick: []string{"c"}},
+		}, "example/skills/dev [2], example/skills/infra [1]"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatIncludes(tt.includes)
+			if got != tt.want {
+				t.Errorf("formatIncludes() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFormatDelegates(t *testing.T) {
+	tests := []struct {
+		name      string
+		delegates []persona.Delegate
+		want      string
+	}{
+		{"empty", nil, "0"},
+		{"single", []persona.Delegate{
+			{GitSource: persona.GitSource{Git: "github.com/example/team"}},
+		}, "example/team"},
+		{"with path and ref", []persona.Delegate{
+			{GitSource: persona.GitSource{Git: "github.com/example/mono", Path: "personas/ops", Ref: "v2"}},
+		}, "example/mono/personas/ops@v2"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatDelegates(tt.delegates)
+			if got != tt.want {
+				t.Errorf("formatDelegates() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFormatArtifactSummary(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	// Create a persona with artifacts
+	personaDir := filepath.Join(dir, ".ynh", "personas", "artfmt")
+	installDir := filepath.Join(personaDir, ".claude-plugin")
+	if err := os.MkdirAll(installDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(installDir, "plugin.json"),
+		[]byte(`{"name":"artfmt","version":"0.1.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add 2 skills, 1 agent
+	for _, skill := range []string{"a", "b"} {
+		sd := filepath.Join(personaDir, "skills", skill)
+		if err := os.MkdirAll(sd, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(sd, "SKILL.md"), []byte("#"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	agentDir := filepath.Join(personaDir, "agents")
+	if err := os.MkdirAll(agentDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(agentDir, "x.md"), []byte("#"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := formatArtifactSummary("artfmt")
+	if got != "2s 1a" {
+		t.Errorf("formatArtifactSummary() = %q, want %q", got, "2s 1a")
+	}
+}
+
+func TestFormatArtifactSummary_Empty(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	installTestPersona(t, "neart")
+	got := formatArtifactSummary("neart")
+	if got != "0" {
+		t.Errorf("formatArtifactSummary() = %q, want %q", got, "0")
+	}
+}
+
+func TestCmdInfo_Success(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+
+	installTestPersona(t, "david")
+
+	err := cmdInfo([]string{"david"})
+	if err != nil {
+		t.Fatalf("cmdInfo failed: %v", err)
+	}
+}
+
+func TestCmdInfo_NotFound(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+
+	if err := os.MkdirAll(filepath.Join(dir, ".ynh", "personas"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := cmdInfo([]string{"nonexistent"})
+	if err == nil {
+		t.Fatal("expected error for nonexistent persona")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestCmdInfo_NoArgs(t *testing.T) {
+	err := cmdInfo([]string{})
+	if err == nil {
+		t.Fatal("expected error for no args")
+	}
+	if !strings.Contains(err.Error(), "usage") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestCmdInstall_WritesProvenance(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	// Create a local persona source
+	srcDir := filepath.Join(dir, "my-persona")
+	pluginDir := filepath.Join(srcDir, ".claude-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"),
+		[]byte(`{"name":"provtest","version":"0.1.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := cmdInstall([]string{srcDir})
+	if err != nil {
+		t.Fatalf("cmdInstall failed: %v", err)
+	}
+
+	// Load installed persona and check provenance
+	p, err := persona.Load("provtest")
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if p.InstalledFrom == nil {
+		t.Fatal("InstalledFrom is nil after install")
+	}
+	if p.InstalledFrom.SourceType != "local" {
+		t.Errorf("SourceType = %q, want %q", p.InstalledFrom.SourceType, "local")
+	}
+	if p.InstalledFrom.Source != srcDir {
+		t.Errorf("Source = %q, want %q", p.InstalledFrom.Source, srcDir)
+	}
+	if p.InstalledFrom.InstalledAt == "" {
+		t.Error("InstalledAt is empty")
+	}
+}
+
 func TestCmdUpdate_NoArgs(t *testing.T) {
 	err := cmdUpdate([]string{})
 	if err == nil {

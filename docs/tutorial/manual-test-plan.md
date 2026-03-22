@@ -36,6 +36,7 @@ Re-run `make install` after any code change you want to test.
 | T1.3 | Verify structure | [T1.3](tutorial/01-first-persona.md#t13-verify-structure) |
 | T1.4 | Install from local path | [T1.4](tutorial/01-first-persona.md#t14-install-from-local-path) |
 | T1.5 | List installed personas | [T1.5](tutorial/01-first-persona.md#t15-list-installed-personas) |
+| T1.5b | Inspect persona detail | [T1.5b](tutorial/01-first-persona.md#t15b-inspect-persona-detail) |
 | T1.6 | Run interactive | [T1.6](tutorial/01-first-persona.md#t16-run-interactive) |
 | T1.7 | Run non-interactive | [T1.7](tutorial/01-first-persona.md#t17-run-non-interactive) |
 | T1.8 | Run with vendor flags | [T1.8](tutorial/01-first-persona.md#t18-run-with-vendor-flags) |
@@ -289,13 +290,34 @@ my-dev "hello" 2>&1 | head -1
 mv ~/.ynh/config.json.bak ~/.ynh/config.json
 ```
 
+### E16: Info on installed persona
+
+```bash
+ynh info my-persona
+# Expected: Name, Vendor, Installed timestamp, Source (local path), no includes, no delegates
+```
+
+### E17: Info on non-existent persona
+
+```bash
+ynh info nonexistent
+# Expected: Error: persona "nonexistent" not found
+```
+
+### E18: Info with no args
+
+```bash
+ynh info
+# Expected: Error: usage: ynh info <persona-name>
+```
+
 ---
 
 ## Summary
 
 | Section | Tests |
 |---------|-------|
-| Tutorial 1: First Persona | 10 |
+| Tutorial 1: First Persona | 11 |
 | Tutorial 2: Vendors & Symlinks | 7 |
 | Tutorial 3: Composition | 12 |
 | Tutorial 4: Delegation | 5 |
@@ -303,5 +325,5 @@ mv ~/.ynh/config.json.bak ~/.ynh/config.json
 | Tutorial 6: Marketplace | 7 |
 | Tutorial 7: Registry & Discovery | 11 |
 | Tutorial 8: Developer Tools | 8 |
-| Edge Cases | 15 |
-| **Total** | **85** |
+| Edge Cases | 18 |
+| **Total** | **89** |
