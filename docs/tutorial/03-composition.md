@@ -63,6 +63,15 @@ This demonstrates:
 - **`pick`** — cherry-pick specific skills (ynh's unique differentiator — no vendor supports this natively)
 - **Multiple includes** — skills from different categories in the same repo
 
+During install, ynh fetches all included repos and caches them locally. You should see output like:
+
+```
+Fetching 3 include(s) and 0 delegate(s)...
+  Fetched eyelock/assistants
+  Fetched eyelock/assistants
+  Fetched eyelock/assistants
+```
+
 Run it once to trigger assembly, then verify only the picked skills are included:
 
 ```bash
@@ -452,7 +461,7 @@ full-stack "hello" 2>&1
 # Expected error: resolving includes: include "github.com/anthropics/skills": remote source not allowed
 ```
 
-> **Note:** `ynh install` from a local path doesn't check includes — it just copies the persona directory. The allow-list is enforced at **run time** when includes are actually resolved from Git.
+> **Note:** `ynh install` now fetches all includes at install time, so the allow-list is enforced during install as well as at run time. If an include is blocked by the allow-list, `ynh install` will fail with an error.
 
 ## T3.12: Allow-list — allow a source
 
@@ -507,9 +516,10 @@ ynh uninstall my-dev with-anthropic with-vercel full-stack mixed local-ref pinne
 - **Embedded skills:** Put skills directly in the persona's `skills/` directory
 - **`pick` is the differentiator:** No vendor natively supports cherry-picking individual skills from a larger repo. ynh does.
 - **Mixing sources:** Combine your own skills, third-party skills, and local skills in one persona
+- **Offline-ready:** All includes are fetched at install time — `ynh run` works offline
 - `ref` pins to branches, tags, or commits
 - `ynh update` refreshes cached repos
-- `allowed_remote_sources` restricts which repos are permitted
+- `allowed_remote_sources` restricts which repos are permitted (enforced at both install and run time)
 
 ## Next
 

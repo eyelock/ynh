@@ -7,7 +7,7 @@
 ```
 
 1. **Detect** persona format and load manifest (`internal/persona/`, `internal/plugin/`)
-2. **Resolve** Git includes by cloning/caching repos (`internal/resolver/`)
+2. **Resolve** Git includes from local cache (`internal/resolver/`) — repos are pre-fetched at install time; run uses cache-only with fallback fetch on miss
 3. **Assemble** vendor config into `~/.ynh/run/<name>/` (`internal/assembler/`)
 4. **Launch** vendor CLI, adapting to each vendor's capabilities (`internal/vendor/`)
 

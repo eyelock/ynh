@@ -94,6 +94,8 @@ Point your metadata at any Git repo. Skills are used as-is - no wrapping, no bui
 }
 ```
 
+All included repos are fetched at install time and cached locally. This means `ynh run` works offline - no network access needed unless the cache is cleared.
+
 Reinstall to pick up changes:
 
 ```bash

@@ -271,6 +271,33 @@ func cmdInstall(args []string) error {
 		return fmt.Errorf("saving provenance: %w", err)
 	}
 
+	// Pre-fetch includes and delegates so ynh run works offline
+	if len(p.Includes) > 0 || len(p.DelegatesTo) > 0 {
+		fmt.Printf("Fetching %d include(s) and %d delegate(s)...\n", len(p.Includes), len(p.DelegatesTo))
+	}
+	for _, inc := range p.Includes {
+		if !isLocalPath(inc.Git) {
+			if err := cfg.CheckRemoteSource(inc.Git); err != nil {
+				return fmt.Errorf("include %q: %w", inc.Git, err)
+			}
+		}
+		if _, err := resolver.EnsureRepo(inc.Git, inc.Ref); err != nil {
+			return fmt.Errorf("fetching include %s: %w", inc.Git, err)
+		}
+		fmt.Printf("  Fetched %s\n", resolver.ShortGitURL(inc.Git))
+	}
+	for _, del := range p.DelegatesTo {
+		if !isLocalPath(del.Git) {
+			if err := cfg.CheckRemoteSource(del.Git); err != nil {
+				return fmt.Errorf("delegate %q: %w", del.Git, err)
+			}
+		}
+		if _, err := resolver.EnsureRepo(del.Git, del.Ref); err != nil {
+			return fmt.Errorf("fetching delegate %s: %w", del.Git, err)
+		}
+		fmt.Printf("  Fetched %s\n", resolver.ShortGitURL(del.Git))
+	}
+
 	// Generate launcher script (skip for reserved names that conflict with the binary)
 	if !reservedName {
 		if err := generateLauncher(p.Name); err != nil {
@@ -424,11 +451,11 @@ func cmdRun(args []string) error {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
-	// Resolve Git includes (with remote source allow-list check)
+	// Resolve Git includes from cache (no network access unless cache miss)
 	if len(p.Includes) > 0 {
 		fmt.Fprintf(os.Stderr, "Resolving %d include(s)...\n", len(p.Includes))
 	}
-	resolved, err := resolver.Resolve(p, cfg)
+	resolved, err := resolver.ResolveFromCache(p, cfg)
 	if err != nil {
 		return fmt.Errorf("resolving includes: %w", err)
 	}
@@ -438,6 +465,9 @@ func cmdRun(args []string) error {
 		source := r.Source
 		if r.Path != "" {
 			source += " → " + r.Path
+		}
+		if len(r.Content.Paths) > 0 {
+			source += " [" + strings.Join(r.Content.Paths, ", ") + "]"
 		}
 		if r.Cloned {
 			fmt.Fprintf(os.Stderr, "  Cloned %s\n", source)

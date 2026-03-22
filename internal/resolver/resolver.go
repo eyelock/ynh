@@ -72,7 +72,7 @@ func Resolve(p *persona.Persona, cfg *config.Config) ([]ResolveResult, error) {
 				BasePath: basePath,
 				Paths:    inc.Pick,
 			},
-			Source: shortGitURL(inc.Git),
+			Source: ShortGitURL(inc.Git),
 			Path:   inc.Path,
 			Cloned: repoResult.Cloned,
 			Cached: !repoResult.Cloned,
@@ -82,9 +82,9 @@ func Resolve(p *persona.Persona, cfg *config.Config) ([]ResolveResult, error) {
 	return results, nil
 }
 
-// shortGitURL abbreviates a git URL for display.
+// ShortGitURL abbreviates a git URL for display.
 // "github.com/eyelock/assistants" -> "eyelock/assistants"
-func shortGitURL(url string) string {
+func ShortGitURL(url string) string {
 	// Local paths: keep as-is
 	if strings.HasPrefix(url, "/") || strings.HasPrefix(url, ".") {
 		return url
@@ -148,6 +148,73 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 
 	after := gitHead(repoDir)
 	return RepoResult{Path: repoDir, Changed: before != after}, nil
+}
+
+// CacheOnlyRepo returns a cached repo without hitting the network.
+// If the cache entry exists, it is returned as-is. If not, it falls back to
+// EnsureRepo (which clones from the network) and prints a warning to stderr.
+func CacheOnlyRepo(gitURL string, ref string) (RepoResult, error) {
+	cacheDir := config.CacheDir()
+	repoDir := filepath.Join(cacheDir, repoDirName(gitURL, ref))
+
+	if _, err := os.Stat(filepath.Join(repoDir, ".git")); err == nil {
+		return RepoResult{Path: repoDir}, nil
+	}
+
+	// Cache miss — fall back to network fetch with warning
+	fmt.Fprintf(os.Stderr, "  Cache miss for %s, fetching...\n", ShortGitURL(gitURL))
+	return EnsureRepo(gitURL, ref)
+}
+
+// ResolveGitSourceFromCache is like ResolveGitSource but uses CacheOnlyRepo
+// to avoid network access when the cache is warm.
+func ResolveGitSourceFromCache(gs persona.GitSource) (string, *RepoResult, error) {
+	result, err := CacheOnlyRepo(gs.Git, gs.Ref)
+	if err != nil {
+		return "", nil, fmt.Errorf("resolving %s: %w", gs.Git, err)
+	}
+
+	basePath := result.Path
+	if gs.Path != "" {
+		basePath = filepath.Join(result.Path, gs.Path)
+		if _, err := os.Stat(basePath); os.IsNotExist(err) {
+			return "", nil, fmt.Errorf("path %q not found in %s", gs.Path, gs.Git)
+		}
+	}
+
+	return basePath, &result, nil
+}
+
+// ResolveFromCache is like Resolve but uses CacheOnlyRepo to avoid network
+// access when the cache is warm. Falls back to a network fetch on cache miss.
+func ResolveFromCache(p *persona.Persona, cfg *config.Config) ([]ResolveResult, error) {
+	var results []ResolveResult
+
+	for _, inc := range p.Includes {
+		if cfg != nil {
+			if err := cfg.CheckRemoteSource(inc.Git); err != nil {
+				return nil, fmt.Errorf("include %q: %w", inc.Git, err)
+			}
+		}
+
+		basePath, repoResult, err := ResolveGitSourceFromCache(inc.GitSource)
+		if err != nil {
+			return nil, err
+		}
+
+		results = append(results, ResolveResult{
+			Content: ResolvedContent{
+				BasePath: basePath,
+				Paths:    inc.Pick,
+			},
+			Source: ShortGitURL(inc.Git),
+			Path:   inc.Path,
+			Cloned: repoResult.Cloned,
+			Cached: !repoResult.Cloned,
+		})
+	}
+
+	return results, nil
 }
 
 // gitHead returns the short HEAD SHA for a repo, or empty string on error.

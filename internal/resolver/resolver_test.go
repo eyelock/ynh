@@ -564,6 +564,271 @@ func TestResolve_NilConfigAllowsAll(t *testing.T) {
 	}
 }
 
+func TestCacheOnlyRepo_CacheHit(t *testing.T) {
+	// Create a local git repo and clone it via EnsureRepo first
+	srcDir := t.TempDir()
+	runGit(t, srcDir, "init")
+	runGit(t, srcDir, "config", "user.email", "test@test.com")
+	runGit(t, srcDir, "config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(srcDir, "test.txt"), []byte("cached"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, srcDir, "add", ".")
+	runGit(t, srcDir, "commit", "-m", "init")
+
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	// Populate cache via EnsureRepo
+	ensureResult, err := EnsureRepo(srcDir, "")
+	if err != nil {
+		t.Fatalf("EnsureRepo failed: %v", err)
+	}
+
+	// Now remove the source repo so any network fetch would fail
+	if err := os.RemoveAll(filepath.Join(srcDir, ".git")); err != nil {
+		t.Fatal(err)
+	}
+
+	// CacheOnlyRepo should return cached result without hitting the network
+	result, err := CacheOnlyRepo(srcDir, "")
+	if err != nil {
+		t.Fatalf("CacheOnlyRepo should succeed on cache hit: %v", err)
+	}
+	if result.Path != ensureResult.Path {
+		t.Errorf("expected same path %q, got %q", ensureResult.Path, result.Path)
+	}
+	if result.Cloned {
+		t.Error("expected Cloned=false for cache hit")
+	}
+
+	// Verify content is still accessible
+	data, err := os.ReadFile(filepath.Join(result.Path, "test.txt"))
+	if err != nil {
+		t.Fatalf("cached file not readable: %v", err)
+	}
+	if string(data) != "cached" {
+		t.Errorf("cached content = %q, want %q", string(data), "cached")
+	}
+}
+
+func TestCacheOnlyRepo_CacheMiss(t *testing.T) {
+	// Create a local git repo — cache is empty, so CacheOnlyRepo should clone
+	srcDir := t.TempDir()
+	runGit(t, srcDir, "init")
+	runGit(t, srcDir, "config", "user.email", "test@test.com")
+	runGit(t, srcDir, "config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(srcDir, "test.txt"), []byte("fresh"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, srcDir, "add", ".")
+	runGit(t, srcDir, "commit", "-m", "init")
+
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	// CacheOnlyRepo with empty cache should fall back to EnsureRepo
+	result, err := CacheOnlyRepo(srcDir, "")
+	if err != nil {
+		t.Fatalf("CacheOnlyRepo should fall back to clone: %v", err)
+	}
+	if !result.Cloned {
+		t.Error("expected Cloned=true for cache miss fallback")
+	}
+
+	data, err := os.ReadFile(filepath.Join(result.Path, "test.txt"))
+	if err != nil {
+		t.Fatalf("cloned file not readable: %v", err)
+	}
+	if string(data) != "fresh" {
+		t.Errorf("cloned content = %q, want %q", string(data), "fresh")
+	}
+}
+
+func TestResolveFromCache_UsesCache(t *testing.T) {
+	// Create a local git repo with skills
+	srcDir := t.TempDir()
+	runGit(t, srcDir, "init")
+	runGit(t, srcDir, "config", "user.email", "test@test.com")
+	runGit(t, srcDir, "config", "user.name", "Test")
+	if err := os.MkdirAll(filepath.Join(srcDir, "skills", "hello"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "skills", "hello", "SKILL.md"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, srcDir, "add", ".")
+	runGit(t, srcDir, "commit", "-m", "init")
+
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	// Pre-populate cache
+	if _, err := EnsureRepo(srcDir, ""); err != nil {
+		t.Fatalf("EnsureRepo failed: %v", err)
+	}
+
+	// Remove source so network access would fail
+	if err := os.RemoveAll(filepath.Join(srcDir, ".git")); err != nil {
+		t.Fatal(err)
+	}
+
+	p := &persona.Persona{
+		Name: "test-cached",
+		Includes: []persona.Include{
+			{
+				GitSource: persona.GitSource{Git: srcDir},
+				Pick:      []string{"skills/hello"},
+			},
+		},
+	}
+
+	// ResolveFromCache should succeed from cache alone
+	results, err := ResolveFromCache(p, nil)
+	if err != nil {
+		t.Fatalf("ResolveFromCache failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Cloned {
+		t.Error("expected Cloned=false (served from cache)")
+	}
+	if !results[0].Cached {
+		t.Error("expected Cached=true")
+	}
+}
+
+func TestResolveFromCache_BlockedByAllowList(t *testing.T) {
+	cfg := &config.Config{
+		AllowedRemoteSources: []string{
+			"github.com/trusted-org/*",
+		},
+	}
+
+	p := &persona.Persona{
+		Name: "test-blocked-cache",
+		Includes: []persona.Include{
+			{
+				GitSource: persona.GitSource{Git: "github.com/untrusted-org/repo"},
+			},
+		},
+	}
+
+	_, err := ResolveFromCache(p, cfg)
+	if err == nil {
+		t.Fatal("expected error for blocked remote source")
+	}
+	if !strings.Contains(err.Error(), "not in the allowed sources list") {
+		t.Errorf("error should mention allow list, got: %v", err)
+	}
+}
+
+func TestResolveGitSourceFromCache_WithPath(t *testing.T) {
+	// Create a repo with a subdirectory
+	srcDir := t.TempDir()
+	runGit(t, srcDir, "init")
+	runGit(t, srcDir, "config", "user.email", "test@test.com")
+	runGit(t, srcDir, "config", "user.name", "Test")
+	if err := os.MkdirAll(filepath.Join(srcDir, "sub", "skills", "s1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "sub", "skills", "s1", "SKILL.md"), []byte("s1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, srcDir, "add", ".")
+	runGit(t, srcDir, "commit", "-m", "init")
+
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	// Pre-populate cache
+	if _, err := EnsureRepo(srcDir, ""); err != nil {
+		t.Fatalf("EnsureRepo failed: %v", err)
+	}
+
+	// Resolve with valid path
+	gs := persona.GitSource{Git: srcDir, Path: "sub"}
+	basePath, _, err := ResolveGitSourceFromCache(gs)
+	if err != nil {
+		t.Fatalf("ResolveGitSourceFromCache failed: %v", err)
+	}
+	skillPath := filepath.Join(basePath, "skills", "s1", "SKILL.md")
+	if _, err := os.Stat(skillPath); err != nil {
+		t.Errorf("skill not found at resolved path: %v", err)
+	}
+
+	// Resolve with invalid path
+	gsBad := persona.GitSource{Git: srcDir, Path: "nonexistent"}
+	_, _, err = ResolveGitSourceFromCache(gsBad)
+	if err == nil {
+		t.Fatal("expected error for nonexistent path")
+	}
+}
+
+func TestResolveFromCache_WithPath(t *testing.T) {
+	// Create a monorepo-style repo
+	srcDir := t.TempDir()
+	runGit(t, srcDir, "init")
+	runGit(t, srcDir, "config", "user.email", "test@test.com")
+	runGit(t, srcDir, "config", "user.name", "Test")
+	if err := os.MkdirAll(filepath.Join(srcDir, "pkg", "skills", "deploy"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "pkg", "skills", "deploy", "SKILL.md"), []byte("deploy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, srcDir, "add", ".")
+	runGit(t, srcDir, "commit", "-m", "init")
+
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	// Pre-populate cache
+	if _, err := EnsureRepo(srcDir, ""); err != nil {
+		t.Fatalf("EnsureRepo failed: %v", err)
+	}
+
+	p := &persona.Persona{
+		Name: "test-path-cache",
+		Includes: []persona.Include{
+			{
+				GitSource: persona.GitSource{Git: srcDir, Path: "pkg"},
+				Pick:      []string{"skills/deploy"},
+			},
+		},
+	}
+
+	results, err := ResolveFromCache(p, nil)
+	if err != nil {
+		t.Fatalf("ResolveFromCache failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Path != "pkg" {
+		t.Errorf("expected Path=%q, got %q", "pkg", results[0].Path)
+	}
+}
+
+func TestShortGitURL(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"github.com/eyelock/assistants", "eyelock/assistants"},
+		{"/tmp/local", "/tmp/local"},
+		{"./relative", "./relative"},
+		{"solo", "solo"},
+	}
+	for _, tt := range tests {
+		got := ShortGitURL(tt.input)
+		if got != tt.want {
+			t.Errorf("ShortGitURL(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	gitArgs := append([]string{"-C", dir}, args...)
