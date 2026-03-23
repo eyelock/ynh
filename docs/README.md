@@ -80,7 +80,7 @@ Add skills, agents, rules, and commands to the persona directory. Pull from Git 
 - **[Vendor Support](vendors.md)** - Claude, Codex, Cursor - capabilities and launch strategies
 - **[Agent Skills Standard](skills-standard.md)** - Cross-platform spec, frontmatter fields, catalog budget, discovery paths
 - **[Marketplace & Distribution](marketplace.md)** - Cross-vendor marketplace systems, distribution formats, and ynh's marketplace builder
-- **[Docker](docker.md)** - Containerized personas, Docker image baking, CI/CD workflows
-- **[Tutorials](tutorial/README.md)** - Progressive tutorials from first persona to marketplace generation
-- **[Manual Test Plan](tutorial/manual-test-plan.md)** - 66 tests covering every feature
+- **[Docker](docker.md)** - Run personas in containers, build persona appliance images for CI/CD
+- **[Tutorials](tutorial/README.md)** - Progressive tutorials from first persona to Docker images
+- **[Manual Test Plan](tutorial/manual-test-plan.md)** - Tests covering every feature
 - **[ynd Developer Tools](ynd.md)** - CLI for scaffolding, linting, formatting, compressing, inspecting, exporting, and marketplace building

@@ -62,7 +62,7 @@ david -v codex
 {"default_vendor": "claude"}
 ```
 
-Resolution order: **CLI flag > persona default > global config**.
+Resolution order: **CLI flag (`-v`) > `YNH_VENDOR` env var > persona default > global config**.
 
 ## Vendor Notes
 

@@ -21,6 +21,88 @@ docker compose run --rm ynh install github.com/user/my-persona
 docker compose run --rm ynh install github.com/org/assistants --path personas/david
 ```
 
+## Base Image
+
+The base runtime image `ghcr.io/eyelock/ynh:latest` ships with all vendor CLIs pre-installed (Claude Code, Codex, Cursor). It's published automatically on each release via goreleaser.
+
+```bash
+# Pull the pre-built base (skip local build entirely)
+docker pull ghcr.io/eyelock/ynh:latest
+
+# Or use docker compose (pulls if available, builds if not)
+docker compose up
+```
+
+The `docker-compose.yml` specifies both `image:` and `build:` — `docker compose up` uses the pre-built image if pulled, `docker compose build` builds locally.
+
+## Persona Images
+
+Build a self-contained Docker image with a specific persona baked in using `ynh image`:
+
+```bash
+# Build from an installed persona
+ynh image david --tag ghcr.io/org/persona-david:latest
+
+# Build from a Git source
+ynh image david --from github.com/org/personas --tag persona-david:latest
+
+# Build from a monorepo subdirectory
+ynh image david --from github.com/org/monorepo --path personas/david
+
+# Preview the generated Dockerfile without building
+ynh image david --dry-run
+
+# Use a custom base image
+ynh image david --base my-registry.io/ynh:v2
+```
+
+The persona image pre-assembles vendor layouts for all three vendors at build time. At runtime, `ynh run` detects the pre-assembled layout and skips assembly entirely.
+
+### Running Persona Images
+
+```bash
+# Basic run (default vendor from persona config)
+docker run --rm -v $(pwd):/workspace -e ANTHROPIC_API_KEY \
+  persona-david:latest -- "fix this bug"
+
+# Switch vendor at runtime
+docker run --rm -v $(pwd):/workspace -e OPENAI_API_KEY \
+  -e YNH_VENDOR=codex persona-david:latest -- "refactor auth"
+```
+
+### Passing Vendor Flags
+
+Everything after the image name becomes arguments to `ynh run <persona>`. Unrecognised flags pass through to the vendor CLI:
+
+```bash
+# Model override
+docker run --rm -v $(pwd):/workspace -e ANTHROPIC_API_KEY \
+  persona-david:latest --model claude-sonnet-4-5-20250514 -- "fix this"
+
+# Skip permissions (headless CI)
+docker run --rm -v $(pwd):/workspace -e ANTHROPIC_API_KEY \
+  persona-david:latest --dangerously-skip-permissions -- "fix this"
+
+# Multiple flags + vendor switch
+docker run --rm -v $(pwd):/workspace -e OPENAI_API_KEY \
+  persona-david:latest -v codex --model gpt-4.1 --full-auto -- "refactor auth"
+```
+
+### Entrypoint Overrides
+
+Override the entrypoint for full ynh/ynd access inside the image:
+
+```bash
+# Full ynh CLI
+docker run --rm --entrypoint ynh persona-david:latest ls
+
+# ynd tools
+docker run --rm --entrypoint ynd persona-david:latest lint .
+
+# Shell access
+docker run --rm -it --entrypoint sh persona-david:latest
+```
+
 ## API Keys
 
 Set vendor API keys as environment variables before running. Create a `.env` file or export them:
@@ -73,8 +155,17 @@ docker run --rm \
   -e ANTHROPIC_API_KEY \
   -v ~/.ynh:/home/ynh/.ynh \
   -v $(pwd):/workspace \
-  ynh:latest run david "fix this bug"
+  ghcr.io/eyelock/ynh:latest run david "fix this bug"
 ```
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `YNH_VENDOR` | _(none)_ | Override the default vendor (between `-v` flag and persona default in priority) |
+| `ANTHROPIC_API_KEY` | _(none)_ | API key for Claude Code |
+| `OPENAI_API_KEY` | _(none)_ | API key for Codex |
+| `CURSOR_API_KEY` | _(none)_ | API key for Cursor |
 
 ## Vendor Override
 
@@ -131,7 +222,7 @@ docker run --rm \
   -v ~/.ynh:/home/ynh/.ynh \
   -v ~/.ssh:/home/ynh/.ssh:ro \
   -v $(pwd):/workspace \
-  ynh:latest run david "deploy"
+  ghcr.io/eyelock/ynh:latest run david "deploy"
 ```
 
 ## UID/GID Mapping

@@ -290,5 +290,6 @@ ynh install ./my-persona
 - [Persona Reference](personas.md) - full manifest syntax
 - [Artifacts Guide](artifacts.md) - skills, agents, rules, commands
 - [Vendor Support](vendors.md) - supported vendors and switching between them
+- [Docker](docker.md) - run personas in containers, build persona appliance images for CI/CD
 - [ynd Developer Tools](ynd.md) - authoring, exporting, and marketplace building
-- [Tutorials](tutorial/README.md) - progressive walkthroughs from first persona to marketplace publishing
+- [Tutorials](tutorial/README.md) - progressive walkthroughs from first persona to Docker images
