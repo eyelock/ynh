@@ -4,6 +4,8 @@ A persona manager for AI coding assistants. Bundle skills, agents, rules, and co
 
 > **Note**: This is a personal project developed in my spare time. It's an exploration of the varying approaches to marketplace/distribution across AI vendors.
 
+**[Full Documentation](https://eyelock.github.io/ynh)**
+
 ```bash
 ynh install github.com/david/my-persona
 david                                    # interactive session
@@ -197,6 +199,8 @@ Global default in `~/.ynh/config.json`:
 
 ## Commands
 
+### ynh (Persona Manager)
+
 | Command | Description |
 |---------|-------------|
 | `ynh init` | Show ynh home path and setup instructions |
@@ -206,10 +210,27 @@ Global default in `~/.ynh/config.json`:
 | `ynh run <name> [flags] [prompt]` | Launch a persona session |
 | `ynh ls` | List installed personas (alias: `ynh list`) |
 | `ynh info <name>` | Show detailed persona information |
+| `ynh search <query>` | Search registries for personas by name or keyword |
+| `ynh registry <subcommand>` | Manage persona registries (add, remove, list) |
 | `ynh vendors` | List supported vendor adapters |
 | `ynh status` | Show symlink installations across projects |
 | `ynh prune` | Clean orphaned symlink installations |
 | `ynh version` | Print version |
+
+### ynd (Developer Tools)
+
+| Command | Description |
+|---------|-------------|
+| `ynd create <type> <name>` | Scaffold a persona, skill, agent, rule, or command |
+| `ynd lint [files]` | Lint markdown, shell blocks, and config files |
+| `ynd validate [path]` | Validate persona structure and required fields |
+| `ynd fmt [files]` | Format markdown files |
+| `ynd compress [files]` | LLM-powered prompt compression with backup/restore |
+| `ynd inspect` | Interactive codebase analysis to generate skills and agents |
+| `ynd export <source> [flags]` | Export persona as vendor-native plugins |
+| `ynd marketplace build [flags]` | Build a marketplace from personas and plugins |
+
+See the [full command reference](https://eyelock.github.io/ynh/#/ynd) for all flags and options.
 
 ### Run Flags
 
@@ -219,6 +240,19 @@ Global default in `~/.ynh/config.json`:
 | `--install` | Install symlinks for the vendor in the current project |
 | `--clean` | Remove symlinks for the vendor in the current project |
 | `--` | Separator between vendor flags and the prompt |
+
+## Documentation
+
+Full documentation is available at **[eyelock.github.io/ynh](https://eyelock.github.io/ynh)**, including:
+
+- [Getting Started](https://eyelock.github.io/ynh/#/getting-started) — create and run your first persona
+- [Persona Reference](https://eyelock.github.io/ynh/#/personas) — plugin manifest, metadata, includes, delegates
+- [Artifacts Guide](https://eyelock.github.io/ynh/#/artifacts) — skills, agents, rules, commands, and project instructions
+- [Vendor Support](https://eyelock.github.io/ynh/#/vendors) — Claude, Codex, Cursor capabilities and launch strategies
+- [Agent Skills Standard](https://eyelock.github.io/ynh/#/skills-standard) — cross-platform spec, discovery paths, catalog budget
+- [Marketplace & Distribution](https://eyelock.github.io/ynh/#/marketplace) — cross-vendor marketplace systems and ynh's marketplace builder
+- [Docker](https://eyelock.github.io/ynh/#/docker) — containerized personas and Docker image baking
+- [Tutorials](https://eyelock.github.io/ynh/#/tutorial/) — 8 progressive tutorials from first persona to marketplace generation
 
 ## License
 

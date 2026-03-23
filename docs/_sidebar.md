@@ -5,6 +5,7 @@
   * [Artifacts Guide](artifacts.md)
   * [Vendor Support](vendors.md)
   * [Agent Skills Standard](skills-standard.md)
+  * [Marketplace & Distribution](marketplace.md)
   * [ynd Developer Tools](ynd.md)
   * [Docker](docker.md)
 
