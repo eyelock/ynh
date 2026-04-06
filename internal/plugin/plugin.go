@@ -34,7 +34,33 @@ type YNHMetadata struct {
 	Includes      []IncludeMeta          `json:"includes,omitempty"`
 	DelegatesTo   []DelegateMeta         `json:"delegates_to,omitempty"`
 	Hooks         map[string][]HookEntry `json:"hooks,omitempty"`
+	MCPServers    map[string]MCPServer   `json:"mcp_servers,omitempty"`
 	InstalledFrom *ProvenanceMeta        `json:"installed_from,omitempty"`
+}
+
+// MCPServer defines an MCP server dependency.
+type MCPServer struct {
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
+// ValidateMCPServers checks that each MCP server has either Command or URL (not both, not neither).
+func ValidateMCPServers(servers map[string]MCPServer) []string {
+	var issues []string
+	for name, server := range servers {
+		hasCommand := server.Command != ""
+		hasURL := server.URL != ""
+		if !hasCommand && !hasURL {
+			issues = append(issues, fmt.Sprintf("mcp_servers.%s: must have either command or url", name))
+		}
+		if hasCommand && hasURL {
+			issues = append(issues, fmt.Sprintf("mcp_servers.%s: must have command or url, not both", name))
+		}
+	}
+	return issues
 }
 
 // HookEntry defines a single hook action.

@@ -76,6 +76,54 @@ func TestCursorGenerateHookConfig_FlatFormat(t *testing.T) {
 	}
 }
 
+func TestCursorGenerateMCPConfig_NilServers(t *testing.T) {
+	c := &Cursor{}
+	result := c.GenerateMCPConfig(nil)
+	if result != nil {
+		t.Error("expected nil for nil servers")
+	}
+}
+
+func TestCursorGenerateMCPConfig_Format(t *testing.T) {
+	c := &Cursor{}
+	servers := map[string]plugin.MCPServer{
+		"github": {
+			Command: "npx",
+			Args:    []string{"-y", "@modelcontextprotocol/server-github"},
+			Env:     map[string]string{"GITHUB_TOKEN": "${GITHUB_TOKEN}"},
+		},
+	}
+
+	result := c.GenerateMCPConfig(servers)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	data, ok := result[filepath.Join(".cursor", "mcp.json")]
+	if !ok {
+		t.Fatal("expected .cursor/mcp.json key")
+	}
+
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	mcpServers, ok := config["mcpServers"].(map[string]any)
+	if !ok {
+		t.Fatal("expected mcpServers object")
+	}
+
+	github, ok := mcpServers["github"].(map[string]any)
+	if !ok {
+		t.Fatal("expected github server object")
+	}
+
+	if github["command"] != "npx" {
+		t.Errorf("command = %v, want npx", github["command"])
+	}
+}
+
 func TestCursorGenerateHookConfig_EventTranslation(t *testing.T) {
 	c := &Cursor{}
 	hooks := map[string][]plugin.HookEntry{

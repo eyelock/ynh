@@ -159,6 +159,8 @@ func validateHarness(dir string) error {
 		} else {
 			// Validate hooks in ynh metadata
 			issues = append(issues, validateMetadataHooks(meta)...)
+			// Validate MCP servers in ynh metadata
+			issues = append(issues, validateMetadataMCPServers(meta)...)
 		}
 	}
 
@@ -297,6 +299,49 @@ func validateMetadataHooks(meta map[string]any) []string {
 			if cmd == "" {
 				issues = append(issues, fmt.Sprintf("ynh.hooks.%s[%d]: command must not be empty", event, i))
 			}
+		}
+	}
+
+	return issues
+}
+
+// validateMetadataMCPServers validates the mcp_servers section inside ynh metadata.
+func validateMetadataMCPServers(meta map[string]any) []string {
+	var issues []string
+
+	ynh, ok := meta["ynh"]
+	if !ok {
+		return issues
+	}
+	ynhMap, ok := ynh.(map[string]any)
+	if !ok {
+		return issues
+	}
+	servers, ok := ynhMap["mcp_servers"]
+	if !ok {
+		return issues
+	}
+	serversMap, ok := servers.(map[string]any)
+	if !ok {
+		issues = append(issues, "'ynh.mcp_servers' must be an object")
+		return issues
+	}
+
+	for name, entry := range serversMap {
+		serverMap, ok := entry.(map[string]any)
+		if !ok {
+			issues = append(issues, fmt.Sprintf("ynh.mcp_servers.%s must be an object", name))
+			continue
+		}
+		cmd, _ := serverMap["command"].(string)
+		url, _ := serverMap["url"].(string)
+		hasCommand := cmd != ""
+		hasURL := url != ""
+		if !hasCommand && !hasURL {
+			issues = append(issues, fmt.Sprintf("ynh.mcp_servers.%s: must have either command or url", name))
+		}
+		if hasCommand && hasURL {
+			issues = append(issues, fmt.Sprintf("ynh.mcp_servers.%s: must have command or url, not both", name))
 		}
 	}
 

@@ -224,6 +224,67 @@ func TestClaudeGenerateHookConfig_ThreeLevelNesting(t *testing.T) {
 	}
 }
 
+func TestClaudeGenerateMCPConfig_NilServers(t *testing.T) {
+	c := &Claude{}
+	result := c.GenerateMCPConfig(nil)
+	if result != nil {
+		t.Error("expected nil for nil servers")
+	}
+}
+
+func TestClaudeGenerateMCPConfig_EmptyServers(t *testing.T) {
+	c := &Claude{}
+	result := c.GenerateMCPConfig(map[string]plugin.MCPServer{})
+	if result != nil {
+		t.Error("expected nil for empty servers")
+	}
+}
+
+func TestClaudeGenerateMCPConfig_Passthrough(t *testing.T) {
+	c := &Claude{}
+	servers := map[string]plugin.MCPServer{
+		"github": {
+			Command: "npx",
+			Args:    []string{"-y", "@modelcontextprotocol/server-github"},
+			Env:     map[string]string{"GITHUB_TOKEN": "${GITHUB_TOKEN}"},
+		},
+	}
+
+	result := c.GenerateMCPConfig(servers)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	data, ok := result[".mcp.json"]
+	if !ok {
+		t.Fatal("expected .mcp.json key")
+	}
+
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	mcpServers, ok := config["mcpServers"].(map[string]any)
+	if !ok {
+		t.Fatal("expected mcpServers object")
+	}
+
+	github, ok := mcpServers["github"].(map[string]any)
+	if !ok {
+		t.Fatal("expected github server object")
+	}
+
+	if github["command"] != "npx" {
+		t.Errorf("command = %v, want npx", github["command"])
+	}
+
+	args, ok := github["args"].([]any)
+	if !ok || len(args) != 2 {
+		t.Errorf("args = %v, want [-y @modelcontextprotocol/server-github]", github["args"])
+	}
+}
+
 func TestClaudeGenerateHookConfig_EventTranslation(t *testing.T) {
 	c := &Claude{}
 	hooks := map[string][]plugin.HookEntry{

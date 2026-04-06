@@ -627,6 +627,114 @@ func TestExportMergedWithHooks(t *testing.T) {
 	assertFileExists(t, filepath.Join(outputDir, ".cursor", "hooks.json"))
 }
 
+func TestExportWithMCPServers(t *testing.T) {
+	// Create a harness with MCP servers
+	srcDir := t.TempDir()
+	pluginDir := filepath.Join(srcDir, ".claude-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(pluginDir, "plugin.json"), map[string]string{
+		"name":    "mcp-test",
+		"version": "0.1.0",
+	})
+	writeJSON(t, filepath.Join(srcDir, "metadata.json"), map[string]any{
+		"ynh": map[string]any{
+			"default_vendor": "claude",
+			"mcp_servers": map[string]any{
+				"github": map[string]any{
+					"command": "npx",
+					"args":    []string{"-y", "@modelcontextprotocol/server-github"},
+					"env":     map[string]string{"GITHUB_TOKEN": "${GITHUB_TOKEN}"},
+				},
+			},
+		},
+	})
+
+	// Test Claude export
+	outputDir := t.TempDir()
+	_, err := Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir,
+		Vendors:   []string{"claude"},
+		Mode:      ModePerVendor,
+	})
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	// Claude should have .mcp.json
+	assertFileExists(t, filepath.Join(outputDir, "claude", ".mcp.json"))
+
+	// Test Cursor export
+	outputDir2 := t.TempDir()
+	_, err = Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir2,
+		Vendors:   []string{"cursor"},
+		Mode:      ModePerVendor,
+	})
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	// Cursor should have .cursor/mcp.json
+	assertFileExists(t, filepath.Join(outputDir2, "cursor", ".cursor", "mcp.json"))
+
+	// Test Codex export
+	outputDir3 := t.TempDir()
+	_, err = Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir3,
+		Vendors:   []string{"codex"},
+		Mode:      ModePerVendor,
+	})
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	// Codex should have .codex/config.toml
+	assertFileExists(t, filepath.Join(outputDir3, "codex", ".codex", "config.toml"))
+}
+
+func TestExportMergedWithMCPServers(t *testing.T) {
+	// Create a harness with MCP servers
+	srcDir := t.TempDir()
+	pluginDir := filepath.Join(srcDir, ".claude-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(pluginDir, "plugin.json"), map[string]string{
+		"name":    "mcp-merged",
+		"version": "0.1.0",
+	})
+	writeJSON(t, filepath.Join(srcDir, "metadata.json"), map[string]any{
+		"ynh": map[string]any{
+			"mcp_servers": map[string]any{
+				"github": map[string]any{
+					"command": "npx",
+					"args":    []string{"-y", "server"},
+				},
+			},
+		},
+	})
+
+	outputDir := filepath.Join(t.TempDir(), "merged")
+	_, err := Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir,
+		Vendors:   []string{"claude", "cursor"},
+		Mode:      ModeMerged,
+	})
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	// Both MCP configs should exist
+	assertFileExists(t, filepath.Join(outputDir, ".mcp.json"))
+	assertFileExists(t, filepath.Join(outputDir, ".cursor", "mcp.json"))
+}
+
 func TestJoinParts(t *testing.T) {
 	tests := []struct {
 		parts []string

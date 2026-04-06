@@ -107,6 +107,27 @@ func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[str
 	}
 }
 
+func (c *Cursor) GenerateMCPConfig(servers map[string]plugin.MCPServer) map[string][]byte {
+	if len(servers) == 0 {
+		return nil
+	}
+
+	// Cursor uses .cursor/mcp.json with "mcpServers" key — same structure as Claude
+	config := map[string]any{
+		"mcpServers": servers,
+	}
+
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return nil
+	}
+	data = append(data, '\n')
+
+	return map[string][]byte{
+		filepath.Join(".cursor", "mcp.json"): data,
+	}
+}
+
 func launchCursor(configPath string, extraArgs []string) error {
 	agentBin, err := exec.LookPath("agent")
 	if err != nil {

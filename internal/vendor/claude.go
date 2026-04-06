@@ -161,6 +161,27 @@ func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[str
 	}
 }
 
+func (c *Claude) GenerateMCPConfig(servers map[string]plugin.MCPServer) map[string][]byte {
+	if len(servers) == 0 {
+		return nil
+	}
+
+	// Claude uses .mcp.json with "mcpServers" key — direct passthrough
+	config := map[string]any{
+		"mcpServers": servers,
+	}
+
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return nil
+	}
+	data = append(data, '\n')
+
+	return map[string][]byte{
+		".mcp.json": data,
+	}
+}
+
 func launchClaude(configPath string, extraArgs []string) error {
 	claudeBin, err := exec.LookPath("claude")
 	if err != nil {

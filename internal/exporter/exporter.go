@@ -206,6 +206,19 @@ func exportMerged(opts ExportOptions, pj *plugin.PluginJSON, p *harness.Harness,
 		}
 	}
 
+	// MCP config for each vendor
+	if len(p.MCPServers) > 0 {
+		for _, v := range vendors {
+			adapter, err := vendor.Get(v)
+			if err != nil {
+				continue
+			}
+			if err := writeMCPConfig(outputDir, adapter, p.MCPServers); err != nil {
+				return nil, fmt.Errorf("writing MCP config for %s: %w", v, err)
+			}
+		}
+	}
+
 	results = append(results, ExportResult{
 		Vendor:    "merged",
 		OutputDir: outputDir,
@@ -272,6 +285,13 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.PluginJSON,
 	if len(p.Hooks) > 0 {
 		if err := writeHookConfig(outputDir, adapter, p.Hooks); err != nil {
 			return result, fmt.Errorf("writing hook config: %w", err)
+		}
+	}
+
+	// MCP config
+	if len(p.MCPServers) > 0 {
+		if err := writeMCPConfig(outputDir, adapter, p.MCPServers); err != nil {
+			return result, fmt.Errorf("writing MCP config: %w", err)
 		}
 	}
 
@@ -343,8 +363,31 @@ func exportCodex(outputDir string, _ *plugin.PluginJSON, p *harness.Harness, con
 		}
 	}
 
+	// MCP config
+	if len(p.MCPServers) > 0 {
+		codexAdapter, _ := vendor.Get("codex")
+		if err := writeMCPConfig(outputDir, codexAdapter, p.MCPServers); err != nil {
+			return result, fmt.Errorf("writing MCP config: %w", err)
+		}
+	}
+
 	result.Skills = countDir(codexSkillsDir)
 	return result, nil
+}
+
+// writeMCPConfig generates vendor-native MCP config files and writes them to the output directory.
+func writeMCPConfig(outputDir string, adapter vendor.Adapter, servers map[string]plugin.MCPServer) error {
+	mcpFiles := adapter.GenerateMCPConfig(servers)
+	for relPath, content := range mcpFiles {
+		absPath := filepath.Join(outputDir, relPath)
+		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+			return fmt.Errorf("creating MCP config dir: %w", err)
+		}
+		if err := os.WriteFile(absPath, content, 0o644); err != nil {
+			return fmt.Errorf("writing MCP config %s: %w", relPath, err)
+		}
+	}
+	return nil
 }
 
 // writeHookConfig generates vendor-native hook config files and writes them to the output directory.

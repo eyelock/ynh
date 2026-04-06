@@ -532,6 +532,20 @@ func cmdRun(args []string) error {
 				}
 			}
 		}
+
+		// Generate vendor-native MCP config files
+		if len(p.MCPServers) > 0 {
+			mcpFiles := adapter.GenerateMCPConfig(p.MCPServers)
+			for relPath, content := range mcpFiles {
+				absPath := filepath.Join(runDir, relPath)
+				if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+					return fmt.Errorf("creating MCP config dir: %w", err)
+				}
+				if err := os.WriteFile(absPath, content, 0o644); err != nil {
+					return fmt.Errorf("writing MCP config %s: %w", relPath, err)
+				}
+			}
+		}
 	}
 
 	// Dispatch based on action.
@@ -742,6 +756,20 @@ func cmdInfo(args []string) error {
 					line += "  (matcher=" + entry.Matcher + ")"
 				}
 				fmt.Println(line)
+			}
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("MCP Servers:")
+	if len(p.MCPServers) == 0 {
+		fmt.Println("  (none)")
+	} else {
+		for name, server := range p.MCPServers {
+			if server.Command != "" {
+				fmt.Printf("  %s: %s\n", name, server.Command)
+			} else if server.URL != "" {
+				fmt.Printf("  %s: %s\n", name, server.URL)
 			}
 		}
 	}

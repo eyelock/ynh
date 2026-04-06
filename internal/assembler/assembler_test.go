@@ -37,6 +37,10 @@ func (m *mockAdapter) GenerateHookConfig(hooks map[string][]plugin.HookEntry) ma
 	return nil
 }
 
+func (m *mockAdapter) GenerateMCPConfig(servers map[string]plugin.MCPServer) map[string][]byte {
+	return nil
+}
+
 func TestAssembleWithPick(t *testing.T) {
 	// Create a fake repo with skills and agents
 	repoDir := t.TempDir()

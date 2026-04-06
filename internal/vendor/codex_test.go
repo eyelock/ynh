@@ -3,6 +3,7 @@ package vendor
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
@@ -88,6 +89,101 @@ func TestCodexGenerateHookConfig_TwoLevelFormat(t *testing.T) {
 	}
 	if len(stop) != 1 {
 		t.Fatalf("Stop entries = %d, want 1", len(stop))
+	}
+}
+
+func TestCodexGenerateMCPConfig_NilServers(t *testing.T) {
+	c := &Codex{}
+	result := c.GenerateMCPConfig(nil)
+	if result != nil {
+		t.Error("expected nil for nil servers")
+	}
+}
+
+func TestCodexGenerateMCPConfig_StdioServer(t *testing.T) {
+	c := &Codex{}
+	servers := map[string]plugin.MCPServer{
+		"github": {
+			Command: "npx",
+			Args:    []string{"-y", "@modelcontextprotocol/server-github"},
+			Env:     map[string]string{"GITHUB_TOKEN": "${GITHUB_TOKEN}"},
+		},
+	}
+
+	result := c.GenerateMCPConfig(servers)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	data, ok := result[filepath.Join(".codex", "config.toml")]
+	if !ok {
+		t.Fatal("expected .codex/config.toml key")
+	}
+
+	toml := string(data)
+	if !strings.Contains(toml, "[mcp_servers.github]") {
+		t.Error("expected [mcp_servers.github] section")
+	}
+	if !strings.Contains(toml, `command = "npx"`) {
+		t.Error("expected command = \"npx\"")
+	}
+	if !strings.Contains(toml, `args = ["-y", "@modelcontextprotocol/server-github"]`) {
+		t.Error("expected args array")
+	}
+	if !strings.Contains(toml, "[mcp_servers.github.env]") {
+		t.Error("expected [mcp_servers.github.env] section")
+	}
+	if !strings.Contains(toml, `GITHUB_TOKEN = "${GITHUB_TOKEN}"`) {
+		t.Error("expected GITHUB_TOKEN env var")
+	}
+}
+
+func TestCodexGenerateMCPConfig_HTTPServer(t *testing.T) {
+	c := &Codex{}
+	servers := map[string]plugin.MCPServer{
+		"api": {
+			URL: "https://api.example.com/mcp",
+		},
+	}
+
+	result := c.GenerateMCPConfig(servers)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	data := result[filepath.Join(".codex", "config.toml")]
+	toml := string(data)
+
+	if !strings.Contains(toml, "[mcp_servers.api]") {
+		t.Error("expected [mcp_servers.api] section")
+	}
+	if !strings.Contains(toml, `url = "https://api.example.com/mcp"`) {
+		t.Error("expected url value")
+	}
+	// Should NOT have command
+	if strings.Contains(toml, "command") {
+		t.Error("HTTP server should not have command")
+	}
+}
+
+func TestCodexGenerateMCPConfig_WithHeaders(t *testing.T) {
+	c := &Codex{}
+	servers := map[string]plugin.MCPServer{
+		"api": {
+			URL:     "https://api.example.com/mcp",
+			Headers: map[string]string{"Authorization": "Bearer ${API_KEY}"},
+		},
+	}
+
+	result := c.GenerateMCPConfig(servers)
+	data := result[filepath.Join(".codex", "config.toml")]
+	toml := string(data)
+
+	if !strings.Contains(toml, "[mcp_servers.api.headers]") {
+		t.Error("expected headers section")
+	}
+	if !strings.Contains(toml, `Authorization = "Bearer ${API_KEY}"`) {
+		t.Error("expected Authorization header")
 	}
 }
 

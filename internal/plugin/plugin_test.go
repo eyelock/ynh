@@ -390,6 +390,117 @@ func TestValidateHooks_EmptyCommand(t *testing.T) {
 	}
 }
 
+func TestLoadMetadataJSON_WithMCPServers(t *testing.T) {
+	dir := t.TempDir()
+	metaJSON := `{
+		"ynh": {
+			"default_vendor": "claude",
+			"mcp_servers": {
+				"github": {
+					"command": "npx",
+					"args": ["-y", "@modelcontextprotocol/server-github"],
+					"env": {"GITHUB_TOKEN": "${GITHUB_TOKEN}"}
+				},
+				"api": {
+					"url": "https://api.example.com/mcp",
+					"headers": {"Authorization": "Bearer ${API_KEY}"}
+				}
+			}
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(dir, "metadata.json"), []byte(metaJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	meta, err := LoadMetadataJSON(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.YNH == nil {
+		t.Fatal("YNH is nil")
+	}
+	if len(meta.YNH.MCPServers) != 2 {
+		t.Fatalf("MCPServers = %d, want 2", len(meta.YNH.MCPServers))
+	}
+
+	gh := meta.YNH.MCPServers["github"]
+	if gh.Command != "npx" {
+		t.Errorf("github.Command = %q, want %q", gh.Command, "npx")
+	}
+	if len(gh.Args) != 2 || gh.Args[0] != "-y" {
+		t.Errorf("github.Args = %v, want [-y @modelcontextprotocol/server-github]", gh.Args)
+	}
+	if gh.Env["GITHUB_TOKEN"] != "${GITHUB_TOKEN}" {
+		t.Errorf("github.Env = %v", gh.Env)
+	}
+
+	api := meta.YNH.MCPServers["api"]
+	if api.URL != "https://api.example.com/mcp" {
+		t.Errorf("api.URL = %q", api.URL)
+	}
+	if api.Headers["Authorization"] != "Bearer ${API_KEY}" {
+		t.Errorf("api.Headers = %v", api.Headers)
+	}
+}
+
+func TestValidateMCPServers_CommandOnly(t *testing.T) {
+	servers := map[string]MCPServer{
+		"test": {Command: "npx", Args: []string{"-y", "server"}},
+	}
+	issues := ValidateMCPServers(servers)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues, got %v", issues)
+	}
+}
+
+func TestValidateMCPServers_URLOnly(t *testing.T) {
+	servers := map[string]MCPServer{
+		"test": {URL: "https://example.com/mcp"},
+	}
+	issues := ValidateMCPServers(servers)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues, got %v", issues)
+	}
+}
+
+func TestValidateMCPServers_Neither(t *testing.T) {
+	servers := map[string]MCPServer{
+		"test": {},
+	}
+	issues := ValidateMCPServers(servers)
+	if len(issues) == 0 {
+		t.Fatal("expected issues for server with neither command nor url")
+	}
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue, "must have either command or url") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'must have either command or url' in issues, got %v", issues)
+	}
+}
+
+func TestValidateMCPServers_Both(t *testing.T) {
+	servers := map[string]MCPServer{
+		"test": {Command: "npx", URL: "https://example.com"},
+	}
+	issues := ValidateMCPServers(servers)
+	if len(issues) == 0 {
+		t.Fatal("expected issues for server with both command and url")
+	}
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue, "not both") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'not both' in issues, got %v", issues)
+	}
+}
+
 func writePluginJSON(t *testing.T, dir string, pj PluginJSON) {
 	t.Helper()
 	pluginDir := filepath.Join(dir, ".claude-plugin")

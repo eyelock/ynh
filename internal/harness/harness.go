@@ -48,6 +48,7 @@ type Harness struct {
 	Includes      []Include
 	DelegatesTo   []Delegate
 	Hooks         map[string][]plugin.HookEntry
+	MCPServers    map[string]plugin.MCPServer
 	InstalledFrom *Provenance
 }
 
@@ -127,6 +128,9 @@ func LoadPluginDir(dir string) (*Harness, error) {
 		}
 		if len(meta.YNH.Hooks) > 0 {
 			p.Hooks = meta.YNH.Hooks
+		}
+		if len(meta.YNH.MCPServers) > 0 {
+			p.MCPServers = meta.YNH.MCPServers
 		}
 		if meta.YNH.InstalledFrom != nil {
 			prov := meta.YNH.InstalledFrom

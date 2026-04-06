@@ -60,6 +60,11 @@ type Adapter interface {
 	// hook configuration files. Returns a map of relative file paths to file contents.
 	// Returns nil if hooks is nil or empty.
 	GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[string][]byte
+
+	// GenerateMCPConfig translates MCP server declarations to vendor-native
+	// MCP configuration files. Returns a map of relative file paths to file contents.
+	// Returns nil if servers is nil or empty.
+	GenerateMCPConfig(servers map[string]plugin.MCPServer) map[string][]byte
 }
 
 var registry = map[string]Adapter{}

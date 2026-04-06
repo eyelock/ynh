@@ -111,6 +111,17 @@ func (c *Codex) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[stri
 	}
 }
 
+func (c *Codex) GenerateMCPConfig(servers map[string]plugin.MCPServer) map[string][]byte {
+	if len(servers) == 0 {
+		return nil
+	}
+
+	toml := renderMCPTOML(servers)
+	return map[string][]byte{
+		filepath.Join(".codex", "config.toml"): []byte(toml),
+	}
+}
+
 func launchCodex(configPath string, extraArgs []string) error {
 	codexBin, err := exec.LookPath("codex")
 	if err != nil {
