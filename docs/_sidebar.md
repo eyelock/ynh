@@ -7,6 +7,8 @@
   * [Vendor Support](vendors.md)
   * [Agent Skills Standard](skills-standard.md)
   * [Marketplace & Distribution](marketplace.md)
+  * [Hooks](hooks.md)
+  * [MCP Servers](mcp.md)
   * [ynd Developer Tools](ynd.md)
   * [Docker](docker.md)
 
@@ -21,6 +23,9 @@
   * [7. Registry & Discovery](tutorial/07-registry-and-discovery.md)
   * [8. Developer Tools](tutorial/08-developer-tools.md)
   * [9. Docker Images](tutorial/09-docker-image.md)
+  * [10. Hooks](tutorial/10-hooks.md)
+  * [11. MCP Servers](tutorial/11-mcp-servers.md)
+  * [12. Developer Preview](tutorial/12-developer-preview.md)
   * [Manual Test Plan](tutorial/manual-test-plan.md)
 
 * **Project**

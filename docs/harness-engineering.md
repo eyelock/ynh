@@ -35,6 +35,18 @@ YNH covers the **guide layer** thoroughly:
 
 YNH does **not** include sensors (linters, test runners, CI/CD). These are well-served by existing tools. YNH declares what the harness needs; vendor hook systems and CI pipelines execute it.
 
+### Hooks: Bridge to Feedback Sensors
+
+While ynh focuses on the guide layer, [hooks](hooks.md) provide the bridge to feedback sensors. A harness declares canonical hook events (`before_tool`, `after_tool`, `before_prompt`, `on_stop`) in `metadata.json`, and ynh translates them into vendor-native hook config at assembly time. The hook scripts themselves — linters, validators, safety checks — live outside the harness. This keeps the boundary clean: ynh declares *when* to check, existing tools provide *what* to check.
+
+### MCP Servers: Tool Registry
+
+[MCP server declarations](mcp.md) let a harness specify the tools an agent needs — databases, APIs, documentation servers. Rather than requiring each developer to manually configure MCP per vendor, the harness declares its tool dependencies once and ynh generates the correct config for Claude (`.mcp.json`), Cursor (`.cursor/mcp.json`), or Codex (`.codex/config.toml`).
+
+### Developer Preview and Diff
+
+The `ynd preview` and `ynd diff` commands support rapid harness iteration. Preview assembles a harness for a specific vendor and shows the output without installing. Diff compares the assembled output across two or more vendors, highlighting structural differences in hook config, MCP config, and artifact layout. This implements the principle that "every harness component encodes an assumption about what the model can't do" — preview and diff make it easy to verify and evolve those assumptions.
+
 ## Key Industry Principles
 
 **"Give agents a map, not a 1,000-page manual"** (OpenAI [2]) — AGENTS.md works best as a short entry point with pointers to structured docs. YNH's multi-artifact architecture (skills + rules + agents + commands + instructions) implements progressive disclosure by design.

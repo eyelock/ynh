@@ -2,7 +2,7 @@
 
 Verification checklist for ynh and ynd. Each test references a tutorial step or is an edge case tested here.
 
-Run all 8 tutorials in sequence to cover the happy path. This file adds edge cases and error handling tests that tutorials don't cover, plus a reference table for tracking.
+Run all 12 tutorials in sequence to cover the happy path. This file adds edge cases and error handling tests that tutorials don't cover, plus a reference table for tracking.
 
 ---
 
@@ -154,6 +154,38 @@ Requires Docker installed and running.
 | T9.8 | Build from Git source | [T9.8](tutorial/09-docker-image.md#t98-build-from-git-source) |
 | T9.9 | Override entrypoint | [T9.9](tutorial/09-docker-image.md#t99-override-entrypoint) |
 | T9.10 | CI/CD matrix example | [T9.10](tutorial/09-docker-image.md#t910-cicd-matrix-example) |
+
+### Tutorial 10: Hooks
+
+| ID | Test | Tutorial step |
+|---|---|---|
+| T10.1 | Add hooks to harness metadata.json | [T10.1](tutorial/10-hooks.md#t101-add-hooks-to-a-harness) |
+| T10.2 | Preview for Claude — verify settings.json | [T10.2](tutorial/10-hooks.md#t102-preview-for-claude) |
+| T10.3 | Preview for Cursor — verify hooks.json | [T10.3](tutorial/10-hooks.md#t103-preview-for-cursor) |
+| T10.4 | Preview for Codex — verify hooks.json | [T10.4](tutorial/10-hooks.md#t104-preview-for-codex) |
+| T10.5 | Write a blocking hook script | [T10.5](tutorial/10-hooks.md#t105-write-a-blocking-hook-example) |
+| T10.6 | Diff hook config across vendors | [T10.6](tutorial/10-hooks.md#t106-compare-hook-config-across-vendors) |
+
+### Tutorial 11: MCP Servers
+
+| ID | Test | Tutorial step |
+|---|---|---|
+| T11.1 | Add stdio MCP server to harness | [T11.1](tutorial/11-mcp-servers.md#t111-add-a-stdio-mcp-server-to-a-harness) |
+| T11.2 | Preview for Claude — verify .mcp.json | [T11.2](tutorial/11-mcp-servers.md#t112-preview-for-claude) |
+| T11.3 | Preview for Cursor — verify .cursor/mcp.json | [T11.3](tutorial/11-mcp-servers.md#t113-preview-for-cursor) |
+| T11.4 | Preview for Codex — verify TOML | [T11.4](tutorial/11-mcp-servers.md#t114-preview-for-codex) |
+| T11.5 | Add HTTP MCP server — verify URL | [T11.5](tutorial/11-mcp-servers.md#t115-add-an-http-mcp-server) |
+| T11.6 | Diff MCP config across vendors | [T11.6](tutorial/11-mcp-servers.md#t116-compare-mcp-config-across-vendors) |
+
+### Tutorial 12: Developer Preview
+
+| ID | Test | Tutorial step |
+|---|---|---|
+| T12.1 | Preview harness for Claude | [T12.1](tutorial/12-developer-preview.md#t121-preview-a-harness-for-claude) |
+| T12.2 | Preview harness for Cursor | [T12.2](tutorial/12-developer-preview.md#t122-preview-the-same-harness-for-cursor) |
+| T12.3 | Diff Claude vs Cursor | [T12.3](tutorial/12-developer-preview.md#t123-compare-claude-vs-cursor-output) |
+| T12.4 | Preview with hooks — inspect config | [T12.4](tutorial/12-developer-preview.md#t124-preview-a-harness-with-hooks) |
+| T12.5 | Preview with MCP — inspect per vendor | [T12.5](tutorial/12-developer-preview.md#t125-preview-a-harness-with-mcp-servers) |
 
 ---
 
@@ -342,5 +374,9 @@ ynh info
 | Tutorial 6: Marketplace | 7 |
 | Tutorial 7: Registry & Discovery | 11 |
 | Tutorial 8: Developer Tools | 8 |
+| Tutorial 9: Docker Images | 10 |
+| Tutorial 10: Hooks | 6 |
+| Tutorial 11: MCP Servers | 6 |
+| Tutorial 12: Developer Preview | 5 |
 | Edge Cases | 18 |
-| **Total** | **89** |
+| **Total** | **116** |

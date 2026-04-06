@@ -15,6 +15,9 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 | 7 | [Registry & Discovery](tutorial/07-registry-and-discovery.md) | Search and install harnesses from curated registries |
 | 8 | [Developer Tools](tutorial/08-developer-tools.md) | Scaffold, lint, validate, format, compress, inspect with ynd |
 | 9 | [Docker Images](tutorial/09-docker-image.md) | Build harness appliance images for CI/CD |
+| 10 | [Hooks](tutorial/10-hooks.md) | Declare vendor-agnostic lifecycle hooks |
+| 11 | [MCP Servers](tutorial/11-mcp-servers.md) | Declare MCP server dependencies per harness |
+| 12 | [Developer Preview](tutorial/12-developer-preview.md) | Preview and diff assembled output across vendors |
 
 ## Manual Test Plan
 
