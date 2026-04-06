@@ -136,6 +136,18 @@ func validateHarness(dir string) error {
 		}
 	}
 
+	// Check for conflicting instructions files
+	hasInstructions := fileExists(filepath.Join(dir, "instructions.md"))
+	hasAgentsMD := fileExists(filepath.Join(dir, "AGENTS.md"))
+	if hasInstructions && hasAgentsMD {
+		// Both exist — check if they have different content
+		instrData, _ := os.ReadFile(filepath.Join(dir, "instructions.md"))
+		agentsData, _ := os.ReadFile(filepath.Join(dir, "AGENTS.md"))
+		if string(instrData) != string(agentsData) {
+			issues = append(issues, "both instructions.md and AGENTS.md exist with different content — remove one or make them identical")
+		}
+	}
+
 	// Check metadata.json if present
 	metaPath := filepath.Join(dir, "metadata.json")
 	if data, err := os.ReadFile(metaPath); err == nil {
@@ -232,4 +244,9 @@ func validateHarness(dir string) error {
 
 	fmt.Printf("%s: valid\n", rel)
 	return nil
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

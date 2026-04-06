@@ -104,7 +104,7 @@ func TestCreateHarness(t *testing.T) {
 	expectedFiles := []string{
 		"my-team/.claude-plugin/plugin.json",
 		"my-team/metadata.json",
-		"my-team/instructions.md",
+		"my-team/AGENTS.md",
 	}
 	for _, f := range expectedFiles {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {

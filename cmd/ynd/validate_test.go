@@ -567,3 +567,54 @@ func TestValidateHarness_NonMarkdownInCommands(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 }
+
+func TestValidateHarness_ConflictingInstructions(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "conflict")
+	mkdirAll(t, filepath.Join(hr, ".claude-plugin"))
+	writeFile(t, filepath.Join(hr, ".claude-plugin", "plugin.json"),
+		[]byte(`{"name":"conflict","version":"0.1.0"}`))
+	writeFile(t, filepath.Join(hr, "instructions.md"), []byte("one thing"))
+	writeFile(t, filepath.Join(hr, "AGENTS.md"), []byte("another thing"))
+
+	err := validateHarness(hr)
+	if err == nil {
+		t.Fatal("expected validation error for conflicting instructions files")
+	}
+	if !strings.Contains(err.Error(), "issue") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateHarness_IdenticalInstructionsOK(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "ok")
+	mkdirAll(t, filepath.Join(hr, ".claude-plugin"))
+	writeFile(t, filepath.Join(hr, ".claude-plugin", "plugin.json"),
+		[]byte(`{"name":"ok","version":"0.1.0"}`))
+	writeFile(t, filepath.Join(hr, "instructions.md"), []byte("same content"))
+	writeFile(t, filepath.Join(hr, "AGENTS.md"), []byte("same content"))
+
+	if err := validateHarness(hr); err != nil {
+		t.Errorf("identical instructions should pass: %v", err)
+	}
+}
+
+func TestValidateHarness_AgentsMDOnly(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "agents-only")
+	mkdirAll(t, filepath.Join(hr, ".claude-plugin"))
+	writeFile(t, filepath.Join(hr, ".claude-plugin", "plugin.json"),
+		[]byte(`{"name":"agents-only","version":"0.1.0"}`))
+	writeFile(t, filepath.Join(hr, "AGENTS.md"), []byte("just agents"))
+
+	if err := validateHarness(hr); err != nil {
+		t.Errorf("AGENTS.md-only harness should be valid: %v", err)
+	}
+}

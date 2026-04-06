@@ -153,14 +153,14 @@ func createHarness(name string) error {
 
 Project-level instructions that apply to every session with this harness.
 `, name)
-	if err := os.WriteFile(filepath.Join(name, "instructions.md"), []byte(instructions), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(name, "AGENTS.md"), []byte(instructions), 0o644); err != nil {
 		return err
 	}
 
 	fmt.Printf("Created harness %q:\n", name)
 	fmt.Printf("  %s/.claude-plugin/plugin.json\n", name)
 	fmt.Printf("  %s/metadata.json\n", name)
-	fmt.Printf("  %s/instructions.md\n", name)
+	fmt.Printf("  %s/AGENTS.md\n", name)
 	fmt.Printf("  %s/skills/\n", name)
 	fmt.Printf("  %s/agents/\n", name)
 	fmt.Printf("  %s/rules/\n", name)

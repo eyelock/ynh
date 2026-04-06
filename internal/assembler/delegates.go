@@ -98,9 +98,9 @@ func BuildDelegateAgent(p *harness.Harness, basePath string) string {
 }
 
 // readInstructionsFrom reads the harness's instructions file.
-// Checks instructions.md first, then CLAUDE.md as fallback.
+// Checks instructions.md first, then AGENTS.md, then CLAUDE.md as fallback.
 func readInstructionsFrom(basePath string) string {
-	for _, name := range []string{"instructions.md", "CLAUDE.md"} {
+	for _, name := range []string{"instructions.md", "AGENTS.md", "CLAUDE.md"} {
 		data, err := os.ReadFile(filepath.Join(basePath, name))
 		if err == nil {
 			return strings.TrimSpace(string(data))
