@@ -83,6 +83,46 @@ ynd inspect -o .               # write artifacts to project root instead
 ynd inspect -o /tmp/out        # write artifacts to a custom directory
 ```
 
+### preview
+
+Show the assembled vendor-native output for a harness without installing it. Useful for verifying hook config, MCP config, and artifact layout before shipping.
+
+```bash
+ynd preview ./my-harness                    # default: Claude vendor, stdout
+ynd preview ./my-harness -v cursor          # specific vendor
+ynd preview ./my-harness -v claude -o ./out # write to directory
+```
+
+| Flag | Description |
+|------|-------------|
+| `-v, --vendor <name>` | Vendor to assemble for. Default: `claude` |
+| `-o, --output <dir>` | Write output to directory instead of stdout |
+
+When no `-o` flag is given, preview prints a tree with file contents to stdout. With `-o`, it writes the full assembled output to the specified directory.
+
+Preview supports the same source types as export: local directories with `.claude-plugin/plugin.json` or bare `AGENTS.md` directories.
+
+See [Tutorial 12: Developer Preview](tutorial/12-developer-preview.md) for a guided walkthrough.
+
+### diff
+
+Compare assembled harness output across two or more vendors. Shows which files are unique to each vendor, which have different content, and which are identical.
+
+```bash
+ynd diff ./my-harness                       # compare all vendors (claude, codex, cursor)
+ynd diff ./my-harness claude cursor         # compare specific vendors
+ynd diff ./my-harness claude cursor codex   # three-way comparison
+```
+
+The diff output groups files into four categories:
+- **Only in \<vendor\>** — files unique to that vendor (e.g., `.claude/settings.json` for Claude hooks)
+- **Different content** — files present in both but with different content
+- **Identical** — files present in both with the same content
+
+At least two vendors are required for comparison. If no vendors are specified, all registered vendors are compared.
+
+See [Tutorial 12: Developer Preview](tutorial/12-developer-preview.md) for a guided walkthrough.
+
 ### export
 
 Export a harness as vendor-native plugins. Resolves all remote includes, flattens artifacts, and writes distributable output per vendor.
@@ -194,9 +234,9 @@ See [Tutorial 6: Marketplace](tutorial/06-marketplace.md) for a guided walkthrou
 
 | Flag | Commands | Description |
 |------|----------|-------------|
-| `-v, --vendor <name(s)>` | compress, inspect, export, marketplace | Vendor to use. Comma-separated for export/marketplace. |
+| `-v, --vendor <name(s)>` | compress, inspect, export, preview, marketplace | Vendor to use. Comma-separated for export/marketplace. Single value for preview. |
 | `-y, --yes` | compress, inspect | Skip confirmation prompts. |
-| `-o, --output <path>` | inspect, export, marketplace | Output directory. Defaults vary by command. |
+| `-o, --output <path>` | inspect, export, preview, marketplace | Output directory. Defaults vary by command. |
 | `--clean` | export, marketplace | Remove output directory before writing. |
 | `--merged` | export | Single output dir with dual vendor manifests. |
 | `--path <subdir>` | export | Subdirectory within source (for monorepos). |
@@ -224,6 +264,13 @@ ynd compress -y instructions.md
 # Inspect a project to generate skills
 cd /path/to/my-app
 ynd inspect
+
+# Preview assembled output for a specific vendor
+ynd preview ./ops-team -v cursor
+ynd preview ./ops-team -v claude -o ./preview-output
+
+# Compare assembled output across vendors
+ynd diff ./ops-team claude cursor
 
 # Export a harness as vendor-native plugins
 ynd export ./ops-team -v claude,cursor
