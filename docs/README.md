@@ -3,7 +3,7 @@
 **Your name. Your AI.**
 
 ```bash
-ynh install github.com/david/my-harness
+ynh install github.com/myorg/david
 david
 ```
 
@@ -14,7 +14,7 @@ That's it. `david` is now a command. It knows your skills, your team's rules, yo
 **You become a command.** Not "claude with some config files." Not "a dotfile repo." A named identity that carries your entire AI working environment. Your tools, your standards, your style - all behind your name.
 
 ```bash
-david                              # your harnesslized AI
+david                              # your configured AI
 david "review this PR"             # it knows how you review
 david -v codex                     # same harness, different vendor
 ```
@@ -33,7 +33,7 @@ david -v codex                     # same harness, different vendor
 }
 ```
 
-**Delegation is native.** Your harnessl harness can delegate to a team harness. Ask `david` to do a team task, and it hands off to `team-dev` using the vendor's native subagent system. No middleware, no proxy.
+**Delegation is native.** Your personal harness can delegate to a team harness. Ask `david` to do a team task, and it hands off to `team-dev` using the vendor's native subagent system. No middleware, no proxy.
 
 ```bash
 david                              # personal context
@@ -42,12 +42,12 @@ team-dev                           # full team context when you need it
 
 **Zero runtime.** ynh resolves your config, assembles it, launches the vendor CLI, and gets out of the way. No process sitting between you and the AI. Each vendor gets the launch strategy that matches its capabilities - native plugin loading for Claude, symlinks for Cursor and Codex.
 
-**Discover and share.** Search registries for harnesses by name or keyword, install with a single command. Export your harnesss as vendor-native plugins, or build a marketplace indexing multiple harnesses for your team or community.
+**Discover and share.** Search registries for harnesses by name or keyword, install with a single command. Export your harness as vendor-native plugins, or build a marketplace indexing multiple harnesses for your team or community.
 
 ```bash
 ynh search "go development"       # find harnesses across registries
 ynh install go-dev                 # install by name
-ynd export ./my-harness            # vendor-native plugins
+ynd export ./david                 # vendor-native plugins
 ynd marketplace build              # build a shareable marketplace
 ```
 
@@ -60,13 +60,13 @@ ynd marketplace build              # build a shareable marketplace
 brew tap eyelock/tap && brew install ynh
 
 # Create a harness
-mkdir -p my-harness/.claude-plugin
-echo '{"name":"david","version":"0.1.0"}' > my-harness/.claude-plugin/plugin.json
+mkdir -p david/.claude-plugin
+echo '{"name":"david","version":"0.1.0"}' > david/.claude-plugin/plugin.json
 
 # Install it
-ynh install ./my-harness
+ynh install ./david
 
-# You're a command now
+# It's a command now
 david
 ```
 

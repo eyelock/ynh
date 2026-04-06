@@ -44,7 +44,7 @@ A harness is a directory with a `.claude-plugin/plugin.json` and your artifacts:
 Add whatever you need - skills, agents, rules, commands:
 
 ```
-my-harness/
+david/
 ├── .claude-plugin/
 │   └── plugin.json
 ├── metadata.json
@@ -56,7 +56,7 @@ my-harness/
 ## Install and Use
 
 ```bash
-ynh install ./my-harness
+ynh install ./david
 david                              # interactive session
 david "explain what this function does"   # one-shot
 ```
@@ -99,7 +99,7 @@ All included repos are fetched at install time and cached locally. This means `y
 Reinstall to pick up changes:
 
 ```bash
-ynh install ./my-harness
+ynh install ./david
 ```
 
 ## Private Repositories
@@ -182,7 +182,7 @@ By default, harnesses can pull skills and agents from any Git repo via `includes
 | Empty array `[]` | All remote sources blocked |
 | Patterns present | Only matching sources allowed |
 
-Local paths (e.g. `ynh install ./my-harness`) are always trusted and bypass this check.
+Local paths (e.g. `ynh install ./david`) are always trusted and bypass this check.
 
 **Pattern syntax:**
 
@@ -282,7 +282,7 @@ git clone https://github.com/eyelock/ynh.git
 cd ynh
 make install
 export PATH="$HOME/.ynh/bin:$PATH"
-ynh install ./my-harness
+ynh install ./david
 ```
 
 ## Next Steps

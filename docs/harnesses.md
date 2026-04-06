@@ -7,7 +7,7 @@ A harness is defined by a `.claude-plugin/plugin.json` manifest, an optional `me
 ## Directory Structure
 
 ```
-my-harness/
+david/
 ├── .claude-plugin/
 │   └── plugin.json           # required - name, version
 ├── metadata.json             # optional - vendor, includes, delegates

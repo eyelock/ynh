@@ -124,7 +124,7 @@ CURSOR_API_KEY=...
 
 ### Simple: bind-mount ~/.ynh
 
-The default `docker-compose.yml` mounts your host `~/.ynh` into the container. Harnesss, cache, and config are shared between host and container:
+The default `docker-compose.yml` mounts your host `~/.ynh` into the container. Harnesses, cache, and config are shared between host and container:
 
 ```bash
 docker compose run --rm ynh run david "review this PR"
@@ -205,7 +205,7 @@ docker compose run --rm --entrypoint ynd ynh fmt
 
 ## Private Git Repos
 
-If your harnesss reference private repos via `includes` or `delegates_to`, mount your SSH keys (read-only):
+If your harnesses reference private repos via `includes` or `delegates_to`, mount your SSH keys (read-only):
 
 Uncomment the SSH volume in `docker-compose.yml`:
 

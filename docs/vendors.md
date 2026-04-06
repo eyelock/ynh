@@ -1,6 +1,6 @@
 # Vendor Support
 
-ynh works with multiple AI coding assistants. The vendor determines which CLI is launched and where config files are placed. Your harnesss and artifacts stay the same regardless of vendor.
+ynh works with multiple AI coding assistants. The vendor determines which CLI is launched and where config files are placed. Your harnesses and artifacts stay the same regardless of vendor.
 
 ## Supported Vendors
 

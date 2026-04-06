@@ -103,7 +103,7 @@ Run flags:
 
 Examples:
   ynh init
-  ynh install github.com/david/my-harness
+  ynh install github.com/myorg/david
   ynh install ./my-local-harness
   ynh install github.com/org/monorepo --path harnesses/david
   ynh run david
@@ -514,7 +514,7 @@ func cmdRun(args []string) error {
 			}
 		}
 
-		// Assemble delegate harnesss as agent files
+		// Assemble delegate harnesses as agent files
 		if err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo); err != nil {
 			return fmt.Errorf("assembling delegates: %w", err)
 		}

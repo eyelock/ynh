@@ -7,7 +7,7 @@ A harness template manager for AI coding assistants. Bundle skills, agents, rule
 **[Full Documentation](https://eyelock.github.io/ynh)**
 
 ```bash
-ynh install github.com/david/my-harness
+ynh install github.com/myorg/david
 david                                    # interactive session
 david "review this PR"                   # non-interactive mode
 david -v codex                           # same harness, different vendor
@@ -35,7 +35,7 @@ source ~/.zshrc
 Create a directory with a `.claude-plugin/plugin.json` and your artifacts:
 
 ```
-my-harness/
+david/
 ├── .claude-plugin/
 │   └── plugin.json           # required - name, version
 ├── metadata.json             # optional - vendor, includes, delegates
@@ -74,7 +74,7 @@ Optional metadata (`metadata.json`):
 ### 3. Install and run
 
 ```bash
-ynh install ./my-harness
+ynh install ./david
 ynh install github.com/org/monorepo --path harnesses/david
 david
 ```
@@ -84,7 +84,7 @@ david
 A harness can include an `instructions.md` that maps to the vendor's project instructions file:
 
 ```
-my-harness/
+david/
 ├── .claude-plugin/
 │   └── plugin.json
 └── instructions.md       # becomes CLAUDE.md, codex.md, or .cursorrules

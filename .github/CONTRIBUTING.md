@@ -19,7 +19,7 @@ ynh is a packaging and distribution tool. It has no runtime component - the AI v
 
 ```
 cmd/ynh/                  CLI entry point: harness template manager (init, install, uninstall, update, run, ls, info, vendors, search, registry, image, status, prune)
-cmd/ynd/                  CLI entry point: developer tools (create, lint, validate, fmt, compress, export, marketplace, inspect)
+cmd/ynd/                  CLI entry point: developer tools (create, lint, validate, fmt, compress, export, marketplace, inspect, preview, diff)
 internal/
   config/                 Global config (~/.ynh/) and path management
   harness/                Harness loading, format detection, name validation
@@ -37,6 +37,7 @@ internal/
     cursor.go             Cursor adapter (child process + symlinks)
     symlinks.go           Shared symlink install/clean helpers
     process.go            Child process management with signal forwarding
+    toml.go               Minimal TOML emitter for Codex MCP config
 testdata/                 Test fixtures
 docs/                     User guide (GitHub Pages)
 ```
@@ -45,15 +46,15 @@ docs/                     User guide (GitHub Pages)
 
 **No build system on content.** Skills, agents, rules, and commands are standard-format files. ynh never transforms or wraps them. A skill from skills.sh works as-is.
 
-**Vendor is a deployment concern, not a content concern.** Harnesss define what artifacts to include. The vendor adapter decides where to put them and how to launch. Adding a new vendor is one file implementing the `Adapter` interface.
+**Vendor is a deployment concern, not a content concern.** Harnesses define what artifacts to include. The vendor adapter decides where to put them and how to launch. Adding a new vendor is one file implementing the `Adapter` interface.
 
 **Git is the package manager.** No npm, no custom registry. Content lives in Git repos, versioned with Git tags, cached locally by hash.
 
-**Harnesss compose from any source.** A harness can embed its own artifacts and pull from any number of Git repos. The `path` field supports monorepos.
+**Harnesses compose from any source.** A harness can embed its own artifacts and pull from any number of Git repos. The `path` field supports monorepos.
 
 **Vendor-adaptive launch.** Each vendor gets the strategy that matches its capabilities. Claude supports `--plugin-dir`, so ynh does a clean `exec` with no running process. Codex and Cursor lack native plugin loading, so ynh installs symlinks and manages a child process with signal forwarding. This pragmatic split avoids forcing a lowest-common-denominator approach.
 
-**Plugin format.** Harnesss use the Claude Code plugin format (`.claude-plugin/plugin.json`) for the manifest, with a `metadata.json` sidecar for ynh-specific config under a `"ynh"` key. This makes harnesses first-class Claude Code plugins while keeping extensibility for other tools.
+**Plugin format.** Harnesses use the Claude Code plugin format (`.claude-plugin/plugin.json`) for the manifest, with a `metadata.json` sidecar for ynh-specific config under a `"ynh"` key. This makes harnesses first-class Claude Code plugins while keeping extensibility for other tools.
 
 ## Technologies
 
@@ -146,6 +147,8 @@ type Adapter interface {
     Clean(entries []SymlinkEntry) error                                   // remove installed artifacts
     LaunchInteractive(configPath string, extraArgs []string) error        // start interactive session
     LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error
+    GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[string][]byte   // vendor-native hook config
+    GenerateMCPConfig(servers map[string]plugin.MCPServer) map[string][]byte    // vendor-native MCP config
 }
 ```
 
@@ -187,7 +190,7 @@ The resolver clones Git repos into `~/.ynh/cache/` using a deterministic directo
 
 ### Assembler
 
-The assembler builds a deterministic run directory (`~/.ynh/run/<name>/`) with the vendor's expected layout. It copies files from resolved content into the right artifact directories (e.g., `skills/` files go into `.claude/skills/`), and copies `instructions.md` to the vendor's project instructions file (e.g., `CLAUDE.md`). The run directory is cleaned and repopulated on each run. Two modes:
+The assembler builds a deterministic run directory (`~/.ynh/run/<name>/`) with the vendor's expected layout. It copies files from resolved content into the right artifact directories (e.g., `skills/` files go into `.claude/skills/`), and copies instructions (`instructions.md` or `AGENTS.md` as fallback) to the vendor's project instructions file (e.g., `CLAUDE.md`). After assembly, hook and MCP configs are generated via the adapter's `GenerateHookConfig()` and `GenerateMCPConfig()` methods. The run directory is cleaned and repopulated on each run. Two modes:
 
 - **With pick list**: Only specified paths are copied
 - **Without pick list**: All recognized artifact directories are scanned and copied
@@ -272,12 +275,23 @@ The `name` field is required and becomes the launcher command name. Only fields 
     ],
     "delegates_to": [
       {"git": "github.com/user/other-harness"}
-    ]
+    ],
+    "hooks": {
+      "before_tool": [{"matcher": "Bash", "command": "/path/to/lint.sh"}],
+      "on_stop": [{"command": "/path/to/log.sh"}]
+    },
+    "mcp_servers": {
+      "github": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"],
+        "env": {"GITHUB_TOKEN": "${GITHUB_TOKEN}"}
+      }
+    }
   }
 }
 ```
 
-ynh-specific config lives under the `"ynh"` key, keeping the file extensible for other tools.
+ynh-specific config lives under the `"ynh"` key, keeping the file extensible for other tools. See [Hooks](docs/hooks.md) and [MCP Servers](docs/mcp.md) for details on those declarations.
 
 ### Install Lifecycle
 

@@ -153,7 +153,7 @@ ynh uninstall team-lead
 
 - `delegates_to` in metadata.json references other harnesses as subagents
 - Delegates must be Git repos (local or remote)
-- ynh generates vendor-native agent files from delegate harnesss at runtime
+- ynh generates vendor-native agent files from delegate harnesses at runtime
 - Agent files inline the delegate's instructions, rules, and skill list
 - Delegate repos are fetched at install time and cached — `ynh run` works offline
 - Use `ynh update` to refresh cached delegate repos

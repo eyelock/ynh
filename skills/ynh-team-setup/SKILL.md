@@ -1,6 +1,6 @@
 ---
 name: ynh-team-setup
-description: Guide graduation from a harnessl harness to a team setup with delegation. Creates a team harness that delegates to personal harnesses.
+description: Guide graduation from a personal harness to a team setup with delegation. Creates a team harness that delegates to personal harnesses.
 ---
 
 # Team Harness Setup
@@ -25,7 +25,7 @@ Ask the user:
 
 Explain how ynh delegation works (see `references/delegation.md`):
 
-**Delegation** means a team harness knows about personal harnesses. When someone runs the team harness and asks for something that a harnessl harness handles, the AI vendor can delegate to it as a subagent.
+**Delegation** means a team harness knows about personal harnesses. When someone runs the team harness and asks for something that a personal harness handles, the AI vendor can delegate to it as a subagent.
 
 Two modes of use:
 - **Delegation for quick tasks**: Run `team-dev "deploy checklist"` and it delegates to the right specialist
@@ -84,7 +84,7 @@ Create the team harness directory.
 - Full SSH: `git@github.com:user/harness.git`
 - Full HTTPS: `https://github.com/user/harness.git`
 
-If the harnessl harness isn't in Git yet, explain they'll need to push it first for delegation to work. Show them how:
+If the personal harness isn't in Git yet, explain they'll need to push it first for delegation to work. Show them how:
 
 ```bash
 cd <harness-dir>
@@ -123,4 +123,4 @@ After the team harness is working:
 
 1. **Version with Git tags** - Use `ref: v1.0.0` in includes for stable references
 2. **Monorepo support** - If the org has a monorepo with AI config, use the `path` field in `delegates_to` (see `references/delegation.md`).
-3. **Multiple teams** - Each team can have their own harness that delegates to specialists. Harnesss compose infinitely.
+3. **Multiple teams** - Each team can have their own harness that delegates to specialists. Harnesses compose infinitely.

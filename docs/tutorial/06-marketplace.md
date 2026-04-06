@@ -247,7 +247,7 @@ rm -rf /tmp/ynh-tutorial/marketplace-*
 - A marketplace config lists `plugin` entries (copy as-is) and `harness` entries (fully exported)
 - Output includes `.claude-plugin/marketplace.json` and `.cursor-plugin/marketplace.json`
 - Plugins get dual manifests so one physical directory serves both vendors
-- Harnesss' remote includes are resolved and flattened during marketplace build
+- Harnesses' remote includes are resolved and flattened during marketplace build
 - Pick filtering carries through from harness metadata to the marketplace output
 - Codex is excluded from marketplaces (no marketplace system)
 
