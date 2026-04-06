@@ -193,6 +193,19 @@ func exportMerged(opts ExportOptions, pj *plugin.PluginJSON, p *harness.Harness,
 		agents = countDir(filepath.Join(outputDir, "agents"))
 	}
 
+	// Hook config for each vendor
+	if len(p.Hooks) > 0 {
+		for _, v := range vendors {
+			adapter, err := vendor.Get(v)
+			if err != nil {
+				continue
+			}
+			if err := writeHookConfig(outputDir, adapter, p.Hooks); err != nil {
+				return nil, fmt.Errorf("writing hook config for %s: %w", v, err)
+			}
+		}
+	}
+
 	results = append(results, ExportResult{
 		Vendor:    "merged",
 		OutputDir: outputDir,
@@ -252,6 +265,13 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.PluginJSON,
 	if len(p.DelegatesTo) > 0 {
 		if err := ExportDelegates(outputDir, p.DelegatesTo); err != nil {
 			return result, fmt.Errorf("exporting delegates: %w", err)
+		}
+	}
+
+	// Hook config
+	if len(p.Hooks) > 0 {
+		if err := writeHookConfig(outputDir, adapter, p.Hooks); err != nil {
+			return result, fmt.Errorf("writing hook config: %w", err)
 		}
 	}
 
@@ -315,8 +335,31 @@ func exportCodex(outputDir string, _ *plugin.PluginJSON, p *harness.Harness, con
 		}
 	}
 
+	// Hook config
+	if len(p.Hooks) > 0 {
+		codexAdapter, _ := vendor.Get("codex")
+		if err := writeHookConfig(outputDir, codexAdapter, p.Hooks); err != nil {
+			return result, fmt.Errorf("writing hook config: %w", err)
+		}
+	}
+
 	result.Skills = countDir(codexSkillsDir)
 	return result, nil
+}
+
+// writeHookConfig generates vendor-native hook config files and writes them to the output directory.
+func writeHookConfig(outputDir string, adapter vendor.Adapter, hooks map[string][]plugin.HookEntry) error {
+	hookFiles := adapter.GenerateHookConfig(hooks)
+	for relPath, content := range hookFiles {
+		absPath := filepath.Join(outputDir, relPath)
+		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+			return fmt.Errorf("creating hook config dir: %w", err)
+		}
+		if err := os.WriteFile(absPath, content, 0o644); err != nil {
+			return fmt.Errorf("writing hook config %s: %w", relPath, err)
+		}
+	}
+	return nil
 }
 
 // copyContent copies resolved content into the target directory using the given artifact dirs mapping.

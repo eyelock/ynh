@@ -519,6 +519,114 @@ func TestExportManifestGeneration(t *testing.T) {
 	}
 }
 
+func TestExportWithHooks(t *testing.T) {
+	// Create a harness with hooks
+	srcDir := t.TempDir()
+	pluginDir := filepath.Join(srcDir, ".claude-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(pluginDir, "plugin.json"), map[string]string{
+		"name":    "hooks-test",
+		"version": "0.1.0",
+	})
+	writeJSON(t, filepath.Join(srcDir, "metadata.json"), map[string]any{
+		"ynh": map[string]any{
+			"default_vendor": "claude",
+			"hooks": map[string]any{
+				"before_tool": []any{
+					map[string]string{"matcher": "Bash", "command": "echo before bash"},
+				},
+				"on_stop": []any{
+					map[string]string{"command": "echo done"},
+				},
+			},
+		},
+	})
+
+	// Test Claude export
+	outputDir := t.TempDir()
+	_, err := Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir,
+		Vendors:   []string{"claude"},
+		Mode:      ModePerVendor,
+	})
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	// Claude should have .claude/settings.json
+	assertFileExists(t, filepath.Join(outputDir, "claude", ".claude", "settings.json"))
+
+	// Test Cursor export
+	outputDir2 := t.TempDir()
+	_, err = Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir2,
+		Vendors:   []string{"cursor"},
+		Mode:      ModePerVendor,
+	})
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	// Cursor should have .cursor/hooks.json
+	assertFileExists(t, filepath.Join(outputDir2, "cursor", ".cursor", "hooks.json"))
+
+	// Test Codex export
+	outputDir3 := t.TempDir()
+	_, err = Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir3,
+		Vendors:   []string{"codex"},
+		Mode:      ModePerVendor,
+	})
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	// Codex should have .codex/hooks.json
+	assertFileExists(t, filepath.Join(outputDir3, "codex", ".codex", "hooks.json"))
+}
+
+func TestExportMergedWithHooks(t *testing.T) {
+	// Create a harness with hooks
+	srcDir := t.TempDir()
+	pluginDir := filepath.Join(srcDir, ".claude-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(pluginDir, "plugin.json"), map[string]string{
+		"name":    "hooks-merged",
+		"version": "0.1.0",
+	})
+	writeJSON(t, filepath.Join(srcDir, "metadata.json"), map[string]any{
+		"ynh": map[string]any{
+			"hooks": map[string]any{
+				"before_tool": []any{
+					map[string]string{"command": "echo hi"},
+				},
+			},
+		},
+	})
+
+	outputDir := filepath.Join(t.TempDir(), "merged")
+	_, err := Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir,
+		Vendors:   []string{"claude", "cursor"},
+		Mode:      ModeMerged,
+	})
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	// Both hook configs should exist
+	assertFileExists(t, filepath.Join(outputDir, ".claude", "settings.json"))
+	assertFileExists(t, filepath.Join(outputDir, ".cursor", "hooks.json"))
+}
+
 func TestJoinParts(t *testing.T) {
 	tests := []struct {
 		parts []string

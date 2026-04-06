@@ -429,5 +429,11 @@ func lintMetadataJSON(path string) []lintIssue {
 		}
 	}
 
+	// Validate hooks
+	hookIssues := validateMetadataHooks(meta)
+	for _, msg := range hookIssues {
+		issues = append(issues, lintIssue{File: path, Message: msg})
+	}
+
 	return issues
 }

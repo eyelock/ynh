@@ -1,10 +1,14 @@
 package vendor
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"syscall"
+
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 func init() {
@@ -62,6 +66,99 @@ func buildClaudeArgs(configPath string, extraArgs []string) []string {
 
 	args = append(args, extraArgs...)
 	return args
+}
+
+// claudeHookEventMap maps canonical event names to Claude Code hook events.
+var claudeHookEventMap = map[string]string{
+	"before_tool":   "PreToolUse",
+	"after_tool":    "PostToolUse",
+	"before_prompt": "UserPromptSubmit",
+	"on_stop":       "Stop",
+}
+
+func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[string][]byte {
+	if len(hooks) == 0 {
+		return nil
+	}
+
+	// Claude's three-level structure:
+	// { "hooks": { "PreToolUse": [ { "matcher": "X", "hooks": [ { "type": "command", "command": "..." } ] } ] } }
+
+	type claudeInnerHook struct {
+		Type    string `json:"type"`
+		Command string `json:"command"`
+	}
+	type claudeHookGroup struct {
+		Matcher string            `json:"matcher,omitempty"`
+		Hooks   []claudeInnerHook `json:"hooks"`
+	}
+
+	allEvents := make(map[string][]claudeHookGroup)
+
+	// Process events in sorted order for deterministic output
+	var events []string
+	for event := range hooks {
+		events = append(events, event)
+	}
+	sort.Strings(events)
+
+	for _, event := range events {
+		entries := hooks[event]
+		claudeEvent, ok := claudeHookEventMap[event]
+		if !ok {
+			continue
+		}
+
+		// Group entries by matcher
+		type matcherGroup struct {
+			matcher string
+			cmds    []string
+		}
+		var groups []matcherGroup
+		groupIdx := make(map[string]int)
+
+		for _, entry := range entries {
+			key := entry.Matcher
+			if idx, exists := groupIdx[key]; exists {
+				groups[idx].cmds = append(groups[idx].cmds, entry.Command)
+			} else {
+				groupIdx[key] = len(groups)
+				groups = append(groups, matcherGroup{matcher: key, cmds: []string{entry.Command}})
+			}
+		}
+
+		var hookGroups []claudeHookGroup
+		for _, g := range groups {
+			var inner []claudeInnerHook
+			for _, cmd := range g.cmds {
+				inner = append(inner, claudeInnerHook{Type: "command", Command: cmd})
+			}
+			hookGroups = append(hookGroups, claudeHookGroup{
+				Matcher: g.matcher,
+				Hooks:   inner,
+			})
+		}
+
+		allEvents[claudeEvent] = hookGroups
+	}
+
+	if len(allEvents) == 0 {
+		return nil
+	}
+
+	settings := map[string]any{
+		"hooks": allEvents,
+	}
+
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return nil
+	}
+	data = append(data, '\n')
+
+	return map[string][]byte{
+		filepath.Join(".claude", "settings.json"): data,
+	}
 }
 
 func launchClaude(configPath string, extraArgs []string) error {

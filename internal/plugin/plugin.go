@@ -30,10 +30,41 @@ type MetadataJSON struct {
 
 // YNHMetadata holds ynh-specific harness configuration.
 type YNHMetadata struct {
-	DefaultVendor string          `json:"default_vendor,omitempty"`
-	Includes      []IncludeMeta   `json:"includes,omitempty"`
-	DelegatesTo   []DelegateMeta  `json:"delegates_to,omitempty"`
-	InstalledFrom *ProvenanceMeta `json:"installed_from,omitempty"`
+	DefaultVendor string                 `json:"default_vendor,omitempty"`
+	Includes      []IncludeMeta          `json:"includes,omitempty"`
+	DelegatesTo   []DelegateMeta         `json:"delegates_to,omitempty"`
+	Hooks         map[string][]HookEntry `json:"hooks,omitempty"`
+	InstalledFrom *ProvenanceMeta        `json:"installed_from,omitempty"`
+}
+
+// HookEntry defines a single hook action.
+type HookEntry struct {
+	Matcher string `json:"matcher,omitempty"` // tool name pattern (optional)
+	Command string `json:"command"`           // shell command to run
+}
+
+// ValidHookEvents lists the canonical hook event names.
+var ValidHookEvents = map[string]bool{
+	"before_tool":   true,
+	"after_tool":    true,
+	"before_prompt": true,
+	"on_stop":       true,
+}
+
+// ValidateHooks checks that hook event names are valid and commands are non-empty.
+func ValidateHooks(hooks map[string][]HookEntry) []string {
+	var issues []string
+	for event, entries := range hooks {
+		if !ValidHookEvents[event] {
+			issues = append(issues, fmt.Sprintf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop)", event))
+		}
+		for i, entry := range entries {
+			if entry.Command == "" {
+				issues = append(issues, fmt.Sprintf("hooks.%s[%d]: command must not be empty", event, i))
+			}
+		}
+	}
+	return issues
 }
 
 // ProvenanceMeta records where a harness was installed from.

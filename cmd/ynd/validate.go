@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 func cmdValidate(args []string) error {
@@ -154,6 +156,9 @@ func validateHarness(dir string) error {
 		var meta map[string]any
 		if err := json.Unmarshal(data, &meta); err != nil {
 			issues = append(issues, fmt.Sprintf("invalid metadata.json: %v", err))
+		} else {
+			// Validate hooks in ynh metadata
+			issues = append(issues, validateMetadataHooks(meta)...)
 		}
 	}
 
@@ -249,4 +254,51 @@ func validateHarness(dir string) error {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// validateMetadataHooks validates the hooks section inside ynh metadata.
+func validateMetadataHooks(meta map[string]any) []string {
+	var issues []string
+
+	ynh, ok := meta["ynh"]
+	if !ok {
+		return issues
+	}
+	ynhMap, ok := ynh.(map[string]any)
+	if !ok {
+		return issues
+	}
+	hooks, ok := ynhMap["hooks"]
+	if !ok {
+		return issues
+	}
+	hooksMap, ok := hooks.(map[string]any)
+	if !ok {
+		issues = append(issues, "'ynh.hooks' must be an object")
+		return issues
+	}
+
+	for event, entries := range hooksMap {
+		if !plugin.ValidHookEvents[event] {
+			issues = append(issues, fmt.Sprintf("ynh.hooks: unknown event %q (valid: before_tool, after_tool, before_prompt, on_stop)", event))
+		}
+		arr, ok := entries.([]any)
+		if !ok {
+			issues = append(issues, fmt.Sprintf("ynh.hooks.%s must be an array", event))
+			continue
+		}
+		for i, item := range arr {
+			entry, ok := item.(map[string]any)
+			if !ok {
+				issues = append(issues, fmt.Sprintf("ynh.hooks.%s[%d] must be an object", event, i))
+				continue
+			}
+			cmd, _ := entry["command"].(string)
+			if cmd == "" {
+				issues = append(issues, fmt.Sprintf("ynh.hooks.%s[%d]: command must not be empty", event, i))
+			}
+		}
+	}
+
+	return issues
 }

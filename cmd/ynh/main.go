@@ -518,6 +518,20 @@ func cmdRun(args []string) error {
 		if err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo); err != nil {
 			return fmt.Errorf("assembling delegates: %w", err)
 		}
+
+		// Generate vendor-native hook config files
+		if len(p.Hooks) > 0 {
+			hookFiles := adapter.GenerateHookConfig(p.Hooks)
+			for relPath, content := range hookFiles {
+				absPath := filepath.Join(runDir, relPath)
+				if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+					return fmt.Errorf("creating hook config dir: %w", err)
+				}
+				if err := os.WriteFile(absPath, content, 0o644); err != nil {
+					return fmt.Errorf("writing hook config %s: %w", relPath, err)
+				}
+			}
+		}
 	}
 
 	// Dispatch based on action.
@@ -713,6 +727,22 @@ func cmdInfo(args []string) error {
 				line += "  ref=" + del.Ref
 			}
 			fmt.Println(line)
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("Hooks:")
+	if len(p.Hooks) == 0 {
+		fmt.Println("  (none)")
+	} else {
+		for event, entries := range p.Hooks {
+			for _, entry := range entries {
+				line := "  " + event + ": " + entry.Command
+				if entry.Matcher != "" {
+					line += "  (matcher=" + entry.Matcher + ")"
+				}
+				fmt.Println(line)
+			}
 		}
 	}
 

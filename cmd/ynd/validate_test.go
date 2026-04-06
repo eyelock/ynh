@@ -604,6 +604,56 @@ func TestValidateHarness_IdenticalInstructionsOK(t *testing.T) {
 	}
 }
 
+func TestValidateHarness_HooksValid(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "hooks-valid")
+	mkdirAll(t, filepath.Join(hr, ".claude-plugin"))
+	writeFile(t, filepath.Join(hr, ".claude-plugin", "plugin.json"),
+		[]byte(`{"name":"hooks-valid","version":"0.1.0"}`))
+	writeFile(t, filepath.Join(hr, "metadata.json"),
+		[]byte(`{"ynh":{"hooks":{"before_tool":[{"command":"echo hi"}]}}}`))
+
+	if err := validateHarness(hr); err != nil {
+		t.Errorf("valid hooks should pass: %v", err)
+	}
+}
+
+func TestValidateHarness_HooksUnknownEvent(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "hooks-bad-event")
+	mkdirAll(t, filepath.Join(hr, ".claude-plugin"))
+	writeFile(t, filepath.Join(hr, ".claude-plugin", "plugin.json"),
+		[]byte(`{"name":"hooks-bad-event","version":"0.1.0"}`))
+	writeFile(t, filepath.Join(hr, "metadata.json"),
+		[]byte(`{"ynh":{"hooks":{"unknown_event":[{"command":"echo hi"}]}}}`))
+
+	err := validateHarness(hr)
+	if err == nil {
+		t.Fatal("expected validation error for unknown hook event")
+	}
+}
+
+func TestValidateHarness_HooksEmptyCommand(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "hooks-empty-cmd")
+	mkdirAll(t, filepath.Join(hr, ".claude-plugin"))
+	writeFile(t, filepath.Join(hr, ".claude-plugin", "plugin.json"),
+		[]byte(`{"name":"hooks-empty-cmd","version":"0.1.0"}`))
+	writeFile(t, filepath.Join(hr, "metadata.json"),
+		[]byte(`{"ynh":{"hooks":{"before_tool":[{"command":""}]}}}`))
+
+	err := validateHarness(hr)
+	if err == nil {
+		t.Fatal("expected validation error for empty hook command")
+	}
+}
+
 func TestValidateHarness_AgentsMDOnly(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)

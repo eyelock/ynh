@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -288,6 +289,104 @@ func TestSaveMetadataJSON_RoundTrip(t *testing.T) {
 	}
 	if meta.YNH.InstalledFrom.RegistryName != "my-registry" {
 		t.Errorf("RegistryName = %q, want %q", meta.YNH.InstalledFrom.RegistryName, "my-registry")
+	}
+}
+
+func TestLoadMetadataJSON_WithHooks(t *testing.T) {
+	dir := t.TempDir()
+	metaJSON := `{
+		"ynh": {
+			"default_vendor": "claude",
+			"hooks": {
+				"before_tool": [
+					{"matcher": "Bash", "command": "echo before bash"},
+					{"command": "echo before all"}
+				],
+				"on_stop": [
+					{"command": "echo done"}
+				]
+			}
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(dir, "metadata.json"), []byte(metaJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	meta, err := LoadMetadataJSON(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.YNH == nil {
+		t.Fatal("YNH is nil")
+	}
+	if len(meta.YNH.Hooks) != 2 {
+		t.Fatalf("Hooks events = %d, want 2", len(meta.YNH.Hooks))
+	}
+	beforeTool := meta.YNH.Hooks["before_tool"]
+	if len(beforeTool) != 2 {
+		t.Fatalf("before_tool entries = %d, want 2", len(beforeTool))
+	}
+	if beforeTool[0].Matcher != "Bash" {
+		t.Errorf("Matcher = %q, want %q", beforeTool[0].Matcher, "Bash")
+	}
+	if beforeTool[0].Command != "echo before bash" {
+		t.Errorf("Command = %q, want %q", beforeTool[0].Command, "echo before bash")
+	}
+	if beforeTool[1].Matcher != "" {
+		t.Errorf("second entry Matcher = %q, want empty", beforeTool[1].Matcher)
+	}
+	onStop := meta.YNH.Hooks["on_stop"]
+	if len(onStop) != 1 {
+		t.Fatalf("on_stop entries = %d, want 1", len(onStop))
+	}
+}
+
+func TestValidateHooks_Valid(t *testing.T) {
+	hooks := map[string][]HookEntry{
+		"before_tool": {{Matcher: "Bash", Command: "echo hi"}},
+		"on_stop":     {{Command: "echo bye"}},
+	}
+	issues := ValidateHooks(hooks)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues, got %v", issues)
+	}
+}
+
+func TestValidateHooks_UnknownEvent(t *testing.T) {
+	hooks := map[string][]HookEntry{
+		"unknown_event": {{Command: "echo hi"}},
+	}
+	issues := ValidateHooks(hooks)
+	if len(issues) == 0 {
+		t.Fatal("expected issues for unknown event")
+	}
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue, "unknown hook event") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'unknown hook event' in issues, got %v", issues)
+	}
+}
+
+func TestValidateHooks_EmptyCommand(t *testing.T) {
+	hooks := map[string][]HookEntry{
+		"before_tool": {{Command: ""}},
+	}
+	issues := ValidateHooks(hooks)
+	if len(issues) == 0 {
+		t.Fatal("expected issues for empty command")
+	}
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue, "command must not be empty") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'command must not be empty' in issues, got %v", issues)
 	}
 }
 

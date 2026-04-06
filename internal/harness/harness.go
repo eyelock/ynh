@@ -47,6 +47,7 @@ type Harness struct {
 	DefaultVendor string
 	Includes      []Include
 	DelegatesTo   []Delegate
+	Hooks         map[string][]plugin.HookEntry
 	InstalledFrom *Provenance
 }
 
@@ -123,6 +124,9 @@ func LoadPluginDir(dir string) (*Harness, error) {
 			p.DelegatesTo = append(p.DelegatesTo, Delegate{
 				GitSource: GitSource{Git: del.Git, Ref: del.Ref, Path: del.Path},
 			})
+		}
+		if len(meta.YNH.Hooks) > 0 {
+			p.Hooks = meta.YNH.Hooks
 		}
 		if meta.YNH.InstalledFrom != nil {
 			prov := meta.YNH.InstalledFrom
