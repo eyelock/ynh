@@ -33,6 +33,10 @@ func main() {
 		err = cmdInspect(os.Args[2:])
 	case "export":
 		err = cmdExport(os.Args[2:])
+	case "preview":
+		err = cmdPreview(os.Args[2:])
+	case "diff":
+		err = cmdDiff(os.Args[2:])
 	case "marketplace":
 		err = cmdMarketplace(os.Args[2:])
 	case "version", "--version", "-v":
@@ -67,6 +71,8 @@ Commands:
   compress [file]            Compress prompts using LLM-powered SudoLang techniques
   inspect                    Interactive codebase walkthrough to generate/update skills and agents
   export <source>            Export harness as vendor-native plugin directories
+  preview <source>           Show assembled vendor output without installing
+  diff <source> [vendors]    Compare assembled output across vendors
   marketplace build          Build a vendor-native marketplace from marketplace.json
   version                    Print version
   help                       Show this help
@@ -105,5 +111,10 @@ Examples:
   ynd export ./my-harness -v claude,cursor -o ./dist
   ynd export ./my-harness --merged
   ynd export github.com/user/repo --path harnesses/david
+  ynd preview ./my-harness
+  ynd preview ./my-harness -v cursor
+  ynd preview ./my-harness -v claude -o ./output
+  ynd diff ./my-harness claude cursor
+  ynd diff ./my-harness
 `, config.Version)
 }
