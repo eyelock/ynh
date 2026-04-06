@@ -11,7 +11,7 @@ import (
 )
 
 func testdataExportDir() string {
-	return filepath.Join("..", "..", "testdata", "export-persona")
+	return filepath.Join("..", "..", "testdata", "export-harness")
 }
 
 func TestCmdExportLocalSource(t *testing.T) {
@@ -106,7 +106,7 @@ func TestCmdExportDefaultOutput(t *testing.T) {
 		t.Fatalf("cmdExport failed: %v", err)
 	}
 
-	// Default output should be ./dist/<persona-name>/
+	// Default output should be ./dist/<harness-name>/
 	assertExists(t, filepath.Join(tmpDir, "dist", "export-test", "claude", ".claude-plugin", "plugin.json"))
 }
 

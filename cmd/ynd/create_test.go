@@ -93,12 +93,12 @@ func TestCreateAgent_AlreadyExists(t *testing.T) {
 	}
 }
 
-func TestCreatePersona(t *testing.T) {
+func TestCreateHarness(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	if err := createPersona("my-team"); err != nil {
-		t.Fatalf("createPersona failed: %v", err)
+	if err := createHarness("my-team"); err != nil {
+		t.Fatalf("createHarness failed: %v", err)
 	}
 
 	expectedFiles := []string{
@@ -140,17 +140,17 @@ func TestCreatePersona(t *testing.T) {
 	}
 }
 
-func TestCreatePersona_AlreadyExists(t *testing.T) {
+func TestCreateHarness_AlreadyExists(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	if err := createPersona("my-team"); err != nil {
-		t.Fatalf("first createPersona failed: %v", err)
+	if err := createHarness("my-team"); err != nil {
+		t.Fatalf("first createHarness failed: %v", err)
 	}
 
-	err := createPersona("my-team")
+	err := createHarness("my-team")
 	if err == nil {
-		t.Fatal("expected error for duplicate persona")
+		t.Fatal("expected error for duplicate harness")
 	}
 	if !strings.Contains(err.Error(), "already exists") {
 		t.Errorf("unexpected error: %v", err)
@@ -190,19 +190,19 @@ func TestCreateCommand(t *testing.T) {
 	}
 }
 
-func TestCreatePersona_InsidePersona(t *testing.T) {
+func TestCreateHarness_InsideHarness(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	// Make CWD look like a persona
+	// Make CWD look like a harness
 	mkdirAll(t, filepath.Join(dir, ".claude-plugin"))
 	writeFile(t, filepath.Join(dir, ".claude-plugin", "plugin.json"), []byte(`{}`))
 
-	err := createPersona("nested")
+	err := createHarness("nested")
 	if err == nil {
-		t.Fatal("expected error when creating persona inside a persona")
+		t.Fatal("expected error when creating harness inside a harness")
 	}
-	if !strings.Contains(err.Error(), "already inside a persona") {
+	if !strings.Contains(err.Error(), "already inside a harness") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -342,15 +342,15 @@ func TestCmdCreate_Agent(t *testing.T) {
 	}
 }
 
-func TestCmdCreate_Persona(t *testing.T) {
+func TestCmdCreate_Harness(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	err := cmdCreate([]string{"persona", "test-persona"})
+	err := cmdCreate([]string{"harness", "test-harness"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "test-persona", ".claude-plugin", "plugin.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, "test-harness", ".claude-plugin", "plugin.json")); err != nil {
 		t.Error("expected plugin.json to exist")
 	}
 }

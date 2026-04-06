@@ -24,21 +24,21 @@ func cmdValidate(args []string) error {
 		return validateFile(root)
 	}
 
-	// Directory: find persona roots and validate them
-	personas := findPersonaRoots(root)
-	if len(personas) == 0 {
-		// Maybe we're inside a persona directory
-		if isPersonaRoot(root) {
-			return validatePersona(root)
+	// Directory: find harness roots and validate them
+	harnesses := findHarnessRoots(root)
+	if len(harnesses) == 0 {
+		// Maybe we're inside a harness directory
+		if isHarnessRoot(root) {
+			return validateHarness(root)
 		}
-		fmt.Println("No persona directories found.")
-		fmt.Println("A persona requires .claude-plugin/plugin.json")
+		fmt.Println("No harness directories found.")
+		fmt.Println("A harness requires .claude-plugin/plugin.json")
 		return nil
 	}
 
 	hasError := false
-	for _, p := range personas {
-		if err := validatePersona(p); err != nil {
+	for _, p := range harnesses {
+		if err := validateHarness(p); err != nil {
 			hasError = true
 		}
 	}
@@ -79,14 +79,14 @@ func validateFile(path string) error {
 	return nil
 }
 
-func isPersonaRoot(dir string) bool {
+func isHarnessRoot(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, ".claude-plugin", "plugin.json"))
 	return err == nil
 }
 
-func findPersonaRoots(root string) []string {
-	// Check if root itself is a persona
-	if isPersonaRoot(root) {
+func findHarnessRoots(root string) []string {
+	// Check if root itself is a harness
+	if isHarnessRoot(root) {
 		return []string{root}
 	}
 
@@ -100,7 +100,7 @@ func findPersonaRoots(root string) []string {
 	for _, entry := range entries {
 		if entry.IsDir() {
 			child := filepath.Join(root, entry.Name())
-			if isPersonaRoot(child) {
+			if isHarnessRoot(child) {
 				roots = append(roots, child)
 			}
 		}
@@ -109,7 +109,7 @@ func findPersonaRoots(root string) []string {
 	return roots
 }
 
-func validatePersona(dir string) error {
+func validateHarness(dir string) error {
 	rel, _ := filepath.Rel(".", dir)
 	if rel == "" {
 		rel = dir
@@ -227,7 +227,7 @@ func validatePersona(dir string) error {
 		for _, issue := range issues {
 			fmt.Printf("  - %s\n", issue)
 		}
-		return fmt.Errorf("persona %q has %d issue(s)", rel, len(issues))
+		return fmt.Errorf("harness %q has %d issue(s)", rel, len(issues))
 	}
 
 	fmt.Printf("%s: valid\n", rel)

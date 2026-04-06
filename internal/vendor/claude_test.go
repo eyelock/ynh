@@ -14,7 +14,7 @@ func TestBuildClaudeArgs_WithInstructions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	instructions := "You are a helpful persona."
+	instructions := "You are a helpful harness."
 	if err := os.WriteFile(filepath.Join(configPath, "CLAUDE.md"), []byte(instructions), 0o644); err != nil {
 		t.Fatal(err)
 	}

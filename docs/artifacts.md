@@ -1,6 +1,6 @@
 # Artifacts Guide
 
-Artifacts are the building blocks of a persona: skills, agents, rules, and commands. ynh doesn't define their format - it uses whatever format the vendor expects and passes content through unchanged.
+Artifacts are the building blocks of a harness: skills, agents, rules, and commands. ynh doesn't define their format - it uses whatever format the vendor expects and passes content through unchanged.
 
 ## Skills
 
@@ -129,7 +129,7 @@ If any step fails, fix the issue and re-run until all checks pass.
 
 ## Project Instructions
 
-A persona can include an `instructions.md` file with project-level instructions. At runtime, this is copied to the vendor-specific instructions file at the project root:
+A harness can include an `instructions.md` file with project-level instructions. At runtime, this is copied to the vendor-specific instructions file at the project root:
 
 | Vendor | Target filename |
 |--------|----------------|
@@ -138,7 +138,7 @@ A persona can include an `instructions.md` file with project-level instructions.
 | Cursor | `.cursorrules` |
 
 ```
-my-persona/
+my-harness/
 ├── .claude-plugin/
 │   └── plugin.json
 └── instructions.md       <- becomes CLAUDE.md (or vendor equivalent)
@@ -155,18 +155,18 @@ You are a senior developer working on a Go microservices codebase.
 - Run `make check` before committing
 ```
 
-If multiple sources provide `instructions.md` (e.g., an included repo and the persona itself), the last source wins. Since the persona's own content is processed last, its `instructions.md` takes priority over included repos.
+If multiple sources provide `instructions.md` (e.g., an included repo and the harness itself), the last source wins. Since the harness's own content is processed last, its `instructions.md` takes priority over included repos.
 
 ## Where Artifacts Come From
 
 Artifacts can come from three places:
 
-### 1. Embedded in the persona
+### 1. Embedded in the harness
 
-Files in the persona's own directory:
+Files in the harness's own directory:
 
 ```
-my-persona/
+my-harness/
 ├── .claude-plugin/
 │   └── plugin.json
 ├── skills/review/SKILL.md     <- embedded
@@ -203,4 +203,4 @@ All three sources are merged into the same vendor config at runtime. If two sour
 
 ## Exporting Artifacts
 
-Artifacts can be exported from ynh's persona format into vendor-native plugin layouts using `ynd export`. This resolves all remote includes, flattens the result, and writes distributable output per vendor. See the [export command reference](ynd.md#export) and [Tutorial 5](tutorial/05-export.md) for details.
+Artifacts can be exported from ynh's harness format into vendor-native plugin layouts using `ynd export`. This resolves all remote includes, flattens the result, and writes distributable output per vendor. See the [export command reference](ynd.md#export) and [Tutorial 5](tutorial/05-export.md) for details.

@@ -31,7 +31,7 @@ func TestIsPluginDir_False(t *testing.T) {
 func TestLoadPluginJSON_Valid(t *testing.T) {
 	dir := t.TempDir()
 	writePluginJSON(t, dir, PluginJSON{
-		Name:    "test-persona",
+		Name:    "test-harness",
 		Version: "1.0.0",
 	})
 
@@ -39,8 +39,8 @@ func TestLoadPluginJSON_Valid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pj.Name != "test-persona" {
-		t.Errorf("Name = %q, want %q", pj.Name, "test-persona")
+	if pj.Name != "test-harness" {
+		t.Errorf("Name = %q, want %q", pj.Name, "test-harness")
 	}
 	if pj.Version != "1.0.0" {
 		t.Errorf("Version = %q, want %q", pj.Version, "1.0.0")
@@ -205,7 +205,7 @@ func TestSaveMetadataJSON_PreservesNonYNHKeys(t *testing.T) {
 		DefaultVendor: "claude",
 		InstalledFrom: &ProvenanceMeta{
 			SourceType:  "local",
-			Source:      "./my-persona",
+			Source:      "./my-harness",
 			InstalledAt: "2026-03-22T10:30:00Z",
 		},
 	}

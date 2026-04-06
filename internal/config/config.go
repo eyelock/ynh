@@ -35,8 +35,8 @@ func HomeDir() string {
 	return filepath.Join(home, DefaultDirName)
 }
 
-func PersonasDir() string {
-	return filepath.Join(HomeDir(), "personas")
+func HarnessesDir() string {
+	return filepath.Join(HomeDir(), "harnesses")
 }
 
 func CacheDir() string {
@@ -59,7 +59,7 @@ func ConfigPath() string {
 func EnsureDirs() error {
 	dirs := []string{
 		HomeDir(),
-		PersonasDir(),
+		HarnessesDir(),
 		CacheDir(),
 		BinDir(),
 		RunDir(),

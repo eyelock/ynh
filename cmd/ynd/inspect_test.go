@@ -326,7 +326,7 @@ func TestParseProposals(t *testing.T) {
 
 1. **Skill: ` + "`ynh-add-vendor`" + `** — Step-by-step guide for implementing a new vendor adapter.
 2. **Agent: ` + "`ynh-reviewer`" + `** — Code reviewer specialized in ynh's patterns.
-3. **skill: ynh-author** — Guided persona authoring cycle.
+3. **skill: ynh-author** — Guided harness authoring cycle.
 
 Not suggested:
 - Dev build cycle (already covered)

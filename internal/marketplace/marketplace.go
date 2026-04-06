@@ -27,9 +27,9 @@ type MarketplaceOwner struct {
 	Email string `json:"email,omitempty"`
 }
 
-// MarketplaceEntry describes one persona or plugin in the marketplace.
+// MarketplaceEntry describes one harness or plugin in the marketplace.
 type MarketplaceEntry struct {
-	Type        string `json:"type"`                  // "persona" or "plugin"
+	Type        string `json:"type"`                  // "harness" or "plugin"
 	Source      string `json:"source"`                // local path or git URL
 	Description string `json:"description,omitempty"` // override plugin.json description
 	Version     string `json:"version,omitempty"`     // override plugin.json version
@@ -59,8 +59,8 @@ func LoadConfig(path string) (*MarketplaceConfig, error) {
 	}
 
 	for i, e := range cfg.Entries {
-		if e.Type != "persona" && e.Type != "plugin" {
-			return nil, fmt.Errorf("marketplace config: entry %d: type must be \"persona\" or \"plugin\", got %q", i, e.Type)
+		if e.Type != "harness" && e.Type != "plugin" {
+			return nil, fmt.Errorf("marketplace config: entry %d: type must be \"harness\" or \"plugin\", got %q", i, e.Type)
 		}
 		if e.Source == "" {
 			return nil, fmt.Errorf("marketplace config: entry %d: source is required", i)
@@ -121,9 +121,9 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 		pluginOutputDir := filepath.Join(pluginsDir, pj.Name)
 
 		switch entry.Type {
-		case "persona":
-			if err := buildPersonaEntry(srcDir, pluginOutputDir, vendors, opts.Config); err != nil {
-				return fmt.Errorf("persona %q: %w", pj.Name, err)
+		case "harness":
+			if err := buildHarnessEntry(srcDir, pluginOutputDir, vendors, opts.Config); err != nil {
+				return fmt.Errorf("harness %q: %w", pj.Name, err)
 			}
 		case "plugin":
 			if err := buildPluginEntry(srcDir, pluginOutputDir, vendors); err != nil {
@@ -169,8 +169,8 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 	return nil
 }
 
-// buildPersonaEntry exports a persona using ModeMerged into the plugin output dir.
-func buildPersonaEntry(srcDir, outputDir string, vendors []string, cfg *config.Config) error {
+// buildHarnessEntry exports a harness using ModeMerged into the plugin output dir.
+func buildHarnessEntry(srcDir, outputDir string, vendors []string, cfg *config.Config) error {
 	_, err := exporter.Export(exporter.ExportOptions{
 		SourceDir: srcDir,
 		OutputDir: outputDir,

@@ -67,7 +67,7 @@ func assembleInto(workDir string, adapter vendor.Adapter, content []resolver.Res
 	}
 
 	// Copy instructions.md → vendor-specific project instructions file.
-	// Later sources override earlier ones (persona's own instructions.md wins).
+	// Later sources override earlier ones (harness's own instructions.md wins).
 	instructionsFile := adapter.InstructionsFile()
 	if instructionsFile != "" {
 		for _, rc := range content {

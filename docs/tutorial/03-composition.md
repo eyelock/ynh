@@ -1,6 +1,6 @@
 # Tutorial 3: Composition
 
-Pull skills from Git repos into your persona using includes. Cherry-pick specific artifacts from your own repos, third-party skill libraries, or local paths.
+Pull skills from Git repos into your harness using includes. Cherry-pick specific artifacts from your own repos, third-party skill libraries, or local paths.
 
 ## Prerequisites
 
@@ -16,7 +16,7 @@ mkdir -p /tmp/ynh-tutorial
 
 The [eyelock/assistants](https://github.com/eyelock/assistants) repo is a skill library organized as plugins. It contains dev skills, language-specific skills, infrastructure skills, and more — all following the [Agent Skills](https://agentskills.io) standard.
 
-Create a persona that cherry-picks specific skills from it:
+Create a harness that cherry-picks specific skills from it:
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/my-dev/.claude-plugin
@@ -25,7 +25,7 @@ cat > /tmp/ynh-tutorial/my-dev/.claude-plugin/plugin.json << 'EOF'
 {
   "name": "my-dev",
   "version": "0.1.0",
-  "description": "My development persona"
+  "description": "My development harness"
 }
 EOF
 
@@ -120,7 +120,7 @@ cat > /tmp/ynh-tutorial/with-anthropic/.claude-plugin/plugin.json << 'EOF'
 {
   "name": "with-anthropic",
   "version": "0.1.0",
-  "description": "Persona with Anthropic official skills"
+  "description": "Harness with Anthropic official skills"
 }
 EOF
 
@@ -158,7 +158,7 @@ cat > /tmp/ynh-tutorial/with-vercel/.claude-plugin/plugin.json << 'EOF'
 {
   "name": "with-vercel",
   "version": "0.1.0",
-  "description": "Persona with Vercel skills"
+  "description": "Harness with Vercel skills"
 }
 EOF
 
@@ -187,7 +187,7 @@ with-vercel "what skills do you have?"
 
 ## T3.5: Mixed sources — own + third-party
 
-Combine skills from your own repos and third-party repos into one persona:
+Combine skills from your own repos and third-party repos into one harness:
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/full-stack/.claude-plugin
@@ -196,7 +196,7 @@ cat > /tmp/ynh-tutorial/full-stack/.claude-plugin/plugin.json << 'EOF'
 {
   "name": "full-stack",
   "version": "0.1.0",
-  "description": "Full-stack persona: own skills + third-party"
+  "description": "Full-stack harness: own skills + third-party"
 }
 EOF
 
@@ -238,9 +238,9 @@ ls ~/.ynh/run/full-stack/.claude/skills/
 # Expected: dev-project/ dev-quality/ dev-review/ go-lang/ frontend-design/
 ```
 
-## T3.6: Local — embedded skills in the persona
+## T3.6: Local — embedded skills in the harness
 
-A persona can have its own skills alongside remote includes:
+A harness can have its own skills alongside remote includes:
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/mixed/.claude-plugin
@@ -253,10 +253,10 @@ EOF
 cat > /tmp/ynh-tutorial/mixed/skills/my-custom-skill/SKILL.md << 'EOF'
 ---
 name: my-custom-skill
-description: A skill unique to this persona — not from any repo.
+description: A skill unique to this harness — not from any repo.
 ---
 
-This skill lives directly in the persona directory.
+This skill lives directly in the harness directory.
 It is not pulled from Git. It exists nowhere else.
 EOF
 
@@ -288,7 +288,7 @@ ls ~/.ynh/run/mixed/.claude/skills/
 # Expected: my-custom-skill/ take-a-moment/ (local + remote)
 ```
 
-For rapid iteration, keep the persona on disk and reinstall:
+For rapid iteration, keep the harness on disk and reinstall:
 
 ```bash
 # Edit locally, install, test, repeat
@@ -316,7 +316,7 @@ git -C /tmp/ynh-tutorial/local-lib init
 git -C /tmp/ynh-tutorial/local-lib add .
 git -C /tmp/ynh-tutorial/local-lib commit -m "init"
 
-# Reference it in a persona
+# Reference it in a harness
 mkdir -p /tmp/ynh-tutorial/local-ref/.claude-plugin
 cat > /tmp/ynh-tutorial/local-ref/.claude-plugin/plugin.json << 'EOF'
 {"name": "local-ref", "version": "0.1.0"}
@@ -405,20 +405,20 @@ Checking github.com/eyelock/assistants...
   Already up to date.
 Checking github.com/anthropics/skills...
   Already up to date.
-Checked 2 source(s) for persona "full-stack", 0 updated.
+Checked 2 source(s) for harness "full-stack", 0 updated.
 ```
 
 If upstream has changed, you'll see `Updated.` instead.
 
 ## T3.10: Install from a monorepo
 
-The `eyelock/assistants` repo has pre-built personas under `ynh/`:
+The `eyelock/assistants` repo has pre-built harnesses under `ynh/`:
 
 ```bash
 ynh install github.com/eyelock/assistants --path ynh/david
 ```
 
-This installs the `david` persona, which already has includes configured to pull dev skills, Go skills, infrastructure skills, and pause skills.
+This installs the `david` harness, which already has includes configured to pull dev skills, Go skills, infrastructure skills, and pause skills.
 
 The `--path` flag scopes into a subdirectory of the repo, installing only what's at that path.
 
@@ -445,7 +445,7 @@ cat > ~/.ynh/config.json << 'EOF'
 EOF
 ```
 
-Now try to run a persona that includes a non-eyelock source:
+Now try to run a harness that includes a non-eyelock source:
 
 ```bash
 with-anthropic "hello" 2>&1
@@ -454,7 +454,7 @@ with-anthropic "hello" 2>&1
 
 The `anthropics/skills` source doesn't match `github.com/eyelock/**`, so it's rejected at run time when ynh tries to resolve the includes.
 
-The `full-stack` persona also fails (it includes both eyelock and anthropic sources):
+The `full-stack` harness also fails (it includes both eyelock and anthropic sources):
 
 ```bash
 full-stack "hello" 2>&1
@@ -479,7 +479,7 @@ cat > ~/.ynh/config.json << 'EOF'
 EOF
 ```
 
-Now the same persona works:
+Now the same harness works:
 
 ```bash
 full-stack "what skills do you have?"
@@ -513,9 +513,9 @@ ynh uninstall my-dev with-anthropic with-vercel full-stack mixed local-ref pinne
 - **Your own repos:** Use `github.com/eyelock/assistants` (or any Git URL) with `path` and `pick`
 - **Third-party repos:** Skills from [skills.sh](https://skills.sh), [anthropics/skills](https://github.com/anthropics/skills), [vercel-labs/skills](https://github.com/vercel-labs/skills) — any agentskills.io-compatible repo works
 - **Local paths:** Start Git URLs with `/` or `.` to use local checkouts (faster, no clone)
-- **Embedded skills:** Put skills directly in the persona's `skills/` directory
+- **Embedded skills:** Put skills directly in the harness's `skills/` directory
 - **`pick` is the differentiator:** No vendor natively supports cherry-picking individual skills from a larger repo. ynh does.
-- **Mixing sources:** Combine your own skills, third-party skills, and local skills in one persona
+- **Mixing sources:** Combine your own skills, third-party skills, and local skills in one harness
 - **Offline-ready:** All includes are fetched at install time — `ynh run` works offline
 - `ref` pins to branches, tags, or commits
 - `ynh update` refreshes cached repos
@@ -523,4 +523,4 @@ ynh uninstall my-dev with-anthropic with-vercel full-stack mixed local-ref pinne
 
 ## Next
 
-[Tutorial 4: Delegation](tutorial/04-delegation.md) — chain personas together as subagents.
+[Tutorial 4: Delegation](tutorial/04-delegation.md) — chain harnesses together as subagents.

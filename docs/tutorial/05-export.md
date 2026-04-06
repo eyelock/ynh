@@ -1,6 +1,6 @@
 # Tutorial 5: Export
 
-Produce vendor-native distributable plugins from personas. The exported output passes strict vendor validation and can be loaded directly by Claude Code, Cursor, or Codex.
+Produce vendor-native distributable plugins from harnesses. The exported output passes strict vendor validation and can be loaded directly by Claude Code, Cursor, or Codex.
 
 ## Prerequisites
 
@@ -11,7 +11,7 @@ rm -rf /tmp/ynh-tutorial
 mkdir -p /tmp/ynh-tutorial
 ```
 
-## T5.1: Create a persona to export
+## T5.1: Create a harness to export
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/exportable/.claude-plugin
@@ -22,7 +22,7 @@ cat > /tmp/ynh-tutorial/exportable/.claude-plugin/plugin.json << 'EOF'
 {
   "name": "exportable",
   "version": "1.0.0",
-  "description": "A persona designed for cross-vendor export",
+  "description": "A harness designed for cross-vendor export",
   "author": {"name": "tutorial"}
 }
 EOF
@@ -49,7 +49,7 @@ Run automated checks on the codebase and report results.
 EOF
 
 cat > /tmp/ynh-tutorial/exportable/instructions.md << 'EOF'
-You are a code quality persona. Focus on correctness and security.
+You are a code quality harness. Focus on correctness and security.
 EOF
 
 cat > /tmp/ynh-tutorial/exportable/metadata.json << 'EOF'

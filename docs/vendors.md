@@ -1,6 +1,6 @@
 # Vendor Support
 
-ynh works with multiple AI coding assistants. The vendor determines which CLI is launched and where config files are placed. Your personas and artifacts stay the same regardless of vendor.
+ynh works with multiple AI coding assistants. The vendor determines which CLI is launched and where config files are placed. Your harnesss and artifacts stay the same regardless of vendor.
 
 ## Supported Vendors
 
@@ -40,7 +40,7 @@ Installations are tracked in `~/.ynh/symlinks.json`. Use `ynh status` to see all
 
 ## Choosing a Vendor
 
-**Per-persona** (in `metadata.json`):
+**Per-harness** (in `metadata.json`):
 
 ```json
 {
@@ -62,11 +62,11 @@ david -v codex
 {"default_vendor": "claude"}
 ```
 
-Resolution order: **CLI flag (`-v`) > `YNH_VENDOR` env var > persona default > global config**.
+Resolution order: **CLI flag (`-v`) > `YNH_VENDOR` env var > harness default > global config**.
 
 ## Vendor Notes
 
-**Claude Code** - Full interactive and non-interactive support. Uses `--plugin-dir` for artifact loading and `--append-system-prompt` for persona instructions. Requires `claude` CLI installed. See [claude.ai/code](https://claude.ai/code).
+**Claude Code** - Full interactive and non-interactive support. Uses `--plugin-dir` for artifact loading and `--append-system-prompt` for harness instructions. Requires `claude` CLI installed. See [claude.ai/code](https://claude.ai/code).
 
 **OpenAI Codex** - Full interactive and non-interactive support. Uses symlink-based artifact installation. Requires `codex` CLI installed. See [openai.com/codex](https://openai.com/codex).
 

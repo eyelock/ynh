@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/config"
-	"github.com/eyelock/ynh/internal/persona"
+	"github.com/eyelock/ynh/internal/harness"
 )
 
 func TestParseRunArgs(t *testing.T) {
@@ -134,7 +134,7 @@ func TestParseRunArgs(t *testing.T) {
 }
 
 func TestResolveVendor_FlagTakesPriority(t *testing.T) {
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name:          "test",
 		DefaultVendor: "codex",
 	}
@@ -148,8 +148,8 @@ func TestResolveVendor_FlagTakesPriority(t *testing.T) {
 	}
 }
 
-func TestResolveVendor_PersonaDefault(t *testing.T) {
-	p := &persona.Persona{
+func TestResolveVendor_HarnessDefault(t *testing.T) {
+	p := &harness.Harness{
 		Name:          "test",
 		DefaultVendor: "codex",
 	}
@@ -167,7 +167,7 @@ func TestResolveVendor_GlobalConfig(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test",
 	}
 
@@ -184,7 +184,7 @@ func TestResolveVendor_GlobalConfig(t *testing.T) {
 func TestResolveVendor_EnvVar(t *testing.T) {
 	t.Setenv("YNH_VENDOR", "codex")
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name:          "test",
 		DefaultVendor: "claude",
 	}
@@ -201,7 +201,7 @@ func TestResolveVendor_EnvVar(t *testing.T) {
 func TestResolveVendor_FlagBeatsEnvVar(t *testing.T) {
 	t.Setenv("YNH_VENDOR", "codex")
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name:          "test",
 		DefaultVendor: "cursor",
 	}
@@ -218,7 +218,7 @@ func TestResolveVendor_FlagBeatsEnvVar(t *testing.T) {
 func TestResolveVendor_EnvVarFallthrough(t *testing.T) {
 	t.Setenv("YNH_VENDOR", "")
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name:          "test",
 		DefaultVendor: "codex",
 	}
@@ -252,12 +252,12 @@ func TestGenerateLauncher(t *testing.T) {
 	}
 }
 
-// installTestPersona creates a fake installed persona with a launcher and run dir.
-func installTestPersona(t *testing.T, name string) {
+// installTestHarness creates a fake installed harness with a launcher and run dir.
+func installTestHarness(t *testing.T, name string) {
 	t.Helper()
 
-	// Create persona directory with plugin manifest
-	installDir := persona.InstalledDir(name)
+	// Create harness directory with plugin manifest
+	installDir := harness.InstalledDir(name)
 	pluginDir := filepath.Join(installDir, ".claude-plugin")
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -290,21 +290,21 @@ func TestCmdUninstall_RemovesEverything(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 
-	installTestPersona(t, "david")
+	installTestHarness(t, "david")
 
 	// Verify everything exists before uninstall
-	installDir := persona.InstalledDir("david")
+	installDir := harness.InstalledDir("david")
 	if _, err := os.Stat(installDir); err != nil {
-		t.Fatalf("persona not installed: %v", err)
+		t.Fatalf("harness not installed: %v", err)
 	}
 
 	if err := cmdUninstall([]string{"david"}); err != nil {
 		t.Fatalf("cmdUninstall failed: %v", err)
 	}
 
-	// Persona directory should be gone
+	// Harness directory should be gone
 	if _, err := os.Stat(installDir); !os.IsNotExist(err) {
-		t.Error("persona directory still exists after uninstall")
+		t.Error("harness directory still exists after uninstall")
 	}
 
 	// Launcher should be gone
@@ -330,7 +330,7 @@ func TestCmdUninstall_NotInstalled(t *testing.T) {
 
 	err := cmdUninstall([]string{"nonexistent"})
 	if err == nil {
-		t.Fatal("expected error for uninstalling nonexistent persona")
+		t.Fatal("expected error for uninstalling nonexistent harness")
 	}
 	if !strings.Contains(err.Error(), "not installed") {
 		t.Errorf("unexpected error: %v", err)
@@ -355,18 +355,18 @@ func TestCmdList_Empty(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Should not error when no personas installed
+	// Should not error when no harnesses installed
 	if err := cmdList(); err != nil {
 		t.Fatalf("cmdList failed: %v", err)
 	}
 }
 
-func TestCmdList_WithPersonas(t *testing.T) {
+func TestCmdList_WithHarnesses(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 
-	installTestPersona(t, "alice")
-	installTestPersona(t, "bob")
+	installTestHarness(t, "alice")
+	installTestHarness(t, "bob")
 
 	if err := cmdList(); err != nil {
 		t.Fatalf("cmdList failed: %v", err)
@@ -376,15 +376,15 @@ func TestCmdList_WithPersonas(t *testing.T) {
 func TestFormatProvenance(t *testing.T) {
 	tests := []struct {
 		name string
-		prov *persona.Provenance
+		prov *harness.Provenance
 		want string
 	}{
 		{"nil", nil, "-"},
-		{"local", &persona.Provenance{SourceType: "local", Source: "./my-persona"}, "./my-persona"},
-		{"git no path", &persona.Provenance{SourceType: "git", Source: "github.com/eyelock/assistants"}, "eyelock/assistants"},
-		{"git with path", &persona.Provenance{SourceType: "git", Source: "github.com/eyelock/assistants", Path: "ynh/david"}, "eyelock/assistants/ynh/david"},
-		{"registry", &persona.Provenance{SourceType: "registry", Source: "github.com/eyelock/assistants", RegistryName: "my-reg"}, "eyelock/assistants (my-reg)"},
-		{"registry with path", &persona.Provenance{SourceType: "registry", Source: "github.com/eyelock/assistants", Path: "ynh/david", RegistryName: "my-reg"}, "eyelock/assistants/ynh/david (my-reg)"},
+		{"local", &harness.Provenance{SourceType: "local", Source: "./my-harness"}, "./my-harness"},
+		{"git no path", &harness.Provenance{SourceType: "git", Source: "github.com/eyelock/assistants"}, "eyelock/assistants"},
+		{"git with path", &harness.Provenance{SourceType: "git", Source: "github.com/eyelock/assistants", Path: "ynh/david"}, "eyelock/assistants/ynh/david"},
+		{"registry", &harness.Provenance{SourceType: "registry", Source: "github.com/eyelock/assistants", RegistryName: "my-reg"}, "eyelock/assistants (my-reg)"},
+		{"registry with path", &harness.Provenance{SourceType: "registry", Source: "github.com/eyelock/assistants", Path: "ynh/david", RegistryName: "my-reg"}, "eyelock/assistants/ynh/david (my-reg)"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -399,25 +399,25 @@ func TestFormatProvenance(t *testing.T) {
 func TestFormatIncludes(t *testing.T) {
 	tests := []struct {
 		name     string
-		includes []persona.Include
+		includes []harness.Include
 		want     string
 	}{
 		{"empty", nil, "0"},
-		{"single no pick", []persona.Include{
-			{GitSource: persona.GitSource{Git: "github.com/example/skills", Path: "dev"}},
+		{"single no pick", []harness.Include{
+			{GitSource: harness.GitSource{Git: "github.com/example/skills", Path: "dev"}},
 		}, "example/skills/dev"},
-		{"single with pick", []persona.Include{
-			{GitSource: persona.GitSource{Git: "github.com/example/skills", Path: "dev"}, Pick: []string{"a", "b"}},
+		{"single with pick", []harness.Include{
+			{GitSource: harness.GitSource{Git: "github.com/example/skills", Path: "dev"}, Pick: []string{"a", "b"}},
 		}, "example/skills/dev [2]"},
-		{"with ref", []persona.Include{
-			{GitSource: persona.GitSource{Git: "github.com/example/skills", Path: "dev", Ref: "v1.2.0"}},
+		{"with ref", []harness.Include{
+			{GitSource: harness.GitSource{Git: "github.com/example/skills", Path: "dev", Ref: "v1.2.0"}},
 		}, "example/skills/dev@v1.2.0"},
-		{"main ref omitted", []persona.Include{
-			{GitSource: persona.GitSource{Git: "github.com/example/skills", Ref: "main"}},
+		{"main ref omitted", []harness.Include{
+			{GitSource: harness.GitSource{Git: "github.com/example/skills", Ref: "main"}},
 		}, "example/skills"},
-		{"multiple", []persona.Include{
-			{GitSource: persona.GitSource{Git: "github.com/example/skills", Path: "dev"}, Pick: []string{"a", "b"}},
-			{GitSource: persona.GitSource{Git: "github.com/example/skills", Path: "infra"}, Pick: []string{"c"}},
+		{"multiple", []harness.Include{
+			{GitSource: harness.GitSource{Git: "github.com/example/skills", Path: "dev"}, Pick: []string{"a", "b"}},
+			{GitSource: harness.GitSource{Git: "github.com/example/skills", Path: "infra"}, Pick: []string{"c"}},
 		}, "example/skills/dev [2], example/skills/infra [1]"},
 	}
 	for _, tt := range tests {
@@ -433,16 +433,16 @@ func TestFormatIncludes(t *testing.T) {
 func TestFormatDelegates(t *testing.T) {
 	tests := []struct {
 		name      string
-		delegates []persona.Delegate
+		delegates []harness.Delegate
 		want      string
 	}{
 		{"empty", nil, "0"},
-		{"single", []persona.Delegate{
-			{GitSource: persona.GitSource{Git: "github.com/example/team"}},
+		{"single", []harness.Delegate{
+			{GitSource: harness.GitSource{Git: "github.com/example/team"}},
 		}, "example/team"},
-		{"with path and ref", []persona.Delegate{
-			{GitSource: persona.GitSource{Git: "github.com/example/mono", Path: "personas/ops", Ref: "v2"}},
-		}, "example/mono/personas/ops@v2"},
+		{"with path and ref", []harness.Delegate{
+			{GitSource: harness.GitSource{Git: "github.com/example/mono", Path: "harnesses/ops", Ref: "v2"}},
+		}, "example/mono/harnesses/ops@v2"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -459,9 +459,9 @@ func TestFormatArtifactSummary(t *testing.T) {
 	t.Setenv("HOME", dir)
 	t.Setenv("YNH_HOME", "")
 
-	// Create a persona with artifacts
-	personaDir := filepath.Join(dir, ".ynh", "personas", "artfmt")
-	installDir := filepath.Join(personaDir, ".claude-plugin")
+	// Create a harness with artifacts
+	harnessDir := filepath.Join(dir, ".ynh", "harnesses", "artfmt")
+	installDir := filepath.Join(harnessDir, ".claude-plugin")
 	if err := os.MkdirAll(installDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -472,7 +472,7 @@ func TestFormatArtifactSummary(t *testing.T) {
 
 	// Add 2 skills, 1 agent
 	for _, skill := range []string{"a", "b"} {
-		sd := filepath.Join(personaDir, "skills", skill)
+		sd := filepath.Join(harnessDir, "skills", skill)
 		if err := os.MkdirAll(sd, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -480,7 +480,7 @@ func TestFormatArtifactSummary(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	agentDir := filepath.Join(personaDir, "agents")
+	agentDir := filepath.Join(harnessDir, "agents")
 	if err := os.MkdirAll(agentDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -499,7 +499,7 @@ func TestFormatArtifactSummary_Empty(t *testing.T) {
 	t.Setenv("HOME", dir)
 	t.Setenv("YNH_HOME", "")
 
-	installTestPersona(t, "neart")
+	installTestHarness(t, "neart")
 	got := formatArtifactSummary("neart")
 	if got != "0" {
 		t.Errorf("formatArtifactSummary() = %q, want %q", got, "0")
@@ -510,7 +510,7 @@ func TestCmdInfo_Success(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 
-	installTestPersona(t, "david")
+	installTestHarness(t, "david")
 
 	err := cmdInfo([]string{"david"})
 	if err != nil {
@@ -522,13 +522,13 @@ func TestCmdInfo_NotFound(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh", "personas"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".ynh", "harnesses"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	err := cmdInfo([]string{"nonexistent"})
 	if err == nil {
-		t.Fatal("expected error for nonexistent persona")
+		t.Fatal("expected error for nonexistent harness")
 	}
 	if !strings.Contains(err.Error(), "not found") {
 		t.Errorf("unexpected error: %v", err)
@@ -550,8 +550,8 @@ func TestCmdInstall_WritesProvenance(t *testing.T) {
 	t.Setenv("HOME", dir)
 	t.Setenv("YNH_HOME", "")
 
-	// Create a local persona source
-	srcDir := filepath.Join(dir, "my-persona")
+	// Create a local harness source
+	srcDir := filepath.Join(dir, "my-harness")
 	pluginDir := filepath.Join(srcDir, ".claude-plugin")
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -566,8 +566,8 @@ func TestCmdInstall_WritesProvenance(t *testing.T) {
 		t.Fatalf("cmdInstall failed: %v", err)
 	}
 
-	// Load installed persona and check provenance
-	p, err := persona.Load("provtest")
+	// Load installed harness and check provenance
+	p, err := harness.Load("provtest")
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
@@ -605,7 +605,7 @@ func TestCmdUpdate_NotFound(t *testing.T) {
 
 	err := cmdUpdate([]string{"nonexistent"})
 	if err == nil {
-		t.Fatal("expected error for nonexistent persona")
+		t.Fatal("expected error for nonexistent harness")
 	}
 	if !strings.Contains(err.Error(), "not found") {
 		t.Errorf("unexpected error: %v", err)
@@ -616,12 +616,12 @@ func TestCmdUpdate_NoGitSources(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 
-	// Install a persona with no includes/delegates
-	installTestPersona(t, "minimal")
+	// Install a harness with no includes/delegates
+	installTestHarness(t, "minimal")
 
 	err := cmdUpdate([]string{"minimal"})
 	if err != nil {
-		t.Fatalf("cmdUpdate should succeed for persona with no git sources: %v", err)
+		t.Fatalf("cmdUpdate should succeed for harness with no git sources: %v", err)
 	}
 }
 
@@ -630,27 +630,27 @@ func TestCmdInstall_PathFlag(t *testing.T) {
 	t.Setenv("HOME", dir)
 	t.Setenv("YNH_HOME", "")
 
-	// Create a monorepo-style layout with a persona in a subdirectory
+	// Create a monorepo-style layout with a harness in a subdirectory
 	monoDir := filepath.Join(dir, "monorepo")
-	pluginDir := filepath.Join(monoDir, "personas", "alice", ".claude-plugin")
+	pluginDir := filepath.Join(monoDir, "harnesses", "alice", ".claude-plugin")
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"),
-		[]byte(`{"name":"alice","version":"0.1.0","description":"test persona"}`), 0o644); err != nil {
+		[]byte(`{"name":"alice","version":"0.1.0","description":"test harness"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	// Install with --path flag
-	err := cmdInstall([]string{monoDir, "--path", "personas/alice"})
+	err := cmdInstall([]string{monoDir, "--path", "harnesses/alice"})
 	if err != nil {
 		t.Fatalf("cmdInstall with --path failed: %v", err)
 	}
 
-	// Verify persona was installed
-	installDir := persona.InstalledDir("alice")
+	// Verify harness was installed
+	installDir := harness.InstalledDir("alice")
 	if _, err := os.Stat(filepath.Join(installDir, ".claude-plugin", "plugin.json")); err != nil {
-		t.Fatal("persona plugin.json not found after install")
+		t.Fatal("harness not found after install")
 	}
 }
 

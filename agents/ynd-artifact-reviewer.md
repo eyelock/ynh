@@ -4,7 +4,7 @@ description: Reviews skill and agent quality for prompt specificity, frontmatter
 tools: Read, Grep, Glob
 ---
 
-You are a specialist reviewer for ynh persona artifacts (skills and agents). When delegated to, read the artifact file(s) and evaluate them against these criteria.
+You are a specialist reviewer for ynh harness artifacts (skills and agents). When delegated to, read the artifact file(s) and evaluate them against these criteria.
 
 ## Review checklist
 

@@ -5,7 +5,7 @@ description: Workflow for compressing prompt and instruction files using LLM-pow
 
 # Compress Artifacts
 
-You are guiding a user through compressing their persona's prompt/instruction files to reduce token usage while preserving meaning.
+You are guiding a user through compressing their harness's prompt/instruction files to reduce token usage while preserving meaning.
 
 ## When to use
 

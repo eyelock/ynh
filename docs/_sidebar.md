@@ -1,7 +1,7 @@
 * **Guides**
   * [Overview](README.md)
   * [Getting Started](getting-started.md)
-  * [Persona Reference](personas.md)
+  * [Harness Reference](harnesses.md)
   * [Artifacts Guide](artifacts.md)
   * [Vendor Support](vendors.md)
   * [Agent Skills Standard](skills-standard.md)
@@ -11,7 +11,7 @@
 
 * **Tutorials**
   * [Tutorial Overview](tutorial/README.md)
-  * [1. First Persona](tutorial/01-first-persona.md)
+  * [1. First Harness](tutorial/01-first-harness.md)
   * [2. Vendors & Symlinks](tutorial/02-vendors-and-symlinks.md)
   * [3. Composition](tutorial/03-composition.md)
   * [4. Delegation](tutorial/04-delegation.md)

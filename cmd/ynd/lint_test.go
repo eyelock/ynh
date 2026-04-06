@@ -358,7 +358,7 @@ func TestHasTemplatePlaceholders(t *testing.T) {
 	}{
 		{"ynh install <output-dir>", true},
 		{"<name> --flag", true},
-		{"cd <persona-dir>", true},
+		{"cd <harness-dir>", true},
 		{"echo hello", false},
 		{"echo hello > file", false},
 		{"if [ $x -lt 5 ]; then echo ok; fi", false},

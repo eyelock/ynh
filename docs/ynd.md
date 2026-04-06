@@ -1,6 +1,6 @@
 # ynd Developer Tools
 
-`ynd` is a companion CLI for authoring and maintaining ynh personas. It scaffolds artifacts, validates structure, formats markdown, compresses prompts, inspects codebases to generate new skills and agents, exports personas as vendor-native plugins, and builds marketplaces.
+`ynd` is a companion CLI for authoring and maintaining ynh harnesses. It scaffolds artifacts, validates structure, formats markdown, compresses prompts, inspects codebases to generate new skills and agents, exports harnesses as vendor-native plugins, and builds marketplaces.
 
 ## Install
 
@@ -15,10 +15,10 @@ brew tap eyelock/tap && brew install ynh
 
 ### create
 
-Scaffold a new artifact or full persona.
+Scaffold a new artifact or full harness.
 
 ```bash
-ynd create persona my-team     # full persona directory structure
+ynd create harness my-team     # full harness directory structure
 ynd create skill commit        # skills/commit/SKILL.md
 ynd create agent reviewer      # agents/reviewer.md
 ynd create rule be-nice        # rules/be-nice.md
@@ -36,11 +36,11 @@ ynd lint agents/reviewer.md    # single file
 
 ### validate
 
-Validate persona structure: required files, frontmatter fields, directory layout.
+Validate harness structure: required files, frontmatter fields, directory layout.
 
 ```bash
-ynd validate                   # current persona directory
-ynd validate path/to/persona   # specific persona
+ynd validate                   # current harness directory
+ynd validate path/to/harness   # specific harness
 ```
 
 ### fmt
@@ -85,20 +85,20 @@ ynd inspect -o /tmp/out        # write artifacts to a custom directory
 
 ### export
 
-Export a persona as vendor-native plugins. Resolves all remote includes, flattens artifacts, and writes distributable output per vendor.
+Export a harness as vendor-native plugins. Resolves all remote includes, flattens artifacts, and writes distributable output per vendor.
 
 ```bash
-ynd export ./my-persona                          # all vendors → ./dist/my-persona/
-ynd export ./my-persona -v claude,cursor          # specific vendors only
-ynd export ./my-persona -o ./out                  # custom output directory
-ynd export ./my-persona --merged                  # single dir with dual manifests
-ynd export ./my-persona --clean                   # remove output dir before export
-ynd export github.com/user/repo --path personas/david  # from a monorepo
+ynd export ./my-harness                          # all vendors → ./dist/my-harness/
+ynd export ./my-harness -v claude,cursor          # specific vendors only
+ynd export ./my-harness -o ./out                  # custom output directory
+ynd export ./my-harness --merged                  # single dir with dual manifests
+ynd export ./my-harness --clean                   # remove output dir before export
+ynd export github.com/user/repo --path harnesses/david  # from a monorepo
 ```
 
 | Flag | Description |
 |------|-------------|
-| `-o, --output <dir>` | Output directory. Default: `./dist/<persona-name>/` |
+| `-o, --output <dir>` | Output directory. Default: `./dist/<harness-name>/` |
 | `-v, --vendor <names>` | Comma-separated vendors. Default: all registered (`claude,codex,cursor`) |
 | `--path <subdir>` | Subdirectory within source (for monorepos) |
 | `--merged` | Single output dir with all vendor manifests (for CI/marketplace use) |
@@ -107,7 +107,7 @@ ynd export github.com/user/repo --path personas/david  # from a monorepo
 **Output structure** (per-vendor mode):
 
 ```
-dist/my-persona/
+dist/my-harness/
 ├── claude/
 │   ├── .claude-plugin/plugin.json
 │   ├── skills/<name>/SKILL.md
@@ -139,7 +139,7 @@ See [Tutorial 5: Export](tutorial/05-export.md) for a guided walkthrough.
 
 ### marketplace build
 
-Build a marketplace from a collection of personas and pre-built plugins. Each entry is exported with dual vendor manifests and indexed.
+Build a marketplace from a collection of harnesses and pre-built plugins. Each entry is exported with dual vendor manifests and indexed.
 
 ```bash
 ynd marketplace build                             # uses ./marketplace.json
@@ -163,14 +163,14 @@ ynd marketplace build --clean                     # remove output dir before bui
   "owner": { "name": "My Org" },
   "entries": [
     { "type": "plugin", "source": "./plugins/foo" },
-    { "type": "persona", "source": "./personas/bar" },
-    { "type": "persona", "source": "github.com/user/repo", "path": "personas/baz" }
+    { "type": "harness", "source": "./harnesses/bar" },
+    { "type": "harness", "source": "github.com/user/repo", "path": "harnesses/baz" }
   ]
 }
 ```
 
 - `plugin` entries are copied as-is (already in vendor-native format)
-- `persona` entries are fully exported — includes resolved, artifacts flattened
+- `harness` entries are fully exported — includes resolved, artifacts flattened
 - Codex is excluded (no marketplace system)
 
 **Output structure:**
@@ -207,8 +207,8 @@ See [Tutorial 6: Marketplace](tutorial/06-marketplace.md) for a guided walkthrou
 ## Examples
 
 ```bash
-# Bootstrap a new persona and validate it
-ynd create persona ops-team
+# Bootstrap a new harness and validate it
+ynd create harness ops-team
 cd ops-team
 ynd validate
 
@@ -225,9 +225,9 @@ ynd compress -y instructions.md
 cd /path/to/my-app
 ynd inspect
 
-# Export a persona as vendor-native plugins
+# Export a harness as vendor-native plugins
 ynd export ./ops-team -v claude,cursor
 
-# Build a marketplace from multiple personas
+# Build a marketplace from multiple harnesses
 ynd marketplace build marketplace.json -o ./dist --clean
 ```

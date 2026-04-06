@@ -1,6 +1,6 @@
 # Marketplace & Distribution
 
-ynh can generate vendor-native marketplace indexes from collections of personas and plugins. This page covers how each vendor's marketplace system works, the state of cross-vendor distribution, and how ynh bridges the differences.
+ynh can generate vendor-native marketplace indexes from collections of harnesses and plugins. This page covers how each vendor's marketplace system works, the state of cross-vendor distribution, and how ynh bridges the differences.
 
 ## The Landscape
 
@@ -246,11 +246,11 @@ For these reasons, ynh excludes Codex from marketplace generation. When building
 
 ## ynh and Marketplaces
 
-ynh acts as the translation layer between your persona definition and vendor-native distribution formats. The `ynd marketplace build` command takes a `marketplace.json` config, resolves all persona includes, and produces a Git-ready directory with dual vendor indexes.
+ynh acts as the translation layer between your harness definition and vendor-native distribution formats. The `ynd marketplace build` command takes a `marketplace.json` config, resolves all harness includes, and produces a Git-ready directory with dual vendor indexes.
 
 ### What ynh Does
 
-1. **Reads** your `marketplace.json` config listing personas and plugins
+1. **Reads** your `marketplace.json` config listing harnesses and plugins
 2. **Resolves** all remote includes (Git repos, pick filtering, monorepo subpaths)
 3. **Exports** each entry as a merged plugin with both `.claude-plugin/` and `.cursor-plugin/` manifests
 4. **Generates** vendor-native `marketplace.json` indexes for Claude Code and Cursor
@@ -264,21 +264,21 @@ ynh's `marketplace.json` is a build config — it describes *what* to include in
 {
   "name": "my-marketplace",
   "owner": { "name": "My Org" },
-  "description": "Skills and personas for the team",
+  "description": "Skills and harnesses for the team",
   "entries": [
     {
       "type": "plugin",
       "source": "./plugins/formatter"
     },
     {
-      "type": "persona",
-      "source": "./personas/reviewer",
+      "type": "harness",
+      "source": "./harnesses/reviewer",
       "description": "Override description for the marketplace"
     },
     {
-      "type": "persona",
+      "type": "harness",
       "source": "github.com/user/repo",
-      "path": "personas/baz"
+      "path": "harnesses/baz"
     }
   ]
 }
@@ -290,7 +290,7 @@ ynh's `marketplace.json` is a build config — it describes *what* to include in
 | `owner.name` | Yes | Publisher name |
 | `owner.email` | No | Contact email |
 | `description` | No | Marketplace description |
-| `entries[].type` | Yes | `"persona"` or `"plugin"` |
+| `entries[].type` | Yes | `"harness"` or `"plugin"` |
 | `entries[].source` | Yes | Local path or Git URL |
 | `entries[].description` | No | Overrides plugin.json description |
 | `entries[].version` | No | Overrides plugin.json version |
@@ -299,7 +299,7 @@ ynh's `marketplace.json` is a build config — it describes *what* to include in
 ### Entry Types
 
 - **`plugin`** — a self-contained plugin directory (already has `.claude-plugin/plugin.json`). Copied as-is with missing vendor manifests generated.
-- **`persona`** — a ynh persona (has `metadata.json` with includes). Fully exported: remote includes resolved, pick filtering applied, delegates generated, dual manifests written.
+- **`harness`** — a ynh harness (has `metadata.json` with includes). Fully exported: remote includes resolved, pick filtering applied, delegates generated, dual manifests written.
 
 ### Output Structure
 

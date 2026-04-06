@@ -8,7 +8,7 @@ import (
 	"github.com/eyelock/ynh/internal/resolver"
 )
 
-// GenerateInstructions writes instruction files from the persona's instructions.md.
+// GenerateInstructions writes instruction files from the harness's instructions.md.
 //
 // Always writes outputDir/AGENTS.md (the universal format).
 // If vendorInstructionsFile is non-empty and differs from "AGENTS.md",
@@ -30,7 +30,7 @@ func GenerateInstructions(instructionsPath string, outputDir string, vendorInstr
 }
 
 // DiscoverInstructions finds the last instructions.md across all resolved content.
-// Later sources override earlier ones (persona's own instructions.md wins).
+// Later sources override earlier ones (harness's own instructions.md wins).
 // Returns empty string if none found.
 func DiscoverInstructions(content []resolver.ResolvedContent) string {
 	var found string

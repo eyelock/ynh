@@ -46,7 +46,7 @@ func (c *Claude) LaunchNonInteractive(configPath string, prompt string, extraArg
 
 // buildClaudeArgs constructs the argument list for the Claude Code CLI.
 // It adds --plugin-dir for artifact loading and --append-system-prompt
-// for persona instructions, then appends any vendor pass-through args.
+// for harness instructions, then appends any vendor pass-through args.
 func buildClaudeArgs(configPath string, extraArgs []string) []string {
 	args := []string{"claude"}
 
@@ -54,7 +54,7 @@ func buildClaudeArgs(configPath string, extraArgs []string) []string {
 	pluginDir := filepath.Join(configPath, ".claude")
 	args = append(args, "--plugin-dir", pluginDir)
 
-	// Inject persona instructions if present.
+	// Inject harness instructions if present.
 	instructionsPath := filepath.Join(configPath, "CLAUDE.md")
 	if data, err := os.ReadFile(instructionsPath); err == nil && len(data) > 0 {
 		args = append(args, "--append-system-prompt", string(data))

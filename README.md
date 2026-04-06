@@ -1,16 +1,16 @@
 # ynh
 
-A persona manager for AI coding assistants. Bundle skills, agents, rules, and commands into named personas, then launch them with any vendor CLI.
+A harness template manager for AI coding assistants. Bundle skills, agents, rules, and commands into named harnesses, then launch them with any vendor CLI.
 
-> **Note**: This is a personal project developed in my spare time. It's an exploration of the varying approaches to marketplace/distribution across AI vendors.
+> **Note**: This is a harnessl project developed in my spare time. It's an exploration of the varying approaches to marketplace/distribution across AI vendors.
 
 **[Full Documentation](https://eyelock.github.io/ynh)**
 
 ```bash
-ynh install github.com/david/my-persona
+ynh install github.com/david/my-harness
 david                                    # interactive session
 david "review this PR"                   # non-interactive mode
-david -v codex                           # same persona, different vendor
+david -v codex                           # same harness, different vendor
 david --model opus -- "fix this bug"     # pass flags through to vendor CLI
 ```
 
@@ -30,12 +30,12 @@ echo 'export PATH="$HOME/.ynh/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-### 2. Create a persona
+### 2. Create a harness
 
 Create a directory with a `.claude-plugin/plugin.json` and your artifacts:
 
 ```
-my-persona/
+my-harness/
 ├── .claude-plugin/
 │   └── plugin.json           # required - name, version
 ├── metadata.json             # optional - vendor, includes, delegates
@@ -57,7 +57,7 @@ The plugin manifest (`.claude-plugin/plugin.json`):
 {
   "name": "david",
   "version": "0.1.0",
-  "description": "David's personal coding persona"
+  "description": "David's personal coding harness"
 }
 ```
 
@@ -74,23 +74,23 @@ Optional metadata (`metadata.json`):
 ### 3. Install and run
 
 ```bash
-ynh install ./my-persona
-ynh install github.com/org/monorepo --path personas/david
+ynh install ./my-harness
+ynh install github.com/org/monorepo --path harnesses/david
 david
 ```
 
 ## Project Instructions
 
-A persona can include an `instructions.md` that maps to the vendor's project instructions file:
+A harness can include an `instructions.md` that maps to the vendor's project instructions file:
 
 ```
-my-persona/
+my-harness/
 ├── .claude-plugin/
 │   └── plugin.json
 └── instructions.md       # becomes CLAUDE.md, codex.md, or .cursorrules
 ```
 
-If multiple sources provide `instructions.md`, the persona's own file takes priority. See the [Artifacts Guide](docs/artifacts.md#project-instructions) for details.
+If multiple sources provide `instructions.md`, the harness's own file takes priority. See the [Artifacts Guide](docs/artifacts.md#project-instructions) for details.
 
 ## Adding Artifacts
 
@@ -130,7 +130,7 @@ commands/check.md
 
 ### Embedding vs Including
 
-Artifacts can live **directly in your persona** (embedded) or be **pulled from Git repos** (included):
+Artifacts can live **directly in your harness** (embedded) or be **pulled from Git repos** (included):
 
 ```json
 {
@@ -149,13 +149,13 @@ Artifacts can live **directly in your persona** (embedded) or be **pulled from G
       }
     ],
     "delegates_to": [
-      {"git": "github.com/eyelock/team-dev-persona"}
+      {"git": "github.com/eyelock/team-dev-harness"}
     ]
   }
 }
 ```
 
-Embedded artifacts (files in the persona directory) are always included. External artifacts are fetched from Git at runtime. Shorthand URLs (`github.com/...`) and `git@` URLs both use SSH. Use `https://` explicitly for HTTPS.
+Embedded artifacts (files in the harness directory) are always included. External artifacts are fetched from Git at runtime. Shorthand URLs (`github.com/...`) and `git@` URLs both use SSH. Use `https://` explicitly for HTTPS.
 
 ## Vendor Support
 
@@ -165,10 +165,10 @@ Each vendor gets the launch strategy that matches its capabilities:
 - **Claude** uses `--plugin-dir` for native plugin loading (clean `exec`, no running process)
 - **Codex/Cursor** use symlink-based installation (managed child process with signal forwarding)
 
-Vendor resolution order: **CLI flag > persona default > global config**.
+Vendor resolution order: **CLI flag > harness default > global config**.
 
 ```bash
-david                    # uses persona's default_vendor
+david                    # uses harness's default_vendor
 david -v codex           # override to codex
 ```
 
@@ -199,19 +199,19 @@ Global default in `~/.ynh/config.json`:
 
 ## Commands
 
-### ynh (Persona Manager)
+### ynh (Harness Template Manager)
 
 | Command | Description |
 |---------|-------------|
 | `ynh init` | Show ynh home path and setup instructions |
-| `ynh install <source> [--path <subdir>]` | Install persona from Git URL or local path |
-| `ynh uninstall <name>` | Remove an installed persona and its launcher (alias: `ynh remove`) |
-| `ynh update <name>` | Refresh cached Git repos for a persona |
-| `ynh run <name> [flags] [prompt]` | Launch a persona session |
-| `ynh ls` | List installed personas (alias: `ynh list`) |
-| `ynh info <name>` | Show detailed persona information |
-| `ynh search <query>` | Search registries for personas by name or keyword |
-| `ynh registry <subcommand>` | Manage persona registries (add, remove, list) |
+| `ynh install <source> [--path <subdir>]` | Install harness from Git URL or local path |
+| `ynh uninstall <name>` | Remove an installed harness and its launcher (alias: `ynh remove`) |
+| `ynh update <name>` | Refresh cached Git repos for a harness |
+| `ynh run <name> [flags] [prompt]` | Launch a harness session |
+| `ynh ls` | List installed harnesses (alias: `ynh list`) |
+| `ynh info <name>` | Show detailed harness information |
+| `ynh search <query>` | Search registries for harnesses by name or keyword |
+| `ynh registry <subcommand>` | Manage harness registries (add, remove, list) |
 | `ynh vendors` | List supported vendor adapters |
 | `ynh status` | Show symlink installations across projects |
 | `ynh prune` | Clean orphaned symlink installations |
@@ -221,14 +221,14 @@ Global default in `~/.ynh/config.json`:
 
 | Command | Description |
 |---------|-------------|
-| `ynd create <type> <name>` | Scaffold a persona, skill, agent, rule, or command |
+| `ynd create <type> <name>` | Scaffold a harness, skill, agent, rule, or command |
 | `ynd lint [files]` | Lint markdown, shell blocks, and config files |
-| `ynd validate [path]` | Validate persona structure and required fields |
+| `ynd validate [path]` | Validate harness structure and required fields |
 | `ynd fmt [files]` | Format markdown files |
 | `ynd compress [files]` | LLM-powered prompt compression with backup/restore |
 | `ynd inspect` | Interactive codebase analysis to generate skills and agents |
-| `ynd export <source> [flags]` | Export persona as vendor-native plugins |
-| `ynd marketplace build [flags]` | Build a marketplace from personas and plugins |
+| `ynd export <source> [flags]` | Export harness as vendor-native plugins |
+| `ynd marketplace build [flags]` | Build a marketplace from harnesses and plugins |
 
 See the [full command reference](https://eyelock.github.io/ynh/#/ynd) for all flags and options.
 
@@ -245,14 +245,14 @@ See the [full command reference](https://eyelock.github.io/ynh/#/ynd) for all fl
 
 Full documentation is available at **[eyelock.github.io/ynh](https://eyelock.github.io/ynh)**, including:
 
-- [Getting Started](https://eyelock.github.io/ynh/#/getting-started) — create and run your first persona
-- [Persona Reference](https://eyelock.github.io/ynh/#/personas) — plugin manifest, metadata, includes, delegates
+- [Getting Started](https://eyelock.github.io/ynh/#/getting-started) — create and run your first harness
+- [Harness Reference](https://eyelock.github.io/ynh/#/harnesses) — plugin manifest, metadata, includes, delegates
 - [Artifacts Guide](https://eyelock.github.io/ynh/#/artifacts) — skills, agents, rules, commands, and project instructions
 - [Vendor Support](https://eyelock.github.io/ynh/#/vendors) — Claude, Codex, Cursor capabilities and launch strategies
 - [Agent Skills Standard](https://eyelock.github.io/ynh/#/skills-standard) — cross-platform spec, discovery paths, catalog budget
 - [Marketplace & Distribution](https://eyelock.github.io/ynh/#/marketplace) — cross-vendor marketplace systems and ynh's marketplace builder
-- [Docker](https://eyelock.github.io/ynh/#/docker) — containerized personas and Docker image baking
-- [Tutorials](https://eyelock.github.io/ynh/#/tutorial/) — 8 progressive tutorials from first persona to marketplace generation
+- [Docker](https://eyelock.github.io/ynh/#/docker) — containerized harnesses and Docker image baking
+- [Tutorials](https://eyelock.github.io/ynh/#/tutorial/) — 8 progressive tutorials from first harness to marketplace generation
 
 ## License
 

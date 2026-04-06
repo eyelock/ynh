@@ -14,14 +14,14 @@ The core flow:
 .claude-plugin/plugin.json + metadata.json → resolve Git includes → assemble vendor config → launch vendor CLI
 ```
 
-Five packages: `internal/persona/`, `internal/plugin/`, `internal/resolver/`, `internal/assembler/`, `internal/vendor/`.
+Five packages: `internal/harness/`, `internal/plugin/`, `internal/resolver/`, `internal/assembler/`, `internal/vendor/`.
 
 Plus `internal/config/` for global config and `internal/symlink/` for symlink transaction logging.
 
 ## Two binaries
 
-- `ynh` (`cmd/ynh/`) - Persona manager: install, run, update, uninstall personas
-- `ynd` (`cmd/ynd/`) - Developer tools: create, lint, validate, fmt, compress persona artifacts
+- `ynh` (`cmd/ynh/`) - Harness manager: install, run, update, uninstall harnesses
+- `ynd` (`cmd/ynd/`) - Developer tools: create, lint, validate, fmt, compress harness artifacts
 
 Both share `internal/config` for version injection. `ynd` is self-contained in `cmd/ynd/` with its own command routing and file discovery.
 

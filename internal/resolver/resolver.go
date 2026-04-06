@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/config"
-	"github.com/eyelock/ynh/internal/persona"
+	"github.com/eyelock/ynh/internal/harness"
 )
 
 // ResolvedContent represents files extracted from a Git source.
@@ -32,7 +32,7 @@ type ResolveResult struct {
 
 // ResolveGitSource clones/updates a GitSource and returns the resolved base path,
 // scoped to the optional sub-path within the repo.
-func ResolveGitSource(gs persona.GitSource) (string, *RepoResult, error) {
+func ResolveGitSource(gs harness.GitSource) (string, *RepoResult, error) {
 	result, err := EnsureRepo(gs.Git, gs.Ref)
 	if err != nil {
 		return "", nil, fmt.Errorf("resolving %s: %w", gs.Git, err)
@@ -49,10 +49,10 @@ func ResolveGitSource(gs persona.GitSource) (string, *RepoResult, error) {
 	return basePath, &result, nil
 }
 
-// Resolve fetches all includes for a persona and returns resolved content
+// Resolve fetches all includes for a harness and returns resolved content
 // with resolution metadata (cloned vs cached).
 // If cfg is non-nil, remote sources are checked against the allowed sources list.
-func Resolve(p *persona.Persona, cfg *config.Config) ([]ResolveResult, error) {
+func Resolve(p *harness.Harness, cfg *config.Config) ([]ResolveResult, error) {
 	var results []ResolveResult
 
 	for _, inc := range p.Includes {
@@ -168,7 +168,7 @@ func CacheOnlyRepo(gitURL string, ref string) (RepoResult, error) {
 
 // ResolveGitSourceFromCache is like ResolveGitSource but uses CacheOnlyRepo
 // to avoid network access when the cache is warm.
-func ResolveGitSourceFromCache(gs persona.GitSource) (string, *RepoResult, error) {
+func ResolveGitSourceFromCache(gs harness.GitSource) (string, *RepoResult, error) {
 	result, err := CacheOnlyRepo(gs.Git, gs.Ref)
 	if err != nil {
 		return "", nil, fmt.Errorf("resolving %s: %w", gs.Git, err)
@@ -187,7 +187,7 @@ func ResolveGitSourceFromCache(gs persona.GitSource) (string, *RepoResult, error
 
 // ResolveFromCache is like Resolve but uses CacheOnlyRepo to avoid network
 // access when the cache is warm. Falls back to a network fetch on cache miss.
-func ResolveFromCache(p *persona.Persona, cfg *config.Config) ([]ResolveResult, error) {
+func ResolveFromCache(p *harness.Harness, cfg *config.Config) ([]ResolveResult, error) {
 	var results []ResolveResult
 
 	for _, inc := range p.Includes {

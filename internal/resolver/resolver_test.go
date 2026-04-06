@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/config"
-	"github.com/eyelock/ynh/internal/persona"
+	"github.com/eyelock/ynh/internal/harness"
 )
 
 func TestNormalizeGitURL(t *testing.T) {
@@ -89,7 +89,7 @@ func TestRepoDirName_DifferentRefsGetDifferentDirs(t *testing.T) {
 }
 
 func TestResolve_EmptyIncludes(t *testing.T) {
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name:     "empty",
 		Includes: nil,
 	}
@@ -173,11 +173,11 @@ func TestResolve_WithLocalRepo(t *testing.T) {
 	t.Setenv("YNH_HOME", "")
 	t.Setenv("HOME", t.TempDir())
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test",
-		Includes: []persona.Include{
+		Includes: []harness.Include{
 			{
-				GitSource: persona.GitSource{Git: srcDir},
+				GitSource: harness.GitSource{Git: srcDir},
 				Pick:      []string{"skills/hello"},
 			},
 		},
@@ -236,11 +236,11 @@ func TestResolve_WithPath_Monorepo(t *testing.T) {
 	t.Setenv("YNH_HOME", "")
 	t.Setenv("HOME", t.TempDir())
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test-monorepo",
-		Includes: []persona.Include{
+		Includes: []harness.Include{
 			{
-				GitSource: persona.GitSource{Git: srcDir, Path: "packages/ai-config"},
+				GitSource: harness.GitSource{Git: srcDir, Path: "packages/ai-config"},
 				Pick:      []string{"skills/deploy"},
 			},
 		},
@@ -283,11 +283,11 @@ func TestResolve_WithPath_NotFound(t *testing.T) {
 	t.Setenv("YNH_HOME", "")
 	t.Setenv("HOME", t.TempDir())
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test-bad-path",
-		Includes: []persona.Include{
+		Includes: []harness.Include{
 			{
-				GitSource: persona.GitSource{Git: srcDir, Path: "nonexistent/path"},
+				GitSource: harness.GitSource{Git: srcDir, Path: "nonexistent/path"},
 			},
 		},
 	}
@@ -327,11 +327,11 @@ func TestResolve_WithPath_NoPickIncludesAll(t *testing.T) {
 	t.Setenv("YNH_HOME", "")
 	t.Setenv("HOME", t.TempDir())
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test-path-all",
-		Includes: []persona.Include{
+		Includes: []harness.Include{
 			{
-				GitSource: persona.GitSource{Git: srcDir, Path: "config"},
+				GitSource: harness.GitSource{Git: srcDir, Path: "config"},
 			},
 		},
 	}
@@ -467,11 +467,11 @@ func TestResolve_BlockedByAllowList(t *testing.T) {
 		},
 	}
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test-blocked",
-		Includes: []persona.Include{
+		Includes: []harness.Include{
 			{
-				GitSource: persona.GitSource{Git: "github.com/untrusted-org/repo"},
+				GitSource: harness.GitSource{Git: "github.com/untrusted-org/repo"},
 			},
 		},
 	}
@@ -510,11 +510,11 @@ func TestResolve_AllowedByAllowList(t *testing.T) {
 		},
 	}
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test-allowed",
-		Includes: []persona.Include{
+		Includes: []harness.Include{
 			{
-				GitSource: persona.GitSource{Git: srcDir},
+				GitSource: harness.GitSource{Git: srcDir},
 			},
 		},
 	}
@@ -533,11 +533,11 @@ func TestResolve_EmptyAllowListBlocksAll(t *testing.T) {
 		AllowedRemoteSources: []string{},
 	}
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test-empty-list",
-		Includes: []persona.Include{
+		Includes: []harness.Include{
 			{
-				GitSource: persona.GitSource{Git: "github.com/any-org/any-repo"},
+				GitSource: harness.GitSource{Git: "github.com/any-org/any-repo"},
 			},
 		},
 	}
@@ -549,7 +549,7 @@ func TestResolve_EmptyAllowListBlocksAll(t *testing.T) {
 }
 
 func TestResolve_NilConfigAllowsAll(t *testing.T) {
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name:     "test-nil",
 		Includes: nil,
 	}
@@ -673,11 +673,11 @@ func TestResolveFromCache_UsesCache(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test-cached",
-		Includes: []persona.Include{
+		Includes: []harness.Include{
 			{
-				GitSource: persona.GitSource{Git: srcDir},
+				GitSource: harness.GitSource{Git: srcDir},
 				Pick:      []string{"skills/hello"},
 			},
 		},
@@ -706,11 +706,11 @@ func TestResolveFromCache_BlockedByAllowList(t *testing.T) {
 		},
 	}
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test-blocked-cache",
-		Includes: []persona.Include{
+		Includes: []harness.Include{
 			{
-				GitSource: persona.GitSource{Git: "github.com/untrusted-org/repo"},
+				GitSource: harness.GitSource{Git: "github.com/untrusted-org/repo"},
 			},
 		},
 	}
@@ -748,7 +748,7 @@ func TestResolveGitSourceFromCache_WithPath(t *testing.T) {
 	}
 
 	// Resolve with valid path
-	gs := persona.GitSource{Git: srcDir, Path: "sub"}
+	gs := harness.GitSource{Git: srcDir, Path: "sub"}
 	basePath, _, err := ResolveGitSourceFromCache(gs)
 	if err != nil {
 		t.Fatalf("ResolveGitSourceFromCache failed: %v", err)
@@ -759,7 +759,7 @@ func TestResolveGitSourceFromCache_WithPath(t *testing.T) {
 	}
 
 	// Resolve with invalid path
-	gsBad := persona.GitSource{Git: srcDir, Path: "nonexistent"}
+	gsBad := harness.GitSource{Git: srcDir, Path: "nonexistent"}
 	_, _, err = ResolveGitSourceFromCache(gsBad)
 	if err == nil {
 		t.Fatal("expected error for nonexistent path")
@@ -789,11 +789,11 @@ func TestResolveFromCache_WithPath(t *testing.T) {
 		t.Fatalf("EnsureRepo failed: %v", err)
 	}
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test-path-cache",
-		Includes: []persona.Include{
+		Includes: []harness.Include{
 			{
-				GitSource: persona.GitSource{Git: srcDir, Path: "pkg"},
+				GitSource: harness.GitSource{Git: srcDir, Path: "pkg"},
 				Pick:      []string{"skills/deploy"},
 			},
 		},

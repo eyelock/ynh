@@ -1,1 +1,0 @@
-You are a composed persona for testing. Follow all rules and use available skills.

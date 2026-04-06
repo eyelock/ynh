@@ -61,8 +61,8 @@ func TestDirPaths(t *testing.T) {
 		t.Errorf("HomeDir() = %q, want %q", home, want)
 	}
 
-	if PersonasDir() != filepath.Join(want, "personas") {
-		t.Errorf("PersonasDir() = %q, want %q", PersonasDir(), filepath.Join(want, "personas"))
+	if HarnessesDir() != filepath.Join(want, "harnesses") {
+		t.Errorf("HarnessesDir() = %q, want %q", HarnessesDir(), filepath.Join(want, "harnesses"))
 	}
 
 	if CacheDir() != filepath.Join(want, "cache") {
@@ -86,8 +86,8 @@ func TestYNHHomeEnvOverride(t *testing.T) {
 		t.Errorf("HomeDir() = %q, want %q", HomeDir(), customHome)
 	}
 
-	if PersonasDir() != filepath.Join(customHome, "personas") {
-		t.Errorf("PersonasDir() = %q, want %q", PersonasDir(), filepath.Join(customHome, "personas"))
+	if HarnessesDir() != filepath.Join(customHome, "harnesses") {
+		t.Errorf("HarnessesDir() = %q, want %q", HarnessesDir(), filepath.Join(customHome, "harnesses"))
 	}
 
 	if CacheDir() != filepath.Join(customHome, "cache") {
@@ -112,7 +112,7 @@ func TestEnsureDirs(t *testing.T) {
 	}
 
 	// Verify all directories were created
-	for _, sub := range []string{"", "personas", "cache", "bin", "run"} {
+	for _, sub := range []string{"", "harnesses", "cache", "bin", "run"} {
 		path := filepath.Join(dir, "custom-ynh", sub)
 		info, err := os.Stat(path)
 		if os.IsNotExist(err) {

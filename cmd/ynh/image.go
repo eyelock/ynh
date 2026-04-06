@@ -10,20 +10,20 @@ import (
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
-	"github.com/eyelock/ynh/internal/persona"
+	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
 )
 
-// imageTemplateData holds the data passed to the persona Dockerfile template.
+// imageTemplateData holds the data passed to the harness Dockerfile template.
 type imageTemplateData struct {
 	Base          string // e.g. ghcr.io/eyelock/ynh:latest
-	Name          string // persona name
+	Name          string // harness name
 	DefaultVendor string // e.g. "claude"
 	YnhVersion    string // version of ynh that assembled the image
 }
 
-// imageDockerfileTmpl is the Dockerfile template for persona images.
+// imageDockerfileTmpl is the Dockerfile template for harness images.
 // It layers pre-assembled vendor layouts on top of the base ynh image.
 var imageDockerfileTmpl = template.Must(template.New("Dockerfile").Parse(`FROM {{.Base}}
 
@@ -32,8 +32,8 @@ COPY --link --chown=ynh:ynh vendors/claude/ /home/ynh/.ynh/run/{{.Name}}/claude/
 COPY --link --chown=ynh:ynh vendors/codex/ /home/ynh/.ynh/run/{{.Name}}/codex/
 COPY --link --chown=ynh:ynh vendors/cursor/ /home/ynh/.ynh/run/{{.Name}}/cursor/
 
-# Persona source (metadata for ynh run)
-COPY --link --chown=ynh:ynh persona/ /home/ynh/.ynh/personas/{{.Name}}/
+# Harness source (metadata for ynh run)
+COPY --link --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/{{.Name}}/
 
 # Default vendor (override: docker run -e YNH_VENDOR=codex)
 ENV YNH_VENDOR={{.DefaultVendor}}
@@ -42,8 +42,8 @@ ENV YNH_VENDOR={{.DefaultVendor}}
 ENTRYPOINT ["tini", "-s", "--", "ynh", "run", "{{.Name}}"]
 CMD []
 
-LABEL dev.ynh.persona="{{.Name}}" \
-      dev.ynh.persona.default-vendor="{{.DefaultVendor}}" \
+LABEL dev.ynh.harness="{{.Name}}" \
+      dev.ynh.harness.default-vendor="{{.DefaultVendor}}" \
       dev.ynh.assembled-by="{{.YnhVersion}}"
 `))
 
@@ -108,7 +108,7 @@ func parseImageArgs(args []string) (imageArgs, error) {
 	return ia, nil
 }
 
-// generateDockerfile renders the persona Dockerfile template.
+// generateDockerfile renders the harness Dockerfile template.
 func generateDockerfile(data imageTemplateData) (string, error) {
 	var buf bytes.Buffer
 	if err := imageDockerfileTmpl.Execute(&buf, data); err != nil {
@@ -117,7 +117,7 @@ func generateDockerfile(data imageTemplateData) (string, error) {
 	return buf.String(), nil
 }
 
-// cmdImage builds a Docker image with a persona baked in.
+// cmdImage builds a Docker image with a harness baked in.
 func cmdImage(args []string) error {
 	ia, err := parseImageArgs(args)
 	if err != nil {
@@ -134,9 +134,9 @@ func cmdImage(args []string) error {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
-	// Load persona
-	var p *persona.Persona
-	var personaSrcDir string
+	// Load harness
+	var p *harness.Harness
+	var harnessSrcDir string
 
 	if ia.from != "" {
 		// Build from source (Git or local)
@@ -159,7 +159,7 @@ func cmdImage(args []string) error {
 			if err != nil {
 				return err
 			}
-			personaSrcDir = absPath
+			harnessSrcDir = absPath
 		} else {
 			if err := cfg.CheckRemoteSource(source); err != nil {
 				return err
@@ -168,27 +168,27 @@ func cmdImage(args []string) error {
 			if err != nil {
 				return fmt.Errorf("resolving %s: %w", source, err)
 			}
-			personaSrcDir = result.Path
+			harnessSrcDir = result.Path
 		}
 
 		if pathFlag != "" {
-			personaSrcDir = filepath.Join(personaSrcDir, pathFlag)
-			if _, err := os.Stat(personaSrcDir); os.IsNotExist(err) {
+			harnessSrcDir = filepath.Join(harnessSrcDir, pathFlag)
+			if _, err := os.Stat(harnessSrcDir); os.IsNotExist(err) {
 				return fmt.Errorf("path %q not found in source", pathFlag)
 			}
 		}
 
-		p, err = persona.LoadPluginDir(personaSrcDir)
+		p, err = harness.LoadPluginDir(harnessSrcDir)
 		if err != nil {
-			return fmt.Errorf("loading persona from source: %w", err)
+			return fmt.Errorf("loading harness from source: %w", err)
 		}
 	} else {
-		// Load from installed personas
-		p, err = persona.Load(ia.name)
+		// Load from installed harnesses
+		p, err = harness.Load(ia.name)
 		if err != nil {
-			return fmt.Errorf("persona %q not found: %w", ia.name, err)
+			return fmt.Errorf("harness %q not found: %w", ia.name, err)
 		}
-		personaSrcDir = persona.InstalledDir(ia.name)
+		harnessSrcDir = harness.InstalledDir(ia.name)
 	}
 
 	// Create temp build context
@@ -198,10 +198,10 @@ func cmdImage(args []string) error {
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	// Copy persona source into build context
-	personaDst := filepath.Join(tmpDir, "persona")
-	if err := assembler.CopyDir(personaSrcDir, personaDst); err != nil {
-		return fmt.Errorf("copying persona source: %w", err)
+	// Copy harness source into build context
+	harnessDst := filepath.Join(tmpDir, "harness")
+	if err := assembler.CopyDir(harnessSrcDir, harnessDst); err != nil {
+		return fmt.Errorf("copying harness source: %w", err)
 	}
 
 	// Resolve includes (with remote source allow-list check)
@@ -223,7 +223,7 @@ func cmdImage(args []string) error {
 		content = append(content, r.Content)
 	}
 	localContent := resolver.ResolvedContent{
-		BasePath: personaSrcDir,
+		BasePath: harnessSrcDir,
 	}
 	content = append(content, localContent)
 
@@ -276,11 +276,11 @@ func cmdImage(args []string) error {
 
 	// Verify docker is available
 	if _, err := exec.LookPath("docker"); err != nil {
-		return fmt.Errorf("docker not found in PATH: install Docker to build persona images")
+		return fmt.Errorf("docker not found in PATH: install Docker to build harness images")
 	}
 
 	// Build image
-	fmt.Fprintf(os.Stderr, "Building persona image %s...\n", ia.tag)
+	fmt.Fprintf(os.Stderr, "Building harness image %s...\n", ia.tag)
 	cmd := exec.Command("docker", "build", "-t", ia.tag, tmpDir)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -288,7 +288,7 @@ func cmdImage(args []string) error {
 		return fmt.Errorf("docker build failed: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "\nPersona image built: %s\n", ia.tag)
+	fmt.Fprintf(os.Stderr, "\nHarness image built: %s\n", ia.tag)
 	fmt.Fprintf(os.Stderr, "Run: docker run --rm -v $(pwd):/workspace -e ANTHROPIC_API_KEY %s -- \"your prompt\"\n", ia.tag)
 	return nil
 }

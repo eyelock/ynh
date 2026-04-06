@@ -8,17 +8,17 @@ Run ynh in a container with all vendor CLIs pre-installed. Designed for non-inte
 # Build the image
 docker compose build
 
-# Run a persona non-interactively
+# Run a harness non-interactively
 docker compose run --rm ynh run david "fix this bug"
 
-# List installed personas
+# List installed harnesses
 docker compose run --rm ynh ls
 
-# Install a persona from Git
-docker compose run --rm ynh install github.com/user/my-persona
+# Install a harness from Git
+docker compose run --rm ynh install github.com/user/my-harness
 
 # Install from a monorepo subdirectory
-docker compose run --rm ynh install github.com/org/assistants --path personas/david
+docker compose run --rm ynh install github.com/org/assistants --path harnesses/david
 ```
 
 ## Base Image
@@ -35,19 +35,19 @@ docker compose up
 
 The `docker-compose.yml` specifies both `image:` and `build:` — `docker compose up` uses the pre-built image if pulled, `docker compose build` builds locally.
 
-## Persona Images
+## Harness Images
 
-Build a self-contained Docker image with a specific persona baked in using `ynh image`:
+Build a self-contained Docker image with a specific harness baked in using `ynh image`:
 
 ```bash
-# Build from an installed persona
-ynh image david --tag ghcr.io/org/persona-david:latest
+# Build from an installed harness
+ynh image david --tag ghcr.io/org/harness-david:latest
 
 # Build from a Git source
-ynh image david --from github.com/org/personas --tag persona-david:latest
+ynh image david --from github.com/org/harnesses --tag harness-david:latest
 
 # Build from a monorepo subdirectory
-ynh image david --from github.com/org/monorepo --path personas/david
+ynh image david --from github.com/org/monorepo --path harnesses/david
 
 # Preview the generated Dockerfile without building
 ynh image david --dry-run
@@ -56,36 +56,36 @@ ynh image david --dry-run
 ynh image david --base my-registry.io/ynh:v2
 ```
 
-The persona image pre-assembles vendor layouts for all three vendors at build time. At runtime, `ynh run` detects the pre-assembled layout and skips assembly entirely.
+The harness image pre-assembles vendor layouts for all three vendors at build time. At runtime, `ynh run` detects the pre-assembled layout and skips assembly entirely.
 
-### Running Persona Images
+### Running Harness Images
 
 ```bash
-# Basic run (default vendor from persona config)
+# Basic run (default vendor from harness config)
 docker run --rm -v $(pwd):/workspace -e ANTHROPIC_API_KEY \
-  persona-david:latest -- "fix this bug"
+  harness-david:latest -- "fix this bug"
 
 # Switch vendor at runtime
 docker run --rm -v $(pwd):/workspace -e OPENAI_API_KEY \
-  -e YNH_VENDOR=codex persona-david:latest -- "refactor auth"
+  -e YNH_VENDOR=codex harness-david:latest -- "refactor auth"
 ```
 
 ### Passing Vendor Flags
 
-Everything after the image name becomes arguments to `ynh run <persona>`. Unrecognised flags pass through to the vendor CLI:
+Everything after the image name becomes arguments to `ynh run <harness>`. Unrecognised flags pass through to the vendor CLI:
 
 ```bash
 # Model override
 docker run --rm -v $(pwd):/workspace -e ANTHROPIC_API_KEY \
-  persona-david:latest --model claude-sonnet-4-5-20250514 -- "fix this"
+  harness-david:latest --model claude-sonnet-4-5-20250514 -- "fix this"
 
 # Skip permissions (headless CI)
 docker run --rm -v $(pwd):/workspace -e ANTHROPIC_API_KEY \
-  persona-david:latest --dangerously-skip-permissions -- "fix this"
+  harness-david:latest --dangerously-skip-permissions -- "fix this"
 
 # Multiple flags + vendor switch
 docker run --rm -v $(pwd):/workspace -e OPENAI_API_KEY \
-  persona-david:latest -v codex --model gpt-4.1 --full-auto -- "refactor auth"
+  harness-david:latest -v codex --model gpt-4.1 --full-auto -- "refactor auth"
 ```
 
 ### Entrypoint Overrides
@@ -94,13 +94,13 @@ Override the entrypoint for full ynh/ynd access inside the image:
 
 ```bash
 # Full ynh CLI
-docker run --rm --entrypoint ynh persona-david:latest ls
+docker run --rm --entrypoint ynh harness-david:latest ls
 
 # ynd tools
-docker run --rm --entrypoint ynd persona-david:latest lint .
+docker run --rm --entrypoint ynd harness-david:latest lint .
 
 # Shell access
-docker run --rm -it --entrypoint sh persona-david:latest
+docker run --rm -it --entrypoint sh harness-david:latest
 ```
 
 ## API Keys
@@ -124,7 +124,7 @@ CURSOR_API_KEY=...
 
 ### Simple: bind-mount ~/.ynh
 
-The default `docker-compose.yml` mounts your host `~/.ynh` into the container. Personas, cache, and config are shared between host and container:
+The default `docker-compose.yml` mounts your host `~/.ynh` into the container. Harnesss, cache, and config are shared between host and container:
 
 ```bash
 docker compose run --rm ynh run david "review this PR"
@@ -162,7 +162,7 @@ docker run --rm \
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `YNH_VENDOR` | _(none)_ | Override the default vendor (between `-v` flag and persona default in priority) |
+| `YNH_VENDOR` | _(none)_ | Override the default vendor (between `-v` flag and harness default in priority) |
 | `ANTHROPIC_API_KEY` | _(none)_ | API key for Claude Code |
 | `OPENAI_API_KEY` | _(none)_ | API key for Codex |
 | `CURSOR_API_KEY` | _(none)_ | API key for Cursor |
@@ -205,7 +205,7 @@ docker compose run --rm --entrypoint ynd ynh fmt
 
 ## Private Git Repos
 
-If your personas reference private repos via `includes` or `delegates_to`, mount your SSH keys (read-only):
+If your harnesss reference private repos via `includes` or `delegates_to`, mount your SSH keys (read-only):
 
 Uncomment the SSH volume in `docker-compose.yml`:
 

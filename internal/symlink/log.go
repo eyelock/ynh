@@ -14,7 +14,7 @@ const logFile = "symlinks.json"
 
 // Installation records a single symlink install operation.
 type Installation struct {
-	Persona   string                `json:"persona"`
+	Harness   string                `json:"harness"`
 	Vendor    string                `json:"vendor"`
 	Project   string                `json:"project"`
 	Timestamp time.Time             `json:"timestamp"`
@@ -63,17 +63,17 @@ func (l *Log) Save() error {
 }
 
 // Record adds or updates an installation entry in the log.
-func (l *Log) Record(persona, vendorName, projectDir string, entries []vendor.SymlinkEntry) {
+func (l *Log) Record(harnessName, vendorName, projectDir string, entries []vendor.SymlinkEntry) {
 	// Update existing entry if present (upsert)
 	for i, inst := range l.Installations {
-		if inst.Persona == persona && inst.Vendor == vendorName && inst.Project == projectDir {
+		if inst.Harness == harnessName && inst.Vendor == vendorName && inst.Project == projectDir {
 			l.Installations[i].Timestamp = time.Now()
 			l.Installations[i].Symlinks = entries
 			return
 		}
 	}
 	l.Installations = append(l.Installations, Installation{
-		Persona:   persona,
+		Harness:   harnessName,
 		Vendor:    vendorName,
 		Project:   projectDir,
 		Timestamp: time.Now(),
@@ -83,10 +83,10 @@ func (l *Log) Record(persona, vendorName, projectDir string, entries []vendor.Sy
 
 // FindInstallation returns the most recent installation matching the criteria.
 // Returns nil if not found.
-func (l *Log) FindInstallation(persona, vendorName, projectDir string) *Installation {
+func (l *Log) FindInstallation(harnessName, vendorName, projectDir string) *Installation {
 	for i := len(l.Installations) - 1; i >= 0; i-- {
 		inst := &l.Installations[i]
-		if inst.Persona == persona && inst.Vendor == vendorName && inst.Project == projectDir {
+		if inst.Harness == harnessName && inst.Vendor == vendorName && inst.Project == projectDir {
 			return inst
 		}
 	}
@@ -94,9 +94,9 @@ func (l *Log) FindInstallation(persona, vendorName, projectDir string) *Installa
 }
 
 // RemoveInstallation removes the first matching installation entry.
-func (l *Log) RemoveInstallation(persona, vendorName, projectDir string) {
+func (l *Log) RemoveInstallation(harnessName, vendorName, projectDir string) {
 	for i, inst := range l.Installations {
-		if inst.Persona == persona && inst.Vendor == vendorName && inst.Project == projectDir {
+		if inst.Harness == harnessName && inst.Vendor == vendorName && inst.Project == projectDir {
 			l.Installations = append(l.Installations[:i], l.Installations[i+1:]...)
 			return
 		}
@@ -131,11 +131,11 @@ func (l *Log) RemoveOrphans(orphans []Installation) {
 	keep := make([]Installation, 0, len(l.Installations))
 	orphanSet := make(map[string]bool)
 	for _, o := range orphans {
-		key := o.Persona + "\x00" + o.Vendor + "\x00" + o.Project
+		key := o.Harness + "\x00" + o.Vendor + "\x00" + o.Project
 		orphanSet[key] = true
 	}
 	for _, inst := range l.Installations {
-		key := inst.Persona + "\x00" + inst.Vendor + "\x00" + inst.Project
+		key := inst.Harness + "\x00" + inst.Vendor + "\x00" + inst.Project
 		if !orphanSet[key] {
 			keep = append(keep, inst)
 		}

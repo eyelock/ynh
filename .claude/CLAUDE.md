@@ -2,11 +2,11 @@
 
 ## What This Is
 
-ynh is a persona manager for AI coding assistants (Claude Code, OpenAI Codex, Cursor). No runtime — resolves config, assembles vendor-specific layout, launches the vendor CLI.
+ynh is a harness template manager for AI coding assistants (Claude Code, OpenAI Codex, Cursor). No runtime — resolves config, assembles vendor-specific layout, launches the vendor CLI.
 
 ## Two Binaries
 
-- **`ynh`** (`cmd/ynh/`) — Persona manager: init, install, uninstall, update, run, ls, info, vendors, search, registry, image, status, prune
+- **`ynh`** (`cmd/ynh/`) — Harness manager: init, install, uninstall, update, run, ls, info, vendors, search, registry, image, status, prune
 - **`ynd`** (`cmd/ynd/`) — Developer tools: create, lint, validate, fmt, compress, inspect
 
 Both built by `make build`, released together via goreleaser (single `v*` tag).
@@ -43,7 +43,7 @@ Read `.github/CONTRIBUTING.md` — it has the full architecture, package structu
 
 ## Artifact Format
 
-Follows the [Agent Skills](https://agentskills.io) open standard. See `docs/skills-standard.md` for spec details and known issues (especially: don't use `compatibility`, `license`, or `metadata` frontmatter in persona skills — Claude Code's plugin loader demotes them).
+Follows the [Agent Skills](https://agentskills.io) open standard. See `docs/skills-standard.md` for spec details and known issues (especially: don't use `compatibility`, `license`, or `metadata` frontmatter in harness skills — Claude Code's plugin loader demotes them).
 
 ## Key Files
 
@@ -70,5 +70,5 @@ Follows the [Agent Skills](https://agentskills.io) open standard. See `docs/skil
 | Variable | Default | Used by |
 |----------|---------|---------|
 | `YNH_HOME` | `~/.ynh` | ynh |
-| `YNH_VENDOR` | _(none)_ | ynh run — override default vendor (between -v flag and persona default) |
+| `YNH_VENDOR` | _(none)_ | ynh run — override default vendor (between -v flag and harness default) |
 | `YND_BACKUP_DIR` | `~/.ynd/backups` | ynd compress |

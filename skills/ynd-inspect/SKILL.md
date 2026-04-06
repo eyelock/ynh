@@ -56,7 +56,7 @@ Encourage them to skip proposals that feel generic. The best skills automate wor
 Explain the output options:
 
 - **Default**: artifacts go to `.{vendor}/` (e.g., `.claude/skills/`, `.claude/agents/`). This is where the vendor CLI looks for them.
-- **`-o .`**: write to project root (`skills/`, `agents/`). Use this if the project itself is a persona/plugin.
+- **`-o .`**: write to project root (`skills/`, `agents/`). Use this if the project itself is a harness/plugin.
 - **`-o /path`**: write to any custom directory.
 
 ## Step 6: Generate

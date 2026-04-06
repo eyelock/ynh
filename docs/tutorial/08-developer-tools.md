@@ -1,6 +1,6 @@
 # Tutorial 8: Developer Tools
 
-Use ynd to scaffold, lint, validate, format, compress, and inspect persona artifacts.
+Use ynd to scaffold, lint, validate, format, compress, and inspect harness artifacts.
 
 ## Prerequisites
 
@@ -11,13 +11,13 @@ rm -rf /tmp/ynh-tutorial
 mkdir -p /tmp/ynh-tutorial && cd /tmp/ynh-tutorial
 ```
 
-## T8.1: Scaffold a persona
+## T8.1: Scaffold a harness
 
 ```bash
-ynd create persona my-team
+ynd create harness my-team
 ```
 
-Expected: a `my-team/` directory with the full persona structure:
+Expected: a `my-team/` directory with the full harness structure:
 
 ```bash
 find my-team -type f | sort
@@ -32,8 +32,8 @@ Empty directories are also created: `skills/`, `agents/`, `rules/`, `commands/`.
 ### Error cases
 
 ```bash
-ynd create persona my-team    # expect: "already exists"
-ynd create persona ""         # expect: invalid name
+ynd create harness my-team    # expect: "already exists"
+ynd create harness ""         # expect: invalid name
 ```
 
 ## T8.2: Scaffold artifacts
@@ -237,7 +237,7 @@ rm -rf /tmp/ynh-tutorial
 
 ## What you learned
 
-- `ynd create` scaffolds personas and artifacts with correct structure
+- `ynd create` scaffolds harnesses and artifacts with correct structure
 - `ynd lint` catches formatting issues (trailing whitespace, missing newlines)
 - `ynd validate` checks structural correctness (SKILL.md exists in skill dirs, valid frontmatter)
 - `ynd fmt` auto-formats markdown files (idempotent)

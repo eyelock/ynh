@@ -64,7 +64,7 @@ func cmdExport(args []string) error {
 	}
 
 	if source == "" {
-		return fmt.Errorf("usage: ynd export <persona-dir|git-url> [flags]")
+		return fmt.Errorf("usage: ynd export <harness-dir|git-url> [flags]")
 	}
 
 	// Resolve source to local path

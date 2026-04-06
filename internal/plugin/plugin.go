@@ -28,7 +28,7 @@ type MetadataJSON struct {
 	YNH *YNHMetadata `json:"ynh,omitempty"`
 }
 
-// YNHMetadata holds ynh-specific persona configuration.
+// YNHMetadata holds ynh-specific harness configuration.
 type YNHMetadata struct {
 	DefaultVendor string          `json:"default_vendor,omitempty"`
 	Includes      []IncludeMeta   `json:"includes,omitempty"`
@@ -36,7 +36,7 @@ type YNHMetadata struct {
 	InstalledFrom *ProvenanceMeta `json:"installed_from,omitempty"`
 }
 
-// ProvenanceMeta records where a persona was installed from.
+// ProvenanceMeta records where a harness was installed from.
 type ProvenanceMeta struct {
 	SourceType   string `json:"source_type"`
 	Source       string `json:"source"`

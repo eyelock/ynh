@@ -1,6 +1,6 @@
 # Tutorial 2: Vendors & Symlinks
 
-Run the same persona with different AI coding assistants. Understand how ynh adapts to each vendor's capabilities.
+Run the same harness with different AI coding assistants. Understand how ynh adapts to each vendor's capabilities.
 
 ## Setup
 
@@ -9,30 +9,30 @@ Make sure `ynh` and `ynd` are installed and on your PATH. See the [install instr
 ```bash
 # Clean up from any previous run
 rm -rf /tmp/ynh-tutorial
-ynh uninstall my-persona 2>/dev/null
+ynh uninstall my-harness 2>/dev/null
 
 mkdir -p /tmp/ynh-tutorial
 ```
 
-## T2.1: Create and install a test persona
+## T2.1: Create and install a test harness
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/my-persona/.claude-plugin
-mkdir -p /tmp/ynh-tutorial/my-persona/skills/ping
+mkdir -p /tmp/ynh-tutorial/my-harness/.claude-plugin
+mkdir -p /tmp/ynh-tutorial/my-harness/skills/ping
 
-cat > /tmp/ynh-tutorial/my-persona/.claude-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/my-harness/.claude-plugin/plugin.json << 'EOF'
 {
-  "name": "my-persona",
+  "name": "my-harness",
   "version": "0.1.0",
-  "description": "Vendor test persona"
+  "description": "Vendor test harness"
 }
 EOF
 
-cat > /tmp/ynh-tutorial/my-persona/metadata.json << 'EOF'
+cat > /tmp/ynh-tutorial/my-harness/metadata.json << 'EOF'
 {"ynh": {"default_vendor": "claude"}}
 EOF
 
-cat > /tmp/ynh-tutorial/my-persona/skills/ping/SKILL.md << 'EOF'
+cat > /tmp/ynh-tutorial/my-harness/skills/ping/SKILL.md << 'EOF'
 ---
 name: ping
 description: Reply with pong.
@@ -40,8 +40,8 @@ description: Reply with pong.
 Reply with "pong" when invoked.
 EOF
 
-ynh install /tmp/ynh-tutorial/my-persona
-# Expected: Installed persona "my-persona"
+ynh install /tmp/ynh-tutorial/my-harness
+# Expected: Installed harness "my-harness"
 ```
 
 ## T2.2: List available vendors
@@ -62,29 +62,29 @@ cursor  agent   .cursor
 
 ynh picks the vendor in this order:
 1. CLI flag `-v` (highest priority)
-2. Persona's `default_vendor` in `metadata.json`
+2. Harness's `default_vendor` in `metadata.json`
 3. Global `~/.ynh/config.json` default (fallback: "claude")
 
 ## T2.3: Switch vendors
 
 ```bash
-my-persona -v codex
-my-persona -v cursor
+my-harness -v codex
+my-harness -v cursor
 ```
 
-Each launches the same persona through a different vendor CLI. Artifacts are reassembled into the vendor's expected layout.
+Each launches the same harness through a different vendor CLI. Artifacts are reassembled into the vendor's expected layout.
 
 **Note:** Codex and Cursor require their CLIs installed separately. If missing, you'll see: `exec: "codex": executable file not found in $PATH`.
 
 ## T2.4: Symlinks — automatic prompt
 
-When you run a persona with a symlink vendor (`-v codex` or `-v cursor`), ynh checks if symlinks are already installed in the current project directory. If not, it **automatically prompts** you:
+When you run a harness with a symlink vendor (`-v codex` or `-v cursor`), ynh checks if symlinks are already installed in the current project directory. If not, it **automatically prompts** you:
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/project
 cd /tmp/ynh-tutorial/project
 
-my-persona -v cursor
+my-harness -v cursor
 ```
 
 Expected:
@@ -92,7 +92,7 @@ Expected:
 cursor requires symlinks in your project directory.
 The following symlinks will be created in /tmp/ynh-tutorial/project:
 
-  .cursor/skills/ping -> /Users/<you>/.ynh/run/my-persona/.cursor/skills/ping
+  .cursor/skills/ping -> /Users/<you>/.ynh/run/my-harness/.cursor/skills/ping
 
 Install 1 symlinks? [Y/n]
 ```
@@ -108,14 +108,14 @@ You can also manage symlinks explicitly without launching a session:
 ```bash
 # Install symlinks without launching
 cd /tmp/ynh-tutorial/project
-my-persona -v cursor --install
+my-harness -v cursor --install
 ```
 
 Expected:
 ```
-Installed 1 symlinks for my-persona (cursor) in /tmp/ynh-tutorial/project:
+Installed 1 symlinks for my-harness (cursor) in /tmp/ynh-tutorial/project:
 
-  .cursor/skills/ping -> /Users/<you>/.ynh/run/my-persona/.cursor/skills/ping
+  .cursor/skills/ping -> /Users/<you>/.ynh/run/my-harness/.cursor/skills/ping
 ```
 
 ### Verify symlinks
@@ -124,7 +124,7 @@ Installed 1 symlinks for my-persona (cursor) in /tmp/ynh-tutorial/project:
 ls -la .cursor/skills/
 ```
 
-Symlinks point back to `~/.ynh/run/my-persona/`.
+Symlinks point back to `~/.ynh/run/my-harness/`.
 
 ### Check installation status
 
@@ -134,19 +134,19 @@ ynh status
 
 Expected:
 ```
-PERSONA     VENDOR  PROJECT                    SYMLINKS
-my-persona  cursor  /tmp/ynh-tutorial/project  1
+HARNESS     VENDOR  PROJECT                    SYMLINKS
+my-harness  cursor  /tmp/ynh-tutorial/project  1
 ```
 
 ### Clean symlinks
 
 ```bash
-my-persona -v cursor --clean
+my-harness -v cursor --clean
 ```
 
 Expected:
 ```
-Cleaned cursor symlinks for persona "my-persona" in /tmp/ynh-tutorial/project
+Cleaned cursor symlinks for harness "my-harness" in /tmp/ynh-tutorial/project
 ```
 
 Verify:
@@ -158,16 +158,16 @@ ynh status
 ## T2.6: Symlinks — Claude doesn't need them
 
 ```bash
-my-persona -v claude --install
+my-harness -v claude --install
 # Expected: "claude uses native plugin loading - no symlink installation needed."
 
-my-persona -v claude --clean
+my-harness -v claude --clean
 # Expected: "claude uses native plugin loading - no symlinks to clean."
 ```
 
 ## T2.7: Prune orphaned installations
 
-If a project directory is deleted while symlinks are still registered, `ynh prune` cleans up the stale entries. It also removes stale launcher scripts from `~/.ynh/bin/` when their persona no longer exists.
+If a project directory is deleted while symlinks are still registered, `ynh prune` cleans up the stale entries. It also removes stale launcher scripts from `~/.ynh/bin/` when their harness no longer exists.
 
 ### Prune orphaned symlinks
 
@@ -176,14 +176,14 @@ Re-create the project and install symlinks:
 ```bash
 mkdir -p /tmp/ynh-tutorial/project
 cd /tmp/ynh-tutorial/project
-my-persona -v cursor --install
+my-harness -v cursor --install
 ```
 
 Verify it's tracked:
 
 ```bash
 ynh status
-# Expected: shows my-persona / cursor / /tmp/ynh-tutorial/project
+# Expected: shows my-harness / cursor / /tmp/ynh-tutorial/project
 ```
 
 Simulate an orphan by deleting the project directory:
@@ -200,23 +200,23 @@ ynh prune
 
 Expected:
 ```
-Removing orphaned installation: my-persona (cursor) in /tmp/ynh-tutorial/project
+Removing orphaned installation: my-harness (cursor) in /tmp/ynh-tutorial/project
 ```
 
 Verify the orphan was removed:
 
 ```bash
 ynh status
-# Expected: no cursor installation for my-persona in /tmp/ynh-tutorial/project
+# Expected: no cursor installation for my-harness in /tmp/ynh-tutorial/project
 ```
 
 ### Prune stale launchers
 
-Simulate a stale launcher by removing the persona directory but leaving its launcher script:
+Simulate a stale launcher by removing the harness directory but leaving its launcher script:
 
 ```bash
-rm -rf ~/.ynh/personas/my-persona
-ls ~/.ynh/bin/my-persona
+rm -rf ~/.ynh/harnesses/my-harness
+ls ~/.ynh/bin/my-harness
 # Expected: file exists (stale launcher)
 ```
 
@@ -228,13 +228,13 @@ ynh prune
 
 Expected:
 ```
-Removed stale launcher: /Users/<you>/.ynh/bin/my-persona
+Removed stale launcher: /Users/<you>/.ynh/bin/my-harness
 ```
 
 Verify the launcher was removed:
 
 ```bash
-ls ~/.ynh/bin/my-persona 2>/dev/null
+ls ~/.ynh/bin/my-harness 2>/dev/null
 # Expected: no such file
 ```
 

@@ -1,6 +1,6 @@
 # Tutorial 9: Docker Images
 
-Build self-contained Docker images with personas baked in. No bind-mounting `~/.ynh` — just mount your workspace and pass API keys.
+Build self-contained Docker images with harnesses baked in. No bind-mounting `~/.ynh` — just mount your workspace and pass API keys.
 
 ## Prerequisites
 
@@ -31,20 +31,20 @@ docker run --rm ghcr.io/eyelock/ynh:latest version
 # Expected: ynh <version>
 ```
 
-## T9.2: Create and install a tutorial persona
+## T9.2: Create and install a tutorial harness
 
-Create a persona to use throughout this tutorial:
+Create a harness to use throughout this tutorial:
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/docker-persona/.claude-plugin
-mkdir -p /tmp/ynh-tutorial/docker-persona/skills/greet
-mkdir -p /tmp/ynh-tutorial/docker-persona/rules
+mkdir -p /tmp/ynh-tutorial/docker-harness/.claude-plugin
+mkdir -p /tmp/ynh-tutorial/docker-harness/skills/greet
+mkdir -p /tmp/ynh-tutorial/docker-harness/rules
 
-cat > /tmp/ynh-tutorial/docker-persona/.claude-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/docker-harness/.claude-plugin/plugin.json << 'EOF'
 {"name": "docker-demo", "version": "0.1.0"}
 EOF
 
-cat > /tmp/ynh-tutorial/docker-persona/metadata.json << 'EOF'
+cat > /tmp/ynh-tutorial/docker-harness/metadata.json << 'EOF'
 {
   "ynh": {
     "default_vendor": "claude"
@@ -52,12 +52,12 @@ cat > /tmp/ynh-tutorial/docker-persona/metadata.json << 'EOF'
 }
 EOF
 
-cat > /tmp/ynh-tutorial/docker-persona/instructions.md << 'EOF'
+cat > /tmp/ynh-tutorial/docker-harness/instructions.md << 'EOF'
 You are a helpful coding assistant running inside a Docker container.
 Always mention that you are running in Docker when greeting the user.
 EOF
 
-cat > /tmp/ynh-tutorial/docker-persona/skills/greet/SKILL.md << 'EOF'
+cat > /tmp/ynh-tutorial/docker-harness/skills/greet/SKILL.md << 'EOF'
 ---
 name: greet
 description: Greet the user with a friendly message
@@ -66,7 +66,7 @@ description: Greet the user with a friendly message
 When asked to greet, respond with a warm welcome and mention the current environment.
 EOF
 
-cat > /tmp/ynh-tutorial/docker-persona/rules/be-concise.md << 'EOF'
+cat > /tmp/ynh-tutorial/docker-harness/rules/be-concise.md << 'EOF'
 ---
 name: be-concise
 description: Keep responses brief
@@ -79,19 +79,19 @@ EOF
 Install it:
 
 ```bash
-ynh install /tmp/ynh-tutorial/docker-persona
+ynh install /tmp/ynh-tutorial/docker-harness
 ```
 
 Expected:
 
 ```
-Installed persona "docker-demo"
-  Location: ~/.ynh/personas/docker-demo
+Installed harness "docker-demo"
+  Location: ~/.ynh/harnesses/docker-demo
   Launcher: ~/.ynh/bin/docker-demo
   Vendor:   claude
 ```
 
-## T9.3: Build a persona image
+## T9.3: Build a harness image
 
 ```bash
 ynh image docker-demo --tag docker-demo:latest
@@ -100,9 +100,9 @@ ynh image docker-demo --tag docker-demo:latest
 Expected:
 
 ```
-Building persona image docker-demo:latest...
+Building harness image docker-demo:latest...
 ...
-Persona image built: docker-demo:latest
+Harness image built: docker-demo:latest
 Run: docker run --rm -v $(pwd):/workspace -e ANTHROPIC_API_KEY docker-demo:latest -- "your prompt"
 ```
 
@@ -113,9 +113,9 @@ docker images docker-demo
 # Expected: docker-demo   latest   <id>   <size>
 ```
 
-## T9.4: Run the persona image
+## T9.4: Run the harness image
 
-The persona's instructions tell it to mention Docker when greeting, and the `be-concise` rule limits responses to 3 sentences. Try it:
+The harness's instructions tell it to mention Docker when greeting, and the `be-concise` rule limits responses to 3 sentences. Try it:
 
 ```bash
 docker run --rm \
@@ -124,11 +124,11 @@ docker run --rm \
   docker-demo:latest -- "greet me and tell me about your environment"
 ```
 
-Expected: the response mentions Docker (from `instructions.md`) and stays brief (from `rules/be-concise`). This confirms the baked-in persona artifacts are active.
+Expected: the response mentions Docker (from `instructions.md`) and stays brief (from `rules/be-concise`). This confirms the baked-in harness artifacts are active.
 
 ## T9.5: Switch vendors at runtime
 
-The image defaults to the persona's `default_vendor` (claude). Override with `YNH_VENDOR`:
+The image defaults to the harness's `default_vendor` (claude). Override with `YNH_VENDOR`:
 
 ```bash
 docker run --rm \
@@ -184,20 +184,20 @@ COPY --link --chown=ynh:ynh vendors/claude/ /home/ynh/.ynh/run/docker-demo/claud
 COPY --link --chown=ynh:ynh vendors/codex/ /home/ynh/.ynh/run/docker-demo/codex/
 COPY --link --chown=ynh:ynh vendors/cursor/ /home/ynh/.ynh/run/docker-demo/cursor/
 
-COPY --link --chown=ynh:ynh persona/ /home/ynh/.ynh/personas/docker-demo/
+COPY --link --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/docker-demo/
 
 ENV YNH_VENDOR=claude
 
 ENTRYPOINT ["tini", "-s", "--", "ynh", "run", "docker-demo"]
 CMD []
 
-LABEL dev.ynh.persona="docker-demo" \
-      dev.ynh.persona.default-vendor="claude"
+LABEL dev.ynh.harness="docker-demo" \
+      dev.ynh.harness.default-vendor="claude"
 ```
 
 ## T9.8: Build from Git source
 
-Build directly from a Git repo without installing the persona first:
+Build directly from a Git repo without installing the harness first:
 
 ```bash
 ynh image tester \
@@ -206,7 +206,7 @@ ynh image tester \
   --tag tester:latest
 ```
 
-This clones the repo (or uses the cached clone), loads the persona from `ynh/tester/`, resolves its includes, and builds the image — all without a prior `ynh install`.
+This clones the repo (or uses the cached clone), loads the harness from `ynh/tester/`, resolves its includes, and builds the image — all without a prior `ynh install`.
 
 Verify the remote includes were resolved and baked in:
 
@@ -221,10 +221,10 @@ docker run --rm --entrypoint sh tester:latest -c \
 
 ## T9.9: Override entrypoint
 
-Access the full ynh/ynd CLI inside the persona image:
+Access the full ynh/ynd CLI inside the harness image:
 
 ```bash
-# List installed personas inside the image
+# List installed harnesses inside the image
 docker run --rm --entrypoint ynh docker-demo:latest ls
 
 # Check ynd version
@@ -236,7 +236,7 @@ docker run --rm -it --entrypoint sh docker-demo:latest
 
 ## T9.10: CI/CD matrix example
 
-Run the same persona across all vendors in a CI pipeline:
+Run the same harness across all vendors in a CI pipeline:
 
 ```yaml
 # .github/workflows/ai-review.yml
@@ -258,7 +258,7 @@ steps:
         -v ${{ github.workspace }}:/workspace \
         -e ${{ matrix.api_key_secret }}=${{ secrets[matrix.api_key_secret] }} \
         -e YNH_VENDOR=${{ matrix.vendor }} \
-        ghcr.io/org/persona-review:latest \
+        ghcr.io/org/harness-review:latest \
         --dangerously-skip-permissions -- "review the changes in this PR"
 ```
 
@@ -274,10 +274,10 @@ rm -rf /tmp/ynh-tutorial
 ## What you learned
 
 - The base image `ghcr.io/eyelock/ynh:latest` provides the runtime with all vendor CLIs
-- `ynh image` builds persona appliance images with pre-assembled vendor layouts
+- `ynh image` builds harness appliance images with pre-assembled vendor layouts
 - `--dry-run` previews the generated Dockerfile
 - `--from` builds from Git sources without installing first
 - `YNH_VENDOR` env var switches vendors at runtime
 - Vendor flags pass through to the underlying CLI
 - `--entrypoint` overrides give full ynh/ynd access
-- Persona images are ready for CI/CD pipelines with no host setup
+- Harness images are ready for CI/CD pipelines with no host setup

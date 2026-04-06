@@ -16,7 +16,7 @@ This is the canonical spec for how AI coding agent skills are structured. It cov
 
 ## ynh-specific notes
 
-ynh distributes skills as persona artifacts. The assembler copies skill directories into the vendor's config dir at run time (e.g. `.claude/skills/`, `.codex/skills/`). This means:
+ynh distributes skills as harness artifacts. The assembler copies skill directories into the vendor's config dir at run time (e.g. `.claude/skills/`, `.codex/skills/`). This means:
 
 - Skills must be self-contained within their directory
 - References should be co-located in `references/` (not absolute paths)

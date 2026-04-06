@@ -1,6 +1,6 @@
 # Tutorial 4: Delegation
 
-Chain personas together. A parent persona can invoke other personas as subagents — each with their own instructions, rules, and skills.
+Chain harnesses together. A parent harness can invoke other harnesses as subagents — each with their own instructions, rules, and skills.
 
 ## Prerequisites
 
@@ -12,9 +12,9 @@ ynh uninstall team-lead 2>/dev/null
 mkdir -p /tmp/ynh-tutorial
 ```
 
-## T4.1: Create a delegate persona
+## T4.1: Create a delegate harness
 
-Delegates must be Git repos (local or remote). Create a specialist persona and turn it into a Git repo:
+Delegates must be Git repos (local or remote). Create a specialist harness and turn it into a Git repo:
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/specialist/.claude-plugin
@@ -52,7 +52,7 @@ git -C /tmp/ynh-tutorial/specialist add .
 git -C /tmp/ynh-tutorial/specialist commit -m "init"
 ```
 
-## T4.2: Create a parent persona with delegates
+## T4.2: Create a parent harness with delegates
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/team-lead/.claude-plugin
@@ -61,7 +61,7 @@ cat > /tmp/ynh-tutorial/team-lead/.claude-plugin/plugin.json << 'EOF'
 {
   "name": "team-lead",
   "version": "0.1.0",
-  "description": "Team lead persona with specialist delegates"
+  "description": "Team lead harness with specialist delegates"
 }
 EOF
 
@@ -94,7 +94,7 @@ Expected install output includes delegate fetching:
 Fetching 0 include(s) and 2 delegate(s)...
   Fetched /tmp/ynh-tutorial/specialist
   Fetched eyelock/ynh
-Installed persona "team-lead"
+Installed harness "team-lead"
 ```
 
 ```bash
@@ -109,7 +109,7 @@ team-lead  claude  /tmp/ynh-tutorial/team-lead      ...        0         /tmp/yn
 
 ## T4.4: Inspect delegate agent files
 
-Delegate repos are fetched at install time and cached locally. Agent files are generated at runtime from the cached repos. Run the persona to trigger assembly:
+Delegate repos are fetched at install time and cached locally. Agent files are generated at runtime from the cached repos. Run the harness to trigger assembly:
 
 ```bash
 team-lead "list your available agents"
@@ -127,7 +127,7 @@ Expected: `specialist.md` and `ynh.md` — generated agent files with the delega
 cat ~/.ynh/run/team-lead/.claude/agents/specialist.md
 ```
 
-Expected: frontmatter with name/description, then sections for Instructions, Rules, and Available Skills — all pulled from the specialist persona.
+Expected: frontmatter with name/description, then sections for Instructions, Rules, and Available Skills — all pulled from the specialist harness.
 
 ## T4.5: Test delegation
 
@@ -141,7 +141,7 @@ The specialist's `instructions.md` says to provide detailed technical analysis w
 team-lead "ask the ynh delegate what the /ynh-validate skill does"
 ```
 
-This delegates to the ynh persona — a remote delegate from GitHub.
+This delegates to the ynh harness — a remote delegate from GitHub.
 
 ## Clean up
 
@@ -151,9 +151,9 @@ ynh uninstall team-lead
 
 ## What you learned
 
-- `delegates_to` in metadata.json references other personas as subagents
+- `delegates_to` in metadata.json references other harnesses as subagents
 - Delegates must be Git repos (local or remote)
-- ynh generates vendor-native agent files from delegate personas at runtime
+- ynh generates vendor-native agent files from delegate harnesss at runtime
 - Agent files inline the delegate's instructions, rules, and skill list
 - Delegate repos are fetched at install time and cached — `ynh run` works offline
 - Use `ynh update` to refresh cached delegate repos

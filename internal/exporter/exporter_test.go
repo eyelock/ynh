@@ -18,7 +18,7 @@ func testdataDir() string {
 }
 
 func TestExportSingleVendorClaude(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	results, err := Export(ExportOptions{
@@ -72,7 +72,7 @@ func TestExportSingleVendorClaude(t *testing.T) {
 }
 
 func TestExportSingleVendorCursor(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	_, err := Export(ExportOptions{
@@ -101,7 +101,7 @@ func TestExportSingleVendorCursor(t *testing.T) {
 }
 
 func TestExportSingleVendorCodex(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	results, err := Export(ExportOptions{
@@ -148,7 +148,7 @@ func TestExportSingleVendorCodex(t *testing.T) {
 }
 
 func TestExportAllVendors(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	results, err := Export(ExportOptions{
@@ -174,7 +174,7 @@ func TestExportAllVendors(t *testing.T) {
 }
 
 func TestExportManifestClaude(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	_, err := Export(ExportOptions{
@@ -206,7 +206,7 @@ func TestExportManifestClaude(t *testing.T) {
 }
 
 func TestExportManifestCursor(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	_, err := Export(ExportOptions{
@@ -235,7 +235,7 @@ func TestExportManifestCursor(t *testing.T) {
 }
 
 func TestExportCodexLayout(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	_, err := Export(ExportOptions{
@@ -269,7 +269,7 @@ func TestExportCodexLayout(t *testing.T) {
 }
 
 func TestExportCodexSkipsAgentsRulesCommands(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	results, err := Export(ExportOptions{
@@ -299,7 +299,7 @@ func TestExportCodexSkipsAgentsRulesCommands(t *testing.T) {
 }
 
 func TestExportWithInstructions(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	_, err := Export(ExportOptions{
@@ -328,13 +328,13 @@ func TestExportWithInstructions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "Export Test Persona") {
+	if !strings.Contains(string(data), "Export Test Harness") {
 		t.Error("AGENTS.md should contain instructions content")
 	}
 }
 
 func TestExportNoInstructions(t *testing.T) {
-	// Create a minimal persona without instructions.md
+	// Create a minimal harness without instructions.md
 	srcDir := t.TempDir()
 	pluginDir := filepath.Join(srcDir, ".claude-plugin")
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
@@ -410,7 +410,7 @@ func TestExportInstructionDiscovery(t *testing.T) {
 }
 
 func TestExportMergedMode(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := filepath.Join(t.TempDir(), "merged-out")
 
 	results, err := Export(ExportOptions{
@@ -445,7 +445,7 @@ func TestExportMergedMode(t *testing.T) {
 }
 
 func TestExportCleanFlag(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	// Create a stale file that should be cleaned

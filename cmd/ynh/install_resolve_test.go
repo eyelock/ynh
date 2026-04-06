@@ -11,7 +11,7 @@ func TestResolveInstallSourceLocalPath(t *testing.T) {
 	cfg := &config.Config{}
 
 	// Rule 1: starts with . or /
-	result, err := resolveInstallSource("./my-persona", "", cfg)
+	result, err := resolveInstallSource("./my-harness", "", cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

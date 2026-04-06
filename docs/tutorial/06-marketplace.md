@@ -1,6 +1,6 @@
 # Tutorial 6: Marketplace
 
-Generate vendor-native marketplace indexes from a collection of personas and plugins. The output is a Git repo that Claude Code and Cursor can add as a custom marketplace.
+Generate vendor-native marketplace indexes from a collection of harnesses and plugins. The output is a Git repo that Claude Code and Cursor can add as a custom marketplace.
 
 ## Prerequisites
 
@@ -13,7 +13,7 @@ mkdir -p /tmp/ynh-tutorial
 
 ## T6.1: Set up source material
 
-Create a small marketplace with one persona and one standalone plugin:
+Create a small marketplace with one harness and one standalone plugin:
 
 ### Standalone plugin (no metadata.json)
 
@@ -40,24 +40,24 @@ configured formatter (prettier, gofmt, black, etc.).
 EOF
 ```
 
-### Persona (has metadata.json with includes)
+### Harness (has metadata.json with includes)
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/marketplace-src/personas/reviewer/.claude-plugin
+mkdir -p /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/.claude-plugin
 
-cat > /tmp/ynh-tutorial/marketplace-src/personas/reviewer/.claude-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/.claude-plugin/plugin.json << 'EOF'
 {
   "name": "reviewer",
   "version": "1.0.0",
-  "description": "Code review persona with external skills"
+  "description": "Code review harness with external skills"
 }
 EOF
 
-cat > /tmp/ynh-tutorial/marketplace-src/personas/reviewer/instructions.md << 'EOF'
+cat > /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/instructions.md << 'EOF'
 You are a code reviewer. Be thorough but constructive.
 EOF
 
-cat > /tmp/ynh-tutorial/marketplace-src/personas/reviewer/metadata.json << 'EOF'
+cat > /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/metadata.json << 'EOF'
 {
   "ynh": {
     "includes": [
@@ -86,8 +86,8 @@ cat > /tmp/ynh-tutorial/marketplace-src/marketplace.json << 'EOF'
       "source": "./plugins/formatter"
     },
     {
-      "type": "persona",
-      "source": "./personas/reviewer",
+      "type": "harness",
+      "source": "./harnesses/reviewer",
       "description": "Code review with dev-quality and dev-review skills"
     }
   ]
@@ -97,7 +97,7 @@ EOF
 
 Two entry types:
 - **`plugin`** — already a valid plugin directory. Copied as-is, missing vendor manifests generated.
-- **`persona`** — has `metadata.json` with includes. Fully exported (includes resolved, pick applied, delegates generated).
+- **`harness`** — has `metadata.json` with includes. Fully exported (includes resolved, pick applied, delegates generated).
 
 ## T6.3: Build the marketplace
 
@@ -147,7 +147,7 @@ Expected: a single commit with message `ynd marketplace build`.
 
 Key points:
 - Each plugin has **both** `.claude-plugin/` and `.cursor-plugin/` manifests
-- The reviewer persona's remote includes are resolved and flattened (dev-review, dev-quality appear as local skills)
+- The reviewer harness's remote includes are resolved and flattened (dev-review, dev-quality appear as local skills)
 - Pick filtering was applied (only the 2 picked skills, not all 7 dev skills)
 
 ### Claude marketplace.json
@@ -244,11 +244,11 @@ rm -rf /tmp/ynh-tutorial/marketplace-*
 ## What you learned
 
 - `ynd marketplace build` generates vendor-native marketplace directories
-- A marketplace config lists `plugin` entries (copy as-is) and `persona` entries (fully exported)
+- A marketplace config lists `plugin` entries (copy as-is) and `harness` entries (fully exported)
 - Output includes `.claude-plugin/marketplace.json` and `.cursor-plugin/marketplace.json`
 - Plugins get dual manifests so one physical directory serves both vendors
-- Personas' remote includes are resolved and flattened during marketplace build
-- Pick filtering carries through from persona metadata to the marketplace output
+- Harnesss' remote includes are resolved and flattened during marketplace build
+- Pick filtering carries through from harness metadata to the marketplace output
 - Codex is excluded from marketplaces (no marketplace system)
 
 ## Next

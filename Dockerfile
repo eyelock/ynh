@@ -73,7 +73,7 @@ RUN addgroup -g ${USER_GID} ynh 2>/dev/null || addgroup ynh; \
 ENV YNH_HOME=/home/ynh/.ynh
 
 # Create directory structure
-RUN mkdir -p /home/ynh/.ynh/personas \
+RUN mkdir -p /home/ynh/.ynh/harnesses \
              /home/ynh/.ynh/cache \
              /home/ynh/.ynh/run \
              /home/ynh/.ynh/bin && \
@@ -90,7 +90,7 @@ ARG VERSION=dev
 ARG CLAUDE_CODE_VERSION=2.1.76
 ARG CODEX_VERSION=0.114.0
 LABEL org.opencontainers.image.title="ynh" \
-      org.opencontainers.image.description="Persona manager for AI coding assistants" \
+      org.opencontainers.image.description="Harness template manager for AI coding assistants" \
       org.opencontainers.image.source="https://github.com/eyelock/ynh" \
       org.opencontainers.image.version="${VERSION}" \
       dev.ynh.version="${VERSION}" \

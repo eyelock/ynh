@@ -32,8 +32,8 @@ func createTestRegistry(t *testing.T, name string, entries []Entry) string {
 func TestLoadFromDir(t *testing.T) {
 	dir := createTestRegistry(t, "test-reg", []Entry{
 		{
-			Name:        "my-persona",
-			Description: "A test persona",
+			Name:        "my-harness",
+			Description: "A test harness",
 			Keywords:    []string{"go", "testing"},
 			Repo:        "github.com/test/repo",
 			Path:        "personas/mine",
@@ -55,7 +55,7 @@ func TestLoadFromDir(t *testing.T) {
 	}
 
 	e := reg.Entries[0]
-	if e.Name != "my-persona" {
+	if e.Name != "my-harness" {
 		t.Errorf("entry name = %q", e.Name)
 	}
 	if e.Repo != "github.com/test/repo" {
@@ -78,7 +78,7 @@ func TestSearchByName(t *testing.T) {
 		{
 			Name: "reg1",
 			Entries: []Entry{
-				{Name: "david", Description: "Go developer persona"},
+				{Name: "david", Description: "Go developer harness"},
 				{Name: "alice", Description: "Python data science"},
 			},
 		},
@@ -98,7 +98,7 @@ func TestSearchByDescription(t *testing.T) {
 		{
 			Name: "reg1",
 			Entries: []Entry{
-				{Name: "david", Description: "Go developer persona"},
+				{Name: "david", Description: "Go developer harness"},
 				{Name: "alice", Description: "Python data science"},
 			},
 		},

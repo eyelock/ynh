@@ -7,7 +7,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
-	"github.com/eyelock/ynh/internal/persona"
+	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
@@ -25,7 +25,7 @@ const (
 
 // ExportOptions configures an export operation.
 type ExportOptions struct {
-	// SourceDir is the persona source directory — always a local path.
+	// SourceDir is the harness source directory — always a local path.
 	// For remote sources, the CLI resolves (clone + --path scoping) before calling Export.
 	SourceDir string
 	// OutputDir is where to write exported plugin(s).
@@ -47,12 +47,12 @@ type ExportResult struct {
 	Warnings  []string
 }
 
-// Export produces vendor-native plugin directories from a persona source.
+// Export produces vendor-native plugin directories from a harness source.
 func Export(opts ExportOptions) ([]ExportResult, error) {
-	// Load persona
-	p, err := persona.LoadPluginDir(opts.SourceDir)
+	// Load harness
+	p, err := harness.LoadPluginDir(opts.SourceDir)
 	if err != nil {
-		return nil, fmt.Errorf("loading persona: %w", err)
+		return nil, fmt.Errorf("loading harness: %w", err)
 	}
 
 	pj, err := plugin.LoadPluginJSON(opts.SourceDir)
@@ -81,7 +81,7 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 		content = append(content, r.Content)
 	}
 
-	// Add SourceDir as local content (persona's own embedded artifacts)
+	// Add SourceDir as local content (harness's own embedded artifacts)
 	content = append(content, resolver.ResolvedContent{
 		BasePath: opts.SourceDir,
 	})
@@ -101,7 +101,7 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	return exportPerVendor(opts, pj, p, content, instructionsPath, vendors)
 }
 
-func exportPerVendor(opts ExportOptions, pj *plugin.PluginJSON, p *persona.Persona, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
+func exportPerVendor(opts ExportOptions, pj *plugin.PluginJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
 	var results []ExportResult
 
 	for _, v := range vendors {
@@ -125,7 +125,7 @@ func exportPerVendor(opts ExportOptions, pj *plugin.PluginJSON, p *persona.Perso
 	return results, nil
 }
 
-func exportMerged(opts ExportOptions, pj *plugin.PluginJSON, p *persona.Persona, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
+func exportMerged(opts ExportOptions, pj *plugin.PluginJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
 	outputDir := opts.OutputDir
 
 	// Clean and recreate output dir
@@ -204,7 +204,7 @@ func exportMerged(opts ExportOptions, pj *plugin.PluginJSON, p *persona.Persona,
 	return results, nil
 }
 
-func exportForVendor(vendorName string, outputDir string, pj *plugin.PluginJSON, p *persona.Persona, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
+func exportForVendor(vendorName string, outputDir string, pj *plugin.PluginJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
 	result := ExportResult{
 		Vendor:    vendorName,
 		OutputDir: outputDir,
@@ -262,7 +262,7 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.PluginJSON,
 
 // exportCodex handles the Codex-specific layout: .agents/skills/ only.
 // Codex has no plugin manifest, no agents/rules/commands support.
-func exportCodex(outputDir string, _ *plugin.PluginJSON, p *persona.Persona, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
+func exportCodex(outputDir string, _ *plugin.PluginJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
 	result := ExportResult{
 		Vendor:    "codex",
 		OutputDir: outputDir,
