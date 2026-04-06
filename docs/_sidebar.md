@@ -1,6 +1,7 @@
 * **Guides**
   * [Overview](README.md)
   * [Getting Started](getting-started.md)
+  * [Harness Engineering](harness-engineering.md)
   * [Harness Reference](harnesses.md)
   * [Artifacts Guide](artifacts.md)
   * [Vendor Support](vendors.md)

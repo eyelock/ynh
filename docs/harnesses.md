@@ -1,5 +1,7 @@
 # Harness Reference
 
+A harness is a portable template that assembles the guide layer of a coding harness — skills, rules, agents, commands, and instructions — for any supported vendor. See [Harness Engineering](harness-engineering.md) for the broader context.
+
 A harness is defined by a `.claude-plugin/plugin.json` manifest, an optional `metadata.json` sidecar, and artifact directories.
 
 ## Directory Structure

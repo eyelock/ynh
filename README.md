@@ -2,7 +2,7 @@
 
 A harness template manager for AI coding assistants. Bundle skills, agents, rules, and commands into named harnesses, then launch them with any vendor CLI.
 
-> **Note**: This is a harnessl project developed in my spare time. It's an exploration of the varying approaches to marketplace/distribution across AI vendors.
+> **Note**: This is a personal project developed in my spare time. It's an exploration of the varying approaches to marketplace/distribution across AI vendors.
 
 **[Full Documentation](https://eyelock.github.io/ynh)**
 
