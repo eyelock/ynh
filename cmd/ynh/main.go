@@ -222,8 +222,8 @@ func cmdInstall(args []string) error {
 		}
 	}
 
-	// Load harness from plugin format
-	p, err := harness.LoadPluginDir(srcDir)
+	// Load harness: try plugin format first, then bare AGENTS.md directory
+	p, err := loadOrSynthesizeHarness(srcDir)
 	if err != nil {
 		return err
 	}
