@@ -129,13 +129,21 @@ func createHarness(name string) error {
 		}
 	}
 
-	harnessJSON := map[string]any{
-		"name":           name,
-		"version":        "0.1.0",
-		"description":    "",
-		"default_vendor": "claude",
+	type scaffoldJSON struct {
+		Schema        string `json:"$schema"`
+		Name          string `json:"name"`
+		Version       string `json:"version"`
+		Description   string `json:"description"`
+		DefaultVendor string `json:"default_vendor"`
 	}
-	data, _ := json.MarshalIndent(harnessJSON, "", "  ")
+	scaffold := scaffoldJSON{
+		Schema:        "https://ynh.dev/schema/harness.json",
+		Name:          name,
+		Version:       "0.1.0",
+		Description:   "",
+		DefaultVendor: "claude",
+	}
+	data, _ := json.MarshalIndent(scaffold, "", "  ")
 	if err := os.WriteFile(filepath.Join(name, "harness.json"), append(data, '\n'), 0o644); err != nil {
 		return err
 	}

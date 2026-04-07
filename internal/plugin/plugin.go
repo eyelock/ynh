@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -130,6 +131,7 @@ func IsLegacyPluginDir(dir string) bool {
 }
 
 // LoadHarnessJSON reads and parses harness.json from dir.
+// Unknown fields are rejected via DisallowUnknownFields.
 func LoadHarnessJSON(dir string) (*HarnessJSON, error) {
 	data, err := os.ReadFile(filepath.Join(dir, "harness.json"))
 	if err != nil {
@@ -137,8 +139,10 @@ func LoadHarnessJSON(dir string) (*HarnessJSON, error) {
 	}
 
 	var hj HarnessJSON
-	if err := json.Unmarshal(data, &hj); err != nil {
-		return nil, fmt.Errorf("parsing harness.json: %w", err)
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&hj); err != nil {
+		return nil, fmt.Errorf("invalid harness.json: %w", err)
 	}
 
 	if hj.Name == "" {

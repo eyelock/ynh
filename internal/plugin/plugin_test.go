@@ -178,6 +178,32 @@ func TestLoadHarnessJSON_MissingName(t *testing.T) {
 	}
 }
 
+func TestLoadHarnessJSON_UnknownField(t *testing.T) {
+	dir := t.TempDir()
+	writeHarnessJSON(t, dir, `{"name":"test","version":"1.0.0","badfield":"value"}`)
+
+	_, err := LoadHarnessJSON(dir)
+	if err == nil {
+		t.Fatal("expected error for unknown field")
+	}
+	if !strings.Contains(err.Error(), "invalid harness.json") {
+		t.Errorf("error should mention invalid harness.json, got: %v", err)
+	}
+}
+
+func TestLoadHarnessJSON_WithSchema(t *testing.T) {
+	dir := t.TempDir()
+	writeHarnessJSON(t, dir, `{"$schema":"https://ynh.dev/schema/harness.json","name":"test","version":"1.0.0"}`)
+
+	hj, err := LoadHarnessJSON(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hj.Schema != "https://ynh.dev/schema/harness.json" {
+		t.Errorf("Schema = %q", hj.Schema)
+	}
+}
+
 func TestSaveHarnessJSON_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 
@@ -332,6 +358,24 @@ func TestValidateMCPServers_Both(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected 'not both' in issues, got %v", issues)
+	}
+}
+
+func TestLoadHarnessJSON_TestdataRoundTrip(t *testing.T) {
+	// Verify all testdata harness.json files parse without error
+	entries, err := filepath.Glob("../../testdata/*/harness.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) == 0 {
+		t.Skip("no testdata harness.json files found")
+	}
+	for _, path := range entries {
+		dir := filepath.Dir(path)
+		_, err := LoadHarnessJSON(dir)
+		if err != nil {
+			t.Errorf("LoadHarnessJSON(%s) failed: %v", dir, err)
+		}
 	}
 }
 
