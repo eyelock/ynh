@@ -251,14 +251,44 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 		return result, err
 	}
 
+	// Codex: skills only (no agents, rules, commands support in plugins)
+	// Claude/Cursor: all artifact types
 	if vendorName == "codex" {
-		return exportCodex(outputDir, pj, p, content, instructionsPath)
-	}
+		codexArtifactDirs := map[string]string{"skills": "skills"}
+		if err := copyContent(outputDir, content, codexArtifactDirs); err != nil {
+			return result, err
+		}
 
-	// Claude and Cursor: standard plugin layout at the output root
-	artifactDirs := adapter.ArtifactDirs()
-	if err := copyContent(outputDir, content, artifactDirs); err != nil {
-		return result, err
+		// Warn about skipped artifacts
+		skippedAgents := 0
+		skippedRules := 0
+		skippedCommands := 0
+		for _, rc := range content {
+			skippedAgents += countDir(filepath.Join(rc.BasePath, "agents"))
+			skippedRules += countDir(filepath.Join(rc.BasePath, "rules"))
+			skippedCommands += countDir(filepath.Join(rc.BasePath, "commands"))
+		}
+		if skippedAgents > 0 || skippedRules > 0 || skippedCommands > 0 {
+			var parts []string
+			if skippedAgents > 0 {
+				parts = append(parts, fmt.Sprintf("%d agents", skippedAgents))
+			}
+			if skippedRules > 0 {
+				parts = append(parts, fmt.Sprintf("%d rules", skippedRules))
+			}
+			if skippedCommands > 0 {
+				parts = append(parts, fmt.Sprintf("%d commands", skippedCommands))
+			}
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Codex: skipping %s (not supported)", joinParts(parts)))
+		}
+		if len(p.DelegatesTo) > 0 {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Codex: skipping %d delegates (not supported)", len(p.DelegatesTo)))
+		}
+	} else {
+		artifactDirs := adapter.ArtifactDirs()
+		if err := copyContent(outputDir, content, artifactDirs); err != nil {
+			return result, err
+		}
 	}
 
 	// Manifest
@@ -271,6 +301,8 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 		if err := GenerateCursorManifest(pj, outputDir); err != nil {
 			return result, err
 		}
+	case "codex":
+		// Generate manifest after MCP config so path pointers are accurate
 	}
 
 	// Instructions
@@ -284,8 +316,8 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 		}
 	}
 
-	// Delegates (Claude and Cursor only)
-	if len(p.DelegatesTo) > 0 {
+	// Delegates (Claude and Cursor only — Codex doesn't support them)
+	if len(p.DelegatesTo) > 0 && vendorName != "codex" {
 		if err := ExportDelegates(outputDir, p.DelegatesTo); err != nil {
 			return result, fmt.Errorf("exporting delegates: %w", err)
 		}
@@ -305,83 +337,15 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 		}
 	}
 
-	result.Skills = countDir(filepath.Join(outputDir, "skills"))
-	result.Agents = countDir(filepath.Join(outputDir, "agents"))
-	return result, nil
-}
-
-// exportCodex handles the Codex-specific layout: .agents/skills/ only.
-// Codex has no plugin manifest, no agents/rules/commands support.
-func exportCodex(outputDir string, _ *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
-	result := ExportResult{
-		Vendor:    "codex",
-		OutputDir: outputDir,
-	}
-
-	// Codex uses .agents/skills/ for skill discovery
-	codexSkillsDir := filepath.Join(outputDir, ".agents", "skills")
-	if err := os.MkdirAll(codexSkillsDir, 0o755); err != nil {
-		return result, err
-	}
-
-	// Only copy skills — Codex has no loading mechanism for other artifact types
-	codexArtifactDirs := map[string]string{
-		"skills": filepath.Join(".agents", "skills"),
-	}
-	if err := copyContent(outputDir, content, codexArtifactDirs); err != nil {
-		return result, err
-	}
-
-	// Count skipped artifacts for warnings
-	skippedAgents := 0
-	skippedRules := 0
-	skippedCommands := 0
-	for _, rc := range content {
-		skippedAgents += countDir(filepath.Join(rc.BasePath, "agents"))
-		skippedRules += countDir(filepath.Join(rc.BasePath, "rules"))
-		skippedCommands += countDir(filepath.Join(rc.BasePath, "commands"))
-	}
-	if skippedAgents > 0 || skippedRules > 0 || skippedCommands > 0 {
-		var parts []string
-		if skippedAgents > 0 {
-			parts = append(parts, fmt.Sprintf("%d agents", skippedAgents))
-		}
-		if skippedRules > 0 {
-			parts = append(parts, fmt.Sprintf("%d rules", skippedRules))
-		}
-		if skippedCommands > 0 {
-			parts = append(parts, fmt.Sprintf("%d commands", skippedCommands))
-		}
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Codex: skipping %s (not supported)", joinParts(parts)))
-	}
-	if len(p.DelegatesTo) > 0 {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Codex: skipping %d delegates (not supported)", len(p.DelegatesTo)))
-	}
-
-	// Instructions — AGENTS.md only (Codex natively consumes it)
-	if instructionsPath != "" {
-		if err := GenerateInstructions(instructionsPath, outputDir, ""); err != nil {
+	// Codex manifest generated after MCP so path pointers detect .mcp.json
+	if vendorName == "codex" {
+		if err := GenerateCodexManifest(pj, outputDir); err != nil {
 			return result, err
 		}
 	}
 
-	// Hook config
-	if len(p.Hooks) > 0 {
-		codexAdapter, _ := vendor.Get("codex")
-		if err := writeHookConfig(outputDir, codexAdapter, p.Hooks); err != nil {
-			return result, fmt.Errorf("writing hook config: %w", err)
-		}
-	}
-
-	// MCP config
-	if len(p.MCPServers) > 0 {
-		codexAdapter, _ := vendor.Get("codex")
-		if err := writeMCPConfig(outputDir, codexAdapter, p.MCPServers); err != nil {
-			return result, fmt.Errorf("writing MCP config: %w", err)
-		}
-	}
-
-	result.Skills = countDir(codexSkillsDir)
+	result.Skills = countDir(filepath.Join(outputDir, "skills"))
+	result.Agents = countDir(filepath.Join(outputDir, "agents"))
 	return result, nil
 }
 

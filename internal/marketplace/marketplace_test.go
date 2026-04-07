@@ -282,6 +282,56 @@ func TestMarketplaceIndexCursor(t *testing.T) {
 	}
 }
 
+func TestMarketplaceIndexCodex(t *testing.T) {
+	configPath, configDir := setupMarketplace(t)
+	outputDir := t.TempDir()
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = Build(cfg, BuildOptions{
+		ConfigDir: configDir,
+		OutputDir: outputDir,
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	// Codex index at .agents/plugins/marketplace.json
+	codexIdxPath := filepath.Join(outputDir, ".agents", "plugins", "marketplace.json")
+	assertFileExists(t, codexIdxPath)
+
+	data, err := os.ReadFile(codexIdxPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var idx codexMarketplaceJSON
+	if err := json.Unmarshal(data, &idx); err != nil {
+		t.Fatalf("parsing codex marketplace.json: %v", err)
+	}
+
+	if idx.Name != "test-marketplace" {
+		t.Errorf("name = %q, want test-marketplace", idx.Name)
+	}
+	if idx.Interface.DisplayName != "test-marketplace" {
+		t.Errorf("displayName = %q, want test-marketplace", idx.Interface.DisplayName)
+	}
+	if len(idx.Plugins) != 2 {
+		t.Fatalf("plugins = %d, want 2", len(idx.Plugins))
+	}
+	for _, p := range idx.Plugins {
+		if p.Source.Source != "local" {
+			t.Errorf("plugin %q source.source = %q, want local", p.Name, p.Source.Source)
+		}
+		if !strings.HasPrefix(p.Source.Path, "./plugins/") {
+			t.Errorf("plugin %q source.path = %q, want ./plugins/ prefix", p.Name, p.Source.Path)
+		}
+	}
+}
+
 func TestMarketplaceReadme(t *testing.T) {
 	configPath, configDir := setupMarketplace(t)
 	outputDir := t.TempDir()

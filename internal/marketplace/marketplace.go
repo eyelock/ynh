@@ -86,17 +86,8 @@ type BuildOptions struct {
 func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 	vendors := opts.Vendors
 	if len(vendors) == 0 {
-		vendors = []string{"claude", "cursor"}
+		vendors = []string{"claude", "cursor", "codex"}
 	}
-
-	// Filter out codex — no marketplace system
-	var filtered []string
-	for _, v := range vendors {
-		if v != "codex" {
-			filtered = append(filtered, v)
-		}
-	}
-	vendors = filtered
 
 	pluginsDir := filepath.Join(opts.OutputDir, "plugins")
 	if err := os.MkdirAll(pluginsDir, 0o755); err != nil {

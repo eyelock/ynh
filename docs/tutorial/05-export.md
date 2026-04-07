@@ -143,18 +143,19 @@ ls -Ra /tmp/ynh-tutorial/export-output/codex/
 
 Expected:
 ```
-.agents/
-  skills/
-    review/SKILL.md
-    take-a-moment/SKILL.md
+.codex-plugin/
+  plugin.json
+skills/
+  review/SKILL.md
+  take-a-moment/SKILL.md
 AGENTS.md
 ```
 
 Key points:
-- Skills go to `.agents/skills/` (Codex's native discovery path)
-- Agents, rules, and commands are **excluded** (Codex doesn't support them)
+- `.codex-plugin/plugin.json` — plugin manifest with path pointers for skills and MCP
+- Skills go to `skills/` at the plugin root (same as Claude and Cursor)
+- Agents, rules, and commands are **excluded** (Codex doesn't support them in plugins)
 - `AGENTS.md` only (Codex natively consumes it)
-- No plugin manifest (Codex has no plugin system)
 
 ## T5.6: Export for specific vendors
 
@@ -251,7 +252,7 @@ rm -rf /tmp/ynh-tutorial/no-inst-out
 - Each vendor gets its own layout:
   - Claude: `.claude-plugin/plugin.json` + artifacts at root
   - Cursor: `.cursor-plugin/plugin.json` + `.cursorrules`
-  - Codex: `.agents/skills/` only (other artifact types excluded)
+  - Codex: `.codex-plugin/plugin.json` + `skills/` (agents, rules, commands excluded)
 - `--merged` produces a single dir with dual manifests (marketplace-ready)
 - Remote includes are resolved and flattened into the export
 - Pick filtering carries through to the export

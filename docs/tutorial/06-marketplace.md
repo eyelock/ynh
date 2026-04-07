@@ -114,6 +114,7 @@ find /tmp/ynh-tutorial/marketplace-out -not -path '*/.git/*' -type f | sort
 
 Expected (`.git/` excluded from listing — it's auto-created by the build):
 ```
+.agents/plugins/marketplace.json
 .claude-plugin/marketplace.json
 .cursor-plugin/marketplace.json
 plugins/formatter/.claude-plugin/plugin.json

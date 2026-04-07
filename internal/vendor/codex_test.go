@@ -3,7 +3,6 @@ package vendor
 import (
 	"encoding/json"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
@@ -128,26 +127,27 @@ func TestCodexGenerateMCPConfig_StdioServer(t *testing.T) {
 		t.Fatal("expected non-nil result")
 	}
 
-	data, ok := result[filepath.Join(".codex", "config.toml")]
+	data, ok := result[".mcp.json"]
 	if !ok {
-		t.Fatal("expected .codex/config.toml key")
+		t.Fatal("expected .mcp.json key")
 	}
 
-	toml := string(data)
-	if !strings.Contains(toml, "[mcp_servers.github]") {
-		t.Error("expected [mcp_servers.github] section")
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
 	}
-	if !strings.Contains(toml, `command = "npx"`) {
-		t.Error("expected command = \"npx\"")
+
+	mcpServers, ok := config["mcpServers"].(map[string]any)
+	if !ok {
+		t.Fatal("expected mcpServers object")
 	}
-	if !strings.Contains(toml, `args = ["-y", "@modelcontextprotocol/server-github"]`) {
-		t.Error("expected args array")
+
+	github, ok := mcpServers["github"].(map[string]any)
+	if !ok {
+		t.Fatal("expected github server object")
 	}
-	if !strings.Contains(toml, "[mcp_servers.github.env]") {
-		t.Error("expected [mcp_servers.github.env] section")
-	}
-	if !strings.Contains(toml, `GITHUB_TOKEN = "${GITHUB_TOKEN}"`) {
-		t.Error("expected GITHUB_TOKEN env var")
+	if github["command"] != "npx" {
+		t.Errorf("command = %v, want npx", github["command"])
 	}
 }
 
@@ -164,18 +164,16 @@ func TestCodexGenerateMCPConfig_HTTPServer(t *testing.T) {
 		t.Fatal("expected non-nil result")
 	}
 
-	data := result[filepath.Join(".codex", "config.toml")]
-	toml := string(data)
+	data := result[".mcp.json"]
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
 
-	if !strings.Contains(toml, "[mcp_servers.api]") {
-		t.Error("expected [mcp_servers.api] section")
-	}
-	if !strings.Contains(toml, `url = "https://api.example.com/mcp"`) {
-		t.Error("expected url value")
-	}
-	// Should NOT have command
-	if strings.Contains(toml, "command") {
-		t.Error("HTTP server should not have command")
+	mcpServers := config["mcpServers"].(map[string]any)
+	api := mcpServers["api"].(map[string]any)
+	if api["url"] != "https://api.example.com/mcp" {
+		t.Errorf("url = %v, want https://api.example.com/mcp", api["url"])
 	}
 }
 
@@ -189,14 +187,17 @@ func TestCodexGenerateMCPConfig_WithHeaders(t *testing.T) {
 	}
 
 	result := c.GenerateMCPConfig(servers)
-	data := result[filepath.Join(".codex", "config.toml")]
-	toml := string(data)
-
-	if !strings.Contains(toml, "[mcp_servers.api.headers]") {
-		t.Error("expected headers section")
+	data := result[".mcp.json"]
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
 	}
-	if !strings.Contains(toml, `Authorization = "Bearer ${API_KEY}"`) {
-		t.Error("expected Authorization header")
+
+	mcpServers := config["mcpServers"].(map[string]any)
+	api := mcpServers["api"].(map[string]any)
+	headers := api["headers"].(map[string]any)
+	if headers["Authorization"] != "Bearer ${API_KEY}" {
+		t.Errorf("Authorization = %v", headers["Authorization"])
 	}
 }
 

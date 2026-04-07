@@ -73,7 +73,7 @@ Each server must have either `command` or `url`, not both. Validation rejects se
 |--------|------|--------|
 | Claude Code | `.claude/.mcp.json` | JSON with `mcpServers` key (inside plugin dir) |
 | Cursor | `.cursor/mcp.json` | JSON with `mcpServers` key |
-| Codex | `.codex/config.toml` | TOML with `[mcp_servers.<name>]` sections |
+| Codex | `.mcp.json` | JSON with `mcpServers` key (at plugin root) |
 
 > **Claude Code runtime limitation:** MCP servers in `--plugin-dir` plugins are not auto-activated during `ynh run` sessions. They work correctly when the plugin is installed via `/plugin install` or when using Codex/Cursor. See [Hooks](hooks.md#claude-code-runtime-limitation) for details.
 
@@ -115,27 +115,22 @@ Cursor uses `.cursor/mcp.json` with the same JSON structure as Claude:
 
 **Cursor env var limitation:** Cursor does not expand `${VAR}` references in env values at runtime. If your MCP server needs environment variables, set them in the shell environment before launching Cursor rather than relying on `${VAR}` syntax in the config.
 
-### Codex TOML Format
+### Codex Format
 
-Codex uses `.codex/config.toml` with TOML table syntax:
+Codex uses `.mcp.json` at the plugin root with the same JSON format as Claude:
 
-```toml
-[mcp_servers.sqlite]
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-sqlite", "/path/to/db.sqlite"]
-
-[mcp_servers.sqlite.env]
-NODE_ENV = "production"
-```
-
-For HTTP servers:
-
-```toml
-[mcp_servers.docs-api]
-url = "https://docs.example.com/mcp"
-
-[mcp_servers.docs-api.headers]
-Authorization = "Bearer ${DOCS_API_KEY}"
+```json
+{
+  "mcpServers": {
+    "sqlite": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sqlite", "/path/to/db.sqlite"],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  }
+}
 ```
 
 ## Root-Harness-Only Rule

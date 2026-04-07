@@ -182,7 +182,8 @@ dist/my-harness/
 │   ├── .cursorrules
 │   └── AGENTS.md
 └── codex/
-    ├── .agents/skills/<name>/SKILL.md
+    ├── .codex-plugin/plugin.json
+    ├── skills/<name>/SKILL.md
     └── AGENTS.md
 ```
 

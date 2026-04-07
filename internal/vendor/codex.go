@@ -144,9 +144,20 @@ func (c *Codex) GenerateMCPConfig(servers map[string]plugin.MCPServer) map[strin
 		return nil
 	}
 
-	toml := renderMCPTOML(servers)
+	// Codex plugin format uses .mcp.json at plugin root (JSON, same as Claude).
+	// See https://developers.openai.com/codex/plugins/build
+	config := map[string]any{
+		"mcpServers": servers,
+	}
+
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return nil
+	}
+	data = append(data, '\n')
+
 	return map[string][]byte{
-		filepath.Join(".codex", "config.toml"): []byte(toml),
+		".mcp.json": data,
 	}
 }
 
