@@ -42,7 +42,15 @@ func cmdCompress(args []string) error {
 		return nil
 	}
 
+	// Env var fallback for skip-confirm
+	if !opts.skipConfirm {
+		opts.skipConfirm = skipConfirmEnv()
+	}
+
 	// Auto-detect vendor if not specified
+	if opts.vendor == "" {
+		opts.vendor = resolveVendorEnv()
+	}
 	if opts.vendor == "" {
 		opts.vendor = detectVendorCLI()
 		if opts.vendor == "" {

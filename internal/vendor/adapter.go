@@ -3,6 +3,8 @@ package vendor
 import (
 	"fmt"
 	"sort"
+
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 // SymlinkEntry records a single symlink created during Install.
@@ -53,7 +55,20 @@ type Adapter interface {
 	// LaunchNonInteractive runs a one-shot prompt.
 	// extraArgs are passed through verbatim to the vendor CLI.
 	LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error
+
+	// GenerateHookConfig translates canonical hook declarations to vendor-native
+	// hook configuration files. Returns a map of relative file paths to file contents.
+	// Returns nil if hooks is nil or empty.
+	GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[string][]byte
+
+	// GenerateMCPConfig translates MCP server declarations to vendor-native
+	// MCP configuration files. Returns a map of relative file paths to file contents.
+	// Returns nil if servers is nil or empty.
+	GenerateMCPConfig(servers map[string]plugin.MCPServer) map[string][]byte
 }
+
+// DefaultName is the fallback vendor when no vendor is specified.
+const DefaultName = "claude"
 
 var registry = map[string]Adapter{}
 

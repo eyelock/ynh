@@ -20,34 +20,27 @@ The `~/.ynh/` directory is created automatically on first use. To customize the 
 export YNH_HOME="$HOME/.config/ynh"
 ```
 
-## Create a Persona
+See [CLI Reference](reference.md) for the full list of environment variables and CLI flags.
 
-A persona is a directory with a `.claude-plugin/plugin.json` and your artifacts:
+## Create a Harness
 
-`.claude-plugin/plugin.json`:
+A harness is a directory with a `harness.json` and your artifacts:
+
+`harness.json`:
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
   "name": "david",
-  "version": "0.1.0"
-}
-```
-
-`metadata.json` (optional):
-```json
-{
-  "ynh": {
-    "default_vendor": "claude"
-  }
+  "version": "0.1.0",
+  "default_vendor": "claude"
 }
 ```
 
 Add whatever you need - skills, agents, rules, commands:
 
 ```
-my-persona/
-├── .claude-plugin/
-│   └── plugin.json
-├── metadata.json
+david/
+├── harness.json
 ├── skills/greet/SKILL.md
 ├── agents/reviewer.md
 └── rules/concise.md
@@ -56,41 +49,42 @@ my-persona/
 ## Install and Use
 
 ```bash
-ynh install ./my-persona
+ynh install ./david
 david                              # interactive session
 david "explain what this function does"   # one-shot
 ```
 
 ### Install from a monorepo
 
-Use `--path` to install a persona from a subdirectory:
+Use `--path` to install a harness from a subdirectory:
 
 ```bash
-ynh install github.com/org/assistants --path personas/david
+ynh install github.com/org/assistants --path harnesses/david
 ynh install ./local-monorepo --path plugins/my-plugin
 ```
 
 ## Pull Skills From Git
 
-Point your metadata at any Git repo. Skills are used as-is - no wrapping, no build step:
+Point your harness at any Git repo. Skills are used as-is - no wrapping, no build step:
 
-`metadata.json`:
+`harness.json`:
 ```json
 {
-  "ynh": {
-    "default_vendor": "claude",
-    "includes": [
-      {
-        "git": "github.com/eyelock/claude-config-toolkit",
-        "pick": ["skills/commit", "skills/tdd"]
-      },
-      {
-        "git": "git@github.com:company/monorepo.git",
-        "path": "packages/ai-config",
-        "pick": ["skills/deploy"]
-      }
-    ]
-  }
+  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
+  "name": "david",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "includes": [
+    {
+      "git": "github.com/eyelock/claude-config-toolkit",
+      "pick": ["skills/commit", "skills/tdd"]
+    },
+    {
+      "git": "git@github.com:company/monorepo.git",
+      "path": "packages/ai-config",
+      "pick": ["skills/deploy"]
+    }
+  ]
 }
 ```
 
@@ -99,7 +93,7 @@ All included repos are fetched at install time and cached locally. This means `y
 Reinstall to pick up changes:
 
 ```bash
-ynh install ./my-persona
+ynh install ./david
 ```
 
 ## Private Repositories
@@ -110,11 +104,9 @@ ynh uses your local `git` for all cloning. If `git clone` works on your machine,
 
 ```json
 {
-  "ynh": {
-    "includes": [
-      {"git": "git@github.com:company/private-skills.git", "pick": ["skills/deploy"]}
-    ]
-  }
+  "includes": [
+    {"git": "git@github.com:company/private-skills.git", "pick": ["skills/deploy"]}
+  ]
 }
 ```
 
@@ -124,11 +116,9 @@ This uses your SSH key. If you can `git clone git@github.com:company/private-ski
 
 ```json
 {
-  "ynh": {
-    "includes": [
-      {"git": "github.com/company/private-repo"}
-    ]
-  }
+  "includes": [
+    {"git": "github.com/company/private-repo"}
+  ]
 }
 ```
 
@@ -161,7 +151,7 @@ Or set a global default in `~/.ynh/config.json`:
 
 ## Restrict Remote Sources
 
-By default, personas can pull skills and agents from any Git repo via `includes` or `delegates_to`. You can restrict which remote sources are allowed by adding an `allowed_remote_sources` list to `~/.ynh/config.json`:
+By default, harnesses can pull skills and agents from any Git repo via `includes` or `delegates_to`. You can restrict which remote sources are allowed by adding an `allowed_remote_sources` list to `~/.ynh/config.json`:
 
 ```json
 {
@@ -182,7 +172,7 @@ By default, personas can pull skills and agents from any Git repo via `includes`
 | Empty array `[]` | All remote sources blocked |
 | Patterns present | Only matching sources allowed |
 
-Local paths (e.g. `ynh install ./my-persona`) are always trusted and bypass this check.
+Local paths (e.g. `ynh install ./david`) are always trusted and bypass this check.
 
 **Pattern syntax:**
 
@@ -231,7 +221,7 @@ david "explain this function"
 
 ## Discover and Install From Registries
 
-A registry is a Git repository containing a `registry.json` that indexes available personas. You can add registries to discover and install personas by name instead of URL.
+A registry is a Git repository containing a `registry.json` that indexes available harnesses. You can add registries to discover and install harnesses by name instead of URL.
 
 ```bash
 # Add a registry (a Git repo with registry.json)
@@ -282,14 +272,14 @@ git clone https://github.com/eyelock/ynh.git
 cd ynh
 make install
 export PATH="$HOME/.ynh/bin:$PATH"
-ynh install ./my-persona
+ynh install ./david
 ```
 
 ## Next Steps
 
-- [Persona Reference](personas.md) - full manifest syntax
+- [Harness Reference](harnesses.md) - full manifest syntax
 - [Artifacts Guide](artifacts.md) - skills, agents, rules, commands
 - [Vendor Support](vendors.md) - supported vendors and switching between them
-- [Docker](docker.md) - run personas in containers, build persona appliance images for CI/CD
+- [Docker](docker.md) - run harnesses in containers, build harness appliance images for CI/CD
 - [ynd Developer Tools](ynd.md) - authoring, exporting, and marketplace building
-- [Tutorials](tutorial/README.md) - progressive walkthroughs from first persona to Docker images
+- [Tutorials](tutorial/README.md) - progressive walkthroughs from first harness to Docker images

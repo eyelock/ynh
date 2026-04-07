@@ -27,9 +27,9 @@ type MarketplaceOwner struct {
 	Email string `json:"email,omitempty"`
 }
 
-// MarketplaceEntry describes one persona or plugin in the marketplace.
+// MarketplaceEntry describes one harness or plugin in the marketplace.
 type MarketplaceEntry struct {
-	Type        string `json:"type"`                  // "persona" or "plugin"
+	Type        string `json:"type"`                  // "harness" or "plugin"
 	Source      string `json:"source"`                // local path or git URL
 	Description string `json:"description,omitempty"` // override plugin.json description
 	Version     string `json:"version,omitempty"`     // override plugin.json version
@@ -59,8 +59,8 @@ func LoadConfig(path string) (*MarketplaceConfig, error) {
 	}
 
 	for i, e := range cfg.Entries {
-		if e.Type != "persona" && e.Type != "plugin" {
-			return nil, fmt.Errorf("marketplace config: entry %d: type must be \"persona\" or \"plugin\", got %q", i, e.Type)
+		if e.Type != "harness" && e.Type != "plugin" {
+			return nil, fmt.Errorf("marketplace config: entry %d: type must be \"harness\" or \"plugin\", got %q", i, e.Type)
 		}
 		if e.Source == "" {
 			return nil, fmt.Errorf("marketplace config: entry %d: source is required", i)
@@ -113,29 +113,31 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 			srcDir = filepath.Join(srcDir, entry.Path)
 		}
 
-		pj, err := plugin.LoadPluginJSON(srcDir)
-		if err != nil {
-			return fmt.Errorf("entry %q: %w", entry.Source, err)
-		}
-
-		pluginOutputDir := filepath.Join(pluginsDir, pj.Name)
+		var info pluginInfo
 
 		switch entry.Type {
-		case "persona":
-			if err := buildPersonaEntry(srcDir, pluginOutputDir, vendors, opts.Config); err != nil {
-				return fmt.Errorf("persona %q: %w", pj.Name, err)
+		case "harness":
+			hj, err := plugin.LoadHarnessJSON(srcDir)
+			if err != nil {
+				return fmt.Errorf("entry %q: %w", entry.Source, err)
+			}
+			info = pluginInfo{Name: hj.Name, Description: hj.Description, Version: hj.Version}
+			pluginOutputDir := filepath.Join(pluginsDir, hj.Name)
+			if err := buildHarnessEntry(srcDir, pluginOutputDir, vendors, opts.Config); err != nil {
+				return fmt.Errorf("harness %q: %w", hj.Name, err)
 			}
 		case "plugin":
+			pi, err := loadPluginManifest(srcDir)
+			if err != nil {
+				return fmt.Errorf("entry %q: %w", entry.Source, err)
+			}
+			info = pi
+			pluginOutputDir := filepath.Join(pluginsDir, pi.Name)
 			if err := buildPluginEntry(srcDir, pluginOutputDir, vendors); err != nil {
-				return fmt.Errorf("plugin %q: %w", pj.Name, err)
+				return fmt.Errorf("plugin %q: %w", pi.Name, err)
 			}
 		}
 
-		info := pluginInfo{
-			Name:        pj.Name,
-			Description: pj.Description,
-			Version:     pj.Version,
-		}
 		// Apply overrides from marketplace config
 		if entry.Description != "" {
 			info.Description = entry.Description
@@ -169,8 +171,8 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 	return nil
 }
 
-// buildPersonaEntry exports a persona using ModeMerged into the plugin output dir.
-func buildPersonaEntry(srcDir, outputDir string, vendors []string, cfg *config.Config) error {
+// buildHarnessEntry exports a harness using ModeMerged into the plugin output dir.
+func buildHarnessEntry(srcDir, outputDir string, vendors []string, cfg *config.Config) error {
 	_, err := exporter.Export(exporter.ExportOptions{
 		SourceDir: srcDir,
 		OutputDir: outputDir,
@@ -188,10 +190,19 @@ func buildPluginEntry(srcDir, outputDir string, vendors []string) error {
 		return fmt.Errorf("copying plugin: %w", err)
 	}
 
-	// Load plugin.json for manifest generation
-	pj, err := plugin.LoadPluginJSON(outputDir)
+	// Load metadata for manifest generation — try harness.json first,
+	// fall back to .claude-plugin/plugin.json (vendor-native plugin format).
+	hj, err := plugin.LoadHarnessJSON(outputDir)
 	if err != nil {
-		return fmt.Errorf("loading copied plugin.json: %w", err)
+		pi, piErr := loadPluginManifest(outputDir)
+		if piErr != nil {
+			return fmt.Errorf("no harness.json or .claude-plugin/plugin.json found: %w", err)
+		}
+		hj = &plugin.HarnessJSON{
+			Name:        pi.Name,
+			Description: pi.Description,
+			Version:     pi.Version,
+		}
 	}
 
 	// Generate missing vendor manifests
@@ -200,14 +211,14 @@ func buildPluginEntry(srcDir, outputDir string, vendors []string) error {
 		case "claude":
 			manifestDir := filepath.Join(outputDir, ".claude-plugin")
 			if _, err := os.Stat(filepath.Join(manifestDir, "plugin.json")); os.IsNotExist(err) {
-				if err := exporter.GenerateClaudeManifest(pj, outputDir); err != nil {
+				if err := exporter.GenerateClaudeManifest(hj, outputDir); err != nil {
 					return err
 				}
 			}
 		case "cursor":
 			manifestDir := filepath.Join(outputDir, ".cursor-plugin")
 			if _, err := os.Stat(filepath.Join(manifestDir, "plugin.json")); os.IsNotExist(err) {
-				if err := exporter.GenerateCursorManifest(pj, outputDir); err != nil {
+				if err := exporter.GenerateCursorManifest(hj, outputDir); err != nil {
 					return err
 				}
 			}
@@ -215,6 +226,32 @@ func buildPluginEntry(srcDir, outputDir string, vendors []string) error {
 	}
 
 	return nil
+}
+
+// loadPluginManifest reads name, description, and version from a vendor-native
+// plugin's .claude-plugin/plugin.json. Used for plugin entries that don't have harness.json.
+func loadPluginManifest(dir string) (pluginInfo, error) {
+	path := filepath.Join(dir, ".claude-plugin", "plugin.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return pluginInfo{}, fmt.Errorf("reading %s: %w", path, err)
+	}
+	var manifest struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Version     string `json:"version"`
+	}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return pluginInfo{}, fmt.Errorf("parsing %s: %w", path, err)
+	}
+	if manifest.Name == "" {
+		return pluginInfo{}, fmt.Errorf("%s: name is required", path)
+	}
+	return pluginInfo{
+		Name:        manifest.Name,
+		Description: manifest.Description,
+		Version:     manifest.Version,
+	}, nil
 }
 
 // resolveEntrySource resolves an entry source path relative to the config directory.

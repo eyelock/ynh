@@ -7,7 +7,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
-	"github.com/eyelock/ynh/internal/persona"
+	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
@@ -25,7 +25,7 @@ const (
 
 // ExportOptions configures an export operation.
 type ExportOptions struct {
-	// SourceDir is the persona source directory — always a local path.
+	// SourceDir is the harness source directory — always a local path.
 	// For remote sources, the CLI resolves (clone + --path scoping) before calling Export.
 	SourceDir string
 	// OutputDir is where to write exported plugin(s).
@@ -36,6 +36,8 @@ type ExportOptions struct {
 	Mode ExportMode
 	// Config provides remote source checking for includes and delegates.
 	Config *config.Config
+	// Profile selects a named configuration variant. Empty means no profile.
+	Profile string
 }
 
 // ExportResult describes the output for one vendor.
@@ -47,17 +49,25 @@ type ExportResult struct {
 	Warnings  []string
 }
 
-// Export produces vendor-native plugin directories from a persona source.
+// Export produces vendor-native plugin directories from a harness source.
 func Export(opts ExportOptions) ([]ExportResult, error) {
-	// Load persona
-	p, err := persona.LoadPluginDir(opts.SourceDir)
+	// Load harness
+	p, err := harness.LoadDir(opts.SourceDir)
 	if err != nil {
-		return nil, fmt.Errorf("loading persona: %w", err)
+		return nil, fmt.Errorf("loading harness: %w", err)
 	}
 
-	pj, err := plugin.LoadPluginJSON(opts.SourceDir)
+	// Apply profile if specified
+	if opts.Profile != "" {
+		p, err = harness.ResolveProfile(p, opts.Profile)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	hj, err := plugin.LoadHarnessJSON(opts.SourceDir)
 	if err != nil {
-		return nil, fmt.Errorf("loading plugin.json: %w", err)
+		return nil, fmt.Errorf("loading harness.json: %w", err)
 	}
 
 	// Check remote sources for all delegates
@@ -81,7 +91,7 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 		content = append(content, r.Content)
 	}
 
-	// Add SourceDir as local content (persona's own embedded artifacts)
+	// Add SourceDir as local content (harness's own embedded artifacts)
 	content = append(content, resolver.ResolvedContent{
 		BasePath: opts.SourceDir,
 	})
@@ -96,12 +106,12 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	}
 
 	if opts.Mode == ModeMerged {
-		return exportMerged(opts, pj, p, content, instructionsPath, vendors)
+		return exportMerged(opts, hj, p, content, instructionsPath, vendors)
 	}
-	return exportPerVendor(opts, pj, p, content, instructionsPath, vendors)
+	return exportPerVendor(opts, hj, p, content, instructionsPath, vendors)
 }
 
-func exportPerVendor(opts ExportOptions, pj *plugin.PluginJSON, p *persona.Persona, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
+func exportPerVendor(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
 	var results []ExportResult
 
 	for _, v := range vendors {
@@ -125,7 +135,7 @@ func exportPerVendor(opts ExportOptions, pj *plugin.PluginJSON, p *persona.Perso
 	return results, nil
 }
 
-func exportMerged(opts ExportOptions, pj *plugin.PluginJSON, p *persona.Persona, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
+func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
 	outputDir := opts.OutputDir
 
 	// Clean and recreate output dir
@@ -193,6 +203,32 @@ func exportMerged(opts ExportOptions, pj *plugin.PluginJSON, p *persona.Persona,
 		agents = countDir(filepath.Join(outputDir, "agents"))
 	}
 
+	// Hook config for each vendor
+	if len(p.Hooks) > 0 {
+		for _, v := range vendors {
+			adapter, err := vendor.Get(v)
+			if err != nil {
+				continue
+			}
+			if err := writeHookConfig(outputDir, adapter, p.Hooks); err != nil {
+				return nil, fmt.Errorf("writing hook config for %s: %w", v, err)
+			}
+		}
+	}
+
+	// MCP config for each vendor
+	if len(p.MCPServers) > 0 {
+		for _, v := range vendors {
+			adapter, err := vendor.Get(v)
+			if err != nil {
+				continue
+			}
+			if err := writeMCPConfig(outputDir, adapter, p.MCPServers); err != nil {
+				return nil, fmt.Errorf("writing MCP config for %s: %w", v, err)
+			}
+		}
+	}
+
 	results = append(results, ExportResult{
 		Vendor:    "merged",
 		OutputDir: outputDir,
@@ -204,7 +240,7 @@ func exportMerged(opts ExportOptions, pj *plugin.PluginJSON, p *persona.Persona,
 	return results, nil
 }
 
-func exportForVendor(vendorName string, outputDir string, pj *plugin.PluginJSON, p *persona.Persona, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
+func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
 	result := ExportResult{
 		Vendor:    vendorName,
 		OutputDir: outputDir,
@@ -255,6 +291,20 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.PluginJSON,
 		}
 	}
 
+	// Hook config
+	if len(p.Hooks) > 0 {
+		if err := writeHookConfig(outputDir, adapter, p.Hooks); err != nil {
+			return result, fmt.Errorf("writing hook config: %w", err)
+		}
+	}
+
+	// MCP config
+	if len(p.MCPServers) > 0 {
+		if err := writeMCPConfig(outputDir, adapter, p.MCPServers); err != nil {
+			return result, fmt.Errorf("writing MCP config: %w", err)
+		}
+	}
+
 	result.Skills = countDir(filepath.Join(outputDir, "skills"))
 	result.Agents = countDir(filepath.Join(outputDir, "agents"))
 	return result, nil
@@ -262,7 +312,7 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.PluginJSON,
 
 // exportCodex handles the Codex-specific layout: .agents/skills/ only.
 // Codex has no plugin manifest, no agents/rules/commands support.
-func exportCodex(outputDir string, _ *plugin.PluginJSON, p *persona.Persona, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
+func exportCodex(outputDir string, _ *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
 	result := ExportResult{
 		Vendor:    "codex",
 		OutputDir: outputDir,
@@ -315,8 +365,54 @@ func exportCodex(outputDir string, _ *plugin.PluginJSON, p *persona.Persona, con
 		}
 	}
 
+	// Hook config
+	if len(p.Hooks) > 0 {
+		codexAdapter, _ := vendor.Get("codex")
+		if err := writeHookConfig(outputDir, codexAdapter, p.Hooks); err != nil {
+			return result, fmt.Errorf("writing hook config: %w", err)
+		}
+	}
+
+	// MCP config
+	if len(p.MCPServers) > 0 {
+		codexAdapter, _ := vendor.Get("codex")
+		if err := writeMCPConfig(outputDir, codexAdapter, p.MCPServers); err != nil {
+			return result, fmt.Errorf("writing MCP config: %w", err)
+		}
+	}
+
 	result.Skills = countDir(codexSkillsDir)
 	return result, nil
+}
+
+// writeMCPConfig generates vendor-native MCP config files and writes them to the output directory.
+func writeMCPConfig(outputDir string, adapter vendor.Adapter, servers map[string]plugin.MCPServer) error {
+	mcpFiles := adapter.GenerateMCPConfig(servers)
+	for relPath, content := range mcpFiles {
+		absPath := filepath.Join(outputDir, relPath)
+		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+			return fmt.Errorf("creating MCP config dir: %w", err)
+		}
+		if err := os.WriteFile(absPath, content, 0o644); err != nil {
+			return fmt.Errorf("writing MCP config %s: %w", relPath, err)
+		}
+	}
+	return nil
+}
+
+// writeHookConfig generates vendor-native hook config files and writes them to the output directory.
+func writeHookConfig(outputDir string, adapter vendor.Adapter, hooks map[string][]plugin.HookEntry) error {
+	hookFiles := adapter.GenerateHookConfig(hooks)
+	for relPath, content := range hookFiles {
+		absPath := filepath.Join(outputDir, relPath)
+		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+			return fmt.Errorf("creating hook config dir: %w", err)
+		}
+		if err := os.WriteFile(absPath, content, 0o644); err != nil {
+			return fmt.Errorf("writing hook config %s: %w", relPath, err)
+		}
+	}
+	return nil
 }
 
 // copyContent copies resolved content into the target directory using the given artifact dirs mapping.

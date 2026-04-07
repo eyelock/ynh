@@ -50,20 +50,20 @@ func TestParseImageArgs(t *testing.T) {
 		},
 		{
 			name:     "from source",
-			args:     []string{"david", "--from", "github.com/org/personas"},
+			args:     []string{"david", "--from", "github.com/org/harnesses"},
 			wantName: "david",
 			wantTag:  "ynh-david:latest",
 			wantBase: "ghcr.io/eyelock/ynh:latest",
-			wantFrom: "github.com/org/personas",
+			wantFrom: "github.com/org/harnesses",
 		},
 		{
 			name:     "from with path",
-			args:     []string{"david", "--from", "github.com/org/monorepo", "--path", "personas/david"},
+			args:     []string{"david", "--from", "github.com/org/monorepo", "--path", "harnesses/david"},
 			wantName: "david",
 			wantTag:  "ynh-david:latest",
 			wantBase: "ghcr.io/eyelock/ynh:latest",
 			wantFrom: "github.com/org/monorepo",
-			wantPath: "personas/david",
+			wantPath: "harnesses/david",
 		},
 		{
 			name:     "all flags",
@@ -155,11 +155,11 @@ func TestGenerateDockerfile(t *testing.T) {
 		"vendors/claude/ /home/ynh/.ynh/run/david/claude/",
 		"vendors/codex/ /home/ynh/.ynh/run/david/codex/",
 		"vendors/cursor/ /home/ynh/.ynh/run/david/cursor/",
-		"persona/ /home/ynh/.ynh/personas/david/",
+		"harness/ /home/ynh/.ynh/harnesses/david/",
 		"ENV YNH_VENDOR=claude",
 		`ENTRYPOINT ["tini", "-s", "--", "ynh", "run", "david"]`,
-		`dev.ynh.persona="david"`,
-		`dev.ynh.persona.default-vendor="claude"`,
+		`dev.ynh.harness="david"`,
+		`dev.ynh.harness.default-vendor="claude"`,
 		`dev.ynh.assembled-by="v1.2.3"`,
 	}
 
@@ -208,8 +208,8 @@ func TestCmdImage_DryRun(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 
-	// Create a minimal installed persona
-	installTestPersona(t, "drytest")
+	// Create a minimal installed harness
+	installTestHarness(t, "drytest")
 
 	// Capture stdout
 	old := os.Stdout
@@ -233,7 +233,7 @@ func TestCmdImage_DryRun(t *testing.T) {
 		t.Errorf("dry-run should print Dockerfile with FROM line\n\nGot:\n%s", output)
 	}
 	if !strings.Contains(output, "drytest") {
-		t.Errorf("dry-run should contain persona name\n\nGot:\n%s", output)
+		t.Errorf("dry-run should contain harness name\n\nGot:\n%s", output)
 	}
 }
 
@@ -247,13 +247,13 @@ func TestCmdImage_NoArgs(t *testing.T) {
 	}
 }
 
-func TestCmdImage_PersonaNotFound(t *testing.T) {
+func TestCmdImage_HarnessNotFound(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 
 	err := cmdImage([]string{"nonexistent", "--dry-run"})
 	if err == nil {
-		t.Fatal("expected error for missing persona")
+		t.Fatal("expected error for missing harness")
 	}
 	if !strings.Contains(err.Error(), "not found") {
 		t.Errorf("expected 'not found' error, got: %v", err)
@@ -264,8 +264,8 @@ func TestCmdImage_NoDocker(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 
-	// Create a minimal installed persona
-	installTestPersona(t, "nodockertest")
+	// Create a minimal installed harness
+	installTestHarness(t, "nodockertest")
 
 	// Set PATH to empty to ensure docker isn't found
 	t.Setenv("PATH", t.TempDir())
@@ -283,8 +283,8 @@ func TestImageAssembly_AllVendors(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 
-	// Create a minimal installed persona
-	installTestPersona(t, "assemblytest")
+	// Create a minimal installed harness
+	installTestHarness(t, "assemblytest")
 
 	// Capture stdout (dry-run prints to stdout)
 	old := os.Stdout
@@ -309,7 +309,7 @@ func TestPreAssembledRunDir(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create a pre-assembled vendor layout
-	vendorDir := filepath.Join(dir, "run", "testpersona", "claude")
+	vendorDir := filepath.Join(dir, "run", "testharness", "claude")
 	if err := os.MkdirAll(vendorDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +320,7 @@ func TestPreAssembledRunDir(t *testing.T) {
 	}
 
 	// Check detection: the directory should exist
-	runDir := filepath.Join(dir, "run", "testpersona")
+	runDir := filepath.Join(dir, "run", "testharness")
 	vendorRunDir := filepath.Join(runDir, "claude")
 	info, err := os.Stat(vendorRunDir)
 	if err != nil {

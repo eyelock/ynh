@@ -1,6 +1,6 @@
 # Tutorial 5: Export
 
-Produce vendor-native distributable plugins from personas. The exported output passes strict vendor validation and can be loaded directly by Claude Code, Cursor, or Codex.
+Produce vendor-native distributable plugins from harnesses. The exported output passes strict vendor validation and can be loaded directly by Claude Code, Cursor, or Codex.
 
 ## Prerequisites
 
@@ -11,21 +11,11 @@ rm -rf /tmp/ynh-tutorial
 mkdir -p /tmp/ynh-tutorial
 ```
 
-## T5.1: Create a persona to export
+## T5.1: Create a harness to export
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/exportable/.claude-plugin
 mkdir -p /tmp/ynh-tutorial/exportable/skills/review
 mkdir -p /tmp/ynh-tutorial/exportable/agents
-
-cat > /tmp/ynh-tutorial/exportable/.claude-plugin/plugin.json << 'EOF'
-{
-  "name": "exportable",
-  "version": "1.0.0",
-  "description": "A persona designed for cross-vendor export",
-  "author": {"name": "tutorial"}
-}
-EOF
 
 cat > /tmp/ynh-tutorial/exportable/skills/review/SKILL.md << 'EOF'
 ---
@@ -49,21 +39,22 @@ Run automated checks on the codebase and report results.
 EOF
 
 cat > /tmp/ynh-tutorial/exportable/instructions.md << 'EOF'
-You are a code quality persona. Focus on correctness and security.
+You are a code quality harness. Focus on correctness and security.
 EOF
 
-cat > /tmp/ynh-tutorial/exportable/metadata.json << 'EOF'
+cat > /tmp/ynh-tutorial/exportable/harness.json << 'EOF'
 {
-  "ynh": {
-    "default_vendor": "claude",
-    "includes": [
-      {
-        "git": "github.com/eyelock/assistants",
-        "path": "skills/pause",
-        "pick": ["skills/take-a-moment"]
-      }
-    ]
-  }
+  "name": "exportable",
+  "version": "1.0.0",
+  "description": "A harness designed for cross-vendor export",
+  "default_vendor": "claude",
+  "includes": [
+    {
+      "git": "github.com/eyelock/assistants",
+      "path": "skills/pause",
+      "pick": ["skills/take-a-moment"]
+    }
+  ]
 }
 EOF
 ```
@@ -233,8 +224,8 @@ Clones the repo, applies `--path` scoping, exports. Same as exporting a local di
 ## T5.10: Export with no instructions
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/no-instructions/.claude-plugin
-cat > /tmp/ynh-tutorial/no-instructions/.claude-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/no-instructions
+cat > /tmp/ynh-tutorial/no-instructions/harness.json << 'EOF'
 {"name": "no-instructions", "version": "0.1.0"}
 EOF
 
@@ -242,7 +233,7 @@ ynd export /tmp/ynh-tutorial/no-instructions -o /tmp/ynh-tutorial/no-inst-out -v
 # Expected: succeeds with warning "No instructions.md found"
 
 ls /tmp/ynh-tutorial/no-inst-out/claude/
-# Expected: .claude-plugin/plugin.json only (no AGENTS.md)
+# Expected: .claude-plugin/plugin.json only (generated from harness.json, no AGENTS.md)
 ```
 
 ## Clean up

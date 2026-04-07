@@ -81,6 +81,11 @@ func cmdMarketplaceBuild(args []string) error {
 		outputDir = filepath.Join(".", "dist")
 	}
 
+	// Resolve vendor from env var if no flag
+	if vendors == "" {
+		vendors = resolveVendorEnv()
+	}
+
 	// Parse vendor list
 	var vendorList []string
 	if vendors != "" {

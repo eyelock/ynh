@@ -1,7 +1,12 @@
 package vendor
 
 import (
+	"encoding/json"
 	"os/exec"
+	"path/filepath"
+	"sort"
+
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 func init() {
@@ -40,6 +45,90 @@ func (c *Cursor) LaunchInteractive(configPath string, extraArgs []string) error 
 func (c *Cursor) LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error {
 	args := append([]string{"-p", prompt}, extraArgs...)
 	return launchCursor(configPath, args)
+}
+
+// cursorHookEventMap maps canonical event names to Cursor hook events.
+// Cursor supports: beforeSubmitPrompt, beforeShellExecution, beforeMCPExecution,
+// beforeReadFile, afterFileEdit, stop. There is no afterShellExecution event.
+var cursorHookEventMap = map[string]string{
+	"before_tool":   "beforeShellExecution",
+	"after_tool":    "afterFileEdit",
+	"before_prompt": "beforeSubmitPrompt",
+	"on_stop":       "stop",
+}
+
+func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[string][]byte {
+	if len(hooks) == 0 {
+		return nil
+	}
+
+	// Cursor flat format: { "hooks": { "beforeShellExecution": [ { "command": "..." } ] } }
+	type cursorHookEntry struct {
+		Command string `json:"command"`
+	}
+
+	allEvents := make(map[string][]cursorHookEntry)
+
+	var events []string
+	for event := range hooks {
+		events = append(events, event)
+	}
+	sort.Strings(events)
+
+	for _, event := range events {
+		entries := hooks[event]
+		cursorEvent, ok := cursorHookEventMap[event]
+		if !ok {
+			continue
+		}
+
+		var hookEntries []cursorHookEntry
+		for _, entry := range entries {
+			hookEntries = append(hookEntries, cursorHookEntry{Command: entry.Command})
+		}
+
+		allEvents[cursorEvent] = hookEntries
+	}
+
+	if len(allEvents) == 0 {
+		return nil
+	}
+
+	config := map[string]any{
+		"version": 1,
+		"hooks":   allEvents,
+	}
+
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return nil
+	}
+	data = append(data, '\n')
+
+	return map[string][]byte{
+		filepath.Join(".cursor", "hooks.json"): data,
+	}
+}
+
+func (c *Cursor) GenerateMCPConfig(servers map[string]plugin.MCPServer) map[string][]byte {
+	if len(servers) == 0 {
+		return nil
+	}
+
+	// Cursor uses .cursor/mcp.json with "mcpServers" key — same structure as Claude
+	config := map[string]any{
+		"mcpServers": servers,
+	}
+
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return nil
+	}
+	data = append(data, '\n')
+
+	return map[string][]byte{
+		filepath.Join(".cursor", "mcp.json"): data,
+	}
 }
 
 func launchCursor(configPath string, extraArgs []string) error {

@@ -93,18 +93,17 @@ func TestCreateAgent_AlreadyExists(t *testing.T) {
 	}
 }
 
-func TestCreatePersona(t *testing.T) {
+func TestCreateHarness(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	if err := createPersona("my-team"); err != nil {
-		t.Fatalf("createPersona failed: %v", err)
+	if err := createHarness("my-team"); err != nil {
+		t.Fatalf("createHarness failed: %v", err)
 	}
 
 	expectedFiles := []string{
-		"my-team/.claude-plugin/plugin.json",
-		"my-team/metadata.json",
-		"my-team/instructions.md",
+		"my-team/harness.json",
+		"my-team/AGENTS.md",
 	}
 	for _, f := range expectedFiles {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
@@ -127,30 +126,30 @@ func TestCreatePersona(t *testing.T) {
 		}
 	}
 
-	// Verify plugin.json content
-	data, err := os.ReadFile(filepath.Join(dir, "my-team/.claude-plugin/plugin.json"))
+	// Verify harness.json content
+	data, err := os.ReadFile(filepath.Join(dir, "my-team/harness.json"))
 	if err != nil {
-		t.Fatalf("reading plugin.json: %v", err)
+		t.Fatalf("reading harness.json: %v", err)
 	}
 	if !strings.Contains(string(data), `"name": "my-team"`) {
-		t.Error("plugin.json missing name")
+		t.Error("harness.json missing name")
 	}
 	if !strings.Contains(string(data), `"version": "0.1.0"`) {
-		t.Error("plugin.json missing version")
+		t.Error("harness.json missing version")
 	}
 }
 
-func TestCreatePersona_AlreadyExists(t *testing.T) {
+func TestCreateHarness_AlreadyExists(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	if err := createPersona("my-team"); err != nil {
-		t.Fatalf("first createPersona failed: %v", err)
+	if err := createHarness("my-team"); err != nil {
+		t.Fatalf("first createHarness failed: %v", err)
 	}
 
-	err := createPersona("my-team")
+	err := createHarness("my-team")
 	if err == nil {
-		t.Fatal("expected error for duplicate persona")
+		t.Fatal("expected error for duplicate harness")
 	}
 	if !strings.Contains(err.Error(), "already exists") {
 		t.Errorf("unexpected error: %v", err)
@@ -190,19 +189,36 @@ func TestCreateCommand(t *testing.T) {
 	}
 }
 
-func TestCreatePersona_InsidePersona(t *testing.T) {
+func TestCreateHarness_VendorEnvVar(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("YNH_VENDOR", "cursor")
+
+	if err := createHarness("vendor-test"); err != nil {
+		t.Fatalf("createHarness failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "vendor-test/harness.json"))
+	if err != nil {
+		t.Fatalf("reading harness.json: %v", err)
+	}
+	if !strings.Contains(string(data), `"default_vendor": "cursor"`) {
+		t.Errorf("expected default_vendor to be cursor, got: %s", data)
+	}
+}
+
+func TestCreateHarness_InsideHarness(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	// Make CWD look like a persona
-	mkdirAll(t, filepath.Join(dir, ".claude-plugin"))
-	writeFile(t, filepath.Join(dir, ".claude-plugin", "plugin.json"), []byte(`{}`))
+	// Make CWD look like a harness
+	writeFile(t, filepath.Join(dir, "harness.json"), []byte(`{"name":"test","version":"0.1.0"}`))
 
-	err := createPersona("nested")
+	err := createHarness("nested")
 	if err == nil {
-		t.Fatal("expected error when creating persona inside a persona")
+		t.Fatal("expected error when creating harness inside a harness")
 	}
-	if !strings.Contains(err.Error(), "already inside a persona") {
+	if !strings.Contains(err.Error(), "already inside a harness") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -342,16 +358,16 @@ func TestCmdCreate_Agent(t *testing.T) {
 	}
 }
 
-func TestCmdCreate_Persona(t *testing.T) {
+func TestCmdCreate_Harness(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	err := cmdCreate([]string{"persona", "test-persona"})
+	err := cmdCreate([]string{"harness", "test-harness"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "test-persona", ".claude-plugin", "plugin.json")); err != nil {
-		t.Error("expected plugin.json to exist")
+	if _, err := os.Stat(filepath.Join(dir, "test-harness", "harness.json")); err != nil {
+		t.Error("expected harness.json to exist")
 	}
 }
 

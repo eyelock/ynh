@@ -46,8 +46,8 @@ func TestSaveAndLoad_Roundtrip(t *testing.T) {
 	}
 
 	inst := loaded.Installations[0]
-	if inst.Persona != "david" {
-		t.Errorf("Persona = %q, want %q", inst.Persona, "david")
+	if inst.Harness != "david" {
+		t.Errorf("Harness = %q, want %q", inst.Harness, "david")
 	}
 	if inst.Vendor != "cursor" {
 		t.Errorf("Vendor = %q, want %q", inst.Vendor, "cursor")
@@ -79,8 +79,8 @@ func TestFindInstallation_ExactMatch(t *testing.T) {
 	if inst == nil {
 		t.Fatal("expected to find installation")
 	}
-	if inst.Persona != "bob" {
-		t.Errorf("Persona = %q, want %q", inst.Persona, "bob")
+	if inst.Harness != "bob" {
+		t.Errorf("Harness = %q, want %q", inst.Harness, "bob")
 	}
 }
 
@@ -90,7 +90,7 @@ func TestFindInstallation_NotFound(t *testing.T) {
 
 	inst := log.FindInstallation("bob", "cursor", "/proj1")
 	if inst != nil {
-		t.Error("expected nil for non-matching persona")
+		t.Error("expected nil for non-matching harness")
 	}
 }
 
@@ -103,8 +103,8 @@ func TestRemoveInstallation(t *testing.T) {
 	if len(log.Installations) != 1 {
 		t.Fatalf("expected 1 installation after removal, got %d", len(log.Installations))
 	}
-	if log.Installations[0].Persona != "bob" {
-		t.Errorf("remaining installation should be bob, got %q", log.Installations[0].Persona)
+	if log.Installations[0].Harness != "bob" {
+		t.Errorf("remaining installation should be bob, got %q", log.Installations[0].Harness)
 	}
 }
 
@@ -150,8 +150,8 @@ func TestPrune_FindsOrphans(t *testing.T) {
 	if len(orphans) != 1 {
 		t.Fatalf("expected 1 orphan (alice), got %d", len(orphans))
 	}
-	if orphans[0].Persona != "alice" {
-		t.Errorf("orphan should be alice, got %q", orphans[0].Persona)
+	if orphans[0].Harness != "alice" {
+		t.Errorf("orphan should be alice, got %q", orphans[0].Harness)
 	}
 }
 
@@ -162,7 +162,7 @@ func TestRecord_Upsert(t *testing.T) {
 	})
 	log.Record("bob", "codex", "/proj2", nil)
 
-	// Record same persona+vendor+project again with different symlinks
+	// Record same harness+vendor+project again with different symlinks
 	log.Record("alice", "cursor", "/proj1", []vendor.SymlinkEntry{
 		{Target: "c", Link: "d"},
 		{Target: "e", Link: "f"},
@@ -204,8 +204,8 @@ func TestPrune_EmptySymlinks(t *testing.T) {
 	if len(orphans) != 1 {
 		t.Fatalf("expected 1 orphan for empty symlinks, got %d", len(orphans))
 	}
-	if orphans[0].Persona != "alice" {
-		t.Errorf("orphan should be alice, got %q", orphans[0].Persona)
+	if orphans[0].Harness != "alice" {
+		t.Errorf("orphan should be alice, got %q", orphans[0].Harness)
 	}
 }
 
@@ -230,7 +230,7 @@ func TestRemoveOrphans(t *testing.T) {
 	if len(log.Installations) != 1 {
 		t.Fatalf("expected 1 after RemoveOrphans, got %d", len(log.Installations))
 	}
-	if log.Installations[0].Persona != "bob" {
-		t.Errorf("remaining should be bob, got %q", log.Installations[0].Persona)
+	if log.Installations[0].Harness != "bob" {
+		t.Errorf("remaining should be bob, got %q", log.Installations[0].Harness)
 	}
 }

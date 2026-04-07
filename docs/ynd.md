@@ -1,6 +1,6 @@
 # ynd Developer Tools
 
-`ynd` is a companion CLI for authoring and maintaining ynh personas. It scaffolds artifacts, validates structure, formats markdown, compresses prompts, inspects codebases to generate new skills and agents, exports personas as vendor-native plugins, and builds marketplaces.
+`ynd` is a companion CLI for authoring and maintaining ynh harnesses. It scaffolds artifacts, validates structure, formats markdown, compresses prompts, inspects codebases to generate new skills and agents, exports harnesses as vendor-native plugins, and builds marketplaces.
 
 ## Install
 
@@ -15,10 +15,10 @@ brew tap eyelock/tap && brew install ynh
 
 ### create
 
-Scaffold a new artifact or full persona.
+Scaffold a new artifact or full harness.
 
 ```bash
-ynd create persona my-team     # full persona directory structure
+ynd create harness my-team     # full harness directory structure (harness.json + artifacts)
 ynd create skill commit        # skills/commit/SKILL.md
 ynd create agent reviewer      # agents/reviewer.md
 ynd create rule be-nice        # rules/be-nice.md
@@ -31,16 +31,18 @@ Lint markdown, shell blocks, and config files for common issues.
 
 ```bash
 ynd lint                       # all files under CWD
-ynd lint agents/reviewer.md    # single file
+ynd lint path/to/harness       # specific directory
+ynd lint --harness ./my-harness  # explicit harness flag
 ```
 
 ### validate
 
-Validate persona structure: required files, frontmatter fields, directory layout.
+Validate harness structure: required files, frontmatter fields, directory layout.
 
 ```bash
-ynd validate                   # current persona directory
-ynd validate path/to/persona   # specific persona
+ynd validate                   # current harness directory
+ynd validate path/to/harness   # specific harness
+ynd validate --harness ./my-harness  # explicit harness flag
 ```
 
 ### fmt
@@ -50,6 +52,7 @@ Format markdown files — normalise headings, whitespace, and list markers.
 ```bash
 ynd fmt                        # all .md files under CWD
 ynd fmt skills/                # specific directory
+ynd fmt --harness ./my-harness   # explicit harness flag
 ```
 
 ### compress
@@ -63,6 +66,8 @@ ynd compress                   # discover and compress all .md files
 ynd compress instructions.md   # specific file
 ynd compress -y verbose.md     # skip confirmation prompt
 ynd compress -v claude         # use specific vendor CLI
+YNH_YES=1 ynd compress file.md # skip confirmation via env var
+CI=true ynd compress file.md   # also skip confirmation (CI convention)
 
 # Backup management
 ynd compress --list-backups instructions.md   # show backup history
@@ -81,33 +86,86 @@ ynd inspect                    # auto-detect vendor CLI, write to .{vendor}/
 ynd inspect -v claude          # use specific vendor
 ynd inspect -o .               # write artifacts to project root instead
 ynd inspect -o /tmp/out        # write artifacts to a custom directory
+YNH_YES=1 ynd inspect          # skip prompts via env var
+YNH_VENDOR=cursor ynd inspect  # vendor via env var
 ```
 
-### export
+### preview
 
-Export a persona as vendor-native plugins. Resolves all remote includes, flattens artifacts, and writes distributable output per vendor.
+Show the assembled vendor-native output for a harness without installing it. Useful for verifying hook config, MCP config, and artifact layout before shipping.
 
 ```bash
-ynd export ./my-persona                          # all vendors → ./dist/my-persona/
-ynd export ./my-persona -v claude,cursor          # specific vendors only
-ynd export ./my-persona -o ./out                  # custom output directory
-ynd export ./my-persona --merged                  # single dir with dual manifests
-ynd export ./my-persona --clean                   # remove output dir before export
-ynd export github.com/user/repo --path personas/david  # from a monorepo
+ynd preview ./my-harness                    # default: Claude vendor, stdout
+ynd preview ./my-harness -v cursor          # specific vendor
+ynd preview ./my-harness -v claude -o ./out # write to directory
+ynd preview ./my-harness --profile strict   # preview with a specific profile
+ynd preview --harness ./my-harness          # explicit harness flag
 ```
 
 | Flag | Description |
 |------|-------------|
-| `-o, --output <dir>` | Output directory. Default: `./dist/<persona-name>/` |
+| `-v, --vendor <name>` | Vendor to assemble for. Default: `claude` |
+| `-o, --output <dir>` | Write output to directory instead of stdout |
+| `--harness <dir>` | Harness source directory (alternative to positional arg) |
+| `--profile <name>` | Profile to apply during assembly |
+
+When no `-o` flag is given, preview prints a tree with file contents to stdout. With `-o`, it writes the full assembled output to the specified directory.
+
+Preview supports the same source types as export: local directories with `harness.json` or bare `AGENTS.md` directories.
+
+See [Tutorial 12: Developer Preview](tutorial/12-developer-preview.md) for a guided walkthrough.
+
+### diff
+
+Compare assembled harness output across two or more vendors. Shows which files are unique to each vendor, which have different content, and which are identical.
+
+```bash
+ynd diff ./my-harness                       # compare all vendors (claude, codex, cursor)
+ynd diff ./my-harness claude cursor         # compare specific vendors (positional)
+ynd diff ./my-harness -v claude,cursor      # compare specific vendors (flag)
+ynd diff ./my-harness claude cursor codex   # three-way comparison
+ynd diff ./my-harness --profile strict      # diff with a specific profile applied
+ynd diff --harness ./my-harness             # explicit harness flag
+```
+
+The diff output groups files into four categories:
+- **Only in \<vendor\>** — files unique to that vendor (e.g., `.claude/settings.json` for Claude hooks)
+- **Different content** — files present in both but with different content
+- **Identical** — files present in both with the same content
+
+At least two vendors are required for comparison. If no vendors are specified, all registered vendors are compared.
+
+See [Tutorial 12: Developer Preview](tutorial/12-developer-preview.md) for a guided walkthrough.
+
+### export
+
+Export a harness as vendor-native plugins. Resolves all remote includes, flattens artifacts, and writes distributable output per vendor.
+
+```bash
+ynd export ./my-harness                          # all vendors → ./dist/my-harness/
+ynd export ./my-harness -v claude,cursor          # specific vendors only
+ynd export ./my-harness -o ./out                  # custom output directory
+ynd export ./my-harness --merged                  # single dir with dual manifests
+ynd export ./my-harness --clean                   # remove output dir before export
+ynd export ./my-harness --profile strict          # export with a specific profile applied
+ynd export --harness ./my-harness                 # explicit harness flag
+ynd export github.com/user/repo --path harnesses/david  # from a monorepo
+```
+
+| Flag | Description |
+|------|-------------|
+| `-o, --output <dir>` | Output directory. Default: `./dist/<harness-name>/` |
 | `-v, --vendor <names>` | Comma-separated vendors. Default: all registered (`claude,codex,cursor`) |
+| `--harness <dir>` | Harness source directory (alternative to positional arg) |
 | `--path <subdir>` | Subdirectory within source (for monorepos) |
+| `--profile <name>` | Profile to apply during assembly |
 | `--merged` | Single output dir with all vendor manifests (for CI/marketplace use) |
 | `--clean` | Remove entire output dir before export |
 
 **Output structure** (per-vendor mode):
 
 ```
-dist/my-persona/
+dist/my-harness/
 ├── claude/
 │   ├── .claude-plugin/plugin.json
 │   ├── skills/<name>/SKILL.md
@@ -139,7 +197,7 @@ See [Tutorial 5: Export](tutorial/05-export.md) for a guided walkthrough.
 
 ### marketplace build
 
-Build a marketplace from a collection of personas and pre-built plugins. Each entry is exported with dual vendor manifests and indexed.
+Build a marketplace from a collection of harnesses and pre-built plugins. Each entry is exported with dual vendor manifests and indexed.
 
 ```bash
 ynd marketplace build                             # uses ./marketplace.json
@@ -163,14 +221,14 @@ ynd marketplace build --clean                     # remove output dir before bui
   "owner": { "name": "My Org" },
   "entries": [
     { "type": "plugin", "source": "./plugins/foo" },
-    { "type": "persona", "source": "./personas/bar" },
-    { "type": "persona", "source": "github.com/user/repo", "path": "personas/baz" }
+    { "type": "harness", "source": "./harnesses/bar" },
+    { "type": "harness", "source": "github.com/user/repo", "path": "harnesses/baz" }
   ]
 }
 ```
 
 - `plugin` entries are copied as-is (already in vendor-native format)
-- `persona` entries are fully exported — includes resolved, artifacts flattened
+- `harness` entries are fully exported — includes resolved, artifacts flattened
 - Codex is excluded (no marketplace system)
 
 **Output structure:**
@@ -194,11 +252,13 @@ See [Tutorial 6: Marketplace](tutorial/06-marketplace.md) for a guided walkthrou
 
 | Flag | Commands | Description |
 |------|----------|-------------|
-| `-v, --vendor <name(s)>` | compress, inspect, export, marketplace | Vendor to use. Comma-separated for export/marketplace. |
-| `-y, --yes` | compress, inspect | Skip confirmation prompts. |
-| `-o, --output <path>` | inspect, export, marketplace | Output directory. Defaults vary by command. |
+| `-v, --vendor <name(s)>` | compress, inspect, export, preview, diff, marketplace | Vendor to use. Comma-separated for export/diff/marketplace. Single value for preview. |
+| `-y, --yes` | compress, inspect | Skip confirmation prompts. Also honored via `YNH_YES` or `CI` env vars. |
+| `-o, --output <path>` | inspect, export, preview, marketplace | Output directory. Defaults vary by command. |
+| `--harness <dir>` | preview, diff, export, validate, lint, fmt | Harness source directory. Alternative to positional arg. Also honored via `YNH_HARNESS` env var. |
 | `--clean` | export, marketplace | Remove output directory before writing. |
 | `--merged` | export | Single output dir with dual vendor manifests. |
+| `--profile <name>` | preview, diff, export | Profile to apply during assembly. |
 | `--path <subdir>` | export | Subdirectory within source (for monorepos). |
 | `--restore` | compress | Restore a file from its latest backup. |
 | `--list-backups` | compress | Show backup history for a file. |
@@ -207,8 +267,8 @@ See [Tutorial 6: Marketplace](tutorial/06-marketplace.md) for a guided walkthrou
 ## Examples
 
 ```bash
-# Bootstrap a new persona and validate it
-ynd create persona ops-team
+# Bootstrap a new harness and validate it
+ynd create harness ops-team
 cd ops-team
 ynd validate
 
@@ -225,9 +285,16 @@ ynd compress -y instructions.md
 cd /path/to/my-app
 ynd inspect
 
-# Export a persona as vendor-native plugins
+# Preview assembled output for a specific vendor
+ynd preview ./ops-team -v cursor
+ynd preview ./ops-team -v claude -o ./preview-output
+
+# Compare assembled output across vendors
+ynd diff ./ops-team claude cursor
+
+# Export a harness as vendor-native plugins
 ynd export ./ops-team -v claude,cursor
 
-# Build a marketplace from multiple personas
+# Build a marketplace from multiple harnesses
 ynd marketplace build marketplace.json -o ./dist --clean
 ```

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 var Version = "dev"
@@ -35,8 +37,8 @@ func HomeDir() string {
 	return filepath.Join(home, DefaultDirName)
 }
 
-func PersonasDir() string {
-	return filepath.Join(HomeDir(), "personas")
+func HarnessesDir() string {
+	return filepath.Join(HomeDir(), "harnesses")
 }
 
 func CacheDir() string {
@@ -59,7 +61,7 @@ func ConfigPath() string {
 func EnsureDirs() error {
 	dirs := []string{
 		HomeDir(),
-		PersonasDir(),
+		HarnessesDir(),
 		CacheDir(),
 		BinDir(),
 		RunDir(),
@@ -74,7 +76,7 @@ func EnsureDirs() error {
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		DefaultVendor: "claude",
+		DefaultVendor: vendor.DefaultName,
 	}
 
 	data, err := os.ReadFile(ConfigPath())

@@ -1,6 +1,6 @@
 ---
 name: ynh-guide
-description: Expert on ynh (ynh) concepts, architecture, and troubleshooting. Use when users ask how ynh works, need help with persona configuration, or encounter issues with installation, vendors, or Git resolution.
+description: Expert on ynh (ynh) concepts, architecture, and troubleshooting. Use when users ask how ynh works, need help with harness configuration, or encounter issues with installation, vendors, or Git resolution.
 tools: Read, Grep, Glob
 ---
 
@@ -13,16 +13,16 @@ Always read the relevant source before answering:
 | Question about | Read |
 |---------------|------|
 | Getting started, installation | `docs/getting-started.md` |
-| Persona manifest syntax | `docs/personas.md` |
+| Harness manifest syntax | `docs/harnesses.md` |
 | Skills, agents, rules, commands | `docs/artifacts.md` |
 | Vendor support, switching vendors | `docs/vendors.md` |
 | Architecture, code patterns | `.github/CONTRIBUTING.md` |
 | Quick reference, overview | `README.md` |
-| Working examples | `testdata/sample-persona/`, `testdata/composed-persona/`, `testdata/team-persona/` |
+| Working examples | `testdata/sample-harness/`, `testdata/composed-harness/`, `testdata/team-harness/` |
 | Git authentication | `docs/getting-started.md` (Private Repositories section) |
 
 For implementation questions, also read the relevant Go source:
-- `internal/persona/` - manifest parsing
+- `internal/harness/` - manifest parsing
 - `internal/resolver/` - Git clone and cache
 - `internal/assembler/` - vendor config assembly
 - `internal/vendor/` - adapter interface and implementations
@@ -38,11 +38,11 @@ For implementation questions, also read the relevant Go source:
 
 ## Common questions and where to look
 
-**"How do I add a skill from Git?"** → `docs/personas.md` (includes syntax) + `docs/artifacts.md` (skill format)
+**"How do I add a skill from Git?"** → `docs/harnesses.md` (includes syntax) + `docs/artifacts.md` (skill format)
 
 **"What vendors are supported?"** → `docs/vendors.md` or run `ynh vendors`
 
-**"How does delegation work?"** → `docs/personas.md` (delegates_to section) + `README.md` (overview)
+**"How does delegation work?"** → `docs/harnesses.md` (delegates_to section) + `README.md` (overview)
 
 **"My Git clone is failing"** → `docs/getting-started.md` (Private Repositories) - it's a Git auth issue, not ynh
 

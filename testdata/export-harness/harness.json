@@ -1,0 +1,10 @@
+{
+  "name": "export-test",
+  "version": "1.0.0",
+  "description": "Test harness for export",
+  "author": {
+    "name": "test"
+  },
+  "keywords": ["test", "export"],
+  "default_vendor": "claude"
+}

@@ -12,7 +12,7 @@ GOBIN := $(shell go env GOPATH)/bin
 GOIMPORTS := $(GOBIN)/goimports
 
 # Version from git: use exact tag only if clean and on that exact commit, otherwise branch+sha
-DEV_VERSION := dev-$(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)-$(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)$(shell git diff --quiet 2>/dev/null || echo '-dirty')
+DEV_VERSION := dev-$(shell git rev-parse --abbrev-ref HEAD 2>/dev/null | tr '/' '-' || echo unknown)-$(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)$(shell git diff --quiet 2>/dev/null || echo '-dirty')
 VERSION := $(shell git diff --quiet 2>/dev/null && git describe --tags --exact-match 2>/dev/null || echo "$(DEV_VERSION)")
 LDFLAGS := -ldflags "-X github.com/eyelock/ynh/internal/config.Version=$(VERSION)"
 

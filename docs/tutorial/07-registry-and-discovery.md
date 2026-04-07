@@ -1,6 +1,6 @@
 # Tutorial 7: Registry & Discovery
 
-Search for personas from curated registries and install them by name. A registry is just a Git repo with a `registry.json` index.
+Search for harnesses from curated registries and install them by name. A registry is just a Git repo with a `registry.json` index.
 
 ## Prerequisites
 
@@ -28,7 +28,7 @@ cat > registry.json << 'EOF'
   "entries": [
     {
       "name": "david",
-      "description": "Full-stack development persona with Go expertise",
+      "description": "Full-stack development harness with Go expertise",
       "keywords": ["go", "development", "full-stack", "testing"],
       "repo": "github.com/eyelock/assistants",
       "path": "ynh/david",
@@ -37,7 +37,7 @@ cat > registry.json << 'EOF'
     },
     {
       "name": "planner",
-      "description": "Project planning and architecture persona",
+      "description": "Project planning and architecture harness",
       "keywords": ["planning", "architecture", "design"],
       "repo": "github.com/eyelock/assistants",
       "path": "ynh/planner",
@@ -94,7 +94,7 @@ ynh search "go"
 Expected:
 ```
 NAME    DESCRIPTION                                    REPO                          VENDORS
-david   Full-stack development persona with Go expertise  eyelock/assistants (ynh/david)  claude, codex, cursor
+david   Full-stack development harness with Go expertise  eyelock/assistants (ynh/david)  claude, codex, cursor
 ```
 
 ```bash
@@ -104,7 +104,7 @@ ynh search "planning"
 Expected:
 ```
 NAME      DESCRIPTION                              REPO                              VENDORS
-planner   Project planning and architecture persona  eyelock/assistants (ynh/planner)  claude
+planner   Project planning and architecture harness  eyelock/assistants (ynh/planner)  claude
 ```
 
 ```bash
@@ -131,8 +131,8 @@ ynh install david
 Expected: resolves `david` from the registry to `github.com/eyelock/assistants` with `--path ynh/david`, then installs normally.
 
 ```
-Installed persona "david"
-  Location: /Users/<you>/.ynh/personas/david
+Installed harness "david"
+  Location: /Users/<you>/.ynh/harnesses/david
   Launcher: /Users/<you>/.ynh/bin/david
   Vendor:   claude
 ```
@@ -163,7 +163,7 @@ If the name doesn't match exactly but is similar to registry entries:
 ynh install development
 # Expected:
 #   "development" not found. Similar results:
-#     david - Full-stack development persona with Go expertise (from tutorial-registry)
+#     david - Full-stack development harness with Go expertise (from tutorial-registry)
 ```
 
 ynh tries an exact name match first. If that fails, it searches descriptions and keywords and shows similar results — but doesn't install automatically. Use the exact name:
@@ -209,7 +209,7 @@ ynh resolves the install argument in this order:
 
 | Pattern | Example | Interpretation |
 |---|---|---|
-| Starts with `.` or `/` | `./my-persona`, `/tmp/foo` | Local path |
+| Starts with `.` or `/` | `./my-harness`, `/tmp/foo` | Local path |
 | Starts with `git@` | `git@github.com:user/repo.git` | Git SSH URL |
 | Starts with `https://` | `https://github.com/user/repo` | Git HTTPS URL |
 | Contains `@` | `david@my-registry` | Registry qualified name |
@@ -251,7 +251,7 @@ ynh uninstall tester 2>/dev/null
 
 ## What you learned
 
-- A registry is a Git repo with `registry.json` listing available personas
+- A registry is a Git repo with `registry.json` listing available harnesses
 - `ynh registry add/list/remove/update` manages registry sources
 - `ynh search` does text matching on name, description, and keywords
 - `ynh install <name>` resolves from registries (exact match installs, multiple matches prompt)

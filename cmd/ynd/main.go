@@ -33,6 +33,10 @@ func main() {
 		err = cmdInspect(os.Args[2:])
 	case "export":
 		err = cmdExport(os.Args[2:])
+	case "preview":
+		err = cmdPreview(os.Args[2:])
+	case "diff":
+		err = cmdDiff(os.Args[2:])
 	case "marketplace":
 		err = cmdMarketplace(os.Args[2:])
 	case "version", "--version", "-v":
@@ -60,13 +64,15 @@ Usage:
   ynd <command> [arguments]
 
 Commands:
-  create <type> <name>       Scaffold a new skill, agent, rule, command, or persona
+  create <type> <name>       Scaffold a new skill, agent, rule, command, or harness
   lint [file]                Lint markdown, shell, and config files
-  validate [file]            Validate persona structure and artifacts
+  validate [file]            Validate harness structure and artifacts
   fmt [file]                 Format markdown files
   compress [file]            Compress prompts using LLM-powered SudoLang techniques
   inspect                    Interactive codebase walkthrough to generate/update skills and agents
-  export <source>            Export persona as vendor-native plugin directories
+  export <source>            Export harness as vendor-native plugin directories
+  preview <source>           Show assembled vendor output without installing
+  diff <source> [vendors]    Compare assembled output across vendors
   marketplace build          Build a vendor-native marketplace from marketplace.json
   version                    Print version
   help                       Show this help
@@ -74,7 +80,7 @@ Commands:
 Create types:
   skill <name>               Create skills/<name>/SKILL.md
   agent <name>               Create agents/<name>.md with frontmatter
-  persona <name>             Create full persona directory structure
+  harness <name>             Create full harness directory structure
   rule <name>                Create rules/<name>.md
   command <name>             Create commands/<name>.md
 
@@ -89,7 +95,7 @@ Options:
 
 Examples:
   ynd create skill commit
-  ynd create persona my-team
+  ynd create harness my-team
   ynd lint
   ynd lint agents/reviewer.md
   ynd validate
@@ -101,9 +107,14 @@ Examples:
   ynd inspect
   ynd inspect -v claude
   ynd inspect -o .
-  ynd export ./my-persona
-  ynd export ./my-persona -v claude,cursor -o ./dist
-  ynd export ./my-persona --merged
-  ynd export github.com/user/repo --path personas/david
+  ynd export ./my-harness
+  ynd export ./my-harness -v claude,cursor -o ./dist
+  ynd export ./my-harness --merged
+  ynd export github.com/user/repo --path harnesses/david
+  ynd preview ./my-harness
+  ynd preview ./my-harness -v cursor
+  ynd preview ./my-harness -v claude -o ./output
+  ynd diff ./my-harness claude cursor
+  ynd diff ./my-harness
 `, config.Version)
 }

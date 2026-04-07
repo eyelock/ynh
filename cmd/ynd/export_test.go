@@ -6,12 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/eyelock/ynh/internal/plugin"
 )
 
 func testdataExportDir() string {
-	return filepath.Join("..", "..", "testdata", "export-persona")
+	return filepath.Join("..", "..", "testdata", "export-harness")
 }
 
 func TestCmdExportLocalSource(t *testing.T) {
@@ -106,7 +104,7 @@ func TestCmdExportDefaultOutput(t *testing.T) {
 		t.Fatalf("cmdExport failed: %v", err)
 	}
 
-	// Default output should be ./dist/<persona-name>/
+	// Default output should be ./dist/<harness-name>/
 	assertExists(t, filepath.Join(tmpDir, "dist", "export-test", "claude", ".claude-plugin", "plugin.json"))
 }
 
@@ -121,6 +119,65 @@ func TestCmdExportUnknownVendor(t *testing.T) {
 	if !strings.Contains(err.Error(), "unknown vendor") {
 		t.Errorf("expected 'unknown vendor' error, got: %v", err)
 	}
+}
+
+func TestCmdExportVendorEnvVar(t *testing.T) {
+	outputDir := t.TempDir()
+	srcDir := testdataExportDir()
+
+	t.Setenv("YNH_VENDOR", "claude")
+
+	err := cmdExport([]string{srcDir, "-o", outputDir})
+	if err != nil {
+		t.Fatalf("cmdExport failed: %v", err)
+	}
+
+	// Should export for claude only
+	assertExists(t, filepath.Join(outputDir, "claude"))
+}
+
+func TestCmdExportVendorFlagOverridesEnv(t *testing.T) {
+	outputDir := t.TempDir()
+	srcDir := testdataExportDir()
+
+	t.Setenv("YNH_VENDOR", "cursor")
+
+	err := cmdExport([]string{srcDir, "-o", outputDir, "-v", "claude"})
+	if err != nil {
+		t.Fatalf("cmdExport failed: %v", err)
+	}
+
+	// Flag should win
+	assertExists(t, filepath.Join(outputDir, "claude"))
+}
+
+func TestCmdExportHarnessFlag(t *testing.T) {
+	outputDir := t.TempDir()
+	srcDir := testdataExportDir()
+
+	err := cmdExport([]string{"--harness", srcDir, "-o", outputDir, "-v", "claude"})
+	if err != nil {
+		t.Fatalf("cmdExport with --harness failed: %v", err)
+	}
+
+	assertExists(t, filepath.Join(outputDir, "claude"))
+}
+
+func TestCmdExportHarnessEnvVar(t *testing.T) {
+	outputDir := t.TempDir()
+	srcDir, err := filepath.Abs(testdataExportDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("YNH_HARNESS", srcDir)
+
+	err = cmdExport([]string{"-o", outputDir, "-v", "claude"})
+	if err != nil {
+		t.Fatalf("cmdExport with YNH_HARNESS failed: %v", err)
+	}
+
+	assertExists(t, filepath.Join(outputDir, "claude"))
 }
 
 func TestCmdExportMissingSource(t *testing.T) {
@@ -151,16 +208,16 @@ func TestCmdExportManifestContent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var pj plugin.PluginJSON
+	var pj map[string]any
 	if err := json.Unmarshal(data, &pj); err != nil {
 		t.Fatalf("invalid manifest JSON: %v", err)
 	}
 
-	if pj.Name != "export-test" {
-		t.Errorf("manifest name = %q, want %q", pj.Name, "export-test")
+	if pj["name"] != "export-test" {
+		t.Errorf("manifest name = %q, want %q", pj["name"], "export-test")
 	}
-	if pj.Version != "1.0.0" {
-		t.Errorf("manifest version = %q, want %q", pj.Version, "1.0.0")
+	if pj["version"] != "1.0.0" {
+		t.Errorf("manifest version = %q, want %q", pj["version"], "1.0.0")
 	}
 }
 

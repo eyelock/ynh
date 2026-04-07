@@ -34,7 +34,7 @@ RUN --mount=type=cache,target=/root/.npm \
 FROM node:22-alpine AS codex-cli
 ARG CODEX_VERSION=0.114.0
 RUN --mount=type=cache,target=/root/.npm \
-    npm install -g "@openai/codex@${CODEX_VERSION}"
+    npm install -g --include=optional "@openai/codex@${CODEX_VERSION}"
 
 # Stage 2c: Cursor Agent CLI (parallel)
 FROM alpine AS cursor-cli
@@ -54,7 +54,7 @@ RUN apk add --no-cache git openssh-client tini bash curl
 COPY --from=claude-cli /usr/local/lib/node_modules/@anthropic-ai/ /usr/local/lib/node_modules/@anthropic-ai/
 COPY --from=claude-cli /usr/local/bin/claude /usr/local/bin/claude
 COPY --from=codex-cli  /usr/local/lib/node_modules/@openai/ /usr/local/lib/node_modules/@openai/
-COPY --from=codex-cli  /usr/local/bin/codex /usr/local/bin/codex
+RUN ln -s ../lib/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex
 COPY --from=cursor-cli /usr/local/bin/agent /usr/local/bin/agent
 
 # Copy ynh binaries from builder
@@ -73,7 +73,7 @@ RUN addgroup -g ${USER_GID} ynh 2>/dev/null || addgroup ynh; \
 ENV YNH_HOME=/home/ynh/.ynh
 
 # Create directory structure
-RUN mkdir -p /home/ynh/.ynh/personas \
+RUN mkdir -p /home/ynh/.ynh/harnesses \
              /home/ynh/.ynh/cache \
              /home/ynh/.ynh/run \
              /home/ynh/.ynh/bin && \
@@ -90,7 +90,7 @@ ARG VERSION=dev
 ARG CLAUDE_CODE_VERSION=2.1.76
 ARG CODEX_VERSION=0.114.0
 LABEL org.opencontainers.image.title="ynh" \
-      org.opencontainers.image.description="Persona manager for AI coding assistants" \
+      org.opencontainers.image.description="Harness template manager for AI coding assistants" \
       org.opencontainers.image.source="https://github.com/eyelock/ynh" \
       org.opencontainers.image.version="${VERSION}" \
       dev.ynh.version="${VERSION}" \

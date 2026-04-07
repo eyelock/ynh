@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/eyelock/ynh/internal/persona"
+	"github.com/eyelock/ynh/internal/harness"
 )
 
 func TestBuildDelegateAgent(t *testing.T) {
-	// Create a fake delegate persona directory
+	// Create a fake delegate harness directory
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "rules"), 0o755); err != nil {
 		t.Fatal(err)
@@ -26,7 +26,7 @@ func TestBuildDelegateAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name:          "team-dev",
 		DefaultVendor: "claude",
 	}
@@ -57,7 +57,7 @@ func TestBuildDelegateAgent(t *testing.T) {
 
 func TestBuildDelegateAgent_NoRulesNoSkills(t *testing.T) {
 	dir := t.TempDir()
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "minimal",
 	}
 
@@ -76,19 +76,12 @@ func TestBuildDelegateAgent_NoRulesNoSkills(t *testing.T) {
 }
 
 func TestAssembleDelegates_WithLocalRepo(t *testing.T) {
-	// Create a delegate persona as a local git repo
+	// Create a delegate harness as a local git repo
 	delegateDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(delegateDir, "rules"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	pluginDir := filepath.Join(delegateDir, ".claude-plugin")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{"name":"team-ops","version":"0.1.0"}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(delegateDir, "metadata.json"), []byte(`{"ynh":{"default_vendor":"claude"}}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(delegateDir, "harness.json"), []byte(`{"name":"team-ops","version":"0.1.0","default_vendor":"claude"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(delegateDir, "rules", "safety.md"), []byte("Always check before deploying."), 0o644); err != nil {
@@ -115,8 +108,8 @@ func TestAssembleDelegates_WithLocalRepo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	delegates := []persona.Delegate{
-		{GitSource: persona.GitSource{Git: delegateDir}},
+	delegates := []harness.Delegate{
+		{GitSource: harness.GitSource{Git: delegateDir}},
 	}
 
 	if err := AssembleDelegates(workDir, adapter, delegates); err != nil {
@@ -147,7 +140,7 @@ func TestAssembleDelegates_Empty(t *testing.T) {
 	if err := AssembleDelegates(workDir, adapter, nil); err != nil {
 		t.Fatalf("AssembleDelegates with nil delegates failed: %v", err)
 	}
-	if err := AssembleDelegates(workDir, adapter, []persona.Delegate{}); err != nil {
+	if err := AssembleDelegates(workDir, adapter, []harness.Delegate{}); err != nil {
 		t.Fatalf("AssembleDelegates with empty delegates failed: %v", err)
 	}
 }

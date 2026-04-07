@@ -6,137 +6,130 @@ import (
 	"testing"
 )
 
-func TestValidatePersona_Valid(t *testing.T) {
+func TestValidateHarness_Valid(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "test-persona")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	mkdirAll(t, filepath.Join(persona, "skills", "hello"))
-	mkdirAll(t, filepath.Join(persona, "agents"))
+	hr := filepath.Join(dir, "test-harness")
+	mkdirAll(t, filepath.Join(hr, "skills", "hello"))
+	mkdirAll(t, filepath.Join(hr, "agents"))
 
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
-		[]byte(`{"name":"test-persona","version":"0.1.0"}`))
-	writeFile(t, filepath.Join(persona, "skills", "hello", "SKILL.md"),
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"test-harness","version":"0.1.0"}`))
+	writeFile(t, filepath.Join(hr, "skills", "hello", "SKILL.md"),
 		[]byte("---\nname: hello\ndescription: Say hello\n---\n\nHello skill.\n"))
-	writeFile(t, filepath.Join(persona, "agents", "reviewer.md"),
+	writeFile(t, filepath.Join(hr, "agents", "reviewer.md"),
 		[]byte("---\nname: reviewer\ndescription: Reviews code\ntools: Read, Grep\n---\n\nBody.\n"))
 
-	if err := validatePersona(persona); err != nil {
-		t.Errorf("validatePersona failed: %v", err)
+	if err := validateHarness(hr); err != nil {
+		t.Errorf("validateHarness failed: %v", err)
 	}
 }
 
-func TestValidatePersona_MissingPluginJSON(t *testing.T) {
+func TestValidateHarness_MissingHarnessJSON(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "bad-persona")
-	mkdirAll(t, persona)
+	hr := filepath.Join(dir, "bad-harness")
+	mkdirAll(t, hr)
 
-	err := validatePersona(persona)
+	err := validateHarness(hr)
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
 }
 
-func TestValidatePersona_MissingSkillMD(t *testing.T) {
+func TestValidateHarness_MissingSkillMD(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "bad-persona")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	mkdirAll(t, filepath.Join(persona, "skills", "empty-skill"))
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
-		[]byte(`{"name":"bad-persona","version":"0.1.0"}`))
+	hr := filepath.Join(dir, "bad-harness")
+	mkdirAll(t, filepath.Join(hr, "skills", "empty-skill"))
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"bad-harness","version":"0.1.0"}`))
 
-	err := validatePersona(persona)
+	err := validateHarness(hr)
 	if err == nil {
 		t.Fatal("expected validation error for missing SKILL.md")
 	}
 }
 
-func TestValidatePersona_SkillNameMismatch(t *testing.T) {
+func TestValidateHarness_SkillNameMismatch(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "test-persona")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	mkdirAll(t, filepath.Join(persona, "skills", "hello"))
+	hr := filepath.Join(dir, "test-harness")
+	mkdirAll(t, filepath.Join(hr, "skills", "hello"))
 
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
-		[]byte(`{"name":"test-persona","version":"0.1.0"}`))
-	writeFile(t, filepath.Join(persona, "skills", "hello", "SKILL.md"),
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"test-harness","version":"0.1.0"}`))
+	writeFile(t, filepath.Join(hr, "skills", "hello", "SKILL.md"),
 		[]byte("---\nname: wrong-name\ndescription: Say hello\n---\n"))
 
-	err := validatePersona(persona)
+	err := validateHarness(hr)
 	if err == nil {
 		t.Fatal("expected validation error for name mismatch")
 	}
 }
 
-func TestValidatePersona_AgentMissingTools(t *testing.T) {
+func TestValidateHarness_AgentMissingTools(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "test-persona")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	mkdirAll(t, filepath.Join(persona, "agents"))
+	hr := filepath.Join(dir, "test-harness")
+	mkdirAll(t, filepath.Join(hr, "agents"))
 
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
-		[]byte(`{"name":"test-persona","version":"0.1.0"}`))
-	writeFile(t, filepath.Join(persona, "agents", "reviewer.md"),
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"test-harness","version":"0.1.0"}`))
+	writeFile(t, filepath.Join(hr, "agents", "reviewer.md"),
 		[]byte("---\nname: reviewer\ndescription: Reviews code\n---\n"))
 
-	err := validatePersona(persona)
+	err := validateHarness(hr)
 	if err == nil {
 		t.Fatal("expected validation error for missing tools field")
 	}
 }
 
-func TestFindPersonaRoots(t *testing.T) {
+func TestFindHarnessRoots(t *testing.T) {
 	dir := t.TempDir()
 
 	for _, name := range []string{"p1", "p2"} {
-		pluginDir := filepath.Join(dir, name, ".claude-plugin")
-		mkdirAll(t, pluginDir)
-		writeFile(t, filepath.Join(pluginDir, "plugin.json"),
+		mkdirAll(t, filepath.Join(dir, name))
+		writeFile(t, filepath.Join(dir, name, "harness.json"),
 			[]byte(`{"name":"`+name+`","version":"0.1.0"}`))
 	}
 
-	mkdirAll(t, filepath.Join(dir, "not-a-persona"))
+	mkdirAll(t, filepath.Join(dir, "not-a-harness"))
 
-	roots := findPersonaRoots(dir)
+	roots := findHarnessRoots(dir)
 	if len(roots) != 2 {
-		t.Errorf("found %d persona roots, want 2", len(roots))
+		t.Errorf("found %d harness roots, want 2", len(roots))
 	}
 }
 
-func TestFindPersonaRoots_SelfIsPersona(t *testing.T) {
+func TestFindHarnessRoots_SelfIsHarness(t *testing.T) {
 	dir := t.TempDir()
-	pluginDir := filepath.Join(dir, ".claude-plugin")
-	mkdirAll(t, pluginDir)
-	writeFile(t, filepath.Join(pluginDir, "plugin.json"), []byte(`{}`))
+	writeFile(t, filepath.Join(dir, "harness.json"),
+		[]byte(`{"name":"self","version":"0.1.0"}`))
 
-	roots := findPersonaRoots(dir)
+	roots := findHarnessRoots(dir)
 	if len(roots) != 1 {
-		t.Errorf("found %d persona roots, want 1", len(roots))
+		t.Errorf("found %d harness roots, want 1", len(roots))
 	}
 }
 
-func TestIsPersonaRoot(t *testing.T) {
+func TestIsHarnessRoot(t *testing.T) {
 	dir := t.TempDir()
-	pluginDir := filepath.Join(dir, ".claude-plugin")
-	mkdirAll(t, pluginDir)
-	writeFile(t, filepath.Join(pluginDir, "plugin.json"), []byte(`{}`))
+	writeFile(t, filepath.Join(dir, "harness.json"),
+		[]byte(`{"name":"test","version":"0.1.0"}`))
 
-	if !isPersonaRoot(dir) {
-		t.Error("expected persona root")
+	if !isHarnessRoot(dir) {
+		t.Error("expected harness root")
 	}
 
-	notPersona := t.TempDir()
-	if isPersonaRoot(notPersona) {
-		t.Error("expected non-persona root")
+	notHarness := t.TempDir()
+	if isHarnessRoot(notHarness) {
+		t.Error("expected non-harness root")
 	}
 }
 
@@ -144,10 +137,9 @@ func TestCmdValidate_Dir(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "my-persona")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
-		[]byte(`{"name":"my-persona","version":"0.1.0"}`))
+	hr := filepath.Join(dir, "my-harness")
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"my-harness","version":"0.1.0"}`))
 
 	err := cmdValidate([]string{dir})
 	if err != nil {
@@ -155,7 +147,7 @@ func TestCmdValidate_Dir(t *testing.T) {
 	}
 }
 
-func TestCmdValidate_NoPersonas(t *testing.T) {
+func TestCmdValidate_NoHarnesses(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
@@ -165,12 +157,11 @@ func TestCmdValidate_NoPersonas(t *testing.T) {
 	}
 }
 
-func TestCmdValidate_InsidePersona(t *testing.T) {
+func TestCmdValidate_InsideHarness(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	mkdirAll(t, filepath.Join(dir, ".claude-plugin"))
-	writeFile(t, filepath.Join(dir, ".claude-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(dir, "harness.json"),
 		[]byte(`{"name":"self","version":"0.1.0"}`))
 
 	err := cmdValidate(nil)
@@ -179,21 +170,10 @@ func TestCmdValidate_InsidePersona(t *testing.T) {
 	}
 }
 
-func TestCmdValidate_SingleFile_PluginJSON(t *testing.T) {
+func TestCmdValidate_SingleFile_HarnessJSON(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "plugin.json")
+	path := filepath.Join(dir, "harness.json")
 	writeFile(t, path, []byte(`{"name":"test","version":"0.1.0"}`))
-
-	err := cmdValidate([]string{path})
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
-	}
-}
-
-func TestCmdValidate_SingleFile_MetadataJSON(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "metadata.json")
-	writeFile(t, path, []byte(`{"other":"data"}`))
 
 	err := cmdValidate([]string{path})
 	if err != nil {
@@ -228,12 +208,59 @@ func TestCmdValidate_SingleFile_Unknown(t *testing.T) {
 
 func TestCmdValidate_SingleFile_WithIssues(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "plugin.json")
+	path := filepath.Join(dir, "harness.json")
 	writeFile(t, path, []byte(`{}`))
 
 	err := cmdValidate([]string{path})
 	if err == nil {
 		t.Fatal("expected validation error")
+	}
+}
+
+func TestCmdValidate_HarnessFlag(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "harness.json"),
+		[]byte(`{"name":"flag-test","version":"0.1.0"}`))
+
+	err := cmdValidate([]string{"--harness", dir})
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
+
+func TestCmdValidate_HarnessEnvVar(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "harness.json"),
+		[]byte(`{"name":"env-test","version":"0.1.0"}`))
+
+	t.Setenv("YNH_HARNESS", dir)
+
+	err := cmdValidate(nil)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
+
+func TestCmdValidate_HarnessFlagOverridesEnv(t *testing.T) {
+	goodDir := t.TempDir()
+	writeFile(t, filepath.Join(goodDir, "harness.json"),
+		[]byte(`{"name":"good","version":"0.1.0"}`))
+
+	t.Setenv("YNH_HARNESS", "/nonexistent/path")
+
+	err := cmdValidate([]string{"--harness", goodDir})
+	if err != nil {
+		t.Errorf("--harness flag should override YNH_HARNESS: %v", err)
+	}
+}
+
+func TestCmdValidate_UnknownFlag(t *testing.T) {
+	err := cmdValidate([]string{"--bogus"})
+	if err == nil {
+		t.Fatal("expected error for unknown flag")
+	}
+	if !strings.Contains(err.Error(), "unknown flag") {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -244,29 +271,28 @@ func TestCmdValidate_Nonexistent(t *testing.T) {
 	}
 }
 
-func TestCmdValidate_MultiplePersonas(t *testing.T) {
+func TestCmdValidate_MultipleHarnesses(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
 	for _, name := range []string{"good", "bad"} {
-		persona := filepath.Join(dir, name)
-		mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-		writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
+		hr := filepath.Join(dir, name)
+		writeFile(t, filepath.Join(hr, "harness.json"),
 			[]byte(`{"name":"`+name+`","version":"0.1.0"}`))
 	}
 
-	// Make "bad" persona invalid by adding a skill dir without SKILL.md
+	// Make "bad" harness invalid by adding a skill dir without SKILL.md
 	mkdirAll(t, filepath.Join(dir, "bad", "skills", "orphan"))
 
 	err := cmdValidate(nil)
 	if err == nil {
-		t.Fatal("expected validation error for bad persona")
+		t.Fatal("expected validation error for bad harness")
 	}
 }
 
-func TestValidateFile_PluginJSON_Valid(t *testing.T) {
+func TestValidateFile_HarnessJSON_Valid(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "plugin.json")
+	path := filepath.Join(dir, "harness.json")
 	writeFile(t, path, []byte(`{"name":"test","version":"0.1.0"}`))
 
 	err := validateFile(path)
@@ -275,25 +301,14 @@ func TestValidateFile_PluginJSON_Valid(t *testing.T) {
 	}
 }
 
-func TestValidateFile_PluginJSON_Invalid(t *testing.T) {
+func TestValidateFile_HarnessJSON_Invalid(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "plugin.json")
+	path := filepath.Join(dir, "harness.json")
 	writeFile(t, path, []byte(`{}`))
 
 	err := validateFile(path)
 	if err == nil {
 		t.Fatal("expected validation error")
-	}
-}
-
-func TestValidateFile_MetadataJSON(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "metadata.json")
-	writeFile(t, path, []byte(`{"other":"data"}`))
-
-	err := validateFile(path)
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
 	}
 }
 
@@ -333,237 +348,423 @@ func TestValidateFile_Unknown(t *testing.T) {
 	}
 }
 
-func TestValidatePersona_InvalidPluginJSON(t *testing.T) {
+func TestValidateHarness_InvalidHarnessJSON(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "bad")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"), []byte(`{not json}`))
+	hr := filepath.Join(dir, "bad")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"), []byte(`{not json}`))
 
-	err := validatePersona(persona)
+	err := validateHarness(hr)
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
 }
 
-func TestValidatePersona_InvalidMetadataJSON(t *testing.T) {
+func TestValidateHarness_NonMarkdownInArtifactDir(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "bad")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
+	hr := filepath.Join(dir, "bad")
+	mkdirAll(t, filepath.Join(hr, "agents"))
+	writeFile(t, filepath.Join(hr, "harness.json"),
 		[]byte(`{"name":"bad","version":"0.1.0"}`))
-	writeFile(t, filepath.Join(persona, "metadata.json"), []byte(`{not json}`))
+	writeFile(t, filepath.Join(hr, "agents", "stray.txt"), []byte("not markdown"))
 
-	err := validatePersona(persona)
-	if err == nil {
-		t.Fatal("expected validation error")
-	}
-}
-
-func TestValidatePersona_NonMarkdownInArtifactDir(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-
-	persona := filepath.Join(dir, "bad")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	mkdirAll(t, filepath.Join(persona, "agents"))
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
-		[]byte(`{"name":"bad","version":"0.1.0"}`))
-	writeFile(t, filepath.Join(persona, "agents", "stray.txt"), []byte("not markdown"))
-
-	err := validatePersona(persona)
+	err := validateHarness(hr)
 	if err == nil {
 		t.Fatal("expected validation error for non-markdown file in agents/")
 	}
 }
 
-func TestValidatePersona_AgentMissingFrontmatter(t *testing.T) {
+func TestValidateHarness_AgentMissingFrontmatter(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "bad")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	mkdirAll(t, filepath.Join(persona, "agents"))
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
+	hr := filepath.Join(dir, "bad")
+	mkdirAll(t, filepath.Join(hr, "agents"))
+	writeFile(t, filepath.Join(hr, "harness.json"),
 		[]byte(`{"name":"bad","version":"0.1.0"}`))
-	writeFile(t, filepath.Join(persona, "agents", "reviewer.md"), []byte("Just text.\n"))
+	writeFile(t, filepath.Join(hr, "agents", "reviewer.md"), []byte("Just text.\n"))
 
-	err := validatePersona(persona)
+	err := validateHarness(hr)
 	if err == nil {
 		t.Fatal("expected validation error for agent missing frontmatter")
 	}
 }
 
-func TestValidatePersona_AgentNameMismatch(t *testing.T) {
+func TestValidateHarness_AgentNameMismatch(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "bad")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	mkdirAll(t, filepath.Join(persona, "agents"))
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
+	hr := filepath.Join(dir, "bad")
+	mkdirAll(t, filepath.Join(hr, "agents"))
+	writeFile(t, filepath.Join(hr, "harness.json"),
 		[]byte(`{"name":"bad","version":"0.1.0"}`))
-	writeFile(t, filepath.Join(persona, "agents", "reviewer.md"),
+	writeFile(t, filepath.Join(hr, "agents", "reviewer.md"),
 		[]byte("---\nname: wrong\ndescription: Reviews code\ntools: Read\n---\n"))
 
-	err := validatePersona(persona)
+	err := validateHarness(hr)
 	if err == nil {
 		t.Fatal("expected validation error for agent name mismatch")
 	}
 }
 
-func TestValidatePersona_AgentMissingDescription(t *testing.T) {
+func TestValidateHarness_AgentMissingDescription(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "bad")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	mkdirAll(t, filepath.Join(persona, "agents"))
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
+	hr := filepath.Join(dir, "bad")
+	mkdirAll(t, filepath.Join(hr, "agents"))
+	writeFile(t, filepath.Join(hr, "harness.json"),
 		[]byte(`{"name":"bad","version":"0.1.0"}`))
-	writeFile(t, filepath.Join(persona, "agents", "reviewer.md"),
+	writeFile(t, filepath.Join(hr, "agents", "reviewer.md"),
 		[]byte("---\nname: reviewer\ntools: Read\n---\n"))
 
-	err := validatePersona(persona)
+	err := validateHarness(hr)
 	if err == nil {
 		t.Fatal("expected validation error for missing description")
 	}
 }
 
-func TestValidatePersona_AgentWithDescriptionButNoTools(t *testing.T) {
+func TestValidateHarness_AgentWithDescriptionButNoTools(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "bad")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	mkdirAll(t, filepath.Join(persona, "agents"))
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
+	hr := filepath.Join(dir, "bad")
+	mkdirAll(t, filepath.Join(hr, "agents"))
+	writeFile(t, filepath.Join(hr, "harness.json"),
 		[]byte(`{"name":"bad","version":"0.1.0"}`))
-	writeFile(t, filepath.Join(persona, "agents", "reviewer.md"),
+	writeFile(t, filepath.Join(hr, "agents", "reviewer.md"),
 		[]byte("---\nname: reviewer\ndescription: Reviews\n---\n"))
 
-	err := validatePersona(persona)
+	err := validateHarness(hr)
 	if err == nil {
 		t.Fatal("expected validation error for missing tools")
 	}
 }
 
-func TestValidatePersona_SkillMissingFrontmatter(t *testing.T) {
+func TestValidateHarness_SkillMissingFrontmatter(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "bad")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	mkdirAll(t, filepath.Join(persona, "skills", "hello"))
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
+	hr := filepath.Join(dir, "bad")
+	mkdirAll(t, filepath.Join(hr, "skills", "hello"))
+	writeFile(t, filepath.Join(hr, "harness.json"),
 		[]byte(`{"name":"bad","version":"0.1.0"}`))
-	writeFile(t, filepath.Join(persona, "skills", "hello", "SKILL.md"), []byte("No frontmatter.\n"))
+	writeFile(t, filepath.Join(hr, "skills", "hello", "SKILL.md"), []byte("No frontmatter.\n"))
 
-	err := validatePersona(persona)
+	err := validateHarness(hr)
 	if err == nil {
 		t.Fatal("expected validation error for skill missing frontmatter")
 	}
 }
 
-func TestValidatePersona_SkillMissingName(t *testing.T) {
+func TestValidateHarness_SkillMissingName(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "bad")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	mkdirAll(t, filepath.Join(persona, "skills", "hello"))
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
+	hr := filepath.Join(dir, "bad")
+	mkdirAll(t, filepath.Join(hr, "skills", "hello"))
+	writeFile(t, filepath.Join(hr, "harness.json"),
 		[]byte(`{"name":"bad","version":"0.1.0"}`))
-	writeFile(t, filepath.Join(persona, "skills", "hello", "SKILL.md"),
+	writeFile(t, filepath.Join(hr, "skills", "hello", "SKILL.md"),
 		[]byte("---\ndescription: A skill\n---\n"))
 
-	err := validatePersona(persona)
+	err := validateHarness(hr)
 	if err == nil {
 		t.Fatal("expected validation error for skill missing name")
 	}
 }
 
-func TestValidatePersona_SkillMissingDescription(t *testing.T) {
+func TestValidateHarness_SkillMissingDescription(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "bad")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	mkdirAll(t, filepath.Join(persona, "skills", "hello"))
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
+	hr := filepath.Join(dir, "bad")
+	mkdirAll(t, filepath.Join(hr, "skills", "hello"))
+	writeFile(t, filepath.Join(hr, "harness.json"),
 		[]byte(`{"name":"bad","version":"0.1.0"}`))
-	writeFile(t, filepath.Join(persona, "skills", "hello", "SKILL.md"),
+	writeFile(t, filepath.Join(hr, "skills", "hello", "SKILL.md"),
 		[]byte("---\nname: hello\n---\n"))
 
-	err := validatePersona(persona)
+	err := validateHarness(hr)
 	if err == nil {
 		t.Fatal("expected validation error for skill missing description")
 	}
 }
 
-func TestValidatePersona_PluginJSONMissingName(t *testing.T) {
+func TestValidateHarness_HarnessJSONMissingName(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "bad")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
+	hr := filepath.Join(dir, "bad")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
 		[]byte(`{"version":"0.1.0"}`))
 
-	err := validatePersona(persona)
+	err := validateHarness(hr)
 	if err == nil {
-		t.Fatal("expected validation error for missing name in plugin.json")
+		t.Fatal("expected validation error for missing name in harness.json")
 	}
 }
 
-func TestValidatePersona_PluginJSONMissingVersion(t *testing.T) {
+func TestValidateHarness_HarnessJSONMissingVersion(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "bad")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
+	hr := filepath.Join(dir, "bad")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
 		[]byte(`{"name":"bad"}`))
 
-	err := validatePersona(persona)
+	err := validateHarness(hr)
 	if err == nil {
-		t.Fatal("expected validation error for missing version in plugin.json")
+		t.Fatal("expected validation error for missing version in harness.json")
 	}
 }
 
-func TestValidatePersona_NonMarkdownInRules(t *testing.T) {
+func TestValidateHarness_NonMarkdownInRules(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "bad")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	mkdirAll(t, filepath.Join(persona, "rules"))
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
+	hr := filepath.Join(dir, "bad")
+	mkdirAll(t, filepath.Join(hr, "rules"))
+	writeFile(t, filepath.Join(hr, "harness.json"),
 		[]byte(`{"name":"bad","version":"0.1.0"}`))
-	writeFile(t, filepath.Join(persona, "rules", "stray.txt"), []byte("not markdown"))
+	writeFile(t, filepath.Join(hr, "rules", "stray.txt"), []byte("not markdown"))
 
-	err := validatePersona(persona)
+	err := validateHarness(hr)
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
 }
 
-func TestValidatePersona_NonMarkdownInCommands(t *testing.T) {
+func TestValidateHarness_NonMarkdownInCommands(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	persona := filepath.Join(dir, "bad")
-	mkdirAll(t, filepath.Join(persona, ".claude-plugin"))
-	mkdirAll(t, filepath.Join(persona, "commands"))
-	writeFile(t, filepath.Join(persona, ".claude-plugin", "plugin.json"),
+	hr := filepath.Join(dir, "bad")
+	mkdirAll(t, filepath.Join(hr, "commands"))
+	writeFile(t, filepath.Join(hr, "harness.json"),
 		[]byte(`{"name":"bad","version":"0.1.0"}`))
-	writeFile(t, filepath.Join(persona, "commands", "stray.py"), []byte("not markdown"))
+	writeFile(t, filepath.Join(hr, "commands", "stray.py"), []byte("not markdown"))
 
-	err := validatePersona(persona)
+	err := validateHarness(hr)
 	if err == nil {
 		t.Fatal("expected validation error")
+	}
+}
+
+func TestValidateHarness_ConflictingInstructions(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "conflict")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"conflict","version":"0.1.0"}`))
+	writeFile(t, filepath.Join(hr, "instructions.md"), []byte("one thing"))
+	writeFile(t, filepath.Join(hr, "AGENTS.md"), []byte("another thing"))
+
+	err := validateHarness(hr)
+	if err == nil {
+		t.Fatal("expected validation error for conflicting instructions files")
+	}
+	if !strings.Contains(err.Error(), "issue") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateHarness_IdenticalInstructionsOK(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "ok")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"ok","version":"0.1.0"}`))
+	writeFile(t, filepath.Join(hr, "instructions.md"), []byte("same content"))
+	writeFile(t, filepath.Join(hr, "AGENTS.md"), []byte("same content"))
+
+	if err := validateHarness(hr); err != nil {
+		t.Errorf("identical instructions should pass: %v", err)
+	}
+}
+
+func TestValidateHarness_HooksValid(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "hooks-valid")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"hooks-valid","version":"0.1.0","hooks":{"before_tool":[{"command":"echo hi"}]}}`))
+
+	if err := validateHarness(hr); err != nil {
+		t.Errorf("valid hooks should pass: %v", err)
+	}
+}
+
+func TestValidateHarness_HooksUnknownEvent(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "hooks-bad-event")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"hooks-bad-event","version":"0.1.0","hooks":{"unknown_event":[{"command":"echo hi"}]}}`))
+
+	err := validateHarness(hr)
+	if err == nil {
+		t.Fatal("expected validation error for unknown hook event")
+	}
+}
+
+func TestValidateHarness_HooksEmptyCommand(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "hooks-empty-cmd")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"hooks-empty-cmd","version":"0.1.0","hooks":{"before_tool":[{"command":""}]}}`))
+
+	err := validateHarness(hr)
+	if err == nil {
+		t.Fatal("expected validation error for empty hook command")
+	}
+}
+
+func TestValidateHarness_MCPServersValid(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "mcp-valid")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"mcp-valid","version":"0.1.0","mcp_servers":{"github":{"command":"npx","args":["-y","server"]}}}`))
+
+	if err := validateHarness(hr); err != nil {
+		t.Errorf("valid MCP servers should pass: %v", err)
+	}
+}
+
+func TestValidateHarness_MCPServersURLOnly(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "mcp-url")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"mcp-url","version":"0.1.0","mcp_servers":{"api":{"url":"https://api.example.com/mcp"}}}`))
+
+	if err := validateHarness(hr); err != nil {
+		t.Errorf("URL-only MCP server should pass: %v", err)
+	}
+}
+
+func TestValidateHarness_MCPServersNeitherCommandNorURL(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "mcp-neither")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"mcp-neither","version":"0.1.0","mcp_servers":{"bad":{}}}`))
+
+	err := validateHarness(hr)
+	if err == nil {
+		t.Fatal("expected validation error for MCP server with neither command nor url")
+	}
+}
+
+func TestValidateHarness_MCPServersBothCommandAndURL(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "mcp-both")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"mcp-both","version":"0.1.0","mcp_servers":{"bad":{"command":"npx","url":"https://example.com"}}}`))
+
+	err := validateHarness(hr)
+	if err == nil {
+		t.Fatal("expected validation error for MCP server with both command and url")
+	}
+}
+
+func TestValidateHarness_MCPServersNotObject(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "mcp-bad-type")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"mcp-bad-type","version":"0.1.0","mcp_servers":"not-an-object"}`))
+
+	err := validateHarness(hr)
+	if err == nil {
+		t.Fatal("expected validation error for mcp_servers not being an object")
+	}
+}
+
+func TestValidateHarness_ProfilesValid(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "prof-valid")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"prof-valid","version":"0.1.0","profiles":{"ci":{"hooks":{"before_tool":[{"command":"echo ci"}]}}}}`))
+
+	if err := validateHarness(hr); err != nil {
+		t.Errorf("valid profiles should pass: %v", err)
+	}
+}
+
+func TestValidateHarness_ProfilesInvalidHookEvent(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "prof-bad")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"prof-bad","version":"0.1.0","profiles":{"ci":{"hooks":{"bad_event":[{"command":"echo"}]}}}}`))
+
+	err := validateHarness(hr)
+	if err == nil {
+		t.Fatal("expected validation error for invalid hook event in profile")
+	}
+}
+
+func TestValidateHarness_ProfilesMCPServerInvalid(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "prof-mcp-bad")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"prof-mcp-bad","version":"0.1.0","profiles":{"ci":{"mcp_servers":{"bad":{}}}}}`))
+
+	err := validateHarness(hr)
+	if err == nil {
+		t.Fatal("expected validation error for MCP server in profile with no command/url")
+	}
+}
+
+func TestValidateHarness_AgentsMDOnly(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "agents-only")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"agents-only","version":"0.1.0"}`))
+	writeFile(t, filepath.Join(hr, "AGENTS.md"), []byte("just agents"))
+
+	if err := validateHarness(hr); err != nil {
+		t.Errorf("AGENTS.md-only harness should be valid: %v", err)
 	}
 }

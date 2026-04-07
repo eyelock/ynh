@@ -1,14 +1,13 @@
 package exporter
 
 import (
-	"os"
 	"path/filepath"
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/resolver"
 )
 
-// GenerateInstructions writes instruction files from the persona's instructions.md.
+// GenerateInstructions writes instruction files from the harness's instructions.
 //
 // Always writes outputDir/AGENTS.md (the universal format).
 // If vendorInstructionsFile is non-empty and differs from "AGENTS.md",
@@ -29,14 +28,15 @@ func GenerateInstructions(instructionsPath string, outputDir string, vendorInstr
 	return nil
 }
 
-// DiscoverInstructions finds the last instructions.md across all resolved content.
-// Later sources override earlier ones (persona's own instructions.md wins).
+// DiscoverInstructions finds the last instructions file across all resolved content.
+// Checks instructions.md first, then AGENTS.md as fallback per source.
+// Later sources override earlier ones (harness's own instructions win).
 // Returns empty string if none found.
 func DiscoverInstructions(content []resolver.ResolvedContent) string {
 	var found string
 	for _, rc := range content {
-		candidate := filepath.Join(rc.BasePath, "instructions.md")
-		if _, err := os.Stat(candidate); err == nil {
+		candidate := assembler.FindInstructionsFile(rc.BasePath)
+		if candidate != "" {
 			found = candidate
 		}
 	}

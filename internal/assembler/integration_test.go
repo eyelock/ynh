@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/eyelock/ynh/internal/persona"
+	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
 )
@@ -59,7 +59,7 @@ func copyTestdata(t *testing.T, name string) string {
 // TestIntegration_MultiSourceComposition tests the full flow:
 // - Pull skills from a standalone skills repo (cherry-picked)
 // - Pull from a monorepo subdirectory (using path)
-// - Include embedded persona artifacts
+// - Include embedded harness artifacts
 // - Assemble into a vendor config directory
 func TestIntegration_MultiSourceComposition(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
@@ -67,23 +67,23 @@ func TestIntegration_MultiSourceComposition(t *testing.T) {
 	// Set up "remote" repos from testdata
 	skillsRepo := copyTestdata(t, "skills-repo")
 	monorepo := copyTestdata(t, "monorepo")
-	composedDir := copyTestdata(t, "composed-persona")
+	composedDir := copyTestdata(t, "composed-harness")
 
-	// Build a persona that composes from all sources
-	p := &persona.Persona{
+	// Build a harness that composes from all sources
+	p := &harness.Harness{
 		Name:          "composed",
 		DefaultVendor: "claude",
-		Includes: []persona.Include{
+		Includes: []harness.Include{
 			{
-				GitSource: persona.GitSource{Git: skillsRepo},
+				GitSource: harness.GitSource{Git: skillsRepo},
 				Pick:      []string{"skills/commit", "skills/tdd", "agents/architecture-advisor.md"},
 			},
 			{
-				GitSource: persona.GitSource{Git: monorepo, Path: "packages/ai-config"},
+				GitSource: harness.GitSource{Git: monorepo, Path: "packages/ai-config"},
 				Pick:      []string{"skills/deploy", "agents/ops-specialist.md"},
 			},
 			{
-				GitSource: persona.GitSource{Git: monorepo, Path: "packages/ai-config"},
+				GitSource: harness.GitSource{Git: monorepo, Path: "packages/ai-config"},
 				Pick:      []string{"rules/production-safety.md"},
 			},
 		},
@@ -96,7 +96,7 @@ func TestIntegration_MultiSourceComposition(t *testing.T) {
 	}
 	content := extractContent(resolved)
 
-	// Add embedded persona content (simulating what cmdRun does)
+	// Add embedded harness content (simulating what cmdRun does)
 	content = append(content, resolver.ResolvedContent{
 		BasePath: composedDir,
 	})
@@ -134,7 +134,7 @@ func TestIntegration_MultiSourceComposition(t *testing.T) {
 	assertFileExists(t, filepath.Join(claudeDir, "rules", "production-safety.md"))
 	assertFileContains(t, filepath.Join(claudeDir, "rules", "production-safety.md"), "destructive commands")
 
-	// Verify embedded persona artifacts
+	// Verify embedded harness artifacts
 	assertFileExists(t, filepath.Join(claudeDir, "rules", "my-style.md"))
 	assertFileContains(t, filepath.Join(claudeDir, "rules", "my-style.md"), "No fluff")
 	assertFileExists(t, filepath.Join(claudeDir, "agents", "personal-assistant.md"))
@@ -145,7 +145,7 @@ func TestIntegration_MultiSourceComposition(t *testing.T) {
 
 	// Verify instructions.md was copied as CLAUDE.md at project root
 	assertFileExists(t, filepath.Join(workDir, "CLAUDE.md"))
-	assertFileContains(t, filepath.Join(workDir, "CLAUDE.md"), "composed persona for testing")
+	assertFileContains(t, filepath.Join(workDir, "CLAUDE.md"), "composed harness for testing")
 }
 
 // TestIntegration_MonorepoNoPickIncludesAll tests that omitting pick
@@ -155,11 +155,11 @@ func TestIntegration_MonorepoNoPickIncludesAll(t *testing.T) {
 
 	monorepo := copyTestdata(t, "monorepo")
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "mono-all",
-		Includes: []persona.Include{
+		Includes: []harness.Include{
 			{
-				GitSource: persona.GitSource{Git: monorepo, Path: "packages/ai-config"},
+				GitSource: harness.GitSource{Git: monorepo, Path: "packages/ai-config"},
 				// No pick - should include all artifact dirs
 			},
 		},
@@ -195,11 +195,11 @@ func TestIntegration_SkillsRepoFullInclude(t *testing.T) {
 
 	skillsRepo := copyTestdata(t, "skills-repo")
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "full-include",
-		Includes: []persona.Include{
+		Includes: []harness.Include{
 			{
-				GitSource: persona.GitSource{Git: skillsRepo},
+				GitSource: harness.GitSource{Git: skillsRepo},
 				// No pick - include everything
 			},
 		},
@@ -236,11 +236,11 @@ func TestIntegration_CrossVendorAssembly(t *testing.T) {
 
 	skillsRepo := copyTestdata(t, "skills-repo")
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "cross-vendor",
-		Includes: []persona.Include{
+		Includes: []harness.Include{
 			{
-				GitSource: persona.GitSource{Git: skillsRepo},
+				GitSource: harness.GitSource{Git: skillsRepo},
 				Pick:      []string{"skills/commit"},
 			},
 		},

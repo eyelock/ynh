@@ -11,6 +11,14 @@ import (
 	"github.com/eyelock/ynh/internal/resolver"
 )
 
+// manifestJSON is used to unmarshal the vendor-specific plugin.json output.
+type manifestJSON struct {
+	Name        string   `json:"name"`
+	Version     string   `json:"version"`
+	Description string   `json:"description,omitempty"`
+	Keywords    []string `json:"keywords,omitempty"`
+}
+
 // testdataDir returns the path to the testdata directory.
 func testdataDir() string {
 	// Tests run from the package directory; testdata is at repo root
@@ -18,7 +26,7 @@ func testdataDir() string {
 }
 
 func TestExportSingleVendorClaude(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	results, err := Export(ExportOptions{
@@ -72,7 +80,7 @@ func TestExportSingleVendorClaude(t *testing.T) {
 }
 
 func TestExportSingleVendorCursor(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	_, err := Export(ExportOptions{
@@ -101,7 +109,7 @@ func TestExportSingleVendorCursor(t *testing.T) {
 }
 
 func TestExportSingleVendorCodex(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	results, err := Export(ExportOptions{
@@ -148,7 +156,7 @@ func TestExportSingleVendorCodex(t *testing.T) {
 }
 
 func TestExportAllVendors(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	results, err := Export(ExportOptions{
@@ -174,7 +182,7 @@ func TestExportAllVendors(t *testing.T) {
 }
 
 func TestExportManifestClaude(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	_, err := Export(ExportOptions{
@@ -192,7 +200,7 @@ func TestExportManifestClaude(t *testing.T) {
 		t.Fatalf("reading manifest: %v", err)
 	}
 
-	var pj plugin.PluginJSON
+	var pj manifestJSON
 	if err := json.Unmarshal(data, &pj); err != nil {
 		t.Fatalf("parsing manifest: %v", err)
 	}
@@ -206,7 +214,7 @@ func TestExportManifestClaude(t *testing.T) {
 }
 
 func TestExportManifestCursor(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	_, err := Export(ExportOptions{
@@ -224,7 +232,7 @@ func TestExportManifestCursor(t *testing.T) {
 		t.Fatalf("reading manifest: %v", err)
 	}
 
-	var pj plugin.PluginJSON
+	var pj manifestJSON
 	if err := json.Unmarshal(data, &pj); err != nil {
 		t.Fatalf("parsing manifest: %v", err)
 	}
@@ -235,7 +243,7 @@ func TestExportManifestCursor(t *testing.T) {
 }
 
 func TestExportCodexLayout(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	_, err := Export(ExportOptions{
@@ -269,7 +277,7 @@ func TestExportCodexLayout(t *testing.T) {
 }
 
 func TestExportCodexSkipsAgentsRulesCommands(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	results, err := Export(ExportOptions{
@@ -299,7 +307,7 @@ func TestExportCodexSkipsAgentsRulesCommands(t *testing.T) {
 }
 
 func TestExportWithInstructions(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	_, err := Export(ExportOptions{
@@ -328,24 +336,18 @@ func TestExportWithInstructions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "Export Test Persona") {
+	if !strings.Contains(string(data), "Export Test Harness") {
 		t.Error("AGENTS.md should contain instructions content")
 	}
 }
 
 func TestExportNoInstructions(t *testing.T) {
-	// Create a minimal persona without instructions.md
+	// Create a minimal harness without instructions.md
 	srcDir := t.TempDir()
-	pluginDir := filepath.Join(srcDir, ".claude-plugin")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeJSON(t, filepath.Join(pluginDir, "plugin.json"), map[string]string{
-		"name":    "no-instructions",
-		"version": "0.1.0",
-	})
-	writeJSON(t, filepath.Join(srcDir, "metadata.json"), map[string]any{
-		"ynh": map[string]string{"default_vendor": "claude"},
+	writeJSON(t, filepath.Join(srcDir, "harness.json"), map[string]any{
+		"name":           "no-instructions",
+		"version":        "0.1.0",
+		"default_vendor": "claude",
 	})
 
 	// Add a skill
@@ -410,7 +412,7 @@ func TestExportInstructionDiscovery(t *testing.T) {
 }
 
 func TestExportMergedMode(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := filepath.Join(t.TempDir(), "merged-out")
 
 	results, err := Export(ExportOptions{
@@ -445,7 +447,7 @@ func TestExportMergedMode(t *testing.T) {
 }
 
 func TestExportCleanFlag(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-persona")
+	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
 
 	// Create a stale file that should be cleaned
@@ -477,7 +479,7 @@ func TestExportCleanFlag(t *testing.T) {
 
 // TestExportManifestGeneration verifies manifest JSON format.
 func TestExportManifestGeneration(t *testing.T) {
-	pj := &plugin.PluginJSON{
+	hj := &plugin.HarnessJSON{
 		Name:        "test-plugin",
 		Version:     "2.0.0",
 		Description: "A test plugin",
@@ -485,10 +487,10 @@ func TestExportManifestGeneration(t *testing.T) {
 
 	dir := t.TempDir()
 
-	if err := GenerateClaudeManifest(pj, dir); err != nil {
+	if err := GenerateClaudeManifest(hj, dir); err != nil {
 		t.Fatalf("GenerateClaudeManifest: %v", err)
 	}
-	if err := GenerateCursorManifest(pj, dir); err != nil {
+	if err := GenerateCursorManifest(hj, dir); err != nil {
 		t.Fatalf("GenerateCursorManifest: %v", err)
 	}
 
@@ -497,7 +499,7 @@ func TestExportManifestGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var claudePJ plugin.PluginJSON
+	var claudePJ manifestJSON
 	if err := json.Unmarshal(claudeData, &claudePJ); err != nil {
 		t.Fatal(err)
 	}
@@ -510,13 +512,197 @@ func TestExportManifestGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var cursorPJ plugin.PluginJSON
+	var cursorPJ manifestJSON
 	if err := json.Unmarshal(cursorData, &cursorPJ); err != nil {
 		t.Fatal(err)
 	}
 	if cursorPJ.Name != "test-plugin" || cursorPJ.Version != "2.0.0" {
 		t.Error("Cursor manifest content mismatch")
 	}
+}
+
+func TestExportWithHooks(t *testing.T) {
+	// Create a harness with hooks
+	srcDir := t.TempDir()
+	writeJSON(t, filepath.Join(srcDir, "harness.json"), map[string]any{
+		"name":           "hooks-test",
+		"version":        "0.1.0",
+		"default_vendor": "claude",
+		"hooks": map[string]any{
+			"before_tool": []any{
+				map[string]string{"matcher": "Bash", "command": "echo before bash"},
+			},
+			"on_stop": []any{
+				map[string]string{"command": "echo done"},
+			},
+		},
+	})
+
+	// Test Claude export
+	outputDir := t.TempDir()
+	_, err := Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir,
+		Vendors:   []string{"claude"},
+		Mode:      ModePerVendor,
+	})
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	// Claude should have .claude/hooks/hooks.json (plugin format)
+	assertFileExists(t, filepath.Join(outputDir, "claude", ".claude", "hooks", "hooks.json"))
+
+	// Test Cursor export
+	outputDir2 := t.TempDir()
+	_, err = Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir2,
+		Vendors:   []string{"cursor"},
+		Mode:      ModePerVendor,
+	})
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	// Cursor should have .cursor/hooks.json
+	assertFileExists(t, filepath.Join(outputDir2, "cursor", ".cursor", "hooks.json"))
+
+	// Test Codex export
+	outputDir3 := t.TempDir()
+	_, err = Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir3,
+		Vendors:   []string{"codex"},
+		Mode:      ModePerVendor,
+	})
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	// Codex should have .codex/hooks.json
+	assertFileExists(t, filepath.Join(outputDir3, "codex", ".codex", "hooks.json"))
+}
+
+func TestExportMergedWithHooks(t *testing.T) {
+	// Create a harness with hooks
+	srcDir := t.TempDir()
+	writeJSON(t, filepath.Join(srcDir, "harness.json"), map[string]any{
+		"name":    "hooks-merged",
+		"version": "0.1.0",
+		"hooks": map[string]any{
+			"before_tool": []any{
+				map[string]string{"command": "echo hi"},
+			},
+		},
+	})
+
+	outputDir := filepath.Join(t.TempDir(), "merged")
+	_, err := Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir,
+		Vendors:   []string{"claude", "cursor"},
+		Mode:      ModeMerged,
+	})
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	// Both hook configs should exist
+	assertFileExists(t, filepath.Join(outputDir, ".claude", "hooks", "hooks.json"))
+	assertFileExists(t, filepath.Join(outputDir, ".cursor", "hooks.json"))
+}
+
+func TestExportWithMCPServers(t *testing.T) {
+	// Create a harness with MCP servers
+	srcDir := t.TempDir()
+	writeJSON(t, filepath.Join(srcDir, "harness.json"), map[string]any{
+		"name":           "mcp-test",
+		"version":        "0.1.0",
+		"default_vendor": "claude",
+		"mcp_servers": map[string]any{
+			"github": map[string]any{
+				"command": "npx",
+				"args":    []string{"-y", "@modelcontextprotocol/server-github"},
+				"env":     map[string]string{"GITHUB_TOKEN": "${GITHUB_TOKEN}"},
+			},
+		},
+	})
+
+	// Test Claude export
+	outputDir := t.TempDir()
+	_, err := Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir,
+		Vendors:   []string{"claude"},
+		Mode:      ModePerVendor,
+	})
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	// Claude should have .claude/.mcp.json (plugin format)
+	assertFileExists(t, filepath.Join(outputDir, "claude", ".claude", ".mcp.json"))
+
+	// Test Cursor export
+	outputDir2 := t.TempDir()
+	_, err = Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir2,
+		Vendors:   []string{"cursor"},
+		Mode:      ModePerVendor,
+	})
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	// Cursor should have .cursor/mcp.json
+	assertFileExists(t, filepath.Join(outputDir2, "cursor", ".cursor", "mcp.json"))
+
+	// Test Codex export
+	outputDir3 := t.TempDir()
+	_, err = Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir3,
+		Vendors:   []string{"codex"},
+		Mode:      ModePerVendor,
+	})
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	// Codex should have .codex/config.toml
+	assertFileExists(t, filepath.Join(outputDir3, "codex", ".codex", "config.toml"))
+}
+
+func TestExportMergedWithMCPServers(t *testing.T) {
+	// Create a harness with MCP servers
+	srcDir := t.TempDir()
+	writeJSON(t, filepath.Join(srcDir, "harness.json"), map[string]any{
+		"name":    "mcp-merged",
+		"version": "0.1.0",
+		"mcp_servers": map[string]any{
+			"github": map[string]any{
+				"command": "npx",
+				"args":    []string{"-y", "server"},
+			},
+		},
+	})
+
+	outputDir := filepath.Join(t.TempDir(), "merged")
+	_, err := Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir,
+		Vendors:   []string{"claude", "cursor"},
+		Mode:      ModeMerged,
+	})
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	// Both MCP configs should exist
+	assertFileExists(t, filepath.Join(outputDir, ".claude", ".mcp.json"))
+	assertFileExists(t, filepath.Join(outputDir, ".cursor", "mcp.json"))
 }
 
 func TestJoinParts(t *testing.T) {

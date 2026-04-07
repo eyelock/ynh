@@ -9,24 +9,42 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
-// GenerateClaudeManifest creates .claude-plugin/plugin.json by copying the
-// source plugin.json verbatim (it's already in Claude's format).
-func GenerateClaudeManifest(src *plugin.PluginJSON, outputDir string) error {
-	return writeManifest(src, filepath.Join(outputDir, ".claude-plugin"))
+// pluginJSON is the Claude Code plugin.json schema — only identity fields.
+type pluginJSON struct {
+	Name        string             `json:"name"`
+	Version     string             `json:"version"`
+	Description string             `json:"description,omitempty"`
+	Author      *plugin.AuthorInfo `json:"author,omitempty"`
+	Keywords    []string           `json:"keywords,omitempty"`
 }
 
-// GenerateCursorManifest creates .cursor-plugin/plugin.json by translating
-// from Claude's plugin.json format. Same schema, different location.
-func GenerateCursorManifest(src *plugin.PluginJSON, outputDir string) error {
-	return writeManifest(src, filepath.Join(outputDir, ".cursor-plugin"))
+// toPluginJSON extracts vendor-compatible fields from a HarnessJSON.
+func toPluginJSON(hj *plugin.HarnessJSON) *pluginJSON {
+	return &pluginJSON{
+		Name:        hj.Name,
+		Version:     hj.Version,
+		Description: hj.Description,
+		Author:      hj.Author,
+		Keywords:    hj.Keywords,
+	}
 }
 
-func writeManifest(src *plugin.PluginJSON, manifestDir string) error {
+// GenerateClaudeManifest creates .claude-plugin/plugin.json from harness identity fields.
+func GenerateClaudeManifest(hj *plugin.HarnessJSON, outputDir string) error {
+	return writeManifest(toPluginJSON(hj), filepath.Join(outputDir, ".claude-plugin"))
+}
+
+// GenerateCursorManifest creates .cursor-plugin/plugin.json from harness identity fields.
+func GenerateCursorManifest(hj *plugin.HarnessJSON, outputDir string) error {
+	return writeManifest(toPluginJSON(hj), filepath.Join(outputDir, ".cursor-plugin"))
+}
+
+func writeManifest(pj *pluginJSON, manifestDir string) error {
 	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
 		return fmt.Errorf("creating manifest dir: %w", err)
 	}
 
-	data, err := json.MarshalIndent(src, "", "  ")
+	data, err := json.MarshalIndent(pj, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshalling plugin.json: %w", err)
 	}

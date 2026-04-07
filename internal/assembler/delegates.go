@@ -6,15 +6,15 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/eyelock/ynh/internal/persona"
+	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
 )
 
-// AssembleDelegates generates agent files for each delegate persona
+// AssembleDelegates generates agent files for each delegate harness
 // in the assembled config directory. Each delegate becomes a vendor-native
-// agent that the parent persona can invoke.
-func AssembleDelegates(workDir string, adapter vendor.Adapter, delegates []persona.Delegate) error {
+// agent that the parent harness can invoke.
+func AssembleDelegates(workDir string, adapter vendor.Adapter, delegates []harness.Delegate) error {
 	if len(delegates) == 0 {
 		return nil
 	}
@@ -36,24 +36,24 @@ func AssembleDelegates(workDir string, adapter vendor.Adapter, delegates []perso
 			return fmt.Errorf("delegate: %w", err)
 		}
 
-		delPersona, err := persona.LoadPluginDir(basePath)
+		delHarness, err := harness.LoadDir(basePath)
 		if err != nil {
-			return fmt.Errorf("loading delegate persona %s: %w", del.Git, err)
+			return fmt.Errorf("loading delegate harness %s: %w", del.Git, err)
 		}
 
-		agentContent := BuildDelegateAgent(delPersona, basePath)
-		agentFile := filepath.Join(agentsPath, delPersona.Name+".md")
+		agentContent := BuildDelegateAgent(delHarness, basePath)
+		agentFile := filepath.Join(agentsPath, delHarness.Name+".md")
 		if err := os.WriteFile(agentFile, []byte(agentContent), 0o644); err != nil {
-			return fmt.Errorf("writing delegate agent %s: %w", delPersona.Name, err)
+			return fmt.Errorf("writing delegate agent %s: %w", delHarness.Name, err)
 		}
 	}
 
 	return nil
 }
 
-// BuildDelegateAgent generates a markdown agent file for a delegate persona.
+// BuildDelegateAgent generates a markdown agent file for a delegate harness.
 // It includes the delegate's instructions, rules, and available skills.
-func BuildDelegateAgent(p *persona.Persona, basePath string) string {
+func BuildDelegateAgent(p *harness.Harness, basePath string) string {
 	var b strings.Builder
 
 	b.WriteString("---\n")
@@ -61,13 +61,13 @@ func BuildDelegateAgent(p *persona.Persona, basePath string) string {
 	if p.Description != "" {
 		fmt.Fprintf(&b, "description: %s\n", p.Description)
 	} else {
-		fmt.Fprintf(&b, "description: Delegate persona %q.\n", p.Name)
+		fmt.Fprintf(&b, "description: Delegate harness %q.\n", p.Name)
 	}
 	b.WriteString("---\n\n")
 
-	fmt.Fprintf(&b, "You are the **%s** persona, invoked as a delegate.\n\n", p.Name)
+	fmt.Fprintf(&b, "You are the **%s** harness, invoked as a delegate.\n\n", p.Name)
 
-	// Include persona instructions (instructions.md / CLAUDE.md)
+	// Include harness instructions (instructions.md / CLAUDE.md)
 	instructions := readInstructionsFrom(basePath)
 	if instructions != "" {
 		b.WriteString("## Instructions\n\n")
@@ -97,10 +97,10 @@ func BuildDelegateAgent(p *persona.Persona, basePath string) string {
 	return b.String()
 }
 
-// readInstructionsFrom reads the persona's instructions file.
-// Checks instructions.md first, then CLAUDE.md as fallback.
+// readInstructionsFrom reads the harness's instructions file.
+// Checks instructions.md first, then AGENTS.md, then CLAUDE.md as fallback.
 func readInstructionsFrom(basePath string) string {
-	for _, name := range []string{"instructions.md", "CLAUDE.md"} {
+	for _, name := range []string{"instructions.md", "AGENTS.md", "CLAUDE.md"} {
 		data, err := os.ReadFile(filepath.Join(basePath, name))
 		if err == nil {
 			return strings.TrimSpace(string(data))

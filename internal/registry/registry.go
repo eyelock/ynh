@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/config"
-	"github.com/eyelock/ynh/internal/persona"
+	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/resolver"
 )
 
@@ -19,7 +19,7 @@ type Registry struct {
 	Entries     []Entry `json:"entries"`
 }
 
-// Entry describes one persona or plugin in a registry.
+// Entry describes one harness or plugin in a registry.
 type Entry struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description,omitempty"`
@@ -53,7 +53,7 @@ func FetchAll(registries []config.RegistrySource) ([]Registry, error) {
 
 // Fetch clones/updates a single registry repo and parses its registry.json.
 func Fetch(src config.RegistrySource) (Registry, error) {
-	gs := persona.GitSource{
+	gs := harness.GitSource{
 		Git: src.URL,
 		Ref: src.Ref,
 	}

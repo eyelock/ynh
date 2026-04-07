@@ -1,7 +1,7 @@
 {
   "plansDirectory": ".claude/plans",
   "companyAnnouncements": [
-    "ynh - persona manager for AI coding assistants."
+    "ynh - harness template manager for AI coding assistants."
   ],
   "permissions": {
     "allow": [

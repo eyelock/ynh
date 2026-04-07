@@ -1,13 +1,31 @@
 package plugin
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestIsPluginDir_True(t *testing.T) {
+func TestIsHarnessDir_True(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(`{"name":"test","version":"0.1.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !IsHarnessDir(dir) {
+		t.Error("expected IsHarnessDir to return true")
+	}
+}
+
+func TestIsHarnessDir_False(t *testing.T) {
+	dir := t.TempDir()
+	if IsHarnessDir(dir) {
+		t.Error("expected IsHarnessDir to return false for empty dir")
+	}
+}
+
+func TestIsLegacyPluginDir(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0o755); err != nil {
 		t.Fatal(err)
@@ -16,240 +34,182 @@ func TestIsPluginDir_True(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !IsPluginDir(dir) {
-		t.Error("expected IsPluginDir to return true")
+	if !IsLegacyPluginDir(dir) {
+		t.Error("expected IsLegacyPluginDir to return true")
 	}
 }
 
-func TestIsPluginDir_False(t *testing.T) {
+func TestLoadHarnessJSON_Valid(t *testing.T) {
 	dir := t.TempDir()
-	if IsPluginDir(dir) {
-		t.Error("expected IsPluginDir to return false for empty dir")
-	}
-}
+	writeHarnessJSON(t, dir, `{"name":"test-harness","version":"1.0.0"}`)
 
-func TestLoadPluginJSON_Valid(t *testing.T) {
-	dir := t.TempDir()
-	writePluginJSON(t, dir, PluginJSON{
-		Name:    "test-persona",
-		Version: "1.0.0",
-	})
-
-	pj, err := LoadPluginJSON(dir)
+	hj, err := LoadHarnessJSON(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pj.Name != "test-persona" {
-		t.Errorf("Name = %q, want %q", pj.Name, "test-persona")
+	if hj.Name != "test-harness" {
+		t.Errorf("Name = %q, want %q", hj.Name, "test-harness")
 	}
-	if pj.Version != "1.0.0" {
-		t.Errorf("Version = %q, want %q", pj.Version, "1.0.0")
+	if hj.Version != "1.0.0" {
+		t.Errorf("Version = %q, want %q", hj.Version, "1.0.0")
 	}
 }
 
-func TestLoadPluginJSON_MissingFile(t *testing.T) {
+func TestLoadHarnessJSON_FullFields(t *testing.T) {
 	dir := t.TempDir()
-	_, err := LoadPluginJSON(dir)
+	writeHarnessJSON(t, dir, `{
+		"name": "full",
+		"version": "0.1.0",
+		"description": "A full harness",
+		"author": {"name": "David", "email": "david@example.com", "url": "https://example.com"},
+		"keywords": ["go", "typescript"],
+		"default_vendor": "claude",
+		"includes": [
+			{"git": "github.com/example/skills", "ref": "v1.0.0", "pick": ["skills/hello"]}
+		],
+		"delegates_to": [
+			{"git": "github.com/example/team"}
+		],
+		"hooks": {
+			"before_tool": [
+				{"matcher": "Bash", "command": "echo before bash"},
+				{"command": "echo before all"}
+			],
+			"on_stop": [
+				{"command": "echo done"}
+			]
+		},
+		"mcp_servers": {
+			"github": {
+				"command": "npx",
+				"args": ["-y", "@modelcontextprotocol/server-github"],
+				"env": {"GITHUB_TOKEN": "${GITHUB_TOKEN}"}
+			},
+			"api": {
+				"url": "https://api.example.com/mcp",
+				"headers": {"Authorization": "Bearer ${API_KEY}"}
+			}
+		},
+		"profiles": {
+			"ci": {
+				"hooks": {
+					"before_tool": [{"command": "echo ci only"}]
+				}
+			}
+		}
+	}`)
+
+	hj, err := LoadHarnessJSON(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hj.Name != "full" {
+		t.Errorf("Name = %q", hj.Name)
+	}
+	if hj.Author == nil || hj.Author.Email != "david@example.com" {
+		t.Errorf("Author = %+v", hj.Author)
+	}
+	if hj.Author.URL != "https://example.com" {
+		t.Errorf("Author.URL = %q", hj.Author.URL)
+	}
+	if len(hj.Includes) != 1 {
+		t.Errorf("Includes = %d, want 1", len(hj.Includes))
+	}
+	if len(hj.DelegatesTo) != 1 {
+		t.Errorf("DelegatesTo = %d, want 1", len(hj.DelegatesTo))
+	}
+	if len(hj.Hooks) != 2 {
+		t.Errorf("Hooks events = %d, want 2", len(hj.Hooks))
+	}
+	beforeTool := hj.Hooks["before_tool"]
+	if len(beforeTool) != 2 {
+		t.Fatalf("before_tool entries = %d, want 2", len(beforeTool))
+	}
+	if beforeTool[0].Matcher != "Bash" {
+		t.Errorf("Matcher = %q, want %q", beforeTool[0].Matcher, "Bash")
+	}
+	if len(hj.MCPServers) != 2 {
+		t.Errorf("MCPServers = %d, want 2", len(hj.MCPServers))
+	}
+	gh := hj.MCPServers["github"]
+	if gh.Command != "npx" {
+		t.Errorf("github.Command = %q", gh.Command)
+	}
+	api := hj.MCPServers["api"]
+	if api.URL != "https://api.example.com/mcp" {
+		t.Errorf("api.URL = %q", api.URL)
+	}
+	if len(hj.Profiles) != 1 {
+		t.Errorf("Profiles = %d, want 1", len(hj.Profiles))
+	}
+	ci := hj.Profiles["ci"]
+	if len(ci.Hooks) != 1 {
+		t.Errorf("ci.Hooks events = %d, want 1", len(ci.Hooks))
+	}
+}
+
+func TestLoadHarnessJSON_MissingFile(t *testing.T) {
+	dir := t.TempDir()
+	_, err := LoadHarnessJSON(dir)
 	if err == nil {
-		t.Fatal("expected error for missing plugin.json")
+		t.Fatal("expected error for missing harness.json")
 	}
 }
 
-func TestLoadPluginJSON_InvalidJSON(t *testing.T) {
+func TestLoadHarnessJSON_InvalidJSON(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, ".claude-plugin", "plugin.json"), []byte(`{invalid`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(`{invalid`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err := LoadPluginJSON(dir)
+	_, err := LoadHarnessJSON(dir)
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
 	}
 }
 
-func TestLoadPluginJSON_MissingName(t *testing.T) {
+func TestLoadHarnessJSON_MissingName(t *testing.T) {
 	dir := t.TempDir()
-	writePluginJSON(t, dir, PluginJSON{Version: "1.0.0"})
+	writeHarnessJSON(t, dir, `{"version":"1.0.0"}`)
 
-	_, err := LoadPluginJSON(dir)
+	_, err := LoadHarnessJSON(dir)
 	if err == nil {
 		t.Fatal("expected error for missing name")
 	}
 }
 
-func TestLoadMetadataJSON_WithYNH(t *testing.T) {
+func TestLoadHarnessJSON_UnknownField(t *testing.T) {
 	dir := t.TempDir()
-	writeMetadataJSON(t, dir, MetadataJSON{
-		YNH: &YNHMetadata{
-			DefaultVendor: "claude",
-			Includes: []IncludeMeta{
-				{Git: "github.com/example/repo", Pick: []string{"skills/hello"}},
-			},
-			DelegatesTo: []DelegateMeta{
-				{Git: "github.com/example/team"},
-			},
-		},
-	})
+	writeHarnessJSON(t, dir, `{"name":"test","version":"1.0.0","badfield":"value"}`)
 
-	meta, err := LoadMetadataJSON(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if meta.YNH == nil {
-		t.Fatal("YNH is nil")
-	}
-	if meta.YNH.DefaultVendor != "claude" {
-		t.Errorf("DefaultVendor = %q, want %q", meta.YNH.DefaultVendor, "claude")
-	}
-	if len(meta.YNH.Includes) != 1 {
-		t.Fatalf("Includes = %d, want 1", len(meta.YNH.Includes))
-	}
-	if len(meta.YNH.DelegatesTo) != 1 {
-		t.Fatalf("DelegatesTo = %d, want 1", len(meta.YNH.DelegatesTo))
-	}
-}
-
-func TestLoadMetadataJSON_FileNotExists(t *testing.T) {
-	dir := t.TempDir()
-	meta, err := LoadMetadataJSON(dir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if meta != nil {
-		t.Error("expected nil for missing metadata.json")
-	}
-}
-
-func TestLoadMetadataJSON_NoYNHKey(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "metadata.json"), []byte(`{"other_tool": {}}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	meta, err := LoadMetadataJSON(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if meta.YNH != nil {
-		t.Error("expected YNH to be nil")
-	}
-}
-
-func TestLoadMetadataJSON_InvalidJSON(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "metadata.json"), []byte(`{bad`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := LoadMetadataJSON(dir)
+	_, err := LoadHarnessJSON(dir)
 	if err == nil {
-		t.Fatal("expected error for invalid JSON")
+		t.Fatal("expected error for unknown field")
+	}
+	if !strings.Contains(err.Error(), "invalid harness.json") {
+		t.Errorf("error should mention invalid harness.json, got: %v", err)
 	}
 }
 
-func TestSaveMetadataJSON_NewFile(t *testing.T) {
+func TestLoadHarnessJSON_WithSchema(t *testing.T) {
 	dir := t.TempDir()
-	ynh := &YNHMetadata{
-		DefaultVendor: "claude",
-		InstalledFrom: &ProvenanceMeta{
-			SourceType:  "git",
-			Source:      "github.com/example/repo",
-			Path:        "personas/test",
-			InstalledAt: "2026-03-22T10:30:00Z",
-		},
-	}
+	writeHarnessJSON(t, dir, `{"$schema":"https://eyelock.github.io/ynh/schema/harness.schema.json","name":"test","version":"1.0.0"}`)
 
-	if err := SaveMetadataJSON(dir, ynh); err != nil {
-		t.Fatal(err)
-	}
-
-	// Read back and verify
-	meta, err := LoadMetadataJSON(dir)
+	hj, err := LoadHarnessJSON(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if meta.YNH == nil {
-		t.Fatal("YNH is nil after save")
-	}
-	if meta.YNH.DefaultVendor != "claude" {
-		t.Errorf("DefaultVendor = %q, want %q", meta.YNH.DefaultVendor, "claude")
-	}
-	if meta.YNH.InstalledFrom == nil {
-		t.Fatal("InstalledFrom is nil after save")
-	}
-	if meta.YNH.InstalledFrom.SourceType != "git" {
-		t.Errorf("SourceType = %q, want %q", meta.YNH.InstalledFrom.SourceType, "git")
-	}
-	if meta.YNH.InstalledFrom.Source != "github.com/example/repo" {
-		t.Errorf("Source = %q, want %q", meta.YNH.InstalledFrom.Source, "github.com/example/repo")
-	}
-	if meta.YNH.InstalledFrom.Path != "personas/test" {
-		t.Errorf("Path = %q, want %q", meta.YNH.InstalledFrom.Path, "personas/test")
+	if hj.Schema != "https://eyelock.github.io/ynh/schema/harness.schema.json" {
+		t.Errorf("Schema = %q", hj.Schema)
 	}
 }
 
-func TestSaveMetadataJSON_PreservesNonYNHKeys(t *testing.T) {
+func TestSaveHarnessJSON_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 
-	// Write a file with a non-ynh key
-	initial := []byte(`{"other_tool": {"setting": true}, "ynh": {"default_vendor": "codex"}}`)
-	if err := os.WriteFile(filepath.Join(dir, "metadata.json"), initial, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Save new ynh metadata (overwrites ynh, preserves other_tool)
-	ynh := &YNHMetadata{
-		DefaultVendor: "claude",
-		InstalledFrom: &ProvenanceMeta{
-			SourceType:  "local",
-			Source:      "./my-persona",
-			InstalledAt: "2026-03-22T10:30:00Z",
-		},
-	}
-	if err := SaveMetadataJSON(dir, ynh); err != nil {
-		t.Fatal(err)
-	}
-
-	// Read raw JSON and check other_tool is preserved
-	data, err := os.ReadFile(filepath.Join(dir, "metadata.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatal(err)
-	}
-
-	otherTool, ok := raw["other_tool"]
-	if !ok {
-		t.Fatal("other_tool key was lost during save")
-	}
-	otherMap, ok := otherTool.(map[string]any)
-	if !ok {
-		t.Fatal("other_tool is not an object")
-	}
-	if otherMap["setting"] != true {
-		t.Errorf("other_tool.setting = %v, want true", otherMap["setting"])
-	}
-
-	// Also verify ynh was updated
-	meta, err := LoadMetadataJSON(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if meta.YNH.DefaultVendor != "claude" {
-		t.Errorf("DefaultVendor = %q, want %q", meta.YNH.DefaultVendor, "claude")
-	}
-}
-
-func TestSaveMetadataJSON_RoundTrip(t *testing.T) {
-	dir := t.TempDir()
-
-	// Write full metadata with includes and provenance
-	ynh := &YNHMetadata{
+	hj := &HarnessJSON{
+		Name:          "round-trip",
+		Version:       "1.0.0",
 		DefaultVendor: "claude",
 		Includes: []IncludeMeta{
 			{Git: "github.com/example/repo", Path: "skills/dev", Pick: []string{"review"}},
@@ -265,54 +225,217 @@ func TestSaveMetadataJSON_RoundTrip(t *testing.T) {
 		},
 	}
 
-	if err := SaveMetadataJSON(dir, ynh); err != nil {
+	if err := SaveHarnessJSON(dir, hj); err != nil {
 		t.Fatal(err)
 	}
 
-	meta, err := LoadMetadataJSON(dir)
+	loaded, err := LoadHarnessJSON(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(meta.YNH.Includes) != 1 {
-		t.Fatalf("Includes = %d, want 1", len(meta.YNH.Includes))
+	if loaded.Name != "round-trip" {
+		t.Errorf("Name = %q", loaded.Name)
 	}
-	if meta.YNH.Includes[0].Path != "skills/dev" {
-		t.Errorf("Include.Path = %q, want %q", meta.YNH.Includes[0].Path, "skills/dev")
+	if len(loaded.Includes) != 1 {
+		t.Fatalf("Includes = %d, want 1", len(loaded.Includes))
 	}
-	if len(meta.YNH.DelegatesTo) != 1 {
-		t.Fatalf("DelegatesTo = %d, want 1", len(meta.YNH.DelegatesTo))
+	if loaded.Includes[0].Path != "skills/dev" {
+		t.Errorf("Include.Path = %q", loaded.Includes[0].Path)
 	}
-	if meta.YNH.InstalledFrom == nil {
+	if len(loaded.DelegatesTo) != 1 {
+		t.Fatalf("DelegatesTo = %d, want 1", len(loaded.DelegatesTo))
+	}
+	if loaded.InstalledFrom == nil {
 		t.Fatal("InstalledFrom is nil after round-trip")
 	}
-	if meta.YNH.InstalledFrom.RegistryName != "my-registry" {
-		t.Errorf("RegistryName = %q, want %q", meta.YNH.InstalledFrom.RegistryName, "my-registry")
+	if loaded.InstalledFrom.RegistryName != "my-registry" {
+		t.Errorf("RegistryName = %q", loaded.InstalledFrom.RegistryName)
 	}
 }
 
-func writePluginJSON(t *testing.T, dir string, pj PluginJSON) {
-	t.Helper()
-	pluginDir := filepath.Join(dir, ".claude-plugin")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatal(err)
+func TestValidateHooks_Valid(t *testing.T) {
+	hooks := map[string][]HookEntry{
+		"before_tool": {{Matcher: "Bash", Command: "echo hi"}},
+		"on_stop":     {{Command: "echo bye"}},
 	}
-	data, err := json.Marshal(pj)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), data, 0o644); err != nil {
-		t.Fatal(err)
+	issues := ValidateHooks(hooks)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues, got %v", issues)
 	}
 }
 
-func writeMetadataJSON(t *testing.T, dir string, meta MetadataJSON) {
-	t.Helper()
-	data, err := json.Marshal(meta)
+func TestValidateHooks_UnknownEvent(t *testing.T) {
+	hooks := map[string][]HookEntry{
+		"unknown_event": {{Command: "echo hi"}},
+	}
+	issues := ValidateHooks(hooks)
+	if len(issues) == 0 {
+		t.Fatal("expected issues for unknown event")
+	}
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue, "unknown hook event") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'unknown hook event' in issues, got %v", issues)
+	}
+}
+
+func TestValidateHooks_EmptyCommand(t *testing.T) {
+	hooks := map[string][]HookEntry{
+		"before_tool": {{Command: ""}},
+	}
+	issues := ValidateHooks(hooks)
+	if len(issues) == 0 {
+		t.Fatal("expected issues for empty command")
+	}
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue, "command must not be empty") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'command must not be empty' in issues, got %v", issues)
+	}
+}
+
+func TestValidateMCPServers_CommandOnly(t *testing.T) {
+	servers := map[string]MCPServer{
+		"test": {Command: "npx", Args: []string{"-y", "server"}},
+	}
+	issues := ValidateMCPServers(servers)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues, got %v", issues)
+	}
+}
+
+func TestValidateMCPServers_URLOnly(t *testing.T) {
+	servers := map[string]MCPServer{
+		"test": {URL: "https://example.com/mcp"},
+	}
+	issues := ValidateMCPServers(servers)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues, got %v", issues)
+	}
+}
+
+func TestValidateMCPServers_Neither(t *testing.T) {
+	servers := map[string]MCPServer{
+		"test": {},
+	}
+	issues := ValidateMCPServers(servers)
+	if len(issues) == 0 {
+		t.Fatal("expected issues for server with neither command nor url")
+	}
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue, "must have either command or url") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'must have either command or url' in issues, got %v", issues)
+	}
+}
+
+func TestValidateMCPServers_Both(t *testing.T) {
+	servers := map[string]MCPServer{
+		"test": {Command: "npx", URL: "https://example.com"},
+	}
+	issues := ValidateMCPServers(servers)
+	if len(issues) == 0 {
+		t.Fatal("expected issues for server with both command and url")
+	}
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue, "not both") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'not both' in issues, got %v", issues)
+	}
+}
+
+func TestValidateProfiles_Valid(t *testing.T) {
+	profiles := map[string]Profile{
+		"ci": {
+			Hooks: map[string][]HookEntry{
+				"before_tool": {{Command: "echo ci"}},
+			},
+			MCPServers: map[string]MCPServer{
+				"test": {Command: "npx"},
+			},
+		},
+	}
+	issues := ValidateProfiles(profiles)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues, got %v", issues)
+	}
+}
+
+func TestValidateProfiles_InvalidHookEvent(t *testing.T) {
+	profiles := map[string]Profile{
+		"ci": {
+			Hooks: map[string][]HookEntry{
+				"bad_event": {{Command: "echo hi"}},
+			},
+		},
+	}
+	issues := ValidateProfiles(profiles)
+	if len(issues) == 0 {
+		t.Fatal("expected issues for invalid hook event in profile")
+	}
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue, `profile "ci"`) && strings.Contains(issue, "unknown hook event") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected profile-prefixed error, got %v", issues)
+	}
+}
+
+func TestValidateProfiles_MCPServerNoCommand(t *testing.T) {
+	profiles := map[string]Profile{
+		"audit": {
+			MCPServers: map[string]MCPServer{
+				"bad": {},
+			},
+		},
+	}
+	issues := ValidateProfiles(profiles)
+	if len(issues) == 0 {
+		t.Fatal("expected issues for MCP server with no command/url in profile")
+	}
+}
+
+func TestLoadHarnessJSON_TestdataRoundTrip(t *testing.T) {
+	// Verify all testdata harness.json files parse without error
+	entries, err := filepath.Glob("../../testdata/*/harness.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "metadata.json"), data, 0o644); err != nil {
+	if len(entries) == 0 {
+		t.Skip("no testdata harness.json files found")
+	}
+	for _, path := range entries {
+		dir := filepath.Dir(path)
+		_, err := LoadHarnessJSON(dir)
+		if err != nil {
+			t.Errorf("LoadHarnessJSON(%s) failed: %v", dir, err)
+		}
+	}
+}
+
+func writeHarnessJSON(t *testing.T, dir string, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -18,29 +18,21 @@ func setupMarketplace(t *testing.T) (configPath string, configDir string) {
 	t.Helper()
 	dir := t.TempDir()
 
-	// Create a persona source (reuse export-persona testdata)
+	// Create a harness source (reuse export-harness testdata)
 	// We'll symlink to avoid duplication
-	personaDir := filepath.Join(dir, "personas", "david")
-	if err := os.MkdirAll(filepath.Dir(personaDir), 0o755); err != nil {
+	harnessDir := filepath.Join(dir, "harnesses", "david")
+	if err := os.MkdirAll(filepath.Dir(harnessDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	srcPersona := filepath.Join(testdataDir(), "export-persona")
-	abs, _ := filepath.Abs(srcPersona)
-	if err := os.Symlink(abs, personaDir); err != nil {
+	srcHarness := filepath.Join(testdataDir(), "export-harness")
+	abs, _ := filepath.Abs(srcHarness)
+	if err := os.Symlink(abs, harnessDir); err != nil {
 		t.Fatal(err)
 	}
 
-	// Create a self-contained plugin source
+	// Create a self-contained plugin source (vendor-native format)
 	pluginDir := filepath.Join(dir, "plugins", "my-tool")
-	claudePlugin := filepath.Join(pluginDir, ".claude-plugin")
-	if err := os.MkdirAll(claudePlugin, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeJSON(t, filepath.Join(claudePlugin, "plugin.json"), map[string]any{
-		"name":        "my-tool",
-		"version":     "0.2.0",
-		"description": "A standalone tool plugin",
-	})
+	writePluginManifest(t, pluginDir, "my-tool", "0.2.0", "A standalone tool plugin")
 	skillDir := filepath.Join(pluginDir, "skills", "format")
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -56,7 +48,7 @@ func setupMarketplace(t *testing.T) (configPath string, configDir string) {
 		"owner":       map[string]string{"name": "tester"},
 		"description": "Test marketplace",
 		"entries": []map[string]string{
-			{"type": "persona", "source": "./personas/david"},
+			{"type": "harness", "source": "./harnesses/david"},
 			{"type": "plugin", "source": "./plugins/my-tool"},
 		},
 	})
@@ -81,8 +73,8 @@ func TestMarketplaceConfigParse(t *testing.T) {
 	if len(cfg.Entries) != 2 {
 		t.Fatalf("entries = %d, want 2", len(cfg.Entries))
 	}
-	if cfg.Entries[0].Type != "persona" {
-		t.Errorf("entry 0 type = %q, want persona", cfg.Entries[0].Type)
+	if cfg.Entries[0].Type != "harness" {
+		t.Errorf("entry 0 type = %q, want harness", cfg.Entries[0].Type)
 	}
 	if cfg.Entries[1].Type != "plugin" {
 		t.Errorf("entry 1 type = %q, want plugin", cfg.Entries[1].Type)
@@ -113,7 +105,7 @@ func TestMarketplaceConfigValidation(t *testing.T) {
 		{
 			name:    "bad type",
 			json:    `{"name":"x","owner":{"name":"x"},"entries":[{"type":"bad","source":"./x"}]}`,
-			wantErr: "must be \"persona\" or \"plugin\"",
+			wantErr: "must be \"harness\" or \"plugin\"",
 		},
 		{
 			name:    "missing source",
@@ -139,7 +131,7 @@ func TestMarketplaceConfigValidation(t *testing.T) {
 	}
 }
 
-func TestMarketplacePersonaExport(t *testing.T) {
+func TestMarketplaceHarnessExport(t *testing.T) {
 	configPath, configDir := setupMarketplace(t)
 	outputDir := t.TempDir()
 
@@ -156,13 +148,13 @@ func TestMarketplacePersonaExport(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	// Persona should have dual manifests
-	personaDir := filepath.Join(outputDir, "plugins", "export-test")
-	assertFileExists(t, filepath.Join(personaDir, ".claude-plugin", "plugin.json"))
-	assertFileExists(t, filepath.Join(personaDir, ".cursor-plugin", "plugin.json"))
+	// Harness should have dual manifests
+	harnessDir := filepath.Join(outputDir, "plugins", "export-test")
+	assertFileExists(t, filepath.Join(harnessDir, ".claude-plugin", "plugin.json"))
+	assertFileExists(t, filepath.Join(harnessDir, ".cursor-plugin", "plugin.json"))
 
 	// Skills should be present
-	assertFileExists(t, filepath.Join(personaDir, "skills", "dev-project", "SKILL.md"))
+	assertFileExists(t, filepath.Join(harnessDir, "skills", "dev-project", "SKILL.md"))
 }
 
 func TestMarketplacePluginCopy(t *testing.T) {
@@ -318,7 +310,7 @@ func TestMarketplaceReadme(t *testing.T) {
 		t.Error("README should contain marketplace name")
 	}
 	if !strings.Contains(content, "export-test") {
-		t.Error("README should contain persona name")
+		t.Error("README should contain harness name")
 	}
 	if !strings.Contains(content, "my-tool") {
 		t.Error("README should contain plugin name")
@@ -356,17 +348,8 @@ func TestMarketplaceCleanFlag(t *testing.T) {
 func TestMarketplaceDescriptionOverride(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create plugin source
-	pluginDir := filepath.Join(dir, "plugins", "widget")
-	claudePlugin := filepath.Join(pluginDir, ".claude-plugin")
-	if err := os.MkdirAll(claudePlugin, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeJSON(t, filepath.Join(claudePlugin, "plugin.json"), map[string]any{
-		"name":        "widget",
-		"version":     "1.0.0",
-		"description": "Original description",
-	})
+	// Create plugin source (vendor-native format)
+	writePluginManifest(t, filepath.Join(dir, "plugins", "widget"), "widget", "1.0.0", "Original description")
 
 	// Marketplace config with description override
 	configPath := filepath.Join(dir, "marketplace.json")
@@ -535,6 +518,20 @@ func assertFileNotExists(t *testing.T, path string) {
 	if _, err := os.Stat(path); err == nil {
 		t.Errorf("expected file NOT to exist: %s", path)
 	}
+}
+
+// writePluginManifest creates a vendor-native plugin directory with .claude-plugin/plugin.json.
+func writePluginManifest(t *testing.T, pluginDir, name, version, description string) {
+	t.Helper()
+	manifestDir := filepath.Join(pluginDir, ".claude-plugin")
+	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(manifestDir, "plugin.json"), map[string]any{
+		"name":        name,
+		"version":     version,
+		"description": description,
+	})
 }
 
 func writeJSON(t *testing.T, path string, v any) {

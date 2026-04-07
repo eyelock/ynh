@@ -1,0 +1,6 @@
+{
+  "name": "composed",
+  "version": "0.1.0",
+  "description": "Composed harness with embedded artifacts",
+  "default_vendor": "claude"
+}

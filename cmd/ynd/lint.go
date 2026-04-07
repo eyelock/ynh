@@ -16,14 +16,39 @@ type lintIssue struct {
 }
 
 func cmdLint(args []string) error {
-	root := "."
-	if len(args) > 0 {
-		root = args[0]
+	var root string
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--harness":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--harness requires a value")
+			}
+			i++
+			root = args[i]
+		case "-h", "--help":
+			return errHelp
+		default:
+			if strings.HasPrefix(args[i], "-") {
+				return fmt.Errorf("unknown flag: %s", args[i])
+			}
+			if root == "" {
+				root = args[i]
+			}
+		}
+	}
+
+	// Resolve source: --harness flag > YNH_HARNESS > positional > CWD
+	if root == "" {
+		root = resolveHarnessEnv()
+	}
+	if root == "" {
+		root = "."
 	}
 
 	files, err := discoverAll(root,
 		[]string{".md", ".sh"},
-		[]string{"plugin.json", "metadata.json"},
+		[]string{"harness.json"},
 	)
 	if err != nil {
 		return err
@@ -42,10 +67,8 @@ func cmdLint(args []string) error {
 			issues = append(issues, lintMarkdown(f)...)
 		case strings.HasSuffix(f, ".sh"):
 			issues = append(issues, lintShell(f)...)
-		case filepath.Base(f) == "plugin.json":
-			issues = append(issues, lintPluginJSON(f)...)
-		case filepath.Base(f) == "metadata.json":
-			issues = append(issues, lintMetadataJSON(f)...)
+		case filepath.Base(f) == "harness.json":
+			issues = append(issues, lintHarnessJSONFile(f)...)
 		}
 	}
 
@@ -337,7 +360,7 @@ func lintShell(path string) []lintIssue {
 	return issues
 }
 
-func lintPluginJSON(path string) []lintIssue {
+func lintHarnessJSONFile(path string) []lintIssue {
 	var issues []lintIssue
 
 	data, err := os.ReadFile(path)
@@ -345,12 +368,12 @@ func lintPluginJSON(path string) []lintIssue {
 		return []lintIssue{{File: path, Message: fmt.Sprintf("read error: %v", err)}}
 	}
 
-	var pj map[string]any
-	if err := json.Unmarshal(data, &pj); err != nil {
+	var hj map[string]any
+	if err := json.Unmarshal(data, &hj); err != nil {
 		return []lintIssue{{File: path, Message: fmt.Sprintf("invalid JSON: %v", err)}}
 	}
 
-	name, ok := pj["name"]
+	name, ok := hj["name"]
 	if !ok {
 		issues = append(issues, lintIssue{File: path, Message: "missing required field 'name'"})
 	} else if nameStr, ok := name.(string); !ok || nameStr == "" {
@@ -359,74 +382,59 @@ func lintPluginJSON(path string) []lintIssue {
 		issues = append(issues, lintIssue{File: path, Message: fmt.Sprintf("'name' %q does not match naming convention (alphanumeric, hyphens, underscores, dots)", nameStr)})
 	}
 
-	version, ok := pj["version"]
+	version, ok := hj["version"]
 	if !ok {
 		issues = append(issues, lintIssue{File: path, Message: "missing required field 'version'"})
 	} else if vStr, ok := version.(string); !ok || vStr == "" {
 		issues = append(issues, lintIssue{File: path, Message: "'version' must be a non-empty string"})
 	}
 
-	return issues
-}
-
-func lintMetadataJSON(path string) []lintIssue {
-	var issues []lintIssue
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return []lintIssue{{File: path, Message: fmt.Sprintf("read error: %v", err)}}
-	}
-
-	var meta map[string]any
-	if err := json.Unmarshal(data, &meta); err != nil {
-		return []lintIssue{{File: path, Message: fmt.Sprintf("invalid JSON: %v", err)}}
-	}
-
-	ynh, ok := meta["ynh"]
-	if !ok {
-		return issues // no ynh section is fine
-	}
-
-	ynhMap, ok := ynh.(map[string]any)
-	if !ok {
-		issues = append(issues, lintIssue{File: path, Message: "'ynh' must be an object"})
-		return issues
-	}
-
-	if includes, ok := ynhMap["includes"]; ok {
+	if includes, ok := hj["includes"]; ok {
 		arr, ok := includes.([]any)
 		if !ok {
-			issues = append(issues, lintIssue{File: path, Message: "'ynh.includes' must be an array"})
+			issues = append(issues, lintIssue{File: path, Message: "'includes' must be an array"})
 		} else {
 			for i, item := range arr {
 				inc, ok := item.(map[string]any)
 				if !ok {
-					issues = append(issues, lintIssue{File: path, Message: fmt.Sprintf("ynh.includes[%d] must be an object", i)})
+					issues = append(issues, lintIssue{File: path, Message: fmt.Sprintf("includes[%d] must be an object", i)})
 					continue
 				}
 				if _, ok := inc["git"]; !ok {
-					issues = append(issues, lintIssue{File: path, Message: fmt.Sprintf("ynh.includes[%d] missing required field 'git'", i)})
+					issues = append(issues, lintIssue{File: path, Message: fmt.Sprintf("includes[%d] missing required field 'git'", i)})
 				}
 			}
 		}
 	}
 
-	if delegates, ok := ynhMap["delegates_to"]; ok {
+	if delegates, ok := hj["delegates_to"]; ok {
 		arr, ok := delegates.([]any)
 		if !ok {
-			issues = append(issues, lintIssue{File: path, Message: "'ynh.delegates_to' must be an array"})
+			issues = append(issues, lintIssue{File: path, Message: "'delegates_to' must be an array"})
 		} else {
 			for i, item := range arr {
 				del, ok := item.(map[string]any)
 				if !ok {
-					issues = append(issues, lintIssue{File: path, Message: fmt.Sprintf("ynh.delegates_to[%d] must be an object", i)})
+					issues = append(issues, lintIssue{File: path, Message: fmt.Sprintf("delegates_to[%d] must be an object", i)})
 					continue
 				}
 				if _, ok := del["git"]; !ok {
-					issues = append(issues, lintIssue{File: path, Message: fmt.Sprintf("ynh.delegates_to[%d] missing required field 'git'", i)})
+					issues = append(issues, lintIssue{File: path, Message: fmt.Sprintf("delegates_to[%d] missing required field 'git'", i)})
 				}
 			}
 		}
+	}
+
+	// Validate hooks
+	hookIssues := validateHarnessHooks(hj)
+	for _, msg := range hookIssues {
+		issues = append(issues, lintIssue{File: path, Message: msg})
+	}
+
+	// Validate MCP servers
+	mcpIssues := validateHarnessMCPServers(hj)
+	for _, msg := range mcpIssues {
+		issues = append(issues, lintIssue{File: path, Message: msg})
 	}
 
 	return issues

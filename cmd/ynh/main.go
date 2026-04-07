@@ -11,7 +11,8 @@ import (
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
-	"github.com/eyelock/ynh/internal/persona"
+	"github.com/eyelock/ynh/internal/exporter"
+	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/symlink"
@@ -69,26 +70,26 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Printf(`ynh - ynh persona manager (%s)
+	fmt.Printf(`ynh - ynh harness template manager (%s)
 
 Usage:
   ynh <command> [arguments]
 
 Commands:
   init                       Show ynh home path and setup instructions
-  install <source> [--path <subdir>]  Install a persona from Git URL or local path
-  uninstall <name>           Remove an installed persona and its launcher
-  update <name>              Refresh cached Git repos for a persona
-  run <name> [flags] [prompt]  Launch a persona session
-  ls                           List installed personas
-  info <name>                  Show detailed persona information
+  install <source> [--path <subdir>]  Install a harness from Git URL or local path
+  uninstall <name>           Remove an installed harness and its launcher
+  update <name>              Refresh cached Git repos for a harness
+  run <name> [flags] [prompt]  Launch a harness session
+  ls                           List installed harnesses
+  info <name>                  Show detailed harness information
   vendors                      List supported vendor adapters
-  search <term>                Search registries for personas
-  registry add <url>           Add a persona registry
+  search <term>                Search registries for harnesses
+  registry add <url>           Add a harness registry
   registry list                Show configured registries
   registry remove <url>        Remove a registry
   registry update              Refresh all cached registries
-  image <name> [flags]         Build a Docker image with a persona baked in
+  image <name> [flags]         Build a Docker image with a harness baked in
   status                       Show symlink installations across projects
   prune                        Clean orphaned symlink installations
   version                      Print version
@@ -103,9 +104,9 @@ Run flags:
 
 Examples:
   ynh init
-  ynh install github.com/david/my-persona
-  ynh install ./my-local-persona
-  ynh install github.com/org/monorepo --path personas/david
+  ynh install github.com/myorg/david
+  ynh install ./my-local-harness
+  ynh install github.com/org/monorepo --path harnesses/david
   ynh run david
   ynh run david "review this PR"
   ynh run david -v codex
@@ -222,8 +223,8 @@ func cmdInstall(args []string) error {
 		}
 	}
 
-	// Load persona from plugin format
-	p, err := persona.LoadPluginDir(srcDir)
+	// Load harness: try plugin format first, then bare AGENTS.md directory
+	p, err := loadOrSynthesizeHarness(srcDir)
 	if err != nil {
 		return err
 	}
@@ -233,8 +234,8 @@ func cmdInstall(args []string) error {
 	// Users invoke it with: ynh run ynh
 	reservedName := p.Name == "ynh"
 
-	// Copy persona to installed directory (clean first to remove stale artifacts)
-	installDir := persona.InstalledDir(p.Name)
+	// Copy harness to installed directory (clean first to remove stale artifacts)
+	installDir := harness.InstalledDir(p.Name)
 	if err := os.RemoveAll(installDir); err != nil {
 		return fmt.Errorf("cleaning install dir: %w", err)
 	}
@@ -246,7 +247,7 @@ func cmdInstall(args []string) error {
 		return err
 	}
 
-	// Inject install provenance into the copied metadata.json
+	// Inject install provenance into the copied harness.json
 	provSource := source
 	if resolved.sourceType == "local" {
 		provSource = originalSource
@@ -258,19 +259,13 @@ func cmdInstall(args []string) error {
 		RegistryName: resolved.registryName,
 		InstalledAt:  time.Now().UTC().Format(time.RFC3339),
 	}
-	// Load existing ynh metadata from the copied file (preserves includes, delegates, etc.)
-	meta, err := plugin.LoadMetadataJSON(installDir)
+	// Load existing harness.json from the copied file (preserves includes, delegates, etc.)
+	hj, err := plugin.LoadHarnessJSON(installDir)
 	if err != nil {
-		return fmt.Errorf("loading installed metadata: %w", err)
+		return fmt.Errorf("loading installed harness.json: %w", err)
 	}
-	var ynh *plugin.YNHMetadata
-	if meta != nil && meta.YNH != nil {
-		ynh = meta.YNH
-	} else {
-		ynh = &plugin.YNHMetadata{}
-	}
-	ynh.InstalledFrom = prov
-	if err := plugin.SaveMetadataJSON(installDir, ynh); err != nil {
+	hj.InstalledFrom = prov
+	if err := plugin.SaveHarnessJSON(installDir, hj); err != nil {
 		return fmt.Errorf("saving provenance: %w", err)
 	}
 
@@ -308,7 +303,7 @@ func cmdInstall(args []string) error {
 		}
 	}
 
-	fmt.Printf("Installed persona %q\n", p.Name)
+	fmt.Printf("Installed harness %q\n", p.Name)
 	fmt.Printf("  Location: %s\n", installDir)
 	if reservedName {
 		fmt.Printf("  Launcher: (skipped — conflicts with ynh binary, use \"ynh run %s\")\n", p.Name)
@@ -325,20 +320,20 @@ func cmdInstall(args []string) error {
 
 func cmdUninstall(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: ynh uninstall <persona-name>")
+		return fmt.Errorf("usage: ynh uninstall <harness-name>")
 	}
 
 	name := args[0]
 
-	// Verify persona exists (either format)
-	installDir := persona.InstalledDir(name)
-	if persona.DetectFormat(installDir) == "" {
-		return fmt.Errorf("persona %q is not installed", name)
+	// Verify harness exists (either format)
+	installDir := harness.InstalledDir(name)
+	if harness.DetectFormat(installDir) == "" {
+		return fmt.Errorf("harness %q is not installed", name)
 	}
 
-	// Remove persona directory
+	// Remove harness directory
 	if err := os.RemoveAll(installDir); err != nil {
-		return fmt.Errorf("removing persona: %w", err)
+		return fmt.Errorf("removing harness: %w", err)
 	}
 
 	// Remove launcher script
@@ -349,24 +344,24 @@ func cmdUninstall(args []string) error {
 	runDir := filepath.Join(config.RunDir(), name)
 	_ = os.RemoveAll(runDir) // ignore error if not present
 
-	fmt.Printf("Uninstalled persona %q\n", name)
+	fmt.Printf("Uninstalled harness %q\n", name)
 	return nil
 }
 
 func cmdUpdate(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: ynh update <persona-name>")
+		return fmt.Errorf("usage: ynh update <harness-name>")
 	}
 
 	name := args[0]
 
-	p, err := persona.Load(name)
+	p, err := harness.Load(name)
 	if err != nil {
-		return fmt.Errorf("persona %q not found: %w", name, err)
+		return fmt.Errorf("harness %q not found: %w", name, err)
 	}
 
 	if len(p.Includes) == 0 && len(p.DelegatesTo) == 0 {
-		fmt.Printf("Persona %q has no Git sources to update.\n", name)
+		fmt.Printf("Harness %q has no Git sources to update.\n", name)
 		return nil
 	}
 
@@ -415,13 +410,13 @@ func cmdUpdate(args []string) error {
 		}
 	}
 
-	fmt.Printf("Checked %d source(s) for persona %q, %d updated.\n", checked, name, updated)
+	fmt.Printf("Checked %d source(s) for harness %q, %d updated.\n", checked, name, updated)
 	return nil
 }
 
 func cmdRun(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: ynh run <persona-name> [-v vendor] [vendor-flags...] [prompt]")
+		return fmt.Errorf("usage: ynh run <harness-name> [-v vendor] [vendor-flags...] [prompt]")
 	}
 
 	if err := config.EnsureDirs(); err != nil {
@@ -429,12 +424,24 @@ func cmdRun(args []string) error {
 	}
 
 	name := args[0]
-	vendorFlag, prompt, vendorArgs, action := parseRunArgs(args[1:])
+	vendorFlag, profileFlag, prompt, vendorArgs, action := parseRunArgs(args[1:])
 
-	// Load persona
-	p, err := persona.Load(name)
+	// Load harness
+	p, err := harness.Load(name)
 	if err != nil {
-		return fmt.Errorf("persona %q not found: %w", name, err)
+		return fmt.Errorf("harness %q not found: %w", name, err)
+	}
+
+	// Resolve profile: --profile flag > YNH_PROFILE env var > no profile
+	profileName := profileFlag
+	if profileName == "" {
+		profileName = os.Getenv("YNH_PROFILE")
+	}
+	if profileName != "" {
+		p, err = harness.ResolveProfile(p, profileName)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Determine vendor
@@ -485,9 +492,9 @@ func cmdRun(args []string) error {
 		content = append(content, r.Content)
 	}
 
-	// Also include any local content from the persona's installed directory
+	// Also include any local content from the harness's installed directory
 	localContent := resolver.ResolvedContent{
-		BasePath: persona.InstalledDir(name),
+		BasePath: harness.InstalledDir(name),
 	}
 	content = append(content, localContent)
 
@@ -497,7 +504,7 @@ func cmdRun(args []string) error {
 	runDir := filepath.Join(config.RunDir(), name)
 	vendorRunDir := filepath.Join(runDir, vendorName)
 	if info, err := os.Stat(vendorRunDir); err == nil && info.IsDir() {
-		// Pre-assembled layout (baked persona image) — use directly.
+		// Pre-assembled layout (baked harness image) — use directly.
 		// Skip AssembleTo, delegate allow-list check, AND AssembleDelegates —
 		// everything was vetted and assembled at image build time.
 		runDir = vendorRunDir
@@ -514,9 +521,50 @@ func cmdRun(args []string) error {
 			}
 		}
 
-		// Assemble delegate personas as agent files
+		// Assemble delegate harnesses as agent files
 		if err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo); err != nil {
 			return fmt.Errorf("assembling delegates: %w", err)
+		}
+
+		// Generate vendor plugin manifests
+		pj := &plugin.HarnessJSON{Name: p.Name, Version: "0.0.0", Description: p.Description}
+		switch adapter.Name() {
+		case "claude":
+			if err := exporter.GenerateClaudeManifest(pj, filepath.Join(runDir, adapter.ConfigDir())); err != nil {
+				return fmt.Errorf("writing plugin manifest: %w", err)
+			}
+		case "cursor":
+			if err := exporter.GenerateCursorManifest(pj, runDir); err != nil {
+				return fmt.Errorf("writing plugin manifest: %w", err)
+			}
+		}
+
+		// Generate vendor-native hook config files
+		if len(p.Hooks) > 0 {
+			hookFiles := adapter.GenerateHookConfig(p.Hooks)
+			for relPath, content := range hookFiles {
+				absPath := filepath.Join(runDir, relPath)
+				if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+					return fmt.Errorf("creating hook config dir: %w", err)
+				}
+				if err := os.WriteFile(absPath, content, 0o644); err != nil {
+					return fmt.Errorf("writing hook config %s: %w", relPath, err)
+				}
+			}
+		}
+
+		// Generate vendor-native MCP config files
+		if len(p.MCPServers) > 0 {
+			mcpFiles := adapter.GenerateMCPConfig(p.MCPServers)
+			for relPath, content := range mcpFiles {
+				absPath := filepath.Join(runDir, relPath)
+				if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+					return fmt.Errorf("creating MCP config dir: %w", err)
+				}
+				if err := os.WriteFile(absPath, content, 0o644); err != nil {
+					return fmt.Errorf("writing MCP config %s: %w", relPath, err)
+				}
+			}
 		}
 	}
 
@@ -587,13 +635,13 @@ func cmdRun(args []string) error {
 }
 
 func cmdList() error {
-	names, err := persona.List()
+	names, err := harness.List()
 	if err != nil {
 		return err
 	}
 
 	if len(names) == 0 {
-		fmt.Println("No personas installed.")
+		fmt.Println("No harnesses installed.")
 		fmt.Println("Install one with: ynh install <git-url|path>")
 		return nil
 	}
@@ -602,7 +650,7 @@ func cmdList() error {
 	_, _ = fmt.Fprintln(w, "NAME\tVENDOR\tSOURCE\tARTIFACTS\tINCLUDES\tDELEGATES TO")
 
 	for _, name := range names {
-		p, err := persona.Load(name)
+		p, err := harness.Load(name)
 		if err != nil {
 			_, _ = fmt.Fprintf(w, "%s\t(error: %v)\t\t\t\t\n", name, err)
 			continue
@@ -627,13 +675,13 @@ func cmdList() error {
 
 func cmdInfo(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: ynh info <persona-name>")
+		return fmt.Errorf("usage: ynh info <harness-name>")
 	}
 
 	name := args[0]
-	p, err := persona.Load(name)
+	p, err := harness.Load(name)
 	if err != nil {
-		return fmt.Errorf("persona %q not found: %w", name, err)
+		return fmt.Errorf("harness %q not found: %w", name, err)
 	}
 
 	vendorName := p.DefaultVendor
@@ -659,7 +707,7 @@ func cmdInfo(args []string) error {
 	}
 
 	// Local artifacts
-	arts, _ := persona.ScanArtifacts(name)
+	arts, _ := harness.ScanArtifacts(name)
 	fmt.Println()
 	fmt.Println("Artifacts:")
 	if arts.Total() == 0 {
@@ -716,13 +764,43 @@ func cmdInfo(args []string) error {
 		}
 	}
 
+	fmt.Println()
+	fmt.Println("Hooks:")
+	if len(p.Hooks) == 0 {
+		fmt.Println("  (none)")
+	} else {
+		for event, entries := range p.Hooks {
+			for _, entry := range entries {
+				line := "  " + event + ": " + entry.Command
+				if entry.Matcher != "" {
+					line += "  (matcher=" + entry.Matcher + ")"
+				}
+				fmt.Println(line)
+			}
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("MCP Servers:")
+	if len(p.MCPServers) == 0 {
+		fmt.Println("  (none)")
+	} else {
+		for name, server := range p.MCPServers {
+			if server.Command != "" {
+				fmt.Printf("  %s: %s\n", name, server.Command)
+			} else if server.URL != "" {
+				fmt.Printf("  %s: %s\n", name, server.URL)
+			}
+		}
+	}
+
 	return nil
 }
 
 // formatArtifactSummary formats the ARTIFACTS column for ynh ls.
 // Shows a compact summary like "1s 2a 1r 1c" (skills, agents, rules, commands).
 func formatArtifactSummary(name string) string {
-	arts, _ := persona.ScanArtifacts(name)
+	arts, _ := harness.ScanArtifacts(name)
 	if arts.Total() == 0 {
 		return "0"
 	}
@@ -743,7 +821,7 @@ func formatArtifactSummary(name string) string {
 }
 
 // formatProvenance formats the SOURCE column for ynh ls.
-func formatProvenance(prov *persona.Provenance) string {
+func formatProvenance(prov *harness.Provenance) string {
 	if prov == nil {
 		return "-"
 	}
@@ -758,7 +836,7 @@ func formatProvenance(prov *persona.Provenance) string {
 }
 
 // formatIncludes formats the INCLUDES column for ynh ls.
-func formatIncludes(includes []persona.Include) string {
+func formatIncludes(includes []harness.Include) string {
 	if len(includes) == 0 {
 		return "0"
 	}
@@ -780,7 +858,7 @@ func formatIncludes(includes []persona.Include) string {
 }
 
 // formatDelegates formats the DELEGATES TO column for ynh ls.
-func formatDelegates(delegates []persona.Delegate) string {
+func formatDelegates(delegates []harness.Delegate) string {
 	if len(delegates) == 0 {
 		return "0"
 	}
@@ -826,8 +904,8 @@ func cmdVendors() {
 	_ = w.Flush()
 }
 
-// resolveVendor picks the vendor: CLI flag > YNH_VENDOR env > persona default > global config.
-func resolveVendor(flag string, p *persona.Persona) (string, error) {
+// resolveVendor picks the vendor: CLI flag > YNH_VENDOR env > harness default > global config.
+func resolveVendor(flag string, p *harness.Harness) (string, error) {
 	if flag != "" {
 		return flag, nil
 	}
@@ -846,7 +924,7 @@ func resolveVendor(flag string, p *persona.Persona) (string, error) {
 		return cfg.DefaultVendor, nil
 	}
 
-	return "", fmt.Errorf("no vendor specified (use -v flag, YNH_VENDOR env var, persona default_vendor, or global config)")
+	return "", fmt.Errorf("no vendor specified (use -v flag, YNH_VENDOR env var, harness default_vendor, or global config)")
 }
 
 // parseRunArgs separates ynh's own flags from vendor pass-through args and the prompt.
@@ -868,7 +946,7 @@ func resolveVendor(flag string, p *persona.Persona) (string, error) {
 // Without --, the first non-flag argument is treated as the prompt. Flag values
 // like "opus" in "--model opus" would be mistaken for the prompt, so use -- when
 // vendor flags take values.
-func parseRunArgs(args []string) (vendorFlag, prompt string, vendorArgs []string, action string) {
+func parseRunArgs(args []string) (vendorFlag, profileFlag, prompt string, vendorArgs []string, action string) {
 	flagArgs := args
 
 	// First pass: find -- separator and extract prompt
@@ -887,6 +965,9 @@ func parseRunArgs(args []string) (vendorFlag, prompt string, vendorArgs []string
 		switch {
 		case flagArgs[i] == "-v" && i+1 < len(flagArgs):
 			vendorFlag = flagArgs[i+1]
+			i++
+		case flagArgs[i] == "--profile" && i+1 < len(flagArgs):
+			profileFlag = flagArgs[i+1]
 			i++
 		case flagArgs[i] == "--install":
 			action = "install"
@@ -926,7 +1007,7 @@ exec ynh run %q "$@"
 	return nil
 }
 
-func cmdInstallVendor(adapter vendor.Adapter, stagingDir string, personaName string) error {
+func cmdInstallVendor(adapter vendor.Adapter, stagingDir string, harnessName string) error {
 	projectDir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -942,11 +1023,11 @@ func cmdInstallVendor(adapter vendor.Adapter, stagingDir string, personaName str
 		if err != nil {
 			return err
 		}
-		log.Record(personaName, adapter.Name(), projectDir, entries)
+		log.Record(harnessName, adapter.Name(), projectDir, entries)
 		if err := log.Save(); err != nil {
 			return err
 		}
-		fmt.Printf("Installed %d symlinks for %s (%s) in %s:\n\n", len(entries), personaName, adapter.Name(), projectDir)
+		fmt.Printf("Installed %d symlinks for %s (%s) in %s:\n\n", len(entries), harnessName, adapter.Name(), projectDir)
 		for _, entry := range entries {
 			rel, _ := filepath.Rel(projectDir, entry.Link)
 			fmt.Printf("  %s -> %s\n", rel, entry.Target)
@@ -955,7 +1036,7 @@ func cmdInstallVendor(adapter vendor.Adapter, stagingDir string, personaName str
 	return nil
 }
 
-func cmdCleanVendor(adapter vendor.Adapter, personaName string) error {
+func cmdCleanVendor(adapter vendor.Adapter, harnessName string) error {
 	projectDir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -966,9 +1047,9 @@ func cmdCleanVendor(adapter vendor.Adapter, personaName string) error {
 		return err
 	}
 
-	installation := log.FindInstallation(personaName, adapter.Name(), projectDir)
+	installation := log.FindInstallation(harnessName, adapter.Name(), projectDir)
 	if installation == nil {
-		fmt.Printf("No %s installation found for persona %q in %s\n", adapter.Name(), personaName, projectDir)
+		fmt.Printf("No %s installation found for harness %q in %s\n", adapter.Name(), harnessName, projectDir)
 		return nil
 	}
 
@@ -976,12 +1057,12 @@ func cmdCleanVendor(adapter vendor.Adapter, personaName string) error {
 		return err
 	}
 
-	log.RemoveInstallation(personaName, adapter.Name(), projectDir)
+	log.RemoveInstallation(harnessName, adapter.Name(), projectDir)
 	if err := log.Save(); err != nil {
 		return err
 	}
 
-	fmt.Printf("Cleaned %s symlinks for persona %q in %s\n", adapter.Name(), personaName, projectDir)
+	fmt.Printf("Cleaned %s symlinks for harness %q in %s\n", adapter.Name(), harnessName, projectDir)
 	return nil
 }
 
@@ -997,10 +1078,10 @@ func cmdStatus() error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "PERSONA\tVENDOR\tPROJECT\tSYMLINKS")
+	_, _ = fmt.Fprintln(w, "HARNESS\tVENDOR\tPROJECT\tSYMLINKS")
 
 	for _, inst := range log.Installations {
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", inst.Persona, inst.Vendor, inst.Project, len(inst.Symlinks))
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", inst.Harness, inst.Vendor, inst.Project, len(inst.Symlinks))
 	}
 
 	return w.Flush()
@@ -1014,7 +1095,7 @@ func cmdPrune() error {
 
 	orphans := log.Prune()
 	for _, inst := range orphans {
-		fmt.Printf("Removing orphaned installation: %s (%s) in %s\n", inst.Persona, inst.Vendor, inst.Project)
+		fmt.Printf("Removing orphaned installation: %s (%s) in %s\n", inst.Harness, inst.Vendor, inst.Project)
 	}
 
 	if len(orphans) > 0 {
@@ -1034,7 +1115,7 @@ func cmdPrune() error {
 			if name == "ynh" || name == "ynd" {
 				continue
 			}
-			if persona.DetectFormat(persona.InstalledDir(name)) == "plugin" {
+			if harness.DetectFormat(harness.InstalledDir(name)) == "harness" {
 				continue
 			}
 			launcherPath := filepath.Join(binDir, name)
@@ -1058,7 +1139,7 @@ func cmdPrune() error {
 	if err == nil {
 		for _, entry := range runEntries {
 			name := entry.Name()
-			if persona.DetectFormat(persona.InstalledDir(name)) == "plugin" {
+			if harness.DetectFormat(harness.InstalledDir(name)) == "harness" {
 				continue
 			}
 			staleRun := filepath.Join(runDir, name)

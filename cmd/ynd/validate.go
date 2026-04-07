@@ -6,12 +6,39 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 func cmdValidate(args []string) error {
-	root := "."
-	if len(args) > 0 {
-		root = args[0]
+	var root string
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--harness":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--harness requires a value")
+			}
+			i++
+			root = args[i]
+		case "-h", "--help":
+			return errHelp
+		default:
+			if strings.HasPrefix(args[i], "-") {
+				return fmt.Errorf("unknown flag: %s", args[i])
+			}
+			if root == "" {
+				root = args[i]
+			}
+		}
+	}
+
+	// Resolve source: --harness flag > YNH_HARNESS > positional > CWD
+	if root == "" {
+		root = resolveHarnessEnv()
+	}
+	if root == "" {
+		root = "."
 	}
 
 	info, err := os.Stat(root)
@@ -24,21 +51,26 @@ func cmdValidate(args []string) error {
 		return validateFile(root)
 	}
 
-	// Directory: find persona roots and validate them
-	personas := findPersonaRoots(root)
-	if len(personas) == 0 {
-		// Maybe we're inside a persona directory
-		if isPersonaRoot(root) {
-			return validatePersona(root)
+	// Directory: find harness roots and validate them
+	harnesses := findHarnessRoots(root)
+	if len(harnesses) == 0 {
+		// Maybe we're inside a harness directory
+		if isHarnessRoot(root) {
+			return validateHarness(root)
 		}
-		fmt.Println("No persona directories found.")
-		fmt.Println("A persona requires .claude-plugin/plugin.json")
+		// Check for legacy format
+		if isLegacyHarnessRoot(root) {
+			fmt.Println("Legacy format detected. Consolidate .claude-plugin/plugin.json and metadata.json into harness.json.")
+			return fmt.Errorf("validation failed")
+		}
+		fmt.Println("No harness directories found.")
+		fmt.Println("A harness requires harness.json")
 		return nil
 	}
 
 	hasError := false
-	for _, p := range personas {
-		if err := validatePersona(p); err != nil {
+	for _, p := range harnesses {
+		if err := validateHarness(p); err != nil {
 			hasError = true
 		}
 	}
@@ -54,10 +86,8 @@ func validateFile(path string) error {
 	var issues []lintIssue
 
 	switch {
-	case base == "plugin.json":
-		issues = lintPluginJSON(path)
-	case base == "metadata.json":
-		issues = lintMetadataJSON(path)
+	case base == "harness.json":
+		issues = lintHarnessJSON(path)
 	case strings.HasSuffix(path, ".md"):
 		issues = lintMarkdown(path)
 	default:
@@ -79,14 +109,19 @@ func validateFile(path string) error {
 	return nil
 }
 
-func isPersonaRoot(dir string) bool {
+func isHarnessRoot(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, "harness.json"))
+	return err == nil
+}
+
+func isLegacyHarnessRoot(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, ".claude-plugin", "plugin.json"))
 	return err == nil
 }
 
-func findPersonaRoots(root string) []string {
-	// Check if root itself is a persona
-	if isPersonaRoot(root) {
+func findHarnessRoots(root string) []string {
+	// Check if root itself is a harness
+	if isHarnessRoot(root) {
 		return []string{root}
 	}
 
@@ -100,7 +135,7 @@ func findPersonaRoots(root string) []string {
 	for _, entry := range entries {
 		if entry.IsDir() {
 			child := filepath.Join(root, entry.Name())
-			if isPersonaRoot(child) {
+			if isHarnessRoot(child) {
 				roots = append(roots, child)
 			}
 		}
@@ -109,7 +144,7 @@ func findPersonaRoots(root string) []string {
 	return roots
 }
 
-func validatePersona(dir string) error {
+func validateHarness(dir string) error {
 	rel, _ := filepath.Rel(".", dir)
 	if rel == "" {
 		rel = dir
@@ -117,31 +152,45 @@ func validatePersona(dir string) error {
 
 	var issues []string
 
-	// Check plugin.json exists and is valid
-	pluginPath := filepath.Join(dir, ".claude-plugin", "plugin.json")
-	data, err := os.ReadFile(pluginPath)
+	// Check for legacy format
+	if isLegacyHarnessRoot(dir) && !isHarnessRoot(dir) {
+		issues = append(issues, "legacy format detected: consolidate .claude-plugin/plugin.json and metadata.json into harness.json")
+	}
+
+	// Check harness.json exists and is valid
+	harnessPath := filepath.Join(dir, "harness.json")
+	data, err := os.ReadFile(harnessPath)
 	if err != nil {
-		issues = append(issues, "missing .claude-plugin/plugin.json")
+		issues = append(issues, "missing harness.json")
 	} else {
-		var pj map[string]any
-		if err := json.Unmarshal(data, &pj); err != nil {
-			issues = append(issues, fmt.Sprintf("invalid plugin.json: %v", err))
+		var hj map[string]any
+		if err := json.Unmarshal(data, &hj); err != nil {
+			issues = append(issues, fmt.Sprintf("invalid harness.json: %v", err))
 		} else {
-			if _, ok := pj["name"]; !ok {
-				issues = append(issues, "plugin.json missing 'name'")
+			if _, ok := hj["name"]; !ok {
+				issues = append(issues, "harness.json missing 'name'")
 			}
-			if _, ok := pj["version"]; !ok {
-				issues = append(issues, "plugin.json missing 'version'")
+			if _, ok := hj["version"]; !ok {
+				issues = append(issues, "harness.json missing 'version'")
 			}
+			// Validate hooks
+			issues = append(issues, validateHarnessHooks(hj)...)
+			// Validate MCP servers
+			issues = append(issues, validateHarnessMCPServers(hj)...)
+			// Validate profiles
+			issues = append(issues, validateHarnessProfiles(hj)...)
 		}
 	}
 
-	// Check metadata.json if present
-	metaPath := filepath.Join(dir, "metadata.json")
-	if data, err := os.ReadFile(metaPath); err == nil {
-		var meta map[string]any
-		if err := json.Unmarshal(data, &meta); err != nil {
-			issues = append(issues, fmt.Sprintf("invalid metadata.json: %v", err))
+	// Check for conflicting instructions files
+	hasInstructions := fileExists(filepath.Join(dir, "instructions.md"))
+	hasAgentsMD := fileExists(filepath.Join(dir, "AGENTS.md"))
+	if hasInstructions && hasAgentsMD {
+		// Both exist — check if they have different content
+		instrData, _ := os.ReadFile(filepath.Join(dir, "instructions.md"))
+		agentsData, _ := os.ReadFile(filepath.Join(dir, "AGENTS.md"))
+		if string(instrData) != string(agentsData) {
+			issues = append(issues, "both instructions.md and AGENTS.md exist with different content — remove one or make them identical")
 		}
 	}
 
@@ -227,9 +276,145 @@ func validatePersona(dir string) error {
 		for _, issue := range issues {
 			fmt.Printf("  - %s\n", issue)
 		}
-		return fmt.Errorf("persona %q has %d issue(s)", rel, len(issues))
+		return fmt.Errorf("harness %q has %d issue(s)", rel, len(issues))
 	}
 
 	fmt.Printf("%s: valid\n", rel)
 	return nil
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// validateHarnessHooks validates the hooks section inside harness.json.
+func validateHarnessHooks(hj map[string]any) []string {
+	var issues []string
+
+	hooks, ok := hj["hooks"]
+	if !ok {
+		return issues
+	}
+	hooksMap, ok := hooks.(map[string]any)
+	if !ok {
+		issues = append(issues, "'hooks' must be an object")
+		return issues
+	}
+
+	for event, entries := range hooksMap {
+		if !plugin.ValidHookEvents[event] {
+			issues = append(issues, fmt.Sprintf("hooks: unknown event %q (valid: before_tool, after_tool, before_prompt, on_stop)", event))
+		}
+		arr, ok := entries.([]any)
+		if !ok {
+			issues = append(issues, fmt.Sprintf("hooks.%s must be an array", event))
+			continue
+		}
+		for i, item := range arr {
+			entry, ok := item.(map[string]any)
+			if !ok {
+				issues = append(issues, fmt.Sprintf("hooks.%s[%d] must be an object", event, i))
+				continue
+			}
+			cmd, _ := entry["command"].(string)
+			if cmd == "" {
+				issues = append(issues, fmt.Sprintf("hooks.%s[%d]: command must not be empty", event, i))
+			}
+		}
+	}
+
+	return issues
+}
+
+// validateHarnessMCPServers validates the mcp_servers section inside harness.json.
+func validateHarnessMCPServers(hj map[string]any) []string {
+	var issues []string
+
+	servers, ok := hj["mcp_servers"]
+	if !ok {
+		return issues
+	}
+	serversMap, ok := servers.(map[string]any)
+	if !ok {
+		issues = append(issues, "'mcp_servers' must be an object")
+		return issues
+	}
+
+	for name, entry := range serversMap {
+		serverMap, ok := entry.(map[string]any)
+		if !ok {
+			issues = append(issues, fmt.Sprintf("mcp_servers.%s must be an object", name))
+			continue
+		}
+		cmd, _ := serverMap["command"].(string)
+		url, _ := serverMap["url"].(string)
+		hasCommand := cmd != ""
+		hasURL := url != ""
+		if !hasCommand && !hasURL {
+			issues = append(issues, fmt.Sprintf("mcp_servers.%s: must have either command or url", name))
+		}
+		if hasCommand && hasURL {
+			issues = append(issues, fmt.Sprintf("mcp_servers.%s: must have command or url, not both", name))
+		}
+	}
+
+	return issues
+}
+
+// validateHarnessProfiles validates hooks and mcp_servers within each profile.
+func validateHarnessProfiles(hj map[string]any) []string {
+	var issues []string
+
+	profiles, ok := hj["profiles"]
+	if !ok {
+		return issues
+	}
+	profilesMap, ok := profiles.(map[string]any)
+	if !ok {
+		issues = append(issues, "'profiles' must be an object")
+		return issues
+	}
+
+	for name, profile := range profilesMap {
+		profileMap, ok := profile.(map[string]any)
+		if !ok {
+			issues = append(issues, fmt.Sprintf("profile %q must be an object", name))
+			continue
+		}
+		// Validate hooks within profile
+		for _, issue := range validateHarnessHooks(profileMap) {
+			issues = append(issues, fmt.Sprintf("profile %q: %s", name, issue))
+		}
+		// Validate MCP servers within profile
+		for _, issue := range validateHarnessMCPServers(profileMap) {
+			issues = append(issues, fmt.Sprintf("profile %q: %s", name, issue))
+		}
+	}
+
+	return issues
+}
+
+// lintHarnessJSON validates harness.json structure for the lint command.
+func lintHarnessJSON(path string) []lintIssue {
+	var issues []lintIssue
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return []lintIssue{{File: path, Message: fmt.Sprintf("cannot read: %v", err)}}
+	}
+
+	var hj map[string]any
+	if err := json.Unmarshal(data, &hj); err != nil {
+		return []lintIssue{{File: path, Message: fmt.Sprintf("invalid JSON: %v", err)}}
+	}
+
+	if _, ok := hj["name"]; !ok {
+		issues = append(issues, lintIssue{File: path, Message: "missing 'name' field"})
+	}
+	if _, ok := hj["version"]; !ok {
+		issues = append(issues, lintIssue{File: path, Message: "missing 'version' field"})
+	}
+
+	return issues
 }

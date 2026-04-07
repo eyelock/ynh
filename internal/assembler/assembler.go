@@ -66,16 +66,17 @@ func assembleInto(workDir string, adapter vendor.Adapter, content []resolver.Res
 		}
 	}
 
-	// Copy instructions.md → vendor-specific project instructions file.
-	// Later sources override earlier ones (persona's own instructions.md wins).
+	// Copy instructions to vendor-specific project instructions file.
+	// Checks instructions.md first, then AGENTS.md as fallback.
+	// Later sources override earlier ones (harness's own instructions win).
 	instructionsFile := adapter.InstructionsFile()
 	if instructionsFile != "" {
 		for _, rc := range content {
-			src := filepath.Join(rc.BasePath, "instructions.md")
-			if _, err := os.Stat(src); err == nil {
+			src := FindInstructionsFile(rc.BasePath)
+			if src != "" {
 				dst := filepath.Join(workDir, instructionsFile)
 				if err := CopyFile(src, dst); err != nil {
-					return fmt.Errorf("copying instructions.md: %w", err)
+					return fmt.Errorf("copying instructions: %w", err)
 				}
 			}
 		}
@@ -196,4 +197,17 @@ func CopyDir(src, dst string) error {
 
 		return CopyFile(path, target)
 	})
+}
+
+// FindInstructionsFile returns the path to the instructions file in dir.
+// Checks instructions.md first, then AGENTS.md as fallback.
+// Returns empty string if neither exists.
+func FindInstructionsFile(dir string) string {
+	for _, name := range []string{"instructions.md", "AGENTS.md"} {
+		path := filepath.Join(dir, name)
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return ""
 }

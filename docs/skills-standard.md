@@ -1,6 +1,6 @@
 # Agent Skills Standard
 
-ynh personas use the [Agent Skills](https://agentskills.io) open standard for packaging skills and agents. This page covers the standard, cross-platform compatibility, and practical guidance for persona authors.
+ynh harnesses use the [Agent Skills](https://agentskills.io) open standard for packaging skills and agents. This page covers the standard, cross-platform compatibility, and practical guidance for harness authors.
 
 ## The Standard
 
@@ -116,7 +116,7 @@ Where each platform looks for skills:
 | Scope | Path |
 |-------|------|
 | Enterprise | Managed settings (admin-deployed) |
-| Personal | `~/.claude/skills/<name>/SKILL.md` |
+| Harnessl | `~/.claude/skills/<name>/SKILL.md` |
 | Project | `.claude/skills/<name>/SKILL.md` |
 | Plugin | `<plugin>/skills/<name>/SKILL.md` (namespaced as `plugin:skill`) |
 | Nested | `<subdir>/.claude/skills/` (monorepo support) |
@@ -159,7 +159,7 @@ Use `user-invocable: false` for background knowledge the agent should auto-apply
 
 ## ynh and the Standard
 
-ynh personas are fully compatible with the Agent Skills standard:
+ynh harnesses are fully compatible with the Agent Skills standard:
 
 - Skills use the standard `skills/<name>/SKILL.md` layout with `scripts/`, `references/`, and `assets/` subdirectories
 - Agents use markdown files with YAML frontmatter (`name`, `description`, `tools`)
@@ -187,9 +187,9 @@ Claude Code's plugin skill loader does not correctly handle some Agent Skills 1.
 
 **Affected:** Plugin skills only (loaded via `.claude-plugin/`). Standalone skills in `.claude/skills/` appear unaffected.
 
-**Workaround:** Do not use `compatibility`, `license`, or `metadata` frontmatter fields in skills distributed as ynh personas (which use the plugin format). Stick to `name`, `description`, and Claude Code extension fields.
+**Workaround:** Do not use `compatibility`, `license`, or `metadata` frontmatter fields in skills distributed as ynh harnesses (which use the plugin format). Stick to `name`, `description`, and Claude Code extension fields.
 
-**Impact on ynh:** Since ynh personas are loaded as Claude Code plugins via `--plugin-dir`, this affects all ynh-distributed skills. The `ynd create skill` and `ynd inspect` commands already generate skills with only `name` and `description`, so scaffolded skills are safe. If you add spec-standard optional fields manually, they may cause the skill to be demoted.
+**Impact on ynh:** Since ynh harnesses are loaded as Claude Code plugins via `--plugin-dir`, this affects all ynh-distributed skills. The `ynd create skill` and `ynd inspect` commands already generate skills with only `name` and `description`, so scaffolded skills are safe. If you add spec-standard optional fields manually, they may cause the skill to be demoted.
 
 | Field | Spec Status | Safe in Plugins? |
 |-------|-------------|-----------------|

@@ -99,7 +99,7 @@ brews:
       token: "{{ .Env.GITHUB_TOKEN }}"
     directory: Formula
     homepage: "https://github.com/eyelock/ynh"
-    description: "Persona manager for AI coding assistants"
+    description: "Harness template manager for AI coding assistants"
     license: "MIT"
     test: |
       system "#{bin}/ynh", "version"

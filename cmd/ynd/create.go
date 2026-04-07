@@ -12,7 +12,7 @@ var validName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
 func cmdCreate(args []string) error {
 	if len(args) < 2 {
-		return fmt.Errorf("usage: ynd create <type> <name>\n\nTypes: skill, agent, persona, rule, command")
+		return fmt.Errorf("usage: ynd create <type> <name>\n\nTypes: skill, agent, harness, rule, command")
 	}
 
 	kind := args[0]
@@ -27,14 +27,14 @@ func cmdCreate(args []string) error {
 		return createSkill(name)
 	case "agent":
 		return createAgent(name)
-	case "persona":
-		return createPersona(name)
+	case "harness":
+		return createHarness(name)
 	case "rule":
 		return createRule(name)
 	case "command":
 		return createCommand(name)
 	default:
-		return fmt.Errorf("unknown type %q: must be skill, agent, persona, rule, or command", kind)
+		return fmt.Errorf("unknown type %q: must be skill, agent, harness, rule, or command", kind)
 	}
 }
 
@@ -107,16 +107,16 @@ Provide actionable output, not just observations.
 	return nil
 }
 
-func createPersona(name string) error {
-	if isPersonaRoot(".") {
-		return fmt.Errorf("already inside a persona directory — create personas from outside")
+func createHarness(name string) error {
+	if isHarnessRoot(".") {
+		return fmt.Errorf("already inside a harness directory — create harnesses from outside")
 	}
 	if _, err := os.Stat(name); err == nil {
 		return fmt.Errorf("directory %q already exists", name)
 	}
 
 	dirs := []string{
-		filepath.Join(name, ".claude-plugin"),
+		name,
 		filepath.Join(name, "skills"),
 		filepath.Join(name, "agents"),
 		filepath.Join(name, "rules"),
@@ -129,38 +129,36 @@ func createPersona(name string) error {
 		}
 	}
 
-	pluginJSON := map[string]string{
-		"name":        name,
-		"version":     "0.1.0",
-		"description": "",
+	type scaffoldJSON struct {
+		Schema        string `json:"$schema"`
+		Name          string `json:"name"`
+		Version       string `json:"version"`
+		Description   string `json:"description"`
+		DefaultVendor string `json:"default_vendor"`
 	}
-	data, _ := json.MarshalIndent(pluginJSON, "", "  ")
-	if err := os.WriteFile(filepath.Join(name, ".claude-plugin", "plugin.json"), append(data, '\n'), 0o644); err != nil {
-		return err
+	scaffold := scaffoldJSON{
+		Schema:        "https://eyelock.github.io/ynh/schema/harness.schema.json",
+		Name:          name,
+		Version:       "0.1.0",
+		Description:   "",
+		DefaultVendor: resolveVendorDefault(""),
 	}
-
-	metadataJSON := map[string]any{
-		"ynh": map[string]any{
-			"default_vendor": "claude",
-		},
-	}
-	data, _ = json.MarshalIndent(metadataJSON, "", "  ")
-	if err := os.WriteFile(filepath.Join(name, "metadata.json"), append(data, '\n'), 0o644); err != nil {
+	data, _ := json.MarshalIndent(scaffold, "", "  ")
+	if err := os.WriteFile(filepath.Join(name, "harness.json"), append(data, '\n'), 0o644); err != nil {
 		return err
 	}
 
 	instructions := fmt.Sprintf(`# %s
 
-Project-level instructions that apply to every session with this persona.
+Project-level instructions that apply to every session with this harness.
 `, name)
-	if err := os.WriteFile(filepath.Join(name, "instructions.md"), []byte(instructions), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(name, "AGENTS.md"), []byte(instructions), 0o644); err != nil {
 		return err
 	}
 
-	fmt.Printf("Created persona %q:\n", name)
-	fmt.Printf("  %s/.claude-plugin/plugin.json\n", name)
-	fmt.Printf("  %s/metadata.json\n", name)
-	fmt.Printf("  %s/instructions.md\n", name)
+	fmt.Printf("Created harness %q:\n", name)
+	fmt.Printf("  %s/harness.json\n", name)
+	fmt.Printf("  %s/AGENTS.md\n", name)
 	fmt.Printf("  %s/skills/\n", name)
 	fmt.Printf("  %s/agents/\n", name)
 	fmt.Printf("  %s/rules/\n", name)

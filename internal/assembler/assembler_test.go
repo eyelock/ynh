@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
 )
@@ -30,6 +31,13 @@ func (m *mockAdapter) Install(stagingDir string, projectDir string) ([]vendor.Sy
 func (m *mockAdapter) Clean(entries []vendor.SymlinkEntry) error                     { return nil }
 func (m *mockAdapter) LaunchInteractive(configPath string, extraArgs []string) error { return nil }
 func (m *mockAdapter) LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error {
+	return nil
+}
+func (m *mockAdapter) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[string][]byte {
+	return nil
+}
+
+func (m *mockAdapter) GenerateMCPConfig(servers map[string]plugin.MCPServer) map[string][]byte {
 	return nil
 }
 
@@ -282,6 +290,73 @@ func TestAssembleInstructionsFile_NoInstructions(t *testing.T) {
 	// No instructions file should be created
 	if _, err := os.Stat(filepath.Join(workDir, "MOCK.md")); !os.IsNotExist(err) {
 		t.Error("instructions file should not exist when no instructions.md in source")
+	}
+}
+
+func TestFindInstructionsFile_InstructionsMD(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "instructions.md"), []byte("instr"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := FindInstructionsFile(dir)
+	if filepath.Base(got) != "instructions.md" {
+		t.Errorf("FindInstructionsFile = %q, want instructions.md", got)
+	}
+}
+
+func TestFindInstructionsFile_AgentsMD(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("agents"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := FindInstructionsFile(dir)
+	if filepath.Base(got) != "AGENTS.md" {
+		t.Errorf("FindInstructionsFile = %q, want AGENTS.md", got)
+	}
+}
+
+func TestFindInstructionsFile_InstructionsTakesPrecedence(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "instructions.md"), []byte("instr"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("agents"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := FindInstructionsFile(dir)
+	if filepath.Base(got) != "instructions.md" {
+		t.Errorf("FindInstructionsFile = %q, want instructions.md (takes precedence)", got)
+	}
+}
+
+func TestFindInstructionsFile_None(t *testing.T) {
+	dir := t.TempDir()
+	got := FindInstructionsFile(dir)
+	if got != "" {
+		t.Errorf("FindInstructionsFile = %q, want empty", got)
+	}
+}
+
+func TestAssembleWithAgentsMD(t *testing.T) {
+	repoDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repoDir, "AGENTS.md"), []byte("agents instructions"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	content := []resolver.ResolvedContent{{BasePath: repoDir}}
+	adapter := &mockAdapter{}
+	workDir, err := Assemble(adapter, content)
+	if err != nil {
+		t.Fatalf("Assemble failed: %v", err)
+	}
+	defer Cleanup(workDir)
+
+	data, err := os.ReadFile(filepath.Join(workDir, "MOCK.md"))
+	if err != nil {
+		t.Fatalf("instructions not found: %v", err)
+	}
+	if string(data) != "agents instructions" {
+		t.Errorf("instructions content = %q, want %q", string(data), "agents instructions")
 	}
 }
 

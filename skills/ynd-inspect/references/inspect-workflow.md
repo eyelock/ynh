@@ -22,7 +22,7 @@ By default, artifacts are written into the vendor-specific config directory:
 
 Override with `-o`:
 
-- `ynd inspect -o .` — write to project root (for plugin/persona development)
+- `ynd inspect -o .` — write to project root (for plugin/harness development)
 - `ynd inspect -o /tmp/out` — write to any custom directory
 
 ## Discovery

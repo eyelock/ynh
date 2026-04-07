@@ -4,13 +4,13 @@
 
 ```yaml
 delegates_to:
-  - git: github.com/user/persona           # shorthand (expands to SSH)
+  - git: github.com/user/harness           # shorthand (expands to SSH)
     ref: main                               # optional - tag, branch, commit
-    path: personas/team-ops                 # optional - monorepo subdirectory
+    path: harnesses/team-ops                 # optional - monorepo subdirectory
   - git: git@github.com:co/private.git     # SSH for private repos
 ```
 
-At runtime, ynh resolves each delegate persona, reads its manifest and artifacts, and generates a vendor-native agent file (e.g., `.claude/agents/<name>.md`) so the AI vendor can invoke it as a subagent.
+At runtime, ynh resolves each delegate harness, reads its manifest and artifacts, and generates a vendor-native agent file (e.g., `.claude/agents/<name>.md`) so the AI vendor can invoke it as a subagent.
 
 ## Git URL formats
 
@@ -38,21 +38,21 @@ ynh delegates to the local `git` binary. If `git clone <url>` works on the machi
 | Codex | `codex` | `.codex` | `codex.md` |
 | Cursor | `agent` | `.cursor` | `.cursorrules` |
 
-Setting `default_vendor` in the team persona standardizes the vendor across the team. Individual members can override with `-v` at runtime.
+Setting `default_vendor` in the team harness standardizes the vendor across the team. Individual members can override with `-v` at runtime.
 
 ## Vendor resolution order
 
-CLI flag (`-v`) > persona `default_vendor` > global `~/.ynh/config.json`
+CLI flag (`-v`) > harness `default_vendor` > global `~/.ynh/config.json`
 
 ## Install flow for teams
 
 ```bash
-# Creator pushes team persona to Git
-cd team-persona && git init && git add . && git commit -m "Initial"
+# Creator pushes team harness to Git
+cd team-harness && git init && git add . && git commit -m "Initial"
 # Push to hosting...
 
 # Team members install
-ynh install github.com/org/team-persona
+ynh install github.com/org/team-harness
 team-dev                    # interactive session with team config
 team-dev "run deploy checklist"  # non-interactive
 ```

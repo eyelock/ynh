@@ -1,17 +1,26 @@
-* **Guides**
+* **Concepts**
   * [Overview](README.md)
   * [Getting Started](getting-started.md)
-  * [Persona Reference](personas.md)
-  * [Artifacts Guide](artifacts.md)
-  * [Vendor Support](vendors.md)
+  * [Harness Engineering](harness-engineering.md)
+  * [Artifacts](artifacts.md)
   * [Agent Skills Standard](skills-standard.md)
-  * [Marketplace & Distribution](marketplace.md)
+
+* **Configuration**
+  * [Harness Manifest](harnesses.md)
+  * [Hooks](hooks.md)
+  * [MCP Servers](mcp.md)
+  * [Profiles](profiles.md)
+  * [Vendor Support](vendors.md)
+
+* **Tooling**
+  * [CLI Reference](reference.md)
   * [ynd Developer Tools](ynd.md)
+  * [Marketplace & Distribution](marketplace.md)
   * [Docker](docker.md)
 
 * **Tutorials**
   * [Tutorial Overview](tutorial/README.md)
-  * [1. First Persona](tutorial/01-first-persona.md)
+  * [1. First Harness](tutorial/01-first-harness.md)
   * [2. Vendors & Symlinks](tutorial/02-vendors-and-symlinks.md)
   * [3. Composition](tutorial/03-composition.md)
   * [4. Delegation](tutorial/04-delegation.md)
@@ -20,6 +29,10 @@
   * [7. Registry & Discovery](tutorial/07-registry-and-discovery.md)
   * [8. Developer Tools](tutorial/08-developer-tools.md)
   * [9. Docker Images](tutorial/09-docker-image.md)
+  * [10. Hooks](tutorial/10-hooks.md)
+  * [11. MCP Servers](tutorial/11-mcp-servers.md)
+  * [12. Developer Preview](tutorial/12-developer-preview.md)
+  * [13. Profiles](tutorial/13-profiles.md)
   * [Manual Test Plan](tutorial/manual-test-plan.md)
 
 * **Project**

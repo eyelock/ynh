@@ -10,7 +10,7 @@ ynh is a packaging and distribution tool. It has no runtime component - the AI v
 .claude-plugin/plugin.json + metadata.json → resolve Git includes → assemble vendor config → launch vendor CLI
 ```
 
-1. **Detect** the persona format and load its manifest (`internal/persona/`, `internal/plugin/`)
+1. **Detect** the harness format and load its manifest (`internal/harness/`, `internal/plugin/`)
 2. **Resolve** Git includes by cloning/caching repos (`internal/resolver/`)
 3. **Assemble** a staging directory with vendor-specific layout (`internal/assembler/`)
 4. **Launch** the vendor CLI, adapting to each vendor's capabilities (`internal/vendor/`)
@@ -18,16 +18,16 @@ ynh is a packaging and distribution tool. It has no runtime component - the AI v
 ### Package Structure
 
 ```
-cmd/ynh/                  CLI entry point: persona manager (init, install, uninstall, update, run, ls, info, vendors, search, registry, image, status, prune)
-cmd/ynd/                  CLI entry point: developer tools (create, lint, validate, fmt, compress, export, marketplace, inspect)
+cmd/ynh/                  CLI entry point: harness template manager (init, install, uninstall, update, run, ls, info, vendors, search, registry, image, status, prune)
+cmd/ynd/                  CLI entry point: developer tools (create, lint, validate, fmt, compress, export, marketplace, inspect, preview, diff)
 internal/
   config/                 Global config (~/.ynh/) and path management
-  persona/                Persona loading, format detection, name validation
+  harness/                Harness loading, format detection, name validation
   plugin/                 Plugin format types (plugin.json + metadata.json)
   resolver/               Git clone, cache, and content extraction
   assembler/              Build vendor config dir from resolved content
-  exporter/               Produce vendor-native plugin dirs from persona definitions
-  marketplace/            Generate marketplace indexes from sets of personas/plugins
+  exporter/               Produce vendor-native plugin dirs from harness definitions
+  marketplace/            Generate marketplace indexes from sets of harnesses/plugins
   registry/               Registry discovery: fetch, search, lookup across Git-hosted indexes
   symlink/                Symlink transaction log (~/.ynh/symlinks.json)
   vendor/                 Vendor adapter interface and implementations
@@ -37,6 +37,7 @@ internal/
     cursor.go             Cursor adapter (child process + symlinks)
     symlinks.go           Shared symlink install/clean helpers
     process.go            Child process management with signal forwarding
+    toml.go               Minimal TOML emitter for Codex MCP config
 testdata/                 Test fixtures
 docs/                     User guide (GitHub Pages)
 ```
@@ -45,21 +46,21 @@ docs/                     User guide (GitHub Pages)
 
 **No build system on content.** Skills, agents, rules, and commands are standard-format files. ynh never transforms or wraps them. A skill from skills.sh works as-is.
 
-**Vendor is a deployment concern, not a content concern.** Personas define what artifacts to include. The vendor adapter decides where to put them and how to launch. Adding a new vendor is one file implementing the `Adapter` interface.
+**Vendor is a deployment concern, not a content concern.** Harnesses define what artifacts to include. The vendor adapter decides where to put them and how to launch. Adding a new vendor is one file implementing the `Adapter` interface.
 
 **Git is the package manager.** No npm, no custom registry. Content lives in Git repos, versioned with Git tags, cached locally by hash.
 
-**Personas compose from any source.** A persona can embed its own artifacts and pull from any number of Git repos. The `path` field supports monorepos.
+**Harnesses compose from any source.** A harness can embed its own artifacts and pull from any number of Git repos. The `path` field supports monorepos.
 
 **Vendor-adaptive launch.** Each vendor gets the strategy that matches its capabilities. Claude supports `--plugin-dir`, so ynh does a clean `exec` with no running process. Codex and Cursor lack native plugin loading, so ynh installs symlinks and manages a child process with signal forwarding. This pragmatic split avoids forcing a lowest-common-denominator approach.
 
-**Plugin format.** Personas use the Claude Code plugin format (`.claude-plugin/plugin.json`) for the manifest, with a `metadata.json` sidecar for ynh-specific config under a `"ynh"` key. This makes personas first-class Claude Code plugins while keeping extensibility for other tools.
+**Plugin format.** Harnesses use the Claude Code plugin format (`.claude-plugin/plugin.json`) for the manifest, with a `metadata.json` sidecar for ynh-specific config under a `"ynh"` key. This makes harnesses first-class Claude Code plugins while keeping extensibility for other tools.
 
 ## Technologies
 
 - **Go 1.25+** - single binary, no runtime dependencies
 - **Git** - content resolution, caching, versioning
-- **JSON** - persona manifests (`plugin.json` + `metadata.json`)
+- **JSON** - harness manifests (`plugin.json` + `metadata.json`)
 - **JSON** - all configuration (plugin manifests, metadata, global config)
 
 ## Development Setup
@@ -92,8 +93,8 @@ make check
 
 The project produces two binaries:
 
-- **`ynh`** (`cmd/ynh/`) - Persona manager for end users. Install, run, update, uninstall, search registries, and manage registry sources.
-- **`ynd`** (`cmd/ynd/`) - Developer tools for persona authors. Scaffold, lint, validate, format, compress, inspect, export vendor-native plugins, and build marketplace indexes. LLM-powered commands (compress, inspect) delegate to vendor CLIs on PATH.
+- **`ynh`** (`cmd/ynh/`) - Harness manager for end users. Install, run, update, uninstall, search registries, and manage registry sources.
+- **`ynd`** (`cmd/ynd/`) - Developer tools for harness authors. Scaffold, lint, validate, format, compress, inspect, export vendor-native plugins, and build marketplace indexes. LLM-powered commands (compress, inspect) delegate to vendor CLIs on PATH.
 
 Both are built by `make build`, installed by `make install`, and released via goreleaser (single tag, both binaries, synced versions). They share `internal/config` for version injection but are otherwise independent.
 
@@ -105,8 +106,8 @@ ynd is self-contained in `cmd/ynd/` with its own command routing, file discovery
 - **Signal scanning** (`inspect.go`): Discovers project files by category (build, test, CI, lint, config) to provide context for LLM analysis.
 - **Backup system** (`compress.go`): Backups are stored in `~/.ynd/backups/` mirroring the absolute file path. Override with `YND_BACKUP_DIR` env var (used in tests).
 - **Vendor-aware output** (`inspect.go`): Inspect writes artifacts to `.{vendor}/` by default (e.g., `.claude/skills/`). Override with `-o`. Discovery searches both project root and all vendor dirs.
-- **Export** (`export.go`): Produces vendor-native plugin directories from persona definitions. Resolves includes, applies pick filtering, generates vendor manifests. Supports per-vendor and merged output modes.
-- **Marketplace** (`marketplace.go`): Builds marketplace indexes from `marketplace.json` config. Exports personas with merged manifests, copies standalone plugins, generates `marketplace.json` indexes for each vendor.
+- **Export** (`export.go`): Produces vendor-native plugin directories from harness definitions. Resolves includes, applies pick filtering, generates vendor manifests. Supports per-vendor and merged output modes.
+- **Marketplace** (`marketplace.go`): Builds marketplace indexes from `marketplace.json` config. Exports harnesses with merged manifests, copies standalone plugins, generates `marketplace.json` indexes for each vendor.
 
 ### Exporter
 
@@ -122,7 +123,7 @@ The exporter reuses `assembler.CopyPicked`, `CopyAllArtifacts`, `CopyFile`, and 
 
 ### Registry
 
-The registry system (`internal/registry/`) enables persona discovery from Git-hosted indexes. A registry is a Git repo with a `registry.json` at its root. Registries are configured in `~/.ynh/config.json` and fetched/cached via `resolver.EnsureRepo`.
+The registry system (`internal/registry/`) enables harness discovery from Git-hosted indexes. A registry is a Git repo with a `registry.json` at its root. Registries are configured in `~/.ynh/config.json` and fetched/cached via `resolver.EnsureRepo`.
 
 The install command uses a 6-rule disambiguation chain: local path → SSH URL → HTTPS URL → `name@registry` → Git shorthand → plain name registry search. See `cmd/ynh/install_resolve.go`.
 
@@ -146,6 +147,8 @@ type Adapter interface {
     Clean(entries []SymlinkEntry) error                                   // remove installed artifacts
     LaunchInteractive(configPath string, extraArgs []string) error        // start interactive session
     LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error
+    GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[string][]byte   // vendor-native hook config
+    GenerateMCPConfig(servers map[string]plugin.MCPServer) map[string][]byte    // vendor-native MCP config
 }
 ```
 
@@ -187,12 +190,12 @@ The resolver clones Git repos into `~/.ynh/cache/` using a deterministic directo
 
 ### Assembler
 
-The assembler builds a deterministic run directory (`~/.ynh/run/<name>/`) with the vendor's expected layout. It copies files from resolved content into the right artifact directories (e.g., `skills/` files go into `.claude/skills/`), and copies `instructions.md` to the vendor's project instructions file (e.g., `CLAUDE.md`). The run directory is cleaned and repopulated on each run. Two modes:
+The assembler builds a deterministic run directory (`~/.ynh/run/<name>/`) with the vendor's expected layout. It copies files from resolved content into the right artifact directories (e.g., `skills/` files go into `.claude/skills/`), and copies instructions (`instructions.md` or `AGENTS.md` as fallback) to the vendor's project instructions file (e.g., `CLAUDE.md`). After assembly, hook and MCP configs are generated via the adapter's `GenerateHookConfig()` and `GenerateMCPConfig()` methods. The run directory is cleaned and repopulated on each run. Two modes:
 
 - **With pick list**: Only specified paths are copied
 - **Without pick list**: All recognized artifact directories are scanned and copied
 
-For delegates, the assembler generates a vendor-native agent file for each delegate persona, embedding the delegate's `plugin.json` description, `instructions.md`, rules, and skill list.
+For delegates, the assembler generates a vendor-native agent file for each delegate harness, embedding the delegate's `plugin.json` description, `instructions.md`, rules, and skill list.
 
 ### Error Handling
 
@@ -237,10 +240,10 @@ The include/subpath logic has many combinations. Integration tests in `internal/
 Test fixtures in `testdata/` simulate real-world sources:
 - `skills-repo/` - standalone skills library with skills, agents, and rules
 - `monorepo/` - company monorepo with AI config under `packages/ai-config/` and unrelated code alongside
-- `composed-persona/` - personal persona with embedded artifacts
-- `team-persona/` - team persona for delegation testing
-- `sample-persona/` - minimal self-contained persona
-- `plugin-persona/` - persona in plugin format (`.claude-plugin/plugin.json` + `metadata.json`)
+- `composed-harness/` - personal harness with embedded artifacts
+- `team-harness/` - team harness for delegation testing
+- `sample-harness/` - minimal self-contained harness
+- `plugin-harness/` - harness in plugin format (`.claude-plugin/plugin.json` + `metadata.json`)
 
 ## Configuration
 
@@ -248,9 +251,9 @@ Test fixtures in `testdata/` simulate real-world sources:
 
 ```json
 {
-  "name": "my-persona",
+  "name": "my-harness",
   "version": "0.1.0",
-  "description": "My coding persona"
+  "description": "My coding harness"
 }
 ```
 
@@ -271,29 +274,40 @@ The `name` field is required and becomes the launcher command name. Only fields 
       }
     ],
     "delegates_to": [
-      {"git": "github.com/user/other-persona"}
-    ]
+      {"git": "github.com/user/other-harness"}
+    ],
+    "hooks": {
+      "before_tool": [{"matcher": "Bash", "command": "/path/to/lint.sh"}],
+      "on_stop": [{"command": "/path/to/log.sh"}]
+    },
+    "mcp_servers": {
+      "github": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"],
+        "env": {"GITHUB_TOKEN": "${GITHUB_TOKEN}"}
+      }
+    }
   }
 }
 ```
 
-ynh-specific config lives under the `"ynh"` key, keeping the file extensible for other tools.
+ynh-specific config lives under the `"ynh"` key, keeping the file extensible for other tools. See [Hooks](docs/hooks.md) and [MCP Servers](docs/mcp.md) for details on those declarations.
 
 ### Install Lifecycle
 
-There are two copies of `metadata.json` in a persona's life:
+There are two copies of `metadata.json` in a harness's life:
 
-1. **Source copy** — git-tracked in the persona's repo. Author-managed. Contains `includes`, `delegates_to`, `default_vendor`.
-2. **Installed copy** — at `~/.ynh/personas/<name>/metadata.json`. Created by `ynh install` via `copyTree`. Local-only, not git-tracked.
+1. **Source copy** — git-tracked in the harness's repo. Author-managed. Contains `includes`, `delegates_to`, `default_vendor`.
+2. **Installed copy** — at `~/.ynh/harnesses/<name>/metadata.json`. Created by `ynh install` via `copyTree`. Local-only, not git-tracked.
 
 During install:
-- `ynh install` copies the entire persona directory (including `metadata.json`) to `~/.ynh/personas/<name>/`.
-- After the copy, ynh injects `installed_from` provenance into the installed `metadata.json`. This records where the persona was installed from (source type, URL/path, timestamp).
+- `ynh install` copies the entire harness directory (including `metadata.json`) to `~/.ynh/harnesses/<name>/`.
+- After the copy, ynh injects `installed_from` provenance into the installed `metadata.json`. This records where the harness was installed from (source type, URL/path, timestamp).
 - ynh then pre-fetches all `includes` and `delegates_to` Git repos into `~/.ynh/cache/`. This ensures `ynh run` works offline and validates all Git refs at install time. If any fetch fails, the install fails with a clear error.
 - The source `metadata.json` is never modified.
 
 At runtime:
-- `ynh run` reads the installed copy at `~/.ynh/personas/<name>/metadata.json` to resolve includes, delegates, and vendor settings.
+- `ynh run` reads the installed copy at `~/.ynh/harnesses/<name>/metadata.json` to resolve includes, delegates, and vendor settings.
 - Cached repos are used as-is without hitting the network. If a cache entry is missing (e.g. manually cleared), ynh falls back to a network fetch with a warning.
 
 The `installed_from` field looks like:
@@ -327,7 +341,7 @@ Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry instal
   "default_vendor": "claude",
   "allowed_remote_sources": ["github.com/myorg/*"],
   "registries": [
-    {"url": "github.com/myorg/persona-registry"}
+    {"url": "github.com/myorg/harness-registry"}
   ]
 }
 ```
@@ -338,7 +352,7 @@ Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry instal
 ~/.ynh/
 ├── config.json               # Global configuration
 ├── symlinks.json             # Symlink transaction log (install/clean tracking)
-├── personas/                  # Installed personas
+├── harnesses/                  # Installed harnesses
 │   └── david/
 │       ├── .claude-plugin/
 │       │   └── plugin.json
@@ -349,7 +363,7 @@ Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry instal
 │       └── commands/
 ├── cache/                     # Cloned Git repos
 │   └── eyelock--assistants--a1b2c3d4/
-├── run/                       # Assembled vendor config (per persona, overwritten each run)
+├── run/                       # Assembled vendor config (per harness, overwritten each run)
 │   └── david/
 │       ├── .claude/           # vendor config dir with assembled artifacts
 │       └── CLAUDE.md          # vendor instructions file (from instructions.md)
@@ -357,16 +371,16 @@ Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry instal
     └── david                  # -> exec ynh run david "$@"
 ```
 
-## Using ynh's Own Persona
+## Using ynh's Own Harness
 
-The ynh project ships its own persona (skills, agents, rules) for contributors. Since the persona is named `ynh` — which conflicts with the `ynh` binary in `~/.ynh/bin/` — it installs without a launcher script:
+The ynh project ships its own harness (skills, agents, rules) for contributors. Since the harness is named `ynh` — which conflicts with the `ynh` binary in `~/.ynh/bin/` — it installs without a launcher script:
 
 ```bash
 ynh install github.com/eyelock/ynh
 
 # Or install from a monorepo subdirectory:
-# ynh install github.com/org/monorepo --path personas/my-persona
-# Installed persona "ynh"
+# ynh install github.com/org/monorepo --path harnesses/my-harness
+# Installed harness "ynh"
 #   Launcher: (skipped — conflicts with ynh binary, use "ynh run ynh")
 ```
 
@@ -376,7 +390,7 @@ To use it, run explicitly:
 ynh run ynh
 ```
 
-The skills and agents in this persona are development-focused and will be extracted to a separate repo in the future.
+The skills and agents in this harness are development-focused and will be extracted to a separate repo in the future.
 
 ## Submitting Changes
 

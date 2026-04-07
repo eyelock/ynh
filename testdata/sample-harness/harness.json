@@ -1,0 +1,6 @@
+{
+  "name": "sample",
+  "version": "0.1.0",
+  "description": "Sample harness with embedded artifacts",
+  "default_vendor": "claude"
+}

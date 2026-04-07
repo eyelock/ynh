@@ -13,23 +13,23 @@ func setupMarketplaceTest(t *testing.T) (configFile string) {
 	t.Helper()
 	dir := t.TempDir()
 
-	// Create persona source (symlink to export-persona testdata)
-	personaDir := filepath.Join(dir, "personas", "david")
-	if err := os.MkdirAll(filepath.Dir(personaDir), 0o755); err != nil {
+	// Create harness source (symlink to export-harness testdata)
+	harnessDir := filepath.Join(dir, "harnesses", "david")
+	if err := os.MkdirAll(filepath.Dir(harnessDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	srcPersona, _ := filepath.Abs(filepath.Join("..", "..", "testdata", "export-persona"))
-	if err := os.Symlink(srcPersona, personaDir); err != nil {
+	srcHarness, _ := filepath.Abs(filepath.Join("..", "..", "testdata", "export-harness"))
+	if err := os.Symlink(srcHarness, harnessDir); err != nil {
 		t.Fatal(err)
 	}
 
-	// Create plugin source
+	// Create plugin source (vendor-native format with .claude-plugin/plugin.json)
 	pluginDir := filepath.Join(dir, "plugins", "my-tool")
-	claudePlugin := filepath.Join(pluginDir, ".claude-plugin")
-	if err := os.MkdirAll(claudePlugin, 0o755); err != nil {
+	manifestDir := filepath.Join(pluginDir, ".claude-plugin")
+	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeTestJSON(t, filepath.Join(claudePlugin, "plugin.json"), map[string]any{
+	writeTestJSON(t, filepath.Join(manifestDir, "plugin.json"), map[string]any{
 		"name":        "my-tool",
 		"version":     "0.2.0",
 		"description": "A standalone tool",
@@ -42,7 +42,7 @@ func setupMarketplaceTest(t *testing.T) (configFile string) {
 		"owner":       map[string]string{"name": "tester"},
 		"description": "CLI test",
 		"entries": []map[string]string{
-			{"type": "persona", "source": "./personas/david"},
+			{"type": "harness", "source": "./harnesses/david"},
 			{"type": "plugin", "source": "./plugins/my-tool"},
 		},
 	})

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/eyelock/ynh/internal/persona"
+	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
 )
@@ -52,8 +52,8 @@ func extractContent(results []resolver.ResolveResult) []resolver.ResolvedContent
 	return content
 }
 
-// resolveAndAssemble is a test helper that resolves and assembles a persona for Claude.
-func resolveAndAssemble(t *testing.T, p *persona.Persona, extraContent ...resolver.ResolvedContent) string {
+// resolveAndAssemble is a test helper that resolves and assembles a harness for Claude.
+func resolveAndAssemble(t *testing.T, p *harness.Harness, extraContent ...resolver.ResolvedContent) string {
 	t.Helper()
 
 	resolved, err := resolver.Resolve(p, nil)
@@ -83,10 +83,10 @@ func TestSubpath_PickSingleSkill(t *testing.T) {
 		"other/unrelated.txt":           "noise",
 	})
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test",
-		Includes: []persona.Include{
-			{GitSource: persona.GitSource{Git: repo, Path: "config"}, Pick: []string{"skills/lint"}},
+		Includes: []harness.Include{
+			{GitSource: harness.GitSource{Git: repo, Path: "config"}, Pick: []string{"skills/lint"}},
 		},
 	}
 
@@ -109,11 +109,11 @@ func TestSubpath_PickMixedArtifactTypes(t *testing.T) {
 		"ai/commands/release.md":    "release cmd",
 	})
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test",
-		Includes: []persona.Include{
+		Includes: []harness.Include{
 			{
-				GitSource: persona.GitSource{Git: repo, Path: "ai"},
+				GitSource: harness.GitSource{Git: repo, Path: "ai"},
 				Pick: []string{
 					"skills/deploy",
 					"agents/ops.md",
@@ -144,10 +144,10 @@ func TestSubpath_NoPickIncludesAllArtifacts(t *testing.T) {
 		"deep/nested/readme.txt":        "not an artifact",
 	})
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test",
-		Includes: []persona.Include{
-			{GitSource: persona.GitSource{Git: repo, Path: "deep/nested"}},
+		Includes: []harness.Include{
+			{GitSource: harness.GitSource{Git: repo, Path: "deep/nested"}},
 		},
 	}
 
@@ -171,11 +171,11 @@ func TestSubpath_SameRepoMultipleSubpaths(t *testing.T) {
 		"team-b/rules/go.md":              "go rules",
 	})
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test",
-		Includes: []persona.Include{
-			{GitSource: persona.GitSource{Git: repo, Path: "team-a"}, Pick: []string{"skills/frontend"}},
-			{GitSource: persona.GitSource{Git: repo, Path: "team-b"}, Pick: []string{"skills/backend", "rules/go.md"}},
+		Includes: []harness.Include{
+			{GitSource: harness.GitSource{Git: repo, Path: "team-a"}, Pick: []string{"skills/frontend"}},
+			{GitSource: harness.GitSource{Git: repo, Path: "team-b"}, Pick: []string{"skills/backend", "rules/go.md"}},
 		},
 	}
 
@@ -204,11 +204,11 @@ func TestSubpath_MixedWithAndWithoutPath(t *testing.T) {
 		"packages/webapp/index.ts":           "webapp code",
 	})
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test",
-		Includes: []persona.Include{
-			{GitSource: persona.GitSource{Git: standaloneRepo}, Pick: []string{"skills/commit"}},
-			{GitSource: persona.GitSource{Git: monorepo, Path: "packages/ai"}, Pick: []string{"skills/deploy"}},
+		Includes: []harness.Include{
+			{GitSource: harness.GitSource{Git: standaloneRepo}, Pick: []string{"skills/commit"}},
+			{GitSource: harness.GitSource{Git: monorepo, Path: "packages/ai"}, Pick: []string{"skills/deploy"}},
 		},
 	}
 
@@ -219,7 +219,7 @@ func TestSubpath_MixedWithAndWithoutPath(t *testing.T) {
 	assertFileNotExists(t, filepath.Join(claudeDir, "agents", "ops.md"))
 }
 
-// --- Subpath with embedded persona content ---
+// --- Subpath with embedded harness content ---
 func TestSubpath_PlusEmbeddedContent(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
@@ -227,7 +227,7 @@ func TestSubpath_PlusEmbeddedContent(t *testing.T) {
 		"shared/skills/review/SKILL.md": "review skill",
 	})
 
-	// Embedded persona content (local directory, not a git repo)
+	// Embedded harness content (local directory, not a git repo)
 	embeddedDir := t.TempDir()
 	for _, sub := range []string{"rules", "agents"} {
 		if err := os.MkdirAll(filepath.Join(embeddedDir, sub), 0o755); err != nil {
@@ -243,10 +243,10 @@ func TestSubpath_PlusEmbeddedContent(t *testing.T) {
 		}
 	}
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test",
-		Includes: []persona.Include{
-			{GitSource: persona.GitSource{Git: repo, Path: "shared"}, Pick: []string{"skills/review"}},
+		Includes: []harness.Include{
+			{GitSource: harness.GitSource{Git: repo, Path: "shared"}, Pick: []string{"skills/review"}},
 		},
 	}
 
@@ -268,10 +268,10 @@ func TestSubpath_NonexistentPathErrors(t *testing.T) {
 		"real/skills/a/SKILL.md": "skill a",
 	})
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test",
-		Includes: []persona.Include{
-			{GitSource: persona.GitSource{Git: repo, Path: "does-not-exist"}},
+		Includes: []harness.Include{
+			{GitSource: harness.GitSource{Git: repo, Path: "does-not-exist"}},
 		},
 	}
 
@@ -293,10 +293,10 @@ func TestSubpath_RootNoPathFullInclude(t *testing.T) {
 		"commands/e.md":     "command e",
 	})
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test",
-		Includes: []persona.Include{
-			{GitSource: persona.GitSource{Git: repo}}, // No path, no pick - everything
+		Includes: []harness.Include{
+			{GitSource: harness.GitSource{Git: repo}}, // No path, no pick - everything
 		},
 	}
 
@@ -319,10 +319,10 @@ func TestSubpath_DeeplyNested(t *testing.T) {
 		"org/division/other-team/code.ts":                     "unrelated",
 	})
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "test",
-		Includes: []persona.Include{
-			{GitSource: persona.GitSource{Git: repo, Path: "org/division/team/ai-config"}},
+		Includes: []harness.Include{
+			{GitSource: harness.GitSource{Git: repo, Path: "org/division/team/ai-config"}},
 		},
 	}
 
@@ -359,18 +359,18 @@ func TestSubpath_ComplexComposition(t *testing.T) {
 		"beta/skills/mobile/SKILL.md":  "mobile from C",
 	})
 
-	p := &persona.Persona{
+	p := &harness.Harness{
 		Name: "mega",
-		Includes: []persona.Include{
+		Includes: []harness.Include{
 			// Repo A: cherry-pick two skills and one agent
-			{GitSource: persona.GitSource{Git: repoA}, Pick: []string{"skills/commit", "skills/tdd", "agents/reviewer.md"}},
+			{GitSource: harness.GitSource{Git: repoA}, Pick: []string{"skills/commit", "skills/tdd", "agents/reviewer.md"}},
 			// Repo B: monorepo subpath, pick specific items
-			{GitSource: persona.GitSource{Git: repoB, Path: "platform/ai"}, Pick: []string{"skills/k8s", "commands/rollback.md"}},
+			{GitSource: harness.GitSource{Git: repoB, Path: "platform/ai"}, Pick: []string{"skills/k8s", "commands/rollback.md"}},
 			// Repo B again: different picks from same subpath
-			{GitSource: persona.GitSource{Git: repoB, Path: "platform/ai"}, Pick: []string{"rules/security.md"}},
+			{GitSource: harness.GitSource{Git: repoB, Path: "platform/ai"}, Pick: []string{"rules/security.md"}},
 			// Repo C: two different subpaths
-			{GitSource: persona.GitSource{Git: repoC, Path: "alpha"}, Pick: []string{"skills/design"}},
-			{GitSource: persona.GitSource{Git: repoC, Path: "beta"}, Pick: []string{"skills/mobile"}},
+			{GitSource: harness.GitSource{Git: repoC, Path: "alpha"}, Pick: []string{"skills/design"}},
+			{GitSource: harness.GitSource{Git: repoC, Path: "beta"}, Pick: []string{"skills/mobile"}},
 		},
 	}
 

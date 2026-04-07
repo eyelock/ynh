@@ -15,12 +15,13 @@ import (
 
 func cmdExport(args []string) error {
 	var (
-		outputDir string
-		vendors   string
-		subPath   string
-		clean     bool
-		merged    bool
-		source    string
+		outputDir   string
+		vendors     string
+		subPath     string
+		profileName string
+		clean       bool
+		merged      bool
+		source      string
 	)
 
 	// Parse flags
@@ -45,10 +46,22 @@ func cmdExport(args []string) error {
 			}
 			i++
 			subPath = args[i]
+		case "--profile":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--profile requires a value")
+			}
+			i++
+			profileName = args[i]
 		case "--clean":
 			clean = true
 		case "--merged":
 			merged = true
+		case "--harness":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--harness requires a value")
+			}
+			i++
+			source = args[i]
 		case "-h", "--help":
 			return errHelp
 		default:
@@ -63,8 +76,17 @@ func cmdExport(args []string) error {
 		i++
 	}
 
+	// Resolve source: --harness flag > YNH_HARNESS > positional > error
 	if source == "" {
-		return fmt.Errorf("usage: ynd export <persona-dir|git-url> [flags]")
+		source = resolveHarnessEnv()
+	}
+	if source == "" {
+		return fmt.Errorf("usage: ynd export <harness-dir|git-url> [--harness dir] [flags]")
+	}
+
+	// Resolve vendor from env var if no flag
+	if vendors == "" {
+		vendors = resolveVendorEnv()
 	}
 
 	// Resolve source to local path
@@ -83,9 +105,9 @@ func cmdExport(args []string) error {
 
 	// Determine output directory
 	if outputDir == "" {
-		pj, err := plugin.LoadPluginJSON(srcDir)
+		pj, err := plugin.LoadHarnessJSON(srcDir)
 		if err != nil {
-			return fmt.Errorf("loading plugin.json for name: %w", err)
+			return fmt.Errorf("loading harness.json for name: %w", err)
 		}
 		outputDir = filepath.Join(".", "dist", pj.Name)
 	}
@@ -123,12 +145,18 @@ func cmdExport(args []string) error {
 		mode = exporter.ModeMerged
 	}
 
+	// Resolve profile from flag or env var
+	if profileName == "" {
+		profileName = os.Getenv("YNH_PROFILE")
+	}
+
 	results, err := exporter.Export(exporter.ExportOptions{
 		SourceDir: srcDir,
 		OutputDir: outputDir,
 		Vendors:   vendorList,
 		Mode:      mode,
 		Config:    cfg,
+		Profile:   profileName,
 	})
 	if err != nil {
 		return err

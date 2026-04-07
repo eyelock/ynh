@@ -6,15 +6,19 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 
 | # | Tutorial | What you'll learn |
 |---|----------|-------------------|
-| 1 | [First Persona](tutorial/01-first-persona.md) | Create, install, and run a persona with all artifact types |
+| 1 | [First Harness](tutorial/01-first-harness.md) | Create, install, and run a harness with all artifact types |
 | 2 | [Vendors & Symlinks](tutorial/02-vendors-and-symlinks.md) | Switch between Claude/Codex/Cursor, manage symlinks |
 | 3 | [Composition](tutorial/03-composition.md) | Pull skills from Git repos with pick, path, and ref |
-| 4 | [Delegation](tutorial/04-delegation.md) | Chain personas together as subagents |
+| 4 | [Delegation](tutorial/04-delegation.md) | Chain harnesses together as subagents |
 | 5 | [Export](tutorial/05-export.md) | Produce vendor-native distributable plugins |
 | 6 | [Marketplace](tutorial/06-marketplace.md) | Generate marketplace indexes for team distribution |
-| 7 | [Registry & Discovery](tutorial/07-registry-and-discovery.md) | Search and install personas from curated registries |
+| 7 | [Registry & Discovery](tutorial/07-registry-and-discovery.md) | Search and install harnesses from curated registries |
 | 8 | [Developer Tools](tutorial/08-developer-tools.md) | Scaffold, lint, validate, format, compress, inspect with ynd |
-| 9 | [Docker Images](tutorial/09-docker-image.md) | Build persona appliance images for CI/CD |
+| 9 | [Docker Images](tutorial/09-docker-image.md) | Build harness appliance images for CI/CD |
+| 10 | [Hooks](tutorial/10-hooks.md) | Declare vendor-agnostic lifecycle hooks |
+| 11 | [MCP Servers](tutorial/11-mcp-servers.md) | Declare MCP server dependencies per harness |
+| 12 | [Developer Preview](tutorial/12-developer-preview.md) | Preview and diff assembled output across vendors |
+| 13 | [Profiles](tutorial/13-profiles.md) | Environment-specific overrides with profiles |
 
 ## Manual Test Plan
 
@@ -31,7 +35,7 @@ brew tap eyelock/tap
 brew install ynh
 ```
 
-This installs both `ynh` (persona manager) and `ynd` (developer tools).
+This installs both `ynh` (harness template manager) and `ynd` (developer tools).
 
 #### **Build from Source**
 
