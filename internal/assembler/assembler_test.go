@@ -33,6 +33,9 @@ func (m *mockAdapter) LaunchInteractive(configPath string, extraArgs []string) e
 func (m *mockAdapter) LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error {
 	return nil
 }
+func (m *mockAdapter) GenerateSystemPrompt(content []byte) map[string][]byte {
+	return map[string][]byte{"AGENTS.md": content}
+}
 func (m *mockAdapter) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[string][]byte {
 	return nil
 }

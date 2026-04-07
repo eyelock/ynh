@@ -229,10 +229,18 @@ What ynh calls each concept vs what each vendor calls it and where it lives.
 | ynh runtime:      | --append-system-prompt           | Written as codex.md in           | Written as .cursorrules in       |
 |                   | (injected, no file conflict)     |   staging dir                    |   staging dir                    |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
-| ynh export:       | AGENTS.md (avoids CLAUDE.md      | AGENTS.md                        | .cursorrules + AGENTS.md         |
-|                   |  conflict with project's own)    |                                  |                                  |
+| ynh export:       | AGENTS.md + CLAUDE.md            | AGENTS.md                        | .cursorrules + AGENTS.md         |
+|                   |  (CLAUDE.md contains @AGENTS.md  |                                  |                                  |
+|                   |   import — see workaround below) |                                  |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 ```
+
+**Claude AGENTS.md workaround:** Claude Code does not read `AGENTS.md` natively
+(see https://code.claude.com/docs/en/memory). ynh exports a `CLAUDE.md` containing
+just `@AGENTS.md` which uses Claude's `@`-import syntax to pull in the cross-vendor
+instructions file. This avoids duplicating content while ensuring Claude reads the
+instructions. The plugin's `CLAUDE.md` lives inside the plugin directory, so it does
+not conflict with the project's own `CLAUDE.md`.
 
 ### Launch Strategy
 
@@ -267,8 +275,8 @@ What ynh calls each concept vs what each vendor calls it and where it lives.
 | HIGH | Codex MCP format wrong                   | Codex      |
 |      |   (TOML should be JSON .mcp.json)        |            |
 | HIGH | Codex marketplace not generated           | Codex      |
-| MED  | Claude export writes AGENTS.md           | Claude     |
-|      |   (Claude doesn't read AGENTS.md)        |            |
+| ---  | Claude AGENTS.md: RESOLVED               | Claude     |
+|      |   (CLAUDE.md with @AGENTS.md import)     |            |
 | MED  | Cursor plugin hooks format               | Cursor     |
 |      |   (flat legacy vs three-level settings)  |            |
 | MED  | Cursor .mdc rules format                 | Cursor     |

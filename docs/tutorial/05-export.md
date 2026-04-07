@@ -82,20 +82,31 @@ ls -Ra /tmp/ynh-tutorial/export-output/claude/
 Expected:
 ```
 .claude-plugin/               # plugin manifest directory
-  plugin.json                 # copied from source
+  plugin.json                 # generated from harness.json
 agents/
   checker.md                  # local agent
 skills/
   review/SKILL.md             # local skill
   take-a-moment/SKILL.md      # picked from remote include
-AGENTS.md                     # from instructions.md
+AGENTS.md                     # instructions (cross-vendor format)
+CLAUDE.md                     # @AGENTS.md import (Claude reads this)
 ```
 
 Key points:
-- No `CLAUDE.md` — distributable plugins don't include it (would conflict with project's own)
+- `AGENTS.md` contains the actual instructions (read by Codex, Cursor, Copilot, etc.)
+- `CLAUDE.md` contains just `@AGENTS.md` — Claude Code reads this and imports the instructions. No duplication, no conflict with the project's own `CLAUDE.md` (the plugin lives in its own directory).
 - No `.claude/` wrapper — artifacts are at the plugin root
-- `AGENTS.md` is the universal instruction format
 - Remote includes are resolved and flattened
+
+### Verify Claude reads the instructions
+
+```bash
+cat /tmp/ynh-tutorial/export-output/claude/CLAUDE.md
+# Expected: @AGENTS.md
+
+cat /tmp/ynh-tutorial/export-output/claude/AGENTS.md
+# Expected: You are a code quality harness. Focus on correctness and security.
+```
 
 ### Validate the Claude export
 
@@ -104,11 +115,22 @@ claude plugin validate /tmp/ynh-tutorial/export-output/claude
 # Expected: validation passes
 ```
 
-### Load as a plugin
+### Verify the @-import works
+
+The exported `CLAUDE.md` contains `@AGENTS.md` — Claude's import syntax. Verify Claude reads the instructions by launching from the export directory:
 
 ```bash
-claude --plugin-dir /tmp/ynh-tutorial/export-output/claude
-# Expected: interactive session with review and take-a-moment skills available
+cd /tmp/ynh-tutorial/export-output/claude
+git init && git add -A && git commit -m "init"
+claude -p "What should you focus on? Answer in one sentence."
+```
+
+Expected: Claude should respond mentioning **code quality**, **correctness**, and **security** — the instructions from `AGENTS.md` imported via `CLAUDE.md`'s `@AGENTS.md` reference.
+
+Return to your previous directory before continuing:
+
+```bash
+cd -
 ```
 
 ## T5.4: Verify Cursor export
@@ -191,6 +213,7 @@ skills/
 
 .cursorrules
 AGENTS.md
+CLAUDE.md
 ```
 
 One physical directory with both vendor manifests — serves Claude and Cursor from the same files.
@@ -256,8 +279,8 @@ rm -rf /tmp/ynh-tutorial/no-inst-out
 - `--merged` produces a single dir with dual manifests (marketplace-ready)
 - Remote includes are resolved and flattened into the export
 - Pick filtering carries through to the export
-- No `CLAUDE.md` in exports (would conflict with project's own)
-- `AGENTS.md` is the universal instruction format
+- `AGENTS.md` is the universal instruction format (read by Codex, Cursor, Copilot, etc.)
+- `CLAUDE.md` is generated with `@AGENTS.md` import — Claude reads this, no duplication
 
 ## Next
 

@@ -179,18 +179,8 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 
 	// Instructions
 	if instructionsPath != "" {
-		// Write AGENTS.md always
-		if err := assembler.CopyFile(instructionsPath, filepath.Join(outputDir, "AGENTS.md")); err != nil {
+		if err := WriteMergedSystemPrompt(instructionsPath, outputDir, vendors); err != nil {
 			return nil, err
-		}
-		// Write .cursorrules if Cursor is a target
-		for _, v := range vendors {
-			if v == "cursor" {
-				if err := assembler.CopyFile(instructionsPath, filepath.Join(outputDir, ".cursorrules")); err != nil {
-					return nil, err
-				}
-				break
-			}
 		}
 	}
 
@@ -307,11 +297,7 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 
 	// Instructions
 	if instructionsPath != "" {
-		vendorInstructionsFile := ""
-		if vendorName == "cursor" {
-			vendorInstructionsFile = adapter.InstructionsFile() // .cursorrules
-		}
-		if err := GenerateInstructions(instructionsPath, outputDir, vendorInstructionsFile); err != nil {
+		if err := WriteSystemPrompt(instructionsPath, outputDir, adapter); err != nil {
 			return result, err
 		}
 	}

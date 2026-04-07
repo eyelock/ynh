@@ -1,27 +1,67 @@
 package exporter
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/resolver"
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
-// GenerateInstructions writes instruction files from the harness's instructions.
-//
-// Always writes outputDir/AGENTS.md (the universal format).
-// If vendorInstructionsFile is non-empty and differs from "AGENTS.md",
-// also writes outputDir/<vendorInstructionsFile> (same content).
-func GenerateInstructions(instructionsPath string, outputDir string, vendorInstructionsFile string) error {
-	// Always write AGENTS.md
-	if err := assembler.CopyFile(instructionsPath, filepath.Join(outputDir, "AGENTS.md")); err != nil {
-		return err
+// WriteSystemPrompt reads instructions from instructionsPath and writes
+// vendor-native instruction files to outputDir using the adapter's
+// GenerateSystemPrompt method.
+func WriteSystemPrompt(instructionsPath string, outputDir string, adapter vendor.Adapter) error {
+	content, err := os.ReadFile(instructionsPath)
+	if err != nil {
+		return fmt.Errorf("reading instructions: %w", err)
 	}
 
-	// Write vendor-specific file if different from AGENTS.md
-	if vendorInstructionsFile != "" && vendorInstructionsFile != "AGENTS.md" {
-		if err := assembler.CopyFile(instructionsPath, filepath.Join(outputDir, vendorInstructionsFile)); err != nil {
+	files := adapter.GenerateSystemPrompt(content)
+	for relPath, data := range files {
+		absPath := filepath.Join(outputDir, relPath)
+		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
 			return err
+		}
+		if err := os.WriteFile(absPath, data, 0o644); err != nil {
+			return fmt.Errorf("writing %s: %w", relPath, err)
+		}
+	}
+
+	return nil
+}
+
+// WriteMergedSystemPrompt writes instruction files for multiple vendors
+// into a single output directory. Used by merged export mode.
+func WriteMergedSystemPrompt(instructionsPath string, outputDir string, vendors []string) error {
+	content, err := os.ReadFile(instructionsPath)
+	if err != nil {
+		return fmt.Errorf("reading instructions: %w", err)
+	}
+
+	// Collect files from all vendor adapters, deduplicating by path.
+	// If multiple vendors write the same file (e.g. AGENTS.md), last wins
+	// — content is identical so order doesn't matter.
+	files := make(map[string][]byte)
+	for _, v := range vendors {
+		adapter, err := vendor.Get(v)
+		if err != nil {
+			continue
+		}
+		for path, data := range adapter.GenerateSystemPrompt(content) {
+			files[path] = data
+		}
+	}
+
+	for relPath, data := range files {
+		absPath := filepath.Join(outputDir, relPath)
+		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(absPath, data, 0o644); err != nil {
+			return fmt.Errorf("writing %s: %w", relPath, err)
 		}
 	}
 
