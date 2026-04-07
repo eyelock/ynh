@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 var Version = "dev"
@@ -74,7 +76,7 @@ func EnsureDirs() error {
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		DefaultVendor: "claude",
+		DefaultVendor: vendor.DefaultName,
 	}
 
 	data, err := os.ReadFile(ConfigPath())

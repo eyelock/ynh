@@ -70,5 +70,9 @@ Follows the [Agent Skills](https://agentskills.io) open standard. See `docs/skil
 | Variable | Default | Used by |
 |----------|---------|---------|
 | `YNH_HOME` | `~/.ynh` | ynh |
-| `YNH_VENDOR` | _(none)_ | ynh run — override default vendor (between -v flag and harness default) |
+| `YNH_VENDOR` | _(none)_ | ynh run, ynd preview/export/create/compress/inspect/marketplace — fallback for `-v` flag |
+| `YNH_PROFILE` | _(none)_ | ynh run, ynd preview/export/diff — fallback for `--profile` flag |
+| `YNH_HARNESS` | _(none)_ | ynd preview/export/diff/validate/lint/fmt — fallback for `--harness` flag |
+| `YNH_YES` | _(none)_ | ynd compress/inspect — fallback for `-y` flag |
+| `CI` | _(none)_ | ynd compress/inspect — lowest priority skip-confirm |
 | `YND_BACKUP_DIR` | `~/.ynd/backups` | ynd compress |

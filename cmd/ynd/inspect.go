@@ -15,7 +15,15 @@ func cmdInspect(args []string) error {
 		return err
 	}
 
+	// Env var fallback for skip-confirm
+	if !skipConfirm {
+		skipConfirm = skipConfirmEnv()
+	}
+
 	// Auto-detect vendor CLI
+	if vendor == "" {
+		vendor = resolveVendorEnv()
+	}
 	if vendor == "" {
 		vendor = detectVendorCLI()
 		if vendor == "" {

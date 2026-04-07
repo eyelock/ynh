@@ -56,6 +56,12 @@ func cmdExport(args []string) error {
 			clean = true
 		case "--merged":
 			merged = true
+		case "--harness":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--harness requires a value")
+			}
+			i++
+			source = args[i]
 		case "-h", "--help":
 			return errHelp
 		default:
@@ -70,8 +76,17 @@ func cmdExport(args []string) error {
 		i++
 	}
 
+	// Resolve source: --harness flag > YNH_HARNESS > positional > error
 	if source == "" {
-		return fmt.Errorf("usage: ynd export <harness-dir|git-url> [flags]")
+		source = resolveHarnessEnv()
+	}
+	if source == "" {
+		return fmt.Errorf("usage: ynd export <harness-dir|git-url> [--harness dir] [flags]")
+	}
+
+	// Resolve vendor from env var if no flag
+	if vendors == "" {
+		vendors = resolveVendorEnv()
 	}
 
 	// Resolve source to local path

@@ -137,11 +137,11 @@ func createHarness(name string) error {
 		DefaultVendor string `json:"default_vendor"`
 	}
 	scaffold := scaffoldJSON{
-		Schema:        "https://ynh.dev/schema/harness.json",
+		Schema:        "https://eyelock.github.io/ynh/schema/harness.schema.json",
 		Name:          name,
 		Version:       "0.1.0",
 		Description:   "",
-		DefaultVendor: "claude",
+		DefaultVendor: resolveVendorDefault(""),
 	}
 	data, _ := json.MarshalIndent(scaffold, "", "  ")
 	if err := os.WriteFile(filepath.Join(name, "harness.json"), append(data, '\n'), 0o644); err != nil {

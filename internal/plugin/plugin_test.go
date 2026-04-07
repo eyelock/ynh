@@ -193,13 +193,13 @@ func TestLoadHarnessJSON_UnknownField(t *testing.T) {
 
 func TestLoadHarnessJSON_WithSchema(t *testing.T) {
 	dir := t.TempDir()
-	writeHarnessJSON(t, dir, `{"$schema":"https://ynh.dev/schema/harness.json","name":"test","version":"1.0.0"}`)
+	writeHarnessJSON(t, dir, `{"$schema":"https://eyelock.github.io/ynh/schema/harness.schema.json","name":"test","version":"1.0.0"}`)
 
 	hj, err := LoadHarnessJSON(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if hj.Schema != "https://ynh.dev/schema/harness.json" {
+	if hj.Schema != "https://eyelock.github.io/ynh/schema/harness.schema.json" {
 		t.Errorf("Schema = %q", hj.Schema)
 	}
 }

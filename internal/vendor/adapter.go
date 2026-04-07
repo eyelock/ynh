@@ -67,6 +67,9 @@ type Adapter interface {
 	GenerateMCPConfig(servers map[string]plugin.MCPServer) map[string][]byte
 }
 
+// DefaultName is the fallback vendor when no vendor is specified.
+const DefaultName = "claude"
+
 var registry = map[string]Adapter{}
 
 // Register adds a vendor adapter to the registry.

@@ -11,9 +11,34 @@ import (
 )
 
 func cmdValidate(args []string) error {
-	root := "."
-	if len(args) > 0 {
-		root = args[0]
+	var root string
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--harness":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--harness requires a value")
+			}
+			i++
+			root = args[i]
+		case "-h", "--help":
+			return errHelp
+		default:
+			if strings.HasPrefix(args[i], "-") {
+				return fmt.Errorf("unknown flag: %s", args[i])
+			}
+			if root == "" {
+				root = args[i]
+			}
+		}
+	}
+
+	// Resolve source: --harness flag > YNH_HARNESS > positional > CWD
+	if root == "" {
+		root = resolveHarnessEnv()
+	}
+	if root == "" {
+		root = "."
 	}
 
 	info, err := os.Stat(root)

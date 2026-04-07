@@ -44,9 +44,7 @@ Installations are tracked in `~/.ynh/symlinks.json`. Use `ynh status` to see all
 
 ```json
 {
-  "ynh": {
-    "default_vendor": "claude"
-  }
+  "default_vendor": "claude"
 }
 ```
 
@@ -63,6 +61,8 @@ david -v codex
 ```
 
 Resolution order: **CLI flag (`-v`) > `YNH_VENDOR` env var > harness default > global config**.
+
+`YNH_VENDOR` is honored by both `ynh` commands (`ynh run`) and `ynd` commands (`preview`, `export`, `create`, `compress`, `inspect`, `marketplace`).
 
 ## Vendor Notes
 

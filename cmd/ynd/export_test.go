@@ -121,6 +121,65 @@ func TestCmdExportUnknownVendor(t *testing.T) {
 	}
 }
 
+func TestCmdExportVendorEnvVar(t *testing.T) {
+	outputDir := t.TempDir()
+	srcDir := testdataExportDir()
+
+	t.Setenv("YNH_VENDOR", "claude")
+
+	err := cmdExport([]string{srcDir, "-o", outputDir})
+	if err != nil {
+		t.Fatalf("cmdExport failed: %v", err)
+	}
+
+	// Should export for claude only
+	assertExists(t, filepath.Join(outputDir, "claude"))
+}
+
+func TestCmdExportVendorFlagOverridesEnv(t *testing.T) {
+	outputDir := t.TempDir()
+	srcDir := testdataExportDir()
+
+	t.Setenv("YNH_VENDOR", "cursor")
+
+	err := cmdExport([]string{srcDir, "-o", outputDir, "-v", "claude"})
+	if err != nil {
+		t.Fatalf("cmdExport failed: %v", err)
+	}
+
+	// Flag should win
+	assertExists(t, filepath.Join(outputDir, "claude"))
+}
+
+func TestCmdExportHarnessFlag(t *testing.T) {
+	outputDir := t.TempDir()
+	srcDir := testdataExportDir()
+
+	err := cmdExport([]string{"--harness", srcDir, "-o", outputDir, "-v", "claude"})
+	if err != nil {
+		t.Fatalf("cmdExport with --harness failed: %v", err)
+	}
+
+	assertExists(t, filepath.Join(outputDir, "claude"))
+}
+
+func TestCmdExportHarnessEnvVar(t *testing.T) {
+	outputDir := t.TempDir()
+	srcDir, err := filepath.Abs(testdataExportDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("YNH_HARNESS", srcDir)
+
+	err = cmdExport([]string{"-o", outputDir, "-v", "claude"})
+	if err != nil {
+		t.Fatalf("cmdExport with YNH_HARNESS failed: %v", err)
+	}
+
+	assertExists(t, filepath.Join(outputDir, "claude"))
+}
+
 func TestCmdExportMissingSource(t *testing.T) {
 	err := cmdExport([]string{})
 	if err == nil {

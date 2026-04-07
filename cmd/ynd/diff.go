@@ -20,6 +20,20 @@ func cmdDiff(args []string) error {
 	// Parse: source is first positional, remaining positional args are vendor names
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "-v", "--vendor":
+			if i+1 >= len(args) {
+				return fmt.Errorf("%s requires a value", args[i])
+			}
+			i++
+			for _, v := range strings.Split(args[i], ",") {
+				vendors = append(vendors, strings.TrimSpace(v))
+			}
+		case "--harness":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--harness requires a value")
+			}
+			i++
+			source = args[i]
 		case "--profile":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--profile requires a value")
@@ -40,8 +54,12 @@ func cmdDiff(args []string) error {
 		}
 	}
 
+	// Resolve source: --harness flag > YNH_HARNESS > positional > error
 	if source == "" {
-		return fmt.Errorf("usage: ynd diff <harness-dir> [--profile name] [vendor1 vendor2 ...]")
+		source = resolveHarnessEnv()
+	}
+	if source == "" {
+		return fmt.Errorf("usage: ynd diff <harness-dir> [--harness dir] [-v vendor1,vendor2] [--profile name] [vendor1 vendor2 ...]")
 	}
 
 	// Resolve profile from flag or env var

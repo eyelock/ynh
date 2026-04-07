@@ -31,7 +31,8 @@ Lint markdown, shell blocks, and config files for common issues.
 
 ```bash
 ynd lint                       # all files under CWD
-ynd lint agents/reviewer.md    # single file
+ynd lint path/to/harness       # specific directory
+ynd lint --harness ./my-harness  # explicit harness flag
 ```
 
 ### validate
@@ -41,6 +42,7 @@ Validate harness structure: required files, frontmatter fields, directory layout
 ```bash
 ynd validate                   # current harness directory
 ynd validate path/to/harness   # specific harness
+ynd validate --harness ./my-harness  # explicit harness flag
 ```
 
 ### fmt
@@ -50,6 +52,7 @@ Format markdown files — normalise headings, whitespace, and list markers.
 ```bash
 ynd fmt                        # all .md files under CWD
 ynd fmt skills/                # specific directory
+ynd fmt --harness ./my-harness   # explicit harness flag
 ```
 
 ### compress
@@ -63,6 +66,8 @@ ynd compress                   # discover and compress all .md files
 ynd compress instructions.md   # specific file
 ynd compress -y verbose.md     # skip confirmation prompt
 ynd compress -v claude         # use specific vendor CLI
+YNH_YES=1 ynd compress file.md # skip confirmation via env var
+CI=true ynd compress file.md   # also skip confirmation (CI convention)
 
 # Backup management
 ynd compress --list-backups instructions.md   # show backup history
@@ -81,6 +86,8 @@ ynd inspect                    # auto-detect vendor CLI, write to .{vendor}/
 ynd inspect -v claude          # use specific vendor
 ynd inspect -o .               # write artifacts to project root instead
 ynd inspect -o /tmp/out        # write artifacts to a custom directory
+YNH_YES=1 ynd inspect          # skip prompts via env var
+YNH_VENDOR=cursor ynd inspect  # vendor via env var
 ```
 
 ### preview
@@ -92,12 +99,14 @@ ynd preview ./my-harness                    # default: Claude vendor, stdout
 ynd preview ./my-harness -v cursor          # specific vendor
 ynd preview ./my-harness -v claude -o ./out # write to directory
 ynd preview ./my-harness --profile strict   # preview with a specific profile
+ynd preview --harness ./my-harness          # explicit harness flag
 ```
 
 | Flag | Description |
 |------|-------------|
 | `-v, --vendor <name>` | Vendor to assemble for. Default: `claude` |
 | `-o, --output <dir>` | Write output to directory instead of stdout |
+| `--harness <dir>` | Harness source directory (alternative to positional arg) |
 | `--profile <name>` | Profile to apply during assembly |
 
 When no `-o` flag is given, preview prints a tree with file contents to stdout. With `-o`, it writes the full assembled output to the specified directory.
@@ -112,9 +121,11 @@ Compare assembled harness output across two or more vendors. Shows which files a
 
 ```bash
 ynd diff ./my-harness                       # compare all vendors (claude, codex, cursor)
-ynd diff ./my-harness claude cursor         # compare specific vendors
+ynd diff ./my-harness claude cursor         # compare specific vendors (positional)
+ynd diff ./my-harness -v claude,cursor      # compare specific vendors (flag)
 ynd diff ./my-harness claude cursor codex   # three-way comparison
 ynd diff ./my-harness --profile strict      # diff with a specific profile applied
+ynd diff --harness ./my-harness             # explicit harness flag
 ```
 
 The diff output groups files into four categories:
@@ -137,6 +148,7 @@ ynd export ./my-harness -o ./out                  # custom output directory
 ynd export ./my-harness --merged                  # single dir with dual manifests
 ynd export ./my-harness --clean                   # remove output dir before export
 ynd export ./my-harness --profile strict          # export with a specific profile applied
+ynd export --harness ./my-harness                 # explicit harness flag
 ynd export github.com/user/repo --path harnesses/david  # from a monorepo
 ```
 
@@ -144,6 +156,7 @@ ynd export github.com/user/repo --path harnesses/david  # from a monorepo
 |------|-------------|
 | `-o, --output <dir>` | Output directory. Default: `./dist/<harness-name>/` |
 | `-v, --vendor <names>` | Comma-separated vendors. Default: all registered (`claude,codex,cursor`) |
+| `--harness <dir>` | Harness source directory (alternative to positional arg) |
 | `--path <subdir>` | Subdirectory within source (for monorepos) |
 | `--profile <name>` | Profile to apply during assembly |
 | `--merged` | Single output dir with all vendor manifests (for CI/marketplace use) |
@@ -239,9 +252,10 @@ See [Tutorial 6: Marketplace](tutorial/06-marketplace.md) for a guided walkthrou
 
 | Flag | Commands | Description |
 |------|----------|-------------|
-| `-v, --vendor <name(s)>` | compress, inspect, export, preview, marketplace | Vendor to use. Comma-separated for export/marketplace. Single value for preview. |
-| `-y, --yes` | compress, inspect | Skip confirmation prompts. |
+| `-v, --vendor <name(s)>` | compress, inspect, export, preview, diff, marketplace | Vendor to use. Comma-separated for export/diff/marketplace. Single value for preview. |
+| `-y, --yes` | compress, inspect | Skip confirmation prompts. Also honored via `YNH_YES` or `CI` env vars. |
 | `-o, --output <path>` | inspect, export, preview, marketplace | Output directory. Defaults vary by command. |
+| `--harness <dir>` | preview, diff, export, validate, lint, fmt | Harness source directory. Alternative to positional arg. Also honored via `YNH_HARNESS` env var. |
 | `--clean` | export, marketplace | Remove output directory before writing. |
 | `--merged` | export | Single output dir with dual vendor manifests. |
 | `--profile <name>` | preview, diff, export | Profile to apply during assembly. |

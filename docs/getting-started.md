@@ -20,6 +20,8 @@ The `~/.ynh/` directory is created automatically on first use. To customize the 
 export YNH_HOME="$HOME/.config/ynh"
 ```
 
+See [CLI Reference](reference.md) for the full list of environment variables and CLI flags.
+
 ## Create a Harness
 
 A harness is a directory with a `harness.json` and your artifacts:

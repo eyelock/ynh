@@ -79,6 +79,35 @@ func TestCmdDiffClaudeCodex(t *testing.T) {
 	}
 }
 
+func TestCmdDiffVendorFlag(t *testing.T) {
+	srcDir := createDiffHarness(t)
+
+	err := cmdDiff([]string{srcDir, "-v", "claude,cursor"})
+	if err != nil {
+		t.Fatalf("cmdDiff with -v failed: %v", err)
+	}
+}
+
+func TestCmdDiffHarnessFlag(t *testing.T) {
+	srcDir := createDiffHarness(t)
+
+	err := cmdDiff([]string{"--harness", srcDir})
+	if err != nil {
+		t.Fatalf("cmdDiff with --harness failed: %v", err)
+	}
+}
+
+func TestCmdDiffHarnessEnvVar(t *testing.T) {
+	srcDir := createDiffHarness(t)
+
+	t.Setenv("YNH_HARNESS", srcDir)
+
+	err := cmdDiff(nil)
+	if err != nil {
+		t.Fatalf("cmdDiff with YNH_HARNESS failed: %v", err)
+	}
+}
+
 func TestCmdDiffMissingSource(t *testing.T) {
 	err := cmdDiff([]string{})
 	if err == nil {

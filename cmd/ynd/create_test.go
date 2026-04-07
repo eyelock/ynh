@@ -189,6 +189,24 @@ func TestCreateCommand(t *testing.T) {
 	}
 }
 
+func TestCreateHarness_VendorEnvVar(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("YNH_VENDOR", "cursor")
+
+	if err := createHarness("vendor-test"); err != nil {
+		t.Fatalf("createHarness failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "vendor-test/harness.json"))
+	if err != nil {
+		t.Fatalf("reading harness.json: %v", err)
+	}
+	if !strings.Contains(string(data), `"default_vendor": "cursor"`) {
+		t.Errorf("expected default_vendor to be cursor, got: %s", data)
+	}
+}
+
 func TestCreateHarness_InsideHarness(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)

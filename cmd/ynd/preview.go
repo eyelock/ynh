@@ -45,6 +45,12 @@ func cmdPreview(args []string) error {
 			}
 			i++
 			profileName = args[i]
+		case "--harness":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--harness requires a value")
+			}
+			i++
+			source = args[i]
 		case "-h", "--help":
 			return errHelp
 		default:
@@ -59,13 +65,16 @@ func cmdPreview(args []string) error {
 		i++
 	}
 
+	// Resolve source: --harness flag > YNH_HARNESS > positional > error
 	if source == "" {
-		return fmt.Errorf("usage: ynd preview <harness-dir> [-v vendor] [-o output-dir] [--profile name]")
+		source = resolveHarnessEnv()
+	}
+	if source == "" {
+		return fmt.Errorf("usage: ynd preview <harness-dir> [--harness dir] [-v vendor] [-o output-dir] [--profile name]")
 	}
 
-	if vendorName == "" {
-		vendorName = "claude"
-	}
+	// Resolve vendor: -v flag > YNH_VENDOR > default
+	vendorName = resolveVendorDefault(vendorName)
 
 	// Resolve source to local path
 	srcDir, err := resolveSource(source)

@@ -217,6 +217,53 @@ func TestCmdValidate_SingleFile_WithIssues(t *testing.T) {
 	}
 }
 
+func TestCmdValidate_HarnessFlag(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "harness.json"),
+		[]byte(`{"name":"flag-test","version":"0.1.0"}`))
+
+	err := cmdValidate([]string{"--harness", dir})
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
+
+func TestCmdValidate_HarnessEnvVar(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "harness.json"),
+		[]byte(`{"name":"env-test","version":"0.1.0"}`))
+
+	t.Setenv("YNH_HARNESS", dir)
+
+	err := cmdValidate(nil)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
+
+func TestCmdValidate_HarnessFlagOverridesEnv(t *testing.T) {
+	goodDir := t.TempDir()
+	writeFile(t, filepath.Join(goodDir, "harness.json"),
+		[]byte(`{"name":"good","version":"0.1.0"}`))
+
+	t.Setenv("YNH_HARNESS", "/nonexistent/path")
+
+	err := cmdValidate([]string{"--harness", goodDir})
+	if err != nil {
+		t.Errorf("--harness flag should override YNH_HARNESS: %v", err)
+	}
+}
+
+func TestCmdValidate_UnknownFlag(t *testing.T) {
+	err := cmdValidate([]string{"--bogus"})
+	if err == nil {
+		t.Fatal("expected error for unknown flag")
+	}
+	if !strings.Contains(err.Error(), "unknown flag") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestCmdValidate_Nonexistent(t *testing.T) {
 	err := cmdValidate([]string{"/nonexistent/path"})
 	if err == nil {

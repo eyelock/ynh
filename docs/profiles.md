@@ -59,7 +59,7 @@ Profiles are selected through a flag or environment variable:
 | `YNH_PROFILE` env var | `YNH_PROFILE=ci ynh run` | Middle |
 | _(none)_ | `ynh run` | Lowest — uses top-level values |
 
-The `--profile` flag is supported on `ynh run`, `ynd preview`, `ynd diff`, and `ynd export`.
+The `--profile` flag is supported on `ynh run`, `ynd preview`, `ynd diff`, and `ynd export`. It can be combined with the `--harness` flag for explicit harness source selection.
 
 When both the flag and the environment variable are set, the flag wins. When neither is set, the top-level `hooks` and `mcp_servers` are used as-is.
 

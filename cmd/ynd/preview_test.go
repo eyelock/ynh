@@ -210,6 +210,69 @@ func TestCmdPreviewNoHarnessOrInstructions(t *testing.T) {
 	}
 }
 
+func TestCmdPreviewVendorEnvVar(t *testing.T) {
+	srcDir := createPreviewHarness(t)
+	outputDir := filepath.Join(t.TempDir(), "preview-env")
+
+	t.Setenv("YNH_VENDOR", "cursor")
+
+	err := cmdPreview([]string{srcDir, "-o", outputDir})
+	if err != nil {
+		t.Fatalf("cmdPreview failed: %v", err)
+	}
+
+	// Cursor output should have .cursor/ dir
+	assertExists(t, filepath.Join(outputDir, ".cursor"))
+}
+
+func TestCmdPreviewVendorFlagOverridesEnv(t *testing.T) {
+	srcDir := createPreviewHarness(t)
+	outputDir := filepath.Join(t.TempDir(), "preview-flag-override")
+
+	t.Setenv("YNH_VENDOR", "cursor")
+
+	err := cmdPreview([]string{srcDir, "-v", "claude", "-o", outputDir})
+	if err != nil {
+		t.Fatalf("cmdPreview failed: %v", err)
+	}
+
+	// -v flag should win over YNH_VENDOR
+	assertExists(t, filepath.Join(outputDir, ".claude"))
+}
+
+func TestCmdPreviewHarnessFlag(t *testing.T) {
+	srcDir := createPreviewHarness(t)
+
+	err := cmdPreview([]string{"--harness", srcDir})
+	if err != nil {
+		t.Fatalf("cmdPreview with --harness failed: %v", err)
+	}
+}
+
+func TestCmdPreviewHarnessEnvVar(t *testing.T) {
+	srcDir := createPreviewHarness(t)
+
+	t.Setenv("YNH_HARNESS", srcDir)
+
+	err := cmdPreview(nil)
+	if err != nil {
+		t.Fatalf("cmdPreview with YNH_HARNESS failed: %v", err)
+	}
+}
+
+func TestCmdPreviewHarnessFlagOverridesEnv(t *testing.T) {
+	srcDir := createPreviewHarness(t)
+	badDir := "/nonexistent/path"
+
+	t.Setenv("YNH_HARNESS", badDir)
+
+	// --harness flag should take priority over env var
+	err := cmdPreview([]string{"--harness", srcDir})
+	if err != nil {
+		t.Fatalf("--harness flag should override YNH_HARNESS: %v", err)
+	}
+}
+
 func TestCmdPreviewSkillsOnly(t *testing.T) {
 	// Harness with skills but no hooks or MCP
 	dir := t.TempDir()

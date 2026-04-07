@@ -163,6 +163,9 @@ docker run --rm \
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `YNH_VENDOR` | _(none)_ | Override the default vendor (between `-v` flag and harness default in priority) |
+| `YNH_HARNESS` | _(none)_ | Harness source directory for `ynd` commands (fallback for `--harness` flag) |
+| `YNH_YES` | _(none)_ | Skip confirmation prompts in `ynd compress`/`inspect` |
+| `CI` | _(none)_ | Also skips confirmation prompts (lowest priority) |
 | `ANTHROPIC_API_KEY` | _(none)_ | API key for Claude Code |
 | `OPENAI_API_KEY` | _(none)_ | API key for Codex |
 | `CURSOR_API_KEY` | _(none)_ | API key for Cursor |
