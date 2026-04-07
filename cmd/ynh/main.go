@@ -423,12 +423,24 @@ func cmdRun(args []string) error {
 	}
 
 	name := args[0]
-	vendorFlag, prompt, vendorArgs, action := parseRunArgs(args[1:])
+	vendorFlag, profileFlag, prompt, vendorArgs, action := parseRunArgs(args[1:])
 
 	// Load harness
 	p, err := harness.Load(name)
 	if err != nil {
 		return fmt.Errorf("harness %q not found: %w", name, err)
+	}
+
+	// Resolve profile: --profile flag > YNH_PROFILE env var > no profile
+	profileName := profileFlag
+	if profileName == "" {
+		profileName = os.Getenv("YNH_PROFILE")
+	}
+	if profileName != "" {
+		p, err = harness.ResolveProfile(p, profileName)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Determine vendor
@@ -920,7 +932,7 @@ func resolveVendor(flag string, p *harness.Harness) (string, error) {
 // Without --, the first non-flag argument is treated as the prompt. Flag values
 // like "opus" in "--model opus" would be mistaken for the prompt, so use -- when
 // vendor flags take values.
-func parseRunArgs(args []string) (vendorFlag, prompt string, vendorArgs []string, action string) {
+func parseRunArgs(args []string) (vendorFlag, profileFlag, prompt string, vendorArgs []string, action string) {
 	flagArgs := args
 
 	// First pass: find -- separator and extract prompt
@@ -939,6 +951,9 @@ func parseRunArgs(args []string) (vendorFlag, prompt string, vendorArgs []string
 		switch {
 		case flagArgs[i] == "-v" && i+1 < len(flagArgs):
 			vendorFlag = flagArgs[i+1]
+			i++
+		case flagArgs[i] == "--profile" && i+1 < len(flagArgs):
+			profileFlag = flagArgs[i+1]
 			i++
 		case flagArgs[i] == "--install":
 			action = "install"

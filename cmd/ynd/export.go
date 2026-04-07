@@ -15,12 +15,13 @@ import (
 
 func cmdExport(args []string) error {
 	var (
-		outputDir string
-		vendors   string
-		subPath   string
-		clean     bool
-		merged    bool
-		source    string
+		outputDir   string
+		vendors     string
+		subPath     string
+		profileName string
+		clean       bool
+		merged      bool
+		source      string
 	)
 
 	// Parse flags
@@ -45,6 +46,12 @@ func cmdExport(args []string) error {
 			}
 			i++
 			subPath = args[i]
+		case "--profile":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--profile requires a value")
+			}
+			i++
+			profileName = args[i]
 		case "--clean":
 			clean = true
 		case "--merged":
@@ -123,12 +130,18 @@ func cmdExport(args []string) error {
 		mode = exporter.ModeMerged
 	}
 
+	// Resolve profile from flag or env var
+	if profileName == "" {
+		profileName = os.Getenv("YNH_PROFILE")
+	}
+
 	results, err := exporter.Export(exporter.ExportOptions{
 		SourceDir: srcDir,
 		OutputDir: outputDir,
 		Vendors:   vendorList,
 		Mode:      mode,
 		Config:    cfg,
+		Profile:   profileName,
 	})
 	if err != nil {
 		return err

@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 func TestDetectFormat_Harness(t *testing.T) {
@@ -355,6 +357,78 @@ func TestLoadDir_RegistryProvenance(t *testing.T) {
 	}
 	if p.InstalledFrom.RegistryName != "my-registry" {
 		t.Errorf("RegistryName = %q, want %q", p.InstalledFrom.RegistryName, "my-registry")
+	}
+}
+
+func TestResolveProfile_Replaces(t *testing.T) {
+	h := &Harness{
+		Name: "test",
+		Hooks: map[string][]plugin.HookEntry{
+			"before_tool": {{Command: "echo default"}},
+		},
+		MCPServers: map[string]plugin.MCPServer{
+			"default-server": {Command: "default-cmd"},
+		},
+		Profiles: map[string]plugin.Profile{
+			"ci": {
+				Hooks: map[string][]plugin.HookEntry{
+					"on_stop": {{Command: "echo ci-stop"}},
+				},
+				MCPServers: map[string]plugin.MCPServer{
+					"ci-server": {Command: "ci-cmd"},
+				},
+			},
+		},
+	}
+
+	resolved, err := ResolveProfile(h, "ci")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Profile hooks should replace, not merge
+	if _, ok := resolved.Hooks["before_tool"]; ok {
+		t.Error("expected before_tool to be gone after profile resolution")
+	}
+	if _, ok := resolved.Hooks["on_stop"]; !ok {
+		t.Error("expected on_stop from profile")
+	}
+
+	// Profile MCP servers should replace, not merge
+	if _, ok := resolved.MCPServers["default-server"]; ok {
+		t.Error("expected default-server to be gone after profile resolution")
+	}
+	if _, ok := resolved.MCPServers["ci-server"]; !ok {
+		t.Error("expected ci-server from profile")
+	}
+
+	// Name should be preserved
+	if resolved.Name != "test" {
+		t.Errorf("Name = %q, want test", resolved.Name)
+	}
+}
+
+func TestResolveProfile_MissingProfile(t *testing.T) {
+	h := &Harness{Name: "test"}
+
+	_, err := ResolveProfile(h, "nonexistent")
+	if err == nil {
+		t.Fatal("expected error for missing profile")
+	}
+	if !containsStr(err.Error(), `profile "nonexistent" not defined`) {
+		t.Errorf("error = %q", err)
+	}
+}
+
+func TestResolveProfile_EmptyName(t *testing.T) {
+	h := &Harness{Name: "test"}
+
+	resolved, err := ResolveProfile(h, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved != h {
+		t.Error("empty profile name should return original harness")
 	}
 }
 

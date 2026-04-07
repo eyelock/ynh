@@ -36,6 +36,8 @@ type ExportOptions struct {
 	Mode ExportMode
 	// Config provides remote source checking for includes and delegates.
 	Config *config.Config
+	// Profile selects a named configuration variant. Empty means no profile.
+	Profile string
 }
 
 // ExportResult describes the output for one vendor.
@@ -53,6 +55,14 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	p, err := harness.LoadDir(opts.SourceDir)
 	if err != nil {
 		return nil, fmt.Errorf("loading harness: %w", err)
+	}
+
+	// Apply profile if specified
+	if opts.Profile != "" {
+		p, err = harness.ResolveProfile(p, opts.Profile)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	hj, err := plugin.LoadHarnessJSON(opts.SourceDir)

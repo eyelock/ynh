@@ -110,7 +110,7 @@ func TestParseRunArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			vendorFlag, prompt, args, action := parseRunArgs(tt.args)
+			vendorFlag, _, prompt, args, action := parseRunArgs(tt.args)
 			if vendorFlag != tt.wantVendor {
 				t.Errorf("vendor = %q, want %q", vendorFlag, tt.wantVendor)
 			}

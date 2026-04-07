@@ -663,6 +663,50 @@ func TestValidateHarness_MCPServersNotObject(t *testing.T) {
 	}
 }
 
+func TestValidateHarness_ProfilesValid(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "prof-valid")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"prof-valid","version":"0.1.0","profiles":{"ci":{"hooks":{"before_tool":[{"command":"echo ci"}]}}}}`))
+
+	if err := validateHarness(hr); err != nil {
+		t.Errorf("valid profiles should pass: %v", err)
+	}
+}
+
+func TestValidateHarness_ProfilesInvalidHookEvent(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "prof-bad")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"prof-bad","version":"0.1.0","profiles":{"ci":{"hooks":{"bad_event":[{"command":"echo"}]}}}}`))
+
+	err := validateHarness(hr)
+	if err == nil {
+		t.Fatal("expected validation error for invalid hook event in profile")
+	}
+}
+
+func TestValidateHarness_ProfilesMCPServerInvalid(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "prof-mcp-bad")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"prof-mcp-bad","version":"0.1.0","profiles":{"ci":{"mcp_servers":{"bad":{}}}}}`))
+
+	err := validateHarness(hr)
+	if err == nil {
+		t.Fatal("expected validation error for MCP server in profile with no command/url")
+	}
+}
+
 func TestValidateHarness_AgentsMDOnly(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)

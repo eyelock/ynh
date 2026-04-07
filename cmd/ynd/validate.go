@@ -152,6 +152,8 @@ func validateHarness(dir string) error {
 			issues = append(issues, validateHarnessHooks(hj)...)
 			// Validate MCP servers
 			issues = append(issues, validateHarnessMCPServers(hj)...)
+			// Validate profiles
+			issues = append(issues, validateHarnessProfiles(hj)...)
 		}
 	}
 
@@ -329,6 +331,39 @@ func validateHarnessMCPServers(hj map[string]any) []string {
 		}
 		if hasCommand && hasURL {
 			issues = append(issues, fmt.Sprintf("mcp_servers.%s: must have command or url, not both", name))
+		}
+	}
+
+	return issues
+}
+
+// validateHarnessProfiles validates hooks and mcp_servers within each profile.
+func validateHarnessProfiles(hj map[string]any) []string {
+	var issues []string
+
+	profiles, ok := hj["profiles"]
+	if !ok {
+		return issues
+	}
+	profilesMap, ok := profiles.(map[string]any)
+	if !ok {
+		issues = append(issues, "'profiles' must be an object")
+		return issues
+	}
+
+	for name, profile := range profilesMap {
+		profileMap, ok := profile.(map[string]any)
+		if !ok {
+			issues = append(issues, fmt.Sprintf("profile %q must be an object", name))
+			continue
+		}
+		// Validate hooks within profile
+		for _, issue := range validateHarnessHooks(profileMap) {
+			issues = append(issues, fmt.Sprintf("profile %q: %s", name, issue))
+		}
+		// Validate MCP servers within profile
+		for _, issue := range validateHarnessMCPServers(profileMap) {
+			issues = append(issues, fmt.Sprintf("profile %q: %s", name, issue))
 		}
 	}
 

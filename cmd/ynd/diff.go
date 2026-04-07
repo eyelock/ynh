@@ -12,13 +12,20 @@ import (
 
 func cmdDiff(args []string) error {
 	var (
-		source  string
-		vendors []string
+		source      string
+		profileName string
+		vendors     []string
 	)
 
 	// Parse: source is first positional, remaining positional args are vendor names
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--profile":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--profile requires a value")
+			}
+			i++
+			profileName = args[i]
 		case "-h", "--help":
 			return errHelp
 		default:
@@ -34,7 +41,12 @@ func cmdDiff(args []string) error {
 	}
 
 	if source == "" {
-		return fmt.Errorf("usage: ynd diff <harness-dir> [vendor1 vendor2 ...]")
+		return fmt.Errorf("usage: ynd diff <harness-dir> [--profile name] [vendor1 vendor2 ...]")
+	}
+
+	// Resolve profile from flag or env var
+	if profileName == "" {
+		profileName = os.Getenv("YNH_PROFILE")
 	}
 
 	// Resolve source
@@ -72,7 +84,7 @@ func cmdDiff(args []string) error {
 	}()
 
 	for _, v := range vendors {
-		tmpDir, err := assembleForVendor(srcDir, v)
+		tmpDir, err := assembleForVendor(srcDir, v, profileName)
 		if err != nil {
 			return fmt.Errorf("assembling for %s: %w", v, err)
 		}

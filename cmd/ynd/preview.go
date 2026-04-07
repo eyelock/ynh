@@ -17,9 +17,10 @@ import (
 
 func cmdPreview(args []string) error {
 	var (
-		vendorName string
-		outputDir  string
-		source     string
+		vendorName  string
+		outputDir   string
+		profileName string
+		source      string
 	)
 
 	// Parse flags
@@ -38,6 +39,12 @@ func cmdPreview(args []string) error {
 			}
 			i++
 			outputDir = args[i]
+		case "--profile":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--profile requires a value")
+			}
+			i++
+			profileName = args[i]
 		case "-h", "--help":
 			return errHelp
 		default:
@@ -53,7 +60,7 @@ func cmdPreview(args []string) error {
 	}
 
 	if source == "" {
-		return fmt.Errorf("usage: ynd preview <harness-dir> [-v vendor] [-o output-dir]")
+		return fmt.Errorf("usage: ynd preview <harness-dir> [-v vendor] [-o output-dir] [--profile name]")
 	}
 
 	if vendorName == "" {
@@ -66,8 +73,13 @@ func cmdPreview(args []string) error {
 		return err
 	}
 
+	// Resolve profile from flag or env var
+	if profileName == "" {
+		profileName = os.Getenv("YNH_PROFILE")
+	}
+
 	// Assemble into temp dir
-	tmpDir, err := assembleForVendor(srcDir, vendorName)
+	tmpDir, err := assembleForVendor(srcDir, vendorName, profileName)
 	if err != nil {
 		return err
 	}
@@ -95,7 +107,7 @@ func cmdPreview(args []string) error {
 
 // assembleForVendor loads a harness from srcDir and assembles vendor-native
 // output into a temp directory. Returns the temp dir path (caller must clean up).
-func assembleForVendor(srcDir string, vendorName string) (string, error) {
+func assembleForVendor(srcDir string, vendorName string, profileName string) (string, error) {
 	adapter, err := vendor.Get(vendorName)
 	if err != nil {
 		return "", err
@@ -109,6 +121,14 @@ func assembleForVendor(srcDir string, vendorName string) (string, error) {
 	if workDir != "" {
 		defer func() { _ = os.RemoveAll(workDir) }()
 		srcDir = workDir
+	}
+
+	// Apply profile if specified
+	if profileName != "" {
+		h, err = harness.ResolveProfile(h, profileName)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	// Load config for remote source checking

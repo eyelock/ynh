@@ -94,6 +94,20 @@ func ValidateHooks(hooks map[string][]HookEntry) []string {
 	return issues
 }
 
+// ValidateProfiles validates hooks and mcp_servers within each profile.
+func ValidateProfiles(profiles map[string]Profile) []string {
+	var issues []string
+	for name, profile := range profiles {
+		for _, issue := range ValidateHooks(profile.Hooks) {
+			issues = append(issues, fmt.Sprintf("profile %q: %s", name, issue))
+		}
+		for _, issue := range ValidateMCPServers(profile.MCPServers) {
+			issues = append(issues, fmt.Sprintf("profile %q: %s", name, issue))
+		}
+	}
+	return issues
+}
+
 // ProvenanceMeta records where a harness was installed from.
 type ProvenanceMeta struct {
 	SourceType   string `json:"source_type"`

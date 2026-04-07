@@ -361,6 +361,60 @@ func TestValidateMCPServers_Both(t *testing.T) {
 	}
 }
 
+func TestValidateProfiles_Valid(t *testing.T) {
+	profiles := map[string]Profile{
+		"ci": {
+			Hooks: map[string][]HookEntry{
+				"before_tool": {{Command: "echo ci"}},
+			},
+			MCPServers: map[string]MCPServer{
+				"test": {Command: "npx"},
+			},
+		},
+	}
+	issues := ValidateProfiles(profiles)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues, got %v", issues)
+	}
+}
+
+func TestValidateProfiles_InvalidHookEvent(t *testing.T) {
+	profiles := map[string]Profile{
+		"ci": {
+			Hooks: map[string][]HookEntry{
+				"bad_event": {{Command: "echo hi"}},
+			},
+		},
+	}
+	issues := ValidateProfiles(profiles)
+	if len(issues) == 0 {
+		t.Fatal("expected issues for invalid hook event in profile")
+	}
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue, `profile "ci"`) && strings.Contains(issue, "unknown hook event") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected profile-prefixed error, got %v", issues)
+	}
+}
+
+func TestValidateProfiles_MCPServerNoCommand(t *testing.T) {
+	profiles := map[string]Profile{
+		"audit": {
+			MCPServers: map[string]MCPServer{
+				"bad": {},
+			},
+		},
+	}
+	issues := ValidateProfiles(profiles)
+	if len(issues) == 0 {
+		t.Fatal("expected issues for MCP server with no command/url in profile")
+	}
+}
+
 func TestLoadHarnessJSON_TestdataRoundTrip(t *testing.T) {
 	// Verify all testdata harness.json files parse without error
 	entries, err := filepath.Glob("../../testdata/*/harness.json")

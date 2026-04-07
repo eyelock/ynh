@@ -154,6 +154,25 @@ func LoadDir(dir string) (*Harness, error) {
 	return p, nil
 }
 
+// ResolveProfile returns a copy of the harness with hooks and mcp_servers
+// replaced from the named profile. Returns an error if the profile is not defined.
+func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
+	if profileName == "" {
+		return h, nil
+	}
+
+	profile, ok := h.Profiles[profileName]
+	if !ok {
+		return nil, fmt.Errorf("profile %q not defined in harness.json", profileName)
+	}
+
+	// Copy the harness, replacing hooks and mcp_servers from the profile
+	resolved := *h
+	resolved.Hooks = profile.Hooks
+	resolved.MCPServers = profile.MCPServers
+	return &resolved, nil
+}
+
 // Artifacts holds the names of local artifacts found in a harness directory,
 // keyed by artifact type (skills, agents, rules, commands).
 type Artifacts struct {
