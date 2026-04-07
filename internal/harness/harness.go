@@ -49,24 +49,34 @@ type Harness struct {
 	DelegatesTo   []Delegate
 	Hooks         map[string][]plugin.HookEntry
 	MCPServers    map[string]plugin.MCPServer
+	Profiles      map[string]plugin.Profile
 	InstalledFrom *Provenance
 }
 
-// DetectFormat returns "plugin" if dir contains .claude-plugin/plugin.json,
-// or "" if not found.
+// DetectFormat returns "harness" if dir contains harness.json,
+// "bare" if dir contains AGENTS.md or instructions.md but no harness.json,
+// or "" if neither is found. Returns "legacy" if .claude-plugin/plugin.json
+// is found without harness.json.
 func DetectFormat(dir string) string {
-	if plugin.IsPluginDir(dir) {
-		return "plugin"
+	if plugin.IsHarnessDir(dir) {
+		return "harness"
+	}
+	if plugin.IsLegacyPluginDir(dir) {
+		return "legacy"
 	}
 	return ""
 }
 
 func Load(name string) (*Harness, error) {
 	installDir := InstalledDir(name)
-	if DetectFormat(installDir) != "plugin" {
-		return nil, fmt.Errorf("harness %q: no .claude-plugin/plugin.json found", name)
+	switch DetectFormat(installDir) {
+	case "harness":
+		return LoadDir(installDir)
+	case "legacy":
+		return nil, fmt.Errorf("harness %q: legacy format detected. Consolidate .claude-plugin/plugin.json and metadata.json into harness.json", name)
+	default:
+		return nil, fmt.Errorf("harness %q: no harness.json found", name)
 	}
-	return LoadPluginDir(installDir)
 }
 
 func List() ([]string, error) {
@@ -83,7 +93,7 @@ func List() ([]string, error) {
 	for _, entry := range entries {
 		if entry.IsDir() {
 			subDir := filepath.Join(dir, entry.Name())
-			if DetectFormat(subDir) == "plugin" {
+			if DetectFormat(subDir) == "harness" {
 				names = append(names, entry.Name())
 			}
 		}
@@ -96,51 +106,48 @@ func InstalledDir(name string) string {
 	return filepath.Join(config.HarnessesDir(), name)
 }
 
-// LoadPluginDir loads a harness from a plugin-format directory.
-func LoadPluginDir(dir string) (*Harness, error) {
-	pj, err := plugin.LoadPluginJSON(dir)
+// LoadDir loads a harness from a directory containing harness.json.
+func LoadDir(dir string) (*Harness, error) {
+	hj, err := plugin.LoadHarnessJSON(dir)
 	if err != nil {
 		return nil, err
 	}
 
-	if !validName.MatchString(pj.Name) {
-		return nil, fmt.Errorf("invalid harness name %q: must match %s", pj.Name, validName.String())
+	if !validName.MatchString(hj.Name) {
+		return nil, fmt.Errorf("invalid harness name %q: must match %s", hj.Name, validName.String())
 	}
 
-	p := &Harness{Name: pj.Name, Description: pj.Description}
+	p := &Harness{Name: hj.Name, Description: hj.Description}
+	p.DefaultVendor = hj.DefaultVendor
 
-	meta, err := plugin.LoadMetadataJSON(dir)
-	if err != nil {
-		return nil, err
+	for _, inc := range hj.Includes {
+		p.Includes = append(p.Includes, Include{
+			GitSource: GitSource{Git: inc.Git, Ref: inc.Ref, Path: inc.Path},
+			Pick:      inc.Pick,
+		})
 	}
-	if meta != nil && meta.YNH != nil {
-		p.DefaultVendor = meta.YNH.DefaultVendor
-		for _, inc := range meta.YNH.Includes {
-			p.Includes = append(p.Includes, Include{
-				GitSource: GitSource{Git: inc.Git, Ref: inc.Ref, Path: inc.Path},
-				Pick:      inc.Pick,
-			})
-		}
-		for _, del := range meta.YNH.DelegatesTo {
-			p.DelegatesTo = append(p.DelegatesTo, Delegate{
-				GitSource: GitSource{Git: del.Git, Ref: del.Ref, Path: del.Path},
-			})
-		}
-		if len(meta.YNH.Hooks) > 0 {
-			p.Hooks = meta.YNH.Hooks
-		}
-		if len(meta.YNH.MCPServers) > 0 {
-			p.MCPServers = meta.YNH.MCPServers
-		}
-		if meta.YNH.InstalledFrom != nil {
-			prov := meta.YNH.InstalledFrom
-			p.InstalledFrom = &Provenance{
-				SourceType:   prov.SourceType,
-				Source:       prov.Source,
-				Path:         prov.Path,
-				RegistryName: prov.RegistryName,
-				InstalledAt:  prov.InstalledAt,
-			}
+	for _, del := range hj.DelegatesTo {
+		p.DelegatesTo = append(p.DelegatesTo, Delegate{
+			GitSource: GitSource{Git: del.Git, Ref: del.Ref, Path: del.Path},
+		})
+	}
+	if len(hj.Hooks) > 0 {
+		p.Hooks = hj.Hooks
+	}
+	if len(hj.MCPServers) > 0 {
+		p.MCPServers = hj.MCPServers
+	}
+	if len(hj.Profiles) > 0 {
+		p.Profiles = hj.Profiles
+	}
+	if hj.InstalledFrom != nil {
+		prov := hj.InstalledFrom
+		p.InstalledFrom = &Provenance{
+			SourceType:   prov.SourceType,
+			Source:       prov.Source,
+			Path:         prov.Path,
+			RegistryName: prov.RegistryName,
+			InstalledAt:  prov.InstalledAt,
 		}
 	}
 

@@ -10,6 +10,7 @@ import (
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
 )
@@ -198,19 +199,21 @@ func writeGeneratedFiles(baseDir string, files map[string][]byte) error {
 
 // loadHarnessForPreview loads a harness without mutating the source directory.
 // If the source is a bare AGENTS.md directory, it copies to a temp dir first
-// and synthesizes plugin.json there. Returns (harness, tempDir, error).
+// and synthesizes harness.json there. Returns (harness, tempDir, error).
 // If tempDir is non-empty, the caller must clean it up.
 func loadHarnessForPreview(dir string) (*harness.Harness, string, error) {
-	// Try standard plugin format first — no mutation needed
-	if harness.DetectFormat(dir) == "plugin" {
-		h, err := harness.LoadPluginDir(dir)
+	switch harness.DetectFormat(dir) {
+	case "harness":
+		h, err := harness.LoadDir(dir)
 		return h, "", err
+	case "legacy":
+		return nil, "", fmt.Errorf("legacy format detected in %q. Consolidate .claude-plugin/plugin.json and metadata.json into harness.json", dir)
 	}
 
 	// Check for bare AGENTS.md or instructions.md
 	hasInstructions := assembler.FindInstructionsFile(dir) != ""
 	if !hasInstructions {
-		return nil, "", fmt.Errorf("directory %q has no .claude-plugin/plugin.json or AGENTS.md", dir)
+		return nil, "", fmt.Errorf("directory %q has no harness.json or AGENTS.md", dir)
 	}
 
 	// Copy to temp dir to avoid mutating source
@@ -231,19 +234,17 @@ func loadHarnessForPreview(dir string) (*harness.Harness, string, error) {
 		return nil, "", fmt.Errorf("copying source: %w", err)
 	}
 
-	// Synthesize minimal plugin.json
+	// Synthesize minimal harness.json
 	name := filepath.Base(dir)
-	pluginDir := filepath.Join(tmpDir, ".claude-plugin")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		return nil, "", fmt.Errorf("creating plugin dir: %w", err)
+	hj := &plugin.HarnessJSON{
+		Name:    name,
+		Version: "0.0.0",
+	}
+	if err := plugin.SaveHarnessJSON(tmpDir, hj); err != nil {
+		return nil, "", fmt.Errorf("writing synthesized harness.json: %w", err)
 	}
 
-	pjData := fmt.Sprintf("{\n  \"name\": %q,\n  \"version\": \"0.0.0\"\n}\n", name)
-	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(pjData), 0o644); err != nil {
-		return nil, "", fmt.Errorf("writing synthesized plugin.json: %w", err)
-	}
-
-	h, err := harness.LoadPluginDir(tmpDir)
+	h, err := harness.LoadDir(tmpDir)
 	if err != nil {
 		return nil, "", err
 	}

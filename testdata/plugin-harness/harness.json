@@ -2,8 +2,7 @@
   "name": "plugin-test",
   "version": "0.1.0",
   "description": "Test harness in plugin format",
-  "author": {
-    "name": "test"
-  },
-  "keywords": ["test"]
+  "author": {"name": "test"},
+  "keywords": ["test"],
+  "default_vendor": "claude"
 }

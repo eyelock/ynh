@@ -33,8 +33,13 @@ func cmdValidate(args []string) error {
 		if isHarnessRoot(root) {
 			return validateHarness(root)
 		}
+		// Check for legacy format
+		if isLegacyHarnessRoot(root) {
+			fmt.Println("Legacy format detected. Consolidate .claude-plugin/plugin.json and metadata.json into harness.json.")
+			return fmt.Errorf("validation failed")
+		}
 		fmt.Println("No harness directories found.")
-		fmt.Println("A harness requires .claude-plugin/plugin.json")
+		fmt.Println("A harness requires harness.json")
 		return nil
 	}
 
@@ -56,10 +61,8 @@ func validateFile(path string) error {
 	var issues []lintIssue
 
 	switch {
-	case base == "plugin.json":
-		issues = lintPluginJSON(path)
-	case base == "metadata.json":
-		issues = lintMetadataJSON(path)
+	case base == "harness.json":
+		issues = lintHarnessJSON(path)
 	case strings.HasSuffix(path, ".md"):
 		issues = lintMarkdown(path)
 	default:
@@ -82,6 +85,11 @@ func validateFile(path string) error {
 }
 
 func isHarnessRoot(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, "harness.json"))
+	return err == nil
+}
+
+func isLegacyHarnessRoot(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, ".claude-plugin", "plugin.json"))
 	return err == nil
 }
@@ -119,22 +127,31 @@ func validateHarness(dir string) error {
 
 	var issues []string
 
-	// Check plugin.json exists and is valid
-	pluginPath := filepath.Join(dir, ".claude-plugin", "plugin.json")
-	data, err := os.ReadFile(pluginPath)
+	// Check for legacy format
+	if isLegacyHarnessRoot(dir) && !isHarnessRoot(dir) {
+		issues = append(issues, "legacy format detected: consolidate .claude-plugin/plugin.json and metadata.json into harness.json")
+	}
+
+	// Check harness.json exists and is valid
+	harnessPath := filepath.Join(dir, "harness.json")
+	data, err := os.ReadFile(harnessPath)
 	if err != nil {
-		issues = append(issues, "missing .claude-plugin/plugin.json")
+		issues = append(issues, "missing harness.json")
 	} else {
-		var pj map[string]any
-		if err := json.Unmarshal(data, &pj); err != nil {
-			issues = append(issues, fmt.Sprintf("invalid plugin.json: %v", err))
+		var hj map[string]any
+		if err := json.Unmarshal(data, &hj); err != nil {
+			issues = append(issues, fmt.Sprintf("invalid harness.json: %v", err))
 		} else {
-			if _, ok := pj["name"]; !ok {
-				issues = append(issues, "plugin.json missing 'name'")
+			if _, ok := hj["name"]; !ok {
+				issues = append(issues, "harness.json missing 'name'")
 			}
-			if _, ok := pj["version"]; !ok {
-				issues = append(issues, "plugin.json missing 'version'")
+			if _, ok := hj["version"]; !ok {
+				issues = append(issues, "harness.json missing 'version'")
 			}
+			// Validate hooks
+			issues = append(issues, validateHarnessHooks(hj)...)
+			// Validate MCP servers
+			issues = append(issues, validateHarnessMCPServers(hj)...)
 		}
 	}
 
@@ -147,20 +164,6 @@ func validateHarness(dir string) error {
 		agentsData, _ := os.ReadFile(filepath.Join(dir, "AGENTS.md"))
 		if string(instrData) != string(agentsData) {
 			issues = append(issues, "both instructions.md and AGENTS.md exist with different content — remove one or make them identical")
-		}
-	}
-
-	// Check metadata.json if present
-	metaPath := filepath.Join(dir, "metadata.json")
-	if data, err := os.ReadFile(metaPath); err == nil {
-		var meta map[string]any
-		if err := json.Unmarshal(data, &meta); err != nil {
-			issues = append(issues, fmt.Sprintf("invalid metadata.json: %v", err))
-		} else {
-			// Validate hooks in ynh metadata
-			issues = append(issues, validateMetadataHooks(meta)...)
-			// Validate MCP servers in ynh metadata
-			issues = append(issues, validateMetadataMCPServers(meta)...)
 		}
 	}
 
@@ -258,46 +261,38 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-// validateMetadataHooks validates the hooks section inside ynh metadata.
-func validateMetadataHooks(meta map[string]any) []string {
+// validateHarnessHooks validates the hooks section inside harness.json.
+func validateHarnessHooks(hj map[string]any) []string {
 	var issues []string
 
-	ynh, ok := meta["ynh"]
-	if !ok {
-		return issues
-	}
-	ynhMap, ok := ynh.(map[string]any)
-	if !ok {
-		return issues
-	}
-	hooks, ok := ynhMap["hooks"]
+	hooks, ok := hj["hooks"]
 	if !ok {
 		return issues
 	}
 	hooksMap, ok := hooks.(map[string]any)
 	if !ok {
-		issues = append(issues, "'ynh.hooks' must be an object")
+		issues = append(issues, "'hooks' must be an object")
 		return issues
 	}
 
 	for event, entries := range hooksMap {
 		if !plugin.ValidHookEvents[event] {
-			issues = append(issues, fmt.Sprintf("ynh.hooks: unknown event %q (valid: before_tool, after_tool, before_prompt, on_stop)", event))
+			issues = append(issues, fmt.Sprintf("hooks: unknown event %q (valid: before_tool, after_tool, before_prompt, on_stop)", event))
 		}
 		arr, ok := entries.([]any)
 		if !ok {
-			issues = append(issues, fmt.Sprintf("ynh.hooks.%s must be an array", event))
+			issues = append(issues, fmt.Sprintf("hooks.%s must be an array", event))
 			continue
 		}
 		for i, item := range arr {
 			entry, ok := item.(map[string]any)
 			if !ok {
-				issues = append(issues, fmt.Sprintf("ynh.hooks.%s[%d] must be an object", event, i))
+				issues = append(issues, fmt.Sprintf("hooks.%s[%d] must be an object", event, i))
 				continue
 			}
 			cmd, _ := entry["command"].(string)
 			if cmd == "" {
-				issues = append(issues, fmt.Sprintf("ynh.hooks.%s[%d]: command must not be empty", event, i))
+				issues = append(issues, fmt.Sprintf("hooks.%s[%d]: command must not be empty", event, i))
 			}
 		}
 	}
@@ -305,32 +300,24 @@ func validateMetadataHooks(meta map[string]any) []string {
 	return issues
 }
 
-// validateMetadataMCPServers validates the mcp_servers section inside ynh metadata.
-func validateMetadataMCPServers(meta map[string]any) []string {
+// validateHarnessMCPServers validates the mcp_servers section inside harness.json.
+func validateHarnessMCPServers(hj map[string]any) []string {
 	var issues []string
 
-	ynh, ok := meta["ynh"]
-	if !ok {
-		return issues
-	}
-	ynhMap, ok := ynh.(map[string]any)
-	if !ok {
-		return issues
-	}
-	servers, ok := ynhMap["mcp_servers"]
+	servers, ok := hj["mcp_servers"]
 	if !ok {
 		return issues
 	}
 	serversMap, ok := servers.(map[string]any)
 	if !ok {
-		issues = append(issues, "'ynh.mcp_servers' must be an object")
+		issues = append(issues, "'mcp_servers' must be an object")
 		return issues
 	}
 
 	for name, entry := range serversMap {
 		serverMap, ok := entry.(map[string]any)
 		if !ok {
-			issues = append(issues, fmt.Sprintf("ynh.mcp_servers.%s must be an object", name))
+			issues = append(issues, fmt.Sprintf("mcp_servers.%s must be an object", name))
 			continue
 		}
 		cmd, _ := serverMap["command"].(string)
@@ -338,11 +325,35 @@ func validateMetadataMCPServers(meta map[string]any) []string {
 		hasCommand := cmd != ""
 		hasURL := url != ""
 		if !hasCommand && !hasURL {
-			issues = append(issues, fmt.Sprintf("ynh.mcp_servers.%s: must have either command or url", name))
+			issues = append(issues, fmt.Sprintf("mcp_servers.%s: must have either command or url", name))
 		}
 		if hasCommand && hasURL {
-			issues = append(issues, fmt.Sprintf("ynh.mcp_servers.%s: must have command or url, not both", name))
+			issues = append(issues, fmt.Sprintf("mcp_servers.%s: must have command or url, not both", name))
 		}
+	}
+
+	return issues
+}
+
+// lintHarnessJSON validates harness.json structure for the lint command.
+func lintHarnessJSON(path string) []lintIssue {
+	var issues []lintIssue
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return []lintIssue{{File: path, Message: fmt.Sprintf("cannot read: %v", err)}}
+	}
+
+	var hj map[string]any
+	if err := json.Unmarshal(data, &hj); err != nil {
+		return []lintIssue{{File: path, Message: fmt.Sprintf("invalid JSON: %v", err)}}
+	}
+
+	if _, ok := hj["name"]; !ok {
+		issues = append(issues, lintIssue{File: path, Message: "missing 'name' field"})
+	}
+	if _, ok := hj["version"]; !ok {
+		issues = append(issues, lintIssue{File: path, Message: "missing 'version' field"})
 	}
 
 	return issues

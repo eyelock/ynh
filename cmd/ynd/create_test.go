@@ -102,8 +102,7 @@ func TestCreateHarness(t *testing.T) {
 	}
 
 	expectedFiles := []string{
-		"my-team/.claude-plugin/plugin.json",
-		"my-team/metadata.json",
+		"my-team/harness.json",
 		"my-team/AGENTS.md",
 	}
 	for _, f := range expectedFiles {
@@ -127,16 +126,16 @@ func TestCreateHarness(t *testing.T) {
 		}
 	}
 
-	// Verify plugin.json content
-	data, err := os.ReadFile(filepath.Join(dir, "my-team/.claude-plugin/plugin.json"))
+	// Verify harness.json content
+	data, err := os.ReadFile(filepath.Join(dir, "my-team/harness.json"))
 	if err != nil {
-		t.Fatalf("reading plugin.json: %v", err)
+		t.Fatalf("reading harness.json: %v", err)
 	}
 	if !strings.Contains(string(data), `"name": "my-team"`) {
-		t.Error("plugin.json missing name")
+		t.Error("harness.json missing name")
 	}
 	if !strings.Contains(string(data), `"version": "0.1.0"`) {
-		t.Error("plugin.json missing version")
+		t.Error("harness.json missing version")
 	}
 }
 
@@ -195,8 +194,7 @@ func TestCreateHarness_InsideHarness(t *testing.T) {
 	t.Chdir(dir)
 
 	// Make CWD look like a harness
-	mkdirAll(t, filepath.Join(dir, ".claude-plugin"))
-	writeFile(t, filepath.Join(dir, ".claude-plugin", "plugin.json"), []byte(`{}`))
+	writeFile(t, filepath.Join(dir, "harness.json"), []byte(`{"name":"test","version":"0.1.0"}`))
 
 	err := createHarness("nested")
 	if err == nil {
@@ -350,8 +348,8 @@ func TestCmdCreate_Harness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "test-harness", ".claude-plugin", "plugin.json")); err != nil {
-		t.Error("expected plugin.json to exist")
+	if _, err := os.Stat(filepath.Join(dir, "test-harness", "harness.json")); err != nil {
+		t.Error("expected harness.json to exist")
 	}
 }
 

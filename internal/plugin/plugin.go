@@ -7,35 +7,35 @@ import (
 	"path/filepath"
 )
 
-// PluginJSON represents the Claude Code plugin.json schema.
-// Only fields that Claude Code recognizes are included.
-type PluginJSON struct {
-	Name        string      `json:"name"`
-	Version     string      `json:"version"`
-	Description string      `json:"description,omitempty"`
-	Author      *AuthorInfo `json:"author,omitempty"`
-	Keywords    []string    `json:"keywords,omitempty"`
-}
-
-// AuthorInfo holds plugin author information.
-type AuthorInfo struct {
-	Name string `json:"name"`
-}
-
-// MetadataJSON represents the metadata.json sidecar file.
-// The "ynh" key holds ynh-specific configuration.
-type MetadataJSON struct {
-	YNH *YNHMetadata `json:"ynh,omitempty"`
-}
-
-// YNHMetadata holds ynh-specific harness configuration.
-type YNHMetadata struct {
+// HarnessJSON represents the harness.json manifest — single source of truth.
+type HarnessJSON struct {
+	Schema        string                 `json:"$schema,omitempty"`
+	Name          string                 `json:"name"`
+	Version       string                 `json:"version"`
+	Description   string                 `json:"description,omitempty"`
+	Author        *AuthorInfo            `json:"author,omitempty"`
+	Keywords      []string               `json:"keywords,omitempty"`
 	DefaultVendor string                 `json:"default_vendor,omitempty"`
 	Includes      []IncludeMeta          `json:"includes,omitempty"`
 	DelegatesTo   []DelegateMeta         `json:"delegates_to,omitempty"`
 	Hooks         map[string][]HookEntry `json:"hooks,omitempty"`
 	MCPServers    map[string]MCPServer   `json:"mcp_servers,omitempty"`
+	Profiles      map[string]Profile     `json:"profiles,omitempty"`
 	InstalledFrom *ProvenanceMeta        `json:"installed_from,omitempty"`
+}
+
+// Profile is a named configuration variant. When selected, its fields
+// fully replace the corresponding top-level values (no merge).
+type Profile struct {
+	Hooks      map[string][]HookEntry `json:"hooks,omitempty"`
+	MCPServers map[string]MCPServer   `json:"mcp_servers,omitempty"`
+}
+
+// AuthorInfo holds harness author information.
+type AuthorInfo struct {
+	Name  string `json:"name"`
+	Email string `json:"email,omitempty"`
+	URL   string `json:"url,omitempty"`
 }
 
 // MCPServer defines an MCP server dependency.
@@ -117,85 +117,47 @@ type DelegateMeta struct {
 	Path string `json:"path,omitempty"`
 }
 
-// IsPluginDir returns true if the directory contains a Claude Code plugin manifest.
-func IsPluginDir(dir string) bool {
+// IsHarnessDir returns true if the directory contains a harness.json manifest.
+func IsHarnessDir(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, "harness.json"))
+	return err == nil
+}
+
+// IsLegacyPluginDir returns true if the directory contains a legacy .claude-plugin/plugin.json.
+func IsLegacyPluginDir(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, ".claude-plugin", "plugin.json"))
 	return err == nil
 }
 
-// LoadPluginJSON reads and parses .claude-plugin/plugin.json from dir.
-func LoadPluginJSON(dir string) (*PluginJSON, error) {
-	data, err := os.ReadFile(filepath.Join(dir, ".claude-plugin", "plugin.json"))
+// LoadHarnessJSON reads and parses harness.json from dir.
+func LoadHarnessJSON(dir string) (*HarnessJSON, error) {
+	data, err := os.ReadFile(filepath.Join(dir, "harness.json"))
 	if err != nil {
-		return nil, fmt.Errorf("reading plugin.json: %w", err)
+		return nil, fmt.Errorf("reading harness.json: %w", err)
 	}
 
-	var pj PluginJSON
-	if err := json.Unmarshal(data, &pj); err != nil {
-		return nil, fmt.Errorf("parsing plugin.json: %w", err)
+	var hj HarnessJSON
+	if err := json.Unmarshal(data, &hj); err != nil {
+		return nil, fmt.Errorf("parsing harness.json: %w", err)
 	}
 
-	if pj.Name == "" {
-		return nil, fmt.Errorf("plugin.json missing required field: name")
+	if hj.Name == "" {
+		return nil, fmt.Errorf("harness.json missing required field: name")
 	}
 
-	return &pj, nil
+	return &hj, nil
 }
 
-// LoadMetadataJSON reads and parses metadata.json from dir.
-// Returns nil with no error if the file doesn't exist.
-func LoadMetadataJSON(dir string) (*MetadataJSON, error) {
-	data, err := os.ReadFile(filepath.Join(dir, "metadata.json"))
+// SaveHarnessJSON writes a HarnessJSON manifest to dir/harness.json.
+func SaveHarnessJSON(dir string, hj *HarnessJSON) error {
+	data, err := json.MarshalIndent(hj, "", "  ")
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("reading metadata.json: %w", err)
+		return fmt.Errorf("marshaling harness.json: %w", err)
 	}
+	data = append(data, '\n')
 
-	var meta MetadataJSON
-	if err := json.Unmarshal(data, &meta); err != nil {
-		return nil, fmt.Errorf("parsing metadata.json: %w", err)
-	}
-
-	return &meta, nil
-}
-
-// SaveMetadataJSON merges ynh metadata into the existing metadata.json at dir,
-// preserving any non-ynh keys. Creates the file if it doesn't exist.
-func SaveMetadataJSON(dir string, ynh *YNHMetadata) error {
-	path := filepath.Join(dir, "metadata.json")
-
-	// Read existing file into a raw map to preserve non-ynh keys.
-	existing := make(map[string]any)
-	data, err := os.ReadFile(path)
-	if err == nil {
-		if err := json.Unmarshal(data, &existing); err != nil {
-			return fmt.Errorf("parsing existing metadata.json: %w", err)
-		}
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("reading metadata.json: %w", err)
-	}
-
-	// Marshal the typed YNHMetadata to a raw value, then inject into the map.
-	ynhBytes, err := json.Marshal(ynh)
-	if err != nil {
-		return fmt.Errorf("marshaling ynh metadata: %w", err)
-	}
-	var ynhRaw any
-	if err := json.Unmarshal(ynhBytes, &ynhRaw); err != nil {
-		return fmt.Errorf("converting ynh metadata: %w", err)
-	}
-	existing["ynh"] = ynhRaw
-
-	out, err := json.MarshalIndent(existing, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshaling metadata.json: %w", err)
-	}
-	out = append(out, '\n')
-
-	if err := os.WriteFile(path, out, 0o644); err != nil {
-		return fmt.Errorf("writing metadata.json: %w", err)
+	if err := os.WriteFile(filepath.Join(dir, "harness.json"), data, 0o644); err != nil {
+		return fmt.Errorf("writing harness.json: %w", err)
 	}
 
 	return nil

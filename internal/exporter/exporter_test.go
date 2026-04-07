@@ -11,6 +11,14 @@ import (
 	"github.com/eyelock/ynh/internal/resolver"
 )
 
+// manifestJSON is used to unmarshal the vendor-specific plugin.json output.
+type manifestJSON struct {
+	Name        string   `json:"name"`
+	Version     string   `json:"version"`
+	Description string   `json:"description,omitempty"`
+	Keywords    []string `json:"keywords,omitempty"`
+}
+
 // testdataDir returns the path to the testdata directory.
 func testdataDir() string {
 	// Tests run from the package directory; testdata is at repo root
@@ -192,7 +200,7 @@ func TestExportManifestClaude(t *testing.T) {
 		t.Fatalf("reading manifest: %v", err)
 	}
 
-	var pj plugin.PluginJSON
+	var pj manifestJSON
 	if err := json.Unmarshal(data, &pj); err != nil {
 		t.Fatalf("parsing manifest: %v", err)
 	}
@@ -224,7 +232,7 @@ func TestExportManifestCursor(t *testing.T) {
 		t.Fatalf("reading manifest: %v", err)
 	}
 
-	var pj plugin.PluginJSON
+	var pj manifestJSON
 	if err := json.Unmarshal(data, &pj); err != nil {
 		t.Fatalf("parsing manifest: %v", err)
 	}
@@ -336,16 +344,10 @@ func TestExportWithInstructions(t *testing.T) {
 func TestExportNoInstructions(t *testing.T) {
 	// Create a minimal harness without instructions.md
 	srcDir := t.TempDir()
-	pluginDir := filepath.Join(srcDir, ".claude-plugin")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeJSON(t, filepath.Join(pluginDir, "plugin.json"), map[string]string{
-		"name":    "no-instructions",
-		"version": "0.1.0",
-	})
-	writeJSON(t, filepath.Join(srcDir, "metadata.json"), map[string]any{
-		"ynh": map[string]string{"default_vendor": "claude"},
+	writeJSON(t, filepath.Join(srcDir, "harness.json"), map[string]any{
+		"name":           "no-instructions",
+		"version":        "0.1.0",
+		"default_vendor": "claude",
 	})
 
 	// Add a skill
@@ -477,7 +479,7 @@ func TestExportCleanFlag(t *testing.T) {
 
 // TestExportManifestGeneration verifies manifest JSON format.
 func TestExportManifestGeneration(t *testing.T) {
-	pj := &plugin.PluginJSON{
+	hj := &plugin.HarnessJSON{
 		Name:        "test-plugin",
 		Version:     "2.0.0",
 		Description: "A test plugin",
@@ -485,10 +487,10 @@ func TestExportManifestGeneration(t *testing.T) {
 
 	dir := t.TempDir()
 
-	if err := GenerateClaudeManifest(pj, dir); err != nil {
+	if err := GenerateClaudeManifest(hj, dir); err != nil {
 		t.Fatalf("GenerateClaudeManifest: %v", err)
 	}
-	if err := GenerateCursorManifest(pj, dir); err != nil {
+	if err := GenerateCursorManifest(hj, dir); err != nil {
 		t.Fatalf("GenerateCursorManifest: %v", err)
 	}
 
@@ -497,7 +499,7 @@ func TestExportManifestGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var claudePJ plugin.PluginJSON
+	var claudePJ manifestJSON
 	if err := json.Unmarshal(claudeData, &claudePJ); err != nil {
 		t.Fatal(err)
 	}
@@ -510,7 +512,7 @@ func TestExportManifestGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var cursorPJ plugin.PluginJSON
+	var cursorPJ manifestJSON
 	if err := json.Unmarshal(cursorData, &cursorPJ); err != nil {
 		t.Fatal(err)
 	}
@@ -522,24 +524,16 @@ func TestExportManifestGeneration(t *testing.T) {
 func TestExportWithHooks(t *testing.T) {
 	// Create a harness with hooks
 	srcDir := t.TempDir()
-	pluginDir := filepath.Join(srcDir, ".claude-plugin")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeJSON(t, filepath.Join(pluginDir, "plugin.json"), map[string]string{
-		"name":    "hooks-test",
-		"version": "0.1.0",
-	})
-	writeJSON(t, filepath.Join(srcDir, "metadata.json"), map[string]any{
-		"ynh": map[string]any{
-			"default_vendor": "claude",
-			"hooks": map[string]any{
-				"before_tool": []any{
-					map[string]string{"matcher": "Bash", "command": "echo before bash"},
-				},
-				"on_stop": []any{
-					map[string]string{"command": "echo done"},
-				},
+	writeJSON(t, filepath.Join(srcDir, "harness.json"), map[string]any{
+		"name":           "hooks-test",
+		"version":        "0.1.0",
+		"default_vendor": "claude",
+		"hooks": map[string]any{
+			"before_tool": []any{
+				map[string]string{"matcher": "Bash", "command": "echo before bash"},
+			},
+			"on_stop": []any{
+				map[string]string{"command": "echo done"},
 			},
 		},
 	})
@@ -593,20 +587,12 @@ func TestExportWithHooks(t *testing.T) {
 func TestExportMergedWithHooks(t *testing.T) {
 	// Create a harness with hooks
 	srcDir := t.TempDir()
-	pluginDir := filepath.Join(srcDir, ".claude-plugin")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeJSON(t, filepath.Join(pluginDir, "plugin.json"), map[string]string{
+	writeJSON(t, filepath.Join(srcDir, "harness.json"), map[string]any{
 		"name":    "hooks-merged",
 		"version": "0.1.0",
-	})
-	writeJSON(t, filepath.Join(srcDir, "metadata.json"), map[string]any{
-		"ynh": map[string]any{
-			"hooks": map[string]any{
-				"before_tool": []any{
-					map[string]string{"command": "echo hi"},
-				},
+		"hooks": map[string]any{
+			"before_tool": []any{
+				map[string]string{"command": "echo hi"},
 			},
 		},
 	})
@@ -630,23 +616,15 @@ func TestExportMergedWithHooks(t *testing.T) {
 func TestExportWithMCPServers(t *testing.T) {
 	// Create a harness with MCP servers
 	srcDir := t.TempDir()
-	pluginDir := filepath.Join(srcDir, ".claude-plugin")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeJSON(t, filepath.Join(pluginDir, "plugin.json"), map[string]string{
-		"name":    "mcp-test",
-		"version": "0.1.0",
-	})
-	writeJSON(t, filepath.Join(srcDir, "metadata.json"), map[string]any{
-		"ynh": map[string]any{
-			"default_vendor": "claude",
-			"mcp_servers": map[string]any{
-				"github": map[string]any{
-					"command": "npx",
-					"args":    []string{"-y", "@modelcontextprotocol/server-github"},
-					"env":     map[string]string{"GITHUB_TOKEN": "${GITHUB_TOKEN}"},
-				},
+	writeJSON(t, filepath.Join(srcDir, "harness.json"), map[string]any{
+		"name":           "mcp-test",
+		"version":        "0.1.0",
+		"default_vendor": "claude",
+		"mcp_servers": map[string]any{
+			"github": map[string]any{
+				"command": "npx",
+				"args":    []string{"-y", "@modelcontextprotocol/server-github"},
+				"env":     map[string]string{"GITHUB_TOKEN": "${GITHUB_TOKEN}"},
 			},
 		},
 	})
@@ -700,21 +678,13 @@ func TestExportWithMCPServers(t *testing.T) {
 func TestExportMergedWithMCPServers(t *testing.T) {
 	// Create a harness with MCP servers
 	srcDir := t.TempDir()
-	pluginDir := filepath.Join(srcDir, ".claude-plugin")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeJSON(t, filepath.Join(pluginDir, "plugin.json"), map[string]string{
+	writeJSON(t, filepath.Join(srcDir, "harness.json"), map[string]any{
 		"name":    "mcp-merged",
 		"version": "0.1.0",
-	})
-	writeJSON(t, filepath.Join(srcDir, "metadata.json"), map[string]any{
-		"ynh": map[string]any{
-			"mcp_servers": map[string]any{
-				"github": map[string]any{
-					"command": "npx",
-					"args":    []string{"-y", "server"},
-				},
+		"mcp_servers": map[string]any{
+			"github": map[string]any{
+				"command": "npx",
+				"args":    []string{"-y", "server"},
 			},
 		},
 	})

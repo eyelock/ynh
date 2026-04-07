@@ -7,11 +7,25 @@ import (
 	"testing"
 )
 
-func TestDetectFormat_Plugin(t *testing.T) {
+func TestDetectFormat_Harness(t *testing.T) {
 	dir := t.TempDir()
-	writeTestPlugin(t, dir, "x")
-	if got := DetectFormat(dir); got != "plugin" {
-		t.Errorf("DetectFormat = %q, want %q", got, "plugin")
+	writeTestHarness(t, dir, "x")
+	if got := DetectFormat(dir); got != "harness" {
+		t.Errorf("DetectFormat = %q, want %q", got, "harness")
+	}
+}
+
+func TestDetectFormat_Legacy(t *testing.T) {
+	dir := t.TempDir()
+	pluginDir := filepath.Join(dir, ".claude-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{"name":"x"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := DetectFormat(dir); got != "legacy" {
+		t.Errorf("DetectFormat = %q, want %q", got, "legacy")
 	}
 }
 
@@ -22,27 +36,46 @@ func TestDetectFormat_None(t *testing.T) {
 	}
 }
 
-func TestLoad_PluginFormat(t *testing.T) {
+func TestLoad_HarnessFormat(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	t.Setenv("YNH_HOME", "")
 
-	harnessDir := filepath.Join(dir, ".ynh", "harnesses", "plugtest")
-	writeTestPlugin(t, harnessDir, "plugtest")
-	if err := os.WriteFile(filepath.Join(harnessDir, "metadata.json"),
-		[]byte(`{"ynh":{"default_vendor":"claude"}}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	harnessDir := filepath.Join(dir, ".ynh", "harnesses", "mytest")
+	writeTestHarness(t, harnessDir, "mytest")
 
-	p, err := Load("plugtest")
+	p, err := Load("mytest")
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
-	if p.Name != "plugtest" {
-		t.Errorf("Name = %q, want %q", p.Name, "plugtest")
+	if p.Name != "mytest" {
+		t.Errorf("Name = %q, want %q", p.Name, "mytest")
 	}
 	if p.DefaultVendor != "claude" {
 		t.Errorf("DefaultVendor = %q, want %q", p.DefaultVendor, "claude")
+	}
+}
+
+func TestLoad_LegacyFormat(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	harnessDir := filepath.Join(dir, ".ynh", "harnesses", "old")
+	pluginDir := filepath.Join(harnessDir, ".claude-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{"name":"old"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load("old")
+	if err == nil {
+		t.Fatal("expected error for legacy format")
+	}
+	if got := err.Error(); !contains(got, "legacy format detected") {
+		t.Errorf("error = %q, want legacy format hint", got)
 	}
 }
 
@@ -58,33 +91,32 @@ func TestLoad_NotFound(t *testing.T) {
 
 	_, err := Load("empty")
 	if err == nil {
-		t.Fatal("expected error for directory without plugin.json")
+		t.Fatal("expected error for directory without harness.json")
 	}
 }
 
-func TestLoadPluginDir_FullMetadata(t *testing.T) {
+func TestLoadDir_FullMetadata(t *testing.T) {
 	dir := t.TempDir()
-	writeTestPlugin(t, dir, "full")
-	meta := `{
-		"ynh": {
-			"default_vendor": "claude",
-			"includes": [
-				{"git": "github.com/example/skills", "ref": "v1.0.0", "pick": ["skills/commit", "agents/reviewer"]},
-				{"git": "github.com/company/monorepo", "path": "packages/ai-config", "pick": ["skills/deploy"]}
-			],
-			"delegates_to": [
-				{"git": "github.com/example/team-harness"},
-				{"git": "github.com/company/monorepo", "path": "harnesses/team-ops"}
-			]
-		}
+	hj := `{
+		"name": "full",
+		"version": "0.1.0",
+		"default_vendor": "claude",
+		"includes": [
+			{"git": "github.com/example/skills", "ref": "v1.0.0", "pick": ["skills/commit", "agents/reviewer"]},
+			{"git": "github.com/company/monorepo", "path": "packages/ai-config", "pick": ["skills/deploy"]}
+		],
+		"delegates_to": [
+			{"git": "github.com/example/team-harness"},
+			{"git": "github.com/company/monorepo", "path": "harnesses/team-ops"}
+		]
 	}`
-	if err := os.WriteFile(filepath.Join(dir, "metadata.json"), []byte(meta), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(hj), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	p, err := LoadPluginDir(dir)
+	p, err := LoadDir(dir)
 	if err != nil {
-		t.Fatalf("LoadPluginDir failed: %v", err)
+		t.Fatalf("LoadDir failed: %v", err)
 	}
 
 	if p.Name != "full" {
@@ -119,13 +151,13 @@ func TestLoadPluginDir_FullMetadata(t *testing.T) {
 	}
 }
 
-func TestLoadPluginDir_NoMetadata(t *testing.T) {
+func TestLoadDir_Minimal(t *testing.T) {
 	dir := t.TempDir()
-	writeTestPlugin(t, dir, "minimal")
+	writeTestHarnessMinimal(t, dir, "minimal")
 
-	p, err := LoadPluginDir(dir)
+	p, err := LoadDir(dir)
 	if err != nil {
-		t.Fatalf("LoadPluginDir failed: %v", err)
+		t.Fatalf("LoadDir failed: %v", err)
 	}
 	if p.Name != "minimal" {
 		t.Errorf("Name = %q, want %q", p.Name, "minimal")
@@ -135,7 +167,7 @@ func TestLoadPluginDir_NoMetadata(t *testing.T) {
 	}
 }
 
-func TestLoadPluginDir_InvalidName(t *testing.T) {
+func TestLoadDir_InvalidName(t *testing.T) {
 	badNames := []string{
 		"../../../etc/cron.d/evil",
 		"foo; rm -rf /",
@@ -148,23 +180,19 @@ func TestLoadPluginDir_InvalidName(t *testing.T) {
 
 	for _, name := range badNames {
 		dir := t.TempDir()
-		pluginDir := filepath.Join(dir, ".claude-plugin")
-		if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		pj := fmt.Sprintf(`{"name":%q,"version":"0.1.0"}`, name)
-		if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(pj), 0o644); err != nil {
+		hj := fmt.Sprintf(`{"name":%q,"version":"0.1.0"}`, name)
+		if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(hj), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
-		_, err := LoadPluginDir(dir)
+		_, err := LoadDir(dir)
 		if err == nil {
 			t.Errorf("expected error for invalid name %q", name)
 		}
 	}
 }
 
-func TestLoadPluginDir_ValidNames(t *testing.T) {
+func TestLoadDir_ValidNames(t *testing.T) {
 	validNames := []string{
 		"david",
 		"team-dev",
@@ -176,9 +204,9 @@ func TestLoadPluginDir_ValidNames(t *testing.T) {
 
 	for _, name := range validNames {
 		dir := t.TempDir()
-		writeTestPlugin(t, dir, name)
+		writeTestHarnessMinimal(t, dir, name)
 
-		p, err := LoadPluginDir(dir)
+		p, err := LoadDir(dir)
 		if err != nil {
 			t.Errorf("unexpected error for valid name %q: %v", name, err)
 			continue
@@ -195,8 +223,8 @@ func TestList(t *testing.T) {
 	t.Setenv("YNH_HOME", "")
 
 	harnessesDir := filepath.Join(dir, ".ynh", "harnesses")
-	writeTestPlugin(t, filepath.Join(harnessesDir, "alpha"), "alpha")
-	writeTestPlugin(t, filepath.Join(harnessesDir, "beta"), "beta")
+	writeTestHarness(t, filepath.Join(harnessesDir, "alpha"), "alpha")
+	writeTestHarness(t, filepath.Join(harnessesDir, "beta"), "beta")
 
 	// Empty dir (no manifest)
 	if err := os.MkdirAll(filepath.Join(harnessesDir, "no-manifest"), 0o755); err != nil {
@@ -222,7 +250,7 @@ func TestList(t *testing.T) {
 		t.Error("List missing 'beta'")
 	}
 	if found["no-manifest"] {
-		t.Error("List should not include dir without plugin.json")
+		t.Error("List should not include dir without harness.json")
 	}
 }
 
@@ -250,27 +278,26 @@ func TestInstalledDir(t *testing.T) {
 	}
 }
 
-func TestLoadPluginDir_WithProvenance(t *testing.T) {
+func TestLoadDir_WithProvenance(t *testing.T) {
 	dir := t.TempDir()
-	writeTestPlugin(t, dir, "prov")
-	meta := `{
-		"ynh": {
-			"default_vendor": "claude",
-			"installed_from": {
-				"source_type": "git",
-				"source": "github.com/example/repo",
-				"path": "personas/prov",
-				"installed_at": "2026-03-22T10:30:00Z"
-			}
+	hj := `{
+		"name": "prov",
+		"version": "0.1.0",
+		"default_vendor": "claude",
+		"installed_from": {
+			"source_type": "git",
+			"source": "github.com/example/repo",
+			"path": "harnesses/prov",
+			"installed_at": "2026-03-22T10:30:00Z"
 		}
 	}`
-	if err := os.WriteFile(filepath.Join(dir, "metadata.json"), []byte(meta), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(hj), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	p, err := LoadPluginDir(dir)
+	p, err := LoadDir(dir)
 	if err != nil {
-		t.Fatalf("LoadPluginDir failed: %v", err)
+		t.Fatalf("LoadDir failed: %v", err)
 	}
 	if p.InstalledFrom == nil {
 		t.Fatal("InstalledFrom is nil")
@@ -281,52 +308,47 @@ func TestLoadPluginDir_WithProvenance(t *testing.T) {
 	if p.InstalledFrom.Source != "github.com/example/repo" {
 		t.Errorf("Source = %q, want %q", p.InstalledFrom.Source, "github.com/example/repo")
 	}
-	if p.InstalledFrom.Path != "personas/prov" {
-		t.Errorf("Path = %q, want %q", p.InstalledFrom.Path, "personas/prov")
+	if p.InstalledFrom.Path != "harnesses/prov" {
+		t.Errorf("Path = %q, want %q", p.InstalledFrom.Path, "harnesses/prov")
 	}
 	if p.InstalledFrom.InstalledAt != "2026-03-22T10:30:00Z" {
 		t.Errorf("InstalledAt = %q", p.InstalledFrom.InstalledAt)
 	}
 }
 
-func TestLoadPluginDir_WithoutProvenance(t *testing.T) {
+func TestLoadDir_WithoutProvenance(t *testing.T) {
 	dir := t.TempDir()
-	writeTestPlugin(t, dir, "noprov")
-	meta := `{"ynh": {"default_vendor": "claude"}}`
-	if err := os.WriteFile(filepath.Join(dir, "metadata.json"), []byte(meta), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeTestHarness(t, dir, "noprov")
 
-	p, err := LoadPluginDir(dir)
+	p, err := LoadDir(dir)
 	if err != nil {
-		t.Fatalf("LoadPluginDir failed: %v", err)
+		t.Fatalf("LoadDir failed: %v", err)
 	}
 	if p.InstalledFrom != nil {
 		t.Errorf("InstalledFrom should be nil, got %+v", p.InstalledFrom)
 	}
 }
 
-func TestLoadPluginDir_RegistryProvenance(t *testing.T) {
+func TestLoadDir_RegistryProvenance(t *testing.T) {
 	dir := t.TempDir()
-	writeTestPlugin(t, dir, "regprov")
-	meta := `{
-		"ynh": {
-			"default_vendor": "claude",
-			"installed_from": {
-				"source_type": "registry",
-				"source": "github.com/example/repo",
-				"registry_name": "my-registry",
-				"installed_at": "2026-03-22T10:30:00Z"
-			}
+	hj := `{
+		"name": "regprov",
+		"version": "0.1.0",
+		"default_vendor": "claude",
+		"installed_from": {
+			"source_type": "registry",
+			"source": "github.com/example/repo",
+			"registry_name": "my-registry",
+			"installed_at": "2026-03-22T10:30:00Z"
 		}
 	}`
-	if err := os.WriteFile(filepath.Join(dir, "metadata.json"), []byte(meta), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(hj), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	p, err := LoadPluginDir(dir)
+	p, err := LoadDir(dir)
 	if err != nil {
-		t.Fatalf("LoadPluginDir failed: %v", err)
+		t.Fatalf("LoadDir failed: %v", err)
 	}
 	if p.InstalledFrom == nil {
 		t.Fatal("InstalledFrom is nil")
@@ -342,7 +364,7 @@ func TestScanArtifacts(t *testing.T) {
 	t.Setenv("YNH_HOME", "")
 
 	harnessDir := filepath.Join(dir, ".ynh", "harnesses", "arttest")
-	writeTestPlugin(t, harnessDir, "arttest")
+	writeTestHarness(t, harnessDir, "arttest")
 
 	// Create skills (directories with SKILL.md)
 	for _, skill := range []string{"greet", "review"} {
@@ -397,7 +419,7 @@ func TestScanArtifacts_Empty(t *testing.T) {
 	t.Setenv("YNH_HOME", "")
 
 	harnessDir := filepath.Join(dir, ".ynh", "harnesses", "empty")
-	writeTestPlugin(t, harnessDir, "empty")
+	writeTestHarness(t, harnessDir, "empty")
 
 	arts, err := ScanArtifacts("empty")
 	if err != nil {
@@ -414,7 +436,7 @@ func TestScanArtifacts_SkillWithoutManifest(t *testing.T) {
 	t.Setenv("YNH_HOME", "")
 
 	harnessDir := filepath.Join(dir, ".ynh", "harnesses", "nosk")
-	writeTestPlugin(t, harnessDir, "nosk")
+	writeTestHarness(t, harnessDir, "nosk")
 
 	// Create a directory in skills/ but without SKILL.md — should not be counted
 	badSkill := filepath.Join(harnessDir, "skills", "bad")
@@ -434,15 +456,39 @@ func TestScanArtifacts_SkillWithoutManifest(t *testing.T) {
 	}
 }
 
-// writeTestPlugin creates a minimal .claude-plugin/plugin.json in dir.
-func writeTestPlugin(t *testing.T, dir, name string) {
+// writeTestHarness creates a minimal harness.json with default_vendor in dir.
+func writeTestHarness(t *testing.T, dir, name string) {
 	t.Helper()
-	pluginDir := filepath.Join(dir, ".claude-plugin")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	pj := fmt.Sprintf(`{"name":%q,"version":"0.1.0"}`, name)
-	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(pj), 0o644); err != nil {
+	hj := fmt.Sprintf(`{"name":%q,"version":"0.1.0","default_vendor":"claude"}`, name)
+	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(hj), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// writeTestHarnessMinimal creates a minimal harness.json without default_vendor.
+func writeTestHarnessMinimal(t *testing.T, dir, name string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hj := fmt.Sprintf(`{"name":%q,"version":"0.1.0"}`, name)
+	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(hj), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsStr(s, substr))
+}
+
+func containsStr(s, substr string) bool {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

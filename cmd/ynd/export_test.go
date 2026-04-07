@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/eyelock/ynh/internal/plugin"
 )
 
 func testdataExportDir() string {
@@ -151,16 +149,16 @@ func TestCmdExportManifestContent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var pj plugin.PluginJSON
+	var pj map[string]any
 	if err := json.Unmarshal(data, &pj); err != nil {
 		t.Fatalf("invalid manifest JSON: %v", err)
 	}
 
-	if pj.Name != "export-test" {
-		t.Errorf("manifest name = %q, want %q", pj.Name, "export-test")
+	if pj["name"] != "export-test" {
+		t.Errorf("manifest name = %q, want %q", pj["name"], "export-test")
 	}
-	if pj.Version != "1.0.0" {
-		t.Errorf("manifest version = %q, want %q", pj.Version, "1.0.0")
+	if pj["version"] != "1.0.0" {
+		t.Errorf("manifest version = %q, want %q", pj["version"], "1.0.0")
 	}
 }
 

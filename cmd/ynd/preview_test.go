@@ -12,40 +12,26 @@ func createPreviewHarness(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 
-	// Create .claude-plugin/plugin.json
-	pluginDir := filepath.Join(dir, ".claude-plugin")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	pj := map[string]any{
-		"name":        "preview-test",
-		"version":     "1.0.0",
-		"description": "Test harness for preview",
-	}
-	data, _ := json.MarshalIndent(pj, "", "  ")
-	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), data, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Create metadata.json with hooks and MCP servers
-	meta := map[string]any{
-		"ynh": map[string]any{
-			"default_vendor": "claude",
-			"hooks": map[string]any{
-				"before_tool": []map[string]any{
-					{"command": "echo before"},
-				},
+	// Create harness.json with hooks and MCP servers
+	hj := map[string]any{
+		"name":           "preview-test",
+		"version":        "1.0.0",
+		"description":    "Test harness for preview",
+		"default_vendor": "claude",
+		"hooks": map[string]any{
+			"before_tool": []map[string]any{
+				{"command": "echo before"},
 			},
-			"mcp_servers": map[string]any{
-				"test-server": map[string]any{
-					"command": "node",
-					"args":    []string{"server.js"},
-				},
+		},
+		"mcp_servers": map[string]any{
+			"test-server": map[string]any{
+				"command": "node",
+				"args":    []string{"server.js"},
 			},
 		},
 	}
-	metaData, _ := json.MarshalIndent(meta, "", "  ")
-	if err := os.WriteFile(filepath.Join(dir, "metadata.json"), metaData, 0o644); err != nil {
+	data, _ := json.MarshalIndent(hj, "", "  ")
+	if err := os.WriteFile(filepath.Join(dir, "harness.json"), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -227,16 +213,9 @@ func TestCmdPreviewNoHarnessOrInstructions(t *testing.T) {
 func TestCmdPreviewSkillsOnly(t *testing.T) {
 	// Harness with skills but no hooks or MCP
 	dir := t.TempDir()
-	pluginDir := filepath.Join(dir, ".claude-plugin")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	pj := map[string]any{"name": "skills-only", "version": "1.0.0"}
-	data, _ := json.MarshalIndent(pj, "", "  ")
-	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), data, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "metadata.json"), []byte(`{"ynh":{}}`), 0o644); err != nil {
+	hj := map[string]any{"name": "skills-only", "version": "1.0.0"}
+	data, _ := json.MarshalIndent(hj, "", "  ")
+	if err := os.WriteFile(filepath.Join(dir, "harness.json"), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 

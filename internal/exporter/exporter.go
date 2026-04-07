@@ -50,14 +50,14 @@ type ExportResult struct {
 // Export produces vendor-native plugin directories from a harness source.
 func Export(opts ExportOptions) ([]ExportResult, error) {
 	// Load harness
-	p, err := harness.LoadPluginDir(opts.SourceDir)
+	p, err := harness.LoadDir(opts.SourceDir)
 	if err != nil {
 		return nil, fmt.Errorf("loading harness: %w", err)
 	}
 
-	pj, err := plugin.LoadPluginJSON(opts.SourceDir)
+	hj, err := plugin.LoadHarnessJSON(opts.SourceDir)
 	if err != nil {
-		return nil, fmt.Errorf("loading plugin.json: %w", err)
+		return nil, fmt.Errorf("loading harness.json: %w", err)
 	}
 
 	// Check remote sources for all delegates
@@ -96,12 +96,12 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	}
 
 	if opts.Mode == ModeMerged {
-		return exportMerged(opts, pj, p, content, instructionsPath, vendors)
+		return exportMerged(opts, hj, p, content, instructionsPath, vendors)
 	}
-	return exportPerVendor(opts, pj, p, content, instructionsPath, vendors)
+	return exportPerVendor(opts, hj, p, content, instructionsPath, vendors)
 }
 
-func exportPerVendor(opts ExportOptions, pj *plugin.PluginJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
+func exportPerVendor(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
 	var results []ExportResult
 
 	for _, v := range vendors {
@@ -125,7 +125,7 @@ func exportPerVendor(opts ExportOptions, pj *plugin.PluginJSON, p *harness.Harne
 	return results, nil
 }
 
-func exportMerged(opts ExportOptions, pj *plugin.PluginJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
+func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
 	outputDir := opts.OutputDir
 
 	// Clean and recreate output dir
@@ -230,7 +230,7 @@ func exportMerged(opts ExportOptions, pj *plugin.PluginJSON, p *harness.Harness,
 	return results, nil
 }
 
-func exportForVendor(vendorName string, outputDir string, pj *plugin.PluginJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
+func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
 	result := ExportResult{
 		Vendor:    vendorName,
 		OutputDir: outputDir,
@@ -302,7 +302,7 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.PluginJSON,
 
 // exportCodex handles the Codex-specific layout: .agents/skills/ only.
 // Codex has no plugin manifest, no agents/rules/commands support.
-func exportCodex(outputDir string, _ *plugin.PluginJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
+func exportCodex(outputDir string, _ *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
 	result := ExportResult{
 		Vendor:    "codex",
 		OutputDir: outputDir,

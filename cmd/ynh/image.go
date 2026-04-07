@@ -178,7 +178,7 @@ func cmdImage(args []string) error {
 			}
 		}
 
-		p, err = harness.LoadPluginDir(harnessSrcDir)
+		p, err = harness.LoadDir(harnessSrcDir)
 		if err != nil {
 			return fmt.Errorf("loading harness from source: %w", err)
 		}

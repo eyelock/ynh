@@ -116,7 +116,7 @@ func createHarness(name string) error {
 	}
 
 	dirs := []string{
-		filepath.Join(name, ".claude-plugin"),
+		name,
 		filepath.Join(name, "skills"),
 		filepath.Join(name, "agents"),
 		filepath.Join(name, "rules"),
@@ -129,23 +129,14 @@ func createHarness(name string) error {
 		}
 	}
 
-	pluginJSON := map[string]string{
-		"name":        name,
-		"version":     "0.1.0",
-		"description": "",
+	harnessJSON := map[string]any{
+		"name":           name,
+		"version":        "0.1.0",
+		"description":    "",
+		"default_vendor": "claude",
 	}
-	data, _ := json.MarshalIndent(pluginJSON, "", "  ")
-	if err := os.WriteFile(filepath.Join(name, ".claude-plugin", "plugin.json"), append(data, '\n'), 0o644); err != nil {
-		return err
-	}
-
-	metadataJSON := map[string]any{
-		"ynh": map[string]any{
-			"default_vendor": "claude",
-		},
-	}
-	data, _ = json.MarshalIndent(metadataJSON, "", "  ")
-	if err := os.WriteFile(filepath.Join(name, "metadata.json"), append(data, '\n'), 0o644); err != nil {
+	data, _ := json.MarshalIndent(harnessJSON, "", "  ")
+	if err := os.WriteFile(filepath.Join(name, "harness.json"), append(data, '\n'), 0o644); err != nil {
 		return err
 	}
 
@@ -158,8 +149,7 @@ Project-level instructions that apply to every session with this harness.
 	}
 
 	fmt.Printf("Created harness %q:\n", name)
-	fmt.Printf("  %s/.claude-plugin/plugin.json\n", name)
-	fmt.Printf("  %s/metadata.json\n", name)
+	fmt.Printf("  %s/harness.json\n", name)
 	fmt.Printf("  %s/AGENTS.md\n", name)
 	fmt.Printf("  %s/skills/\n", name)
 	fmt.Printf("  %s/agents/\n", name)

@@ -111,13 +111,9 @@ func TestCopyTree_EmptyDir(t *testing.T) {
 	}
 }
 
-func TestLoadOrSynthesizeHarness_PluginFormat(t *testing.T) {
+func TestLoadOrSynthesizeHarness_HarnessFormat(t *testing.T) {
 	dir := t.TempDir()
-	pluginDir := filepath.Join(dir, ".claude-plugin")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"),
+	if err := os.WriteFile(filepath.Join(dir, "harness.json"),
 		[]byte(`{"name":"test","version":"0.1.0"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -149,9 +145,9 @@ func TestLoadOrSynthesizeHarness_BareAgentsMD(t *testing.T) {
 		t.Errorf("Name = %q, want %q", h.Name, "my-project")
 	}
 
-	// Verify plugin.json was synthesized
-	if _, err := os.Stat(filepath.Join(dir, ".claude-plugin", "plugin.json")); err != nil {
-		t.Error("synthesized plugin.json should exist")
+	// Verify harness.json was synthesized
+	if _, err := os.Stat(filepath.Join(dir, "harness.json")); err != nil {
+		t.Error("synthesized harness.json should exist")
 	}
 }
 

@@ -246,7 +246,7 @@ func cmdInstall(args []string) error {
 		return err
 	}
 
-	// Inject install provenance into the copied metadata.json
+	// Inject install provenance into the copied harness.json
 	provSource := source
 	if resolved.sourceType == "local" {
 		provSource = originalSource
@@ -258,19 +258,13 @@ func cmdInstall(args []string) error {
 		RegistryName: resolved.registryName,
 		InstalledAt:  time.Now().UTC().Format(time.RFC3339),
 	}
-	// Load existing ynh metadata from the copied file (preserves includes, delegates, etc.)
-	meta, err := plugin.LoadMetadataJSON(installDir)
+	// Load existing harness.json from the copied file (preserves includes, delegates, etc.)
+	hj, err := plugin.LoadHarnessJSON(installDir)
 	if err != nil {
-		return fmt.Errorf("loading installed metadata: %w", err)
+		return fmt.Errorf("loading installed harness.json: %w", err)
 	}
-	var ynh *plugin.YNHMetadata
-	if meta != nil && meta.YNH != nil {
-		ynh = meta.YNH
-	} else {
-		ynh = &plugin.YNHMetadata{}
-	}
-	ynh.InstalledFrom = prov
-	if err := plugin.SaveMetadataJSON(installDir, ynh); err != nil {
+	hj.InstalledFrom = prov
+	if err := plugin.SaveHarnessJSON(installDir, hj); err != nil {
 		return fmt.Errorf("saving provenance: %w", err)
 	}
 
@@ -1092,7 +1086,7 @@ func cmdPrune() error {
 			if name == "ynh" || name == "ynd" {
 				continue
 			}
-			if harness.DetectFormat(harness.InstalledDir(name)) == "plugin" {
+			if harness.DetectFormat(harness.InstalledDir(name)) == "harness" {
 				continue
 			}
 			launcherPath := filepath.Join(binDir, name)
@@ -1116,7 +1110,7 @@ func cmdPrune() error {
 	if err == nil {
 		for _, entry := range runEntries {
 			name := entry.Name()
-			if harness.DetectFormat(harness.InstalledDir(name)) == "plugin" {
+			if harness.DetectFormat(harness.InstalledDir(name)) == "harness" {
 				continue
 			}
 			staleRun := filepath.Join(runDir, name)

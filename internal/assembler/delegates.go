@@ -36,7 +36,7 @@ func AssembleDelegates(workDir string, adapter vendor.Adapter, delegates []harne
 			return fmt.Errorf("delegate: %w", err)
 		}
 
-		delHarness, err := harness.LoadPluginDir(basePath)
+		delHarness, err := harness.LoadDir(basePath)
 		if err != nil {
 			return fmt.Errorf("loading delegate harness %s: %w", del.Git, err)
 		}

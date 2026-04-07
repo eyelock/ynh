@@ -256,17 +256,13 @@ func TestGenerateLauncher(t *testing.T) {
 func installTestHarness(t *testing.T, name string) {
 	t.Helper()
 
-	// Create harness directory with plugin manifest
+	// Create harness directory with harness.json
 	installDir := harness.InstalledDir(name)
-	pluginDir := filepath.Join(installDir, ".claude-plugin")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+	if err := os.MkdirAll(installDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	pluginJSON := fmt.Sprintf(`{"name":%q,"version":"0.1.0"}`, name)
-	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(pluginJSON), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(installDir, "metadata.json"), []byte(`{"ynh":{"default_vendor":"claude"}}`), 0o644); err != nil {
+	harnessJSON := fmt.Sprintf(`{"name":%q,"version":"0.1.0","default_vendor":"claude"}`, name)
+	if err := os.WriteFile(filepath.Join(installDir, "harness.json"), []byte(harnessJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -461,11 +457,10 @@ func TestFormatArtifactSummary(t *testing.T) {
 
 	// Create a harness with artifacts
 	harnessDir := filepath.Join(dir, ".ynh", "harnesses", "artfmt")
-	installDir := filepath.Join(harnessDir, ".claude-plugin")
-	if err := os.MkdirAll(installDir, 0o755); err != nil {
+	if err := os.MkdirAll(harnessDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(installDir, "plugin.json"),
+	if err := os.WriteFile(filepath.Join(harnessDir, "harness.json"),
 		[]byte(`{"name":"artfmt","version":"0.1.0"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -552,11 +547,10 @@ func TestCmdInstall_WritesProvenance(t *testing.T) {
 
 	// Create a local harness source
 	srcDir := filepath.Join(dir, "my-harness")
-	pluginDir := filepath.Join(srcDir, ".claude-plugin")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"),
+	if err := os.WriteFile(filepath.Join(srcDir, "harness.json"),
 		[]byte(`{"name":"provtest","version":"0.1.0"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -632,11 +626,11 @@ func TestCmdInstall_PathFlag(t *testing.T) {
 
 	// Create a monorepo-style layout with a harness in a subdirectory
 	monoDir := filepath.Join(dir, "monorepo")
-	pluginDir := filepath.Join(monoDir, "harnesses", "alice", ".claude-plugin")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+	aliceDir := filepath.Join(monoDir, "harnesses", "alice")
+	if err := os.MkdirAll(aliceDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"),
+	if err := os.WriteFile(filepath.Join(aliceDir, "harness.json"),
 		[]byte(`{"name":"alice","version":"0.1.0","description":"test harness"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -649,7 +643,7 @@ func TestCmdInstall_PathFlag(t *testing.T) {
 
 	// Verify harness was installed
 	installDir := harness.InstalledDir("alice")
-	if _, err := os.Stat(filepath.Join(installDir, ".claude-plugin", "plugin.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(installDir, "harness.json")); err != nil {
 		t.Fatal("harness not found after install")
 	}
 }

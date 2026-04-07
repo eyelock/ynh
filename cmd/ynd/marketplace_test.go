@@ -23,13 +23,13 @@ func setupMarketplaceTest(t *testing.T) (configFile string) {
 		t.Fatal(err)
 	}
 
-	// Create plugin source
+	// Create plugin source (vendor-native format with .claude-plugin/plugin.json)
 	pluginDir := filepath.Join(dir, "plugins", "my-tool")
-	claudePlugin := filepath.Join(pluginDir, ".claude-plugin")
-	if err := os.MkdirAll(claudePlugin, 0o755); err != nil {
+	manifestDir := filepath.Join(pluginDir, ".claude-plugin")
+	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeTestJSON(t, filepath.Join(claudePlugin, "plugin.json"), map[string]any{
+	writeTestJSON(t, filepath.Join(manifestDir, "plugin.json"), map[string]any{
 		"name":        "my-tool",
 		"version":     "0.2.0",
 		"description": "A standalone tool",
