@@ -27,6 +27,7 @@ func TestBuildClaudeArgs_WithInstructions(t *testing.T) {
 	expected := []string{
 		"claude",
 		"--plugin-dir", claudeDir,
+		"--add-dir", configPath,
 		"--append-system-prompt", instructions,
 		"--model", "opus",
 	}
@@ -54,6 +55,7 @@ func TestBuildClaudeArgs_NoInstructions(t *testing.T) {
 	expected := []string{
 		"claude",
 		"--plugin-dir", claudeDir,
+		"--add-dir", configPath,
 	}
 
 	if len(args) != len(expected) {
@@ -115,10 +117,14 @@ func TestBuildClaudeArgs_NonInteractive(t *testing.T) {
 	args := buildClaudeArgs(configPath, []string{"-p", "fix the bug"})
 
 	foundPlugin := false
+	foundAddDir := false
 	foundPrompt := false
 	for i, arg := range args {
 		if arg == "--plugin-dir" {
 			foundPlugin = true
+		}
+		if arg == "--add-dir" {
+			foundAddDir = true
 		}
 		if arg == "-p" && i+1 < len(args) && args[i+1] == "fix the bug" {
 			foundPrompt = true
@@ -126,6 +132,9 @@ func TestBuildClaudeArgs_NonInteractive(t *testing.T) {
 	}
 	if !foundPlugin {
 		t.Error("missing --plugin-dir")
+	}
+	if !foundAddDir {
+		t.Error("missing --add-dir")
 	}
 	if !foundPrompt {
 		t.Error("missing -p prompt")

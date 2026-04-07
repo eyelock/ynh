@@ -1,9 +1,9 @@
 {
   "name": "ynh",
   "version": "0.1.0",
-  "description": "ynh persona manager - development plugin with skills and agents for contributing",
+  "description": "ynh harness template manager - development plugin with skills and agents for contributing",
   "author": {
     "name": "eyelock"
   },
-  "keywords": ["ynh", "persona", "development"]
+  "keywords": ["ynh", "harness", "development"]
 }

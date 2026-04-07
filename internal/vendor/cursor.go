@@ -48,9 +48,11 @@ func (c *Cursor) LaunchNonInteractive(configPath string, prompt string, extraArg
 }
 
 // cursorHookEventMap maps canonical event names to Cursor hook events.
+// Cursor supports: beforeSubmitPrompt, beforeShellExecution, beforeMCPExecution,
+// beforeReadFile, afterFileEdit, stop. There is no afterShellExecution event.
 var cursorHookEventMap = map[string]string{
 	"before_tool":   "beforeShellExecution",
-	"after_tool":    "afterShellExecution",
+	"after_tool":    "afterFileEdit",
 	"before_prompt": "beforeSubmitPrompt",
 	"on_stop":       "stop",
 }
@@ -93,7 +95,8 @@ func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[str
 	}
 
 	config := map[string]any{
-		"hooks": allEvents,
+		"version": 1,
+		"hooks":   allEvents,
 	}
 
 	data, err := json.MarshalIndent(config, "", "  ")

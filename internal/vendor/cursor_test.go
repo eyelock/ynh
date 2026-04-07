@@ -43,6 +43,12 @@ func TestCursorGenerateHookConfig_FlatFormat(t *testing.T) {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 
+	// Check version field
+	version, ok := config["version"].(float64)
+	if !ok || version != 1 {
+		t.Errorf("version = %v, want 1", config["version"])
+	}
+
 	hooksObj, ok := config["hooks"].(map[string]any)
 	if !ok {
 		t.Fatal("expected hooks object")
@@ -142,7 +148,7 @@ func TestCursorGenerateHookConfig_EventTranslation(t *testing.T) {
 	}
 
 	hooksObj := config["hooks"].(map[string]any)
-	expectedEvents := []string{"beforeShellExecution", "afterShellExecution", "beforeSubmitPrompt", "stop"}
+	expectedEvents := []string{"beforeShellExecution", "afterFileEdit", "beforeSubmitPrompt", "stop"}
 	for _, event := range expectedEvents {
 		if _, ok := hooksObj[event]; !ok {
 			t.Errorf("missing event %s", event)

@@ -55,8 +55,11 @@ func buildClaudeArgs(configPath string, extraArgs []string) []string {
 	args := []string{"claude"}
 
 	// Load assembled artifacts (skills, agents, rules, commands) via --plugin-dir.
+	// Also --add-dir to grant read access so Claude doesn't prompt for permission
+	// when reading plugin files at runtime (the staging dir is outside the project).
 	pluginDir := filepath.Join(configPath, ".claude")
 	args = append(args, "--plugin-dir", pluginDir)
+	args = append(args, "--add-dir", configPath)
 
 	// Inject harness instructions if present.
 	instructionsPath := filepath.Join(configPath, "CLAUDE.md")

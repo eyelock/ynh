@@ -60,13 +60,19 @@ func (c *Codex) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[stri
 		return nil
 	}
 
-	// Codex two-level format: { "hooks": { "PreToolUse": [ { "matcher": "Bash", "command": "..." } ] } }
-	type codexHookEntry struct {
-		Matcher string `json:"matcher,omitempty"`
+	// Codex three-level format (same structure as Claude Code):
+	// { "hooks": { "PreToolUse": [ { "matcher": "Bash", "hooks": [ { "type": "command", "command": "..." } ] } ] } }
+
+	type codexInnerHook struct {
+		Type    string `json:"type"`
 		Command string `json:"command"`
 	}
+	type codexHookGroup struct {
+		Matcher string           `json:"matcher,omitempty"`
+		Hooks   []codexInnerHook `json:"hooks"`
+	}
 
-	allEvents := make(map[string][]codexHookEntry)
+	allEvents := make(map[string][]codexHookGroup)
 
 	var events []string
 	for event := range hooks {
@@ -81,15 +87,37 @@ func (c *Codex) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[stri
 			continue
 		}
 
-		var hookEntries []codexHookEntry
+		// Group entries by matcher (same logic as Claude adapter)
+		type matcherGroup struct {
+			matcher string
+			cmds    []string
+		}
+		var groups []matcherGroup
+		groupIdx := make(map[string]int)
+
 		for _, entry := range entries {
-			hookEntries = append(hookEntries, codexHookEntry{
-				Matcher: entry.Matcher,
-				Command: entry.Command,
+			key := entry.Matcher
+			if idx, exists := groupIdx[key]; exists {
+				groups[idx].cmds = append(groups[idx].cmds, entry.Command)
+			} else {
+				groupIdx[key] = len(groups)
+				groups = append(groups, matcherGroup{matcher: key, cmds: []string{entry.Command}})
+			}
+		}
+
+		var hookGroups []codexHookGroup
+		for _, g := range groups {
+			var inner []codexInnerHook
+			for _, cmd := range g.cmds {
+				inner = append(inner, codexInnerHook{Type: "command", Command: cmd})
+			}
+			hookGroups = append(hookGroups, codexHookGroup{
+				Matcher: g.matcher,
+				Hooks:   inner,
 			})
 		}
 
-		allEvents[codexEvent] = hookEntries
+		allEvents[codexEvent] = hookGroups
 	}
 
 	if len(allEvents) == 0 {

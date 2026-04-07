@@ -17,7 +17,7 @@ func TestCodexGenerateHookConfig_NilHooks(t *testing.T) {
 	}
 }
 
-func TestCodexGenerateHookConfig_TwoLevelFormat(t *testing.T) {
+func TestCodexGenerateHookConfig_ThreeLevelFormat(t *testing.T) {
 	c := &Codex{}
 	hooks := map[string][]plugin.HookEntry{
 		"before_tool": {
@@ -49,37 +49,42 @@ func TestCodexGenerateHookConfig_TwoLevelFormat(t *testing.T) {
 		t.Fatal("expected hooks object")
 	}
 
-	// Check PreToolUse (two-level: matcher and command at same level)
+	// Check PreToolUse (three-level: matcher group → hooks array)
 	preToolUse, ok := hooksObj["PreToolUse"].([]any)
 	if !ok {
 		t.Fatal("expected PreToolUse array")
 	}
+	// Two matcher groups: "Bash" and "" (no matcher)
 	if len(preToolUse) != 2 {
-		t.Fatalf("PreToolUse entries = %d, want 2", len(preToolUse))
+		t.Fatalf("PreToolUse groups = %d, want 2", len(preToolUse))
 	}
 
-	// First entry should have matcher
-	entry0 := preToolUse[0].(map[string]any)
-	if entry0["matcher"] != "Bash" {
-		t.Errorf("matcher = %v, want Bash", entry0["matcher"])
-	}
-	if entry0["command"] != "echo before bash" {
-		t.Errorf("command = %v, want 'echo before bash'", entry0["command"])
+	// First group should have matcher "Bash"
+	group0 := preToolUse[0].(map[string]any)
+	if group0["matcher"] != "Bash" {
+		t.Errorf("matcher = %v, want Bash", group0["matcher"])
 	}
 
-	// Second entry should have no matcher
-	entry1 := preToolUse[1].(map[string]any)
-	if _, hasMatcher := entry1["matcher"]; hasMatcher {
-		t.Error("second entry should not have matcher (empty omitted)")
+	// Should have nested "hooks" array with type: "command"
+	innerHooks0, ok := group0["hooks"].([]any)
+	if !ok {
+		t.Fatal("expected nested hooks array in first group")
+	}
+	if len(innerHooks0) != 1 {
+		t.Fatalf("inner hooks = %d, want 1", len(innerHooks0))
+	}
+	inner0 := innerHooks0[0].(map[string]any)
+	if inner0["type"] != "command" {
+		t.Errorf("type = %v, want command", inner0["type"])
+	}
+	if inner0["command"] != "echo before bash" {
+		t.Errorf("command = %v, want 'echo before bash'", inner0["command"])
 	}
 
-	// Should NOT have nested "hooks" array (that's Claude's format)
-	if _, hasNestedHooks := entry0["hooks"]; hasNestedHooks {
-		t.Error("Codex format should not have nested 'hooks' array")
-	}
-	// Should NOT have "type" field (that's Claude's format)
-	if _, hasType := entry0["type"]; hasType {
-		t.Error("Codex format should not have 'type' field")
+	// Second group should have no matcher
+	group1 := preToolUse[1].(map[string]any)
+	if _, hasMatcher := group1["matcher"]; hasMatcher {
+		t.Error("second group should not have matcher (empty omitted)")
 	}
 
 	// Check Stop
@@ -88,7 +93,15 @@ func TestCodexGenerateHookConfig_TwoLevelFormat(t *testing.T) {
 		t.Fatal("expected Stop array")
 	}
 	if len(stop) != 1 {
-		t.Fatalf("Stop entries = %d, want 1", len(stop))
+		t.Fatalf("Stop groups = %d, want 1", len(stop))
+	}
+	stopGroup := stop[0].(map[string]any)
+	stopInner, ok := stopGroup["hooks"].([]any)
+	if !ok {
+		t.Fatal("expected nested hooks array in Stop group")
+	}
+	if len(stopInner) != 1 {
+		t.Fatalf("Stop inner hooks = %d, want 1", len(stopInner))
 	}
 }
 
