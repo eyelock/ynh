@@ -222,6 +222,13 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 		}
 	}
 
+	// Codex manifest generated after MCP so path pointers detect .mcp.json
+	if adapter.Name() == "codex" {
+		if err := exporter.GenerateCodexManifest(pj, tmpDir); err != nil {
+			return "", fmt.Errorf("writing plugin manifest: %w", err)
+		}
+	}
+
 	success = true
 	return tmpDir, nil
 }

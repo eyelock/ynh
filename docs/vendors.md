@@ -96,6 +96,10 @@ Key differences between runtime and export:
 
 See [ynd export](ynd.md#export) for full command reference.
 
+## Vendor Spec Tracking
+
+Vendor plugin formats evolve frequently. The `vendor-adapters` skill (`.claude/skills/vendor-adapters/`) maintains current documentation links, format mappings, and known discrepancies for each vendor. Consult it when updating adapters or verifying spec compliance.
+
 ## Adding a New Vendor
 
 See [CONTRIBUTING.md](https://github.com/eyelock/ynh/blob/main/.github/CONTRIBUTING.md) for how to implement a vendor adapter.

@@ -125,9 +125,12 @@ func TestExportSingleVendorCodex(t *testing.T) {
 	r := results[0]
 	codexDir := filepath.Join(outputDir, "codex")
 
-	// Check .agents/skills/ layout
-	assertFileExists(t, filepath.Join(codexDir, ".agents", "skills", "dev-project", "SKILL.md"))
-	assertFileExists(t, filepath.Join(codexDir, ".agents", "skills", "dev-quality", "SKILL.md"))
+	// Check skills/ layout (at plugin root, not .agents/skills/)
+	assertFileExists(t, filepath.Join(codexDir, "skills", "dev-project", "SKILL.md"))
+	assertFileExists(t, filepath.Join(codexDir, "skills", "dev-quality", "SKILL.md"))
+
+	// Check .codex-plugin/plugin.json manifest
+	assertFileExists(t, filepath.Join(codexDir, ".codex-plugin", "plugin.json"))
 
 	// Check AGENTS.md present
 	assertFileExists(t, filepath.Join(codexDir, "AGENTS.md"))
@@ -257,10 +260,10 @@ func TestExportCodexLayout(t *testing.T) {
 
 	codexDir := filepath.Join(outputDir, "codex")
 
-	// Skills must be under .agents/skills/
-	entries, err := os.ReadDir(filepath.Join(codexDir, ".agents", "skills"))
+	// Skills must be under skills/ (plugin root format)
+	entries, err := os.ReadDir(filepath.Join(codexDir, "skills"))
 	if err != nil {
-		t.Fatalf("reading .agents/skills: %v", err)
+		t.Fatalf("reading skills: %v", err)
 	}
 
 	skillNames := make(map[string]bool)
@@ -671,8 +674,8 @@ func TestExportWithMCPServers(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	// Codex should have .codex/config.toml
-	assertFileExists(t, filepath.Join(outputDir3, "codex", ".codex", "config.toml"))
+	// Codex should have .mcp.json (JSON format at plugin root)
+	assertFileExists(t, filepath.Join(outputDir3, "codex", ".mcp.json"))
 }
 
 func TestExportMergedWithMCPServers(t *testing.T) {

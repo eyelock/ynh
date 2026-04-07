@@ -526,7 +526,7 @@ func cmdRun(args []string) error {
 			return fmt.Errorf("assembling delegates: %w", err)
 		}
 
-		// Generate vendor plugin manifests
+		// Generate vendor plugin manifests (Claude/Cursor before hooks/MCP, Codex after)
 		pj := &plugin.HarnessJSON{Name: p.Name, Version: "0.0.0", Description: p.Description}
 		switch adapter.Name() {
 		case "claude":
@@ -564,6 +564,13 @@ func cmdRun(args []string) error {
 				if err := os.WriteFile(absPath, content, 0o644); err != nil {
 					return fmt.Errorf("writing MCP config %s: %w", relPath, err)
 				}
+			}
+		}
+
+		// Codex manifest generated after MCP so path pointers detect .mcp.json
+		if adapter.Name() == "codex" {
+			if err := exporter.GenerateCodexManifest(pj, runDir); err != nil {
+				return fmt.Errorf("writing plugin manifest: %w", err)
 			}
 		}
 	}
