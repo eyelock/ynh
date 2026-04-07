@@ -23,13 +23,13 @@ david -v codex                     # same harness, different vendor
 
 ```json
 {
-  "ynh": {
-    "includes": [
-      {"git": "github.com/eyelock/assistants", "path": "skills/dev", "pick": ["skills/dev-project", "skills/dev-quality"]},
-      {"git": "github.com/vercel-labs/skills", "pick": ["skills/next-app-router"]},
-      {"git": "git@github.com:company/internal-tools.git", "path": "ai-config"}
-    ]
-  }
+  "name": "david",
+  "version": "0.1.0",
+  "includes": [
+    {"git": "github.com/eyelock/assistants", "path": "skills/dev", "pick": ["skills/dev-project", "skills/dev-quality"]},
+    {"git": "github.com/vercel-labs/skills", "pick": ["skills/next-app-router"]},
+    {"git": "git@github.com:company/internal-tools.git", "path": "ai-config"}
+  ]
 }
 ```
 
@@ -60,8 +60,8 @@ ynd marketplace build              # build a shareable marketplace
 brew tap eyelock/tap && brew install ynh
 
 # Create a harness
-mkdir -p david/.claude-plugin
-echo '{"name":"david","version":"0.1.0"}' > david/.claude-plugin/plugin.json
+mkdir david
+echo '{"name":"david","version":"0.1.0","default_vendor":"claude"}' > david/harness.json
 
 # Install it
 ynh install ./david
@@ -75,7 +75,7 @@ Add skills, agents, rules, and commands to the harness directory. Pull from Git 
 ## Guides
 
 - **[Getting Started](getting-started.md)** - Create your first harness and run it
-- **[Harness Reference](harnesses.md)** - Plugin manifest, metadata, includes, delegates
+- **[Harness Reference](harnesses.md)** - Harness manifest, includes, delegates, profiles
 - **[Artifacts Guide](artifacts.md)** - Skills, agents, rules, commands, and project instructions
 - **[Vendor Support](vendors.md)** - Claude, Codex, Cursor - capabilities and launch strategies
 - **[Agent Skills Standard](skills-standard.md)** - Cross-platform spec, frontmatter fields, catalog budget, discovery paths

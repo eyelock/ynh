@@ -2,7 +2,9 @@
 
 Hooks are shell commands that vendors execute at specific lifecycle events during an agent session. They bridge the **guide layer** (what ynh manages) to the **sensor layer** (linters, tests, validators) by declaring *when* a command should run, without embedding the tool itself.
 
-A harness declares hooks in `metadata.json`. At assembly time, ynh translates them into the vendor-native config format. The hook scripts themselves live outside the harness — they are regular shell commands or scripts on the host machine.
+A harness declares hooks in `harness.json` at the top level. At assembly time, ynh translates them into the vendor-native config format. The hook scripts themselves live outside the harness — they are regular shell commands or scripts on the host machine.
+
+> **Note:** Hooks can vary by [profile](harnesses.md#profiles). When a profile is selected, its `hooks` field replaces the top-level hooks entirely.
 
 ## Why Hooks Matter
 
@@ -21,31 +23,31 @@ ynh defines four canonical hook events. Each vendor translates these to its nati
 | `before_prompt` | Runs before a user prompt is submitted to the model. |
 | `on_stop` | Runs when the agent session ends. |
 
-## metadata.json Format
+## harness.json Format
 
-Hooks are declared under `ynh.hooks` in `metadata.json`. Each event maps to an array of hook entries:
+Hooks are declared under the top-level `hooks` key in `harness.json`. Each event maps to an array of hook entries:
 
 ```json
 {
-  "ynh": {
-    "hooks": {
-      "before_tool": [
-        {
-          "matcher": "Bash",
-          "command": "/usr/local/bin/check-dangerous-commands.sh"
-        }
-      ],
-      "after_tool": [
-        {
-          "command": "/usr/local/bin/run-linter.sh"
-        }
-      ],
-      "on_stop": [
-        {
-          "command": "/usr/local/bin/cleanup.sh"
-        }
-      ]
-    }
+  "name": "my-harness",
+  "version": "0.1.0",
+  "hooks": {
+    "before_tool": [
+      {
+        "matcher": "Bash",
+        "command": "/usr/local/bin/check-dangerous-commands.sh"
+      }
+    ],
+    "after_tool": [
+      {
+        "command": "/usr/local/bin/run-linter.sh"
+      }
+    ],
+    "on_stop": [
+      {
+        "command": "/usr/local/bin/cleanup.sh"
+      }
+    ]
   }
 }
 ```
@@ -66,7 +68,7 @@ Each vendor uses different event names and config file formats:
 | Canonical | Claude Code | Cursor | Codex |
 |-----------|-------------|--------|-------|
 | `before_tool` | `PreToolUse` | `beforeShellExecution` | `PreToolUse` |
-| `after_tool` | `PostToolUse` | `afterShellExecution` | `PostToolUse` |
+| `after_tool` | `PostToolUse` | `afterFileEdit` | `PostToolUse` |
 | `before_prompt` | `UserPromptSubmit` | `beforeSubmitPrompt` | `UserPromptSubmit` |
 | `on_stop` | `Stop` | `stop` | `Stop` |
 
@@ -75,8 +77,8 @@ Each vendor uses different event names and config file formats:
 | Vendor | File | Format |
 |--------|------|--------|
 | Claude Code | `.claude/settings.json` | Three-level nesting: event > matcher group > hook array |
-| Cursor | `.cursor/hooks.json` | Flat: event > hook array |
-| Codex | `.codex/hooks.json` | Two-level: event > hook array with optional matcher field |
+| Cursor | `.cursor/hooks.json` | Flat: event > hook array (with `"version": 1` required) |
+| Codex | `.codex/hooks.json` | Three-level nesting: event > matcher group > hook array (same structure as Claude) |
 
 ### Claude Code Format
 
@@ -99,10 +101,11 @@ Claude uses a three-level structure. Hook entries are grouped by matcher, and ea
 
 ### Cursor Format
 
-Cursor uses a flat structure. Matchers are not supported — all hooks for an event fire unconditionally:
+Cursor uses a flat structure with a required `"version": 1` field. Matchers are not supported — all hooks for an event fire unconditionally:
 
 ```json
 {
+  "version": 1,
   "hooks": {
     "beforeShellExecution": [
       { "command": "/usr/local/bin/check-dangerous-commands.sh" }
@@ -113,13 +116,18 @@ Cursor uses a flat structure. Matchers are not supported — all hooks for an ev
 
 ### Codex Format
 
-Codex uses a two-level structure with optional matcher on each entry:
+Codex uses the same three-level nesting structure as Claude. Hook entries are grouped by matcher, and each group contains an array of inner hooks:
 
 ```json
 {
   "hooks": {
     "PreToolUse": [
-      { "matcher": "Bash", "command": "/usr/local/bin/check-dangerous-commands.sh" }
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "/usr/local/bin/check-dangerous-commands.sh" }
+        ]
+      }
     ]
   }
 }
@@ -149,7 +157,7 @@ The blocking message should be **agent-legible**: tell the agent what to do inst
 
 Hooks declared in **included harnesses** (via `includes`) are dropped during assembly. Only the root harness's hooks are used. This prevents composed harnesses from silently injecting lifecycle behavior that the harness author didn't explicitly declare.
 
-If an included harness needs hooks, copy its hook declarations into the root harness's `metadata.json`.
+If an included harness needs hooks, copy its hook declarations into the root harness's `harness.json`.
 
 ## Portable Hook Script Advice
 

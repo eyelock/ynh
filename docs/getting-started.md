@@ -22,22 +22,15 @@ export YNH_HOME="$HOME/.config/ynh"
 
 ## Create a Harness
 
-A harness is a directory with a `.claude-plugin/plugin.json` and your artifacts:
+A harness is a directory with a `harness.json` and your artifacts:
 
-`.claude-plugin/plugin.json`:
+`harness.json`:
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
   "name": "david",
-  "version": "0.1.0"
-}
-```
-
-`metadata.json` (optional):
-```json
-{
-  "ynh": {
-    "default_vendor": "claude"
-  }
+  "version": "0.1.0",
+  "default_vendor": "claude"
 }
 ```
 
@@ -45,9 +38,7 @@ Add whatever you need - skills, agents, rules, commands:
 
 ```
 david/
-├── .claude-plugin/
-│   └── plugin.json
-├── metadata.json
+├── harness.json
 ├── skills/greet/SKILL.md
 ├── agents/reviewer.md
 └── rules/concise.md
@@ -72,25 +63,26 @@ ynh install ./local-monorepo --path plugins/my-plugin
 
 ## Pull Skills From Git
 
-Point your metadata at any Git repo. Skills are used as-is - no wrapping, no build step:
+Point your harness at any Git repo. Skills are used as-is - no wrapping, no build step:
 
-`metadata.json`:
+`harness.json`:
 ```json
 {
-  "ynh": {
-    "default_vendor": "claude",
-    "includes": [
-      {
-        "git": "github.com/eyelock/claude-config-toolkit",
-        "pick": ["skills/commit", "skills/tdd"]
-      },
-      {
-        "git": "git@github.com:company/monorepo.git",
-        "path": "packages/ai-config",
-        "pick": ["skills/deploy"]
-      }
-    ]
-  }
+  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
+  "name": "david",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "includes": [
+    {
+      "git": "github.com/eyelock/claude-config-toolkit",
+      "pick": ["skills/commit", "skills/tdd"]
+    },
+    {
+      "git": "git@github.com:company/monorepo.git",
+      "path": "packages/ai-config",
+      "pick": ["skills/deploy"]
+    }
+  ]
 }
 ```
 
@@ -110,11 +102,9 @@ ynh uses your local `git` for all cloning. If `git clone` works on your machine,
 
 ```json
 {
-  "ynh": {
-    "includes": [
-      {"git": "git@github.com:company/private-skills.git", "pick": ["skills/deploy"]}
-    ]
-  }
+  "includes": [
+    {"git": "git@github.com:company/private-skills.git", "pick": ["skills/deploy"]}
+  ]
 }
 ```
 
@@ -124,11 +114,9 @@ This uses your SSH key. If you can `git clone git@github.com:company/private-ski
 
 ```json
 {
-  "ynh": {
-    "includes": [
-      {"git": "github.com/company/private-repo"}
-    ]
-  }
+  "includes": [
+    {"git": "github.com/company/private-repo"}
+  ]
 }
 ```
 

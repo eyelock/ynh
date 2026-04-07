@@ -17,10 +17,9 @@ mkdir -p /tmp/ynh-tutorial
 Delegates must be Git repos (local or remote). Create a specialist harness and turn it into a Git repo:
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/specialist/.claude-plugin
 mkdir -p /tmp/ynh-tutorial/specialist/skills/analyze
 
-cat > /tmp/ynh-tutorial/specialist/.claude-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/specialist/harness.json << 'EOF'
 {
   "name": "specialist",
   "version": "0.1.0",
@@ -55,31 +54,24 @@ git -C /tmp/ynh-tutorial/specialist commit -m "init"
 ## T4.2: Create a parent harness with delegates
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/team-lead/.claude-plugin
+mkdir -p /tmp/ynh-tutorial/team-lead
 
-cat > /tmp/ynh-tutorial/team-lead/.claude-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/team-lead/harness.json << 'EOF'
 {
   "name": "team-lead",
   "version": "0.1.0",
-  "description": "Team lead harness with specialist delegates"
+  "description": "Team lead harness with specialist delegates",
+  "default_vendor": "claude",
+  "delegates_to": [
+    {"git": "/tmp/ynh-tutorial/specialist"},
+    {"git": "github.com/eyelock/assistants", "path": "ynh/researcher"}
+  ]
 }
 EOF
 
 cat > /tmp/ynh-tutorial/team-lead/instructions.md << 'EOF'
 You are a team lead. Delegate specialist tasks to your team members.
 Use the specialist delegate for deep code analysis.
-EOF
-
-cat > /tmp/ynh-tutorial/team-lead/metadata.json << 'EOF'
-{
-  "ynh": {
-    "default_vendor": "claude",
-    "delegates_to": [
-      {"git": "/tmp/ynh-tutorial/specialist"},
-      {"git": "github.com/eyelock/ynh"}
-    ]
-  }
-}
 EOF
 ```
 
@@ -93,7 +85,7 @@ Expected install output includes delegate fetching:
 ```
 Fetching 0 include(s) and 2 delegate(s)...
   Fetched /tmp/ynh-tutorial/specialist
-  Fetched eyelock/ynh
+  Fetched eyelock/assistants
 Installed harness "team-lead"
 ```
 
@@ -104,7 +96,7 @@ ynh ls
 Expected:
 ```
 NAME       VENDOR  SOURCE                          ARTIFACTS  INCLUDES  DELEGATES TO
-team-lead  claude  /tmp/ynh-tutorial/team-lead      ...        0         /tmp/ynh-tutorial/specialist, eyelock/ynh
+team-lead  claude  /tmp/ynh-tutorial/team-lead      ...        0         /tmp/ynh-tutorial/specialist, eyelock/assistants
 ```
 
 ## T4.4: Inspect delegate agent files
@@ -121,7 +113,7 @@ Check what was generated:
 ls ~/.ynh/run/team-lead/.claude/agents/
 ```
 
-Expected: `specialist.md` and `ynh.md` — generated agent files with the delegate's instructions, rules, and skill lists inlined.
+Expected: `specialist.md` and `researcher.md` — generated agent files with the delegate's instructions, rules, and skill lists inlined.
 
 ```bash
 cat ~/.ynh/run/team-lead/.claude/agents/specialist.md
@@ -138,10 +130,10 @@ team-lead "delegate to the specialist agent and ask it to analyze this project's
 The specialist's `instructions.md` says to provide detailed technical analysis with file paths. If you see that style of response, delegation is working.
 
 ```bash
-team-lead "ask the ynh delegate what the /ynh-validate skill does"
+team-lead "ask the researcher delegate to review the project structure"
 ```
 
-This delegates to the ynh harness — a remote delegate from GitHub.
+This delegates to the researcher harness — a remote delegate from GitHub (from the assistants monorepo).
 
 ## Clean up
 
@@ -151,7 +143,7 @@ ynh uninstall team-lead
 
 ## What you learned
 
-- `delegates_to` in metadata.json references other harnesses as subagents
+- `delegates_to` in harness.json references other harnesses as subagents
 - Delegates must be Git repos (local or remote)
 - ynh generates vendor-native agent files from delegate harnesses at runtime
 - Agent files inline the delegate's instructions, rules, and skill list

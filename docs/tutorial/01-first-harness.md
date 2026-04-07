@@ -22,24 +22,17 @@ ynh init
 
 ## T1.1: Create the harness structure
 
-A harness needs two files at minimum: `.claude-plugin/plugin.json` (identity) and optionally `metadata.json` (ynh config).
+A harness needs one file at minimum: `harness.json` (identity and config).
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/my-harness/.claude-plugin
+mkdir -p /tmp/ynh-tutorial/my-harness
 
-cat > /tmp/ynh-tutorial/my-harness/.claude-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/my-harness/harness.json << 'EOF'
 {
   "name": "my-harness",
   "version": "0.1.0",
-  "description": "My first ynh harness"
-}
-EOF
-
-cat > /tmp/ynh-tutorial/my-harness/metadata.json << 'EOF'
-{
-  "ynh": {
-    "default_vendor": "claude"
-  }
+  "description": "My first ynh harness",
+  "default_vendor": "claude"
 }
 EOF
 ```
@@ -114,11 +107,10 @@ find /tmp/ynh-tutorial/my-harness -type f | sort
 
 Expected:
 ```
-.claude-plugin/plugin.json
 agents/nitpicker.md
 commands/hello.md
+harness.json
 instructions.md
-metadata.json
 rules/be-brief.md
 skills/greet/SKILL.md
 ```
@@ -245,7 +237,7 @@ The `remove` alias also works: `ynh remove my-harness`.
 
 ## What you learned
 
-- A harness is a directory with `.claude-plugin/plugin.json` + optional `metadata.json`
+- A harness is a directory with `harness.json`
 - Four artifact types: skills, agents, rules, commands
 - `instructions.md` becomes vendor-specific project instructions
 - `ynh install` copies the harness and generates a launcher script

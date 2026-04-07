@@ -36,19 +36,14 @@ docker run --rm ghcr.io/eyelock/ynh:latest version
 Create a harness to use throughout this tutorial:
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/docker-harness/.claude-plugin
 mkdir -p /tmp/ynh-tutorial/docker-harness/skills/greet
 mkdir -p /tmp/ynh-tutorial/docker-harness/rules
 
-cat > /tmp/ynh-tutorial/docker-harness/.claude-plugin/plugin.json << 'EOF'
-{"name": "docker-demo", "version": "0.1.0"}
-EOF
-
-cat > /tmp/ynh-tutorial/docker-harness/metadata.json << 'EOF'
+cat > /tmp/ynh-tutorial/docker-harness/harness.json << 'EOF'
 {
-  "ynh": {
-    "default_vendor": "claude"
-  }
+  "name": "docker-demo",
+  "version": "0.1.0",
+  "default_vendor": "claude"
 }
 EOF
 

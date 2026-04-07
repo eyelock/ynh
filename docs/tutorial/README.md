@@ -18,6 +18,7 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 | 10 | [Hooks](tutorial/10-hooks.md) | Declare vendor-agnostic lifecycle hooks |
 | 11 | [MCP Servers](tutorial/11-mcp-servers.md) | Declare MCP server dependencies per harness |
 | 12 | [Developer Preview](tutorial/12-developer-preview.md) | Preview and diff assembled output across vendors |
+| 13 | [Profiles](tutorial/13-profiles.md) | Environment-specific overrides with profiles |
 
 ## Manual Test Plan
 

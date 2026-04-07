@@ -139,8 +139,7 @@ A harness can include an `instructions.md` file with project-level instructions.
 
 ```
 my-harness/
-├── .claude-plugin/
-│   └── plugin.json
+├── harness.json
 └── instructions.md       <- becomes CLAUDE.md (or vendor equivalent)
 ```
 
@@ -167,23 +166,20 @@ Files in the harness's own directory:
 
 ```
 my-harness/
-├── .claude-plugin/
-│   └── plugin.json
+├── harness.json
 ├── skills/review/SKILL.md     <- embedded
 └── rules/concise.md           <- embedded
 ```
 
 ### 2. External Git repos
 
-Referenced in `metadata.json`:
+Referenced in `harness.json`:
 
 ```json
 {
-  "ynh": {
-    "includes": [
-      {"git": "github.com/user/skills-repo", "pick": ["skills/commit"]}
-    ]
-  }
+  "includes": [
+    {"git": "github.com/user/skills-repo", "pick": ["skills/commit"]}
+  ]
 }
 ```
 
@@ -191,11 +187,9 @@ Referenced in `metadata.json`:
 
 ```json
 {
-  "ynh": {
-    "includes": [
-      {"git": "github.com/company/monorepo", "path": "packages/ai-config"}
-    ]
-  }
+  "includes": [
+    {"git": "github.com/company/monorepo", "path": "packages/ai-config"}
+  ]
 }
 ```
 

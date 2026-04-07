@@ -12,17 +12,8 @@ rm -rf /tmp/ynh-tutorial
 Create a harness with multiple artifact types, hooks, and MCP servers:
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/preview-harness/.claude-plugin
 mkdir -p /tmp/ynh-tutorial/preview-harness/skills/deploy
 mkdir -p /tmp/ynh-tutorial/preview-harness/rules
-
-cat > /tmp/ynh-tutorial/preview-harness/.claude-plugin/plugin.json << 'EOF'
-{"name": "preview-demo", "version": "0.1.0"}
-EOF
-
-cat > /tmp/ynh-tutorial/preview-harness/instructions.md << 'EOF'
-You are a DevOps assistant. Use the deployment skill for releases and query the database for status checks.
-EOF
 
 cat > /tmp/ynh-tutorial/preview-harness/skills/deploy/SKILL.md << 'EOF'
 ---
@@ -48,31 +39,35 @@ Never deploy to production without running the test suite first.
 Always create a rollback plan before deploying.
 EOF
 
-cat > /tmp/ynh-tutorial/preview-harness/metadata.json << 'EOF'
+cat > /tmp/ynh-tutorial/preview-harness/harness.json << 'EOF'
 {
-  "ynh": {
-    "default_vendor": "claude",
-    "hooks": {
-      "before_tool": [
-        {
-          "matcher": "Bash",
-          "command": "/usr/local/bin/check-deploy.sh"
-        }
-      ],
-      "after_tool": [
-        {
-          "command": "/usr/local/bin/validate-output.sh"
-        }
-      ]
-    },
-    "mcp_servers": {
-      "sqlite": {
-        "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-sqlite", "/tmp/status.db"]
+  "name": "preview-demo",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "hooks": {
+    "before_tool": [
+      {
+        "matcher": "Bash",
+        "command": "/usr/local/bin/check-deploy.sh"
       }
+    ],
+    "after_tool": [
+      {
+        "command": "/usr/local/bin/validate-output.sh"
+      }
+    ]
+  },
+  "mcp_servers": {
+    "sqlite": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sqlite", "/tmp/status.db"]
     }
   }
 }
+EOF
+
+cat > /tmp/ynh-tutorial/preview-harness/instructions.md << 'EOF'
+You are a DevOps assistant. Use the deployment skill for releases and query the database for status checks.
 EOF
 ```
 
@@ -210,8 +205,9 @@ Expected:
 
 ```json
 {
+  "version": 1,
   "hooks": {
-    "afterShellExecution": [
+    "afterFileEdit": [
       { "command": "/usr/local/bin/validate-output.sh" }
     ],
     "beforeShellExecution": [
@@ -279,4 +275,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-Return to the [Tutorial Overview](README.md) for a full list of tutorials.
+[Tutorial 13: Profiles](13-profiles.md) — configure environment-specific overrides with profiles.

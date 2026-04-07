@@ -18,7 +18,7 @@ brew tap eyelock/tap && brew install ynh
 Scaffold a new artifact or full harness.
 
 ```bash
-ynd create harness my-team     # full harness directory structure
+ynd create harness my-team     # full harness directory structure (harness.json + artifacts)
 ynd create skill commit        # skills/commit/SKILL.md
 ynd create agent reviewer      # agents/reviewer.md
 ynd create rule be-nice        # rules/be-nice.md
@@ -91,16 +91,18 @@ Show the assembled vendor-native output for a harness without installing it. Use
 ynd preview ./my-harness                    # default: Claude vendor, stdout
 ynd preview ./my-harness -v cursor          # specific vendor
 ynd preview ./my-harness -v claude -o ./out # write to directory
+ynd preview ./my-harness --profile strict   # preview with a specific profile
 ```
 
 | Flag | Description |
 |------|-------------|
 | `-v, --vendor <name>` | Vendor to assemble for. Default: `claude` |
 | `-o, --output <dir>` | Write output to directory instead of stdout |
+| `--profile <name>` | Profile to apply during assembly |
 
 When no `-o` flag is given, preview prints a tree with file contents to stdout. With `-o`, it writes the full assembled output to the specified directory.
 
-Preview supports the same source types as export: local directories with `.claude-plugin/plugin.json` or bare `AGENTS.md` directories.
+Preview supports the same source types as export: local directories with `harness.json` or bare `AGENTS.md` directories.
 
 See [Tutorial 12: Developer Preview](tutorial/12-developer-preview.md) for a guided walkthrough.
 
@@ -112,6 +114,7 @@ Compare assembled harness output across two or more vendors. Shows which files a
 ynd diff ./my-harness                       # compare all vendors (claude, codex, cursor)
 ynd diff ./my-harness claude cursor         # compare specific vendors
 ynd diff ./my-harness claude cursor codex   # three-way comparison
+ynd diff ./my-harness --profile strict      # diff with a specific profile applied
 ```
 
 The diff output groups files into four categories:
@@ -133,6 +136,7 @@ ynd export ./my-harness -v claude,cursor          # specific vendors only
 ynd export ./my-harness -o ./out                  # custom output directory
 ynd export ./my-harness --merged                  # single dir with dual manifests
 ynd export ./my-harness --clean                   # remove output dir before export
+ynd export ./my-harness --profile strict          # export with a specific profile applied
 ynd export github.com/user/repo --path harnesses/david  # from a monorepo
 ```
 
@@ -141,6 +145,7 @@ ynd export github.com/user/repo --path harnesses/david  # from a monorepo
 | `-o, --output <dir>` | Output directory. Default: `./dist/<harness-name>/` |
 | `-v, --vendor <names>` | Comma-separated vendors. Default: all registered (`claude,codex,cursor`) |
 | `--path <subdir>` | Subdirectory within source (for monorepos) |
+| `--profile <name>` | Profile to apply during assembly |
 | `--merged` | Single output dir with all vendor manifests (for CI/marketplace use) |
 | `--clean` | Remove entire output dir before export |
 
@@ -239,6 +244,7 @@ See [Tutorial 6: Marketplace](tutorial/06-marketplace.md) for a guided walkthrou
 | `-o, --output <path>` | inspect, export, preview, marketplace | Output directory. Defaults vary by command. |
 | `--clean` | export, marketplace | Remove output directory before writing. |
 | `--merged` | export | Single output dir with dual vendor manifests. |
+| `--profile <name>` | preview, diff, export | Profile to apply during assembly. |
 | `--path <subdir>` | export | Subdirectory within source (for monorepos). |
 | `--restore` | compress | Restore a file from its latest backup. |
 | `--list-backups` | compress | Show backup history for a file. |

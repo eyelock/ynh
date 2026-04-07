@@ -15,7 +15,7 @@ mkdir -p /tmp/ynh-tutorial
 
 Create a small marketplace with one harness and one standalone plugin:
 
-### Standalone plugin (no metadata.json)
+### Standalone plugin (no harness.json)
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/marketplace-src/plugins/formatter/.claude-plugin
@@ -40,35 +40,28 @@ configured formatter (prettier, gofmt, black, etc.).
 EOF
 ```
 
-### Harness (has metadata.json with includes)
+### Harness (has harness.json with includes)
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/.claude-plugin
+mkdir -p /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer
 
-cat > /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/.claude-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/harness.json << 'EOF'
 {
   "name": "reviewer",
   "version": "1.0.0",
-  "description": "Code review harness with external skills"
+  "description": "Code review harness with external skills",
+  "includes": [
+    {
+      "git": "github.com/eyelock/assistants",
+      "path": "skills/dev",
+      "pick": ["skills/dev-review", "skills/dev-quality"]
+    }
+  ]
 }
 EOF
 
 cat > /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/instructions.md << 'EOF'
 You are a code reviewer. Be thorough but constructive.
-EOF
-
-cat > /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/metadata.json << 'EOF'
-{
-  "ynh": {
-    "includes": [
-      {
-        "git": "github.com/eyelock/assistants",
-        "path": "skills/dev",
-        "pick": ["skills/dev-review", "skills/dev-quality"]
-      }
-    ]
-  }
-}
 EOF
 ```
 
@@ -97,7 +90,7 @@ EOF
 
 Two entry types:
 - **`plugin`** — already a valid plugin directory. Copied as-is, missing vendor manifests generated.
-- **`harness`** — has `metadata.json` with includes. Fully exported (includes resolved, pick applied, delegates generated).
+- **`harness`** — has `harness.json` with includes. Fully exported (includes resolved, pick applied, delegates generated).
 
 ## T6.3: Build the marketplace
 

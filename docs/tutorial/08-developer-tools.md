@@ -22,9 +22,8 @@ Expected: a `my-team/` directory with the full harness structure:
 ```bash
 find my-team -type f | sort
 # Expected:
-#   my-team/.claude-plugin/plugin.json
+#   my-team/harness.json
 #   my-team/instructions.md
-#   my-team/metadata.json
 ```
 
 Empty directories are also created: `skills/`, `agents/`, `rules/`, `commands/`.
@@ -247,4 +246,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Complete
 
-You've now covered every feature of ynh and ynd. For a quick verification checklist, see the [Manual Test Plan](manual-test-plan.md).
+Continue to [Tutorial 9: Docker Images](tutorial/09-docker-image.md) or jump to [Tutorial 13: Profiles](tutorial/13-profiles.md) for the profile system.

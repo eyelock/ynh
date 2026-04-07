@@ -32,13 +32,11 @@ source ~/.zshrc
 
 ### 2. Create a harness
 
-Create a directory with a `.claude-plugin/plugin.json` and your artifacts:
+Create a directory with a `harness.json` and your artifacts:
 
 ```
 david/
-├── .claude-plugin/
-│   └── plugin.json           # required - name, version
-├── metadata.json             # optional - vendor, includes, delegates
+├── harness.json              # required - name, version, vendor config
 ├── instructions.md           # optional - project-level instructions
 ├── skills/
 │   └── review/
@@ -51,23 +49,14 @@ david/
     └── check.md
 ```
 
-The plugin manifest (`.claude-plugin/plugin.json`):
+The harness manifest (`harness.json`):
 
 ```json
 {
   "name": "david",
   "version": "0.1.0",
-  "description": "David's personal coding harness"
-}
-```
-
-Optional metadata (`metadata.json`):
-
-```json
-{
-  "ynh": {
-    "default_vendor": "claude"
-  }
+  "description": "David's personal coding harness",
+  "default_vendor": "claude"
 }
 ```
 
@@ -85,8 +74,7 @@ A harness can include an `instructions.md` that maps to the vendor's project ins
 
 ```
 david/
-├── .claude-plugin/
-│   └── plugin.json
+├── harness.json
 └── instructions.md       # becomes CLAUDE.md, codex.md, or .cursorrules
 ```
 
@@ -134,24 +122,24 @@ Artifacts can live **directly in your harness** (embedded) or be **pulled from G
 
 ```json
 {
-  "ynh": {
-    "default_vendor": "claude",
-    "includes": [
-      {
-        "git": "github.com/eyelock/claude-config-toolkit",
-        "ref": "v2.0.0",
-        "pick": ["skills/commit", "skills/tdd"]
-      },
-      {
-        "git": "git@github.com:company/internal-tools.git",
-        "path": "packages/ai-config",
-        "pick": ["agents/reviewer"]
-      }
-    ],
-    "delegates_to": [
-      {"git": "github.com/eyelock/team-dev-harness"}
-    ]
-  }
+  "name": "david",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "includes": [
+    {
+      "git": "github.com/eyelock/claude-config-toolkit",
+      "ref": "v2.0.0",
+      "pick": ["skills/commit", "skills/tdd"]
+    },
+    {
+      "git": "git@github.com:company/internal-tools.git",
+      "path": "packages/ai-config",
+      "pick": ["agents/reviewer"]
+    }
+  ],
+  "delegates_to": [
+    {"git": "github.com/eyelock/team-dev-harness"}
+  ]
 }
 ```
 
@@ -252,7 +240,7 @@ Full documentation is available at **[eyelock.github.io/ynh](https://eyelock.git
 - [Agent Skills Standard](https://eyelock.github.io/ynh/#/skills-standard) — cross-platform spec, discovery paths, catalog budget
 - [Marketplace & Distribution](https://eyelock.github.io/ynh/#/marketplace) — cross-vendor marketplace systems and ynh's marketplace builder
 - [Docker](https://eyelock.github.io/ynh/#/docker) — containerized harnesses and Docker image baking
-- [Tutorials](https://eyelock.github.io/ynh/#/tutorial/) — 8 progressive tutorials from first harness to marketplace generation
+- [Tutorials](https://eyelock.github.io/ynh/#/tutorial/) — 13 progressive tutorials from first harness to profiles
 
 ## License
 

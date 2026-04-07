@@ -1,0 +1,221 @@
+# Tutorial 13: Profiles
+
+Configure environment-specific overrides with profiles. A profile can add rules, hooks, MCP servers, and other settings that activate only when the profile is selected.
+
+## Prerequisites
+
+```bash
+# Clean up from any previous run
+rm -rf /tmp/ynh-tutorial
+ynh uninstall profile-demo 2>/dev/null
+
+mkdir -p /tmp/ynh-tutorial
+```
+
+## T13.1: Add profiles to harness.json
+
+Create a harness with a `ci` profile that adds stricter rules and a lint hook:
+
+```bash
+mkdir -p /tmp/ynh-tutorial/profile-harness/skills/deploy
+mkdir -p /tmp/ynh-tutorial/profile-harness/rules
+
+cat > /tmp/ynh-tutorial/profile-harness/harness.json << 'EOF'
+{
+  "name": "profile-demo",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "hooks": {
+    "after_tool": [
+      { "command": "/usr/local/bin/format-check.sh" }
+    ]
+  },
+  "profiles": {
+    "ci": {
+      "hooks": {
+        "before_tool": [
+          {
+            "matcher": "Bash",
+            "command": "/usr/local/bin/ci-guard.sh"
+          }
+        ]
+      },
+      "mcp_servers": {
+        "ci-db": {
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-sqlite", "/tmp/ci.db"]
+        }
+      }
+    },
+    "local": {
+      "mcp_servers": {
+        "dev-db": {
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-sqlite", "/tmp/dev.db"]
+        }
+      }
+    }
+  }
+}
+EOF
+
+cat > /tmp/ynh-tutorial/profile-harness/instructions.md << 'EOF'
+You are a deployment assistant. Follow safety procedures for all environments.
+EOF
+
+cat > /tmp/ynh-tutorial/profile-harness/skills/deploy/SKILL.md << 'EOF'
+---
+name: deploy
+description: Deploy to staging or production
+---
+
+Run the deployment pipeline for the target environment.
+EOF
+
+cat > /tmp/ynh-tutorial/profile-harness/rules/safety.md << 'EOF'
+Never deploy without running tests first.
+EOF
+```
+
+Key points:
+- `profiles` is a top-level field in `harness.json`
+- Each profile can contain `hooks` and `mcp_servers`
+- When a profile is selected, its `hooks` and `mcp_servers` **fully replace** the top-level values (no merge, no inheritance)
+- If a profile only defines `hooks`, the top-level `mcp_servers` are dropped (replaced with nothing)
+
+## T13.2: Validate profiles
+
+```bash
+ynd validate /tmp/ynh-tutorial/profile-harness
+```
+
+Expected:
+```
+/tmp/ynh-tutorial/profile-harness: valid
+```
+
+The validator checks that profile names are valid and profile contents use the correct schema.
+
+## T13.3: Preview with --profile ci
+
+```bash
+ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile ci
+```
+
+Expected output includes:
+- `.claude/settings.json` with **only** the `ci` profile's `before_tool` hook (the base `after_tool` hook is replaced — profiles use replace semantics, not merge)
+- `.mcp.json` with the `ci-db` MCP server from the `ci` profile
+
+Compare with the base (no profile):
+
+```bash
+ynd preview /tmp/ynh-tutorial/profile-harness -v claude
+```
+
+Expected: `.claude/settings.json` has only the base `after_tool` hook. No `.mcp.json` (no MCP servers in base config).
+
+## T13.4: Run with --profile ci
+
+Install the harness first:
+
+```bash
+ynh install /tmp/ynh-tutorial/profile-harness
+```
+
+Run with the `ci` profile:
+
+```bash
+profile-demo --profile ci -- "what hooks and MCP servers are configured?"
+```
+
+The `ci` profile's hooks and MCP servers fully replace the base values — only the profile's `before_tool` hook and `ci-db` MCP server are active.
+
+Run without a profile for comparison:
+
+```bash
+profile-demo "what hooks are configured?"
+```
+
+Only the base hooks are active.
+
+## T13.5: Try --profile nonexistent
+
+```bash
+ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile nonexistent
+```
+
+Expected error:
+```
+Error: profile "nonexistent" not found in harness.json (available: ci, local)
+```
+
+The error lists available profiles to help you pick the right one.
+
+## T13.6: Use YNH_PROFILE env var
+
+The `YNH_PROFILE` environment variable activates a profile without the flag:
+
+```bash
+YNH_PROFILE=ci ynd preview /tmp/ynh-tutorial/profile-harness -v claude
+```
+
+Expected: same output as `--profile ci` — the `ci` profile's hooks and MCP servers replace the base values.
+
+This is useful in CI/CD pipelines:
+
+```yaml
+# .github/workflows/deploy.yml
+env:
+  YNH_PROFILE: ci
+steps:
+  - run: profile-demo -- "run deployment checks"
+```
+
+## T13.7: Both flag and env var — flag wins
+
+```bash
+YNH_PROFILE=local ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile ci
+```
+
+Expected: the `ci` profile is active (not `local`). The `--profile` flag takes precedence over `YNH_PROFILE`.
+
+Verify by checking the MCP output — you should see `ci-db` (from the `ci` profile), not `dev-db` (from the `local` profile).
+
+## T13.8: Use ynd diff --profile ci
+
+Compare base vs profile output across vendors:
+
+```bash
+ynd diff /tmp/ynh-tutorial/profile-harness claude cursor --profile ci
+```
+
+Expected output shows the vendor-specific differences with the `ci` profile applied to both:
+- Claude: hooks in `.claude/settings.json`, MCP in `.mcp.json`
+- Cursor: hooks in `.cursor/hooks.json`, MCP in `.cursor/mcp.json`
+
+Compare with no profile to see what the profile adds:
+
+```bash
+ynd diff /tmp/ynh-tutorial/profile-harness claude cursor
+```
+
+## Clean up
+
+```bash
+ynh uninstall profile-demo 2>/dev/null
+rm -rf /tmp/ynh-tutorial
+```
+
+## What You Learned
+
+- Profiles are declared in `harness.json` under `profiles` as named config objects
+- Each profile can override `hooks` and `mcp_servers`
+- Profile settings **fully replace** the base values (not additive — what you see in the profile is what you get)
+- `--profile <name>` activates a profile on `ynh run`, `ynd preview`, and `ynd diff`
+- `YNH_PROFILE` env var activates a profile (flag takes precedence)
+- Invalid profile names produce helpful errors listing available profiles
+- `ynd validate` checks profile schema validity
+
+## Next
+
+Return to the [Tutorial Overview](README.md) for a full list of tutorials.

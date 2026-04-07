@@ -1,15 +1,21 @@
-* **Guides**
+* **Concepts**
   * [Overview](README.md)
   * [Getting Started](getting-started.md)
   * [Harness Engineering](harness-engineering.md)
-  * [Harness Reference](harnesses.md)
-  * [Artifacts Guide](artifacts.md)
-  * [Vendor Support](vendors.md)
+  * [Artifacts](artifacts.md)
   * [Agent Skills Standard](skills-standard.md)
-  * [Marketplace & Distribution](marketplace.md)
+
+* **Configuration**
+  * [Harness Manifest](harnesses.md)
   * [Hooks](hooks.md)
   * [MCP Servers](mcp.md)
+  * [Profiles](profiles.md)
+  * [Vendor Support](vendors.md)
+
+* **Tooling**
+  * [CLI Reference](reference.md)
   * [ynd Developer Tools](ynd.md)
+  * [Marketplace & Distribution](marketplace.md)
   * [Docker](docker.md)
 
 * **Tutorials**
@@ -26,6 +32,7 @@
   * [10. Hooks](tutorial/10-hooks.md)
   * [11. MCP Servers](tutorial/11-mcp-servers.md)
   * [12. Developer Preview](tutorial/12-developer-preview.md)
+  * [13. Profiles](tutorial/13-profiles.md)
   * [Manual Test Plan](tutorial/manual-test-plan.md)
 
 * **Project**

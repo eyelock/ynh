@@ -19,38 +19,31 @@ The [eyelock/assistants](https://github.com/eyelock/assistants) repo is a skill 
 Create a harness that cherry-picks specific skills from it:
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/my-dev/.claude-plugin
+mkdir -p /tmp/ynh-tutorial/my-dev
 
-cat > /tmp/ynh-tutorial/my-dev/.claude-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/my-dev/harness.json << 'EOF'
 {
   "name": "my-dev",
   "version": "0.1.0",
-  "description": "My development harness"
-}
-EOF
-
-cat > /tmp/ynh-tutorial/my-dev/metadata.json << 'EOF'
-{
-  "ynh": {
-    "default_vendor": "claude",
-    "includes": [
-      {
-        "git": "github.com/eyelock/assistants",
-        "path": "skills/dev",
-        "pick": ["skills/dev-project", "skills/dev-quality"]
-      },
-      {
-        "git": "github.com/eyelock/assistants",
-        "path": "skills/tech",
-        "pick": ["skills/go-lang"]
-      },
-      {
-        "git": "github.com/eyelock/assistants",
-        "path": "skills/pause",
-        "pick": ["skills/help-me-answer"]
-      }
-    ]
-  }
+  "description": "My development harness",
+  "default_vendor": "claude",
+  "includes": [
+    {
+      "git": "github.com/eyelock/assistants",
+      "path": "skills/dev",
+      "pick": ["skills/dev-project", "skills/dev-quality"]
+    },
+    {
+      "git": "github.com/eyelock/assistants",
+      "path": "skills/tech",
+      "pick": ["skills/go-lang"]
+    },
+    {
+      "git": "github.com/eyelock/assistants",
+      "path": "skills/pause",
+      "pick": ["skills/help-me-answer"]
+    }
+  ]
 }
 EOF
 
@@ -89,18 +82,19 @@ ls ~/.ynh/run/my-dev/.claude/skills/
 If you have the assistants repo checked out locally, you can use a local path instead of a Git URL. This is faster (no clone) and useful during development:
 
 ```bash
-cat > /tmp/ynh-tutorial/my-dev/metadata.json << 'EOF'
+cat > /tmp/ynh-tutorial/my-dev/harness.json << 'EOF'
 {
-  "ynh": {
-    "default_vendor": "claude",
-    "includes": [
-      {
-        "git": "/Users/david/Storage/Workspace/eyelock/assistants",
-        "path": "skills/dev",
-        "pick": ["skills/dev-project", "skills/dev-quality"]
-      }
-    ]
-  }
+  "name": "my-dev",
+  "version": "0.1.0",
+  "description": "My development harness",
+  "default_vendor": "claude",
+  "includes": [
+    {
+      "git": "/Users/david/Storage/Workspace/eyelock/assistants",
+      "path": "skills/dev",
+      "pick": ["skills/dev-project", "skills/dev-quality"]
+    }
+  ]
 }
 EOF
 ```
@@ -114,27 +108,20 @@ Any GitHub repo that follows the [Agent Skills](https://agentskills.io) standard
 [anthropics/skills](https://github.com/anthropics/skills) has skills for frontend design, document handling, and more:
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/with-anthropic/.claude-plugin
+mkdir -p /tmp/ynh-tutorial/with-anthropic
 
-cat > /tmp/ynh-tutorial/with-anthropic/.claude-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/with-anthropic/harness.json << 'EOF'
 {
   "name": "with-anthropic",
   "version": "0.1.0",
-  "description": "Harness with Anthropic official skills"
-}
-EOF
-
-cat > /tmp/ynh-tutorial/with-anthropic/metadata.json << 'EOF'
-{
-  "ynh": {
-    "default_vendor": "claude",
-    "includes": [
-      {
-        "git": "github.com/anthropics/skills",
-        "pick": ["skills/frontend-design"]
-      }
-    ]
-  }
+  "description": "Harness with Anthropic official skills",
+  "default_vendor": "claude",
+  "includes": [
+    {
+      "git": "github.com/anthropics/skills",
+      "pick": ["skills/frontend-design"]
+    }
+  ]
 }
 EOF
 
@@ -152,27 +139,20 @@ with-anthropic "what skills do you have?"
 [vercel-labs/skills](https://github.com/vercel-labs/skills) has skills for Next.js and Vercel workflows:
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/with-vercel/.claude-plugin
+mkdir -p /tmp/ynh-tutorial/with-vercel
 
-cat > /tmp/ynh-tutorial/with-vercel/.claude-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/with-vercel/harness.json << 'EOF'
 {
   "name": "with-vercel",
   "version": "0.1.0",
-  "description": "Harness with Vercel skills"
-}
-EOF
-
-cat > /tmp/ynh-tutorial/with-vercel/metadata.json << 'EOF'
-{
-  "ynh": {
-    "default_vendor": "claude",
-    "includes": [
-      {
-        "git": "github.com/vercel-labs/skills",
-        "pick": ["skills/find-skills"]
-      }
-    ]
-  }
+  "description": "Harness with Vercel skills",
+  "default_vendor": "claude",
+  "includes": [
+    {
+      "git": "github.com/vercel-labs/skills",
+      "pick": ["skills/find-skills"]
+    }
+  ]
 }
 EOF
 
@@ -190,37 +170,30 @@ with-vercel "what skills do you have?"
 Combine skills from your own repos and third-party repos into one harness:
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/full-stack/.claude-plugin
+mkdir -p /tmp/ynh-tutorial/full-stack
 
-cat > /tmp/ynh-tutorial/full-stack/.claude-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/full-stack/harness.json << 'EOF'
 {
   "name": "full-stack",
   "version": "0.1.0",
-  "description": "Full-stack harness: own skills + third-party"
-}
-EOF
-
-cat > /tmp/ynh-tutorial/full-stack/metadata.json << 'EOF'
-{
-  "ynh": {
-    "default_vendor": "claude",
-    "includes": [
-      {
-        "git": "github.com/eyelock/assistants",
-        "path": "skills/dev",
-        "pick": ["skills/dev-project", "skills/dev-quality", "skills/dev-review"]
-      },
-      {
-        "git": "github.com/eyelock/assistants",
-        "path": "skills/tech",
-        "pick": ["skills/go-lang"]
-      },
-      {
-        "git": "github.com/anthropics/skills",
-        "pick": ["skills/frontend-design"]
-      }
-    ]
-  }
+  "description": "Full-stack harness: own skills + third-party",
+  "default_vendor": "claude",
+  "includes": [
+    {
+      "git": "github.com/eyelock/assistants",
+      "path": "skills/dev",
+      "pick": ["skills/dev-project", "skills/dev-quality", "skills/dev-review"]
+    },
+    {
+      "git": "github.com/eyelock/assistants",
+      "path": "skills/tech",
+      "pick": ["skills/go-lang"]
+    },
+    {
+      "git": "github.com/anthropics/skills",
+      "pick": ["skills/frontend-design"]
+    }
+  ]
 }
 EOF
 
@@ -243,12 +216,7 @@ ls ~/.ynh/run/full-stack/.claude/skills/
 A harness can have its own skills alongside remote includes:
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/mixed/.claude-plugin
 mkdir -p /tmp/ynh-tutorial/mixed/skills/my-custom-skill
-
-cat > /tmp/ynh-tutorial/mixed/.claude-plugin/plugin.json << 'EOF'
-{"name": "mixed", "version": "0.1.0"}
-EOF
 
 cat > /tmp/ynh-tutorial/mixed/skills/my-custom-skill/SKILL.md << 'EOF'
 ---
@@ -260,17 +228,17 @@ This skill lives directly in the harness directory.
 It is not pulled from Git. It exists nowhere else.
 EOF
 
-cat > /tmp/ynh-tutorial/mixed/metadata.json << 'EOF'
+cat > /tmp/ynh-tutorial/mixed/harness.json << 'EOF'
 {
-  "ynh": {
-    "includes": [
-      {
-        "git": "github.com/eyelock/assistants",
-        "path": "skills/pause",
-        "pick": ["skills/take-a-moment"]
-      }
-    ]
-  }
+  "name": "mixed",
+  "version": "0.1.0",
+  "includes": [
+    {
+      "git": "github.com/eyelock/assistants",
+      "path": "skills/pause",
+      "pick": ["skills/take-a-moment"]
+    }
+  ]
 }
 EOF
 
@@ -317,20 +285,17 @@ git -C /tmp/ynh-tutorial/local-lib add .
 git -C /tmp/ynh-tutorial/local-lib commit -m "init"
 
 # Reference it in a harness
-mkdir -p /tmp/ynh-tutorial/local-ref/.claude-plugin
-cat > /tmp/ynh-tutorial/local-ref/.claude-plugin/plugin.json << 'EOF'
-{"name": "local-ref", "version": "0.1.0"}
-EOF
-cat > /tmp/ynh-tutorial/local-ref/metadata.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/local-ref
+cat > /tmp/ynh-tutorial/local-ref/harness.json << 'EOF'
 {
-  "ynh": {
-    "includes": [
-      {
-        "git": "/tmp/ynh-tutorial/local-lib",
-        "pick": ["skills/fast-deploy"]
-      }
-    ]
-  }
+  "name": "local-ref",
+  "version": "0.1.0",
+  "includes": [
+    {
+      "git": "/tmp/ynh-tutorial/local-lib",
+      "pick": ["skills/fast-deploy"]
+    }
+  ]
 }
 EOF
 
@@ -351,24 +316,20 @@ ls ~/.ynh/run/local-ref/.claude/skills/
 ## T3.8: Pin a version with ref
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/pinned/.claude-plugin
+mkdir -p /tmp/ynh-tutorial/pinned
 
-cat > /tmp/ynh-tutorial/pinned/.claude-plugin/plugin.json << 'EOF'
-{"name": "pinned", "version": "0.1.0"}
-EOF
-
-cat > /tmp/ynh-tutorial/pinned/metadata.json << 'EOF'
+cat > /tmp/ynh-tutorial/pinned/harness.json << 'EOF'
 {
-  "ynh": {
-    "includes": [
-      {
-        "git": "github.com/eyelock/assistants",
-        "ref": "main",
-        "path": "skills/pause",
-        "pick": ["skills/help-me-answer"]
-      }
-    ]
-  }
+  "name": "pinned",
+  "version": "0.1.0",
+  "includes": [
+    {
+      "git": "github.com/eyelock/assistants",
+      "ref": "main",
+      "path": "skills/pause",
+      "pick": ["skills/help-me-answer"]
+    }
+  ]
 }
 EOF
 

@@ -4,13 +4,15 @@ MCP (Model Context Protocol) servers provide tools and resources that AI coding 
 
 ynh treats MCP server declarations as part of the harness template. At assembly time, each vendor adapter translates the canonical format into the vendor's native MCP configuration.
 
+> **Note:** MCP servers can vary by [profile](harnesses.md#profiles). When a profile is selected, its `mcp_servers` field replaces the top-level MCP servers entirely.
+
 ## Why Harnesses Declare MCP Servers
 
 Without harness-level MCP declarations, each developer must manually configure MCP servers per vendor per project. A harness that requires a database query tool or a documentation server can declare those dependencies once, and ynh handles vendor translation.
 
-## metadata.json Format
+## harness.json Format
 
-MCP servers are declared under `ynh.mcp_servers` in `metadata.json`. Each key is the server name, and the value defines either a stdio server (with `command` + `args`) or an HTTP server (with `url`).
+MCP servers are declared under the top-level `mcp_servers` key in `harness.json`. Each key is the server name, and the value defines either a stdio server (with `command` + `args`) or an HTTP server (with `url`).
 
 ### Stdio Server
 
@@ -18,14 +20,14 @@ A stdio server runs as a subprocess:
 
 ```json
 {
-  "ynh": {
-    "mcp_servers": {
-      "sqlite": {
-        "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-sqlite", "/path/to/db.sqlite"],
-        "env": {
-          "NODE_ENV": "production"
-        }
+  "name": "my-harness",
+  "version": "0.1.0",
+  "mcp_servers": {
+    "sqlite": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sqlite", "/path/to/db.sqlite"],
+      "env": {
+        "NODE_ENV": "production"
       }
     }
   }
@@ -38,13 +40,13 @@ An HTTP server connects to a remote endpoint:
 
 ```json
 {
-  "ynh": {
-    "mcp_servers": {
-      "docs-api": {
-        "url": "https://docs.example.com/mcp",
-        "headers": {
-          "Authorization": "Bearer ${DOCS_API_KEY}"
-        }
+  "name": "my-harness",
+  "version": "0.1.0",
+  "mcp_servers": {
+    "docs-api": {
+      "url": "https://docs.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DOCS_API_KEY}"
       }
     }
   }
@@ -138,7 +140,7 @@ Authorization = "Bearer ${DOCS_API_KEY}"
 
 MCP server declarations in **included harnesses** (via `includes`) are dropped during assembly. Only the root harness's MCP servers are configured. This prevents composed harnesses from silently adding tool dependencies.
 
-If an included harness requires an MCP server, add the server declaration to the root harness's `metadata.json`.
+If an included harness requires an MCP server, add the server declaration to the root harness's `harness.json`.
 
 ## Future
 

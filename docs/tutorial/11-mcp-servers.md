@@ -14,31 +14,27 @@ rm -rf /tmp/ynh-tutorial
 Create a harness with an MCP server declaration:
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/mcp-harness/.claude-plugin
+mkdir -p /tmp/ynh-tutorial/mcp-harness
 
-cat > /tmp/ynh-tutorial/mcp-harness/.claude-plugin/plugin.json << 'EOF'
-{"name": "mcp-demo", "version": "0.1.0"}
-EOF
-
-cat > /tmp/ynh-tutorial/mcp-harness/instructions.md << 'EOF'
-You are a data analyst assistant with access to a SQLite database via MCP.
-EOF
-
-cat > /tmp/ynh-tutorial/mcp-harness/metadata.json << 'EOF'
+cat > /tmp/ynh-tutorial/mcp-harness/harness.json << 'EOF'
 {
-  "ynh": {
-    "default_vendor": "claude",
-    "mcp_servers": {
-      "sqlite": {
-        "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-sqlite", "/tmp/demo.db"],
-        "env": {
-          "NODE_ENV": "production"
-        }
+  "name": "mcp-demo",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "mcp_servers": {
+    "sqlite": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sqlite", "/tmp/demo.db"],
+      "env": {
+        "NODE_ENV": "production"
       }
     }
   }
 }
+EOF
+
+cat > /tmp/ynh-tutorial/mcp-harness/instructions.md << 'EOF'
+You are a data analyst assistant with access to a SQLite database via MCP.
 EOF
 ```
 
@@ -114,23 +110,23 @@ Codex uses TOML instead of JSON, with `[mcp_servers.<name>]` table headers and a
 Add a second server using HTTP transport:
 
 ```bash
-cat > /tmp/ynh-tutorial/mcp-harness/metadata.json << 'EOF'
+cat > /tmp/ynh-tutorial/mcp-harness/harness.json << 'EOF'
 {
-  "ynh": {
-    "default_vendor": "claude",
-    "mcp_servers": {
-      "sqlite": {
-        "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-sqlite", "/tmp/demo.db"],
-        "env": {
-          "NODE_ENV": "production"
-        }
-      },
-      "docs-api": {
-        "url": "https://docs.example.com/mcp",
-        "headers": {
-          "Authorization": "Bearer ${DOCS_API_KEY}"
-        }
+  "name": "mcp-demo",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "mcp_servers": {
+    "sqlite": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sqlite", "/tmp/demo.db"],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    },
+    "docs-api": {
+      "url": "https://docs.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DOCS_API_KEY}"
       }
     }
   }
@@ -209,7 +205,7 @@ rm -rf /tmp/ynh-tutorial
 
 ## What You Learned
 
-- MCP servers are declared in `metadata.json` under `ynh.mcp_servers`
+- MCP servers are declared in `harness.json` under `mcp_servers`
 - Servers can use stdio transport (`command` + `args`) or HTTP transport (`url`)
 - Claude and Cursor both use JSON with `mcpServers` key, but in different file locations
 - Codex uses TOML format with `[mcp_servers.<name>]` table sections

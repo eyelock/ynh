@@ -11,14 +11,35 @@ rm -rf /tmp/ynh-tutorial
 
 ## T10.1: Add hooks to a harness
 
-Create a harness with hook declarations in `metadata.json`:
+Create a harness with hook declarations in `harness.json`:
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/hook-harness/.claude-plugin
 mkdir -p /tmp/ynh-tutorial/hook-harness/rules
 
-cat > /tmp/ynh-tutorial/hook-harness/.claude-plugin/plugin.json << 'EOF'
-{"name": "hook-demo", "version": "0.1.0"}
+cat > /tmp/ynh-tutorial/hook-harness/harness.json << 'EOF'
+{
+  "name": "hook-demo",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "hooks": {
+    "before_tool": [
+      {
+        "matcher": "Bash",
+        "command": "/usr/local/bin/check-commands.sh"
+      }
+    ],
+    "after_tool": [
+      {
+        "command": "/usr/local/bin/run-linter.sh"
+      }
+    ],
+    "on_stop": [
+      {
+        "command": "/usr/local/bin/session-report.sh"
+      }
+    ]
+  }
+}
 EOF
 
 cat > /tmp/ynh-tutorial/hook-harness/instructions.md << 'EOF'
@@ -33,39 +54,13 @@ description: Safety-first coding
 
 Never run destructive commands without confirmation.
 EOF
-
-cat > /tmp/ynh-tutorial/hook-harness/metadata.json << 'EOF'
-{
-  "ynh": {
-    "default_vendor": "claude",
-    "hooks": {
-      "before_tool": [
-        {
-          "matcher": "Bash",
-          "command": "/usr/local/bin/check-commands.sh"
-        }
-      ],
-      "after_tool": [
-        {
-          "command": "/usr/local/bin/run-linter.sh"
-        }
-      ],
-      "on_stop": [
-        {
-          "command": "/usr/local/bin/session-report.sh"
-        }
-      ]
-    }
-  }
-}
-EOF
 ```
 
 Verify the structure:
 
 ```bash
 ls -R /tmp/ynh-tutorial/hook-harness/
-# Expected: .claude-plugin/plugin.json, metadata.json, instructions.md, rules/safety.md
+# Expected: harness.json, instructions.md, rules/safety.md
 ```
 
 ## T10.2: Preview for Claude
@@ -113,12 +108,13 @@ Note: Claude groups hooks under matcher objects and wraps each command in `{"typ
 ynd preview /tmp/ynh-tutorial/hook-harness -v cursor
 ```
 
-Expected output includes `.cursor/hooks.json` with Cursor's flat format:
+Expected output includes `.cursor/hooks.json` with Cursor's format:
 
 ```json
 {
+  "version": 1,
   "hooks": {
-    "afterShellExecution": [
+    "afterFileEdit": [
       { "command": "/usr/local/bin/run-linter.sh" }
     ],
     "beforeShellExecution": [
@@ -131,7 +127,7 @@ Expected output includes `.cursor/hooks.json` with Cursor's flat format:
 }
 ```
 
-Note: Cursor uses different event names (`beforeShellExecution` vs `PreToolUse`) and a flat structure without matchers or type wrappers.
+Note: Cursor uses different event names (`beforeShellExecution` / `afterFileEdit` vs `PreToolUse` / `PostToolUse`), includes a `version: 1` key, and a flat structure without matchers or type wrappers.
 
 ## T10.4: Preview for Codex
 
@@ -139,25 +135,38 @@ Note: Cursor uses different event names (`beforeShellExecution` vs `PreToolUse`)
 ynd preview /tmp/ynh-tutorial/hook-harness -v codex
 ```
 
-Expected output includes `.codex/hooks.json` with Codex's two-level format:
+Expected output includes `.codex/hooks.json` with Codex's three-level format (same as Claude):
 
 ```json
 {
   "hooks": {
     "PreToolUse": [
-      { "matcher": "Bash", "command": "/usr/local/bin/check-commands.sh" }
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "/usr/local/bin/check-commands.sh" }
+        ]
+      }
     ],
     "PostToolUse": [
-      { "command": "/usr/local/bin/run-linter.sh" }
+      {
+        "hooks": [
+          { "type": "command", "command": "/usr/local/bin/run-linter.sh" }
+        ]
+      }
     ],
     "Stop": [
-      { "command": "/usr/local/bin/session-report.sh" }
+      {
+        "hooks": [
+          { "type": "command", "command": "/usr/local/bin/session-report.sh" }
+        ]
+      }
     ]
   }
 }
 ```
 
-Note: Codex uses the same event names as Claude but a flatter structure — matcher is a field on each entry rather than a grouping wrapper.
+Note: Codex uses the same event names and three-level nesting as Claude — matcher objects wrapping hook arrays with `{"type": "command", ...}` entries.
 
 ## T10.5: Write a blocking hook example
 
@@ -209,7 +218,7 @@ Expected output shows:
 - `.codex/hooks.json` is only in Codex
 - Shared files (like `CLAUDE.md`, `.cursorrules`, `codex.md`) may be listed as identical or different depending on instructions content
 
-The key difference: the same three hooks declared once in `metadata.json` produce three structurally different config files, each native to the vendor.
+The key difference: the same three hooks declared once in `harness.json` produce three structurally different config files, each native to the vendor.
 
 ## Clean up
 
@@ -219,7 +228,7 @@ rm -rf /tmp/ynh-tutorial
 
 ## What You Learned
 
-- Hooks are declared in `metadata.json` under `ynh.hooks` using canonical event names
+- Hooks are declared in `harness.json` under `hooks` using canonical event names
 - `ynd preview` shows the assembled vendor-native output without installing
 - Claude, Cursor, and Codex each use different event names and nesting structures
 - Hook scripts should exit with code 2 to block actions and include remediation instructions
