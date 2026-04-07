@@ -244,19 +244,24 @@ cat /tmp/ynh-tutorial/cursor-output/.cursor/mcp.json
 
 Expected: same JSON structure as Claude, different file location.
 
-Preview Codex to see TOML format:
+Preview Codex to see its MCP format:
 
 ```bash
 ynd preview /tmp/ynh-tutorial/preview-harness -v codex -o /tmp/ynh-tutorial/codex-output
-cat /tmp/ynh-tutorial/codex-output/.codex/config.toml
+cat /tmp/ynh-tutorial/codex-output/.mcp.json
 ```
 
-Expected:
+Expected (JSON, same format as Claude — at plugin root):
 
-```toml
-[mcp_servers.sqlite]
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-sqlite", "/tmp/status.db"]
+```json
+{
+  "mcpServers": {
+    "sqlite": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sqlite", "/tmp/status.db"]
+    }
+  }
+}
 ```
 
 ## Clean up

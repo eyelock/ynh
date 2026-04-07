@@ -78,13 +78,13 @@ Resolution order: **CLI flag (`-v`) > `YNH_VENDOR` env var > harness default > g
 
 | | Claude | Cursor | Codex |
 |---|---|---|---|
-| **Manifest** | `.claude-plugin/plugin.json` | `.cursor-plugin/plugin.json` | — |
-| **Skills** | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` | `.agents/skills/<name>/SKILL.md` |
+| **Manifest** | `.claude-plugin/plugin.json` | `.cursor-plugin/plugin.json` | `.codex-plugin/plugin.json` |
+| **Skills** | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` |
 | **Agents** | `agents/<name>.md` | `agents/<name>.md` | *excluded* |
 | **Rules** | `rules/<name>.md` | `rules/<name>.md` | *excluded* |
 | **Commands** | `commands/<name>.md` | `commands/<name>.md` | *excluded* |
 | **Instructions** | `AGENTS.md` | `.cursorrules` + `AGENTS.md` | `AGENTS.md` |
-| **Marketplace** | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` | *excluded* |
+| **Marketplace** | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` | `.agents/plugins/marketplace.json` |
 
 Key differences between runtime and export:
 
@@ -92,7 +92,7 @@ Key differences between runtime and export:
 - **Export** places artifacts at the plugin root (e.g., `skills/`) — the standard distributable layout
 - Claude export writes `AGENTS.md` for instructions, not `CLAUDE.md` (which would conflict with the installing project's own)
 - Codex export is limited to skills — agents, rules, commands, and delegates are excluded with warnings
-- Codex is excluded from marketplace and merged export modes (no marketplace system)
+- Codex is excluded from merged export mode (different marketplace format)
 
 See [ynd export](ynd.md#export) for full command reference.
 

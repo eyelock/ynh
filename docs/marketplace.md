@@ -10,11 +10,11 @@ AI coding assistants are converging on a plugin/marketplace model for distributi
 |---|---|---|---|
 | **Status** | GA | GA (Feb 2026) | Beta (Mar 2026) |
 | **Model** | Open — anyone hosts a marketplace | Curated — official + team | Curated — official catalog |
-| **Plugin format** | `.claude-plugin/plugin.json` | `.cursor-plugin/plugin.json` | No plugin manifest |
-| **Marketplace index** | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` | `marketplace.json` (evolving) |
-| **Install mechanism** | TUI: `/plugin install`. CLI: `--plugin-dir` (direct load) | IDE one-click / CLI | CLI `plugin install` |
-| **Private marketplaces** | Yes (any Git repo) | Yes (Teams/Enterprise) | Not documented |
-| **Ecosystem size** | Large (40+ marketplaces, 800+ plugins) | Growing (30+ curated plugins) | Small (curated set) |
+| **Plugin format** | `.claude-plugin/plugin.json` | `.cursor-plugin/plugin.json` | `.codex-plugin/plugin.json` |
+| **Marketplace index** | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` | `.agents/plugins/marketplace.json` |
+| **Install mechanism** | TUI: `/plugin install`. CLI: `--plugin-dir` (direct load) | IDE one-click / CLI | CLI / Plugin Directory |
+| **Private marketplaces** | Yes (any Git repo) | Yes (Teams/Enterprise) | Yes (repo or personal) |
+| **Ecosystem size** | Large (40+ marketplaces, 800+ plugins) | Growing (30+ curated plugins) | Growing (official directory coming soon) |
 
 ## Claude Code
 
