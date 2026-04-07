@@ -159,8 +159,11 @@ func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[str
 	}
 	data = append(data, '\n')
 
+	// Write to hooks/hooks.json inside the plugin dir (.claude/).
+	// Claude Code discovers hooks from plugins via hooks/hooks.json,
+	// not from settings.json (which only supports the "agent" key in plugins).
 	return map[string][]byte{
-		filepath.Join(".claude", "settings.json"): data,
+		filepath.Join(".claude", "hooks", "hooks.json"): data,
 	}
 }
 
@@ -180,8 +183,10 @@ func (c *Claude) GenerateMCPConfig(servers map[string]plugin.MCPServer) map[stri
 	}
 	data = append(data, '\n')
 
+	// Write inside the plugin dir (.claude/) so Claude Code discovers it
+	// as a plugin-provided MCP server configuration.
 	return map[string][]byte{
-		".mcp.json": data,
+		filepath.Join(".claude", ".mcp.json"): data,
 	}
 }
 

@@ -920,6 +920,10 @@ func TestCmdInspect_WalkthroughQuit(t *testing.T) {
 }
 
 func TestCmdInspect_WalkthroughSkipAfterGenerate(t *testing.T) {
+	// Clear CI/YNH_YES so skipConfirmEnv() doesn't auto-skip
+	t.Setenv("CI", "")
+	t.Setenv("YNH_YES", "")
+
 	origLookPath := lookPathFunc
 	originalLLM := queryLLMFunc
 	originalPrompt := promptActionFunc

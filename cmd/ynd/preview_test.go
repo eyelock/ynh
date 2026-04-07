@@ -120,16 +120,16 @@ func TestCmdPreviewWithHooks(t *testing.T) {
 		t.Fatalf("cmdPreview failed: %v", err)
 	}
 
-	// Claude hooks go in .claude/settings.json
-	settingsPath := filepath.Join(outputDir, ".claude", "settings.json")
-	assertExists(t, settingsPath)
+	// Claude hooks go in .claude/hooks/hooks.json (plugin format)
+	hooksPath := filepath.Join(outputDir, ".claude", "hooks", "hooks.json")
+	assertExists(t, hooksPath)
 
-	data, err := os.ReadFile(settingsPath)
+	data, err := os.ReadFile(hooksPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(data), "hooks") {
-		t.Error("expected settings.json to contain hooks config")
+		t.Error("expected hooks.json to contain hooks config")
 	}
 }
 
@@ -142,8 +142,8 @@ func TestCmdPreviewWithMCP(t *testing.T) {
 		t.Fatalf("cmdPreview failed: %v", err)
 	}
 
-	// Claude MCP goes in .mcp.json
-	mcpPath := filepath.Join(outputDir, ".mcp.json")
+	// Claude MCP goes in .claude/.mcp.json (plugin format)
+	mcpPath := filepath.Join(outputDir, ".claude", ".mcp.json")
 	assertExists(t, mcpPath)
 
 	data, err := os.ReadFile(mcpPath)

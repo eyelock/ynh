@@ -71,9 +71,11 @@ Each server must have either `command` or `url`, not both. Validation rejects se
 
 | Vendor | File | Format |
 |--------|------|--------|
-| Claude Code | `.mcp.json` | JSON with `mcpServers` key |
+| Claude Code | `.claude/.mcp.json` | JSON with `mcpServers` key (inside plugin dir) |
 | Cursor | `.cursor/mcp.json` | JSON with `mcpServers` key |
 | Codex | `.codex/config.toml` | TOML with `[mcp_servers.<name>]` sections |
+
+> **Claude Code runtime limitation:** MCP servers in `--plugin-dir` plugins are not auto-activated during `ynh run` sessions. They work correctly when the plugin is installed via `/plugin install` or when using Codex/Cursor. See [Hooks](hooks.md#claude-code-runtime-limitation) for details.
 
 ### Claude Code Format
 

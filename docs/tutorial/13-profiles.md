@@ -122,21 +122,28 @@ Install the harness first:
 ynh install /tmp/ynh-tutorial/profile-harness
 ```
 
-Run with the `ci` profile:
+Launch interactively with the `ci` profile:
 
 ```bash
-profile-demo --profile ci -- "what hooks and MCP servers are configured?"
+profile-demo --profile ci
+```
+
+Inside the Claude session, enable the plugin and reload to activate hooks and MCP servers:
+
+```
+/plugin enable profile-demo
+/reload-plugins
+```
+
+Expected reload output includes: `3 hooks · 1 plugin MCP server` (or similar counts). Then ask:
+
+```
+what hooks and MCP servers are configured?
 ```
 
 The `ci` profile's hooks and MCP servers fully replace the base values — only the profile's `before_tool` hook and `ci-db` MCP server are active.
 
-Run without a profile for comparison:
-
-```bash
-profile-demo "what hooks are configured?"
-```
-
-Only the base hooks are active.
+> **Note:** Claude Code's `--plugin-dir` auto-activates skills and commands but not hooks or MCP servers. The `/plugin enable` + `/reload-plugins` step is needed to activate them. This is a Claude Code limitation — Codex and Cursor activate all plugin components automatically.
 
 ## T13.5: Try --profile nonexistent
 

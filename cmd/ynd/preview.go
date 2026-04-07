@@ -9,6 +9,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/exporter"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
@@ -192,6 +193,19 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 	// Assemble delegates
 	if err := assembler.AssembleDelegates(tmpDir, adapter, h.DelegatesTo); err != nil {
 		return "", fmt.Errorf("assembling delegates: %w", err)
+	}
+
+	// Generate vendor plugin manifests
+	pj := &plugin.HarnessJSON{Name: h.Name, Version: "0.0.0", Description: h.Description}
+	switch adapter.Name() {
+	case "claude":
+		if err := exporter.GenerateClaudeManifest(pj, filepath.Join(tmpDir, adapter.ConfigDir())); err != nil {
+			return "", fmt.Errorf("writing plugin manifest: %w", err)
+		}
+	case "cursor":
+		if err := exporter.GenerateCursorManifest(pj, tmpDir); err != nil {
+			return "", fmt.Errorf("writing plugin manifest: %w", err)
+		}
 	}
 
 	// Generate hook config

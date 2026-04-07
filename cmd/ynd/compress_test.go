@@ -416,6 +416,10 @@ func TestCmdCompress_InteractiveApply(t *testing.T) {
 }
 
 func TestCmdCompress_InteractiveSkip(t *testing.T) {
+	// Clear CI/YNH_YES so skipConfirmEnv() doesn't auto-skip
+	t.Setenv("CI", "")
+	t.Setenv("YNH_YES", "")
+
 	mockLLM(t, func(vendor, prompt string) (string, error) {
 		return "Compressed.", nil
 	})

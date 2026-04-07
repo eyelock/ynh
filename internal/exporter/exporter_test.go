@@ -550,8 +550,8 @@ func TestExportWithHooks(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	// Claude should have .claude/settings.json
-	assertFileExists(t, filepath.Join(outputDir, "claude", ".claude", "settings.json"))
+	// Claude should have .claude/hooks/hooks.json (plugin format)
+	assertFileExists(t, filepath.Join(outputDir, "claude", ".claude", "hooks", "hooks.json"))
 
 	// Test Cursor export
 	outputDir2 := t.TempDir()
@@ -609,7 +609,7 @@ func TestExportMergedWithHooks(t *testing.T) {
 	}
 
 	// Both hook configs should exist
-	assertFileExists(t, filepath.Join(outputDir, ".claude", "settings.json"))
+	assertFileExists(t, filepath.Join(outputDir, ".claude", "hooks", "hooks.json"))
 	assertFileExists(t, filepath.Join(outputDir, ".cursor", "hooks.json"))
 }
 
@@ -641,8 +641,8 @@ func TestExportWithMCPServers(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	// Claude should have .mcp.json
-	assertFileExists(t, filepath.Join(outputDir, "claude", ".mcp.json"))
+	// Claude should have .claude/.mcp.json (plugin format)
+	assertFileExists(t, filepath.Join(outputDir, "claude", ".claude", ".mcp.json"))
 
 	// Test Cursor export
 	outputDir2 := t.TempDir()
@@ -701,7 +701,7 @@ func TestExportMergedWithMCPServers(t *testing.T) {
 	}
 
 	// Both MCP configs should exist
-	assertFileExists(t, filepath.Join(outputDir, ".mcp.json"))
+	assertFileExists(t, filepath.Join(outputDir, ".claude", ".mcp.json"))
 	assertFileExists(t, filepath.Join(outputDir, ".cursor", "mcp.json"))
 }
 

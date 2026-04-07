@@ -144,6 +144,15 @@ docker run --rm \
 
 Both do the same thing. `YNH_VENDOR` is more CI-friendly (see T9.10).
 
+**Note:** Codex requires a Git working tree. If `/workspace` is not a Git repo, add `--skip-git-repo-check`:
+
+```bash
+docker run --rm \
+  -v $(pwd):/workspace \
+  -e OPENAI_API_KEY \
+  docker-demo:latest -v codex --skip-git-repo-check -- "greet me and describe your setup"
+```
+
 ## T9.6: Pass vendor flags
 
 Everything after the image name becomes arguments to `ynh run docker-demo`. Unrecognised flags pass through to the vendor CLI:

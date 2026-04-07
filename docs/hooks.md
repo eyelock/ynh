@@ -76,9 +76,17 @@ Each vendor uses different event names and config file formats:
 
 | Vendor | File | Format |
 |--------|------|--------|
-| Claude Code | `.claude/settings.json` | Three-level nesting: event > matcher group > hook array |
+| Claude Code | `.claude/hooks/hooks.json` | Three-level nesting: event > matcher group > hook array |
 | Cursor | `.cursor/hooks.json` | Flat: event > hook array (with `"version": 1` required) |
 | Codex | `.codex/hooks.json` | Three-level nesting: event > matcher group > hook array (same structure as Claude) |
+
+### Claude Code Runtime Limitation
+
+Claude Code's `--plugin-dir` flag (used by `ynh run` for Claude) only auto-activates **skills and commands** from plugins. Hooks and MCP servers in `--plugin-dir` plugins are **not activated** at runtime — they require the plugin to be formally installed via `/plugin install`. See [Claude Code plugin docs](https://code.claude.com/docs/en/plugins).
+
+This means hooks and MCP servers defined in `harness.json` are correctly **assembled and exported** by ynh, but are **not active during `ynh run` sessions** with Claude. They work correctly with Codex and Cursor (which use symlink-based installation into the project directory).
+
+Hooks and MCP servers in exported plugins (`ynd export`) work as expected when the plugin is installed via Claude Code's `/plugin install` command.
 
 ### Claude Code Format
 

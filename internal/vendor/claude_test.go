@@ -175,9 +175,9 @@ func TestClaudeGenerateHookConfig_ThreeLevelNesting(t *testing.T) {
 		t.Fatal("expected non-nil result")
 	}
 
-	data, ok := result[filepath.Join(".claude", "settings.json")]
+	data, ok := result[filepath.Join(".claude", "hooks", "hooks.json")]
 	if !ok {
-		t.Fatal("expected .claude/settings.json key")
+		t.Fatal("expected .claude/hooks/hooks.json key")
 	}
 
 	var settings map[string]any
@@ -264,9 +264,9 @@ func TestClaudeGenerateMCPConfig_Passthrough(t *testing.T) {
 		t.Fatal("expected non-nil result")
 	}
 
-	data, ok := result[".mcp.json"]
+	data, ok := result[filepath.Join(".claude", ".mcp.json")]
 	if !ok {
-		t.Fatal("expected .mcp.json key")
+		t.Fatal("expected .claude/.mcp.json key")
 	}
 
 	var config map[string]any
@@ -304,7 +304,7 @@ func TestClaudeGenerateHookConfig_EventTranslation(t *testing.T) {
 	}
 
 	result := c.GenerateHookConfig(hooks)
-	data := result[filepath.Join(".claude", "settings.json")]
+	data := result[filepath.Join(".claude", "hooks", "hooks.json")]
 
 	var settings map[string]any
 	if err := json.Unmarshal(data, &settings); err != nil {

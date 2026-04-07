@@ -34,7 +34,7 @@ RUN --mount=type=cache,target=/root/.npm \
 FROM node:22-alpine AS codex-cli
 ARG CODEX_VERSION=0.114.0
 RUN --mount=type=cache,target=/root/.npm \
-    npm install -g "@openai/codex@${CODEX_VERSION}"
+    npm install -g --include=optional "@openai/codex@${CODEX_VERSION}"
 
 # Stage 2c: Cursor Agent CLI (parallel)
 FROM alpine AS cursor-cli
@@ -54,7 +54,7 @@ RUN apk add --no-cache git openssh-client tini bash curl
 COPY --from=claude-cli /usr/local/lib/node_modules/@anthropic-ai/ /usr/local/lib/node_modules/@anthropic-ai/
 COPY --from=claude-cli /usr/local/bin/claude /usr/local/bin/claude
 COPY --from=codex-cli  /usr/local/lib/node_modules/@openai/ /usr/local/lib/node_modules/@openai/
-COPY --from=codex-cli  /usr/local/bin/codex /usr/local/bin/codex
+RUN ln -s ../lib/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex
 COPY --from=cursor-cli /usr/local/bin/agent /usr/local/bin/agent
 
 # Copy ynh binaries from builder
