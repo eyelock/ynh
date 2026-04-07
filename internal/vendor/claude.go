@@ -29,6 +29,16 @@ func (c *Claude) InstructionsFile() string { return "CLAUDE.md" }
 
 func (c *Claude) ArtifactDirs() map[string]string { return DefaultArtifactDirs() }
 
+func (c *Claude) GenerateSystemPrompt(content []byte) map[string][]byte {
+	// AGENTS.md: cross-vendor instructions (read by Codex, Cursor, Copilot, etc.)
+	// CLAUDE.md: @-import of AGENTS.md (Claude doesn't read AGENTS.md natively)
+	// See: https://code.claude.com/docs/en/memory
+	return map[string][]byte{
+		"AGENTS.md": content,
+		"CLAUDE.md": []byte("@AGENTS.md\n"),
+	}
+}
+
 func (c *Claude) NeedsSymlinks() bool { return false }
 
 func (c *Claude) Install(stagingDir string, projectDir string) ([]SymlinkEntry, error) {

@@ -68,8 +68,13 @@ func TestExportSingleVendorClaude(t *testing.T) {
 	// Check AGENTS.md (from instructions.md)
 	assertFileExists(t, filepath.Join(claudeDir, "AGENTS.md"))
 
-	// No CLAUDE.md in export
-	assertFileNotExists(t, filepath.Join(claudeDir, "CLAUDE.md"))
+	// CLAUDE.md with @AGENTS.md import (Claude doesn't read AGENTS.md natively)
+	claudeMDPath := filepath.Join(claudeDir, "CLAUDE.md")
+	assertFileExists(t, claudeMDPath)
+	claudeMD, _ := os.ReadFile(claudeMDPath)
+	if string(claudeMD) != "@AGENTS.md\n" {
+		t.Errorf("CLAUDE.md = %q, want %q", string(claudeMD), "@AGENTS.md\n")
+	}
 
 	// No .cursorrules in Claude export
 	assertFileNotExists(t, filepath.Join(claudeDir, ".cursorrules"))
@@ -322,10 +327,10 @@ func TestExportWithInstructions(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	// Claude: AGENTS.md only
+	// Claude: AGENTS.md + CLAUDE.md (with @-import)
 	claudeAgents := filepath.Join(outputDir, "claude", "AGENTS.md")
 	assertFileExists(t, claudeAgents)
-	assertFileNotExists(t, filepath.Join(outputDir, "claude", "CLAUDE.md"))
+	assertFileExists(t, filepath.Join(outputDir, "claude", "CLAUDE.md"))
 
 	// Cursor: .cursorrules + AGENTS.md
 	assertFileExists(t, filepath.Join(outputDir, "cursor", ".cursorrules"))
@@ -446,6 +451,7 @@ func TestExportMergedMode(t *testing.T) {
 
 	// Instructions
 	assertFileExists(t, filepath.Join(outputDir, "AGENTS.md"))
+	assertFileExists(t, filepath.Join(outputDir, "CLAUDE.md"))
 	assertFileExists(t, filepath.Join(outputDir, ".cursorrules"))
 }
 

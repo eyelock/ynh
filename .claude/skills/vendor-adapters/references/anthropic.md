@@ -111,5 +111,5 @@ command, http, prompt, agent
 
 - `--plugin-dir` auto-activates skills/commands but NOT hooks/MCP (need `/plugin enable` + `/reload-plugins`)
 - Plugin `settings.json` only supports `agent` key (not hooks)
-- Export writes AGENTS.md for instructions — Claude doesn't read AGENTS.md natively
+- Claude doesn't read AGENTS.md natively — export writes CLAUDE.md with `@AGENTS.md` import to bridge this
 - Environment vars available: `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`

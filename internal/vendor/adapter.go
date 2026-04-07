@@ -56,6 +56,12 @@ type Adapter interface {
 	// extraArgs are passed through verbatim to the vendor CLI.
 	LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error
 
+	// GenerateSystemPrompt produces vendor-native instruction files from the
+	// harness instructions content. Returns a map of relative file paths to
+	// file contents. Always includes AGENTS.md (cross-vendor); vendors add
+	// their own files as needed (e.g. CLAUDE.md, .cursorrules).
+	GenerateSystemPrompt(content []byte) map[string][]byte
+
 	// GenerateHookConfig translates canonical hook declarations to vendor-native
 	// hook configuration files. Returns a map of relative file paths to file contents.
 	// Returns nil if hooks is nil or empty.

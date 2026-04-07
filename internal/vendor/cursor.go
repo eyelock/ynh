@@ -28,6 +28,15 @@ func (c *Cursor) InstructionsFile() string { return ".cursorrules" }
 
 func (c *Cursor) ArtifactDirs() map[string]string { return DefaultArtifactDirs() }
 
+func (c *Cursor) GenerateSystemPrompt(content []byte) map[string][]byte {
+	// AGENTS.md: cross-vendor format
+	// .cursorrules: Cursor-native instructions
+	return map[string][]byte{
+		"AGENTS.md":    content,
+		".cursorrules": content,
+	}
+}
+
 func (c *Cursor) NeedsSymlinks() bool { return true }
 
 func (c *Cursor) Install(stagingDir string, projectDir string) ([]SymlinkEntry, error) {

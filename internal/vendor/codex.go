@@ -27,6 +27,13 @@ func (c *Codex) InstructionsFile() string { return "codex.md" }
 
 func (c *Codex) ArtifactDirs() map[string]string { return DefaultArtifactDirs() }
 
+func (c *Codex) GenerateSystemPrompt(content []byte) map[string][]byte {
+	// AGENTS.md: Codex natively reads this
+	return map[string][]byte{
+		"AGENTS.md": content,
+	}
+}
+
 func (c *Codex) NeedsSymlinks() bool { return true }
 
 func (c *Codex) Install(stagingDir string, projectDir string) ([]SymlinkEntry, error) {
