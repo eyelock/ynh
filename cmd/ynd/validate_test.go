@@ -590,6 +590,79 @@ func TestValidateHarness_HooksEmptyCommand(t *testing.T) {
 	}
 }
 
+func TestValidateHarness_MCPServersValid(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "mcp-valid")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"mcp-valid","version":"0.1.0","mcp_servers":{"github":{"command":"npx","args":["-y","server"]}}}`))
+
+	if err := validateHarness(hr); err != nil {
+		t.Errorf("valid MCP servers should pass: %v", err)
+	}
+}
+
+func TestValidateHarness_MCPServersURLOnly(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "mcp-url")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"mcp-url","version":"0.1.0","mcp_servers":{"api":{"url":"https://api.example.com/mcp"}}}`))
+
+	if err := validateHarness(hr); err != nil {
+		t.Errorf("URL-only MCP server should pass: %v", err)
+	}
+}
+
+func TestValidateHarness_MCPServersNeitherCommandNorURL(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "mcp-neither")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"mcp-neither","version":"0.1.0","mcp_servers":{"bad":{}}}`))
+
+	err := validateHarness(hr)
+	if err == nil {
+		t.Fatal("expected validation error for MCP server with neither command nor url")
+	}
+}
+
+func TestValidateHarness_MCPServersBothCommandAndURL(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "mcp-both")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"mcp-both","version":"0.1.0","mcp_servers":{"bad":{"command":"npx","url":"https://example.com"}}}`))
+
+	err := validateHarness(hr)
+	if err == nil {
+		t.Fatal("expected validation error for MCP server with both command and url")
+	}
+}
+
+func TestValidateHarness_MCPServersNotObject(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "mcp-bad-type")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"mcp-bad-type","version":"0.1.0","mcp_servers":"not-an-object"}`))
+
+	err := validateHarness(hr)
+	if err == nil {
+		t.Fatal("expected validation error for mcp_servers not being an object")
+	}
+}
+
 func TestValidateHarness_AgentsMDOnly(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
