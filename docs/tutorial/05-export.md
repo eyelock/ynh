@@ -67,10 +67,10 @@ ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/export-output
 
 Expected output:
 ```
-Exported "exportable" for claude → /tmp/ynh-tutorial/export-output/claude/
-Exported "exportable" for cursor → /tmp/ynh-tutorial/export-output/cursor/
-Exported "exportable" for codex → /tmp/ynh-tutorial/export-output/codex/
-  codex: skipping 1 agent (not supported)
+Exported for claude → /tmp/ynh-tutorial/export-output/claude (2 skills, 1 agents)
+Exported for codex → /tmp/ynh-tutorial/export-output/codex (2 skills, 0 agents)
+  warning: codex: skipping 1 agents (not supported)
+Exported for cursor → /tmp/ynh-tutorial/export-output/cursor (2 skills, 1 agents)
 ```
 
 ## T5.3: Verify Claude export
@@ -254,7 +254,7 @@ cat > /tmp/ynh-tutorial/no-instructions/harness.json << 'EOF'
 EOF
 
 ynd export /tmp/ynh-tutorial/no-instructions -o /tmp/ynh-tutorial/no-inst-out -v claude
-# Expected: succeeds with warning "No instructions.md found"
+# Expected: succeeds (no warning)
 
 ls /tmp/ynh-tutorial/no-inst-out/claude/
 # Expected: .claude-plugin/plugin.json only (generated from harness.json, no AGENTS.md)

@@ -410,7 +410,7 @@ Now try to run a harness that includes a non-eyelock source:
 
 ```bash
 with-anthropic "hello" 2>&1
-# Expected error: resolving includes: include "github.com/anthropics/skills": remote source not allowed
+# Expected error: resolving includes: include "github.com/anthropics/skills": remote source "github.com/anthropics/skills" is not in the allowed sources list
 ```
 
 The `anthropics/skills` source doesn't match `github.com/eyelock/**`, so it's rejected at run time when ynh tries to resolve the includes.
@@ -419,7 +419,7 @@ The `full-stack` harness also fails (it includes both eyelock and anthropic sour
 
 ```bash
 full-stack "hello" 2>&1
-# Expected error: resolving includes: include "github.com/anthropics/skills": remote source not allowed
+# Expected error: resolving includes: include "github.com/anthropics/skills": remote source "github.com/anthropics/skills" is not in the allowed sources list
 ```
 
 > **Note:** `ynh install` now fetches all includes at install time, so the allow-list is enforced during install as well as at run time. If an include is blocked by the allow-list, `ynh install` will fail with an error.
