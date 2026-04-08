@@ -360,13 +360,15 @@ After upstream repos change:
 ynh update full-stack
 ```
 
-Expected:
+Expected (one line per include — repos with multiple includes appear multiple times):
 ```
+Checking github.com/eyelock/assistants...
+  Already up to date.
 Checking github.com/eyelock/assistants...
   Already up to date.
 Checking github.com/anthropics/skills...
   Already up to date.
-Checked 2 source(s) for harness "full-stack", 0 updated.
+Checked 3 source(s) for harness "full-stack", 0 updated.
 ```
 
 If upstream has changed, you'll see `Updated.` instead.

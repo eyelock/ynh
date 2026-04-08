@@ -256,8 +256,8 @@ EOF
 ynd export /tmp/ynh-tutorial/no-instructions -o /tmp/ynh-tutorial/no-inst-out -v claude
 # Expected: succeeds (no warning)
 
-ls /tmp/ynh-tutorial/no-inst-out/claude/
-# Expected: .claude-plugin/plugin.json only (generated from harness.json, no AGENTS.md)
+ls -a /tmp/ynh-tutorial/no-inst-out/claude/
+# Expected: .claude-plugin/ only (generated from harness.json, no AGENTS.md)
 ```
 
 ## Clean up
