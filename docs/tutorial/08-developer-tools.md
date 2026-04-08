@@ -140,21 +140,15 @@ rmdir skills/orphan
 ## T8.6: Format
 
 ```bash
-cat > rules/messy.md << 'EOF'
-# Messy File
-
-This has trailing spaces.
-
-Multiple blank lines above.
-EOF
+printf '# Messy File   \n\nThis has trailing spaces.   \n\n\nMultiple blank lines above.\n' > rules/messy.md
 
 ynd fmt
 # Expected:
 #   Formatted rules/messy.md
-#   Formatted 1 of 2 file(s).
+#   Formatted 1 of 6 file(s).
 
 ynd fmt
-# Expected: "Checked 2 file(s) — all formatted." (idempotent — no-op on second run)
+# Expected: "Checked 6 file(s) — all formatted." (idempotent — no-op on second run)
 ```
 
 ## T8.7: Compress

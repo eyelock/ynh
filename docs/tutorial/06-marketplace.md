@@ -157,7 +157,10 @@ Expected (formatted):
 ```json
 {
   "name": "tutorial-marketplace",
-  "owner": {"name": "tutorial"},
+  "owner": {
+    "name": "tutorial"
+  },
+  "description": "Sample marketplace for the ynh tutorial",
   "plugins": [
     {
       "name": "formatter",

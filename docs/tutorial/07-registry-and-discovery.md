@@ -161,7 +161,7 @@ If the name doesn't match exactly but is similar to registry entries:
 ```bash
 ynh install development
 # Expected:
-#   "development" not found. Similar results:
+#   Error: "development" not found. Similar results:
 #     david - Full-stack development harness with Go expertise (from tutorial-registry)
 ```
 
@@ -176,7 +176,7 @@ ynh install david
 ```bash
 ynh install nonexistent-thing
 # Expected:
-#   "nonexistent-thing" not found in any registry.
+#   Error: "nonexistent-thing" not found in any registry.
 #     Did you mean a Git URL? Try: ynh install github.com/user/nonexistent-thing
 ```
 
