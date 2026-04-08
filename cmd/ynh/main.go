@@ -11,7 +11,6 @@ import (
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
-	"github.com/eyelock/ynh/internal/exporter"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
@@ -526,19 +525,6 @@ func cmdRun(args []string) error {
 			return fmt.Errorf("assembling delegates: %w", err)
 		}
 
-		// Generate vendor plugin manifests (Claude/Cursor before hooks/MCP, Codex after)
-		pj := &plugin.HarnessJSON{Name: p.Name, Version: "0.0.0", Description: p.Description}
-		switch adapter.Name() {
-		case "claude":
-			if err := exporter.GenerateClaudeManifest(pj, filepath.Join(runDir, adapter.ConfigDir())); err != nil {
-				return fmt.Errorf("writing plugin manifest: %w", err)
-			}
-		case "cursor":
-			if err := exporter.GenerateCursorManifest(pj, runDir); err != nil {
-				return fmt.Errorf("writing plugin manifest: %w", err)
-			}
-		}
-
 		// Generate vendor-native hook config files
 		if len(p.Hooks) > 0 {
 			hookFiles, err := adapter.GenerateHookConfig(p.Hooks)
@@ -573,10 +559,19 @@ func cmdRun(args []string) error {
 			}
 		}
 
-		// Codex manifest generated after MCP so path pointers detect .mcp.json
-		if adapter.Name() == "codex" {
-			if err := exporter.GenerateCodexManifest(pj, runDir); err != nil {
-				return fmt.Errorf("writing plugin manifest: %w", err)
+		// Generate vendor plugin manifest (after hooks/MCP so path pointers are accurate)
+		pj := &plugin.HarnessJSON{Name: p.Name, Version: "0.0.0", Description: p.Description}
+		manifestFiles, mErr := adapter.GeneratePluginManifest(pj, runDir)
+		if mErr != nil {
+			return fmt.Errorf("writing plugin manifest: %w", mErr)
+		}
+		for relPath, content := range manifestFiles {
+			absPath := filepath.Join(runDir, relPath)
+			if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+				return fmt.Errorf("creating manifest dir: %w", err)
+			}
+			if err := os.WriteFile(absPath, content, 0o644); err != nil {
+				return fmt.Errorf("writing manifest %s: %w", relPath, err)
 			}
 		}
 	}

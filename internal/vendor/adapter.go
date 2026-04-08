@@ -75,6 +75,46 @@ type Adapter interface {
 	// MCP configuration files. Returns a map of relative file paths to file contents.
 	// Returns nil if servers is nil or empty.
 	GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error)
+
+	// GeneratePluginManifest produces vendor-native plugin manifest files
+	// (e.g. .claude-plugin/plugin.json). Returns a map of relative file paths
+	// to file contents. The outputDir is needed by some vendors to detect
+	// existing content (e.g. Codex checks for skills/ and .mcp.json).
+	// Returns nil if the vendor has no manifest format.
+	GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error)
+
+	// ExportArtifactDirs returns the artifact directory mapping for export.
+	// Some vendors support a subset of artifact types in their plugin format
+	// (e.g. Codex only supports skills). Returns nil to use ArtifactDirs().
+	ExportArtifactDirs() map[string]string
+
+	// SupportsExportDelegates reports whether this vendor supports delegate
+	// harnesses in exported plugins. Codex does not support delegates.
+	SupportsExportDelegates() bool
+
+	// MarketplaceManifestDir returns the directory name for marketplace index
+	// files (e.g. ".claude-plugin", ".agents/plugins"). Returns empty string
+	// if the vendor has no marketplace system.
+	MarketplaceManifestDir() string
+
+	// GenerateMarketplaceIndex produces vendor-native marketplace index content.
+	// Returns nil if the vendor has no marketplace system.
+	GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error)
+}
+
+// MarketplaceIndexConfig holds marketplace identity for index generation.
+type MarketplaceIndexConfig struct {
+	Name        string
+	Description string
+	OwnerName   string
+	OwnerEmail  string
+}
+
+// MarketplacePluginInfo holds resolved metadata for one plugin in the marketplace.
+type MarketplacePluginInfo struct {
+	Name        string
+	Description string
+	Version     string
 }
 
 // DefaultName is the fallback vendor when no vendor is specified.

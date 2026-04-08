@@ -48,7 +48,7 @@ func TestExportSingleVendorCodex(t *testing.T) {
 	}
 	foundSkipWarning := false
 	for _, w := range r.Warnings {
-		if strings.Contains(w, "Codex: skipping") {
+		if strings.Contains(w, "codex: skipping") {
 			foundSkipWarning = true
 		}
 	}

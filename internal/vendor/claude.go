@@ -12,6 +12,15 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
+// claudePluginJSON is the Claude Code plugin.json schema — identity fields only.
+type claudePluginJSON struct {
+	Name        string             `json:"name"`
+	Version     string             `json:"version"`
+	Description string             `json:"description,omitempty"`
+	Author      *plugin.AuthorInfo `json:"author,omitempty"`
+	Keywords    []string           `json:"keywords,omitempty"`
+}
+
 func init() {
 	Register(&Claude{})
 }
@@ -176,6 +185,70 @@ func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[st
 	return map[string][]byte{
 		filepath.Join(".claude", "hooks", "hooks.json"): data,
 	}, nil
+}
+
+func (c *Claude) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {
+	pj := &claudePluginJSON{
+		Name:        hj.Name,
+		Version:     hj.Version,
+		Description: hj.Description,
+		Author:      hj.Author,
+		Keywords:    hj.Keywords,
+	}
+	data, err := json.MarshalIndent(pj, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshalling plugin.json: %w", err)
+	}
+	data = append(data, '\n')
+	return map[string][]byte{
+		filepath.Join(".claude-plugin", "plugin.json"): data,
+	}, nil
+}
+
+func (c *Claude) ExportArtifactDirs() map[string]string { return nil }
+
+func (c *Claude) SupportsExportDelegates() bool { return true }
+
+func (c *Claude) MarketplaceManifestDir() string { return ".claude-plugin" }
+
+func (c *Claude) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error) {
+	type indexPlugin struct {
+		Name        string `json:"name"`
+		Description string `json:"description,omitempty"`
+		Version     string `json:"version,omitempty"`
+		Source      string `json:"source"`
+	}
+	type indexOwner struct {
+		Name  string `json:"name"`
+		Email string `json:"email,omitempty"`
+	}
+	type indexJSON struct {
+		Name        string        `json:"name"`
+		Owner       indexOwner    `json:"owner"`
+		Description string        `json:"description,omitempty"`
+		Plugins     []indexPlugin `json:"plugins"`
+	}
+
+	idx := indexJSON{
+		Name:        cfg.Name,
+		Owner:       indexOwner{Name: cfg.OwnerName, Email: cfg.OwnerEmail},
+		Description: cfg.Description,
+	}
+	for _, p := range plugins {
+		idx.Plugins = append(idx.Plugins, indexPlugin{
+			Name:        p.Name,
+			Description: p.Description,
+			Version:     p.Version,
+			Source:      "./plugins/" + p.Name,
+		})
+	}
+
+	data, err := json.MarshalIndent(idx, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	data = append(data, '\n')
+	return data, nil
 }
 
 func (c *Claude) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {

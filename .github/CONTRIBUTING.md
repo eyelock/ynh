@@ -147,10 +147,24 @@ type Adapter interface {
     Clean(entries []SymlinkEntry) error                                   // remove installed artifacts
     LaunchInteractive(configPath string, extraArgs []string) error        // start interactive session
     LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error
-    GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[string][]byte   // vendor-native hook config
-    GenerateMCPConfig(servers map[string]plugin.MCPServer) map[string][]byte    // vendor-native MCP config
+    GenerateSystemPrompt(content []byte) map[string][]byte                // vendor-native instruction files
+    GenerateHookConfig(hooks) (map[string][]byte, error)                  // vendor-native hook config
+    GenerateMCPConfig(servers) (map[string][]byte, error)                 // vendor-native MCP config
+    GeneratePluginManifest(hj, outputDir) (map[string][]byte, error)      // vendor-native plugin manifest
+    ExportArtifactDirs() map[string]string                                // restricted dirs for export (nil = use ArtifactDirs)
+    SupportsExportDelegates() bool                                        // true if vendor supports delegates
+    MarketplaceManifestDir() string                                       // manifest dir for marketplace index
+    GenerateMarketplaceIndex(cfg, plugins) ([]byte, error)                // vendor-native marketplace index
 }
 ```
+
+**Consumer-side narrow interfaces.** Packages that consume adapters define their own interfaces covering only the methods they need:
+
+- `assembler.LayoutProvider` — `ConfigDir()`, `ArtifactDirs()`, `InstructionsFile()`
+- `exporter.VendorExporter` — generation methods needed for export
+- `exporter.SystemPromptGenerator` — `GenerateSystemPrompt()` only
+
+This follows the "accept interfaces, return structs" principle and keeps coupling minimal.
 
 **Two launch patterns exist:**
 
@@ -190,7 +204,7 @@ The resolver clones Git repos into `~/.ynh/cache/` using a deterministic directo
 
 ### Assembler
 
-The assembler builds a deterministic run directory (`~/.ynh/run/<name>/`) with the vendor's expected layout. It copies files from resolved content into the right artifact directories (e.g., `skills/` files go into `.claude/skills/`), and copies instructions (`instructions.md` or `AGENTS.md` as fallback) to the vendor's project instructions file (e.g., `CLAUDE.md`). After assembly, hook and MCP configs are generated via the adapter's `GenerateHookConfig()` and `GenerateMCPConfig()` methods. The run directory is cleaned and repopulated on each run. Two modes:
+The assembler builds a deterministic run directory (`~/.ynh/run/<name>/`) with the vendor's expected layout. It accepts the narrow `LayoutProvider` interface (not the full `Adapter`) and copies files from resolved content into the right artifact directories (e.g., `skills/` files go into `.claude/skills/`), and copies instructions (`instructions.md` or `AGENTS.md` as fallback) to the vendor's project instructions file (e.g., `CLAUDE.md`). After assembly, hook and MCP configs are generated via the adapter's `GenerateHookConfig()` and `GenerateMCPConfig()` methods, and plugin manifests via `GeneratePluginManifest()`. The run directory is cleaned and repopulated on each run. Two modes:
 
 - **With pick list**: Only specified paths are copied
 - **Without pick list**: All recognized artifact directories are scanned and copied

@@ -10,6 +10,15 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
+// cursorPluginJSON is the Cursor plugin.json schema — identity fields only.
+type cursorPluginJSON struct {
+	Name        string             `json:"name"`
+	Version     string             `json:"version"`
+	Description string             `json:"description,omitempty"`
+	Author      *plugin.AuthorInfo `json:"author,omitempty"`
+	Keywords    []string           `json:"keywords,omitempty"`
+}
+
 func init() {
 	Register(&Cursor{})
 }
@@ -118,6 +127,70 @@ func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[st
 	return map[string][]byte{
 		filepath.Join(".cursor", "hooks.json"): data,
 	}, nil
+}
+
+func (c *Cursor) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {
+	pj := &cursorPluginJSON{
+		Name:        hj.Name,
+		Version:     hj.Version,
+		Description: hj.Description,
+		Author:      hj.Author,
+		Keywords:    hj.Keywords,
+	}
+	data, err := json.MarshalIndent(pj, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshalling plugin.json: %w", err)
+	}
+	data = append(data, '\n')
+	return map[string][]byte{
+		filepath.Join(".cursor-plugin", "plugin.json"): data,
+	}, nil
+}
+
+func (c *Cursor) ExportArtifactDirs() map[string]string { return nil }
+
+func (c *Cursor) SupportsExportDelegates() bool { return true }
+
+func (c *Cursor) MarketplaceManifestDir() string { return ".cursor-plugin" }
+
+func (c *Cursor) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error) {
+	type indexPlugin struct {
+		Name        string `json:"name"`
+		Description string `json:"description,omitempty"`
+		Version     string `json:"version,omitempty"`
+		Source      string `json:"source"`
+	}
+	type indexOwner struct {
+		Name  string `json:"name"`
+		Email string `json:"email,omitempty"`
+	}
+	type indexJSON struct {
+		Name        string        `json:"name"`
+		Owner       indexOwner    `json:"owner"`
+		Description string        `json:"description,omitempty"`
+		Plugins     []indexPlugin `json:"plugins"`
+	}
+
+	idx := indexJSON{
+		Name:        cfg.Name,
+		Owner:       indexOwner{Name: cfg.OwnerName, Email: cfg.OwnerEmail},
+		Description: cfg.Description,
+	}
+	for _, p := range plugins {
+		idx.Plugins = append(idx.Plugins, indexPlugin{
+			Name:        p.Name,
+			Description: p.Description,
+			Version:     p.Version,
+			Source:      "./plugins/" + p.Name,
+		})
+	}
+
+	data, err := json.MarshalIndent(idx, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	data = append(data, '\n')
+	return data, nil
 }
 
 func (c *Cursor) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {

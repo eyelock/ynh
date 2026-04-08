@@ -11,7 +11,59 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/exporter"
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/vendor"
 )
+
+// pluginInfo holds resolved metadata for a plugin in the marketplace.
+type pluginInfo struct {
+	Name        string
+	Description string
+	Version     string
+}
+
+// marketplaceJSON is the Claude/Cursor marketplace index format — used for test unmarshalling.
+type marketplaceJSON struct {
+	Name        string              `json:"name"`
+	Owner       MarketplaceOwner    `json:"owner"`
+	Description string              `json:"description,omitempty"`
+	Plugins     []marketplacePlugin `json:"plugins"`
+}
+
+// marketplacePlugin is one entry in the Claude/Cursor marketplace index.
+type marketplacePlugin struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Version     string `json:"version,omitempty"`
+	Source      string `json:"source"`
+}
+
+// codexMarketplaceJSON is the Codex marketplace index format — used for test unmarshalling.
+type codexMarketplaceJSON struct {
+	Name      string                    `json:"name"`
+	Interface codexMarketplaceInterface `json:"interface"`
+	Plugins   []codexMarketplacePlugin  `json:"plugins"`
+}
+
+type codexMarketplaceInterface struct {
+	DisplayName string `json:"displayName"`
+}
+
+type codexMarketplacePlugin struct {
+	Name     string                 `json:"name"`
+	Source   codexMarketplaceSource `json:"source"`
+	Policy   codexMarketplacePolicy `json:"policy,omitempty"`
+	Category string                 `json:"category,omitempty"`
+}
+
+type codexMarketplaceSource struct {
+	Source string `json:"source"`
+	Path   string `json:"path"`
+}
+
+type codexMarketplacePolicy struct {
+	Installation   string `json:"installation,omitempty"`
+	Authentication string `json:"authentication,omitempty"`
+}
 
 // MarketplaceConfig is ynh's build config for marketplace generation.
 type MarketplaceConfig struct {
@@ -198,18 +250,22 @@ func buildPluginEntry(srcDir, outputDir string, vendors []string) error {
 
 	// Generate missing vendor manifests
 	for _, v := range vendors {
-		switch v {
-		case "claude":
-			manifestDir := filepath.Join(outputDir, ".claude-plugin")
-			if _, err := os.Stat(filepath.Join(manifestDir, "plugin.json")); os.IsNotExist(err) {
-				if err := exporter.GenerateClaudeManifest(hj, outputDir); err != nil {
+		adapter, err := vendor.Get(v)
+		if err != nil {
+			continue
+		}
+		manifestFiles, err := adapter.GeneratePluginManifest(hj, outputDir)
+		if err != nil {
+			return fmt.Errorf("generating %s manifest: %w", v, err)
+		}
+		for relPath, data := range manifestFiles {
+			absPath := filepath.Join(outputDir, relPath)
+			// Only generate if missing
+			if _, statErr := os.Stat(absPath); os.IsNotExist(statErr) {
+				if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
 					return err
 				}
-			}
-		case "cursor":
-			manifestDir := filepath.Join(outputDir, ".cursor-plugin")
-			if _, err := os.Stat(filepath.Join(manifestDir, "plugin.json")); os.IsNotExist(err) {
-				if err := exporter.GenerateCursorManifest(hj, outputDir); err != nil {
+				if err := os.WriteFile(absPath, data, 0o644); err != nil {
 					return err
 				}
 			}
