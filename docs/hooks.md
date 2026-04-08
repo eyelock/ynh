@@ -179,6 +179,6 @@ When writing hook scripts for use across vendors:
 
 ## See Also
 
-- [Tutorial 10: Hooks](tutorial/10-hooks.md) — step-by-step walkthrough
+- [Tutorial 4: Hooks](tutorial/10-hooks.md) — step-by-step walkthrough
 - [Harness Engineering](harness-engineering.md) — how hooks bridge guides to sensors
 - [Vendor Support](vendors.md) — vendor capabilities and differences

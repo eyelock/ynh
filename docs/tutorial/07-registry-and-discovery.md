@@ -261,4 +261,4 @@ ynh uninstall tester 2>/dev/null
 
 ## Next
 
-[Tutorial 8: Developer Tools](tutorial/08-developer-tools.md) — scaffold, lint, validate, format, compress, inspect with ynd.
+[Tutorial 13: Docker Images](tutorial/09-docker-image.md) — build harness appliance images for CI/CD.

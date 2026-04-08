@@ -378,5 +378,5 @@ Add the marketplace URL in Cursor's plugin settings, then install from the IDE m
 - Cursor marketplace: [cursor.com/marketplace](https://cursor.com/marketplace)
 - Cursor plugins: [cursor.com/docs/plugins](https://cursor.com/docs/plugins)
 - Codex CLI: [developers.openai.com/codex/cli](https://developers.openai.com/codex/cli)
-- ynh marketplace tutorial: [Tutorial 6: Marketplace](tutorial/06-marketplace.md)
+- ynh marketplace tutorial: [Tutorial 11: Marketplace](tutorial/06-marketplace.md)
 - ynd marketplace command: [ynd Developer Tools](ynd.md#marketplace-build)

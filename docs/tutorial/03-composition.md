@@ -484,4 +484,4 @@ ynh uninstall my-dev with-anthropic with-vercel full-stack mixed local-ref pinne
 
 ## Next
 
-[Tutorial 4: Delegation](tutorial/04-delegation.md) — chain harnesses together as subagents.
+[Tutorial 4: Hooks](tutorial/10-hooks.md) — declare vendor-agnostic lifecycle hooks.

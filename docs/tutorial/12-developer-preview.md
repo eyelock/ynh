@@ -280,4 +280,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Tutorial 13: Profiles](13-profiles.md) — configure environment-specific overrides with profiles.
+[Tutorial 9: Delegation](tutorial/04-delegation.md) — chain harnesses together as subagents.

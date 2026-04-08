@@ -213,4 +213,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Tutorial 12: Developer Preview](12-developer-preview.md) — use preview and diff to iterate on harness design.
+[Tutorial 6: Profiles](tutorial/13-profiles.md) — configure environment-specific overrides with profiles.

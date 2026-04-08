@@ -246,4 +246,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Complete
 
-Continue to [Tutorial 9: Docker Images](tutorial/09-docker-image.md) or jump to [Tutorial 13: Profiles](tutorial/13-profiles.md) for the profile system.
+[Tutorial 8: Developer Preview](tutorial/12-developer-preview.md) — preview and diff assembled output across vendors.

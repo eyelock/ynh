@@ -1,246 +1,73 @@
 # ynh
 
-A harness template manager for AI coding assistants. Bundle skills, agents, rules, and commands into named harnesses, then launch them with any vendor CLI.
-
-> **Note**: This is a personal project developed in my spare time. It's an exploration of the varying approaches to marketplace/distribution across AI vendors.
-
-**[Full Documentation](https://eyelock.github.io/ynh)**
+**Your name. Your AI.**
 
 ```bash
 ynh install github.com/myorg/david
-david                                    # interactive session
-david "review this PR"                   # non-interactive mode
-david -v codex                           # same harness, different vendor
-david --model opus -- "fix this bug"     # pass flags through to vendor CLI
-```
-
-## Quick Start
-
-### 1. Install
-
-```bash
-brew tap eyelock/tap
-brew install ynh
-```
-
-Add the launcher directory to your PATH (one-time):
-
-```bash
-echo 'export PATH="$HOME/.ynh/bin:$PATH"' >> ~/.zshrc
-source ~/.zshrc
-```
-
-### 2. Create a harness
-
-Create a directory with a `harness.json` and your artifacts:
-
-```
-david/
-├── harness.json              # required - name, version, vendor config
-├── instructions.md           # optional - project-level instructions
-├── skills/
-│   └── review/
-│       └── SKILL.md
-├── agents/
-│   └── code-reviewer.md
-├── rules/
-│   └── always-test.md
-└── commands/
-    └── check.md
-```
-
-The harness manifest (`harness.json`):
-
-```json
-{
-  "name": "david",
-  "version": "0.1.0",
-  "description": "David's personal coding harness",
-  "default_vendor": "claude"
-}
-```
-
-### 3. Install and run
-
-```bash
-ynh install ./david
-ynh install github.com/org/monorepo --path harnesses/david
 david
 ```
 
-## Project Instructions
+That's it. `david` is now a command. It knows your skills, your team's rules, your coding standards. It works on Claude today. Switch to Codex with `-v codex`. Same harness, different engine.
 
-A harness can include an `instructions.md` that maps to the vendor's project instructions file:
+## What this gives you
 
-```
-david/
-├── harness.json
-└── instructions.md       # becomes CLAUDE.md, codex.md, or .cursorrules
-```
-
-If multiple sources provide `instructions.md`, the harness's own file takes priority. See the [Artifacts Guide](docs/artifacts.md#project-instructions) for details.
-
-## Adding Artifacts
-
-Artifacts are standard-format files. No build step, no wrapper. A skill from [skills.sh](https://skills.sh) or any Git repo works as-is.
-
-### Skills
-
-A directory with a `SKILL.md` file following the [Agent Skills](https://agentskills.io) open specification:
-
-```
-skills/review/SKILL.md
-```
-
-### Agents
-
-A markdown file with YAML frontmatter:
-
-```
-agents/code-reviewer.md
-```
-
-### Rules
-
-A markdown file loaded as context:
-
-```
-rules/always-test.md
-```
-
-### Commands
-
-A markdown file describing a command:
-
-```
-commands/check.md
-```
-
-### Embedding vs Including
-
-Artifacts can live **directly in your harness** (embedded) or be **pulled from Git repos** (included):
-
-```json
-{
-  "name": "david",
-  "version": "0.1.0",
-  "default_vendor": "claude",
-  "includes": [
-    {
-      "git": "github.com/eyelock/claude-config-toolkit",
-      "ref": "v2.0.0",
-      "pick": ["skills/commit", "skills/tdd"]
-    },
-    {
-      "git": "git@github.com:company/internal-tools.git",
-      "path": "packages/ai-config",
-      "pick": ["agents/reviewer"]
-    }
-  ],
-  "delegates_to": [
-    {"git": "github.com/eyelock/team-dev-harness"}
-  ]
-}
-```
-
-Embedded artifacts (files in the harness directory) are always included. External artifacts are fetched from Git at runtime. Shorthand URLs (`github.com/...`) and `git@` URLs both use SSH. Use `https://` explicitly for HTTPS.
-
-## Vendor Support
-
-ynh supports multiple AI vendors. The vendor determines which CLI is launched and where config files are placed. Run `ynh vendors` to see what's available.
-
-Each vendor gets the launch strategy that matches its capabilities:
-- **Claude** uses `--plugin-dir` for native plugin loading (clean `exec`, no running process)
-- **Codex/Cursor** use symlink-based installation (managed child process with signal forwarding)
-
-Vendor resolution order: **CLI flag > harness default > global config**.
+**You become a command.** Not "claude with some config files." A named identity that carries your entire AI working environment — tools, standards, style — all behind your name.
 
 ```bash
-david                    # uses harness's default_vendor
-david -v codex           # override to codex
+david                              # your configured AI
+david "review this PR"             # it knows how you review
+david -v codex                     # same harness, different vendor
 ```
 
-All flags except `-v`, `--install`, and `--clean` are passed through to the vendor CLI. Use `--` to separate vendor flags from the prompt:
+**Compose from anywhere.** Cherry-pick skills from community repos, your team's private config, open-source libraries — and mix them with your own. Like a package manager for AI capabilities, backed by Git.
+
+**Zero runtime.** ynh resolves your config, assembles it, launches the vendor CLI, and gets out of the way. No process sitting between you and the AI.
+
+## The 60-second version
 
 ```bash
-david --model opus -- "fix this bug"
-david -v codex -- "refactor auth"
+# Install
+brew tap eyelock/tap && brew install ynh
+
+# Create a harness
+mkdir david && cat > david/harness.json << 'EOF'
+{"name":"david","version":"0.1.0","default_vendor":"claude"}
+EOF
+
+# Install and run
+ynh install ./david
+david
 ```
 
-### Symlink Installation (Codex/Cursor)
+Add skills, agents, rules, and commands to the harness directory. Pull from Git repos. Compose across sources. Switch vendors. Delegate to team harnesses.
 
-Vendors that don't support plugin directories use symlinks installed into your project:
+## Why harness management?
 
-```bash
-david -v cursor --install     # creates .cursor/ symlinks in current project
-david -v cursor               # launches normally
-david -v cursor --clean       # removes symlinks
-```
+> **Agent = Model + Harness.** Weak results are usually harness problems, not model problems.
 
-Symlink installations are tracked in `~/.ynh/symlinks.json`. Use `ynh status` to see all installations and `ynh prune` to clean up orphaned ones.
+The term "harness" was formalized by [Martin Fowler](https://martinfowler.com/articles/harness-engineering.html) and adopted by [OpenAI](https://openai.com/index/harness-engineering/) and [Anthropic](https://www.anthropic.com/engineering/harness-design-long-running-apps). A harness is everything in an AI coding agent except the model itself — the skills, rules, context, and constraints that shape its behavior.
 
-Global default in `~/.ynh/config.json`:
+ynh manages the **guide layer** of that harness: the proactive steering that happens *before* the agent acts. One harness definition, assembled for Claude, Codex, or Cursor. Read more in [Harness Engineering](https://eyelock.github.io/ynh/#/harness-engineering).
 
-```json
-{"default_vendor": "claude"}
-```
+## What you can do
 
-## Commands
+**Build** — Create harnesses with skills, agents, rules, and commands. Pull artifacts from any Git repo with cherry-picking (`pick`). Declare hooks, MCP servers, and environment-specific profiles.
 
-### ynh (Harness Template Manager)
+**Refine** — Scaffold with `ynd create`, lint and validate with `ynd lint`/`ynd validate`, compress prompts with `ynd compress`, preview assembled output with `ynd preview`, diff across vendors with `ynd diff`.
 
-| Command | Description |
-|---------|-------------|
-| `ynh init` | Show ynh home path and setup instructions |
-| `ynh install <source> [--path <subdir>]` | Install harness from Git URL or local path |
-| `ynh uninstall <name>` | Remove an installed harness and its launcher (alias: `ynh remove`) |
-| `ynh update <name>` | Refresh cached Git repos for a harness |
-| `ynh run <name> [flags] [prompt]` | Launch a harness session |
-| `ynh ls` | List installed harnesses (alias: `ynh list`) |
-| `ynh info <name>` | Show detailed harness information |
-| `ynh search <query>` | Search registries for harnesses by name or keyword |
-| `ynh registry <subcommand>` | Manage harness registries (add, remove, list) |
-| `ynh vendors` | List supported vendor adapters |
-| `ynh status` | Show symlink installations across projects |
-| `ynh prune` | Clean orphaned symlink installations |
-| `ynh version` | Print version |
-
-### ynd (Developer Tools)
-
-| Command | Description |
-|---------|-------------|
-| `ynd create <type> <name>` | Scaffold a harness, skill, agent, rule, or command |
-| `ynd lint [files]` | Lint markdown, shell blocks, and config files |
-| `ynd validate [path]` | Validate harness structure and required fields |
-| `ynd fmt [files]` | Format markdown files |
-| `ynd compress [files]` | LLM-powered prompt compression with backup/restore |
-| `ynd inspect` | Interactive codebase analysis to generate skills and agents |
-| `ynd export <source> [flags]` | Export harness as vendor-native plugins |
-| `ynd marketplace build [flags]` | Build a marketplace from harnesses and plugins |
-
-See the [full command reference](https://eyelock.github.io/ynh/#/ynd) for all flags and options.
-
-### Run Flags
-
-| Flag | Description |
-|------|-------------|
-| `-v <vendor>` | Override vendor (claude, codex, cursor) |
-| `--install` | Install symlinks for the vendor in the current project |
-| `--clean` | Remove symlinks for the vendor in the current project |
-| `--` | Separator between vendor flags and the prompt |
+**Share** — Export as vendor-native plugins with `ynd export`. Build team marketplaces with `ynd marketplace build`. Publish to registries. Bake harnesses into Docker images for CI/CD.
 
 ## Documentation
 
-Full documentation is available at **[eyelock.github.io/ynh](https://eyelock.github.io/ynh)**, including:
+Full docs at **[eyelock.github.io/ynh](https://eyelock.github.io/ynh)**:
 
-- [Getting Started](https://eyelock.github.io/ynh/#/getting-started) — create and run your first harness
-- [Harness Reference](https://eyelock.github.io/ynh/#/harnesses) — plugin manifest, metadata, includes, delegates
-- [Artifacts Guide](https://eyelock.github.io/ynh/#/artifacts) — skills, agents, rules, commands, and project instructions
-- [Vendor Support](https://eyelock.github.io/ynh/#/vendors) — Claude, Codex, Cursor capabilities and launch strategies
-- [Agent Skills Standard](https://eyelock.github.io/ynh/#/skills-standard) — cross-platform spec, discovery paths, catalog budget
-- [Marketplace & Distribution](https://eyelock.github.io/ynh/#/marketplace) — cross-vendor marketplace systems and ynh's marketplace builder
-- [Docker](https://eyelock.github.io/ynh/#/docker) — containerized harnesses and Docker image baking
-- [Tutorials](https://eyelock.github.io/ynh/#/tutorial/) — 13 progressive tutorials from first harness to profiles
+- **[Getting Started](https://eyelock.github.io/ynh/#/getting-started)** — Create and run your first harness
+- **[Harness Engineering](https://eyelock.github.io/ynh/#/harness-engineering)** — Why harness management matters
+- **[Tutorials](https://eyelock.github.io/ynh/#/tutorial/)** — 13 progressive tutorials from first harness to Docker images
+- **[Artifacts Guide](https://eyelock.github.io/ynh/#/artifacts)** — Skills, agents, rules, commands
+- **[CLI Reference](https://eyelock.github.io/ynh/#/reference)** — Full command reference for ynh and ynd
+- **[Agent Skills Standard](https://eyelock.github.io/ynh/#/skills-standard)** — Cross-platform spec, discovery paths, catalog budget
+- **[Vendor Support](https://eyelock.github.io/ynh/#/vendors)** — Claude, Codex, Cursor capabilities
 
 ## License
 

@@ -236,4 +236,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Tutorial 11: MCP Servers](11-mcp-servers.md) — declare tool dependencies that vendors load automatically.
+[Tutorial 5: MCP Servers](tutorial/11-mcp-servers.md) — declare tool dependencies that vendors load automatically.
