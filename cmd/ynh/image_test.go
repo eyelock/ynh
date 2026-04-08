@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -211,24 +213,13 @@ func TestCmdImage_DryRun(t *testing.T) {
 	// Create a minimal installed harness
 	installTestHarness(t, "drytest")
 
-	// Capture stdout
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := cmdImage([]string{"drytest", "--dry-run"})
-
-	_ = w.Close()
-	os.Stdout = old
-
+	var stdout bytes.Buffer
+	err := cmdImageTo([]string{"drytest", "--dry-run"}, &stdout, io.Discard)
 	if err != nil {
-		t.Fatalf("cmdImage --dry-run failed: %v", err)
+		t.Fatalf("cmdImageTo --dry-run failed: %v", err)
 	}
 
-	buf := make([]byte, 4096)
-	n, _ := r.Read(buf)
-	output := string(buf[:n])
-
+	output := stdout.String()
 	if !strings.Contains(output, "FROM ghcr.io/eyelock/ynh:latest") {
 		t.Errorf("dry-run should print Dockerfile with FROM line\n\nGot:\n%s", output)
 	}
@@ -286,18 +277,9 @@ func TestImageAssembly_AllVendors(t *testing.T) {
 	// Create a minimal installed harness
 	installTestHarness(t, "assemblytest")
 
-	// Capture stdout (dry-run prints to stdout)
-	old := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
-
-	err := cmdImage([]string{"assemblytest", "--dry-run"})
-
-	_ = w.Close()
-	os.Stdout = old
-
+	err := cmdImageTo([]string{"assemblytest", "--dry-run"}, io.Discard, io.Discard)
 	if err != nil {
-		t.Fatalf("cmdImage failed: %v", err)
+		t.Fatalf("cmdImageTo failed: %v", err)
 	}
 
 	// The temp dir is cleaned up by cmdImage, but we can verify via dry-run

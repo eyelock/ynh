@@ -92,12 +92,8 @@ func TestCmdExportDefaultOutput(t *testing.T) {
 	}
 
 	// Run in a temp directory so the default ./dist/ doesn't pollute
-	origDir, _ := os.Getwd()
 	tmpDir := t.TempDir()
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = os.Chdir(origDir) }()
+	t.Chdir(tmpDir)
 
 	err = cmdExport([]string{srcDir, "-v", "claude"})
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
@@ -76,7 +77,7 @@ func TestLoad_LegacyFormat(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for legacy format")
 	}
-	if got := err.Error(); !contains(got, "legacy format detected") {
+	if got := err.Error(); !strings.Contains(got, "legacy format detected") {
 		t.Errorf("error = %q, want legacy format hint", got)
 	}
 }
@@ -415,7 +416,7 @@ func TestResolveProfile_MissingProfile(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing profile")
 	}
-	if !containsStr(err.Error(), `profile "nonexistent" not defined`) {
+	if !strings.Contains(err.Error(), `profile "nonexistent" not defined`) {
 		t.Errorf("error = %q", err)
 	}
 }
@@ -552,17 +553,4 @@ func writeTestHarnessMinimal(t *testing.T, dir, name string) {
 	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(hj), 0o644); err != nil {
 		t.Fatal(err)
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsStr(s, substr))
-}
-
-func containsStr(s, substr string) bool {
-	for i := 0; i+len(substr) <= len(s); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
