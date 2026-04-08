@@ -21,10 +21,15 @@ func cmdCompress(args []string) error {
 		if len(opts.files) == 0 {
 			return fmt.Errorf("--list-backups requires a file argument")
 		}
+		var errs []string
 		for _, f := range opts.files {
 			if err := listBackups(f); err != nil {
 				fmt.Fprintf(os.Stderr, "%s: %v\n", f, err)
+				errs = append(errs, f)
 			}
+		}
+		if len(errs) > 0 {
+			return fmt.Errorf("failed to list backups for %d file(s)", len(errs))
 		}
 		return nil
 	}
@@ -34,10 +39,15 @@ func cmdCompress(args []string) error {
 		if len(opts.files) == 0 {
 			return fmt.Errorf("--restore requires a file argument")
 		}
+		var errs []string
 		for _, f := range opts.files {
 			if err := restoreBackup(f, opts.pick); err != nil {
 				fmt.Fprintf(os.Stderr, "%s: %v\n", f, err)
+				errs = append(errs, f)
 			}
+		}
+		if len(errs) > 0 {
+			return fmt.Errorf("failed to restore %d file(s)", len(errs))
 		}
 		return nil
 	}

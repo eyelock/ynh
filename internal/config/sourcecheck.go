@@ -22,7 +22,7 @@ func (c *Config) CheckRemoteSource(gitURL string) error {
 		}
 	}
 
-	return fmt.Errorf("remote source %q is not in the allowed sources list\n  configure allowed_remote_sources in %s", gitURL, ConfigPath())
+	return fmt.Errorf("remote source %q is not in the allowed sources list", gitURL)
 }
 
 // normalizeForMatch strips a Git URL down to a canonical host/path form for matching.

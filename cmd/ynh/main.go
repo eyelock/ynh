@@ -198,7 +198,7 @@ func cmdInstall(args []string) error {
 	if isLocalPath(source) {
 		absPath, err := filepath.Abs(source)
 		if err != nil {
-			return err
+			return fmt.Errorf("resolving absolute path for %s: %w", source, err)
 		}
 		srcDir = absPath
 	} else {
@@ -240,11 +240,11 @@ func cmdInstall(args []string) error {
 		return fmt.Errorf("cleaning install dir: %w", err)
 	}
 	if err := os.MkdirAll(installDir, 0o755); err != nil {
-		return err
+		return fmt.Errorf("creating install directory: %w", err)
 	}
 
 	if err := copyTree(srcDir, installDir); err != nil {
-		return err
+		return fmt.Errorf("copying harness to install directory: %w", err)
 	}
 
 	// Inject install provenance into the copied harness.json
@@ -420,7 +420,7 @@ func cmdRun(args []string) error {
 	}
 
 	if err := config.EnsureDirs(); err != nil {
-		return err
+		return fmt.Errorf("ensuring directories: %w", err)
 	}
 
 	name := args[0]

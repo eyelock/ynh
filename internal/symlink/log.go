@@ -2,6 +2,7 @@ package symlink
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -39,12 +40,12 @@ func LoadLog() (*Log, error) {
 		if os.IsNotExist(err) {
 			return &Log{}, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("reading symlink log: %w", err)
 	}
 
 	var log Log
 	if err := json.Unmarshal(data, &log); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parsing symlink log: %w", err)
 	}
 	return &log, nil
 }
@@ -52,14 +53,18 @@ func LoadLog() (*Log, error) {
 // Save writes the transaction log to disk.
 func (l *Log) Save() error {
 	if err := os.MkdirAll(filepath.Dir(LogPath()), 0o755); err != nil {
-		return err
+		return fmt.Errorf("creating symlink log directory: %w", err)
 	}
 
 	data, err := json.MarshalIndent(l, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("marshalling symlink log: %w", err)
 	}
-	return os.WriteFile(LogPath(), data, 0o644)
+
+	if err := os.WriteFile(LogPath(), data, 0o644); err != nil {
+		return fmt.Errorf("writing symlink log: %w", err)
+	}
+	return nil
 }
 
 // Record adds or updates an installation entry in the log.
