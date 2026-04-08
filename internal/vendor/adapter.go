@@ -65,12 +65,12 @@ type Adapter interface {
 	// GenerateHookConfig translates canonical hook declarations to vendor-native
 	// hook configuration files. Returns a map of relative file paths to file contents.
 	// Returns nil if hooks is nil or empty.
-	GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[string][]byte
+	GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)
 
 	// GenerateMCPConfig translates MCP server declarations to vendor-native
 	// MCP configuration files. Returns a map of relative file paths to file contents.
 	// Returns nil if servers is nil or empty.
-	GenerateMCPConfig(servers map[string]plugin.MCPServer) map[string][]byte
+	GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error)
 }
 
 // DefaultName is the fallback vendor when no vendor is specified.

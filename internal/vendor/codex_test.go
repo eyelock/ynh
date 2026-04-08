@@ -10,7 +10,10 @@ import (
 
 func TestCodexGenerateHookConfig_NilHooks(t *testing.T) {
 	c := &Codex{}
-	result := c.GenerateHookConfig(nil)
+	result, err := c.GenerateHookConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result != nil {
 		t.Error("expected nil for nil hooks")
 	}
@@ -28,7 +31,10 @@ func TestCodexGenerateHookConfig_ThreeLevelFormat(t *testing.T) {
 		},
 	}
 
-	result := c.GenerateHookConfig(hooks)
+	result, err := c.GenerateHookConfig(hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result == nil {
 		t.Fatal("expected non-nil result")
 	}
@@ -106,7 +112,10 @@ func TestCodexGenerateHookConfig_ThreeLevelFormat(t *testing.T) {
 
 func TestCodexGenerateMCPConfig_NilServers(t *testing.T) {
 	c := &Codex{}
-	result := c.GenerateMCPConfig(nil)
+	result, err := c.GenerateMCPConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result != nil {
 		t.Error("expected nil for nil servers")
 	}
@@ -122,7 +131,10 @@ func TestCodexGenerateMCPConfig_StdioServer(t *testing.T) {
 		},
 	}
 
-	result := c.GenerateMCPConfig(servers)
+	result, err := c.GenerateMCPConfig(servers)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result == nil {
 		t.Fatal("expected non-nil result")
 	}
@@ -159,7 +171,10 @@ func TestCodexGenerateMCPConfig_HTTPServer(t *testing.T) {
 		},
 	}
 
-	result := c.GenerateMCPConfig(servers)
+	result, err := c.GenerateMCPConfig(servers)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result == nil {
 		t.Fatal("expected non-nil result")
 	}
@@ -186,7 +201,10 @@ func TestCodexGenerateMCPConfig_WithHeaders(t *testing.T) {
 		},
 	}
 
-	result := c.GenerateMCPConfig(servers)
+	result, err := c.GenerateMCPConfig(servers)
+	if err != nil {
+		t.Fatal(err)
+	}
 	data := result[".mcp.json"]
 	var config map[string]any
 	if err := json.Unmarshal(data, &config); err != nil {
@@ -210,7 +228,10 @@ func TestCodexGenerateHookConfig_EventTranslation(t *testing.T) {
 		"on_stop":       {{Command: "cmd4"}},
 	}
 
-	result := c.GenerateHookConfig(hooks)
+	result, err := c.GenerateHookConfig(hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
 	data := result[filepath.Join(".codex", "hooks.json")]
 
 	var config map[string]any

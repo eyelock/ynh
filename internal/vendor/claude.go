@@ -2,6 +2,7 @@ package vendor
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -89,9 +90,9 @@ var claudeHookEventMap = map[string]string{
 	"on_stop":       "Stop",
 }
 
-func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[string][]byte {
+func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
 	if len(hooks) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	// Claude's three-level structure:
@@ -156,7 +157,7 @@ func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[str
 	}
 
 	if len(allEvents) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	settings := map[string]any{
@@ -165,7 +166,7 @@ func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[str
 
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("marshalling hook config: %w", err)
 	}
 	data = append(data, '\n')
 
@@ -174,12 +175,12 @@ func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[str
 	// not from settings.json (which only supports the "agent" key in plugins).
 	return map[string][]byte{
 		filepath.Join(".claude", "hooks", "hooks.json"): data,
-	}
+	}, nil
 }
 
-func (c *Claude) GenerateMCPConfig(servers map[string]plugin.MCPServer) map[string][]byte {
+func (c *Claude) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
 	if len(servers) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	// Claude uses .mcp.json with "mcpServers" key — direct passthrough
@@ -189,7 +190,7 @@ func (c *Claude) GenerateMCPConfig(servers map[string]plugin.MCPServer) map[stri
 
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("marshalling MCP config: %w", err)
 	}
 	data = append(data, '\n')
 
@@ -197,7 +198,7 @@ func (c *Claude) GenerateMCPConfig(servers map[string]plugin.MCPServer) map[stri
 	// as a plugin-provided MCP server configuration.
 	return map[string][]byte{
 		filepath.Join(".claude", ".mcp.json"): data,
-	}
+	}, nil
 }
 
 func launchClaude(configPath string, extraArgs []string) error {

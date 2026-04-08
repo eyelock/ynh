@@ -161,8 +161,8 @@ func CacheOnlyRepo(gitURL string, ref string) (RepoResult, error) {
 		return RepoResult{Path: repoDir}, nil
 	}
 
-	// Cache miss — fall back to network fetch with warning
-	fmt.Fprintf(os.Stderr, "  Cache miss for %s, fetching...\n", ShortGitURL(gitURL))
+	// Cache miss — fall back to network fetch.
+	// Caller can detect this via RepoResult.Cloned.
 	return EnsureRepo(gitURL, ref)
 }
 

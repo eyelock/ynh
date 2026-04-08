@@ -10,7 +10,10 @@ import (
 
 func TestCursorGenerateHookConfig_NilHooks(t *testing.T) {
 	c := &Cursor{}
-	result := c.GenerateHookConfig(nil)
+	result, err := c.GenerateHookConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result != nil {
 		t.Error("expected nil for nil hooks")
 	}
@@ -28,7 +31,10 @@ func TestCursorGenerateHookConfig_FlatFormat(t *testing.T) {
 		},
 	}
 
-	result := c.GenerateHookConfig(hooks)
+	result, err := c.GenerateHookConfig(hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result == nil {
 		t.Fatal("expected non-nil result")
 	}
@@ -84,7 +90,10 @@ func TestCursorGenerateHookConfig_FlatFormat(t *testing.T) {
 
 func TestCursorGenerateMCPConfig_NilServers(t *testing.T) {
 	c := &Cursor{}
-	result := c.GenerateMCPConfig(nil)
+	result, err := c.GenerateMCPConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result != nil {
 		t.Error("expected nil for nil servers")
 	}
@@ -100,7 +109,10 @@ func TestCursorGenerateMCPConfig_Format(t *testing.T) {
 		},
 	}
 
-	result := c.GenerateMCPConfig(servers)
+	result, err := c.GenerateMCPConfig(servers)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result == nil {
 		t.Fatal("expected non-nil result")
 	}
@@ -139,7 +151,10 @@ func TestCursorGenerateHookConfig_EventTranslation(t *testing.T) {
 		"on_stop":       {{Command: "cmd4"}},
 	}
 
-	result := c.GenerateHookConfig(hooks)
+	result, err := c.GenerateHookConfig(hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
 	data := result[filepath.Join(".cursor", "hooks.json")]
 
 	var config map[string]any

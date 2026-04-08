@@ -2,6 +2,7 @@ package vendor
 
 import (
 	"encoding/json"
+	"fmt"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -66,9 +67,9 @@ var cursorHookEventMap = map[string]string{
 	"on_stop":       "stop",
 }
 
-func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[string][]byte {
+func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
 	if len(hooks) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	// Cursor flat format: { "hooks": { "beforeShellExecution": [ { "command": "..." } ] } }
@@ -100,7 +101,7 @@ func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[str
 	}
 
 	if len(allEvents) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	config := map[string]any{
@@ -110,18 +111,18 @@ func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[str
 
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("marshalling hook config: %w", err)
 	}
 	data = append(data, '\n')
 
 	return map[string][]byte{
 		filepath.Join(".cursor", "hooks.json"): data,
-	}
+	}, nil
 }
 
-func (c *Cursor) GenerateMCPConfig(servers map[string]plugin.MCPServer) map[string][]byte {
+func (c *Cursor) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
 	if len(servers) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	// Cursor uses .cursor/mcp.json with "mcpServers" key — same structure as Claude
@@ -131,13 +132,13 @@ func (c *Cursor) GenerateMCPConfig(servers map[string]plugin.MCPServer) map[stri
 
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("marshalling MCP config: %w", err)
 	}
 	data = append(data, '\n')
 
 	return map[string][]byte{
 		filepath.Join(".cursor", "mcp.json"): data,
-	}
+	}, nil
 }
 
 func launchCursor(configPath string, extraArgs []string) error {

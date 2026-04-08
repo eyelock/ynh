@@ -143,7 +143,10 @@ func TestBuildClaudeArgs_NonInteractive(t *testing.T) {
 
 func TestClaudeGenerateHookConfig_NilHooks(t *testing.T) {
 	c := &Claude{}
-	result := c.GenerateHookConfig(nil)
+	result, err := c.GenerateHookConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result != nil {
 		t.Error("expected nil for nil hooks")
 	}
@@ -151,7 +154,10 @@ func TestClaudeGenerateHookConfig_NilHooks(t *testing.T) {
 
 func TestClaudeGenerateHookConfig_EmptyHooks(t *testing.T) {
 	c := &Claude{}
-	result := c.GenerateHookConfig(map[string][]plugin.HookEntry{})
+	result, err := c.GenerateHookConfig(map[string][]plugin.HookEntry{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result != nil {
 		t.Error("expected nil for empty hooks")
 	}
@@ -170,7 +176,10 @@ func TestClaudeGenerateHookConfig_ThreeLevelNesting(t *testing.T) {
 		},
 	}
 
-	result := c.GenerateHookConfig(hooks)
+	result, err := c.GenerateHookConfig(hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result == nil {
 		t.Fatal("expected non-nil result")
 	}
@@ -235,7 +244,10 @@ func TestClaudeGenerateHookConfig_ThreeLevelNesting(t *testing.T) {
 
 func TestClaudeGenerateMCPConfig_NilServers(t *testing.T) {
 	c := &Claude{}
-	result := c.GenerateMCPConfig(nil)
+	result, err := c.GenerateMCPConfig(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result != nil {
 		t.Error("expected nil for nil servers")
 	}
@@ -243,7 +255,10 @@ func TestClaudeGenerateMCPConfig_NilServers(t *testing.T) {
 
 func TestClaudeGenerateMCPConfig_EmptyServers(t *testing.T) {
 	c := &Claude{}
-	result := c.GenerateMCPConfig(map[string]plugin.MCPServer{})
+	result, err := c.GenerateMCPConfig(map[string]plugin.MCPServer{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result != nil {
 		t.Error("expected nil for empty servers")
 	}
@@ -259,7 +274,10 @@ func TestClaudeGenerateMCPConfig_Passthrough(t *testing.T) {
 		},
 	}
 
-	result := c.GenerateMCPConfig(servers)
+	result, err := c.GenerateMCPConfig(servers)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result == nil {
 		t.Fatal("expected non-nil result")
 	}
@@ -303,7 +321,10 @@ func TestClaudeGenerateHookConfig_EventTranslation(t *testing.T) {
 		"on_stop":       {{Command: "cmd4"}},
 	}
 
-	result := c.GenerateHookConfig(hooks)
+	result, err := c.GenerateHookConfig(hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
 	data := result[filepath.Join(".claude", "hooks", "hooks.json")]
 
 	var settings map[string]any
