@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -67,6 +68,9 @@ func DetectFormat(dir string) string {
 	return ""
 }
 
+// ErrNotFound is returned when a harness is not installed.
+var ErrNotFound = errors.New("harness not found")
+
 func Load(name string) (*Harness, error) {
 	installDir := InstalledDir(name)
 	switch DetectFormat(installDir) {
@@ -75,7 +79,7 @@ func Load(name string) (*Harness, error) {
 	case "legacy":
 		return nil, fmt.Errorf("harness %q: legacy format detected. Consolidate .claude-plugin/plugin.json and metadata.json into harness.json", name)
 	default:
-		return nil, fmt.Errorf("harness %q: no harness.json found", name)
+		return nil, fmt.Errorf("harness %q: %w", name, ErrNotFound)
 	}
 }
 

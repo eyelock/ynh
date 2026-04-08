@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -468,7 +469,7 @@ func TestCmdInfo_NotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for nonexistent harness")
 	}
-	if !strings.Contains(err.Error(), "not found") {
+	if !errors.Is(err, harness.ErrNotFound) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -544,7 +545,7 @@ func TestCmdUpdate_NotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for nonexistent harness")
 	}
-	if !strings.Contains(err.Error(), "not found") {
+	if !errors.Is(err, harness.ErrNotFound) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }

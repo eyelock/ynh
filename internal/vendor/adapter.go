@@ -1,11 +1,15 @@
 package vendor
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 
 	"github.com/eyelock/ynh/internal/plugin"
 )
+
+// ErrUnknownVendor is returned when a vendor name is not registered.
+var ErrUnknownVendor = errors.New("unknown vendor")
 
 // SymlinkEntry records a single symlink created during Install.
 type SymlinkEntry struct {
@@ -91,7 +95,7 @@ func Get(name string) (Adapter, error) {
 		for k := range registry {
 			available = append(available, k)
 		}
-		return nil, fmt.Errorf("unknown vendor %q (available: %v)", name, available)
+		return nil, fmt.Errorf("%w %q (available: %v)", ErrUnknownVendor, name, available)
 	}
 	return a, nil
 }

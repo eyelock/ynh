@@ -2,11 +2,14 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/harness"
 )
 
 func TestParseImageArgs(t *testing.T) {
@@ -246,8 +249,8 @@ func TestCmdImage_HarnessNotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing harness")
 	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("expected 'not found' error, got: %v", err)
+	if !errors.Is(err, harness.ErrNotFound) {
+		t.Errorf("expected harness.ErrNotFound, got: %v", err)
 	}
 }
 
