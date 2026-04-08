@@ -1,6 +1,7 @@
 package vendor
 
 import (
+	"errors"
 	"testing"
 )
 
@@ -80,6 +81,9 @@ func TestGetUnknownVendor(t *testing.T) {
 	_, err := Get("nonexistent")
 	if err == nil {
 		t.Fatal("expected error for unknown vendor")
+	}
+	if !errors.Is(err, ErrUnknownVendor) {
+		t.Errorf("expected ErrUnknownVendor, got: %v", err)
 	}
 }
 
