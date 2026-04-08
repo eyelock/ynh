@@ -50,3 +50,5 @@ EVALS: FAIL (N tutorials, X failures)
 If ANY step in ANY tutorial fails, the overall verdict is **FAIL**.
 
 Do not attempt fixes during evaluation. Report only.
+
+If the verdict is FAIL and you are asked to fix the failures: make the fixes locally, then re-run this entire eval process locally to confirm PASS **before** pushing anything to remote. Never push tutorial fixes without verifying them first.

@@ -57,6 +57,19 @@ Follows the [Agent Skills](https://agentskills.io) open standard. See `docs/skil
 | `docs/skills-standard.md` | Agent Skills spec, cross-platform compat, known issues |
 | `docs/ynd.md` | ynd command reference |
 
+## Verify Before Push
+
+**NEVER push to remote without full local verification first.** The workflow is always:
+
+1. Make the fix
+2. Run the full verification locally (`make check`, `/evals`, whatever caught the issue)
+3. Confirm the fix actually resolves the problem — don't assume
+4. Only then: commit, push, create PR
+
+This applies to everything — code, docs, tutorials. Pushing a fix that hasn't been locally verified is not acceptable. Multiple follow-up fix PRs for the same issue is unprofessional.
+
+**Never push directly to main.** Always use a PR branch.
+
 ## Code Conventions
 
 - Go 1.25+, standard library only (zero external dependencies)
