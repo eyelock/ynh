@@ -184,19 +184,24 @@ Expected output (Dockerfile printed to stdout):
 ```dockerfile
 FROM ghcr.io/eyelock/ynh:latest
 
+# Pre-assembled vendor layouts (all three, ready to use)
 COPY --link --chown=ynh:ynh vendors/claude/ /home/ynh/.ynh/run/docker-demo/claude/
 COPY --link --chown=ynh:ynh vendors/codex/ /home/ynh/.ynh/run/docker-demo/codex/
 COPY --link --chown=ynh:ynh vendors/cursor/ /home/ynh/.ynh/run/docker-demo/cursor/
 
+# Harness source (metadata for ynh run)
 COPY --link --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/docker-demo/
 
+# Default vendor (override: docker run -e YNH_VENDOR=codex)
 ENV YNH_VENDOR=claude
 
+# Baked entrypoint — just pass the prompt as CMD
 ENTRYPOINT ["tini", "-s", "--", "ynh", "run", "docker-demo"]
 CMD []
 
 LABEL dev.ynh.harness="docker-demo" \
-      dev.ynh.harness.default-vendor="claude"
+      dev.ynh.harness.default-vendor="claude" \
+      dev.ynh.assembled-by="<version>"
 ```
 
 ## T9.8: Build from Git source

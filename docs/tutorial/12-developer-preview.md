@@ -113,8 +113,8 @@ Expected output structure:
 
 ```
 .cursor/
-  .cursor-plugin/
-    plugin.json
+  agents/
+  commands/
   hooks.json
   mcp.json
   rules/
@@ -122,6 +122,8 @@ Expected output structure:
   skills/
     deploy/
       SKILL.md
+.cursor-plugin/
+  plugin.json
 .cursorrules
 ```
 
