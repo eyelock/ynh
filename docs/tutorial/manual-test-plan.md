@@ -259,7 +259,7 @@ ynh uninstall nonexistent-harness
 
 ```bash
 ynh run nonexistent-harness
-# Expected: Error: harness "nonexistent-harness" not found
+# Expected: Error: harness "nonexistent-harness": harness not found
 ```
 
 ### E7: Export unknown vendor
@@ -363,7 +363,7 @@ ynh info my-harness
 
 ```bash
 ynh info nonexistent
-# Expected: Error: harness "nonexistent" not found
+# Expected: Error: harness "nonexistent": harness not found
 ```
 
 ### E18: Info with no args

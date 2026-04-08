@@ -221,6 +221,8 @@ CLAUDE.md
   commands/hello.md
   rules/be-brief.md
   skills/greet/SKILL.md
+.claude-plugin/
+  plugin.json
 ```
 
 `CLAUDE.md` (at the root) was generated from `instructions.md`. Artifacts are inside `.claude/` — the layout Claude expects for `--plugin-dir`.

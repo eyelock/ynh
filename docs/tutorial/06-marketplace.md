@@ -118,12 +118,15 @@ Expected (`.git/` excluded from listing — it's auto-created by the build):
 .claude-plugin/marketplace.json
 .cursor-plugin/marketplace.json
 plugins/formatter/.claude-plugin/plugin.json
+plugins/formatter/.codex-plugin/plugin.json
 plugins/formatter/.cursor-plugin/plugin.json
 plugins/formatter/skills/auto-format/SKILL.md
 plugins/reviewer/.claude-plugin/plugin.json
+plugins/reviewer/.codex-plugin/plugin.json
 plugins/reviewer/.cursor-plugin/plugin.json
 plugins/reviewer/.cursorrules
 plugins/reviewer/AGENTS.md
+plugins/reviewer/CLAUDE.md
 plugins/reviewer/skills/dev-quality/SKILL.md
 plugins/reviewer/skills/dev-review/SKILL.md
 README.md
@@ -158,15 +161,15 @@ Expected (formatted):
   "plugins": [
     {
       "name": "formatter",
-      "source": "./plugins/formatter",
       "description": "Auto-format code on save",
-      "version": "1.0.0"
+      "version": "1.0.0",
+      "source": "./plugins/formatter"
     },
     {
       "name": "reviewer",
-      "source": "./plugins/reviewer",
       "description": "Code review with dev-quality and dev-review skills",
-      "version": "1.0.0"
+      "version": "1.0.0",
+      "source": "./plugins/reviewer"
     }
   ]
 }
