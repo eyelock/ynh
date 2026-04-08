@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"github.com/eyelock/ynh/internal/vendor"
 )
 
 var Version = "dev"
@@ -14,6 +12,7 @@ var Version = "dev"
 const (
 	DefaultDirName = ".ynh"
 	ConfigFile     = "config.json"
+	DefaultVendor  = "claude"
 )
 
 // RegistrySource points to a Git repo containing a registry.json.
@@ -80,7 +79,7 @@ func EnsureDirs() error {
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		DefaultVendor: vendor.DefaultName,
+		DefaultVendor: DefaultVendor,
 	}
 
 	data, err := os.ReadFile(ConfigPath())
