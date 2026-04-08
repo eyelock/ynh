@@ -225,6 +225,7 @@ ynh prune
 Expected:
 ```
 Removed stale launcher: /Users/<you>/.ynh/bin/my-harness
+Removed stale run dir: /Users/<you>/.ynh/run/my-harness
 ```
 
 Verify the launcher was removed:

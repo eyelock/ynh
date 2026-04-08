@@ -168,6 +168,12 @@ Includes:
 
 Delegates to:
   (none)
+
+Hooks:
+  (none)
+
+MCP Servers:
+  (none)
 ```
 
 Check the launcher script:
@@ -232,7 +238,9 @@ CLAUDE.md
 ```bash
 ynh uninstall my-harness
 ynh ls
-# Expected: No harnesses installed.
+# Expected:
+#   No harnesses installed.
+#   Install one with: ynh install <git-url|path>
 ```
 
 The `remove` alias also works: `ynh remove my-harness`.

@@ -83,15 +83,16 @@ Expected output structure:
 
 ```
 .claude/
-  .claude-plugin/
-    plugin.json
+  hooks/
+    hooks.json
   rules/
     safety.md
   skills/
     deploy/
       SKILL.md
-  settings.json
-.mcp.json
+  .mcp.json
+.claude-plugin/
+  plugin.json
 CLAUDE.md
 ```
 
@@ -99,8 +100,8 @@ Key things to verify:
 - `CLAUDE.md` contains the harness instructions
 - `.claude/skills/deploy/SKILL.md` has the skill content
 - `.claude/rules/safety.md` has the rule content
-- `.claude/settings.json` has hooks in Claude's three-level format
-- `.mcp.json` has the MCP server config
+- `.claude/hooks/hooks.json` has hooks in Claude's three-level format
+- `.claude/.mcp.json` has the MCP server config
 
 ## T12.2: Preview the same harness for Cursor
 
@@ -126,8 +127,8 @@ Expected output structure:
 
 Note the differences from Claude:
 - Instructions go to `.cursorrules` instead of `CLAUDE.md`
-- Hooks go to `.cursor/hooks.json` instead of `.claude/settings.json`
-- MCP config goes to `.cursor/mcp.json` instead of `.mcp.json`
+- Hooks go to `.cursor/hooks.json` instead of `.claude/hooks/hooks.json`
+- MCP config goes to `.cursor/mcp.json` instead of `.claude/.mcp.json`
 - Artifacts are under `.cursor/` instead of `.claude/`
 
 ## T12.3: Compare Claude vs Cursor output
@@ -141,17 +142,19 @@ Expected output:
 ```
 === claude vs cursor ===
 Only in claude:
-  .claude/settings.json
-  .mcp.json
+  .claude-plugin/plugin.json
+  .claude/.mcp.json
+  .claude/hooks/hooks.json
+  .claude/rules/safety.md
+  .claude/skills/deploy/SKILL.md
   CLAUDE.md
 Only in cursor:
+  .cursor-plugin/plugin.json
   .cursor/hooks.json
   .cursor/mcp.json
+  .cursor/rules/safety.md
+  .cursor/skills/deploy/SKILL.md
   .cursorrules
-Different content:
-  ...
-Identical:
-  ...
 ```
 
 The diff shows which files are vendor-specific and which content is shared. Artifacts like skills and rules may appear as identical content under different directory prefixes.
@@ -167,7 +170,7 @@ ynd preview /tmp/ynh-tutorial/preview-harness -v claude -o /tmp/ynh-tutorial/cla
 Inspect the hook config:
 
 ```bash
-cat /tmp/ynh-tutorial/claude-output/.claude/settings.json
+cat /tmp/ynh-tutorial/claude-output/.claude/hooks/hooks.json
 ```
 
 Expected:
@@ -222,7 +225,7 @@ Expected:
 Inspect MCP config for each vendor:
 
 ```bash
-cat /tmp/ynh-tutorial/claude-output/.mcp.json
+cat /tmp/ynh-tutorial/claude-output/.claude/.mcp.json
 ```
 
 Expected:
@@ -251,7 +254,7 @@ ynd preview /tmp/ynh-tutorial/preview-harness -v codex -o /tmp/ynh-tutorial/code
 cat /tmp/ynh-tutorial/codex-output/.mcp.json
 ```
 
-Expected (JSON, same format as Claude — at plugin root):
+Expected (JSON, same format as Claude, at plugin root):
 
 ```json
 {

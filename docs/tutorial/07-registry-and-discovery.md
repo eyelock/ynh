@@ -68,7 +68,7 @@ ynh registry add /tmp/ynh-tutorial/my-registry
 
 Expected:
 ```
-Added registry "tutorial-registry" from /tmp/ynh-tutorial/my-registry
+Added registry: /tmp/ynh-tutorial/my-registry
 ```
 
 ## T7.3: List registries
@@ -79,8 +79,7 @@ ynh registry list
 
 Expected:
 ```
-NAME                URL
-tutorial-registry   /tmp/ynh-tutorial/my-registry
+  /tmp/ynh-tutorial/my-registry
 ```
 
 ## T7.4: Search
@@ -93,8 +92,8 @@ ynh search "go"
 
 Expected:
 ```
-NAME    DESCRIPTION                                    REPO                          VENDORS
-david   Full-stack development harness with Go expertise  eyelock/assistants (ynh/david)  claude, codex, cursor
+NAME   DESCRIPTION                                       REPO                                       VENDORS              REGISTRY
+david  Full-stack development harness with Go expertise  github.com/eyelock/assistants (ynh/david)  claude,codex,cursor  tutorial-registry
 ```
 
 ```bash
@@ -103,8 +102,8 @@ ynh search "planning"
 
 Expected:
 ```
-NAME      DESCRIPTION                              REPO                              VENDORS
-planner   Project planning and architecture harness  eyelock/assistants (ynh/planner)  claude
+NAME     DESCRIPTION                                REPO                                         VENDORS  REGISTRY
+planner  Project planning and architecture harness  github.com/eyelock/assistants (ynh/planner)  claude   tutorial-registry
 ```
 
 ```bash
@@ -113,13 +112,13 @@ ynh search "music"
 
 Expected:
 ```
-NAME               DESCRIPTION                                    REPO                                       VENDORS
-media-management   Music library processing and Apple Music import  eyelock/assistants (plugins/media-management)  claude
+NAME              DESCRIPTION                                      REPO                                                      VENDORS  REGISTRY
+media-management  Music library processing and Apple Music import  github.com/eyelock/assistants (plugins/media-management)  claude   tutorial-registry
 ```
 
 ```bash
 ynh search "nonexistent"
-# Expected: No results found for "nonexistent".
+# Expected: No results for "nonexistent"
 ```
 
 ## T7.5: Install — by exact name
@@ -189,8 +188,7 @@ ynh registry update
 
 Expected:
 ```
-Updating tutorial-registry...
-  Already up to date.
+  tutorial-registry (up to date, 3 entries)
 ```
 
 This fetches the latest `registry.json` from each configured registry.

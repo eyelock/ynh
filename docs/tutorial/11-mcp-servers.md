@@ -44,7 +44,7 @@ EOF
 ynd preview /tmp/ynh-tutorial/mcp-harness -v claude
 ```
 
-Expected output includes `.mcp.json` at the project root:
+Expected output includes `.claude/.mcp.json`:
 
 ```json
 {
@@ -60,7 +60,7 @@ Expected output includes `.mcp.json` at the project root:
 }
 ```
 
-Claude uses `.mcp.json` with a `mcpServers` key — the server definition passes through directly.
+Claude uses `.claude/.mcp.json` with a `mcpServers` key — the server definition passes through directly.
 
 ## T11.3: Preview for Cursor
 
@@ -84,7 +84,7 @@ Expected output includes `.cursor/mcp.json`:
 }
 ```
 
-Cursor uses the same JSON structure as Claude but places the file at `.cursor/mcp.json` instead of the project root.
+Cursor uses the same JSON structure as Claude but places the file at `.cursor/mcp.json` instead of `.claude/.mcp.json`.
 
 ## T11.4: Preview for Codex
 
@@ -92,18 +92,23 @@ Cursor uses the same JSON structure as Claude but places the file at `.cursor/mc
 ynd preview /tmp/ynh-tutorial/mcp-harness -v codex
 ```
 
-Expected output includes `.codex/config.toml` with TOML format:
+Expected output includes `.mcp.json` with JSON format (same structure as Claude, at plugin root):
 
-```toml
-[mcp_servers.sqlite]
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-sqlite", "/tmp/demo.db"]
-
-[mcp_servers.sqlite.env]
-NODE_ENV = "production"
+```json
+{
+  "mcpServers": {
+    "sqlite": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sqlite", "/tmp/demo.db"],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  }
+}
 ```
 
-Codex uses TOML instead of JSON, with `[mcp_servers.<name>]` table headers and a separate `[mcp_servers.<name>.env]` sub-table for environment variables.
+Codex uses the same JSON format as Claude with a `mcpServers` key, placed at the plugin root as `.mcp.json`.
 
 ## T11.5: Add an HTTP MCP server
 
@@ -140,7 +145,7 @@ Preview for Claude to see both servers:
 ynd preview /tmp/ynh-tutorial/mcp-harness -v claude
 ```
 
-Expected `.mcp.json` now includes both servers:
+Expected `.claude/.mcp.json` now includes both servers:
 
 ```json
 {
@@ -162,27 +167,32 @@ Expected `.mcp.json` now includes both servers:
 }
 ```
 
-Preview for Codex to see the TOML translation with both server types:
+Preview for Codex to see the JSON translation with both server types:
 
 ```bash
 ynd preview /tmp/ynh-tutorial/mcp-harness -v codex
 ```
 
-Expected `.codex/config.toml`:
+Expected `.mcp.json` (at plugin root):
 
-```toml
-[mcp_servers.docs-api]
-url = "https://docs.example.com/mcp"
-
-[mcp_servers.docs-api.headers]
-Authorization = "Bearer ${DOCS_API_KEY}"
-
-[mcp_servers.sqlite]
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-sqlite", "/tmp/demo.db"]
-
-[mcp_servers.sqlite.env]
-NODE_ENV = "production"
+```json
+{
+  "mcpServers": {
+    "docs-api": {
+      "url": "https://docs.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DOCS_API_KEY}"
+      }
+    },
+    "sqlite": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sqlite", "/tmp/demo.db"],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  }
+}
 ```
 
 ## T11.6: Compare MCP config across vendors
@@ -192,10 +202,10 @@ ynd diff /tmp/ynh-tutorial/mcp-harness claude cursor codex
 ```
 
 Expected output shows:
-- `.mcp.json` only in Claude (project-root MCP config)
+- `.claude/.mcp.json` only in Claude
 - `.cursor/mcp.json` only in Cursor
-- `.codex/config.toml` only in Codex
-- The same two servers appear in all three, but in structurally different formats
+- `.mcp.json` only in Codex (at plugin root)
+- The same two servers appear in all three, in the same JSON format but at different file locations
 
 ## Clean up
 
@@ -207,8 +217,8 @@ rm -rf /tmp/ynh-tutorial
 
 - MCP servers are declared in `harness.json` under `mcp_servers`
 - Servers can use stdio transport (`command` + `args`) or HTTP transport (`url`)
-- Claude and Cursor both use JSON with `mcpServers` key, but in different file locations
-- Codex uses TOML format with `[mcp_servers.<name>]` table sections
+- All three vendors use JSON with a `mcpServers` key, but in different file locations
+- Claude places MCP config at `.claude/.mcp.json`, Cursor at `.cursor/mcp.json`, and Codex at `.mcp.json` (plugin root)
 - `ynd preview` and `ynd diff` let you verify MCP config without installing
 
 ## Next
