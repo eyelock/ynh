@@ -3,11 +3,19 @@
 **Your name. Your AI.**
 
 ```bash
+brew tap eyelock/tap && brew install ynh
+ynh install github.com/eyelock/ynh
+ynh-guide
+```
+
+That gets you a guided session that teaches you ynh — and helps you create your own harness. Once you have one:
+
+```bash
 ynh install github.com/myorg/david
 david
 ```
 
-That's it. `david` is now a command. It knows your skills, your team's rules, your coding standards. It works on Claude today. Switch to Codex with `-v codex`. Same harness, different engine.
+`david` is now a command. It knows your skills, your team's rules, your coding standards. It works on Claude today. Switch to Codex with `-v codex`. Same harness, different engine.
 
 ## What this gives you
 
@@ -26,9 +34,17 @@ david -v codex                     # same harness, different vendor
 ## The 60-second version
 
 ```bash
-# Install
+# Install ynh
 brew tap eyelock/tap && brew install ynh
 
+# Try the ynh harness — it teaches you ynh
+ynh install github.com/eyelock/ynh
+ynh-guide
+```
+
+Inside the session, use `/ynh-create-harness` to build your own. Or do it manually:
+
+```bash
 # Create a harness
 mkdir david && cat > david/harness.json << 'EOF'
 {"name":"david","version":"0.1.0","default_vendor":"claude"}

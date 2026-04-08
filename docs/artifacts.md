@@ -129,21 +129,21 @@ If any step fails, fix the issue and re-run until all checks pass.
 
 ## Project Instructions
 
-A harness can include an `instructions.md` file with project-level instructions. At runtime, this is copied to the vendor-specific instructions file at the project root:
+A harness can include an `AGENTS.md` file with project-level instructions. Most vendors read `AGENTS.md` natively. For Claude, ynh generates a `CLAUDE.md` with an `@AGENTS.md` import.
 
-| Vendor | Target filename |
-|--------|----------------|
-| Claude | `CLAUDE.md` |
-| Codex | `codex.md` |
-| Cursor | `.cursorrules` |
+| Vendor | Native AGENTS.md support | ynh shim |
+|--------|--------------------------|----------|
+| Claude | No | `CLAUDE.md` with `@AGENTS.md` import |
+| Codex  | Yes | — |
+| Cursor | Yes | — |
 
 ```
 my-harness/
 ├── harness.json
-└── instructions.md       <- becomes CLAUDE.md (or vendor equivalent)
+└── AGENTS.md             <- read natively by Codex/Cursor; shimmed for Claude
 ```
 
-**Example instructions.md:**
+**Example AGENTS.md:**
 
 ```markdown
 You are a senior developer working on a Go microservices codebase.
@@ -154,7 +154,9 @@ You are a senior developer working on a Go microservices codebase.
 - Run `make check` before committing
 ```
 
-If multiple sources provide `instructions.md` (e.g., an included repo and the harness itself), the last source wins. Since the harness's own content is processed last, its `instructions.md` takes priority over included repos.
+If multiple sources provide instructions (e.g., an included repo and the harness itself), the last source wins. Since the harness's own content is processed last, its `AGENTS.md` takes priority over included repos.
+
+> **Note:** `instructions.md` is also supported and takes precedence over `AGENTS.md` if both exist. New harnesses should use `AGENTS.md`.
 
 ## Where Artifacts Come From
 

@@ -266,7 +266,7 @@ ynh run nonexistent-harness
 
 ```bash
 ynd export /tmp/ynh-edge/repo -v fakevend
-# Expected: Error: unknown vendor "fakevend" (available: [claude codex cursor])
+# Expected: Error: unknown vendor "fakevend" (available: [... order varies ...])
 ```
 
 ### E8: Export missing source
@@ -336,7 +336,9 @@ cd /tmp
 ynd create harness broken-test
 mkdir -p broken-test/skills/orphan
 ynd validate broken-test
-# Expected: INVALID — skills/orphan/ missing SKILL.md
+# Expected:
+#   broken-test: INVALID
+#     - skills/orphan/ missing SKILL.md
 
 rm -rf broken-test
 ```

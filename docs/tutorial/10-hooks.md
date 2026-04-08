@@ -112,7 +112,6 @@ Expected output includes `.cursor/hooks.json` with Cursor's format:
 
 ```json
 {
-  "version": 1,
   "hooks": {
     "afterFileEdit": [
       { "command": "/usr/local/bin/run-linter.sh" }
@@ -123,7 +122,8 @@ Expected output includes `.cursor/hooks.json` with Cursor's format:
     "stop": [
       { "command": "/usr/local/bin/session-report.sh" }
     ]
-  }
+  },
+  "version": 1
 }
 ```
 

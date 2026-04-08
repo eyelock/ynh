@@ -83,6 +83,8 @@ Expected output structure:
 
 ```
 .claude/
+  agents/
+  commands/
   hooks/
     hooks.json
   rules/
@@ -210,7 +212,6 @@ Expected:
 
 ```json
 {
-  "version": 1,
   "hooks": {
     "afterFileEdit": [
       { "command": "/usr/local/bin/validate-output.sh" }
@@ -218,7 +219,8 @@ Expected:
     "beforeShellExecution": [
       { "command": "/usr/local/bin/check-deploy.sh" }
     ]
-  }
+  },
+  "version": 1
 }
 ```
 

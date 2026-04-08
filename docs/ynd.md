@@ -63,16 +63,16 @@ A backup of every file is saved to `~/.ynd/backups/` before overwriting. Use `--
 
 ```bash
 ynd compress                   # discover and compress all .md files
-ynd compress instructions.md   # specific file
+ynd compress AGENTS.md         # specific file
 ynd compress -y verbose.md     # skip confirmation prompt
 ynd compress -v claude         # use specific vendor CLI
 YNH_YES=1 ynd compress file.md # skip confirmation via env var
 CI=true ynd compress file.md   # also skip confirmation (CI convention)
 
 # Backup management
-ynd compress --list-backups instructions.md   # show backup history
-ynd compress --restore instructions.md        # restore latest backup
-ynd compress --restore --pick 2 instructions.md  # restore specific backup
+ynd compress --list-backups AGENTS.md   # show backup history
+ynd compress --restore AGENTS.md        # restore latest backup
+ynd compress --restore --pick 2 AGENTS.md  # restore specific backup
 ```
 
 ### inspect
@@ -280,7 +280,7 @@ ynd lint
 ynd fmt
 
 # Compress verbose instructions before shipping
-ynd compress -y instructions.md
+ynd compress -y AGENTS.md
 
 # Inspect a project to generate skills
 cd /path/to/my-app

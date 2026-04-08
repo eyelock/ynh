@@ -15,8 +15,7 @@ Read these references to understand the current formats and conventions:
 2. Read `references/artifact-formats.md` for skill, agent, rule, and command formats
 
 Also read the working examples in `testdata/sample-harness/` to see realistic artifacts:
-- `testdata/sample-harness/.claude-plugin/plugin.json`
-- `testdata/sample-harness/metadata.json`
+- `testdata/sample-harness/harness.json`
 - `testdata/sample-harness/skills/hello/SKILL.md`
 - `testdata/sample-harness/agents/code-reviewer.md`
 - `testdata/sample-harness/rules/be-concise.md`
@@ -55,10 +54,8 @@ Create the directory structure based on their choices:
 
 ```
 <output-dir>/
-├── .claude-plugin/
-│   └── plugin.json
-├── metadata.json
-├── instructions.md      (optional - becomes CLAUDE.md / codex.md / .cursorrules)
+├── harness.json
+├── AGENTS.md            (optional - read natively by most vendors; ynh shims Claude via @-import)
 ├── skills/              (if selected)
 │   └── <example>/
 │       └── SKILL.md
@@ -70,25 +67,15 @@ Create the directory structure based on their choices:
     └── <example>.md
 ```
 
-For `.claude-plugin/plugin.json`:
+For `harness.json`:
 
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
   "name": "<their-name>",
   "version": "0.1.0",
-  "description": "<their description>"
-}
-```
-
-For `metadata.json` (only needed if they want vendor/includes/delegates config):
-
-```json
-{
-  "ynh": {
-    "default_vendor": "<their-vendor>",
-    "includes": [],
-    "delegates_to": []
-  }
+  "description": "<their description>",
+  "default_vendor": "<their-vendor>"
 }
 ```
 
@@ -127,6 +114,6 @@ If `ynh` isn't on their PATH, remind them about the build step (`make build`) an
 
 After the harness is working, mention:
 
-1. **Add external skills** - They can pull skills from any Git repo by adding `includes` to `metadata.json`. See `references/harness-format.md` for the syntax.
+1. **Add external skills** - They can pull skills from any Git repo by adding `includes` to `harness.json`. See `references/harness-format.md` for the syntax.
 2. **Team setup** - When ready, they can use `/ynh-team-setup` to create a team harness with delegation.
 3. **Private repos** - If they need private Git repos, SSH URLs (`git@github.com:...`) are recommended. ynh delegates to the local `git` binary - if `git clone` works, ynh works.

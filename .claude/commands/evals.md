@@ -6,6 +6,8 @@ Evaluate ALL tutorials. This is a release gate — the verdict must be PASS befo
 2. For EVERY tutorial in `docs/tutorial/` (01 through 13, excluding README.md):
    - Set up an isolated environment: `export HOME=$(mktemp -d) && export YNH_HOME=""`
    - Use binaries at `/Users/david/.ynh/bin/ynh` and `/Users/david/.ynh/bin/ynd`
+   - **ALL file creation and commands MUST run in `/tmp/`** — never in the repo directory. The repo has real `skills/`, `agents/`, `rules/`, `commands/` directories; creating test files there pollutes the working tree. Use `cd /tmp` or absolute `/tmp/...` paths for all tutorial commands.
+   - **Use only the Bash tool** for creating files outside the repo. Do NOT use Write/Edit tools for `/tmp/` files (they trigger permission prompts).
    - Execute each step that produces verifiable output
    - Compare actual output against the expected output documented in the tutorial
    - Skip steps that require network access (git clone from GitHub), vendor CLIs (claude, codex), or Docker

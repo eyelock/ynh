@@ -11,7 +11,7 @@ A harness is defined by a `harness.json` manifest and artifact directories.
 ```
 david/
 ├── harness.json              # required - name, version, vendor, includes, hooks, etc.
-├── instructions.md           # optional - project-level instructions
+├── AGENTS.md                 # optional - project-level instructions (read natively by most vendors; ynh shims Claude via @-import)
 ├── skills/                   # optional - embedded skills
 │   └── review/
 │       └── SKILL.md
@@ -180,7 +180,7 @@ When running as `david`, you can ask it to delegate a task to `team-dev`. The de
 At runtime, ynh generates a vendor-native agent file for each delegate containing:
 
 - **Description** from the delegate's `harness.json` (helps the AI route to the right delegate)
-- **Instructions** from the delegate's `instructions.md` (gives the delegate its identity)
+- **Instructions** from the delegate's `AGENTS.md` (gives the delegate its identity)
 - **Rules** inlined from the delegate's `rules/` directory
 - **Skills** listed from the delegate's `skills/` directory
 

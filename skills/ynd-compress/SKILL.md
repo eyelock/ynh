@@ -15,7 +15,7 @@ Use after authoring or updating skills, agents, rules, or instructions. Compress
 
 Help the user find files worth compressing. Good candidates are:
 
-- Verbose `instructions.md` files
+- Verbose `AGENTS.md` files
 - Skills with lengthy step-by-step guides
 - Rules that use more words than necessary
 - Any markdown file over ~500 chars that loads every session
@@ -24,7 +24,7 @@ Files that should NOT be compressed:
 
 - Reference documents (they're read on-demand, not loaded every session)
 - Files that are already concise
-- Config files (plugin.json, metadata.json)
+- Config files (harness.json)
 
 ## Step 2: Review before compressing
 

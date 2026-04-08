@@ -22,6 +22,17 @@ The `~/.ynh/` directory is created automatically on first use. To customize the 
 export YNH_HOME="$HOME/.config/ynh"
 ```
 
+## Try the ynh Harness
+
+The fastest way to see what ynh does is to install the ynh harness itself:
+
+```bash
+ynh install github.com/eyelock/ynh
+ynh-guide
+```
+
+This gives you an AI session with skills that teach you ynh — including `/ynh-create-harness` to build your own harness interactively.
+
 ## Create a Harness
 
 A harness is a directory with a `harness.json` and your artifacts:

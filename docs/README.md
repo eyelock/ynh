@@ -3,11 +3,19 @@
 **Your name. Your AI.**
 
 ```bash
+brew tap eyelock/tap && brew install ynh
+ynh install github.com/eyelock/ynh
+ynh-guide
+```
+
+That gets you a guided session that teaches you ynh — and helps you create your own harness. Once you have one:
+
+```bash
 ynh install github.com/myorg/david
 david
 ```
 
-That's it. `david` is now a command. It knows your skills, your team's rules, your coding standards. It works on Claude today. Switch to Codex with `-v codex`. Same harness, different engine.
+`david` is now a command. It knows your skills, your team's rules, your coding standards. It works on Claude today. Switch to Codex with `-v codex`. Same harness, different engine.
 
 ## What this gives you
 
@@ -59,6 +67,14 @@ ynd marketplace build              # build a shareable marketplace
 # Install ynh
 brew tap eyelock/tap && brew install ynh
 
+# Try the ynh harness — it teaches you ynh
+ynh install github.com/eyelock/ynh
+ynh-guide
+```
+
+Inside the session, use `/ynh-create-harness` to build your own. Or do it manually:
+
+```bash
 # Create a harness
 mkdir david
 echo '{"name":"david","version":"0.1.0","default_vendor":"claude"}' > david/harness.json
@@ -75,7 +91,7 @@ Add skills, agents, rules, and commands to the harness directory. Pull from Git 
 ## Guides
 
 - **[Harness Engineering](harness-engineering.md)** - Why harness management matters (Fowler, OpenAI, Anthropic)
-- **[Getting Started](getting-started.md)** - Create your first harness and run it
+- **[Getting Started](getting-started.md)** - Install, try the ynh harness, then create your own
 - **[Tutorials](tutorial/README.md)** - Progressive tutorials: build, refine, share & scale
 - **[Artifacts Guide](artifacts.md)** - Skills, agents, rules, commands, and project instructions
 - **[Agent Skills Standard](skills-standard.md)** - Cross-platform spec, frontmatter fields, catalog budget, discovery paths
