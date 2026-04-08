@@ -12,6 +12,7 @@ You are helping a developer work on the ynh codebase.
 Read these before starting work:
 
 - `references/architecture.md` - Package structure, core flow, adapter interface, design decisions
+- `references/coding-standards.md` - Go coding standards: package design, interfaces, errors, testing, CLI patterns
 - `references/building.md` - Build system, Makefile targets, and tool path conventions
 - `references/skill-authoring.md` - Required reading (https://agentskills.io/) before creating or modifying skills
 
