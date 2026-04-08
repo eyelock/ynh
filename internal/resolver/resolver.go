@@ -30,10 +30,12 @@ type ResolveResult struct {
 	Cached  bool   // true if already in cache (not first time)
 }
 
-// ResolveGitSource clones/updates a GitSource and returns the resolved base path,
-// scoped to the optional sub-path within the repo.
-func ResolveGitSource(gs harness.GitSource) (string, *RepoResult, error) {
-	result, err := EnsureRepo(gs.Git, gs.Ref)
+// repoFunc is a function that fetches or looks up a Git repo.
+type repoFunc func(gitURL, ref string) (RepoResult, error)
+
+// resolveGitSourceWith resolves a GitSource using the given repo function.
+func resolveGitSourceWith(gs harness.GitSource, fetch repoFunc) (string, *RepoResult, error) {
+	result, err := fetch(gs.Git, gs.Ref)
 	if err != nil {
 		return "", nil, fmt.Errorf("resolving %s: %w", gs.Git, err)
 	}
@@ -49,10 +51,8 @@ func ResolveGitSource(gs harness.GitSource) (string, *RepoResult, error) {
 	return basePath, &result, nil
 }
 
-// Resolve fetches all includes for a harness and returns resolved content
-// with resolution metadata (cloned vs cached).
-// If cfg is non-nil, remote sources are checked against the allowed sources list.
-func Resolve(p *harness.Harness, cfg *config.Config) ([]ResolveResult, error) {
+// resolveWith fetches all includes using the given repo function.
+func resolveWith(p *harness.Harness, cfg *config.Config, fetch repoFunc) ([]ResolveResult, error) {
 	var results []ResolveResult
 
 	for _, inc := range p.Includes {
@@ -62,7 +62,7 @@ func Resolve(p *harness.Harness, cfg *config.Config) ([]ResolveResult, error) {
 			}
 		}
 
-		basePath, repoResult, err := ResolveGitSource(inc.GitSource)
+		basePath, repoResult, err := resolveGitSourceWith(inc.GitSource, fetch)
 		if err != nil {
 			return nil, err
 		}
@@ -80,6 +80,19 @@ func Resolve(p *harness.Harness, cfg *config.Config) ([]ResolveResult, error) {
 	}
 
 	return results, nil
+}
+
+// ResolveGitSource clones/updates a GitSource and returns the resolved base path,
+// scoped to the optional sub-path within the repo.
+func ResolveGitSource(gs harness.GitSource) (string, *RepoResult, error) {
+	return resolveGitSourceWith(gs, EnsureRepo)
+}
+
+// Resolve fetches all includes for a harness and returns resolved content
+// with resolution metadata (cloned vs cached).
+// If cfg is non-nil, remote sources are checked against the allowed sources list.
+func Resolve(p *harness.Harness, cfg *config.Config) ([]ResolveResult, error) {
+	return resolveWith(p, cfg, EnsureRepo)
 }
 
 // ShortGitURL abbreviates a git URL for display.
@@ -169,52 +182,13 @@ func CacheOnlyRepo(gitURL string, ref string) (RepoResult, error) {
 // ResolveGitSourceFromCache is like ResolveGitSource but uses CacheOnlyRepo
 // to avoid network access when the cache is warm.
 func ResolveGitSourceFromCache(gs harness.GitSource) (string, *RepoResult, error) {
-	result, err := CacheOnlyRepo(gs.Git, gs.Ref)
-	if err != nil {
-		return "", nil, fmt.Errorf("resolving %s: %w", gs.Git, err)
-	}
-
-	basePath := result.Path
-	if gs.Path != "" {
-		basePath = filepath.Join(result.Path, gs.Path)
-		if _, err := os.Stat(basePath); os.IsNotExist(err) {
-			return "", nil, fmt.Errorf("path %q not found in %s", gs.Path, gs.Git)
-		}
-	}
-
-	return basePath, &result, nil
+	return resolveGitSourceWith(gs, CacheOnlyRepo)
 }
 
 // ResolveFromCache is like Resolve but uses CacheOnlyRepo to avoid network
 // access when the cache is warm. Falls back to a network fetch on cache miss.
 func ResolveFromCache(p *harness.Harness, cfg *config.Config) ([]ResolveResult, error) {
-	var results []ResolveResult
-
-	for _, inc := range p.Includes {
-		if cfg != nil {
-			if err := cfg.CheckRemoteSource(inc.Git); err != nil {
-				return nil, fmt.Errorf("include %q: %w", inc.Git, err)
-			}
-		}
-
-		basePath, repoResult, err := ResolveGitSourceFromCache(inc.GitSource)
-		if err != nil {
-			return nil, err
-		}
-
-		results = append(results, ResolveResult{
-			Content: ResolvedContent{
-				BasePath: basePath,
-				Paths:    inc.Pick,
-			},
-			Source: ShortGitURL(inc.Git),
-			Path:   inc.Path,
-			Cloned: repoResult.Cloned,
-			Cached: !repoResult.Cloned,
-		})
-	}
-
-	return results, nil
+	return resolveWith(p, cfg, CacheOnlyRepo)
 }
 
 // gitHead returns the short HEAD SHA for a repo, or empty string on error.
