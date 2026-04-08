@@ -2,6 +2,7 @@ package vendor
 
 import (
 	"encoding/json"
+	"fmt"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -62,9 +63,9 @@ var codexHookEventMap = map[string]string{
 	"on_stop":       "Stop",
 }
 
-func (c *Codex) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[string][]byte {
+func (c *Codex) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
 	if len(hooks) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	// Codex three-level format (same structure as Claude Code):
@@ -128,7 +129,7 @@ func (c *Codex) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[stri
 	}
 
 	if len(allEvents) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	config := map[string]any{
@@ -137,18 +138,18 @@ func (c *Codex) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[stri
 
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("marshalling hook config: %w", err)
 	}
 	data = append(data, '\n')
 
 	return map[string][]byte{
 		filepath.Join(".codex", "hooks.json"): data,
-	}
+	}, nil
 }
 
-func (c *Codex) GenerateMCPConfig(servers map[string]plugin.MCPServer) map[string][]byte {
+func (c *Codex) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
 	if len(servers) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	// Codex plugin format uses .mcp.json at plugin root (JSON, same as Claude).
@@ -159,13 +160,13 @@ func (c *Codex) GenerateMCPConfig(servers map[string]plugin.MCPServer) map[strin
 
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("marshalling MCP config: %w", err)
 	}
 	data = append(data, '\n')
 
 	return map[string][]byte{
 		".mcp.json": data,
-	}
+	}, nil
 }
 
 func launchCodex(configPath string, extraArgs []string) error {

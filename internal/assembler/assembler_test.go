@@ -36,12 +36,12 @@ func (m *mockAdapter) LaunchNonInteractive(configPath string, prompt string, ext
 func (m *mockAdapter) GenerateSystemPrompt(content []byte) map[string][]byte {
 	return map[string][]byte{"AGENTS.md": content}
 }
-func (m *mockAdapter) GenerateHookConfig(hooks map[string][]plugin.HookEntry) map[string][]byte {
-	return nil
+func (m *mockAdapter) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
+	return nil, nil
 }
 
-func (m *mockAdapter) GenerateMCPConfig(servers map[string]plugin.MCPServer) map[string][]byte {
-	return nil
+func (m *mockAdapter) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
+	return nil, nil
 }
 
 func TestAssembleWithPick(t *testing.T) {

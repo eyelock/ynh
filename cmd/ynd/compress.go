@@ -64,14 +64,14 @@ func cmdCompress(args []string) error {
 	if opts.vendor == "" {
 		opts.vendor = detectVendorCLI()
 		if opts.vendor == "" {
-			fmt.Println("No supported LLM CLI found (checked: claude, codex).")
-			fmt.Println("Compression requires an LLM to perform semantic optimization.")
-			fmt.Println()
-			fmt.Println("Install one of:")
-			fmt.Println("  claude  → https://docs.anthropic.com/claude-code")
-			fmt.Println("  codex   → https://openai.com/codex")
-			fmt.Println()
-			fmt.Println("Or specify one explicitly: ynd compress -v claude")
+			fmt.Fprintln(os.Stderr, "No supported LLM CLI found (checked: claude, codex).")
+			fmt.Fprintln(os.Stderr, "Compression requires an LLM to perform semantic optimization.")
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "Install one of:")
+			fmt.Fprintln(os.Stderr, "  claude  → https://docs.anthropic.com/claude-code")
+			fmt.Fprintln(os.Stderr, "  codex   → https://openai.com/codex")
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "Or specify one explicitly: ynd compress -v claude")
 			return nil
 		}
 	} else {

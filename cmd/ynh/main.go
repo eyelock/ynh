@@ -42,7 +42,7 @@ func main() {
 	case "info":
 		err = cmdInfo(os.Args[2:])
 	case "vendors":
-		cmdVendors()
+		err = cmdVendors()
 	case "status":
 		err = cmdStatus()
 	case "search":
@@ -541,7 +541,10 @@ func cmdRun(args []string) error {
 
 		// Generate vendor-native hook config files
 		if len(p.Hooks) > 0 {
-			hookFiles := adapter.GenerateHookConfig(p.Hooks)
+			hookFiles, err := adapter.GenerateHookConfig(p.Hooks)
+			if err != nil {
+				return fmt.Errorf("generating hook config: %w", err)
+			}
 			for relPath, content := range hookFiles {
 				absPath := filepath.Join(runDir, relPath)
 				if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
@@ -555,7 +558,10 @@ func cmdRun(args []string) error {
 
 		// Generate vendor-native MCP config files
 		if len(p.MCPServers) > 0 {
-			mcpFiles := adapter.GenerateMCPConfig(p.MCPServers)
+			mcpFiles, err := adapter.GenerateMCPConfig(p.MCPServers)
+			if err != nil {
+				return fmt.Errorf("generating MCP config: %w", err)
+			}
 			for relPath, content := range mcpFiles {
 				absPath := filepath.Join(runDir, relPath)
 				if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
@@ -899,16 +905,20 @@ func shortGitURL(url string) string {
 	return url
 }
 
-func cmdVendors() {
+func cmdVendors() error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 	_, _ = fmt.Fprintln(w, "NAME\tCLI\tCONFIG DIR")
 
 	for _, name := range vendor.Available() {
-		adapter, _ := vendor.Get(name)
+		adapter, err := vendor.Get(name)
+		if err != nil {
+			return fmt.Errorf("loading vendor %s: %w", name, err)
+		}
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", adapter.Name(), adapter.CLIName(), adapter.ConfigDir())
 	}
 
 	_ = w.Flush()
+	return nil
 }
 
 // resolveVendor picks the vendor: CLI flag > YNH_VENDOR env > harness default > global config.

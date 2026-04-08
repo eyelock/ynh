@@ -337,7 +337,10 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 
 // writeMCPConfig generates vendor-native MCP config files and writes them to the output directory.
 func writeMCPConfig(outputDir string, adapter vendor.Adapter, servers map[string]plugin.MCPServer) error {
-	mcpFiles := adapter.GenerateMCPConfig(servers)
+	mcpFiles, err := adapter.GenerateMCPConfig(servers)
+	if err != nil {
+		return fmt.Errorf("generating MCP config: %w", err)
+	}
 	for relPath, content := range mcpFiles {
 		absPath := filepath.Join(outputDir, relPath)
 		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
@@ -352,7 +355,10 @@ func writeMCPConfig(outputDir string, adapter vendor.Adapter, servers map[string
 
 // writeHookConfig generates vendor-native hook config files and writes them to the output directory.
 func writeHookConfig(outputDir string, adapter vendor.Adapter, hooks map[string][]plugin.HookEntry) error {
-	hookFiles := adapter.GenerateHookConfig(hooks)
+	hookFiles, err := adapter.GenerateHookConfig(hooks)
+	if err != nil {
+		return fmt.Errorf("generating hook config: %w", err)
+	}
 	for relPath, content := range hookFiles {
 		absPath := filepath.Join(outputDir, relPath)
 		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {

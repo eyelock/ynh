@@ -210,14 +210,22 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 
 	// Generate hook config
 	if len(h.Hooks) > 0 {
-		if err := writeGeneratedFiles(tmpDir, adapter.GenerateHookConfig(h.Hooks)); err != nil {
+		hookFiles, err := adapter.GenerateHookConfig(h.Hooks)
+		if err != nil {
+			return "", fmt.Errorf("generating hook config: %w", err)
+		}
+		if err := writeGeneratedFiles(tmpDir, hookFiles); err != nil {
 			return "", fmt.Errorf("writing hook config: %w", err)
 		}
 	}
 
 	// Generate MCP config
 	if len(h.MCPServers) > 0 {
-		if err := writeGeneratedFiles(tmpDir, adapter.GenerateMCPConfig(h.MCPServers)); err != nil {
+		mcpFiles, err := adapter.GenerateMCPConfig(h.MCPServers)
+		if err != nil {
+			return "", fmt.Errorf("generating MCP config: %w", err)
+		}
+		if err := writeGeneratedFiles(tmpDir, mcpFiles); err != nil {
 			return "", fmt.Errorf("writing MCP config: %w", err)
 		}
 	}

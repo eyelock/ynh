@@ -27,14 +27,14 @@ func cmdInspect(args []string) error {
 	if vendor == "" {
 		vendor = detectVendorCLI()
 		if vendor == "" {
-			fmt.Println("No supported LLM CLI found (checked: claude, codex).")
-			fmt.Println("Inspect requires an LLM to analyze your codebase.")
-			fmt.Println()
-			fmt.Println("Install one of:")
-			fmt.Println("  claude  → https://docs.anthropic.com/claude-code")
-			fmt.Println("  codex   → https://openai.com/codex")
-			fmt.Println()
-			fmt.Println("Or specify one explicitly: ynd inspect -v claude")
+			fmt.Fprintln(os.Stderr, "No supported LLM CLI found (checked: claude, codex).")
+			fmt.Fprintln(os.Stderr, "Inspect requires an LLM to analyze your codebase.")
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "Install one of:")
+			fmt.Fprintln(os.Stderr, "  claude  → https://docs.anthropic.com/claude-code")
+			fmt.Fprintln(os.Stderr, "  codex   → https://openai.com/codex")
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "Or specify one explicitly: ynd inspect -v claude")
 			return nil
 		}
 	} else {

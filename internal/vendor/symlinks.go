@@ -89,8 +89,8 @@ func createSymlink(target, link string) (*SymlinkEntry, error) {
 				return nil, fmt.Errorf("replacing symlink %s: %w", link, err)
 			}
 		} else {
-			// Real file/dir - skip to avoid overwriting user's config.
-			fmt.Fprintf(os.Stderr, "Warning: skipping %s (existing file, not a symlink)\n", link)
+			// Real file/dir — skip to avoid overwriting user's config.
+			// Caller receives nil entry (no symlink created).
 			return nil, nil
 		}
 	}
@@ -113,8 +113,7 @@ func cleanSymlinks(entries []SymlinkEntry) error {
 		}
 
 		if info.Mode()&os.ModeSymlink == 0 {
-			// No longer a symlink (user replaced it) - skip.
-			fmt.Fprintf(os.Stderr, "Warning: skipping %s (no longer a symlink)\n", entry.Link)
+			// No longer a symlink (user replaced it) — skip.
 			continue
 		}
 
@@ -124,7 +123,7 @@ func cleanSymlinks(entries []SymlinkEntry) error {
 			continue
 		}
 		if actual != entry.Target {
-			fmt.Fprintf(os.Stderr, "Warning: skipping %s (points to %s, expected %s)\n", entry.Link, actual, entry.Target)
+			// Points elsewhere — skip.
 			continue
 		}
 
