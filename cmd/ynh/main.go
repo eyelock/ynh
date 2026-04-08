@@ -356,7 +356,7 @@ func cmdUpdate(args []string) error {
 
 	p, err := harness.Load(name)
 	if err != nil {
-		return fmt.Errorf("harness %q not found: %w", name, err)
+		return err
 	}
 
 	if len(p.Includes) == 0 && len(p.DelegatesTo) == 0 {
@@ -428,7 +428,7 @@ func cmdRun(args []string) error {
 	// Load harness
 	p, err := harness.Load(name)
 	if err != nil {
-		return fmt.Errorf("harness %q not found: %w", name, err)
+		return err
 	}
 
 	// Resolve profile: --profile flag > YNH_PROFILE env var > no profile
@@ -689,7 +689,7 @@ func cmdInfo(args []string) error {
 	name := args[0]
 	p, err := harness.Load(name)
 	if err != nil {
-		return fmt.Errorf("harness %q not found: %w", name, err)
+		return err
 	}
 
 	vendorName := p.DefaultVendor

@@ -192,7 +192,7 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 		// Load from installed harnesses
 		p, err = harness.Load(ia.name)
 		if err != nil {
-			return fmt.Errorf("harness %q not found: %w", ia.name, err)
+			return err
 		}
 		harnessSrcDir = harness.InstalledDir(ia.name)
 	}
