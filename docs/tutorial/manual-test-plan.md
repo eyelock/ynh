@@ -160,7 +160,7 @@ Requires Docker installed and running.
 | ID | Test | Tutorial step |
 |---|---|---|
 | T10.1 | Add hooks to harness.json | [T10.1](tutorial/10-hooks.md#t101-add-hooks-to-a-harness) |
-| T10.2 | Preview for Claude — verify settings.json | [T10.2](tutorial/10-hooks.md#t102-preview-for-claude) |
+| T10.2 | Preview for Claude — verify hooks.json | [T10.2](tutorial/10-hooks.md#t102-preview-for-claude) |
 | T10.3 | Preview for Cursor — verify hooks.json | [T10.3](tutorial/10-hooks.md#t103-preview-for-cursor) |
 | T10.4 | Preview for Codex — verify hooks.json | [T10.4](tutorial/10-hooks.md#t104-preview-for-codex) |
 | T10.5 | Write a blocking hook script | [T10.5](tutorial/10-hooks.md#t105-write-a-blocking-hook-example) |
@@ -171,9 +171,9 @@ Requires Docker installed and running.
 | ID | Test | Tutorial step |
 |---|---|---|
 | T11.1 | Add stdio MCP server to harness | [T11.1](tutorial/11-mcp-servers.md#t111-add-a-stdio-mcp-server-to-a-harness) |
-| T11.2 | Preview for Claude — verify .mcp.json | [T11.2](tutorial/11-mcp-servers.md#t112-preview-for-claude) |
+| T11.2 | Preview for Claude — verify .claude/.mcp.json | [T11.2](tutorial/11-mcp-servers.md#t112-preview-for-claude) |
 | T11.3 | Preview for Cursor — verify .cursor/mcp.json | [T11.3](tutorial/11-mcp-servers.md#t113-preview-for-cursor) |
-| T11.4 | Preview for Codex — verify TOML | [T11.4](tutorial/11-mcp-servers.md#t114-preview-for-codex) |
+| T11.4 | Preview for Codex — verify JSON | [T11.4](tutorial/11-mcp-servers.md#t114-preview-for-codex) |
 | T11.5 | Add HTTP MCP server — verify URL | [T11.5](tutorial/11-mcp-servers.md#t115-add-an-http-mcp-server) |
 | T11.6 | Diff MCP config across vendors | [T11.6](tutorial/11-mcp-servers.md#t116-compare-mcp-config-across-vendors) |
 
@@ -266,14 +266,14 @@ ynh run nonexistent-harness
 
 ```bash
 ynd export /tmp/ynh-edge/repo -v fakevend
-# Expected: Error: unknown vendor "fakevend"
+# Expected: Error: unknown vendor "fakevend" (available: [claude codex cursor])
 ```
 
 ### E8: Export missing source
 
 ```bash
 ynd export
-# Expected: Error: usage: ynd export <harness-dir|git-url> [flags]
+# Expected: Error: usage: ynd export <harness-dir|git-url> [--harness dir] [flags]
 ```
 
 ### E9: Marketplace build without config
@@ -303,7 +303,10 @@ cp ~/.ynh/config.json ~/.ynh/config.json.bak
 echo '{"default_vendor":"claude"}' > ~/.ynh/config.json
 
 ynh install somename
-# Expected: Error: no registries configured. Add one with: ynh registry add <url>
+# Expected:
+#   Error: no registries configured.
+#     Add one with: ynh registry add <url>
+#     Or specify a Git URL: ynh install github.com/user/somename
 
 mv ~/.ynh/config.json.bak ~/.ynh/config.json
 ```

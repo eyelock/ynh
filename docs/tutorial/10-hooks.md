@@ -69,23 +69,23 @@ ls -R /tmp/ynh-tutorial/hook-harness/
 ynd preview /tmp/ynh-tutorial/hook-harness -v claude
 ```
 
-Expected output includes `.claude/settings.json` with Claude's three-level hook structure:
+Expected output includes `.claude/hooks/hooks.json` with Claude's three-level hook structure:
 
 ```json
 {
   "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "/usr/local/bin/run-linter.sh" }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
         "hooks": [
           { "type": "command", "command": "/usr/local/bin/check-commands.sh" }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          { "type": "command", "command": "/usr/local/bin/run-linter.sh" }
         ]
       }
     ],
@@ -213,7 +213,7 @@ ynd diff /tmp/ynh-tutorial/hook-harness claude cursor codex
 ```
 
 Expected output shows:
-- `.claude/settings.json` is only in Claude (hooks embedded in settings)
+- `.claude/hooks/hooks.json` is only in Claude
 - `.cursor/hooks.json` is only in Cursor
 - `.codex/hooks.json` is only in Codex
 - Shared files (like `CLAUDE.md`, `.cursorrules`, `codex.md`) may be listed as identical or different depending on instructions content

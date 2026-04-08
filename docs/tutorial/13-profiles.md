@@ -103,8 +103,8 @@ ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile ci
 ```
 
 Expected output includes:
-- `.claude/settings.json` with **only** the `ci` profile's `before_tool` hook (the base `after_tool` hook is replaced — profiles use replace semantics, not merge)
-- `.mcp.json` with the `ci-db` MCP server from the `ci` profile
+- `.claude/hooks/hooks.json` with **only** the `ci` profile's `before_tool` hook (the base `after_tool` hook is replaced — profiles use replace semantics, not merge)
+- `.claude/.mcp.json` with the `ci-db` MCP server from the `ci` profile
 
 Compare with the base (no profile):
 
@@ -112,7 +112,7 @@ Compare with the base (no profile):
 ynd preview /tmp/ynh-tutorial/profile-harness -v claude
 ```
 
-Expected: `.claude/settings.json` has only the base `after_tool` hook. No `.mcp.json` (no MCP servers in base config).
+Expected: `.claude/hooks/hooks.json` has only the base `after_tool` hook. No `.claude/.mcp.json` (no MCP servers in base config).
 
 ## T13.4: Run with --profile ci
 
@@ -153,10 +153,8 @@ ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile nonexistent
 
 Expected error:
 ```
-Error: profile "nonexistent" not found in harness.json (available: ci, local)
+Error: profile "nonexistent" not defined in harness.json
 ```
-
-The error lists available profiles to help you pick the right one.
 
 ## T13.6: Use YNH_PROFILE env var
 
@@ -197,7 +195,7 @@ ynd diff /tmp/ynh-tutorial/profile-harness claude cursor --profile ci
 ```
 
 Expected output shows the vendor-specific differences with the `ci` profile applied to both:
-- Claude: hooks in `.claude/settings.json`, MCP in `.mcp.json`
+- Claude: hooks in `.claude/hooks/hooks.json`, MCP in `.claude/.mcp.json`
 - Cursor: hooks in `.cursor/hooks.json`, MCP in `.cursor/mcp.json`
 
 Compare with no profile to see what the profile adds:

@@ -22,8 +22,8 @@ Expected: a `my-team/` directory with the full harness structure:
 ```bash
 find my-team -type f | sort
 # Expected:
+#   my-team/AGENTS.md
 #   my-team/harness.json
-#   my-team/instructions.md
 ```
 
 Empty directories are also created: `skills/`, `agents/`, `rules/`, `commands/`.
@@ -149,10 +149,12 @@ Multiple blank lines above.
 EOF
 
 ynd fmt
-# Expected: "Formatted rules/messy.md"
+# Expected:
+#   Formatted rules/messy.md
+#   Formatted 1 of 2 file(s).
 
 ynd fmt
-# Expected: "all formatted" (idempotent — no-op on second run)
+# Expected: "Checked 2 file(s) — all formatted." (idempotent — no-op on second run)
 ```
 
 ## T8.7: Compress
