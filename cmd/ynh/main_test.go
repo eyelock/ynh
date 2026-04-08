@@ -133,102 +133,45 @@ func TestParseRunArgs(t *testing.T) {
 	}
 }
 
-func TestResolveVendor_FlagTakesPriority(t *testing.T) {
-	p := &harness.Harness{
-		Name:          "test",
-		DefaultVendor: "codex",
+func TestResolveVendor(t *testing.T) {
+	tests := []struct {
+		name          string
+		flag          string
+		envVar        string
+		harnessVendor string
+		want          string
+	}{
+		{"flag takes priority", "claude", "", "codex", "claude"},
+		{"harness default", "", "", "codex", "codex"},
+		{"global config fallback", "", "", "", "claude"},
+		{"env var", "", "codex", "claude", "codex"},
+		{"flag beats env var", "claude", "codex", "cursor", "claude"},
+		{"empty env var falls through", "", "", "codex", "codex"},
 	}
 
-	got, err := resolveVendor("claude", p)
-	if err != nil {
-		t.Fatalf("resolveVendor failed: %v", err)
-	}
-	if got != "claude" {
-		t.Errorf("got %q, want %q", got, "claude")
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("HOME", dir)
+			if tt.envVar != "" {
+				t.Setenv("YNH_VENDOR", tt.envVar)
+			} else {
+				t.Setenv("YNH_VENDOR", "")
+			}
 
-func TestResolveVendor_HarnessDefault(t *testing.T) {
-	p := &harness.Harness{
-		Name:          "test",
-		DefaultVendor: "codex",
-	}
+			p := &harness.Harness{
+				Name:          "test",
+				DefaultVendor: tt.harnessVendor,
+			}
 
-	got, err := resolveVendor("", p)
-	if err != nil {
-		t.Fatalf("resolveVendor failed: %v", err)
-	}
-	if got != "codex" {
-		t.Errorf("got %q, want %q", got, "codex")
-	}
-}
-
-func TestResolveVendor_GlobalConfig(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-
-	p := &harness.Harness{
-		Name: "test",
-	}
-
-	got, err := resolveVendor("", p)
-	if err != nil {
-		t.Fatalf("resolveVendor failed: %v", err)
-	}
-	// Default global config is "claude"
-	if got != "claude" {
-		t.Errorf("got %q, want %q", got, "claude")
-	}
-}
-
-func TestResolveVendor_EnvVar(t *testing.T) {
-	t.Setenv("YNH_VENDOR", "codex")
-
-	p := &harness.Harness{
-		Name:          "test",
-		DefaultVendor: "claude",
-	}
-
-	got, err := resolveVendor("", p)
-	if err != nil {
-		t.Fatalf("resolveVendor failed: %v", err)
-	}
-	if got != "codex" {
-		t.Errorf("got %q, want %q", got, "codex")
-	}
-}
-
-func TestResolveVendor_FlagBeatsEnvVar(t *testing.T) {
-	t.Setenv("YNH_VENDOR", "codex")
-
-	p := &harness.Harness{
-		Name:          "test",
-		DefaultVendor: "cursor",
-	}
-
-	got, err := resolveVendor("claude", p)
-	if err != nil {
-		t.Fatalf("resolveVendor failed: %v", err)
-	}
-	if got != "claude" {
-		t.Errorf("got %q, want %q", got, "claude")
-	}
-}
-
-func TestResolveVendor_EnvVarFallthrough(t *testing.T) {
-	t.Setenv("YNH_VENDOR", "")
-
-	p := &harness.Harness{
-		Name:          "test",
-		DefaultVendor: "codex",
-	}
-
-	got, err := resolveVendor("", p)
-	if err != nil {
-		t.Fatalf("resolveVendor failed: %v", err)
-	}
-	if got != "codex" {
-		t.Errorf("got %q, want %q", got, "codex")
+			got, err := resolveVendor(tt.flag, p)
+			if err != nil {
+				t.Fatalf("resolveVendor failed: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

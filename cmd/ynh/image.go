@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -119,6 +120,11 @@ func generateDockerfile(data imageTemplateData) (string, error) {
 
 // cmdImage builds a Docker image with a harness baked in.
 func cmdImage(args []string) error {
+	return cmdImageTo(args, os.Stdout, os.Stderr)
+}
+
+// cmdImageTo is the testable core of cmdImage, writing output to the given writers.
+func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 	ia, err := parseImageArgs(args)
 	if err != nil {
 		return err
@@ -265,7 +271,7 @@ func cmdImage(args []string) error {
 	}
 
 	if ia.dryRun {
-		fmt.Print(dockerfile)
+		_, _ = fmt.Fprint(stdout, dockerfile)
 		return nil
 	}
 
@@ -280,15 +286,15 @@ func cmdImage(args []string) error {
 	}
 
 	// Build image
-	fmt.Fprintf(os.Stderr, "Building harness image %s...\n", ia.tag)
+	_, _ = fmt.Fprintf(stderr, "Building harness image %s...\n", ia.tag)
 	cmd := exec.Command("docker", "build", "-t", ia.tag, tmpDir)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("docker build failed: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "\nHarness image built: %s\n", ia.tag)
-	fmt.Fprintf(os.Stderr, "Run: docker run --rm -v $(pwd):/workspace -e ANTHROPIC_API_KEY %s -- \"your prompt\"\n", ia.tag)
+	_, _ = fmt.Fprintf(stderr, "\nHarness image built: %s\n", ia.tag)
+	_, _ = fmt.Fprintf(stderr, "Run: docker run --rm -v $(pwd):/workspace -e ANTHROPIC_API_KEY %s -- \"your prompt\"\n", ia.tag)
 	return nil
 }

@@ -6,28 +6,26 @@ import (
 	"testing"
 )
 
-func TestIsLocalPath_AbsolutePath(t *testing.T) {
-	if !isLocalPath("/tmp/some-path") {
-		t.Error("expected /tmp/some-path to be local")
-	}
-}
-
-func TestIsLocalPath_RelativePath(t *testing.T) {
-	if !isLocalPath("./some-path") {
-		t.Error("expected ./some-path to be local")
-	}
-}
-
-func TestIsLocalPath_ExistingDir(t *testing.T) {
+func TestIsLocalPath(t *testing.T) {
 	dir := t.TempDir()
-	if !isLocalPath(dir) {
-		t.Errorf("expected existing dir %q to be local", dir)
-	}
-}
 
-func TestIsLocalPath_GitURL(t *testing.T) {
-	if isLocalPath("github.com/user/repo") {
-		t.Error("expected github.com URL to not be local")
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"absolute path", "/tmp/some-path", true},
+		{"relative path", "./some-path", true},
+		{"existing dir", dir, true},
+		{"git URL", "github.com/user/repo", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isLocalPath(tt.input); got != tt.want {
+				t.Errorf("isLocalPath(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
 	}
 }
 
