@@ -197,4 +197,4 @@ All three sources are merged into the same vendor config at runtime. If two sour
 
 ## Exporting Artifacts
 
-Artifacts can be exported from ynh's harness format into vendor-native plugin layouts using `ynd export`. This resolves all remote includes, flattens the result, and writes distributable output per vendor. See the [export command reference](ynd.md#export) and [Tutorial 5](tutorial/05-export.md) for details.
+Artifacts can be exported from ynh's harness format into vendor-native plugin layouts using `ynd export`. This resolves all remote includes, flattens the result, and writes distributable output per vendor. See the [export command reference](ynd.md#export) and [Tutorial 10](tutorial/05-export.md) for details.

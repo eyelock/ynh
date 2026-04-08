@@ -74,13 +74,13 @@ Add skills, agents, rules, and commands to the harness directory. Pull from Git 
 
 ## Guides
 
+- **[Harness Engineering](harness-engineering.md)** - Why harness management matters (Fowler, OpenAI, Anthropic)
 - **[Getting Started](getting-started.md)** - Create your first harness and run it
-- **[Harness Reference](harnesses.md)** - Harness manifest, includes, delegates, profiles
+- **[Tutorials](tutorial/README.md)** - Progressive tutorials: build, refine, share & scale
 - **[Artifacts Guide](artifacts.md)** - Skills, agents, rules, commands, and project instructions
-- **[Vendor Support](vendors.md)** - Claude, Codex, Cursor - capabilities and launch strategies
 - **[Agent Skills Standard](skills-standard.md)** - Cross-platform spec, frontmatter fields, catalog budget, discovery paths
+- **[Harness Reference](harnesses.md)** - Harness manifest, includes, delegates, profiles
+- **[Vendor Support](vendors.md)** - Claude, Codex, Cursor - capabilities and launch strategies
+- **[ynd Developer Tools](ynd.md)** - CLI for scaffolding, linting, formatting, compressing, inspecting, exporting, and marketplace building
 - **[Marketplace & Distribution](marketplace.md)** - Cross-vendor marketplace systems, distribution formats, and ynh's marketplace builder
 - **[Docker](docker.md)** - Run harnesses in containers, build harness appliance images for CI/CD
-- **[Tutorials](tutorial/README.md)** - Progressive tutorials from first harness to Docker images
-- **[Manual Test Plan](tutorial/manual-test-plan.md)** - Tests covering every feature
-- **[ynd Developer Tools](ynd.md)** - CLI for scaffolding, linting, formatting, compressing, inspecting, exporting, and marketplace building

@@ -113,7 +113,7 @@ When no `-o` flag is given, preview prints a tree with file contents to stdout. 
 
 Preview supports the same source types as export: local directories with `harness.json` or bare `AGENTS.md` directories.
 
-See [Tutorial 12: Developer Preview](tutorial/12-developer-preview.md) for a guided walkthrough.
+See [Tutorial 8: Developer Preview](tutorial/12-developer-preview.md) for a guided walkthrough.
 
 ### diff
 
@@ -135,7 +135,7 @@ The diff output groups files into four categories:
 
 At least two vendors are required for comparison. If no vendors are specified, all registered vendors are compared.
 
-See [Tutorial 12: Developer Preview](tutorial/12-developer-preview.md) for a guided walkthrough.
+See [Tutorial 8: Developer Preview](tutorial/12-developer-preview.md) for a guided walkthrough.
 
 ### export
 
@@ -194,7 +194,7 @@ Key differences from runtime layout:
 - Codex is limited to skills only — agents, rules, commands, and delegates are excluded with warnings
 - `--merged` produces one directory with both `.claude-plugin/` and `.cursor-plugin/` manifests; Codex is excluded from merged mode
 
-See [Tutorial 5: Export](tutorial/05-export.md) for a guided walkthrough.
+See [Tutorial 10: Export](tutorial/05-export.md) for a guided walkthrough.
 
 ### marketplace build
 
@@ -247,7 +247,7 @@ dist/
 └── README.md
 ```
 
-See [Tutorial 6: Marketplace](tutorial/06-marketplace.md) for a guided walkthrough.
+See [Tutorial 11: Marketplace](tutorial/06-marketplace.md) for a guided walkthrough.
 
 ## Common Options
 

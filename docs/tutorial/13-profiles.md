@@ -225,4 +225,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-Return to the [Tutorial Overview](README.md) for a full list of tutorials.
+[Tutorial 7: Developer Tools](tutorial/08-developer-tools.md) — scaffold, lint, validate, format, compress, inspect with ynd.

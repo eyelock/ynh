@@ -1,5 +1,7 @@
 # Getting Started
 
+> **Prefer a guided walkthrough?** Start with [Tutorial 1: First Harness](tutorial/01-first-harness.md).
+
 ## Install
 
 ```bash
@@ -19,8 +21,6 @@ The `~/.ynh/` directory is created automatically on first use. To customize the 
 ```bash
 export YNH_HOME="$HOME/.config/ynh"
 ```
-
-See [CLI Reference](reference.md) for the full list of environment variables and CLI flags.
 
 ## Create a Harness
 
@@ -54,13 +54,17 @@ david                              # interactive session
 david "explain what this function does"   # one-shot
 ```
 
-### Install from a monorepo
-
-Use `--path` to install a harness from a subdirectory:
+## Switch Vendors
 
 ```bash
-ynh install github.com/org/assistants --path harnesses/david
-ynh install ./local-monorepo --path plugins/my-plugin
+david -v codex
+david -v cursor
+```
+
+Or set a global default in `~/.ynh/config.json`:
+
+```json
+{"default_vendor": "codex"}
 ```
 
 ## Pull Skills From Git
@@ -96,7 +100,43 @@ Reinstall to pick up changes:
 ynh install ./david
 ```
 
-## Private Repositories
+## Passing Vendor Flags
+
+All flags except `-v`, `--install`, and `--clean` are passed through to the vendor CLI. Use `--` to separate vendor flags from the prompt:
+
+```bash
+david --model opus -- "fix this bug"
+david -v codex -- "refactor auth"
+```
+
+When there are no vendor flags, the prompt can be a plain argument:
+
+```bash
+david "explain this function"
+```
+
+## Next Steps
+
+- [Harness Reference](harnesses.md) - full manifest syntax
+- [Artifacts Guide](artifacts.md) - skills, agents, rules, commands
+- [Vendor Support](vendors.md) - supported vendors and switching between them
+- [Tutorials](tutorial/README.md) - progressive walkthroughs from first harness to Docker images
+- [ynd Developer Tools](ynd.md) - authoring, exporting, and marketplace building
+
+---
+
+## Advanced Topics
+
+### Install from a Monorepo
+
+Use `--path` to install a harness from a subdirectory:
+
+```bash
+ynh install github.com/org/assistants --path harnesses/david
+ynh install ./local-monorepo --path plugins/my-plugin
+```
+
+### Private Repositories
 
 ynh uses your local `git` for all cloning. If `git clone` works on your machine, `ynh` works too - it inherits whatever authentication you already have configured.
 
@@ -136,20 +176,7 @@ The shorthand form expands to an SSH URL (`git@github.com:company/private-repo.g
 git ls-remote git@github.com:company/private-skills.git
 ```
 
-## Switch Vendors
-
-```bash
-david -v codex
-david -v cursor
-```
-
-Or set a global default in `~/.ynh/config.json`:
-
-```json
-{"default_vendor": "codex"}
-```
-
-## Restrict Remote Sources
+### Restrict Remote Sources
 
 By default, harnesses can pull skills and agents from any Git repo via `includes` or `delegates_to`. You can restrict which remote sources are allowed by adding an `allowed_remote_sources` list to `~/.ynh/config.json`:
 
@@ -204,22 +231,7 @@ david -v cursor --clean       # removes symlinks
 
 Use `ynh status` to see all symlink installations and `ynh prune` to clean up orphaned ones.
 
-## Passing Vendor Flags
-
-All flags except `-v`, `--install`, and `--clean` are passed through to the vendor CLI. Use `--` to separate vendor flags from the prompt:
-
-```bash
-david --model opus -- "fix this bug"
-david -v codex -- "refactor auth"
-```
-
-When there are no vendor flags, the prompt can be a plain argument:
-
-```bash
-david "explain this function"
-```
-
-## Discover and Install From Registries
+### Discover and Install From Registries
 
 A registry is a Git repository containing a `registry.json` that indexes available harnesses. You can add registries to discover and install harnesses by name instead of URL.
 
@@ -237,7 +249,7 @@ ynh install go-dev
 ynh install go-dev@eyelock
 ```
 
-### Registry management
+**Registry management:**
 
 ```bash
 ynh registry list              # show configured registries
@@ -245,7 +257,7 @@ ynh registry remove <url>      # remove a registry
 ynh registry update            # refresh all cached registries
 ```
 
-### Install disambiguation
+**Install disambiguation:**
 
 ynh resolves install arguments in this order:
 
@@ -260,9 +272,9 @@ ynh resolves install arguments in this order:
 
 Plain word matches: single match installs directly; multiple matches errors with disambiguation guidance; no exact match searches descriptions and suggests similar results.
 
-See [Tutorial 7: Registry & Discovery](tutorial/07-registry-and-discovery.md) for a guided walkthrough.
+See [Tutorial 12: Registry & Discovery](tutorial/07-registry-and-discovery.md) for a guided walkthrough.
 
-## Build From Source
+### Build From Source
 
 If you prefer not to use Homebrew:
 
@@ -274,12 +286,3 @@ make install
 export PATH="$HOME/.ynh/bin:$PATH"
 ynh install ./david
 ```
-
-## Next Steps
-
-- [Harness Reference](harnesses.md) - full manifest syntax
-- [Artifacts Guide](artifacts.md) - skills, agents, rules, commands
-- [Vendor Support](vendors.md) - supported vendors and switching between them
-- [Docker](docker.md) - run harnesses in containers, build harness appliance images for CI/CD
-- [ynd Developer Tools](ynd.md) - authoring, exporting, and marketplace building
-- [Tutorials](tutorial/README.md) - progressive walkthroughs from first harness to Docker images

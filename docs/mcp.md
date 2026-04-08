@@ -145,6 +145,6 @@ The [Agentic AI Foundation (AAIF)](https://www.linuxfoundation.org/press/linux-f
 
 ## See Also
 
-- [Tutorial 11: MCP Servers](tutorial/11-mcp-servers.md) — step-by-step walkthrough
+- [Tutorial 5: MCP Servers](tutorial/11-mcp-servers.md) — step-by-step walkthrough
 - [Hooks](hooks.md) — lifecycle hooks that bridge guides to sensors
 - [Vendor Support](vendors.md) — vendor capabilities and differences
