@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -51,8 +52,8 @@ func queryLLMImpl(vendor, prompt string) (string, error) {
 
 	output, err := cmd.Output()
 	if err != nil {
-		// Check for stderr in the exit error
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			msg := strings.TrimSpace(string(exitErr.Stderr))
 			if msg != "" {
 				return "", fmt.Errorf("%s: %w", msg, err)
@@ -63,7 +64,7 @@ func queryLLMImpl(vendor, prompt string) (string, error) {
 
 	result := strings.TrimSpace(string(output))
 	if result == "" {
-		return "", fmt.Errorf("LLM returned empty response")
+		return "", fmt.Errorf("llm returned empty response")
 	}
 
 	return result, nil

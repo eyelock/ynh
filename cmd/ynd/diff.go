@@ -117,8 +117,14 @@ func cmdDiff(args []string) error {
 
 			fmt.Printf("=== %s vs %s ===\n", a.name, b.name)
 
-			filesA := listFiles(a.dir)
-			filesB := listFiles(b.dir)
+			filesA, err := listFiles(a.dir)
+			if err != nil {
+				return fmt.Errorf("listing files for %s: %w", a.name, err)
+			}
+			filesB, err := listFiles(b.dir)
+			if err != nil {
+				return fmt.Errorf("listing files for %s: %w", b.name, err)
+			}
 
 			setA := make(map[string]bool, len(filesA))
 			for _, f := range filesA {
@@ -200,22 +206,25 @@ func cmdDiff(args []string) error {
 }
 
 // listFiles returns all file paths relative to root, sorted.
-func listFiles(root string) []string {
+func listFiles(root string) ([]string, error) {
 	var files []string
-	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil
+			return err
 		}
 		if info.IsDir() {
 			return nil
 		}
 		rel, relErr := filepath.Rel(root, path)
 		if relErr != nil {
-			return nil
+			return relErr
 		}
 		files = append(files, rel)
 		return nil
 	})
+	if err != nil {
+		return nil, fmt.Errorf("walking %s: %w", root, err)
+	}
 	sort.Strings(files)
-	return files
+	return files, nil
 }

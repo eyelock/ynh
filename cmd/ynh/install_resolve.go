@@ -61,7 +61,7 @@ func lookupFromRegistry(name, regName string, cfg *config.Config) (resolvedSourc
 
 	regs, err := registry.FetchAll(cfg.Registries)
 	if err != nil {
-		return resolvedSource{}, err
+		return resolvedSource{}, fmt.Errorf("fetching registries: %w", err)
 	}
 
 	results := registry.LookupExact(regs, name, regName)
@@ -88,7 +88,7 @@ func searchFromRegistry(name string, cfg *config.Config) (resolvedSource, error)
 
 	regs, err := registry.FetchAll(cfg.Registries)
 	if err != nil {
-		return resolvedSource{}, err
+		return resolvedSource{}, fmt.Errorf("fetching registries: %w", err)
 	}
 
 	results := registry.LookupExact(regs, name, "")

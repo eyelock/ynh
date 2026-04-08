@@ -143,7 +143,10 @@ func createHarness(name string) error {
 		Description:   "",
 		DefaultVendor: resolveVendorDefault(""),
 	}
-	data, _ := json.MarshalIndent(scaffold, "", "  ")
+	data, err := json.MarshalIndent(scaffold, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshalling harness.json: %w", err)
+	}
 	if err := os.WriteFile(filepath.Join(name, "harness.json"), append(data, '\n'), 0o644); err != nil {
 		return err
 	}

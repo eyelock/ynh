@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -33,7 +34,10 @@ func HomeDir() string {
 	if env := os.Getenv("YNH_HOME"); env != "" {
 		return env
 	}
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "."
+	}
 	return filepath.Join(home, DefaultDirName)
 }
 
@@ -68,7 +72,7 @@ func EnsureDirs() error {
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
+			return fmt.Errorf("creating directory %s: %w", dir, err)
 		}
 	}
 	return nil
@@ -84,11 +88,11 @@ func Load() (*Config, error) {
 		if os.IsNotExist(err) {
 			return cfg, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("reading config: %w", err)
 	}
 
 	if err := json.Unmarshal(data, cfg); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
 	return cfg, nil
@@ -96,13 +100,16 @@ func Load() (*Config, error) {
 
 func (c *Config) Save() error {
 	if err := os.MkdirAll(HomeDir(), 0o755); err != nil {
-		return err
+		return fmt.Errorf("creating config directory: %w", err)
 	}
 
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("marshalling config: %w", err)
 	}
 
-	return os.WriteFile(ConfigPath(), data, 0o644)
+	if err := os.WriteFile(ConfigPath(), data, 0o644); err != nil {
+		return fmt.Errorf("writing config: %w", err)
+	}
+	return nil
 }
