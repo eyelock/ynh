@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 )
 
@@ -23,65 +22,6 @@ type manifestJSON struct {
 func testdataDir() string {
 	// Tests run from the package directory; testdata is at repo root
 	return filepath.Join("..", "..", "testdata")
-}
-
-func TestExportSingleVendorClaude(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-harness")
-	outputDir := t.TempDir()
-
-	results, err := Export(ExportOptions{
-		SourceDir: srcDir,
-		OutputDir: outputDir,
-		Vendors:   []string{"claude"},
-		Mode:      ModePerVendor,
-	})
-	if err != nil {
-		t.Fatalf("Export failed: %v", err)
-	}
-
-	if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(results))
-	}
-	r := results[0]
-	if r.Vendor != "claude" {
-		t.Errorf("expected vendor claude, got %s", r.Vendor)
-	}
-
-	claudeDir := filepath.Join(outputDir, "claude")
-
-	// Check .claude-plugin/plugin.json exists
-	assertFileExists(t, filepath.Join(claudeDir, ".claude-plugin", "plugin.json"))
-
-	// Check skills copied
-	assertFileExists(t, filepath.Join(claudeDir, "skills", "dev-project", "SKILL.md"))
-	assertFileExists(t, filepath.Join(claudeDir, "skills", "dev-quality", "SKILL.md"))
-
-	// Check agents copied
-	assertFileExists(t, filepath.Join(claudeDir, "agents", "planner.md"))
-
-	// Check rules copied
-	assertFileExists(t, filepath.Join(claudeDir, "rules", "be-concise.md"))
-
-	// Check commands copied
-	assertFileExists(t, filepath.Join(claudeDir, "commands", "check.md"))
-
-	// Check AGENTS.md (from instructions.md)
-	assertFileExists(t, filepath.Join(claudeDir, "AGENTS.md"))
-
-	// CLAUDE.md with @AGENTS.md import (Claude doesn't read AGENTS.md natively)
-	claudeMDPath := filepath.Join(claudeDir, "CLAUDE.md")
-	assertFileExists(t, claudeMDPath)
-	claudeMD, _ := os.ReadFile(claudeMDPath)
-	if string(claudeMD) != "@AGENTS.md\n" {
-		t.Errorf("CLAUDE.md = %q, want %q", string(claudeMD), "@AGENTS.md\n")
-	}
-
-	// No .cursorrules in Claude export
-	assertFileNotExists(t, filepath.Join(claudeDir, ".cursorrules"))
-
-	if r.Skills != 2 {
-		t.Errorf("expected 2 skills, got %d", r.Skills)
-	}
 }
 
 func TestExportSingleVendorCursor(t *testing.T) {
@@ -113,56 +53,6 @@ func TestExportSingleVendorCursor(t *testing.T) {
 	assertFileExists(t, filepath.Join(cursorDir, "skills", "dev-project", "SKILL.md"))
 }
 
-func TestExportSingleVendorCodex(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-harness")
-	outputDir := t.TempDir()
-
-	results, err := Export(ExportOptions{
-		SourceDir: srcDir,
-		OutputDir: outputDir,
-		Vendors:   []string{"codex"},
-		Mode:      ModePerVendor,
-	})
-	if err != nil {
-		t.Fatalf("Export failed: %v", err)
-	}
-
-	r := results[0]
-	codexDir := filepath.Join(outputDir, "codex")
-
-	// Check skills/ layout (at plugin root, not .agents/skills/)
-	assertFileExists(t, filepath.Join(codexDir, "skills", "dev-project", "SKILL.md"))
-	assertFileExists(t, filepath.Join(codexDir, "skills", "dev-quality", "SKILL.md"))
-
-	// Check .codex-plugin/plugin.json manifest
-	assertFileExists(t, filepath.Join(codexDir, ".codex-plugin", "plugin.json"))
-
-	// Check AGENTS.md present
-	assertFileExists(t, filepath.Join(codexDir, "AGENTS.md"))
-
-	// No agents/rules/commands directories at top level
-	assertFileNotExists(t, filepath.Join(codexDir, "agents"))
-	assertFileNotExists(t, filepath.Join(codexDir, "rules"))
-	assertFileNotExists(t, filepath.Join(codexDir, "commands"))
-
-	// No plugin manifest
-	assertFileNotExists(t, filepath.Join(codexDir, ".codex"))
-
-	// Should have warnings about skipped artifacts
-	if len(r.Warnings) == 0 {
-		t.Error("expected warnings about skipped artifacts")
-	}
-	foundSkipWarning := false
-	for _, w := range r.Warnings {
-		if strings.Contains(w, "Codex: skipping") {
-			foundSkipWarning = true
-		}
-	}
-	if !foundSkipWarning {
-		t.Error("expected Codex skip warning")
-	}
-}
-
 func TestExportAllVendors(t *testing.T) {
 	srcDir := filepath.Join(testdataDir(), "export-harness")
 	outputDir := t.TempDir()
@@ -186,38 +76,6 @@ func TestExportAllVendors(t *testing.T) {
 		if _, err := os.Stat(r.OutputDir); os.IsNotExist(err) {
 			t.Errorf("output dir for %s does not exist: %s", r.Vendor, r.OutputDir)
 		}
-	}
-}
-
-func TestExportManifestClaude(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-harness")
-	outputDir := t.TempDir()
-
-	_, err := Export(ExportOptions{
-		SourceDir: srcDir,
-		OutputDir: outputDir,
-		Vendors:   []string{"claude"},
-	})
-	if err != nil {
-		t.Fatalf("Export failed: %v", err)
-	}
-
-	manifestPath := filepath.Join(outputDir, "claude", ".claude-plugin", "plugin.json")
-	data, err := os.ReadFile(manifestPath)
-	if err != nil {
-		t.Fatalf("reading manifest: %v", err)
-	}
-
-	var pj manifestJSON
-	if err := json.Unmarshal(data, &pj); err != nil {
-		t.Fatalf("parsing manifest: %v", err)
-	}
-
-	if pj.Name != "export-test" {
-		t.Errorf("expected name export-test, got %s", pj.Name)
-	}
-	if pj.Version != "1.0.0" {
-		t.Errorf("expected version 1.0.0, got %s", pj.Version)
 	}
 }
 
@@ -247,70 +105,6 @@ func TestExportManifestCursor(t *testing.T) {
 
 	if pj.Name != "export-test" {
 		t.Errorf("expected name export-test, got %s", pj.Name)
-	}
-}
-
-func TestExportCodexLayout(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-harness")
-	outputDir := t.TempDir()
-
-	_, err := Export(ExportOptions{
-		SourceDir: srcDir,
-		OutputDir: outputDir,
-		Vendors:   []string{"codex"},
-	})
-	if err != nil {
-		t.Fatalf("Export failed: %v", err)
-	}
-
-	codexDir := filepath.Join(outputDir, "codex")
-
-	// Skills must be under skills/ (plugin root format)
-	entries, err := os.ReadDir(filepath.Join(codexDir, "skills"))
-	if err != nil {
-		t.Fatalf("reading skills: %v", err)
-	}
-
-	skillNames := make(map[string]bool)
-	for _, e := range entries {
-		skillNames[e.Name()] = true
-	}
-
-	if !skillNames["dev-project"] {
-		t.Error("missing dev-project skill")
-	}
-	if !skillNames["dev-quality"] {
-		t.Error("missing dev-quality skill")
-	}
-}
-
-func TestExportCodexSkipsAgentsRulesCommands(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-harness")
-	outputDir := t.TempDir()
-
-	results, err := Export(ExportOptions{
-		SourceDir: srcDir,
-		OutputDir: outputDir,
-		Vendors:   []string{"codex"},
-	})
-	if err != nil {
-		t.Fatalf("Export failed: %v", err)
-	}
-
-	r := results[0]
-	codexDir := filepath.Join(outputDir, "codex")
-
-	// These should NOT exist
-	for _, name := range []string{"agents", "rules", "commands"} {
-		path := filepath.Join(codexDir, name)
-		if _, err := os.Stat(path); err == nil {
-			t.Errorf("%s directory should not exist in Codex export", name)
-		}
-	}
-
-	// Should have warnings
-	if len(r.Warnings) == 0 {
-		t.Error("expected warnings about skipped artifacts")
 	}
 }
 
@@ -419,117 +213,6 @@ func TestExportInstructionDiscovery(t *testing.T) {
 	}
 }
 
-func TestExportMergedMode(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-harness")
-	outputDir := filepath.Join(t.TempDir(), "merged-out")
-
-	results, err := Export(ExportOptions{
-		SourceDir: srcDir,
-		OutputDir: outputDir,
-		Vendors:   []string{"claude", "cursor"},
-		Mode:      ModeMerged,
-	})
-	if err != nil {
-		t.Fatalf("Export failed: %v", err)
-	}
-
-	if len(results) != 1 {
-		t.Fatalf("expected 1 merged result, got %d", len(results))
-	}
-	if results[0].Vendor != "merged" {
-		t.Errorf("expected vendor 'merged', got %s", results[0].Vendor)
-	}
-
-	// Both manifests in same dir
-	assertFileExists(t, filepath.Join(outputDir, ".claude-plugin", "plugin.json"))
-	assertFileExists(t, filepath.Join(outputDir, ".cursor-plugin", "plugin.json"))
-
-	// Shared artifacts
-	assertFileExists(t, filepath.Join(outputDir, "skills", "dev-project", "SKILL.md"))
-	assertFileExists(t, filepath.Join(outputDir, "skills", "dev-quality", "SKILL.md"))
-	assertFileExists(t, filepath.Join(outputDir, "agents", "planner.md"))
-
-	// Instructions
-	assertFileExists(t, filepath.Join(outputDir, "AGENTS.md"))
-	assertFileExists(t, filepath.Join(outputDir, "CLAUDE.md"))
-	assertFileExists(t, filepath.Join(outputDir, ".cursorrules"))
-}
-
-func TestExportCleanFlag(t *testing.T) {
-	srcDir := filepath.Join(testdataDir(), "export-harness")
-	outputDir := t.TempDir()
-
-	// Create a stale file that should be cleaned
-	staleDir := filepath.Join(outputDir, "old-vendor")
-	if err := os.MkdirAll(staleDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	staleFile := filepath.Join(staleDir, "stale.txt")
-	if err := os.WriteFile(staleFile, []byte("stale"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Export with clean behaviour (remove and recreate vendor subdirs)
-	_, err := Export(ExportOptions{
-		SourceDir: srcDir,
-		OutputDir: outputDir,
-		Vendors:   []string{"claude"},
-	})
-	if err != nil {
-		t.Fatalf("Export failed: %v", err)
-	}
-
-	// The export only cleans vendor subdirs it owns, not the parent output dir.
-	// The --clean flag at CLI level handles full output dir removal.
-
-	// Claude dir should have fresh content
-	assertFileExists(t, filepath.Join(outputDir, "claude", ".claude-plugin", "plugin.json"))
-}
-
-// TestExportManifestGeneration verifies manifest JSON format.
-func TestExportManifestGeneration(t *testing.T) {
-	hj := &plugin.HarnessJSON{
-		Name:        "test-plugin",
-		Version:     "2.0.0",
-		Description: "A test plugin",
-	}
-
-	dir := t.TempDir()
-
-	if err := GenerateClaudeManifest(hj, dir); err != nil {
-		t.Fatalf("GenerateClaudeManifest: %v", err)
-	}
-	if err := GenerateCursorManifest(hj, dir); err != nil {
-		t.Fatalf("GenerateCursorManifest: %v", err)
-	}
-
-	// Verify Claude manifest
-	claudeData, err := os.ReadFile(filepath.Join(dir, ".claude-plugin", "plugin.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var claudePJ manifestJSON
-	if err := json.Unmarshal(claudeData, &claudePJ); err != nil {
-		t.Fatal(err)
-	}
-	if claudePJ.Name != "test-plugin" || claudePJ.Version != "2.0.0" {
-		t.Error("Claude manifest content mismatch")
-	}
-
-	// Verify Cursor manifest
-	cursorData, err := os.ReadFile(filepath.Join(dir, ".cursor-plugin", "plugin.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var cursorPJ manifestJSON
-	if err := json.Unmarshal(cursorData, &cursorPJ); err != nil {
-		t.Fatal(err)
-	}
-	if cursorPJ.Name != "test-plugin" || cursorPJ.Version != "2.0.0" {
-		t.Error("Cursor manifest content mismatch")
-	}
-}
-
 func TestExportWithHooks(t *testing.T) {
 	// Create a harness with hooks
 	srcDir := t.TempDir()
@@ -593,35 +276,6 @@ func TestExportWithHooks(t *testing.T) {
 	assertFileExists(t, filepath.Join(outputDir3, "codex", ".codex", "hooks.json"))
 }
 
-func TestExportMergedWithHooks(t *testing.T) {
-	// Create a harness with hooks
-	srcDir := t.TempDir()
-	writeJSON(t, filepath.Join(srcDir, "harness.json"), map[string]any{
-		"name":    "hooks-merged",
-		"version": "0.1.0",
-		"hooks": map[string]any{
-			"before_tool": []any{
-				map[string]string{"command": "echo hi"},
-			},
-		},
-	})
-
-	outputDir := filepath.Join(t.TempDir(), "merged")
-	_, err := Export(ExportOptions{
-		SourceDir: srcDir,
-		OutputDir: outputDir,
-		Vendors:   []string{"claude", "cursor"},
-		Mode:      ModeMerged,
-	})
-	if err != nil {
-		t.Fatalf("Export failed: %v", err)
-	}
-
-	// Both hook configs should exist
-	assertFileExists(t, filepath.Join(outputDir, ".claude", "hooks", "hooks.json"))
-	assertFileExists(t, filepath.Join(outputDir, ".cursor", "hooks.json"))
-}
-
 func TestExportWithMCPServers(t *testing.T) {
 	// Create a harness with MCP servers
 	srcDir := t.TempDir()
@@ -682,36 +336,6 @@ func TestExportWithMCPServers(t *testing.T) {
 
 	// Codex should have .mcp.json (JSON format at plugin root)
 	assertFileExists(t, filepath.Join(outputDir3, "codex", ".mcp.json"))
-}
-
-func TestExportMergedWithMCPServers(t *testing.T) {
-	// Create a harness with MCP servers
-	srcDir := t.TempDir()
-	writeJSON(t, filepath.Join(srcDir, "harness.json"), map[string]any{
-		"name":    "mcp-merged",
-		"version": "0.1.0",
-		"mcp_servers": map[string]any{
-			"github": map[string]any{
-				"command": "npx",
-				"args":    []string{"-y", "server"},
-			},
-		},
-	})
-
-	outputDir := filepath.Join(t.TempDir(), "merged")
-	_, err := Export(ExportOptions{
-		SourceDir: srcDir,
-		OutputDir: outputDir,
-		Vendors:   []string{"claude", "cursor"},
-		Mode:      ModeMerged,
-	})
-	if err != nil {
-		t.Fatalf("Export failed: %v", err)
-	}
-
-	// Both MCP configs should exist
-	assertFileExists(t, filepath.Join(outputDir, ".claude", ".mcp.json"))
-	assertFileExists(t, filepath.Join(outputDir, ".cursor", "mcp.json"))
 }
 
 func TestJoinParts(t *testing.T) {

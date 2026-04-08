@@ -22,11 +22,6 @@ func isLocalPath(source string) bool {
 	return false
 }
 
-// copyTree recursively copies a directory, skipping .git.
-func copyTree(src, dst string) error {
-	return assembler.CopyDir(src, dst)
-}
-
 // loadOrSynthesizeHarness loads a harness from a directory. If the directory
 // has harness.json, it loads normally. If the directory has AGENTS.md (or
 // instructions.md) but no harness.json, it synthesizes minimal harness.json

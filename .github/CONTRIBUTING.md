@@ -298,7 +298,7 @@ ynh-specific config lives under the `"ynh"` key, keeping the file extensible for
 There are two copies of `metadata.json` in a harness's life:
 
 1. **Source copy** — git-tracked in the harness's repo. Author-managed. Contains `includes`, `delegates_to`, `default_vendor`.
-2. **Installed copy** — at `~/.ynh/harnesses/<name>/metadata.json`. Created by `ynh install` via `copyTree`. Local-only, not git-tracked.
+2. **Installed copy** — at `~/.ynh/harnesses/<name>/metadata.json`. Created by `ynh install` via `assembler.CopyDir`. Local-only, not git-tracked.
 
 During install:
 - `ynh install` copies the entire harness directory (including `metadata.json`) to `~/.ynh/harnesses/<name>/`.
