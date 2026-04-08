@@ -7,12 +7,23 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/resolver"
-	"github.com/eyelock/ynh/internal/vendor"
 )
+
+// LayoutProvider describes the vendor layout information that the assembler
+// needs. Consumers define their own narrow interface rather than depending on
+// the full vendor.Adapter.
+type LayoutProvider interface {
+	// ConfigDir returns the vendor's config directory name (e.g. ".claude").
+	ConfigDir() string
+	// ArtifactDirs maps artifact types to their directory names within the config dir.
+	ArtifactDirs() map[string]string
+	// InstructionsFile returns the filename for project-level instructions.
+	InstructionsFile() string
+}
 
 // Assemble creates a temporary directory with vendor-specific config layout
 // populated from resolved Git content.
-func Assemble(adapter vendor.Adapter, content []resolver.ResolvedContent) (string, error) {
+func Assemble(adapter LayoutProvider, content []resolver.ResolvedContent) (string, error) {
 	workDir, err := os.MkdirTemp("", "ynh-*")
 	if err != nil {
 		return "", fmt.Errorf("creating temp dir: %w", err)
@@ -27,7 +38,7 @@ func Assemble(adapter vendor.Adapter, content []resolver.ResolvedContent) (strin
 // AssembleTo populates a specific directory with vendor-specific config layout.
 // The directory is cleaned and recreated. Use this for deterministic paths that
 // survive process replacement (syscall.Exec).
-func AssembleTo(dir string, adapter vendor.Adapter, content []resolver.ResolvedContent) error {
+func AssembleTo(dir string, adapter LayoutProvider, content []resolver.ResolvedContent) error {
 	// Clean previous run
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("cleaning run dir: %w", err)
@@ -39,7 +50,7 @@ func AssembleTo(dir string, adapter vendor.Adapter, content []resolver.ResolvedC
 	return assembleInto(dir, adapter, content)
 }
 
-func assembleInto(workDir string, adapter vendor.Adapter, content []resolver.ResolvedContent) error {
+func assembleInto(workDir string, adapter LayoutProvider, content []resolver.ResolvedContent) error {
 	configDir := filepath.Join(workDir, adapter.ConfigDir())
 	artifactDirs := adapter.ArtifactDirs()
 

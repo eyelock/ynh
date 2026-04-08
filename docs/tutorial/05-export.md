@@ -70,7 +70,7 @@ Expected output:
 Exported "exportable" for claude → /tmp/ynh-tutorial/export-output/claude/
 Exported "exportable" for cursor → /tmp/ynh-tutorial/export-output/cursor/
 Exported "exportable" for codex → /tmp/ynh-tutorial/export-output/codex/
-  Codex: skipping 1 agent (not supported)
+  codex: skipping 1 agent (not supported)
 ```
 
 ## T5.3: Verify Claude export

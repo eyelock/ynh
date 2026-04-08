@@ -8,13 +8,12 @@ import (
 
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/resolver"
-	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // AssembleDelegates generates agent files for each delegate harness
 // in the assembled config directory. Each delegate becomes a vendor-native
 // agent that the parent harness can invoke.
-func AssembleDelegates(workDir string, adapter vendor.Adapter, delegates []harness.Delegate) error {
+func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harness.Delegate) error {
 	if len(delegates) == 0 {
 		return nil
 	}

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 func TestExportSingleVendorClaude(t *testing.T) {
@@ -100,7 +101,7 @@ func TestExportManifestClaude(t *testing.T) {
 	}
 }
 
-// TestExportManifestGeneration verifies manifest JSON format.
+// TestExportManifestGeneration verifies manifest JSON format via adapter methods.
 func TestExportManifestGeneration(t *testing.T) {
 	hj := &plugin.HarnessJSON{
 		Name:        "test-plugin",
@@ -110,11 +111,35 @@ func TestExportManifestGeneration(t *testing.T) {
 
 	dir := t.TempDir()
 
-	if err := GenerateClaudeManifest(hj, dir); err != nil {
-		t.Fatalf("GenerateClaudeManifest: %v", err)
+	// Generate manifests via adapter methods
+	claudeAdapter, _ := vendor.Get("claude")
+	claudeFiles, err := claudeAdapter.GeneratePluginManifest(hj, dir)
+	if err != nil {
+		t.Fatalf("claude GeneratePluginManifest: %v", err)
 	}
-	if err := GenerateCursorManifest(hj, dir); err != nil {
-		t.Fatalf("GenerateCursorManifest: %v", err)
+	for relPath, data := range claudeFiles {
+		absPath := filepath.Join(dir, relPath)
+		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(absPath, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cursorAdapter, _ := vendor.Get("cursor")
+	cursorFiles, err := cursorAdapter.GeneratePluginManifest(hj, dir)
+	if err != nil {
+		t.Fatalf("cursor GeneratePluginManifest: %v", err)
+	}
+	for relPath, data := range cursorFiles {
+		absPath := filepath.Join(dir, relPath)
+		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(absPath, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Verify Claude manifest

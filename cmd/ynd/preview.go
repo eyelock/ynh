@@ -9,7 +9,6 @@ import (
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
-	"github.com/eyelock/ynh/internal/exporter"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
@@ -195,19 +194,6 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 		return "", fmt.Errorf("assembling delegates: %w", err)
 	}
 
-	// Generate vendor plugin manifests
-	pj := &plugin.HarnessJSON{Name: h.Name, Version: "0.0.0", Description: h.Description}
-	switch adapter.Name() {
-	case "claude":
-		if err := exporter.GenerateClaudeManifest(pj, filepath.Join(tmpDir, adapter.ConfigDir())); err != nil {
-			return "", fmt.Errorf("writing plugin manifest: %w", err)
-		}
-	case "cursor":
-		if err := exporter.GenerateCursorManifest(pj, tmpDir); err != nil {
-			return "", fmt.Errorf("writing plugin manifest: %w", err)
-		}
-	}
-
 	// Generate hook config
 	if len(h.Hooks) > 0 {
 		hookFiles, err := adapter.GenerateHookConfig(h.Hooks)
@@ -230,11 +216,14 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 		}
 	}
 
-	// Codex manifest generated after MCP so path pointers detect .mcp.json
-	if adapter.Name() == "codex" {
-		if err := exporter.GenerateCodexManifest(pj, tmpDir); err != nil {
-			return "", fmt.Errorf("writing plugin manifest: %w", err)
-		}
+	// Generate vendor plugin manifest (after hooks/MCP so path pointers are accurate)
+	pj := &plugin.HarnessJSON{Name: h.Name, Version: "0.0.0", Description: h.Description}
+	manifestFiles, err := adapter.GeneratePluginManifest(pj, tmpDir)
+	if err != nil {
+		return "", fmt.Errorf("writing plugin manifest: %w", err)
+	}
+	if err := writeGeneratedFiles(tmpDir, manifestFiles); err != nil {
+		return "", fmt.Errorf("writing plugin manifest: %w", err)
 	}
 
 	success = true

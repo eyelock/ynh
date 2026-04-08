@@ -13,6 +13,26 @@ import (
 	"github.com/eyelock/ynh/internal/vendor"
 )
 
+// VendorExporter describes the vendor capabilities that the exporter needs.
+// Consumers define their own narrow interface rather than depending on the
+// full vendor.Adapter.
+type VendorExporter interface {
+	// ArtifactDirs maps artifact types to their directory names.
+	ArtifactDirs() map[string]string
+	// ExportArtifactDirs returns restricted artifact dirs for export, or nil to use ArtifactDirs().
+	ExportArtifactDirs() map[string]string
+	// SupportsExportDelegates reports whether this vendor supports delegates in exports.
+	SupportsExportDelegates() bool
+	// GenerateSystemPrompt produces vendor-native instruction files.
+	GenerateSystemPrompt(content []byte) map[string][]byte
+	// GeneratePluginManifest produces vendor-native plugin manifest files.
+	GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error)
+	// GenerateHookConfig translates canonical hooks to vendor-native config.
+	GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)
+	// GenerateMCPConfig translates MCP servers to vendor-native config.
+	GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error)
+}
+
 // ExportMode controls the output layout.
 type ExportMode int
 
@@ -158,22 +178,18 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 
 	// Generate manifests and instructions for each vendor
 	var results []ExportResult
-	var mergedWarnings []string
 
 	for _, v := range vendors {
-		switch v {
-		case "claude":
-			if err := GenerateClaudeManifest(pj, outputDir); err != nil {
-				return nil, err
-			}
-		case "cursor":
-			if err := GenerateCursorManifest(pj, outputDir); err != nil {
-				return nil, err
-			}
-		case "codex":
-			// Codex has no marketplace system — skip in merged mode
-			mergedWarnings = append(mergedWarnings, "Codex: excluded from merged export (no marketplace system)")
+		adapter, err := vendor.Get(v)
+		if err != nil {
 			continue
+		}
+		manifestFiles, err := adapter.GeneratePluginManifest(pj, outputDir)
+		if err != nil {
+			return nil, fmt.Errorf("generating %s manifest: %w", v, err)
+		}
+		if err := writeGeneratedFiles(outputDir, manifestFiles); err != nil {
+			return nil, fmt.Errorf("writing %s manifest: %w", v, err)
 		}
 	}
 
@@ -224,7 +240,6 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 		OutputDir: outputDir,
 		Skills:    skills,
 		Agents:    agents,
-		Warnings:  mergedWarnings,
 	})
 
 	return results, nil
@@ -241,58 +256,39 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 		return result, err
 	}
 
-	// Codex: skills only (no agents, rules, commands support in plugins)
-	// Claude/Cursor: all artifact types
-	if vendorName == "codex" {
-		codexArtifactDirs := map[string]string{"skills": "skills"}
-		if err := copyContent(outputDir, content, codexArtifactDirs); err != nil {
-			return result, err
-		}
-
-		// Warn about skipped artifacts
-		skippedAgents := 0
-		skippedRules := 0
-		skippedCommands := 0
-		for _, rc := range content {
-			skippedAgents += countDir(filepath.Join(rc.BasePath, "agents"))
-			skippedRules += countDir(filepath.Join(rc.BasePath, "rules"))
-			skippedCommands += countDir(filepath.Join(rc.BasePath, "commands"))
-		}
-		if skippedAgents > 0 || skippedRules > 0 || skippedCommands > 0 {
-			var parts []string
-			if skippedAgents > 0 {
-				parts = append(parts, fmt.Sprintf("%d agents", skippedAgents))
-			}
-			if skippedRules > 0 {
-				parts = append(parts, fmt.Sprintf("%d rules", skippedRules))
-			}
-			if skippedCommands > 0 {
-				parts = append(parts, fmt.Sprintf("%d commands", skippedCommands))
-			}
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Codex: skipping %s (not supported)", joinParts(parts)))
-		}
-		if len(p.DelegatesTo) > 0 {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Codex: skipping %d delegates (not supported)", len(p.DelegatesTo)))
-		}
-	} else {
-		artifactDirs := adapter.ArtifactDirs()
-		if err := copyContent(outputDir, content, artifactDirs); err != nil {
-			return result, err
-		}
+	// Determine artifact dirs — some vendors restrict what they support
+	artifactDirs := adapter.ExportArtifactDirs()
+	if artifactDirs == nil {
+		artifactDirs = adapter.ArtifactDirs()
+	}
+	if err := copyContent(outputDir, content, artifactDirs); err != nil {
+		return result, err
 	}
 
-	// Manifest
-	switch vendorName {
-	case "claude":
-		if err := GenerateClaudeManifest(pj, outputDir); err != nil {
-			return result, err
+	// Warn about skipped artifact types when export uses a restricted set
+	if exportDirs := adapter.ExportArtifactDirs(); exportDirs != nil {
+		allDirs := adapter.ArtifactDirs()
+		skippedCounts := map[string]int{}
+		for artifactType := range allDirs {
+			if _, ok := exportDirs[artifactType]; ok {
+				continue
+			}
+			for _, rc := range content {
+				skippedCounts[artifactType] += countDir(filepath.Join(rc.BasePath, artifactType))
+			}
 		}
-	case "cursor":
-		if err := GenerateCursorManifest(pj, outputDir); err != nil {
-			return result, err
+		var parts []string
+		for _, artifactType := range []string{"agents", "rules", "commands"} {
+			if n := skippedCounts[artifactType]; n > 0 {
+				parts = append(parts, fmt.Sprintf("%d %s", n, artifactType))
+			}
 		}
-	case "codex":
-		// Generate manifest after MCP config so path pointers are accurate
+		if len(parts) > 0 {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("%s: skipping %s (not supported)", vendorName, joinParts(parts)))
+		}
+		if len(p.DelegatesTo) > 0 && !adapter.SupportsExportDelegates() {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("%s: skipping %d delegates (not supported)", vendorName, len(p.DelegatesTo)))
+		}
 	}
 
 	// Instructions
@@ -302,8 +298,8 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 		}
 	}
 
-	// Delegates (Claude and Cursor only — Codex doesn't support them)
-	if len(p.DelegatesTo) > 0 && vendorName != "codex" {
+	// Delegates
+	if len(p.DelegatesTo) > 0 && adapter.SupportsExportDelegates() {
 		if err := ExportDelegates(outputDir, p.DelegatesTo); err != nil {
 			return result, fmt.Errorf("exporting delegates: %w", err)
 		}
@@ -323,11 +319,13 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 		}
 	}
 
-	// Codex manifest generated after MCP so path pointers detect .mcp.json
-	if vendorName == "codex" {
-		if err := GenerateCodexManifest(pj, outputDir); err != nil {
-			return result, err
-		}
+	// Manifest — generated after content (MCP, skills) so path pointers are accurate
+	manifestFiles, err := adapter.GeneratePluginManifest(pj, outputDir)
+	if err != nil {
+		return result, fmt.Errorf("generating manifest: %w", err)
+	}
+	if err := writeGeneratedFiles(outputDir, manifestFiles); err != nil {
+		return result, fmt.Errorf("writing manifest: %w", err)
 	}
 
 	result.Skills = countDir(filepath.Join(outputDir, "skills"))
@@ -336,7 +334,7 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 }
 
 // writeMCPConfig generates vendor-native MCP config files and writes them to the output directory.
-func writeMCPConfig(outputDir string, adapter vendor.Adapter, servers map[string]plugin.MCPServer) error {
+func writeMCPConfig(outputDir string, adapter VendorExporter, servers map[string]plugin.MCPServer) error {
 	mcpFiles, err := adapter.GenerateMCPConfig(servers)
 	if err != nil {
 		return fmt.Errorf("generating MCP config: %w", err)
@@ -354,7 +352,7 @@ func writeMCPConfig(outputDir string, adapter vendor.Adapter, servers map[string
 }
 
 // writeHookConfig generates vendor-native hook config files and writes them to the output directory.
-func writeHookConfig(outputDir string, adapter vendor.Adapter, hooks map[string][]plugin.HookEntry) error {
+func writeHookConfig(outputDir string, adapter VendorExporter, hooks map[string][]plugin.HookEntry) error {
 	hookFiles, err := adapter.GenerateHookConfig(hooks)
 	if err != nil {
 		return fmt.Errorf("generating hook config: %w", err)
@@ -366,6 +364,20 @@ func writeHookConfig(outputDir string, adapter vendor.Adapter, hooks map[string]
 		}
 		if err := os.WriteFile(absPath, content, 0o644); err != nil {
 			return fmt.Errorf("writing hook config %s: %w", relPath, err)
+		}
+	}
+	return nil
+}
+
+// writeGeneratedFiles writes a map of relative paths to file contents into baseDir.
+func writeGeneratedFiles(baseDir string, files map[string][]byte) error {
+	for relPath, data := range files {
+		absPath := filepath.Join(baseDir, relPath)
+		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(absPath, data, 0o644); err != nil {
+			return fmt.Errorf("writing %s: %w", relPath, err)
 		}
 	}
 	return nil

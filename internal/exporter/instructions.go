@@ -10,10 +10,17 @@ import (
 	"github.com/eyelock/ynh/internal/vendor"
 )
 
+// SystemPromptGenerator describes the ability to produce vendor-native
+// instruction files. Used by WriteSystemPrompt to avoid depending on the
+// full vendor.Adapter interface.
+type SystemPromptGenerator interface {
+	GenerateSystemPrompt(content []byte) map[string][]byte
+}
+
 // WriteSystemPrompt reads instructions from instructionsPath and writes
 // vendor-native instruction files to outputDir using the adapter's
 // GenerateSystemPrompt method.
-func WriteSystemPrompt(instructionsPath string, outputDir string, adapter vendor.Adapter) error {
+func WriteSystemPrompt(instructionsPath string, outputDir string, adapter SystemPromptGenerator) error {
 	content, err := os.ReadFile(instructionsPath)
 	if err != nil {
 		return fmt.Errorf("reading instructions: %w", err)

@@ -43,6 +43,15 @@ func (m *mockAdapter) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (m
 func (m *mockAdapter) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
 	return nil, nil
 }
+func (m *mockAdapter) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {
+	return nil, nil
+}
+func (m *mockAdapter) ExportArtifactDirs() map[string]string { return nil }
+func (m *mockAdapter) SupportsExportDelegates() bool         { return true }
+func (m *mockAdapter) MarketplaceManifestDir() string        { return ".mock-plugin" }
+func (m *mockAdapter) GenerateMarketplaceIndex(cfg vendor.MarketplaceIndexConfig, plugins []vendor.MarketplacePluginInfo) ([]byte, error) {
+	return nil, nil
+}
 
 func TestAssembleWithPick(t *testing.T) {
 	// Create a fake repo with skills and agents
