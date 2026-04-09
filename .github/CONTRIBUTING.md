@@ -293,13 +293,33 @@ Test fixtures in `testdata/` simulate real-world sources:
   "profiles": {
     "ci": {
       "hooks": { "before_tool": [{"matcher": "Bash", "command": "/path/to/ci-lint.sh"}] },
-      "mcp_servers": { "github": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"] } }
+      "mcp_servers": { "github": null }
     }
+  },
+  "focus": {
+    "review": { "profile": "ci", "prompt": "Review staged changes for quality" },
+    "docs": { "prompt": "Generate API documentation for all public interfaces" }
   }
 }
 ```
 
-`name` and `version` are required. All other fields are optional. See the JSON schema at `docs/schema/harness.schema.json` for the full specification. See [Hooks](docs/hooks.md) and [MCP Servers](docs/mcp.md) for details on those declarations.
+`name` and `version` are required for installed harnesses. For project-local `.harness.json` files (loaded via `--harness-file` or auto-discovered in cwd), they are optional. See the JSON schema at `docs/schema/harness.schema.json` for the full specification. See [Hooks](docs/hooks.md), [MCP Servers](docs/mcp.md), [Profiles](docs/profiles.md), and the focus tutorial (`docs/tutorial/14-focus.md`) for details.
+
+### Focus Entries
+
+Focus entries combine a profile + prompt for repeatable, non-interactive AI execution. When `ynh run --focus review` is invoked, ynh looks up the focus entry, applies its profile (if any), and sends its prompt to the vendor CLI via `LaunchNonInteractive`.
+
+Profiles use merge semantics when applied — see `ResolveProfile()` in `internal/harness/harness.go`. Focus validation (`ValidateFocus()` in `internal/plugin/plugin.go`) checks that prompts are non-empty, and `ynd validate` cross-references profile names.
+
+### Harness Resolution Order
+
+When `ynh run` is invoked, the harness source is resolved in this order:
+
+1. **Positional name**: `ynh run my-harness` → loads from `~/.ynh/harnesses/my-harness/`
+2. **`--harness-file`**: `ynh run --harness-file path/.harness.json` → loads directly from file
+3. **Auto-discovery**: bare `ynh run` → looks for `.harness.json` in the current working directory
+
+For `--harness-file` and auto-discovery, the harness is assembled into `~/.ynh/run/_inline-<hash>/` (hash of the source directory for stable run dirs).
 
 ### Install Lifecycle
 
@@ -338,6 +358,11 @@ Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry instal
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `YNH_HOME` | Override the ynh home directory | `~/.ynh` |
+| `YNH_VENDOR` | Fallback for `-v` flag | _(none)_ |
+| `YNH_PROFILE` | Fallback for `--profile` flag | _(none)_ |
+| `YNH_FOCUS` | Fallback for `--focus` flag | _(none)_ |
+| `YNH_HARNESS_FILE` | Fallback for `--harness-file` flag | _(none)_ |
+| `YNH_HARNESS` | Fallback for `--harness` flag (ynd) | _(none)_ |
 | `YND_BACKUP_DIR` | Override the ynd compress backup directory | `~/.ynd/backups` |
 
 ### Global Config (`~/.ynh/config.json`)
@@ -368,9 +393,10 @@ Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry instal
 ├── cache/                     # Cloned Git repos
 │   └── eyelock--assistants--a1b2c3d4/
 ├── run/                       # Assembled vendor config (per harness, overwritten each run)
-│   └── david/
-│       ├── .claude/           # vendor config dir with assembled artifacts
-│       └── CLAUDE.md          # vendor instructions file (from instructions.md)
+│   ├── david/
+│   │   ├── .claude/           # vendor config dir with assembled artifacts
+│   │   └── CLAUDE.md          # vendor instructions file (from instructions.md)
+│   └── _inline-a1b2c3d4/     # inline harness run dirs (--harness-file / auto-discovery)
 └── bin/                       # Launcher scripts (add to PATH)
     └── david                  # -> exec ynh run david "$@"
 ```
