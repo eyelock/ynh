@@ -18,7 +18,7 @@ brew tap eyelock/tap && brew install ynh
 Scaffold a new artifact or full harness.
 
 ```bash
-ynd create harness my-team     # full harness directory structure (harness.json + artifacts)
+ynd create harness my-team     # full harness directory structure (.harness.json + artifacts)
 ynd create skill commit        # skills/commit/SKILL.md
 ynd create agent reviewer      # agents/reviewer.md
 ynd create rule be-nice        # rules/be-nice.md
@@ -111,7 +111,7 @@ ynd preview --harness ./my-harness          # explicit harness flag
 
 When no `-o` flag is given, preview prints a tree with file contents to stdout. With `-o`, it writes the full assembled output to the specified directory.
 
-Preview supports the same source types as export: local directories with `harness.json` or bare `AGENTS.md` directories.
+Preview supports the same source types as export: local directories with `.harness.json` or bare `AGENTS.md` directories.
 
 See [Tutorial 8: Developer Preview](tutorial/12-developer-preview.md) for a guided walkthrough.
 

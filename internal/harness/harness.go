@@ -78,7 +78,7 @@ func Load(name string) (*Harness, error) {
 	case "harness":
 		return LoadDir(installDir)
 	case "legacy":
-		return nil, fmt.Errorf("harness %q: legacy format detected. Consolidate .claude-plugin/plugin.json and metadata.json into harness.json", name)
+		return nil, fmt.Errorf("harness %q: legacy format detected. Consolidate .claude-plugin/plugin.json and metadata.json into .harness.json", name)
 	default:
 		return nil, fmt.Errorf("harness %q: %w", name, ErrNotFound)
 	}
@@ -175,7 +175,7 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 
 	profile, ok := h.Profiles[profileName]
 	if !ok {
-		return nil, fmt.Errorf("profile %q not defined in harness.json", profileName)
+		return nil, fmt.Errorf("profile %q not defined in .harness.json", profileName)
 	}
 
 	resolved := *h

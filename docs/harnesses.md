@@ -2,15 +2,15 @@
 
 A harness is a portable template that assembles the guide layer of a coding harness — skills, rules, agents, commands, and instructions — for any supported vendor. See [Harness Engineering](harness-engineering.md) for the broader context.
 
-A harness is defined by a `harness.json` manifest and artifact directories.
+A harness is defined by a `.harness.json` manifest and artifact directories.
 
-> **Migration note:** Legacy format (`.claude-plugin/plugin.json` + `metadata.json`) is no longer supported. Consolidate into `harness.json`.
+> **Migration note:** Legacy format (`.claude-plugin/plugin.json` + `metadata.json`) is no longer supported. Consolidate into `.harness.json`.
 
 ## Directory Structure
 
 ```
 david/
-├── harness.json              # required - name, version, vendor, includes, hooks, etc.
+├── .harness.json              # required - name, version, vendor, includes, hooks, etc.
 ├── AGENTS.md                 # optional - project-level instructions (read natively by most vendors; ynh shims Claude via @-import)
 ├── skills/                   # optional - embedded skills
 │   └── review/
@@ -23,9 +23,9 @@ david/
     └── check.md
 ```
 
-## Harness Manifest (`harness.json`)
+## Harness Manifest (`.harness.json`)
 
-All harness configuration lives in a single `harness.json` file. Add `"$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json"` for editor autocompletion and validation.
+All harness configuration lives in a single `.harness.json` file. Add `"$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json"` for editor autocompletion and validation.
 
 ### Annotated Example
 
@@ -179,7 +179,7 @@ When running as `david`, you can ask it to delegate a task to `team-dev`. The de
 
 At runtime, ynh generates a vendor-native agent file for each delegate containing:
 
-- **Description** from the delegate's `harness.json` (helps the AI route to the right delegate)
+- **Description** from the delegate's `.harness.json` (helps the AI route to the right delegate)
 - **Instructions** from the delegate's `AGENTS.md` (gives the delegate its identity)
 - **Rules** inlined from the delegate's `rules/` directory
 - **Skills** listed from the delegate's `skills/` directory
@@ -214,7 +214,7 @@ Profiles let a single harness carry multiple configurations — e.g. a `strict` 
 |----------|--------|---------|
 | 1 (highest) | `--profile` flag | `david --profile strict` |
 | 2 | `YNH_PROFILE` env var | `export YNH_PROFILE=strict` |
-| 3 (lowest) | Top-level config | Fields in `harness.json` root |
+| 3 (lowest) | Top-level config | Fields in `.harness.json` root |
 
 When a profile is selected, its `hooks` and `mcp_servers` **fully replace** the corresponding top-level values. No merge, no inheritance. If a profile defines `hooks`, the top-level hooks are discarded entirely.
 
@@ -255,7 +255,7 @@ Running `ops-team --profile strict` uses the strict hooks (replacing the top-lev
 
 ### Minimal
 
-`harness.json`:
+`.harness.json`:
 ```json
 {
   "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
@@ -269,7 +269,7 @@ Just a named launcher. Useful as a starting point.
 
 ### Harness with external skills
 
-`harness.json`:
+`.harness.json`:
 ```json
 {
   "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
@@ -288,7 +288,7 @@ Just a named launcher. Useful as a starting point.
 
 ### Team with private repos
 
-`harness.json`:
+`.harness.json`:
 ```json
 {
   "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
@@ -310,7 +310,7 @@ Just a named launcher. Useful as a starting point.
 
 ### Multi-source composition
 
-`harness.json`:
+`.harness.json`:
 ```json
 {
   "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",

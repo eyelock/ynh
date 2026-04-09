@@ -12,7 +12,7 @@ func createDiffHarness(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 
-	// Create harness.json with hooks and MCP
+	// Create .harness.json with hooks and MCP
 	hj := map[string]any{
 		"name":           "diff-test",
 		"version":        "1.0.0",
@@ -31,7 +31,7 @@ func createDiffHarness(t *testing.T) string {
 		},
 	}
 	data, _ := json.MarshalIndent(hj, "", "  ")
-	if err := os.WriteFile(filepath.Join(dir, "harness.json"), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 

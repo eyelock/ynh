@@ -246,7 +246,7 @@ func cmdInstall(args []string) error {
 		return fmt.Errorf("copying harness to install directory: %w", err)
 	}
 
-	// Inject install provenance into the copied harness.json
+	// Inject install provenance into the copied .harness.json
 	provSource := source
 	if resolved.sourceType == "local" {
 		provSource = originalSource
@@ -258,10 +258,10 @@ func cmdInstall(args []string) error {
 		RegistryName: resolved.registryName,
 		InstalledAt:  time.Now().UTC().Format(time.RFC3339),
 	}
-	// Load existing harness.json from the copied file (preserves includes, delegates, etc.)
+	// Load existing .harness.json from the copied file (preserves includes, delegates, etc.)
 	hj, err := plugin.LoadHarnessJSON(installDir)
 	if err != nil {
-		return fmt.Errorf("loading installed harness.json: %w", err)
+		return fmt.Errorf("loading installed .harness.json: %w", err)
 	}
 	hj.InstalledFrom = prov
 	if err := plugin.SaveHarnessJSON(installDir, hj); err != nil {

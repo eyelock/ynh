@@ -4,7 +4,7 @@
 
 ```
 my-harness/
-├── harness.json           # required - name, version, vendor, includes, delegates
+├── .harness.json           # required - name, version, vendor, includes, delegates
 ├── AGENTS.md              # optional - read natively by most vendors; ynh shims Claude via @-import
 ├── skills/
 │   └── <name>/
@@ -17,7 +17,7 @@ my-harness/
     └── <name>.md
 ```
 
-## harness.json
+## .harness.json
 
 ```json
 {

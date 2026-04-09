@@ -102,7 +102,7 @@ func TestCreateHarness(t *testing.T) {
 	}
 
 	expectedFiles := []string{
-		"my-team/harness.json",
+		"my-team/.harness.json",
 		"my-team/AGENTS.md",
 	}
 	for _, f := range expectedFiles {
@@ -126,16 +126,16 @@ func TestCreateHarness(t *testing.T) {
 		}
 	}
 
-	// Verify harness.json content
-	data, err := os.ReadFile(filepath.Join(dir, "my-team/harness.json"))
+	// Verify .harness.json content
+	data, err := os.ReadFile(filepath.Join(dir, "my-team/.harness.json"))
 	if err != nil {
-		t.Fatalf("reading harness.json: %v", err)
+		t.Fatalf("reading .harness.json: %v", err)
 	}
 	if !strings.Contains(string(data), `"name": "my-team"`) {
-		t.Error("harness.json missing name")
+		t.Error(".harness.json missing name")
 	}
 	if !strings.Contains(string(data), `"version": "0.1.0"`) {
-		t.Error("harness.json missing version")
+		t.Error(".harness.json missing version")
 	}
 }
 
@@ -198,9 +198,9 @@ func TestCreateHarness_VendorEnvVar(t *testing.T) {
 		t.Fatalf("createHarness failed: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, "vendor-test/harness.json"))
+	data, err := os.ReadFile(filepath.Join(dir, "vendor-test/.harness.json"))
 	if err != nil {
-		t.Fatalf("reading harness.json: %v", err)
+		t.Fatalf("reading .harness.json: %v", err)
 	}
 	if !strings.Contains(string(data), `"default_vendor": "cursor"`) {
 		t.Errorf("expected default_vendor to be cursor, got: %s", data)
@@ -212,7 +212,7 @@ func TestCreateHarness_InsideHarness(t *testing.T) {
 	t.Chdir(dir)
 
 	// Make CWD look like a harness
-	writeFile(t, filepath.Join(dir, "harness.json"), []byte(`{"name":"test","version":"0.1.0"}`))
+	writeFile(t, filepath.Join(dir, ".harness.json"), []byte(`{"name":"test","version":"0.1.0"}`))
 
 	err := createHarness("nested")
 	if err == nil {
@@ -366,8 +366,8 @@ func TestCmdCreate_Harness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "test-harness", "harness.json")); err != nil {
-		t.Error("expected harness.json to exist")
+	if _, err := os.Stat(filepath.Join(dir, "test-harness", ".harness.json")); err != nil {
+		t.Error("expected .harness.json to exist")
 	}
 }
 

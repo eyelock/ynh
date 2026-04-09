@@ -16,7 +16,7 @@ Create a harness with an MCP server declaration:
 ```bash
 mkdir -p /tmp/ynh-tutorial/mcp-harness
 
-cat > /tmp/ynh-tutorial/mcp-harness/harness.json << 'EOF'
+cat > /tmp/ynh-tutorial/mcp-harness/.harness.json << 'EOF'
 {
   "name": "mcp-demo",
   "version": "0.1.0",
@@ -115,7 +115,7 @@ Codex uses the same JSON format as Claude with a `mcpServers` key, placed at the
 Add a second server using HTTP transport:
 
 ```bash
-cat > /tmp/ynh-tutorial/mcp-harness/harness.json << 'EOF'
+cat > /tmp/ynh-tutorial/mcp-harness/.harness.json << 'EOF'
 {
   "name": "mcp-demo",
   "version": "0.1.0",
@@ -215,7 +215,7 @@ rm -rf /tmp/ynh-tutorial
 
 ## What You Learned
 
-- MCP servers are declared in `harness.json` under `mcp_servers`
+- MCP servers are declared in `.harness.json` under `mcp_servers`
 - Servers can use stdio transport (`command` + `args`) or HTTP transport (`url`)
 - All three vendors use JSON with a `mcpServers` key, but in different file locations
 - Claude places MCP config at `.claude/.mcp.json`, Cursor at `.cursor/mcp.json`, and Codex at `.mcp.json` (plugin root)

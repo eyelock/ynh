@@ -200,13 +200,13 @@ func TestGenerateLauncher(t *testing.T) {
 func installTestHarness(t *testing.T, name string) {
 	t.Helper()
 
-	// Create harness directory with harness.json
+	// Create harness directory with .harness.json
 	installDir := harness.InstalledDir(name)
 	if err := os.MkdirAll(installDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	harnessJSON := fmt.Sprintf(`{"name":%q,"version":"0.1.0","default_vendor":"claude"}`, name)
-	if err := os.WriteFile(filepath.Join(installDir, "harness.json"), []byte(harnessJSON), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(installDir, ".harness.json"), []byte(harnessJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -404,7 +404,7 @@ func TestFormatArtifactSummary(t *testing.T) {
 	if err := os.MkdirAll(harnessDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(harnessDir, "harness.json"),
+	if err := os.WriteFile(filepath.Join(harnessDir, ".harness.json"),
 		[]byte(`{"name":"artfmt","version":"0.1.0"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -494,7 +494,7 @@ func TestCmdInstall_WritesProvenance(t *testing.T) {
 	if err := os.MkdirAll(srcDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, "harness.json"),
+	if err := os.WriteFile(filepath.Join(srcDir, ".harness.json"),
 		[]byte(`{"name":"provtest","version":"0.1.0"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -574,7 +574,7 @@ func TestCmdInstall_PathFlag(t *testing.T) {
 	if err := os.MkdirAll(aliceDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(aliceDir, "harness.json"),
+	if err := os.WriteFile(filepath.Join(aliceDir, ".harness.json"),
 		[]byte(`{"name":"alice","version":"0.1.0","description":"test harness"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -587,7 +587,7 @@ func TestCmdInstall_PathFlag(t *testing.T) {
 
 	// Verify harness was installed
 	installDir := harness.InstalledDir("alice")
-	if _, err := os.Stat(filepath.Join(installDir, "harness.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(installDir, ".harness.json")); err != nil {
 		t.Fatal("harness not found after install")
 	}
 }

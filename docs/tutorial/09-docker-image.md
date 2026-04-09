@@ -39,7 +39,7 @@ Create a harness to use throughout this tutorial:
 mkdir -p /tmp/ynh-tutorial/docker-harness/skills/greet
 mkdir -p /tmp/ynh-tutorial/docker-harness/rules
 
-cat > /tmp/ynh-tutorial/docker-harness/harness.json << 'EOF'
+cat > /tmp/ynh-tutorial/docker-harness/.harness.json << 'EOF'
 {
   "name": "docker-demo",
   "version": "0.1.0",

@@ -299,7 +299,7 @@ ynh's `marketplace.json` is a build config — it describes *what* to include in
 ### Entry Types
 
 - **`plugin`** — a self-contained plugin directory (already has `.claude-plugin/plugin.json`). Copied as-is with missing vendor manifests generated.
-- **`harness`** — a ynh harness (has `harness.json` with includes). Fully exported: remote includes resolved, pick filtering applied, delegates generated, dual manifests written.
+- **`harness`** — a ynh harness (has `.harness.json` with includes). Fully exported: remote includes resolved, pick filtering applied, delegates generated, dual manifests written.
 
 ### Output Structure
 

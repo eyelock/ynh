@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-// HarnessJSON represents the harness.json manifest — single source of truth.
+// HarnessJSON represents the .harness.json manifest — single source of truth.
 type HarnessJSON struct {
 	Schema        string                 `json:"$schema,omitempty"`
 	Name          string                 `json:"name"`
@@ -161,9 +161,12 @@ type DelegateMeta struct {
 	Path string `json:"path,omitempty"`
 }
 
-// IsHarnessDir returns true if the directory contains a harness.json manifest.
+// HarnessFile is the manifest filename used in harness directories.
+const HarnessFile = ".harness.json"
+
+// IsHarnessDir returns true if the directory contains a .harness.json manifest.
 func IsHarnessDir(dir string) bool {
-	_, err := os.Stat(filepath.Join(dir, "harness.json"))
+	_, err := os.Stat(filepath.Join(dir, HarnessFile))
 	return err == nil
 }
 
@@ -176,20 +179,20 @@ func IsLegacyPluginDir(dir string) bool {
 // LoadHarnessJSON reads and parses harness.json from dir.
 // Unknown fields are rejected via DisallowUnknownFields.
 func LoadHarnessJSON(dir string) (*HarnessJSON, error) {
-	data, err := os.ReadFile(filepath.Join(dir, "harness.json"))
+	data, err := os.ReadFile(filepath.Join(dir, HarnessFile))
 	if err != nil {
-		return nil, fmt.Errorf("reading harness.json: %w", err)
+		return nil, fmt.Errorf("reading .harness.json: %w", err)
 	}
 
 	var hj HarnessJSON
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&hj); err != nil {
-		return nil, fmt.Errorf("invalid harness.json: %w", err)
+		return nil, fmt.Errorf("invalid .harness.json: %w", err)
 	}
 
 	if hj.Name == "" {
-		return nil, fmt.Errorf("harness.json missing required field: name")
+		return nil, fmt.Errorf(".harness.json missing required field: name")
 	}
 
 	return &hj, nil
@@ -199,12 +202,12 @@ func LoadHarnessJSON(dir string) (*HarnessJSON, error) {
 func SaveHarnessJSON(dir string, hj *HarnessJSON) error {
 	data, err := json.MarshalIndent(hj, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshaling harness.json: %w", err)
+		return fmt.Errorf("marshaling .harness.json: %w", err)
 	}
 	data = append(data, '\n')
 
-	if err := os.WriteFile(filepath.Join(dir, "harness.json"), data, 0o644); err != nil {
-		return fmt.Errorf("writing harness.json: %w", err)
+	if err := os.WriteFile(filepath.Join(dir, HarnessFile), data, 0o644); err != nil {
+		return fmt.Errorf("writing .harness.json: %w", err)
 	}
 
 	return nil

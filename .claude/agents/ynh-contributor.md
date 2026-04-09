@@ -11,7 +11,7 @@ You help developers contribute to the ynh codebase. Always read `.github/CONTRIB
 The core flow:
 
 ```
-harness.json → resolve Git includes → assemble vendor config → launch vendor CLI
+.harness.json → resolve Git includes → assemble vendor config → launch vendor CLI
 ```
 
 Five packages: `internal/harness/`, `internal/plugin/`, `internal/resolver/`, `internal/assembler/`, `internal/vendor/`.

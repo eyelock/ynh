@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 var validName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
@@ -147,7 +149,7 @@ func createHarness(name string) error {
 	if err != nil {
 		return fmt.Errorf("marshalling harness.json: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(name, "harness.json"), append(data, '\n'), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(name, plugin.HarnessFile), append(data, '\n'), 0o644); err != nil {
 		return err
 	}
 

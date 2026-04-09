@@ -15,7 +15,7 @@ mkdir -p /tmp/ynh-tutorial
 
 Create a small marketplace with one harness and one standalone plugin:
 
-### Standalone plugin (no harness.json)
+### Standalone plugin (no .harness.json)
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/marketplace-src/plugins/formatter/.claude-plugin
@@ -40,12 +40,12 @@ configured formatter (prettier, gofmt, black, etc.).
 EOF
 ```
 
-### Harness (has harness.json with includes)
+### Harness (has .harness.json with includes)
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer
 
-cat > /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/harness.json << 'EOF'
+cat > /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/.harness.json << 'EOF'
 {
   "name": "reviewer",
   "version": "1.0.0",
@@ -90,7 +90,7 @@ EOF
 
 Two entry types:
 - **`plugin`** — already a valid plugin directory. Copied as-is, missing vendor manifests generated.
-- **`harness`** — has `harness.json` with includes. Fully exported (includes resolved, pick applied, delegates generated).
+- **`harness`** — has `.harness.json` with includes. Fully exported (includes resolved, pick applied, delegates generated).
 
 ## T6.3: Build the marketplace
 
