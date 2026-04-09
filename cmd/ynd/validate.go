@@ -179,6 +179,8 @@ func validateHarness(dir string) error {
 			issues = append(issues, validateHarnessMCPServers(hj)...)
 			// Validate profiles
 			issues = append(issues, validateHarnessProfiles(hj)...)
+			// Validate focus entries
+			issues = append(issues, validateHarnessFocus(hj)...)
 		}
 	}
 
@@ -389,6 +391,47 @@ func validateHarnessProfiles(hj map[string]any) []string {
 		// Validate MCP servers within profile
 		for _, issue := range validateHarnessMCPServers(profileMap) {
 			issues = append(issues, fmt.Sprintf("profile %q: %s", name, issue))
+		}
+	}
+
+	return issues
+}
+
+// validateHarnessFocus validates focus entries inside harness.json.
+func validateHarnessFocus(hj map[string]any) []string {
+	var issues []string
+
+	focus, ok := hj["focus"]
+	if !ok {
+		return issues
+	}
+	focusMap, ok := focus.(map[string]any)
+	if !ok {
+		issues = append(issues, "'focus' must be an object")
+		return issues
+	}
+
+	// Collect profile names for cross-field validation
+	profileNames := map[string]bool{}
+	if profiles, ok := hj["profiles"].(map[string]any); ok {
+		for name := range profiles {
+			profileNames[name] = true
+		}
+	}
+
+	for name, entry := range focusMap {
+		entryMap, ok := entry.(map[string]any)
+		if !ok {
+			issues = append(issues, fmt.Sprintf("focus.%s must be an object", name))
+			continue
+		}
+		prompt, _ := entryMap["prompt"].(string)
+		if prompt == "" {
+			issues = append(issues, fmt.Sprintf("focus.%s: prompt must not be empty", name))
+		}
+		profile, _ := entryMap["profile"].(string)
+		if profile != "" && !profileNames[profile] {
+			issues = append(issues, fmt.Sprintf("focus.%s: references unknown profile %q", name, profile))
 		}
 	}
 

@@ -22,7 +22,14 @@ type HarnessJSON struct {
 	Hooks         map[string][]HookEntry `json:"hooks,omitempty"`
 	MCPServers    map[string]MCPServer   `json:"mcp_servers,omitempty"`
 	Profiles      map[string]Profile     `json:"profiles,omitempty"`
+	Focuses       map[string]Focus       `json:"focus,omitempty"`
 	InstalledFrom *ProvenanceMeta        `json:"installed_from,omitempty"`
+}
+
+// Focus is a named combination of profile + prompt for repeatable AI execution.
+type Focus struct {
+	Profile string `json:"profile,omitempty"`
+	Prompt  string `json:"prompt"`
 }
 
 // Profile is a named configuration variant. When selected, its fields
@@ -114,6 +121,17 @@ func ValidateProfiles(profiles map[string]Profile) []string {
 		}
 		for _, issue := range ValidateMCPServers(servers) {
 			issues = append(issues, fmt.Sprintf("profile %q: %s", name, issue))
+		}
+	}
+	return issues
+}
+
+// ValidateFocus checks that each focus entry has a non-empty prompt.
+func ValidateFocus(focuses map[string]Focus) []string {
+	var issues []string
+	for name, f := range focuses {
+		if f.Prompt == "" {
+			issues = append(issues, fmt.Sprintf("focus.%s: prompt must not be empty", name))
 		}
 	}
 	return issues

@@ -51,6 +51,7 @@ type Harness struct {
 	Hooks         map[string][]plugin.HookEntry
 	MCPServers    map[string]plugin.MCPServer
 	Profiles      map[string]plugin.Profile
+	Focuses       map[string]plugin.Focus
 	InstalledFrom *Provenance
 }
 
@@ -143,6 +144,9 @@ func LoadDir(dir string) (*Harness, error) {
 	}
 	if len(hj.Profiles) > 0 {
 		p.Profiles = hj.Profiles
+	}
+	if len(hj.Focuses) > 0 {
+		p.Focuses = hj.Focuses
 	}
 	if hj.InstalledFrom != nil {
 		prov := hj.InstalledFrom
