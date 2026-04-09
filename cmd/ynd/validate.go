@@ -154,7 +154,7 @@ func validateHarness(dir string) error {
 
 	// Check for legacy format
 	if isLegacyHarnessRoot(dir) && !isHarnessRoot(dir) {
-		issues = append(issues, "legacy format detected: consolidate .claude-plugin/plugin.json and metadata.json into harness.json")
+		issues = append(issues, "legacy format detected: consolidate .claude-plugin/plugin.json and metadata.json into .harness.json")
 	}
 
 	// Check harness.json exists and is valid

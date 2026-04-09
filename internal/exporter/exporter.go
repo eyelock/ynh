@@ -87,7 +87,7 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 
 	hj, err := plugin.LoadHarnessJSON(opts.SourceDir)
 	if err != nil {
-		return nil, fmt.Errorf("loading harness.json: %w", err)
+		return nil, fmt.Errorf("loading .harness.json: %w", err)
 	}
 
 	// Check remote sources for all delegates

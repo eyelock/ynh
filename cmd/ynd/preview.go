@@ -287,13 +287,13 @@ func loadHarnessForPreview(dir string) (*harness.Harness, string, error) {
 		h, err := harness.LoadDir(dir)
 		return h, "", err
 	case "legacy":
-		return nil, "", fmt.Errorf("legacy format detected in %q. Consolidate .claude-plugin/plugin.json and metadata.json into harness.json", dir)
+		return nil, "", fmt.Errorf("legacy format detected in %q. Consolidate .claude-plugin/plugin.json and metadata.json into .harness.json", dir)
 	}
 
 	// Check for bare AGENTS.md or instructions.md
 	hasInstructions := assembler.FindInstructionsFile(dir) != ""
 	if !hasInstructions {
-		return nil, "", fmt.Errorf("directory %q has no harness.json or AGENTS.md", dir)
+		return nil, "", fmt.Errorf("directory %q has no .harness.json or AGENTS.md", dir)
 	}
 
 	// Copy to temp dir to avoid mutating source
@@ -321,7 +321,7 @@ func loadHarnessForPreview(dir string) (*harness.Harness, string, error) {
 		Version: "0.0.0",
 	}
 	if err := plugin.SaveHarnessJSON(tmpDir, hj); err != nil {
-		return nil, "", fmt.Errorf("writing synthesized harness.json: %w", err)
+		return nil, "", fmt.Errorf("writing synthesized .harness.json: %w", err)
 	}
 
 	h, err := harness.LoadDir(tmpDir)
