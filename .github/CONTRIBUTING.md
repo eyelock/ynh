@@ -7,7 +7,7 @@ ynh is a packaging and distribution tool. It has no runtime component - the AI v
 ### Core Flow
 
 ```
-.claude-plugin/plugin.json + metadata.json → resolve Git includes → assemble vendor config → launch vendor CLI
+harness.json → resolve Git includes → assemble vendor config → launch vendor CLI
 ```
 
 1. **Detect** the harness format and load its manifest (`internal/harness/`, `internal/plugin/`)
@@ -23,7 +23,7 @@ cmd/ynd/                  CLI entry point: developer tools (create, lint, valida
 internal/
   config/                 Global config (~/.ynh/) and path management
   harness/                Harness loading, format detection, name validation
-  plugin/                 Plugin format types (plugin.json + metadata.json)
+  plugin/                 Harness manifest types (harness.json)
   resolver/               Git clone, cache, and content extraction
   assembler/              Build vendor config dir from resolved content
   exporter/               Produce vendor-native plugin dirs from harness definitions
@@ -54,14 +54,13 @@ docs/                     User guide (GitHub Pages)
 
 **Vendor-adaptive launch.** Each vendor gets the strategy that matches its capabilities. Claude supports `--plugin-dir`, so ynh does a clean `exec` with no running process. Codex and Cursor lack native plugin loading, so ynh installs symlinks and manages a child process with signal forwarding. This pragmatic split avoids forcing a lowest-common-denominator approach.
 
-**Plugin format.** Harnesses use the Claude Code plugin format (`.claude-plugin/plugin.json`) for the manifest, with a `metadata.json` sidecar for ynh-specific config under a `"ynh"` key. This makes harnesses first-class Claude Code plugins while keeping extensibility for other tools.
+**Single manifest.** Harnesses use a single `harness.json` file as their manifest — all config (identity, includes, hooks, MCP servers, profiles) lives in one place. The legacy two-file format (`.claude-plugin/plugin.json` + `metadata.json`) is no longer supported.
 
 ## Technologies
 
 - **Go 1.25+** - single binary, no runtime dependencies
 - **Git** - content resolution, caching, versioning
-- **JSON** - harness manifests (`plugin.json` + `metadata.json`)
-- **JSON** - all configuration (plugin manifests, metadata, global config)
+- **JSON** - all configuration (harness manifests, global config)
 
 ## Development Setup
 
@@ -257,84 +256,77 @@ Test fixtures in `testdata/` simulate real-world sources:
 - `composed-harness/` - personal harness with embedded artifacts
 - `team-harness/` - team harness for delegation testing
 - `sample-harness/` - minimal self-contained harness
-- `plugin-harness/` - harness in plugin format (`.claude-plugin/plugin.json` + `metadata.json`)
+- `plugin-harness/` - harness with author and keyword metadata fields
 
 ## Configuration
 
-### Plugin Manifest (`.claude-plugin/plugin.json`)
+### Harness Manifest (`harness.json`)
 
 ```json
 {
   "name": "my-harness",
   "version": "0.1.0",
-  "description": "My coding harness"
-}
-```
-
-The `name` field is required and becomes the launcher command name. Only fields from the Claude Code plugin schema belong here.
-
-### Metadata Sidecar (`metadata.json`)
-
-```json
-{
-  "ynh": {
-    "default_vendor": "claude",
-    "includes": [
-      {
-        "git": "github.com/user/repo",
-        "ref": "v1.0.0",
-        "path": "subdirectory",
-        "pick": ["skills/commit", "agents/reviewer"]
-      }
-    ],
-    "delegates_to": [
-      {"git": "github.com/user/other-harness"}
-    ],
-    "hooks": {
-      "before_tool": [{"matcher": "Bash", "command": "/path/to/lint.sh"}],
-      "on_stop": [{"command": "/path/to/log.sh"}]
-    },
-    "mcp_servers": {
-      "github": {
-        "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-github"],
-        "env": {"GITHUB_TOKEN": "${GITHUB_TOKEN}"}
-      }
+  "description": "My coding harness",
+  "default_vendor": "claude",
+  "includes": [
+    {
+      "git": "github.com/user/repo",
+      "ref": "v1.0.0",
+      "path": "subdirectory",
+      "pick": ["skills/commit", "agents/reviewer"]
+    }
+  ],
+  "delegates_to": [
+    {"git": "github.com/user/other-harness"}
+  ],
+  "hooks": {
+    "before_tool": [{"matcher": "Bash", "command": "/path/to/lint.sh"}],
+    "on_stop": [{"command": "/path/to/log.sh"}]
+  },
+  "mcp_servers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {"GITHUB_TOKEN": "${GITHUB_TOKEN}"}
+    }
+  },
+  "profiles": {
+    "ci": {
+      "hooks": { "before_tool": [{"matcher": "Bash", "command": "/path/to/ci-lint.sh"}] },
+      "mcp_servers": { "github": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"] } }
     }
   }
 }
 ```
 
-ynh-specific config lives under the `"ynh"` key, keeping the file extensible for other tools. See [Hooks](docs/hooks.md) and [MCP Servers](docs/mcp.md) for details on those declarations.
+`name` and `version` are required. All other fields are optional. See the JSON schema at `docs/schema/harness.schema.json` for the full specification. See [Hooks](docs/hooks.md) and [MCP Servers](docs/mcp.md) for details on those declarations.
 
 ### Install Lifecycle
 
-There are two copies of `metadata.json` in a harness's life:
+There are two copies of `harness.json` in a harness's life:
 
-1. **Source copy** — git-tracked in the harness's repo. Author-managed. Contains `includes`, `delegates_to`, `default_vendor`.
-2. **Installed copy** — at `~/.ynh/harnesses/<name>/metadata.json`. Created by `ynh install` via `assembler.CopyDir`. Local-only, not git-tracked.
+1. **Source copy** — git-tracked in the harness's repo. Author-managed. Contains `name`, `version`, `includes`, `delegates_to`, `default_vendor`, etc.
+2. **Installed copy** — at `~/.ynh/harnesses/<name>/harness.json`. Created by `ynh install`. Local-only, not git-tracked.
 
 During install:
-- `ynh install` copies the entire harness directory (including `metadata.json`) to `~/.ynh/harnesses/<name>/`.
-- After the copy, ynh injects `installed_from` provenance into the installed `metadata.json`. This records where the harness was installed from (source type, URL/path, timestamp).
+- `ynh install` copies the entire harness directory (including `harness.json`) to `~/.ynh/harnesses/<name>/`.
+- After the copy, ynh injects `installed_from` provenance into the installed `harness.json`. This records where the harness was installed from (source type, URL/path, timestamp).
 - ynh then pre-fetches all `includes` and `delegates_to` Git repos into `~/.ynh/cache/`. This ensures `ynh run` works offline and validates all Git refs at install time. If any fetch fails, the install fails with a clear error.
-- The source `metadata.json` is never modified.
+- The source `harness.json` is never modified.
 
 At runtime:
-- `ynh run` reads the installed copy at `~/.ynh/harnesses/<name>/metadata.json` to resolve includes, delegates, and vendor settings.
+- `ynh run` reads the installed copy at `~/.ynh/harnesses/<name>/harness.json` to resolve includes, delegates, and vendor settings.
 - Cached repos are used as-is without hitting the network. If a cache entry is missing (e.g. manually cleared), ynh falls back to a network fetch with a warning.
 
 The `installed_from` field looks like:
 
 ```json
 {
-  "ynh": {
-    "installed_from": {
-      "source_type": "git",
-      "source": "github.com/eyelock/assistants",
-      "path": "ynh/david",
-      "installed_at": "2026-03-22T10:30:00Z"
-    }
+  "installed_from": {
+    "source_type": "git",
+    "source": "github.com/eyelock/assistants",
+    "path": "ynh/david",
+    "installed_at": "2026-03-22T10:30:00Z"
   }
 }
 ```
@@ -368,9 +360,7 @@ Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry instal
 ├── symlinks.json             # Symlink transaction log (install/clean tracking)
 ├── harnesses/                  # Installed harnesses
 │   └── david/
-│       ├── .claude-plugin/
-│       │   └── plugin.json
-│       ├── metadata.json
+│       ├── harness.json
 │       ├── skills/
 │       ├── agents/
 │       ├── rules/
