@@ -26,10 +26,12 @@ type HarnessJSON struct {
 }
 
 // Profile is a named configuration variant. When selected, its fields
-// fully replace the corresponding top-level values (no merge).
+// are merged with top-level values: mcp_servers uses deep merge (profile
+// keys win), hooks uses per-event replace. A nil *MCPServer removes an
+// inherited server (JSON null).
 type Profile struct {
 	Hooks      map[string][]HookEntry `json:"hooks,omitempty"`
-	MCPServers map[string]MCPServer   `json:"mcp_servers,omitempty"`
+	MCPServers map[string]*MCPServer  `json:"mcp_servers,omitempty"`
 }
 
 // AuthorInfo holds harness author information.
@@ -95,13 +97,22 @@ func ValidateHooks(hooks map[string][]HookEntry) []string {
 }
 
 // ValidateProfiles validates hooks and mcp_servers within each profile.
+// Nil MCPServer entries (JSON null) are skipped — they signal removal of
+// an inherited server during profile merge.
 func ValidateProfiles(profiles map[string]Profile) []string {
 	var issues []string
 	for name, profile := range profiles {
 		for _, issue := range ValidateHooks(profile.Hooks) {
 			issues = append(issues, fmt.Sprintf("profile %q: %s", name, issue))
 		}
-		for _, issue := range ValidateMCPServers(profile.MCPServers) {
+		// Filter out nil entries (null removals) before validating
+		servers := make(map[string]MCPServer)
+		for k, v := range profile.MCPServers {
+			if v != nil {
+				servers[k] = *v
+			}
+		}
+		for _, issue := range ValidateMCPServers(servers) {
 			issues = append(issues, fmt.Sprintf("profile %q: %s", name, issue))
 		}
 	}

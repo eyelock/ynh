@@ -80,8 +80,9 @@ EOF
 Key points:
 - `profiles` is a top-level field in `harness.json`
 - Each profile can contain `hooks` and `mcp_servers`
-- When a profile is selected, its `hooks` and `mcp_servers` **fully replace** the top-level values (no merge, no inheritance)
-- If a profile only defines `hooks`, the top-level `mcp_servers` are dropped (replaced with nothing)
+- Profiles declare only what they change — absent fields inherit from top-level defaults
+- MCP servers are deep-merged (profile keys win on collision); hooks use per-event replace
+- Set an MCP server to `null` in a profile to remove an inherited server
 
 ## T13.2: Validate profiles
 
@@ -103,8 +104,8 @@ ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile ci
 ```
 
 Expected output includes:
-- `.claude/hooks/hooks.json` with **only** the `ci` profile's `before_tool` hook (the base `after_tool` hook is replaced — profiles use replace semantics, not merge)
-- `.claude/.mcp.json` with the `ci-db` MCP server from the `ci` profile
+- `.claude/hooks/hooks.json` with the `ci` profile's `before_tool` hook **and** the inherited base `after_tool` hook (profiles use per-event merge — the `ci` profile's `before_tool` replaces the default, but `after_tool` is inherited)
+- `.claude/.mcp.json` with the `ci-db` MCP server from the `ci` profile (no base MCP servers to inherit)
 
 Compare with the base (no profile):
 
@@ -141,7 +142,7 @@ Expected reload output includes: `3 hooks · 1 plugin MCP server` (or similar co
 what hooks and MCP servers are configured?
 ```
 
-The `ci` profile's hooks and MCP servers fully replace the base values — only the profile's `before_tool` hook and `ci-db` MCP server are active.
+The `ci` profile's `before_tool` hook replaces the base, and the `ci-db` MCP server is added. The base `after_tool` hook is inherited since the profile doesn't declare it.
 
 > **Note:** Claude Code's `--plugin-dir` auto-activates skills and commands but not hooks or MCP servers. The `/plugin enable` + `/reload-plugins` step is needed to activate them. This is a Claude Code limitation — Codex and Cursor activate all plugin components automatically.
 
@@ -164,7 +165,7 @@ The `YNH_PROFILE` environment variable activates a profile without the flag:
 YNH_PROFILE=ci ynd preview /tmp/ynh-tutorial/profile-harness -v claude
 ```
 
-Expected: same output as `--profile ci` — the `ci` profile's hooks and MCP servers replace the base values.
+Expected: same output as `--profile ci` — the `ci` profile's settings are merged with the base values.
 
 This is useful in CI/CD pipelines:
 
@@ -215,7 +216,8 @@ rm -rf /tmp/ynh-tutorial
 
 - Profiles are declared in `harness.json` under `profiles` as named config objects
 - Each profile can override `hooks` and `mcp_servers`
-- Profile settings **fully replace** the base values (not additive — what you see in the profile is what you get)
+- Profiles use merge semantics: MCP servers are deep-merged (profile keys win), hooks use per-event replace (absent events inherited)
+- Set an MCP server to `null` in a profile to remove an inherited server
 - `--profile <name>` activates a profile on `ynh run`, `ynd preview`, and `ynd diff`
 - `YNH_PROFILE` env var activates a profile (flag takes precedence)
 - Invalid profile names produce helpful errors listing available profiles
