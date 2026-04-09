@@ -754,6 +754,64 @@ func TestValidateHarness_ProfilesMCPServerInvalid(t *testing.T) {
 	}
 }
 
+func TestValidateHarness_FocusValid(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "focus-valid")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"focus-valid","version":"0.1.0","profiles":{"ci":{}},"focus":{"review":{"profile":"ci","prompt":"Review code"}}}`))
+
+	if err := validateHarness(hr); err != nil {
+		t.Errorf("valid focus should pass: %v", err)
+	}
+}
+
+func TestValidateHarness_FocusMissingPrompt(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "focus-no-prompt")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"focus-no-prompt","version":"0.1.0","focus":{"review":{"profile":"ci"}}}`))
+
+	err := validateHarness(hr)
+	if err == nil {
+		t.Fatal("expected validation error for focus with missing prompt")
+	}
+}
+
+func TestValidateHarness_FocusUnknownProfile(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "focus-bad-profile")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"focus-bad-profile","version":"0.1.0","focus":{"review":{"profile":"nonexistent","prompt":"Review code"}}}`))
+
+	err := validateHarness(hr)
+	if err == nil {
+		t.Fatal("expected validation error for focus referencing unknown profile")
+	}
+}
+
+func TestValidateHarness_FocusNoProfile(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "focus-no-profile")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, "harness.json"),
+		[]byte(`{"name":"focus-no-profile","version":"0.1.0","focus":{"docs":{"prompt":"Generate docs"}}}`))
+
+	if err := validateHarness(hr); err != nil {
+		t.Errorf("focus without profile ref should pass: %v", err)
+	}
+}
+
 func TestValidateHarness_AgentsMDOnly(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)

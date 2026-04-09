@@ -430,6 +430,63 @@ func TestValidateProfiles_NullEntrySkipped(t *testing.T) {
 	}
 }
 
+func TestValidateFocus_Valid(t *testing.T) {
+	focuses := map[string]Focus{
+		"review":   {Profile: "ci", Prompt: "Review staged changes"},
+		"security": {Prompt: "Audit for OWASP Top 10"},
+	}
+	issues := ValidateFocus(focuses)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues, got %v", issues)
+	}
+}
+
+func TestValidateFocus_MissingPrompt(t *testing.T) {
+	focuses := map[string]Focus{
+		"review": {Profile: "ci", Prompt: ""},
+	}
+	issues := ValidateFocus(focuses)
+	if len(issues) == 0 {
+		t.Fatal("expected issues for focus with empty prompt")
+	}
+	found := false
+	for _, issue := range issues {
+		if strings.Contains(issue, "focus.review") && strings.Contains(issue, "prompt") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected focus.review prompt error, got %v", issues)
+	}
+}
+
+func TestLoadHarnessJSON_WithFocus(t *testing.T) {
+	dir := t.TempDir()
+	writeHarnessJSON(t, dir, `{
+		"name": "test",
+		"version": "0.1.0",
+		"focus": {
+			"review": {"profile": "ci", "prompt": "Review staged changes"},
+			"docs": {"prompt": "Generate API docs"}
+		}
+	}`)
+	hj, err := LoadHarnessJSON(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hj.Focuses) != 2 {
+		t.Fatalf("Focuses = %d, want 2", len(hj.Focuses))
+	}
+	review := hj.Focuses["review"]
+	if review.Profile != "ci" || review.Prompt != "Review staged changes" {
+		t.Errorf("review = %+v", review)
+	}
+	docs := hj.Focuses["docs"]
+	if docs.Profile != "" || docs.Prompt != "Generate API docs" {
+		t.Errorf("docs = %+v", docs)
+	}
+}
+
 func TestLoadHarnessJSON_TestdataRoundTrip(t *testing.T) {
 	// Verify all testdata harness.json files parse without error
 	entries, err := filepath.Glob("../../testdata/*/harness.json")

@@ -46,6 +46,19 @@
         }
       }
     },
+    "focus": {
+      "description": "Named combinations of profile + prompt for repeatable AI execution.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["prompt"],
+        "additionalProperties": false,
+        "properties": {
+          "profile": { "type": "string" },
+          "prompt": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
     "installed_from": { "$ref": "#/$defs/provenance" }
   },
   "$defs": {

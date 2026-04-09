@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/harness-inline.schema.json",
+  "title": "YNH Inline Harness",
+  "description": "Project-local harness config (.harness.json) — same as harness.schema.json but name and version are optional.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": { "type": "string" },
+    "version": { "type": "string" },
+    "description": { "type": "string" },
+    "author": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "url": { "type": "string" }
+      }
+    },
+    "keywords": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "default_vendor": {
+      "type": "string",
+      "enum": ["claude", "cursor", "codex"]
+    },
+    "includes": { "$ref": "harness.schema.json#/$defs/includes" },
+    "delegates_to": { "$ref": "harness.schema.json#/$defs/delegates" },
+    "hooks": { "$ref": "harness.schema.json#/$defs/hooks" },
+    "mcp_servers": { "$ref": "harness.schema.json#/$defs/mcp_servers" },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "hooks": { "$ref": "harness.schema.json#/$defs/hooks" },
+          "mcp_servers": { "$ref": "harness.schema.json#/$defs/profile_mcp_servers" }
+        }
+      }
+    },
+    "focus": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["prompt"],
+        "additionalProperties": false,
+        "properties": {
+          "profile": { "type": "string" },
+          "prompt": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "installed_from": { "$ref": "harness.schema.json#/$defs/provenance" }
+  }
+}
