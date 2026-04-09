@@ -21,7 +21,7 @@ Create a harness that cherry-picks specific skills from it:
 ```bash
 mkdir -p /tmp/ynh-tutorial/my-dev
 
-cat > /tmp/ynh-tutorial/my-dev/harness.json << 'EOF'
+cat > /tmp/ynh-tutorial/my-dev/.harness.json << 'EOF'
 {
   "name": "my-dev",
   "version": "0.1.0",
@@ -82,7 +82,7 @@ ls ~/.ynh/run/my-dev/.claude/skills/
 If you have the assistants repo checked out locally, you can use a local path instead of a Git URL. This is faster (no clone) and useful during development:
 
 ```bash
-cat > /tmp/ynh-tutorial/my-dev/harness.json << 'EOF'
+cat > /tmp/ynh-tutorial/my-dev/.harness.json << 'EOF'
 {
   "name": "my-dev",
   "version": "0.1.0",
@@ -110,7 +110,7 @@ Any GitHub repo that follows the [Agent Skills](https://agentskills.io) standard
 ```bash
 mkdir -p /tmp/ynh-tutorial/with-anthropic
 
-cat > /tmp/ynh-tutorial/with-anthropic/harness.json << 'EOF'
+cat > /tmp/ynh-tutorial/with-anthropic/.harness.json << 'EOF'
 {
   "name": "with-anthropic",
   "version": "0.1.0",
@@ -141,7 +141,7 @@ with-anthropic "what skills do you have?"
 ```bash
 mkdir -p /tmp/ynh-tutorial/with-vercel
 
-cat > /tmp/ynh-tutorial/with-vercel/harness.json << 'EOF'
+cat > /tmp/ynh-tutorial/with-vercel/.harness.json << 'EOF'
 {
   "name": "with-vercel",
   "version": "0.1.0",
@@ -172,7 +172,7 @@ Combine skills from your own repos and third-party repos into one harness:
 ```bash
 mkdir -p /tmp/ynh-tutorial/full-stack
 
-cat > /tmp/ynh-tutorial/full-stack/harness.json << 'EOF'
+cat > /tmp/ynh-tutorial/full-stack/.harness.json << 'EOF'
 {
   "name": "full-stack",
   "version": "0.1.0",
@@ -228,7 +228,7 @@ This skill lives directly in the harness directory.
 It is not pulled from Git. It exists nowhere else.
 EOF
 
-cat > /tmp/ynh-tutorial/mixed/harness.json << 'EOF'
+cat > /tmp/ynh-tutorial/mixed/.harness.json << 'EOF'
 {
   "name": "mixed",
   "version": "0.1.0",
@@ -286,7 +286,7 @@ git -C /tmp/ynh-tutorial/local-lib commit -m "init"
 
 # Reference it in a harness
 mkdir -p /tmp/ynh-tutorial/local-ref
-cat > /tmp/ynh-tutorial/local-ref/harness.json << 'EOF'
+cat > /tmp/ynh-tutorial/local-ref/.harness.json << 'EOF'
 {
   "name": "local-ref",
   "version": "0.1.0",
@@ -318,7 +318,7 @@ ls ~/.ynh/run/local-ref/.claude/skills/
 ```bash
 mkdir -p /tmp/ynh-tutorial/pinned
 
-cat > /tmp/ynh-tutorial/pinned/harness.json << 'EOF'
+cat > /tmp/ynh-tutorial/pinned/.harness.json << 'EOF'
 {
   "name": "pinned",
   "version": "0.1.0",

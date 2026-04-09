@@ -146,7 +146,7 @@ func TestExportWithInstructions(t *testing.T) {
 func TestExportNoInstructions(t *testing.T) {
 	// Create a minimal harness without instructions.md
 	srcDir := t.TempDir()
-	writeJSON(t, filepath.Join(srcDir, "harness.json"), map[string]any{
+	writeJSON(t, filepath.Join(srcDir, ".harness.json"), map[string]any{
 		"name":           "no-instructions",
 		"version":        "0.1.0",
 		"default_vendor": "claude",
@@ -216,7 +216,7 @@ func TestExportInstructionDiscovery(t *testing.T) {
 func TestExportWithHooks(t *testing.T) {
 	// Create a harness with hooks
 	srcDir := t.TempDir()
-	writeJSON(t, filepath.Join(srcDir, "harness.json"), map[string]any{
+	writeJSON(t, filepath.Join(srcDir, ".harness.json"), map[string]any{
 		"name":           "hooks-test",
 		"version":        "0.1.0",
 		"default_vendor": "claude",
@@ -279,7 +279,7 @@ func TestExportWithHooks(t *testing.T) {
 func TestExportWithMCPServers(t *testing.T) {
 	// Create a harness with MCP servers
 	srcDir := t.TempDir()
-	writeJSON(t, filepath.Join(srcDir, "harness.json"), map[string]any{
+	writeJSON(t, filepath.Join(srcDir, ".harness.json"), map[string]any{
 		"name":           "mcp-test",
 		"version":        "0.1.0",
 		"default_vendor": "claude",

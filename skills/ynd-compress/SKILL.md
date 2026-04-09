@@ -24,7 +24,7 @@ Files that should NOT be compressed:
 
 - Reference documents (they're read on-demand, not loaded every session)
 - Files that are already concise
-- Config files (harness.json)
+- Config files (.harness.json)
 
 ## Step 2: Review before compressing
 

@@ -12,7 +12,7 @@ You are guiding a user through creating a team harness that delegates to persona
 Read these references to understand delegation and Git URL formats:
 
 1. Read `references/delegation.md` for `delegates_to` syntax, Git URL formats, auth, and vendor support
-2. Read `testdata/team-harness/harness.json` for the team harness structure
+2. Read `testdata/team-harness/.harness.json` for the team harness structure
 
 ## Step 1: Understand their current setup
 
@@ -55,7 +55,7 @@ They might also want to pull from external repos via `includes`.
 
 Create the team harness directory.
 
-`harness.json`:
+`.harness.json`:
 
 ```json
 {
@@ -99,7 +99,7 @@ ynh install <personal-persona-git-url>
 david                       # personal session
 ```
 
-Explain the vendor standardization: setting `default_vendor` in `harness.json` ensures everyone uses the same AI vendor, but individuals can override with `-v`.
+Explain the vendor standardization: setting `default_vendor` in `.harness.json` ensures everyone uses the same AI vendor, but individuals can override with `-v`.
 
 ## Step 7: Auth considerations
 

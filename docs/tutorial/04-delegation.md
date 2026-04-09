@@ -19,7 +19,7 @@ Delegates must be Git repos (local or remote). Create a specialist harness and t
 ```bash
 mkdir -p /tmp/ynh-tutorial/specialist/skills/analyze
 
-cat > /tmp/ynh-tutorial/specialist/harness.json << 'EOF'
+cat > /tmp/ynh-tutorial/specialist/.harness.json << 'EOF'
 {
   "name": "specialist",
   "version": "0.1.0",
@@ -56,7 +56,7 @@ git -C /tmp/ynh-tutorial/specialist commit -m "init"
 ```bash
 mkdir -p /tmp/ynh-tutorial/team-lead
 
-cat > /tmp/ynh-tutorial/team-lead/harness.json << 'EOF'
+cat > /tmp/ynh-tutorial/team-lead/.harness.json << 'EOF'
 {
   "name": "team-lead",
   "version": "0.1.0",
@@ -143,7 +143,7 @@ ynh uninstall team-lead
 
 ## What you learned
 
-- `delegates_to` in harness.json references other harnesses as subagents
+- `delegates_to` in .harness.json references other harnesses as subagents
 - Delegates must be Git repos (local or remote)
 - ynh generates vendor-native agent files from delegate harnesses at runtime
 - Agent files inline the delegate's instructions, rules, and skill list

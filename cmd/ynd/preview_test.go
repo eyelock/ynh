@@ -12,7 +12,7 @@ func createPreviewHarness(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 
-	// Create harness.json with hooks and MCP servers
+	// Create .harness.json with hooks and MCP servers
 	hj := map[string]any{
 		"name":           "preview-test",
 		"version":        "1.0.0",
@@ -31,7 +31,7 @@ func createPreviewHarness(t *testing.T) string {
 		},
 	}
 	data, _ := json.MarshalIndent(hj, "", "  ")
-	if err := os.WriteFile(filepath.Join(dir, "harness.json"), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -278,7 +278,7 @@ func TestCmdPreviewSkillsOnly(t *testing.T) {
 	dir := t.TempDir()
 	hj := map[string]any{"name": "skills-only", "version": "1.0.0"}
 	data, _ := json.MarshalIndent(hj, "", "  ")
-	if err := os.WriteFile(filepath.Join(dir, "harness.json"), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 

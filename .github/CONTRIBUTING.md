@@ -7,7 +7,7 @@ ynh is a packaging and distribution tool. It has no runtime component - the AI v
 ### Core Flow
 
 ```
-harness.json → resolve Git includes → assemble vendor config → launch vendor CLI
+.harness.json → resolve Git includes → assemble vendor config → launch vendor CLI
 ```
 
 1. **Detect** the harness format and load its manifest (`internal/harness/`, `internal/plugin/`)
@@ -23,7 +23,7 @@ cmd/ynd/                  CLI entry point: developer tools (create, lint, valida
 internal/
   config/                 Global config (~/.ynh/) and path management
   harness/                Harness loading, format detection, name validation
-  plugin/                 Harness manifest types (harness.json)
+  plugin/                 Harness manifest types (.harness.json)
   resolver/               Git clone, cache, and content extraction
   assembler/              Build vendor config dir from resolved content
   exporter/               Produce vendor-native plugin dirs from harness definitions
@@ -54,7 +54,7 @@ docs/                     User guide (GitHub Pages)
 
 **Vendor-adaptive launch.** Each vendor gets the strategy that matches its capabilities. Claude supports `--plugin-dir`, so ynh does a clean `exec` with no running process. Codex and Cursor lack native plugin loading, so ynh installs symlinks and manages a child process with signal forwarding. This pragmatic split avoids forcing a lowest-common-denominator approach.
 
-**Single manifest.** Harnesses use a single `harness.json` file as their manifest — all config (identity, includes, hooks, MCP servers, profiles) lives in one place. The legacy two-file format (`.claude-plugin/plugin.json` + `metadata.json`) is no longer supported.
+**Single manifest.** Harnesses use a single `.harness.json` file as their manifest — all config (identity, includes, hooks, MCP servers, profiles) lives in one place. The legacy two-file format (`.claude-plugin/plugin.json` + `metadata.json`) is no longer supported.
 
 ## Technologies
 
@@ -260,7 +260,7 @@ Test fixtures in `testdata/` simulate real-world sources:
 
 ## Configuration
 
-### Harness Manifest (`harness.json`)
+### Harness Manifest (`.harness.json`)
 
 ```json
 {
@@ -303,19 +303,19 @@ Test fixtures in `testdata/` simulate real-world sources:
 
 ### Install Lifecycle
 
-There are two copies of `harness.json` in a harness's life:
+There are two copies of `.harness.json` in a harness's life:
 
 1. **Source copy** — git-tracked in the harness's repo. Author-managed. Contains `name`, `version`, `includes`, `delegates_to`, `default_vendor`, etc.
-2. **Installed copy** — at `~/.ynh/harnesses/<name>/harness.json`. Created by `ynh install`. Local-only, not git-tracked.
+2. **Installed copy** — at `~/.ynh/harnesses/<name>/.harness.json`. Created by `ynh install`. Local-only, not git-tracked.
 
 During install:
-- `ynh install` copies the entire harness directory (including `harness.json`) to `~/.ynh/harnesses/<name>/`.
-- After the copy, ynh injects `installed_from` provenance into the installed `harness.json`. This records where the harness was installed from (source type, URL/path, timestamp).
+- `ynh install` copies the entire harness directory (including `.harness.json`) to `~/.ynh/harnesses/<name>/`.
+- After the copy, ynh injects `installed_from` provenance into the installed `.harness.json`. This records where the harness was installed from (source type, URL/path, timestamp).
 - ynh then pre-fetches all `includes` and `delegates_to` Git repos into `~/.ynh/cache/`. This ensures `ynh run` works offline and validates all Git refs at install time. If any fetch fails, the install fails with a clear error.
-- The source `harness.json` is never modified.
+- The source `.harness.json` is never modified.
 
 At runtime:
-- `ynh run` reads the installed copy at `~/.ynh/harnesses/<name>/harness.json` to resolve includes, delegates, and vendor settings.
+- `ynh run` reads the installed copy at `~/.ynh/harnesses/<name>/.harness.json` to resolve includes, delegates, and vendor settings.
 - Cached repos are used as-is without hitting the network. If a cache entry is missing (e.g. manually cleared), ynh falls back to a network fetch with a warning.
 
 The `installed_from` field looks like:
@@ -360,7 +360,7 @@ Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry instal
 ├── symlinks.json             # Symlink transaction log (install/clean tracking)
 ├── harnesses/                  # Installed harnesses
 │   └── david/
-│       ├── harness.json
+│       ├── .harness.json
 │       ├── skills/
 │       ├── agents/
 │       ├── rules/

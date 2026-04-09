@@ -213,7 +213,7 @@ func TestLintAgentFrontmatter_NoFrontmatter(t *testing.T) {
 
 func TestLintHarnessJSON_Valid(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "harness.json")
+	path := filepath.Join(dir, ".harness.json")
 	writeFile(t, path, []byte(`{"name":"test","version":"0.1.0"}`))
 
 	issues := lintHarnessJSONFile(path)
@@ -224,7 +224,7 @@ func TestLintHarnessJSON_Valid(t *testing.T) {
 
 func TestLintHarnessJSON_MissingFields(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "harness.json")
+	path := filepath.Join(dir, ".harness.json")
 	writeFile(t, path, []byte(`{}`))
 
 	issues := lintHarnessJSONFile(path)
@@ -235,7 +235,7 @@ func TestLintHarnessJSON_MissingFields(t *testing.T) {
 
 func TestLintHarnessJSON_InvalidJSON(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "harness.json")
+	path := filepath.Join(dir, ".harness.json")
 	writeFile(t, path, []byte(`{not json}`))
 
 	issues := lintHarnessJSONFile(path)
@@ -249,7 +249,7 @@ func TestLintHarnessJSON_InvalidJSON(t *testing.T) {
 
 func TestLintHarnessJSON_InvalidName(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "harness.json")
+	path := filepath.Join(dir, ".harness.json")
 	writeFile(t, path, []byte(`{"name":"../bad","version":"1.0"}`))
 
 	issues := lintHarnessJSONFile(path)
@@ -266,7 +266,7 @@ func TestLintHarnessJSON_InvalidName(t *testing.T) {
 
 func TestLintHarnessJSON_MissingGitInIncludes(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "harness.json")
+	path := filepath.Join(dir, ".harness.json")
 	writeFile(t, path, []byte(`{"name":"test","version":"0.1.0","includes":[{"ref":"main"}]}`))
 
 	issues := lintHarnessJSONFile(path)
@@ -446,7 +446,7 @@ func TestCmdLint_WithShellAndJSON(t *testing.T) {
 	t.Chdir(dir)
 
 	writeFile(t, filepath.Join(dir, "test.sh"), []byte("#!/bin/bash\necho hello\n"))
-	writeFile(t, filepath.Join(dir, "harness.json"), []byte(`{"name":"test","version":"0.1.0"}`))
+	writeFile(t, filepath.Join(dir, ".harness.json"), []byte(`{"name":"test","version":"0.1.0"}`))
 
 	err := cmdLint(nil)
 	if err != nil {
@@ -470,11 +470,11 @@ func TestCmdLint_IssueWithoutLineNumber(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	writeFile(t, filepath.Join(dir, "harness.json"), []byte(`{}`))
+	writeFile(t, filepath.Join(dir, ".harness.json"), []byte(`{}`))
 
 	err := cmdLint(nil)
 	if err == nil {
-		t.Fatal("expected lint error for harness.json missing fields")
+		t.Fatal("expected lint error for .harness.json missing fields")
 	}
 }
 
@@ -571,7 +571,7 @@ func TestLintAgentFrontmatter_EmptyName(t *testing.T) {
 
 func TestLintHarnessJSON_IncludesNotArray(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "harness.json")
+	path := filepath.Join(dir, ".harness.json")
 	writeFile(t, path, []byte(`{"name":"test","version":"0.1.0","includes":"not-array"}`))
 
 	issues := lintHarnessJSONFile(path)
@@ -588,7 +588,7 @@ func TestLintHarnessJSON_IncludesNotArray(t *testing.T) {
 
 func TestLintHarnessJSON_IncludesItemNotObject(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "harness.json")
+	path := filepath.Join(dir, ".harness.json")
 	writeFile(t, path, []byte(`{"name":"test","version":"0.1.0","includes":["not-object"]}`))
 
 	issues := lintHarnessJSONFile(path)
@@ -605,7 +605,7 @@ func TestLintHarnessJSON_IncludesItemNotObject(t *testing.T) {
 
 func TestLintHarnessJSON_DelegatesToMissingGit(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "harness.json")
+	path := filepath.Join(dir, ".harness.json")
 	writeFile(t, path, []byte(`{"name":"test","version":"0.1.0","delegates_to":[{"ref":"main"}]}`))
 
 	issues := lintHarnessJSONFile(path)
@@ -622,7 +622,7 @@ func TestLintHarnessJSON_DelegatesToMissingGit(t *testing.T) {
 
 func TestLintHarnessJSON_DelegatesToNotArray(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "harness.json")
+	path := filepath.Join(dir, ".harness.json")
 	writeFile(t, path, []byte(`{"name":"test","version":"0.1.0","delegates_to":"not-array"}`))
 
 	issues := lintHarnessJSONFile(path)
@@ -639,7 +639,7 @@ func TestLintHarnessJSON_DelegatesToNotArray(t *testing.T) {
 
 func TestLintHarnessJSON_DelegatesToItemNotObject(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "harness.json")
+	path := filepath.Join(dir, ".harness.json")
 	writeFile(t, path, []byte(`{"name":"test","version":"0.1.0","delegates_to":["not-object"]}`))
 
 	issues := lintHarnessJSONFile(path)
@@ -656,7 +656,7 @@ func TestLintHarnessJSON_DelegatesToItemNotObject(t *testing.T) {
 
 func TestLintHarnessJSON_ValidWithIncludes(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "harness.json")
+	path := filepath.Join(dir, ".harness.json")
 	writeFile(t, path, []byte(`{"name":"test","version":"0.1.0","includes":[{"git":"https://example.com/repo"}]}`))
 
 	issues := lintHarnessJSONFile(path)
@@ -667,7 +667,7 @@ func TestLintHarnessJSON_ValidWithIncludes(t *testing.T) {
 
 func TestLintHarnessJSON_ValidWithDelegatesTo(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "harness.json")
+	path := filepath.Join(dir, ".harness.json")
 	writeFile(t, path, []byte(`{"name":"test","version":"0.1.0","delegates_to":[{"git":"https://example.com/repo"}]}`))
 
 	issues := lintHarnessJSONFile(path)
@@ -678,7 +678,7 @@ func TestLintHarnessJSON_ValidWithDelegatesTo(t *testing.T) {
 
 func TestLintHarnessJSON_EmptyName(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "harness.json")
+	path := filepath.Join(dir, ".harness.json")
 	writeFile(t, path, []byte(`{"name":"","version":"0.1.0"}`))
 
 	issues := lintHarnessJSONFile(path)
@@ -695,7 +695,7 @@ func TestLintHarnessJSON_EmptyName(t *testing.T) {
 
 func TestLintHarnessJSON_EmptyVersion(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "harness.json")
+	path := filepath.Join(dir, ".harness.json")
 	writeFile(t, path, []byte(`{"name":"test","version":""}`))
 
 	issues := lintHarnessJSONFile(path)
@@ -762,7 +762,7 @@ func TestLintShell_ReadError(t *testing.T) {
 }
 
 func TestLintHarnessJSON_ReadError(t *testing.T) {
-	issues := lintHarnessJSONFile("/nonexistent/path/harness.json")
+	issues := lintHarnessJSONFile("/nonexistent/path/.harness.json")
 	if len(issues) == 0 {
 		t.Fatal("expected read error issue")
 	}

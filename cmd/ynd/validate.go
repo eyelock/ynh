@@ -60,11 +60,11 @@ func cmdValidate(args []string) error {
 		}
 		// Check for legacy format
 		if isLegacyHarnessRoot(root) {
-			fmt.Println("Legacy format detected. Consolidate .claude-plugin/plugin.json and metadata.json into harness.json.")
+			fmt.Println("Legacy format detected. Consolidate .claude-plugin/plugin.json and metadata.json into .harness.json.")
 			return fmt.Errorf("validation failed")
 		}
 		fmt.Println("No harness directories found.")
-		fmt.Println("A harness requires harness.json")
+		fmt.Println("A harness requires .harness.json")
 		return nil
 	}
 
@@ -86,7 +86,7 @@ func validateFile(path string) error {
 	var issues []lintIssue
 
 	switch {
-	case base == "harness.json":
+	case base == plugin.HarnessFile:
 		issues = lintHarnessJSON(path)
 	case strings.HasSuffix(path, ".md"):
 		issues = lintMarkdown(path)
@@ -110,7 +110,7 @@ func validateFile(path string) error {
 }
 
 func isHarnessRoot(dir string) bool {
-	_, err := os.Stat(filepath.Join(dir, "harness.json"))
+	_, err := os.Stat(filepath.Join(dir, plugin.HarnessFile))
 	return err == nil
 }
 
@@ -154,24 +154,24 @@ func validateHarness(dir string) error {
 
 	// Check for legacy format
 	if isLegacyHarnessRoot(dir) && !isHarnessRoot(dir) {
-		issues = append(issues, "legacy format detected: consolidate .claude-plugin/plugin.json and metadata.json into harness.json")
+		issues = append(issues, "legacy format detected: consolidate .claude-plugin/plugin.json and metadata.json into .harness.json")
 	}
 
 	// Check harness.json exists and is valid
-	harnessPath := filepath.Join(dir, "harness.json")
+	harnessPath := filepath.Join(dir, plugin.HarnessFile)
 	data, err := os.ReadFile(harnessPath)
 	if err != nil {
-		issues = append(issues, "missing harness.json")
+		issues = append(issues, "missing .harness.json")
 	} else {
 		var hj map[string]any
 		if err := json.Unmarshal(data, &hj); err != nil {
-			issues = append(issues, fmt.Sprintf("invalid harness.json: %v", err))
+			issues = append(issues, fmt.Sprintf("invalid .harness.json: %v", err))
 		} else {
 			if _, ok := hj["name"]; !ok {
-				issues = append(issues, "harness.json missing 'name'")
+				issues = append(issues, ".harness.json missing 'name'")
 			}
 			if _, ok := hj["version"]; !ok {
-				issues = append(issues, "harness.json missing 'version'")
+				issues = append(issues, ".harness.json missing 'version'")
 			}
 			// Validate hooks
 			issues = append(issues, validateHarnessHooks(hj)...)

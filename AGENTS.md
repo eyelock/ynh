@@ -10,7 +10,7 @@ You are running inside a ynh-managed harness. ynh assembles skills, agents, rule
 
 ## Key concepts
 
-- A **harness** is a directory with `harness.json` plus `skills/`, `agents/`, `rules/`, `commands/`
+- A **harness** is a directory with `.harness.json` plus `skills/`, `agents/`, `rules/`, `commands/`
 - `ynh install` copies a harness (local or Git) into `~/.ynh/harnesses/` and assembles it for the target vendor
 - `ynh run <name>` launches the vendor CLI with the assembled config
 - Harnesses compose via `includes` (pull artifacts from other repos) and `delegates_to` (subagent delegation)

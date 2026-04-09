@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 var validName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
@@ -145,9 +147,9 @@ func createHarness(name string) error {
 	}
 	data, err := json.MarshalIndent(scaffold, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshalling harness.json: %w", err)
+		return fmt.Errorf("marshalling .harness.json: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(name, "harness.json"), append(data, '\n'), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(name, plugin.HarnessFile), append(data, '\n'), 0o644); err != nil {
 		return err
 	}
 
@@ -160,7 +162,7 @@ Project-level instructions that apply to every session with this harness.
 	}
 
 	fmt.Printf("Created harness %q:\n", name)
-	fmt.Printf("  %s/harness.json\n", name)
+	fmt.Printf("  %s/%s\n", name, plugin.HarnessFile)
 	fmt.Printf("  %s/AGENTS.md\n", name)
 	fmt.Printf("  %s/skills/\n", name)
 	fmt.Printf("  %s/agents/\n", name)

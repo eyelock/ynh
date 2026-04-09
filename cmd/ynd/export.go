@@ -19,6 +19,7 @@ func cmdExport(args []string) error {
 		vendors     string
 		subPath     string
 		profileName string
+		focusName   string
 		clean       bool
 		merged      bool
 		source      string
@@ -52,6 +53,12 @@ func cmdExport(args []string) error {
 			}
 			i++
 			profileName = args[i]
+		case "--focus":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--focus requires a value")
+			}
+			i++
+			focusName = args[i]
 		case "--clean":
 			clean = true
 		case "--merged":
@@ -107,7 +114,7 @@ func cmdExport(args []string) error {
 	if outputDir == "" {
 		pj, err := plugin.LoadHarnessJSON(srcDir)
 		if err != nil {
-			return fmt.Errorf("loading harness.json for name: %w", err)
+			return fmt.Errorf("loading .harness.json for name: %w", err)
 		}
 		outputDir = filepath.Join(".", "dist", pj.Name)
 	}
@@ -145,9 +152,35 @@ func cmdExport(args []string) error {
 		mode = exporter.ModeMerged
 	}
 
+	// Resolve focus from flag or env var
+	if focusName == "" {
+		focusName = os.Getenv("YNH_FOCUS")
+	}
+	if focusName != "" && profileName != "" {
+		return fmt.Errorf("cannot use --focus and --profile together")
+	}
+
 	// Resolve profile from flag or env var
 	if profileName == "" {
 		profileName = os.Getenv("YNH_PROFILE")
+	}
+	if focusName != "" && profileName != "" {
+		return fmt.Errorf("cannot use --focus and --profile together (focus includes a profile)")
+	}
+
+	// Resolve focus → profile
+	if focusName != "" {
+		h, _, loadErr := loadHarnessForPreview(srcDir)
+		if loadErr != nil {
+			return fmt.Errorf("loading harness for focus resolution: %w", loadErr)
+		}
+		focus, ok := h.Focuses[focusName]
+		if !ok {
+			return fmt.Errorf("focus %q not defined in harness", focusName)
+		}
+		if focus.Profile != "" {
+			profileName = focus.Profile
+		}
 	}
 
 	results, err := exporter.Export(exporter.ExportOptions{

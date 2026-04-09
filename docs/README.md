@@ -77,7 +77,7 @@ Inside the session, use `/ynh-create-harness` to build your own. Or do it manual
 ```bash
 # Create a harness
 mkdir david
-echo '{"name":"david","version":"0.1.0","default_vendor":"claude"}' > david/harness.json
+echo '{"name":"david","version":"0.1.0","default_vendor":"claude"}' > david/.harness.json
 
 # Install it
 ynh install ./david

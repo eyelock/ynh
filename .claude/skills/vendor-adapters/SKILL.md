@@ -63,7 +63,7 @@ What ynh calls each concept vs what each vendor calls it and where it lives.
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | ynh               | Claude Code                      | Codex                            | Cursor                           |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
-| harness.json      | .claude-plugin/plugin.json       | .codex-plugin/plugin.json        | .cursor-plugin/plugin.json       |
+| .harness.json      | .claude-plugin/plugin.json       | .codex-plugin/plugin.json        | .cursor-plugin/plugin.json       |
 | (source format)   | (distribution format)            | (distribution format)            | (distribution format)            |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Required fields:  | name                             | name, version, description       | name, version, description       |
@@ -150,7 +150,7 @@ What ynh calls each concept vs what each vendor calls it and where it lives.
 | ynh               | Claude Code                      | Codex                            | Cursor                           |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Source:            |                                  |                                  |                                  |
-| harness.json      | hooks/hooks.json (plugin)        | .codex/hooks.json                | hooks/hooks.json (plugin)        |
+| .harness.json      | hooks/hooks.json (plugin)        | .codex/hooks.json                | hooks/hooks.json (plugin)        |
 |   hooks: {}       | .claude/settings.json (project)  | ~/.codex/hooks.json (user)       | .cursor/settings.json (project)  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Format:           | Three-level nesting:             | Three-level nesting:             | Two formats:                     |
@@ -182,7 +182,7 @@ What ynh calls each concept vs what each vendor calls it and where it lives.
 | ynh               | Claude Code                      | Codex                            | Cursor                           |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Source:            |                                  |                                  |                                  |
-| harness.json      | .claude/.mcp.json (plugin)       | .mcp.json (plugin root)          | .cursor/mcp.json (project)       |
+| .harness.json      | .claude/.mcp.json (plugin)       | .mcp.json (plugin root)          | .cursor/mcp.json (project)       |
 |   mcp_servers: {} | .mcp.json (project root)         |                                  | mcp.json (plugin root)           |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Format:           | JSON: {"mcpServers": {...}}      | JSON: {"mcpServers": {...}}      | JSON: {"mcpServers": {...}}      |

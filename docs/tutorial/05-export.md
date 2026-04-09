@@ -42,7 +42,7 @@ cat > /tmp/ynh-tutorial/exportable/instructions.md << 'EOF'
 You are a code quality harness. Focus on correctness and security.
 EOF
 
-cat > /tmp/ynh-tutorial/exportable/harness.json << 'EOF'
+cat > /tmp/ynh-tutorial/exportable/.harness.json << 'EOF'
 {
   "name": "exportable",
   "version": "1.0.0",
@@ -82,7 +82,7 @@ ls -Ra /tmp/ynh-tutorial/export-output/claude/
 Expected:
 ```
 .claude-plugin/               # plugin manifest directory
-  plugin.json                 # generated from harness.json
+  plugin.json                 # generated from .harness.json
 agents/
   checker.md                  # local agent
 skills/
@@ -249,7 +249,7 @@ Clones the repo, applies `--path` scoping, exports. Same as exporting a local di
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/no-instructions
-cat > /tmp/ynh-tutorial/no-instructions/harness.json << 'EOF'
+cat > /tmp/ynh-tutorial/no-instructions/.harness.json << 'EOF'
 {"name": "no-instructions", "version": "0.1.0"}
 EOF
 
@@ -257,7 +257,7 @@ ynd export /tmp/ynh-tutorial/no-instructions -o /tmp/ynh-tutorial/no-inst-out -v
 # Expected: succeeds (no warning)
 
 ls -a /tmp/ynh-tutorial/no-inst-out/claude/
-# Expected: .claude-plugin/ only (generated from harness.json, no AGENTS.md)
+# Expected: .claude-plugin/ only (generated from .harness.json, no AGENTS.md)
 ```
 
 ## Clean up

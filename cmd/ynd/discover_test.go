@@ -94,21 +94,21 @@ func TestDiscoverFiles_SkipsNodeModules(t *testing.T) {
 func TestDiscoverByName(t *testing.T) {
 	dir := t.TempDir()
 
-	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(`{}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(`{}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	sub := filepath.Join(dir, "sub")
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(sub, "harness.json"), []byte(`{}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sub, ".harness.json"), []byte(`{}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "other.json"), []byte(`{}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	files, err := discoverByName(dir, []string{"harness.json"})
+	files, err := discoverByName(dir, []string{".harness.json"})
 	if err != nil {
 		t.Fatalf("discoverByName failed: %v", err)
 	}
@@ -120,12 +120,12 @@ func TestDiscoverByName(t *testing.T) {
 
 func TestDiscoverByName_SingleFile(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "harness.json")
+	path := filepath.Join(dir, ".harness.json")
 	if err := os.WriteFile(path, []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	files, err := discoverByName(path, []string{"harness.json"})
+	files, err := discoverByName(path, []string{".harness.json"})
 	if err != nil {
 		t.Fatalf("discoverByName failed: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestDiscoverAll_SingleFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	files, err := discoverAll(path, []string{".sh"}, []string{"harness.json"})
+	files, err := discoverAll(path, []string{".sh"}, []string{".harness.json"})
 	if err != nil {
 		t.Fatalf("discoverAll failed: %v", err)
 	}
@@ -181,11 +181,11 @@ func TestDiscoverAll(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(`{}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(`{}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	files, err := discoverAll(dir, []string{".md", ".sh"}, []string{"harness.json"})
+	files, err := discoverAll(dir, []string{".md", ".sh"}, []string{".harness.json"})
 	if err != nil {
 		t.Fatalf("discoverAll failed: %v", err)
 	}

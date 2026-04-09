@@ -113,7 +113,7 @@ func TestLoadDir_FullMetadata(t *testing.T) {
 			{"git": "github.com/company/monorepo", "path": "harnesses/team-ops"}
 		]
 	}`
-	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(hj), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -184,7 +184,7 @@ func TestLoadDir_InvalidName(t *testing.T) {
 	for _, name := range badNames {
 		dir := t.TempDir()
 		hj := fmt.Sprintf(`{"name":%q,"version":"0.1.0"}`, name)
-		if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(hj), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -294,7 +294,7 @@ func TestLoadDir_WithProvenance(t *testing.T) {
 			"installed_at": "2026-03-22T10:30:00Z"
 		}
 	}`
-	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(hj), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -345,7 +345,7 @@ func TestLoadDir_RegistryProvenance(t *testing.T) {
 			"installed_at": "2026-03-22T10:30:00Z"
 		}
 	}`
-	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(hj), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -699,7 +699,7 @@ func writeTestHarness(t *testing.T, dir, name string) {
 		t.Fatal(err)
 	}
 	hj := fmt.Sprintf(`{"name":%q,"version":"0.1.0","default_vendor":"claude"}`, name)
-	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(hj), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -711,7 +711,7 @@ func writeTestHarnessMinimal(t *testing.T, dir, name string) {
 		t.Fatal(err)
 	}
 	hj := fmt.Sprintf(`{"name":%q,"version":"0.1.0"}`, name)
-	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(hj), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }

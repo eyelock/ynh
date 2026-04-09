@@ -20,6 +20,7 @@ func cmdPreview(args []string) error {
 		vendorName  string
 		outputDir   string
 		profileName string
+		focusName   string
 		source      string
 	)
 
@@ -45,6 +46,12 @@ func cmdPreview(args []string) error {
 			}
 			i++
 			profileName = args[i]
+		case "--focus":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--focus requires a value")
+			}
+			i++
+			focusName = args[i]
 		case "--harness":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--harness requires a value")
@@ -82,9 +89,35 @@ func cmdPreview(args []string) error {
 		return err
 	}
 
+	// Resolve focus from flag or env var
+	if focusName == "" {
+		focusName = os.Getenv("YNH_FOCUS")
+	}
+	if focusName != "" && profileName != "" {
+		return fmt.Errorf("cannot use --focus and --profile together")
+	}
+
 	// Resolve profile from flag or env var
 	if profileName == "" {
 		profileName = os.Getenv("YNH_PROFILE")
+	}
+	if focusName != "" && profileName != "" {
+		return fmt.Errorf("cannot use --focus and --profile together (focus includes a profile)")
+	}
+
+	// Resolve focus → profile (must load harness first to look up focus entry)
+	if focusName != "" {
+		h, _, loadErr := loadHarnessForPreview(srcDir)
+		if loadErr != nil {
+			return fmt.Errorf("loading harness for focus resolution: %w", loadErr)
+		}
+		focus, ok := h.Focuses[focusName]
+		if !ok {
+			return fmt.Errorf("focus %q not defined in harness", focusName)
+		}
+		if focus.Profile != "" {
+			profileName = focus.Profile
+		}
 	}
 
 	// Assemble into temp dir
@@ -254,13 +287,13 @@ func loadHarnessForPreview(dir string) (*harness.Harness, string, error) {
 		h, err := harness.LoadDir(dir)
 		return h, "", err
 	case "legacy":
-		return nil, "", fmt.Errorf("legacy format detected in %q. Consolidate .claude-plugin/plugin.json and metadata.json into harness.json", dir)
+		return nil, "", fmt.Errorf("legacy format detected in %q. Consolidate .claude-plugin/plugin.json and metadata.json into .harness.json", dir)
 	}
 
 	// Check for bare AGENTS.md or instructions.md
 	hasInstructions := assembler.FindInstructionsFile(dir) != ""
 	if !hasInstructions {
-		return nil, "", fmt.Errorf("directory %q has no harness.json or AGENTS.md", dir)
+		return nil, "", fmt.Errorf("directory %q has no .harness.json or AGENTS.md", dir)
 	}
 
 	// Copy to temp dir to avoid mutating source
@@ -288,7 +321,7 @@ func loadHarnessForPreview(dir string) (*harness.Harness, string, error) {
 		Version: "0.0.0",
 	}
 	if err := plugin.SaveHarnessJSON(tmpDir, hj); err != nil {
-		return nil, "", fmt.Errorf("writing synthesized harness.json: %w", err)
+		return nil, "", fmt.Errorf("writing synthesized .harness.json: %w", err)
 	}
 
 	h, err := harness.LoadDir(tmpDir)

@@ -9,7 +9,7 @@ import (
 
 func TestIsHarnessDir_True(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(`{"name":"test","version":"0.1.0"}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(`{"name":"test","version":"0.1.0"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -152,13 +152,13 @@ func TestLoadHarnessJSON_MissingFile(t *testing.T) {
 	dir := t.TempDir()
 	_, err := LoadHarnessJSON(dir)
 	if err == nil {
-		t.Fatal("expected error for missing harness.json")
+		t.Fatal("expected error for missing .harness.json")
 	}
 }
 
 func TestLoadHarnessJSON_InvalidJSON(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(`{invalid`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(`{invalid`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -186,8 +186,8 @@ func TestLoadHarnessJSON_UnknownField(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for unknown field")
 	}
-	if !strings.Contains(err.Error(), "invalid harness.json") {
-		t.Errorf("error should mention invalid harness.json, got: %v", err)
+	if !strings.Contains(err.Error(), "invalid .harness.json") {
+		t.Errorf("error should mention invalid .harness.json, got: %v", err)
 	}
 }
 
@@ -488,13 +488,13 @@ func TestLoadHarnessJSON_WithFocus(t *testing.T) {
 }
 
 func TestLoadHarnessJSON_TestdataRoundTrip(t *testing.T) {
-	// Verify all testdata harness.json files parse without error
-	entries, err := filepath.Glob("../../testdata/*/harness.json")
+	// Verify all testdata .harness.json files parse without error
+	entries, err := filepath.Glob("../../testdata/*/.harness.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(entries) == 0 {
-		t.Skip("no testdata harness.json files found")
+		t.Skip("no testdata .harness.json files found")
 	}
 	for _, path := range entries {
 		dir := filepath.Dir(path)
@@ -507,7 +507,7 @@ func TestLoadHarnessJSON_TestdataRoundTrip(t *testing.T) {
 
 func writeHarnessJSON(t *testing.T, dir string, content string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, "harness.json"), []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -1,14 +1,14 @@
 # Profiles
 
-Profiles are named configuration variants that allow the same harness to serve different execution contexts — CI, developer, security audit — with different hooks and MCP servers. A single `harness.json` carries one set of top-level defaults plus any number of profiles that can be selected at run time.
+Profiles are named configuration variants that allow the same harness to serve different execution contexts — CI, developer, security audit — with different hooks and MCP servers. A single `.harness.json` carries one set of top-level defaults plus any number of profiles that can be selected at run time.
 
 ## Why Profiles Matter
 
 A harness that works well for interactive development may need different controls for CI (stricter linting, no interactive MCP servers) or for a security audit (audit logging, SAST tooling). Without profiles, you would need separate harnesses for each context or manual post-install editing. Profiles let the harness author declare all variants in one file, and the operator selects the right one at run time.
 
-## harness.json Format
+## .harness.json Format
 
-Profiles live under the `profiles` key in `harness.json`. Each profile name maps to an object containing `hooks` and/or `mcp_servers`:
+Profiles live under the `profiles` key in `.harness.json`. Each profile name maps to an object containing `hooks` and/or `mcp_servers`:
 
 ```json
 {
@@ -75,10 +75,10 @@ When both the flag and the environment variable are set, the flag wins. When nei
 
 ## Missing Profile Behavior
 
-Selecting a profile that does not exist in `harness.json` is a hard error:
+Selecting a profile that does not exist in `.harness.json` is a hard error:
 
 ```
-Error: profile "staging" not defined in harness.json
+Error: profile "staging" not defined in .harness.json
 ```
 
 This is intentional — a typo in a CI pipeline should fail loudly rather than silently falling back to defaults.

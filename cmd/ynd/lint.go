@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 type lintIssue struct {
@@ -48,7 +50,7 @@ func cmdLint(args []string) error {
 
 	files, err := discoverAll(root,
 		[]string{".md", ".sh"},
-		[]string{"harness.json"},
+		[]string{plugin.HarnessFile},
 	)
 	if err != nil {
 		return err
@@ -67,7 +69,7 @@ func cmdLint(args []string) error {
 			issues = append(issues, lintMarkdown(f)...)
 		case strings.HasSuffix(f, ".sh"):
 			issues = append(issues, lintShell(f)...)
-		case filepath.Base(f) == "harness.json":
+		case filepath.Base(f) == plugin.HarnessFile:
 			issues = append(issues, lintHarnessJSONFile(f)...)
 		}
 	}

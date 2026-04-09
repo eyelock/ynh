@@ -239,7 +239,7 @@ func buildPluginEntry(srcDir, outputDir string, vendors []string) error {
 	if err != nil {
 		pi, piErr := loadPluginManifest(outputDir)
 		if piErr != nil {
-			return fmt.Errorf("no harness.json or .claude-plugin/plugin.json found: %w", err)
+			return fmt.Errorf("no .harness.json or .claude-plugin/plugin.json found: %w", err)
 		}
 		hj = &plugin.HarnessJSON{
 			Name:        pi.Name,

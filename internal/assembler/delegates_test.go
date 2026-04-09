@@ -81,7 +81,7 @@ func TestAssembleDelegates_WithLocalRepo(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(delegateDir, "rules"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(delegateDir, "harness.json"), []byte(`{"name":"team-ops","version":"0.1.0","default_vendor":"claude"}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(delegateDir, ".harness.json"), []byte(`{"name":"team-ops","version":"0.1.0","default_vendor":"claude"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(delegateDir, "rules", "safety.md"), []byte("Always check before deploying."), 0o644); err != nil {

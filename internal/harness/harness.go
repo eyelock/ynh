@@ -78,7 +78,7 @@ func Load(name string) (*Harness, error) {
 	case "harness":
 		return LoadDir(installDir)
 	case "legacy":
-		return nil, fmt.Errorf("harness %q: legacy format detected. Consolidate .claude-plugin/plugin.json and metadata.json into harness.json", name)
+		return nil, fmt.Errorf("harness %q: legacy format detected. Consolidate .claude-plugin/plugin.json and metadata.json into .harness.json", name)
 	default:
 		return nil, fmt.Errorf("harness %q: %w", name, ErrNotFound)
 	}
@@ -175,7 +175,7 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 
 	profile, ok := h.Profiles[profileName]
 	if !ok {
-		return nil, fmt.Errorf("profile %q not defined in harness.json", profileName)
+		return nil, fmt.Errorf("profile %q not defined in .harness.json", profileName)
 	}
 
 	resolved := *h
@@ -235,6 +235,44 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 	}
 
 	return &resolved, nil
+}
+
+// LoadFile loads a harness from a file path directly (e.g. .harness.json).
+// Unlike LoadDir, name is optional and the validName check is skipped.
+func LoadFile(path string) (*Harness, error) {
+	hj, err := plugin.LoadHarnessFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	p := &Harness{Name: hj.Name, Description: hj.Description}
+	p.DefaultVendor = hj.DefaultVendor
+
+	for _, inc := range hj.Includes {
+		p.Includes = append(p.Includes, Include{
+			GitSource: GitSource{Git: inc.Git, Ref: inc.Ref, Path: inc.Path},
+			Pick:      inc.Pick,
+		})
+	}
+	for _, del := range hj.DelegatesTo {
+		p.DelegatesTo = append(p.DelegatesTo, Delegate{
+			GitSource: GitSource{Git: del.Git, Ref: del.Ref, Path: del.Path},
+		})
+	}
+	if len(hj.Hooks) > 0 {
+		p.Hooks = hj.Hooks
+	}
+	if len(hj.MCPServers) > 0 {
+		p.MCPServers = hj.MCPServers
+	}
+	if len(hj.Profiles) > 0 {
+		p.Profiles = hj.Profiles
+	}
+	if len(hj.Focuses) > 0 {
+		p.Focuses = hj.Focuses
+	}
+
+	return p, nil
 }
 
 // Artifacts holds the names of local artifacts found in a harness directory,

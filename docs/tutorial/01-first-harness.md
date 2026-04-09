@@ -22,12 +22,12 @@ ynh init
 
 ## T1.1: Create the harness structure
 
-A harness needs one file at minimum: `harness.json` (identity and config).
+A harness needs one file at minimum: `.harness.json` (identity and config).
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/my-harness
 
-cat > /tmp/ynh-tutorial/my-harness/harness.json << 'EOF'
+cat > /tmp/ynh-tutorial/my-harness/.harness.json << 'EOF'
 {
   "name": "my-harness",
   "version": "0.1.0",
@@ -109,7 +109,7 @@ Expected:
 ```
 /tmp/ynh-tutorial/my-harness/agents/nitpicker.md
 /tmp/ynh-tutorial/my-harness/commands/hello.md
-/tmp/ynh-tutorial/my-harness/harness.json
+/tmp/ynh-tutorial/my-harness/.harness.json
 /tmp/ynh-tutorial/my-harness/instructions.md
 /tmp/ynh-tutorial/my-harness/rules/be-brief.md
 /tmp/ynh-tutorial/my-harness/skills/greet/SKILL.md
@@ -249,7 +249,7 @@ The `remove` alias also works: `ynh remove my-harness`.
 
 ## What you learned
 
-- A harness is a directory with `harness.json`
+- A harness is a directory with `.harness.json`
 - Four artifact types: skills, agents, rules, commands
 - `instructions.md` becomes vendor-specific project instructions
 - `ynh install` copies the harness and generates a launcher script
