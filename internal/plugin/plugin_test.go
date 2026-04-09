@@ -367,7 +367,7 @@ func TestValidateProfiles_Valid(t *testing.T) {
 			Hooks: map[string][]HookEntry{
 				"before_tool": {{Command: "echo ci"}},
 			},
-			MCPServers: map[string]MCPServer{
+			MCPServers: map[string]*MCPServer{
 				"test": {Command: "npx"},
 			},
 		},
@@ -404,7 +404,7 @@ func TestValidateProfiles_InvalidHookEvent(t *testing.T) {
 func TestValidateProfiles_MCPServerNoCommand(t *testing.T) {
 	profiles := map[string]Profile{
 		"audit": {
-			MCPServers: map[string]MCPServer{
+			MCPServers: map[string]*MCPServer{
 				"bad": {},
 			},
 		},
@@ -412,6 +412,21 @@ func TestValidateProfiles_MCPServerNoCommand(t *testing.T) {
 	issues := ValidateProfiles(profiles)
 	if len(issues) == 0 {
 		t.Fatal("expected issues for MCP server with no command/url in profile")
+	}
+}
+
+func TestValidateProfiles_NullEntrySkipped(t *testing.T) {
+	profiles := map[string]Profile{
+		"ci": {
+			MCPServers: map[string]*MCPServer{
+				"postgres": nil, // null removal — should not cause validation error
+				"github":   {Command: "gh-cmd"},
+			},
+		},
+	}
+	issues := ValidateProfiles(profiles)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues, got %v", issues)
 	}
 }
 

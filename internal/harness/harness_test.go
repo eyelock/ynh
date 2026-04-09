@@ -361,21 +361,16 @@ func TestLoadDir_RegistryProvenance(t *testing.T) {
 	}
 }
 
-func TestResolveProfile_Replaces(t *testing.T) {
+func TestResolveProfile_MergesMCPServers(t *testing.T) {
 	h := &Harness{
 		Name: "test",
-		Hooks: map[string][]plugin.HookEntry{
-			"before_tool": {{Command: "echo default"}},
-		},
 		MCPServers: map[string]plugin.MCPServer{
-			"default-server": {Command: "default-cmd"},
+			"github": {Command: "gh-cmd", Env: map[string]string{"TOKEN": "abc"}},
+			"slack":  {Command: "slack-cmd"},
 		},
 		Profiles: map[string]plugin.Profile{
 			"ci": {
-				Hooks: map[string][]plugin.HookEntry{
-					"on_stop": {{Command: "echo ci-stop"}},
-				},
-				MCPServers: map[string]plugin.MCPServer{
+				MCPServers: map[string]*plugin.MCPServer{
 					"ci-server": {Command: "ci-cmd"},
 				},
 			},
@@ -387,25 +382,191 @@ func TestResolveProfile_Replaces(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Profile hooks should replace, not merge
-	if _, ok := resolved.Hooks["before_tool"]; ok {
-		t.Error("expected before_tool to be gone after profile resolution")
+	// Profile adds server, inherits others
+	if _, ok := resolved.MCPServers["github"]; !ok {
+		t.Error("expected inherited github server")
 	}
-	if _, ok := resolved.Hooks["on_stop"]; !ok {
-		t.Error("expected on_stop from profile")
-	}
-
-	// Profile MCP servers should replace, not merge
-	if _, ok := resolved.MCPServers["default-server"]; ok {
-		t.Error("expected default-server to be gone after profile resolution")
+	if _, ok := resolved.MCPServers["slack"]; !ok {
+		t.Error("expected inherited slack server")
 	}
 	if _, ok := resolved.MCPServers["ci-server"]; !ok {
 		t.Error("expected ci-server from profile")
 	}
-
-	// Name should be preserved
 	if resolved.Name != "test" {
 		t.Errorf("Name = %q, want test", resolved.Name)
+	}
+}
+
+func TestResolveProfile_NullRemovesServer(t *testing.T) {
+	h := &Harness{
+		Name: "test",
+		MCPServers: map[string]plugin.MCPServer{
+			"postgres": {Command: "pg-cmd"},
+			"github":   {Command: "gh-cmd"},
+		},
+		Profiles: map[string]plugin.Profile{
+			"ci": {
+				MCPServers: map[string]*plugin.MCPServer{
+					"postgres": nil, // remove
+				},
+			},
+		},
+	}
+
+	resolved, err := ResolveProfile(h, "ci")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, ok := resolved.MCPServers["postgres"]; ok {
+		t.Error("expected postgres to be removed by null")
+	}
+	if _, ok := resolved.MCPServers["github"]; !ok {
+		t.Error("expected github to be inherited")
+	}
+}
+
+func TestResolveProfile_HooksPerEventReplace(t *testing.T) {
+	h := &Harness{
+		Name: "test",
+		Hooks: map[string][]plugin.HookEntry{
+			"before_tool": {{Command: "echo default-before"}},
+			"on_stop":     {{Command: "echo default-stop"}},
+		},
+		Profiles: map[string]plugin.Profile{
+			"ci": {
+				Hooks: map[string][]plugin.HookEntry{
+					"on_stop": {{Command: "echo ci-stop"}},
+				},
+			},
+		},
+	}
+
+	resolved, err := ResolveProfile(h, "ci")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// before_tool inherited (profile didn't declare it)
+	if _, ok := resolved.Hooks["before_tool"]; !ok {
+		t.Error("expected before_tool to be inherited")
+	}
+	// on_stop replaced by profile
+	entries := resolved.Hooks["on_stop"]
+	if len(entries) != 1 || entries[0].Command != "echo ci-stop" {
+		t.Errorf("on_stop = %v, want ci-stop", entries)
+	}
+}
+
+func TestResolveProfile_EmptyProfile(t *testing.T) {
+	h := &Harness{
+		Name: "test",
+		Hooks: map[string][]plugin.HookEntry{
+			"before_tool": {{Command: "echo default"}},
+		},
+		MCPServers: map[string]plugin.MCPServer{
+			"github": {Command: "gh-cmd"},
+		},
+		Profiles: map[string]plugin.Profile{
+			"empty": {},
+		},
+	}
+
+	resolved, err := ResolveProfile(h, "empty")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Empty profile inherits everything unchanged
+	if _, ok := resolved.Hooks["before_tool"]; !ok {
+		t.Error("expected hooks inherited from empty profile")
+	}
+	if _, ok := resolved.MCPServers["github"]; !ok {
+		t.Error("expected mcp_servers inherited from empty profile")
+	}
+}
+
+func TestResolveProfile_FullOverride(t *testing.T) {
+	h := &Harness{
+		Name: "test",
+		Hooks: map[string][]plugin.HookEntry{
+			"before_tool": {{Command: "echo default"}},
+		},
+		MCPServers: map[string]plugin.MCPServer{
+			"default-server": {Command: "default-cmd"},
+		},
+		Profiles: map[string]plugin.Profile{
+			"ci": {
+				Hooks: map[string][]plugin.HookEntry{
+					"before_tool": {{Command: "echo ci"}},
+					"on_stop":     {{Command: "echo ci-stop"}},
+				},
+				MCPServers: map[string]*plugin.MCPServer{
+					"default-server": nil,
+					"ci-server":      {Command: "ci-cmd"},
+				},
+			},
+		},
+	}
+
+	resolved, err := ResolveProfile(h, "ci")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// before_tool replaced by profile
+	entries := resolved.Hooks["before_tool"]
+	if len(entries) != 1 || entries[0].Command != "echo ci" {
+		t.Errorf("before_tool = %v, want ci", entries)
+	}
+	// on_stop added by profile
+	if _, ok := resolved.Hooks["on_stop"]; !ok {
+		t.Error("expected on_stop from profile")
+	}
+	// default-server removed, ci-server added
+	if _, ok := resolved.MCPServers["default-server"]; ok {
+		t.Error("expected default-server removed by null")
+	}
+	if _, ok := resolved.MCPServers["ci-server"]; !ok {
+		t.Error("expected ci-server from profile")
+	}
+}
+
+func TestResolveProfile_MCPServerEnvMerge(t *testing.T) {
+	h := &Harness{
+		Name: "test",
+		MCPServers: map[string]plugin.MCPServer{
+			"github": {
+				Command: "gh-cmd",
+				Env:     map[string]string{"TOKEN": "abc", "ORG": "myorg"},
+			},
+		},
+		Profiles: map[string]plugin.Profile{
+			"ci": {
+				MCPServers: map[string]*plugin.MCPServer{
+					"github": {Env: map[string]string{"TOKEN": "ci-token"}},
+				},
+			},
+		},
+	}
+
+	resolved, err := ResolveProfile(h, "ci")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gh := resolved.MCPServers["github"]
+	// Command inherited (profile didn't set it)
+	if gh.Command != "gh-cmd" {
+		t.Errorf("Command = %q, want gh-cmd", gh.Command)
+	}
+	// TOKEN overridden by profile
+	if gh.Env["TOKEN"] != "ci-token" {
+		t.Errorf("TOKEN = %q, want ci-token", gh.Env["TOKEN"])
+	}
+	// ORG inherited
+	if gh.Env["ORG"] != "myorg" {
+		t.Errorf("ORG = %q, want myorg", gh.Env["ORG"])
 	}
 }
 

@@ -158,8 +158,12 @@ func LoadDir(dir string) (*Harness, error) {
 	return p, nil
 }
 
-// ResolveProfile returns a copy of the harness with hooks and mcp_servers
-// replaced from the named profile. Returns an error if the profile is not defined.
+// ResolveProfile returns a copy of the harness with profile settings merged
+// into top-level values. MCP servers are deep-merged (profile keys win on
+// collision, absent keys inherited; nil pointer removes inherited entry).
+// Hooks use per-event replace (if profile declares an event, it replaces
+// the default; other events are inherited). Server env maps are deep-merged.
+// Returns an error if the profile is not defined.
 func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 	if profileName == "" {
 		return h, nil
@@ -170,10 +174,62 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 		return nil, fmt.Errorf("profile %q not defined in harness.json", profileName)
 	}
 
-	// Copy the harness, replacing hooks and mcp_servers from the profile
 	resolved := *h
-	resolved.Hooks = profile.Hooks
-	resolved.MCPServers = profile.MCPServers
+
+	// Merge hooks: per-event replace, inherit absent events
+	if profile.Hooks != nil {
+		merged := make(map[string][]plugin.HookEntry)
+		for k, v := range h.Hooks {
+			merged[k] = v
+		}
+		for k, v := range profile.Hooks {
+			merged[k] = v
+		}
+		resolved.Hooks = merged
+	}
+
+	// Merge MCP servers: deep merge, nil removes inherited
+	if profile.MCPServers != nil {
+		merged := make(map[string]plugin.MCPServer)
+		for k, v := range h.MCPServers {
+			merged[k] = v
+		}
+		for k, v := range profile.MCPServers {
+			if v == nil {
+				delete(merged, k)
+			} else {
+				existing, exists := merged[k]
+				if exists {
+					// Deep merge env maps
+					if v.Command != "" {
+						existing.Command = v.Command
+					}
+					if v.Args != nil {
+						existing.Args = v.Args
+					}
+					if v.URL != "" {
+						existing.URL = v.URL
+					}
+					if v.Headers != nil {
+						existing.Headers = v.Headers
+					}
+					if v.Env != nil {
+						if existing.Env == nil {
+							existing.Env = make(map[string]string)
+						}
+						for ek, ev := range v.Env {
+							existing.Env[ek] = ev
+						}
+					}
+					merged[k] = existing
+				} else {
+					merged[k] = *v
+				}
+			}
+		}
+		resolved.MCPServers = merged
+	}
+
 	return &resolved, nil
 }
 

@@ -15,10 +15,12 @@ Profiles live under the `profiles` key in `harness.json`. Each profile name maps
   "name": "my-harness",
   "version": "0.1.0",
   "hooks": {
-    "before_tool": [{"command": "echo default"}]
+    "before_tool": [{"command": "echo default"}],
+    "after_tool": [{"command": "echo log"}]
   },
   "mcp_servers": {
-    "github": {"command": "gh-mcp", "args": ["serve"]}
+    "github": {"command": "gh-mcp", "args": ["serve"]},
+    "postgres": {"command": "pg-mcp"}
   },
   "profiles": {
     "ci": {
@@ -26,13 +28,11 @@ Profiles live under the `profiles` key in `harness.json`. Each profile name maps
         "before_tool": [{"command": "./scripts/strict-lint.sh", "matcher": "Write"}]
       },
       "mcp_servers": {
-        "github": {"command": "gh-mcp", "args": ["serve"]}
+        "postgres": null,
+        "ci-metrics": {"command": "metrics-mcp"}
       }
     },
     "security-audit": {
-      "hooks": {
-        "before_tool": [{"command": "./scripts/audit-log.sh"}]
-      },
       "mcp_servers": {
         "sast": {"command": "semgrep-mcp", "args": ["serve"]}
       }
@@ -41,13 +41,23 @@ Profiles live under the `profiles` key in `harness.json`. Each profile name maps
 }
 ```
 
-The top-level `hooks` and `mcp_servers` are the defaults — used when no profile is selected. The `ci` and `security-audit` profiles each declare their own hooks and MCP servers.
+The top-level `hooks` and `mcp_servers` are the defaults — used when no profile is selected.
 
-## Replace Semantics
+## Merge Semantics
 
-When a profile is selected, its `hooks` and `mcp_servers` **fully replace** the top-level values. There is no merge and no inheritance. If the `ci` profile defines `hooks` but omits `mcp_servers`, the assembled output will contain only the profile's hooks and no MCP servers.
+Profiles declare only what they change. Absent fields inherit from the top-level defaults.
 
-This keeps behavior predictable: you see exactly what a profile produces by reading its block alone, without tracing merge logic across layers.
+**MCP servers** use deep merge — profile keys win on collision, absent keys are inherited. Server `env` maps are also deep-merged. Set a server to `null` to remove an inherited entry.
+
+**Hooks** use per-event replace — if a profile declares `before_tool`, it replaces the default `before_tool`. Other events (like `after_tool`) are inherited.
+
+Using the example above, selecting the `ci` profile produces:
+- **hooks**: `before_tool` replaced with the CI lint hook; `after_tool` inherited from defaults
+- **mcp_servers**: `github` inherited, `postgres` removed (null), `ci-metrics` added
+
+Selecting `security-audit` produces:
+- **hooks**: all inherited (profile declares none)
+- **mcp_servers**: `github` and `postgres` inherited, `sast` added
 
 ## Profile Selection
 
