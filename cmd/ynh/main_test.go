@@ -14,17 +14,27 @@ import (
 
 func TestParseRunArgs(t *testing.T) {
 	tests := []struct {
-		name       string
-		args       []string
-		wantVendor string
-		wantPrompt string
-		wantArgs   []string
-		wantAction string
+		name        string
+		args        []string
+		wantName    string
+		wantVendor  string
+		wantProfile string
+		wantFocus   string
+		wantFile    string
+		wantPrompt  string
+		wantArgs    []string
+		wantAction  string
 	}{
 		{
-			name:       "just prompt",
-			args:       []string{"review this PR"},
-			wantPrompt: "review this PR",
+			name:     "harness name as first positional",
+			args:     []string{"my-harness"},
+			wantName: "my-harness",
+		},
+		{
+			name:       "harness name then prompt via separator",
+			args:       []string{"my-harness", "--", "fix the bug"},
+			wantName:   "my-harness",
+			wantPrompt: "fix the bug",
 		},
 		{
 			name:       "vendor flag only",
@@ -32,45 +42,48 @@ func TestParseRunArgs(t *testing.T) {
 			wantVendor: "codex",
 		},
 		{
-			name:       "vendor and prompt",
-			args:       []string{"-v", "codex", "fix the bug"},
+			name:       "harness name and vendor",
+			args:       []string{"my-harness", "-v", "codex"},
+			wantName:   "my-harness",
 			wantVendor: "codex",
-			wantPrompt: "fix the bug",
 		},
 		{
-			name:       "vendor flag with passthrough via separator",
-			args:       []string{"-v", "claude", "--model", "opus", "--", "fix the bug"},
+			name:       "name vendor passthrough and prompt via separator",
+			args:       []string{"my-harness", "-v", "claude", "--model", "opus", "--", "fix the bug"},
+			wantName:   "my-harness",
 			wantVendor: "claude",
 			wantPrompt: "fix the bug",
 			wantArgs:   []string{"--model", "opus"},
 		},
 		{
-			name:       "passthrough with prompt via separator",
+			name:       "passthrough with prompt via separator — positional becomes name",
 			args:       []string{"--model", "opus", "--", "do something"},
+			wantName:   "opus",
 			wantPrompt: "do something",
-			wantArgs:   []string{"--model", "opus"},
+			wantArgs:   []string{"--model"},
 		},
 		{
-			name:       "double dash separator",
+			name:       "double dash separator no name",
 			args:       []string{"--verbose", "--full-auto", "--", "refactor auth"},
 			wantPrompt: "refactor auth",
 			wantArgs:   []string{"--verbose", "--full-auto"},
 		},
 		{
-			name:       "mixed flags vendor and double dash",
-			args:       []string{"-v", "codex", "--full-auto", "--model", "gpt-5", "--", "deploy it"},
+			name:       "name vendor passthrough and prompt via double dash",
+			args:       []string{"my-harness", "-v", "codex", "--full-auto", "--model", "gpt-5", "--", "deploy it"},
+			wantName:   "my-harness",
 			wantVendor: "codex",
 			wantPrompt: "deploy it",
 			wantArgs:   []string{"--full-auto", "--model", "gpt-5"},
 		},
 		{
-			name:       "boolean flags then prompt",
-			args:       []string{"--verbose", "--full-auto", "fix this"},
-			wantPrompt: "fix this",
-			wantArgs:   []string{"--verbose", "--full-auto"},
+			name:     "boolean flags then harness name",
+			args:     []string{"--verbose", "--full-auto", "my-harness"},
+			wantName: "my-harness",
+			wantArgs: []string{"--verbose", "--full-auto"},
 		},
 		{
-			name:     "flags only no prompt",
+			name:     "flags only no name",
 			args:     []string{"--verbose", "--full-auto"},
 			wantArgs: []string{"--verbose", "--full-auto"},
 		},
@@ -107,30 +120,79 @@ func TestParseRunArgs(t *testing.T) {
 			wantAction: "install",
 			wantArgs:   []string{"--verbose"},
 		},
+		{
+			name:      "focus flag",
+			args:      []string{"my-harness", "--focus", "review"},
+			wantName:  "my-harness",
+			wantFocus: "review",
+		},
+		{
+			name:        "profile flag",
+			args:        []string{"my-harness", "--profile", "ci"},
+			wantName:    "my-harness",
+			wantProfile: "ci",
+		},
+		{
+			name:     "harness-file flag",
+			args:     []string{"--harness-file", "/tmp/test.json"},
+			wantFile: "/tmp/test.json",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			vendorFlag, _, prompt, args, action := parseRunArgs(tt.args)
-			if vendorFlag != tt.wantVendor {
-				t.Errorf("vendor = %q, want %q", vendorFlag, tt.wantVendor)
+			t.Setenv("YNH_FOCUS", "")
+			t.Setenv("YNH_HARNESS_FILE", "")
+			ra := parseRunArgs(tt.args)
+			if ra.HarnessName != tt.wantName {
+				t.Errorf("HarnessName = %q, want %q", ra.HarnessName, tt.wantName)
 			}
-			if prompt != tt.wantPrompt {
-				t.Errorf("prompt = %q, want %q", prompt, tt.wantPrompt)
+			if ra.VendorFlag != tt.wantVendor {
+				t.Errorf("VendorFlag = %q, want %q", ra.VendorFlag, tt.wantVendor)
 			}
-			if action != tt.wantAction {
-				t.Errorf("action = %q, want %q", action, tt.wantAction)
+			if ra.ProfileFlag != tt.wantProfile {
+				t.Errorf("ProfileFlag = %q, want %q", ra.ProfileFlag, tt.wantProfile)
 			}
-			if len(args) != len(tt.wantArgs) {
-				t.Errorf("vendorArgs = %v, want %v", args, tt.wantArgs)
+			if ra.FocusFlag != tt.wantFocus {
+				t.Errorf("FocusFlag = %q, want %q", ra.FocusFlag, tt.wantFocus)
+			}
+			if ra.HarnessFile != tt.wantFile {
+				t.Errorf("HarnessFile = %q, want %q", ra.HarnessFile, tt.wantFile)
+			}
+			if ra.Prompt != tt.wantPrompt {
+				t.Errorf("Prompt = %q, want %q", ra.Prompt, tt.wantPrompt)
+			}
+			if ra.Action != tt.wantAction {
+				t.Errorf("Action = %q, want %q", ra.Action, tt.wantAction)
+			}
+			if len(ra.VendorArgs) != len(tt.wantArgs) {
+				t.Errorf("VendorArgs = %v, want %v", ra.VendorArgs, tt.wantArgs)
 			} else {
-				for i := range args {
-					if args[i] != tt.wantArgs[i] {
-						t.Errorf("vendorArgs[%d] = %q, want %q", i, args[i], tt.wantArgs[i])
+				for i := range ra.VendorArgs {
+					if ra.VendorArgs[i] != tt.wantArgs[i] {
+						t.Errorf("VendorArgs[%d] = %q, want %q", i, ra.VendorArgs[i], tt.wantArgs[i])
 					}
 				}
 			}
 		})
+	}
+}
+
+func TestParseRunArgs_FocusEnvVar(t *testing.T) {
+	t.Setenv("YNH_FOCUS", "review")
+	t.Setenv("YNH_HARNESS_FILE", "")
+	ra := parseRunArgs([]string{"my-harness"})
+	if ra.FocusFlag != "review" {
+		t.Errorf("FocusFlag = %q, want review", ra.FocusFlag)
+	}
+}
+
+func TestParseRunArgs_HarnessFileEnvVar(t *testing.T) {
+	t.Setenv("YNH_FOCUS", "")
+	t.Setenv("YNH_HARNESS_FILE", "/tmp/test.json")
+	ra := parseRunArgs([]string{})
+	if ra.HarnessFile != "/tmp/test.json" {
+		t.Errorf("HarnessFile = %q, want /tmp/test.json", ra.HarnessFile)
 	}
 }
 

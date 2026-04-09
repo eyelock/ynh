@@ -198,7 +198,25 @@ func LoadHarnessJSON(dir string) (*HarnessJSON, error) {
 	return &hj, nil
 }
 
-// SaveHarnessJSON writes a HarnessJSON manifest to dir/harness.json.
+// LoadHarnessFile reads and parses a .harness.json from a file path directly.
+// Unlike LoadHarnessJSON, the name field is not required (for inline config).
+func LoadHarnessFile(path string) (*HarnessJSON, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+
+	var hj HarnessJSON
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&hj); err != nil {
+		return nil, fmt.Errorf("invalid %s: %w", path, err)
+	}
+
+	return &hj, nil
+}
+
+// SaveHarnessJSON writes a HarnessJSON manifest to dir/.harness.json.
 func SaveHarnessJSON(dir string, hj *HarnessJSON) error {
 	data, err := json.MarshalIndent(hj, "", "  ")
 	if err != nil {

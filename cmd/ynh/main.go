@@ -414,28 +414,92 @@ func cmdUpdate(args []string) error {
 }
 
 func cmdRun(args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: ynh run <harness-name> [-v vendor] [vendor-flags...] [prompt]")
-	}
-
 	if err := config.EnsureDirs(); err != nil {
 		return fmt.Errorf("ensuring directories: %w", err)
 	}
 
-	name := args[0]
-	vendorFlag, profileFlag, prompt, vendorArgs, action := parseRunArgs(args[1:])
+	ra := parseRunArgs(args)
 
-	// Load harness
-	p, err := harness.Load(name)
-	if err != nil {
-		return err
+	// Mutual exclusivity: --harness-file + harness name
+	if ra.HarnessFile != "" && ra.HarnessName != "" {
+		return fmt.Errorf("cannot specify both a harness name and --harness-file")
 	}
 
-	// Resolve profile: --profile flag > YNH_PROFILE env var > no profile
-	profileName := profileFlag
+	// Mutual exclusivity: --focus + --profile
+	profileName := ra.ProfileFlag
 	if profileName == "" {
 		profileName = os.Getenv("YNH_PROFILE")
 	}
+	if ra.FocusFlag != "" && profileName != "" {
+		return fmt.Errorf("cannot use --focus and --profile together (focus includes a profile)")
+	}
+
+	// Mutual exclusivity: --focus + trailing prompt
+	if ra.FocusFlag != "" && ra.Prompt != "" {
+		return fmt.Errorf("cannot use --focus and a trailing prompt together (focus includes a prompt)")
+	}
+
+	// Resolve harness source: name > --harness-file > .harness.json in cwd > error
+	var p *harness.Harness
+	var name string
+	var harnessDir string // directory containing harness content (for local artifacts)
+	var err error
+
+	switch {
+	case ra.HarnessName != "":
+		name = ra.HarnessName
+		p, err = harness.Load(name)
+		if err != nil {
+			return err
+		}
+		harnessDir = harness.InstalledDir(name)
+
+	case ra.HarnessFile != "":
+		p, err = harness.LoadFile(ra.HarnessFile)
+		if err != nil {
+			return err
+		}
+		name = p.Name
+		if name == "" {
+			name = "(inline)"
+		}
+		harnessDir = filepath.Dir(ra.HarnessFile)
+
+	default:
+		// Auto-discover .harness.json in cwd
+		cwd, wdErr := os.Getwd()
+		if wdErr != nil {
+			return wdErr
+		}
+		localFile := filepath.Join(cwd, plugin.HarnessFile)
+		if _, statErr := os.Stat(localFile); statErr == nil {
+			p, err = harness.LoadFile(localFile)
+			if err != nil {
+				return err
+			}
+			name = p.Name
+			if name == "" {
+				name = "(inline)"
+			}
+			harnessDir = cwd
+		} else {
+			return fmt.Errorf("usage: ynh run <harness-name> [-v vendor] [--focus name] [--harness-file path] [-- prompt]")
+		}
+	}
+
+	// Resolve focus → profile + prompt
+	if ra.FocusFlag != "" {
+		focus, ok := p.Focuses[ra.FocusFlag]
+		if !ok {
+			return fmt.Errorf("focus %q not defined in harness", ra.FocusFlag)
+		}
+		if focus.Profile != "" {
+			profileName = focus.Profile
+		}
+		ra.Prompt = focus.Prompt
+	}
+
+	// Resolve profile
 	if profileName != "" {
 		p, err = harness.ResolveProfile(p, profileName)
 		if err != nil {
@@ -443,8 +507,12 @@ func cmdRun(args []string) error {
 		}
 	}
 
+	prompt := ra.Prompt
+	vendorArgs := ra.VendorArgs
+	action := ra.Action
+
 	// Determine vendor
-	vendorName, err := resolveVendor(vendorFlag, p)
+	vendorName, err := resolveVendor(ra.VendorFlag, p)
 	if err != nil {
 		return err
 	}
@@ -491,16 +559,22 @@ func cmdRun(args []string) error {
 		content = append(content, r.Content)
 	}
 
-	// Also include any local content from the harness's installed directory
+	// Also include any local content from the harness directory
 	localContent := resolver.ResolvedContent{
-		BasePath: harness.InstalledDir(name),
+		BasePath: harnessDir,
 	}
 	content = append(content, localContent)
 
 	// Assemble vendor config into deterministic run dir.
 	// We use a stable path instead of a temp dir because syscall.Exec
 	// replaces this process — deferred cleanup would never run.
-	runDir := filepath.Join(config.RunDir(), name)
+	runDirName := name
+	if ra.HarnessFile != "" || ra.HarnessName == "" {
+		// Inline/discovered harness: use a hash-based stable dir name
+		h := fmt.Sprintf("%x", hashString(harnessDir))
+		runDirName = "_inline-" + h[:8]
+	}
+	runDir := filepath.Join(config.RunDir(), runDirName)
 	vendorRunDir := filepath.Join(runDir, vendorName)
 	if info, err := os.Stat(vendorRunDir); err == nil && info.IsDir() {
 		// Pre-assembled layout (baked harness image) — use directly.
@@ -958,7 +1032,20 @@ func resolveVendor(flag string, p *harness.Harness) (string, error) {
 // Without --, the first non-flag argument is treated as the prompt. Flag values
 // like "opus" in "--model opus" would be mistaken for the prompt, so use -- when
 // vendor flags take values.
-func parseRunArgs(args []string) (vendorFlag, profileFlag, prompt string, vendorArgs []string, action string) {
+// runArgs holds parsed arguments for ynh run.
+type runArgs struct {
+	HarnessName string   // positional name, if given
+	HarnessFile string   // --harness-file or YNH_HARNESS_FILE
+	VendorFlag  string   // -v or YNH_VENDOR
+	ProfileFlag string   // --profile or YNH_PROFILE
+	FocusFlag   string   // --focus or YNH_FOCUS
+	Prompt      string   // trailing prompt after --
+	VendorArgs  []string // passthrough args for vendor CLI
+	Action      string   // "install", "clean", or ""
+}
+
+func parseRunArgs(args []string) runArgs {
+	var ra runArgs
 	flagArgs := args
 
 	// First pass: find -- separator and extract prompt
@@ -966,38 +1053,66 @@ func parseRunArgs(args []string) (vendorFlag, profileFlag, prompt string, vendor
 		if arg == "--" {
 			flagArgs = args[:i]
 			if i+1 < len(args) {
-				prompt = args[i+1]
+				ra.Prompt = args[i+1]
 			}
 			break
 		}
 	}
 
 	// Second pass: process flags
+	firstPositional := true
 	for i := 0; i < len(flagArgs); i++ {
 		switch {
 		case flagArgs[i] == "-v" && i+1 < len(flagArgs):
-			vendorFlag = flagArgs[i+1]
+			ra.VendorFlag = flagArgs[i+1]
 			i++
 		case flagArgs[i] == "--profile" && i+1 < len(flagArgs):
-			profileFlag = flagArgs[i+1]
+			ra.ProfileFlag = flagArgs[i+1]
+			i++
+		case flagArgs[i] == "--focus" && i+1 < len(flagArgs):
+			ra.FocusFlag = flagArgs[i+1]
+			i++
+		case flagArgs[i] == "--harness-file" && i+1 < len(flagArgs):
+			ra.HarnessFile = flagArgs[i+1]
 			i++
 		case flagArgs[i] == "--install":
-			action = "install"
+			ra.Action = "install"
 		case flagArgs[i] == "--clean":
-			action = "clean"
+			ra.Action = "clean"
 		case !strings.HasPrefix(flagArgs[i], "-"):
-			if prompt == "" {
-				// No -- separator found; first non-flag arg is the prompt
-				prompt = flagArgs[i]
+			if firstPositional {
+				// First positional arg is the harness name
+				ra.HarnessName = flagArgs[i]
+				firstPositional = false
+			} else if ra.Prompt == "" {
+				ra.Prompt = flagArgs[i]
 			} else {
-				// -- separator found; non-flag args before it are flag values
-				vendorArgs = append(vendorArgs, flagArgs[i])
+				ra.VendorArgs = append(ra.VendorArgs, flagArgs[i])
 			}
 		default:
-			vendorArgs = append(vendorArgs, flagArgs[i])
+			ra.VendorArgs = append(ra.VendorArgs, flagArgs[i])
 		}
 	}
-	return
+
+	// Env var fallbacks
+	if ra.FocusFlag == "" {
+		ra.FocusFlag = os.Getenv("YNH_FOCUS")
+	}
+	if ra.HarnessFile == "" {
+		ra.HarnessFile = os.Getenv("YNH_HARNESS_FILE")
+	}
+
+	return ra
+}
+
+// hashString returns a stable hash of s for use in directory names.
+func hashString(s string) uint64 {
+	var h uint64 = 14695981039346656037 // FNV-1a offset basis
+	for i := 0; i < len(s); i++ {
+		h ^= uint64(s[i])
+		h *= 1099511628211 // FNV-1a prime
+	}
+	return h
 }
 
 func generateLauncher(name string) error {
