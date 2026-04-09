@@ -754,6 +754,20 @@ func TestValidateHarness_ProfilesMCPServerInvalid(t *testing.T) {
 	}
 }
 
+func TestValidateHarness_ProfileNullMCPServerValid(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "null-mcp")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, ".harness.json"),
+		[]byte(`{"name":"null-mcp","version":"0.1.0","mcp_servers":{"pg":{"command":"pg-mcp"}},"profiles":{"ci":{"mcp_servers":{"pg":null}}}}`))
+
+	if err := validateHarness(hr); err != nil {
+		t.Errorf("null MCP server in profile should pass validation: %v", err)
+	}
+}
+
 func TestValidateHarness_FocusValid(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)

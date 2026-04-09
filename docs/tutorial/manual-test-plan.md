@@ -2,7 +2,7 @@
 
 Verification checklist for ynh and ynd. Each test references a tutorial step or is an edge case tested here.
 
-Run all 13 tutorials in sequence to cover the happy path. This file adds edge cases and error handling tests that tutorials don't cover, plus a reference table for tracking.
+Run all 15 tutorials in sequence to cover the happy path. This file adds edge cases and error handling tests that tutorials don't cover, plus a reference table for tracking.
 
 ---
 
@@ -378,6 +378,44 @@ ynh info
 # Expected: Error: usage: ynh info <harness-name>
 ```
 
+### E19: Focus and profile mutual exclusivity
+
+```bash
+ynd preview /tmp/some-harness -v claude --focus review --profile ci
+# Expected: Error: cannot use --focus and --profile together
+```
+
+### E20: Unknown focus name
+
+```bash
+ynd preview /tmp/some-harness -v claude --focus nonexistent
+# Expected: Error: focus "nonexistent" not defined in harness
+```
+
+### E21: Focus with missing prompt in .harness.json
+
+```bash
+mkdir -p /tmp/ynh-bad-focus
+cat > /tmp/ynh-bad-focus/.harness.json << 'EOF'
+{"name":"bad","version":"0.1.0","focus":{"review":{"profile":"ci"}}}
+EOF
+ynd validate /tmp/ynh-bad-focus
+# Expected: INVALID with "focus.review: prompt must not be empty"
+rm -rf /tmp/ynh-bad-focus
+```
+
+### E22: Focus referencing unknown profile
+
+```bash
+mkdir -p /tmp/ynh-bad-focus
+cat > /tmp/ynh-bad-focus/.harness.json << 'EOF'
+{"name":"bad","version":"0.1.0","focus":{"review":{"profile":"nonexistent","prompt":"Review code"}}}
+EOF
+ynd validate /tmp/ynh-bad-focus
+# Expected: INVALID with "focus.review: references unknown profile"
+rm -rf /tmp/ynh-bad-focus
+```
+
 ---
 
 ## Summary
@@ -397,5 +435,7 @@ ynh info
 | Tutorial 11: MCP Servers | 6 |
 | Tutorial 12: Developer Preview | 5 |
 | Tutorial 13: Profiles | 8 |
-| Edge Cases | 18 |
-| **Total** | **124** |
+| Tutorial 14: Focus | 7 |
+| Tutorial 15: Project-Local Config | 4 |
+| Edge Cases | 22 |
+| **Total** | **139** |

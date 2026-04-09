@@ -388,8 +388,8 @@ func validateHarnessProfiles(hj map[string]any) []string {
 		for _, issue := range validateHarnessHooks(profileMap) {
 			issues = append(issues, fmt.Sprintf("profile %q: %s", name, issue))
 		}
-		// Validate MCP servers within profile
-		for _, issue := range validateHarnessMCPServers(profileMap) {
+		// Validate MCP servers within profile (skip null entries — they signal removal)
+		for _, issue := range validateProfileMCPServers(profileMap) {
 			issues = append(issues, fmt.Sprintf("profile %q: %s", name, issue))
 		}
 	}
@@ -397,7 +397,46 @@ func validateHarnessProfiles(hj map[string]any) []string {
 	return issues
 }
 
-// validateHarnessFocus validates focus entries inside harness.json.
+// validateProfileMCPServers validates mcp_servers within a profile, skipping
+// null entries (which signal removal of inherited servers during merge).
+func validateProfileMCPServers(profile map[string]any) []string {
+	var issues []string
+
+	servers, ok := profile["mcp_servers"]
+	if !ok {
+		return issues
+	}
+	serversMap, ok := servers.(map[string]any)
+	if !ok {
+		issues = append(issues, "'mcp_servers' must be an object")
+		return issues
+	}
+
+	for name, entry := range serversMap {
+		if entry == nil {
+			continue // null = remove inherited server
+		}
+		serverMap, ok := entry.(map[string]any)
+		if !ok {
+			issues = append(issues, fmt.Sprintf("mcp_servers.%s must be an object or null", name))
+			continue
+		}
+		cmd, _ := serverMap["command"].(string)
+		url, _ := serverMap["url"].(string)
+		hasCommand := cmd != ""
+		hasURL := url != ""
+		if !hasCommand && !hasURL {
+			issues = append(issues, fmt.Sprintf("mcp_servers.%s: must have either command or url", name))
+		}
+		if hasCommand && hasURL {
+			issues = append(issues, fmt.Sprintf("mcp_servers.%s: must have command or url, not both", name))
+		}
+	}
+
+	return issues
+}
+
+// validateHarnessFocus validates focus entries inside .harness.json.
 func validateHarnessFocus(hj map[string]any) []string {
 	var issues []string
 
