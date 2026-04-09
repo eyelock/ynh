@@ -12,7 +12,7 @@ You are guiding a user through creating a team harness that delegates to persona
 Read these references to understand delegation and Git URL formats:
 
 1. Read `references/delegation.md` for `delegates_to` syntax, Git URL formats, auth, and vendor support
-2. Read `testdata/team-harness/.claude-plugin/plugin.json` and `testdata/team-harness/metadata.json` for the team harness structure
+2. Read `testdata/team-harness/harness.json` for the team harness structure
 
 ## Step 1: Understand their current setup
 
@@ -55,27 +55,18 @@ They might also want to pull from external repos via `includes`.
 
 Create the team harness directory.
 
-`.claude-plugin/plugin.json`:
+`harness.json`:
 
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
   "name": "<team-name>",
   "version": "0.1.0",
-  "description": "<team description>"
-}
-```
-
-`metadata.json`:
-
-```json
-{
-  "ynh": {
-    "default_vendor": "<vendor>",
-    "includes": [],
-    "delegates_to": [
-      {"git": "<personal-persona-git-url>"}
-    ]
-  }
+  "description": "<team description>",
+  "default_vendor": "<vendor>",
+  "delegates_to": [
+    {"git": "<personal-persona-git-url>"}
+  ]
 }
 ```
 
@@ -108,7 +99,7 @@ ynh install <personal-persona-git-url>
 david                       # personal session
 ```
 
-Explain the vendor standardization: setting `default_vendor` in `metadata.json` ensures everyone uses the same AI vendor, but individuals can override with `-v`.
+Explain the vendor standardization: setting `default_vendor` in `harness.json` ensures everyone uses the same AI vendor, but individuals can override with `-v`.
 
 ## Step 7: Auth considerations
 

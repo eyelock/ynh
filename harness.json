@@ -1,0 +1,9 @@
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
+  "name": "ynh-guide",
+  "version": "0.1.0",
+  "description": "AI harness management — your name, your AI",
+  "author": { "name": "eyelock", "url": "https://github.com/eyelock" },
+  "keywords": ["harness", "ai", "skills", "meta"],
+  "default_vendor": "claude"
+}

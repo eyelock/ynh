@@ -387,24 +387,14 @@ Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry instal
 
 ## Using ynh's Own Harness
 
-The ynh project ships its own harness (skills, agents, rules) for contributors. Since the harness is named `ynh` — which conflicts with the `ynh` binary in `~/.ynh/bin/` — it installs without a launcher script:
+The ynh project ships its own harness (skills, agents, rules) for both contributors and new users:
 
 ```bash
 ynh install github.com/eyelock/ynh
-
-# Or install from a monorepo subdirectory:
-# ynh install github.com/org/monorepo --path harnesses/my-harness
-# Installed harness "ynh"
-#   Launcher: (skipped — conflicts with ynh binary, use "ynh run ynh")
+ynh-guide
 ```
 
-To use it, run explicitly:
-
-```bash
-ynh run ynh
-```
-
-The skills and agents in this harness are development-focused and will be extracted to a separate repo in the future.
+Inside the session, `/ynh-create-harness` walks you through creating your own harness. The development-focused skills (`ynh-dev`, `vendor-adapters`, etc.) live in `.claude/` and are loaded natively by Claude — they're not part of the installable harness.
 
 ## Submitting Changes
 

@@ -4,10 +4,8 @@
 
 ```
 my-harness/
-├── .claude-plugin/
-│   └── plugin.json       # required - name, version
-├── metadata.json          # optional - vendor, includes, delegates
-├── instructions.md        # optional - becomes CLAUDE.md / codex.md / .cursorrules
+├── harness.json           # required - name, version, vendor, includes, delegates
+├── AGENTS.md              # optional - read natively by most vendors; ynh shims Claude via @-import
 ├── skills/
 │   └── <name>/
 │       └── SKILL.md
@@ -19,13 +17,15 @@ my-harness/
     └── <name>.md
 ```
 
-## .claude-plugin/plugin.json
+## harness.json
 
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
   "name": "david",
   "version": "0.1.0",
-  "description": "David's coding harness"
+  "description": "David's coding harness",
+  "default_vendor": "claude"
 }
 ```
 
@@ -33,35 +33,24 @@ my-harness/
 
 Lowercase, hyphens and dots allowed. Regex: `^[a-zA-Z0-9][a-zA-Z0-9._-]*$`. This becomes the launcher command on PATH.
 
-## metadata.json
-
-```json
-{
-  "ynh": {
-    "default_vendor": "claude",
-    "includes": [],
-    "delegates_to": []
-  }
-}
-```
-
 ### includes
 
 ```json
 {
-  "ynh": {
-    "includes": [
-      {
-        "git": "github.com/user/repo",
-        "ref": "v2.0.0",
-        "path": "packages/ai-config",
-        "pick": ["skills/commit", "agents/reviewer"]
-      },
-      {
-        "git": "git@github.com:co/repo.git"
-      }
-    ]
-  }
+  "name": "david",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "includes": [
+    {
+      "git": "github.com/user/repo",
+      "ref": "v2.0.0",
+      "path": "packages/ai-config",
+      "pick": ["skills/commit", "agents/reviewer"]
+    },
+    {
+      "git": "git@github.com:co/repo.git"
+    }
+  ]
 }
 ```
 
@@ -69,15 +58,16 @@ Lowercase, hyphens and dots allowed. Regex: `^[a-zA-Z0-9][a-zA-Z0-9._-]*$`. This
 
 ```json
 {
-  "ynh": {
-    "delegates_to": [
-      {
-        "git": "github.com/user/other-harness",
-        "ref": "main",
-        "path": "harnesses/team-ops"
-      }
-    ]
-  }
+  "name": "team-dev",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "delegates_to": [
+    {
+      "git": "github.com/user/other-harness",
+      "ref": "main",
+      "path": "harnesses/team-ops"
+    }
+  ]
 }
 ```
 

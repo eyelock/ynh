@@ -68,14 +68,14 @@ make format && make lint && make test
 ```
 ```
 
-## Project instructions (instructions.md)
+## Project instructions (AGENTS.md)
 
-Optional file at harness root. Copied to vendor-specific filename at runtime:
+Optional file at harness root. Most vendors read `AGENTS.md` natively. For Claude, ynh generates a `CLAUDE.md` with an `@AGENTS.md` import.
 
-| Vendor | Target |
-|--------|--------|
-| Claude | `CLAUDE.md` |
-| Codex  | `codex.md` |
-| Cursor | `.cursorrules` |
+| Vendor | Native support | ynh shim |
+|--------|---------------|----------|
+| Claude | No | `CLAUDE.md` with `@AGENTS.md` import |
+| Codex  | Yes | — |
+| Cursor | Yes | — |
 
-Last source wins. Harness's own `instructions.md` takes priority over included repos.
+Last source wins. Harness's own `AGENTS.md` takes priority over included repos.

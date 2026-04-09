@@ -107,12 +107,12 @@ find /tmp/ynh-tutorial/my-harness -type f | sort
 
 Expected:
 ```
-agents/nitpicker.md
-commands/hello.md
-harness.json
-instructions.md
-rules/be-brief.md
-skills/greet/SKILL.md
+/tmp/ynh-tutorial/my-harness/agents/nitpicker.md
+/tmp/ynh-tutorial/my-harness/commands/hello.md
+/tmp/ynh-tutorial/my-harness/harness.json
+/tmp/ynh-tutorial/my-harness/instructions.md
+/tmp/ynh-tutorial/my-harness/rules/be-brief.md
+/tmp/ynh-tutorial/my-harness/skills/greet/SKILL.md
 ```
 
 ## T1.4: Install from local path
@@ -137,8 +137,8 @@ ynh ls
 
 Expected:
 ```
-NAME        VENDOR  SOURCE                          ARTIFACTS      INCLUDES  DELEGATES TO
-my-harness  claude  /tmp/ynh-tutorial/my-harness     1s 1a 1r 1c   0         0
+NAME        VENDOR  SOURCE                        ARTIFACTS    INCLUDES  DELEGATES TO
+my-harness  claude  /tmp/ynh-tutorial/my-harness  1s 1a 1r 1c  0         0
 ```
 
 The ARTIFACTS column shows a compact count: skills (s), agents (a), rules (r), commands (c).
@@ -215,11 +215,13 @@ my-harness --model opus -- "what are you? one sentence."
 
 ## T1.9: Inspect the assembled output
 
+> **Note:** The run directory is created by `ynh run`, which requires a vendor CLI. This step is only verifiable after running T1.6/T1.7/T1.8.
+
 ```bash
 ls -Ra ~/.ynh/run/my-harness/
 ```
 
-Expected:
+Expected (stylized — actual `ls -Ra` format uses directory headers):
 ```
 CLAUDE.md
 .claude/
