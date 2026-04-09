@@ -14,6 +14,7 @@ func cmdDiff(args []string) error {
 	var (
 		source      string
 		profileName string
+		focusName   string
 		vendors     []string
 	)
 
@@ -40,6 +41,12 @@ func cmdDiff(args []string) error {
 			}
 			i++
 			profileName = args[i]
+		case "--focus":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--focus requires a value")
+			}
+			i++
+			focusName = args[i]
 		case "-h", "--help":
 			return errHelp
 		default:
@@ -62,15 +69,41 @@ func cmdDiff(args []string) error {
 		return fmt.Errorf("usage: ynd diff <harness-dir> [--harness dir] [-v vendor1,vendor2] [--profile name] [vendor1 vendor2 ...]")
 	}
 
+	// Resolve focus from flag or env var
+	if focusName == "" {
+		focusName = os.Getenv("YNH_FOCUS")
+	}
+	if focusName != "" && profileName != "" {
+		return fmt.Errorf("cannot use --focus and --profile together")
+	}
+
 	// Resolve profile from flag or env var
 	if profileName == "" {
 		profileName = os.Getenv("YNH_PROFILE")
+	}
+	if focusName != "" && profileName != "" {
+		return fmt.Errorf("cannot use --focus and --profile together (focus includes a profile)")
 	}
 
 	// Resolve source
 	srcDir, err := resolveSource(source)
 	if err != nil {
 		return err
+	}
+
+	// Resolve focus → profile
+	if focusName != "" {
+		h, _, loadErr := loadHarnessForPreview(srcDir)
+		if loadErr != nil {
+			return fmt.Errorf("loading harness for focus resolution: %w", loadErr)
+		}
+		focus, ok := h.Focuses[focusName]
+		if !ok {
+			return fmt.Errorf("focus %q not defined in harness", focusName)
+		}
+		if focus.Profile != "" {
+			profileName = focus.Profile
+		}
 	}
 
 	// Default to all vendors

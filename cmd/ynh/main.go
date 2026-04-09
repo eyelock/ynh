@@ -876,6 +876,49 @@ func cmdInfo(args []string) error {
 		}
 	}
 
+	fmt.Println()
+	fmt.Println("Profiles:")
+	if len(p.Profiles) == 0 {
+		fmt.Println("  (none)")
+	} else {
+		for name, profile := range p.Profiles {
+			var parts []string
+			if len(profile.Hooks) > 0 {
+				var events []string
+				for event := range profile.Hooks {
+					events = append(events, event)
+				}
+				parts = append(parts, "hooks: "+strings.Join(events, ", "))
+			}
+			if len(profile.MCPServers) > 0 {
+				var servers []string
+				for sname := range profile.MCPServers {
+					servers = append(servers, sname)
+				}
+				parts = append(parts, "mcp_servers: "+strings.Join(servers, ", "))
+			}
+			if len(parts) == 0 {
+				fmt.Printf("  %s\n", name)
+			} else {
+				fmt.Printf("  %s    %s\n", name, strings.Join(parts, "    "))
+			}
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("Focus:")
+	if len(p.Focuses) == 0 {
+		fmt.Println("  (none)")
+	} else {
+		for name, focus := range p.Focuses {
+			profileLabel := "(default)"
+			if focus.Profile != "" {
+				profileLabel = "profile=" + focus.Profile
+			}
+			fmt.Printf("  %s    %s    %q\n", name, profileLabel, focus.Prompt)
+		}
+	}
+
 	return nil
 }
 
