@@ -3,7 +3,7 @@
 ## Core flow
 
 ```
-.claude-plugin/plugin.json + metadata.json → resolve Git includes → assemble vendor config → launch vendor CLI
+harness.json → resolve Git includes → assemble vendor config → launch vendor CLI
 ```
 
 1. **Detect** harness format and load manifest (`internal/harness/`, `internal/plugin/`)
@@ -18,7 +18,7 @@ cmd/ynh/                  CLI entry point and command handlers
 internal/
   config/                 Global config (~/.ynh/) and path management
   harness/                Harness loading, format detection, name validation
-  plugin/                 Plugin format types (plugin.json + metadata.json)
+  plugin/                 Harness manifest types (harness.json)
   resolver/               Git clone, cache, and content extraction
   assembler/              Build vendor config dir from resolved content
     delegates.go          Generate agent files for delegates_to
@@ -40,7 +40,7 @@ testdata/                 Test fixtures (sample-harness, monorepo, etc.)
 - **Git is the package manager** - no registry, content cached locally by URL+ref hash
 - **Vendor-adaptive launch** - Claude uses `syscall.Exec` (native `--plugin-dir`), Codex/Cursor use child process with signal forwarding (symlink-based install)
 - **Deterministic run dir** - `~/.ynh/run/<name>/` overwritten each run (no temp dir leaks)
-- **Plugin format** - `.claude-plugin/plugin.json` for the manifest (strict vendor schema), `metadata.json` sidecar for ynh config under a `"ynh"` key
+- **Single manifest** - `harness.json` for all config (identity, includes, hooks, MCP servers, profiles)
 
 ## Adapter interface
 
