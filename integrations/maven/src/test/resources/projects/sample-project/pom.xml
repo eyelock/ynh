@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.acme</groupId>
+  <artifactId>web-api</artifactId>
+  <version>3.2.1</version>
+  <packaging>jar</packaging>
+
+  <name>ACME Web API</name>
+  <description>Sample web API for testing ynh-maven-plugin</description>
+
+  <properties>
+    <maven.compiler.release>17</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>io.ynh</groupId>
+        <artifactId>ynh-maven-plugin</artifactId>
+        <version>0.1.0</version>
+        <configuration>
+          <vendor>claude</vendor>
+          <inlineConfig>
+            <hooks>
+              <before_tool>
+                <hookEntry>
+                  <matcher>Write</matcher>
+                  <command>./scripts/lint-gate.sh</command>
+                </hookEntry>
+              </before_tool>
+            </hooks>
+            <mcpServers>
+              <github>
+                <command>npx</command>
+                <args>
+                  <arg>-y</arg>
+                  <arg>@modelcontextprotocol/server-github</arg>
+                </args>
+                <env>
+                  <GITHUB_TOKEN>${env.GITHUB_TOKEN}</GITHUB_TOKEN>
+                </env>
+              </github>
+            </mcpServers>
+            <profiles>
+              <ci>
+                <hooks>
+                  <before_tool>
+                    <hookEntry>
+                      <matcher>Write</matcher>
+                      <command>./scripts/strict-lint.sh</command>
+                    </hookEntry>
+                    <hookEntry>
+                      <matcher>Bash</matcher>
+                      <command>./scripts/ci-guard.sh</command>
+                    </hookEntry>
+                  </before_tool>
+                </hooks>
+              </ci>
+            </profiles>
+            <focus>
+              <review>
+                <profile>ci</profile>
+                <prompt>Review all staged changes for correctness and team standards</prompt>
+              </review>
+              <security>
+                <profile>ci</profile>
+                <prompt>Audit for OWASP Top 10 vulnerabilities</prompt>
+              </security>
+              <docs>
+                <prompt>Generate Javadoc for all public methods</prompt>
+              </docs>
+            </focus>
+          </inlineConfig>
+        </configuration>
+        <executions>
+          <execution>
+            <id>ai-security-review</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>execute</goal>
+            </goals>
+            <configuration>
+              <focus>security</focus>
+              <skip>${skipAiReview}</skip>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
