@@ -1,0 +1,54 @@
+{
+  "name": "@acme/web-api",
+  "version": "3.2.1",
+  "description": "Sample web API for testing @ynh/cli integration",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test src/*.test.js",
+    "ai": "ynh run",
+    "ai:review": "ynh run --focus review",
+    "ai:security": "ynh run --focus security"
+  },
+  "ynh": {
+    "vendor": "claude",
+    "hooks": {
+      "before_tool": [
+        { "matcher": "Write", "command": "node scripts/lint-gate.js" }
+      ]
+    },
+    "mcp_servers": {
+      "github": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"],
+        "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
+      }
+    },
+    "profiles": {
+      "ci": {
+        "hooks": {
+          "before_tool": [
+            { "matcher": "Write", "command": "node scripts/strict-lint.js" },
+            { "matcher": "Bash", "command": "node scripts/ci-guard.js" }
+          ]
+        },
+        "mcp_servers": {
+          "github": null
+        }
+      }
+    },
+    "focus": {
+      "review": {
+        "profile": "ci",
+        "prompt": "Review all staged changes. Check for correctness, edge cases, and adherence to team standards."
+      },
+      "security": {
+        "profile": "ci",
+        "prompt": "Audit the codebase for OWASP Top 10 vulnerabilities. Report severity and remediation."
+      },
+      "docs": {
+        "prompt": "Generate JSDoc documentation for all exported functions in src/"
+      }
+    }
+  }
+}

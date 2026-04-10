@@ -31,6 +31,8 @@ jobs:
               - 'go.sum'
               - 'Makefile'
               - '.github/workflows/**'
+            npm:
+              - 'integrations/npm/**'
 
   build:
     name: Build
@@ -90,10 +92,34 @@ jobs:
             exit 1
           fi
 
+  test-npm:
+    name: NPM Integration Tests
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.npm == 'true'
+    defaults:
+      run:
+        working-directory: integrations/npm
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Build ynh binary
+        run: make build
+        working-directory: .
+      - name: Add ynh to PATH
+        run: echo "${{ github.workspace }}/bin" >> $GITHUB_PATH
+      - name: Run tests
+        run: node --test test/*.test.js
+
   all-clear:
     name: All Clear
     runs-on: ubuntu-latest
-    needs: [changes, build, test, lint, format]
+    needs: [changes, build, test, lint, format, test-npm]
     if: always()
     steps:
       - name: Check results
@@ -104,6 +130,7 @@ jobs:
           echo "  test: ${{ needs.test.result }}"
           echo "  lint: ${{ needs.lint.result }}"
           echo "  format: ${{ needs.format.result }}"
+          echo "  test-npm: ${{ needs.test-npm.result }}"
 
           if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
             echo "One or more required checks failed"

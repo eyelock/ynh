@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage format lint check run docs help docker-build docker-push
+.PHONY: clean deps install build test test-coverage format lint check run docs help docker-build docker-push test-npm
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -80,5 +80,9 @@ docker-build: ## Build base Docker image
 docker-push: ## Push base Docker image to GHCR
 	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
 	docker push $(DOCKER_IMAGE):latest
+
+test-npm: ## Run NPM integration tests
+	@command -v node >/dev/null 2>&1 || { echo "Node.js not found. Install Node.js to run NPM integration tests."; exit 1; }
+	cd integrations/npm && node --test test/*.test.js
 
 check: deps format lint test build ## Run full CI pipeline

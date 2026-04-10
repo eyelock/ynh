@@ -1,0 +1,66 @@
+name: NPM Publish
+
+# Triggered after goreleaser creates a release (same v* tag).
+# Builds platform packages from the release archives and publishes to npm.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish @ynh/cli
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Download release archives
+        run: |
+          mkdir -p /tmp/dist
+          for platform in darwin_arm64 darwin_amd64 linux_amd64 linux_arm64; do
+            gh release download "${{ github.ref_name }}" \
+              --pattern "ynh_${{ steps.version.outputs.version }}_${platform}.tar.gz" \
+              --dir /tmp/dist
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build platform packages
+        run: ./integrations/npm/platforms/build.sh "${{ steps.version.outputs.version }}" /tmp/dist
+
+      - name: Publish platform packages
+        run: |
+          for pkg in integrations/npm/platforms/dist/@ynh/cli-*; do
+            echo "Publishing $(basename "$pkg")..."
+            (cd "$pkg" && npm publish --access public)
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Update coordinator package version
+        run: |
+          cd integrations/npm
+          npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
+          # Update optional dep versions to match
+          node -e "
+            const pkg = require('./package.json');
+            for (const dep of Object.keys(pkg.optionalDependencies || {})) {
+              pkg.optionalDependencies[dep] = '${{ steps.version.outputs.version }}';
+            }
+            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+
+      - name: Publish coordinator package
+        run: cd integrations/npm && npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
