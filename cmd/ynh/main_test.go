@@ -187,6 +187,57 @@ func TestParseRunArgs_FocusEnvVar(t *testing.T) {
 	}
 }
 
+func TestCmdRun_FocusAndProfileError(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("YNH_FOCUS", "")
+	t.Setenv("YNH_PROFILE", "")
+	t.Setenv("YNH_HARNESS_FILE", "")
+
+	err := cmdRun([]string{"my-harness", "--focus", "review", "--profile", "ci"})
+	if err == nil {
+		t.Fatal("expected error for --focus + --profile")
+	}
+	if !strings.Contains(err.Error(), "cannot use --focus and --profile together") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestCmdRun_FocusAndPromptError(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("YNH_FOCUS", "")
+	t.Setenv("YNH_PROFILE", "")
+	t.Setenv("YNH_HARNESS_FILE", "")
+
+	err := cmdRun([]string{"my-harness", "--focus", "review", "--", "do something"})
+	if err == nil {
+		t.Fatal("expected error for --focus + trailing prompt")
+	}
+	if !strings.Contains(err.Error(), "cannot use --focus and a trailing prompt together") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestCmdRun_FocusEnvPlusProfileEnvError(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("YNH_FOCUS", "review")
+	t.Setenv("YNH_PROFILE", "ci")
+	t.Setenv("YNH_HARNESS_FILE", "")
+
+	err := cmdRun([]string{"my-harness"})
+	if err == nil {
+		t.Fatal("expected error for YNH_FOCUS + YNH_PROFILE both set")
+	}
+	if !strings.Contains(err.Error(), "cannot use --focus and --profile together") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestParseRunArgs_HarnessFileEnvVar(t *testing.T) {
 	t.Setenv("YNH_FOCUS", "")
 	t.Setenv("YNH_HARNESS_FILE", "/tmp/test.json")
