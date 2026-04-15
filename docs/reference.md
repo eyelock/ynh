@@ -41,6 +41,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh search <query>` | |
 | `ynh registry <subcommand>` | |
 | `ynh image <subcommand>` | |
+| `ynh paths` | `--format <text\|json>` |
 | `ynh status` | |
 | `ynh prune` | |
 
@@ -60,3 +61,13 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynd marketplace build` | `-v`, `-o`, `--clean` |
 
 See [ynd Developer Tools](ynd.md) for detailed command documentation.
+
+## Structured Output
+
+Commands that take `--format json` emit machine-readable output conforming to [Structured CLI Output](cli-structured.md). Current emitters:
+
+| Command | Structured fields |
+|---------|-------------------|
+| `ynh paths` | `home`, `config`, `harnesses`, `symlinks`, `cache`, `run`, `bin` — all absolute paths resolved for the current `$YNH_HOME` |
+
+Human-readable tabwriter output remains the default for every command. Structured mode is strictly opt-in.

@@ -200,6 +200,19 @@ Requires Docker installed and running.
 | T13.7 | Flag wins over env var | [T13.7](tutorial/13-profiles.md#t137-both-flag-and-env-var--flag-wins) |
 | T13.8 | Diff with --profile | [T13.8](tutorial/13-profiles.md#t138-use-ynd-diff---profile-ci) |
 
+### Tutorial 16: Structured Output
+
+| ID | Test | Tutorial step |
+|---|---|---|
+| T16.1 | Show resolved paths — text | [T16.1](tutorial/16-structured-output.md#t161-show-resolved-paths--text) |
+| T16.2 | Show resolved paths — JSON | [T16.2](tutorial/16-structured-output.md#t162-show-resolved-paths--json) |
+| T16.3 | Pipe to jq | [T16.3](tutorial/16-structured-output.md#t163-pipe-to-jq) |
+| T16.4 | Explicit text format | [T16.4](tutorial/16-structured-output.md#t164-explicit-text-format) |
+| T16.5 | Error handling — text mode | [T16.5](tutorial/16-structured-output.md#t165-error-handling--text-mode) |
+| T16.6 | Error handling — JSON error envelope | [T16.6](tutorial/16-structured-output.md#t166-error-handling--json-error-envelope) |
+| T16.7 | Space-separated flags only | [T16.7](tutorial/16-structured-output.md#t167-space-separated-flags-only) |
+| T16.8 | YNH_HOME override | [T16.8](tutorial/16-structured-output.md#t168-ynh_home-override) |
+
 ---
 
 ## Edge Cases
@@ -437,5 +450,6 @@ rm -rf /tmp/ynh-bad-focus
 | Tutorial 13: Profiles | 8 |
 | Tutorial 14: Focus | 7 |
 | Tutorial 15: Project-Local Config | 4 |
+| Tutorial 16: Structured Output | 8 |
 | Edge Cases | 22 |
-| **Total** | **139** |
+| **Total** | **147** |

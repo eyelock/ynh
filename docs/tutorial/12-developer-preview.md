@@ -287,4 +287,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Tutorial 9: Delegation](tutorial/04-delegation.md) — chain harnesses together as subagents.
+[Tutorial 11: Structured Output](tutorial/16-structured-output.md) — use `--format json` for scripts, CI, and tool integration.

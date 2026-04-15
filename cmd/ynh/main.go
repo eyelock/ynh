@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -42,6 +43,8 @@ func main() {
 		err = cmdInfo(os.Args[2:])
 	case "vendors":
 		err = cmdVendors()
+	case "paths":
+		err = cmdPaths(os.Args[2:])
 	case "status":
 		err = cmdStatus()
 	case "search":
@@ -63,7 +66,13 @@ func main() {
 	}
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		// errStructuredReported means the command has already emitted a JSON
+		// error envelope to stderr — print nothing more to keep structured
+		// consumer stdout/stderr clean. errors.Is so a wrapped sentinel still
+		// suppresses the "Error: ..." line.
+		if !errors.Is(err, errStructuredReported) {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
 		os.Exit(1)
 	}
 }
@@ -89,6 +98,7 @@ Commands:
   registry remove <url>        Remove a registry
   registry update              Refresh all cached registries
   image <name> [flags]         Build a Docker image with a harness baked in
+  paths                        Show resolved path roots (supports --format json)
   status                       Show symlink installations across projects
   prune                        Clean orphaned symlink installations
   version                      Print version

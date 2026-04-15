@@ -60,6 +60,13 @@ func ConfigPath() string {
 	return filepath.Join(HomeDir(), ConfigFile)
 }
 
+// SymlinksPath returns the path to the symlink installation log.
+// Kept here alongside the other path accessors so every ynh-resolved path
+// has a single, authoritative home.
+func SymlinksPath() string {
+	return filepath.Join(HomeDir(), "symlinks.json")
+}
+
 // EnsureDirs creates the ynh directory structure if it doesn't exist.
 func EnsureDirs() error {
 	dirs := []string{
