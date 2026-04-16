@@ -337,3 +337,231 @@ func TestCmdComposeWithDelegates(t *testing.T) {
 		t.Errorf("delegate path = %q", got.DelegatesTo[0].Path)
 	}
 }
+
+func TestCmdComposeWithProfile(t *testing.T) {
+	srcDir := createComposeHarness(t)
+
+	// With --profile staging, hooks should be replaced by the profile's hooks
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{srcDir, "--profile", "staging"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	// Profile merges hooks: staging replaces before_tool
+	bt, ok := got.Hooks["before_tool"]
+	if !ok {
+		t.Fatal("hooks missing before_tool after profile merge")
+	}
+	if len(bt) != 1 || bt[0].Command != "echo staging" {
+		t.Errorf("profile should replace before_tool hook, got: %+v", bt)
+	}
+}
+
+func TestCmdComposeProfileEnvVar(t *testing.T) {
+	srcDir := createComposeHarness(t)
+	t.Setenv("YNH_PROFILE", "staging")
+
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{srcDir}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	// Should resolve profile from env var
+	bt, ok := got.Hooks["before_tool"]
+	if !ok {
+		t.Fatal("hooks missing before_tool after env-var profile")
+	}
+	if len(bt) != 1 || bt[0].Command != "echo staging" {
+		t.Errorf("env-var profile should replace before_tool hook, got: %+v", bt)
+	}
+}
+
+func TestCmdComposeHarnessEnvVar(t *testing.T) {
+	srcDir := createComposeHarness(t)
+	t.Setenv("YNH_HARNESS", srcDir)
+
+	var stdout bytes.Buffer
+	// No positional arg — should resolve from env var
+	if err := cmdComposeTo(nil, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Name != "compose-test" {
+		t.Errorf("name = %q, want compose-test", got.Name)
+	}
+}
+
+func TestCmdComposeTextRich(t *testing.T) {
+	srcDir := createComposeHarness(t)
+
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{srcDir, "--format", "text"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+
+	out := stdout.String()
+
+	// Identity
+	if !strings.Contains(out, "compose-test") {
+		t.Error("expected harness name")
+	}
+	if !strings.Contains(out, "1.0.0") {
+		t.Error("expected version")
+	}
+	if !strings.Contains(out, "Test harness for compose") {
+		t.Error("expected description")
+	}
+	if !strings.Contains(out, "claude") {
+		t.Error("expected vendor")
+	}
+
+	// Artifacts
+	if !strings.Contains(out, "greet") {
+		t.Error("expected skill greet")
+	}
+	if !strings.Contains(out, "deploy") {
+		t.Error("expected skill deploy")
+	}
+	if !strings.Contains(out, "reviewer") {
+		t.Error("expected agent reviewer")
+	}
+	if !strings.Contains(out, "no-debug") {
+		t.Error("expected rule no-debug")
+	}
+
+	// Hooks
+	if !strings.Contains(out, "before_tool") {
+		t.Error("expected hook event")
+	}
+	if !strings.Contains(out, "echo before") {
+		t.Error("expected hook command")
+	}
+	if !strings.Contains(out, "matcher=Write") {
+		t.Error("expected hook matcher")
+	}
+
+	// MCP Servers
+	if !strings.Contains(out, "test-server") {
+		t.Error("expected MCP server name")
+	}
+	if !strings.Contains(out, "node") {
+		t.Error("expected MCP server command")
+	}
+
+	// Profiles
+	if !strings.Contains(out, "staging") {
+		t.Error("expected profile name")
+	}
+
+	// Focuses
+	if !strings.Contains(out, "quick") {
+		t.Error("expected focus name")
+	}
+	if !strings.Contains(out, "Be concise") {
+		t.Error("expected focus prompt")
+	}
+	if !strings.Contains(out, "review") {
+		t.Error("expected focus name review")
+	}
+	if !strings.Contains(out, "profile=staging") {
+		t.Error("expected focus profile")
+	}
+}
+
+func TestCmdComposeMissingFormatValue(t *testing.T) {
+	err := cmdComposeTo([]string{".", "--format"}, io.Discard, io.Discard)
+	if err == nil {
+		t.Fatal("expected error for missing --format value")
+	}
+}
+
+func TestCmdComposeMissingHarnessValue(t *testing.T) {
+	err := cmdComposeTo([]string{"--harness"}, io.Discard, io.Discard)
+	if err == nil {
+		t.Fatal("expected error for missing --harness value")
+	}
+}
+
+func TestCmdComposeMissingProfileValue(t *testing.T) {
+	err := cmdComposeTo([]string{".", "--profile"}, io.Discard, io.Discard)
+	if err == nil {
+		t.Fatal("expected error for missing --profile value")
+	}
+}
+
+func TestCmdComposeHarnessFlag(t *testing.T) {
+	srcDir := createComposeHarness(t)
+
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{"--harness", srcDir}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Name != "compose-test" {
+		t.Errorf("name = %q, want compose-test", got.Name)
+	}
+}
+
+func TestCmdComposeExtraArg(t *testing.T) {
+	srcDir := createComposeHarness(t)
+	err := cmdComposeTo([]string{srcDir, "extra"}, io.Discard, io.Discard)
+	if err == nil {
+		t.Fatal("expected error for extra argument")
+	}
+	if !strings.Contains(err.Error(), "unexpected") {
+		t.Errorf("error should mention unexpected, got: %v", err)
+	}
+}
+
+func TestCmdComposeHelp(t *testing.T) {
+	err := cmdComposeTo([]string{"--help"}, io.Discard, io.Discard)
+	if err != errHelp {
+		t.Fatalf("expected errHelp, got: %v", err)
+	}
+}
+
+func TestCmdComposeTextWithMCPURL(t *testing.T) {
+	dir := t.TempDir()
+
+	hj := map[string]any{
+		"name":           "mcp-url-test",
+		"version":        "1.0.0",
+		"default_vendor": "claude",
+		"mcp_servers": map[string]any{
+			"remote": map[string]any{
+				"url": "https://api.example.com/mcp",
+			},
+		},
+	}
+	data, _ := json.MarshalIndent(hj, "", "  ")
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{dir, "--format", "text"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+
+	if !strings.Contains(stdout.String(), "https://api.example.com/mcp") {
+		t.Error("expected URL MCP server in text output")
+	}
+}

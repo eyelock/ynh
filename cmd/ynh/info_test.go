@@ -306,3 +306,204 @@ func TestCmdInfoManifestPreservesAllFields(t *testing.T) {
 		t.Error("manifest should contain mcp_servers")
 	}
 }
+
+func TestCmdInfoTextRichHarness(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	hj := `{
+		"name": "rich",
+		"version": "2.0.0",
+		"description": "Rich harness",
+		"default_vendor": "claude",
+		"includes": [
+			{"git": "github.com/eyelock/assistants", "path": "skills/dev", "ref": "v2"}
+		],
+		"delegates_to": [
+			{"git": "github.com/eyelock/delegate", "path": "harnesses/helper", "ref": "main"}
+		],
+		"hooks": {
+			"before_tool": [{"command": "echo before", "matcher": "Write"}],
+			"after_tool": [{"command": "echo after"}]
+		},
+		"mcp_servers": {
+			"db-server": {"command": "db-mcp", "args": ["--port", "5432"]},
+			"remote-api": {"url": "https://api.example.com/mcp"}
+		},
+		"profiles": {
+			"staging": {
+				"hooks": {"before_tool": [{"command": "echo staging"}]},
+				"mcp_servers": {"staging-db": {"command": "staging-mcp"}}
+			}
+		},
+		"focus": {
+			"quick": {"prompt": "Be concise"},
+			"review": {"profile": "staging", "prompt": "Review mode"}
+		},
+		"installed_from": {
+			"source_type": "git",
+			"source": "github.com/eyelock/rich",
+			"path": "harnesses/rich",
+			"registry_name": "eyelock",
+			"installed_at": "2026-04-16T10:00:00Z"
+		}
+	}`
+	installListTestHarness(t, home, "rich", hj)
+
+	// Add artifacts
+	skillDir := filepath.Join(home, "harnesses", "rich", "skills", "greet")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: greet\n---\nHello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	agentDir := filepath.Join(home, "harnesses", "rich", "agents")
+	if err := os.MkdirAll(agentDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(agentDir, "reviewer.md"), []byte("Review agent"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	if err := cmdInfoTo([]string{"rich"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+
+	out := stdout.String()
+
+	// Identity
+	if !strings.Contains(out, "rich") {
+		t.Error("expected harness name")
+	}
+	if !strings.Contains(out, "claude") {
+		t.Error("expected vendor")
+	}
+
+	// Provenance
+	if !strings.Contains(out, "github.com/eyelock/rich") {
+		t.Error("expected source in provenance")
+	}
+	if !strings.Contains(out, "harnesses/rich") {
+		t.Error("expected path in provenance")
+	}
+	if !strings.Contains(out, "eyelock") {
+		t.Error("expected registry name in provenance")
+	}
+
+	// Artifacts
+	if !strings.Contains(out, "greet") {
+		t.Error("expected skill name in artifacts")
+	}
+	if !strings.Contains(out, "reviewer") {
+		t.Error("expected agent name in artifacts")
+	}
+
+	// Includes
+	if !strings.Contains(out, "github.com/eyelock/assistants") {
+		t.Error("expected include git URL")
+	}
+	if !strings.Contains(out, "path=skills/dev") {
+		t.Error("expected include path")
+	}
+	if !strings.Contains(out, "ref=v2") {
+		t.Error("expected include ref")
+	}
+
+	// Delegates
+	if !strings.Contains(out, "github.com/eyelock/delegate") {
+		t.Error("expected delegate git URL")
+	}
+	if !strings.Contains(out, "path=harnesses/helper") {
+		t.Error("expected delegate path")
+	}
+
+	// Hooks
+	if !strings.Contains(out, "before_tool") {
+		t.Error("expected before_tool hook event")
+	}
+	if !strings.Contains(out, "echo before") {
+		t.Error("expected hook command")
+	}
+	if !strings.Contains(out, "matcher=Write") {
+		t.Error("expected hook matcher")
+	}
+	if !strings.Contains(out, "after_tool") {
+		t.Error("expected after_tool hook event")
+	}
+
+	// MCP Servers
+	if !strings.Contains(out, "db-server") {
+		t.Error("expected MCP server name (command)")
+	}
+	if !strings.Contains(out, "db-mcp") {
+		t.Error("expected MCP server command")
+	}
+	if !strings.Contains(out, "remote-api") {
+		t.Error("expected MCP server name (URL)")
+	}
+	if !strings.Contains(out, "https://api.example.com/mcp") {
+		t.Error("expected MCP server URL")
+	}
+
+	// Profiles
+	if !strings.Contains(out, "staging") {
+		t.Error("expected profile name")
+	}
+
+	// Focuses
+	if !strings.Contains(out, "quick") {
+		t.Error("expected focus name")
+	}
+	if !strings.Contains(out, "Be concise") {
+		t.Error("expected focus prompt")
+	}
+	if !strings.Contains(out, "review") {
+		t.Error("expected focus name review")
+	}
+	if !strings.Contains(out, "profile=staging") {
+		t.Error("expected focus profile")
+	}
+}
+
+func TestCmdInfoTextNoProvenance(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	installListTestHarness(t, home, "bare", `{"name": "bare", "version": "0.1.0"}`)
+
+	var stdout bytes.Buffer
+	if err := cmdInfoTo([]string{"bare"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+
+	out := stdout.String()
+	// Should show dashes for missing provenance
+	if !strings.Contains(out, "Installed:    -") {
+		t.Error("expected dash for missing install date")
+	}
+	if !strings.Contains(out, "Source:       -") {
+		t.Error("expected dash for missing source")
+	}
+	// Should show (none) for empty sections
+	if !strings.Contains(out, "(none)") {
+		t.Error("expected (none) for empty sections")
+	}
+}
+
+func TestCmdInfoTextNoVendor(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	installListTestHarness(t, home, "no-vendor", `{"name": "no-vendor", "version": "0.1.0"}`)
+
+	var stdout bytes.Buffer
+	if err := cmdInfoTo([]string{"no-vendor"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+
+	if !strings.Contains(stdout.String(), "Vendor:       -") {
+		t.Error("expected dash for missing vendor")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -728,7 +729,11 @@ func cmdRun(args []string) error {
 }
 
 func cmdVendors() error {
-	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	return cmdVendorsTo(os.Stdout)
+}
+
+func cmdVendorsTo(stdout io.Writer) error {
+	w := tabwriter.NewWriter(stdout, 0, 4, 2, ' ', 0)
 	_, _ = fmt.Fprintln(w, "NAME\tDISPLAY NAME\tCLI\tCONFIG DIR\tAVAILABLE")
 
 	for _, name := range vendor.Available() {
