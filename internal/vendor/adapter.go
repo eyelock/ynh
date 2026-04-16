@@ -22,6 +22,9 @@ type Adapter interface {
 	// Name returns the vendor identifier (e.g. "claude", "codex", "cursor").
 	Name() string
 
+	// DisplayName returns the human-friendly name (e.g. "Claude Code", "OpenAI Codex").
+	DisplayName() string
+
 	// CLIName returns the CLI binary name (e.g. "claude", "codex", "agent").
 	CLIName() string
 

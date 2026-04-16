@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
@@ -728,14 +729,19 @@ func cmdRun(args []string) error {
 
 func cmdVendors() error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "NAME\tCLI\tCONFIG DIR")
+	_, _ = fmt.Fprintln(w, "NAME\tDISPLAY NAME\tCLI\tCONFIG DIR\tAVAILABLE")
 
 	for _, name := range vendor.Available() {
 		adapter, err := vendor.Get(name)
 		if err != nil {
 			return fmt.Errorf("loading vendor %s: %w", name, err)
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", adapter.Name(), adapter.CLIName(), adapter.ConfigDir())
+		available := "false"
+		if _, err := exec.LookPath(adapter.CLIName()); err == nil {
+			available = "true"
+		}
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+			adapter.Name(), adapter.DisplayName(), adapter.CLIName(), adapter.ConfigDir(), available)
 	}
 
 	_ = w.Flush()
