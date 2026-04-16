@@ -53,6 +53,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynd validate [path]` | `--harness` |
 | `ynd lint [path]` | `--harness` |
 | `ynd fmt [path]` | `--harness` |
+| `ynd compose <source>` | `--harness`, `--profile`, `--format <text\|json>` |
 | `ynd compress [files...]` | `-v`, `-y`, `--restore`, `--list-backups`, `--pick` |
 | `ynd inspect` | `-v`, `-y`, `-o` |
 | `ynd preview <source>` | `-v`, `-o`, `--harness`, `--profile` |
@@ -68,6 +69,7 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 
 | Command | Structured fields |
 |---------|-------------------|
+| `ynd compose` | Composed harness: `name`, `version`, `description`, `default_vendor`, `artifacts` (with source), `includes`, `delegates_to`, `hooks`, `mcp_servers`, `profiles`, `focuses`, `counts` |
 | `ynh info <name>` | Single harness object: `name`, `version`, `description`, `default_vendor`, `path`, `installed_from`, `manifest` (raw `.harness.json` body) |
 | `ynh ls` | Array of harness objects: `name`, `version`, `description`, `default_vendor`, `path`, `installed_from`, `artifacts`, `includes`, `delegates_to` |
 | `ynh paths` | `home`, `config`, `harnesses`, `symlinks`, `cache`, `run`, `bin` — all absolute paths resolved for the current `$YNH_HOME` |

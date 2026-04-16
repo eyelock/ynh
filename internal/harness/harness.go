@@ -293,17 +293,16 @@ func (a *Artifacts) Total() int {
 // ScanArtifacts discovers local artifacts in a harness's installed directory.
 // Skills are directories containing SKILL.md; agents, rules, and commands are .md files.
 func ScanArtifacts(name string) (*Artifacts, error) {
-	dir := InstalledDir(name)
+	return ScanArtifactsDir(InstalledDir(name))
+}
+
+// ScanArtifactsDir discovers artifacts in an arbitrary directory.
+func ScanArtifactsDir(dir string) (*Artifacts, error) {
 	a := &Artifacts{}
-
-	// Skills: subdirectories with SKILL.md
 	a.Skills = scanSkillDirs(filepath.Join(dir, "skills"))
-
-	// Agents, rules, commands: .md files
 	a.Agents = scanMDFiles(filepath.Join(dir, "agents"))
 	a.Rules = scanMDFiles(filepath.Join(dir, "rules"))
 	a.Commands = scanMDFiles(filepath.Join(dir, "commands"))
-
 	return a, nil
 }
 
