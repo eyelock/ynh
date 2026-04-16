@@ -40,7 +40,7 @@ func main() {
 	case "marketplace":
 		err = cmdMarketplace(os.Args[2:])
 	case "version", "--version", "-v":
-		fmt.Printf("ynd %s\n", config.Version)
+		fmt.Println(config.Version)
 	case "help", "--help", "-h":
 		printUsage()
 	default:

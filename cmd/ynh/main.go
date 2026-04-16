@@ -56,7 +56,7 @@ func main() {
 	case "prune":
 		err = cmdPrune()
 	case "version", "--version":
-		fmt.Printf("ynh %s\n", config.Version)
+		fmt.Println(config.Version)
 	case "help", "--help", "-h":
 		printUsage()
 	default:
