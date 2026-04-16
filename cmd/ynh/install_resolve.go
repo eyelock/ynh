@@ -6,6 +6,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/registry"
+	"github.com/eyelock/ynh/internal/sources"
 )
 
 // resolvedSource holds the result of disambiguating an install source.
@@ -14,8 +15,10 @@ import (
 type resolvedSource struct {
 	gitURL       string // non-empty if resolved to a Git URL (from registry)
 	path         string // monorepo subdir (from registry entry)
-	sourceType   string // "local", "git", "registry"
+	localPath    string // absolute path when resolved from a configured source
+	sourceType   string // "local", "git", "registry", "source"
 	registryName string // non-empty for registry lookups
+	sourceName   string // non-empty for source lookups (config source name)
 }
 
 // resolveInstallSource applies disambiguation rules to determine the source type.
@@ -50,7 +53,12 @@ func resolveInstallSource(source, existingPath string, cfg *config.Config) (reso
 		return resolvedSource{sourceType: "git"}, nil
 	}
 
-	// Rule 6: Plain word → registry search
+	// Rule 6: Plain word → check local sources first, then registry search
+	if len(cfg.Sources) > 0 {
+		if rs, found := searchFromSources(source, cfg); found {
+			return rs, nil
+		}
+	}
 	return searchFromRegistry(source, cfg)
 }
 
@@ -125,4 +133,25 @@ func searchFromRegistry(name string, cfg *config.Config) (resolvedSource, error)
 		"%q not found in any registry.\n  Did you mean a Git URL? Try: ynh install github.com/user/%s",
 		name, name,
 	)
+}
+
+// searchFromSources looks for a harness by exact name in all configured
+// local sources. Returns the first match (config order wins).
+func searchFromSources(name string, cfg *config.Config) (resolvedSource, bool) {
+	for _, s := range cfg.Sources {
+		discovered, err := sources.Discover(s.Path, 2)
+		if err != nil {
+			continue
+		}
+		for _, h := range discovered {
+			if strings.EqualFold(h.Name, name) {
+				return resolvedSource{
+					sourceType: "source",
+					localPath:  h.Path,
+					sourceName: s.Name,
+				}, true
+			}
+		}
+	}
+	return resolvedSource{}, false
 }

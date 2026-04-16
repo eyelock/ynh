@@ -21,10 +21,18 @@ type RegistrySource struct {
 	Ref string `json:"ref,omitempty"`
 }
 
+// Source points to a local directory tree containing harnesses.
+type Source struct {
+	Name        string `json:"name"`
+	Path        string `json:"path"`
+	Description string `json:"description,omitempty"`
+}
+
 type Config struct {
 	DefaultVendor        string           `json:"default_vendor,omitempty"`
 	AllowedRemoteSources []string         `json:"allowed_remote_sources,omitempty"`
 	Registries           []RegistrySource `json:"registries,omitempty"`
+	Sources              []Source         `json:"sources,omitempty"`
 }
 
 // HomeDir returns the ynh home directory.

@@ -45,6 +45,8 @@ func main() {
 		err = cmdInfo(os.Args[2:])
 	case "vendors":
 		err = cmdVendors()
+	case "sources":
+		err = cmdSources(os.Args[2:])
 	case "paths":
 		err = cmdPaths(os.Args[2:])
 	case "status":
@@ -94,7 +96,10 @@ Commands:
   ls                           List installed harnesses (supports --format json)
   info <name>                  Show detailed harness information (supports --format json)
   vendors                      List supported vendor adapters
-  search <term>                Search registries for harnesses
+  search <term>                Search registries and sources for harnesses
+  sources add <path>           Add a local harness source directory
+  sources list                 Show configured sources (supports --format json)
+  sources remove <name>        Remove a source
   registry add <url>           Add a harness registry
   registry list                Show configured registries
   registry remove <url>        Remove a registry
@@ -206,7 +211,9 @@ func cmdInstall(args []string) error {
 		}
 	}
 
-	if isLocalPath(source) {
+	if resolved.localPath != "" {
+		srcDir = resolved.localPath
+	} else if isLocalPath(source) {
 		absPath, err := filepath.Abs(source)
 		if err != nil {
 			return fmt.Errorf("resolving absolute path for %s: %w", source, err)
@@ -262,6 +269,8 @@ func cmdInstall(args []string) error {
 	provSource := source
 	if resolved.sourceType == "local" {
 		provSource = originalSource
+	} else if resolved.localPath != "" {
+		provSource = resolved.localPath
 	}
 	prov := &plugin.ProvenanceMeta{
 		SourceType:   resolved.sourceType,
