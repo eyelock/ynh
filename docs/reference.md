@@ -36,7 +36,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh uninstall <harness>` | |
 | `ynh update [harness]` | |
 | `ynh ls` | `--format <text\|json>` |
-| `ynh info <harness>` | |
+| `ynh info <harness>` | `--format <text\|json>` |
 | `ynh vendors` | |
 | `ynh search <query>` | |
 | `ynh registry <subcommand>` | |
@@ -68,6 +68,7 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 
 | Command | Structured fields |
 |---------|-------------------|
+| `ynh info <name>` | Single harness object: `name`, `version`, `description`, `default_vendor`, `path`, `installed_from`, `manifest` (raw `.harness.json` body) |
 | `ynh ls` | Array of harness objects: `name`, `version`, `description`, `default_vendor`, `path`, `installed_from`, `artifacts`, `includes`, `delegates_to` |
 | `ynh paths` | `home`, `config`, `harnesses`, `symlinks`, `cache`, `run`, `bin` — all absolute paths resolved for the current `$YNH_HOME` |
 
