@@ -96,7 +96,7 @@ Commands:
   ls                           List installed harnesses (supports --format json)
   info <name>                  Show detailed harness information (supports --format json)
   vendors                      List supported vendor adapters
-  search <term>                Search registries and sources for harnesses
+  search <term>                Search registries and sources (supports --format json)
   sources add <path>           Add a local harness source directory
   sources list                 Show configured sources (supports --format json)
   sources remove <name>        Remove a source
