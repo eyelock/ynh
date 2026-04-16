@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -44,7 +45,7 @@ func main() {
 	case "info":
 		err = cmdInfo(os.Args[2:])
 	case "vendors":
-		err = cmdVendors()
+		err = cmdVendors(os.Args[2:])
 	case "sources":
 		err = cmdSources(os.Args[2:])
 	case "paths":
@@ -95,7 +96,7 @@ Commands:
   run <name> [flags] [prompt]  Launch a harness session
   ls                           List installed harnesses (supports --format json)
   info <name>                  Show detailed harness information (supports --format json)
-  vendors                      List supported vendor adapters
+  vendors                      List supported vendor adapters (supports --format json)
   search <term>                Search registries and sources (supports --format json)
   sources add <path>           Add a local harness source directory
   sources list                 Show configured sources (supports --format json)
@@ -737,13 +738,57 @@ func cmdRun(args []string) error {
 	}
 }
 
-func cmdVendors() error {
-	return cmdVendorsTo(os.Stdout)
+func cmdVendors(args []string) error {
+	return cmdVendorsTo(args, os.Stdout, os.Stderr)
 }
 
-func cmdVendorsTo(stdout io.Writer) error {
-	w := tabwriter.NewWriter(stdout, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "NAME\tDISPLAY NAME\tCLI\tCONFIG DIR\tAVAILABLE")
+// vendorEntry is the JSON shape for a single vendor in `ynh vendors --format json`.
+type vendorEntry struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	CLI         string `json:"cli"`
+	ConfigDir   string `json:"config_dir"`
+	Available   bool   `json:"available"`
+}
+
+func cmdVendorsTo(args []string, stdout, stderr io.Writer) error {
+	structured := detectJSONFormat(args)
+
+	format := "text"
+	i := 0
+	for i < len(args) {
+		switch args[i] {
+		case "--format":
+			if i+1 >= len(args) {
+				return cliError(stderr, structured, errCodeInvalidInput, "--format requires a value")
+			}
+			i++
+			format = args[i]
+		default:
+			if strings.HasPrefix(args[i], "-") {
+				return cliError(stderr, structured, errCodeInvalidInput,
+					fmt.Sprintf("unknown flag: %s", args[i]))
+			}
+			return cliError(stderr, structured, errCodeInvalidInput,
+				fmt.Sprintf("unexpected argument: %s", args[i]))
+		}
+		i++
+	}
+
+	switch format {
+	case "text":
+		return printVendorsText(stdout)
+	case "json":
+		return printVendorsJSON(stdout)
+	default:
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("invalid --format value %q (want text or json)", format))
+	}
+}
+
+func printVendorsText(w io.Writer) error {
+	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "NAME\tDISPLAY NAME\tCLI\tCONFIG DIR\tAVAILABLE")
 
 	for _, name := range vendor.Available() {
 		adapter, err := vendor.Get(name)
@@ -754,12 +799,36 @@ func cmdVendorsTo(stdout io.Writer) error {
 		if _, err := exec.LookPath(adapter.CLIName()); err == nil {
 			available = "true"
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
 			adapter.Name(), adapter.DisplayName(), adapter.CLIName(), adapter.ConfigDir(), available)
 	}
 
-	_ = w.Flush()
-	return nil
+	return tw.Flush()
+}
+
+func printVendorsJSON(w io.Writer) error {
+	entries := make([]vendorEntry, 0, len(vendor.Available()))
+	for _, name := range vendor.Available() {
+		adapter, err := vendor.Get(name)
+		if err != nil {
+			return fmt.Errorf("loading vendor %s: %w", name, err)
+		}
+		_, lookErr := exec.LookPath(adapter.CLIName())
+		entries = append(entries, vendorEntry{
+			Name:        adapter.Name(),
+			DisplayName: adapter.DisplayName(),
+			CLI:         adapter.CLIName(),
+			ConfigDir:   adapter.ConfigDir(),
+			Available:   lookErr == nil,
+		})
+	}
+
+	data, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encoding vendors: %w", err)
+	}
+	_, err = fmt.Fprintln(w, string(data))
+	return err
 }
 
 // resolveVendor picks the vendor: CLI flag > YNH_VENDOR env > harness default > global config.

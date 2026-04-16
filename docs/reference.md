@@ -37,7 +37,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh update [harness]` | |
 | `ynh ls` | `--format <text\|json>` |
 | `ynh info <harness>` | `--format <text\|json>` |
-| `ynh vendors` | |
+| `ynh vendors` | `--format <text\|json>` |
 | `ynh search <query>` | `--format <text\|json>` |
 | `ynh sources add <path>` | `--name`, `--description` |
 | `ynh sources list` | `--format <text\|json>` |
@@ -77,6 +77,7 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 | `ynh ls` | Array of harness objects: `name`, `version`, `description`, `default_vendor`, `path`, `installed_from`, `artifacts`, `includes`, `delegates_to` |
 | `ynh paths` | `home`, `config`, `harnesses`, `symlinks`, `cache`, `run`, `bin` — all absolute paths resolved for the current `$YNH_HOME` |
 | `ynh search <term>` | Array of result objects: `name`, `description`, `keywords`, `repo`, `path`, `vendors`, `version`, `from` (`type`, `name`) |
+| `ynh vendors` | Array of vendor objects: `name`, `display_name`, `cli`, `config_dir`, `available` (bool) |
 | `ynh sources list` | Array of source objects: `name`, `path`, `description`, `harnesses` (discovery count) |
 
 Human-readable tabwriter output remains the default for every command. Structured mode is strictly opt-in.
