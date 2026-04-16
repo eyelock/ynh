@@ -409,7 +409,7 @@ func TestCmdList_Empty(t *testing.T) {
 	}
 
 	// Should not error when no harnesses installed
-	if err := cmdList(); err != nil {
+	if err := cmdList(nil); err != nil {
 		t.Fatalf("cmdList failed: %v", err)
 	}
 }
@@ -421,7 +421,7 @@ func TestCmdList_WithHarnesses(t *testing.T) {
 	installTestHarness(t, "alice")
 	installTestHarness(t, "bob")
 
-	if err := cmdList(); err != nil {
+	if err := cmdList(nil); err != nil {
 		t.Fatalf("cmdList failed: %v", err)
 	}
 }

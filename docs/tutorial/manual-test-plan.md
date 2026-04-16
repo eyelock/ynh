@@ -211,7 +211,10 @@ Requires Docker installed and running.
 | T16.5 | Error handling — text mode | [T16.5](tutorial/16-structured-output.md#t165-error-handling--text-mode) |
 | T16.6 | Error handling — JSON error envelope | [T16.6](tutorial/16-structured-output.md#t166-error-handling--json-error-envelope) |
 | T16.7 | Space-separated flags only | [T16.7](tutorial/16-structured-output.md#t167-space-separated-flags-only) |
-| T16.8 | YNH_HOME override | [T16.8](tutorial/16-structured-output.md#t168-ynh_home-override) |
+| T16.8 | List harnesses — JSON | [T16.8](tutorial/16-structured-output.md#t168-list-installed-harnesses--json) |
+| T16.9 | List harnesses — jq extraction | [T16.9](tutorial/16-structured-output.md#t169-list-harnesses--extract-with-jq) |
+| T16.10 | Empty list — JSON | [T16.10](tutorial/16-structured-output.md#t1610-empty-list--json) |
+| T16.11 | YNH_HOME override | [T16.11](tutorial/16-structured-output.md#t1611-ynh_home-override) |
 
 ---
 
@@ -450,6 +453,6 @@ rm -rf /tmp/ynh-bad-focus
 | Tutorial 13: Profiles | 8 |
 | Tutorial 14: Focus | 7 |
 | Tutorial 15: Project-Local Config | 4 |
-| Tutorial 16: Structured Output | 8 |
+| Tutorial 16: Structured Output | 11 |
 | Edge Cases | 22 |
-| **Total** | **147** |
+| **Total** | **150** |

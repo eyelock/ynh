@@ -35,7 +35,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh run [harness]` | `-v`, `--profile`, `--install`, `--clean` |
 | `ynh uninstall <harness>` | |
 | `ynh update [harness]` | |
-| `ynh ls` | |
+| `ynh ls` | `--format <text\|json>` |
 | `ynh info <harness>` | |
 | `ynh vendors` | |
 | `ynh search <query>` | |
@@ -68,6 +68,7 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 
 | Command | Structured fields |
 |---------|-------------------|
+| `ynh ls` | Array of harness objects: `name`, `version`, `description`, `default_vendor`, `path`, `installed_from`, `artifacts`, `includes`, `delegates_to` |
 | `ynh paths` | `home`, `config`, `harnesses`, `symlinks`, `cache`, `run`, `bin` — all absolute paths resolved for the current `$YNH_HOME` |
 
 Human-readable tabwriter output remains the default for every command. Structured mode is strictly opt-in.

@@ -6,7 +6,7 @@ Use `--format json` to get machine-readable output from ynh commands. Useful for
 
 Make sure `ynh` is installed and on your PATH. See the [install instructions](tutorial/README.md) if you haven't set up yet.
 
-No harnesses need to be installed — `ynh paths` works with just ynh itself.
+The `ynh paths` examples work with just ynh itself. The `ynh ls` examples need at least one harness installed — if you completed Tutorial 1, `my-harness` will be available.
 
 ## How structured output works
 
@@ -165,7 +165,118 @@ Error: unknown flag: --format=json
 
 Always use `--format json` (with a space).
 
-## T16.8: YNH_HOME override
+## T16.8: List installed harnesses — JSON
+
+`ynh ls` also supports `--format json`. First, make sure a harness is installed:
+
+```bash
+rm -rf /tmp/ynh-tutorial
+mkdir -p /tmp/ynh-tutorial/my-harness/skills/greet
+
+cat > /tmp/ynh-tutorial/my-harness/.harness.json << 'EOF'
+{
+  "name": "my-harness",
+  "version": "0.1.0",
+  "description": "Tutorial harness",
+  "default_vendor": "claude"
+}
+EOF
+
+cat > /tmp/ynh-tutorial/my-harness/skills/greet/SKILL.md << 'EOF'
+---
+name: greet
+description: Say hello.
+---
+Say hello.
+EOF
+
+ynh install /tmp/ynh-tutorial/my-harness
+```
+
+Now list in JSON:
+
+```bash
+ynh ls --format json
+```
+
+Expected (timestamps and paths will differ):
+```json
+[
+  {
+    "name": "my-harness",
+    "version": "0.1.0",
+    "description": "Tutorial harness",
+    "default_vendor": "claude",
+    "path": "/Users/<you>/.ynh/harnesses/my-harness",
+    "installed_from": {
+      "source_type": "local",
+      "source": "/tmp/ynh-tutorial/my-harness",
+      "installed_at": "<timestamp>"
+    },
+    "artifacts": {
+      "skills": 1,
+      "agents": 0,
+      "rules": 0,
+      "commands": 0
+    },
+    "includes": [],
+    "delegates_to": []
+  }
+]
+```
+
+Key points:
+- Output is a JSON **array** — even with one harness.
+- `path` is the absolute path to the installed harness directory.
+- `artifacts` always includes all four counts (never omitted when zero).
+- `includes` and `delegates_to` are always present, even when empty (`[]`).
+- `description` is omitted if the harness has none (not present as `""`).
+
+## T16.9: List harnesses — extract with jq
+
+Get just the names:
+
+```bash
+ynh ls --format json | jq -r '.[].name'
+```
+
+Expected:
+```
+my-harness
+```
+
+Check if a specific harness is installed:
+
+```bash
+ynh ls --format json | jq -e '.[] | select(.name == "my-harness")' > /dev/null && echo "installed" || echo "not installed"
+```
+
+Expected:
+```
+installed
+```
+
+## T16.10: Empty list — JSON
+
+With no harnesses installed, the JSON output is an empty array:
+
+```bash
+ynh uninstall my-harness
+ynh ls --format json
+```
+
+Expected:
+```json
+[]
+```
+
+Not `null`, not omitted — a clean empty array. Reinstall for subsequent tutorials:
+
+```bash
+ynh install /tmp/ynh-tutorial/my-harness
+```
+
+## T16.11: YNH_HOME override
 
 Paths reflect the active `YNH_HOME`, which is useful for testing or multi-environment setups:
 
@@ -188,17 +299,27 @@ Expected:
 
 All seven paths shift to the overridden root.
 
+## Clean up
+
+```bash
+ynh uninstall my-harness 2>/dev/null
+rm -rf /tmp/ynh-tutorial
+```
+
 ## What you learned
 
 - `--format json` gives machine-readable JSON on stdout; `--format text` is the default
 - The flag is space-separated only (`--format json`, not `--format=json`)
-- JSON output is a single object (or array) terminated by a newline — pipe to `jq` for extraction
+- `ynh paths --format json` emits a single object; `ynh ls --format json` emits an array
+- Empty arrays are `[]`, never `null` or omitted
+- Optional fields like `description` are omitted when unset, never serialised as `""`
+- Pipe to `jq` for extraction — names, paths, counts, install status checks
 - Errors in text mode go to stderr as plain `Error:` lines
 - Errors in JSON mode go to stderr as a structured envelope: `{"error":{"code":"...","message":"..."}}`
 - Stdout is always empty on error — scripts can check exit code and parse stderr
 - `code` values are stable identifiers for scripting; `message` is for humans
 - `YNH_HOME` changes all resolved paths — useful for testing and multi-environment setups
-- These conventions apply to every command that supports `--format json`, not just `ynh paths`
+- These conventions apply to every command that supports `--format json`
 
 ## Next
 

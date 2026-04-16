@@ -38,7 +38,7 @@ func main() {
 	case "run":
 		err = cmdRun(os.Args[2:])
 	case "ls", "list":
-		err = cmdList()
+		err = cmdList(os.Args[2:])
 	case "info":
 		err = cmdInfo(os.Args[2:])
 	case "vendors":
@@ -89,7 +89,7 @@ Commands:
   uninstall <name>           Remove an installed harness and its launcher
   update <name>              Refresh cached Git repos for a harness
   run <name> [flags] [prompt]  Launch a harness session
-  ls                           List installed harnesses
+  ls                           List installed harnesses (supports --format json)
   info <name>                  Show detailed harness information
   vendors                      List supported vendor adapters
   search <term>                Search registries for harnesses
@@ -726,45 +726,6 @@ func cmdRun(args []string) error {
 	}
 }
 
-func cmdList() error {
-	names, err := harness.List()
-	if err != nil {
-		return err
-	}
-
-	if len(names) == 0 {
-		fmt.Println("No harnesses installed.")
-		fmt.Println("Install one with: ynh install <git-url|path>")
-		return nil
-	}
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "NAME\tVENDOR\tSOURCE\tARTIFACTS\tINCLUDES\tDELEGATES TO")
-
-	for _, name := range names {
-		p, err := harness.Load(name)
-		if err != nil {
-			_, _ = fmt.Fprintf(w, "%s\t(error: %v)\t\t\t\t\n", name, err)
-			continue
-		}
-
-		vendorName := p.DefaultVendor
-		if vendorName == "" {
-			vendorName = "-"
-		}
-
-		source := formatProvenance(p.InstalledFrom)
-		artifacts := formatArtifactSummary(name)
-		includes := formatIncludes(p.Includes)
-		delegates := formatDelegates(p.DelegatesTo)
-
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", p.Name, vendorName, source, artifacts, includes, delegates)
-	}
-
-	_ = w.Flush()
-	return nil
-}
-
 func cmdInfo(args []string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("usage: ynh info <harness-name>")
@@ -930,101 +891,6 @@ func cmdInfo(args []string) error {
 	}
 
 	return nil
-}
-
-// formatArtifactSummary formats the ARTIFACTS column for ynh ls.
-// Shows a compact summary like "1s 2a 1r 1c" (skills, agents, rules, commands).
-func formatArtifactSummary(name string) string {
-	arts, _ := harness.ScanArtifacts(name)
-	if arts.Total() == 0 {
-		return "0"
-	}
-	var parts []string
-	if len(arts.Skills) > 0 {
-		parts = append(parts, fmt.Sprintf("%ds", len(arts.Skills)))
-	}
-	if len(arts.Agents) > 0 {
-		parts = append(parts, fmt.Sprintf("%da", len(arts.Agents)))
-	}
-	if len(arts.Rules) > 0 {
-		parts = append(parts, fmt.Sprintf("%dr", len(arts.Rules)))
-	}
-	if len(arts.Commands) > 0 {
-		parts = append(parts, fmt.Sprintf("%dc", len(arts.Commands)))
-	}
-	return strings.Join(parts, " ")
-}
-
-// formatProvenance formats the SOURCE column for ynh ls.
-func formatProvenance(prov *harness.Provenance) string {
-	if prov == nil {
-		return "-"
-	}
-	short := shortGitURL(prov.Source)
-	if prov.Path != "" {
-		short += "/" + prov.Path
-	}
-	if prov.RegistryName != "" {
-		short += " (" + prov.RegistryName + ")"
-	}
-	return short
-}
-
-// formatIncludes formats the INCLUDES column for ynh ls.
-func formatIncludes(includes []harness.Include) string {
-	if len(includes) == 0 {
-		return "0"
-	}
-	parts := make([]string, 0, len(includes))
-	for _, inc := range includes {
-		s := shortGitURL(inc.Git)
-		if inc.Path != "" {
-			s += "/" + inc.Path
-		}
-		if inc.Ref != "" && inc.Ref != "main" && inc.Ref != "HEAD" {
-			s += "@" + inc.Ref
-		}
-		if len(inc.Pick) > 0 {
-			s += fmt.Sprintf(" [%d]", len(inc.Pick))
-		}
-		parts = append(parts, s)
-	}
-	return strings.Join(parts, ", ")
-}
-
-// formatDelegates formats the DELEGATES TO column for ynh ls.
-func formatDelegates(delegates []harness.Delegate) string {
-	if len(delegates) == 0 {
-		return "0"
-	}
-	parts := make([]string, 0, len(delegates))
-	for _, del := range delegates {
-		s := shortGitURL(del.Git)
-		if del.Path != "" {
-			s += "/" + del.Path
-		}
-		if del.Ref != "" && del.Ref != "main" && del.Ref != "HEAD" {
-			s += "@" + del.Ref
-		}
-		parts = append(parts, s)
-	}
-	return strings.Join(parts, ", ")
-}
-
-// shortGitURL abbreviates a git URL for display.
-// "github.com/eyelock/ynh" -> "eyelock/ynh"
-// "/tmp/ynh-walkthrough/foo" -> "/tmp/ynh-walkthrough/foo"
-func shortGitURL(url string) string {
-	// Local paths: keep as-is
-	if strings.HasPrefix(url, "/") || strings.HasPrefix(url, ".") {
-		return url
-	}
-	// Strip host prefix: "github.com/user/repo" -> "user/repo"
-	parts := strings.SplitN(url, "/", 2)
-	if len(parts) == 2 {
-		return parts[1]
-	}
-	return url
 }
 
 func cmdVendors() error {

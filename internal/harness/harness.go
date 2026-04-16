@@ -44,6 +44,7 @@ type Provenance struct {
 
 type Harness struct {
 	Name          string
+	Version       string
 	Description   string
 	DefaultVendor string
 	Includes      []Include
@@ -122,7 +123,7 @@ func LoadDir(dir string) (*Harness, error) {
 		return nil, fmt.Errorf("invalid harness name %q: must match %s", hj.Name, validName.String())
 	}
 
-	p := &Harness{Name: hj.Name, Description: hj.Description}
+	p := &Harness{Name: hj.Name, Version: hj.Version, Description: hj.Description}
 	p.DefaultVendor = hj.DefaultVendor
 
 	for _, inc := range hj.Includes {
@@ -245,7 +246,7 @@ func LoadFile(path string) (*Harness, error) {
 		return nil, err
 	}
 
-	p := &Harness{Name: hj.Name, Description: hj.Description}
+	p := &Harness{Name: hj.Name, Version: hj.Version, Description: hj.Description}
 	p.DefaultVendor = hj.DefaultVendor
 
 	for _, inc := range hj.Includes {
