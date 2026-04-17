@@ -58,8 +58,10 @@ func cmdRegistryAdd(args []string) error {
 }
 
 type registryListEntry struct {
-	URL string `json:"url"`
-	Ref string `json:"ref,omitempty"`
+	URL         string `json:"url"`
+	Ref         string `json:"ref,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 func cmdRegistryList(args []string) error {
@@ -84,7 +86,15 @@ func cmdRegistryList(args []string) error {
 	case "json":
 		entries := make([]registryListEntry, len(cfg.Registries))
 		for i, r := range cfg.Registries {
-			entries[i] = registryListEntry{URL: r.URL, Ref: r.Ref}
+			e := registryListEntry{URL: r.URL, Ref: r.Ref}
+			// Enrich with name/description from cached registry.json if available.
+			if result, resErr := resolver.EnsureRepo(r.URL, r.Ref); resErr == nil {
+				if reg, regErr := registry.LoadFromDir(result.Path); regErr == nil {
+					e.Name = reg.Name
+					e.Description = reg.Description
+				}
+			}
+			entries[i] = e
 		}
 		data, err := json.MarshalIndent(entries, "", "  ")
 		if err != nil {
