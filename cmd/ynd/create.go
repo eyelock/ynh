@@ -30,7 +30,7 @@ func cmdCreate(args []string) error {
 	case "agent":
 		return createAgent(name)
 	case "harness":
-		return createHarness(name)
+		return cmdCreateHarness(name, args[2:])
 	case "rule":
 		return createRule(name)
 	case "command":
@@ -38,6 +38,29 @@ func cmdCreate(args []string) error {
 	default:
 		return fmt.Errorf("unknown type %q: must be skill, agent, harness, rule, or command", kind)
 	}
+}
+
+func cmdCreateHarness(name string, args []string) error {
+	var description, vendor string
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--description":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--description requires a value")
+			}
+			i++
+			description = args[i]
+		case "--vendor", "-v":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--vendor requires a value")
+			}
+			i++
+			vendor = args[i]
+		default:
+			return fmt.Errorf("unknown flag: %s\nUsage: ynd create harness <name> [--description <desc>] [--vendor <vendor>]", args[i])
+		}
+	}
+	return createHarness(name, description, vendor)
 }
 
 func createSkill(name string) error {
@@ -109,7 +132,7 @@ Provide actionable output, not just observations.
 	return nil
 }
 
-func createHarness(name string) error {
+func createHarness(name, description, vendor string) error {
 	if isHarnessRoot(".") {
 		return fmt.Errorf("already inside a harness directory — create harnesses from outside")
 	}
@@ -135,15 +158,15 @@ func createHarness(name string) error {
 		Schema        string `json:"$schema"`
 		Name          string `json:"name"`
 		Version       string `json:"version"`
-		Description   string `json:"description"`
+		Description   string `json:"description,omitempty"`
 		DefaultVendor string `json:"default_vendor"`
 	}
 	scaffold := scaffoldJSON{
 		Schema:        "https://eyelock.github.io/ynh/schema/harness.schema.json",
 		Name:          name,
 		Version:       "0.1.0",
-		Description:   "",
-		DefaultVendor: resolveVendorDefault(""),
+		Description:   description,
+		DefaultVendor: resolveVendorDefault(vendor),
 	}
 	data, err := json.MarshalIndent(scaffold, "", "  ")
 	if err != nil {
