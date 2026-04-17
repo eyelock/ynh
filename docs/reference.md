@@ -45,7 +45,10 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh sources add <path>` | `--name`, `--description` |
 | `ynh sources list` | `--format <text\|json>` |
 | `ynh sources remove <name>` | |
-| `ynh registry <subcommand>` | |
+| `ynh registry add <url>` | |
+| `ynh registry list` | `--format <text\|json>` |
+| `ynh registry remove <url>` | |
+| `ynh registry update` | |
 | `ynh image <subcommand>` | |
 | `ynh paths` | `--format <text\|json>` |
 | `ynh status` | |
