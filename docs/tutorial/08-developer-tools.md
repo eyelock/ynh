@@ -22,8 +22,8 @@ Expected: a `my-team/` directory with the full harness structure:
 ```bash
 find my-team -type f | sort
 # Expected:
-#   my-team/AGENTS.md
 #   my-team/.harness.json
+#   my-team/AGENTS.md
 ```
 
 Empty directories are also created: `skills/`, `agents/`, `rules/`, `commands/`.

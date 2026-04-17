@@ -11,8 +11,6 @@ import (
 	"github.com/eyelock/ynh/internal/vendor"
 )
 
-const logFile = "symlinks.json"
-
 // Installation records a single symlink install operation.
 type Installation struct {
 	Harness   string                `json:"harness"`
@@ -28,8 +26,9 @@ type Log struct {
 }
 
 // LogPath returns the path to the symlink transaction log.
+// Delegates to config.SymlinksPath so every ynh-resolved path has a single home.
 func LogPath() string {
-	return filepath.Join(config.HomeDir(), logFile)
+	return config.SymlinksPath()
 }
 
 // LoadLog reads the transaction log from disk.

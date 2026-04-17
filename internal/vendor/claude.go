@@ -28,8 +28,9 @@ func init() {
 // Claude implements the Adapter interface for Claude Code CLI.
 type Claude struct{}
 
-func (c *Claude) Name() string    { return "claude" }
-func (c *Claude) CLIName() string { return "claude" }
+func (c *Claude) Name() string        { return "claude" }
+func (c *Claude) DisplayName() string { return "Claude Code" }
+func (c *Claude) CLIName() string     { return "claude" }
 
 func (c *Claude) ConfigDir() string {
 	return ".claude"

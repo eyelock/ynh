@@ -13,6 +13,7 @@ import (
 type mockAdapter struct{}
 
 func (m *mockAdapter) Name() string             { return "mock" }
+func (m *mockAdapter) DisplayName() string      { return "Mock" }
 func (m *mockAdapter) CLIName() string          { return "mock" }
 func (m *mockAdapter) ConfigDir() string        { return ".mock" }
 func (m *mockAdapter) InstructionsFile() string { return "MOCK.md" }

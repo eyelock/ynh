@@ -33,6 +33,8 @@ func main() {
 		err = cmdInspect(os.Args[2:])
 	case "export":
 		err = cmdExport(os.Args[2:])
+	case "compose":
+		err = cmdCompose(os.Args[2:])
 	case "preview":
 		err = cmdPreview(os.Args[2:])
 	case "diff":
@@ -40,7 +42,7 @@ func main() {
 	case "marketplace":
 		err = cmdMarketplace(os.Args[2:])
 	case "version", "--version", "-v":
-		fmt.Printf("ynd %s\n", config.Version)
+		fmt.Println(config.Version)
 	case "help", "--help", "-h":
 		printUsage()
 	default:
@@ -70,6 +72,7 @@ Commands:
   fmt [file]                 Format markdown files
   compress [file]            Compress prompts using LLM-powered SudoLang techniques
   inspect                    Interactive codebase walkthrough to generate/update skills and agents
+  compose <source>           Show resolved composition before vendor assembly
   export <source>            Export harness as vendor-native plugin directories
   preview <source>           Show assembled vendor output without installing
   diff <source> [vendors]    Compare assembled output across vendors
@@ -107,6 +110,9 @@ Examples:
   ynd inspect
   ynd inspect -v claude
   ynd inspect -o .
+  ynd compose ./my-harness
+  ynd compose ./my-harness --profile staging
+  ynd compose ./my-harness --format text
   ynd export ./my-harness
   ynd export ./my-harness -v claude,cursor -o ./dist
   ynd export ./my-harness --merged

@@ -22,15 +22,21 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 | 7 | [Developer Tools](tutorial/08-developer-tools.md) | Scaffold, lint, validate, format, compress, inspect with ynd |
 | 8 | [Developer Preview](tutorial/12-developer-preview.md) | Preview and diff assembled output across vendors |
 
+### Automate
+
+| # | Tutorial | What you'll learn |
+|---|----------|-------------------|
+| 9 | [Structured Output](tutorial/16-structured-output.md) | Use `--format json` for scripts, CI, and tool integration |
+
 ### Share & Scale
 
 | # | Tutorial | What you'll learn |
 |---|----------|-------------------|
-| 9 | [Delegation](tutorial/04-delegation.md) | Chain harnesses together as subagents |
-| 10 | [Export](tutorial/05-export.md) | Produce vendor-native distributable plugins |
-| 11 | [Marketplace](tutorial/06-marketplace.md) | Generate marketplace indexes for team distribution |
-| 12 | [Registry & Discovery](tutorial/07-registry-and-discovery.md) | Search and install harnesses from curated registries |
-| 13 | [Docker Images](tutorial/09-docker-image.md) | Build harness appliance images for CI/CD |
+| 10 | [Delegation](tutorial/04-delegation.md) | Chain harnesses together as subagents |
+| 11 | [Export](tutorial/05-export.md) | Produce vendor-native distributable plugins |
+| 12 | [Marketplace](tutorial/06-marketplace.md) | Generate marketplace indexes for team distribution |
+| 13 | [Registry & Discovery](tutorial/07-registry-and-discovery.md) | Search and install harnesses from curated registries |
+| 14 | [Docker Images](tutorial/09-docker-image.md) | Build harness appliance images for CI/CD |
 
 ## Manual Test Plan
 

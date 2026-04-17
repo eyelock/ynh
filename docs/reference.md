@@ -35,12 +35,16 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh run [harness]` | `-v`, `--profile`, `--install`, `--clean` |
 | `ynh uninstall <harness>` | |
 | `ynh update [harness]` | |
-| `ynh ls` | |
-| `ynh info <harness>` | |
-| `ynh vendors` | |
-| `ynh search <query>` | |
+| `ynh ls` | `--format <text\|json>` |
+| `ynh info <harness>` | `--format <text\|json>` |
+| `ynh vendors` | `--format <text\|json>` |
+| `ynh search <query>` | `--format <text\|json>` |
+| `ynh sources add <path>` | `--name`, `--description` |
+| `ynh sources list` | `--format <text\|json>` |
+| `ynh sources remove <name>` | |
 | `ynh registry <subcommand>` | |
 | `ynh image <subcommand>` | |
+| `ynh paths` | `--format <text\|json>` |
 | `ynh status` | |
 | `ynh prune` | |
 
@@ -52,6 +56,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynd validate [path]` | `--harness` |
 | `ynd lint [path]` | `--harness` |
 | `ynd fmt [path]` | `--harness` |
+| `ynd compose <source>` | `--harness`, `--profile`, `--format <text\|json>` |
 | `ynd compress [files...]` | `-v`, `-y`, `--restore`, `--list-backups`, `--pick` |
 | `ynd inspect` | `-v`, `-y`, `-o` |
 | `ynd preview <source>` | `-v`, `-o`, `--harness`, `--profile` |
@@ -60,3 +65,19 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynd marketplace build` | `-v`, `-o`, `--clean` |
 
 See [ynd Developer Tools](ynd.md) for detailed command documentation.
+
+## Structured Output
+
+Commands that take `--format json` emit machine-readable output conforming to [Structured CLI Output](cli-structured.md). Current emitters:
+
+| Command | Structured fields |
+|---------|-------------------|
+| `ynd compose` | Composed harness: `name`, `version`, `description`, `default_vendor`, `artifacts` (with source), `includes`, `delegates_to`, `hooks`, `mcp_servers`, `profiles`, `focuses`, `counts` |
+| `ynh info <name>` | Single harness object: `name`, `version`, `description`, `default_vendor`, `path`, `installed_from`, `manifest` (raw `.harness.json` body) |
+| `ynh ls` | Array of harness objects: `name`, `version`, `description`, `default_vendor`, `path`, `installed_from`, `artifacts`, `includes`, `delegates_to` |
+| `ynh paths` | `home`, `config`, `harnesses`, `symlinks`, `cache`, `run`, `bin` — all absolute paths resolved for the current `$YNH_HOME` |
+| `ynh search <term>` | Array of result objects: `name`, `description`, `keywords`, `repo`, `path`, `vendors`, `version`, `from` (`type`, `name`) |
+| `ynh vendors` | Array of vendor objects: `name`, `display_name`, `cli`, `config_dir`, `available` (bool) |
+| `ynh sources list` | Array of source objects: `name`, `path`, `description`, `harnesses` (discovery count) |
+
+Human-readable tabwriter output remains the default for every command. Structured mode is strictly opt-in.

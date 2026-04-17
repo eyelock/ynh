@@ -27,8 +27,9 @@ func init() {
 // Uses .cursor/rules/ for rules and .cursorrules at project root.
 type Cursor struct{}
 
-func (c *Cursor) Name() string    { return "cursor" }
-func (c *Cursor) CLIName() string { return "agent" }
+func (c *Cursor) Name() string        { return "cursor" }
+func (c *Cursor) DisplayName() string { return "Cursor" }
+func (c *Cursor) CLIName() string     { return "agent" }
 
 func (c *Cursor) ConfigDir() string {
 	return ".cursor"

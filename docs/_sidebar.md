@@ -16,6 +16,7 @@
 
 * **Tools**
   * [CLI Reference](reference.md)
+  * [Structured CLI Output](cli-structured.md)
   * [ynd Developer Tools](ynd.md)
 
 * **Distribute**
@@ -37,12 +38,15 @@
   * [9. Developer Tools](tutorial/08-developer-tools.md)
   * [10. Developer Preview](tutorial/12-developer-preview.md)
 
+* **Tutorials: Automate**
+  * [11. Structured Output](tutorial/16-structured-output.md)
+
 * **Tutorials: Share & Scale**
-  * [11. Delegation](tutorial/04-delegation.md)
-  * [12. Export](tutorial/05-export.md)
-  * [13. Marketplace](tutorial/06-marketplace.md)
-  * [14. Registry & Discovery](tutorial/07-registry-and-discovery.md)
-  * [15. Docker Images](tutorial/09-docker-image.md)
+  * [12. Delegation](tutorial/04-delegation.md)
+  * [13. Export](tutorial/05-export.md)
+  * [14. Marketplace](tutorial/06-marketplace.md)
+  * [15. Registry & Discovery](tutorial/07-registry-and-discovery.md)
+  * [16. Docker Images](tutorial/09-docker-image.md)
 
 * **Project**
   * [Manual Test Plan](tutorial/manual-test-plan.md)

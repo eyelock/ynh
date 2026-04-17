@@ -2,8 +2,12 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
@@ -37,11 +41,15 @@ func main() {
 	case "run":
 		err = cmdRun(os.Args[2:])
 	case "ls", "list":
-		err = cmdList()
+		err = cmdList(os.Args[2:])
 	case "info":
 		err = cmdInfo(os.Args[2:])
 	case "vendors":
-		err = cmdVendors()
+		err = cmdVendors(os.Args[2:])
+	case "sources":
+		err = cmdSources(os.Args[2:])
+	case "paths":
+		err = cmdPaths(os.Args[2:])
 	case "status":
 		err = cmdStatus()
 	case "search":
@@ -53,7 +61,7 @@ func main() {
 	case "prune":
 		err = cmdPrune()
 	case "version", "--version":
-		fmt.Printf("ynh %s\n", config.Version)
+		fmt.Println(config.Version)
 	case "help", "--help", "-h":
 		printUsage()
 	default:
@@ -63,7 +71,13 @@ func main() {
 	}
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		// errStructuredReported means the command has already emitted a JSON
+		// error envelope to stderr — print nothing more to keep structured
+		// consumer stdout/stderr clean. errors.Is so a wrapped sentinel still
+		// suppresses the "Error: ..." line.
+		if !errors.Is(err, errStructuredReported) {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
 		os.Exit(1)
 	}
 }
@@ -80,15 +94,19 @@ Commands:
   uninstall <name>           Remove an installed harness and its launcher
   update <name>              Refresh cached Git repos for a harness
   run <name> [flags] [prompt]  Launch a harness session
-  ls                           List installed harnesses
-  info <name>                  Show detailed harness information
-  vendors                      List supported vendor adapters
-  search <term>                Search registries for harnesses
+  ls                           List installed harnesses (supports --format json)
+  info <name>                  Show detailed harness information (supports --format json)
+  vendors                      List supported vendor adapters (supports --format json)
+  search <term>                Search registries and sources (supports --format json)
+  sources add <path>           Add a local harness source directory
+  sources list                 Show configured sources (supports --format json)
+  sources remove <name>        Remove a source
   registry add <url>           Add a harness registry
   registry list                Show configured registries
   registry remove <url>        Remove a registry
   registry update              Refresh all cached registries
   image <name> [flags]         Build a Docker image with a harness baked in
+  paths                        Show resolved path roots (supports --format json)
   status                       Show symlink installations across projects
   prune                        Clean orphaned symlink installations
   version                      Print version
@@ -194,7 +212,9 @@ func cmdInstall(args []string) error {
 		}
 	}
 
-	if isLocalPath(source) {
+	if resolved.localPath != "" {
+		srcDir = resolved.localPath
+	} else if isLocalPath(source) {
 		absPath, err := filepath.Abs(source)
 		if err != nil {
 			return fmt.Errorf("resolving absolute path for %s: %w", source, err)
@@ -250,6 +270,8 @@ func cmdInstall(args []string) error {
 	provSource := source
 	if resolved.sourceType == "local" {
 		provSource = originalSource
+	} else if resolved.localPath != "" {
+		provSource = resolved.localPath
 	}
 	prov := &plugin.ProvenanceMeta{
 		SourceType:   resolved.sourceType,
@@ -716,321 +738,97 @@ func cmdRun(args []string) error {
 	}
 }
 
-func cmdList() error {
-	names, err := harness.List()
-	if err != nil {
-		return err
-	}
-
-	if len(names) == 0 {
-		fmt.Println("No harnesses installed.")
-		fmt.Println("Install one with: ynh install <git-url|path>")
-		return nil
-	}
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "NAME\tVENDOR\tSOURCE\tARTIFACTS\tINCLUDES\tDELEGATES TO")
-
-	for _, name := range names {
-		p, err := harness.Load(name)
-		if err != nil {
-			_, _ = fmt.Fprintf(w, "%s\t(error: %v)\t\t\t\t\n", name, err)
-			continue
-		}
-
-		vendorName := p.DefaultVendor
-		if vendorName == "" {
-			vendorName = "-"
-		}
-
-		source := formatProvenance(p.InstalledFrom)
-		artifacts := formatArtifactSummary(name)
-		includes := formatIncludes(p.Includes)
-		delegates := formatDelegates(p.DelegatesTo)
-
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", p.Name, vendorName, source, artifacts, includes, delegates)
-	}
-
-	_ = w.Flush()
-	return nil
+func cmdVendors(args []string) error {
+	return cmdVendorsTo(args, os.Stdout, os.Stderr)
 }
 
-func cmdInfo(args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: ynh info <harness-name>")
-	}
-
-	name := args[0]
-	p, err := harness.Load(name)
-	if err != nil {
-		return err
-	}
-
-	vendorName := p.DefaultVendor
-	if vendorName == "" {
-		vendorName = "-"
-	}
-
-	fmt.Printf("Name:         %s\n", p.Name)
-	fmt.Printf("Vendor:       %s\n", vendorName)
-
-	if p.InstalledFrom != nil {
-		fmt.Printf("Installed:    %s\n", p.InstalledFrom.InstalledAt)
-		fmt.Printf("Source:       %s (%s)\n", p.InstalledFrom.Source, p.InstalledFrom.SourceType)
-		if p.InstalledFrom.Path != "" {
-			fmt.Printf("Path:         %s\n", p.InstalledFrom.Path)
-		}
-		if p.InstalledFrom.RegistryName != "" {
-			fmt.Printf("Registry:     %s\n", p.InstalledFrom.RegistryName)
-		}
-	} else {
-		fmt.Printf("Installed:    -\n")
-		fmt.Printf("Source:       -\n")
-	}
-
-	// Local artifacts
-	arts, _ := harness.ScanArtifacts(name)
-	fmt.Println()
-	fmt.Println("Artifacts:")
-	if arts.Total() == 0 {
-		fmt.Println("  (none)")
-	} else {
-		if len(arts.Skills) > 0 {
-			fmt.Printf("  skills:    %s\n", strings.Join(arts.Skills, ", "))
-		}
-		if len(arts.Agents) > 0 {
-			fmt.Printf("  agents:    %s\n", strings.Join(arts.Agents, ", "))
-		}
-		if len(arts.Rules) > 0 {
-			fmt.Printf("  rules:     %s\n", strings.Join(arts.Rules, ", "))
-		}
-		if len(arts.Commands) > 0 {
-			fmt.Printf("  commands:  %s\n", strings.Join(arts.Commands, ", "))
-		}
-	}
-
-	fmt.Println()
-	fmt.Println("Includes:")
-	if len(p.Includes) == 0 {
-		fmt.Println("  (none)")
-	} else {
-		for _, inc := range p.Includes {
-			line := "  " + inc.Git
-			if inc.Path != "" {
-				line += "  path=" + inc.Path
-			}
-			if inc.Ref != "" {
-				line += "  ref=" + inc.Ref
-			}
-			if len(inc.Pick) > 0 {
-				line += "  pick=[" + strings.Join(inc.Pick, ", ") + "]"
-			}
-			fmt.Println(line)
-		}
-	}
-
-	fmt.Println()
-	fmt.Println("Delegates to:")
-	if len(p.DelegatesTo) == 0 {
-		fmt.Println("  (none)")
-	} else {
-		for _, del := range p.DelegatesTo {
-			line := "  " + del.Git
-			if del.Path != "" {
-				line += "  path=" + del.Path
-			}
-			if del.Ref != "" {
-				line += "  ref=" + del.Ref
-			}
-			fmt.Println(line)
-		}
-	}
-
-	fmt.Println()
-	fmt.Println("Hooks:")
-	if len(p.Hooks) == 0 {
-		fmt.Println("  (none)")
-	} else {
-		for event, entries := range p.Hooks {
-			for _, entry := range entries {
-				line := "  " + event + ": " + entry.Command
-				if entry.Matcher != "" {
-					line += "  (matcher=" + entry.Matcher + ")"
-				}
-				fmt.Println(line)
-			}
-		}
-	}
-
-	fmt.Println()
-	fmt.Println("MCP Servers:")
-	if len(p.MCPServers) == 0 {
-		fmt.Println("  (none)")
-	} else {
-		for name, server := range p.MCPServers {
-			if server.Command != "" {
-				fmt.Printf("  %s: %s\n", name, server.Command)
-			} else if server.URL != "" {
-				fmt.Printf("  %s: %s\n", name, server.URL)
-			}
-		}
-	}
-
-	fmt.Println()
-	fmt.Println("Profiles:")
-	if len(p.Profiles) == 0 {
-		fmt.Println("  (none)")
-	} else {
-		for name, profile := range p.Profiles {
-			var parts []string
-			if len(profile.Hooks) > 0 {
-				var events []string
-				for event := range profile.Hooks {
-					events = append(events, event)
-				}
-				parts = append(parts, "hooks: "+strings.Join(events, ", "))
-			}
-			if len(profile.MCPServers) > 0 {
-				var servers []string
-				for sname := range profile.MCPServers {
-					servers = append(servers, sname)
-				}
-				parts = append(parts, "mcp_servers: "+strings.Join(servers, ", "))
-			}
-			if len(parts) == 0 {
-				fmt.Printf("  %s\n", name)
-			} else {
-				fmt.Printf("  %s    %s\n", name, strings.Join(parts, "    "))
-			}
-		}
-	}
-
-	fmt.Println()
-	fmt.Println("Focus:")
-	if len(p.Focuses) == 0 {
-		fmt.Println("  (none)")
-	} else {
-		for name, focus := range p.Focuses {
-			profileLabel := "(default)"
-			if focus.Profile != "" {
-				profileLabel = "profile=" + focus.Profile
-			}
-			fmt.Printf("  %s    %s    %q\n", name, profileLabel, focus.Prompt)
-		}
-	}
-
-	return nil
+// vendorEntry is the JSON shape for a single vendor in `ynh vendors --format json`.
+type vendorEntry struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	CLI         string `json:"cli"`
+	ConfigDir   string `json:"config_dir"`
+	Available   bool   `json:"available"`
 }
 
-// formatArtifactSummary formats the ARTIFACTS column for ynh ls.
-// Shows a compact summary like "1s 2a 1r 1c" (skills, agents, rules, commands).
-func formatArtifactSummary(name string) string {
-	arts, _ := harness.ScanArtifacts(name)
-	if arts.Total() == 0 {
-		return "0"
+func cmdVendorsTo(args []string, stdout, stderr io.Writer) error {
+	structured := detectJSONFormat(args)
+
+	format := "text"
+	i := 0
+	for i < len(args) {
+		switch args[i] {
+		case "--format":
+			if i+1 >= len(args) {
+				return cliError(stderr, structured, errCodeInvalidInput, "--format requires a value")
+			}
+			i++
+			format = args[i]
+		default:
+			if strings.HasPrefix(args[i], "-") {
+				return cliError(stderr, structured, errCodeInvalidInput,
+					fmt.Sprintf("unknown flag: %s", args[i]))
+			}
+			return cliError(stderr, structured, errCodeInvalidInput,
+				fmt.Sprintf("unexpected argument: %s", args[i]))
+		}
+		i++
 	}
-	var parts []string
-	if len(arts.Skills) > 0 {
-		parts = append(parts, fmt.Sprintf("%ds", len(arts.Skills)))
+
+	switch format {
+	case "text":
+		return printVendorsText(stdout)
+	case "json":
+		return printVendorsJSON(stdout)
+	default:
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("invalid --format value %q (want text or json)", format))
 	}
-	if len(arts.Agents) > 0 {
-		parts = append(parts, fmt.Sprintf("%da", len(arts.Agents)))
-	}
-	if len(arts.Rules) > 0 {
-		parts = append(parts, fmt.Sprintf("%dr", len(arts.Rules)))
-	}
-	if len(arts.Commands) > 0 {
-		parts = append(parts, fmt.Sprintf("%dc", len(arts.Commands)))
-	}
-	return strings.Join(parts, " ")
 }
 
-// formatProvenance formats the SOURCE column for ynh ls.
-func formatProvenance(prov *harness.Provenance) string {
-	if prov == nil {
-		return "-"
-	}
-	short := shortGitURL(prov.Source)
-	if prov.Path != "" {
-		short += "/" + prov.Path
-	}
-	if prov.RegistryName != "" {
-		short += " (" + prov.RegistryName + ")"
-	}
-	return short
-}
-
-// formatIncludes formats the INCLUDES column for ynh ls.
-func formatIncludes(includes []harness.Include) string {
-	if len(includes) == 0 {
-		return "0"
-	}
-	parts := make([]string, 0, len(includes))
-	for _, inc := range includes {
-		s := shortGitURL(inc.Git)
-		if inc.Path != "" {
-			s += "/" + inc.Path
-		}
-		if inc.Ref != "" && inc.Ref != "main" && inc.Ref != "HEAD" {
-			s += "@" + inc.Ref
-		}
-		if len(inc.Pick) > 0 {
-			s += fmt.Sprintf(" [%d]", len(inc.Pick))
-		}
-		parts = append(parts, s)
-	}
-	return strings.Join(parts, ", ")
-}
-
-// formatDelegates formats the DELEGATES TO column for ynh ls.
-func formatDelegates(delegates []harness.Delegate) string {
-	if len(delegates) == 0 {
-		return "0"
-	}
-	parts := make([]string, 0, len(delegates))
-	for _, del := range delegates {
-		s := shortGitURL(del.Git)
-		if del.Path != "" {
-			s += "/" + del.Path
-		}
-		if del.Ref != "" && del.Ref != "main" && del.Ref != "HEAD" {
-			s += "@" + del.Ref
-		}
-		parts = append(parts, s)
-	}
-	return strings.Join(parts, ", ")
-}
-
-// shortGitURL abbreviates a git URL for display.
-// "github.com/eyelock/ynh" -> "eyelock/ynh"
-// "/tmp/ynh-walkthrough/foo" -> "/tmp/ynh-walkthrough/foo"
-func shortGitURL(url string) string {
-	// Local paths: keep as-is
-	if strings.HasPrefix(url, "/") || strings.HasPrefix(url, ".") {
-		return url
-	}
-	// Strip host prefix: "github.com/user/repo" -> "user/repo"
-	parts := strings.SplitN(url, "/", 2)
-	if len(parts) == 2 {
-		return parts[1]
-	}
-	return url
-}
-
-func cmdVendors() error {
-	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "NAME\tCLI\tCONFIG DIR")
+func printVendorsText(w io.Writer) error {
+	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "NAME\tDISPLAY NAME\tCLI\tCONFIG DIR\tAVAILABLE")
 
 	for _, name := range vendor.Available() {
 		adapter, err := vendor.Get(name)
 		if err != nil {
 			return fmt.Errorf("loading vendor %s: %w", name, err)
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", adapter.Name(), adapter.CLIName(), adapter.ConfigDir())
+		available := "false"
+		if _, err := exec.LookPath(adapter.CLIName()); err == nil {
+			available = "true"
+		}
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
+			adapter.Name(), adapter.DisplayName(), adapter.CLIName(), adapter.ConfigDir(), available)
 	}
 
-	_ = w.Flush()
-	return nil
+	return tw.Flush()
+}
+
+func printVendorsJSON(w io.Writer) error {
+	entries := make([]vendorEntry, 0, len(vendor.Available()))
+	for _, name := range vendor.Available() {
+		adapter, err := vendor.Get(name)
+		if err != nil {
+			return fmt.Errorf("loading vendor %s: %w", name, err)
+		}
+		_, lookErr := exec.LookPath(adapter.CLIName())
+		entries = append(entries, vendorEntry{
+			Name:        adapter.Name(),
+			DisplayName: adapter.DisplayName(),
+			CLI:         adapter.CLIName(),
+			ConfigDir:   adapter.ConfigDir(),
+			Available:   lookErr == nil,
+		})
+	}
+
+	data, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encoding vendors: %w", err)
+	}
+	_, err = fmt.Fprintln(w, string(data))
+	return err
 }
 
 // resolveVendor picks the vendor: CLI flag > YNH_VENDOR env > harness default > global config.

@@ -14,6 +14,9 @@ func TestClaudeAdapter(t *testing.T) {
 	if adapter.Name() != "claude" {
 		t.Errorf("Name = %q, want %q", adapter.Name(), "claude")
 	}
+	if adapter.DisplayName() != "Claude Code" {
+		t.Errorf("DisplayName = %q, want %q", adapter.DisplayName(), "Claude Code")
+	}
 	if adapter.CLIName() != "claude" {
 		t.Errorf("CLIName = %q, want %q", adapter.CLIName(), "claude")
 	}
@@ -38,6 +41,9 @@ func TestCodexAdapter(t *testing.T) {
 	if adapter.Name() != "codex" {
 		t.Errorf("Name = %q, want %q", adapter.Name(), "codex")
 	}
+	if adapter.DisplayName() != "OpenAI Codex" {
+		t.Errorf("DisplayName = %q, want %q", adapter.DisplayName(), "OpenAI Codex")
+	}
 	if adapter.CLIName() != "codex" {
 		t.Errorf("CLIName = %q, want %q", adapter.CLIName(), "codex")
 	}
@@ -61,6 +67,9 @@ func TestCursorAdapter(t *testing.T) {
 
 	if adapter.Name() != "cursor" {
 		t.Errorf("Name = %q, want %q", adapter.Name(), "cursor")
+	}
+	if adapter.DisplayName() != "Cursor" {
+		t.Errorf("DisplayName = %q, want %q", adapter.DisplayName(), "Cursor")
 	}
 	if adapter.CLIName() != "agent" {
 		t.Errorf("CLIName = %q, want %q", adapter.CLIName(), "agent")

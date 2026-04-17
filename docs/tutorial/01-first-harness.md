@@ -107,9 +107,9 @@ find /tmp/ynh-tutorial/my-harness -type f | sort
 
 Expected:
 ```
+/tmp/ynh-tutorial/my-harness/.harness.json
 /tmp/ynh-tutorial/my-harness/agents/nitpicker.md
 /tmp/ynh-tutorial/my-harness/commands/hello.md
-/tmp/ynh-tutorial/my-harness/.harness.json
 /tmp/ynh-tutorial/my-harness/instructions.md
 /tmp/ynh-tutorial/my-harness/rules/be-brief.md
 /tmp/ynh-tutorial/my-harness/skills/greet/SKILL.md
@@ -173,6 +173,12 @@ Hooks:
   (none)
 
 MCP Servers:
+  (none)
+
+Profiles:
+  (none)
+
+Focus:
   (none)
 ```
 
