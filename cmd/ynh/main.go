@@ -119,7 +119,7 @@ Commands:
 
 Run flags:
   -v <vendor>                  Override vendor (claude, codex, cursor)
-  --session-name <name>        Set the session name (passed to vendor CLI as --session-name)
+  --session-name <name>        Session label (recorded by ynh, not forwarded to vendor CLI)
   --install                    Install symlinks for the vendor in current project
   --clean                      Remove symlinks for the vendor in current project
   All other flags are passed through to the vendor CLI.
@@ -544,9 +544,6 @@ func cmdRun(args []string) error {
 
 	prompt := ra.Prompt
 	vendorArgs := ra.VendorArgs
-	if ra.SessionName != "" {
-		vendorArgs = append([]string{"--session-name", ra.SessionName}, vendorArgs...)
-	}
 	action := ra.Action
 
 	// Determine vendor
@@ -896,7 +893,7 @@ type runArgs struct {
 	VendorFlag  string   // -v or YNH_VENDOR
 	ProfileFlag string   // --profile or YNH_PROFILE
 	FocusFlag   string   // --focus or YNH_FOCUS
-	SessionName string   // --session-name: passed through to vendor CLI as --session-name
+	SessionName string   // --session-name: consumed by ynh, not forwarded to vendor
 	Prompt      string   // trailing prompt after --
 	VendorArgs  []string // passthrough args for vendor CLI
 	Action      string   // "install", "clean", or ""
