@@ -107,7 +107,7 @@ Commands:
   include remove <harness> <url>  Remove a Git include from a harness
   include update <harness> <url>  Update a Git include's options
   registry add <url>           Add a harness registry
-  registry list                Show configured registries
+  registry list                Show configured registries (supports --format json)
   registry remove <url>        Remove a registry
   registry update              Refresh all cached registries
   image <name> [flags]         Build a Docker image with a harness baked in

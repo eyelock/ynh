@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"io"
 	"os"
 	"testing"
 
@@ -38,7 +40,7 @@ func TestCmdRegistryAddAndList(t *testing.T) {
 	}
 
 	// List should work
-	err = cmdRegistryList()
+	err = cmdRegistryList(nil)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -127,7 +129,7 @@ func TestCmdRegistryListEmpty(t *testing.T) {
 	}
 
 	// Should not error, just print message
-	err := cmdRegistryList()
+	err := cmdRegistryList(nil)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -158,5 +160,114 @@ func TestCmdRegistryUnknownSubcommand(t *testing.T) {
 	err := cmdRegistry([]string{"destroy"})
 	if err == nil {
 		t.Fatal("expected error for unknown subcommand")
+	}
+}
+
+func TestCmdRegistryListJSON(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		DefaultVendor: "claude",
+		Registries: []config.RegistrySource{
+			{URL: "github.com/org/registry-a"},
+			{URL: "github.com/org/registry-b", Ref: "v2"},
+		},
+	}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Capture stdout
+	r, w, _ := os.Pipe()
+	old := os.Stdout
+	os.Stdout = w
+
+	err := cmdRegistryList([]string{"--format", "json"})
+
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = old
+
+	if err != nil {
+		t.Fatalf("list --format json: %v", err)
+	}
+
+	out, err2 := io.ReadAll(r)
+	if err2 != nil {
+		t.Fatal(err2)
+	}
+
+	var got []registryListEntry
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("invalid json: %v\noutput: %s", err, out)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d entries, want 2", len(got))
+	}
+	if got[0].URL != "github.com/org/registry-a" {
+		t.Errorf("entry 0 url = %q", got[0].URL)
+	}
+	if got[1].URL != "github.com/org/registry-b" || got[1].Ref != "v2" {
+		t.Errorf("entry 1 = %+v", got[1])
+	}
+}
+
+func TestCmdRegistryListJSONEmpty(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{DefaultVendor: "claude"}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	r, w, _ := os.Pipe()
+	old := os.Stdout
+	os.Stdout = w
+
+	err := cmdRegistryList([]string{"--format", "json"})
+
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = old
+
+	if err != nil {
+		t.Fatalf("list --format json empty: %v", err)
+	}
+
+	out, err2 := io.ReadAll(r)
+	if err2 != nil {
+		t.Fatal(err2)
+	}
+
+	var got []registryListEntry
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("expected empty array, got %d entries", len(got))
+	}
+}
+
+func TestCmdRegistryListInvalidFormat(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{DefaultVendor: "claude"}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	err := cmdRegistryList([]string{"--format", "yaml"})
+	if err == nil {
+		t.Fatal("expected error for invalid format")
 	}
 }

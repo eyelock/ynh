@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/registry"
@@ -17,7 +19,7 @@ func cmdRegistry(args []string) error {
 	case "add":
 		return cmdRegistryAdd(args[1:])
 	case "list", "ls":
-		return cmdRegistryList()
+		return cmdRegistryList(args[1:])
 	case "remove", "rm":
 		return cmdRegistryRemove(args[1:])
 	case "update":
@@ -55,27 +57,68 @@ func cmdRegistryAdd(args []string) error {
 	return nil
 }
 
-func cmdRegistryList() error {
+type registryListEntry struct {
+	URL         string `json:"url"`
+	Ref         string `json:"ref,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+func cmdRegistryList(args []string) error {
+	format := "text"
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--format":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--format requires a value")
+			}
+			i++
+			format = args[i]
+		}
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
-	if len(cfg.Registries) == 0 {
-		fmt.Println("No registries configured.")
-		fmt.Println("Add one with: ynh registry add <url>")
-		return nil
-	}
-
-	for _, r := range cfg.Registries {
-		if r.Ref != "" {
-			fmt.Printf("  %s (ref: %s)\n", r.URL, r.Ref)
-		} else {
-			fmt.Printf("  %s\n", r.URL)
+	switch format {
+	case "json":
+		entries := make([]registryListEntry, len(cfg.Registries))
+		for i, r := range cfg.Registries {
+			e := registryListEntry{URL: r.URL, Ref: r.Ref}
+			// Enrich with name/description from cached registry.json if available.
+			if result, resErr := resolver.EnsureRepo(r.URL, r.Ref); resErr == nil {
+				if reg, regErr := registry.LoadFromDir(result.Path); regErr == nil {
+					e.Name = reg.Name
+					e.Description = reg.Description
+				}
+			}
+			entries[i] = e
 		}
+		data, err := json.MarshalIndent(entries, "", "  ")
+		if err != nil {
+			return fmt.Errorf("encoding json: %w", err)
+		}
+		_, err = fmt.Fprintf(os.Stdout, "%s\n", data)
+		return err
+	case "text":
+		if len(cfg.Registries) == 0 {
+			fmt.Println("No registries configured.")
+			fmt.Println("Add one with: ynh registry add <url>")
+			return nil
+		}
+		for _, r := range cfg.Registries {
+			if r.Ref != "" {
+				fmt.Printf("  %s (ref: %s)\n", r.URL, r.Ref)
+			} else {
+				fmt.Printf("  %s\n", r.URL)
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("invalid --format value %q (want text or json)", format)
 	}
-
-	return nil
 }
 
 func cmdRegistryRemove(args []string) error {
