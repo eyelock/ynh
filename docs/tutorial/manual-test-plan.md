@@ -307,7 +307,8 @@ cp ~/.ynh/config.json ~/.ynh/config.json.bak
 echo '{"default_vendor":"claude"}' > ~/.ynh/config.json
 
 ynh search "anything"
-# Expected: Error about no registries configured
+# Expected: No results for "anything"
+# (no error — unified search succeeds with empty results when no registries or sources are configured)
 
 mv ~/.ynh/config.json.bak ~/.ynh/config.json
 ```
