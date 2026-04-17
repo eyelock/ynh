@@ -21,6 +21,7 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 |---|----------|-------------------|
 | 7 | [Developer Tools](tutorial/08-developer-tools.md) | Scaffold, lint, validate, format, compress, inspect with ynd |
 | 8 | [Developer Preview](tutorial/12-developer-preview.md) | Preview and diff assembled output across vendors |
+| 9 | [Include Editing](tutorial/17-include-editing.md) | Add, remove, and update includes in an installed harness |
 
 ### Automate
 
