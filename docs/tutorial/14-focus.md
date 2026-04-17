@@ -156,8 +156,8 @@ ynh info focus-demo
 Expected output includes a `Focus:` section:
 ```
 Focus:
-  review    profile=ci    "Review staged changes for quality and correctness"
   docs    (default)    "Generate API documentation for all public interfaces"
+  review    profile=ci    "Review staged changes for quality and correctness"
 ```
 
 And a `Profiles:` section:

@@ -117,13 +117,13 @@ Expected output structure:
 .cursor/
   agents/
   commands/
-  hooks.json
-  mcp.json
   rules/
     safety.md
   skills/
     deploy/
       SKILL.md
+  hooks.json
+  mcp.json
 .cursor-plugin/
   plugin.json
 .cursorrules
