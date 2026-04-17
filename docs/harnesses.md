@@ -251,6 +251,55 @@ When a profile is selected, its `hooks` and `mcp_servers` **fully replace** the 
 
 Running `ops-team --profile strict` uses the strict hooks (replacing the top-level hooks entirely). Running `ops-team --profile lite` drops all MCP servers while keeping the base vendor and no hooks (both hooks and mcp_servers are replaced — lite defines empty mcp_servers and no hooks).
 
+## Editing an Installed Harness
+
+After a harness is installed, use `ynh include` to add, remove, or update its Git includes from the CLI — no manual JSON editing required.
+
+### Add an include
+
+```bash
+ynh include add <harness> <url> [--path <subdir>] [--pick <items>] [--ref <ref>] [--replace]
+```
+
+`<harness>` is the installed harness name **or** a filesystem path to a harness directory. Names resolve to `~/.ynh/harnesses/<name>`; a leading `/` or `.` forces path semantics.
+
+When targeting an installed harness by name, the new include is pre-fetched immediately so `ynh run` works without a separate `ynh update`. When targeting a local path (not yet installed), the JSON is updated only.
+
+`--replace` overwrites an existing URL+path combination instead of erroring.
+
+### Remove an include
+
+```bash
+ynh include remove <harness> <url> [--path <subdir>]
+```
+
+If the same URL appears at multiple paths (monorepo), `--path` selects which entry to remove.
+
+### Update an include
+
+```bash
+ynh include update <harness> <url> [--from-path <subdir>] [--path <newpath>] [--pick <items>] [--ref <ref>]
+```
+
+Only the flags you supply are changed; others are left unchanged. `--from-path` disambiguates which entry to target when the URL matches multiple includes. `--path` sets a new path value on the selected entry.
+
+### Pick validation
+
+When `--pick` is supplied, `ynh include add` and `ynh include update` validate that every named artifact exists in the fetched source before writing the `.harness.json`. An error lists both the unknown names and what's available.
+
+### Disambiguation rules
+
+Includes are keyed by **URL + path**. When a URL matches multiple includes and no path is given, the command errors and lists the paths that would disambiguate:
+
+```
+Error: include "github.com/acme/tools" matches multiple entries:
+  skills/dev
+  skills/tech
+Use --path (remove) or --from-path (update) to disambiguate
+```
+
+See [Tutorial 17: Include Editing](tutorial/17-include-editing.md) for a full walkthrough.
+
 ## Examples
 
 ### Minimal

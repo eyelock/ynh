@@ -97,7 +97,7 @@ func TestCreateHarness(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	if err := createHarness("my-team"); err != nil {
+	if err := createHarness("my-team", "", ""); err != nil {
 		t.Fatalf("createHarness failed: %v", err)
 	}
 
@@ -143,11 +143,11 @@ func TestCreateHarness_AlreadyExists(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	if err := createHarness("my-team"); err != nil {
+	if err := createHarness("my-team", "", ""); err != nil {
 		t.Fatalf("first createHarness failed: %v", err)
 	}
 
-	err := createHarness("my-team")
+	err := createHarness("my-team", "", "")
 	if err == nil {
 		t.Fatal("expected error for duplicate harness")
 	}
@@ -194,7 +194,7 @@ func TestCreateHarness_VendorEnvVar(t *testing.T) {
 	t.Chdir(dir)
 	t.Setenv("YNH_VENDOR", "cursor")
 
-	if err := createHarness("vendor-test"); err != nil {
+	if err := createHarness("vendor-test", "", ""); err != nil {
 		t.Fatalf("createHarness failed: %v", err)
 	}
 
@@ -207,6 +207,104 @@ func TestCreateHarness_VendorEnvVar(t *testing.T) {
 	}
 }
 
+func TestCreateHarness_WithDescription(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	if err := cmdCreate([]string{"harness", "my-harness", "--description", "My team harness"}); err != nil {
+		t.Fatalf("cmdCreate: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "my-harness/.harness.json"))
+	if err != nil {
+		t.Fatalf("reading .harness.json: %v", err)
+	}
+	if !strings.Contains(string(data), `"description": "My team harness"`) {
+		t.Errorf("expected description in .harness.json, got: %s", data)
+	}
+}
+
+func TestCreateHarness_WithVendor(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	if err := cmdCreate([]string{"harness", "my-harness", "--vendor", "codex"}); err != nil {
+		t.Fatalf("cmdCreate: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "my-harness/.harness.json"))
+	if err != nil {
+		t.Fatalf("reading .harness.json: %v", err)
+	}
+	if !strings.Contains(string(data), `"default_vendor": "codex"`) {
+		t.Errorf("expected default_vendor=codex in .harness.json, got: %s", data)
+	}
+}
+
+func TestCreateHarness_WithDescriptionAndVendor(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	if err := cmdCreate([]string{"harness", "my-harness", "--description", "My team harness", "--vendor", "codex"}); err != nil {
+		t.Fatalf("cmdCreate: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "my-harness/.harness.json"))
+	if err != nil {
+		t.Fatalf("reading .harness.json: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, `"description": "My team harness"`) {
+		t.Errorf("expected description in .harness.json, got: %s", content)
+	}
+	if !strings.Contains(content, `"default_vendor": "codex"`) {
+		t.Errorf("expected default_vendor=codex in .harness.json, got: %s", content)
+	}
+}
+
+func TestCreateHarness_NoDescriptionOmitsField(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	if err := cmdCreate([]string{"harness", "my-harness"}); err != nil {
+		t.Fatalf("cmdCreate: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "my-harness/.harness.json"))
+	if err != nil {
+		t.Fatalf("reading .harness.json: %v", err)
+	}
+	if strings.Contains(string(data), `"description"`) {
+		t.Errorf("empty description should be omitted, got: %s", data)
+	}
+}
+
+func TestCreateHarness_UnknownFlag(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	err := cmdCreate([]string{"harness", "my-harness", "--bogus"})
+	if err == nil {
+		t.Fatal("expected error for unknown flag")
+	}
+	if !strings.Contains(err.Error(), "unknown flag") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestCreateHarness_MissingDescriptionValue(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	err := cmdCreate([]string{"harness", "my-harness", "--description"})
+	if err == nil {
+		t.Fatal("expected error for missing --description value")
+	}
+	if !strings.Contains(err.Error(), "--description requires a value") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestCreateHarness_InsideHarness(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
@@ -214,7 +312,7 @@ func TestCreateHarness_InsideHarness(t *testing.T) {
 	// Make CWD look like a harness
 	writeFile(t, filepath.Join(dir, ".harness.json"), []byte(`{"name":"test","version":"0.1.0"}`))
 
-	err := createHarness("nested")
+	err := createHarness("nested", "", "")
 	if err == nil {
 		t.Fatal("expected error when creating harness inside a harness")
 	}

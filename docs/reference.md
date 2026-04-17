@@ -39,6 +39,9 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh info <harness>` | `--format <text\|json>` |
 | `ynh vendors` | `--format <text\|json>` |
 | `ynh search <query>` | `--format <text\|json>` |
+| `ynh include add <harness> <url>` | `--path`, `--pick`, `--ref`, `--replace` |
+| `ynh include remove <harness> <url>` | `--path` |
+| `ynh include update <harness> <url>` | `--from-path`, `--path`, `--pick`, `--ref` |
 | `ynh sources add <path>` | `--name`, `--description` |
 | `ynh sources list` | `--format <text\|json>` |
 | `ynh sources remove <name>` | |
