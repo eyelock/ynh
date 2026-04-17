@@ -21,6 +21,7 @@ func TestParseRunArgs(t *testing.T) {
 		wantProfile string
 		wantFocus   string
 		wantFile    string
+		wantSession string
 		wantPrompt  string
 		wantArgs    []string
 		wantAction  string
@@ -137,6 +138,27 @@ func TestParseRunArgs(t *testing.T) {
 			args:     []string{"--harness-file", "/tmp/test.json"},
 			wantFile: "/tmp/test.json",
 		},
+		{
+			name:        "session-name flag",
+			args:        []string{"my-harness", "--session-name", "termq-abc12345"},
+			wantName:    "my-harness",
+			wantSession: "termq-abc12345",
+		},
+		{
+			name:        "session-name with vendor and prompt",
+			args:        []string{"my-harness", "-v", "claude", "--session-name", "termq-abc12345", "--", "review this"},
+			wantName:    "my-harness",
+			wantVendor:  "claude",
+			wantSession: "termq-abc12345",
+			wantPrompt:  "review this",
+		},
+		{
+			name:        "session-name value not confused as prompt",
+			args:        []string{"my-harness", "--session-name", "termq-abc12345"},
+			wantName:    "my-harness",
+			wantSession: "termq-abc12345",
+			wantPrompt:  "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -158,6 +180,9 @@ func TestParseRunArgs(t *testing.T) {
 			}
 			if ra.HarnessFile != tt.wantFile {
 				t.Errorf("HarnessFile = %q, want %q", ra.HarnessFile, tt.wantFile)
+			}
+			if ra.SessionName != tt.wantSession {
+				t.Errorf("SessionName = %q, want %q", ra.SessionName, tt.wantSession)
 			}
 			if ra.Prompt != tt.wantPrompt {
 				t.Errorf("Prompt = %q, want %q", ra.Prompt, tt.wantPrompt)
@@ -728,6 +753,33 @@ func TestCmdInstall_PathFlag_NoSource(t *testing.T) {
 	err := cmdInstall([]string{"--path", "some/dir"})
 	if err == nil {
 		t.Fatal("expected error when --path consumes the source arg")
+	}
+}
+
+func TestCmdInstall_SourceInsideHarnessesDir(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	// Install a harness whose source is already the install location (e.g. the
+	// marketplace browser pointing at an already-installed harness). ynh should
+	// skip the clean+copy and succeed without deleting anything.
+	srcDir := harness.InstalledDir("already-there")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, ".harness.json"),
+		[]byte(`{"name":"already-there","version":"0.1.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cmdInstall([]string{srcDir}); err != nil {
+		t.Fatalf("install from already-installed location should succeed, got: %v", err)
+	}
+
+	// Harness file must still be present after install
+	if _, statErr := os.Stat(filepath.Join(srcDir, ".harness.json")); statErr != nil {
+		t.Error("harness file missing after install from already-installed location")
 	}
 }
 

@@ -56,6 +56,8 @@ func main() {
 		err = cmdSearch(os.Args[2:])
 	case "registry":
 		err = cmdRegistry(os.Args[2:])
+	case "include":
+		err = cmdInclude(os.Args[2:])
 	case "image":
 		err = cmdImage(os.Args[2:])
 	case "prune":
@@ -101,6 +103,9 @@ Commands:
   sources add <path>           Add a local harness source directory
   sources list                 Show configured sources (supports --format json)
   sources remove <name>        Remove a source
+  include add <harness> <url>  Add a Git include to a harness
+  include remove <harness> <url>  Remove a Git include from a harness
+  include update <harness> <url>  Update a Git include's options
   registry add <url>           Add a harness registry
   registry list                Show configured registries
   registry remove <url>        Remove a registry
@@ -114,6 +119,7 @@ Commands:
 
 Run flags:
   -v <vendor>                  Override vendor (claude, codex, cursor)
+  --session-name <name>        Set the session name (passed to vendor CLI as --session-name)
   --install                    Install symlinks for the vendor in current project
   --clean                      Remove symlinks for the vendor in current project
   All other flags are passed through to the vendor CLI.
@@ -255,15 +261,22 @@ func cmdInstall(args []string) error {
 
 	// Copy harness to installed directory (clean first to remove stale artifacts)
 	installDir := harness.InstalledDir(p.Name)
-	if err := os.RemoveAll(installDir); err != nil {
-		return fmt.Errorf("cleaning install dir: %w", err)
-	}
-	if err := os.MkdirAll(installDir, 0o755); err != nil {
-		return fmt.Errorf("creating install directory: %w", err)
-	}
 
-	if err := assembler.CopyDir(srcDir, installDir); err != nil {
-		return fmt.Errorf("copying harness to install directory: %w", err)
+	// If source == install dir, skip the clean+copy (already in place).
+	// Otherwise remove stale artifacts and copy fresh.
+	absSrc, srcErr := filepath.Abs(srcDir)
+	absInstall, instErr := filepath.Abs(installDir)
+	alreadyInstalled := srcErr == nil && instErr == nil && absSrc == absInstall
+	if !alreadyInstalled {
+		if err := os.RemoveAll(installDir); err != nil {
+			return fmt.Errorf("cleaning install dir: %w", err)
+		}
+		if err := os.MkdirAll(installDir, 0o755); err != nil {
+			return fmt.Errorf("creating install directory: %w", err)
+		}
+		if err := assembler.CopyDir(srcDir, installDir); err != nil {
+			return fmt.Errorf("copying harness to install directory: %w", err)
+		}
 	}
 
 	// Inject install provenance into the copied .harness.json
@@ -531,6 +544,9 @@ func cmdRun(args []string) error {
 
 	prompt := ra.Prompt
 	vendorArgs := ra.VendorArgs
+	if ra.SessionName != "" {
+		vendorArgs = append([]string{"--session-name", ra.SessionName}, vendorArgs...)
+	}
 	action := ra.Action
 
 	// Determine vendor
@@ -880,6 +896,7 @@ type runArgs struct {
 	VendorFlag  string   // -v or YNH_VENDOR
 	ProfileFlag string   // --profile or YNH_PROFILE
 	FocusFlag   string   // --focus or YNH_FOCUS
+	SessionName string   // --session-name: passed through to vendor CLI as --session-name
 	Prompt      string   // trailing prompt after --
 	VendorArgs  []string // passthrough args for vendor CLI
 	Action      string   // "install", "clean", or ""
@@ -915,6 +932,9 @@ func parseRunArgs(args []string) runArgs {
 			i++
 		case flagArgs[i] == "--harness-file" && i+1 < len(flagArgs):
 			ra.HarnessFile = flagArgs[i+1]
+			i++
+		case flagArgs[i] == "--session-name" && i+1 < len(flagArgs):
+			ra.SessionName = flagArgs[i+1]
 			i++
 		case flagArgs[i] == "--install":
 			ra.Action = "install"
