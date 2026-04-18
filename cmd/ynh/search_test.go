@@ -32,23 +32,72 @@ func TestCmdSearchNoRegistries(t *testing.T) {
 	}
 }
 
-func TestCmdSearchMissingArgs(t *testing.T) {
+func TestCmdSearch_NoQuery_ListsAll(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("YNH_HOME", "")
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+
+	srcDir := filepath.Join(home, "sources")
+	writeSourceHarness(t, filepath.Join(srcDir, "alice"), "alice")
+	writeSourceHarness(t, filepath.Join(srcDir, "bob"), "bob")
+
+	cfg := &config.Config{
+		DefaultVendor: "claude",
+		Sources:       []config.Source{{Name: "dev", Path: srcDir}},
+	}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+
 	var stdout, stderr bytes.Buffer
 	err := cmdSearchTo([]string{}, &stdout, &stderr)
-	if err == nil {
-		t.Fatal("expected error for missing search term")
+	if err != nil {
+		t.Fatalf("no-query search should succeed: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "alice") {
+		t.Error("expected alice in no-query results")
+	}
+	if !strings.Contains(out, "bob") {
+		t.Error("expected bob in no-query results")
 	}
 }
 
-func TestCmdSearchMissingArgs_Structured(t *testing.T) {
+func TestCmdSearch_NoQuery_JSON(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("YNH_HOME", "")
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+
+	srcDir := filepath.Join(home, "sources")
+	writeSourceHarness(t, filepath.Join(srcDir, "alice"), "alice")
+	writeSourceHarness(t, filepath.Join(srcDir, "bob"), "bob")
+
+	cfg := &config.Config{
+		DefaultVendor: "claude",
+		Sources:       []config.Source{{Name: "dev", Path: srcDir}},
+	}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+
 	var stdout, stderr bytes.Buffer
 	err := cmdSearchTo([]string{"--format", "json"}, &stdout, &stderr)
-	if err == nil {
-		t.Fatal("expected error for missing search term")
+	if err != nil {
+		t.Fatalf("no-query JSON search should succeed: %v", err)
 	}
-	// Should be a structured error
-	if !strings.Contains(stderr.String(), "invalid_input") {
-		t.Errorf("expected structured error, got stderr: %s", stderr.String())
+
+	var results []searchResultEntry
+	if err := json.Unmarshal(stdout.Bytes(), &results); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
 	}
 }
 
