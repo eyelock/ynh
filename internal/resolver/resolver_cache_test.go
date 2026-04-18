@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -308,6 +309,102 @@ func TestResolveGitSourceFromCache_WithPath(t *testing.T) {
 	_, _, err = ResolveGitSourceFromCache(gsBad)
 	if err == nil {
 		t.Fatal("expected error for nonexistent path")
+	}
+}
+
+func TestEnsureRepo_ShallowCorruption_RecoversViaReclone(t *testing.T) {
+	// Set up a local git repo to clone
+	srcDir := t.TempDir()
+	runGit(t, srcDir, "init")
+	runGit(t, srcDir, "config", "user.email", "test@test.com")
+	runGit(t, srcDir, "config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(srcDir, "data.txt"), []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, srcDir, "add", ".")
+	runGit(t, srcDir, "commit", "-m", "init")
+
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	// First clone succeeds
+	result, err := EnsureRepo(srcDir, "")
+	if err != nil {
+		t.Fatalf("initial clone failed: %v", err)
+	}
+	repoDir := result.Path
+
+	// Simulate a shallow file corruption: replace gitCmdFunc so that the next
+	// fetch returns the exact error git produces for this condition, then restores
+	// to real git for the subsequent re-clone.
+	callCount := 0
+	orig := gitCmdFunc
+	t.Cleanup(func() { gitCmdFunc = orig })
+	gitCmdFunc = func(args ...string) error {
+		callCount++
+		// First call is the fetch — simulate shallow corruption
+		if callCount == 1 && len(args) > 0 && args[0] == "-C" {
+			return errors.New("exit status 128\nfatal: shallow file has changed since we read it")
+		}
+		return orig(args...)
+	}
+
+	result2, err := EnsureRepo(srcDir, "")
+	if err != nil {
+		t.Fatalf("EnsureRepo should recover from shallow corruption: %v", err)
+	}
+	if result2.Path != repoDir {
+		t.Errorf("expected same cache path after recovery, got %q", result2.Path)
+	}
+	if !result2.Cloned {
+		t.Error("expected Cloned=true after re-clone recovery")
+	}
+
+	// Content should be accessible after recovery
+	data, err := os.ReadFile(filepath.Join(result2.Path, "data.txt"))
+	if err != nil {
+		t.Fatalf("file not readable after recovery: %v", err)
+	}
+	if string(data) != "original" {
+		t.Errorf("unexpected content after recovery: %q", string(data))
+	}
+}
+
+func TestPurgeCacheDirsForURL(t *testing.T) {
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	cacheDir := config.CacheDir()
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create fake cache dirs matching the URL's org--repo prefix
+	prefix := repoDirPrefix("https://github.com/myorg/myrepo")
+	dirs := []string{
+		prefix + "--aabbccdd",           // ref=""
+		prefix + "--11223344",           // ref="v1"
+		"otherorg--otherrepo--deadbeef", // different URL — must not be deleted
+	}
+	for _, d := range dirs {
+		if err := os.MkdirAll(filepath.Join(cacheDir, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := PurgeCacheDirsForURL("https://github.com/myorg/myrepo"); err != nil {
+		t.Fatalf("PurgeCacheDirsForURL: %v", err)
+	}
+
+	// Both matching dirs should be gone
+	for _, d := range dirs[:2] {
+		if _, err := os.Stat(filepath.Join(cacheDir, d)); !os.IsNotExist(err) {
+			t.Errorf("expected %s to be deleted, stat err: %v", d, err)
+		}
+	}
+	// Unrelated dir must survive
+	if _, err := os.Stat(filepath.Join(cacheDir, dirs[2])); err != nil {
+		t.Errorf("unrelated cache dir should survive: %v", err)
 	}
 }
 
