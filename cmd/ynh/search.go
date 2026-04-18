@@ -37,10 +37,6 @@ func cmdSearchTo(args []string, stdout, stderr io.Writer) error {
 		i++
 	}
 
-	if len(queryParts) == 0 {
-		return cliError(stderr, structured, errCodeInvalidInput, "usage: ynh search <term>")
-	}
-
 	query := strings.Join(queryParts, " ")
 
 	cfg, err := config.Load()
@@ -157,7 +153,11 @@ func matchesSourceQuery(h sources.DiscoveredHarness, query string) bool {
 
 func printSearchText(w io.Writer, query string, results []searchResultEntry) error {
 	if len(results) == 0 {
-		_, _ = fmt.Fprintf(w, "No results for %q\n", query)
+		if query == "" {
+			_, _ = fmt.Fprintln(w, "No harnesses found")
+		} else {
+			_, _ = fmt.Fprintf(w, "No results for %q\n", query)
+		}
 		return nil
 	}
 
