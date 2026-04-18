@@ -151,11 +151,9 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 	}
 
 	if fetchErr != nil {
-		errStr := fetchErr.Error()
-
-		// Stale lock file from an interrupted fetch — remove it and retry once.
-		// This is the most common cause of "first call fails, retry succeeds".
-		if strings.Contains(errStr, ".lock") {
+		// Stale lock file from an interrupted fetch — remove it and retry once
+		// before falling through to the full re-clone path.
+		if strings.Contains(fetchErr.Error(), ".lock") {
 			_ = os.Remove(filepath.Join(repoDir, ".git", "shallow.lock"))
 			_ = os.Remove(filepath.Join(repoDir, ".git", "index.lock"))
 			if ref != "" {
@@ -163,33 +161,26 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 			} else {
 				fetchErr = gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin")
 			}
-			errStr = ""
-			if fetchErr != nil {
-				errStr = fetchErr.Error()
-			}
 		}
+	}
 
-		if fetchErr != nil {
-			// Shallow clone corruption — delete the stale cache and re-clone clean.
-			if strings.Contains(errStr, "shallow file has changed") {
-				if err := os.RemoveAll(repoDir); err != nil {
-					return RepoResult{}, fmt.Errorf("removing corrupt registry cache: %w", err)
-				}
-				args := []string{"clone", "--depth", "1"}
-				if ref != "" {
-					args = append(args, "--branch", ref)
-				}
-				args = append(args, fullURL, repoDir)
-				if err := gitCmd(args...); err != nil {
-					return RepoResult{}, fmt.Errorf("git clone %s: %w", fullURL, err)
-				}
-				return RepoResult{Path: repoDir, Cloned: true, Changed: true}, nil
-			}
-			if ref != "" {
-				return RepoResult{}, fmt.Errorf("git fetch %s ref %s: %w", fullURL, ref, fetchErr)
-			}
-			return RepoResult{}, fmt.Errorf("git fetch %s: %w", fullURL, fetchErr)
+	if fetchErr != nil {
+		// Any fetch failure on a shallow clone is unrecoverable: the shallow
+		// graft history may be inconsistent with what the remote sends (stale
+		// grafts, missing objects, changed history). Nuke the cache and
+		// re-clone clean — the cache is disposable.
+		if err := os.RemoveAll(repoDir); err != nil {
+			return RepoResult{}, fmt.Errorf("removing stale registry cache: %w", err)
 		}
+		args := []string{"clone", "--depth", "1"}
+		if ref != "" {
+			args = append(args, "--branch", ref)
+		}
+		args = append(args, fullURL, repoDir)
+		if err := gitCmd(args...); err != nil {
+			return RepoResult{}, fmt.Errorf("git clone %s: %w", fullURL, err)
+		}
+		return RepoResult{Path: repoDir, Cloned: true, Changed: true}, nil
 	}
 
 	if ref != "" {
