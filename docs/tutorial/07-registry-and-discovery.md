@@ -121,6 +121,18 @@ ynh search "nonexistent"
 # Expected: No results for "nonexistent"
 ```
 
+Omit the query to list every harness across all registries and sources:
+
+```bash
+ynh search
+```
+
+```bash
+ynh search --format json
+```
+
+Expected: all three harnesses from `tutorial-registry` (david, planner, media-management) in the output.
+
 ## T7.5: Install — by exact name
 
 ```bash
@@ -251,7 +263,7 @@ ynh uninstall tester 2>/dev/null
 
 - A registry is a Git repo with `registry.json` listing available harnesses
 - `ynh registry add/list/remove/update` manages registry sources
-- `ynh search` does text matching on name, description, and keywords
+- `ynh search [query]` does text matching on name, description, and keywords; omit the query to list all
 - `ynh install <name>` resolves from registries (exact match installs, multiple matches prompt)
 - `name@registry` disambiguates across registries
 - Git URLs and local paths still work as before (higher precedence)
