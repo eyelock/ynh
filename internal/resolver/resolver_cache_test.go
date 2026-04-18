@@ -434,8 +434,8 @@ func TestEnsureRepo_ShallowCorruption_RecoversViaReclone(t *testing.T) {
 	t.Cleanup(func() { gitCmdFunc = orig })
 	gitCmdFunc = func(args ...string) error {
 		callCount++
-		isFetch := len(args) > 0 && args[0] == "-C" && len(args) > 2 && args[2] == "fetch"
-		if callCount == 1 && isFetch {
+		// First call is the fetch — simulate shallow corruption
+		if callCount == 1 && len(args) > 0 && args[0] == "-C" {
 			return errors.New("exit status 128\nfatal: shallow file has changed since we read it")
 		}
 		return orig(args...)
