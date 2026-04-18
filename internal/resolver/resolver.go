@@ -215,8 +215,30 @@ func ResolveFromCache(p *harness.Harness, cfg *config.Config) ([]ResolveResult, 
 }
 
 // gitHead returns the short HEAD SHA for a repo, or empty string on error.
+// gitBin is the resolved path to the git binary. Resolved once at startup so
+// that callers invoked from GUI apps (which have a minimal PATH) can still
+// find git even when PATH doesn't include Homebrew or developer tool dirs.
+var gitBin = resolveGitBin()
+
+func resolveGitBin() string {
+	if path, err := exec.LookPath("git"); err == nil {
+		return path
+	}
+	// Common macOS locations not always on GUI app PATH
+	for _, candidate := range []string{
+		"/usr/bin/git",
+		"/opt/homebrew/bin/git",
+		"/usr/local/bin/git",
+	} {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return "git" // last resort — let exec fail with a clear error
+}
+
 func gitHead(repoDir string) string {
-	cmd := exec.Command("git", "-C", repoDir, "rev-parse", "HEAD")
+	cmd := exec.Command(gitBin, "-C", repoDir, "rev-parse", "HEAD")
 	out, err := cmd.Output()
 	if err != nil {
 		return ""
@@ -227,7 +249,7 @@ func gitHead(repoDir string) string {
 // gitCmd runs a git command, suppressing output unless it fails.
 // Replaceable in tests via gitCmdFunc.
 var gitCmdFunc = func(args ...string) error {
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command(gitBin, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w\n%s", err, out)
