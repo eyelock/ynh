@@ -85,28 +85,66 @@ func TestEnsureRepo_UpdateErrorsNotSwallowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("initial clone failed: %v", err)
 	}
-	_ = result
 
 	// Corrupt the remote by removing the source repo's .git
 	if err := os.RemoveAll(filepath.Join(srcDir, ".git")); err != nil {
 		t.Fatal(err)
 	}
 
-	// Second call: update should fail (fetch from a non-git directory)
+	// Second call: fetch fails → re-clone attempted → re-clone also fails (remote gone).
+	// Error should surface from the clone attempt, not the original fetch.
 	_, err = EnsureRepo(srcDir, "")
 	if err == nil {
-		t.Fatal("expected error when fetching from corrupted remote, got nil")
+		t.Fatal("expected error when remote is gone, got nil")
+	}
+	if !strings.Contains(err.Error(), "git clone") {
+		t.Errorf("error should mention git clone (re-clone after fetch failure), got: %s", err.Error())
+	}
+	_ = result
+}
+
+func TestEnsureRepo_AnyFetchFailure_TriggersReclone(t *testing.T) {
+	srcDir := t.TempDir()
+	runGit(t, srcDir, "init")
+	runGit(t, srcDir, "config", "user.email", "test@test.com")
+	runGit(t, srcDir, "config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(srcDir, "data.txt"), []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, srcDir, "add", ".")
+	runGit(t, srcDir, "commit", "-m", "init")
+
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	result, err := EnsureRepo(srcDir, "")
+	if err != nil {
+		t.Fatalf("initial clone: %v", err)
 	}
 
-	// Verify the error message contains useful context
-	errStr := err.Error()
-	if !strings.Contains(errStr, "git fetch") {
-		t.Errorf("error should mention git fetch, got: %s", errStr)
+	// Inject a fetch failure with an arbitrary git error (e.g. "remote did not
+	// send all necessary objects") — should trigger nuke-and-reclone, not propagate.
+	orig := gitCmdFunc
+	t.Cleanup(func() { gitCmdFunc = orig })
+	calls := 0
+	gitCmdFunc = func(args ...string) error {
+		calls++
+		isFetch := len(args) > 0 && args[0] == "-C" && len(args) > 2 && args[2] == "fetch"
+		if calls == 1 && isFetch {
+			return errors.New("exit status 1\nerror: remote did not send all necessary objects")
+		}
+		return orig(args...)
 	}
 
-	// Verify the cached repo still exists (we don't blow it away on update failure)
-	if _, statErr := os.Stat(result.Path); os.IsNotExist(statErr) {
-		t.Error("cached repo should still exist after failed update")
+	result2, err := EnsureRepo(srcDir, "")
+	if err != nil {
+		t.Fatalf("EnsureRepo should recover via re-clone: %v", err)
+	}
+	if result2.Path != result.Path {
+		t.Errorf("expected same cache path after recovery")
+	}
+	if !result2.Cloned {
+		t.Error("expected Cloned=true after re-clone recovery")
 	}
 }
 
@@ -396,8 +434,8 @@ func TestEnsureRepo_ShallowCorruption_RecoversViaReclone(t *testing.T) {
 	t.Cleanup(func() { gitCmdFunc = orig })
 	gitCmdFunc = func(args ...string) error {
 		callCount++
-		// First call is the fetch — simulate shallow corruption
-		if callCount == 1 && len(args) > 0 && args[0] == "-C" {
+		isFetch := len(args) > 0 && args[0] == "-C" && len(args) > 2 && args[2] == "fetch"
+		if callCount == 1 && isFetch {
 			return errors.New("exit status 128\nfatal: shallow file has changed since we read it")
 		}
 		return orig(args...)
