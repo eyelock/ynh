@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/eyelock/ynh/internal/config"
@@ -114,6 +115,41 @@ func TestCmdRegistryRemoveNotFound(t *testing.T) {
 	err := cmdRegistryRemove([]string{"github.com/test/nonexistent"})
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestCmdRegistryRemove_PurgesCache(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("YNH_HOME", "")
+
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		DefaultVendor: "claude",
+		Registries:    []config.RegistrySource{{URL: "github.com/myorg/myrepo"}},
+	}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pre-create fake cache dirs that would belong to this registry URL
+	cacheDir := config.CacheDir()
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cacheEntry := filepath.Join(cacheDir, "myorg--myrepo--aabb1122")
+	if err := os.MkdirAll(cacheEntry, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cmdRegistryRemove([]string{"github.com/myorg/myrepo"}); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+
+	if _, err := os.Stat(cacheEntry); !os.IsNotExist(err) {
+		t.Error("registry remove should have deleted the cache directory")
 	}
 }
 
