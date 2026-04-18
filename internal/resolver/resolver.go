@@ -151,25 +151,45 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 	}
 
 	if fetchErr != nil {
-		// Shallow clone corruption — delete the stale cache and re-clone clean.
-		if strings.Contains(fetchErr.Error(), "shallow file has changed") {
-			if err := os.RemoveAll(repoDir); err != nil {
-				return RepoResult{}, fmt.Errorf("removing corrupt registry cache: %w", err)
-			}
-			args := []string{"clone", "--depth", "1"}
+		errStr := fetchErr.Error()
+
+		// Stale lock file from an interrupted fetch — remove it and retry once.
+		// This is the most common cause of "first call fails, retry succeeds".
+		if strings.Contains(errStr, ".lock") {
+			_ = os.Remove(filepath.Join(repoDir, ".git", "shallow.lock"))
+			_ = os.Remove(filepath.Join(repoDir, ".git", "index.lock"))
 			if ref != "" {
-				args = append(args, "--branch", ref)
+				fetchErr = gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin", ref)
+			} else {
+				fetchErr = gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin")
 			}
-			args = append(args, fullURL, repoDir)
-			if err := gitCmd(args...); err != nil {
-				return RepoResult{}, fmt.Errorf("git clone %s: %w", fullURL, err)
+			errStr = ""
+			if fetchErr != nil {
+				errStr = fetchErr.Error()
 			}
-			return RepoResult{Path: repoDir, Cloned: true, Changed: true}, nil
 		}
-		if ref != "" {
-			return RepoResult{}, fmt.Errorf("git fetch %s ref %s: %w", fullURL, ref, fetchErr)
+
+		if fetchErr != nil {
+			// Shallow clone corruption — delete the stale cache and re-clone clean.
+			if strings.Contains(errStr, "shallow file has changed") {
+				if err := os.RemoveAll(repoDir); err != nil {
+					return RepoResult{}, fmt.Errorf("removing corrupt registry cache: %w", err)
+				}
+				args := []string{"clone", "--depth", "1"}
+				if ref != "" {
+					args = append(args, "--branch", ref)
+				}
+				args = append(args, fullURL, repoDir)
+				if err := gitCmd(args...); err != nil {
+					return RepoResult{}, fmt.Errorf("git clone %s: %w", fullURL, err)
+				}
+				return RepoResult{Path: repoDir, Cloned: true, Changed: true}, nil
+			}
+			if ref != "" {
+				return RepoResult{}, fmt.Errorf("git fetch %s ref %s: %w", fullURL, ref, fetchErr)
+			}
+			return RepoResult{}, fmt.Errorf("git fetch %s: %w", fullURL, fetchErr)
 		}
-		return RepoResult{}, fmt.Errorf("git fetch %s: %w", fullURL, fetchErr)
 	}
 
 	if ref != "" {

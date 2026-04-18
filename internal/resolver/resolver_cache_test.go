@@ -312,6 +312,60 @@ func TestResolveGitSourceFromCache_WithPath(t *testing.T) {
 	}
 }
 
+func TestEnsureRepo_StaleLockFile_RecoversViaRetry(t *testing.T) {
+	srcDir := t.TempDir()
+	runGit(t, srcDir, "init")
+	runGit(t, srcDir, "config", "user.email", "test@test.com")
+	runGit(t, srcDir, "config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(srcDir, "data.txt"), []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, srcDir, "add", ".")
+	runGit(t, srcDir, "commit", "-m", "init")
+
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	// First clone
+	result, err := EnsureRepo(srcDir, "")
+	if err != nil {
+		t.Fatalf("initial clone: %v", err)
+	}
+
+	// Simulate a stale shallow.lock left by an interrupted prior fetch
+	lockFile := filepath.Join(result.Path, ".git", "shallow.lock")
+	if err := os.WriteFile(lockFile, []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Inject a gitCmdFunc that fails with a lock error on the first fetch,
+	// then delegates to real git for the retry and all subsequent calls.
+	callCount := 0
+	orig := gitCmdFunc
+	t.Cleanup(func() { gitCmdFunc = orig })
+	gitCmdFunc = func(args ...string) error {
+		callCount++
+		isFetch := len(args) > 0 && args[0] == "-C" && len(args) > 2 && args[2] == "fetch"
+		if callCount == 1 && isFetch {
+			return errors.New("exit status 128\nfatal: Unable to create '...shallow.lock': File exists.")
+		}
+		return orig(args...)
+	}
+
+	result2, err := EnsureRepo(srcDir, "")
+	if err != nil {
+		t.Fatalf("EnsureRepo should recover from stale lock: %v", err)
+	}
+	if result2.Path != result.Path {
+		t.Errorf("expected same cache path, got %q", result2.Path)
+	}
+
+	// Lock file should be gone after recovery
+	if _, err := os.Stat(lockFile); !os.IsNotExist(err) {
+		t.Error("shallow.lock should have been removed during recovery")
+	}
+}
+
 func TestEnsureRepo_ShallowCorruption_RecoversViaReclone(t *testing.T) {
 	// Set up a local git repo to clone
 	srcDir := t.TempDir()
