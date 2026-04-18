@@ -1,5 +1,7 @@
 Before ANY remote operation (`git push`, `gh pr create`, `gh pr merge`), ALL of the following gates must pass. No exceptions. If blocked, stop and ask the user for help.
 
+**PR target:** feature and fix branches always PR into `develop`, not `main`. Only `develop` and `hotfix/*` may target `main`.
+
 ## Gate 1: make check
 
 Run `make check`. It must pass with zero issues. If it fails, fix the issue and re-run until green.
