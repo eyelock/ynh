@@ -143,17 +143,60 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 	// Update existing clone — capture HEAD before and after
 	before := gitHead(repoDir)
 
+	var fetchErr error
 	if ref != "" {
-		if err := gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin", ref); err != nil {
-			return RepoResult{}, fmt.Errorf("git fetch %s ref %s: %w", fullURL, ref, err)
+		fetchErr = gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin", ref)
+	} else {
+		fetchErr = gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin")
+	}
+
+	if fetchErr != nil {
+		errStr := fetchErr.Error()
+
+		// Stale lock file from an interrupted fetch — remove it and retry once.
+		// This is the most common cause of "first call fails, retry succeeds".
+		if strings.Contains(errStr, ".lock") {
+			_ = os.Remove(filepath.Join(repoDir, ".git", "shallow.lock"))
+			_ = os.Remove(filepath.Join(repoDir, ".git", "index.lock"))
+			if ref != "" {
+				fetchErr = gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin", ref)
+			} else {
+				fetchErr = gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin")
+			}
+			errStr = ""
+			if fetchErr != nil {
+				errStr = fetchErr.Error()
+			}
 		}
+
+		if fetchErr != nil {
+			// Shallow clone corruption — delete the stale cache and re-clone clean.
+			if strings.Contains(errStr, "shallow file has changed") {
+				if err := os.RemoveAll(repoDir); err != nil {
+					return RepoResult{}, fmt.Errorf("removing corrupt registry cache: %w", err)
+				}
+				args := []string{"clone", "--depth", "1"}
+				if ref != "" {
+					args = append(args, "--branch", ref)
+				}
+				args = append(args, fullURL, repoDir)
+				if err := gitCmd(args...); err != nil {
+					return RepoResult{}, fmt.Errorf("git clone %s: %w", fullURL, err)
+				}
+				return RepoResult{Path: repoDir, Cloned: true, Changed: true}, nil
+			}
+			if ref != "" {
+				return RepoResult{}, fmt.Errorf("git fetch %s ref %s: %w", fullURL, ref, fetchErr)
+			}
+			return RepoResult{}, fmt.Errorf("git fetch %s: %w", fullURL, fetchErr)
+		}
+	}
+
+	if ref != "" {
 		if err := gitCmd("-C", repoDir, "checkout", "FETCH_HEAD"); err != nil {
 			return RepoResult{}, fmt.Errorf("git checkout FETCH_HEAD in %s: %w", repoDir, err)
 		}
 	} else {
-		if err := gitCmd("-C", repoDir, "fetch", "--depth", "1", "origin"); err != nil {
-			return RepoResult{}, fmt.Errorf("git fetch %s: %w", fullURL, err)
-		}
 		if err := gitCmd("-C", repoDir, "reset", "--hard", "origin/HEAD"); err != nil {
 			return RepoResult{}, fmt.Errorf("git reset in %s: %w", repoDir, err)
 		}
@@ -192,8 +235,30 @@ func ResolveFromCache(p *harness.Harness, cfg *config.Config) ([]ResolveResult, 
 }
 
 // gitHead returns the short HEAD SHA for a repo, or empty string on error.
+// gitBin is the resolved path to the git binary. Resolved once at startup so
+// that callers invoked from GUI apps (which have a minimal PATH) can still
+// find git even when PATH doesn't include Homebrew or developer tool dirs.
+var gitBin = resolveGitBin()
+
+func resolveGitBin() string {
+	if path, err := exec.LookPath("git"); err == nil {
+		return path
+	}
+	// Common macOS locations not always on GUI app PATH
+	for _, candidate := range []string{
+		"/usr/bin/git",
+		"/opt/homebrew/bin/git",
+		"/usr/local/bin/git",
+	} {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return "git" // last resort — let exec fail with a clear error
+}
+
 func gitHead(repoDir string) string {
-	cmd := exec.Command("git", "-C", repoDir, "rev-parse", "HEAD")
+	cmd := exec.Command(gitBin, "-C", repoDir, "rev-parse", "HEAD")
 	out, err := cmd.Output()
 	if err != nil {
 		return ""
@@ -202,13 +267,58 @@ func gitHead(repoDir string) string {
 }
 
 // gitCmd runs a git command, suppressing output unless it fails.
-func gitCmd(args ...string) error {
-	cmd := exec.Command("git", args...)
+// Replaceable in tests via gitCmdFunc.
+var gitCmdFunc = func(args ...string) error {
+	cmd := exec.Command(gitBin, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w\n%s", err, out)
 	}
 	return nil
+}
+
+func gitCmd(args ...string) error { return gitCmdFunc(args...) }
+
+// PurgeCacheDirsForURL removes all cache directories associated with the given
+// Git URL (all refs). It derives the org--repo name prefix from the URL and
+// deletes every subdirectory of the cache that starts with that prefix.
+func PurgeCacheDirsForURL(gitURL string) error {
+	cacheDir := config.CacheDir()
+	prefix := repoDirPrefix(gitURL)
+
+	entries, err := os.ReadDir(cacheDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("reading cache dir: %w", err)
+	}
+
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), prefix+"--") {
+			if err := os.RemoveAll(filepath.Join(cacheDir, e.Name())); err != nil {
+				return fmt.Errorf("removing cache dir %s: %w", e.Name(), err)
+			}
+		}
+	}
+	return nil
+}
+
+// repoDirPrefix returns the org--repo portion of the cache dir name (without the hash suffix).
+func repoDirPrefix(url string) string {
+	cleaned := strings.TrimSuffix(url, ".git")
+	if strings.HasPrefix(cleaned, "git@") {
+		if idx := strings.Index(cleaned, ":"); idx > 0 {
+			cleaned = cleaned[idx+1:]
+		}
+	}
+	cleaned = strings.TrimPrefix(cleaned, "https://")
+	cleaned = strings.TrimPrefix(cleaned, "http://")
+	parts := strings.Split(cleaned, "/")
+	if len(parts) >= 2 {
+		return fmt.Sprintf("%s--%s", parts[len(parts)-2], parts[len(parts)-1])
+	}
+	return parts[len(parts)-1]
 }
 
 // NormalizeGitURL ensures a full Git URL from shorthand.

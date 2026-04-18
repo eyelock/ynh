@@ -152,6 +152,10 @@ func cmdRegistryRemove(args []string) error {
 		return fmt.Errorf("saving config: %w", err)
 	}
 
+	if err := resolver.PurgeCacheDirsForURL(url); err != nil {
+		return fmt.Errorf("purging registry cache: %w", err)
+	}
+
 	fmt.Printf("Removed registry: %s\n", url)
 	return nil
 }
