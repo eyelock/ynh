@@ -16,7 +16,7 @@ Every change goes through a branch and PR — no exceptions.
 
 ## Branch naming
 
-Use hyphens, not slashes:
+Use hyphens for all branches except hotfixes, which must use a slash (CI enforces `hotfix/*`):
 
 ```
 feat-<description>
@@ -25,7 +25,7 @@ docs-<description>
 ci-<description>
 refactor-<description>
 test-<description>
-hotfix-<description>
+hotfix/<description>
 ```
 
 ## Workflow
