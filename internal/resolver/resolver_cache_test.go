@@ -462,6 +462,47 @@ func TestEnsureRepo_ShallowCorruption_RecoversViaReclone(t *testing.T) {
 	}
 }
 
+func TestEnsureRepo_ExistingDirWithoutGit_ClonesClean(t *testing.T) {
+	srcDir := t.TempDir()
+	runGit(t, srcDir, "init")
+	runGit(t, srcDir, "config", "user.email", "test@test.com")
+	runGit(t, srcDir, "config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(srcDir, "file.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, srcDir, "add", ".")
+	runGit(t, srcDir, "commit", "-m", "init")
+
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	// Pre-create the cache directory without a .git dir — simulates a prior
+	// marketplace index fetch that left a non-clone artifact in the cache.
+	cacheDir := config.CacheDir()
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	repoDir := filepath.Join(cacheDir, repoDirName(srcDir, ""))
+	if err := os.MkdirAll(filepath.Join(repoDir, "some-leftover-dir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := EnsureRepo(srcDir, "")
+	if err != nil {
+		t.Fatalf("EnsureRepo should clone over existing non-git dir: %v", err)
+	}
+	if !result.Cloned {
+		t.Error("expected Cloned=true")
+	}
+	data, err := os.ReadFile(filepath.Join(result.Path, "file.txt"))
+	if err != nil {
+		t.Fatalf("cloned file not readable: %v", err)
+	}
+	if string(data) != "hello" {
+		t.Errorf("unexpected content: %q", string(data))
+	}
+}
+
 func TestPurgeCacheDirsForURL(t *testing.T) {
 	t.Setenv("YNH_HOME", "")
 	t.Setenv("HOME", t.TempDir())
