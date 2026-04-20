@@ -128,6 +128,10 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 	fullURL := NormalizeGitURL(gitURL)
 
 	if _, err := os.Stat(filepath.Join(repoDir, ".git")); os.IsNotExist(err) {
+		// No .git dir — remove any partial/pre-existing directory before cloning.
+		if err := os.RemoveAll(repoDir); err != nil {
+			return RepoResult{}, fmt.Errorf("removing incomplete cache dir: %w", err)
+		}
 		// Clone
 		args := []string{"clone", "--depth", "1"}
 		if ref != "" {
