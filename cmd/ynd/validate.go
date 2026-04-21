@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/marketplace"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
@@ -88,6 +89,8 @@ func validateFile(path string) error {
 	switch {
 	case base == plugin.HarnessFile:
 		issues = lintHarnessJSON(path)
+	case base == "marketplace.json":
+		issues = lintMarketplaceConfig(path)
 	case strings.HasSuffix(path, ".md"):
 		issues = lintMarkdown(path)
 	default:
@@ -475,6 +478,14 @@ func validateHarnessFocus(hj map[string]any) []string {
 	}
 
 	return issues
+}
+
+// lintMarketplaceConfig validates a marketplace.json build config.
+func lintMarketplaceConfig(path string) []lintIssue {
+	if _, err := marketplace.LoadConfig(path); err != nil {
+		return []lintIssue{{File: path, Message: err.Error()}}
+	}
+	return nil
 }
 
 // lintHarnessJSON validates harness.json structure for the lint command.
