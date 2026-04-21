@@ -7,8 +7,9 @@ Search for harnesses from curated registries and install them by name. A registr
 ```bash
 # Clean up from any previous run
 rm -rf /tmp/ynh-tutorial
-ynh uninstall david planner tester 2>/dev/null
+ynh uninstall david planner tester codereview 2>/dev/null
 ynh registry remove /tmp/ynh-tutorial/my-registry 2>/dev/null
+ynh sources remove codereview 2>/dev/null
 
 mkdir -p /tmp/ynh-tutorial
 ```
@@ -213,6 +214,88 @@ ynh registry list
 # Expected: no registries
 ```
 
+## T7.12: Add a local source
+
+Local sources are directories of harnesses registered in config — no Git or internet required. When a source name matches a harness name, uninstalling the harness also removes the source entry.
+
+```bash
+mkdir -p /tmp/ynh-tutorial/sources/codereview
+cat > /tmp/ynh-tutorial/sources/codereview/.harness.json << 'EOF'
+{
+  "name": "codereview",
+  "version": "0.1.0",
+  "description": "Code review harness",
+  "default_vendor": "claude"
+}
+EOF
+
+ynh sources add /tmp/ynh-tutorial/sources --name codereview
+```
+
+Expected:
+```
+Added source "codereview" (/tmp/ynh-tutorial/sources) — 1 harness(es) found
+```
+
+## T7.13: List sources
+
+```bash
+ynh sources list
+```
+
+Expected:
+```
+NAME        PATH                       DESCRIPTION  HARNESSES
+codereview  /tmp/ynh-tutorial/sources  -            1
+```
+
+## T7.14: Search includes source harnesses
+
+`ynh search` queries both registries and local sources in a single pass:
+
+```bash
+ynh search "code review"
+```
+
+Expected:
+```
+NAME        DESCRIPTION          REPO                                  VENDORS  FROM
+codereview  Code review harness  /tmp/ynh-tutorial/sources/codereview  claude   codereview (source)
+```
+
+## T7.15: Install from source
+
+Install the harness by name — ynh resolves it from the configured source:
+
+```bash
+ynh install codereview
+```
+
+Expected:
+```
+Installed harness "codereview"
+  Location: /Users/<you>/.ynh/harnesses/codereview
+  Launcher: /Users/<you>/.ynh/bin/codereview
+  Vendor:   claude
+```
+
+## T7.16: Uninstall removes the source entry
+
+When a harness and its source share the same name, uninstalling the harness cleans up the source entry from config automatically:
+
+```bash
+ynh uninstall codereview
+ynh sources list
+```
+
+Expected:
+```
+No sources configured.
+Add one with: ynh sources add <path>
+```
+
+The `codereview` source entry is removed because its name matched the uninstalled harness.
+
 ## Disambiguation rules
 
 ynh resolves the install argument in this order:
@@ -263,11 +346,13 @@ ynh uninstall tester 2>/dev/null
 
 - A registry is a Git repo with `registry.json` listing available harnesses
 - `ynh registry add/list/remove/update` manages registry sources
-- `ynh search [query]` does text matching on name, description, and keywords; omit the query to list all
-- `ynh install <name>` resolves from registries (exact match installs, multiple matches prompt)
+- `ynh search [query]` queries both registries and local sources; omit the query to list all
+- `ynh install <name>` resolves from registries and local sources (exact match installs, multiple matches prompt)
 - `name@registry` disambiguates across registries
 - Git URLs and local paths still work as before (higher precedence)
 - Registries are cached locally and updated on demand
+- `ynh sources add/list/remove` manages local source directories (no Git required)
+- Uninstalling a harness automatically removes its matching source entry from config
 
 ## Next
 
