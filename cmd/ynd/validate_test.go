@@ -206,6 +206,38 @@ func TestCmdValidate_SingleFile_Unknown(t *testing.T) {
 	}
 }
 
+func TestValidateMarketplaceConfig_Valid(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "marketplace.json")
+	writeFile(t, path, []byte(`{
+		"name": "test-marketplace",
+		"owner": {"name": "tester"},
+		"entries": [{"type": "plugin", "source": "./plugins/my-plugin"}]
+	}`))
+
+	if err := cmdValidate([]string{path}); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateMarketplaceConfig_InvalidRemoteSource(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "marketplace.json")
+	writeFile(t, path, []byte(`{
+		"name": "test-marketplace",
+		"owner": {"name": "tester"},
+		"entries": [{"type": "plugin", "source": "github.com/user"}]
+	}`))
+
+	err := cmdValidate([]string{path})
+	if err == nil {
+		t.Fatal("expected validation error for bad remote source")
+	}
+	if !strings.Contains(err.Error(), "validation failed") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestCmdValidate_SingleFile_WithIssues(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".harness.json")
