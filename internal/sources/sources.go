@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-)
 
-const harnessFile = ".harness.json"
+	"github.com/eyelock/ynh/internal/plugin"
+)
 
 // DiscoveredHarness describes a harness found by walking a local source directory.
 type DiscoveredHarness struct {
@@ -68,11 +68,24 @@ func walkDiscover(dir string, remainingDepth int, results *[]DiscoveredHarness) 
 	}
 }
 
-// loadMinimalHarness reads just the identity fields from .harness.json.
-// It intentionally uses a loose struct (no DisallowUnknownFields) so that
-// discovery works even if the manifest has newer fields.
+// loadMinimalHarness reads just the identity fields from a harness manifest.
+// It checks .ynh-plugin/plugin.json first (0.2+), then .harness.json (0.1).
+// Uses a loose struct (no DisallowUnknownFields) so discovery tolerates newer fields.
 func loadMinimalHarness(dir string) (DiscoveredHarness, bool) {
-	data, err := os.ReadFile(filepath.Join(dir, harnessFile))
+	var manifestPath string
+	pluginPath := filepath.Join(dir, plugin.PluginDir, plugin.PluginFile)
+	legacyPath := filepath.Join(dir, plugin.HarnessFile)
+
+	switch {
+	case fileExists(pluginPath):
+		manifestPath = pluginPath
+	case fileExists(legacyPath):
+		manifestPath = legacyPath
+	default:
+		return DiscoveredHarness{}, false
+	}
+
+	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return DiscoveredHarness{}, false
 	}
@@ -100,4 +113,9 @@ func loadMinimalHarness(dir string) (DiscoveredHarness, bool) {
 		Keywords:      manifest.Keywords,
 		Path:          dir,
 	}, true
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
