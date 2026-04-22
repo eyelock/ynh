@@ -6,11 +6,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/exporter"
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
 )
 
@@ -88,6 +90,25 @@ type MarketplaceEntry struct {
 	Path        string `json:"path,omitempty"`        // monorepo subdir
 }
 
+// isLocalSource reports whether a source string refers to a local filesystem path.
+func isLocalSource(source string) bool {
+	return strings.HasPrefix(source, "/") || strings.HasPrefix(source, ".")
+}
+
+// validateRemoteSource checks that a non-local source looks like a valid Git URL.
+// Accepts HTTPS/HTTP/SSH URLs and host/org/repo shorthand (e.g. github.com/org/repo).
+func validateRemoteSource(source string) error {
+	if strings.HasPrefix(source, "https://") || strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "git@") {
+		return nil
+	}
+	// Shorthand must include at least host/org/repo (3 slash-separated components).
+	parts := strings.SplitN(source, "/", 3)
+	if len(parts) < 3 || parts[1] == "" || parts[2] == "" {
+		return fmt.Errorf("remote source %q must be a full URL (https://...) or host/org/repo shorthand (e.g. github.com/org/repo)", source)
+	}
+	return nil
+}
+
 // LoadConfig reads and parses a marketplace.json file.
 func LoadConfig(path string) (*MarketplaceConfig, error) {
 	data, err := os.ReadFile(path)
@@ -116,6 +137,11 @@ func LoadConfig(path string) (*MarketplaceConfig, error) {
 		}
 		if e.Source == "" {
 			return nil, fmt.Errorf("marketplace config: entry %d: source is required", i)
+		}
+		if !isLocalSource(e.Source) {
+			if err := validateRemoteSource(e.Source); err != nil {
+				return nil, fmt.Errorf("marketplace config: entry %d: %w", i, err)
+			}
 		}
 	}
 
@@ -149,7 +175,10 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 	// Process each entry
 	var pluginInfos []pluginInfo
 	for _, entry := range cfg.Entries {
-		srcDir := resolveEntrySource(entry.Source, opts.ConfigDir)
+		srcDir, err := resolveEntrySource(entry.Source, opts.ConfigDir)
+		if err != nil {
+			return fmt.Errorf("entry %q: %w", entry.Source, err)
+		}
 
 		// Apply monorepo subdir
 		if entry.Path != "" {
@@ -301,12 +330,21 @@ func loadPluginManifest(dir string) (pluginInfo, error) {
 	}, nil
 }
 
-// resolveEntrySource resolves an entry source path relative to the config directory.
-func resolveEntrySource(source, configDir string) string {
-	if filepath.IsAbs(source) {
-		return source
+// resolveEntrySource resolves an entry source to a local directory path.
+// Local paths (starting with / or .) are resolved relative to configDir.
+// Remote sources (GitHub shorthand, HTTPS, SSH) are cloned and cached via the resolver.
+func resolveEntrySource(source, configDir string) (string, error) {
+	if isLocalSource(source) {
+		if filepath.IsAbs(source) {
+			return source, nil
+		}
+		return filepath.Join(configDir, source), nil
 	}
-	return filepath.Join(configDir, source)
+	result, err := resolver.EnsureRepo(source, "")
+	if err != nil {
+		return "", fmt.Errorf("cloning %q: %w", source, err)
+	}
+	return result.Path, nil
 }
 
 // isGitRepo checks whether dir is the root of a Git repository.

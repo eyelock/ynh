@@ -124,6 +124,11 @@ Re-run `make install` after any code change you want to test.
 | T7.9 | No match error | [T7.9](tutorial/07-registry-and-discovery.md#t79-no-match-error) |
 | T7.10 | Update registries | [T7.10](tutorial/07-registry-and-discovery.md#t710-update-registries) |
 | T7.11 | Remove registry | [T7.11](tutorial/07-registry-and-discovery.md#t711-remove-a-registry) |
+| T7.12 | Add local source | [T7.12](tutorial/07-registry-and-discovery.md#t712-add-a-local-source) |
+| T7.13 | List sources | [T7.13](tutorial/07-registry-and-discovery.md#t713-list-sources) |
+| T7.14 | Search includes source harnesses | [T7.14](tutorial/07-registry-and-discovery.md#t714-search-includes-source-harnesses) |
+| T7.15 | Install from source | [T7.15](tutorial/07-registry-and-discovery.md#t715-install-from-source) |
+| T7.16 | Uninstall removes source entry | [T7.16](tutorial/07-registry-and-discovery.md#t716-uninstall-removes-the-source-entry) |
 
 ### Tutorial 8: Developer Tools
 
