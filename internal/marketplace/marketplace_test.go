@@ -111,6 +111,16 @@ func TestMarketplaceConfigValidation(t *testing.T) {
 			json:    `{"name":"x","owner":{"name":"x"},"entries":[{"type":"plugin"}]}`,
 			wantErr: "source is required",
 		},
+		{
+			name:    "github shorthand missing repo",
+			json:    `{"name":"x","owner":{"name":"x"},"entries":[{"type":"plugin","source":"github.com/user"}]}`,
+			wantErr: "remote source",
+		},
+		{
+			name:    "bare user/repo without host",
+			json:    `{"name":"x","owner":{"name":"x"},"entries":[{"type":"plugin","source":"user/repo"}]}`,
+			wantErr: "remote source",
+		},
 	}
 
 	for _, tt := range tests {
@@ -125,6 +135,28 @@ func TestMarketplaceConfigValidation(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), tt.wantErr) {
 				t.Errorf("error = %q, want containing %q", err.Error(), tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestMarketplaceRemoteSourceValidation(t *testing.T) {
+	valid := []string{
+		"github.com/user/repo",
+		"gitlab.com/org/repo",
+		"https://github.com/user/repo",
+		"https://github.com/user/repo.git",
+		"git@github.com:user/repo.git",
+	}
+	for _, src := range valid {
+		t.Run(src, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "marketplace.json")
+			data := `{"name":"x","owner":{"name":"x"},"entries":[{"type":"plugin","source":"` + src + `"}]}`
+			if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := LoadConfig(path); err != nil {
+				t.Errorf("LoadConfig(%q) unexpected error: %v", src, err)
 			}
 		})
 	}

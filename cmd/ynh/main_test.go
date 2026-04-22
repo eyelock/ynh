@@ -425,6 +425,48 @@ func TestCmdUninstall_NoArgs(t *testing.T) {
 	}
 }
 
+func TestCmdUninstall_RemovesSourcesEntry(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pre-populate config with a sources entry for the harness being uninstalled
+	// and an unrelated entry that must survive.
+	cfg := &config.Config{
+		DefaultVendor: "claude",
+		Sources: []config.Source{
+			{Name: "david", Path: "/some/path"},
+			{Name: "other", Path: "/other/path"},
+		},
+	}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	installTestHarness(t, "david")
+
+	if err := cmdUninstall([]string{"david"}); err != nil {
+		t.Fatalf("cmdUninstall failed: %v", err)
+	}
+
+	loaded, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range loaded.Sources {
+		if s.Name == "david" {
+			t.Error("sources entry for uninstalled harness still present in config")
+		}
+	}
+	if len(loaded.Sources) != 1 || loaded.Sources[0].Name != "other" {
+		t.Errorf("unexpected sources after uninstall: %+v", loaded.Sources)
+	}
+}
+
 func TestCmdList_Empty(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)

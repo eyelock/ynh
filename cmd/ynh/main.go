@@ -378,6 +378,20 @@ func cmdUninstall(args []string) error {
 	runDir := filepath.Join(config.RunDir(), name)
 	_ = os.RemoveAll(runDir) // ignore error if not present
 
+	// Remove matching sources entry if present
+	if cfg, err := config.Load(); err == nil {
+		remaining := make([]config.Source, 0, len(cfg.Sources))
+		for _, s := range cfg.Sources {
+			if s.Name != name {
+				remaining = append(remaining, s)
+			}
+		}
+		cfg.Sources = remaining
+		if err := cfg.Save(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not update config after uninstall: %v\n", err)
+		}
+	}
+
 	fmt.Printf("Uninstalled harness %q\n", name)
 	return nil
 }
