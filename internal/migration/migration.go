@@ -34,7 +34,7 @@ func (c Chain) Run(dir string) ([]string, error) {
 	return applied, nil
 }
 
-// DefaultChain returns the standard migration chain in dependency order.
+// DefaultChain returns the full migration chain including storage relocation.
 //
 // Order matters: HarnessFormatMigrator must run before HarnessStorageMigrator
 // so that .ynh-plugin/installed.json exists when namespace inference runs.
@@ -43,5 +43,15 @@ func DefaultChain() Chain {
 		HarnessFormatMigrator{},
 		RegistryFormatMigrator{},
 		HarnessStorageMigrator{},
+	}
+}
+
+// FormatChain returns the format-only migration chain (no storage relocation).
+// Use this when loading harnesses transparently — storage migration should be
+// triggered explicitly so callers holding paths are not surprised by relocation.
+func FormatChain() Chain {
+	return Chain{
+		HarnessFormatMigrator{},
+		RegistryFormatMigrator{},
 	}
 }
