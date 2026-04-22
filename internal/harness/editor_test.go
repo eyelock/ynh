@@ -372,19 +372,39 @@ func TestValidatePicks_Valid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := ValidatePicks(dir, []string{"web-search"}); err != nil {
+	if err := ValidatePicks(dir, []string{"skills/web-search"}); err != nil {
 		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
+func TestValidatePicks_RejectsBareName(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, "skills", "web-search")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# web-search"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bare basename is no longer valid — canonical form is type/name.
+	err := ValidatePicks(dir, []string{"web-search"})
+	if err == nil {
+		t.Fatal("expected error when pick is a bare name without type/ prefix")
+	}
+	if !strings.Contains(err.Error(), "skills/web-search") {
+		t.Errorf("error should suggest the canonical form, got: %v", err)
 	}
 }
 
 func TestValidatePicks_Unknown(t *testing.T) {
 	dir := t.TempDir()
 
-	err := ValidatePicks(dir, []string{"nonexistent"})
+	err := ValidatePicks(dir, []string{"skills/nonexistent"})
 	if err == nil {
 		t.Fatal("expected error for unknown pick")
 	}
-	if !strings.Contains(err.Error(), "nonexistent") {
+	if !strings.Contains(err.Error(), "skills/nonexistent") {
 		t.Errorf("error should name the unknown pick, got: %v", err)
 	}
 }
@@ -393,6 +413,50 @@ func TestValidatePicks_Empty(t *testing.T) {
 	dir := t.TempDir()
 	if err := ValidatePicks(dir, nil); err != nil {
 		t.Fatalf("nil picks should always pass: %v", err)
+	}
+}
+
+// TestValidatePicks_BasenameClash asserts the canonical type/name form
+// disambiguates a skill and an agent that share a basename.
+//
+// With the old bare-name validation they collided on a single key ("foo")
+// and the user could not pick one without also picking the other.
+func TestValidatePicks_BasenameClash(t *testing.T) {
+	dir := t.TempDir()
+
+	// skill "foo"
+	skillDir := filepath.Join(dir, "skills", "foo")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# foo skill"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// agent "foo.md"
+	agentsDir := filepath.Join(dir, "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(agentsDir, "foo.md"), []byte("agent foo"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Either alone is valid.
+	if err := ValidatePicks(dir, []string{"skills/foo"}); err != nil {
+		t.Errorf("pick skills/foo alone should validate: %v", err)
+	}
+	if err := ValidatePicks(dir, []string{"agents/foo.md"}); err != nil {
+		t.Errorf("pick agents/foo.md alone should validate: %v", err)
+	}
+	// Both together.
+	if err := ValidatePicks(dir, []string{"skills/foo", "agents/foo.md"}); err != nil {
+		t.Errorf("picking both skills/foo and agents/foo.md should validate: %v", err)
+	}
+	// Bare "foo" is ambiguous and no longer accepted.
+	err := ValidatePicks(dir, []string{"foo"})
+	if err == nil {
+		t.Error("bare basename should not validate (canonical type/name required)")
 	}
 }
 

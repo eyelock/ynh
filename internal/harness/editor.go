@@ -180,26 +180,40 @@ func FindUpdateTarget(dir, url string, opts UpdateOptions) (plugin.IncludeMeta, 
 	return inc, nil
 }
 
-// ValidatePicks checks that every named pick exists as an artifact in basePath.
-// Returns an error listing any unrecognised names.
+// ValidatePicks checks that every pick names an artifact that exists in basePath.
+//
+// Each pick must be in canonical type/name form:
+//
+//   - Skills:   "skills/<name>"         (a skill directory containing SKILL.md)
+//   - Agents:   "agents/<name>.md"
+//   - Rules:    "rules/<name>.md"
+//   - Commands: "commands/<name>.md"
+//
+// This is the same format the assembler expects (see assembler.CopyPicked), so
+// a pick that passes validation here is guaranteed to work end-to-end. The
+// type/name prefix also disambiguates a skill named "foo" from an agent named
+// "foo.md" — both can coexist and be picked independently.
+//
+// The error listing for unknown picks uses the same canonical form so the
+// user can copy an entry directly into their --pick argument.
 func ValidatePicks(basePath string, picks []string) error {
 	artifacts, err := ScanArtifactsDir(basePath)
 	if err != nil {
 		return fmt.Errorf("scanning artifacts for pick validation: %w", err)
 	}
 
-	known := make(map[string]bool, len(artifacts.Skills)+len(artifacts.Agents)+len(artifacts.Rules)+len(artifacts.Commands))
+	known := make(map[string]bool)
 	for _, n := range artifacts.Skills {
-		known[n] = true
+		known["skills/"+n] = true
 	}
 	for _, n := range artifacts.Agents {
-		known[n] = true
+		known["agents/"+n+".md"] = true
 	}
 	for _, n := range artifacts.Rules {
-		known[n] = true
+		known["rules/"+n+".md"] = true
 	}
 	for _, n := range artifacts.Commands {
-		known[n] = true
+		known["commands/"+n+".md"] = true
 	}
 
 	var unknown []string
@@ -219,7 +233,7 @@ func ValidatePicks(basePath string, picks []string) error {
 	}
 
 	return fmt.Errorf(
-		"unknown pick name(s): %s\nAvailable: %s",
+		"unknown pick name(s): %s\nAvailable: %s\n(Picks must use type/name form: skills/<name>, agents/<name>.md, rules/<name>.md, commands/<name>.md)",
 		strings.Join(unknown, ", "),
 		formatAvailable(available),
 	)

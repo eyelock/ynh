@@ -98,7 +98,7 @@ External Git sources to pull artifacts from.
     {
       "git": "github.com/user/skills-repo",
       "ref": "v2.0.0",
-      "pick": ["skills/commit", "agents/reviewer"]
+      "pick": ["skills/commit", "agents/reviewer.md"]
     }
   ]
 }
@@ -136,7 +136,7 @@ See [Private Repositories](getting-started.md#private-repositories) for authenti
     {
       "git": "github.com/company/monorepo",
       "path": "packages/ai-config",
-      "pick": ["skills/deploy", "agents/ops"]
+      "pick": ["skills/deploy", "agents/ops.md"]
     }
   ]
 }
@@ -378,7 +378,7 @@ Just a named launcher. Useful as a starting point.
     {
       "git": "github.com/company/design-system",
       "path": "ai",
-      "pick": ["rules/component-standards"]
+      "pick": ["rules/component-standards.md"]
     }
   ],
   "delegates_to": [

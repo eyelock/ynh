@@ -61,7 +61,7 @@ Add a second include scoped to a subdirectory with specific picks and a pinned r
 ```bash
 ynh include add /tmp/ynh-tutorial-includes/my-harness github.com/eyelock/assistants \
   --path skills/dev \
-  --pick dev-project,dev-quality \
+  --pick skills/dev-project,skills/dev-quality \
   --ref main
 ```
 
@@ -89,8 +89,8 @@ Expected:
       "ref": "main",
       "path": "skills/dev",
       "pick": [
-        "dev-project",
-        "dev-quality"
+        "skills/dev-project",
+        "skills/dev-quality"
       ]
     }
   ]
@@ -102,7 +102,7 @@ Expected:
 | Flag | Purpose |
 |------|---------|
 | `--path <subdir>` | Scope into a subdirectory of the repo |
-| `--pick <items>` | Comma-separated artifact names to include (all others excluded) |
+| `--pick <items>` | Comma-separated artifact paths in `type/name` form: `skills/<name>`, `agents/<name>.md`, `rules/<name>.md`, `commands/<name>.md`. All others excluded. |
 | `--ref <ref>` | Pin to a branch, tag, or commit SHA |
 
 ## T17.3: Duplicate add → error
@@ -125,7 +125,7 @@ Use `--replace` to overwrite an existing include rather than erroring:
 
 ```bash
 ynh include add /tmp/ynh-tutorial-includes/my-harness github.com/anthropics/skills \
-  --pick frontend-design \
+  --pick skills/frontend-design \
   --replace
 ```
 
@@ -148,7 +148,7 @@ Expected:
     {
       "git": "github.com/anthropics/skills",
       "pick": [
-        "frontend-design"
+        "skills/frontend-design"
       ]
     },
     {
@@ -156,8 +156,8 @@ Expected:
       "ref": "main",
       "path": "skills/dev",
       "pick": [
-        "dev-project",
-        "dev-quality"
+        "skills/dev-project",
+        "skills/dev-quality"
       ]
     }
   ]
@@ -196,7 +196,7 @@ Expected:
     {
       "git": "github.com/anthropics/skills",
       "pick": [
-        "frontend-design"
+        "skills/frontend-design"
       ]
     },
     {
@@ -204,8 +204,8 @@ Expected:
       "ref": "v1.0.0",
       "path": "skills/dev",
       "pick": [
-        "dev-project",
-        "dev-quality"
+        "skills/dev-project",
+        "skills/dev-quality"
       ]
     }
   ]
@@ -240,7 +240,7 @@ Expected:
     {
       "git": "github.com/anthropics/skills",
       "pick": [
-        "frontend-design"
+        "skills/frontend-design"
       ]
     },
     {
@@ -248,8 +248,8 @@ Expected:
       "ref": "v1.0.0",
       "path": "skills/tech",
       "pick": [
-        "dev-project",
-        "dev-quality"
+        "skills/dev-project",
+        "skills/dev-quality"
       ]
     }
   ]
@@ -283,8 +283,8 @@ Expected:
       "ref": "v1.0.0",
       "path": "skills/tech",
       "pick": [
-        "dev-project",
-        "dev-quality"
+        "skills/dev-project",
+        "skills/dev-quality"
       ]
     }
   ]
@@ -463,7 +463,8 @@ rm -rf /tmp/ynh-tutorial-includes
 - `ynh include update <harness> <url>` — updates specific fields; only supplied flags change; uses `--from-path` to target one of multiple entries from the same URL; `--path` changes the path value
 - `<harness>` is a **name** (installed harness) or a **path** (local directory); paths take a `/` or `.` prefix
 - Installed harnesses are pre-fetched after `add` or `update` so `ynh run` works immediately — no separate `ynh update` needed
-- `--pick` names are validated against the fetched repo — unknown names produce a clear error with the available list
+- `--pick` values must use the canonical `type/name` form (`skills/<name>`, `agents/<name>.md`, `rules/<name>.md`, `commands/<name>.md`); validated against the fetched repo with a "did you mean" list on error
+- The `type/` prefix disambiguates a skill and a flat artifact that share a basename (e.g., `skills/foo` vs `agents/foo.md` — both can be picked independently)
 - Mutations never happen if validation fails — the `.ynh-plugin/plugin.json` is only written after all checks pass
 
 ## Next
