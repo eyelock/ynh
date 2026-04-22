@@ -86,8 +86,8 @@ func TestResolveEditTarget_PathNoHarness(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for path without .harness.json")
 	}
-	if !strings.Contains(err.Error(), ".harness.json") {
-		t.Errorf("error should mention .harness.json, got: %v", err)
+	if !strings.Contains(err.Error(), "no harness manifest") {
+		t.Errorf("error should mention missing manifest, got: %v", err)
 	}
 }
 

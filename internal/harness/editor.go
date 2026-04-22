@@ -19,14 +19,14 @@ func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
 		if absErr != nil {
 			return "", false, fmt.Errorf("resolving path %q: %w", ref, absErr)
 		}
-		if !plugin.IsHarnessDir(abs) {
-			return "", false, fmt.Errorf("no .harness.json found at %q", abs)
+		if DetectFormat(abs) == "" {
+			return "", false, fmt.Errorf("no harness manifest found at %q", abs)
 		}
 		return abs, false, nil
 	}
 
 	installDir := InstalledDir(ref)
-	if DetectFormat(installDir) == "harness" {
+	if f := DetectFormat(installDir); f == "plugin" || f == "harness" {
 		return installDir, true, nil
 	}
 	return "", false, fmt.Errorf("harness %q: %w", ref, ErrNotFound)

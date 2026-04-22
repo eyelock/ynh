@@ -283,11 +283,11 @@ func writeGeneratedFiles(baseDir string, files map[string][]byte) error {
 // If tempDir is non-empty, the caller must clean it up.
 func loadHarnessForPreview(dir string) (*harness.Harness, string, error) {
 	switch harness.DetectFormat(dir) {
-	case "harness":
+	case "plugin", "harness":
 		h, err := harness.LoadDir(dir)
 		return h, "", err
 	case "legacy":
-		return nil, "", fmt.Errorf("legacy format detected in %q. Consolidate .claude-plugin/plugin.json and metadata.json into .harness.json", dir)
+		return nil, "", fmt.Errorf("legacy format detected in %q. Migrate to .ynh-plugin/plugin.json", dir)
 	}
 
 	// Check for bare AGENTS.md or instructions.md

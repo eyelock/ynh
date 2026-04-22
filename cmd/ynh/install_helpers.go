@@ -27,14 +27,12 @@ func isLocalPath(source string) bool {
 // instructions.md) but no .harness.json, it synthesizes minimal .harness.json
 // on disk so that the rest of the install flow works unchanged.
 func loadOrSynthesizeHarness(dir string) (*harness.Harness, error) {
-	// Try .harness.json format first
-	if harness.DetectFormat(dir) == "harness" {
+	// Try known harness formats (plugin = 0.2+, harness = 0.1)
+	switch harness.DetectFormat(dir) {
+	case "plugin", "harness":
 		return harness.LoadDir(dir)
-	}
-
-	// Legacy format detection
-	if harness.DetectFormat(dir) == "legacy" {
-		return nil, fmt.Errorf("legacy format detected in %q. Consolidate .claude-plugin/plugin.json and metadata.json into .harness.json", dir)
+	case "legacy":
+		return nil, fmt.Errorf("legacy format detected in %q. Migrate to .ynh-plugin/plugin.json", dir)
 	}
 
 	// Check for bare AGENTS.md or instructions.md

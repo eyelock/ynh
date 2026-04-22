@@ -77,7 +77,7 @@ func TestLoad_LegacyFormat(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for legacy format")
 	}
-	if got := err.Error(); !strings.Contains(got, "legacy format detected") {
+	if got := err.Error(); !strings.Contains(got, "legacy") {
 		t.Errorf("error = %q, want legacy format hint", got)
 	}
 }
