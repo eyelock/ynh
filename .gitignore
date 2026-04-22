@@ -23,6 +23,7 @@ bin/
 .claude/**/*.local.*
 .claude/sessions/
 .claude/plans/
+.worktrees/
 
 # OS
 .DS_Store
