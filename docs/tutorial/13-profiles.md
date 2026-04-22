@@ -154,7 +154,7 @@ ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile nonexistent
 
 Expected error:
 ```
-Error: profile "nonexistent" not defined in .harness.json
+Error: profile "nonexistent" not defined in harness manifest
 ```
 
 ## T13.6: Use YNH_PROFILE env var

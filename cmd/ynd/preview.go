@@ -283,17 +283,16 @@ func writeGeneratedFiles(baseDir string, files map[string][]byte) error {
 // If tempDir is non-empty, the caller must clean it up.
 func loadHarnessForPreview(dir string) (*harness.Harness, string, error) {
 	switch harness.DetectFormat(dir) {
-	case "plugin", "harness":
+	case "plugin":
 		h, err := harness.LoadDir(dir)
 		return h, "", err
 	case "legacy":
 		return nil, "", fmt.Errorf("legacy format detected in %q. Migrate to .ynh-plugin/plugin.json", dir)
 	}
 
-	// Check for bare AGENTS.md or instructions.md
-	hasInstructions := assembler.FindInstructionsFile(dir) != ""
-	if !hasInstructions {
-		return nil, "", fmt.Errorf("directory %q has no .harness.json or AGENTS.md", dir)
+	// No manifest: synthesize from AGENTS.md / instructions.md if present
+	if assembler.FindInstructionsFile(dir) == "" {
+		return nil, "", fmt.Errorf("directory %q has no harness manifest or AGENTS.md", dir)
 	}
 
 	// Copy to temp dir to avoid mutating source
@@ -314,14 +313,14 @@ func loadHarnessForPreview(dir string) (*harness.Harness, string, error) {
 		return nil, "", fmt.Errorf("copying source: %w", err)
 	}
 
-	// Synthesize minimal harness.json
+	// Synthesize minimal plugin.json
 	name := filepath.Base(dir)
 	hj := &plugin.HarnessJSON{
 		Name:    name,
 		Version: "0.0.0",
 	}
-	if err := plugin.SaveHarnessJSON(tmpDir, hj); err != nil {
-		return nil, "", fmt.Errorf("writing synthesized .harness.json: %w", err)
+	if err := plugin.SavePluginJSON(tmpDir, hj); err != nil {
+		return nil, "", fmt.Errorf("writing synthesized plugin.json: %w", err)
 	}
 
 	h, err := harness.LoadDir(tmpDir)

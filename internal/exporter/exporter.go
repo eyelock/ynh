@@ -85,9 +85,10 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 		}
 	}
 
-	hj, err := plugin.LoadHarnessJSON(opts.SourceDir)
+	// harness.LoadDir above ran the migration chain, so the manifest is at the new path.
+	hj, err := plugin.LoadPluginJSON(opts.SourceDir)
 	if err != nil {
-		return nil, fmt.Errorf("loading .harness.json: %w", err)
+		return nil, fmt.Errorf("loading plugin.json: %w", err)
 	}
 
 	// Check remote sources for all delegates

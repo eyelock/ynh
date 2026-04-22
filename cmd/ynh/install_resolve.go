@@ -17,7 +17,8 @@ type resolvedSource struct {
 	path         string // monorepo subdir (from registry entry)
 	localPath    string // absolute path when resolved from a configured source
 	sourceType   string // "local", "git", "registry", "source"
-	registryName string // non-empty for registry lookups
+	registryName string // non-empty for registry lookups (user-declared label)
+	namespace    string // non-empty for registry lookups (URL-derived "org/repo")
 	sourceName   string // non-empty for source lookups (config source name)
 }
 
@@ -40,12 +41,12 @@ func resolveInstallSource(source, existingPath string, cfg *config.Config) (reso
 		return resolvedSource{sourceType: "git"}, nil
 	}
 
-	// Rule 4: Contains @ → registry lookup as name@registry-name
+	// Rule 4: Contains @ → registry lookup as name@<namespace-or-label>.
+	// Passes the full qualified ref through to LookupExact, which matches
+	// against the registry's URL-derived namespace (e.g. "eyelock/assistants")
+	// or its user-declared name (e.g. "eyelock-assistants").
 	if strings.Contains(source, "@") {
-		parts := strings.SplitN(source, "@", 2)
-		name := parts[0]
-		regName := parts[1]
-		return lookupFromRegistry(name, regName, cfg)
+		return lookupFromRegistry(source, cfg)
 	}
 
 	// Rule 5: Contains / → Git URL shorthand
@@ -62,7 +63,7 @@ func resolveInstallSource(source, existingPath string, cfg *config.Config) (reso
 	return searchFromRegistry(source, cfg)
 }
 
-func lookupFromRegistry(name, regName string, cfg *config.Config) (resolvedSource, error) {
+func lookupFromRegistry(qualified string, cfg *config.Config) (resolvedSource, error) {
 	if len(cfg.Registries) == 0 {
 		return resolvedSource{}, fmt.Errorf("no registries configured. Add one with: ynh registry add <url>")
 	}
@@ -72,9 +73,9 @@ func lookupFromRegistry(name, regName string, cfg *config.Config) (resolvedSourc
 		return resolvedSource{}, fmt.Errorf("fetching registries: %w", err)
 	}
 
-	results := registry.LookupExact(regs, name, regName)
+	results := registry.LookupExact(regs, qualified, "")
 	if len(results) == 0 {
-		return resolvedSource{}, fmt.Errorf("%q not found in registry %q", name, regName)
+		return resolvedSource{}, fmt.Errorf("%q not found in any registry", qualified)
 	}
 
 	entry := results[0].Entry
@@ -82,7 +83,8 @@ func lookupFromRegistry(name, regName string, cfg *config.Config) (resolvedSourc
 		gitURL:       entry.Repo,
 		path:         entry.Path,
 		sourceType:   "registry",
-		registryName: regName,
+		registryName: results[0].RegistryName,
+		namespace:    entry.Namespace,
 	}, nil
 }
 
@@ -107,6 +109,7 @@ func searchFromRegistry(name string, cfg *config.Config) (resolvedSource, error)
 			path:         entry.Path,
 			sourceType:   "registry",
 			registryName: results[0].RegistryName,
+			namespace:    entry.Namespace,
 		}, nil
 	}
 
@@ -115,7 +118,7 @@ func searchFromRegistry(name string, cfg *config.Config) (resolvedSource, error)
 		for _, r := range results {
 			msg += fmt.Sprintf("  %s (from %s)\n", r.Entry.Name, r.RegistryName)
 		}
-		msg += fmt.Sprintf("Use: ynh install %s@<registry-name>", name)
+		msg += fmt.Sprintf("Use: ynh install %s@<namespace>", name)
 		return resolvedSource{}, fmt.Errorf("%s", msg)
 	}
 

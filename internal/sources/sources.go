@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
@@ -69,22 +70,14 @@ func walkDiscover(dir string, remainingDepth int, results *[]DiscoveredHarness) 
 }
 
 // loadMinimalHarness reads just the identity fields from a harness manifest.
-// It checks .ynh-plugin/plugin.json first (0.2+), then .harness.json (0.1).
+// Migration chain runs first so any legacy format is converted before we read.
 // Uses a loose struct (no DisallowUnknownFields) so discovery tolerates newer fields.
 func loadMinimalHarness(dir string) (DiscoveredHarness, bool) {
-	var manifestPath string
-	pluginPath := filepath.Join(dir, plugin.PluginDir, plugin.PluginFile)
-	legacyPath := filepath.Join(dir, plugin.HarnessFile)
-
-	switch {
-	case fileExists(pluginPath):
-		manifestPath = pluginPath
-	case fileExists(legacyPath):
-		manifestPath = legacyPath
-	default:
+	if _, err := migration.FormatChain().Run(dir); err != nil {
 		return DiscoveredHarness{}, false
 	}
 
+	manifestPath := filepath.Join(dir, plugin.PluginDir, plugin.PluginFile)
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return DiscoveredHarness{}, false
@@ -113,9 +106,4 @@ func loadMinimalHarness(dir string) (DiscoveredHarness, bool) {
 		Keywords:      manifest.Keywords,
 		Path:          dir,
 	}, true
-}
-
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
 }

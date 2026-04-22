@@ -470,11 +470,11 @@ func TestCmdLint_IssueWithoutLineNumber(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	writeFile(t, filepath.Join(dir, ".harness.json"), []byte(`{}`))
+	writeFile(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(`{}`))
 
 	err := cmdLint(nil)
 	if err == nil {
-		t.Fatal("expected lint error for .harness.json missing fields")
+		t.Fatal("expected lint error for plugin.json missing fields")
 	}
 }
 
