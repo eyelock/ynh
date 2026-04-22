@@ -51,11 +51,54 @@ func resolveGitSourceWith(gs harness.GitSource, fetch repoFunc) (string, *RepoRe
 	return basePath, &result, nil
 }
 
+// resolveLocalSource resolves a local filesystem include against the harness
+// root. Absolute paths are used as-is; relative paths are joined to harnessDir.
+// Subpath (gs.Path) is applied on top if set.
+func resolveLocalSource(gs harness.GitSource, harnessDir string) (string, error) {
+	local := gs.Local
+	if !filepath.IsAbs(local) {
+		if harnessDir == "" {
+			return "", fmt.Errorf("local include %q: harness directory not known, cannot resolve relative path", local)
+		}
+		local = filepath.Join(harnessDir, local)
+	}
+	if _, err := os.Stat(local); os.IsNotExist(err) {
+		return "", fmt.Errorf("local include %q: path not found", gs.Local)
+	}
+
+	basePath := local
+	if gs.Path != "" {
+		basePath = filepath.Join(local, gs.Path)
+		if _, err := os.Stat(basePath); os.IsNotExist(err) {
+			return "", fmt.Errorf("path %q not found in local source %q", gs.Path, gs.Local)
+		}
+	}
+	return basePath, nil
+}
+
 // resolveWith fetches all includes using the given repo function.
 func resolveWith(p *harness.Harness, cfg *config.Config, fetch repoFunc) ([]ResolveResult, error) {
 	var results []ResolveResult
 
 	for _, inc := range p.Includes {
+		if inc.IsLocal() {
+			basePath, err := resolveLocalSource(inc.GitSource, p.Dir)
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, ResolveResult{
+				Content: ResolvedContent{
+					BasePath: basePath,
+					Paths:    inc.Pick,
+				},
+				Source: inc.Local,
+				Path:   inc.Path,
+				Cloned: false,
+				Cached: true,
+			})
+			continue
+		}
+
 		if cfg != nil {
 			if err := cfg.CheckRemoteSource(inc.Git); err != nil {
 				return nil, fmt.Errorf("include %q: %w", inc.Git, err)

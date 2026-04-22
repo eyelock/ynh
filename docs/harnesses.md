@@ -90,7 +90,9 @@ If omitted, falls back to `~/.ynh/config.json` default.
 
 ### includes (optional)
 
-External Git sources to pull artifacts from.
+Additional sources to pull artifacts from. Each include is either a remote
+Git source (`git`) or a local filesystem source (`local`) — exactly one of
+the two must be set.
 
 ```json
 {
@@ -99,6 +101,9 @@ External Git sources to pull artifacts from.
       "git": "github.com/user/skills-repo",
       "ref": "v2.0.0",
       "pick": ["skills/commit", "agents/reviewer.md"]
+    },
+    {
+      "local": "shared-artifacts"
     }
   ]
 }
@@ -108,10 +113,22 @@ External Git sources to pull artifacts from.
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `git` | yes | Git URL (see formats below) |
-| `ref` | no | Git tag, branch, or commit |
-| `path` | no | Subdirectory within the repo (monorepo support) |
+| `git` | one of git/local | Git URL (see formats below) |
+| `local` | one of git/local | Local filesystem path. Absolute, or relative to the harness root. |
+| `ref` | no | Git tag, branch, or commit (Git sources only) |
+| `path` | no | Subdirectory within the resolved source |
 | `pick` | no | Specific artifact paths to include. If omitted, includes all. |
+
+Local includes are useful when a harness ships bundled artifact directories
+**inside** its root, or when a profile needs to pull in an adjacent
+directory (see [Profiles](#profiles) for profile-level includes).
+
+> **Relative paths must stay inside the harness root.** `ynh install`
+> copies the harness directory to `~/.ynh/harnesses/…`; anything outside
+> the source tree (e.g. `../sibling`) is not copied and the include fails
+> to resolve post-install. Use an absolute path or fold the content into
+> the harness if you need it after install. Absolute paths are resolved
+> as-is and are unaffected by the install copy.
 
 **Git URL formats:**
 
@@ -202,7 +219,7 @@ MCP server declarations. See [MCP Servers](mcp.md) for full reference.
 
 ### profiles (optional)
 
-Named configuration variants. A profile can override `hooks` and `mcp_servers`. It cannot override identity fields (`name`, `version`, `description`), composition (`includes`, `delegates_to`), or `default_vendor`. See [Profiles](profiles.md) for full scope reference.
+Named configuration variants. A profile can override `hooks`, override `mcp_servers`, and append additional `includes`. It cannot override identity fields (`name`, `version`, `description`), `delegates_to`, or `default_vendor`. See [Profiles](profiles.md) for full scope reference.
 
 ## Profiles
 
@@ -216,7 +233,16 @@ Profiles let a single harness carry multiple configurations — e.g. a `strict` 
 | 2 | `YNH_PROFILE` env var | `export YNH_PROFILE=strict` |
 | 3 (lowest) | Top-level config | Fields in `.ynh-plugin/plugin.json` root |
 
-When a profile is selected, its `hooks` and `mcp_servers` **fully replace** the corresponding top-level values. No merge, no inheritance. If a profile defines `hooks`, the top-level hooks are discarded entirely.
+When a profile is selected, its fields are **merged** with the top-level values:
+
+- **`hooks`** use per-event replace. If the profile declares an event
+  (e.g. `before_tool`), that event is replaced wholesale; events the
+  profile does not declare are inherited from the top-level config.
+- **`mcp_servers`** use deep merge. Profile entries win on collision;
+  entries the profile does not declare are inherited. Setting a server
+  to `null` in the profile removes an inherited server.
+- **`includes`** are appended to the base harness's includes. A profile
+  cannot remove a base include; it only adds.
 
 ### Example
 
@@ -249,7 +275,39 @@ When a profile is selected, its `hooks` and `mcp_servers` **fully replace** the 
 }
 ```
 
-Running `ops-team --profile strict` uses the strict hooks (replacing the top-level hooks entirely). Running `ops-team --profile lite` drops all MCP servers while keeping the base vendor and no hooks (both hooks and mcp_servers are replaced — lite defines empty mcp_servers and no hooks).
+Running `ops-team --profile strict` uses the strict `before_tool` hook in
+place of the basic one, and keeps any base hooks on other events.
+
+### Profile-level includes
+
+Profiles can pull in additional artifact sources that are only active when
+the profile is selected. This is how a single harness can ship a
+"user-facing" view by default and a "contributor" view under a `dev`
+profile:
+
+```json
+{
+  "name": "ynh-guide",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "profiles": {
+    "ynh-dev": {
+      "includes": [
+        {"local": ".claude"}
+      ]
+    }
+  }
+}
+```
+
+Running `ynh-guide` gives users the base artifact set (whatever sits at the
+harness root under `skills/`, `agents/`, `rules/`, `commands/`). Running
+`ynh-guide --profile ynh-dev` additionally includes everything from the
+harness's `.claude/` directory on top of the base set.
+
+Profile-level includes use the same schema as top-level `includes` — either
+a remote Git source (`git`) or a local path (`local`), with optional
+`path`, `ref`, and `pick`.
 
 ## Editing an Installed Harness
 

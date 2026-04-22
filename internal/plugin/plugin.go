@@ -33,12 +33,18 @@ type Focus struct {
 }
 
 // Profile is a named configuration variant. When selected, its fields
-// are merged with top-level values: mcp_servers uses deep merge (profile
-// keys win), hooks uses per-event replace. A nil *MCPServer removes an
-// inherited server (JSON null).
+// are merged with top-level values:
+//   - `hooks`: per-event replace. If the profile declares an event,
+//     it replaces the default; absent events are inherited.
+//   - `mcp_servers`: deep merge (profile keys win on collision;
+//     absent keys inherited; nil pointer removes an inherited server).
+//   - `includes`: appended to the harness's base includes. Profile-only
+//     includes let a single harness carry multiple artifact sets and
+//     swap them based on the active profile.
 type Profile struct {
 	Hooks      map[string][]HookEntry `json:"hooks,omitempty"`
 	MCPServers map[string]*MCPServer  `json:"mcp_servers,omitempty"`
+	Includes   []IncludeMeta          `json:"includes,omitempty"`
 }
 
 // AuthorInfo holds harness author information.
@@ -146,12 +152,16 @@ type ProvenanceMeta struct {
 	InstalledAt  string `json:"installed_at"`
 }
 
-// IncludeMeta is the JSON representation of a Git include.
+// IncludeMeta is the JSON representation of an include source. Exactly one
+// of `git` (remote) or `local` (path-based) must be set. For both forms
+// `path` scopes into a subdirectory of the source and `pick` filters paths.
+// `ref` is Git-only.
 type IncludeMeta struct {
-	Git  string   `json:"git"`
-	Ref  string   `json:"ref,omitempty"`
-	Path string   `json:"path,omitempty"`
-	Pick []string `json:"pick,omitempty"`
+	Git   string   `json:"git,omitempty"`
+	Local string   `json:"local,omitempty"`
+	Ref   string   `json:"ref,omitempty"`
+	Path  string   `json:"path,omitempty"`
+	Pick  []string `json:"pick,omitempty"`
 }
 
 // DelegateMeta is the JSON representation of a delegate reference.

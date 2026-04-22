@@ -314,6 +314,13 @@ func cmdInstall(args []string) error {
 		fmt.Printf("Fetching %d include(s) and %d delegate(s)...\n", len(p.Includes), len(p.DelegatesTo))
 	}
 	for _, inc := range p.Includes {
+		// Local-path includes are resolved on-demand from the harness dir
+		// — there's nothing to pre-fetch. Skip the allow-list check and the
+		// EnsureRepo clone; the resolver will hit the filesystem at run time.
+		if inc.IsLocal() {
+			fmt.Printf("  Local  %s\n", inc.Local)
+			continue
+		}
 		if !isLocalPath(inc.Git) {
 			if err := cfg.CheckRemoteSource(inc.Git); err != nil {
 				return fmt.Errorf("include %q: %w", inc.Git, err)
@@ -428,6 +435,10 @@ func cmdUpdate(args []string) error {
 	checked := 0
 	updated := 0
 	for _, inc := range p.Includes {
+		// Local-path includes have no cache entry to refresh.
+		if inc.IsLocal() {
+			continue
+		}
 		if err := cfg.CheckRemoteSource(inc.Git); err != nil {
 			return fmt.Errorf("include %q: %w", inc.Git, err)
 		}
