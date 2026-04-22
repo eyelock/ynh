@@ -61,11 +61,11 @@ func cmdValidate(args []string) error {
 		}
 		// Check for legacy format
 		if isLegacyHarnessRoot(root) {
-			fmt.Println("Legacy format detected. Consolidate .claude-plugin/plugin.json and metadata.json into .harness.json.")
+			fmt.Println("Legacy format detected. Migrate .claude-plugin/plugin.json and metadata.json to .ynh-plugin/plugin.json.")
 			return fmt.Errorf("validation failed")
 		}
 		fmt.Println("No harness directories found.")
-		fmt.Println("A harness requires .harness.json")
+		fmt.Println("A harness requires .ynh-plugin/plugin.json (or legacy .harness.json).")
 		return nil
 	}
 
@@ -87,7 +87,7 @@ func validateFile(path string) error {
 	var issues []lintIssue
 
 	switch {
-	case base == plugin.HarnessFile:
+	case base == plugin.PluginFile || base == plugin.HarnessFile:
 		issues = lintHarnessJSON(path)
 	case base == "marketplace.json":
 		issues = lintMarketplaceConfig(path)
@@ -113,8 +113,25 @@ func validateFile(path string) error {
 }
 
 func isHarnessRoot(dir string) bool {
+	if plugin.IsPluginDir(dir) {
+		return true
+	}
 	_, err := os.Stat(filepath.Join(dir, plugin.HarnessFile))
 	return err == nil
+}
+
+// harnessManifestPath returns the path to the manifest file for dir.
+// Prefers .ynh-plugin/plugin.json; falls back to .harness.json. Empty if neither.
+func harnessManifestPath(dir string) string {
+	pluginPath := filepath.Join(dir, plugin.PluginDir, plugin.PluginFile)
+	if _, err := os.Stat(pluginPath); err == nil {
+		return pluginPath
+	}
+	legacyPath := filepath.Join(dir, plugin.HarnessFile)
+	if _, err := os.Stat(legacyPath); err == nil {
+		return legacyPath
+	}
+	return ""
 }
 
 func isLegacyHarnessRoot(dir string) bool {
@@ -157,24 +174,37 @@ func validateHarness(dir string) error {
 
 	// Check for legacy format
 	if isLegacyHarnessRoot(dir) && !isHarnessRoot(dir) {
-		issues = append(issues, "legacy format detected: consolidate .claude-plugin/plugin.json and metadata.json into .harness.json")
+		issues = append(issues, "legacy format detected: migrate .claude-plugin/plugin.json and metadata.json to .ynh-plugin/plugin.json")
 	}
 
-	// Check harness.json exists and is valid
-	harnessPath := filepath.Join(dir, plugin.HarnessFile)
-	data, err := os.ReadFile(harnessPath)
-	if err != nil {
-		issues = append(issues, "missing .harness.json")
+	// Check manifest exists (plugin.json or .harness.json) and is valid
+	manifestPath := harnessManifestPath(dir)
+	manifestLabel := "manifest"
+	if manifestPath == filepath.Join(dir, plugin.PluginDir, plugin.PluginFile) {
+		manifestLabel = ".ynh-plugin/plugin.json"
+	} else if manifestPath == filepath.Join(dir, plugin.HarnessFile) {
+		manifestLabel = ".harness.json"
+	}
+	var data []byte
+	var err error
+	if manifestPath == "" {
+		issues = append(issues, "missing manifest (.ynh-plugin/plugin.json or .harness.json)")
 	} else {
+		data, err = os.ReadFile(manifestPath)
+		if err != nil {
+			issues = append(issues, fmt.Sprintf("missing %s", manifestLabel))
+		}
+	}
+	if err == nil && data != nil {
 		var hj map[string]any
 		if err := json.Unmarshal(data, &hj); err != nil {
-			issues = append(issues, fmt.Sprintf("invalid .harness.json: %v", err))
+			issues = append(issues, fmt.Sprintf("invalid %s: %v", manifestLabel, err))
 		} else {
 			if _, ok := hj["name"]; !ok {
-				issues = append(issues, ".harness.json missing 'name'")
+				issues = append(issues, fmt.Sprintf("%s missing 'name'", manifestLabel))
 			}
 			if _, ok := hj["version"]; !ok {
-				issues = append(issues, ".harness.json missing 'version'")
+				issues = append(issues, fmt.Sprintf("%s missing 'version'", manifestLabel))
 			}
 			// Validate hooks
 			issues = append(issues, validateHarnessHooks(hj)...)

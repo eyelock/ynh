@@ -41,6 +41,8 @@ func main() {
 		err = cmdDiff(os.Args[2:])
 	case "marketplace":
 		err = cmdMarketplace(os.Args[2:])
+	case "migrate":
+		err = cmdMigrate(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println(config.Version)
 	case "help", "--help", "-h":
@@ -77,6 +79,7 @@ Commands:
   preview <source>           Show assembled vendor output without installing
   diff <source> [vendors]    Compare assembled output across vendors
   marketplace build          Build a vendor-native marketplace from marketplace.json
+  migrate <path>             Convert .harness.json → .ynh-plugin/plugin.json in-place
   version                    Print version
   help                       Show this help
 

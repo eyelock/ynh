@@ -112,9 +112,15 @@ func cmdExport(args []string) error {
 
 	// Determine output directory
 	if outputDir == "" {
-		pj, err := plugin.LoadHarnessJSON(srcDir)
+		var pj *plugin.HarnessJSON
+		var err error
+		if plugin.IsPluginDir(srcDir) {
+			pj, err = plugin.LoadPluginJSON(srcDir)
+		} else {
+			pj, err = plugin.LoadHarnessJSON(srcDir)
+		}
 		if err != nil {
-			return fmt.Errorf("loading .harness.json for name: %w", err)
+			return fmt.Errorf("loading manifest for name: %w", err)
 		}
 		outputDir = filepath.Join(".", "dist", pj.Name)
 	}

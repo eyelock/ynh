@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -154,26 +153,15 @@ func createHarness(name, description, vendor string) error {
 		}
 	}
 
-	type scaffoldJSON struct {
-		Schema        string `json:"$schema"`
-		Name          string `json:"name"`
-		Version       string `json:"version"`
-		Description   string `json:"description,omitempty"`
-		DefaultVendor string `json:"default_vendor"`
-	}
-	scaffold := scaffoldJSON{
-		Schema:        "https://eyelock.github.io/ynh/schema/harness.schema.json",
+	hj := &plugin.HarnessJSON{
+		Schema:        "https://eyelock.github.io/ynh/schema/plugin.schema.json",
 		Name:          name,
 		Version:       "0.1.0",
 		Description:   description,
 		DefaultVendor: resolveVendorDefault(vendor),
 	}
-	data, err := json.MarshalIndent(scaffold, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshalling .harness.json: %w", err)
-	}
-	if err := os.WriteFile(filepath.Join(name, plugin.HarnessFile), append(data, '\n'), 0o644); err != nil {
-		return err
+	if err := plugin.SavePluginJSON(name, hj); err != nil {
+		return fmt.Errorf("writing plugin.json: %w", err)
 	}
 
 	instructions := fmt.Sprintf(`# %s
@@ -185,7 +173,7 @@ Project-level instructions that apply to every session with this harness.
 	}
 
 	fmt.Printf("Created harness %q:\n", name)
-	fmt.Printf("  %s/%s\n", name, plugin.HarnessFile)
+	fmt.Printf("  %s/%s/%s\n", name, plugin.PluginDir, plugin.PluginFile)
 	fmt.Printf("  %s/AGENTS.md\n", name)
 	fmt.Printf("  %s/skills/\n", name)
 	fmt.Printf("  %s/agents/\n", name)

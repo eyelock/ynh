@@ -38,17 +38,17 @@ func loadOrSynthesizeHarness(dir string) (*harness.Harness, error) {
 	// Check for bare AGENTS.md or instructions.md
 	hasInstructions := assembler.FindInstructionsFile(dir) != ""
 	if !hasInstructions {
-		return nil, fmt.Errorf("directory %q has no .harness.json or AGENTS.md", dir)
+		return nil, fmt.Errorf("directory %q has no .ynh-plugin/plugin.json, .harness.json, or AGENTS.md", dir)
 	}
 
-	// Synthesize minimal .harness.json in the source directory
+	// Synthesize minimal plugin.json in the source directory
 	name := filepath.Base(dir)
 	hj := &plugin.HarnessJSON{
 		Name:    name,
 		Version: "0.0.0",
 	}
-	if err := plugin.SaveHarnessJSON(dir, hj); err != nil {
-		return nil, fmt.Errorf("writing synthesized .harness.json: %w", err)
+	if err := plugin.SavePluginJSON(dir, hj); err != nil {
+		return nil, fmt.Errorf("writing synthesized plugin.json: %w", err)
 	}
 
 	return harness.LoadDir(dir)

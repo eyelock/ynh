@@ -293,7 +293,7 @@ func loadHarnessForPreview(dir string) (*harness.Harness, string, error) {
 	// Check for bare AGENTS.md or instructions.md
 	hasInstructions := assembler.FindInstructionsFile(dir) != ""
 	if !hasInstructions {
-		return nil, "", fmt.Errorf("directory %q has no .harness.json or AGENTS.md", dir)
+		return nil, "", fmt.Errorf("directory %q has no .ynh-plugin/plugin.json, .harness.json, or AGENTS.md", dir)
 	}
 
 	// Copy to temp dir to avoid mutating source
@@ -314,14 +314,14 @@ func loadHarnessForPreview(dir string) (*harness.Harness, string, error) {
 		return nil, "", fmt.Errorf("copying source: %w", err)
 	}
 
-	// Synthesize minimal harness.json
+	// Synthesize minimal plugin.json
 	name := filepath.Base(dir)
 	hj := &plugin.HarnessJSON{
 		Name:    name,
 		Version: "0.0.0",
 	}
-	if err := plugin.SaveHarnessJSON(tmpDir, hj); err != nil {
-		return nil, "", fmt.Errorf("writing synthesized .harness.json: %w", err)
+	if err := plugin.SavePluginJSON(tmpDir, hj); err != nil {
+		return nil, "", fmt.Errorf("writing synthesized plugin.json: %w", err)
 	}
 
 	h, err := harness.LoadDir(tmpDir)

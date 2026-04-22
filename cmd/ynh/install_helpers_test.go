@@ -63,9 +63,9 @@ func TestLoadOrSynthesizeHarness_BareAgentsMD(t *testing.T) {
 		t.Errorf("Name = %q, want %q", h.Name, "my-project")
 	}
 
-	// Verify .harness.json was synthesized
-	if _, err := os.Stat(filepath.Join(dir, ".harness.json")); err != nil {
-		t.Error("synthesized .harness.json should exist")
+	// Verify manifest was synthesized (new format)
+	if _, err := os.Stat(filepath.Join(dir, ".ynh-plugin", "plugin.json")); err != nil {
+		t.Error("synthesized plugin.json should exist")
 	}
 }
 
