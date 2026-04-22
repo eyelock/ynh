@@ -463,8 +463,9 @@ rm -rf /tmp/ynh-tutorial-includes
 - `ynh include update <harness> <url>` — updates specific fields; only supplied flags change; uses `--from-path` to target one of multiple entries from the same URL; `--path` changes the path value
 - `<harness>` is a **name** (installed harness) or a **path** (local directory); paths take a `/` or `.` prefix
 - Installed harnesses are pre-fetched after `add` or `update` so `ynh run` works immediately — no separate `ynh update` needed
-- `--pick` values must use the canonical `type/name` form (`skills/<name>`, `agents/<name>.md`, `rules/<name>.md`, `commands/<name>.md`); validated against the fetched repo with a "did you mean" list on error
-- The `type/` prefix disambiguates a skill and a flat artifact that share a basename (e.g., `skills/foo` vs `agents/foo.md` — both can be picked independently)
+- `--pick` values must use the canonical `type/name` form (`skills/<name>`, `agents/<name>.md`, `rules/<name>.md`, `commands/<name>.md`); validated against the fetched repo before the manifest is touched
+- If a bare basename or mistyped pick resolves to existing canonical entries, the error leads with a "Did you mean …?" hint (`--pick foo` → `did you mean skills/foo or agents/foo.md?`); otherwise the full available list is shown
+- The `type/` prefix disambiguates a skill and a flat artifact that share a basename — both can be picked independently
 - Mutations never happen if validation fails — the `.ynh-plugin/plugin.json` is only written after all checks pass
 
 ## Next

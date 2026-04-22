@@ -1,8 +1,11 @@
 package harness
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -477,5 +480,71 @@ func TestFindUpdateTarget_ComputesFinalState(t *testing.T) {
 	}
 	if inc.Path != "new" || inc.Ref != "v2" {
 		t.Errorf("expected path=new ref=v2, got path=%q ref=%q", inc.Path, inc.Ref)
+	}
+}
+
+// TestArtifactTypes_SchemaAgreement asserts that the pick regex in
+// docs/schema/plugin.schema.json covers exactly the artifact types declared
+// in ArtifactTypeDirs + ArtifactTypeFiles. If someone adds a new directory-
+// or file-style artifact root to harness without updating the schema, this
+// test fails and names the divergent type.
+func TestArtifactTypes_SchemaAgreement(t *testing.T) {
+	_, thisFile, _, _ := runtime.Caller(0)
+	schemaPath := filepath.Join(filepath.Dir(thisFile), "..", "..", "docs", "schema", "plugin.schema.json")
+
+	data, err := os.ReadFile(schemaPath)
+	if err != nil {
+		t.Fatalf("read schema: %v", err)
+	}
+
+	var schema map[string]any
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatalf("parse schema: %v", err)
+	}
+
+	// Walk into $defs.includes.items.properties.pick.items.pattern.
+	defs, _ := schema["$defs"].(map[string]any)
+	includes, _ := defs["includes"].(map[string]any)
+	items, _ := includes["items"].(map[string]any)
+	props, _ := items["properties"].(map[string]any)
+	pick, _ := props["pick"].(map[string]any)
+	pickItems, _ := pick["items"].(map[string]any)
+	pattern, _ := pickItems["pattern"].(string)
+	if pattern == "" {
+		t.Fatal("schema: could not locate pick.items.pattern")
+	}
+
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		t.Fatalf("compile schema pattern %q: %v", pattern, err)
+	}
+
+	// Every directory-style type must match as type/<bare>. (A skill named
+	// "foo.md" is legal — it's an unusual but valid directory name — so we
+	// don't assert the suffix is rejected here.)
+	for _, typ := range ArtifactTypeDirs {
+		sample := typ + "/demo"
+		if !re.MatchString(sample) {
+			t.Errorf("schema pick.items.pattern does not match directory-style type %q (sample %q)", typ, sample)
+		}
+	}
+
+	// Every flat-file type must match as type/<bare>.md and reject bare form.
+	for _, typ := range ArtifactTypeFiles {
+		sampleOK := typ + "/demo.md"
+		sampleBad := typ + "/demo"
+		if !re.MatchString(sampleOK) {
+			t.Errorf("schema pick.items.pattern does not match flat-file type %q (sample %q)", typ, sampleOK)
+		}
+		if re.MatchString(sampleBad) {
+			t.Errorf("schema pattern wrongly accepts %s/demo — flat-file types require .md", typ)
+		}
+	}
+
+	// Bare basenames must always fail.
+	for _, bare := range []string{"foo", "foo.md"} {
+		if re.MatchString(bare) {
+			t.Errorf("schema pattern wrongly accepts bare basename %q", bare)
+		}
 	}
 }
