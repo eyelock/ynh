@@ -60,8 +60,8 @@ EOF
 Verify the structure:
 
 ```bash
-ls -R /tmp/ynh-tutorial/hook-harness/
-# Expected: .ynh-plugin/, instructions.md, rules/safety.md
+ls -aR /tmp/ynh-tutorial/hook-harness/ | grep -v '^\.\{1,2\}$\|^\.:'
+# Expected lines include: .ynh-plugin, instructions.md, rules, safety.md
 ```
 
 ## T10.2: Preview for Claude
