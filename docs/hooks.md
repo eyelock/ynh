@@ -2,7 +2,7 @@
 
 Hooks are shell commands that vendors execute at specific lifecycle events during an agent session. They bridge the **guide layer** (what ynh manages) to the **sensor layer** (linters, tests, validators) by declaring *when* a command should run, without embedding the tool itself.
 
-A harness declares hooks in `.harness.json` at the top level. At assembly time, ynh translates them into the vendor-native config format. The hook scripts themselves live outside the harness — they are regular shell commands or scripts on the host machine.
+A harness declares hooks in `.ynh-plugin/plugin.json` at the top level. At assembly time, ynh translates them into the vendor-native config format. The hook scripts themselves live outside the harness — they are regular shell commands or scripts on the host machine.
 
 > **Note:** Hooks can vary by [profile](harnesses.md#profiles). When a profile is selected, its `hooks` field replaces the top-level hooks entirely.
 
@@ -23,9 +23,9 @@ ynh defines four canonical hook events. Each vendor translates these to its nati
 | `before_prompt` | Runs before a user prompt is submitted to the model. |
 | `on_stop` | Runs when the agent session ends. |
 
-## .harness.json Format
+## Manifest Format
 
-Hooks are declared under the top-level `hooks` key in `.harness.json`. Each event maps to an array of hook entries:
+Hooks are declared under the top-level `hooks` key in `.ynh-plugin/plugin.json`. Each event maps to an array of hook entries:
 
 ```json
 {
@@ -84,7 +84,7 @@ Each vendor uses different event names and config file formats:
 
 Claude Code's `--plugin-dir` flag (used by `ynh run` for Claude) only auto-activates **skills and commands** from plugins. Hooks and MCP servers in `--plugin-dir` plugins are **not activated** at runtime — they require the plugin to be formally installed via `/plugin install`. See [Claude Code plugin docs](https://code.claude.com/docs/en/plugins).
 
-This means hooks and MCP servers defined in `.harness.json` are correctly **assembled and exported** by ynh, but are **not active during `ynh run` sessions** with Claude. They work correctly with Codex and Cursor (which use symlink-based installation into the project directory).
+This means hooks and MCP servers defined in `.ynh-plugin/plugin.json` are correctly **assembled and exported** by ynh, but are **not active during `ynh run` sessions** with Claude. They work correctly with Codex and Cursor (which use symlink-based installation into the project directory).
 
 Hooks and MCP servers in exported plugins (`ynd export`) work as expected when the plugin is installed via Claude Code's `/plugin install` command.
 
@@ -165,7 +165,7 @@ The blocking message should be **agent-legible**: tell the agent what to do inst
 
 Hooks declared in **included harnesses** (via `includes`) are dropped during assembly. Only the root harness's hooks are used. This prevents composed harnesses from silently injecting lifecycle behavior that the harness author didn't explicitly declare.
 
-If an included harness needs hooks, copy its hook declarations into the root harness's `.harness.json`.
+If an included harness needs hooks, copy its hook declarations into the root harness's `.ynh-plugin/plugin.json`.
 
 ## Portable Hook Script Advice
 

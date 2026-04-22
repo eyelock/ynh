@@ -111,7 +111,7 @@ ynd preview --harness ./my-harness          # explicit harness flag
 
 When no `-o` flag is given, preview prints a tree with file contents to stdout. With `-o`, it writes the full assembled output to the specified directory.
 
-Preview supports the same source types as export: local directories with `.harness.json` or bare `AGENTS.md` directories.
+Preview supports the same source types as export: local directories with `.ynh-plugin/plugin.json` or bare `AGENTS.md` directories.
 
 See [Tutorial 8: Developer Preview](tutorial/12-developer-preview.md) for a guided walkthrough.
 
