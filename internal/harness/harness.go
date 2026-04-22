@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/migration"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
@@ -37,7 +39,10 @@ type Delegate struct {
 type Provenance struct {
 	SourceType   string
 	Source       string
+	Ref          string
+	SHA          string
 	Path         string
+	Namespace    string
 	RegistryName string
 	InstalledAt  string
 }
@@ -47,6 +52,7 @@ type Harness struct {
 	Version       string
 	Description   string
 	DefaultVendor string
+	Namespace     string // e.g. "eyelock/assistants"; empty for local/unqualified installs
 	Includes      []Include
 	DelegatesTo   []Delegate
 	Hooks         map[string][]plugin.HookEntry
@@ -56,11 +62,19 @@ type Harness struct {
 	InstalledFrom *Provenance
 }
 
-// DetectFormat returns "harness" if dir contains harness.json,
-// "bare" if dir contains AGENTS.md or instructions.md but no harness.json,
-// or "" if neither is found. Returns "legacy" if .claude-plugin/plugin.json
-// is found without harness.json.
+// ListEntry is one installed harness with its namespace.
+type ListEntry struct {
+	Name      string
+	Namespace string // e.g. "eyelock/assistants"; empty for flat/local installs
+	Dir       string // absolute path to the harness directory
+}
+
+// DetectFormat returns the format of a harness directory.
+// Returns "plugin" (0.2+), "harness" (0.1), "legacy" (pre-0.1), or "".
 func DetectFormat(dir string) string {
+	if plugin.IsPluginDir(dir) {
+		return "plugin"
+	}
 	if plugin.IsHarnessDir(dir) {
 		return "harness"
 	}
@@ -73,21 +87,75 @@ func DetectFormat(dir string) string {
 // ErrNotFound is returned when a harness is not installed.
 var ErrNotFound = errors.New("harness not found")
 
+// Load finds and loads an installed harness by name. It runs the migration
+// chain transparently — if the flat-layout dir is migrated to a namespaced
+// path, Load follows and returns the harness from its new location.
 func Load(name string) (*Harness, error) {
-	installDir := InstalledDir(name)
-	switch DetectFormat(installDir) {
-	case "harness":
-		return LoadDir(installDir)
-	case "legacy":
-		return nil, fmt.Errorf("harness %q: legacy format detected. Consolidate .claude-plugin/plugin.json and metadata.json into .harness.json", name)
-	default:
-		return nil, fmt.Errorf("harness %q: %w", name, ErrNotFound)
+	flatDir := InstalledDir(name)
+
+	if _, err := os.Stat(flatDir); err == nil {
+		// Run format migration only — storage migration is triggered explicitly
+		// to avoid surprising callers that hold the flat path.
+		if _, err := migration.FormatChain().Run(flatDir); err != nil {
+			return nil, fmt.Errorf("migrating harness %q: %w", name, err)
+		}
+		return LoadDir(flatDir)
 	}
+
+	return findInNamespacedDirs(name)
 }
 
+// LoadNS loads an installed harness by namespace-qualified name.
+func LoadNS(ns, name string) (*Harness, error) {
+	dir := InstalledDirNS(ns, name)
+	if _, err := os.Stat(dir); err != nil {
+		return nil, fmt.Errorf("harness %q@%q: %w", name, ns, ErrNotFound)
+	}
+	return LoadDir(dir)
+}
+
+// findInNamespacedDirs scans ~/.ynh/harnesses/<ns>/<name>/ for a matching harness.
+func findInNamespacedDirs(name string) (*Harness, error) {
+	harnessesDir := config.HarnessesDir()
+	entries, err := os.ReadDir(harnessesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("harness %q: %w", name, ErrNotFound)
+		}
+		return nil, err
+	}
+	for _, e := range entries {
+		if !e.IsDir() || !strings.Contains(e.Name(), "--") {
+			continue
+		}
+		candidate := filepath.Join(harnessesDir, e.Name(), name)
+		if DetectFormat(candidate) != "" {
+			return LoadDir(candidate)
+		}
+	}
+	return nil, fmt.Errorf("harness %q: %w", name, ErrNotFound)
+}
+
+// List returns the names of all installed harnesses across all namespaces.
 func List() ([]string, error) {
-	dir := config.HarnessesDir()
-	entries, err := os.ReadDir(dir)
+	entries, err := ListAll()
+	if err != nil {
+		return nil, err
+	}
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	names := make([]string, len(entries))
+	for i, e := range entries {
+		names[i] = e.Name
+	}
+	return names, nil
+}
+
+// ListAll returns all installed harnesses with namespace and directory information.
+func ListAll() ([]ListEntry, error) {
+	harnessesDir := config.HarnessesDir()
+	entries, err := os.ReadDir(harnessesDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -95,29 +163,87 @@ func List() ([]string, error) {
 		return nil, err
 	}
 
-	var names []string
+	var results []ListEntry
 	for _, entry := range entries {
-		if entry.IsDir() {
-			subDir := filepath.Join(dir, entry.Name())
-			if DetectFormat(subDir) == "harness" {
-				names = append(names, entry.Name())
+		if !entry.IsDir() {
+			continue
+		}
+		entryPath := filepath.Join(harnessesDir, entry.Name())
+		if strings.Contains(entry.Name(), "--") {
+			// Namespace directory: walk children
+			ns := namespace.FromFSName(entry.Name())
+			children, err := os.ReadDir(entryPath)
+			if err != nil {
+				continue
+			}
+			for _, child := range children {
+				if !child.IsDir() {
+					continue
+				}
+				childDir := filepath.Join(entryPath, child.Name())
+				if DetectFormat(childDir) != "" {
+					results = append(results, ListEntry{
+						Name:      child.Name(),
+						Namespace: ns,
+						Dir:       childDir,
+					})
+				}
+			}
+		} else {
+			// Flat entry (unmigrated or local install)
+			if DetectFormat(entryPath) != "" {
+				results = append(results, ListEntry{
+					Name: entry.Name(),
+					Dir:  entryPath,
+				})
 			}
 		}
 	}
 
-	return names, nil
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].Namespace != results[j].Namespace {
+			return results[i].Namespace < results[j].Namespace
+		}
+		return results[i].Name < results[j].Name
+	})
+	return results, nil
+}
+
+// InstalledDirNS returns the namespaced install path for a harness.
+func InstalledDirNS(ns, name string) string {
+	return filepath.Join(config.HarnessesDir(), namespace.ToFSName(ns), name)
+}
+
+// NamespacedDir is an alias for InstalledDirNS.
+func NamespacedDir(ns, name string) string {
+	return InstalledDirNS(ns, name)
 }
 
 func InstalledDir(name string) string {
 	return filepath.Join(config.HarnessesDir(), name)
 }
 
-// LoadDir loads a harness from a directory containing harness.json.
+// LoadDir loads a harness from a directory. It handles both the 0.2
+// (.ynh-plugin/plugin.json) and 0.1 (.harness.json) formats. The migration
+// chain should be run before calling this for installed harnesses.
 func LoadDir(dir string) (*Harness, error) {
-	hj, err := plugin.LoadHarnessJSON(dir)
+	var hj *plugin.HarnessJSON
+	var err error
+
+	switch DetectFormat(dir) {
+	case "plugin":
+		hj, err = plugin.LoadPluginJSON(dir)
+	case "harness":
+		hj, err = plugin.LoadHarnessJSON(dir)
+	case "legacy":
+		return nil, fmt.Errorf("legacy .claude-plugin format is not supported; migrate to .ynh-plugin/plugin.json")
+	default:
+		return nil, fmt.Errorf("no harness manifest found in %s", dir)
+	}
 	if err != nil {
 		return nil, err
 	}
+	_ = hj // used below
 
 	if !validName.MatchString(hj.Name) {
 		return nil, fmt.Errorf("invalid harness name %q: must match %s", hj.Name, validName.String())
@@ -125,6 +251,7 @@ func LoadDir(dir string) (*Harness, error) {
 
 	p := &Harness{Name: hj.Name, Version: hj.Version, Description: hj.Description}
 	p.DefaultVendor = hj.DefaultVendor
+	p.Namespace = inferNamespace(dir)
 
 	for _, inc := range hj.Includes {
 		p.Includes = append(p.Includes, Include{
@@ -149,7 +276,23 @@ func LoadDir(dir string) (*Harness, error) {
 	if len(hj.Focuses) > 0 {
 		p.Focuses = hj.Focuses
 	}
-	if hj.InstalledFrom != nil {
+
+	// Provenance: prefer installed.json (new format), fall back to InstalledFrom in manifest (legacy).
+	if ins, err := plugin.LoadInstalledJSON(dir); err == nil {
+		p.InstalledFrom = &Provenance{
+			SourceType:   ins.SourceType,
+			Source:       ins.Source,
+			Ref:          ins.Ref,
+			SHA:          ins.SHA,
+			Path:         ins.Path,
+			Namespace:    ins.Namespace,
+			RegistryName: ins.RegistryName,
+			InstalledAt:  ins.InstalledAt,
+		}
+		if p.Namespace == "" && ins.Namespace != "" {
+			p.Namespace = ins.Namespace
+		}
+	} else if hj.InstalledFrom != nil {
 		prov := hj.InstalledFrom
 		p.InstalledFrom = &Provenance{
 			SourceType:   prov.SourceType,
@@ -161,6 +304,16 @@ func LoadDir(dir string) (*Harness, error) {
 	}
 
 	return p, nil
+}
+
+// inferNamespace derives namespace from dir path if it is under ~/.ynh/harnesses/<ns>/<name>/.
+func inferNamespace(dir string) string {
+	harnessesDir := config.HarnessesDir()
+	parent := filepath.Dir(dir)
+	if filepath.Dir(parent) == harnessesDir && strings.Contains(filepath.Base(parent), "--") {
+		return namespace.FromFSName(filepath.Base(parent))
+	}
+	return ""
 }
 
 // ResolveProfile returns a copy of the harness with profile settings merged
