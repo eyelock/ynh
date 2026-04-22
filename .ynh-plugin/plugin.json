@@ -23,7 +23,12 @@
             "command": "sh -c 'case \"$YNH_TOOL_INPUT\" in *\"git push\"*|*\"gh pr create\"*|*\"gh pr merge\"*) echo \"Reminder: .claude/rules/pre-remote.md requires make check + /evals before remote operations\" >&2 ;; esac; exit 0'"
           }
         ]
-      }
+      },
+      "includes": [
+        {
+          "local": ".claude"
+        }
+      ]
     }
   },
   "focus": {

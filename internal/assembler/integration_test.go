@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
 )
@@ -361,5 +362,109 @@ func assertFileContains(t *testing.T, path string, substr string) {
 	}
 	if !strings.Contains(string(data), substr) {
 		t.Errorf("file %s does not contain %q", path, substr)
+	}
+}
+
+// TestIntegration_ProfileIncludes_LocalPath verifies end-to-end that a
+// profile-level local include flows through Resolve → Assemble and the
+// picked artifacts land in the assembled vendor output.
+//
+// Harness layout under the test dir:
+//
+//	harness/
+//	  .ynh-plugin/plugin.json   (with profiles.ynh-dev.includes = [{local: "dev-extras"}])
+//	  skills/base-skill/SKILL.md
+//	  dev-extras/
+//	    skills/dev-skill/SKILL.md
+//	    agents/dev-agent.md
+//
+// With no profile, only base-skill should appear. With the ynh-dev profile,
+// both base-skill and the dev-extras content should appear.
+func TestIntegration_ProfileIncludes_LocalPath(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	harnessDir := t.TempDir()
+
+	// Base artifacts — live at harness root
+	writeFileTree(t, harnessDir, map[string]string{
+		"skills/base-skill/SKILL.md": "---\nname: base-skill\ndescription: base only\n---\nbase\n",
+	})
+
+	// dev-extras — a sibling directory the profile pulls in
+	writeFileTree(t, harnessDir, map[string]string{
+		"dev-extras/skills/dev-skill/SKILL.md": "---\nname: dev-skill\ndescription: dev only\n---\ndev\n",
+		"dev-extras/agents/dev-agent.md":       "---\nname: dev-agent\ndescription: dev agent\ntools: Read\n---\nbody\n",
+	})
+
+	baseHarness := &harness.Harness{
+		Name:          "test",
+		DefaultVendor: "claude",
+		Dir:           harnessDir,
+		Profiles: map[string]plugin.Profile{
+			"ynh-dev": {
+				Includes: []plugin.IncludeMeta{
+					{Local: "dev-extras"},
+				},
+			},
+		},
+	}
+
+	adapter, _ := vendor.Get("claude")
+
+	// Case 1: no profile — only base content should resolve + assemble.
+	resolved, err := resolver.Resolve(baseHarness, nil)
+	if err != nil {
+		t.Fatalf("Resolve (base): %v", err)
+	}
+	content := extractContent(resolved)
+	content = append(content, resolver.ResolvedContent{BasePath: harnessDir})
+	workDir, err := Assemble(adapter, content)
+	if err != nil {
+		t.Fatalf("Assemble (base): %v", err)
+	}
+	defer Cleanup(workDir)
+
+	baseSkills := filepath.Join(workDir, ".claude", "skills")
+	assertFileExists(t, filepath.Join(baseSkills, "base-skill", "SKILL.md"))
+	if _, err := os.Stat(filepath.Join(baseSkills, "dev-skill")); err == nil {
+		t.Error("dev-skill leaked into base assembly — profile include should not be active")
+	}
+
+	// Case 2: with --profile ynh-dev — profile includes are merged in.
+	devHarness, err := harness.ResolveProfile(baseHarness, "ynh-dev")
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	resolvedDev, err := resolver.Resolve(devHarness, nil)
+	if err != nil {
+		t.Fatalf("Resolve (ynh-dev): %v", err)
+	}
+	contentDev := extractContent(resolvedDev)
+	contentDev = append(contentDev, resolver.ResolvedContent{BasePath: harnessDir})
+	workDirDev, err := Assemble(adapter, contentDev)
+	if err != nil {
+		t.Fatalf("Assemble (ynh-dev): %v", err)
+	}
+	defer Cleanup(workDirDev)
+
+	devSkills := filepath.Join(workDirDev, ".claude", "skills")
+	devAgents := filepath.Join(workDirDev, ".claude", "agents")
+	assertFileExists(t, filepath.Join(devSkills, "base-skill", "SKILL.md"))
+	assertFileExists(t, filepath.Join(devSkills, "dev-skill", "SKILL.md"))
+	assertFileExists(t, filepath.Join(devAgents, "dev-agent.md"))
+}
+
+// writeFileTree writes all (relpath, content) pairs into root, creating
+// parent directories as needed. Test-only helper.
+func writeFileTree(t *testing.T, root string, files map[string]string) {
+	t.Helper()
+	for rel, content := range files {
+		full := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", full, err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", full, err)
+		}
 	}
 }

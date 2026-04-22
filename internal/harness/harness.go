@@ -19,12 +19,20 @@ import (
 // Must start with a letter or digit. Prevents path traversal and shell injection.
 var validName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
-// GitSource holds the common fields for any Git-backed reference.
+// GitSource holds the common fields for any include or delegate source.
+// Exactly one of Git (remote) or Local (filesystem path) is set at any
+// given time. Path is a subdirectory scoped within the source; Ref
+// applies to Git sources only.
 type GitSource struct {
-	Git  string
-	Ref  string
-	Path string
+	Git   string
+	Local string
+	Ref   string
+	Path  string
 }
+
+// IsLocal reports whether the source is a filesystem path (Local set,
+// Git empty). Callers use this to skip git fetch and resolve directly.
+func (g GitSource) IsLocal() bool { return g.Local != "" && g.Git == "" }
 
 type Include struct {
 	GitSource
@@ -53,6 +61,7 @@ type Harness struct {
 	Description   string
 	DefaultVendor string
 	Namespace     string // e.g. "eyelock/assistants"; empty for local/unqualified installs
+	Dir           string // absolute path to the harness directory — the base for relative local includes
 	Includes      []Include
 	DelegatesTo   []Delegate
 	Hooks         map[string][]plugin.HookEntry
@@ -248,10 +257,15 @@ func LoadDir(dir string) (*Harness, error) {
 	p := &Harness{Name: hj.Name, Version: hj.Version, Description: hj.Description}
 	p.DefaultVendor = hj.DefaultVendor
 	p.Namespace = inferNamespace(dir)
+	if abs, err := filepath.Abs(dir); err == nil {
+		p.Dir = abs
+	} else {
+		p.Dir = dir
+	}
 
 	for _, inc := range hj.Includes {
 		p.Includes = append(p.Includes, Include{
-			GitSource: GitSource{Git: inc.Git, Ref: inc.Ref, Path: inc.Path},
+			GitSource: GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
 			Pick:      inc.Pick,
 		})
 	}
@@ -384,6 +398,27 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 		resolved.MCPServers = merged
 	}
 
+	// Append profile-level includes to the harness's base includes. Profile
+	// includes cannot remove base includes — they only add. Order: base first,
+	// then profile entries, so a later profile pick can shadow a base pick
+	// when the assembler resolves collisions.
+	if len(profile.Includes) > 0 {
+		merged := make([]Include, 0, len(h.Includes)+len(profile.Includes))
+		merged = append(merged, h.Includes...)
+		for _, inc := range profile.Includes {
+			merged = append(merged, Include{
+				GitSource: GitSource{
+					Git:   inc.Git,
+					Local: inc.Local,
+					Ref:   inc.Ref,
+					Path:  inc.Path,
+				},
+				Pick: inc.Pick,
+			})
+		}
+		resolved.Includes = merged
+	}
+
 	return &resolved, nil
 }
 
@@ -400,7 +435,7 @@ func LoadFile(path string) (*Harness, error) {
 
 	for _, inc := range hj.Includes {
 		p.Includes = append(p.Includes, Include{
-			GitSource: GitSource{Git: inc.Git, Ref: inc.Ref, Path: inc.Path},
+			GitSource: GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
 			Pick:      inc.Pick,
 		})
 	}

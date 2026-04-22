@@ -473,20 +473,66 @@ mv ~/.ynh/config.json.bak ~/.ynh/config.json
 | Not set (default) | All sources allowed |
 | `[]` (empty array) | All sources denied |
 
+## T3.11: Local — sibling directory (no Git repo)
+
+If you just want to pull artifacts from a sibling directory that is **not** a Git repo (e.g. a `shared-artifacts/` folder checked in alongside your harness), use a `local` include instead of `git`:
+
+```bash
+# Create a sibling directory with some artifacts
+mkdir -p /tmp/ynh-tutorial/shared/skills/team-standards
+cat > /tmp/ynh-tutorial/shared/skills/team-standards/SKILL.md << 'EOF'
+---
+name: team-standards
+description: Team coding standards and review checklist.
+---
+Apply our team's code review checklist to the diff.
+EOF
+
+# Point a harness at it via a local include
+mkdir -p /tmp/ynh-tutorial/uses-local/.ynh-plugin
+cat > /tmp/ynh-tutorial/uses-local/.ynh-plugin/plugin.json << 'EOF'
+{
+  "name": "uses-local",
+  "version": "0.1.0",
+  "includes": [
+    {"local": "../shared"}
+  ]
+}
+EOF
+
+ynh install /tmp/ynh-tutorial/uses-local
+uses-local "what skills do you have?"
+```
+
+```bash
+ls ~/.ynh/run/uses-local/.claude/skills/
+# Expected: team-standards/
+```
+
+Key differences vs `git`:
+
+- **`local`** expects a filesystem path (absolute or relative to the harness root). No Git required — no clone, no cache.
+- **`git`** expects a Git URL (or a local path that happens to be a Git repo). ynh clones/caches it.
+
+Use `local` when shipping a harness with pre-bundled artifact directories next to it. Use `git` when the artifact source has its own version history and lifecycle.
+
+`local` pairs well with profiles — see [Tutorial 13 → Profile-level includes](tutorial/13-profiles.md#t139-profile-level-includes--bundle-extra-artifacts-per-profile).
+
 ## Clean up
 
 ```bash
-ynh uninstall my-dev with-anthropic with-vercel full-stack mixed local-ref pinned david 2>/dev/null
+ynh uninstall my-dev with-anthropic with-vercel full-stack mixed local-ref pinned david uses-local 2>/dev/null
 ```
 
 ## What you learned
 
 - **Your own repos:** Use `github.com/eyelock/assistants` (or any Git URL) with `path` and `pick`
 - **Third-party repos:** Skills from [skills.sh](https://skills.sh), [anthropics/skills](https://github.com/anthropics/skills), [vercel-labs/skills](https://github.com/vercel-labs/skills) — any agentskills.io-compatible repo works
-- **Local paths:** Start Git URLs with `/` or `.` to use local checkouts (faster, no clone)
+- **Local paths:** Start Git URLs with `/` or `.` to use a local Git checkout (faster, no clone)
+- **Local sibling directories:** Use `"local": "path"` for a directory that's not a Git repo — no Git required
 - **Embedded skills:** Put skills directly in the harness's `skills/` directory
 - **`pick` is the differentiator:** No vendor natively supports cherry-picking individual skills from a larger repo. ynh does.
-- **Mixing sources:** Combine your own skills, third-party skills, and local skills in one harness
+- **Mixing sources:** Combine your own skills, third-party skills, local sibling dirs, and embedded skills in one harness
 - **Offline-ready:** All includes are fetched at install time — `ynh run` works offline
 - `ref` pins to branches, tags, or commits
 - `ynh update` refreshes cached repos

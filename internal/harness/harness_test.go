@@ -711,3 +711,44 @@ func writeTestHarnessMinimal(t *testing.T, dir, name string) {
 		t.Fatal(err)
 	}
 }
+
+func TestResolveProfile_AppendsIncludes(t *testing.T) {
+	h := &Harness{
+		Name: "x",
+		Includes: []Include{
+			{GitSource: GitSource{Git: "github.com/base/repo"}},
+		},
+		Profiles: map[string]plugin.Profile{
+			"ci": {
+				Includes: []plugin.IncludeMeta{
+					{Local: ".ci-scripts"},
+					{Git: "github.com/ci/extras", Ref: "main"},
+				},
+			},
+		},
+	}
+
+	resolved, err := ResolveProfile(h, "ci")
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if len(resolved.Includes) != 3 {
+		t.Fatalf("expected 3 includes (1 base + 2 profile), got %d", len(resolved.Includes))
+	}
+	// Base preserved first
+	if resolved.Includes[0].Git != "github.com/base/repo" {
+		t.Errorf("first include = %q, want base git URL", resolved.Includes[0].Git)
+	}
+	// Profile entries appended
+	if !resolved.Includes[1].IsLocal() || resolved.Includes[1].Local != ".ci-scripts" {
+		t.Errorf("second include should be local include %q, got %+v", ".ci-scripts", resolved.Includes[1])
+	}
+	if resolved.Includes[2].Git != "github.com/ci/extras" {
+		t.Errorf("third include git = %q, want github.com/ci/extras", resolved.Includes[2].Git)
+	}
+
+	// Original harness untouched
+	if len(h.Includes) != 1 {
+		t.Errorf("base harness mutated: includes = %d, want 1", len(h.Includes))
+	}
+}
