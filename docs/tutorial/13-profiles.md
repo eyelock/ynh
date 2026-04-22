@@ -12,7 +12,7 @@ ynh uninstall profile-demo 2>/dev/null
 mkdir -p /tmp/ynh-tutorial
 ```
 
-## T13.1: Add profiles to .harness.json
+## T13.1: Add profiles to the plugin manifest
 
 Create a harness with a `ci` profile that adds stricter rules and a lint hook:
 
@@ -20,7 +20,8 @@ Create a harness with a `ci` profile that adds stricter rules and a lint hook:
 mkdir -p /tmp/ynh-tutorial/profile-harness/skills/deploy
 mkdir -p /tmp/ynh-tutorial/profile-harness/rules
 
-cat > /tmp/ynh-tutorial/profile-harness/.harness.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/profile-harness/.ynh-plugin
+cat > /tmp/ynh-tutorial/profile-harness/.ynh-plugin/plugin.json << 'EOF'
 {
   "name": "profile-demo",
   "version": "0.1.0",
@@ -78,7 +79,7 @@ EOF
 ```
 
 Key points:
-- `profiles` is a top-level field in `.harness.json`
+- `profiles` is a top-level field in `.ynh-plugin/plugin.json`
 - Each profile can contain `hooks` and `mcp_servers`
 - Profiles declare only what they change — absent fields inherit from top-level defaults
 - MCP servers are deep-merged (profile keys win on collision); hooks use per-event replace
@@ -214,7 +215,7 @@ rm -rf /tmp/ynh-tutorial
 
 ## What You Learned
 
-- Profiles are declared in `.harness.json` under `profiles` as named config objects
+- Profiles are declared in `.ynh-plugin/plugin.json` under `profiles` as named config objects
 - Each profile can override `hooks` and `mcp_servers`
 - Profiles use merge semantics: MCP servers are deep-merged (profile keys win), hooks use per-event replace (absent events inherited)
 - Set an MCP server to `null` in a profile to remove an inherited server

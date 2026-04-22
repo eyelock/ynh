@@ -17,7 +17,8 @@ Start with a bare harness and add a Git include to it:
 ```bash
 mkdir -p /tmp/ynh-tutorial-includes/my-harness
 
-cat > /tmp/ynh-tutorial-includes/my-harness/.harness.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin
+cat > /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json << 'EOF'
 {
   "name": "my-harness",
   "version": "0.1.0",
@@ -33,10 +34,10 @@ Expected:
 Added include "github.com/anthropics/skills"
 ```
 
-The include is written to `.harness.json` immediately:
+The include is written to `.ynh-plugin/plugin.json` immediately:
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.harness.json
+cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 ```
 
 Expected:
@@ -70,7 +71,7 @@ Added include "github.com/eyelock/assistants" (path: "skills/dev")
 ```
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.harness.json
+cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 ```
 
 Expected:
@@ -134,7 +135,7 @@ Replaced include "github.com/anthropics/skills"
 ```
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.harness.json
+cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 ```
 
 Expected:
@@ -182,7 +183,7 @@ Updated include "github.com/eyelock/assistants"
 The path and pick are unchanged:
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.harness.json
+cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 ```
 
 Expected:
@@ -226,7 +227,7 @@ Updated include "github.com/eyelock/assistants"
 ```
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.harness.json
+cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 ```
 
 Expected:
@@ -267,7 +268,7 @@ Removed include "github.com/anthropics/skills"
 ```
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.harness.json
+cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 ```
 
 Expected:
@@ -297,7 +298,8 @@ A harness can include the same repo at two different paths. When a URL matches m
 Set up two includes from the same repo at different paths:
 
 ```bash
-cat > /tmp/ynh-tutorial-includes/my-harness/.harness.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin
+cat > /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json << 'EOF'
 {
   "name": "my-harness",
   "version": "0.1.0",
@@ -368,7 +370,7 @@ Updated include "github.com/eyelock/assistants"
 Only the `skills/dev` include is changed; `skills/tech` is untouched:
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.harness.json
+cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 ```
 
 Expected:
@@ -400,7 +402,8 @@ For installed harnesses, use the harness name instead of a path:
 ```bash
 # Install a harness first
 mkdir -p /tmp/ynh-tutorial-includes/base
-cat > /tmp/ynh-tutorial-includes/base/.harness.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial-includes/base/.ynh-plugin
+cat > /tmp/ynh-tutorial-includes/base/.ynh-plugin/plugin.json << 'EOF'
 {
   "name": "base",
   "version": "0.1.0",
@@ -426,7 +429,7 @@ When targeting an installed harness by name, ynh pre-fetches the new include imm
 ynh info base
 ```
 
-The installed harness's `.harness.json` at `~/.ynh/harnesses/base/.harness.json` now contains the added include.
+The installed harness's `.ynh-plugin/plugin.json` at `~/.ynh/harnesses/base/.ynh-plugin/plugin.json` now contains the added include.
 
 ```bash
 # Clean up
@@ -461,7 +464,7 @@ rm -rf /tmp/ynh-tutorial-includes
 - `<harness>` is a **name** (installed harness) or a **path** (local directory); paths take a `/` or `.` prefix
 - Installed harnesses are pre-fetched after `add` or `update` so `ynh run` works immediately — no separate `ynh update` needed
 - `--pick` names are validated against the fetched repo — unknown names produce a clear error with the available list
-- Mutations never happen if validation fails — the `.harness.json` is only written after all checks pass
+- Mutations never happen if validation fails — the `.ynh-plugin/plugin.json` is only written after all checks pass
 
 ## Next
 

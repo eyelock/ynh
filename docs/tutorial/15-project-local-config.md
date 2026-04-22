@@ -1,6 +1,6 @@
 # Tutorial 15: Project-Local Config
 
-Use a `.harness.json` file in your project root for zero-install AI configuration. No `ynh install` needed — just drop the file and run.
+Use a `.ynh-plugin/plugin.json` file in your project root for zero-install AI configuration. No `ynh install` needed — just drop the file and run.
 
 ## Prerequisites
 
@@ -11,14 +11,15 @@ rm -rf /tmp/ynh-tutorial
 mkdir -p /tmp/ynh-tutorial
 ```
 
-## T15.1: Create a project with .harness.json
+## T15.1: Create a project with .ynh-plugin/plugin.json
 
-Create a project directory with a `.harness.json` file:
+Create a project directory with a `.ynh-plugin/plugin.json` file:
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/my-project/rules
 
-cat > /tmp/ynh-tutorial/my-project/.harness.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/my-project/.ynh-plugin
+cat > /tmp/ynh-tutorial/my-project/.ynh-plugin/plugin.json << 'EOF'
 {
   "name": "my-project",
   "version": "0.1.0",
@@ -42,9 +43,9 @@ EOF
 ```
 
 Key points:
-- `.harness.json` in the project root — same format as an installed harness
+- `.ynh-plugin/plugin.json` in the project root — same format as an installed harness
 - No `ynh install` needed — ynh can discover and use this file directly
-- Rules, skills, agents, and commands sit alongside `.harness.json` as usual
+- Rules, skills, agents, and commands sit alongside `.ynh-plugin/plugin.json` as usual
 
 ## T15.2: Validate the project config
 
@@ -84,10 +85,10 @@ rm -rf /tmp/ynh-tutorial
 
 ## What You Learned
 
-- `.harness.json` in a project root provides zero-install AI configuration
-- `ynd validate`, `ynd preview`, and `ynd diff` work with project directories containing `.harness.json`
-- `ynh run` auto-discovers `.harness.json` in the current working directory
-- `ynh run --harness-file <path>` points to a specific `.harness.json` file
+- `.ynh-plugin/plugin.json` in a project root provides zero-install AI configuration
+- `ynd validate`, `ynd preview`, and `ynd diff` work with project directories containing `.ynh-plugin/plugin.json`
+- `ynh run` auto-discovers `.ynh-plugin/plugin.json` in the current working directory
+- `ynh run --harness-file <path>` points to a specific `.ynh-plugin/plugin.json` file
 - The file format is identical to installed harnesses — same hooks, MCP servers, profiles, and focus entries
 
 ## Next

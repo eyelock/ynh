@@ -19,7 +19,8 @@ Create a harness with profiles and focus entries that reference them:
 ```bash
 mkdir -p /tmp/ynh-tutorial/focus-harness/skills/deploy
 
-cat > /tmp/ynh-tutorial/focus-harness/.harness.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/focus-harness/.ynh-plugin
+cat > /tmp/ynh-tutorial/focus-harness/.ynh-plugin/plugin.json << 'EOF'
 {
   "name": "focus-demo",
   "version": "0.1.0",
@@ -185,4 +186,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Tutorial 15: Project-Local Config](15-project-local-config.md) — use `.harness.json` in your project root for zero-install AI configuration.
+[Tutorial 15: Project-Local Config](15-project-local-config.md) — use `.ynh-plugin/plugin.json` in your project root for zero-install AI configuration.
