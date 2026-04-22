@@ -100,6 +100,42 @@ func TestHarnessFormatMigrator_Run(t *testing.T) {
 			t.Error("Applies should return false after migration")
 		}
 	})
+
+	t.Run("rewrites $schema URL suffix", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, plugin.HarnessFile),
+			`{"$schema":"https://eyelock.github.io/ynh/schema/harness.schema.json","name":"x","version":"0.1.0"}`)
+
+		if err := harnessFormatM.Run(dir); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		hj, err := plugin.LoadPluginJSON(dir)
+		if err != nil {
+			t.Fatalf("LoadPluginJSON: %v", err)
+		}
+		want := "https://eyelock.github.io/ynh/schema/plugin.schema.json"
+		if hj.Schema != want {
+			t.Errorf("Schema = %q, want %q", hj.Schema, want)
+		}
+	})
+
+	t.Run("preserves non-legacy $schema URLs", func(t *testing.T) {
+		dir := t.TempDir()
+		custom := "https://my-org.example.com/schemas/custom.json"
+		writeFile(t, filepath.Join(dir, plugin.HarnessFile),
+			`{"$schema":"`+custom+`","name":"x","version":"0.1.0"}`)
+
+		if err := harnessFormatM.Run(dir); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		hj, err := plugin.LoadPluginJSON(dir)
+		if err != nil {
+			t.Fatalf("LoadPluginJSON: %v", err)
+		}
+		if hj.Schema != custom {
+			t.Errorf("Schema = %q, want %q (unchanged)", hj.Schema, custom)
+		}
+	})
 }
 
 func writeFile(t *testing.T, path, content string) {
