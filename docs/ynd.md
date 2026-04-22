@@ -18,7 +18,7 @@ brew tap eyelock/tap && brew install ynh
 Scaffold a new artifact or full harness.
 
 ```bash
-ynd create harness my-team     # full harness directory structure (.harness.json + artifacts)
+ynd create harness my-team     # full harness directory structure (.ynh-plugin/plugin.json + artifacts)
 ynd create skill commit        # skills/commit/SKILL.md
 ynd create agent reviewer      # agents/reviewer.md
 ynd create rule be-nice        # rules/be-nice.md
@@ -231,6 +231,28 @@ ynd marketplace build --clean                     # remove output dir before bui
 - `plugin` entries are copied as-is (already in vendor-native format)
 - `harness` entries are fully exported — includes resolved, artifacts flattened
 - Codex is excluded (no marketplace system)
+
+### migrate
+
+Run the format migration chain against a harness or registry directory.
+Handles any registered migrator generically — the command itself knows
+nothing about specific formats. See [docs/migration.md](migration.md) for
+the full 0.1 → 0.2 migration guide.
+
+```bash
+ynd migrate                    # current directory
+ynd migrate ./my-harness       # specific directory
+ynd migrate -r ./harnesses     # recursive: walk tree, migrate every match
+```
+
+Idempotent — safe to run twice. No-op if the target already uses the new
+format. Called transparently by ynh on first access to a legacy harness,
+so manual invocation is rarely needed except for source trees.
+
+| Flag | Description |
+|------|-------------|
+| `-r, --recursive` | Walk the tree and migrate every matching dir |
+| `-h, --help` | Show help |
 
 **Output structure:**
 

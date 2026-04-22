@@ -12,6 +12,7 @@
   * [Hooks](hooks.md)
   * [MCP Servers](mcp.md)
   * [Profiles](profiles.md)
+  * [Namespacing](namespacing.md)
   * [Vendor Support](vendors.md)
 
 * **Tools**
@@ -49,5 +50,6 @@
   * [16. Docker Images](tutorial/09-docker-image.md)
 
 * **Project**
+  * [Migrating to 0.2](migration.md)
   * [Manual Test Plan](tutorial/manual-test-plan.md)
   * [Contributing](https://github.com/eyelock/ynh/blob/main/.github/CONTRIBUTING.md)
