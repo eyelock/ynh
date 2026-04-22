@@ -120,8 +120,15 @@ the two must be set.
 | `pick` | no | Specific artifact paths to include. If omitted, includes all. |
 
 Local includes are useful when a harness ships bundled artifact directories
-alongside its manifest, or when a profile needs to pull in a sibling
+**inside** its root, or when a profile needs to pull in an adjacent
 directory (see [Profiles](#profiles) for profile-level includes).
+
+> **Relative paths must stay inside the harness root.** `ynh install`
+> copies the harness directory to `~/.ynh/harnesses/…`; anything outside
+> the source tree (e.g. `../sibling`) is not copied and the include fails
+> to resolve post-install. Use an absolute path or fold the content into
+> the harness if you need it after install. Absolute paths are resolved
+> as-is and are unaffected by the install copy.
 
 **Git URL formats:**
 
