@@ -96,7 +96,6 @@ func unifiedSearch(cfg *config.Config, query string) ([]searchResultEntry, error
 				Keywords:    r.Entry.Keywords,
 				Repo:        r.Entry.Repo,
 				Path:        r.Entry.Path,
-				Vendors:     r.Entry.Vendors,
 				Version:     r.Entry.Version,
 				From:        searchFrom{Type: "registry", Name: r.RegistryName},
 			}

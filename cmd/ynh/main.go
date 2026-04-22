@@ -16,6 +16,7 @@ import (
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/symlink"
@@ -279,27 +280,26 @@ func cmdInstall(args []string) error {
 		}
 	}
 
-	// Inject install provenance into the copied .harness.json
+	// Migrate format if needed (converts .harness.json → .ynh-plugin/plugin.json)
+	if _, err := migration.FormatChain().Run(installDir); err != nil {
+		return fmt.Errorf("migrating installed harness format: %w", err)
+	}
+
+	// Write install provenance to .ynh-plugin/installed.json (separate from plugin.json)
 	provSource := source
 	if resolved.sourceType == "local" {
 		provSource = originalSource
 	} else if resolved.localPath != "" {
 		provSource = resolved.localPath
 	}
-	prov := &plugin.ProvenanceMeta{
+	ins := &plugin.InstalledJSON{
 		SourceType:   resolved.sourceType,
 		Source:       provSource,
 		Path:         pathFlag,
 		RegistryName: resolved.registryName,
 		InstalledAt:  time.Now().UTC().Format(time.RFC3339),
 	}
-	// Load existing .harness.json from the copied file (preserves includes, delegates, etc.)
-	hj, err := plugin.LoadHarnessJSON(installDir)
-	if err != nil {
-		return fmt.Errorf("loading installed .harness.json: %w", err)
-	}
-	hj.InstalledFrom = prov
-	if err := plugin.SaveHarnessJSON(installDir, hj); err != nil {
+	if err := plugin.SaveInstalledJSON(installDir, ins); err != nil {
 		return fmt.Errorf("saving provenance: %w", err)
 	}
 
@@ -1114,7 +1114,7 @@ func cmdPrune() error {
 			if name == "ynh" || name == "ynd" {
 				continue
 			}
-			if harness.DetectFormat(harness.InstalledDir(name)) == "harness" {
+			if f := harness.DetectFormat(harness.InstalledDir(name)); f == "plugin" || f == "harness" {
 				continue
 			}
 			launcherPath := filepath.Join(binDir, name)
@@ -1138,7 +1138,7 @@ func cmdPrune() error {
 	if err == nil {
 		for _, entry := range runEntries {
 			name := entry.Name()
-			if harness.DetectFormat(harness.InstalledDir(name)) == "harness" {
+			if f := harness.DetectFormat(harness.InstalledDir(name)); f == "plugin" || f == "harness" {
 				continue
 			}
 			staleRun := filepath.Join(runDir, name)
