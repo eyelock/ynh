@@ -260,8 +260,13 @@ func cmdInstall(args []string) error {
 	// Users invoke it with: ynh run ynh
 	reservedName := p.Name == "ynh"
 
-	// Copy harness to installed directory (clean first to remove stale artifacts)
-	installDir := harness.InstalledDir(p.Name)
+	// Install dir: namespaced when a registry namespace was resolved, else flat.
+	var installDir string
+	if resolved.namespace != "" {
+		installDir = harness.InstalledDirNS(resolved.namespace, p.Name)
+	} else {
+		installDir = harness.InstalledDir(p.Name)
+	}
 
 	// If source == install dir, skip the clean+copy (already in place).
 	// Otherwise remove stale artifacts and copy fresh.
@@ -296,6 +301,7 @@ func cmdInstall(args []string) error {
 		SourceType:   resolved.sourceType,
 		Source:       provSource,
 		Path:         pathFlag,
+		Namespace:    resolved.namespace,
 		RegistryName: resolved.registryName,
 		InstalledAt:  time.Now().UTC().Format(time.RFC3339),
 	}

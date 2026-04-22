@@ -69,10 +69,15 @@ func Fetch(src config.RegistrySource) (Registry, error) {
 		return Registry{}, err
 	}
 
-	// Derive and set namespace from the registry URL
+	// Derive namespace from the registry URL; resolve relative-path entries
+	// against the registry URL so Entry.Repo is always set.
 	reg.Namespace = namespace.DeriveFromURL(src.URL)
 	for i := range reg.Entries {
 		reg.Entries[i].Namespace = reg.Namespace
+		if reg.Entries[i].Repo == "" && reg.Entries[i].Path != "" {
+			reg.Entries[i].Repo = src.URL
+			reg.Entries[i].Path = strings.TrimPrefix(reg.Entries[i].Path, "./")
+		}
 	}
 	return reg, nil
 }
@@ -153,16 +158,19 @@ func Search(registries []Registry, query string) []SearchResult {
 }
 
 // LookupExact finds an entry by exact name, optionally scoped to a registry.
-// Accepts plain "name" or qualified "name@org/repo".
+// Accepts plain "name" or qualified "name@<label>". The label after @ matches
+// the registry's URL-derived Namespace first, then the user-declared Name
+// (legacy form), so both `david@eyelock/assistants` and `david@eyelock-assistants`
+// resolve the same entry.
 func LookupExact(registries []Registry, ref string, registryName string) []SearchResult {
-	name, ns, _ := namespace.ParseQualified(ref)
+	name, label, _ := namespace.ParseQualified(ref)
 
 	var results []SearchResult
 	for _, reg := range registries {
 		if registryName != "" && reg.Name != registryName {
 			continue
 		}
-		if ns != "" && reg.Namespace != ns {
+		if label != "" && reg.Namespace != label && reg.Name != label {
 			continue
 		}
 		for _, entry := range reg.Entries {
