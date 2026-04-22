@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/marketplace"
+	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
@@ -87,7 +88,7 @@ func validateFile(path string) error {
 	var issues []lintIssue
 
 	switch {
-	case base == plugin.PluginFile || base == plugin.HarnessFile:
+	case base == plugin.PluginFile:
 		issues = lintHarnessJSON(path)
 	case base == "marketplace.json":
 		issues = lintMarketplaceConfig(path)
@@ -113,23 +114,20 @@ func validateFile(path string) error {
 }
 
 func isHarnessRoot(dir string) bool {
-	if plugin.IsPluginDir(dir) {
-		return true
-	}
-	_, err := os.Stat(filepath.Join(dir, plugin.HarnessFile))
-	return err == nil
+	// Run the migration chain first so a legacy .harness.json is converted
+	// transparently before we decide whether this dir is a harness root.
+	_, _ = migration.FormatChain().Run(dir)
+	return plugin.IsPluginDir(dir)
 }
 
-// harnessManifestPath returns the path to the manifest file for dir.
-// Prefers .ynh-plugin/plugin.json; falls back to .harness.json. Empty if neither.
+// harnessManifestPath returns the path to the manifest file for dir,
+// after running the migration chain so the result is always the new format
+// (or empty if no harness manifest exists).
 func harnessManifestPath(dir string) string {
+	_, _ = migration.FormatChain().Run(dir)
 	pluginPath := filepath.Join(dir, plugin.PluginDir, plugin.PluginFile)
 	if _, err := os.Stat(pluginPath); err == nil {
 		return pluginPath
-	}
-	legacyPath := filepath.Join(dir, plugin.HarnessFile)
-	if _, err := os.Stat(legacyPath); err == nil {
-		return legacyPath
 	}
 	return ""
 }
@@ -177,18 +175,14 @@ func validateHarness(dir string) error {
 		issues = append(issues, "legacy format detected: migrate .claude-plugin/plugin.json and metadata.json to .ynh-plugin/plugin.json")
 	}
 
-	// Check manifest exists (plugin.json or .harness.json) and is valid
+	// Migration chain runs inside harnessManifestPath so manifestPath is
+	// always the new format (or empty if no harness manifest exists).
 	manifestPath := harnessManifestPath(dir)
-	manifestLabel := "manifest"
-	if manifestPath == filepath.Join(dir, plugin.PluginDir, plugin.PluginFile) {
-		manifestLabel = ".ynh-plugin/plugin.json"
-	} else if manifestPath == filepath.Join(dir, plugin.HarnessFile) {
-		manifestLabel = ".harness.json"
-	}
+	const manifestLabel = ".ynh-plugin/plugin.json"
 	var data []byte
 	var err error
 	if manifestPath == "" {
-		issues = append(issues, "missing manifest (.ynh-plugin/plugin.json or .harness.json)")
+		issues = append(issues, "missing .ynh-plugin/plugin.json")
 	} else {
 		data, err = os.ReadFile(manifestPath)
 		if err != nil {

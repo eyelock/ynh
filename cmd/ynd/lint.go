@@ -50,7 +50,7 @@ func cmdLint(args []string) error {
 
 	files, err := discoverAll(root,
 		[]string{".md", ".sh"},
-		[]string{plugin.HarnessFile, plugin.PluginFile},
+		[]string{plugin.PluginFile},
 	)
 	if err != nil {
 		return err
@@ -69,7 +69,7 @@ func cmdLint(args []string) error {
 			issues = append(issues, lintMarkdown(f)...)
 		case strings.HasSuffix(f, ".sh"):
 			issues = append(issues, lintShell(f)...)
-		case filepath.Base(f) == plugin.HarnessFile, filepath.Base(f) == plugin.PluginFile:
+		case filepath.Base(f) == plugin.PluginFile:
 			issues = append(issues, lintHarnessJSONFile(f)...)
 		}
 	}

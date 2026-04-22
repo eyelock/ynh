@@ -515,25 +515,27 @@ func cmdRun(args []string) error {
 		harnessDir = filepath.Dir(ra.HarnessFile)
 
 	default:
-		// Auto-discover .harness.json in cwd
+		// Auto-discover a harness in cwd. The migration chain converts any
+		// legacy format transparently so we only need to load the new format.
 		cwd, wdErr := os.Getwd()
 		if wdErr != nil {
 			return wdErr
 		}
-		localFile := filepath.Join(cwd, plugin.HarnessFile)
-		if _, statErr := os.Stat(localFile); statErr == nil {
-			p, err = harness.LoadFile(localFile)
-			if err != nil {
-				return err
-			}
-			name = p.Name
-			if name == "" {
-				name = "(inline)"
-			}
-			harnessDir = cwd
-		} else {
+		if _, err := migration.FormatChain().Run(cwd); err != nil {
+			return fmt.Errorf("migrating harness in cwd: %w", err)
+		}
+		if !plugin.IsPluginDir(cwd) {
 			return fmt.Errorf("usage: ynh run <harness-name> [-v vendor] [--focus name] [--harness-file path] [-- prompt]")
 		}
+		p, err = harness.LoadDir(cwd)
+		if err != nil {
+			return err
+		}
+		name = p.Name
+		if name == "" {
+			name = "(inline)"
+		}
+		harnessDir = cwd
 	}
 
 	// Resolve focus → profile + prompt
@@ -1114,7 +1116,7 @@ func cmdPrune() error {
 			if name == "ynh" || name == "ynd" {
 				continue
 			}
-			if f := harness.DetectFormat(harness.InstalledDir(name)); f == "plugin" || f == "harness" {
+			if harness.DetectFormat(harness.InstalledDir(name)) == "plugin" {
 				continue
 			}
 			launcherPath := filepath.Join(binDir, name)
@@ -1138,7 +1140,7 @@ func cmdPrune() error {
 	if err == nil {
 		for _, entry := range runEntries {
 			name := entry.Name()
-			if f := harness.DetectFormat(harness.InstalledDir(name)); f == "plugin" || f == "harness" {
+			if harness.DetectFormat(harness.InstalledDir(name)) == "plugin" {
 				continue
 			}
 			staleRun := filepath.Join(runDir, name)

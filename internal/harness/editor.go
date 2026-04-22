@@ -5,12 +5,21 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
+// loadManifest runs the migration chain and loads the manifest from the new path.
+func loadManifest(dir string) (*plugin.HarnessJSON, error) {
+	if _, err := migration.FormatChain().Run(dir); err != nil {
+		return nil, fmt.Errorf("migrating harness manifest: %w", err)
+	}
+	return plugin.LoadPluginJSON(dir)
+}
+
 // ResolveEditTarget resolves a harness reference to a directory.
 // If ref contains a path separator or starts with '.', it is treated as a
-// filesystem path and must contain .harness.json. Otherwise it is looked up
+// filesystem path and must contain a harness manifest. Otherwise it is looked up
 // as an installed harness name. Returns the directory and whether the harness
 // is installed (i.e. lives under the ynh harnesses directory).
 func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
@@ -26,7 +35,7 @@ func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
 	}
 
 	installDir := InstalledDir(ref)
-	if f := DetectFormat(installDir); f == "plugin" || f == "harness" {
+	if DetectFormat(installDir) == "plugin" {
 		return installDir, true, nil
 	}
 	return "", false, fmt.Errorf("harness %q: %w", ref, ErrNotFound)
@@ -58,7 +67,7 @@ type UpdateOptions struct {
 // If the URL+path already exists and Replace is false, it returns an error.
 // Network operations (pre-fetch, pick validation) are the caller's responsibility.
 func AddInclude(dir, url string, opts AddOptions) error {
-	hj, err := plugin.LoadHarnessJSON(dir)
+	hj, err := loadManifest(dir)
 	if err != nil {
 		return err
 	}
@@ -77,14 +86,14 @@ func AddInclude(dir, url string, opts AddOptions) error {
 		hj.Includes = append(hj.Includes, plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick})
 	}
 
-	return plugin.SaveHarnessJSON(dir, hj)
+	return plugin.SavePluginJSON(dir, hj)
 }
 
 // RemoveInclude removes an include identified by URL and optional path.
 // If the URL matches multiple includes and no path is given, an error is
 // returned listing the paths that would disambiguate.
 func RemoveInclude(dir, url string, opts RemoveOptions) error {
-	hj, err := plugin.LoadHarnessJSON(dir)
+	hj, err := loadManifest(dir)
 	if err != nil {
 		return err
 	}
@@ -111,7 +120,7 @@ func RemoveInclude(dir, url string, opts RemoveOptions) error {
 	}
 
 	hj.Includes = keep
-	return plugin.SaveHarnessJSON(dir, hj)
+	return plugin.SavePluginJSON(dir, hj)
 }
 
 // UpdateInclude updates fields on an existing include.
@@ -120,7 +129,7 @@ func RemoveInclude(dir, url string, opts RemoveOptions) error {
 // are updated; omitted fields are left unchanged.
 // Network operations (pre-fetch, pick validation) are the caller's responsibility.
 func UpdateInclude(dir, url string, opts UpdateOptions) error {
-	hj, err := plugin.LoadHarnessJSON(dir)
+	hj, err := loadManifest(dir)
 	if err != nil {
 		return err
 	}
@@ -141,14 +150,14 @@ func UpdateInclude(dir, url string, opts UpdateOptions) error {
 		inc.Ref = *opts.Ref
 	}
 
-	return plugin.SaveHarnessJSON(dir, hj)
+	return plugin.SavePluginJSON(dir, hj)
 }
 
 // FindUpdateTarget loads the harness from dir and returns the include that
 // would be updated by UpdateOptions. Used by callers that need to inspect the
 // final state before writing (e.g. to pre-fetch the right ref/path).
 func FindUpdateTarget(dir, url string, opts UpdateOptions) (plugin.IncludeMeta, error) {
-	hj, err := plugin.LoadHarnessJSON(dir)
+	hj, err := loadManifest(dir)
 	if err != nil {
 		return plugin.IncludeMeta{}, err
 	}

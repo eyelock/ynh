@@ -69,14 +69,20 @@ type ListEntry struct {
 	Dir       string // absolute path to the harness directory
 }
 
-// DetectFormat returns the format of a harness directory.
-// Returns "plugin" (0.2+), "harness" (0.1), "legacy" (pre-0.1), or "".
+// DetectFormat reports what manifest format a directory holds, after
+// running the migration chain. Returns "plugin" (new format present),
+// "legacy" (unsupported pre-0.1 .claude-plugin format), or "" (nothing).
+//
+// The migration chain converts any supported legacy format to the new
+// format before detection, so callers only ever see "plugin" or "" for
+// valid harnesses. Legacy detection is the one exception — it signals a
+// format that predates ynh and has no migration path.
 func DetectFormat(dir string) string {
+	if _, err := migration.FormatChain().Run(dir); err != nil {
+		return ""
+	}
 	if plugin.IsPluginDir(dir) {
 		return "plugin"
-	}
-	if plugin.IsHarnessDir(dir) {
-		return "harness"
 	}
 	if plugin.IsLegacyPluginDir(dir) {
 		return "legacy"
@@ -87,21 +93,14 @@ func DetectFormat(dir string) string {
 // ErrNotFound is returned when a harness is not installed.
 var ErrNotFound = errors.New("harness not found")
 
-// Load finds and loads an installed harness by name. It runs the migration
-// chain transparently — if the flat-layout dir is migrated to a namespaced
-// path, Load follows and returns the harness from its new location.
+// Load finds and loads an installed harness by name. The migration chain
+// runs inside LoadDir so no legacy handling is needed here. If the flat
+// layout has the harness, use that; otherwise scan the namespaced layout.
 func Load(name string) (*Harness, error) {
 	flatDir := InstalledDir(name)
-
 	if _, err := os.Stat(flatDir); err == nil {
-		// Run format migration only — storage migration is triggered explicitly
-		// to avoid surprising callers that hold the flat path.
-		if _, err := migration.FormatChain().Run(flatDir); err != nil {
-			return nil, fmt.Errorf("migrating harness %q: %w", name, err)
-		}
 		return LoadDir(flatDir)
 	}
-
 	return findInNamespacedDirs(name)
 }
 
@@ -223,27 +222,24 @@ func InstalledDir(name string) string {
 	return filepath.Join(config.HarnessesDir(), name)
 }
 
-// LoadDir loads a harness from a directory. It handles both the 0.2
-// (.ynh-plugin/plugin.json) and 0.1 (.harness.json) formats. The migration
-// chain should be run before calling this for installed harnesses.
+// LoadDir loads a harness from a directory. The migration chain runs
+// transparently, so callers never need to handle legacy formats themselves.
 func LoadDir(dir string) (*Harness, error) {
-	var hj *plugin.HarnessJSON
-	var err error
+	if _, err := migration.FormatChain().Run(dir); err != nil {
+		return nil, fmt.Errorf("migrating harness manifest: %w", err)
+	}
 
-	switch DetectFormat(dir) {
-	case "plugin":
-		hj, err = plugin.LoadPluginJSON(dir)
-	case "harness":
-		hj, err = plugin.LoadHarnessJSON(dir)
-	case "legacy":
+	if plugin.IsLegacyPluginDir(dir) && !plugin.IsPluginDir(dir) {
 		return nil, fmt.Errorf("legacy .claude-plugin format is not supported; migrate to .ynh-plugin/plugin.json")
-	default:
+	}
+	if !plugin.IsPluginDir(dir) {
 		return nil, fmt.Errorf("no harness manifest found in %s", dir)
 	}
+
+	hj, err := plugin.LoadPluginJSON(dir)
 	if err != nil {
 		return nil, err
 	}
-	_ = hj // used below
 
 	if !validName.MatchString(hj.Name) {
 		return nil, fmt.Errorf("invalid harness name %q: must match %s", hj.Name, validName.String())
@@ -329,7 +325,7 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 
 	profile, ok := h.Profiles[profileName]
 	if !ok {
-		return nil, fmt.Errorf("profile %q not defined in .harness.json", profileName)
+		return nil, fmt.Errorf("profile %q not defined in harness manifest", profileName)
 	}
 
 	resolved := *h

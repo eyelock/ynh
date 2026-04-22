@@ -8,6 +8,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
@@ -22,26 +23,24 @@ func isLocalPath(source string) bool {
 	return false
 }
 
-// loadOrSynthesizeHarness loads a harness from a directory. If the directory
-// has .harness.json, it loads normally. If the directory has AGENTS.md (or
-// instructions.md) but no .harness.json, it synthesizes minimal .harness.json
-// on disk so that the rest of the install flow works unchanged.
+// loadOrSynthesizeHarness loads a harness from a directory. The migration
+// chain runs first to convert any legacy format transparently. If no manifest
+// exists but AGENTS.md or instructions.md does, a minimal plugin.json is
+// synthesized so the install flow works unchanged.
 func loadOrSynthesizeHarness(dir string) (*harness.Harness, error) {
-	// Try known harness formats (plugin = 0.2+, harness = 0.1)
-	switch harness.DetectFormat(dir) {
-	case "plugin", "harness":
+	if _, err := migration.FormatChain().Run(dir); err != nil {
+		return nil, fmt.Errorf("migrating harness format: %w", err)
+	}
+
+	if plugin.IsPluginDir(dir) {
 		return harness.LoadDir(dir)
-	case "legacy":
-		return nil, fmt.Errorf("legacy format detected in %q. Migrate to .ynh-plugin/plugin.json", dir)
 	}
 
-	// Check for bare AGENTS.md or instructions.md
-	hasInstructions := assembler.FindInstructionsFile(dir) != ""
-	if !hasInstructions {
-		return nil, fmt.Errorf("directory %q has no .ynh-plugin/plugin.json, .harness.json, or AGENTS.md", dir)
+	// No manifest: try to synthesize from AGENTS.md or instructions.md
+	if assembler.FindInstructionsFile(dir) == "" {
+		return nil, fmt.Errorf("directory %q has no harness manifest or AGENTS.md", dir)
 	}
 
-	// Synthesize minimal plugin.json in the source directory
 	name := filepath.Base(dir)
 	hj := &plugin.HarnessJSON{
 		Name:    name,

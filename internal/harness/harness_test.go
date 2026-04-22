@@ -10,11 +10,13 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
-func TestDetectFormat_Harness(t *testing.T) {
+func TestDetectFormat_Plugin(t *testing.T) {
+	// Migration chain converts legacy .harness.json transparently.
+	// DetectFormat always returns "plugin" for any supported format.
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "x")
-	if got := DetectFormat(dir); got != "harness" {
-		t.Errorf("DetectFormat = %q, want %q", got, "harness")
+	if got := DetectFormat(dir); got != "plugin" {
+		t.Errorf("DetectFormat = %q, want %q", got, "plugin")
 	}
 }
 
@@ -692,26 +694,20 @@ func TestScanArtifacts_SkillWithoutManifest(t *testing.T) {
 	}
 }
 
-// writeTestHarness creates a minimal harness.json with default_vendor in dir.
+// writeTestHarness creates a minimal plugin.json with default_vendor in dir.
 func writeTestHarness(t *testing.T, dir, name string) {
 	t.Helper()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	hj := fmt.Sprintf(`{"name":%q,"version":"0.1.0","default_vendor":"claude"}`, name)
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
+	hj := &plugin.HarnessJSON{Name: name, Version: "0.1.0", DefaultVendor: "claude"}
+	if err := plugin.SavePluginJSON(dir, hj); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// writeTestHarnessMinimal creates a minimal harness.json without default_vendor.
+// writeTestHarnessMinimal creates a minimal plugin.json without default_vendor.
 func writeTestHarnessMinimal(t *testing.T, dir, name string) {
 	t.Helper()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	hj := fmt.Sprintf(`{"name":%q,"version":"0.1.0"}`, name)
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
+	hj := &plugin.HarnessJSON{Name: name, Version: "0.1.0"}
+	if err := plugin.SavePluginJSON(dir, hj); err != nil {
 		t.Fatal(err)
 	}
 }

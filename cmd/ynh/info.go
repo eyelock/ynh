@@ -243,12 +243,10 @@ func printInfoJSON(stdout, stderr io.Writer, name string) error {
 		return cliError(stderr, true, code, err.Error())
 	}
 
-	// Read the raw manifest (plugin.json for 0.2+, .harness.json for 0.1)
+	// Migration chain has run (harness.Load was called above), so the manifest
+	// is always at the new path.
 	installDir := harness.InstalledDir(name)
 	manifestPath := filepath.Join(installDir, plugin.PluginDir, plugin.PluginFile)
-	if _, err := os.Stat(manifestPath); err != nil {
-		manifestPath = filepath.Join(installDir, plugin.HarnessFile)
-	}
 	raw, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return cliError(stderr, true, errCodeIOError,

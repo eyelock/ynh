@@ -5,6 +5,9 @@
   "author": {
     "name": "test"
   },
-  "keywords": ["test", "export"],
+  "keywords": [
+    "test",
+    "export"
+  ],
   "default_vendor": "claude"
 }

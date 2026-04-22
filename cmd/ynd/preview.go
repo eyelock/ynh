@@ -283,17 +283,16 @@ func writeGeneratedFiles(baseDir string, files map[string][]byte) error {
 // If tempDir is non-empty, the caller must clean it up.
 func loadHarnessForPreview(dir string) (*harness.Harness, string, error) {
 	switch harness.DetectFormat(dir) {
-	case "plugin", "harness":
+	case "plugin":
 		h, err := harness.LoadDir(dir)
 		return h, "", err
 	case "legacy":
 		return nil, "", fmt.Errorf("legacy format detected in %q. Migrate to .ynh-plugin/plugin.json", dir)
 	}
 
-	// Check for bare AGENTS.md or instructions.md
-	hasInstructions := assembler.FindInstructionsFile(dir) != ""
-	if !hasInstructions {
-		return nil, "", fmt.Errorf("directory %q has no .ynh-plugin/plugin.json, .harness.json, or AGENTS.md", dir)
+	// No manifest: synthesize from AGENTS.md / instructions.md if present
+	if assembler.FindInstructionsFile(dir) == "" {
+		return nil, "", fmt.Errorf("directory %q has no harness manifest or AGENTS.md", dir)
 	}
 
 	// Copy to temp dir to avoid mutating source

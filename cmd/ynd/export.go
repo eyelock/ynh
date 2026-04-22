@@ -8,6 +8,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/exporter"
+	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
@@ -110,17 +111,15 @@ func cmdExport(args []string) error {
 		}
 	}
 
-	// Determine output directory
+	// Determine output directory. Migration chain runs in harness.LoadDir below,
+	// so we convert any legacy source format transparently before reading.
 	if outputDir == "" {
-		var pj *plugin.HarnessJSON
-		var err error
-		if plugin.IsPluginDir(srcDir) {
-			pj, err = plugin.LoadPluginJSON(srcDir)
-		} else {
-			pj, err = plugin.LoadHarnessJSON(srcDir)
+		if _, err := migration.FormatChain().Run(srcDir); err != nil {
+			return fmt.Errorf("migrating source format: %w", err)
 		}
+		pj, err := plugin.LoadPluginJSON(srcDir)
 		if err != nil {
-			return fmt.Errorf("loading manifest for name: %w", err)
+			return fmt.Errorf("loading plugin.json for name: %w", err)
 		}
 		outputDir = filepath.Join(".", "dist", pj.Name)
 	}

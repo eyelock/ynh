@@ -93,8 +93,8 @@ ynh search "go"
 
 Expected:
 ```
-NAME   DESCRIPTION                                       REPO                                       VENDORS              FROM
-david  Full-stack development harness with Go expertise  github.com/eyelock/assistants (ynh/david)  claude,codex,cursor  tutorial-registry (registry)
+NAME   DESCRIPTION                                       REPO                                       FROM
+david  Full-stack development harness with Go expertise  github.com/eyelock/assistants (ynh/david)  tutorial-registry (registry)
 ```
 
 ```bash
@@ -103,8 +103,8 @@ ynh search "planning"
 
 Expected:
 ```
-NAME     DESCRIPTION                                REPO                                         VENDORS  FROM
-planner  Project planning and architecture harness  github.com/eyelock/assistants (ynh/planner)  claude   tutorial-registry (registry)
+NAME     DESCRIPTION                                REPO                                         FROM
+planner  Project planning and architecture harness  github.com/eyelock/assistants (ynh/planner)  tutorial-registry (registry)
 ```
 
 ```bash
@@ -113,8 +113,8 @@ ynh search "music"
 
 Expected:
 ```
-NAME              DESCRIPTION                                      REPO                                                      VENDORS  FROM
-media-management  Music library processing and Apple Music import  github.com/eyelock/assistants (plugins/media-management)  claude   tutorial-registry (registry)
+NAME              DESCRIPTION                                      REPO                                                      FROM
+media-management  Music library processing and Apple Music import  github.com/eyelock/assistants (plugins/media-management)  tutorial-registry (registry)
 ```
 
 ```bash

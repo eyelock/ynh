@@ -22,7 +22,7 @@ Expected: a `my-team/` directory with the full harness structure:
 ```bash
 find my-team -type f | sort
 # Expected:
-#   my-team/.harness.json
+#   my-team/.ynh-plugin/plugin.json
 #   my-team/AGENTS.md
 ```
 

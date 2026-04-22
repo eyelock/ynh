@@ -29,9 +29,9 @@ func overrideHarnessesDir(t *testing.T) {
 // loadIncludes is a test helper that reads the includes from a harness dir.
 func loadIncludes(t *testing.T, dir string) []plugin.IncludeMeta {
 	t.Helper()
-	hj, err := plugin.LoadHarnessJSON(dir)
+	hj, err := plugin.LoadPluginJSON(dir)
 	if err != nil {
-		t.Fatalf("LoadHarnessJSON: %v", err)
+		t.Fatalf("LoadPluginJSON: %v", err)
 	}
 	return hj.Includes
 }

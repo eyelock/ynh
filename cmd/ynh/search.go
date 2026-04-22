@@ -69,7 +69,6 @@ type searchResultEntry struct {
 	Keywords    []string   `json:"keywords,omitempty"`
 	Repo        string     `json:"repo,omitempty"`
 	Path        string     `json:"path,omitempty"`
-	Vendors     []string   `json:"vendors,omitempty"`
 	Version     string     `json:"version,omitempty"`
 	From        searchFrom `json:"from"`
 }
@@ -119,9 +118,6 @@ func unifiedSearch(cfg *config.Config, query string) ([]searchResultEntry, error
 					Version:     h.Version,
 					From:        searchFrom{Type: "source", Name: s.Name},
 				}
-				if h.DefaultVendor != "" {
-					entry.Vendors = []string{h.DefaultVendor}
-				}
 				if len(h.Keywords) > 0 {
 					entry.Keywords = h.Keywords
 				}
@@ -161,19 +157,15 @@ func printSearchText(w io.Writer, query string, results []searchResultEntry) err
 	}
 
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "NAME\tDESCRIPTION\tREPO\tVENDORS\tFROM")
+	_, _ = fmt.Fprintln(tw, "NAME\tDESCRIPTION\tREPO\tFROM")
 	for _, r := range results {
-		vendors := strings.Join(r.Vendors, ",")
-		if vendors == "" {
-			vendors = "-"
-		}
 		repo := r.Repo
 		if r.Path != "" {
 			repo += " (" + r.Path + ")"
 		}
 		from := r.From.Name + " (" + r.From.Type + ")"
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
-			r.Name, r.Description, repo, vendors, from)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
+			r.Name, r.Description, repo, from)
 	}
 	return tw.Flush()
 }
