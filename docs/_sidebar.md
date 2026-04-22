@@ -12,6 +12,7 @@
   * [Hooks](hooks.md)
   * [MCP Servers](mcp.md)
   * [Profiles](profiles.md)
+  * [Namespacing](namespacing.md)
   * [Vendor Support](vendors.md)
 
 * **Tools**
@@ -47,7 +48,9 @@
   * [14. Marketplace](tutorial/06-marketplace.md)
   * [15. Registry & Discovery](tutorial/07-registry-and-discovery.md)
   * [16. Docker Images](tutorial/09-docker-image.md)
+  * [17. Namespacing & Migration](tutorial/18-namespacing-and-migration.md)
 
 * **Project**
+  * [Migrating to 0.2](migration.md)
   * [Manual Test Plan](tutorial/manual-test-plan.md)
   * [Contributing](https://github.com/eyelock/ynh/blob/main/.github/CONTRIBUTING.md)

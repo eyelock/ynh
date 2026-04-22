@@ -11,12 +11,13 @@ rm -rf /tmp/ynh-tutorial
 
 ## T10.1: Add hooks to a harness
 
-Create a harness with hook declarations in `.harness.json`:
+Create a harness with hook declarations in `.ynh-plugin/plugin.json`:
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/hook-harness/rules
 
-cat > /tmp/ynh-tutorial/hook-harness/.harness.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/hook-harness/.ynh-plugin
+cat > /tmp/ynh-tutorial/hook-harness/.ynh-plugin/plugin.json << 'EOF'
 {
   "name": "hook-demo",
   "version": "0.1.0",
@@ -59,8 +60,8 @@ EOF
 Verify the structure:
 
 ```bash
-ls -R /tmp/ynh-tutorial/hook-harness/
-# Expected: .harness.json, instructions.md, rules/safety.md
+ls -aR /tmp/ynh-tutorial/hook-harness/ | grep -v '^\.\{1,2\}$\|^\.:'
+# Expected lines include: .ynh-plugin, instructions.md, rules, safety.md
 ```
 
 ## T10.2: Preview for Claude
@@ -218,7 +219,7 @@ Expected output shows:
 - `.codex/hooks.json` is only in Codex
 - Shared files (like `CLAUDE.md`, `.cursorrules`, `codex.md`) may be listed as identical or different depending on instructions content
 
-The key difference: the same three hooks declared once in `.harness.json` produce three structurally different config files, each native to the vendor.
+The key difference: the same three hooks declared once in `.ynh-plugin/plugin.json` produce three structurally different config files, each native to the vendor.
 
 ## Clean up
 
@@ -228,7 +229,7 @@ rm -rf /tmp/ynh-tutorial
 
 ## What You Learned
 
-- Hooks are declared in `.harness.json` under `hooks` using canonical event names
+- Hooks are declared in `.ynh-plugin/plugin.json` under `hooks` using canonical event names
 - `ynd preview` shows the assembled vendor-native output without installing
 - Claude, Cursor, and Codex each use different event names and nesting structures
 - Hook scripts should exit with code 2 to block actions and include remediation instructions

@@ -173,7 +173,8 @@ Always use `--format json` (with a space).
 rm -rf /tmp/ynh-tutorial
 mkdir -p /tmp/ynh-tutorial/my-harness/skills/greet
 
-cat > /tmp/ynh-tutorial/my-harness/.harness.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/my-harness/.ynh-plugin
+cat > /tmp/ynh-tutorial/my-harness/.ynh-plugin/plugin.json << 'EOF'
 {
   "name": "my-harness",
   "version": "0.1.0",

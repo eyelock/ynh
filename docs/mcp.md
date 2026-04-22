@@ -10,9 +10,9 @@ ynh treats MCP server declarations as part of the harness template. At assembly 
 
 Without harness-level MCP declarations, each developer must manually configure MCP servers per vendor per project. A harness that requires a database query tool or a documentation server can declare those dependencies once, and ynh handles vendor translation.
 
-## .harness.json Format
+## Manifest Format
 
-MCP servers are declared under the top-level `mcp_servers` key in `.harness.json`. Each key is the server name, and the value defines either a stdio server (with `command` + `args`) or an HTTP server (with `url`).
+MCP servers are declared under the top-level `mcp_servers` key in `.ynh-plugin/plugin.json`. Each key is the server name, and the value defines either a stdio server (with `command` + `args`) or an HTTP server (with `url`).
 
 ### Stdio Server
 
@@ -137,7 +137,7 @@ Codex uses `.mcp.json` at the plugin root with the same JSON format as Claude:
 
 MCP server declarations in **included harnesses** (via `includes`) are dropped during assembly. Only the root harness's MCP servers are configured. This prevents composed harnesses from silently adding tool dependencies.
 
-If an included harness requires an MCP server, add the server declaration to the root harness's `.harness.json`.
+If an included harness requires an MCP server, add the server declaration to the root harness's `.ynh-plugin/plugin.json`.
 
 ## Future
 

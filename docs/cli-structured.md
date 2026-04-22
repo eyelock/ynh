@@ -17,7 +17,7 @@ Structured output exists to serve those consumers without breaking the humans-fi
 
 **JSON.** One format, everywhere. No YAML, no TOML, no per-command bespoke shapes.
 
-- Fields use `snake_case` — matching `.harness.json` and `config.json`.
+- Fields use `snake_case` — matching `.ynh-plugin/plugin.json` and `config.json`.
 - Output is written to `stdout` as a single top-level value (object or array), terminated by a newline. No banners, no prompts, no progress chatter on `stdout`.
 - Progress or informational messages, when emitted by a structured-output command, go to `stderr` and are advisory only. Consumers parse `stdout`.
 - Arrays are emitted even when empty (`[]`, not omitted). Required object fields are always present.
@@ -78,13 +78,13 @@ Pre-1.0 caveat: breaking changes remain possible across minor versions, but will
 - Paths are absolute, fully resolved — no `~`, no relative fragments. Consumers receive exactly what they can pass to `os.Open` or its equivalent.
 - Timestamps are ISO 8601 in UTC (`2026-04-15T12:34:56Z`). No Unix epochs.
 - Booleans are `true` / `false`, never `0` / `1` or `"yes"` / `"no"`.
-- Vendor and adapter IDs use the canonical short form (`claude`, `codex`, `cursor`) — the same identifiers used in `.harness.json` and on the `-v` flag.
+- Vendor and adapter IDs use the canonical short form (`claude`, `codex`, `cursor`) — the same identifiers used in `.ynh-plugin/plugin.json` and on the `-v` flag.
 
 ## Scope
 
 This document governs *output* shape and stability. It does not govern:
 
-- On-disk file formats (`.harness.json`, `config.json`, `symlinks.json`) — those have their own schemas under `docs/schema/`.
+- On-disk file formats (`.ynh-plugin/plugin.json`, `config.json`, `symlinks.json`) — those have their own schemas under `docs/schema/`.
 - Command-line argument shape — flags and positional args are part of each command's own contract.
 - Log or diagnostic output from long-running operations (e.g. Git clones) — that remains human-oriented text on `stderr`.
 

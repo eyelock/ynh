@@ -139,7 +139,7 @@ A harness can include an `AGENTS.md` file with project-level instructions. Most 
 
 ```
 my-harness/
-├── .harness.json
+├── .ynh-plugin/plugin.json
 └── AGENTS.md             <- read natively by Codex/Cursor; shimmed for Claude
 ```
 
@@ -168,14 +168,14 @@ Files in the harness's own directory:
 
 ```
 my-harness/
-├── .harness.json
+├── .ynh-plugin/plugin.json
 ├── skills/review/SKILL.md     <- embedded
 └── rules/concise.md           <- embedded
 ```
 
 ### 2. External Git repos
 
-Referenced in `.harness.json`:
+Referenced in `.ynh-plugin/plugin.json`:
 
 ```json
 {

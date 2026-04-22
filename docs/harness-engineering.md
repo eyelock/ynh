@@ -37,7 +37,7 @@ YNH does **not** include sensors (linters, test runners, CI/CD). These are well-
 
 ### Hooks: Bridge to Feedback Sensors
 
-While ynh focuses on the guide layer, [hooks](hooks.md) provide the bridge to feedback sensors. A harness declares canonical hook events (`before_tool`, `after_tool`, `before_prompt`, `on_stop`) in `.harness.json`, and ynh translates them into vendor-native hook config at assembly time. The hook scripts themselves — linters, validators, safety checks — live outside the harness. This keeps the boundary clean: ynh declares *when* to check, existing tools provide *what* to check.
+While ynh focuses on the guide layer, [hooks](hooks.md) provide the bridge to feedback sensors. A harness declares canonical hook events (`before_tool`, `after_tool`, `before_prompt`, `on_stop`) in `.ynh-plugin/plugin.json`, and ynh translates them into vendor-native hook config at assembly time. The hook scripts themselves — linters, validators, safety checks — live outside the harness. This keeps the boundary clean: ynh declares *when* to check, existing tools provide *what* to check.
 
 ### MCP Servers: Tool Registry
 
