@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/harness"
@@ -221,7 +222,13 @@ func printInfoText(w io.Writer, name string) error {
 	if len(p.Focuses) == 0 {
 		_, _ = fmt.Fprintln(w, "  (none)")
 	} else {
-		for fname, focus := range p.Focuses {
+		focusNames := make([]string, 0, len(p.Focuses))
+		for fname := range p.Focuses {
+			focusNames = append(focusNames, fname)
+		}
+		sort.Strings(focusNames)
+		for _, fname := range focusNames {
+			focus := p.Focuses[fname]
 			profileLabel := "(default)"
 			if focus.Profile != "" {
 				profileLabel = "profile=" + focus.Profile
