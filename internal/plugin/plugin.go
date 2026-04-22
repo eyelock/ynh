@@ -164,10 +164,119 @@ type DelegateMeta struct {
 // HarnessFile is the manifest filename used in harness directories.
 const HarnessFile = ".harness.json"
 
+// PluginDir is the manifest directory for the 0.2+ format.
+const PluginDir = ".ynh-plugin"
+
+// PluginFile is the manifest filename inside PluginDir.
+const PluginFile = "plugin.json"
+
+// InstalledFile holds install-time provenance inside PluginDir.
+// Authors never write this file — ynh install writes it at install time.
+const InstalledFile = "installed.json"
+
+// InstalledJSON records where a harness was installed from.
+// It lives at .ynh-plugin/installed.json, separate from the author-controlled plugin.json.
+type InstalledJSON struct {
+	SourceType   string `json:"source_type"`
+	Source       string `json:"source"`
+	Ref          string `json:"ref,omitempty"`
+	SHA          string `json:"sha,omitempty"`
+	Path         string `json:"path,omitempty"`
+	Namespace    string `json:"namespace,omitempty"`
+	RegistryName string `json:"registry_name,omitempty"`
+	InstalledAt  string `json:"installed_at"`
+}
+
 // IsHarnessDir returns true if the directory contains a .harness.json manifest.
 func IsHarnessDir(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, HarnessFile))
 	return err == nil
+}
+
+// IsPluginDir returns true if the directory contains a .ynh-plugin/plugin.json manifest.
+func IsPluginDir(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, PluginDir, PluginFile))
+	return err == nil
+}
+
+// LoadPluginJSON reads and parses .ynh-plugin/plugin.json from dir.
+// Unknown fields are rejected. The migration chain must run before this
+// so callers can assume the new format exists.
+func LoadPluginJSON(dir string) (*HarnessJSON, error) {
+	data, err := os.ReadFile(filepath.Join(dir, PluginDir, PluginFile))
+	if err != nil {
+		return nil, fmt.Errorf("reading plugin.json: %w", err)
+	}
+
+	var hj HarnessJSON
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&hj); err != nil {
+		return nil, fmt.Errorf("invalid plugin.json: %w", err)
+	}
+
+	if hj.Name == "" {
+		return nil, fmt.Errorf("plugin.json missing required field: name")
+	}
+
+	return &hj, nil
+}
+
+// SavePluginJSON writes hj to .ynh-plugin/plugin.json in dir.
+// InstalledFrom is stripped — provenance belongs in installed.json.
+func SavePluginJSON(dir string, hj *HarnessJSON) error {
+	if err := os.MkdirAll(filepath.Join(dir, PluginDir), 0o755); err != nil {
+		return fmt.Errorf("creating .ynh-plugin dir: %w", err)
+	}
+
+	clean := *hj
+	clean.InstalledFrom = nil
+
+	data, err := json.MarshalIndent(clean, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling plugin.json: %w", err)
+	}
+	data = append(data, '\n')
+
+	if err := os.WriteFile(filepath.Join(dir, PluginDir, PluginFile), data, 0o644); err != nil {
+		return fmt.Errorf("writing plugin.json: %w", err)
+	}
+
+	return nil
+}
+
+// LoadInstalledJSON reads .ynh-plugin/installed.json from dir.
+func LoadInstalledJSON(dir string) (*InstalledJSON, error) {
+	data, err := os.ReadFile(filepath.Join(dir, PluginDir, InstalledFile))
+	if err != nil {
+		return nil, fmt.Errorf("reading installed.json: %w", err)
+	}
+
+	var ins InstalledJSON
+	if err := json.Unmarshal(data, &ins); err != nil {
+		return nil, fmt.Errorf("invalid installed.json: %w", err)
+	}
+
+	return &ins, nil
+}
+
+// SaveInstalledJSON writes ins to .ynh-plugin/installed.json in dir.
+func SaveInstalledJSON(dir string, ins *InstalledJSON) error {
+	if err := os.MkdirAll(filepath.Join(dir, PluginDir), 0o755); err != nil {
+		return fmt.Errorf("creating .ynh-plugin dir: %w", err)
+	}
+
+	data, err := json.MarshalIndent(ins, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling installed.json: %w", err)
+	}
+	data = append(data, '\n')
+
+	if err := os.WriteFile(filepath.Join(dir, PluginDir, InstalledFile), data, 0o644); err != nil {
+		return fmt.Errorf("writing installed.json: %w", err)
+	}
+
+	return nil
 }
 
 // IsLegacyPluginDir returns true if the directory contains a legacy .claude-plugin/plugin.json.
