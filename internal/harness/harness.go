@@ -439,6 +439,22 @@ func (a *Artifacts) Total() int {
 	return len(a.Skills) + len(a.Agents) + len(a.Rules) + len(a.Commands)
 }
 
+// ArtifactTypeDirs lists the directory-style artifact roots — each entry
+// is a subdirectory of the harness root whose children are themselves
+// directories, each holding a manifest file (SKILL.md today).
+//
+// Keep this list in lock-step with the pick.items pattern in
+// docs/schema/plugin.schema.json. The TestArtifactTypes_SchemaAgreement
+// test in this package asserts they match.
+var ArtifactTypeDirs = []string{"skills"}
+
+// ArtifactTypeFiles lists the flat-file artifact roots — each entry is a
+// subdirectory of the harness root whose children are individual .md files.
+//
+// Keep this list in lock-step with the pick.items pattern in
+// docs/schema/plugin.schema.json.
+var ArtifactTypeFiles = []string{"agents", "rules", "commands"}
+
 // ScanArtifacts discovers local artifacts in a harness's installed directory.
 // Skills are directories containing SKILL.md; agents, rules, and commands are .md files.
 func ScanArtifacts(name string) (*Artifacts, error) {
@@ -448,6 +464,7 @@ func ScanArtifacts(name string) (*Artifacts, error) {
 // ScanArtifactsDir discovers artifacts in an arbitrary directory.
 func ScanArtifactsDir(dir string) (*Artifacts, error) {
 	a := &Artifacts{}
+	// ArtifactTypeDirs[0] is "skills" — update if more directory-style types are added.
 	a.Skills = scanSkillDirs(filepath.Join(dir, "skills"))
 	a.Agents = scanMDFiles(filepath.Join(dir, "agents"))
 	a.Rules = scanMDFiles(filepath.Join(dir, "rules"))

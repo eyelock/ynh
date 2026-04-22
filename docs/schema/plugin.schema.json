@@ -131,7 +131,14 @@
           "git": { "type": "string" },
           "ref": { "type": "string" },
           "path": { "type": "string" },
-          "pick": { "type": "array", "items": { "type": "string" } }
+          "pick": {
+            "type": "array",
+            "description": "Artifact paths in canonical type/name form. Skills use the bare name (they are directories): skills/<name>. Flat artifacts include the .md extension: agents/<name>.md, rules/<name>.md, commands/<name>.md.",
+            "items": {
+              "type": "string",
+              "pattern": "^(skills/[^/]+|(agents|rules|commands)/[^/]+\\.md)$"
+            }
+          }
         }
       }
     },

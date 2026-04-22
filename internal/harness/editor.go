@@ -180,26 +180,56 @@ func FindUpdateTarget(dir, url string, opts UpdateOptions) (plugin.IncludeMeta, 
 	return inc, nil
 }
 
-// ValidatePicks checks that every named pick exists as an artifact in basePath.
-// Returns an error listing any unrecognised names.
+// ValidatePicks checks that every pick names an artifact that exists in basePath.
+//
+// Each pick must be in canonical type/name form. Directory-style types carry
+// no extension (skills/<name>); flat-file types carry .md:
+//
+//   - Skills:   "skills/<name>"        (a skill directory containing SKILL.md)
+//   - Agents:   "agents/<name>.md"
+//   - Rules:    "rules/<name>.md"
+//   - Commands: "commands/<name>.md"
+//
+// This is the same format the assembler expects (see assembler.CopyPicked), so
+// a pick that passes validation here is guaranteed to work end-to-end. The
+// type/name prefix also disambiguates a skill named "foo" from an agent named
+// "foo.md" — both can coexist and be picked independently.
+//
+// On unknown picks the error lists the canonical candidates. When a user
+// submitted a bare basename that resolves to exactly one canonical entry,
+// the error leads with a "Did you mean <X>?" suggestion; when it resolves
+// to several (e.g. a skill and an agent share a basename) all candidates
+// are suggested; when it matches none the full available list is shown.
 func ValidatePicks(basePath string, picks []string) error {
 	artifacts, err := ScanArtifactsDir(basePath)
 	if err != nil {
 		return fmt.Errorf("scanning artifacts for pick validation: %w", err)
 	}
 
-	known := make(map[string]bool, len(artifacts.Skills)+len(artifacts.Agents)+len(artifacts.Rules)+len(artifacts.Commands))
+	known := make(map[string]bool)
+	// byBasename indexes canonical entries by their basename (sans .md) so we
+	// can offer "did you mean ...?" suggestions when a user submits a bare name.
+	byBasename := make(map[string][]string)
+
 	for _, n := range artifacts.Skills {
-		known[n] = true
+		canon := "skills/" + n
+		known[canon] = true
+		byBasename[n] = append(byBasename[n], canon)
 	}
 	for _, n := range artifacts.Agents {
-		known[n] = true
+		canon := "agents/" + n + ".md"
+		known[canon] = true
+		byBasename[n] = append(byBasename[n], canon)
 	}
 	for _, n := range artifacts.Rules {
-		known[n] = true
+		canon := "rules/" + n + ".md"
+		known[canon] = true
+		byBasename[n] = append(byBasename[n], canon)
 	}
 	for _, n := range artifacts.Commands {
-		known[n] = true
+		canon := "commands/" + n + ".md"
+		known[canon] = true
+		byBasename[n] = append(byBasename[n], canon)
 	}
 
 	var unknown []string
@@ -213,16 +243,40 @@ func ValidatePicks(basePath string, picks []string) error {
 		return nil
 	}
 
+	// Build suggestion lines. For each unknown pick try basename → canonical
+	// resolution; if that fails, fall back to dropping any type/ prefix and
+	// retrying (so "skill/foo" with a typo'd type still hints).
+	var suggestions []string
+	for _, bad := range unknown {
+		candidates := suggestionsFor(bad, byBasename)
+		if len(candidates) > 0 {
+			suggestions = append(suggestions, fmt.Sprintf("  %s → did you mean %s?", bad, strings.Join(candidates, " or ")))
+		}
+	}
+
 	available := make([]string, 0, len(known))
 	for n := range known {
 		available = append(available, n)
 	}
 
-	return fmt.Errorf(
-		"unknown pick name(s): %s\nAvailable: %s",
-		strings.Join(unknown, ", "),
-		formatAvailable(available),
-	)
+	msg := fmt.Sprintf("unknown pick name(s): %s", strings.Join(unknown, ", "))
+	if len(suggestions) > 0 {
+		msg += "\n" + strings.Join(suggestions, "\n")
+	}
+	msg += fmt.Sprintf("\nAvailable: %s\n(Picks must use type/name form: skills/<name>, agents/<name>.md, rules/<name>.md, commands/<name>.md)", formatAvailable(available))
+	return fmt.Errorf("%s", msg)
+}
+
+// suggestionsFor returns canonical entries that share the unknown pick's
+// basename. Strips any leading "type/" and trailing ".md" before lookup
+// so "foo", "skill/foo", and "foo.md" all resolve to the same candidates.
+func suggestionsFor(bad string, byBasename map[string][]string) []string {
+	bare := bad
+	if idx := strings.Index(bare, "/"); idx >= 0 {
+		bare = bare[idx+1:]
+	}
+	bare = strings.TrimSuffix(bare, ".md")
+	return byBasename[bare]
 }
 
 func findInclude(includes []plugin.IncludeMeta, url, path string) int {
