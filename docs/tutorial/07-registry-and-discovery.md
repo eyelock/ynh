@@ -263,8 +263,8 @@ ynh uninstall tester 2>/dev/null
 
 - A registry is a Git repo with `registry.json` listing available harnesses
 - `ynh registry add/list/remove/update` manages registry sources
-- `ynh search [query]` does text matching on name, description, and keywords; omit the query to list all
-- `ynh install <name>` resolves from registries (exact match installs, multiple matches prompt)
+- `ynh search [query]` queries both registries and local sources; omit the query to list all
+- `ynh install <name>` resolves from registries and local sources (exact match installs, multiple matches prompt)
 - `name@registry` disambiguates across registries
 - Git URLs and local paths still work as before (higher precedence)
 - Registries are cached locally and updated on demand
