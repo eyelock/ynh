@@ -7,7 +7,23 @@ import (
 	"path/filepath"
 )
 
+// Version is the release version, injected by goreleaser via ldflags.
+// "dev" when building from a developer checkout.
 var Version = "dev"
+
+// CapabilitiesVersion declares the TermQ-facing wire-contract version of this
+// ynh build. Unlike Version it is a source constant, so developer builds
+// (`make install` from any branch) honestly report what the contract supports
+// without needing a release tag.
+//
+// Bump when the JSON shapes consumers decode, the commands they invoke, or
+// the manifest fields they rely on change in a way that requires downstream
+// code to adapt. Do NOT bump for internal refactors, bug fixes, or additive
+// fields older clients can ignore.
+//
+// Consumers (e.g. TermQ) read this via `ynh version --format json` and gate
+// features on it with their own `minimumYNHCapabilities` constant.
+const CapabilitiesVersion = "0.2.0"
 
 const (
 	DefaultDirName = ".ynh"

@@ -80,6 +80,24 @@ Pre-1.0 caveat: breaking changes remain possible across minor versions, but will
 - Booleans are `true` / `false`, never `0` / `1` or `"yes"` / `"no"`.
 - Vendor and adapter IDs use the canonical short form (`claude`, `codex`, `cursor`) — the same identifiers used in `.ynh-plugin/plugin.json` and on the `-v` flag.
 
+## Wire-contract capability (`version --format json`)
+
+Both `ynh version --format json` and `ynd version --format json` emit:
+
+```json
+{
+  "version": "0.2.0",
+  "capabilities": "0.2.0"
+}
+```
+
+- `version` — the release version (or `dev-*` for developer builds).
+- `capabilities` — the **wire-contract version**: a semantic version consumers gate on when they depend on specific JSON shapes, command names, or manifest fields exposed by this ynh build.
+
+`capabilities` is a source constant (`internal/config.CapabilitiesVersion`), so developer builds report the contract they actually support — not whatever tag the repo was last released at. Bumped when consumer-visible contracts change; additive fields older clients can ignore do **not** bump it.
+
+Downstream tooling (e.g. TermQ) reads `capabilities` and refuses to run against an older ynh than it requires.
+
 ## Scope
 
 This document governs *output* shape and stability. It does not govern:

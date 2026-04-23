@@ -92,6 +92,25 @@ make lint
 make check
 ```
 
+### Testing Unreleased ynh Against Downstream Tooling
+
+Downstream consumers (e.g. TermQ) gate on `ynh`'s wire-contract version, exposed as `capabilities` in `ynh version --format json`. Unlike `version` (release tag, injected via ldflags), `capabilities` is a source constant in `internal/config/config.go` — `make install` produces a developer build that honestly reports whatever contract the current branch implements.
+
+To test a branch against downstream tooling without cutting a release:
+
+```bash
+# From this repo — build and install to ~/.ynh/bin/
+make install
+
+# Verify the contract
+ynh version --format json
+# {"version": "dev-<branch>-<sha>", "capabilities": "0.2.0"}
+
+# Downstream tooling on PATH now sees the dev build
+```
+
+Bump `CapabilitiesVersion` whenever you change a JSON shape, command name, or manifest field that downstream code decodes or depends on. Do **not** bump it for internal refactors, bug fixes, or additive fields that older clients can safely ignore.
+
 ### Two Binaries
 
 The project produces two binaries:

@@ -44,7 +44,7 @@ func main() {
 	case "migrate":
 		err = cmdMigrate(os.Args[2:])
 	case "version", "--version", "-v":
-		fmt.Println(config.Version)
+		err = cmdVersion(os.Args[2:])
 	case "help", "--help", "-h":
 		printUsage()
 	default:
