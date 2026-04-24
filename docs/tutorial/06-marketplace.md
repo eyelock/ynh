@@ -71,10 +71,11 @@ EOF
 ```bash
 cat > /tmp/ynh-tutorial/marketplace-src/marketplace.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
   "name": "tutorial-marketplace",
   "owner": {"name": "tutorial"},
   "description": "Sample marketplace for the ynh tutorial",
-  "entries": [
+  "harnesses": [
     {
       "type": "plugin",
       "source": "./plugins/formatter"

@@ -74,7 +74,7 @@ type MarketplaceConfig struct {
 	Name        string             `json:"name"`
 	Owner       MarketplaceOwner   `json:"owner"`
 	Description string             `json:"description,omitempty"`
-	Entries     []MarketplaceEntry `json:"entries"`
+	Harnesses   []MarketplaceEntry `json:"harnesses"`
 }
 
 // MarketplaceOwner identifies the marketplace publisher.
@@ -129,11 +129,11 @@ func LoadConfig(path string) (*MarketplaceConfig, error) {
 	if cfg.Owner.Name == "" {
 		return nil, fmt.Errorf("marketplace config: owner.name is required")
 	}
-	if len(cfg.Entries) == 0 {
-		return nil, fmt.Errorf("marketplace config: at least one entry is required")
+	if len(cfg.Harnesses) == 0 {
+		return nil, fmt.Errorf("marketplace config: at least one harness is required")
 	}
 
-	for i, e := range cfg.Entries {
+	for i, e := range cfg.Harnesses {
 		if e.Type != "harness" && e.Type != "plugin" {
 			return nil, fmt.Errorf("marketplace config: entry %d: type must be \"harness\" or \"plugin\", got %q", i, e.Type)
 		}
@@ -176,7 +176,7 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 
 	// Process each entry
 	var pluginInfos []pluginInfo
-	for _, entry := range cfg.Entries {
+	for _, entry := range cfg.Harnesses {
 		srcDir, err := resolveEntrySource(entry.Source, opts.ConfigDir)
 		if err != nil {
 			return fmt.Errorf("entry %q: %w", entry.Source, err)

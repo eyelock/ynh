@@ -26,6 +26,7 @@ silently conflict. In 0.2 each harness lives under its own namespace.
 mkdir -p /tmp/ynh-ns-tutorial/reg-a/harnesses/david/.ynh-plugin
 cat > /tmp/ynh-ns-tutorial/reg-a/harnesses/david/.ynh-plugin/plugin.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "david",
   "version": "0.1.0",
   "description": "Eyelock's development harness"
@@ -35,6 +36,7 @@ EOF
 mkdir -p /tmp/ynh-ns-tutorial/reg-a/.ynh-plugin
 cat > /tmp/ynh-ns-tutorial/reg-a/.ynh-plugin/marketplace.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
   "name": "eyelock-assistants",
   "owner": {"name": "eyelock"},
   "harnesses": [
@@ -49,6 +51,7 @@ EOF
 mkdir -p /tmp/ynh-ns-tutorial/reg-b/harnesses/david/.ynh-plugin
 cat > /tmp/ynh-ns-tutorial/reg-b/harnesses/david/.ynh-plugin/plugin.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "david",
   "version": "2.0.0",
   "description": "Acme's David harness (different author)"
@@ -58,6 +61,7 @@ EOF
 mkdir -p /tmp/ynh-ns-tutorial/reg-b/.ynh-plugin
 cat > /tmp/ynh-ns-tutorial/reg-b/.ynh-plugin/marketplace.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
   "name": "acme-tools",
   "owner": {"name": "acme"},
   "harnesses": [

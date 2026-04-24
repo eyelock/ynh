@@ -37,10 +37,15 @@ ynd lint --harness ./my-harness  # explicit harness flag
 
 ### validate
 
-Validate harness structure: required files, frontmatter fields, directory layout.
+Validate harness structure: required files, frontmatter fields, directory layout,
+and JSON Schema conformance (`plugin.json` against `plugin.schema.json`;
+`.ynh-plugin/marketplace.json` against `marketplace.schema.json`).
+
+When given a directory, validates all harnesses found within it and also checks
+for a `.ynh-plugin/marketplace.json` at the root of that directory.
 
 ```bash
-ynd validate                   # current harness directory
+ynd validate                   # current directory (harnesses + root marketplace.json)
 ynd validate path/to/harness   # specific harness
 ynd validate --harness ./my-harness  # explicit harness flag
 ```
@@ -220,7 +225,7 @@ ynd marketplace build --clean                     # remove output dir before bui
 {
   "name": "my-marketplace",
   "owner": { "name": "My Org" },
-  "entries": [
+  "harnesses": [
     { "type": "plugin", "source": "./plugins/foo" },
     { "type": "harness", "source": "./harnesses/bar" },
     { "type": "harness", "source": "github.com/user/repo", "path": "harnesses/baz" }

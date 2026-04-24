@@ -41,7 +41,7 @@ func setupMarketplaceTest(t *testing.T) (configFile string) {
 		"name":        "cli-test-marketplace",
 		"owner":       map[string]string{"name": "tester"},
 		"description": "CLI test",
-		"entries": []map[string]string{
+		"harnesses": []map[string]string{
 			{"type": "harness", "source": "./harnesses/david"},
 			{"type": "plugin", "source": "./plugins/my-tool"},
 		},

@@ -35,8 +35,9 @@ func (RegistryFormatMigrator) Run(dir string) error {
 	}
 
 	mj := &plugin.MarketplaceJSON{
-		Name:  old.Name,
-		Owner: &plugin.OwnerInfo{Name: old.Name},
+		Schema: "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
+		Name:   old.Name,
+		Owner:  &plugin.OwnerInfo{Name: old.Name},
 	}
 	if old.Description != "" {
 		mj.Metadata = &plugin.MarketplaceMeta{Description: old.Description}

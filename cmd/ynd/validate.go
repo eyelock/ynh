@@ -77,9 +77,31 @@ func cmdValidate(args []string) error {
 		}
 	}
 
+	// Also validate a marketplace.json in the root's .ynh-plugin/ directory, if present.
+	if err := validateRootMarketplace(root); err != nil {
+		hasError = true
+	}
+
 	if hasError {
 		return fmt.Errorf("validation failed")
 	}
+	return nil
+}
+
+// validateRootMarketplace validates .ynh-plugin/marketplace.json in dir if it exists.
+func validateRootMarketplace(dir string) error {
+	path := filepath.Join(dir, plugin.PluginDir, plugin.MarketplaceFile)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil
+	}
+	issues := lintRegistryMarketplace(path)
+	for _, issue := range issues {
+		fmt.Printf("%s: %s\n", issue.File, issue.Message)
+	}
+	if len(issues) > 0 {
+		return fmt.Errorf("validation failed")
+	}
+	fmt.Printf("%s: valid\n", path)
 	return nil
 }
 
@@ -91,7 +113,13 @@ func validateFile(path string) error {
 	case base == plugin.PluginFile:
 		issues = lintHarnessJSON(path)
 	case base == "marketplace.json":
-		issues = lintMarketplaceConfig(path)
+		// Registry index (inside .ynh-plugin/) validates against the schema.
+		// Build config (anywhere else) validates via LoadConfig programmatic checks.
+		if filepath.Base(filepath.Dir(path)) == plugin.PluginDir {
+			issues = lintRegistryMarketplace(path)
+		} else {
+			issues = lintMarketplaceConfig(path)
+		}
 	case strings.HasSuffix(path, ".md"):
 		issues = lintMarkdown(path)
 	default:
@@ -186,23 +214,18 @@ func validateHarness(dir string) error {
 		}
 	}
 	if err == nil && data != nil {
+		// Schema validation covers $schema URL, required fields, types, enums, patterns.
+		for _, si := range lintHarnessJSON(manifestPath) {
+			issues = append(issues, si.Message)
+		}
 		var hj map[string]any
 		if err := json.Unmarshal(data, &hj); err != nil {
 			issues = append(issues, fmt.Sprintf("invalid %s: %v", manifestLabel, err))
 		} else {
-			if _, ok := hj["name"]; !ok {
-				issues = append(issues, fmt.Sprintf("%s missing 'name'", manifestLabel))
-			}
-			if _, ok := hj["version"]; !ok {
-				issues = append(issues, fmt.Sprintf("%s missing 'version'", manifestLabel))
-			}
-			// Validate hooks
+			// Cross-field checks the schema cannot express.
 			issues = append(issues, validateHarnessHooks(hj)...)
-			// Validate MCP servers
 			issues = append(issues, validateHarnessMCPServers(hj)...)
-			// Validate profiles
 			issues = append(issues, validateHarnessProfiles(hj)...)
-			// Validate focus entries
 			issues = append(issues, validateHarnessFocus(hj)...)
 		}
 	}
@@ -500,34 +523,29 @@ func validateHarnessFocus(hj map[string]any) []string {
 	return issues
 }
 
-// lintMarketplaceConfig validates a marketplace.json build config.
+// lintHarnessJSON validates a plugin.json file against plugin.schema.json.
+func lintHarnessJSON(path string) []lintIssue {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return []lintIssue{{File: path, Message: fmt.Sprintf("cannot read: %v", err)}}
+	}
+	return schemaIssues(path, data, compiledPluginSchema)
+}
+
+// lintRegistryMarketplace validates a .ynh-plugin/marketplace.json registry index
+// against marketplace.schema.json.
+func lintRegistryMarketplace(path string) []lintIssue {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return []lintIssue{{File: path, Message: fmt.Sprintf("cannot read: %v", err)}}
+	}
+	return schemaIssues(path, data, compiledMarketplaceSchema)
+}
+
+// lintMarketplaceConfig validates a marketplace.json build config via programmatic checks.
 func lintMarketplaceConfig(path string) []lintIssue {
 	if _, err := marketplace.LoadConfig(path); err != nil {
 		return []lintIssue{{File: path, Message: err.Error()}}
 	}
 	return nil
-}
-
-// lintHarnessJSON validates harness.json structure for the lint command.
-func lintHarnessJSON(path string) []lintIssue {
-	var issues []lintIssue
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return []lintIssue{{File: path, Message: fmt.Sprintf("cannot read: %v", err)}}
-	}
-
-	var hj map[string]any
-	if err := json.Unmarshal(data, &hj); err != nil {
-		return []lintIssue{{File: path, Message: fmt.Sprintf("invalid JSON: %v", err)}}
-	}
-
-	if _, ok := hj["name"]; !ok {
-		issues = append(issues, lintIssue{File: path, Message: "missing 'name' field"})
-	}
-	if _, ok := hj["version"]; !ok {
-		issues = append(issues, lintIssue{File: path, Message: "missing 'version' field"})
-	}
-
-	return issues
 }

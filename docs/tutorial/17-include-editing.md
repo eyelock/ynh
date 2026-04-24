@@ -20,6 +20,7 @@ mkdir -p /tmp/ynh-tutorial-includes/my-harness
 mkdir -p /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin
 cat > /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
   "default_vendor": "claude"
@@ -43,6 +44,7 @@ cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 Expected:
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
   "default_vendor": "claude",
@@ -77,6 +79,7 @@ cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 Expected:
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
   "default_vendor": "claude",
@@ -141,6 +144,7 @@ cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 Expected:
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
   "default_vendor": "claude",
@@ -189,6 +193,7 @@ cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 Expected:
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
   "default_vendor": "claude",
@@ -233,6 +238,7 @@ cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 Expected:
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
   "default_vendor": "claude",
@@ -274,6 +280,7 @@ cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 Expected:
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
   "default_vendor": "claude",
@@ -301,6 +308,7 @@ Set up two includes from the same repo at different paths:
 mkdir -p /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin
 cat > /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
   "default_vendor": "claude",
@@ -376,6 +384,7 @@ cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 Expected:
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
   "default_vendor": "claude",

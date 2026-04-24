@@ -45,6 +45,7 @@ EOF
 mkdir -p /tmp/ynh-tutorial/exportable/.ynh-plugin
 cat > /tmp/ynh-tutorial/exportable/.ynh-plugin/plugin.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "exportable",
   "version": "1.0.0",
   "description": "A harness designed for cross-vendor export",
@@ -252,7 +253,7 @@ Clones the repo, applies `--path` scoping, exports. Same as exporting a local di
 mkdir -p /tmp/ynh-tutorial/no-instructions
 mkdir -p /tmp/ynh-tutorial/no-instructions/.ynh-plugin
 cat > /tmp/ynh-tutorial/no-instructions/.ynh-plugin/plugin.json << 'EOF'
-{"name": "no-instructions", "version": "0.1.0"}
+{"$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json", "name": "no-instructions", "version": "0.1.0"}
 EOF
 
 ynd export /tmp/ynh-tutorial/no-instructions -o /tmp/ynh-tutorial/no-inst-out -v claude

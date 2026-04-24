@@ -133,6 +133,6 @@ func cmdMarketplaceBuild(args []string) error {
 		return err
 	}
 
-	fmt.Printf("Marketplace built → %s (%d plugins)\n", outputDir, len(cfg.Entries))
+	fmt.Printf("Marketplace built → %s (%d plugins)\n", outputDir, len(cfg.Harnesses))
 	return nil
 }
