@@ -12,6 +12,7 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/exporter"
 	"github.com/eyelock/ynh/internal/migration"
+	"github.com/eyelock/ynh/internal/pathutil"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
@@ -183,6 +184,9 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 
 		// Apply monorepo subdir
 		if entry.Path != "" {
+			if err := pathutil.CheckSubpath(entry.Path); err != nil {
+				return fmt.Errorf("entry %q: invalid path: %w", entry.Source, err)
+			}
 			srcDir = filepath.Join(srcDir, entry.Path)
 		}
 

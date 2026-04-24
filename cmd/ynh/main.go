@@ -17,6 +17,7 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/migration"
+	"github.com/eyelock/ynh/internal/pathutil"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/symlink"
@@ -243,6 +244,9 @@ func cmdInstall(args []string) error {
 
 	// Scope to subdirectory if --path was specified
 	if pathFlag != "" {
+		if err := pathutil.CheckSubpath(pathFlag); err != nil {
+			return fmt.Errorf("invalid --path: %w", err)
+		}
 		srcDir = filepath.Join(srcDir, pathFlag)
 		if _, err := os.Stat(srcDir); os.IsNotExist(err) {
 			return fmt.Errorf("path %q not found in source", pathFlag)

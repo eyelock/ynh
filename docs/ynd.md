@@ -157,7 +157,7 @@ ynd export github.com/user/repo --path harnesses/david  # from a monorepo
 | `-o, --output <dir>` | Output directory. Default: `./dist/<harness-name>/` |
 | `-v, --vendor <names>` | Comma-separated vendors. Default: all registered (`claude,codex,cursor`) |
 | `--harness <dir>` | Harness source directory (alternative to positional arg) |
-| `--path <subdir>` | Subdirectory within source (for monorepos) |
+| `--path <subdir>` | Subdirectory within source (for monorepos). Must be a relative path with no `..` traversal. |
 | `--profile <name>` | Profile to apply during assembly |
 | `--merged` | Single output dir with all vendor manifests (for CI/marketplace use) |
 | `--clean` | Remove entire output dir before export |
@@ -281,7 +281,7 @@ See [Tutorial 11: Marketplace](tutorial/06-marketplace.md) for a guided walkthro
 | `--clean` | export, marketplace | Remove output directory before writing. |
 | `--merged` | export | Single output dir with dual vendor manifests. |
 | `--profile <name>` | preview, diff, export | Profile to apply during assembly. |
-| `--path <subdir>` | export | Subdirectory within source (for monorepos). |
+| `--path <subdir>` | export | Subdirectory within source (for monorepos). Must be a relative path with no `..` traversal. |
 | `--restore` | compress | Restore a file from its latest backup. |
 | `--list-backups` | compress | Show backup history for a file. |
 | `--pick <N>` | compress | With `--restore`, pick a specific backup by number from the list. |

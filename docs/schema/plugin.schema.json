@@ -142,7 +142,8 @@
           },
           "path": {
             "type": "string",
-            "description": "Subdirectory within the resolved source."
+            "pattern": "^(?!\\.\\./|\\.\\.($))[^/]",
+            "description": "Subdirectory within the resolved source. Must be relative and must not traverse above the source root."
           },
           "pick": {
             "type": "array",
@@ -168,7 +169,7 @@
         "properties": {
           "git": { "type": "string" },
           "ref": { "type": "string" },
-          "path": { "type": "string" }
+          "path": { "type": "string", "pattern": "^(?!\\.\\./|\\.\\.($))[^/]" }
         }
       }
     }

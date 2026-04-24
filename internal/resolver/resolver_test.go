@@ -574,3 +574,53 @@ func TestResolve_LocalInclude_Missing(t *testing.T) {
 		t.Errorf("error should mention 'not found', got: %v", err)
 	}
 }
+
+func TestResolveLocalSource_TraversalBlocked(t *testing.T) {
+	base := t.TempDir()
+	// Create a real subdir so the local path resolves — the traversal in path should still be blocked.
+	subdir := filepath.Join(base, "subdir")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		local string
+		path  string
+	}{
+		// Relative local paths with .. are blocked
+		{local: "../../../etc", path: ""},
+		// Path component with .. is blocked even when local resolves
+		{local: "subdir", path: "../../etc"},
+		// Absolute path component is blocked
+		{local: "subdir", path: "/etc/passwd"},
+	} {
+		gs := harness.GitSource{Local: tc.local, Path: tc.path}
+		_, err := resolveLocalSource(gs, base)
+		if err == nil {
+			t.Errorf("local=%q path=%q: expected error, got nil", tc.local, tc.path)
+			continue
+		}
+		if !strings.Contains(err.Error(), "must not traverse") && !strings.Contains(err.Error(), "must be relative") {
+			t.Errorf("local=%q path=%q: unexpected error: %v", tc.local, tc.path, err)
+		}
+	}
+}
+
+func TestResolveGitSource_PathTraversalBlocked(t *testing.T) {
+	repoDir := t.TempDir()
+	fetch := func(url, ref string) (RepoResult, error) {
+		return RepoResult{Path: repoDir}, nil
+	}
+
+	for _, badPath := range []string{"../../etc", "../secret", "/etc/passwd"} {
+		gs := harness.GitSource{Git: "github.com/org/repo", Path: badPath}
+		_, _, err := resolveGitSourceWith(gs, fetch)
+		if err == nil {
+			t.Errorf("path %q: expected error, got nil", badPath)
+			continue
+		}
+		if !strings.Contains(err.Error(), "must not traverse") && !strings.Contains(err.Error(), "must be relative") {
+			t.Errorf("path %q: unexpected error: %v", badPath, err)
+		}
+	}
+}
