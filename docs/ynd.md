@@ -242,7 +242,7 @@ the full 0.1 → 0.2 migration guide.
 ```bash
 ynd migrate                    # current directory
 ynd migrate ./my-harness       # specific directory
-ynd migrate -r ./harnesses     # recursive: walk tree, migrate every match
+ynd migrate ./harnesses        # walk tree, migrate every match
 ```
 
 Idempotent — safe to run twice. No-op if the target already uses the new
@@ -251,7 +251,6 @@ so manual invocation is rarely needed except for source trees.
 
 | Flag | Description |
 |------|-------------|
-| `-r, --recursive` | Walk the tree and migrate every matching dir |
 | `-h, --help` | Show help |
 
 **Output structure:**

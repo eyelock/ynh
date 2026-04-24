@@ -184,7 +184,7 @@ cat > /tmp/ynh-ns-tutorial/bulk/h2/.harness.json << 'EOF'
 {"name":"h2","version":"0.1.0"}
 EOF
 
-ynd migrate -r /tmp/ynh-ns-tutorial/bulk
+ynd migrate /tmp/ynh-ns-tutorial/bulk
 ```
 
 Expected:
