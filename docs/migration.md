@@ -33,7 +33,7 @@ If you author harnesses, convert your source trees:
 
 ```bash
 cd my-harnesses
-ynd migrate -r .
+ynd migrate .
 ```
 
 `ynd migrate` runs the full migration chain against every matching directory.
@@ -102,7 +102,7 @@ synthetic `local/unknown` namespace if provenance is missing.
 - **0.2.x** — `.harness.json` and `registry.json` continue to work via the
   migration chain. Old files are converted transparently on first read.
 - **0.3.x** — Legacy migrators are removed. `.harness.json` and
-  `registry.json` are no longer recognized. Run `ynd migrate -r` before
+  `registry.json` are no longer recognized. Run `ynd migrate` before
   upgrading to 0.3.
 
 Dropping support in 0.3 means removing the migrator files and unregistering

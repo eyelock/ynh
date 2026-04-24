@@ -138,27 +138,23 @@ func isLegacyHarnessRoot(dir string) bool {
 }
 
 func findHarnessRoots(root string) []string {
-	// Check if root itself is a harness
-	if isHarnessRoot(root) {
-		return []string{root}
-	}
-
-	// Check immediate children
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return nil
-	}
-
 	var roots []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			child := filepath.Join(root, entry.Name())
-			if isHarnessRoot(child) {
-				roots = append(roots, child)
-			}
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
 		}
-	}
-
+		if !d.IsDir() {
+			return nil
+		}
+		if d.Name() == plugin.PluginDir {
+			return filepath.SkipDir
+		}
+		if isHarnessRoot(path) {
+			roots = append(roots, path)
+			return filepath.SkipDir
+		}
+		return nil
+	})
 	return roots
 }
 

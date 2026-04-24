@@ -4,33 +4,31 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
-// cmdMigrate runs the format migration chain against a directory.
+// cmdMigrate runs the format migration chain against a directory tree.
 // Idempotent — the chain no-ops when no migrator applies.
 //
 // The command itself knows nothing about specific migrations. Adding or
 // removing a migrator in internal/migration/ changes what this command
 // handles automatically. Storage relocation is intentionally excluded;
 // ynh itself triggers that when installing or relocating harnesses.
-//
-// Supports -r/--recursive to walk a tree and migrate every directory that
-// any registered migrator applies to.
 func cmdMigrate(args []string) error {
-	recursive := false
 	var target string
 
 	for _, a := range args {
 		switch a {
-		case "-r", "--recursive":
-			recursive = true
 		case "-h", "--help":
 			printMigrateUsage()
 			return nil
 		default:
+			if strings.HasPrefix(a, "-") {
+				return fmt.Errorf("unknown flag: %s", a)
+			}
 			if target != "" {
 				return fmt.Errorf("unexpected argument %q", a)
 			}
@@ -52,13 +50,10 @@ func cmdMigrate(args []string) error {
 
 	chain := migration.FormatChain()
 
-	dirs := []string{target}
-	if recursive {
-		dirs = findMigratableDirs(target, chain)
-		if len(dirs) == 0 {
-			fmt.Printf("Nothing to migrate under %s\n", target)
-			return nil
-		}
+	dirs := findMigratableDirs(target, chain)
+	if len(dirs) == 0 {
+		fmt.Println("Nothing to migrate.")
+		return nil
 	}
 
 	migrated := 0
@@ -113,15 +108,13 @@ func findMigratableDirs(root string, chain migration.Chain) []string {
 func printMigrateUsage() {
 	fmt.Println(`ynd migrate - run the format migration chain
 
-Runs every registered format migrator against the target directory.
+Runs every registered format migrator against the target directory tree.
 Migrators decide whether they apply based on the directory contents,
 so the command works for any format transition handled by the chain.
 
 Usage:
-  ynd migrate [path]              Migrate a single directory (default: .)
-  ynd migrate -r [path]           Recursively migrate all matching dirs under path
+  ynd migrate [path]              Migrate all matching dirs under path (default: .)
 
 Options:
-  -r, --recursive                 Walk the tree and migrate every matching dir
   -h, --help                      Show this help`)
 }
