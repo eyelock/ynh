@@ -10,6 +10,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/pathutil"
 )
 
 // ResolvedContent represents files extracted from a Git source.
@@ -42,6 +43,9 @@ func resolveGitSourceWith(gs harness.GitSource, fetch repoFunc) (string, *RepoRe
 
 	basePath := result.Path
 	if gs.Path != "" {
+		if err := pathutil.CheckSubpath(gs.Path); err != nil {
+			return "", nil, fmt.Errorf("include path: %w", err)
+		}
 		basePath = filepath.Join(result.Path, gs.Path)
 		if _, err := os.Stat(basePath); os.IsNotExist(err) {
 			return "", nil, fmt.Errorf("path %q not found in %s", gs.Path, gs.Git)
@@ -57,6 +61,9 @@ func resolveGitSourceWith(gs harness.GitSource, fetch repoFunc) (string, *RepoRe
 func resolveLocalSource(gs harness.GitSource, harnessDir string) (string, error) {
 	local := gs.Local
 	if !filepath.IsAbs(local) {
+		if err := pathutil.CheckSubpath(local); err != nil {
+			return "", fmt.Errorf("local include: %w", err)
+		}
 		if harnessDir == "" {
 			return "", fmt.Errorf("local include %q: harness directory not known, cannot resolve relative path", local)
 		}
@@ -68,6 +75,9 @@ func resolveLocalSource(gs harness.GitSource, harnessDir string) (string, error)
 
 	basePath := local
 	if gs.Path != "" {
+		if err := pathutil.CheckSubpath(gs.Path); err != nil {
+			return "", fmt.Errorf("local include path: %w", err)
+		}
 		basePath = filepath.Join(local, gs.Path)
 		if _, err := os.Stat(basePath); os.IsNotExist(err) {
 			return "", fmt.Errorf("path %q not found in local source %q", gs.Path, gs.Local)

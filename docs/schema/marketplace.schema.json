@@ -86,7 +86,7 @@
           "type": "string",
           "description": "owner/repo shorthand"
         },
-        "path": { "type": "string" },
+        "path": { "type": "string", "pattern": "^(?!\\.\\./|\\.\\.($))[^/]" },
         "ref": { "type": "string" },
         "sha": {
           "type": "string",
@@ -102,7 +102,7 @@
       "properties": {
         "type": { "const": "url" },
         "url": { "type": "string" },
-        "path": { "type": "string" },
+        "path": { "type": "string", "pattern": "^(?!\\.\\./|\\.\\.($))[^/]" },
         "ref": { "type": "string" },
         "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
       }
@@ -116,7 +116,8 @@
         "url": { "type": "string" },
         "path": {
           "type": "string",
-          "description": "Subdirectory to sparse-clone. Required — no point in sparse clone of the root."
+          "pattern": "^(?!\\.\\./|\\.\\.($))[^/]",
+          "description": "Subdirectory to sparse-clone. Must be relative and must not traverse above the source root."
         },
         "ref": { "type": "string" },
         "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" }

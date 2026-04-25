@@ -798,6 +798,23 @@ func TestCmdInstall_PathFlag_NoSource(t *testing.T) {
 	}
 }
 
+func TestCmdInstall_PathFlag_TraversalBlocked(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	for _, p := range []string{"../../etc", "../secret", "/etc/passwd", "a/../../etc"} {
+		err := cmdInstall([]string{dir, "--path", p})
+		if err == nil {
+			t.Errorf("--path %q: expected error, got nil", p)
+			continue
+		}
+		if !strings.Contains(err.Error(), "invalid --path") {
+			t.Errorf("--path %q: unexpected error: %v", p, err)
+		}
+	}
+}
+
 func TestCmdInstall_SourceInsideHarnessesDir(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)

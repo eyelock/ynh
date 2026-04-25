@@ -116,7 +116,7 @@ the two must be set.
 | `git` | one of git/local | Git URL (see formats below) |
 | `local` | one of git/local | Local filesystem path. Absolute, or relative to the harness root. |
 | `ref` | no | Git tag, branch, or commit (Git sources only) |
-| `path` | no | Subdirectory within the resolved source |
+| `path` | no | Subdirectory within the resolved source. Must be a relative path with no `..` traversal. |
 | `pick` | no | Specific artifact paths to include. If omitted, includes all. |
 
 Local includes are useful when a harness ships bundled artifact directories
@@ -190,7 +190,7 @@ Other harnesses this one can invoke as subagents.
 |-------|----------|-------------|
 | `git` | yes | Git URL (same formats as includes) |
 | `ref` | no | Git tag/branch |
-| `path` | no | Subdirectory within the repo (monorepo support) |
+| `path` | no | Subdirectory within the repo (monorepo support). Must be a relative path with no `..` traversal. |
 
 When running as `david`, you can ask it to delegate a task to `team-dev`. The delegation happens through the vendor's native subagent system.
 
