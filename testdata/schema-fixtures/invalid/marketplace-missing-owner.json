@@ -1,0 +1,4 @@
+{
+  "name": "my-registry",
+  "harnesses": [{ "name": "test", "source": "./test" }]
+}

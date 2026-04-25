@@ -1,0 +1,5 @@
+{
+  "name": "my-registry",
+  "owner": { "name": "alice" },
+  "harnesses": [{ "name": "test", "source": "./test" }]
+}

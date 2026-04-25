@@ -46,7 +46,7 @@ func setupMarketplace(t *testing.T) (configPath string, configDir string) {
 		"name":        "test-marketplace",
 		"owner":       map[string]string{"name": "tester"},
 		"description": "Test marketplace",
-		"entries": []map[string]string{
+		"harnesses": []map[string]string{
 			{"type": "harness", "source": "./harnesses/david"},
 			{"type": "plugin", "source": "./plugins/my-tool"},
 		},
@@ -69,14 +69,14 @@ func TestMarketplaceConfigParse(t *testing.T) {
 	if cfg.Owner.Name != "tester" {
 		t.Errorf("owner.name = %q, want %q", cfg.Owner.Name, "tester")
 	}
-	if len(cfg.Entries) != 2 {
-		t.Fatalf("entries = %d, want 2", len(cfg.Entries))
+	if len(cfg.Harnesses) != 2 {
+		t.Fatalf("entries = %d, want 2", len(cfg.Harnesses))
 	}
-	if cfg.Entries[0].Type != "harness" {
-		t.Errorf("entry 0 type = %q, want harness", cfg.Entries[0].Type)
+	if cfg.Harnesses[0].Type != "harness" {
+		t.Errorf("entry 0 type = %q, want harness", cfg.Harnesses[0].Type)
 	}
-	if cfg.Entries[1].Type != "plugin" {
-		t.Errorf("entry 1 type = %q, want plugin", cfg.Entries[1].Type)
+	if cfg.Harnesses[1].Type != "plugin" {
+		t.Errorf("entry 1 type = %q, want plugin", cfg.Harnesses[1].Type)
 	}
 }
 
@@ -88,37 +88,37 @@ func TestMarketplaceConfigValidation(t *testing.T) {
 	}{
 		{
 			name:    "missing name",
-			json:    `{"owner":{"name":"x"},"entries":[{"type":"plugin","source":"./x"}]}`,
+			json:    `{"owner":{"name":"x"},"harnesses":[{"type":"plugin","source":"./x"}]}`,
 			wantErr: "name is required",
 		},
 		{
 			name:    "missing owner",
-			json:    `{"name":"x","owner":{},"entries":[{"type":"plugin","source":"./x"}]}`,
+			json:    `{"name":"x","owner":{},"harnesses":[{"type":"plugin","source":"./x"}]}`,
 			wantErr: "owner.name is required",
 		},
 		{
 			name:    "empty entries",
-			json:    `{"name":"x","owner":{"name":"x"},"entries":[]}`,
-			wantErr: "at least one entry",
+			json:    `{"name":"x","owner":{"name":"x"},"harnesses":[]}`,
+			wantErr: "at least one harness",
 		},
 		{
 			name:    "bad type",
-			json:    `{"name":"x","owner":{"name":"x"},"entries":[{"type":"bad","source":"./x"}]}`,
+			json:    `{"name":"x","owner":{"name":"x"},"harnesses":[{"type":"bad","source":"./x"}]}`,
 			wantErr: "must be \"harness\" or \"plugin\"",
 		},
 		{
 			name:    "missing source",
-			json:    `{"name":"x","owner":{"name":"x"},"entries":[{"type":"plugin"}]}`,
+			json:    `{"name":"x","owner":{"name":"x"},"harnesses":[{"type":"plugin"}]}`,
 			wantErr: "source is required",
 		},
 		{
 			name:    "github shorthand missing repo",
-			json:    `{"name":"x","owner":{"name":"x"},"entries":[{"type":"plugin","source":"github.com/user"}]}`,
+			json:    `{"name":"x","owner":{"name":"x"},"harnesses":[{"type":"plugin","source":"github.com/user"}]}`,
 			wantErr: "remote source",
 		},
 		{
 			name:    "bare user/repo without host",
-			json:    `{"name":"x","owner":{"name":"x"},"entries":[{"type":"plugin","source":"user/repo"}]}`,
+			json:    `{"name":"x","owner":{"name":"x"},"harnesses":[{"type":"plugin","source":"user/repo"}]}`,
 			wantErr: "remote source",
 		},
 	}
@@ -151,7 +151,7 @@ func TestMarketplaceRemoteSourceValidation(t *testing.T) {
 	for _, src := range valid {
 		t.Run(src, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "marketplace.json")
-			data := `{"name":"x","owner":{"name":"x"},"entries":[{"type":"plugin","source":"` + src + `"}]}`
+			data := `{"name":"x","owner":{"name":"x"},"harnesses":[{"type":"plugin","source":"` + src + `"}]}`
 			if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
 				t.Fatal(err)
 			}
@@ -165,17 +165,17 @@ func TestMarketplaceRemoteSourceValidation(t *testing.T) {
 func TestMarketplaceEmptyEntries(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "marketplace.json")
 	writeJSON(t, path, map[string]any{
-		"name":    "empty",
-		"owner":   map[string]string{"name": "x"},
-		"entries": []any{},
+		"name":      "empty",
+		"owner":     map[string]string{"name": "x"},
+		"harnesses": []any{},
 	})
 
 	_, err := LoadConfig(path)
 	if err == nil {
 		t.Fatal("expected error for empty entries")
 	}
-	if !strings.Contains(err.Error(), "at least one entry") {
-		t.Errorf("error = %q, want 'at least one entry'", err.Error())
+	if !strings.Contains(err.Error(), "at least one harness") {
+		t.Errorf("error = %q, want 'at least one harness'", err.Error())
 	}
 }
 

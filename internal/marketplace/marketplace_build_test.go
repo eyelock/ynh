@@ -119,7 +119,7 @@ func TestMarketplaceDescriptionOverride(t *testing.T) {
 	writeJSON(t, configPath, map[string]any{
 		"name":  "override-test",
 		"owner": map[string]string{"name": "tester"},
-		"entries": []map[string]string{
+		"harnesses": []map[string]string{
 			{
 				"type":        "plugin",
 				"source":      "./plugins/widget",
@@ -256,7 +256,7 @@ func TestMarketplaceBuild_EntryPathTraversalBlocked(t *testing.T) {
 		cfg := &MarketplaceConfig{
 			Name:  "test",
 			Owner: MarketplaceOwner{Name: "tester"},
-			Entries: []MarketplaceEntry{
+			Harnesses: []MarketplaceEntry{
 				{Type: "plugin", Source: "./plugins/foo", Path: badPath},
 			},
 		}
