@@ -236,25 +236,25 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 		}
 
 		for _, s := range incArts.Skills {
-			if len(pickSet) > 0 && !pickSet[s] {
+			if len(pickSet) > 0 && !pickSet["skills/"+s] {
 				continue
 			}
 			allSkills = append(allSkills, composeArtifact{Name: s, Source: incSource})
 		}
 		for _, a := range incArts.Agents {
-			if len(pickSet) > 0 && !pickSet[a] {
+			if len(pickSet) > 0 && !pickSet["agents/"+a] {
 				continue
 			}
 			allAgents = append(allAgents, composeArtifact{Name: a, Source: incSource})
 		}
 		for _, r := range incArts.Rules {
-			if len(pickSet) > 0 && !pickSet[r] {
+			if len(pickSet) > 0 && !pickSet["rules/"+r] {
 				continue
 			}
 			allRules = append(allRules, composeArtifact{Name: r, Source: incSource})
 		}
 		for _, c := range incArts.Commands {
-			if len(pickSet) > 0 && !pickSet[c] {
+			if len(pickSet) > 0 && !pickSet["commands/"+c] {
 				continue
 			}
 			allCommands = append(allCommands, composeArtifact{Name: c, Source: incSource})
