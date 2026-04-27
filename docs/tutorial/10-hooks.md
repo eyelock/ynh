@@ -141,18 +141,18 @@ Expected output includes `.codex/hooks.json` with Codex's three-level format (sa
 ```json
 {
   "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "/usr/local/bin/run-linter.sh" }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
         "hooks": [
           { "type": "command", "command": "/usr/local/bin/check-commands.sh" }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          { "type": "command", "command": "/usr/local/bin/run-linter.sh" }
         ]
       }
     ],

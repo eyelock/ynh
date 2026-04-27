@@ -22,6 +22,7 @@ mkdir -p /tmp/ynh-tutorial/focus-harness/skills/deploy
 mkdir -p /tmp/ynh-tutorial/focus-harness/.ynh-plugin
 cat > /tmp/ynh-tutorial/focus-harness/.ynh-plugin/plugin.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "focus-demo",
   "version": "0.1.0",
   "default_vendor": "claude",
