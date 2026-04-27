@@ -765,9 +765,9 @@ func TestCmdInstall_PathFlag(t *testing.T) {
 		t.Fatalf("cmdInstall with --path failed: %v", err)
 	}
 
-	// Verify harness was installed
+	// Verify harness was installed (format migrated to .ynh-plugin/plugin.json)
 	installDir := harness.InstalledDir("alice")
-	if _, err := os.Stat(filepath.Join(installDir, ".harness.json")); err != nil {
+	if harness.DetectFormat(installDir) == "" {
 		t.Fatal("harness not found after install")
 	}
 }
@@ -798,6 +798,23 @@ func TestCmdInstall_PathFlag_NoSource(t *testing.T) {
 	}
 }
 
+func TestCmdInstall_PathFlag_TraversalBlocked(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	for _, p := range []string{"../../etc", "../secret", "/etc/passwd", "a/../../etc"} {
+		err := cmdInstall([]string{dir, "--path", p})
+		if err == nil {
+			t.Errorf("--path %q: expected error, got nil", p)
+			continue
+		}
+		if !strings.Contains(err.Error(), "invalid --path") {
+			t.Errorf("--path %q: unexpected error: %v", p, err)
+		}
+	}
+}
+
 func TestCmdInstall_SourceInsideHarnessesDir(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
@@ -819,9 +836,9 @@ func TestCmdInstall_SourceInsideHarnessesDir(t *testing.T) {
 		t.Fatalf("install from already-installed location should succeed, got: %v", err)
 	}
 
-	// Harness file must still be present after install
-	if _, statErr := os.Stat(filepath.Join(srcDir, ".harness.json")); statErr != nil {
-		t.Error("harness file missing after install from already-installed location")
+	// Harness must still be loadable after install from already-installed location
+	if harness.DetectFormat(srcDir) == "" {
+		t.Error("harness missing after install from already-installed location")
 	}
 }
 

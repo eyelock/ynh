@@ -102,7 +102,7 @@ func TestCreateHarness(t *testing.T) {
 	}
 
 	expectedFiles := []string{
-		"my-team/.harness.json",
+		"my-team/.ynh-plugin/plugin.json",
 		"my-team/AGENTS.md",
 	}
 	for _, f := range expectedFiles {
@@ -127,7 +127,7 @@ func TestCreateHarness(t *testing.T) {
 	}
 
 	// Verify .harness.json content
-	data, err := os.ReadFile(filepath.Join(dir, "my-team/.harness.json"))
+	data, err := os.ReadFile(filepath.Join(dir, "my-team/.ynh-plugin/plugin.json"))
 	if err != nil {
 		t.Fatalf("reading .harness.json: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestCreateHarness_VendorEnvVar(t *testing.T) {
 		t.Fatalf("createHarness failed: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, "vendor-test/.harness.json"))
+	data, err := os.ReadFile(filepath.Join(dir, "vendor-test/.ynh-plugin/plugin.json"))
 	if err != nil {
 		t.Fatalf("reading .harness.json: %v", err)
 	}
@@ -215,7 +215,7 @@ func TestCreateHarness_WithDescription(t *testing.T) {
 		t.Fatalf("cmdCreate: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, "my-harness/.harness.json"))
+	data, err := os.ReadFile(filepath.Join(dir, "my-harness/.ynh-plugin/plugin.json"))
 	if err != nil {
 		t.Fatalf("reading .harness.json: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestCreateHarness_WithVendor(t *testing.T) {
 		t.Fatalf("cmdCreate: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, "my-harness/.harness.json"))
+	data, err := os.ReadFile(filepath.Join(dir, "my-harness/.ynh-plugin/plugin.json"))
 	if err != nil {
 		t.Fatalf("reading .harness.json: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestCreateHarness_WithDescriptionAndVendor(t *testing.T) {
 		t.Fatalf("cmdCreate: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, "my-harness/.harness.json"))
+	data, err := os.ReadFile(filepath.Join(dir, "my-harness/.ynh-plugin/plugin.json"))
 	if err != nil {
 		t.Fatalf("reading .harness.json: %v", err)
 	}
@@ -270,7 +270,7 @@ func TestCreateHarness_NoDescriptionOmitsField(t *testing.T) {
 		t.Fatalf("cmdCreate: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, "my-harness/.harness.json"))
+	data, err := os.ReadFile(filepath.Join(dir, "my-harness/.ynh-plugin/plugin.json"))
 	if err != nil {
 		t.Fatalf("reading .harness.json: %v", err)
 	}
@@ -464,8 +464,8 @@ func TestCmdCreate_Harness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "test-harness", ".harness.json")); err != nil {
-		t.Error("expected .harness.json to exist")
+	if _, err := os.Stat(filepath.Join(dir, "test-harness", ".ynh-plugin", "plugin.json")); err != nil {
+		t.Error("expected .ynh-plugin/plugin.json to exist")
 	}
 }
 

@@ -16,6 +16,8 @@ import (
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/migration"
+	"github.com/eyelock/ynh/internal/pathutil"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/symlink"
@@ -63,7 +65,7 @@ func main() {
 	case "prune":
 		err = cmdPrune()
 	case "version", "--version":
-		fmt.Println(config.Version)
+		err = cmdVersion(os.Args[2:])
 	case "help", "--help", "-h":
 		printUsage()
 	default:
@@ -242,6 +244,9 @@ func cmdInstall(args []string) error {
 
 	// Scope to subdirectory if --path was specified
 	if pathFlag != "" {
+		if err := pathutil.CheckSubpath(pathFlag); err != nil {
+			return fmt.Errorf("invalid --path: %w", err)
+		}
 		srcDir = filepath.Join(srcDir, pathFlag)
 		if _, err := os.Stat(srcDir); os.IsNotExist(err) {
 			return fmt.Errorf("path %q not found in source", pathFlag)
@@ -259,8 +264,13 @@ func cmdInstall(args []string) error {
 	// Users invoke it with: ynh run ynh
 	reservedName := p.Name == "ynh"
 
-	// Copy harness to installed directory (clean first to remove stale artifacts)
-	installDir := harness.InstalledDir(p.Name)
+	// Install dir: namespaced when a registry namespace was resolved, else flat.
+	var installDir string
+	if resolved.namespace != "" {
+		installDir = harness.InstalledDirNS(resolved.namespace, p.Name)
+	} else {
+		installDir = harness.InstalledDir(p.Name)
+	}
 
 	// If source == install dir, skip the clean+copy (already in place).
 	// Otherwise remove stale artifacts and copy fresh.
@@ -279,27 +289,27 @@ func cmdInstall(args []string) error {
 		}
 	}
 
-	// Inject install provenance into the copied .harness.json
+	// Migrate format if needed (converts .harness.json → .ynh-plugin/plugin.json)
+	if _, err := migration.FormatChain().Run(installDir); err != nil {
+		return fmt.Errorf("migrating installed harness format: %w", err)
+	}
+
+	// Write install provenance to .ynh-plugin/installed.json (separate from plugin.json)
 	provSource := source
 	if resolved.sourceType == "local" {
 		provSource = originalSource
 	} else if resolved.localPath != "" {
 		provSource = resolved.localPath
 	}
-	prov := &plugin.ProvenanceMeta{
+	ins := &plugin.InstalledJSON{
 		SourceType:   resolved.sourceType,
 		Source:       provSource,
 		Path:         pathFlag,
+		Namespace:    resolved.namespace,
 		RegistryName: resolved.registryName,
 		InstalledAt:  time.Now().UTC().Format(time.RFC3339),
 	}
-	// Load existing .harness.json from the copied file (preserves includes, delegates, etc.)
-	hj, err := plugin.LoadHarnessJSON(installDir)
-	if err != nil {
-		return fmt.Errorf("loading installed .harness.json: %w", err)
-	}
-	hj.InstalledFrom = prov
-	if err := plugin.SaveHarnessJSON(installDir, hj); err != nil {
+	if err := plugin.SaveInstalledJSON(installDir, ins); err != nil {
 		return fmt.Errorf("saving provenance: %w", err)
 	}
 
@@ -308,6 +318,13 @@ func cmdInstall(args []string) error {
 		fmt.Printf("Fetching %d include(s) and %d delegate(s)...\n", len(p.Includes), len(p.DelegatesTo))
 	}
 	for _, inc := range p.Includes {
+		// Local-path includes are resolved on-demand from the harness dir
+		// — there's nothing to pre-fetch. Skip the allow-list check and the
+		// EnsureRepo clone; the resolver will hit the filesystem at run time.
+		if inc.IsLocal() {
+			fmt.Printf("  Local  %s\n", inc.Local)
+			continue
+		}
 		if !isLocalPath(inc.Git) {
 			if err := cfg.CheckRemoteSource(inc.Git); err != nil {
 				return fmt.Errorf("include %q: %w", inc.Git, err)
@@ -422,6 +439,10 @@ func cmdUpdate(args []string) error {
 	checked := 0
 	updated := 0
 	for _, inc := range p.Includes {
+		// Local-path includes have no cache entry to refresh.
+		if inc.IsLocal() {
+			continue
+		}
 		if err := cfg.CheckRemoteSource(inc.Git); err != nil {
 			return fmt.Errorf("include %q: %w", inc.Git, err)
 		}
@@ -515,25 +536,27 @@ func cmdRun(args []string) error {
 		harnessDir = filepath.Dir(ra.HarnessFile)
 
 	default:
-		// Auto-discover .harness.json in cwd
+		// Auto-discover a harness in cwd. The migration chain converts any
+		// legacy format transparently so we only need to load the new format.
 		cwd, wdErr := os.Getwd()
 		if wdErr != nil {
 			return wdErr
 		}
-		localFile := filepath.Join(cwd, plugin.HarnessFile)
-		if _, statErr := os.Stat(localFile); statErr == nil {
-			p, err = harness.LoadFile(localFile)
-			if err != nil {
-				return err
-			}
-			name = p.Name
-			if name == "" {
-				name = "(inline)"
-			}
-			harnessDir = cwd
-		} else {
+		if _, err := migration.FormatChain().Run(cwd); err != nil {
+			return fmt.Errorf("migrating harness in cwd: %w", err)
+		}
+		if !plugin.IsPluginDir(cwd) {
 			return fmt.Errorf("usage: ynh run <harness-name> [-v vendor] [--focus name] [--harness-file path] [-- prompt]")
 		}
+		p, err = harness.LoadDir(cwd)
+		if err != nil {
+			return err
+		}
+		name = p.Name
+		if name == "" {
+			name = "(inline)"
+		}
+		harnessDir = cwd
 	}
 
 	// Resolve focus → profile + prompt
@@ -1114,7 +1137,7 @@ func cmdPrune() error {
 			if name == "ynh" || name == "ynd" {
 				continue
 			}
-			if harness.DetectFormat(harness.InstalledDir(name)) == "harness" {
+			if harness.DetectFormat(harness.InstalledDir(name)) == "plugin" {
 				continue
 			}
 			launcherPath := filepath.Join(binDir, name)
@@ -1138,7 +1161,7 @@ func cmdPrune() error {
 	if err == nil {
 		for _, entry := range runEntries {
 			name := entry.Name()
-			if harness.DetectFormat(harness.InstalledDir(name)) == "harness" {
+			if harness.DetectFormat(harness.InstalledDir(name)) == "plugin" {
 				continue
 			}
 			staleRun := filepath.Join(runDir, name)

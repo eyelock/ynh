@@ -12,7 +12,7 @@ ynh uninstall profile-demo 2>/dev/null
 mkdir -p /tmp/ynh-tutorial
 ```
 
-## T13.1: Add profiles to .harness.json
+## T13.1: Add profiles to the plugin manifest
 
 Create a harness with a `ci` profile that adds stricter rules and a lint hook:
 
@@ -20,8 +20,10 @@ Create a harness with a `ci` profile that adds stricter rules and a lint hook:
 mkdir -p /tmp/ynh-tutorial/profile-harness/skills/deploy
 mkdir -p /tmp/ynh-tutorial/profile-harness/rules
 
-cat > /tmp/ynh-tutorial/profile-harness/.harness.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/profile-harness/.ynh-plugin
+cat > /tmp/ynh-tutorial/profile-harness/.ynh-plugin/plugin.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "profile-demo",
   "version": "0.1.0",
   "default_vendor": "claude",
@@ -78,7 +80,7 @@ EOF
 ```
 
 Key points:
-- `profiles` is a top-level field in `.harness.json`
+- `profiles` is a top-level field in `.ynh-plugin/plugin.json`
 - Each profile can contain `hooks` and `mcp_servers`
 - Profiles declare only what they change — absent fields inherit from top-level defaults
 - MCP servers are deep-merged (profile keys win on collision); hooks use per-event replace
@@ -154,7 +156,7 @@ ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile nonexistent
 
 Expected error:
 ```
-Error: profile "nonexistent" not defined in .harness.json
+Error: profile "nonexistent" not defined in harness manifest
 ```
 
 ## T13.6: Use YNH_PROFILE env var
@@ -205,6 +207,73 @@ Compare with no profile to see what the profile adds:
 ynd diff /tmp/ynh-tutorial/profile-harness claude cursor
 ```
 
+## T13.9: Profile-level includes — bundle extra artifacts per profile
+
+Profiles can also declare their own `includes` array. When the profile is active, those artifact sources are **appended** to the base harness's includes. This is how a single harness can carry a "user view" by default and a "contributor view" under a dev profile.
+
+The include source can be a local filesystem path (`local`) — ideal for ship-alongside-the-manifest directories — or a remote Git URL (`git`), same as a top-level include.
+
+Create a bundle directory next to the harness:
+
+```bash
+mkdir -p /tmp/ynh-tutorial/profile-harness/dev-extras/skills/deep-debug
+
+cat > /tmp/ynh-tutorial/profile-harness/dev-extras/skills/deep-debug/SKILL.md << 'EOF'
+---
+name: deep-debug
+description: Systematic debugging workflow for production incidents.
+---
+
+When invoked, walk through: reproduce, isolate, bisect, hypothesize, verify.
+EOF
+```
+
+Add a profile that pulls it in:
+
+```bash
+cat > /tmp/ynh-tutorial/profile-harness/.ynh-plugin/plugin.json << 'EOF'
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "profile-demo",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "profiles": {
+    "ci": {
+      "hooks": {
+        "before_tool": [
+          {
+            "matcher": "Bash",
+            "command": "/usr/local/bin/ci-guard.sh"
+          }
+        ]
+      }
+    },
+    "dev": {
+      "includes": [
+        {"local": "dev-extras"}
+      ]
+    }
+  }
+}
+EOF
+```
+
+Preview without profile — only the base artifacts appear:
+
+```bash
+ynd preview /tmp/ynh-tutorial/profile-harness -v claude | grep SKILL
+# Expected: only skills declared at the harness root
+```
+
+Preview with `--profile dev` — `deep-debug` appears on top of the base set:
+
+```bash
+ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile dev | grep deep-debug
+# Expected: skills/deep-debug/SKILL.md shows up
+```
+
+Paths in `local` are relative to the harness root (or absolute). The `pick` field filters which artifacts to include from the source. A profile cannot remove base includes — it only appends.
+
 ## Clean up
 
 ```bash
@@ -214,13 +283,14 @@ rm -rf /tmp/ynh-tutorial
 
 ## What You Learned
 
-- Profiles are declared in `.harness.json` under `profiles` as named config objects
-- Each profile can override `hooks` and `mcp_servers`
-- Profiles use merge semantics: MCP servers are deep-merged (profile keys win), hooks use per-event replace (absent events inherited)
+- Profiles are declared in `.ynh-plugin/plugin.json` under `profiles` as named config objects
+- Each profile can override `hooks`, `mcp_servers`, and add `includes`
+- Profiles use merge semantics: MCP servers are deep-merged (profile keys win), hooks use per-event replace (absent events inherited), includes are appended (profile cannot remove a base include)
 - Set an MCP server to `null` in a profile to remove an inherited server
 - `--profile <name>` activates a profile on `ynh run`, `ynd preview`, and `ynd diff`
 - `YNH_PROFILE` env var activates a profile (flag takes precedence)
 - Invalid profile names produce helpful errors listing available profiles
+- Profile-level `includes` support both remote (`git`) and local (`local`) sources — same shape as top-level includes
 - `ynd validate` checks profile schema validity
 
 ## Next

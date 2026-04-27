@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/marketplace"
+	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
@@ -61,11 +62,11 @@ func cmdValidate(args []string) error {
 		}
 		// Check for legacy format
 		if isLegacyHarnessRoot(root) {
-			fmt.Println("Legacy format detected. Consolidate .claude-plugin/plugin.json and metadata.json into .harness.json.")
+			fmt.Println("Legacy format detected. Migrate .claude-plugin/plugin.json and metadata.json to .ynh-plugin/plugin.json.")
 			return fmt.Errorf("validation failed")
 		}
 		fmt.Println("No harness directories found.")
-		fmt.Println("A harness requires .harness.json")
+		fmt.Println("A harness requires .ynh-plugin/plugin.json (or legacy .harness.json).")
 		return nil
 	}
 
@@ -76,9 +77,31 @@ func cmdValidate(args []string) error {
 		}
 	}
 
+	// Also validate a marketplace.json in the root's .ynh-plugin/ directory, if present.
+	if err := validateRootMarketplace(root); err != nil {
+		hasError = true
+	}
+
 	if hasError {
 		return fmt.Errorf("validation failed")
 	}
+	return nil
+}
+
+// validateRootMarketplace validates .ynh-plugin/marketplace.json in dir if it exists.
+func validateRootMarketplace(dir string) error {
+	path := filepath.Join(dir, plugin.PluginDir, plugin.MarketplaceFile)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil
+	}
+	issues := lintRegistryMarketplace(path)
+	for _, issue := range issues {
+		fmt.Printf("%s: %s\n", issue.File, issue.Message)
+	}
+	if len(issues) > 0 {
+		return fmt.Errorf("validation failed")
+	}
+	fmt.Printf("%s: valid\n", path)
 	return nil
 }
 
@@ -87,10 +110,16 @@ func validateFile(path string) error {
 	var issues []lintIssue
 
 	switch {
-	case base == plugin.HarnessFile:
+	case base == plugin.PluginFile:
 		issues = lintHarnessJSON(path)
 	case base == "marketplace.json":
-		issues = lintMarketplaceConfig(path)
+		// Registry index (inside .ynh-plugin/) validates against the schema.
+		// Build config (anywhere else) validates via LoadConfig programmatic checks.
+		if filepath.Base(filepath.Dir(path)) == plugin.PluginDir {
+			issues = lintRegistryMarketplace(path)
+		} else {
+			issues = lintMarketplaceConfig(path)
+		}
 	case strings.HasSuffix(path, ".md"):
 		issues = lintMarkdown(path)
 	default:
@@ -113,8 +142,22 @@ func validateFile(path string) error {
 }
 
 func isHarnessRoot(dir string) bool {
-	_, err := os.Stat(filepath.Join(dir, plugin.HarnessFile))
-	return err == nil
+	// Run the migration chain first so a legacy .harness.json is converted
+	// transparently before we decide whether this dir is a harness root.
+	_, _ = migration.FormatChain().Run(dir)
+	return plugin.IsPluginDir(dir)
+}
+
+// harnessManifestPath returns the path to the manifest file for dir,
+// after running the migration chain so the result is always the new format
+// (or empty if no harness manifest exists).
+func harnessManifestPath(dir string) string {
+	_, _ = migration.FormatChain().Run(dir)
+	pluginPath := filepath.Join(dir, plugin.PluginDir, plugin.PluginFile)
+	if _, err := os.Stat(pluginPath); err == nil {
+		return pluginPath
+	}
+	return ""
 }
 
 func isLegacyHarnessRoot(dir string) bool {
@@ -123,27 +166,23 @@ func isLegacyHarnessRoot(dir string) bool {
 }
 
 func findHarnessRoots(root string) []string {
-	// Check if root itself is a harness
-	if isHarnessRoot(root) {
-		return []string{root}
-	}
-
-	// Check immediate children
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return nil
-	}
-
 	var roots []string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			child := filepath.Join(root, entry.Name())
-			if isHarnessRoot(child) {
-				roots = append(roots, child)
-			}
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
 		}
-	}
-
+		if !d.IsDir() {
+			return nil
+		}
+		if d.Name() == plugin.PluginDir {
+			return filepath.SkipDir
+		}
+		if isHarnessRoot(path) {
+			roots = append(roots, path)
+			return filepath.SkipDir
+		}
+		return nil
+	})
 	return roots
 }
 
@@ -157,32 +196,36 @@ func validateHarness(dir string) error {
 
 	// Check for legacy format
 	if isLegacyHarnessRoot(dir) && !isHarnessRoot(dir) {
-		issues = append(issues, "legacy format detected: consolidate .claude-plugin/plugin.json and metadata.json into .harness.json")
+		issues = append(issues, "legacy format detected: migrate .claude-plugin/plugin.json and metadata.json to .ynh-plugin/plugin.json")
 	}
 
-	// Check harness.json exists and is valid
-	harnessPath := filepath.Join(dir, plugin.HarnessFile)
-	data, err := os.ReadFile(harnessPath)
-	if err != nil {
-		issues = append(issues, "missing .harness.json")
+	// Migration chain runs inside harnessManifestPath so manifestPath is
+	// always the new format (or empty if no harness manifest exists).
+	manifestPath := harnessManifestPath(dir)
+	const manifestLabel = ".ynh-plugin/plugin.json"
+	var data []byte
+	var err error
+	if manifestPath == "" {
+		issues = append(issues, "missing .ynh-plugin/plugin.json")
 	} else {
+		data, err = os.ReadFile(manifestPath)
+		if err != nil {
+			issues = append(issues, fmt.Sprintf("missing %s", manifestLabel))
+		}
+	}
+	if err == nil && data != nil {
+		// Schema validation covers $schema URL, required fields, types, enums, patterns.
+		for _, si := range lintHarnessJSON(manifestPath) {
+			issues = append(issues, si.Message)
+		}
 		var hj map[string]any
 		if err := json.Unmarshal(data, &hj); err != nil {
-			issues = append(issues, fmt.Sprintf("invalid .harness.json: %v", err))
+			issues = append(issues, fmt.Sprintf("invalid %s: %v", manifestLabel, err))
 		} else {
-			if _, ok := hj["name"]; !ok {
-				issues = append(issues, ".harness.json missing 'name'")
-			}
-			if _, ok := hj["version"]; !ok {
-				issues = append(issues, ".harness.json missing 'version'")
-			}
-			// Validate hooks
+			// Cross-field checks the schema cannot express.
 			issues = append(issues, validateHarnessHooks(hj)...)
-			// Validate MCP servers
 			issues = append(issues, validateHarnessMCPServers(hj)...)
-			// Validate profiles
 			issues = append(issues, validateHarnessProfiles(hj)...)
-			// Validate focus entries
 			issues = append(issues, validateHarnessFocus(hj)...)
 		}
 	}
@@ -480,34 +523,29 @@ func validateHarnessFocus(hj map[string]any) []string {
 	return issues
 }
 
-// lintMarketplaceConfig validates a marketplace.json build config.
+// lintHarnessJSON validates a plugin.json file against plugin.schema.json.
+func lintHarnessJSON(path string) []lintIssue {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return []lintIssue{{File: path, Message: fmt.Sprintf("cannot read: %v", err)}}
+	}
+	return schemaIssues(path, data, compiledPluginSchema)
+}
+
+// lintRegistryMarketplace validates a .ynh-plugin/marketplace.json registry index
+// against marketplace.schema.json.
+func lintRegistryMarketplace(path string) []lintIssue {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return []lintIssue{{File: path, Message: fmt.Sprintf("cannot read: %v", err)}}
+	}
+	return schemaIssues(path, data, compiledMarketplaceSchema)
+}
+
+// lintMarketplaceConfig validates a marketplace.json build config via programmatic checks.
 func lintMarketplaceConfig(path string) []lintIssue {
 	if _, err := marketplace.LoadConfig(path); err != nil {
 		return []lintIssue{{File: path, Message: err.Error()}}
 	}
 	return nil
-}
-
-// lintHarnessJSON validates harness.json structure for the lint command.
-func lintHarnessJSON(path string) []lintIssue {
-	var issues []lintIssue
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return []lintIssue{{File: path, Message: fmt.Sprintf("cannot read: %v", err)}}
-	}
-
-	var hj map[string]any
-	if err := json.Unmarshal(data, &hj); err != nil {
-		return []lintIssue{{File: path, Message: fmt.Sprintf("invalid JSON: %v", err)}}
-	}
-
-	if _, ok := hj["name"]; !ok {
-		issues = append(issues, lintIssue{File: path, Message: "missing 'name' field"})
-	}
-	if _, ok := hj["version"]; !ok {
-		issues = append(issues, lintIssue{File: path, Message: "missing 'version' field"})
-	}
-
-	return issues
 }

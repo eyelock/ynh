@@ -2,31 +2,26 @@ package main
 
 import (
 	"bytes"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
-// writeIncludeTestHarness creates a minimal .harness.json in dir.
+// writeIncludeTestHarness creates a minimal plugin.json in dir.
 func writeIncludeTestHarness(t *testing.T, dir, name string) {
 	t.Helper()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	content := `{"name":"` + name + `","version":"0.1.0"}`
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(content), 0o644); err != nil {
+	hj := &plugin.HarnessJSON{Name: name, Version: "0.1.0"}
+	if err := plugin.SavePluginJSON(dir, hj); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func loadTestIncludes(t *testing.T, dir string) []plugin.IncludeMeta {
 	t.Helper()
-	hj, err := plugin.LoadHarnessJSON(dir)
+	hj, err := plugin.LoadPluginJSON(dir)
 	if err != nil {
-		t.Fatalf("LoadHarnessJSON: %v", err)
+		t.Fatalf("LoadPluginJSON: %v", err)
 	}
 	return hj.Includes
 }

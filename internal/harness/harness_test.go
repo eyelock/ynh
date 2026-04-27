@@ -10,11 +10,13 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
-func TestDetectFormat_Harness(t *testing.T) {
+func TestDetectFormat_Plugin(t *testing.T) {
+	// Migration chain converts legacy .harness.json transparently.
+	// DetectFormat always returns "plugin" for any supported format.
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "x")
-	if got := DetectFormat(dir); got != "harness" {
-		t.Errorf("DetectFormat = %q, want %q", got, "harness")
+	if got := DetectFormat(dir); got != "plugin" {
+		t.Errorf("DetectFormat = %q, want %q", got, "plugin")
 	}
 }
 
@@ -77,7 +79,7 @@ func TestLoad_LegacyFormat(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for legacy format")
 	}
-	if got := err.Error(); !strings.Contains(got, "legacy format detected") {
+	if got := err.Error(); !strings.Contains(got, "legacy") {
 		t.Errorf("error = %q, want legacy format hint", got)
 	}
 }
@@ -692,26 +694,61 @@ func TestScanArtifacts_SkillWithoutManifest(t *testing.T) {
 	}
 }
 
-// writeTestHarness creates a minimal harness.json with default_vendor in dir.
+// writeTestHarness creates a minimal plugin.json with default_vendor in dir.
 func writeTestHarness(t *testing.T, dir, name string) {
 	t.Helper()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	hj := fmt.Sprintf(`{"name":%q,"version":"0.1.0","default_vendor":"claude"}`, name)
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
+	hj := &plugin.HarnessJSON{Name: name, Version: "0.1.0", DefaultVendor: "claude"}
+	if err := plugin.SavePluginJSON(dir, hj); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// writeTestHarnessMinimal creates a minimal harness.json without default_vendor.
+// writeTestHarnessMinimal creates a minimal plugin.json without default_vendor.
 func writeTestHarnessMinimal(t *testing.T, dir, name string) {
 	t.Helper()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	hj := &plugin.HarnessJSON{Name: name, Version: "0.1.0"}
+	if err := plugin.SavePluginJSON(dir, hj); err != nil {
 		t.Fatal(err)
 	}
-	hj := fmt.Sprintf(`{"name":%q,"version":"0.1.0"}`, name)
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
-		t.Fatal(err)
+}
+
+func TestResolveProfile_AppendsIncludes(t *testing.T) {
+	h := &Harness{
+		Name: "x",
+		Includes: []Include{
+			{GitSource: GitSource{Git: "github.com/base/repo"}},
+		},
+		Profiles: map[string]plugin.Profile{
+			"ci": {
+				Includes: []plugin.IncludeMeta{
+					{Local: ".ci-scripts"},
+					{Git: "github.com/ci/extras", Ref: "main"},
+				},
+			},
+		},
+	}
+
+	resolved, err := ResolveProfile(h, "ci")
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	if len(resolved.Includes) != 3 {
+		t.Fatalf("expected 3 includes (1 base + 2 profile), got %d", len(resolved.Includes))
+	}
+	// Base preserved first
+	if resolved.Includes[0].Git != "github.com/base/repo" {
+		t.Errorf("first include = %q, want base git URL", resolved.Includes[0].Git)
+	}
+	// Profile entries appended
+	if !resolved.Includes[1].IsLocal() || resolved.Includes[1].Local != ".ci-scripts" {
+		t.Errorf("second include should be local include %q, got %+v", ".ci-scripts", resolved.Includes[1])
+	}
+	if resolved.Includes[2].Git != "github.com/ci/extras" {
+		t.Errorf("third include git = %q, want github.com/ci/extras", resolved.Includes[2].Git)
+	}
+
+	// Original harness untouched
+	if len(h.Includes) != 1 {
+		t.Errorf("base harness mutated: includes = %d, want 1", len(h.Includes))
 	}
 }

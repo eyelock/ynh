@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "title": "YNH Plugin",
+  "description": "Harness plugin manifest for ynh 0.2+ — lives at .ynh-plugin/plugin.json. Install-time provenance lives in a separate .ynh-plugin/installed.json file written by ynh install.",
+  "type": "object",
+  "required": ["$schema", "name", "version"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "pattern": "/plugin\\.schema\\.json$"
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+    },
+    "version": { "type": "string" },
+    "description": { "type": "string" },
+    "author": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "url": { "type": "string" }
+      }
+    },
+    "keywords": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "default_vendor": {
+      "type": "string",
+      "enum": ["claude", "cursor", "codex"]
+    },
+    "includes": { "$ref": "#/$defs/includes" },
+    "delegates_to": { "$ref": "#/$defs/delegates" },
+    "hooks": { "$ref": "#/$defs/hooks" },
+    "mcp_servers": { "$ref": "#/$defs/mcp_servers" },
+    "profiles": {
+      "description": "Named configuration variants. Merge semantics: mcp_servers are deep-merged (profile keys win), hooks use per-event replace (profile event replaces default, absent events inherited), includes are appended to the base harness's includes when the profile is active. Set a server to null to remove it.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "hooks": { "$ref": "#/$defs/hooks" },
+          "mcp_servers": { "$ref": "#/$defs/profile_mcp_servers" },
+          "includes": { "$ref": "#/$defs/includes" }
+        }
+      }
+    },
+    "focus": {
+      "description": "Named combinations of profile + prompt for repeatable AI execution.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["prompt"],
+        "additionalProperties": false,
+        "properties": {
+          "profile": { "type": "string" },
+          "prompt": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "hooks": {
+      "type": "object",
+      "propertyNames": {
+        "enum": ["before_tool", "after_tool", "before_prompt", "on_stop"]
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["command"],
+          "additionalProperties": false,
+          "properties": {
+            "command": { "type": "string", "minLength": 1 },
+            "matcher": { "type": "string" }
+          }
+        }
+      }
+    },
+    "mcp_servers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "command": { "type": "string" },
+          "args": { "type": "array", "items": { "type": "string" } },
+          "env": { "type": "object", "additionalProperties": { "type": "string" } },
+          "url": { "type": "string" },
+          "headers": { "type": "object", "additionalProperties": { "type": "string" } }
+        },
+        "oneOf": [
+          { "required": ["command"] },
+          { "required": ["url"] }
+        ]
+      }
+    },
+    "profile_mcp_servers": {
+      "description": "MCP servers within a profile. Null removes an inherited server.",
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "null" },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "command": { "type": "string" },
+              "args": { "type": "array", "items": { "type": "string" } },
+              "env": { "type": "object", "additionalProperties": { "type": "string" } },
+              "url": { "type": "string" },
+              "headers": { "type": "object", "additionalProperties": { "type": "string" } }
+            },
+            "oneOf": [
+              { "required": ["command"] },
+              { "required": ["url"] }
+            ]
+          }
+        ]
+      }
+    },
+    "includes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "git": {
+            "type": "string",
+            "description": "Remote Git URL or shorthand (e.g. github.com/org/repo). Mutually exclusive with local."
+          },
+          "local": {
+            "type": "string",
+            "description": "Local filesystem path. Absolute or relative to the harness root. Mutually exclusive with git."
+          },
+          "ref": {
+            "type": "string",
+            "description": "Git ref (branch, tag, SHA). Only meaningful when git is set."
+          },
+          "path": {
+            "type": "string",
+            "description": "Subdirectory within the resolved source."
+          },
+          "pick": {
+            "type": "array",
+            "description": "Artifact paths in canonical type/name form. Skills use the bare name (they are directories): skills/<name>. Flat artifacts include the .md extension: agents/<name>.md, rules/<name>.md, commands/<name>.md.",
+            "items": {
+              "type": "string",
+              "pattern": "^(skills/[^/]+|(agents|rules|commands)/[^/]+\\.md)$"
+            }
+          }
+        },
+        "oneOf": [
+          { "required": ["git"] },
+          { "required": ["local"] }
+        ]
+      }
+    },
+    "delegates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["git"],
+        "additionalProperties": false,
+        "properties": {
+          "git": { "type": "string" },
+          "ref": { "type": "string" },
+          "path": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -42,8 +42,10 @@ cat > /tmp/ynh-tutorial/exportable/instructions.md << 'EOF'
 You are a code quality harness. Focus on correctness and security.
 EOF
 
-cat > /tmp/ynh-tutorial/exportable/.harness.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/exportable/.ynh-plugin
+cat > /tmp/ynh-tutorial/exportable/.ynh-plugin/plugin.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "exportable",
   "version": "1.0.0",
   "description": "A harness designed for cross-vendor export",
@@ -82,7 +84,7 @@ ls -Ra /tmp/ynh-tutorial/export-output/claude/
 Expected:
 ```
 .claude-plugin/               # plugin manifest directory
-  plugin.json                 # generated from .harness.json
+  plugin.json                 # generated from .ynh-plugin/plugin.json
 agents/
   checker.md                  # local agent
 skills/
@@ -249,15 +251,16 @@ Clones the repo, applies `--path` scoping, exports. Same as exporting a local di
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/no-instructions
-cat > /tmp/ynh-tutorial/no-instructions/.harness.json << 'EOF'
-{"name": "no-instructions", "version": "0.1.0"}
+mkdir -p /tmp/ynh-tutorial/no-instructions/.ynh-plugin
+cat > /tmp/ynh-tutorial/no-instructions/.ynh-plugin/plugin.json << 'EOF'
+{"$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json", "name": "no-instructions", "version": "0.1.0"}
 EOF
 
 ynd export /tmp/ynh-tutorial/no-instructions -o /tmp/ynh-tutorial/no-inst-out -v claude
 # Expected: succeeds (no warning)
 
 ls -a /tmp/ynh-tutorial/no-inst-out/claude/
-# Expected: .claude-plugin/ only (generated from .harness.json, no AGENTS.md)
+# Expected: .claude-plugin/ only (generated from .ynh-plugin/plugin.json, no AGENTS.md)
 ```
 
 ## Clean up

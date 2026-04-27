@@ -1,0 +1,56 @@
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "ynh-guide",
+  "version": "0.1.0",
+  "description": "AI harness management — your name, your AI",
+  "author": {
+    "name": "eyelock",
+    "url": "https://github.com/eyelock"
+  },
+  "keywords": [
+    "harness",
+    "ai",
+    "skills",
+    "meta"
+  ],
+  "default_vendor": "claude",
+  "profiles": {
+    "ynh-dev": {
+      "hooks": {
+        "before_tool": [
+          {
+            "matcher": "Bash",
+            "command": "sh -c 'case \"$YNH_TOOL_INPUT\" in *\"git push\"*|*\"gh pr create\"*|*\"gh pr merge\"*) echo \"Reminder: .claude/rules/pre-remote.md requires make check + /evals before remote operations\" >&2 ;; esac; exit 0'"
+          }
+        ]
+      },
+      "includes": [
+        {
+          "local": ".claude"
+        }
+      ]
+    }
+  },
+  "focus": {
+    "learn": {
+      "prompt": "Walk me through ynh as a first-time user, starting from the README.md. Introduce the core concepts — harnesses, vendors, includes, delegates — with a concrete example for each. When I'm ready, suggest I use /ynh-create-harness to build my own."
+    },
+    "create": {
+      "prompt": "Use the ynh-create-harness skill to help me build a new harness. Ask what I do, what languages and tools I use, and what standards my team follows. Scaffold it with ynd create harness and install it so I can try it immediately."
+    },
+    "team": {
+      "prompt": "Use the ynh-team-setup skill to set up a team harness. We'll build a parent harness that delegates to personal team members' harnesses. Explain delegation as we go."
+    },
+    "validate": {
+      "prompt": "Validate the harness in the current working directory with ynd validate. If issues are found, walk through each one and help me fix it. If it's valid, run ynd preview so I can see the assembled vendor output."
+    },
+    "contribute": {
+      "profile": "ynh-dev",
+      "prompt": "I want to contribute to ynh. Start by reading .claude/CLAUDE.md and the rules under .claude/rules/. Ask what I want to change — a bug fix, a new feature, a doc update — then help me follow the branching rules in .claude/rules/branching.md and the pre-remote gates in .claude/rules/pre-remote.md."
+    },
+    "release": {
+      "profile": "ynh-dev",
+      "prompt": "Walk me through preparing a ynh release. Confirm we are on develop, run /evals to gate the release, update the changelog, then create a release PR per .claude/rules/branching.md. The full sequence is documented in .claude/commands/release.md."
+    }
+  }
+}

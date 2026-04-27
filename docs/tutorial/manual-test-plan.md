@@ -164,7 +164,7 @@ Requires Docker installed and running.
 
 | ID | Test | Tutorial step |
 |---|---|---|
-| T10.1 | Add hooks to .harness.json | [T10.1](tutorial/10-hooks.md#t101-add-hooks-to-a-harness) |
+| T10.1 | Add hooks to .ynh-plugin/plugin.json | [T10.1](tutorial/10-hooks.md#t101-add-hooks-to-a-harness) |
 | T10.2 | Preview for Claude — verify hooks.json | [T10.2](tutorial/10-hooks.md#t102-preview-for-claude) |
 | T10.3 | Preview for Cursor — verify hooks.json | [T10.3](tutorial/10-hooks.md#t103-preview-for-cursor) |
 | T10.4 | Preview for Codex — verify hooks.json | [T10.4](tutorial/10-hooks.md#t104-preview-for-codex) |
@@ -196,7 +196,7 @@ Requires Docker installed and running.
 
 | ID | Test | Tutorial step |
 |---|---|---|
-| T13.1 | Add profiles to .harness.json | [T13.1](tutorial/13-profiles.md#t131-add-profiles-to-harnessjson) |
+| T13.1 | Add profiles to the plugin manifest | [T13.1](tutorial/13-profiles.md#t131-add-profiles-to-the-plugin-manifest) |
 | T13.2 | Validate profiles | [T13.2](tutorial/13-profiles.md#t132-validate-profiles) |
 | T13.3 | Preview with --profile ci | [T13.3](tutorial/13-profiles.md#t133-preview-with---profile-ci) |
 | T13.4 | Run with --profile ci | [T13.4](tutorial/13-profiles.md#t134-run-with---profile-ci) |
@@ -250,7 +250,7 @@ ynd --help         # Expected: same
 
 ```bash
 mkdir -p /tmp/ynh-edge/repo
-echo '{"name":"edge","version":"0.1.0"}' > /tmp/ynh-edge/repo/.harness.json
+echo '{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"edge","version":"0.1.0"}' > /tmp/ynh-edge/repo/.ynh-plugin/plugin.json
 
 ynh install /tmp/ynh-edge/repo --path nonexistent/path
 # Expected: Error: path "nonexistent/path" not found in source
@@ -260,7 +260,7 @@ ynh install /tmp/ynh-edge/repo --path nonexistent/path
 
 ```bash
 mkdir -p /tmp/ynh-edge/dup
-echo '{"name":"dup","version":"0.1.0"}' > /tmp/ynh-edge/dup/.harness.json
+echo '{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"dup","version":"0.1.0"}' > /tmp/ynh-edge/dup/.ynh-plugin/plugin.json
 
 ynh install /tmp/ynh-edge/dup
 ynh install /tmp/ynh-edge/dup
@@ -414,12 +414,13 @@ ynd preview /tmp/some-harness -v claude --focus nonexistent
 # Expected: Error: focus "nonexistent" not defined in harness
 ```
 
-### E21: Focus with missing prompt in .harness.json
+### E21: Focus with missing prompt in .ynh-plugin/plugin.json
 
 ```bash
 mkdir -p /tmp/ynh-bad-focus
-cat > /tmp/ynh-bad-focus/.harness.json << 'EOF'
-{"name":"bad","version":"0.1.0","focus":{"review":{"profile":"ci"}}}
+mkdir -p /tmp/ynh-bad-focus/.ynh-plugin
+cat > /tmp/ynh-bad-focus/.ynh-plugin/plugin.json << 'EOF'
+{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0","focus":{"review":{"profile":"ci"}}}
 EOF
 ynd validate /tmp/ynh-bad-focus
 # Expected: INVALID with "focus.review: prompt must not be empty"
@@ -430,8 +431,9 @@ rm -rf /tmp/ynh-bad-focus
 
 ```bash
 mkdir -p /tmp/ynh-bad-focus
-cat > /tmp/ynh-bad-focus/.harness.json << 'EOF'
-{"name":"bad","version":"0.1.0","focus":{"review":{"profile":"nonexistent","prompt":"Review code"}}}
+mkdir -p /tmp/ynh-bad-focus/.ynh-plugin
+cat > /tmp/ynh-bad-focus/.ynh-plugin/plugin.json << 'EOF'
+{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0","focus":{"review":{"profile":"nonexistent","prompt":"Review code"}}}
 EOF
 ynd validate /tmp/ynh-bad-focus
 # Expected: INVALID with "focus.review: references unknown profile"

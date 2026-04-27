@@ -1,0 +1,12 @@
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "full-harness",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "includes": [
+    { "git": "github.com/eyelock/assistants", "path": "skills/dev" }
+  ],
+  "hooks": {
+    "before_tool": [{ "command": "/usr/local/bin/lint.sh" }]
+  }
+}

@@ -119,7 +119,7 @@ func TestMarketplaceDescriptionOverride(t *testing.T) {
 	writeJSON(t, configPath, map[string]any{
 		"name":  "override-test",
 		"owner": map[string]string{"name": "tester"},
-		"entries": []map[string]string{
+		"harnesses": []map[string]string{
 			{
 				"type":        "plugin",
 				"source":      "./plugins/widget",
@@ -248,4 +248,25 @@ func TestMarketplaceVendorFiltering(t *testing.T) {
 
 	assertFileExists(t, filepath.Join(outputDir, ".claude-plugin", "marketplace.json"))
 	assertFileNotExists(t, filepath.Join(outputDir, ".cursor-plugin", "marketplace.json"))
+}
+
+func TestMarketplaceBuild_EntryPathTraversalBlocked(t *testing.T) {
+	dir := t.TempDir()
+	for _, badPath := range []string{"../../etc", "../secret", "/etc/passwd", "a/../../etc"} {
+		cfg := &MarketplaceConfig{
+			Name:  "test",
+			Owner: MarketplaceOwner{Name: "tester"},
+			Harnesses: []MarketplaceEntry{
+				{Type: "plugin", Source: "./plugins/foo", Path: badPath},
+			},
+		}
+		err := Build(cfg, BuildOptions{ConfigDir: dir, OutputDir: t.TempDir()})
+		if err == nil {
+			t.Errorf("path %q: expected error, got nil", badPath)
+			continue
+		}
+		if !strings.Contains(err.Error(), "invalid path") {
+			t.Errorf("path %q: unexpected error: %v", badPath, err)
+		}
+	}
 }

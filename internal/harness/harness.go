@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/migration"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
@@ -17,12 +19,20 @@ import (
 // Must start with a letter or digit. Prevents path traversal and shell injection.
 var validName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
-// GitSource holds the common fields for any Git-backed reference.
+// GitSource holds the common fields for any include or delegate source.
+// Exactly one of Git (remote) or Local (filesystem path) is set at any
+// given time. Path is a subdirectory scoped within the source; Ref
+// applies to Git sources only.
 type GitSource struct {
-	Git  string
-	Ref  string
-	Path string
+	Git   string
+	Local string
+	Ref   string
+	Path  string
 }
+
+// IsLocal reports whether the source is a filesystem path (Local set,
+// Git empty). Callers use this to skip git fetch and resolve directly.
+func (g GitSource) IsLocal() bool { return g.Local != "" && g.Git == "" }
 
 type Include struct {
 	GitSource
@@ -37,7 +47,10 @@ type Delegate struct {
 type Provenance struct {
 	SourceType   string
 	Source       string
+	Ref          string
+	SHA          string
 	Path         string
+	Namespace    string
 	RegistryName string
 	InstalledAt  string
 }
@@ -47,6 +60,8 @@ type Harness struct {
 	Version       string
 	Description   string
 	DefaultVendor string
+	Namespace     string // e.g. "eyelock/assistants"; empty for local/unqualified installs
+	Dir           string // absolute path to the harness directory — the base for relative local includes
 	Includes      []Include
 	DelegatesTo   []Delegate
 	Hooks         map[string][]plugin.HookEntry
@@ -56,13 +71,27 @@ type Harness struct {
 	InstalledFrom *Provenance
 }
 
-// DetectFormat returns "harness" if dir contains harness.json,
-// "bare" if dir contains AGENTS.md or instructions.md but no harness.json,
-// or "" if neither is found. Returns "legacy" if .claude-plugin/plugin.json
-// is found without harness.json.
+// ListEntry is one installed harness with its namespace.
+type ListEntry struct {
+	Name      string
+	Namespace string // e.g. "eyelock/assistants"; empty for flat/local installs
+	Dir       string // absolute path to the harness directory
+}
+
+// DetectFormat reports what manifest format a directory holds, after
+// running the migration chain. Returns "plugin" (new format present),
+// "legacy" (unsupported pre-0.1 .claude-plugin format), or "" (nothing).
+//
+// The migration chain converts any supported legacy format to the new
+// format before detection, so callers only ever see "plugin" or "" for
+// valid harnesses. Legacy detection is the one exception — it signals a
+// format that predates ynh and has no migration path.
 func DetectFormat(dir string) string {
-	if plugin.IsHarnessDir(dir) {
-		return "harness"
+	if _, err := migration.FormatChain().Run(dir); err != nil {
+		return ""
+	}
+	if plugin.IsPluginDir(dir) {
+		return "plugin"
 	}
 	if plugin.IsLegacyPluginDir(dir) {
 		return "legacy"
@@ -73,21 +102,68 @@ func DetectFormat(dir string) string {
 // ErrNotFound is returned when a harness is not installed.
 var ErrNotFound = errors.New("harness not found")
 
+// Load finds and loads an installed harness by name. The migration chain
+// runs inside LoadDir so no legacy handling is needed here. If the flat
+// layout has the harness, use that; otherwise scan the namespaced layout.
 func Load(name string) (*Harness, error) {
-	installDir := InstalledDir(name)
-	switch DetectFormat(installDir) {
-	case "harness":
-		return LoadDir(installDir)
-	case "legacy":
-		return nil, fmt.Errorf("harness %q: legacy format detected. Consolidate .claude-plugin/plugin.json and metadata.json into .harness.json", name)
-	default:
-		return nil, fmt.Errorf("harness %q: %w", name, ErrNotFound)
+	flatDir := InstalledDir(name)
+	if _, err := os.Stat(flatDir); err == nil {
+		return LoadDir(flatDir)
 	}
+	return findInNamespacedDirs(name)
 }
 
+// LoadNS loads an installed harness by namespace-qualified name.
+func LoadNS(ns, name string) (*Harness, error) {
+	dir := InstalledDirNS(ns, name)
+	if _, err := os.Stat(dir); err != nil {
+		return nil, fmt.Errorf("harness %q@%q: %w", name, ns, ErrNotFound)
+	}
+	return LoadDir(dir)
+}
+
+// findInNamespacedDirs scans ~/.ynh/harnesses/<ns>/<name>/ for a matching harness.
+func findInNamespacedDirs(name string) (*Harness, error) {
+	harnessesDir := config.HarnessesDir()
+	entries, err := os.ReadDir(harnessesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("harness %q: %w", name, ErrNotFound)
+		}
+		return nil, err
+	}
+	for _, e := range entries {
+		if !e.IsDir() || !strings.Contains(e.Name(), "--") {
+			continue
+		}
+		candidate := filepath.Join(harnessesDir, e.Name(), name)
+		if DetectFormat(candidate) != "" {
+			return LoadDir(candidate)
+		}
+	}
+	return nil, fmt.Errorf("harness %q: %w", name, ErrNotFound)
+}
+
+// List returns the names of all installed harnesses across all namespaces.
 func List() ([]string, error) {
-	dir := config.HarnessesDir()
-	entries, err := os.ReadDir(dir)
+	entries, err := ListAll()
+	if err != nil {
+		return nil, err
+	}
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	names := make([]string, len(entries))
+	for i, e := range entries {
+		names[i] = e.Name
+	}
+	return names, nil
+}
+
+// ListAll returns all installed harnesses with namespace and directory information.
+func ListAll() ([]ListEntry, error) {
+	harnessesDir := config.HarnessesDir()
+	entries, err := os.ReadDir(harnessesDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -95,26 +171,81 @@ func List() ([]string, error) {
 		return nil, err
 	}
 
-	var names []string
+	var results []ListEntry
 	for _, entry := range entries {
-		if entry.IsDir() {
-			subDir := filepath.Join(dir, entry.Name())
-			if DetectFormat(subDir) == "harness" {
-				names = append(names, entry.Name())
+		if !entry.IsDir() {
+			continue
+		}
+		entryPath := filepath.Join(harnessesDir, entry.Name())
+		if strings.Contains(entry.Name(), "--") {
+			// Namespace directory: walk children
+			ns := namespace.FromFSName(entry.Name())
+			children, err := os.ReadDir(entryPath)
+			if err != nil {
+				continue
+			}
+			for _, child := range children {
+				if !child.IsDir() {
+					continue
+				}
+				childDir := filepath.Join(entryPath, child.Name())
+				if DetectFormat(childDir) != "" {
+					results = append(results, ListEntry{
+						Name:      child.Name(),
+						Namespace: ns,
+						Dir:       childDir,
+					})
+				}
+			}
+		} else {
+			// Flat entry (unmigrated or local install)
+			if DetectFormat(entryPath) != "" {
+				results = append(results, ListEntry{
+					Name: entry.Name(),
+					Dir:  entryPath,
+				})
 			}
 		}
 	}
 
-	return names, nil
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].Namespace != results[j].Namespace {
+			return results[i].Namespace < results[j].Namespace
+		}
+		return results[i].Name < results[j].Name
+	})
+	return results, nil
+}
+
+// InstalledDirNS returns the namespaced install path for a harness.
+func InstalledDirNS(ns, name string) string {
+	return filepath.Join(config.HarnessesDir(), namespace.ToFSName(ns), name)
+}
+
+// NamespacedDir is an alias for InstalledDirNS.
+func NamespacedDir(ns, name string) string {
+	return InstalledDirNS(ns, name)
 }
 
 func InstalledDir(name string) string {
 	return filepath.Join(config.HarnessesDir(), name)
 }
 
-// LoadDir loads a harness from a directory containing harness.json.
+// LoadDir loads a harness from a directory. The migration chain runs
+// transparently, so callers never need to handle legacy formats themselves.
 func LoadDir(dir string) (*Harness, error) {
-	hj, err := plugin.LoadHarnessJSON(dir)
+	if _, err := migration.FormatChain().Run(dir); err != nil {
+		return nil, fmt.Errorf("migrating harness manifest: %w", err)
+	}
+
+	if plugin.IsLegacyPluginDir(dir) && !plugin.IsPluginDir(dir) {
+		return nil, fmt.Errorf("legacy .claude-plugin format is not supported; migrate to .ynh-plugin/plugin.json")
+	}
+	if !plugin.IsPluginDir(dir) {
+		return nil, fmt.Errorf("no harness manifest found in %s", dir)
+	}
+
+	hj, err := plugin.LoadPluginJSON(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -125,10 +256,16 @@ func LoadDir(dir string) (*Harness, error) {
 
 	p := &Harness{Name: hj.Name, Version: hj.Version, Description: hj.Description}
 	p.DefaultVendor = hj.DefaultVendor
+	p.Namespace = inferNamespace(dir)
+	if abs, err := filepath.Abs(dir); err == nil {
+		p.Dir = abs
+	} else {
+		p.Dir = dir
+	}
 
 	for _, inc := range hj.Includes {
 		p.Includes = append(p.Includes, Include{
-			GitSource: GitSource{Git: inc.Git, Ref: inc.Ref, Path: inc.Path},
+			GitSource: GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
 			Pick:      inc.Pick,
 		})
 	}
@@ -149,7 +286,23 @@ func LoadDir(dir string) (*Harness, error) {
 	if len(hj.Focuses) > 0 {
 		p.Focuses = hj.Focuses
 	}
-	if hj.InstalledFrom != nil {
+
+	// Provenance: prefer installed.json (new format), fall back to InstalledFrom in manifest (legacy).
+	if ins, err := plugin.LoadInstalledJSON(dir); err == nil {
+		p.InstalledFrom = &Provenance{
+			SourceType:   ins.SourceType,
+			Source:       ins.Source,
+			Ref:          ins.Ref,
+			SHA:          ins.SHA,
+			Path:         ins.Path,
+			Namespace:    ins.Namespace,
+			RegistryName: ins.RegistryName,
+			InstalledAt:  ins.InstalledAt,
+		}
+		if p.Namespace == "" && ins.Namespace != "" {
+			p.Namespace = ins.Namespace
+		}
+	} else if hj.InstalledFrom != nil {
 		prov := hj.InstalledFrom
 		p.InstalledFrom = &Provenance{
 			SourceType:   prov.SourceType,
@@ -161,6 +314,16 @@ func LoadDir(dir string) (*Harness, error) {
 	}
 
 	return p, nil
+}
+
+// inferNamespace derives namespace from dir path if it is under ~/.ynh/harnesses/<ns>/<name>/.
+func inferNamespace(dir string) string {
+	harnessesDir := config.HarnessesDir()
+	parent := filepath.Dir(dir)
+	if filepath.Dir(parent) == harnessesDir && strings.Contains(filepath.Base(parent), "--") {
+		return namespace.FromFSName(filepath.Base(parent))
+	}
+	return ""
 }
 
 // ResolveProfile returns a copy of the harness with profile settings merged
@@ -176,7 +339,7 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 
 	profile, ok := h.Profiles[profileName]
 	if !ok {
-		return nil, fmt.Errorf("profile %q not defined in .harness.json", profileName)
+		return nil, fmt.Errorf("profile %q not defined in harness manifest", profileName)
 	}
 
 	resolved := *h
@@ -235,6 +398,27 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 		resolved.MCPServers = merged
 	}
 
+	// Append profile-level includes to the harness's base includes. Profile
+	// includes cannot remove base includes — they only add. Order: base first,
+	// then profile entries, so a later profile pick can shadow a base pick
+	// when the assembler resolves collisions.
+	if len(profile.Includes) > 0 {
+		merged := make([]Include, 0, len(h.Includes)+len(profile.Includes))
+		merged = append(merged, h.Includes...)
+		for _, inc := range profile.Includes {
+			merged = append(merged, Include{
+				GitSource: GitSource{
+					Git:   inc.Git,
+					Local: inc.Local,
+					Ref:   inc.Ref,
+					Path:  inc.Path,
+				},
+				Pick: inc.Pick,
+			})
+		}
+		resolved.Includes = merged
+	}
+
 	return &resolved, nil
 }
 
@@ -251,7 +435,7 @@ func LoadFile(path string) (*Harness, error) {
 
 	for _, inc := range hj.Includes {
 		p.Includes = append(p.Includes, Include{
-			GitSource: GitSource{Git: inc.Git, Ref: inc.Ref, Path: inc.Path},
+			GitSource: GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
 			Pick:      inc.Pick,
 		})
 	}
@@ -290,6 +474,22 @@ func (a *Artifacts) Total() int {
 	return len(a.Skills) + len(a.Agents) + len(a.Rules) + len(a.Commands)
 }
 
+// ArtifactTypeDirs lists the directory-style artifact roots — each entry
+// is a subdirectory of the harness root whose children are themselves
+// directories, each holding a manifest file (SKILL.md today).
+//
+// Keep this list in lock-step with the pick.items pattern in
+// docs/schema/plugin.schema.json. The TestArtifactTypes_SchemaAgreement
+// test in this package asserts they match.
+var ArtifactTypeDirs = []string{"skills"}
+
+// ArtifactTypeFiles lists the flat-file artifact roots — each entry is a
+// subdirectory of the harness root whose children are individual .md files.
+//
+// Keep this list in lock-step with the pick.items pattern in
+// docs/schema/plugin.schema.json.
+var ArtifactTypeFiles = []string{"agents", "rules", "commands"}
+
 // ScanArtifacts discovers local artifacts in a harness's installed directory.
 // Skills are directories containing SKILL.md; agents, rules, and commands are .md files.
 func ScanArtifacts(name string) (*Artifacts, error) {
@@ -299,6 +499,7 @@ func ScanArtifacts(name string) (*Artifacts, error) {
 // ScanArtifactsDir discovers artifacts in an arbitrary directory.
 func ScanArtifactsDir(dir string) (*Artifacts, error) {
 	a := &Artifacts{}
+	// ArtifactTypeDirs[0] is "skills" — update if more directory-style types are added.
 	a.Skills = scanSkillDirs(filepath.Join(dir, "skills"))
 	a.Agents = scanMDFiles(filepath.Join(dir, "agents"))
 	a.Rules = scanMDFiles(filepath.Join(dir, "rules"))

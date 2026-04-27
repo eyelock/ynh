@@ -79,11 +79,12 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 | Command | Structured fields |
 |---------|-------------------|
 | `ynd compose` | Composed harness: `name`, `version`, `description`, `default_vendor`, `artifacts` (with source), `includes`, `delegates_to`, `hooks`, `mcp_servers`, `profiles`, `focuses`, `counts` |
-| `ynh info <name>` | Single harness object: `name`, `version`, `description`, `default_vendor`, `path`, `installed_from`, `manifest` (raw `.harness.json` body) |
+| `ynh info <name>` | Single harness object: `name`, `version`, `description`, `default_vendor`, `path`, `installed_from`, `manifest` (raw `.ynh-plugin/plugin.json` body) |
 | `ynh ls` | Array of harness objects: `name`, `version`, `description`, `default_vendor`, `path`, `installed_from`, `artifacts`, `includes`, `delegates_to` |
 | `ynh paths` | `home`, `config`, `harnesses`, `symlinks`, `cache`, `run`, `bin` — all absolute paths resolved for the current `$YNH_HOME` |
 | `ynh search [query]` | Array of result objects: `name`, `description`, `keywords`, `repo`, `path`, `vendors`, `version`, `from` (`type`, `name`) |
 | `ynh vendors` | Array of vendor objects: `name`, `display_name`, `cli`, `config_dir`, `available` (bool) |
+| `ynh version` / `ynd version` | `version` (release), `capabilities` (wire-contract). See [Wire-contract capability](cli-structured.md#wire-contract-capability-version---format-json). |
 | `ynh sources list` | Array of source objects: `name`, `path`, `description`, `harnesses` (discovery count) |
 
 Human-readable tabwriter output remains the default for every command. Structured mode is strictly opt-in.

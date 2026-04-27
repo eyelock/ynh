@@ -492,3 +492,135 @@ func runGit(t *testing.T, dir string, args ...string) {
 		t.Fatalf("git %v failed: %v\n%s", args, err, out)
 	}
 }
+
+func TestResolve_LocalInclude_Relative(t *testing.T) {
+	// Harness root contains a child "extras/" with an artifact.
+	harnessDir := t.TempDir()
+	extras := filepath.Join(harnessDir, "extras", "skills", "demo")
+	if err := os.MkdirAll(extras, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(extras, "SKILL.md"),
+		[]byte("---\nname: demo\ndescription: d\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p := &harness.Harness{
+		Name: "h",
+		Dir:  harnessDir,
+		Includes: []harness.Include{
+			{GitSource: harness.GitSource{Local: "extras"}},
+		},
+	}
+
+	results, err := Resolve(p, nil)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("len(results) = %d, want 1", len(results))
+	}
+	want := filepath.Join(harnessDir, "extras")
+	if results[0].Content.BasePath != want {
+		t.Errorf("BasePath = %q, want %q", results[0].Content.BasePath, want)
+	}
+	if !results[0].Cached || results[0].Cloned {
+		t.Errorf("local include should report Cached=true Cloned=false, got Cached=%v Cloned=%v",
+			results[0].Cached, results[0].Cloned)
+	}
+}
+
+func TestResolve_LocalInclude_Absolute(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "rules"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "rules", "r.md"), []byte("r"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p := &harness.Harness{
+		Name: "h",
+		Dir:  "/does/not/matter", // absolute Local ignores Dir
+		Includes: []harness.Include{
+			{GitSource: harness.GitSource{Local: dir}},
+		},
+	}
+
+	results, err := Resolve(p, nil)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if results[0].Content.BasePath != dir {
+		t.Errorf("BasePath = %q, want %q", results[0].Content.BasePath, dir)
+	}
+}
+
+func TestResolve_LocalInclude_Missing(t *testing.T) {
+	harnessDir := t.TempDir()
+	p := &harness.Harness{
+		Name: "h",
+		Dir:  harnessDir,
+		Includes: []harness.Include{
+			{GitSource: harness.GitSource{Local: "does-not-exist"}},
+		},
+	}
+
+	_, err := Resolve(p, nil)
+	if err == nil {
+		t.Fatal("expected error for missing local include")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error should mention 'not found', got: %v", err)
+	}
+}
+
+func TestResolveLocalSource_TraversalBlocked(t *testing.T) {
+	base := t.TempDir()
+	// Create a real subdir so the local path resolves — the traversal in path should still be blocked.
+	subdir := filepath.Join(base, "subdir")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		local string
+		path  string
+	}{
+		// Relative local paths with .. are blocked
+		{local: "../../../etc", path: ""},
+		// Path component with .. is blocked even when local resolves
+		{local: "subdir", path: "../../etc"},
+		// Absolute path component is blocked
+		{local: "subdir", path: "/etc/passwd"},
+	} {
+		gs := harness.GitSource{Local: tc.local, Path: tc.path}
+		_, err := resolveLocalSource(gs, base)
+		if err == nil {
+			t.Errorf("local=%q path=%q: expected error, got nil", tc.local, tc.path)
+			continue
+		}
+		if !strings.Contains(err.Error(), "must not traverse") && !strings.Contains(err.Error(), "must be relative") {
+			t.Errorf("local=%q path=%q: unexpected error: %v", tc.local, tc.path, err)
+		}
+	}
+}
+
+func TestResolveGitSource_PathTraversalBlocked(t *testing.T) {
+	repoDir := t.TempDir()
+	fetch := func(url, ref string) (RepoResult, error) {
+		return RepoResult{Path: repoDir}, nil
+	}
+
+	for _, badPath := range []string{"../../etc", "../secret", "/etc/passwd"} {
+		gs := harness.GitSource{Git: "github.com/org/repo", Path: badPath}
+		_, _, err := resolveGitSourceWith(gs, fetch)
+		if err == nil {
+			t.Errorf("path %q: expected error, got nil", badPath)
+			continue
+		}
+		if !strings.Contains(err.Error(), "must not traverse") && !strings.Contains(err.Error(), "must be relative") {
+			t.Errorf("path %q: unexpected error: %v", badPath, err)
+		}
+	}
+}

@@ -5,12 +5,21 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
+// loadManifest runs the migration chain and loads the manifest from the new path.
+func loadManifest(dir string) (*plugin.HarnessJSON, error) {
+	if _, err := migration.FormatChain().Run(dir); err != nil {
+		return nil, fmt.Errorf("migrating harness manifest: %w", err)
+	}
+	return plugin.LoadPluginJSON(dir)
+}
+
 // ResolveEditTarget resolves a harness reference to a directory.
 // If ref contains a path separator or starts with '.', it is treated as a
-// filesystem path and must contain .harness.json. Otherwise it is looked up
+// filesystem path and must contain a harness manifest. Otherwise it is looked up
 // as an installed harness name. Returns the directory and whether the harness
 // is installed (i.e. lives under the ynh harnesses directory).
 func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
@@ -19,14 +28,14 @@ func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
 		if absErr != nil {
 			return "", false, fmt.Errorf("resolving path %q: %w", ref, absErr)
 		}
-		if !plugin.IsHarnessDir(abs) {
-			return "", false, fmt.Errorf("no .harness.json found at %q", abs)
+		if DetectFormat(abs) == "" {
+			return "", false, fmt.Errorf("no harness manifest found at %q", abs)
 		}
 		return abs, false, nil
 	}
 
 	installDir := InstalledDir(ref)
-	if DetectFormat(installDir) == "harness" {
+	if DetectFormat(installDir) == "plugin" {
 		return installDir, true, nil
 	}
 	return "", false, fmt.Errorf("harness %q: %w", ref, ErrNotFound)
@@ -58,7 +67,7 @@ type UpdateOptions struct {
 // If the URL+path already exists and Replace is false, it returns an error.
 // Network operations (pre-fetch, pick validation) are the caller's responsibility.
 func AddInclude(dir, url string, opts AddOptions) error {
-	hj, err := plugin.LoadHarnessJSON(dir)
+	hj, err := loadManifest(dir)
 	if err != nil {
 		return err
 	}
@@ -77,14 +86,14 @@ func AddInclude(dir, url string, opts AddOptions) error {
 		hj.Includes = append(hj.Includes, plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick})
 	}
 
-	return plugin.SaveHarnessJSON(dir, hj)
+	return plugin.SavePluginJSON(dir, hj)
 }
 
 // RemoveInclude removes an include identified by URL and optional path.
 // If the URL matches multiple includes and no path is given, an error is
 // returned listing the paths that would disambiguate.
 func RemoveInclude(dir, url string, opts RemoveOptions) error {
-	hj, err := plugin.LoadHarnessJSON(dir)
+	hj, err := loadManifest(dir)
 	if err != nil {
 		return err
 	}
@@ -111,7 +120,7 @@ func RemoveInclude(dir, url string, opts RemoveOptions) error {
 	}
 
 	hj.Includes = keep
-	return plugin.SaveHarnessJSON(dir, hj)
+	return plugin.SavePluginJSON(dir, hj)
 }
 
 // UpdateInclude updates fields on an existing include.
@@ -120,7 +129,7 @@ func RemoveInclude(dir, url string, opts RemoveOptions) error {
 // are updated; omitted fields are left unchanged.
 // Network operations (pre-fetch, pick validation) are the caller's responsibility.
 func UpdateInclude(dir, url string, opts UpdateOptions) error {
-	hj, err := plugin.LoadHarnessJSON(dir)
+	hj, err := loadManifest(dir)
 	if err != nil {
 		return err
 	}
@@ -141,14 +150,14 @@ func UpdateInclude(dir, url string, opts UpdateOptions) error {
 		inc.Ref = *opts.Ref
 	}
 
-	return plugin.SaveHarnessJSON(dir, hj)
+	return plugin.SavePluginJSON(dir, hj)
 }
 
 // FindUpdateTarget loads the harness from dir and returns the include that
 // would be updated by UpdateOptions. Used by callers that need to inspect the
 // final state before writing (e.g. to pre-fetch the right ref/path).
 func FindUpdateTarget(dir, url string, opts UpdateOptions) (plugin.IncludeMeta, error) {
-	hj, err := plugin.LoadHarnessJSON(dir)
+	hj, err := loadManifest(dir)
 	if err != nil {
 		return plugin.IncludeMeta{}, err
 	}
@@ -171,26 +180,56 @@ func FindUpdateTarget(dir, url string, opts UpdateOptions) (plugin.IncludeMeta, 
 	return inc, nil
 }
 
-// ValidatePicks checks that every named pick exists as an artifact in basePath.
-// Returns an error listing any unrecognised names.
+// ValidatePicks checks that every pick names an artifact that exists in basePath.
+//
+// Each pick must be in canonical type/name form. Directory-style types carry
+// no extension (skills/<name>); flat-file types carry .md:
+//
+//   - Skills:   "skills/<name>"        (a skill directory containing SKILL.md)
+//   - Agents:   "agents/<name>.md"
+//   - Rules:    "rules/<name>.md"
+//   - Commands: "commands/<name>.md"
+//
+// This is the same format the assembler expects (see assembler.CopyPicked), so
+// a pick that passes validation here is guaranteed to work end-to-end. The
+// type/name prefix also disambiguates a skill named "foo" from an agent named
+// "foo.md" — both can coexist and be picked independently.
+//
+// On unknown picks the error lists the canonical candidates. When a user
+// submitted a bare basename that resolves to exactly one canonical entry,
+// the error leads with a "Did you mean <X>?" suggestion; when it resolves
+// to several (e.g. a skill and an agent share a basename) all candidates
+// are suggested; when it matches none the full available list is shown.
 func ValidatePicks(basePath string, picks []string) error {
 	artifacts, err := ScanArtifactsDir(basePath)
 	if err != nil {
 		return fmt.Errorf("scanning artifacts for pick validation: %w", err)
 	}
 
-	known := make(map[string]bool, len(artifacts.Skills)+len(artifacts.Agents)+len(artifacts.Rules)+len(artifacts.Commands))
+	known := make(map[string]bool)
+	// byBasename indexes canonical entries by their basename (sans .md) so we
+	// can offer "did you mean ...?" suggestions when a user submits a bare name.
+	byBasename := make(map[string][]string)
+
 	for _, n := range artifacts.Skills {
-		known[n] = true
+		canon := "skills/" + n
+		known[canon] = true
+		byBasename[n] = append(byBasename[n], canon)
 	}
 	for _, n := range artifacts.Agents {
-		known[n] = true
+		canon := "agents/" + n + ".md"
+		known[canon] = true
+		byBasename[n] = append(byBasename[n], canon)
 	}
 	for _, n := range artifacts.Rules {
-		known[n] = true
+		canon := "rules/" + n + ".md"
+		known[canon] = true
+		byBasename[n] = append(byBasename[n], canon)
 	}
 	for _, n := range artifacts.Commands {
-		known[n] = true
+		canon := "commands/" + n + ".md"
+		known[canon] = true
+		byBasename[n] = append(byBasename[n], canon)
 	}
 
 	var unknown []string
@@ -204,16 +243,40 @@ func ValidatePicks(basePath string, picks []string) error {
 		return nil
 	}
 
+	// Build suggestion lines. For each unknown pick try basename → canonical
+	// resolution; if that fails, fall back to dropping any type/ prefix and
+	// retrying (so "skill/foo" with a typo'd type still hints).
+	var suggestions []string
+	for _, bad := range unknown {
+		candidates := suggestionsFor(bad, byBasename)
+		if len(candidates) > 0 {
+			suggestions = append(suggestions, fmt.Sprintf("  %s → did you mean %s?", bad, strings.Join(candidates, " or ")))
+		}
+	}
+
 	available := make([]string, 0, len(known))
 	for n := range known {
 		available = append(available, n)
 	}
 
-	return fmt.Errorf(
-		"unknown pick name(s): %s\nAvailable: %s",
-		strings.Join(unknown, ", "),
-		formatAvailable(available),
-	)
+	msg := fmt.Sprintf("unknown pick name(s): %s", strings.Join(unknown, ", "))
+	if len(suggestions) > 0 {
+		msg += "\n" + strings.Join(suggestions, "\n")
+	}
+	msg += fmt.Sprintf("\nAvailable: %s\n(Picks must use type/name form: skills/<name>, agents/<name>.md, rules/<name>.md, commands/<name>.md)", formatAvailable(available))
+	return fmt.Errorf("%s", msg)
+}
+
+// suggestionsFor returns canonical entries that share the unknown pick's
+// basename. Strips any leading "type/" and trailing ".md" before lookup
+// so "foo", "skill/foo", and "foo.md" all resolve to the same candidates.
+func suggestionsFor(bad string, byBasename map[string][]string) []string {
+	bare := bad
+	if idx := strings.Index(bare, "/"); idx >= 0 {
+		bare = bare[idx+1:]
+	}
+	bare = strings.TrimSuffix(bare, ".md")
+	return byBasename[bare]
 }
 
 func findInclude(includes []plugin.IncludeMeta, url, path string) int {

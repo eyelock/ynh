@@ -538,6 +538,61 @@ func TestCmdComposeHelp(t *testing.T) {
 	}
 }
 
+func TestCmdComposePickFilterWithLocalInclude(t *testing.T) {
+	// Regression: pickSet was built from "skills/name" paths but compared
+	// against bare "name" values returned by ScanArtifactsDir, so picked
+	// skills were always dropped.
+	dir := t.TempDir()
+
+	// Create include harness with two skills
+	incDir := filepath.Join(dir, "include-harness")
+	for _, name := range []string{"swift-lang", "go-lang"} {
+		skillDir := filepath.Join(incDir, "skills", name)
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"),
+			[]byte("---\nname: "+name+"\n---\n"+name+" skill.\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(incDir, ".harness.json"),
+		[]byte(`{"name":"inc","version":"0.1.0","default_vendor":"claude"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Main harness picks only swift-lang from the include
+	hj := map[string]any{
+		"name":           "main",
+		"version":        "1.0.0",
+		"default_vendor": "claude",
+		"includes": []map[string]any{
+			{"local": incDir, "pick": []string{"skills/swift-lang"}},
+		},
+	}
+	data, _ := json.MarshalIndent(hj, "", "  ")
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{dir}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if len(got.Artifacts.Skills) != 1 {
+		t.Fatalf("skills = %v, want exactly [swift-lang]", got.Artifacts.Skills)
+	}
+	if got.Artifacts.Skills[0].Name != "swift-lang" {
+		t.Errorf("skill name = %q, want swift-lang", got.Artifacts.Skills[0].Name)
+	}
+}
+
 func TestCmdComposeTextWithMCPURL(t *testing.T) {
 	dir := t.TempDir()
 

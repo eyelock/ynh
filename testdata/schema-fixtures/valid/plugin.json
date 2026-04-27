@@ -1,0 +1,7 @@
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "my-plugin",
+  "version": "1.0.0",
+  "description": "A valid plugin",
+  "default_vendor": "claude"
+}

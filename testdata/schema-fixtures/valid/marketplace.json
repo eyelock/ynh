@@ -1,0 +1,9 @@
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
+  "name": "my-registry",
+  "owner": { "name": "alice" },
+  "harnesses": [
+    { "name": "reviewer", "source": "./harnesses/reviewer", "description": "Code reviewer" },
+    { "name": "analyst", "source": { "type": "github", "repo": "github.com/alice/assistants", "path": "ynh/analyst" } }
+  ]
+}

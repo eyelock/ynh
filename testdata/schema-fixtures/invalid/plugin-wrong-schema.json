@@ -1,0 +1,5 @@
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/plin.schema.json",
+  "name": "my-plugin",
+  "version": "1.0.0"
+}

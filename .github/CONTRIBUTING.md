@@ -22,12 +22,14 @@ cmd/ynh/                  CLI entry point: harness template manager (init, insta
 cmd/ynd/                  CLI entry point: developer tools (create, lint, validate, fmt, compress, export, marketplace, inspect, preview, diff)
 internal/
   config/                 Global config (~/.ynh/) and path management
-  harness/                Harness loading, format detection, name validation
-  plugin/                 Harness manifest types (.harness.json)
+  harness/                Harness loading, name validation, namespaced storage
+  migration/              Format migration filter chain (see Migration Chain below)
+  plugin/                 Harness manifest types (.ynh-plugin/plugin.json, marketplace.json)
   resolver/               Git clone, cache, and content extraction
   assembler/              Build vendor config dir from resolved content
   exporter/               Produce vendor-native plugin dirs from harness definitions
   marketplace/            Generate marketplace indexes from sets of harnesses/plugins
+  namespace/              @ syntax parsing, URL → namespace derivation, FS name encoding
   registry/               Registry discovery: fetch, search, lookup across Git-hosted indexes
   symlink/                Symlink transaction log (~/.ynh/symlinks.json)
   vendor/                 Vendor adapter interface and implementations
@@ -54,7 +56,9 @@ docs/                     User guide (GitHub Pages)
 
 **Vendor-adaptive launch.** Each vendor gets the strategy that matches its capabilities. Claude supports `--plugin-dir`, so ynh does a clean `exec` with no running process. Codex and Cursor lack native plugin loading, so ynh installs symlinks and manages a child process with signal forwarding. This pragmatic split avoids forcing a lowest-common-denominator approach.
 
-**Single manifest.** Harnesses use a single `.harness.json` file as their manifest — all config (identity, includes, hooks, MCP servers, profiles) lives in one place. The legacy two-file format (`.claude-plugin/plugin.json` + `metadata.json`) is no longer supported.
+**Single manifest.** Harnesses use a single `plugin.json` inside `.ynh-plugin/` as their manifest — all config (identity, includes, hooks, MCP servers, profiles) lives in one place.
+
+**Migration via filter chain.** All backward compatibility lives in `internal/migration/`. Each migration is one struct implementing `Migrator` — its own `Applies` conditions and `Run` transform. Loaders call the chain once before reading; they never branch on old formats themselves. Removing support for a legacy format means deleting that one file and unregistering the struct. No other code changes.
 
 ## Technologies
 
@@ -87,6 +91,25 @@ make lint
 # Full CI pipeline (deps, format, lint, test, build)
 make check
 ```
+
+### Testing Unreleased ynh Against Downstream Tooling
+
+Downstream consumers (e.g. TermQ) gate on `ynh`'s wire-contract version, exposed as `capabilities` in `ynh version --format json`. Unlike `version` (release tag, injected via ldflags), `capabilities` is a source constant in `internal/config/config.go` — `make install` produces a developer build that honestly reports whatever contract the current branch implements.
+
+To test a branch against downstream tooling without cutting a release:
+
+```bash
+# From this repo — build and install to ~/.ynh/bin/
+make install
+
+# Verify the contract
+ynh version --format json
+# {"version": "dev-<branch>-<sha>", "capabilities": "0.2.0"}
+
+# Downstream tooling on PATH now sees the dev build
+```
+
+Bump `CapabilitiesVersion` whenever you change a JSON shape, command name, or manifest field that downstream code decodes or depends on. Do **not** bump it for internal refactors, bug fixes, or additive fields that older clients can safely ignore.
 
 ### Two Binaries
 
@@ -122,9 +145,31 @@ The exporter reuses `assembler.CopyPicked`, `CopyAllArtifacts`, `CopyFile`, and 
 
 ### Registry
 
-The registry system (`internal/registry/`) enables harness discovery from Git-hosted indexes. A registry is a Git repo with a `registry.json` at its root. Registries are configured in `~/.ynh/config.json` and fetched/cached via `resolver.EnsureRepo`.
+The registry system (`internal/registry/`) enables harness discovery from Git-hosted indexes. A registry is a Git repo with a `.ynh-plugin/marketplace.json` at its root. Registries are configured in `~/.ynh/config.json` and fetched/cached via `resolver.EnsureRepo`.
 
-The install command uses a 6-rule disambiguation chain: local path → SSH URL → HTTPS URL → `name@registry` → Git shorthand → plain name registry search. See `cmd/ynh/install_resolve.go`.
+The install command uses a 6-rule disambiguation chain: local path → SSH URL → HTTPS URL → `name@org/repo` → Git shorthand → plain name registry search. See `cmd/ynh/install_resolve.go`.
+
+### Migration Chain
+
+All backward compatibility lives in `internal/migration/`. The pattern:
+
+```go
+type Migrator interface {
+    Applies(dir string) bool  // check conditions — should this run?
+    Run(dir string) error     // perform the transform
+    Description() string      // user-facing label for what was migrated
+}
+
+type Chain []Migrator
+
+func (c Chain) Run(dir string) ([]string, error)  // returns descriptions of applied migrations
+```
+
+**Adding a migration:** create one file in `internal/migration/`, implement `Migrator`, add to `DefaultChain()`.
+
+**Removing a migration:** delete the file and remove the struct from `DefaultChain()`. No other code changes — loaders never branch on old formats directly.
+
+**Rule:** loaders (`internal/plugin`, `internal/registry`, `internal/harness`) call the migration chain before reading. They assume the new format. Legacy detection logic lives only in `Applies()` methods inside `internal/migration/`.
 
 ## Code Patterns
 

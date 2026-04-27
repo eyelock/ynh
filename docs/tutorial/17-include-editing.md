@@ -17,8 +17,10 @@ Start with a bare harness and add a Git include to it:
 ```bash
 mkdir -p /tmp/ynh-tutorial-includes/my-harness
 
-cat > /tmp/ynh-tutorial-includes/my-harness/.harness.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin
+cat > /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
   "default_vendor": "claude"
@@ -33,15 +35,16 @@ Expected:
 Added include "github.com/anthropics/skills"
 ```
 
-The include is written to `.harness.json` immediately:
+The include is written to `.ynh-plugin/plugin.json` immediately:
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.harness.json
+cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 ```
 
 Expected:
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
   "default_vendor": "claude",
@@ -60,7 +63,7 @@ Add a second include scoped to a subdirectory with specific picks and a pinned r
 ```bash
 ynh include add /tmp/ynh-tutorial-includes/my-harness github.com/eyelock/assistants \
   --path skills/dev \
-  --pick dev-project,dev-quality \
+  --pick skills/dev-project,skills/dev-quality \
   --ref main
 ```
 
@@ -70,12 +73,13 @@ Added include "github.com/eyelock/assistants" (path: "skills/dev")
 ```
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.harness.json
+cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 ```
 
 Expected:
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
   "default_vendor": "claude",
@@ -88,8 +92,8 @@ Expected:
       "ref": "main",
       "path": "skills/dev",
       "pick": [
-        "dev-project",
-        "dev-quality"
+        "skills/dev-project",
+        "skills/dev-quality"
       ]
     }
   ]
@@ -101,7 +105,7 @@ Expected:
 | Flag | Purpose |
 |------|---------|
 | `--path <subdir>` | Scope into a subdirectory of the repo |
-| `--pick <items>` | Comma-separated artifact names to include (all others excluded) |
+| `--pick <items>` | Comma-separated artifact paths in `type/name` form: `skills/<name>`, `agents/<name>.md`, `rules/<name>.md`, `commands/<name>.md`. All others excluded. |
 | `--ref <ref>` | Pin to a branch, tag, or commit SHA |
 
 ## T17.3: Duplicate add → error
@@ -124,7 +128,7 @@ Use `--replace` to overwrite an existing include rather than erroring:
 
 ```bash
 ynh include add /tmp/ynh-tutorial-includes/my-harness github.com/anthropics/skills \
-  --pick frontend-design \
+  --pick skills/frontend-design \
   --replace
 ```
 
@@ -134,12 +138,13 @@ Replaced include "github.com/anthropics/skills"
 ```
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.harness.json
+cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 ```
 
 Expected:
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
   "default_vendor": "claude",
@@ -147,7 +152,7 @@ Expected:
     {
       "git": "github.com/anthropics/skills",
       "pick": [
-        "frontend-design"
+        "skills/frontend-design"
       ]
     },
     {
@@ -155,8 +160,8 @@ Expected:
       "ref": "main",
       "path": "skills/dev",
       "pick": [
-        "dev-project",
-        "dev-quality"
+        "skills/dev-project",
+        "skills/dev-quality"
       ]
     }
   ]
@@ -182,12 +187,13 @@ Updated include "github.com/eyelock/assistants"
 The path and pick are unchanged:
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.harness.json
+cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 ```
 
 Expected:
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
   "default_vendor": "claude",
@@ -195,7 +201,7 @@ Expected:
     {
       "git": "github.com/anthropics/skills",
       "pick": [
-        "frontend-design"
+        "skills/frontend-design"
       ]
     },
     {
@@ -203,8 +209,8 @@ Expected:
       "ref": "v1.0.0",
       "path": "skills/dev",
       "pick": [
-        "dev-project",
-        "dev-quality"
+        "skills/dev-project",
+        "skills/dev-quality"
       ]
     }
   ]
@@ -226,12 +232,13 @@ Updated include "github.com/eyelock/assistants"
 ```
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.harness.json
+cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 ```
 
 Expected:
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
   "default_vendor": "claude",
@@ -239,7 +246,7 @@ Expected:
     {
       "git": "github.com/anthropics/skills",
       "pick": [
-        "frontend-design"
+        "skills/frontend-design"
       ]
     },
     {
@@ -247,8 +254,8 @@ Expected:
       "ref": "v1.0.0",
       "path": "skills/tech",
       "pick": [
-        "dev-project",
-        "dev-quality"
+        "skills/dev-project",
+        "skills/dev-quality"
       ]
     }
   ]
@@ -267,12 +274,13 @@ Removed include "github.com/anthropics/skills"
 ```
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.harness.json
+cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 ```
 
 Expected:
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
   "default_vendor": "claude",
@@ -282,8 +290,8 @@ Expected:
       "ref": "v1.0.0",
       "path": "skills/tech",
       "pick": [
-        "dev-project",
-        "dev-quality"
+        "skills/dev-project",
+        "skills/dev-quality"
       ]
     }
   ]
@@ -297,8 +305,10 @@ A harness can include the same repo at two different paths. When a URL matches m
 Set up two includes from the same repo at different paths:
 
 ```bash
-cat > /tmp/ynh-tutorial-includes/my-harness/.harness.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin
+cat > /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
   "default_vendor": "claude",
@@ -368,12 +378,13 @@ Updated include "github.com/eyelock/assistants"
 Only the `skills/dev` include is changed; `skills/tech` is untouched:
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.harness.json
+cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
 ```
 
 Expected:
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
   "default_vendor": "claude",
@@ -400,7 +411,8 @@ For installed harnesses, use the harness name instead of a path:
 ```bash
 # Install a harness first
 mkdir -p /tmp/ynh-tutorial-includes/base
-cat > /tmp/ynh-tutorial-includes/base/.harness.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial-includes/base/.ynh-plugin
+cat > /tmp/ynh-tutorial-includes/base/.ynh-plugin/plugin.json << 'EOF'
 {
   "name": "base",
   "version": "0.1.0",
@@ -426,7 +438,7 @@ When targeting an installed harness by name, ynh pre-fetches the new include imm
 ynh info base
 ```
 
-The installed harness's `.harness.json` at `~/.ynh/harnesses/base/.harness.json` now contains the added include.
+The installed harness's `.ynh-plugin/plugin.json` at `~/.ynh/harnesses/base/.ynh-plugin/plugin.json` now contains the added include.
 
 ```bash
 # Clean up
@@ -460,8 +472,10 @@ rm -rf /tmp/ynh-tutorial-includes
 - `ynh include update <harness> <url>` — updates specific fields; only supplied flags change; uses `--from-path` to target one of multiple entries from the same URL; `--path` changes the path value
 - `<harness>` is a **name** (installed harness) or a **path** (local directory); paths take a `/` or `.` prefix
 - Installed harnesses are pre-fetched after `add` or `update` so `ynh run` works immediately — no separate `ynh update` needed
-- `--pick` names are validated against the fetched repo — unknown names produce a clear error with the available list
-- Mutations never happen if validation fails — the `.harness.json` is only written after all checks pass
+- `--pick` values must use the canonical `type/name` form (`skills/<name>`, `agents/<name>.md`, `rules/<name>.md`, `commands/<name>.md`); validated against the fetched repo before the manifest is touched
+- If a bare basename or mistyped pick resolves to existing canonical entries, the error leads with a "Did you mean …?" hint (`--pick foo` → `did you mean skills/foo or agents/foo.md?`); otherwise the full available list is shown
+- The `type/` prefix disambiguates a skill and a flat artifact that share a basename — both can be picked independently
+- Mutations never happen if validation fails — the `.ynh-plugin/plugin.json` is only written after all checks pass
 
 ## Next
 

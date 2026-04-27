@@ -15,7 +15,7 @@ mkdir -p /tmp/ynh-tutorial
 
 Create a small marketplace with one harness and one standalone plugin:
 
-### Standalone plugin (no .harness.json)
+### Standalone plugin (vendor-native format)
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/marketplace-src/plugins/formatter/.claude-plugin
@@ -40,12 +40,13 @@ configured formatter (prettier, gofmt, black, etc.).
 EOF
 ```
 
-### Harness (has .harness.json with includes)
+### Harness (has .ynh-plugin/plugin.json with includes)
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer
 
-cat > /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/.harness.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/.ynh-plugin
+cat > /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/.ynh-plugin/plugin.json << 'EOF'
 {
   "name": "reviewer",
   "version": "1.0.0",
@@ -70,10 +71,11 @@ EOF
 ```bash
 cat > /tmp/ynh-tutorial/marketplace-src/marketplace.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
   "name": "tutorial-marketplace",
   "owner": {"name": "tutorial"},
   "description": "Sample marketplace for the ynh tutorial",
-  "entries": [
+  "harnesses": [
     {
       "type": "plugin",
       "source": "./plugins/formatter"
@@ -90,7 +92,7 @@ EOF
 
 Two entry types:
 - **`plugin`** — already a valid plugin directory. Copied as-is, missing vendor manifests generated.
-- **`harness`** — has `.harness.json` with includes. Fully exported (includes resolved, pick applied, delegates generated).
+- **`harness`** — has `.ynh-plugin/plugin.json` with includes. Fully exported (includes resolved, pick applied, delegates generated).
 
 ## T6.3: Build the marketplace
 

@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
+  "title": "YNH Marketplace",
+  "description": "Registry index for ynh 0.2+ — lives at .ynh-plugin/marketplace.json. Lists harnesses published by a registry.",
+  "type": "object",
+  "required": ["$schema", "name", "owner", "harnesses"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "pattern": "/marketplace\\.schema\\.json$"
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
+      "description": "Kebab-case registry identifier."
+    },
+    "owner": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": { "type": "string" },
+        "version": { "type": "string" },
+        "harnessRoot": {
+          "type": "string",
+          "description": "Path prefix prepended to relative source paths. Example: \"./ynh\""
+        }
+      }
+    },
+    "harnesses": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/harnessEntry" }
+    }
+  },
+  "$defs": {
+    "harnessEntry": {
+      "type": "object",
+      "required": ["name", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+        },
+        "source": { "$ref": "#/$defs/source" },
+        "description": { "type": "string" },
+        "version": { "type": "string" },
+        "author": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "email": { "type": "string" },
+            "url": { "type": "string" }
+          }
+        },
+        "keywords": { "type": "array", "items": { "type": "string" } },
+        "category": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "source": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^\\.[\\/]",
+          "description": "Relative path under the marketplace repo root. Must start with ./"
+        },
+        { "$ref": "#/$defs/sourceGitHub" },
+        { "$ref": "#/$defs/sourceURL" },
+        { "$ref": "#/$defs/sourceGitSubdir" }
+      ]
+    },
+    "sourceGitHub": {
+      "type": "object",
+      "required": ["type", "repo"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "github" },
+        "repo": {
+          "type": "string",
+          "description": "host/owner/repo format, e.g. github.com/owner/repo"
+        },
+        "path": { "type": "string" },
+        "ref": { "type": "string" },
+        "sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "Full 40-character commit SHA. When both ref and sha are present, ref controls what is fetched; sha is verified against the fetched commit."
+        }
+      }
+    },
+    "sourceURL": {
+      "type": "object",
+      "required": ["type", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "url" },
+        "url": { "type": "string" },
+        "path": { "type": "string" },
+        "ref": { "type": "string" },
+        "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    },
+    "sourceGitSubdir": {
+      "type": "object",
+      "required": ["type", "url", "path"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "git-subdir" },
+        "url": { "type": "string" },
+        "path": {
+          "type": "string",
+          "description": "Subdirectory to sparse-clone. Required — no point in sparse clone of the root."
+        },
+        "ref": { "type": "string" },
+        "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+      }
+    }
+  }
+}

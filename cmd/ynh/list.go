@@ -93,12 +93,12 @@ func cmdListTo(args []string, stdout, stderr io.Writer) error {
 }
 
 func printListText(w io.Writer) error {
-	names, err := harness.List()
+	entries, err := harness.ListAll()
 	if err != nil {
 		return err
 	}
 
-	if len(names) == 0 {
+	if len(entries) == 0 {
 		_, _ = fmt.Fprintln(w, "No harnesses installed.")
 		_, _ = fmt.Fprintln(w, "Install one with: ynh install <git-url|path>")
 		return nil
@@ -107,10 +107,10 @@ func printListText(w io.Writer) error {
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	_, _ = fmt.Fprintln(tw, "NAME\tVENDOR\tSOURCE\tARTIFACTS\tINCLUDES\tDELEGATES TO")
 
-	for _, name := range names {
-		p, err := harness.Load(name)
+	for _, e := range entries {
+		p, err := harness.LoadDir(e.Dir)
 		if err != nil {
-			_, _ = fmt.Fprintf(tw, "%s\t(error: %v)\t\t\t\t\n", name, err)
+			_, _ = fmt.Fprintf(tw, "%s\t(error: %v)\t\t\t\t\n", e.Name, err)
 			continue
 		}
 
@@ -120,7 +120,7 @@ func printListText(w io.Writer) error {
 		}
 
 		source := formatProvenance(p.InstalledFrom)
-		artifacts := formatArtifactSummary(name)
+		artifacts := formatArtifactSummaryDir(e.Dir)
 		includes := formatIncludes(p.Includes)
 		delegates := formatDelegates(p.DelegatesTo)
 
@@ -216,7 +216,12 @@ func buildDelegates(delegates []harness.Delegate) []listDelegate {
 // formatArtifactSummary formats the ARTIFACTS column for ynh ls.
 // Shows a compact summary like "1s 2a 1r 1c" (skills, agents, rules, commands).
 func formatArtifactSummary(name string) string {
-	arts, _ := harness.ScanArtifacts(name)
+	return formatArtifactSummaryDir(harness.InstalledDir(name))
+}
+
+// formatArtifactSummaryDir formats the ARTIFACTS column from an explicit directory.
+func formatArtifactSummaryDir(dir string) string {
+	arts, _ := harness.ScanArtifactsDir(dir)
 	if arts.Total() == 0 {
 		return "0"
 	}

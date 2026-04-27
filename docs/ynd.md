@@ -18,7 +18,7 @@ brew tap eyelock/tap && brew install ynh
 Scaffold a new artifact or full harness.
 
 ```bash
-ynd create harness my-team     # full harness directory structure (.harness.json + artifacts)
+ynd create harness my-team     # full harness directory structure (.ynh-plugin/plugin.json + artifacts)
 ynd create skill commit        # skills/commit/SKILL.md
 ynd create agent reviewer      # agents/reviewer.md
 ynd create rule be-nice        # rules/be-nice.md
@@ -37,10 +37,15 @@ ynd lint --harness ./my-harness  # explicit harness flag
 
 ### validate
 
-Validate harness structure: required files, frontmatter fields, directory layout.
+Validate harness structure: required files, frontmatter fields, directory layout,
+and JSON Schema conformance (`plugin.json` against `plugin.schema.json`;
+`.ynh-plugin/marketplace.json` against `marketplace.schema.json`).
+
+When given a directory, validates all harnesses found within it and also checks
+for a `.ynh-plugin/marketplace.json` at the root of that directory.
 
 ```bash
-ynd validate                   # current harness directory
+ynd validate                   # current directory (harnesses + root marketplace.json)
 ynd validate path/to/harness   # specific harness
 ynd validate --harness ./my-harness  # explicit harness flag
 ```
@@ -111,7 +116,7 @@ ynd preview --harness ./my-harness          # explicit harness flag
 
 When no `-o` flag is given, preview prints a tree with file contents to stdout. With `-o`, it writes the full assembled output to the specified directory.
 
-Preview supports the same source types as export: local directories with `.harness.json` or bare `AGENTS.md` directories.
+Preview supports the same source types as export: local directories with `.ynh-plugin/plugin.json` or bare `AGENTS.md` directories.
 
 See [Tutorial 8: Developer Preview](tutorial/12-developer-preview.md) for a guided walkthrough.
 
@@ -157,7 +162,7 @@ ynd export github.com/user/repo --path harnesses/david  # from a monorepo
 | `-o, --output <dir>` | Output directory. Default: `./dist/<harness-name>/` |
 | `-v, --vendor <names>` | Comma-separated vendors. Default: all registered (`claude,codex,cursor`) |
 | `--harness <dir>` | Harness source directory (alternative to positional arg) |
-| `--path <subdir>` | Subdirectory within source (for monorepos) |
+| `--path <subdir>` | Subdirectory within source (for monorepos). Must be a relative path with no `..` traversal. |
 | `--profile <name>` | Profile to apply during assembly |
 | `--merged` | Single output dir with all vendor manifests (for CI/marketplace use) |
 | `--clean` | Remove entire output dir before export |
@@ -220,7 +225,7 @@ ynd marketplace build --clean                     # remove output dir before bui
 {
   "name": "my-marketplace",
   "owner": { "name": "My Org" },
-  "entries": [
+  "harnesses": [
     { "type": "plugin", "source": "./plugins/foo" },
     { "type": "harness", "source": "./harnesses/bar" },
     { "type": "harness", "source": "github.com/user/repo", "path": "harnesses/baz" }
@@ -231,6 +236,27 @@ ynd marketplace build --clean                     # remove output dir before bui
 - `plugin` entries are copied as-is (already in vendor-native format)
 - `harness` entries are fully exported — includes resolved, artifacts flattened
 - Codex is excluded (no marketplace system)
+
+### migrate
+
+Run the format migration chain against a harness or registry directory.
+Handles any registered migrator generically — the command itself knows
+nothing about specific formats. See [docs/migration.md](migration.md) for
+the full 0.1 → 0.2 migration guide.
+
+```bash
+ynd migrate                    # current directory
+ynd migrate ./my-harness       # specific directory
+ynd migrate ./harnesses        # walk tree, migrate every match
+```
+
+Idempotent — safe to run twice. No-op if the target already uses the new
+format. Called transparently by ynh on first access to a legacy harness,
+so manual invocation is rarely needed except for source trees.
+
+| Flag | Description |
+|------|-------------|
+| `-h, --help` | Show help |
 
 **Output structure:**
 
@@ -260,7 +286,7 @@ See [Tutorial 11: Marketplace](tutorial/06-marketplace.md) for a guided walkthro
 | `--clean` | export, marketplace | Remove output directory before writing. |
 | `--merged` | export | Single output dir with dual vendor manifests. |
 | `--profile <name>` | preview, diff, export | Profile to apply during assembly. |
-| `--path <subdir>` | export | Subdirectory within source (for monorepos). |
+| `--path <subdir>` | export | Subdirectory within source (for monorepos). Must be a relative path with no `..` traversal. |
 | `--restore` | compress | Restore a file from its latest backup. |
 | `--list-backups` | compress | Show backup history for a file. |
 | `--pick <N>` | compress | With `--restore`, pick a specific backup by number from the list. |

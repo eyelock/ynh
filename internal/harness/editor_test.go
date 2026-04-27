@@ -1,8 +1,11 @@
 package harness
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -29,9 +32,9 @@ func overrideHarnessesDir(t *testing.T) {
 // loadIncludes is a test helper that reads the includes from a harness dir.
 func loadIncludes(t *testing.T, dir string) []plugin.IncludeMeta {
 	t.Helper()
-	hj, err := plugin.LoadHarnessJSON(dir)
+	hj, err := plugin.LoadPluginJSON(dir)
 	if err != nil {
-		t.Fatalf("LoadHarnessJSON: %v", err)
+		t.Fatalf("LoadPluginJSON: %v", err)
 	}
 	return hj.Includes
 }
@@ -86,8 +89,8 @@ func TestResolveEditTarget_PathNoHarness(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for path without .harness.json")
 	}
-	if !strings.Contains(err.Error(), ".harness.json") {
-		t.Errorf("error should mention .harness.json, got: %v", err)
+	if !strings.Contains(err.Error(), "no harness manifest") {
+		t.Errorf("error should mention missing manifest, got: %v", err)
 	}
 }
 
@@ -372,19 +375,39 @@ func TestValidatePicks_Valid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := ValidatePicks(dir, []string{"web-search"}); err != nil {
+	if err := ValidatePicks(dir, []string{"skills/web-search"}); err != nil {
 		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
+func TestValidatePicks_RejectsBareName(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, "skills", "web-search")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# web-search"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bare basename is no longer valid — canonical form is type/name.
+	err := ValidatePicks(dir, []string{"web-search"})
+	if err == nil {
+		t.Fatal("expected error when pick is a bare name without type/ prefix")
+	}
+	if !strings.Contains(err.Error(), "skills/web-search") {
+		t.Errorf("error should suggest the canonical form, got: %v", err)
 	}
 }
 
 func TestValidatePicks_Unknown(t *testing.T) {
 	dir := t.TempDir()
 
-	err := ValidatePicks(dir, []string{"nonexistent"})
+	err := ValidatePicks(dir, []string{"skills/nonexistent"})
 	if err == nil {
 		t.Fatal("expected error for unknown pick")
 	}
-	if !strings.Contains(err.Error(), "nonexistent") {
+	if !strings.Contains(err.Error(), "skills/nonexistent") {
 		t.Errorf("error should name the unknown pick, got: %v", err)
 	}
 }
@@ -393,6 +416,50 @@ func TestValidatePicks_Empty(t *testing.T) {
 	dir := t.TempDir()
 	if err := ValidatePicks(dir, nil); err != nil {
 		t.Fatalf("nil picks should always pass: %v", err)
+	}
+}
+
+// TestValidatePicks_BasenameClash asserts the canonical type/name form
+// disambiguates a skill and an agent that share a basename.
+//
+// With the old bare-name validation they collided on a single key ("foo")
+// and the user could not pick one without also picking the other.
+func TestValidatePicks_BasenameClash(t *testing.T) {
+	dir := t.TempDir()
+
+	// skill "foo"
+	skillDir := filepath.Join(dir, "skills", "foo")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# foo skill"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// agent "foo.md"
+	agentsDir := filepath.Join(dir, "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(agentsDir, "foo.md"), []byte("agent foo"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Either alone is valid.
+	if err := ValidatePicks(dir, []string{"skills/foo"}); err != nil {
+		t.Errorf("pick skills/foo alone should validate: %v", err)
+	}
+	if err := ValidatePicks(dir, []string{"agents/foo.md"}); err != nil {
+		t.Errorf("pick agents/foo.md alone should validate: %v", err)
+	}
+	// Both together.
+	if err := ValidatePicks(dir, []string{"skills/foo", "agents/foo.md"}); err != nil {
+		t.Errorf("picking both skills/foo and agents/foo.md should validate: %v", err)
+	}
+	// Bare "foo" is ambiguous and no longer accepted.
+	err := ValidatePicks(dir, []string{"foo"})
+	if err == nil {
+		t.Error("bare basename should not validate (canonical type/name required)")
 	}
 }
 
@@ -413,5 +480,71 @@ func TestFindUpdateTarget_ComputesFinalState(t *testing.T) {
 	}
 	if inc.Path != "new" || inc.Ref != "v2" {
 		t.Errorf("expected path=new ref=v2, got path=%q ref=%q", inc.Path, inc.Ref)
+	}
+}
+
+// TestArtifactTypes_SchemaAgreement asserts that the pick regex in
+// docs/schema/plugin.schema.json covers exactly the artifact types declared
+// in ArtifactTypeDirs + ArtifactTypeFiles. If someone adds a new directory-
+// or file-style artifact root to harness without updating the schema, this
+// test fails and names the divergent type.
+func TestArtifactTypes_SchemaAgreement(t *testing.T) {
+	_, thisFile, _, _ := runtime.Caller(0)
+	schemaPath := filepath.Join(filepath.Dir(thisFile), "..", "..", "docs", "schema", "plugin.schema.json")
+
+	data, err := os.ReadFile(schemaPath)
+	if err != nil {
+		t.Fatalf("read schema: %v", err)
+	}
+
+	var schema map[string]any
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatalf("parse schema: %v", err)
+	}
+
+	// Walk into $defs.includes.items.properties.pick.items.pattern.
+	defs, _ := schema["$defs"].(map[string]any)
+	includes, _ := defs["includes"].(map[string]any)
+	items, _ := includes["items"].(map[string]any)
+	props, _ := items["properties"].(map[string]any)
+	pick, _ := props["pick"].(map[string]any)
+	pickItems, _ := pick["items"].(map[string]any)
+	pattern, _ := pickItems["pattern"].(string)
+	if pattern == "" {
+		t.Fatal("schema: could not locate pick.items.pattern")
+	}
+
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		t.Fatalf("compile schema pattern %q: %v", pattern, err)
+	}
+
+	// Every directory-style type must match as type/<bare>. (A skill named
+	// "foo.md" is legal — it's an unusual but valid directory name — so we
+	// don't assert the suffix is rejected here.)
+	for _, typ := range ArtifactTypeDirs {
+		sample := typ + "/demo"
+		if !re.MatchString(sample) {
+			t.Errorf("schema pick.items.pattern does not match directory-style type %q (sample %q)", typ, sample)
+		}
+	}
+
+	// Every flat-file type must match as type/<bare>.md and reject bare form.
+	for _, typ := range ArtifactTypeFiles {
+		sampleOK := typ + "/demo.md"
+		sampleBad := typ + "/demo"
+		if !re.MatchString(sampleOK) {
+			t.Errorf("schema pick.items.pattern does not match flat-file type %q (sample %q)", typ, sampleOK)
+		}
+		if re.MatchString(sampleBad) {
+			t.Errorf("schema pattern wrongly accepts %s/demo — flat-file types require .md", typ)
+		}
+	}
+
+	// Bare basenames must always fail.
+	for _, bare := range []string{"foo", "foo.md"} {
+		if re.MatchString(bare) {
+			t.Errorf("schema pattern wrongly accepts bare basename %q", bare)
+		}
 	}
 }

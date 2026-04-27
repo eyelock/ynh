@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/harness"
@@ -221,7 +222,13 @@ func printInfoText(w io.Writer, name string) error {
 	if len(p.Focuses) == 0 {
 		_, _ = fmt.Fprintln(w, "  (none)")
 	} else {
-		for fname, focus := range p.Focuses {
+		focusNames := make([]string, 0, len(p.Focuses))
+		for fname := range p.Focuses {
+			focusNames = append(focusNames, fname)
+		}
+		sort.Strings(focusNames)
+		for _, fname := range focusNames {
+			focus := p.Focuses[fname]
 			profileLabel := "(default)"
 			if focus.Profile != "" {
 				profileLabel = "profile=" + focus.Profile
@@ -243,8 +250,10 @@ func printInfoJSON(stdout, stderr io.Writer, name string) error {
 		return cliError(stderr, true, code, err.Error())
 	}
 
-	// Read the raw .harness.json for the manifest field
-	manifestPath := filepath.Join(harness.InstalledDir(name), plugin.HarnessFile)
+	// Migration chain has run (harness.Load was called above), so the manifest
+	// is always at the new path.
+	installDir := harness.InstalledDir(name)
+	manifestPath := filepath.Join(installDir, plugin.PluginDir, plugin.PluginFile)
 	raw, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return cliError(stderr, true, errCodeIOError,

@@ -93,8 +93,8 @@ ynh search "go"
 
 Expected:
 ```
-NAME   DESCRIPTION                                       REPO                                       VENDORS              FROM
-david  Full-stack development harness with Go expertise  github.com/eyelock/assistants (ynh/david)  claude,codex,cursor  tutorial-registry (registry)
+NAME   DESCRIPTION                                       REPO                                       FROM
+david  Full-stack development harness with Go expertise  github.com/eyelock/assistants (ynh/david)  tutorial-registry (registry)
 ```
 
 ```bash
@@ -103,8 +103,8 @@ ynh search "planning"
 
 Expected:
 ```
-NAME     DESCRIPTION                                REPO                                         VENDORS  FROM
-planner  Project planning and architecture harness  github.com/eyelock/assistants (ynh/planner)  claude   tutorial-registry (registry)
+NAME     DESCRIPTION                                REPO                                         FROM
+planner  Project planning and architecture harness  github.com/eyelock/assistants (ynh/planner)  tutorial-registry (registry)
 ```
 
 ```bash
@@ -113,8 +113,8 @@ ynh search "music"
 
 Expected:
 ```
-NAME              DESCRIPTION                                      REPO                                                      VENDORS  FROM
-media-management  Music library processing and Apple Music import  github.com/eyelock/assistants (plugins/media-management)  claude   tutorial-registry (registry)
+NAME              DESCRIPTION                                      REPO                                                      FROM
+media-management  Music library processing and Apple Music import  github.com/eyelock/assistants (plugins/media-management)  tutorial-registry (registry)
 ```
 
 ```bash
@@ -219,8 +219,8 @@ ynh registry list
 Local sources are directories of harnesses registered in config — no Git or internet required. When a source name matches a harness name, uninstalling the harness also removes the source entry.
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/sources/codereview
-cat > /tmp/ynh-tutorial/sources/codereview/.harness.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/sources/codereview/.ynh-plugin
+cat > /tmp/ynh-tutorial/sources/codereview/.ynh-plugin/plugin.json << 'EOF'
 {
   "name": "codereview",
   "version": "0.1.0",
@@ -259,8 +259,8 @@ ynh search "code review"
 
 Expected:
 ```
-NAME        DESCRIPTION          REPO                                  VENDORS  FROM
-codereview  Code review harness  /tmp/ynh-tutorial/sources/codereview  claude   codereview (source)
+NAME        DESCRIPTION          REPO                                  FROM
+codereview  Code review harness  /tmp/ynh-tutorial/sources/codereview  codereview (source)
 ```
 
 ## T7.15: Install from source
