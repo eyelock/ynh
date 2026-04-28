@@ -335,6 +335,184 @@ func ambiguousIncludeError(url string, includes []plugin.IncludeMeta, indices []
 	)
 }
 
+// DelegateAddOptions controls ynh delegate add behaviour.
+type DelegateAddOptions struct {
+	Ref  string
+	Path string
+}
+
+// DelegateRemoveOptions controls ynh delegate remove behaviour.
+type DelegateRemoveOptions struct {
+	Path string // optional disambiguation when URL matches multiple delegates
+}
+
+// DelegateUpdateOptions controls ynh delegate update behaviour.
+type DelegateUpdateOptions struct {
+	FromPath string  // disambiguation key (required if URL matches multiple delegates)
+	NewPath  *string // non-nil → update the path field to this value
+	Ref      *string // non-nil → update the ref field to this value
+}
+
+// AddDelegate adds a new delegate to a harness directory.
+// Returns an error if the same URL+path combination already exists.
+func AddDelegate(dir, url string, opts DelegateAddOptions) error {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+
+	if idx := findDelegate(hj.DelegatesTo, url, opts.Path); idx >= 0 {
+		msg := fmt.Sprintf("delegate %q already present in harness %q", url, hj.Name)
+		if opts.Path != "" {
+			msg = fmt.Sprintf("delegate %q (path: %q) already present in harness %q", url, opts.Path, hj.Name)
+		}
+		return fmt.Errorf("%s.\nUse 'ynh delegate update' to change its options", msg)
+	}
+
+	hj.DelegatesTo = append(hj.DelegatesTo, plugin.DelegateMeta{Git: url, Ref: opts.Ref, Path: opts.Path})
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// RemoveDelegate removes a delegate identified by URL and optional path.
+// If the URL matches multiple delegates and no path is given, an error is
+// returned listing the paths that would disambiguate.
+func RemoveDelegate(dir, url string, opts DelegateRemoveOptions) error {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+
+	matches := findAllDelegates(hj.DelegatesTo, url)
+	if len(matches) == 0 {
+		return fmt.Errorf("delegate %q not found in harness %q", url, hj.Name)
+	}
+
+	if opts.Path == "" && len(matches) > 1 {
+		return ambiguousDelegateError(url, hj.DelegatesTo, matches)
+	}
+
+	keep := hj.DelegatesTo[:0]
+	for _, del := range hj.DelegatesTo {
+		if del.Git == url && (opts.Path == "" || del.Path == opts.Path) {
+			continue
+		}
+		keep = append(keep, del)
+	}
+
+	if len(keep) == len(hj.DelegatesTo) {
+		return fmt.Errorf("delegate %q (path: %q) not found in harness %q", url, opts.Path, hj.Name)
+	}
+
+	hj.DelegatesTo = keep
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// UpdateDelegate updates fields on an existing delegate.
+// The delegate is looked up by URL; if multiple delegates share the same URL,
+// FromPath must be set to disambiguate. Supplied fields (NewPath, Ref) are
+// updated; omitted fields are left unchanged.
+func UpdateDelegate(dir, url string, opts DelegateUpdateOptions) error {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+
+	targetIdx, findErr := findDelegateUpdateTarget(hj.DelegatesTo, url, opts.FromPath, hj.Name)
+	if findErr != nil {
+		return findErr
+	}
+
+	del := &hj.DelegatesTo[targetIdx]
+	if opts.NewPath != nil {
+		del.Path = *opts.NewPath
+	}
+	if opts.Ref != nil {
+		del.Ref = *opts.Ref
+	}
+
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// FindDelegateUpdateTarget loads the harness from dir and returns the delegate
+// that would be updated by DelegateUpdateOptions. Used by callers that need to
+// inspect the final state before writing (e.g. to pre-fetch the right ref).
+func FindDelegateUpdateTarget(dir, url string, opts DelegateUpdateOptions) (plugin.DelegateMeta, error) {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return plugin.DelegateMeta{}, err
+	}
+
+	targetIdx, findErr := findDelegateUpdateTarget(hj.DelegatesTo, url, opts.FromPath, hj.Name)
+	if findErr != nil {
+		return plugin.DelegateMeta{}, findErr
+	}
+
+	del := hj.DelegatesTo[targetIdx]
+	if opts.NewPath != nil {
+		del.Path = *opts.NewPath
+	}
+	if opts.Ref != nil {
+		del.Ref = *opts.Ref
+	}
+	return del, nil
+}
+
+func findDelegate(delegates []plugin.DelegateMeta, url, path string) int {
+	for i, del := range delegates {
+		if del.Git == url && del.Path == path {
+			return i
+		}
+	}
+	return -1
+}
+
+func findAllDelegates(delegates []plugin.DelegateMeta, url string) []int {
+	var out []int
+	for i, del := range delegates {
+		if del.Git == url {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+func findDelegateUpdateTarget(delegates []plugin.DelegateMeta, url, fromPath, harnessName string) (int, error) {
+	matches := findAllDelegates(delegates, url)
+	if len(matches) == 0 {
+		return -1, fmt.Errorf("delegate %q not found in harness %q", url, harnessName)
+	}
+
+	if len(matches) == 1 {
+		return matches[0], nil
+	}
+
+	if fromPath == "" {
+		return -1, ambiguousDelegateError(url, delegates, matches)
+	}
+
+	for _, i := range matches {
+		if delegates[i].Path == fromPath {
+			return i, nil
+		}
+	}
+	return -1, fmt.Errorf("delegate %q with --from-path %q not found in harness %q", url, fromPath, harnessName)
+}
+
+func ambiguousDelegateError(url string, delegates []plugin.DelegateMeta, indices []int) error {
+	var paths []string
+	for _, i := range indices {
+		p := delegates[i].Path
+		if p == "" {
+			p = "(root)"
+		}
+		paths = append(paths, "  "+p)
+	}
+	return fmt.Errorf(
+		"delegate %q matches multiple entries:\n%s\nUse --path (remove) or --from-path (update) to disambiguate",
+		url, strings.Join(paths, "\n"),
+	)
+}
+
 func formatAvailable(names []string) string {
 	if len(names) == 0 {
 		return "(none)"
