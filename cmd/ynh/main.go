@@ -58,6 +58,8 @@ func main() {
 		err = cmdSearch(os.Args[2:])
 	case "registry":
 		err = cmdRegistry(os.Args[2:])
+	case "delegate":
+		err = cmdDelegate(os.Args[2:])
 	case "fork":
 		err = cmdFork(os.Args[2:])
 	case "include":
@@ -108,6 +110,9 @@ Commands:
   sources list                 Show configured sources (supports --format json)
   sources remove <name>        Remove a source
   fork <name> [--to <path>]    Fork an installed harness to a local directory
+  delegate add <harness> <url>     Add a Git delegate to a harness
+  delegate remove <harness> <url>  Remove a Git delegate from a harness
+  delegate update <harness> <url>  Update a Git delegate's options
   include add <harness> <url>  Add a Git include to a harness
   include remove <harness> <url>  Remove a Git include from a harness
   include update <harness> <url>  Update a Git include's options
