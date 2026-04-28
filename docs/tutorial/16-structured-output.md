@@ -288,7 +288,30 @@ Expected (truncated):
 ynh install /tmp/ynh-tutorial/my-harness
 ```
 
-## T16.11: YNH_HOME override
+## T16.11: Check for updates — `--check-updates`
+
+By default `ynh ls` and `ynh info` are **offline** — they read installed manifests and emit local provenance only. To learn whether an installed harness or include is behind upstream, opt in with `--check-updates`:
+
+```bash
+ynh ls --format json --check-updates | jq '.harnesses[0]'
+```
+
+The flag adds two optional fields per harness and per include:
+
+- `version_available` — the latest version known upstream (registry-installed harnesses only)
+- `ref_available` — the latest Git SHA known upstream (anything with a remote)
+
+The fields are **omitted entirely** when:
+
+- `--check-updates` was not passed
+- The probe failed (network down, repo gone, lookup miss)
+- The harness has no upstream (pure local install)
+
+This is the "unknown" arm of a three-state contract — consumers must distinguish *unknown* from *up-to-date* (field present and equal to `*_installed`) from *update available* (field present and different).
+
+> Note: `--check-updates` does network I/O. Probes run concurrently with a bounded fan-out and per-probe failures degrade silently — the command never errors on probe failure. Default calls (without the flag) stay fast and deterministic.
+
+## T16.12: YNH_HOME override
 
 Paths reflect the active `YNH_HOME`, which is useful for testing or multi-environment setups:
 

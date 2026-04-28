@@ -127,7 +127,20 @@ Per-harness fields:
 
 `ynh info` and `ynh ls` accept `--check-updates` together with `--format json`. The flag opts in to upstream lookups for `version_available` and `ref_available`. Without it, those fields are always omitted (the "unknown" three-state).
 
-> Note: `--check-updates` performs network calls. Failures degrade silently — fields are simply omitted, the command does not error. Default `info` and `ls` calls (without the flag) remain offline, fast, and deterministic.
+What gets probed:
+
+- **Includes** (per `git`, with a remote URL): `git ls-remote` against the upstream URL, returning the current SHA on `ref_installed`. **Pinned includes** (`is_pinned: true`) probe `HEAD` instead of re-resolving the pinned SHA — otherwise a pinned include could never appear behind upstream.
+- **Registry-installed harnesses**: configured registries are walked and the matching entry's version becomes `version_available`.
+- **Git-installed harnesses**: same as include probing, against the harness's own `installed_from.source`.
+- **Local-only harnesses** (no `installed_from`, or `source_type: "local"` without a remote): no probe possible — fields stay omitted.
+
+> Note: `--check-updates` performs network calls. Failures degrade silently — fields are simply omitted, the command does not error. Default `info` and `ls` calls (without the flag) remain offline, fast, and deterministic. Probes run concurrently (bounded fan-out) so a multi-include harness does not serialize the network.
+
+Three-state rendering on the consumer side (TermQ and similar):
+
+- Field omitted ⇒ **unknown** (probe failed, not requested, or no upstream)
+- Field present and equal to `*_installed` ⇒ **up-to-date**
+- Field present and different from `*_installed` ⇒ **update available**
 
 The `is_pinned` rule is the same on harnesses and includes:
 

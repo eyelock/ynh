@@ -263,10 +263,7 @@ func printInfoText(w io.Writer, name string) error {
 	return nil
 }
 
-func printInfoJSON(stdout, stderr io.Writer, name string, _ bool) error {
-	// checkUpdates is accepted but not yet wired to network probes — version_available
-	// and ref_available remain omitted (the "unknown" state per the three-state contract).
-	// Network probes land in a follow-up PR.
+func printInfoJSON(stdout, stderr io.Writer, name string, checkUpdates bool) error {
 	p, err := harness.Load(name)
 	if err != nil {
 		code := errCodeNotFound
@@ -294,6 +291,11 @@ func printInfoJSON(stdout, stderr io.Writer, name string, _ bool) error {
 	}
 
 	base := buildListEntry(p, name)
+	if checkUpdates {
+		single := []listEntry{base}
+		fillUpdates(single, defaultProbe())
+		base = single[0]
+	}
 	entry := infoEntry{
 		Name:             base.Name,
 		VersionInstalled: base.VersionInstalled,
