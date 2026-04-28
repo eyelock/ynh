@@ -58,6 +58,8 @@ func main() {
 		err = cmdSearch(os.Args[2:])
 	case "registry":
 		err = cmdRegistry(os.Args[2:])
+	case "fork":
+		err = cmdFork(os.Args[2:])
 	case "include":
 		err = cmdInclude(os.Args[2:])
 	case "image":
@@ -105,6 +107,7 @@ Commands:
   sources add <path>           Add a local harness source directory
   sources list                 Show configured sources (supports --format json)
   sources remove <name>        Remove a source
+  fork <name> [--to <path>]    Fork an installed harness to a local directory
   include add <harness> <url>  Add a Git include to a harness
   include remove <harness> <url>  Remove a Git include from a harness
   include update <harness> <url>  Update a Git include's options
@@ -301,6 +304,13 @@ func cmdInstall(args []string) error {
 	} else if resolved.localPath != "" {
 		provSource = resolved.localPath
 	}
+
+	// Carry forward forked_from when installing from a previously forked local directory.
+	var forkedFrom *plugin.ForkedFromJSON
+	if srcIns, loadErr := plugin.LoadInstalledJSON(srcDir); loadErr == nil && srcIns.ForkedFrom != nil {
+		forkedFrom = srcIns.ForkedFrom
+	}
+
 	ins := &plugin.InstalledJSON{
 		SourceType:   resolved.sourceType,
 		Source:       provSource,
@@ -308,6 +318,7 @@ func cmdInstall(args []string) error {
 		Namespace:    resolved.namespace,
 		RegistryName: resolved.registryName,
 		InstalledAt:  time.Now().UTC().Format(time.RFC3339),
+		ForkedFrom:   forkedFrom,
 	}
 	if err := plugin.SaveInstalledJSON(installDir, ins); err != nil {
 		return fmt.Errorf("saving provenance: %w", err)
@@ -423,6 +434,12 @@ func cmdUpdate(args []string) error {
 	p, err := harness.Load(name)
 	if err != nil {
 		return err
+	}
+
+	if p.InstalledFrom != nil && p.InstalledFrom.ForkedFrom != nil {
+		return fmt.Errorf("harness %q is a fork — ynh update cannot pull upstream changes for a fork\n"+
+			"  To update includes within the fork, edit .ynh-plugin/plugin.json directly\n"+
+			"  To incorporate upstream changes, fork again from the re-installed original", name)
 	}
 
 	if len(p.Includes) == 0 && len(p.DelegatesTo) == 0 {

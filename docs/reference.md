@@ -35,6 +35,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh run [harness]` | `-v`, `--profile`, `--install`, `--clean` |
 | `ynh uninstall <harness>` | |
 | `ynh update [harness]` | |
+| `ynh fork <name>` | `--to <path>`, `--format <text\|json>` |
 | `ynh ls` | `--format <text\|json>` |
 | `ynh info <harness>` | `--format <text\|json>` |
 | `ynh vendors` | `--format <text\|json>` |
@@ -79,6 +80,7 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 | Command | Structured fields |
 |---------|-------------------|
 | `ynd compose` | Composed harness: `name`, `version`, `description`, `default_vendor`, `artifacts` (with source), `includes`, `delegates_to`, `hooks`, `mcp_servers`, `profiles`, `focuses`, `counts` |
+| `ynh fork <name>` | Envelope (`capabilities`, `ynh_version`, `name`, `path`, `installed_from`) — see [ynh fork output](#ynh-fork-output) below |
 | `ynh info <name>` | Envelope (`capabilities`, `ynh_version`, `harness`) wrapping a single harness object — see [Envelope and harness fields](#envelope-and-harness-fields) below |
 | `ynh ls` | Envelope (`capabilities`, `ynh_version`, `harnesses`) wrapping an array of harness objects — same shape as `ynh info`, plus `artifacts`, minus `manifest` |
 | `ynh paths` | `home`, `config`, `harnesses`, `symlinks`, `cache`, `run`, `bin` — all absolute paths resolved for the current `$YNH_HOME` |
@@ -146,3 +148,33 @@ The `is_pinned` rule is the same on harnesses and includes:
 
 - `ref_installed` matches `^[0-9a-f]{7,40}$` ⇒ `"is_pinned": true` (a resolved SHA)
 - Anything else (tag, branch, `main`, `HEAD`, empty) ⇒ `"is_pinned": false`
+
+### ynh fork output
+
+`ynh fork <name> --format json` returns a single result object (not an array):
+
+```json
+{
+  "capabilities": "0.3.0",
+  "ynh_version": "0.x.y",
+  "name": "demo",
+  "path": "/absolute/path/to/fork",
+  "installed_from": {
+    "source_type": "local",
+    "source": "/absolute/path/to/fork",
+    "installed_at": "<timestamp>",
+    "forked_from": {
+      "source_type": "git",
+      "source": "github.com/org/demo",
+      "sha": "abc123",
+      "version": "0.1.0"
+    }
+  }
+}
+```
+
+`forked_from` captures the upstream provenance of the harness at the time of the fork. If the source harness had no upstream (a bare local install), `forked_from.source_type` is `"local"` and `forked_from.source` is the installed directory path.
+
+`ynh update` refuses to run on a fork and prints an explanatory error. To incorporate upstream changes, re-install the original and fork again.
+
+`ynh install <fork-path>` preserves `forked_from` when installing a forked harness into `~/.ynh/harnesses/`, so `ynh ls` surfaces the upstream provenance.
