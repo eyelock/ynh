@@ -23,7 +23,7 @@ var Version = "dev"
 //
 // Consumers (e.g. TermQ) read this via `ynh version --format json` and gate
 // features on it with their own `minimumYNHCapabilities` constant.
-const CapabilitiesVersion = "0.2.0"
+const CapabilitiesVersion = "0.3.0"
 
 const (
 	DefaultDirName = ".ynh"

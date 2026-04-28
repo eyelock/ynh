@@ -187,14 +187,27 @@ const InstalledFile = "installed.json"
 // InstalledJSON records where a harness was installed from.
 // It lives at .ynh-plugin/installed.json, separate from the author-controlled plugin.json.
 type InstalledJSON struct {
+	SourceType   string          `json:"source_type"`
+	Source       string          `json:"source"`
+	Ref          string          `json:"ref,omitempty"`
+	SHA          string          `json:"sha,omitempty"`
+	Path         string          `json:"path,omitempty"`
+	Namespace    string          `json:"namespace,omitempty"`
+	RegistryName string          `json:"registry_name,omitempty"`
+	InstalledAt  string          `json:"installed_at"`
+	ForkedFrom   *ForkedFromJSON `json:"forked_from,omitempty"`
+}
+
+// ForkedFromJSON records the upstream a local harness was forked from.
+// Populated by `ynh fork`; absent on installs that were not forked.
+type ForkedFromJSON struct {
 	SourceType   string `json:"source_type"`
 	Source       string `json:"source"`
 	Ref          string `json:"ref,omitempty"`
 	SHA          string `json:"sha,omitempty"`
 	Path         string `json:"path,omitempty"`
-	Namespace    string `json:"namespace,omitempty"`
 	RegistryName string `json:"registry_name,omitempty"`
-	InstalledAt  string `json:"installed_at"`
+	Version      string `json:"version,omitempty"`
 }
 
 // IsHarnessDir returns true if the directory contains a .harness.json manifest.

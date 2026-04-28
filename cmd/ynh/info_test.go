@@ -75,16 +75,20 @@ func TestCmdInfoJSONBasic(t *testing.T) {
 		t.Fatalf("cmdInfoTo: %v", err)
 	}
 
-	var got infoEntry
-	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+	var env infoEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
 		t.Fatalf("unmarshal: %v\noutput: %s", err, stdout.String())
 	}
+	got := env.Harness
 
+	if env.Capabilities == "" {
+		t.Errorf("envelope missing capabilities; output: %s", stdout.String())
+	}
 	if got.Name != "test-harness" {
 		t.Errorf("name = %q, want test-harness", got.Name)
 	}
-	if got.Version != "2.0.0" {
-		t.Errorf("version = %q, want 2.0.0", got.Version)
+	if got.VersionInstalled != "2.0.0" {
+		t.Errorf("version_installed = %q, want 2.0.0", got.VersionInstalled)
 	}
 	if got.Description != "A test harness" {
 		t.Errorf("description = %q, want 'A test harness'", got.Description)
@@ -154,12 +158,12 @@ func TestCmdInfoJSONFormatBeforeName(t *testing.T) {
 		t.Fatalf("cmdInfoTo: %v", err)
 	}
 
-	var got infoEntry
-	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+	var env infoEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
 		t.Fatalf("unmarshal: %v\noutput: %s", err, stdout.String())
 	}
-	if got.Name != "demo" {
-		t.Errorf("name = %q, want demo", got.Name)
+	if env.Harness.Name != "demo" {
+		t.Errorf("name = %q, want demo", env.Harness.Name)
 	}
 }
 
@@ -282,10 +286,11 @@ func TestCmdInfoManifestPreservesAllFields(t *testing.T) {
 		t.Fatalf("cmdInfoTo: %v", err)
 	}
 
-	var got infoEntry
-	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+	var env infoEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
+	got := env.Harness
 
 	// The manifest field should contain all the raw fields
 	var manifest map[string]interface{}

@@ -86,8 +86,8 @@ Both `ynh version --format json` and `ynd version --format json` emit:
 
 ```json
 {
-  "version": "0.2.0",
-  "capabilities": "0.2.0"
+  "version": "0.3.0",
+  "capabilities": "0.3.0"
 }
 ```
 

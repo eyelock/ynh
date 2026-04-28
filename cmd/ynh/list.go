@@ -8,29 +8,58 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 )
+
+// listEnvelope wraps the array of harnesses with the wire-contract version
+// (capabilities) and the ynh release version. Every structured response from
+// ls and info follows this envelope shape so consumers can gate behaviour
+// without re-parsing the per-command body.
+type listEnvelope struct {
+	Capabilities string      `json:"capabilities"`
+	YnhVersion   string      `json:"ynh_version"`
+	Harnesses    []listEntry `json:"harnesses"`
+}
 
 // listEntry is the JSON shape for a single harness in the `ynh ls` output.
 // Field order drives JSON key order via MarshalIndent.
 type listEntry struct {
-	Name          string             `json:"name"`
-	Version       string             `json:"version"`
-	Description   string             `json:"description,omitempty"`
-	DefaultVendor string             `json:"default_vendor"`
-	Path          string             `json:"path"`
-	InstalledFrom *listInstalledFrom `json:"installed_from,omitempty"`
-	Artifacts     listArtifacts      `json:"artifacts"`
-	Includes      []listInclude      `json:"includes"`
-	DelegatesTo   []listDelegate     `json:"delegates_to"`
+	Name             string             `json:"name"`
+	VersionInstalled string             `json:"version_installed"`
+	VersionAvailable string             `json:"version_available,omitempty"`
+	Description      string             `json:"description,omitempty"`
+	DefaultVendor    string             `json:"default_vendor"`
+	Path             string             `json:"path"`
+	RefInstalled     string             `json:"ref_installed,omitempty"`
+	RefAvailable     string             `json:"ref_available,omitempty"`
+	IsPinned         bool               `json:"is_pinned"`
+	InstalledFrom    *listInstalledFrom `json:"installed_from,omitempty"`
+	Artifacts        listArtifacts      `json:"artifacts"`
+	Includes         []listInclude      `json:"includes"`
+	DelegatesTo      []listDelegate     `json:"delegates_to"`
 }
 
 type listInstalledFrom struct {
+	SourceType   string          `json:"source_type"`
+	Source       string          `json:"source"`
+	Path         string          `json:"path,omitempty"`
+	RegistryName string          `json:"registry_name,omitempty"`
+	InstalledAt  string          `json:"installed_at"`
+	ForkedFrom   *listForkedFrom `json:"forked_from,omitempty"`
+}
+
+// listForkedFrom is the JSON shape of installed_from.forked_from — the
+// upstream a local harness was forked from. Populated by `ynh fork`; absent
+// otherwise.
+type listForkedFrom struct {
 	SourceType   string `json:"source_type"`
 	Source       string `json:"source"`
+	Ref          string `json:"ref,omitempty"`
+	SHA          string `json:"sha,omitempty"`
 	Path         string `json:"path,omitempty"`
 	RegistryName string `json:"registry_name,omitempty"`
-	InstalledAt  string `json:"installed_at"`
+	Version      string `json:"version,omitempty"`
 }
 
 type listArtifacts struct {
@@ -41,16 +70,19 @@ type listArtifacts struct {
 }
 
 type listInclude struct {
-	Git  string   `json:"git"`
-	Ref  string   `json:"ref,omitempty"`
-	Path string   `json:"path,omitempty"`
-	Pick []string `json:"pick,omitempty"`
+	Git          string   `json:"git"`
+	RefInstalled string   `json:"ref_installed,omitempty"`
+	RefAvailable string   `json:"ref_available,omitempty"`
+	IsPinned     bool     `json:"is_pinned"`
+	Path         string   `json:"path,omitempty"`
+	Pick         []string `json:"pick,omitempty"`
 }
 
 type listDelegate struct {
-	Git  string `json:"git"`
-	Ref  string `json:"ref,omitempty"`
-	Path string `json:"path,omitempty"`
+	Git          string `json:"git"`
+	RefInstalled string `json:"ref_installed,omitempty"`
+	IsPinned     bool   `json:"is_pinned"`
+	Path         string `json:"path,omitempty"`
 }
 
 func cmdList(args []string) error {
@@ -61,6 +93,7 @@ func cmdListTo(args []string, stdout, stderr io.Writer) error {
 	structured := detectJSONFormat(args)
 
 	format := "text"
+	checkUpdates := false
 	i := 0
 	for i < len(args) {
 		switch args[i] {
@@ -70,6 +103,8 @@ func cmdListTo(args []string, stdout, stderr io.Writer) error {
 			}
 			i++
 			format = args[i]
+		case "--check-updates":
+			checkUpdates = true
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return cliError(stderr, structured, errCodeInvalidInput,
@@ -83,9 +118,13 @@ func cmdListTo(args []string, stdout, stderr io.Writer) error {
 
 	switch format {
 	case "text":
+		if checkUpdates {
+			return cliError(stderr, structured, errCodeInvalidInput,
+				"--check-updates requires --format json")
+		}
 		return printListText(stdout)
 	case "json":
-		return printListJSON(stdout)
+		return printListJSON(stdout, checkUpdates)
 	default:
 		return cliError(stderr, structured, errCodeInvalidInput,
 			fmt.Sprintf("invalid --format value %q (want text or json)", format))
@@ -130,7 +169,10 @@ func printListText(w io.Writer) error {
 	return tw.Flush()
 }
 
-func printListJSON(w io.Writer) error {
+func printListJSON(w io.Writer, _ bool) error {
+	// checkUpdates is accepted but not yet wired to network probes — version_available
+	// and ref_available remain omitted (the "unknown" state per the three-state contract).
+	// Network probes land in a follow-up PR.
 	names, err := harness.List()
 	if err != nil {
 		return err
@@ -142,37 +184,66 @@ func printListJSON(w io.Writer) error {
 		if loadErr != nil {
 			continue
 		}
-
-		entry := listEntry{
-			Name:          p.Name,
-			Version:       p.Version,
-			Description:   p.Description,
-			DefaultVendor: p.DefaultVendor,
-			Path:          harness.InstalledDir(name),
-			Artifacts:     scanArtifactCounts(name),
-			Includes:      buildIncludes(p.Includes),
-			DelegatesTo:   buildDelegates(p.DelegatesTo),
-		}
-
-		if p.InstalledFrom != nil {
-			entry.InstalledFrom = &listInstalledFrom{
-				SourceType:   p.InstalledFrom.SourceType,
-				Source:       p.InstalledFrom.Source,
-				Path:         p.InstalledFrom.Path,
-				RegistryName: p.InstalledFrom.RegistryName,
-				InstalledAt:  p.InstalledFrom.InstalledAt,
-			}
-		}
-
-		entries = append(entries, entry)
+		entries = append(entries, buildListEntry(p, name))
 	}
 
-	data, err := json.MarshalIndent(entries, "", "  ")
+	envelope := listEnvelope{
+		Capabilities: config.CapabilitiesVersion,
+		YnhVersion:   config.Version,
+		Harnesses:    entries,
+	}
+
+	data, err := json.MarshalIndent(envelope, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encoding list: %w", err)
 	}
 	_, err = fmt.Fprintln(w, string(data))
 	return err
+}
+
+// buildListEntry assembles the structured-output entry for a loaded harness.
+// Shared by cmdListTo and cmdInfoTo so the per-harness shape stays uniform
+// between the two commands.
+func buildListEntry(p *harness.Harness, name string) listEntry {
+	entry := listEntry{
+		Name:             p.Name,
+		VersionInstalled: p.Version,
+		Description:      p.Description,
+		DefaultVendor:    p.DefaultVendor,
+		Path:             harness.InstalledDir(name),
+		Artifacts:        scanArtifactCounts(name),
+		Includes:         buildIncludes(p.Includes),
+		DelegatesTo:      buildDelegates(p.DelegatesTo),
+	}
+
+	if p.InstalledFrom != nil {
+		entry.RefInstalled = p.InstalledFrom.SHA
+		if entry.RefInstalled == "" {
+			entry.RefInstalled = p.InstalledFrom.Ref
+		}
+		entry.IsPinned = harness.IsPinnedRef(entry.RefInstalled)
+		entry.InstalledFrom = &listInstalledFrom{
+			SourceType:   p.InstalledFrom.SourceType,
+			Source:       p.InstalledFrom.Source,
+			Path:         p.InstalledFrom.Path,
+			RegistryName: p.InstalledFrom.RegistryName,
+			InstalledAt:  p.InstalledFrom.InstalledAt,
+		}
+		if p.InstalledFrom.ForkedFrom != nil {
+			ff := p.InstalledFrom.ForkedFrom
+			entry.InstalledFrom.ForkedFrom = &listForkedFrom{
+				SourceType:   ff.SourceType,
+				Source:       ff.Source,
+				Ref:          ff.Ref,
+				SHA:          ff.SHA,
+				Path:         ff.Path,
+				RegistryName: ff.RegistryName,
+				Version:      ff.Version,
+			}
+		}
+	}
+
+	return entry
 }
 
 func scanArtifactCounts(name string) listArtifacts {
@@ -189,9 +260,10 @@ func buildIncludes(includes []harness.Include) []listInclude {
 	result := make([]listInclude, 0, len(includes))
 	for _, inc := range includes {
 		li := listInclude{
-			Git:  inc.Git,
-			Ref:  inc.Ref,
-			Path: inc.Path,
+			Git:          inc.Git,
+			RefInstalled: inc.Ref,
+			IsPinned:     harness.IsPinnedRef(inc.Ref),
+			Path:         inc.Path,
 		}
 		if len(inc.Pick) > 0 {
 			li.Pick = inc.Pick
@@ -205,9 +277,10 @@ func buildDelegates(delegates []harness.Delegate) []listDelegate {
 	result := make([]listDelegate, 0, len(delegates))
 	for _, del := range delegates {
 		result = append(result, listDelegate{
-			Git:  del.Git,
-			Ref:  del.Ref,
-			Path: del.Path,
+			Git:          del.Git,
+			RefInstalled: del.Ref,
+			IsPinned:     harness.IsPinnedRef(del.Ref),
+			Path:         del.Path,
 		})
 	}
 	return result

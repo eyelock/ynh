@@ -9,20 +9,36 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
+// infoEnvelope wraps a single harness with the wire-contract version
+// (capabilities) and the ynh release version. Mirrors listEnvelope so
+// consumers can decode either response with the same outer shape.
+type infoEnvelope struct {
+	Capabilities string    `json:"capabilities"`
+	YnhVersion   string    `json:"ynh_version"`
+	Harness      infoEntry `json:"harness"`
+}
+
 // infoEntry is the JSON shape for `ynh info` structured output.
-// Identity fields at the top, provenance next, then the raw manifest.
+// Carries the same per-harness fields as listEntry, plus the raw manifest.
 type infoEntry struct {
-	Name          string             `json:"name"`
-	Version       string             `json:"version"`
-	Description   string             `json:"description,omitempty"`
-	DefaultVendor string             `json:"default_vendor"`
-	Path          string             `json:"path"`
-	InstalledFrom *listInstalledFrom `json:"installed_from,omitempty"`
-	Manifest      json.RawMessage    `json:"manifest"`
+	Name             string             `json:"name"`
+	VersionInstalled string             `json:"version_installed"`
+	VersionAvailable string             `json:"version_available,omitempty"`
+	Description      string             `json:"description,omitempty"`
+	DefaultVendor    string             `json:"default_vendor"`
+	Path             string             `json:"path"`
+	RefInstalled     string             `json:"ref_installed,omitempty"`
+	RefAvailable     string             `json:"ref_available,omitempty"`
+	IsPinned         bool               `json:"is_pinned"`
+	InstalledFrom    *listInstalledFrom `json:"installed_from,omitempty"`
+	Includes         []listInclude      `json:"includes"`
+	DelegatesTo      []listDelegate     `json:"delegates_to"`
+	Manifest         json.RawMessage    `json:"manifest"`
 }
 
 func cmdInfo(args []string) error {
@@ -33,6 +49,7 @@ func cmdInfoTo(args []string, stdout, stderr io.Writer) error {
 	structured := detectJSONFormat(args)
 
 	format := "text"
+	checkUpdates := false
 	var name string
 	i := 0
 	for i < len(args) {
@@ -43,6 +60,8 @@ func cmdInfoTo(args []string, stdout, stderr io.Writer) error {
 			}
 			i++
 			format = args[i]
+		case "--check-updates":
+			checkUpdates = true
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return cliError(stderr, structured, errCodeInvalidInput,
@@ -63,9 +82,13 @@ func cmdInfoTo(args []string, stdout, stderr io.Writer) error {
 
 	switch format {
 	case "text":
+		if checkUpdates {
+			return cliError(stderr, structured, errCodeInvalidInput,
+				"--check-updates requires --format json")
+		}
 		return printInfoText(stdout, name)
 	case "json":
-		return printInfoJSON(stdout, stderr, name)
+		return printInfoJSON(stdout, stderr, name, checkUpdates)
 	default:
 		return cliError(stderr, structured, errCodeInvalidInput,
 			fmt.Sprintf("invalid --format value %q (want text or json)", format))
@@ -240,7 +263,10 @@ func printInfoText(w io.Writer, name string) error {
 	return nil
 }
 
-func printInfoJSON(stdout, stderr io.Writer, name string) error {
+func printInfoJSON(stdout, stderr io.Writer, name string, _ bool) error {
+	// checkUpdates is accepted but not yet wired to network probes — version_available
+	// and ref_available remain omitted (the "unknown" state per the three-state contract).
+	// Network probes land in a follow-up PR.
 	p, err := harness.Load(name)
 	if err != nil {
 		code := errCodeNotFound
@@ -267,26 +293,30 @@ func printInfoJSON(stdout, stderr io.Writer, name string) error {
 			fmt.Sprintf("parsing manifest: %v", err))
 	}
 
+	base := buildListEntry(p, name)
 	entry := infoEntry{
-		Name:          p.Name,
-		Version:       p.Version,
-		Description:   p.Description,
-		DefaultVendor: p.DefaultVendor,
-		Path:          harness.InstalledDir(name),
-		Manifest:      compacted,
+		Name:             base.Name,
+		VersionInstalled: base.VersionInstalled,
+		VersionAvailable: base.VersionAvailable,
+		Description:      base.Description,
+		DefaultVendor:    base.DefaultVendor,
+		Path:             base.Path,
+		RefInstalled:     base.RefInstalled,
+		RefAvailable:     base.RefAvailable,
+		IsPinned:         base.IsPinned,
+		InstalledFrom:    base.InstalledFrom,
+		Includes:         base.Includes,
+		DelegatesTo:      base.DelegatesTo,
+		Manifest:         compacted,
 	}
 
-	if p.InstalledFrom != nil {
-		entry.InstalledFrom = &listInstalledFrom{
-			SourceType:   p.InstalledFrom.SourceType,
-			Source:       p.InstalledFrom.Source,
-			Path:         p.InstalledFrom.Path,
-			RegistryName: p.InstalledFrom.RegistryName,
-			InstalledAt:  p.InstalledFrom.InstalledAt,
-		}
+	envelope := infoEnvelope{
+		Capabilities: config.CapabilitiesVersion,
+		YnhVersion:   config.Version,
+		Harness:      entry,
 	}
 
-	data, err := json.MarshalIndent(entry, "", "  ")
+	data, err := json.MarshalIndent(envelope, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encoding info: %w", err)
 	}
