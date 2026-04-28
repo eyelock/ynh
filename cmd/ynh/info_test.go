@@ -497,6 +497,32 @@ func TestCmdInfoTextNoProvenance(t *testing.T) {
 	}
 }
 
+func TestCmdInfoJSONNamespacedPath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	installListTestHarnessNS(t, home, "eyelock/assistants", "planner",
+		`{"name":"planner","version":"1.0.0","default_vendor":"claude"}`)
+
+	var stdout bytes.Buffer
+	if err := cmdInfoTo([]string{"planner", "--format", "json"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+
+	var env infoEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v\noutput: %s", err, stdout.String())
+	}
+
+	wantPath := filepath.Join(home, "harnesses", "eyelock--assistants", "planner")
+	if env.Harness.Path != wantPath {
+		t.Errorf("path = %q, want %q", env.Harness.Path, wantPath)
+	}
+	if env.Harness.Manifest == nil {
+		t.Fatal("manifest is nil")
+	}
+}
+
 func TestCmdInfoTextNoVendor(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
