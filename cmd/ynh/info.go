@@ -73,7 +73,7 @@ func cmdInfoTo(args []string, stdout, stderr io.Writer) error {
 }
 
 func printInfoText(w io.Writer, name string) error {
-	p, err := harness.Load(name)
+	p, err := harness.LoadQualified(name)
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func printInfoText(w io.Writer, name string) error {
 	}
 
 	// Local artifacts
-	arts, _ := harness.ScanArtifacts(name)
+	arts, _ := harness.ScanArtifactsDir(p.Dir)
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintln(w, "Artifacts:")
 	if arts.Total() == 0 {
@@ -241,7 +241,7 @@ func printInfoText(w io.Writer, name string) error {
 }
 
 func printInfoJSON(stdout, stderr io.Writer, name string) error {
-	p, err := harness.Load(name)
+	p, err := harness.LoadQualified(name)
 	if err != nil {
 		code := errCodeNotFound
 		if !strings.Contains(err.Error(), "not found") {
@@ -252,8 +252,7 @@ func printInfoJSON(stdout, stderr io.Writer, name string) error {
 
 	// Migration chain has run (harness.Load was called above), so the manifest
 	// is always at the new path.
-	installDir := harness.InstalledDir(name)
-	manifestPath := filepath.Join(installDir, plugin.PluginDir, plugin.PluginFile)
+	manifestPath := filepath.Join(p.Dir, plugin.PluginDir, plugin.PluginFile)
 	raw, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return cliError(stderr, true, errCodeIOError,
@@ -272,7 +271,7 @@ func printInfoJSON(stdout, stderr io.Writer, name string) error {
 		Version:       p.Version,
 		Description:   p.Description,
 		DefaultVendor: p.DefaultVendor,
-		Path:          harness.InstalledDir(name),
+		Path:          p.Dir,
 		Manifest:      compacted,
 	}
 

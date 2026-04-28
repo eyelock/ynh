@@ -398,6 +398,34 @@ func TestCmdUninstall_RemovesEverything(t *testing.T) {
 	}
 }
 
+func TestCmdUninstall_NamespacedHarness(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Install harness at namespaced path (eyelock/assistants → eyelock--assistants)
+	nsDir := filepath.Join(config.HarnessesDir(), "eyelock--assistants", "planner")
+	if err := os.MkdirAll(nsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	harnessJSON := `{"name":"planner","version":"1.0.0","default_vendor":"claude"}`
+	if err := os.WriteFile(filepath.Join(nsDir, ".harness.json"), []byte(harnessJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cmdUninstall([]string{"planner"}); err != nil {
+		t.Fatalf("cmdUninstall failed: %v", err)
+	}
+
+	if _, err := os.Stat(nsDir); !os.IsNotExist(err) {
+		t.Error("namespaced harness directory still exists after uninstall")
+	}
+}
+
 func TestCmdUninstall_NotInstalled(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)

@@ -113,6 +113,20 @@ func Load(name string) (*Harness, error) {
 	return findInNamespacedDirs(name)
 }
 
+// LoadQualified loads an installed harness by an optionally namespace-qualified
+// ref ("name" or "name@org/repo"). Dispatches to LoadNS when a namespace is
+// present, Load otherwise.
+func LoadQualified(ref string) (*Harness, error) {
+	name, ns, err := namespace.ParseQualified(ref)
+	if err != nil {
+		return nil, err
+	}
+	if ns != "" {
+		return LoadNS(ns, name)
+	}
+	return Load(name)
+}
+
 // LoadNS loads an installed harness by namespace-qualified name.
 func LoadNS(ns, name string) (*Harness, error) {
 	dir := InstalledDirNS(ns, name)

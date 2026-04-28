@@ -194,7 +194,7 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
-		harnessSrcDir = harness.InstalledDir(ia.name)
+		harnessSrcDir = p.Dir
 	}
 
 	// Create temp build context

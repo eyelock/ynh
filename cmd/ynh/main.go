@@ -374,13 +374,16 @@ func cmdUninstall(args []string) error {
 		return fmt.Errorf("usage: ynh uninstall <harness-name>")
 	}
 
-	name := args[0]
+	ref := args[0]
 
-	// Verify harness exists (either format)
-	installDir := harness.InstalledDir(name)
-	if harness.DetectFormat(installDir) == "" {
-		return fmt.Errorf("harness %q is not installed", name)
+	// Load to resolve the actual on-disk directory (may be namespaced).
+	// Accepts plain "name" or qualified "name@org/repo".
+	p, err := harness.LoadQualified(ref)
+	if err != nil {
+		return fmt.Errorf("harness %q is not installed", ref)
 	}
+	installDir := p.Dir
+	bareName := p.Name // bare name for launcher/run/sources cleanup
 
 	// Remove harness directory
 	if err := os.RemoveAll(installDir); err != nil {
@@ -388,18 +391,18 @@ func cmdUninstall(args []string) error {
 	}
 
 	// Remove launcher script
-	launcherPath := filepath.Join(config.BinDir(), name)
+	launcherPath := filepath.Join(config.BinDir(), bareName)
 	_ = os.Remove(launcherPath) // ignore error if launcher doesn't exist
 
 	// Remove run directory
-	runDir := filepath.Join(config.RunDir(), name)
+	runDir := filepath.Join(config.RunDir(), bareName)
 	_ = os.RemoveAll(runDir) // ignore error if not present
 
 	// Remove matching sources entry if present
 	if cfg, err := config.Load(); err == nil {
 		remaining := make([]config.Source, 0, len(cfg.Sources))
 		for _, s := range cfg.Sources {
-			if s.Name != name {
+			if s.Name != bareName {
 				remaining = append(remaining, s)
 			}
 		}
@@ -409,7 +412,7 @@ func cmdUninstall(args []string) error {
 		}
 	}
 
-	fmt.Printf("Uninstalled harness %q\n", name)
+	fmt.Printf("Uninstalled harness %q\n", bareName)
 	return nil
 }
 
@@ -522,7 +525,7 @@ func cmdRun(args []string) error {
 		if err != nil {
 			return err
 		}
-		harnessDir = harness.InstalledDir(name)
+		harnessDir = p.Dir
 
 	case ra.HarnessFile != "":
 		p, err = harness.LoadFile(ra.HarnessFile)
@@ -1137,7 +1140,7 @@ func cmdPrune() error {
 			if name == "ynh" || name == "ynd" {
 				continue
 			}
-			if harness.DetectFormat(harness.InstalledDir(name)) == "plugin" {
+			if _, err := harness.Load(name); err == nil {
 				continue
 			}
 			launcherPath := filepath.Join(binDir, name)
@@ -1161,7 +1164,7 @@ func cmdPrune() error {
 	if err == nil {
 		for _, entry := range runEntries {
 			name := entry.Name()
-			if harness.DetectFormat(harness.InstalledDir(name)) == "plugin" {
+			if _, err := harness.Load(name); err == nil {
 				continue
 			}
 			staleRun := filepath.Join(runDir, name)
