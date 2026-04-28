@@ -752,3 +752,27 @@ func TestResolveProfile_AppendsIncludes(t *testing.T) {
 		t.Errorf("base harness mutated: includes = %d, want 1", len(h.Includes))
 	}
 }
+
+func TestIsPinnedRef(t *testing.T) {
+	cases := []struct {
+		ref  string
+		want bool
+	}{
+		{"", false},
+		{"main", false},
+		{"HEAD", false},
+		{"v1.2.3", false},
+		{"release-1.0", false},
+		{"abc1234", true}, // 7-char short SHA
+		{"abc1234567890abcdef1234567890abcdef12345", true}, // 40-char full SHA
+		{"abc123", false},  // 6 chars — too short
+		{"ABC1234", false}, // uppercase rejected (git emits lowercase)
+		{"feature/branch", false},
+		{"abc1234x", false}, // non-hex
+	}
+	for _, tc := range cases {
+		if got := IsPinnedRef(tc.ref); got != tc.want {
+			t.Errorf("IsPinnedRef(%q) = %v, want %v", tc.ref, got, tc.want)
+		}
+	}
+}

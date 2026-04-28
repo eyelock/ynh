@@ -53,6 +53,29 @@ type Provenance struct {
 	Namespace    string
 	RegistryName string
 	InstalledAt  string
+	ForkedFrom   *ForkedFrom
+}
+
+// ForkedFrom records the upstream that a local harness was forked from.
+type ForkedFrom struct {
+	SourceType   string
+	Source       string
+	Ref          string
+	SHA          string
+	Path         string
+	RegistryName string
+	Version      string
+}
+
+// pinnedRefRe matches a Git SHA (full or short) — 7 to 40 lowercase hex chars.
+// Used to classify an include's ref as pinned (SHA) vs floating (tag/branch).
+var pinnedRefRe = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
+
+// IsPinnedRef reports whether ref looks like a resolved Git SHA.
+// Pinned refs identify a single immutable commit; floating refs (tags,
+// branches, "main", "HEAD") track moving targets. Empty refs are floating.
+func IsPinnedRef(ref string) bool {
+	return ref != "" && pinnedRefRe.MatchString(ref)
 }
 
 type Harness struct {
@@ -298,6 +321,18 @@ func LoadDir(dir string) (*Harness, error) {
 			Namespace:    ins.Namespace,
 			RegistryName: ins.RegistryName,
 			InstalledAt:  ins.InstalledAt,
+		}
+		if ins.ForkedFrom != nil {
+			ff := ins.ForkedFrom
+			p.InstalledFrom.ForkedFrom = &ForkedFrom{
+				SourceType:   ff.SourceType,
+				Source:       ff.Source,
+				Ref:          ff.Ref,
+				SHA:          ff.SHA,
+				Path:         ff.Path,
+				RegistryName: ff.RegistryName,
+				Version:      ff.Version,
+			}
 		}
 		if p.Namespace == "" && ins.Namespace != "" {
 			p.Namespace = ins.Namespace

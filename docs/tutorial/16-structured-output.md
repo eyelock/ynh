@@ -202,32 +202,39 @@ ynh ls --format json
 
 Expected (timestamps and paths will differ):
 ```json
-[
-  {
-    "name": "my-harness",
-    "version": "0.1.0",
-    "description": "Tutorial harness",
-    "default_vendor": "claude",
-    "path": "/Users/<you>/.ynh/harnesses/my-harness",
-    "installed_from": {
-      "source_type": "local",
-      "source": "/tmp/ynh-tutorial/my-harness",
-      "installed_at": "<timestamp>"
-    },
-    "artifacts": {
-      "skills": 1,
-      "agents": 0,
-      "rules": 0,
-      "commands": 0
-    },
-    "includes": [],
-    "delegates_to": []
-  }
-]
+{
+  "capabilities": "0.3.0",
+  "ynh_version": "<version>",
+  "harnesses": [
+    {
+      "name": "my-harness",
+      "version_installed": "0.1.0",
+      "description": "Tutorial harness",
+      "default_vendor": "claude",
+      "path": "/Users/<you>/.ynh/harnesses/my-harness",
+      "is_pinned": false,
+      "installed_from": {
+        "source_type": "local",
+        "source": "/tmp/ynh-tutorial/my-harness",
+        "installed_at": "<timestamp>"
+      },
+      "artifacts": {
+        "skills": 1,
+        "agents": 0,
+        "rules": 0,
+        "commands": 0
+      },
+      "includes": [],
+      "delegates_to": []
+    }
+  ]
+}
 ```
 
 Key points:
-- Output is a JSON **array** — even with one harness.
+- Output is wrapped in an **envelope**: `capabilities` (wire-contract version), `ynh_version` (release), and `harnesses` (the array).
+- `version_installed` is the version recorded in the harness manifest. Pass `--check-updates` to add `version_available` (and `ref_available`) by querying the upstream.
+- `is_pinned` is `true` when the installed Git ref is a resolved SHA (matches `^[0-9a-f]{7,40}$`); `false` for tags, branches, or local-only installs.
 - `path` is the absolute path to the installed harness directory.
 - `artifacts` always includes all four counts (never omitted when zero).
 - `includes` and `delegates_to` are always present, even when empty (`[]`).
@@ -238,7 +245,7 @@ Key points:
 Get just the names:
 
 ```bash
-ynh ls --format json | jq -r '.[].name'
+ynh ls --format json | jq -r '.harnesses[].name'
 ```
 
 Expected:
@@ -249,7 +256,7 @@ my-harness
 Check if a specific harness is installed:
 
 ```bash
-ynh ls --format json | jq -e '.[] | select(.name == "my-harness")' > /dev/null && echo "installed" || echo "not installed"
+ynh ls --format json | jq -e '.harnesses[] | select(.name == "my-harness")' > /dev/null && echo "installed" || echo "not installed"
 ```
 
 Expected:
@@ -259,19 +266,23 @@ installed
 
 ## T16.10: Empty list — JSON
 
-With no harnesses installed, the JSON output is an empty array:
+With no harnesses installed, `harnesses` is an empty array — but the envelope (with `capabilities` and `ynh_version`) is still present:
 
 ```bash
 ynh uninstall my-harness
 ynh ls --format json
 ```
 
-Expected:
+Expected (truncated):
 ```json
-[]
+{
+  "capabilities": "0.3.0",
+  "ynh_version": "<version>",
+  "harnesses": []
+}
 ```
 
-Not `null`, not omitted — a clean empty array. Reinstall for subsequent tutorials:
+`harnesses` is never `null`, never omitted — always at least a clean empty array. Reinstall for subsequent tutorials:
 
 ```bash
 ynh install /tmp/ynh-tutorial/my-harness
@@ -311,7 +322,7 @@ rm -rf /tmp/ynh-tutorial
 
 - `--format json` gives machine-readable JSON on stdout; `--format text` is the default
 - The flag is space-separated only (`--format json`, not `--format=json`)
-- `ynh paths --format json` emits a single object; `ynh ls --format json` emits an array
+- `ynh paths --format json` emits a single object; `ynh ls --format json` emits an envelope object with a `harnesses` array
 - Empty arrays are `[]`, never `null` or omitted
 - Optional fields like `description` are omitted when unset, never serialised as `""`
 - Pipe to `jq` for extraction — names, paths, counts, install status checks

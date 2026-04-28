@@ -77,18 +77,21 @@ func TestCmdListJSONEmpty(t *testing.T) {
 		t.Fatalf("cmdListTo: %v", err)
 	}
 
-	var got []listEntry
+	var got listEnvelope
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("unmarshal: %v\noutput: %s", err, stdout.String())
 	}
-	if len(got) != 0 {
-		t.Errorf("expected empty array, got %d entries", len(got))
+	if got.Capabilities == "" {
+		t.Errorf("envelope missing capabilities; output: %s", stdout.String())
 	}
-
-	// Must be "[]" not "null"
-	trimmed := strings.TrimSpace(stdout.String())
-	if trimmed != "[]" {
-		t.Errorf("expected literal [], got: %s", trimmed)
+	if got.Harnesses == nil {
+		t.Errorf("envelope harnesses is null, expected []; output: %s", stdout.String())
+	}
+	if len(got.Harnesses) != 0 {
+		t.Errorf("expected empty harnesses, got %d", len(got.Harnesses))
+	}
+	if !strings.Contains(stdout.String(), `"harnesses": []`) {
+		t.Errorf("expected literal \"harnesses\": [], got: %s", stdout.String())
 	}
 }
 
@@ -129,21 +132,21 @@ func TestCmdListJSONPopulated(t *testing.T) {
 		t.Fatalf("cmdListTo: %v", err)
 	}
 
-	var got []listEntry
+	var got listEnvelope
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("unmarshal: %v\noutput: %s", err, stdout.String())
 	}
 
-	if len(got) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(got))
+	if len(got.Harnesses) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(got.Harnesses))
 	}
 
-	e := got[0]
+	e := got.Harnesses[0]
 	if e.Name != "test-harness" {
 		t.Errorf("name = %q, want test-harness", e.Name)
 	}
-	if e.Version != "1.2.3" {
-		t.Errorf("version = %q, want 1.2.3", e.Version)
+	if e.VersionInstalled != "1.2.3" {
+		t.Errorf("version_installed = %q, want 1.2.3", e.VersionInstalled)
 	}
 	if e.Description != "A test harness" {
 		t.Errorf("description = %q, want 'A test harness'", e.Description)
@@ -321,20 +324,122 @@ func TestCmdListMultipleHarnesses(t *testing.T) {
 		t.Fatalf("cmdListTo: %v", err)
 	}
 
-	var got []listEntry
+	var got listEnvelope
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if len(got) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(got))
+	if len(got.Harnesses) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(got.Harnesses))
 	}
 
 	// Entries are sorted by name (harness.List reads directory entries)
-	names := []string{got[0].Name, got[1].Name}
+	names := []string{got.Harnesses[0].Name, got.Harnesses[1].Name}
 	if names[0] != "alpha" || names[1] != "beta" {
 		t.Errorf("names = %v, want [alpha beta]", names)
 	}
-	if got[1].DefaultVendor != "codex" {
-		t.Errorf("beta vendor = %q, want codex", got[1].DefaultVendor)
+	if got.Harnesses[1].DefaultVendor != "codex" {
+		t.Errorf("beta vendor = %q, want codex", got.Harnesses[1].DefaultVendor)
+	}
+}
+
+func TestCmdListJSONEnvelopeShape(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, "harnesses"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	if err := cmdListTo([]string{"--format", "json"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdListTo: %v", err)
+	}
+
+	out := stdout.String()
+	for _, key := range []string{`"capabilities"`, `"ynh_version"`, `"harnesses"`} {
+		if !strings.Contains(out, key) {
+			t.Errorf("envelope missing %s; output: %s", key, out)
+		}
+	}
+}
+
+func TestCmdListJSONIsPinnedSemantics(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	// Include with a SHA-style ref → pinned. Include with a tag-style ref → floating.
+	hj := `{
+		"name": "demo",
+		"version": "1.0.0",
+		"default_vendor": "claude",
+		"includes": [
+			{"git": "github.com/example/a", "ref": "abc1234567890abcdef1234567890abcdef12345"},
+			{"git": "github.com/example/b", "ref": "v1.2.3"},
+			{"git": "github.com/example/c", "ref": "main"}
+		]
+	}`
+	installListTestHarness(t, home, "demo", hj)
+
+	var stdout bytes.Buffer
+	if err := cmdListTo([]string{"--format", "json"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdListTo: %v", err)
+	}
+
+	var env listEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v\noutput: %s", err, stdout.String())
+	}
+	if len(env.Harnesses) != 1 {
+		t.Fatalf("expected 1 harness, got %d", len(env.Harnesses))
+	}
+	incs := env.Harnesses[0].Includes
+	if len(incs) != 3 {
+		t.Fatalf("expected 3 includes, got %d", len(incs))
+	}
+	if !incs[0].IsPinned {
+		t.Errorf("SHA ref %q must be pinned", incs[0].RefInstalled)
+	}
+	if incs[1].IsPinned {
+		t.Errorf("tag ref %q must not be pinned", incs[1].RefInstalled)
+	}
+	if incs[2].IsPinned {
+		t.Errorf("branch ref %q must not be pinned", incs[2].RefInstalled)
+	}
+}
+
+func TestCmdListCheckUpdatesFlagAccepted(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, "harnesses"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Network probes are not yet wired in this PR — the flag must be accepted
+	// but version_available / ref_available must remain omitted (the "unknown"
+	// state of the three-state contract).
+	var stdout bytes.Buffer
+	if err := cmdListTo([]string{"--format", "json", "--check-updates"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdListTo: %v", err)
+	}
+	for _, forbidden := range []string{`"version_available"`, `"ref_available"`} {
+		if strings.Contains(stdout.String(), forbidden) {
+			t.Errorf("output must omit %s until network probes land; got: %s", forbidden, stdout.String())
+		}
+	}
+}
+
+func TestCmdListCheckUpdatesRequiresJSON(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, "harnesses"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	err := cmdListTo([]string{"--check-updates"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for --check-updates without --format json")
+	}
+	if !strings.Contains(stderr.String()+err.Error(), "--check-updates") {
+		t.Errorf("expected error to mention --check-updates; stderr: %s; err: %v", stderr.String(), err)
 	}
 }
