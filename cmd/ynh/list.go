@@ -169,10 +169,7 @@ func printListText(w io.Writer) error {
 	return tw.Flush()
 }
 
-func printListJSON(w io.Writer, _ bool) error {
-	// checkUpdates is accepted but not yet wired to network probes — version_available
-	// and ref_available remain omitted (the "unknown" state per the three-state contract).
-	// Network probes land in a follow-up PR.
+func printListJSON(w io.Writer, checkUpdates bool) error {
 	names, err := harness.List()
 	if err != nil {
 		return err
@@ -185,6 +182,10 @@ func printListJSON(w io.Writer, _ bool) error {
 			continue
 		}
 		entries = append(entries, buildListEntry(p, name))
+	}
+
+	if checkUpdates {
+		fillUpdates(entries, defaultProbe())
 	}
 
 	envelope := listEnvelope{

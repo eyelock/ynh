@@ -327,6 +327,39 @@ var gitCmdFunc = func(args ...string) error {
 
 func gitCmd(args ...string) error { return gitCmdFunc(args...) }
 
+// LsRemote queries the upstream SHA for ref on gitURL via `git ls-remote`,
+// without cloning. Empty ref resolves to HEAD. Returns the resolved SHA or
+// an error if the network probe fails or the ref is not present upstream.
+//
+// Replaceable in tests via LsRemoteFunc.
+func LsRemote(gitURL, ref string) (string, error) {
+	return LsRemoteFunc(gitURL, ref)
+}
+
+// LsRemoteFunc is the implementation behind LsRemote, broken out so tests
+// can stub network behaviour without shelling out to git.
+var LsRemoteFunc = func(gitURL, ref string) (string, error) {
+	fullURL := NormalizeGitURL(gitURL)
+	args := []string{"ls-remote", "--exit-code", fullURL}
+	if ref != "" {
+		args = append(args, ref)
+	} else {
+		args = append(args, "HEAD")
+	}
+	cmd := exec.Command(gitBin, args...)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git ls-remote %s: %w", fullURL, err)
+	}
+	// First whitespace-separated token of the first line is the SHA.
+	line := strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)[0]
+	fields := strings.Fields(line)
+	if len(fields) == 0 {
+		return "", fmt.Errorf("git ls-remote %s: no output", fullURL)
+	}
+	return fields[0], nil
+}
+
 // PurgeCacheDirsForURL removes all cache directories associated with the given
 // Git URL (all refs). It derives the org--repo name prefix from the URL and
 // deletes every subdirectory of the cache that starts with that prefix.
