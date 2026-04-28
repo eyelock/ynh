@@ -131,14 +131,14 @@ func printListText(w io.Writer) error {
 }
 
 func printListJSON(w io.Writer) error {
-	names, err := harness.List()
+	all, err := harness.ListAll()
 	if err != nil {
 		return err
 	}
 
-	entries := make([]listEntry, 0, len(names))
-	for _, name := range names {
-		p, loadErr := harness.Load(name)
+	entries := make([]listEntry, 0, len(all))
+	for _, e := range all {
+		p, loadErr := harness.LoadDir(e.Dir)
 		if loadErr != nil {
 			continue
 		}
@@ -148,8 +148,8 @@ func printListJSON(w io.Writer) error {
 			Version:       p.Version,
 			Description:   p.Description,
 			DefaultVendor: p.DefaultVendor,
-			Path:          harness.InstalledDir(name),
-			Artifacts:     scanArtifactCounts(name),
+			Path:          p.Dir,
+			Artifacts:     scanArtifactCounts(p.Dir),
 			Includes:      buildIncludes(p.Includes),
 			DelegatesTo:   buildDelegates(p.DelegatesTo),
 		}
@@ -175,8 +175,8 @@ func printListJSON(w io.Writer) error {
 	return err
 }
 
-func scanArtifactCounts(name string) listArtifacts {
-	arts, _ := harness.ScanArtifacts(name)
+func scanArtifactCounts(dir string) listArtifacts {
+	arts, _ := harness.ScanArtifactsDir(dir)
 	return listArtifacts{
 		Skills:   len(arts.Skills),
 		Agents:   len(arts.Agents),

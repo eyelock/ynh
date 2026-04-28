@@ -132,6 +132,46 @@ launcher is only created when the name is unambiguous — installing a second
 `david` removes the short launcher and requires the namespaced launcher
 (`ynh-ns-tutorial--reg-a--david`) or `ynh run david@<namespace>`.
 
+## T18.5a: Verify namespaced paths in JSON output
+
+```bash
+ynh ls --format json | grep '"path"'
+```
+
+Expected: both entries show their namespaced install directories:
+
+```
+  "path": "/Users/<you>/.ynh/harnesses/ynh-ns-tutorial--reg-a/david",
+  "path": "/Users/<you>/.ynh/harnesses/ynh-ns-tutorial--reg-b/david",
+```
+
+## T18.5b: Verify info works by qualified name
+
+```bash
+ynh info "david@ynh-ns-tutorial/reg-a" --format json | grep '"path"'
+```
+
+Expected: the path field shows the namespaced directory:
+
+```
+  "path": "/Users/<you>/.ynh/harnesses/ynh-ns-tutorial--reg-a/david",
+```
+
+## T18.5c: Verify uninstall works when name is unambiguous
+
+Uninstall one of the two `david` harnesses to make the remaining one unambiguous, then verify that short-name uninstall works:
+
+```bash
+ynh uninstall "david@ynh-ns-tutorial/reg-b"
+ynh uninstall david
+```
+
+Expected: both succeed without error. Reinstall for the remaining tutorial steps:
+
+```bash
+ynh install "david@ynh-ns-tutorial/reg-b"
+```
+
 ## T18.6: Migrate a legacy harness with ynd migrate
 
 Create a harness in the legacy 0.1 format:
@@ -224,8 +264,8 @@ intentionally — for example when cleaning up a source repo before publishing.
 ## Clean up
 
 ```bash
-ynh uninstall david@ynh-ns-tutorial/reg-a 2>/dev/null
-ynh uninstall david@ynh-ns-tutorial/reg-b 2>/dev/null
+ynh uninstall "david@ynh-ns-tutorial/reg-a"
+ynh uninstall "david@ynh-ns-tutorial/reg-b"
 ynh uninstall legacy-demo transparent h1 h2 2>/dev/null
 ynh registry remove /tmp/ynh-ns-tutorial/reg-a 2>/dev/null
 ynh registry remove /tmp/ynh-ns-tutorial/reg-b 2>/dev/null
