@@ -312,6 +312,46 @@ func TestCmdListMissingFormatValue(t *testing.T) {
 	}
 }
 
+// installListTestHarnessNS creates a harness under a namespace subdirectory,
+// mirroring what `ynh install` does for registry harnesses.
+func installListTestHarnessNS(t *testing.T, home, ns, name, harnessJSON string) {
+	t.Helper()
+	fsNS := strings.ReplaceAll(ns, "/", "--")
+	dir := filepath.Join(home, "harnesses", fsNS, name)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(harnessJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCmdListJSONNamespacedPath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	installListTestHarnessNS(t, home, "eyelock/assistants", "planner",
+		`{"name":"planner","version":"1.0.0","default_vendor":"claude"}`)
+
+	var stdout bytes.Buffer
+	if err := cmdListTo([]string{"--format", "json"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdListTo: %v", err)
+	}
+
+	var env listEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v\noutput: %s", err, stdout.String())
+	}
+	if len(env.Harnesses) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(env.Harnesses))
+	}
+
+	wantPath := filepath.Join(home, "harnesses", "eyelock--assistants", "planner")
+	if env.Harnesses[0].Path != wantPath {
+		t.Errorf("path = %q, want %q", env.Harnesses[0].Path, wantPath)
+	}
+}
+
 func TestCmdListMultipleHarnesses(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)

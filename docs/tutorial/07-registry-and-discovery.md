@@ -140,13 +140,23 @@ Expected: all three harnesses from `tutorial-registry` (david, planner, media-ma
 ynh install david
 ```
 
-Expected: resolves `david` from the registry to `github.com/eyelock/assistants` with `--path ynh/david`, then installs normally.
+Expected: resolves `david` from the registry to `github.com/eyelock/assistants` with `--path ynh/david`, then installs normally. The namespace is derived from the registry URL (`ynh-tutorial/my-registry`), so the harness is installed under a namespaced directory:
 
 ```
 Installed harness "david"
-  Location: /Users/<you>/.ynh/harnesses/david
+  Location: /Users/<you>/.ynh/harnesses/ynh-tutorial--my-registry/david
   Launcher: /Users/<you>/.ynh/bin/david
   Vendor:   claude
+```
+
+Verify the roundtrip — `ynh ls`, `ynh info`, and `ynh uninstall` all resolve by short name:
+
+```bash
+ynh ls --format json | grep '"path"'
+# Expected: contains "ynh-tutorial--my-registry/david"
+
+ynh info david --format json | grep '"path"'
+# Expected: contains "ynh-tutorial--my-registry/david"
 ```
 
 ## T7.6: Install — with registry qualifier

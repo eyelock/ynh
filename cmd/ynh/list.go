@@ -170,18 +170,18 @@ func printListText(w io.Writer) error {
 }
 
 func printListJSON(w io.Writer, checkUpdates bool) error {
-	names, err := harness.List()
+	all, err := harness.ListAll()
 	if err != nil {
 		return err
 	}
 
-	entries := make([]listEntry, 0, len(names))
-	for _, name := range names {
-		p, loadErr := harness.Load(name)
+	entries := make([]listEntry, 0, len(all))
+	for _, e := range all {
+		p, loadErr := harness.LoadDir(e.Dir)
 		if loadErr != nil {
 			continue
 		}
-		entries = append(entries, buildListEntry(p, name))
+		entries = append(entries, buildListEntry(p))
 	}
 
 	if checkUpdates {
@@ -205,14 +205,14 @@ func printListJSON(w io.Writer, checkUpdates bool) error {
 // buildListEntry assembles the structured-output entry for a loaded harness.
 // Shared by cmdListTo and cmdInfoTo so the per-harness shape stays uniform
 // between the two commands.
-func buildListEntry(p *harness.Harness, name string) listEntry {
+func buildListEntry(p *harness.Harness) listEntry {
 	entry := listEntry{
 		Name:             p.Name,
 		VersionInstalled: p.Version,
 		Description:      p.Description,
 		DefaultVendor:    p.DefaultVendor,
-		Path:             harness.InstalledDir(name),
-		Artifacts:        scanArtifactCounts(name),
+		Path:             p.Dir,
+		Artifacts:        scanArtifactCounts(p.Dir),
 		Includes:         buildIncludes(p.Includes),
 		DelegatesTo:      buildDelegates(p.DelegatesTo),
 	}
@@ -247,8 +247,8 @@ func buildListEntry(p *harness.Harness, name string) listEntry {
 	return entry
 }
 
-func scanArtifactCounts(name string) listArtifacts {
-	arts, _ := harness.ScanArtifacts(name)
+func scanArtifactCounts(dir string) listArtifacts {
+	arts, _ := harness.ScanArtifactsDir(dir)
 	return listArtifacts{
 		Skills:   len(arts.Skills),
 		Agents:   len(arts.Agents),
