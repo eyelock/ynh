@@ -234,10 +234,16 @@ func cmdInstall(args []string) error {
 			return err
 		}
 
-		// Resolve from Git via cache
-		result, err := resolver.EnsureRepo(source, "")
+		// Resolve from Git via cache. When the source came from a registry
+		// entry that pinned a ref, honor it so the on-disk checkout matches
+		// what the marketplace declared. If a sha is also declared, verify
+		// it against the fetched HEAD.
+		result, err := resolver.EnsureRepo(source, resolved.ref)
 		if err != nil {
 			return fmt.Errorf("resolving %s: %w", source, err)
+		}
+		if err := verifyResolvedSHA(result.Path, resolved.sha); err != nil {
+			return err
 		}
 		srcDir = result.Path
 	}

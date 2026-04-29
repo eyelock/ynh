@@ -15,6 +15,8 @@ import (
 type resolvedSource struct {
 	gitURL       string // non-empty if resolved to a Git URL (from registry)
 	path         string // monorepo subdir (from registry entry)
+	ref          string // optional Git ref pin from a registry entry
+	sha          string // optional commit SHA, verified against the fetched HEAD
 	localPath    string // absolute path when resolved from a configured source
 	sourceType   string // "local", "git", "registry", "source"
 	registryName string // non-empty for registry lookups (user-declared label)
@@ -82,6 +84,8 @@ func lookupFromRegistry(qualified string, cfg *config.Config) (resolvedSource, e
 	return resolvedSource{
 		gitURL:       entry.Repo,
 		path:         entry.Path,
+		ref:          entry.Ref,
+		sha:          entry.SHA,
 		sourceType:   "registry",
 		registryName: results[0].RegistryName,
 		namespace:    entry.Namespace,
@@ -107,6 +111,8 @@ func searchFromRegistry(name string, cfg *config.Config) (resolvedSource, error)
 		return resolvedSource{
 			gitURL:       entry.Repo,
 			path:         entry.Path,
+			ref:          entry.Ref,
+			sha:          entry.SHA,
 			sourceType:   "registry",
 			registryName: results[0].RegistryName,
 			namespace:    entry.Namespace,
