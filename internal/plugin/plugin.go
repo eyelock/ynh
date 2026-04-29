@@ -23,7 +23,181 @@ type HarnessJSON struct {
 	MCPServers    map[string]MCPServer   `json:"mcp_servers,omitempty"`
 	Profiles      map[string]Profile     `json:"profiles,omitempty"`
 	Focuses       map[string]Focus       `json:"focus,omitempty"`
+	Sensors       map[string]Sensor      `json:"sensors,omitempty"`
 	InstalledFrom *ProvenanceMeta        `json:"installed_from,omitempty"`
+}
+
+// Sensor declares an observation surface — a feedforward signal a loop
+// driver consumes between agent turns. ynh declares; the loop driver runs.
+type Sensor struct {
+	Category string       `json:"category,omitempty"`
+	Source   SensorSource `json:"source"`
+	Output   SensorOutput `json:"output"`
+}
+
+// SensorSource is a strict one-of: files, command, or focus. Exactly one
+// must be set. Discriminated by structure, not labels.
+type SensorSource struct {
+	Files   []string  `json:"files,omitempty"`
+	Command string    `json:"command,omitempty"`
+	Focus   *FocusRef `json:"focus,omitempty"`
+}
+
+// Kind reports which source variant is set. Returns "" if none or
+// (impossibly, for a validated sensor) more than one.
+func (s SensorSource) Kind() string {
+	count := 0
+	kind := ""
+	if s.Files != nil {
+		count++
+		kind = "files"
+	}
+	if s.Command != "" {
+		count++
+		kind = "command"
+	}
+	if s.Focus != nil {
+		count++
+		kind = "focus"
+	}
+	if count != 1 {
+		return ""
+	}
+	return kind
+}
+
+// UnmarshalJSON enforces that exactly one of files, command, focus is set.
+func (s *SensorSource) UnmarshalJSON(data []byte) error {
+	type alias SensorSource
+	var raw alias
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&raw); err != nil {
+		return err
+	}
+	*s = SensorSource(raw)
+	if s.Kind() == "" {
+		return fmt.Errorf("source must have exactly one of files, command, focus")
+	}
+	return nil
+}
+
+// FocusRef is either a string (referring to a named top-level focus) or
+// an inline focus object.
+type FocusRef struct {
+	Name   string       // set when source.focus is a string reference
+	Inline *InlineFocus // set when source.focus is an inline object
+}
+
+// InlineFocus is a focus declared inline inside a sensor's source.
+// Inline focuses are not exposed via --focus or YNH_FOCUS — they live
+// only as the sensor's source.
+type InlineFocus struct {
+	Profile string `json:"profile,omitempty"`
+	Prompt  string `json:"prompt"`
+}
+
+// UnmarshalJSON accepts either a string ref or an inline focus object.
+func (f *FocusRef) UnmarshalJSON(data []byte) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) > 0 && trimmed[0] == '"' {
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		if s == "" {
+			return fmt.Errorf("focus reference must not be empty")
+		}
+		f.Name = s
+		return nil
+	}
+	var inline InlineFocus
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&inline); err != nil {
+		return err
+	}
+	if inline.Prompt == "" {
+		return fmt.Errorf("inline focus must have a non-empty prompt")
+	}
+	f.Inline = &inline
+	return nil
+}
+
+// MarshalJSON emits the variant that is set.
+func (f FocusRef) MarshalJSON() ([]byte, error) {
+	if f.Inline != nil {
+		return json.Marshal(f.Inline)
+	}
+	return json.Marshal(f.Name)
+}
+
+// SensorOutput declares where a sensor's result lives and what shape it
+// has. format is a freeform pass-through identifier; ynh maintains no
+// vocabulary.
+type SensorOutput struct {
+	Format  string `json:"format"`
+	Channel string `json:"channel,omitempty"`
+	Path    string `json:"path,omitempty"`
+}
+
+// ValidSensorCategories lists the Fowler buckets a sensor's category may use.
+var ValidSensorCategories = map[string]bool{
+	"maintainability": true,
+	"architecture":    true,
+	"behaviour":       true,
+}
+
+// ValidateSensors checks each sensor's source/output/category and resolves
+// focus references against the supplied profile and focus name sets.
+// profileNames and focusNames may be nil if no cross-reference data is
+// available (callers should pass both to enable full validation).
+func ValidateSensors(sensors map[string]Sensor, profileNames, focusNames map[string]bool) []string {
+	var issues []string
+	for name, s := range sensors {
+		if name == "" {
+			issues = append(issues, "sensor name must not be empty")
+			continue
+		}
+		prefix := fmt.Sprintf("sensor %q:", name)
+		if s.Category != "" && !ValidSensorCategories[s.Category] {
+			issues = append(issues, fmt.Sprintf("%s category %q must be one of maintainability, architecture, behaviour", prefix, s.Category))
+		}
+		if s.Source.Kind() == "" {
+			issues = append(issues, fmt.Sprintf("%s source must have exactly one of files, command, focus", prefix))
+		} else {
+			switch s.Source.Kind() {
+			case "files":
+				if len(s.Source.Files) == 0 {
+					issues = append(issues, fmt.Sprintf("%s source.files must be a non-empty array", prefix))
+				}
+				for i, p := range s.Source.Files {
+					if p == "" {
+						issues = append(issues, fmt.Sprintf("%s source.files[%d] must be non-empty", prefix, i))
+					}
+				}
+			case "command":
+				if s.Source.Command == "" {
+					issues = append(issues, fmt.Sprintf("%s source.command must be a non-empty string", prefix))
+				}
+			case "focus":
+				if s.Source.Focus.Inline != nil {
+					if s.Source.Focus.Inline.Prompt == "" {
+						issues = append(issues, fmt.Sprintf("%s source.focus.prompt must not be empty", prefix))
+					}
+					if p := s.Source.Focus.Inline.Profile; p != "" && profileNames != nil && !profileNames[p] {
+						issues = append(issues, fmt.Sprintf("%s source.focus references unknown profile %q", prefix, p))
+					}
+				} else if s.Source.Focus.Name != "" && focusNames != nil && !focusNames[s.Source.Focus.Name] {
+					issues = append(issues, fmt.Sprintf("%s source.focus references undefined focus %q", prefix, s.Source.Focus.Name))
+				}
+			}
+		}
+		if s.Output.Format == "" {
+			issues = append(issues, fmt.Sprintf("%s output.format must not be empty", prefix))
+		}
+	}
+	return issues
 }
 
 // Focus is a named combination of profile + prompt for repeatable AI execution.
