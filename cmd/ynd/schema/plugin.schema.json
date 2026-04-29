@@ -80,6 +80,11 @@
           "type": "string",
           "enum": ["maintainability", "architecture", "behaviour"]
         },
+        "role": {
+          "description": "Optional role hint for loop drivers. regular = run between turns; convergence-verifier = the loop's done-check; stuck-recovery = invoked when the stuckness watchdog fires. Pure metadata — ynh does not enforce semantics.",
+          "type": "string",
+          "enum": ["regular", "convergence-verifier", "stuck-recovery"]
+        },
         "source": { "$ref": "#/$defs/sensor_source" },
         "output": { "$ref": "#/$defs/sensor_output" }
       }

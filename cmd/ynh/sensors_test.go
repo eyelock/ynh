@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -220,5 +222,171 @@ func TestCmdInfo_RendersSensorsSection(t *testing.T) {
 	}
 	if !strings.Contains(out, "build") || !strings.Contains(out, "tests") {
 		t.Errorf("expected sensor names in info output: %s", out)
+	}
+}
+
+func TestCmdSensors_Run_Command(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "sh", `{
+		"name": "sh",
+		"version": "0.1.0",
+		"sensors": {
+			"build": {
+				"source": {"command": "echo hello && exit 0"},
+				"output": {"format": "text"}
+			},
+			"fail": {
+				"source": {"command": "exit 7"},
+				"output": {"format": "text"}
+			}
+		}
+	}`)
+
+	t.Run("zero exit", func(t *testing.T) {
+		var stdout bytes.Buffer
+		if err := cmdSensorsTo([]string{"run", "sh", "build"}, &stdout, io.Discard); err != nil {
+			t.Fatalf("cmdSensorsTo: %v", err)
+		}
+		var r sensorRunResult
+		if err := json.Unmarshal(stdout.Bytes(), &r); err != nil {
+			t.Fatalf("unmarshal: %v\noutput: %s", err, stdout.String())
+		}
+		if r.ExitCode != 0 {
+			t.Errorf("ExitCode = %d, want 0", r.ExitCode)
+		}
+		if !strings.Contains(r.Output.Stdout, "hello") {
+			t.Errorf("expected hello in stdout, got %q", r.Output.Stdout)
+		}
+		if r.Kind != "command" {
+			t.Errorf("Kind = %q", r.Kind)
+		}
+	})
+
+	t.Run("non-zero exit captured, no passed bool", func(t *testing.T) {
+		var stdout bytes.Buffer
+		if err := cmdSensorsTo([]string{"run", "sh", "fail"}, &stdout, io.Discard); err != nil {
+			t.Fatalf("cmdSensorsTo: %v", err)
+		}
+		var r sensorRunResult
+		if err := json.Unmarshal(stdout.Bytes(), &r); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if r.ExitCode != 7 {
+			t.Errorf("ExitCode = %d, want 7", r.ExitCode)
+		}
+		// Verify there's no "passed" field by checking the raw JSON.
+		if strings.Contains(stdout.String(), `"passed"`) {
+			t.Errorf("expected no `passed` field in run output (loop-driver policy): %s", stdout.String())
+		}
+	})
+}
+
+func TestCmdSensors_Run_Files(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "sh", `{
+		"name": "sh",
+		"version": "0.1.0",
+		"sensors": {
+			"reports": {
+				"source": {"files": ["reports/*.txt"]},
+				"output": {"format": "text"}
+			}
+		}
+	}`)
+
+	work := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(work, "reports"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(work, "reports", "a.txt"), []byte("alpha"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(work, "reports", "b.txt"), []byte("bravo"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	if err := cmdSensorsTo([]string{"run", "sh", "reports", "--cwd", work}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdSensorsTo: %v", err)
+	}
+	var r sensorRunResult
+	if err := json.Unmarshal(stdout.Bytes(), &r); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, stdout.String())
+	}
+	if len(r.Output.Files) != 2 {
+		t.Fatalf("expected 2 files, got %d", len(r.Output.Files))
+	}
+	if r.Output.Files[0].Content != "alpha" {
+		t.Errorf("first file content = %q", r.Output.Files[0].Content)
+	}
+
+	// --no-content suppresses content but keeps size/path
+	stdout.Reset()
+	if err := cmdSensorsTo([]string{"run", "sh", "reports", "--cwd", work, "--no-content"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("--no-content: %v", err)
+	}
+	var r2 sensorRunResult
+	if err := json.Unmarshal(stdout.Bytes(), &r2); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if r2.Output.Files[0].Content != "" {
+		t.Errorf("expected no content with --no-content")
+	}
+	if r2.Output.Files[0].Size != 5 {
+		t.Errorf("expected size = 5, got %d", r2.Output.Files[0].Size)
+	}
+}
+
+func TestCmdSensors_Run_FocusReturnsResolvedPayload(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "sh", sensorHarnessJSON)
+
+	var stdout bytes.Buffer
+	if err := cmdSensorsTo([]string{"run", "sh", "sec"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdSensorsTo: %v", err)
+	}
+	var r sensorRunResult
+	if err := json.Unmarshal(stdout.Bytes(), &r); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if r.Kind != "focus" {
+		t.Errorf("Kind = %q", r.Kind)
+	}
+	if r.Output.Focus == nil || r.Output.Focus.Prompt != "audit the diff" {
+		t.Errorf("expected resolved focus, got %+v", r.Output.Focus)
+	}
+	if r.Output.Note == "" {
+		t.Errorf("expected note explaining ynh does not invoke agent, got empty")
+	}
+}
+
+func TestRoleField_ValidatesAndSurfacesInLs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "sh", `{
+		"name": "sh",
+		"version": "0.1.0",
+		"sensors": {
+			"verify": {
+				"role": "convergence-verifier",
+				"source": {"command": "true"},
+				"output": {"format": "text"}
+			}
+		}
+	}`)
+
+	var stdout bytes.Buffer
+	if err := cmdSensorsTo([]string{"ls", "sh", "--format", "json"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdSensorsTo: %v", err)
+	}
+	var entries []sensorListEntry
+	if err := json.Unmarshal(stdout.Bytes(), &entries); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Role != "convergence-verifier" {
+		t.Errorf("expected role=convergence-verifier in ls output: %+v", entries)
 	}
 }

@@ -564,6 +564,9 @@ func validateHarnessSensors(hj map[string]any) []string {
 		if cat, ok := entry["category"].(string); ok && cat != "" && !plugin.ValidSensorCategories[cat] {
 			issues = append(issues, fmt.Sprintf("%s category %q must be one of maintainability, architecture, behaviour", prefix, cat))
 		}
+		if role, ok := entry["role"].(string); ok && role != "" && !plugin.ValidSensorRoles[role] {
+			issues = append(issues, fmt.Sprintf("%s role %q must be one of regular, convergence-verifier, stuck-recovery", prefix, role))
+		}
 		if out, ok := entry["output"].(map[string]any); ok {
 			if format, _ := out["format"].(string); format == "" {
 				issues = append(issues, fmt.Sprintf("%s output.format must not be empty", prefix))

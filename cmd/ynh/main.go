@@ -120,6 +120,7 @@ Commands:
   include update <harness> <url>  Update a Git include's options
   sensors ls <harness>         List declared sensors (supports --format json)
   sensors show <harness> <name>  Resolve a sensor declaration (supports --format text|json)
+  sensors run <harness> <name>   Run a sensor and emit a JSON result (loop drivers consume this)
   registry add <url>           Add a harness registry
   registry list                Show configured registries (supports --format json)
   registry remove <url>        Remove a registry

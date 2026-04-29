@@ -31,8 +31,18 @@ type HarnessJSON struct {
 // driver consumes between agent turns. ynh declares; the loop driver runs.
 type Sensor struct {
 	Category string       `json:"category,omitempty"`
+	Role     string       `json:"role,omitempty"`
 	Source   SensorSource `json:"source"`
 	Output   SensorOutput `json:"output"`
+}
+
+// ValidSensorRoles lists the role hints loop drivers can use to discover
+// which sensor plays which role. Loop-driver policy, not ynh policy —
+// ynh just stores the hint.
+var ValidSensorRoles = map[string]bool{
+	"regular":              true,
+	"convergence-verifier": true,
+	"stuck-recovery":       true,
 }
 
 // SensorSource is a strict one-of: files, command, or focus. Exactly one
@@ -162,6 +172,9 @@ func ValidateSensors(sensors map[string]Sensor, profileNames, focusNames map[str
 		prefix := fmt.Sprintf("sensor %q:", name)
 		if s.Category != "" && !ValidSensorCategories[s.Category] {
 			issues = append(issues, fmt.Sprintf("%s category %q must be one of maintainability, architecture, behaviour", prefix, s.Category))
+		}
+		if s.Role != "" && !ValidSensorRoles[s.Role] {
+			issues = append(issues, fmt.Sprintf("%s role %q must be one of regular, convergence-verifier, stuck-recovery", prefix, s.Role))
 		}
 		if s.Source.Kind() == "" {
 			issues = append(issues, fmt.Sprintf("%s source must have exactly one of files, command, focus", prefix))

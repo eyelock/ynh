@@ -32,6 +32,7 @@ type composeOutput struct {
 
 type composeSensor struct {
 	Category string              `json:"category,omitempty"`
+	Role     string              `json:"role,omitempty"`
 	Source   composeSensorSource `json:"source"`
 	Output   composeSensorOutput `json:"output"`
 }
@@ -392,6 +393,7 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 		for name, s := range h.Sensors {
 			cs := composeSensor{
 				Category: s.Category,
+				Role:     s.Role,
 				Output: composeSensorOutput{
 					Format:  s.Output.Format,
 					Channel: s.Output.Channel,
