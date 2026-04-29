@@ -29,6 +29,8 @@ type Entry struct {
 	// Source fields (from marketplace.json or mapped from legacy)
 	Repo    string // owner/repo or full URL
 	Path    string // subdirectory within repo
+	Ref     string // optional Git ref pin (branch, tag, or SHA) for the entry's source
+	SHA     string // optional commit SHA verified against the fetched HEAD
 	Version string
 	Vendors []string
 }
@@ -130,6 +132,8 @@ func LoadFromDir(dir string) (Registry, error) {
 				e.Repo = src.URL
 			}
 			e.Path = src.Path
+			e.Ref = src.Ref
+			e.SHA = src.SHA
 		}
 
 		reg.Entries = append(reg.Entries, e)

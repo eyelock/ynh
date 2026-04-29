@@ -66,6 +66,66 @@ func TestLoadFromDir(t *testing.T) {
 	}
 }
 
+// TestLoadFromDirCarriesEntryRef ensures a per-entry ref pinned in
+// marketplace.json's RemoteSource is preserved on the parsed Entry so the
+// install path can pass it to the cloner. Regression test: the ref was
+// previously dropped, causing pinned entries to silently install from the
+// default branch.
+func TestLoadFromDirCarriesEntryRef(t *testing.T) {
+	dir := t.TempDir()
+	mj := `{
+  "name": "test-reg",
+  "owner": {"name": "test"},
+  "harnesses": [
+    {
+      "name": "pinned",
+      "source": {"type": "github", "repo": "eyelock/assistants", "path": "ynh/david", "ref": "develop", "sha": "0123456789abcdef0123456789abcdef01234567"}
+    },
+    {
+      "name": "unpinned",
+      "source": {"type": "github", "repo": "eyelock/assistants", "path": "ynh/david"}
+    }
+  ]
+}`
+	pluginDir := filepath.Join(dir, ".ynh-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "marketplace.json"), []byte(mj), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reg, err := LoadFromDir(dir)
+	if err != nil {
+		t.Fatalf("LoadFromDir: %v", err)
+	}
+	if len(reg.Entries) != 2 {
+		t.Fatalf("entries = %d, want 2", len(reg.Entries))
+	}
+
+	pinned := reg.Entries[0]
+	if pinned.Name != "pinned" {
+		t.Fatalf("entries[0].Name = %q", pinned.Name)
+	}
+	if pinned.Ref != "develop" {
+		t.Errorf("entries[0].Ref = %q, want %q", pinned.Ref, "develop")
+	}
+	if pinned.SHA != "0123456789abcdef0123456789abcdef01234567" {
+		t.Errorf("entries[0].SHA = %q", pinned.SHA)
+	}
+	if pinned.Repo != "eyelock/assistants" {
+		t.Errorf("entries[0].Repo = %q", pinned.Repo)
+	}
+
+	unpinned := reg.Entries[1]
+	if unpinned.Ref != "" {
+		t.Errorf("entries[1].Ref = %q, want empty", unpinned.Ref)
+	}
+	if unpinned.SHA != "" {
+		t.Errorf("entries[1].SHA = %q, want empty", unpinned.SHA)
+	}
+}
+
 func TestLoadFromDirMissing(t *testing.T) {
 	_, err := LoadFromDir(t.TempDir())
 	if err == nil {

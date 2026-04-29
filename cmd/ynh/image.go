@@ -170,9 +170,12 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 			if err := cfg.CheckRemoteSource(source); err != nil {
 				return err
 			}
-			result, err := resolver.EnsureRepo(source, "")
+			result, err := resolver.EnsureRepo(source, resolved.ref)
 			if err != nil {
 				return fmt.Errorf("resolving %s: %w", source, err)
+			}
+			if err := verifyResolvedSHA(result.Path, resolved.sha); err != nil {
+				return err
 			}
 			harnessSrcDir = result.Path
 		}

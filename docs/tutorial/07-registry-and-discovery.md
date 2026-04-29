@@ -169,6 +169,61 @@ ynh install planner@tutorial-registry
 
 The `name@registry` format bypasses ambiguity.
 
+## T7.6b: Pin a registry entry to a ref or SHA
+
+The legacy `registry.json` format used in T7.1 has no per-entry pinning. Modern marketplaces use `.ynh-plugin/marketplace.json` with a `source` object that supports `ref` (branch, tag, or SHA) and `sha` (commit verification):
+
+```bash
+mkdir -p /tmp/ynh-tutorial/pinned-registry/.ynh-plugin
+cd /tmp/ynh-tutorial/pinned-registry
+
+cat > .ynh-plugin/marketplace.json << 'EOF'
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
+  "name": "pinned-registry",
+  "owner": {"name": "tutorial"},
+  "harnesses": [
+    {
+      "name": "david-stable",
+      "description": "david pinned to the main branch",
+      "source": {
+        "type": "github",
+        "repo": "github.com/eyelock/assistants",
+        "path": "ynh/david",
+        "ref": "main"
+      }
+    }
+  ]
+}
+EOF
+
+git init && git add . && git commit -m "init pinned registry"
+
+ynh registry add /tmp/ynh-tutorial/pinned-registry
+ynh install david-stable
+```
+
+The entry's `ref` controls which branch, tag, or commit gets cloned for the install — independent of the registry's own ref. If `sha` is also set, ynh verifies the fetched commit matches and aborts the install on mismatch:
+
+```json
+{
+  "name": "david-locked",
+  "source": {
+    "type": "github",
+    "repo": "github.com/eyelock/assistants",
+    "path": "ynh/david",
+    "ref": "main",
+    "sha": "0000000000000000000000000000000000000000"
+  }
+}
+```
+
+```
+Error: sha mismatch: registry entry declared 0000... but fetched commit is <actual>
+```
+
+Use `ref` for human-friendly pins (a release tag, a stable branch); add `sha` when you want belt-and-braces protection against branch tip movement or repo tampering.
+
 ## T7.7: Install — direct URL still works
 
 ```bash
