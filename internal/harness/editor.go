@@ -38,6 +38,12 @@ func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
 	if DetectFormat(installDir) == "plugin" {
 		return installDir, true, nil
 	}
+
+	// Not in flat layout — check namespaced dirs.
+	if h, nsErr := findInNamespacedDirs(ref); nsErr == nil {
+		return h.Dir, true, nil
+	}
+
 	return "", false, fmt.Errorf("harness %q: %w", ref, ErrNotFound)
 }
 
