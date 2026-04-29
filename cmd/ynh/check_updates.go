@@ -181,9 +181,14 @@ func probeHarness(entry *listEntry, probe updateProbe, mu *sync.Mutex) {
 
 func probeInclude(entry *listEntry, idx int, probe updateProbe, mu *sync.Mutex) {
 	inc := entry.Includes[idx]
-	ref := inc.RefInstalled
-	if harness.IsPinnedRef(ref) {
-		ref = ""
+	// IsPinned reflects the manifest pin (a SHA-shaped ref). For pinned
+	// entries we probe HEAD instead — there's no point re-resolving the
+	// pinned SHA. For floating-ref entries we probe the manifest ref
+	// (branch/tag), not RefInstalled (which is now the resolved SHA at
+	// install time, not a fetchable ref).
+	ref := ""
+	if !inc.IsPinned {
+		ref = inc.Ref
 	}
 	sha, ok := probe.git(inc.Git, ref)
 	if !ok {

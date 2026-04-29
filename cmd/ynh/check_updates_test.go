@@ -51,10 +51,12 @@ func (f *fakeProbe) probe() updateProbe {
 }
 
 func TestFillUpdates_GitIncludeFloatingRef(t *testing.T) {
+	// Floating-ref include: manifest declares Ref="main", install resolves
+	// it to a SHA recorded as RefInstalled. Probe should target "main" upstream.
 	entries := []listEntry{{
 		Name: "demo",
 		Includes: []listInclude{
-			{Git: "github.com/example/repo", RefInstalled: "main"},
+			{Git: "github.com/example/repo", Ref: "main", RefInstalled: "oldsha", IsPinned: false},
 		},
 	}}
 
@@ -79,7 +81,12 @@ func TestFillUpdates_GitIncludePinnedProbesHEAD(t *testing.T) {
 	entries := []listEntry{{
 		Name: "demo",
 		Includes: []listInclude{
-			{Git: "github.com/example/repo", RefInstalled: "abc1234567890abcdef1234567890abcdef12345"},
+			{
+				Git:          "github.com/example/repo",
+				Ref:          "abc1234567890abcdef1234567890abcdef12345",
+				RefInstalled: "abc1234567890abcdef1234567890abcdef12345",
+				IsPinned:     true,
+			},
 		},
 	}}
 
@@ -104,7 +111,7 @@ func TestFillUpdates_ProbeFailureStaysOmitted(t *testing.T) {
 	entries := []listEntry{{
 		Name: "demo",
 		Includes: []listInclude{
-			{Git: "github.com/example/repo", RefInstalled: "main"},
+			{Git: "github.com/example/repo", Ref: "main", RefInstalled: "oldsha", IsPinned: false},
 		},
 	}}
 

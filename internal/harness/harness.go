@@ -37,10 +37,17 @@ func (g GitSource) IsLocal() bool { return g.Local != "" && g.Git == "" }
 type Include struct {
 	GitSource
 	Pick []string
+	// SHA is the resolved commit at install/update time, populated from
+	// installed.json's resolved slice. Empty for local-path includes and for
+	// pre-migration installs that predate SHA recording.
+	SHA string
 }
 
 type Delegate struct {
 	GitSource
+	// SHA is the resolved commit at install/update time, populated from
+	// installed.json's resolved slice. Empty for pre-migration installs.
+	SHA string
 }
 
 // Provenance records where a harness was installed from.
@@ -310,6 +317,29 @@ func LoadDir(dir string) (*Harness, error) {
 		p.DelegatesTo = append(p.DelegatesTo, Delegate{
 			GitSource: GitSource{Git: del.Git, Ref: del.Ref, Path: del.Path},
 		})
+	}
+
+	// Backfill resolved SHAs from installed.json onto includes/delegates so
+	// downstream consumers (list, info, --check-updates) have a recorded
+	// commit even for floating refs.
+	if ins, err := plugin.LoadInstalledJSON(dir); err == nil && ins != nil && len(ins.Resolved) > 0 {
+		shaFor := func(git, ref, path string) string {
+			for _, r := range ins.Resolved {
+				if r.Git == git && r.Ref == ref && r.Path == path {
+					return r.SHA
+				}
+			}
+			return ""
+		}
+		for i := range p.Includes {
+			if p.Includes[i].Git == "" {
+				continue
+			}
+			p.Includes[i].SHA = shaFor(p.Includes[i].Git, p.Includes[i].Ref, p.Includes[i].Path)
+		}
+		for i := range p.DelegatesTo {
+			p.DelegatesTo[i].SHA = shaFor(p.DelegatesTo[i].Git, p.DelegatesTo[i].Ref, p.DelegatesTo[i].Path)
+		}
 	}
 	if len(hj.Hooks) > 0 {
 		p.Hooks = hj.Hooks

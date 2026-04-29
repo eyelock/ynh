@@ -187,15 +187,28 @@ const InstalledFile = "installed.json"
 // InstalledJSON records where a harness was installed from.
 // It lives at .ynh-plugin/installed.json, separate from the author-controlled plugin.json.
 type InstalledJSON struct {
-	SourceType   string          `json:"source_type"`
-	Source       string          `json:"source"`
-	Ref          string          `json:"ref,omitempty"`
-	SHA          string          `json:"sha,omitempty"`
-	Path         string          `json:"path,omitempty"`
-	Namespace    string          `json:"namespace,omitempty"`
-	RegistryName string          `json:"registry_name,omitempty"`
-	InstalledAt  string          `json:"installed_at"`
-	ForkedFrom   *ForkedFromJSON `json:"forked_from,omitempty"`
+	SourceType   string               `json:"source_type"`
+	Source       string               `json:"source"`
+	Ref          string               `json:"ref,omitempty"`
+	SHA          string               `json:"sha,omitempty"`
+	Path         string               `json:"path,omitempty"`
+	Namespace    string               `json:"namespace,omitempty"`
+	RegistryName string               `json:"registry_name,omitempty"`
+	InstalledAt  string               `json:"installed_at"`
+	ForkedFrom   *ForkedFromJSON      `json:"forked_from,omitempty"`
+	Resolved     []ResolvedSourceJSON `json:"resolved,omitempty"`
+}
+
+// ResolvedSourceJSON records the resolved commit SHA for an include or
+// delegate at install/update time. Identity is the (Git, Ref, Path) triple
+// matching the manifest entry. Floating-ref entries (Ref == "" or branch
+// name) get their SHA filled here so consumers can compare against
+// ls-remote without re-resolving.
+type ResolvedSourceJSON struct {
+	Git  string `json:"git"`
+	Ref  string `json:"ref,omitempty"`
+	Path string `json:"path,omitempty"`
+	SHA  string `json:"sha"`
 }
 
 // ForkedFromJSON records the upstream a local harness was forked from.

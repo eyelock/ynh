@@ -166,6 +166,7 @@ func ShortGitURL(url string) string {
 // RepoResult describes the outcome of EnsureRepo.
 type RepoResult struct {
 	Path    string // path to the cached repo on disk
+	SHA     string // resolved commit SHA at HEAD after fetch/checkout
 	Cloned  bool   // true if freshly cloned (not previously cached)
 	Changed bool   // true if HEAD moved during update
 }
@@ -194,7 +195,7 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 		if err := gitCmd(args...); err != nil {
 			return RepoResult{}, fmt.Errorf("git clone %s: %w", fullURL, err)
 		}
-		return RepoResult{Path: repoDir, Cloned: true, Changed: true}, nil
+		return RepoResult{Path: repoDir, SHA: gitHead(repoDir), Cloned: true, Changed: true}, nil
 	}
 
 	// Update existing clone — capture HEAD before and after
@@ -237,7 +238,7 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 		if err := gitCmd(args...); err != nil {
 			return RepoResult{}, fmt.Errorf("git clone %s: %w", fullURL, err)
 		}
-		return RepoResult{Path: repoDir, Cloned: true, Changed: true}, nil
+		return RepoResult{Path: repoDir, SHA: gitHead(repoDir), Cloned: true, Changed: true}, nil
 	}
 
 	if ref != "" {
@@ -251,7 +252,7 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 	}
 
 	after := gitHead(repoDir)
-	return RepoResult{Path: repoDir, Changed: before != after}, nil
+	return RepoResult{Path: repoDir, SHA: after, Changed: before != after}, nil
 }
 
 // CacheOnlyRepo returns a cached repo without hitting the network.
@@ -262,7 +263,7 @@ func CacheOnlyRepo(gitURL string, ref string) (RepoResult, error) {
 	repoDir := filepath.Join(cacheDir, repoDirName(gitURL, ref))
 
 	if _, err := os.Stat(filepath.Join(repoDir, ".git")); err == nil {
-		return RepoResult{Path: repoDir}, nil
+		return RepoResult{Path: repoDir, SHA: gitHead(repoDir)}, nil
 	}
 
 	// Cache miss — fall back to network fetch.
