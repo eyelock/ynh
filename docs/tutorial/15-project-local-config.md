@@ -21,6 +21,7 @@ mkdir -p /tmp/ynh-tutorial/my-project/rules
 mkdir -p /tmp/ynh-tutorial/my-project/.ynh-plugin
 cat > /tmp/ynh-tutorial/my-project/.ynh-plugin/plugin.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-project",
   "version": "0.1.0",
   "default_vendor": "claude",
