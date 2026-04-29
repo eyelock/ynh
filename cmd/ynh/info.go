@@ -263,6 +263,30 @@ func printInfoText(w io.Writer, name string) error {
 		}
 	}
 
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "Sensors:")
+	if len(p.Sensors) == 0 {
+		_, _ = fmt.Fprintln(w, "  (none)")
+	} else {
+		names := make([]string, 0, len(p.Sensors))
+		for n := range p.Sensors {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		for _, n := range names {
+			s := p.Sensors[n]
+			cat := s.Category
+			if cat == "" {
+				cat = "-"
+			}
+			kind := s.Source.Kind()
+			if s.Source.Focus != nil && s.Source.Focus.Inline != nil {
+				kind = "focus*" // * = inline focus
+			}
+			_, _ = fmt.Fprintf(w, "  %s    %s    %s    %s\n", n, cat, kind, s.Output.Format)
+		}
+	}
+
 	return nil
 }
 

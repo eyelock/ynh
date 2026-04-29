@@ -64,6 +64,8 @@ func main() {
 		err = cmdFork(os.Args[2:])
 	case "include":
 		err = cmdInclude(os.Args[2:])
+	case "sensors":
+		err = cmdSensors(os.Args[2:])
 	case "image":
 		err = cmdImage(os.Args[2:])
 	case "prune":
@@ -116,6 +118,8 @@ Commands:
   include add <harness> <url>  Add a Git include to a harness
   include remove <harness> <url>  Remove a Git include from a harness
   include update <harness> <url>  Update a Git include's options
+  sensors ls <harness>         List declared sensors (supports --format json)
+  sensors show <harness> <name>  Resolve a sensor declaration (supports --format text|json)
   registry add <url>           Add a harness registry
   registry list                Show configured registries (supports --format json)
   registry remove <url>        Remove a registry

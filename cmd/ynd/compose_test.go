@@ -620,3 +620,57 @@ func TestCmdComposeTextWithMCPURL(t *testing.T) {
 		t.Error("expected URL MCP server in text output")
 	}
 }
+
+func TestCompose_Sensors(t *testing.T) {
+	dir := t.TempDir()
+	hj := map[string]any{
+		"name":    "sensor-h",
+		"version": "0.1.0",
+		"focus": map[string]any{
+			"audit": map[string]any{"prompt": "audit the diff"},
+		},
+		"sensors": map[string]any{
+			"build": map[string]any{
+				"category": "maintainability",
+				"source":   map[string]any{"command": "make check"},
+				"output":   map[string]any{"format": "text"},
+			},
+			"sec": map[string]any{
+				"source": map[string]any{"focus": "audit"},
+				"output": map[string]any{"format": "markdown"},
+			},
+			"inline-judge": map[string]any{
+				"source": map[string]any{
+					"focus": map[string]any{"prompt": "judge coverage"},
+				},
+				"output": map[string]any{"format": "markdown"},
+			},
+		},
+	}
+	data, _ := json.MarshalIndent(hj, "", "  ")
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{dir}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v\noutput: %s", err, stdout.String())
+	}
+	if len(got.Sensors) != 3 {
+		t.Fatalf("expected 3 sensors, got %d: %+v", len(got.Sensors), got.Sensors)
+	}
+	if got.Sensors["build"].Source.Command != "make check" {
+		t.Errorf("build sensor command = %q", got.Sensors["build"].Source.Command)
+	}
+	if got.Sensors["sec"].Source.Focus == nil || got.Sensors["sec"].Source.Focus.Name != "audit" {
+		t.Errorf("sec sensor focus = %+v", got.Sensors["sec"].Source.Focus)
+	}
+	inline := got.Sensors["inline-judge"].Source.Focus
+	if inline == nil || !inline.Inline || inline.Prompt != "judge coverage" {
+		t.Errorf("inline-judge focus = %+v", inline)
+	}
+}
