@@ -36,7 +36,7 @@ CI enforces `hotfix/*` for hotfixes targeting `main`. There are no release branc
 # Start work
 git checkout develop
 git pull origin develop
-git checkout -b feat-my-thing
+git checkout -b feat/my-thing
 
 # Before opening a PR — sync with develop
 git fetch origin develop
