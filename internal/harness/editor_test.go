@@ -57,6 +57,23 @@ func TestResolveEditTarget_InstalledName(t *testing.T) {
 	}
 }
 
+func TestResolveEditTarget_NamespacedName(t *testing.T) {
+	overrideHarnessesDir(t)
+	dir := InstalledDirNS("org/repo", "my-harness")
+	writeTestHarness(t, dir, "my-harness")
+
+	got, installed, err := ResolveEditTarget("my-harness")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != dir {
+		t.Errorf("dir = %q, want %q", got, dir)
+	}
+	if !installed {
+		t.Error("expected installed=true for namespaced harness")
+	}
+}
+
 func TestResolveEditTarget_Path(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "local")
