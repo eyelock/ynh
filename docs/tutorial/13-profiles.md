@@ -23,6 +23,7 @@ mkdir -p /tmp/ynh-tutorial/profile-harness/rules
 mkdir -p /tmp/ynh-tutorial/profile-harness/.ynh-plugin
 cat > /tmp/ynh-tutorial/profile-harness/.ynh-plugin/plugin.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "profile-demo",
   "version": "0.1.0",
   "default_vendor": "claude",
@@ -232,6 +233,7 @@ Add a profile that pulls it in:
 ```bash
 cat > /tmp/ynh-tutorial/profile-harness/.ynh-plugin/plugin.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "profile-demo",
   "version": "0.1.0",
   "default_vendor": "claude",
