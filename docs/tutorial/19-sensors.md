@@ -206,9 +206,10 @@ EOF
 ynd validate /tmp/ynh-tutorial/sensor-harness
 ```
 
-Expected error:
+Expected error (the schema-level violation and the cross-field violation each emit one line):
 
 ```
+sensors/broken/source: 'oneOf' failed, subschemas 0, 1 matched
 sensor "broken": source must have exactly one of files, command, focus
 ```
 
@@ -243,17 +244,18 @@ ynd validate /tmp/ynh-tutorial/sensor-harness
 
 The hook produces the file mid-session; the sensor consumes it between iterations. Coupling is by shared file path — implicit, no schema link needed.
 
-## T19.8: Round-trip via `ynd export`
+## T19.8: Install round-trip preserves sensors
 
-Sensors round-trip through `ynd export`. Re-install with the latest manifest:
+Re-install the harness and confirm sensors still appear in the discovery surface:
 
 ```bash
 ynh install /tmp/ynh-tutorial/sensor-harness
-ynd export --harness sensor-demo --to /tmp/ynh-tutorial/exported
-grep -A 5 '"sensors"' /tmp/ynh-tutorial/exported/.ynh-plugin/plugin.json
+ynh sensors ls sensor-demo --format json | jq '.[] | .name'
 ```
 
-The exported manifest preserves the sensors block faithfully.
+Expected: each sensor name appears, one per line. Sensors flow from the source `plugin.json` through the install path into the on-disk harness directory and surface back through the discovery CLI unchanged.
+
+Note: `ynd export` produces vendor-native plugin formats (Claude/Cursor/Codex), and vendors have no concept of sensors today. Sensors live only in the ynh manifest and are consumed by loop drivers via `ynh sensors`. They are not part of vendor export.
 
 ## T19.9: Cleanup
 

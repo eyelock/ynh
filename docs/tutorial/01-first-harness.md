@@ -181,6 +181,9 @@ Profiles:
 
 Focus:
   (none)
+
+Sensors:
+  (none)
 ```
 
 Check the launcher script:
