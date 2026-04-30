@@ -25,24 +25,35 @@ type listEnvelope struct {
 // listEntry is the JSON shape for a single harness in the `ynh ls` output.
 // Field order drives JSON key order via MarshalIndent.
 type listEntry struct {
-	Name             string             `json:"name"`
-	VersionInstalled string             `json:"version_installed"`
-	VersionAvailable string             `json:"version_available,omitempty"`
-	Description      string             `json:"description,omitempty"`
-	DefaultVendor    string             `json:"default_vendor"`
-	Path             string             `json:"path"`
-	RefInstalled     string             `json:"ref_installed,omitempty"`
-	RefAvailable     string             `json:"ref_available,omitempty"`
-	IsPinned         bool               `json:"is_pinned"`
-	InstalledFrom    *listInstalledFrom `json:"installed_from,omitempty"`
-	Artifacts        listArtifacts      `json:"artifacts"`
-	Includes         []listInclude      `json:"includes"`
-	DelegatesTo      []listDelegate     `json:"delegates_to"`
+	Name             string `json:"name"`
+	VersionInstalled string `json:"version_installed"`
+	VersionAvailable string `json:"version_available,omitempty"`
+	Description      string `json:"description,omitempty"`
+	DefaultVendor    string `json:"default_vendor"`
+	Path             string `json:"path"`
+	RefInstalled     string `json:"ref_installed,omitempty"`
+	RefAvailable     string `json:"ref_available,omitempty"`
+	// SHAAvailable is the live upstream SHA for the harness source itself
+	// (probed via ls-remote against the recorded install ref). Distinct from
+	// RefAvailable, which for registry harnesses comes from the registry
+	// entry's recorded SHA. Both can be present — answers different
+	// questions: "has the source moved?" vs "has the registry entry moved?".
+	SHAAvailable  string             `json:"sha_available,omitempty"`
+	IsPinned      bool               `json:"is_pinned"`
+	InstalledFrom *listInstalledFrom `json:"installed_from,omitempty"`
+	Artifacts     listArtifacts      `json:"artifacts"`
+	Includes      []listInclude      `json:"includes"`
+	DelegatesTo   []listDelegate     `json:"delegates_to"`
 }
 
 type listInstalledFrom struct {
-	SourceType   string          `json:"source_type"`
-	Source       string          `json:"source"`
+	SourceType string `json:"source_type"`
+	Source     string `json:"source"`
+	// Ref is the branch/tag/SHA recorded at install time — the ref this
+	// harness actually tracks. Used by --check-updates to probe the same ref
+	// ynh update tracks. Empty for pre-migration installs.
+	Ref          string          `json:"ref,omitempty"`
+	SHA          string          `json:"sha,omitempty"`
 	Path         string          `json:"path,omitempty"`
 	RegistryName string          `json:"registry_name,omitempty"`
 	InstalledAt  string          `json:"installed_at"`
@@ -237,6 +248,8 @@ func buildListEntry(p *harness.Harness) listEntry {
 		entry.InstalledFrom = &listInstalledFrom{
 			SourceType:   p.InstalledFrom.SourceType,
 			Source:       p.InstalledFrom.Source,
+			Ref:          p.InstalledFrom.Ref,
+			SHA:          p.InstalledFrom.SHA,
 			Path:         p.InstalledFrom.Path,
 			RegistryName: p.InstalledFrom.RegistryName,
 			InstalledAt:  p.InstalledFrom.InstalledAt,

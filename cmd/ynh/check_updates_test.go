@@ -170,6 +170,86 @@ func TestFillUpdates_LocalHarnessNotProbed(t *testing.T) {
 	}
 }
 
+func TestFillUpdates_RegistryHarness_LiveSHAProbe(t *testing.T) {
+	// Registry harnesses get both signals: marketplace.json's recorded SHA
+	// (RefAvailable) AND a live ls-remote against the underlying git source
+	// using the recorded install ref (SHAAvailable). The two differ when
+	// marketplace.json is stale — the canonical motivating case for this
+	// dual-signal contract.
+	entries := []listEntry{{
+		Name: "demo",
+		InstalledFrom: &listInstalledFrom{
+			SourceType:   "registry",
+			Source:       "github.com/example/registry-harness",
+			Ref:          "main",
+			Path:         "harnesses/demo",
+			RegistryName: "demo-registry",
+		},
+	}}
+
+	fp := &fakeProbe{
+		gitResults: map[string]struct {
+			sha string
+			ok  bool
+		}{
+			"github.com/example/registry-harness|main": {sha: "live-sha", ok: true},
+		},
+		registryResults: map[string]struct {
+			version string
+			sha     string
+			ok      bool
+		}{
+			"demo|github.com/example/registry-harness|harnesses/demo": {
+				version: "0.2.0", sha: "stale-marketplace-sha", ok: true,
+			},
+		},
+	}
+	fillUpdates(entries, fp.probe())
+
+	if entries[0].VersionAvailable != "0.2.0" {
+		t.Errorf("version_available = %q, want 0.2.0", entries[0].VersionAvailable)
+	}
+	if entries[0].RefAvailable != "stale-marketplace-sha" {
+		t.Errorf("ref_available = %q, want stale-marketplace-sha", entries[0].RefAvailable)
+	}
+	if entries[0].SHAAvailable != "live-sha" {
+		t.Errorf("sha_available = %q, want live-sha", entries[0].SHAAvailable)
+	}
+}
+
+func TestFillUpdates_GitHarness_PrefersRecordedRef(t *testing.T) {
+	// Git harness with a recorded install ref — probe targets THAT ref, not
+	// the upstream HEAD. Catches the regression that motivated this fix:
+	// installs from a non-default branch that drift away from the new default.
+	entries := []listEntry{{
+		Name: "demo",
+		InstalledFrom: &listInstalledFrom{
+			SourceType: "git",
+			Source:     "github.com/example/harness-repo",
+			Ref:        "main",
+		},
+		RefInstalled: "old-main-sha",
+	}}
+
+	fp := &fakeProbe{
+		gitResults: map[string]struct {
+			sha string
+			ok  bool
+		}{
+			"github.com/example/harness-repo|main": {sha: "main-tip", ok: true},
+			"github.com/example/harness-repo|":     {sha: "head-of-default", ok: true},
+		},
+	}
+	fillUpdates(entries, fp.probe())
+
+	if entries[0].SHAAvailable != "main-tip" {
+		t.Errorf("sha_available = %q, want main-tip (probed via recorded ref)", entries[0].SHAAvailable)
+	}
+	if entries[0].RefAvailable != "main-tip" {
+		t.Errorf("ref_available = %q, want main-tip (mirrors sha for git source)", entries[0].RefAvailable)
+	}
+}
+
 func TestFillUpdates_GitHarnessProbesSource(t *testing.T) {
 	entries := []listEntry{{
 		Name:         "demo",

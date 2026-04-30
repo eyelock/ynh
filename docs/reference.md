@@ -119,24 +119,27 @@ Per-harness fields:
 | `default_vendor` | Vendor for `ynh run` without `-v` |
 | `path` | Absolute path to the installed harness directory |
 | `ref_installed` | Currently installed Git ref or SHA — omitted when there is no Git provenance |
-| `ref_available` | Latest Git SHA known upstream — same omission rules as `version_available` |
+| `ref_available` | Latest Git SHA known upstream — same omission rules as `version_available`. For registry harnesses this is the registry entry's recorded SHA (may lag the actual source); for git harnesses it equals `sha_available` |
+| `sha_available` | Live upstream SHA from a fresh `git ls-remote` against `installed_from.source` at the recorded `installed_from.ref` — answers "has the source moved since I installed?" independently of registry freshness. Omitted with the same rules as `ref_available` |
 | `is_pinned` | `true` iff `ref_installed` matches `^[0-9a-f]{7,40}$` (resolved SHA). Tags and branches are floating |
-| `installed_from` | Provenance object — `source_type`, `source`, `installed_at`, optional `path`, `registry_name`, `forked_from` |
+| `installed_from` | Provenance object — `source_type`, `source`, optional `ref`, `sha`, `path`, `registry_name`, `installed_at`, `forked_from` |
+| `installed_from.ref` | Branch/tag/SHA recorded at install time — the ref this harness actually tracks. Empty for pre-migration installs (re-run `ynh update <name>` to backfill) |
+| `installed_from.sha` | Resolved commit SHA at install time. Empty for pre-migration installs |
 | `installed_from.forked_from` | Upstream a forked harness was copied from — `source_type`, `source`, `version`, `sha`, optional `ref`, `path`, `registry_name`. Absent on non-fork installs |
 | `artifacts` | (`ynh ls` only) Counts: `skills`, `agents`, `rules`, `commands` |
 | `includes` | Array of include objects: `git`, `ref_installed`, `ref_available`, `is_pinned`, optional `path`, `pick` |
-| `delegates_to` | Array of delegate objects: `git`, `ref_installed`, `is_pinned`, optional `path` |
+| `delegates_to` | Array of delegate objects: `git`, `ref_installed`, `ref_available`, `is_pinned`, optional `path` |
 | `manifest` | (`ynh info` only) Raw `.ynh-plugin/plugin.json` body, JSON-compacted |
 
 #### `--check-updates` flag
 
-`ynh info` and `ynh ls` accept `--check-updates` together with `--format json`. The flag opts in to upstream lookups for `version_available` and `ref_available`. Without it, those fields are always omitted (the "unknown" three-state).
+`ynh info` and `ynh ls` accept `--check-updates` together with `--format json`. The flag opts in to upstream lookups for `version_available`, `ref_available`, and `sha_available`. Without it, those fields are always omitted (the "unknown" three-state).
 
 What gets probed:
 
-- **Includes** (per `git`, with a remote URL): `git ls-remote` against the upstream URL, returning the current SHA on `ref_installed`. **Pinned includes** (`is_pinned: true`) probe `HEAD` instead of re-resolving the pinned SHA — otherwise a pinned include could never appear behind upstream.
-- **Registry-installed harnesses**: configured registries are walked and the matching entry's version becomes `version_available`.
-- **Git-installed harnesses**: same as include probing, against the harness's own `installed_from.source`.
+- **Includes and delegates** (per `git`, with a remote URL): `git ls-remote` against the upstream URL, targeting the recorded install ref (`installed.json.resolved[].ref`) — the branch the cache actually tracks. Falls back to the manifest ref for pre-migration installs. **Pinned entries** (`is_pinned: true`) probe `HEAD` instead of re-resolving the pinned SHA — otherwise a pinned entry could never appear behind upstream.
+- **Registry-installed harnesses**: configured registries are walked. The matching entry's version → `version_available`; the entry's recorded SHA → `ref_available` (maintainer-controlled, may be stale). A live `ls-remote` against `installed_from.source` at `installed_from.ref` → `sha_available`.
+- **Git-installed harnesses**: live `ls-remote` against `installed_from.source` at the recorded ref → `ref_available` and `sha_available` (identical for this source type).
 - **Local-only harnesses** (no `installed_from`, or `source_type: "local"` without a remote): no probe possible — fields stay omitted.
 
 > Note: `--check-updates` performs network calls. Failures degrade silently — fields are simply omitted, the command does not error. Default `info` and `ls` calls (without the flag) remain offline, fast, and deterministic. Probes run concurrently (bounded fan-out) so a multi-include harness does not serialize the network.
