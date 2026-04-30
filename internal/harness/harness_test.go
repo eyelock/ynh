@@ -334,6 +334,91 @@ func TestLoadDir_WithoutProvenance(t *testing.T) {
 	}
 }
 
+func TestLoadDir_BackfillsResolvedSHAs(t *testing.T) {
+	dir := t.TempDir()
+	hj := `{
+		"name": "withincludes",
+		"version": "0.1.0",
+		"default_vendor": "claude",
+		"includes": [
+			{"git": "github.com/org/floating", "path": "skills"},
+			{"git": "github.com/org/pinned", "ref": "v1.0.0", "path": "rules"},
+			{"git": "github.com/org/missing", "path": "agents"},
+			{"local": "./local-include"}
+		],
+		"delegates_to": [
+			{"git": "github.com/org/del-floating", "path": "x"}
+		]
+	}`
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, plugin.PluginDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	installed := `{
+		"source_type": "git",
+		"source": "github.com/example/withincludes",
+		"installed_at": "2026-04-30T12:00:00Z",
+		"resolved": [
+			{"git": "github.com/org/floating", "path": "skills", "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+			{"git": "github.com/org/pinned", "ref": "v1.0.0", "path": "rules", "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+			{"git": "github.com/org/del-floating", "path": "x", "sha": "cccccccccccccccccccccccccccccccccccccccc"}
+		]
+	}`
+	if err := os.WriteFile(filepath.Join(dir, plugin.PluginDir, plugin.InstalledFile), []byte(installed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := LoadDir(dir)
+	if err != nil {
+		t.Fatalf("LoadDir failed: %v", err)
+	}
+
+	if len(p.Includes) != 4 {
+		t.Fatalf("expected 4 includes, got %d", len(p.Includes))
+	}
+	wantSHAs := []string{
+		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // floating, matched
+		"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", // pinned, matched
+		"", // missing from resolved, fallback to empty
+		"", // local-only, no Git URL → skipped
+	}
+	for i, want := range wantSHAs {
+		if p.Includes[i].SHA != want {
+			t.Errorf("include[%d].SHA = %q, want %q", i, p.Includes[i].SHA, want)
+		}
+	}
+
+	if len(p.DelegatesTo) != 1 {
+		t.Fatalf("expected 1 delegate, got %d", len(p.DelegatesTo))
+	}
+	if got, want := p.DelegatesTo[0].SHA, "cccccccccccccccccccccccccccccccccccccccc"; got != want {
+		t.Errorf("delegate[0].SHA = %q, want %q", got, want)
+	}
+}
+
+func TestLoadDir_NoInstalledJSON_LeavesSHAsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	hj := `{
+		"name": "noinst",
+		"version": "0.1.0",
+		"default_vendor": "claude",
+		"includes": [{"git": "github.com/org/foo", "path": "x"}]
+	}`
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := LoadDir(dir)
+	if err != nil {
+		t.Fatalf("LoadDir failed: %v", err)
+	}
+	if p.Includes[0].SHA != "" {
+		t.Errorf("include SHA = %q, want empty (no installed.json present)", p.Includes[0].SHA)
+	}
+}
+
 func TestLoadDir_RegistryProvenance(t *testing.T) {
 	dir := t.TempDir()
 	hj := `{

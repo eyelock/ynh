@@ -70,7 +70,11 @@ type listArtifacts struct {
 }
 
 type listInclude struct {
-	Git          string   `json:"git"`
+	Git string `json:"git"`
+	// Ref is the manifest pin (branch, tag, or SHA) declared in plugin.json.
+	// Internal field — not emitted in JSON output. Used by --check-updates
+	// to know which upstream ref to probe for floating-ref includes.
+	Ref          string   `json:"-"`
 	RefInstalled string   `json:"ref_installed,omitempty"`
 	RefAvailable string   `json:"ref_available,omitempty"`
 	IsPinned     bool     `json:"is_pinned"`
@@ -260,9 +264,16 @@ func scanArtifactCounts(dir string) listArtifacts {
 func buildIncludes(includes []harness.Include) []listInclude {
 	result := make([]listInclude, 0, len(includes))
 	for _, inc := range includes {
+		// Prefer the resolved SHA recorded at install/update time. Fall back
+		// to the manifest ref so pre-migration installs still report something.
+		refInstalled := inc.SHA
+		if refInstalled == "" {
+			refInstalled = inc.Ref
+		}
 		li := listInclude{
 			Git:          inc.Git,
-			RefInstalled: inc.Ref,
+			Ref:          inc.Ref,
+			RefInstalled: refInstalled,
 			IsPinned:     harness.IsPinnedRef(inc.Ref),
 			Path:         inc.Path,
 		}
@@ -277,9 +288,13 @@ func buildIncludes(includes []harness.Include) []listInclude {
 func buildDelegates(delegates []harness.Delegate) []listDelegate {
 	result := make([]listDelegate, 0, len(delegates))
 	for _, del := range delegates {
+		refInstalled := del.SHA
+		if refInstalled == "" {
+			refInstalled = del.Ref
+		}
 		result = append(result, listDelegate{
 			Git:          del.Git,
-			RefInstalled: del.Ref,
+			RefInstalled: refInstalled,
 			IsPinned:     harness.IsPinnedRef(del.Ref),
 			Path:         del.Path,
 		})

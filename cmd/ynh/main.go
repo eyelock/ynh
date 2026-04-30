@@ -331,11 +331,10 @@ func cmdInstall(args []string) error {
 		InstalledAt:  time.Now().UTC().Format(time.RFC3339),
 		ForkedFrom:   forkedFrom,
 	}
-	if err := plugin.SaveInstalledJSON(installDir, ins); err != nil {
-		return fmt.Errorf("saving provenance: %w", err)
-	}
 
-	// Pre-fetch includes and delegates so ynh run works offline
+	// Pre-fetch includes and delegates so ynh run works offline.
+	// Capture each resolved SHA into ins.Resolved so floating-ref entries
+	// have a recorded commit for later update detection.
 	if len(p.Includes) > 0 || len(p.DelegatesTo) > 0 {
 		fmt.Printf("Fetching %d include(s) and %d delegate(s)...\n", len(p.Includes), len(p.DelegatesTo))
 	}
@@ -352,9 +351,16 @@ func cmdInstall(args []string) error {
 				return fmt.Errorf("include %q: %w", inc.Git, err)
 			}
 		}
-		if _, err := resolver.EnsureRepo(inc.Git, inc.Ref); err != nil {
+		res, err := resolver.EnsureRepo(inc.Git, inc.Ref)
+		if err != nil {
 			return fmt.Errorf("fetching include %s: %w", inc.Git, err)
 		}
+		ins.Resolved = append(ins.Resolved, plugin.ResolvedSourceJSON{
+			Git:  inc.Git,
+			Ref:  inc.Ref,
+			Path: inc.Path,
+			SHA:  res.SHA,
+		})
 		fmt.Printf("  Fetched %s\n", resolver.ShortGitURL(inc.Git))
 	}
 	for _, del := range p.DelegatesTo {
@@ -363,10 +369,21 @@ func cmdInstall(args []string) error {
 				return fmt.Errorf("delegate %q: %w", del.Git, err)
 			}
 		}
-		if _, err := resolver.EnsureRepo(del.Git, del.Ref); err != nil {
+		res, err := resolver.EnsureRepo(del.Git, del.Ref)
+		if err != nil {
 			return fmt.Errorf("fetching delegate %s: %w", del.Git, err)
 		}
+		ins.Resolved = append(ins.Resolved, plugin.ResolvedSourceJSON{
+			Git:  del.Git,
+			Ref:  del.Ref,
+			Path: del.Path,
+			SHA:  res.SHA,
+		})
 		fmt.Printf("  Fetched %s\n", resolver.ShortGitURL(del.Git))
+	}
+
+	if err := plugin.SaveInstalledJSON(installDir, ins); err != nil {
+		return fmt.Errorf("saving provenance: %w", err)
 	}
 
 	// Generate launcher script (skip for reserved names that conflict with the binary)
@@ -469,6 +486,7 @@ func cmdUpdate(args []string) error {
 
 	checked := 0
 	updated := 0
+	resolvedSources := make([]plugin.ResolvedSourceJSON, 0, len(p.Includes)+len(p.DelegatesTo))
 	for _, inc := range p.Includes {
 		// Local-path includes have no cache entry to refresh.
 		if inc.IsLocal() {
@@ -484,6 +502,12 @@ func cmdUpdate(args []string) error {
 			continue
 		}
 		checked++
+		resolvedSources = append(resolvedSources, plugin.ResolvedSourceJSON{
+			Git:  inc.Git,
+			Ref:  inc.Ref,
+			Path: inc.Path,
+			SHA:  result.SHA,
+		})
 		if result.Changed {
 			updated++
 			fmt.Printf("  Updated.\n")
@@ -502,11 +526,26 @@ func cmdUpdate(args []string) error {
 			continue
 		}
 		checked++
+		resolvedSources = append(resolvedSources, plugin.ResolvedSourceJSON{
+			Git:  del.Git,
+			Ref:  del.Ref,
+			Path: del.Path,
+			SHA:  result.SHA,
+		})
 		if result.Changed {
 			updated++
 			fmt.Printf("  Updated.\n")
 		} else {
 			fmt.Printf("  Already up to date.\n")
+		}
+	}
+
+	// Persist resolved SHAs back to installed.json so subsequent --check-updates
+	// queries can compare against the recorded SHA without re-fetching.
+	if ins, loadErr := plugin.LoadInstalledJSON(p.Dir); loadErr == nil && ins != nil {
+		ins.Resolved = resolvedSources
+		if err := plugin.SaveInstalledJSON(p.Dir, ins); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not update installed.json: %v\n", err)
 		}
 	}
 
