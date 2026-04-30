@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/config"
@@ -186,7 +187,16 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 		if err := os.RemoveAll(repoDir); err != nil {
 			return RepoResult{}, fmt.Errorf("removing incomplete cache dir: %w", err)
 		}
-		// Clone
+		// SHA refs can't go through `clone --branch <sha>` — git rejects them.
+		// Use init+fetch+checkout, which works against any server that allows
+		// fetch-by-SHA (GitHub does, default uploadpack.allowReachableSHA1InWant).
+		if isShaLike(ref) {
+			if err := cloneAtSHA(repoDir, fullURL, ref); err != nil {
+				return RepoResult{}, err
+			}
+			return RepoResult{Path: repoDir, SHA: gitHead(repoDir), Cloned: true, Changed: true}, nil
+		}
+		// Branch/tag: use clone --branch for the depth-1 shortcut.
 		args := []string{"clone", "--depth", "1"}
 		if ref != "" {
 			args = append(args, "--branch", ref)
@@ -403,12 +413,43 @@ func repoDirPrefix(url string) string {
 	return parts[len(parts)-1]
 }
 
+// shaLike matches a 40-character hex commit SHA. Git refuses to take a
+// SHA via `clone --branch`, so SHA pinning has to go through init+fetch.
+var shaLike = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+func isShaLike(ref string) bool {
+	return shaLike.MatchString(ref)
+}
+
+// cloneAtSHA materialises a shallow checkout of url at sha into dir.
+// dir must not yet exist.
+func cloneAtSHA(dir, url, sha string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("creating cache dir: %w", err)
+	}
+	if err := gitCmd("-C", dir, "init", "--quiet"); err != nil {
+		return fmt.Errorf("git init in %s: %w", dir, err)
+	}
+	if err := gitCmd("-C", dir, "remote", "add", "origin", url); err != nil {
+		return fmt.Errorf("git remote add: %w", err)
+	}
+	if err := gitCmd("-C", dir, "fetch", "--depth", "1", "origin", sha); err != nil {
+		return fmt.Errorf("git fetch %s %s: %w", url, sha, err)
+	}
+	if err := gitCmd("-C", dir, "checkout", "--quiet", sha); err != nil {
+		return fmt.Errorf("git checkout %s: %w", sha, err)
+	}
+	return nil
+}
+
 // NormalizeGitURL ensures a full Git URL from shorthand.
 // Local paths (starting with / or .) are returned as-is.
 // Shorthand like "github.com/user/repo" becomes "git@github.com:user/repo.git" (SSH).
-// SSH URLs (git@...) and full HTTPS URLs are passed through unchanged.
+// SSH URLs (git@...), HTTPS URLs, and file:// URLs are passed through unchanged.
+// (file:// is a valid git transport for local bare repos and lets the E2E suite
+// exercise the cloner against controlled fixtures without going to the network.)
 func NormalizeGitURL(url string) string {
-	if strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "git@") {
+	if strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "git@") || strings.HasPrefix(url, "file://") {
 		return url
 	}
 	if strings.HasPrefix(url, "/") || strings.HasPrefix(url, ".") {

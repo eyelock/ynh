@@ -98,7 +98,7 @@ Usage:
 
 Commands:
   init                       Show ynh home path and setup instructions
-  install <source> [--path <subdir>]  Install a harness from Git URL or local path
+  install <source> [--path <subdir>] [--ref <ref>]  Install a harness from Git URL or local path
   uninstall <name>           Remove an installed harness and its launcher
   update <name>              Refresh cached Git repos for a harness
   run <name> [flags] [prompt]  Launch a harness session
@@ -140,6 +140,7 @@ Examples:
   ynh install github.com/myorg/david
   ynh install ./my-local-harness
   ynh install github.com/org/monorepo --path harnesses/david
+  ynh install github.com/org/repo --ref v1.2.0
   ynh run david
   ynh run david "review this PR"
   ynh run david -v codex
@@ -178,26 +179,29 @@ func cmdInit() error {
 
 func cmdInstall(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: ynh install <git-url|local-path> [--path <subdir>]")
+		return fmt.Errorf("usage: ynh install <git-url|local-path> [--path <subdir>] [--ref <commit|tag|branch>]")
 	}
 
 	if err := config.EnsureDirs(); err != nil {
 		return err
 	}
 
-	// Parse --path flag from args
-	var pathFlag string
+	// Parse --path and --ref flags from args
+	var pathFlag, refFlag string
 	var remaining []string
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--path" && i+1 < len(args) {
 			pathFlag = args[i+1]
+			i++ // skip value
+		} else if args[i] == "--ref" && i+1 < len(args) {
+			refFlag = args[i+1]
 			i++ // skip value
 		} else {
 			remaining = append(remaining, args[i])
 		}
 	}
 	if len(remaining) < 1 {
-		return fmt.Errorf("usage: ynh install <git-url|local-path> [--path <subdir>]")
+		return fmt.Errorf("usage: ynh install <git-url|local-path> [--path <subdir>] [--ref <commit|tag|branch>]")
 	}
 
 	source := remaining[0]
@@ -227,6 +231,20 @@ func cmdInstall(args []string) error {
 			pathFlag = resolved.path
 		}
 	}
+	// --ref overrides any registry-resolved ref. Allowed only when a git
+	// fetch will actually happen; noisily refused for local installs to
+	// avoid silent confusion.
+	if refFlag != "" {
+		if resolved.sourceType == "local" || resolved.localPath != "" {
+			return fmt.Errorf("--ref is not valid for local-path installs")
+		}
+		resolved.ref = refFlag
+		resolved.sha = "" // user-provided ref takes precedence; don't verify against a stale registry SHA
+	}
+
+	// resolvedSHA captures the actual commit SHA fetched for git installs;
+	// stays empty for local installs.
+	var resolvedSHA string
 
 	if resolved.localPath != "" {
 		srcDir = resolved.localPath
@@ -254,6 +272,7 @@ func cmdInstall(args []string) error {
 			return err
 		}
 		srcDir = result.Path
+		resolvedSHA = result.SHA
 	}
 
 	// Scope to subdirectory if --path was specified
@@ -325,6 +344,8 @@ func cmdInstall(args []string) error {
 	ins := &plugin.InstalledJSON{
 		SourceType:   resolved.sourceType,
 		Source:       provSource,
+		Ref:          resolved.ref,
+		SHA:          resolvedSHA,
 		Path:         pathFlag,
 		Namespace:    resolved.namespace,
 		RegistryName: resolved.registryName,

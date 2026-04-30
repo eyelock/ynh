@@ -4,14 +4,11 @@ name: E2E
 # targeting `develop` stays fast (CI only). See
 # .claude/plans/e2e-test-suite.md for the full trigger model.
 #
-# Phase 5 will wire the tag-push trigger into release.yml so goreleaser
-# blocks on E2E. Until then, the v* trigger here runs alongside release.yml.
+# Tag-push (v*) triggers go through release.yml's `e2e` job, which
+# blocks `goreleaser`. This workflow handles PR-to-main and ad-hoc runs.
 on:
   pull_request:
     branches: [main]
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
 
 permissions:

@@ -30,8 +30,15 @@ const AssistantsRepo = "https://github.com/eyelock/assistants.git"
 // e2e-fixtures/ tree the suite tests against. Bump intentionally when
 // fixtures evolve (see eyelock/assistants:e2e-fixtures/README.md).
 //
-// Pinned to the merge commit of eyelock/assistants#15 (initial fixture).
-const AssistantsFixturesSHA = "8713efacdee8a2b05bdb70fee83be73b66222cc4"
+// Pinned to the tip of eyelock/assistants:feat/e2e-fixtures-extended
+// (containing all Phases 2–4 fixtures). Update to the merge SHA on
+// `develop` once that branch is merged.
+const AssistantsFixturesSHA = "69baa731b5a1ed67ff0c5362f7806f398ee62815"
+
+// AssistantsFixturesV1Tag is a stable git tag in eyelock/assistants used
+// by the with-tag-include fixture to verify tag-to-SHA resolution.
+// Currently points at the initial fixture commit (8713efa).
+const AssistantsFixturesV1Tag = "e2e-fixtures-v1"
 
 // repoRoot resolves the ynh repo root from this source file's location.
 // Stable across test working directories and CI runners.
