@@ -10,6 +10,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/resolver"
 )
 
 // listEnvelope wraps the array of harnesses with the wire-contract version
@@ -224,10 +225,48 @@ func printListJSON(w io.Writer, checkUpdates bool) error {
 	return err
 }
 
+// backfillProvenanceFromCache populates harness-level SHA/Ref from the local
+// git cache when installed.json predates SHA/ref recording. The cache's
+// origin/HEAD symref pins to the branch resolved at clone time and survives
+// upstream default-branch changes, so it's a reliable source for what the
+// install actually tracks. No network call.
+func backfillProvenanceFromCache(prov *harness.Provenance) {
+	if prov == nil {
+		return
+	}
+	if prov.SHA != "" && prov.Ref != "" {
+		return
+	}
+	switch prov.SourceType {
+	case "git", "registry":
+		// continue
+	default:
+		return
+	}
+	if prov.Source == "" {
+		return
+	}
+	res, ok := resolver.LookupCache(prov.Source, prov.Ref)
+	if !ok {
+		return
+	}
+	if prov.SHA == "" {
+		prov.SHA = res.SHA
+	}
+	if prov.Ref == "" {
+		prov.Ref = res.ResolvedRef
+	}
+}
+
 // buildListEntry assembles the structured-output entry for a loaded harness.
 // Shared by cmdListTo and cmdInfoTo so the per-harness shape stays uniform
 // between the two commands.
 func buildListEntry(p *harness.Harness) listEntry {
+	// Best-effort backfill of pre-migration provenance from the cache so
+	// downstream consumers see a populated installed_from.{sha,ref} without
+	// requiring a manual `ynh update`.
+	backfillProvenanceFromCache(p.InstalledFrom)
+
 	entry := listEntry{
 		Name:             p.Name,
 		VersionInstalled: p.Version,

@@ -266,16 +266,26 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 // If the cache entry exists, it is returned as-is. If not, it falls back to
 // EnsureRepo (which clones from the network) and prints a warning to stderr.
 func CacheOnlyRepo(gitURL string, ref string) (RepoResult, error) {
-	cacheDir := config.CacheDir()
-	repoDir := filepath.Join(cacheDir, repoDirName(gitURL, ref))
-
-	if _, err := os.Stat(filepath.Join(repoDir, ".git")); err == nil {
-		return RepoResult{Path: repoDir, SHA: gitHead(repoDir), ResolvedRef: effectiveRef(repoDir, ref)}, nil
+	if res, ok := LookupCache(gitURL, ref); ok {
+		return res, nil
 	}
-
 	// Cache miss — fall back to network fetch.
 	// Caller can detect this via RepoResult.Cloned.
 	return EnsureRepo(gitURL, ref)
+}
+
+// LookupCache returns the cached repo state for (gitURL, ref) without hitting
+// the network. ok=false if no cache entry exists. Used to backfill harness
+// provenance for pre-migration installs whose installed.json predates SHA/ref
+// recording — we can still recover the install ref from the cache's pinned
+// origin/HEAD symref.
+func LookupCache(gitURL string, ref string) (RepoResult, bool) {
+	cacheDir := config.CacheDir()
+	repoDir := filepath.Join(cacheDir, repoDirName(gitURL, ref))
+	if _, err := os.Stat(filepath.Join(repoDir, ".git")); err != nil {
+		return RepoResult{}, false
+	}
+	return RepoResult{Path: repoDir, SHA: gitHead(repoDir), ResolvedRef: effectiveRef(repoDir, ref)}, true
 }
 
 // ResolveGitSourceFromCache is like ResolveGitSource but uses CacheOnlyRepo
