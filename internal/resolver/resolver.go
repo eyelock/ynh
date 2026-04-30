@@ -165,10 +165,17 @@ func ShortGitURL(url string) string {
 
 // RepoResult describes the outcome of EnsureRepo.
 type RepoResult struct {
-	Path    string // path to the cached repo on disk
-	SHA     string // resolved commit SHA at HEAD after fetch/checkout
-	Cloned  bool   // true if freshly cloned (not previously cached)
-	Changed bool   // true if HEAD moved during update
+	Path string // path to the cached repo on disk
+	SHA  string // resolved commit SHA at HEAD after fetch/checkout
+	// ResolvedRef is the branch name actually tracked by this clone.
+	// For non-empty input refs it equals the input ref. For empty input
+	// refs it is read from the cache's origin/HEAD symref (the default
+	// branch as of clone time, which never auto-updates with upstream
+	// default-branch changes). Used by --check-updates to probe the same
+	// ref that ynh update tracks, so the two stay consistent.
+	ResolvedRef string
+	Cloned      bool // true if freshly cloned (not previously cached)
+	Changed     bool // true if HEAD moved during update
 }
 
 // EnsureRepo clones or updates a Git repo in the cache directory.
@@ -195,7 +202,7 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 		if err := gitCmd(args...); err != nil {
 			return RepoResult{}, fmt.Errorf("git clone %s: %w", fullURL, err)
 		}
-		return RepoResult{Path: repoDir, SHA: gitHead(repoDir), Cloned: true, Changed: true}, nil
+		return RepoResult{Path: repoDir, SHA: gitHead(repoDir), ResolvedRef: effectiveRef(repoDir, ref), Cloned: true, Changed: true}, nil
 	}
 
 	// Update existing clone — capture HEAD before and after
@@ -238,7 +245,7 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 		if err := gitCmd(args...); err != nil {
 			return RepoResult{}, fmt.Errorf("git clone %s: %w", fullURL, err)
 		}
-		return RepoResult{Path: repoDir, SHA: gitHead(repoDir), Cloned: true, Changed: true}, nil
+		return RepoResult{Path: repoDir, SHA: gitHead(repoDir), ResolvedRef: effectiveRef(repoDir, ref), Cloned: true, Changed: true}, nil
 	}
 
 	if ref != "" {
@@ -252,7 +259,7 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 	}
 
 	after := gitHead(repoDir)
-	return RepoResult{Path: repoDir, SHA: after, Changed: before != after}, nil
+	return RepoResult{Path: repoDir, SHA: after, ResolvedRef: effectiveRef(repoDir, ref), Changed: before != after}, nil
 }
 
 // CacheOnlyRepo returns a cached repo without hitting the network.
@@ -263,7 +270,7 @@ func CacheOnlyRepo(gitURL string, ref string) (RepoResult, error) {
 	repoDir := filepath.Join(cacheDir, repoDirName(gitURL, ref))
 
 	if _, err := os.Stat(filepath.Join(repoDir, ".git")); err == nil {
-		return RepoResult{Path: repoDir, SHA: gitHead(repoDir)}, nil
+		return RepoResult{Path: repoDir, SHA: gitHead(repoDir), ResolvedRef: effectiveRef(repoDir, ref)}, nil
 	}
 
 	// Cache miss — fall back to network fetch.
@@ -304,6 +311,38 @@ func resolveGitBin() string {
 		}
 	}
 	return "git" // last resort — let exec fail with a clear error
+}
+
+// resolvedBranchName returns the bare branch name that origin/HEAD points to
+// in the local cache (e.g. "main" or "develop"). Empty if the symref is not
+// set or doesn't point at a remote-tracking branch under origin/.
+//
+// We capture this so --check-updates probes the same ref that ynh update
+// tracks. Git pins this symref at clone time and does not auto-update it
+// when upstream changes its default branch — which is exactly the divergence
+// that makes phantom drift possible.
+func resolvedBranchName(repoDir string) string {
+	cmd := exec.Command(gitBin, "-C", repoDir, "symbolic-ref", "refs/remotes/origin/HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	ref := strings.TrimSpace(string(out))
+	const prefix = "refs/remotes/origin/"
+	if !strings.HasPrefix(ref, prefix) {
+		return ""
+	}
+	return strings.TrimPrefix(ref, prefix)
+}
+
+// effectiveRef returns the ref to record alongside this clone. If the caller
+// supplied an explicit ref it is echoed; otherwise the cache's resolved
+// branch name is returned (empty string if it cannot be determined).
+func effectiveRef(repoDir, inputRef string) string {
+	if inputRef != "" {
+		return inputRef
+	}
+	return resolvedBranchName(repoDir)
 }
 
 func gitHead(repoDir string) string {

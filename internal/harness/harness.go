@@ -41,6 +41,12 @@ type Include struct {
 	// installed.json's resolved slice. Empty for local-path includes and for
 	// pre-migration installs that predate SHA recording.
 	SHA string
+	// ResolvedRef is the branch name actually tracked at install/update time.
+	// For non-empty manifest refs it equals the manifest ref. For empty
+	// manifest refs it is the cache's resolved default branch (e.g. "main")
+	// captured at clone time. Used by --check-updates so probe targets the
+	// same ref that ynh update tracks. Empty for pre-migration installs.
+	ResolvedRef string
 }
 
 type Delegate struct {
@@ -48,6 +54,8 @@ type Delegate struct {
 	// SHA is the resolved commit at install/update time, populated from
 	// installed.json's resolved slice. Empty for pre-migration installs.
 	SHA string
+	// ResolvedRef — see Include.ResolvedRef.
+	ResolvedRef string
 }
 
 // Provenance records where a harness was installed from.
@@ -319,26 +327,38 @@ func LoadDir(dir string) (*Harness, error) {
 		})
 	}
 
-	// Backfill resolved SHAs from installed.json onto includes/delegates so
-	// downstream consumers (list, info, --check-updates) have a recorded
-	// commit even for floating refs.
+	// Backfill resolved SHAs and resolved refs from installed.json onto
+	// includes/delegates so downstream consumers (list, info,
+	// --check-updates) have both a recorded commit and the ref that was
+	// actually tracked, even for floating manifest refs.
+	//
+	// Matching: prefer an exact (git, ref, path) match against the manifest
+	// ref. If none, fall back to (git, path). The fallback covers the
+	// floating-ref case where the manifest ref is empty but the resolved
+	// entry's ref records the cache's default branch — e.g. "main" — that
+	// the install actually tracked.
 	if ins, err := plugin.LoadInstalledJSON(dir); err == nil && ins != nil && len(ins.Resolved) > 0 {
-		shaFor := func(git, ref, path string) string {
+		find := func(git, ref, path string) (sha, resolvedRef string) {
 			for _, r := range ins.Resolved {
 				if r.Git == git && r.Ref == ref && r.Path == path {
-					return r.SHA
+					return r.SHA, r.Ref
 				}
 			}
-			return ""
+			for _, r := range ins.Resolved {
+				if r.Git == git && r.Path == path {
+					return r.SHA, r.Ref
+				}
+			}
+			return "", ""
 		}
 		for i := range p.Includes {
 			if p.Includes[i].Git == "" {
 				continue
 			}
-			p.Includes[i].SHA = shaFor(p.Includes[i].Git, p.Includes[i].Ref, p.Includes[i].Path)
+			p.Includes[i].SHA, p.Includes[i].ResolvedRef = find(p.Includes[i].Git, p.Includes[i].Ref, p.Includes[i].Path)
 		}
 		for i := range p.DelegatesTo {
-			p.DelegatesTo[i].SHA = shaFor(p.DelegatesTo[i].Git, p.DelegatesTo[i].Ref, p.DelegatesTo[i].Path)
+			p.DelegatesTo[i].SHA, p.DelegatesTo[i].ResolvedRef = find(p.DelegatesTo[i].Git, p.DelegatesTo[i].Ref, p.DelegatesTo[i].Path)
 		}
 	}
 	if len(hj.Hooks) > 0 {

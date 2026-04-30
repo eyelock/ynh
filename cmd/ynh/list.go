@@ -71,9 +71,13 @@ type listArtifacts struct {
 
 type listInclude struct {
 	Git string `json:"git"`
-	// Ref is the manifest pin (branch, tag, or SHA) declared in plugin.json.
-	// Internal field — not emitted in JSON output. Used by --check-updates
-	// to know which upstream ref to probe for floating-ref includes.
+	// Ref is the ref this include actually tracks — equal to the manifest
+	// pin if non-empty, otherwise the resolved branch name recorded in
+	// installed.json (e.g. "main" for an empty manifest ref where the
+	// cache resolved to main at clone time). Internal field, not emitted
+	// in JSON output. Used by --check-updates to probe the same ref that
+	// ynh update tracks, so the two stay consistent across upstream
+	// default-branch changes.
 	Ref          string   `json:"-"`
 	RefInstalled string   `json:"ref_installed,omitempty"`
 	RefAvailable string   `json:"ref_available,omitempty"`
@@ -83,8 +87,11 @@ type listInclude struct {
 }
 
 type listDelegate struct {
-	Git          string `json:"git"`
+	Git string `json:"git"`
+	// Ref — see listInclude.Ref.
+	Ref          string `json:"-"`
 	RefInstalled string `json:"ref_installed,omitempty"`
+	RefAvailable string `json:"ref_available,omitempty"`
 	IsPinned     bool   `json:"is_pinned"`
 	Path         string `json:"path,omitempty"`
 }
@@ -270,9 +277,16 @@ func buildIncludes(includes []harness.Include) []listInclude {
 		if refInstalled == "" {
 			refInstalled = inc.Ref
 		}
+		// Probe target: prefer the ref recorded in installed.json (the actual
+		// tracked branch) over the manifest ref, so default-branch changes
+		// upstream don't produce phantom drift against ynh update.
+		probeRef := inc.ResolvedRef
+		if probeRef == "" {
+			probeRef = inc.Ref
+		}
 		li := listInclude{
 			Git:          inc.Git,
-			Ref:          inc.Ref,
+			Ref:          probeRef,
 			RefInstalled: refInstalled,
 			IsPinned:     harness.IsPinnedRef(inc.Ref),
 			Path:         inc.Path,
@@ -292,8 +306,13 @@ func buildDelegates(delegates []harness.Delegate) []listDelegate {
 		if refInstalled == "" {
 			refInstalled = del.Ref
 		}
+		probeRef := del.ResolvedRef
+		if probeRef == "" {
+			probeRef = del.Ref
+		}
 		result = append(result, listDelegate{
 			Git:          del.Git,
+			Ref:          probeRef,
 			RefInstalled: refInstalled,
 			IsPinned:     harness.IsPinnedRef(del.Ref),
 			Path:         del.Path,

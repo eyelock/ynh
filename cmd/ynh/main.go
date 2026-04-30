@@ -357,7 +357,7 @@ func cmdInstall(args []string) error {
 		}
 		ins.Resolved = append(ins.Resolved, plugin.ResolvedSourceJSON{
 			Git:  inc.Git,
-			Ref:  inc.Ref,
+			Ref:  res.ResolvedRef,
 			Path: inc.Path,
 			SHA:  res.SHA,
 		})
@@ -375,7 +375,7 @@ func cmdInstall(args []string) error {
 		}
 		ins.Resolved = append(ins.Resolved, plugin.ResolvedSourceJSON{
 			Git:  del.Git,
-			Ref:  del.Ref,
+			Ref:  res.ResolvedRef,
 			Path: del.Path,
 			SHA:  res.SHA,
 		})
@@ -504,7 +504,7 @@ func cmdUpdate(args []string) error {
 		checked++
 		resolvedSources = append(resolvedSources, plugin.ResolvedSourceJSON{
 			Git:  inc.Git,
-			Ref:  inc.Ref,
+			Ref:  result.ResolvedRef,
 			Path: inc.Path,
 			SHA:  result.SHA,
 		})
@@ -528,7 +528,7 @@ func cmdUpdate(args []string) error {
 		checked++
 		resolvedSources = append(resolvedSources, plugin.ResolvedSourceJSON{
 			Git:  del.Git,
-			Ref:  del.Ref,
+			Ref:  result.ResolvedRef,
 			Path: del.Path,
 			SHA:  result.SHA,
 		})
