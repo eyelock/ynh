@@ -34,6 +34,7 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 	format := "text"
 	var toPath string
 	var name string
+	var newName string
 	i := 0
 	for i < len(args) {
 		switch args[i] {
@@ -49,6 +50,12 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 			}
 			i++
 			toPath = args[i]
+		case "--name":
+			if i+1 >= len(args) {
+				return cliError(stderr, structured, errCodeInvalidInput, "--name requires a value")
+			}
+			i++
+			newName = args[i]
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return cliError(stderr, structured, errCodeInvalidInput,
@@ -64,7 +71,11 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 	}
 
 	if name == "" {
-		return cliError(stderr, structured, errCodeInvalidInput, "usage: ynh fork <harness-name> [--to <path>]")
+		return cliError(stderr, structured, errCodeInvalidInput, "usage: ynh fork <harness-name> [--to <path>] [--name <new>]")
+	}
+	if newName != "" && !harness.IsValidName(newName) {
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("invalid --name value %q: must match %s", newName, harness.ValidNamePattern()))
 	}
 
 	switch format {
@@ -87,6 +98,15 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 		return cliError(stderr, structured, code, err.Error())
 	}
 
+	// installName is the name the fork registers under and writes into its
+	// own plugin.json. Defaults to the source name; --name lets the user
+	// fork while keeping the upstream installed (otherwise the clash check
+	// would force them to uninstall first).
+	installName := p.Name
+	if newName != "" {
+		installName = newName
+	}
+
 	// Resolve destination directory
 	destDir := toPath
 	if destDir == "" {
@@ -95,7 +115,7 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 			return cliError(stderr, structured, errCodeIOError,
 				fmt.Sprintf("getting working directory: %v", cwdErr))
 		}
-		destDir = filepath.Join(cwd, p.Name)
+		destDir = filepath.Join(cwd, installName)
 	}
 	absDestDir, absErr := filepath.Abs(destDir)
 	if absErr != nil {
@@ -107,6 +127,21 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 	if _, statErr := os.Stat(absDestDir); statErr == nil {
 		return cliError(stderr, structured, errCodeInvalidInput,
 			fmt.Sprintf("destination already exists: %s", absDestDir))
+	}
+
+	// Clash check: refuse to register if a flat install already claims the
+	// install name — either a pointer file or a flat tree at
+	// ~/.ynh/harnesses/<installName>/. Namespaced installs of the same name
+	// are fine; they remain accessible via "name@org/repo" while the fork
+	// takes over the bare name. Same rule ynh install uses, applied at
+	// registration time.
+	if existing, err := harness.LoadPointer(installName); err == nil && existing != nil {
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("harness %q is already installed (registered at %s)", installName, existing.Source))
+	}
+	if _, err := os.Stat(harness.InstalledDir(installName)); err == nil {
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("harness %q is already installed (uninstall it first, or pass --name to fork under a different name)", installName))
 	}
 
 	// p.Dir is the resolved install directory — works for both flat and
@@ -122,6 +157,26 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 		_ = os.RemoveAll(absDestDir)
 		return cliError(stderr, structured, errCodeIOError,
 			fmt.Sprintf("copying harness: %v", copyErr))
+	}
+
+	// Rewrite plugin.json's name field when --name was given. Required
+	// for identity coherence: Load(installName) returns a Harness whose
+	// p.Name must equal installName, otherwise downstream code (run dirs,
+	// launcher exec, profile lookup) gets confused. Provenance survives —
+	// the upstream identity is preserved in installed_from.forked_from.
+	if newName != "" {
+		hj, loadErr := plugin.LoadPluginJSON(absDestDir)
+		if loadErr != nil {
+			_ = os.RemoveAll(absDestDir)
+			return cliError(stderr, structured, errCodeIOError,
+				fmt.Sprintf("reading fork manifest: %v", loadErr))
+		}
+		hj.Name = installName
+		if saveErr := plugin.SavePluginJSON(absDestDir, hj); saveErr != nil {
+			_ = os.RemoveAll(absDestDir)
+			return cliError(stderr, structured, errCodeIOError,
+				fmt.Sprintf("renaming fork manifest: %v", saveErr))
+		}
 	}
 
 	// Build forked_from from source provenance
@@ -140,11 +195,38 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 			fmt.Sprintf("saving provenance: %v", saveErr))
 	}
 
+	// Register the fork in the YNH layer via a pointer file. Pointer wins
+	// over tree-shaped installs in Load() so subsequent ynh run / ls / info
+	// resolve to absDestDir directly — no copy under ~/.ynh/harnesses.
+	ptr := &harness.Pointer{
+		Name:        installName,
+		SourceType:  "local",
+		Source:      absDestDir,
+		InstalledAt: ins.InstalledAt,
+	}
+	if err := harness.SavePointer(ptr); err != nil {
+		_ = os.RemoveAll(absDestDir)
+		return cliError(stderr, structured, errCodeIOError,
+			fmt.Sprintf("registering fork: %v", err))
+	}
+
+	// Generate launcher so the fork is fully runnable as `<installName>`,
+	// matching ynh install. Skip for the reserved "ynh" name to avoid
+	// shadowing the binary.
+	if installName != "ynh" {
+		if err := generateLauncher(installName); err != nil {
+			_ = harness.RemovePointer(installName)
+			_ = os.RemoveAll(absDestDir)
+			return cliError(stderr, structured, errCodeIOError,
+				fmt.Sprintf("generating launcher: %v", err))
+		}
+	}
+
 	if format == "json" {
 		result := forkResult{
 			Capabilities: config.CapabilitiesVersion,
 			YnhVersion:   config.Version,
-			Name:         p.Name,
+			Name:         installName,
 			Path:         absDestDir,
 			InstalledFrom: &listInstalledFrom{
 				SourceType:  "local",
@@ -162,7 +244,11 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 	}
 
 	// Text output
-	_, _ = fmt.Fprintf(stdout, "Forked harness %q to %s\n", p.Name, absDestDir)
+	if installName != p.Name {
+		_, _ = fmt.Fprintf(stdout, "Forked harness %q as %q to %s\n", p.Name, installName, absDestDir)
+	} else {
+		_, _ = fmt.Fprintf(stdout, "Forked harness %q to %s\n", p.Name, absDestDir)
+	}
 	if p.InstalledFrom != nil {
 		_, _ = fmt.Fprintf(stdout, "  Source:  %s (%s)\n", p.InstalledFrom.Source, p.InstalledFrom.SourceType)
 	}

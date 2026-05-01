@@ -26,7 +26,11 @@ type listEnvelope struct {
 // listEntry is the JSON shape for a single harness in the `ynh ls` output.
 // Field order drives JSON key order via MarshalIndent.
 type listEntry struct {
-	Name             string `json:"name"`
+	Name string `json:"name"`
+	// Kind classifies the install: "local-fork" (pointer-shaped, forked
+	// from an upstream), "local" (local path, no upstream), "registry",
+	// "git", or "-" for pre-migration entries with no recorded source.
+	Kind             string `json:"kind"`
 	VersionInstalled string `json:"version_installed"`
 	VersionAvailable string `json:"version_available,omitempty"`
 	Description      string `json:"description,omitempty"`
@@ -167,12 +171,12 @@ func printListText(w io.Writer) error {
 	}
 
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "NAME\tVENDOR\tSOURCE\tARTIFACTS\tINCLUDES\tDELEGATES TO")
+	_, _ = fmt.Fprintln(tw, "NAME\tKIND\tVENDOR\tSOURCE\tARTIFACTS\tINCLUDES\tDELEGATES TO")
 
 	for _, e := range entries {
 		p, err := harness.LoadDir(e.Dir)
 		if err != nil {
-			_, _ = fmt.Fprintf(tw, "%s\t(error: %v)\t\t\t\t\n", e.Name, err)
+			_, _ = fmt.Fprintf(tw, "%s\t(error: %v)\t\t\t\t\t\n", e.Name, err)
 			continue
 		}
 
@@ -181,12 +185,13 @@ func printListText(w io.Writer) error {
 			vendorName = "-"
 		}
 
+		kind := classifyKind(p.InstalledFrom)
 		source := formatProvenance(p.InstalledFrom)
 		artifacts := formatArtifactSummaryDir(e.Dir)
 		includes := formatIncludes(p.Includes)
 		delegates := formatDelegates(p.DelegatesTo)
 
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", p.Name, vendorName, source, artifacts, includes, delegates)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", p.Name, kind, vendorName, source, artifacts, includes, delegates)
 	}
 
 	return tw.Flush()
@@ -202,6 +207,22 @@ func printListJSON(w io.Writer, checkUpdates bool) error {
 	for _, e := range all {
 		p, loadErr := harness.LoadDir(e.Dir)
 		if loadErr != nil {
+			// Surface broken pointer entries as minimal placeholders so the
+			// JSON consumer sees the registration even when the source path
+			// is missing. Text mode already shows these as "(error: ...)"
+			// rows; the JSON contract should be no less informative.
+			if ptr, _ := harness.LoadPointer(e.Name); ptr != nil {
+				entries = append(entries, listEntry{
+					Name: ptr.Name,
+					Kind: "local-fork",
+					Path: ptr.Source,
+					InstalledFrom: &listInstalledFrom{
+						SourceType:  ptr.SourceType,
+						Source:      ptr.Source,
+						InstalledAt: ptr.InstalledAt,
+					},
+				})
+			}
 			continue
 		}
 		entries = append(entries, buildListEntry(p))
@@ -269,6 +290,7 @@ func buildListEntry(p *harness.Harness) listEntry {
 
 	entry := listEntry{
 		Name:             p.Name,
+		Kind:             classifyKind(p.InstalledFrom),
 		VersionInstalled: p.Version,
 		Description:      p.Description,
 		DefaultVendor:    p.DefaultVendor,
@@ -399,6 +421,25 @@ func formatArtifactSummaryDir(dir string) string {
 		parts = append(parts, fmt.Sprintf("%dc", len(arts.Commands)))
 	}
 	return strings.Join(parts, " ")
+}
+
+// classifyKind returns the KIND label for ynh ls.
+//   - local-fork: a fork registered via pointer (forked_from is set)
+//   - local: installed from a local path, no upstream
+//   - registry: installed via a registry reference
+//   - git: installed from a remote git URL
+//   - "-": unknown / pre-migration
+func classifyKind(prov *harness.Provenance) string {
+	if prov == nil {
+		return "-"
+	}
+	if prov.ForkedFrom != nil {
+		return "local-fork"
+	}
+	if prov.SourceType == "" {
+		return "-"
+	}
+	return prov.SourceType
 }
 
 // formatProvenance formats the SOURCE column for ynh ls.

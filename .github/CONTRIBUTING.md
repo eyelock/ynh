@@ -373,6 +373,11 @@ A harness has two locations in its life:
 1. **Source** — git-tracked in the harness's repo. Author-managed. The author writes `.ynh-plugin/plugin.json` containing `name`, `version`, `includes`, `delegates_to`, `default_vendor`, hooks, MCP servers, profiles, focuses.
 2. **Installed copy** — at `~/.ynh/harnesses/<name>/`. Created by `ynh install`. Local-only, not git-tracked. Contains the copied source plus a separate `.ynh-plugin/installed.json` file written by ynh.
 
+There are two install layouts on disk, chosen by command:
+
+- **Tree-shaped** (`~/.ynh/harnesses/<name>/`) — created by `ynh install` for git and registry sources. The harness lives as a copy under `harnesses/`, with `.ynh-plugin/installed.json` recording provenance in-tree.
+- **Pointer-shaped** (`~/.ynh/installed/<name>.json`) — created by `ynh fork`. The harness lives at a user-chosen path; the pointer file in `installed/` registers it under the YNH layer. No copy under `harnesses/` is made. Edits to the source tree are live to `ynh run`. The pointer file holds only registration metadata (name → source path → timestamp); provenance still lives in the source tree's `.ynh-plugin/installed.json`. `harness.Load(name)` checks pointers before tree directories.
+
 During install:
 - `ynh install` copies the entire harness directory (including the `.ynh-plugin/` directory) to `~/.ynh/harnesses/<name>/`.
 - If the source uses the legacy `.harness.json` single-file format, the migration chain converts it to `.ynh-plugin/plugin.json` in place during install.
@@ -430,7 +435,7 @@ Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry instal
 ~/.ynh/
 ├── config.json               # Global configuration
 ├── symlinks.json             # Symlink transaction log (install/clean tracking)
-├── harnesses/                  # Installed harnesses
+├── harnesses/                  # Installed harnesses (tree-shaped: git, registry)
 │   └── david/
 │       ├── .ynh-plugin/
 │       │   ├── plugin.json   # Author manifest (copied from source)
@@ -439,6 +444,9 @@ Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry instal
 │       ├── agents/
 │       ├── rules/
 │       └── commands/
+├── installed/                  # Pointer files for forks (pointer-shaped: ynh fork)
+│   └── researcher.json       # Registers a user-owned tree under <name>
+
 ├── cache/                     # Cloned Git repos
 │   └── eyelock--assistants--a1b2c3d4/
 ├── run/                       # Assembled vendor config (per harness, overwritten each run)
