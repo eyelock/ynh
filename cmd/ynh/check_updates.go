@@ -148,25 +148,43 @@ func probeHarness(entry *listEntry, probe updateProbe, mu *sync.Mutex) {
 	prov := entry.InstalledFrom
 	switch prov.SourceType {
 	case "registry":
-		version, sha, ok := probe.registry(entry.Name, prov.Source, prov.Path)
-		if !ok {
-			return
+		// Registry harnesses get two signals (Option C):
+		//   version_available / ref_available — from the registry entry's
+		//     marketplace.json (maintainer-controlled, may be stale)
+		//   sha_available — live ls-remote against the underlying git source
+		// They answer different questions ("has the registry entry moved?"
+		// vs "has the source moved since I installed?"). Consumers may want
+		// both — TermQ's badge logic can pick the stricter signal.
+		if version, sha, ok := probe.registry(entry.Name, prov.Source, prov.Path); ok {
+			mu.Lock()
+			if version != "" {
+				entry.VersionAvailable = version
+			}
+			if sha != "" {
+				entry.RefAvailable = sha
+			}
+			mu.Unlock()
 		}
-		mu.Lock()
-		if version != "" {
-			entry.VersionAvailable = version
+		if prov.Source != "" {
+			if sha, ok := probe.git(prov.Source, prov.Ref); ok {
+				mu.Lock()
+				entry.SHAAvailable = sha
+				mu.Unlock()
+			}
 		}
-		if sha != "" {
-			entry.RefAvailable = sha
-		}
-		mu.Unlock()
 	case "git":
 		// A git-installed harness was tracked at a specific ref; "available"
-		// is the current SHA of the same ref upstream.
-		ref := entry.RefInstalled
+		// is the current SHA of the same ref upstream. Prefer the recorded
+		// install ref so probe targets the same branch ynh update tracks.
+		// Pre-migration installs lack prov.Ref — fall back to RefInstalled
+		// (the legacy field that may hold the manifest ref). SHAAvailable
+		// mirrors RefAvailable for git source — they differ only for registry.
+		ref := prov.Ref
+		if ref == "" {
+			ref = entry.RefInstalled
+		}
 		if harness.IsPinnedRef(ref) {
-			// Pinned to a SHA — probe HEAD to surface "is there anything
-			// newer on the default branch" rather than re-resolving the SHA.
+			// Pinned to a SHA — probe HEAD instead of re-resolving the SHA.
 			ref = ""
 		}
 		sha, ok := probe.git(prov.Source, ref)
@@ -175,6 +193,7 @@ func probeHarness(entry *listEntry, probe updateProbe, mu *sync.Mutex) {
 		}
 		mu.Lock()
 		entry.RefAvailable = sha
+		entry.SHAAvailable = sha
 		mu.Unlock()
 	}
 }

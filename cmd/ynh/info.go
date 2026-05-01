@@ -34,6 +34,7 @@ type infoEntry struct {
 	Path             string             `json:"path"`
 	RefInstalled     string             `json:"ref_installed,omitempty"`
 	RefAvailable     string             `json:"ref_available,omitempty"`
+	SHAAvailable     string             `json:"sha_available,omitempty"`
 	IsPinned         bool               `json:"is_pinned"`
 	InstalledFrom    *listInstalledFrom `json:"installed_from,omitempty"`
 	Includes         []listInclude      `json:"includes"`
@@ -304,6 +305,7 @@ func printInfoJSON(stdout, stderr io.Writer, name string, checkUpdates bool) err
 		Path:             base.Path,
 		RefInstalled:     base.RefInstalled,
 		RefAvailable:     base.RefAvailable,
+		SHAAvailable:     base.SHAAvailable,
 		IsPinned:         base.IsPinned,
 		InstalledFrom:    base.InstalledFrom,
 		Includes:         base.Includes,
