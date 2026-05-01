@@ -7,7 +7,7 @@ ynh is a packaging and distribution tool. It has no runtime component - the AI v
 ### Core Flow
 
 ```
-.harness.json → resolve Git includes → assemble vendor config → launch vendor CLI
+.ynh-plugin/plugin.json → resolve Git includes → assemble vendor config → launch vendor CLI
 ```
 
 1. **Detect** the harness format and load its manifest (`internal/harness/`, `internal/plugin/`)
@@ -305,7 +305,7 @@ Test fixtures in `testdata/` simulate real-world sources:
 
 ## Configuration
 
-### Harness Manifest (`.harness.json`)
+### Harness Manifest (`.ynh-plugin/plugin.json`)
 
 ```json
 {
@@ -348,7 +348,7 @@ Test fixtures in `testdata/` simulate real-world sources:
 }
 ```
 
-`name` and `version` are required for installed harnesses. For project-local `.harness.json` files (loaded via `--harness-file` or auto-discovered in cwd), they are optional. See the JSON schema at `docs/schema/harness.schema.json` for the full specification. See [Hooks](docs/hooks.md), [MCP Servers](docs/mcp.md), [Profiles](docs/profiles.md), and the focus tutorial (`docs/tutorial/14-focus.md`) for details.
+`name` and `version` are required for installed harnesses. For project-local manifests (loaded via `--harness-file` or auto-discovered in cwd), they are optional. See the JSON schema at `docs/schema/harness.schema.json` for the full specification. See [Hooks](docs/hooks.md), [MCP Servers](docs/mcp.md), [Profiles](docs/profiles.md), and the focus tutorial (`docs/tutorial/14-focus.md`) for details.
 
 ### Focus Entries
 
@@ -360,43 +360,45 @@ Profiles use merge semantics when applied — see `ResolveProfile()` in `interna
 
 When `ynh run` is invoked, the harness source is resolved in this order:
 
-1. **Positional name**: `ynh run my-harness` → loads from `~/.ynh/harnesses/my-harness/`
-2. **`--harness-file`**: `ynh run --harness-file path/.harness.json` → loads directly from file
-3. **Auto-discovery**: bare `ynh run` → looks for `.harness.json` in the current working directory
+1. **Positional name**: `ynh run my-harness` → loads from `~/.ynh/harnesses/my-harness/.ynh-plugin/plugin.json`
+2. **`--harness-file`**: `ynh run --harness-file path/.harness.json` → loads a legacy single-file manifest directly from the given path
+3. **Auto-discovery**: bare `ynh run` → migrates the current working directory if needed, then loads `.ynh-plugin/plugin.json` from cwd
 
 For `--harness-file` and auto-discovery, the harness is assembled into `~/.ynh/run/_inline-<hash>/` (hash of the source directory for stable run dirs).
 
 ### Install Lifecycle
 
-There are two copies of `.harness.json` in a harness's life:
+A harness has two locations in its life:
 
-1. **Source copy** — git-tracked in the harness's repo. Author-managed. Contains `name`, `version`, `includes`, `delegates_to`, `default_vendor`, etc.
-2. **Installed copy** — at `~/.ynh/harnesses/<name>/.harness.json`. Created by `ynh install`. Local-only, not git-tracked.
+1. **Source** — git-tracked in the harness's repo. Author-managed. The author writes `.ynh-plugin/plugin.json` containing `name`, `version`, `includes`, `delegates_to`, `default_vendor`, hooks, MCP servers, profiles, focuses.
+2. **Installed copy** — at `~/.ynh/harnesses/<name>/`. Created by `ynh install`. Local-only, not git-tracked. Contains the copied source plus a separate `.ynh-plugin/installed.json` file written by ynh.
 
 During install:
-- `ynh install` copies the entire harness directory (including `.harness.json`) to `~/.ynh/harnesses/<name>/`.
-- After the copy, ynh injects `installed_from` provenance into the installed `.harness.json`. This records where the harness was installed from (source type, URL/path, timestamp).
+- `ynh install` copies the entire harness directory (including the `.ynh-plugin/` directory) to `~/.ynh/harnesses/<name>/`.
+- If the source uses the legacy `.harness.json` single-file format, the migration chain converts it to `.ynh-plugin/plugin.json` in place during install.
+- ynh writes `~/.ynh/harnesses/<name>/.ynh-plugin/installed.json` recording install provenance — separate from the author-controlled `plugin.json`. This records where the harness was installed from (source type, URL/path, timestamp), and a `resolved[]` slice of per-include/per-delegate SHAs captured at fetch time.
 - ynh then pre-fetches all `includes` and `delegates_to` Git repos into `~/.ynh/cache/`. This ensures `ynh run` works offline and validates all Git refs at install time. If any fetch fails, the install fails with a clear error.
-- The source `.harness.json` is never modified.
+- The source `.ynh-plugin/plugin.json` is never modified.
 
 At runtime:
-- `ynh run` reads the installed copy at `~/.ynh/harnesses/<name>/.harness.json` to resolve includes, delegates, and vendor settings.
+- `ynh run` reads the installed copy at `~/.ynh/harnesses/<name>/.ynh-plugin/plugin.json` to resolve includes, delegates, and vendor settings.
 - Cached repos are used as-is without hitting the network. If a cache entry is missing (e.g. manually cleared), ynh falls back to a network fetch with a warning.
 
-The `installed_from` field looks like:
+`installed.json` looks like:
 
 ```json
 {
-  "installed_from": {
-    "source_type": "git",
-    "source": "github.com/eyelock/assistants",
-    "path": "ynh/david",
-    "installed_at": "2026-03-22T10:30:00Z"
-  }
+  "source_type": "git",
+  "source": "github.com/eyelock/assistants",
+  "path": "ynh/david",
+  "installed_at": "2026-03-22T10:30:00Z",
+  "resolved": [
+    {"git": "github.com/example/repo", "path": "skills", "sha": "a1b2c3d..."}
+  ]
 }
 ```
 
-Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry installs also include `"registry_name"`.
+Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry installs also include `"registry_name"`. Forks include a `"forked_from"` block recording upstream provenance.
 
 ### Environment Variables
 
@@ -430,7 +432,9 @@ Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry instal
 ├── symlinks.json             # Symlink transaction log (install/clean tracking)
 ├── harnesses/                  # Installed harnesses
 │   └── david/
-│       ├── .harness.json
+│       ├── .ynh-plugin/
+│       │   ├── plugin.json   # Author manifest (copied from source)
+│       │   └── installed.json  # Install provenance (written by ynh install)
 │       ├── skills/
 │       ├── agents/
 │       ├── rules/
