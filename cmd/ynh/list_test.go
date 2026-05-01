@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/harness"
 )
 
 // installListTestHarness creates a harness with custom JSON in the harnesses dir.
@@ -481,5 +483,46 @@ func TestCmdListCheckUpdatesRequiresJSON(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String()+err.Error(), "--check-updates") {
 		t.Errorf("expected error to mention --check-updates; stderr: %s; err: %v", stderr.String(), err)
+	}
+}
+
+// Broken-pointer placeholder rows must emit [] not null for empty
+// includes/delegates_to. JSON consumers expect the canonical empty-array shape
+// regardless of whether the source tree could be loaded.
+func TestCmdListJSONOrphanPointerEmptyArrays(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	if err := harness.SavePointer(&harness.Pointer{
+		Name: "stranded", SourceType: "local",
+		Source: filepath.Join(t.TempDir(), "gone"), InstalledAt: "2026-05-01T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	if err := cmdListTo([]string{"--format", "json"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdListTo: %v", err)
+	}
+	out := stdout.String()
+	if strings.Contains(out, `"includes": null`) {
+		t.Errorf("includes serialised as null; want []. output: %s", out)
+	}
+	if strings.Contains(out, `"delegates_to": null`) {
+		t.Errorf("delegates_to serialised as null; want []. output: %s", out)
+	}
+
+	var got listEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v\noutput: %s", err, out)
+	}
+	if len(got.Harnesses) != 1 {
+		t.Fatalf("expected 1 harness, got %d; output: %s", len(got.Harnesses), out)
+	}
+	if got.Harnesses[0].Includes == nil {
+		t.Error("Includes is nil; want empty slice")
+	}
+	if got.Harnesses[0].DelegatesTo == nil {
+		t.Error("DelegatesTo is nil; want empty slice")
 	}
 }
