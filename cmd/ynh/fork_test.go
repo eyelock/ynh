@@ -101,6 +101,56 @@ func TestCmdFork_DestAlreadyExists(t *testing.T) {
 	}
 }
 
+// installNamespacedForkTestHarness writes a harness under
+// YNH_HOME/harnesses/<ns--repo>/<name>/, mirroring how registry installs land.
+func installNamespacedForkTestHarness(t *testing.T, home, fsNS, name string, ins *plugin.InstalledJSON) string {
+	t.Helper()
+	dir := filepath.Join(home, "harnesses", fsNS, name)
+	if err := os.MkdirAll(filepath.Join(dir, plugin.PluginDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hj := `{"name":"` + name + `","version":"0.1.0","default_vendor":"claude"}`
+	if err := os.WriteFile(filepath.Join(dir, plugin.PluginDir, plugin.PluginFile), []byte(hj), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if ins != nil {
+		if err := plugin.SaveInstalledJSON(dir, ins); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func TestCmdFork_NamespacedInstall(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installNamespacedForkTestHarness(t, home, "eyelock--assistants", "researcher", &plugin.InstalledJSON{
+		SourceType:   "registry",
+		Source:       "github.com/eyelock/assistants",
+		Ref:          "main",
+		SHA:          "abc123",
+		RegistryName: "eyelock-assistants",
+		InstalledAt:  "2026-01-01T00:00:00Z",
+	})
+
+	dest := filepath.Join(t.TempDir(), "forked-researcher")
+	if err := cmdForkTo([]string{"researcher", "--to", dest}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("cmdForkTo: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dest, plugin.PluginDir, plugin.PluginFile)); err != nil {
+		t.Errorf("plugin.json not found in dest: %v", err)
+	}
+
+	ins, err := plugin.LoadInstalledJSON(dest)
+	if err != nil {
+		t.Fatalf("LoadInstalledJSON: %v", err)
+	}
+	if ins.ForkedFrom == nil || ins.ForkedFrom.RegistryName != "eyelock-assistants" {
+		t.Errorf("forked_from registry not preserved: %+v", ins.ForkedFrom)
+	}
+}
+
 func TestCmdFork_NotFound(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)

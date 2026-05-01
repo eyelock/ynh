@@ -75,8 +75,10 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 			fmt.Sprintf("invalid --format value %q (want text or json)", format))
 	}
 
-	// Load source harness
-	p, err := harness.Load(name)
+	// Load source harness. LoadQualified accepts both bare names ("researcher")
+	// and namespace-qualified refs ("researcher@org/repo") so callers can
+	// disambiguate when two registries publish the same name.
+	p, err := harness.LoadQualified(name)
 	if err != nil {
 		code := errCodeNotFound
 		if !strings.Contains(err.Error(), "not found") {
@@ -93,7 +95,7 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 			return cliError(stderr, structured, errCodeIOError,
 				fmt.Sprintf("getting working directory: %v", cwdErr))
 		}
-		destDir = filepath.Join(cwd, name)
+		destDir = filepath.Join(cwd, p.Name)
 	}
 	absDestDir, absErr := filepath.Abs(destDir)
 	if absErr != nil {
@@ -107,7 +109,9 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 			fmt.Sprintf("destination already exists: %s", absDestDir))
 	}
 
-	installDir := harness.InstalledDir(name)
+	// p.Dir is the resolved install directory — works for both flat and
+	// namespaced layouts (.ynh/harnesses/<ns--repo>/<name>/).
+	installDir := p.Dir
 
 	// Copy harness files to destination
 	if mkErr := os.MkdirAll(absDestDir, 0o755); mkErr != nil {
@@ -173,7 +177,7 @@ func buildForkedFrom(p *harness.Harness) *plugin.ForkedFromJSON {
 	if p.InstalledFrom == nil {
 		return &plugin.ForkedFromJSON{
 			SourceType: "local",
-			Source:     harness.InstalledDir(p.Name),
+			Source:     p.Dir,
 			Version:    p.Version,
 		}
 	}
