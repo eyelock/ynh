@@ -26,7 +26,9 @@ type infoEnvelope struct {
 // infoEntry is the JSON shape for `ynh info` structured output.
 // Carries the same per-harness fields as listEntry, plus the raw manifest.
 type infoEntry struct {
-	Name             string             `json:"name"`
+	Name string `json:"name"`
+	// Kind classifies the install — see listEntry.Kind.
+	Kind             string             `json:"kind"`
 	VersionInstalled string             `json:"version_installed"`
 	VersionAvailable string             `json:"version_available,omitempty"`
 	Description      string             `json:"description,omitempty"`
@@ -298,6 +300,7 @@ func printInfoJSON(stdout, stderr io.Writer, name string, checkUpdates bool) err
 	}
 	entry := infoEntry{
 		Name:             base.Name,
+		Kind:             base.Kind,
 		VersionInstalled: base.VersionInstalled,
 		VersionAvailable: base.VersionAvailable,
 		Description:      base.Description,

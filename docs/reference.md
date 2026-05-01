@@ -35,7 +35,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh run [harness]` | `-v`, `--profile`, `--install`, `--clean` |
 | `ynh uninstall <harness>` | |
 | `ynh update [harness]` | |
-| `ynh fork <name>` | `--to <path>`, `--format <text\|json>` |
+| `ynh fork <name>` | `--to <path>`, `--name <new>`, `--format <text\|json>` |
 | `ynh ls` | `--format <text\|json>` |
 | `ynh info <harness>` | `--format <text\|json>` |
 | `ynh vendors` | `--format <text\|json>` |
@@ -113,6 +113,7 @@ Per-harness fields:
 | Field | Description |
 |-------|-------------|
 | `name` | Harness name |
+| `kind` | Install kind: `local-fork` (pointer-shaped, registered via `ynh fork`), `local`, `registry`, `git`, or `-` for pre-migration entries |
 | `version_installed` | Version recorded in the harness manifest |
 | `version_available` | Latest version known upstream — **omitted** if `--check-updates` was not passed or the upstream check failed (the "unknown" state) |
 | `description` | Optional human description |
@@ -181,6 +182,14 @@ The `is_pinned` rule is the same on harnesses and includes:
 
 `forked_from` captures the upstream provenance of the harness at the time of the fork. If the source harness had no upstream (a bare local install), `forked_from.source_type` is `"local"` and `forked_from.source` is the installed directory path.
 
-`ynh update` refuses to run on a fork and prints an explanatory error. To incorporate upstream changes, re-install the original and fork again.
+`ynh fork` self-registers the new fork: a pointer file at `~/.ynh/installed/<name>.json` records `<path>` as the install location, and a launcher script is generated at `~/.ynh/bin/<name>`. The fork is immediately visible in `ynh ls` and runnable via `ynh run <name>` — no follow-up `ynh install` needed. Edits to the source tree are live; YNH never copies it.
 
-`ynh install <fork-path>` preserves `forked_from` when installing a forked harness into `~/.ynh/harnesses/`, so `ynh ls` surfaces the upstream provenance.
+`ynh fork` refuses to register if a flat install of the same name already exists (either a pointer or a tree at `~/.ynh/harnesses/<name>/`). Namespaced installs of the same name are unaffected — they remain accessible via `name@org/repo`. Uninstall the conflicting flat install first if you want the fork to take that name.
+
+**`--name <new>`** registers the fork under a different name without uninstalling the source — the common case where a user wants to keep the upstream installed and fork a copy alongside it. The fork tree's `.ynh-plugin/plugin.json` is rewritten so its `name` field matches the registration; upstream identity survives in `installed_from.forked_from`. The new name is validated against the same regex as harness names (`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`). If `--to` is omitted, the default destination uses the new name (`<cwd>/<new>`).
+
+`ynh uninstall <name>` for a fork removes the pointer file (and launcher, run dir, sources entry) but leaves the source tree on disk — the user owns it. To delete the tree as well, remove the directory after uninstalling.
+
+If the source path recorded in a pointer no longer exists when the fork is loaded, `ynh` prints an actionable error directing the user to either restore the directory or run `ynh uninstall <name>`. There is no auto-relocate in this version.
+
+`ynh update` refuses to run on a fork and prints an explanatory error. To incorporate upstream changes, re-install the original and fork again.

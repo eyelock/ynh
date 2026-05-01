@@ -9,14 +9,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
-// installForkTestHarness writes a minimal harness into YNH_HOME/harnesses/<name>.
+// installForkTestHarness writes a minimal harness into YNH_HOME/harnesses/<ns>/<name>.
+// Sources are installed namespaced so the flat name remains free for the fork's
+// pointer registration (matching how registry installs land in practice).
 // Returns the installed directory path.
 func installForkTestHarness(t *testing.T, home, name string, ins *plugin.InstalledJSON) string {
 	t.Helper()
-	dir := filepath.Join(home, "harnesses", name)
+	dir := filepath.Join(home, "harnesses", "test--src", name)
 	if err := os.MkdirAll(filepath.Join(dir, plugin.PluginDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -307,6 +311,229 @@ func TestCmdUpdate_ForkBlocked(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "fork") {
 		t.Errorf("expected 'fork' in error message, got: %v", err)
+	}
+}
+
+func TestCmdFork_WritesPointerAndLauncher(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installForkTestHarness(t, home, "demo", &plugin.InstalledJSON{
+		SourceType:   "registry",
+		Source:       "github.com/org/demo",
+		Ref:          "v0.1.0",
+		SHA:          "deadbeef",
+		RegistryName: "org-registry",
+		InstalledAt:  "2026-01-01T00:00:00Z",
+	})
+
+	dest := filepath.Join(t.TempDir(), "my-demo")
+	if err := cmdForkTo([]string{"demo", "--to", dest}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("cmdForkTo: %v", err)
+	}
+
+	// Pointer file written under ~/.ynh/installed/demo.json
+	ptr, err := harness.LoadPointer("demo")
+	if err != nil {
+		t.Fatalf("LoadPointer: %v", err)
+	}
+	if ptr == nil {
+		t.Fatal("pointer not written")
+	}
+	absDest, _ := filepath.Abs(dest)
+	if ptr.Source != absDest {
+		t.Errorf("pointer.source = %q, want %q", ptr.Source, absDest)
+	}
+	if ptr.SourceType != "local" {
+		t.Errorf("pointer.source_type = %q, want local", ptr.SourceType)
+	}
+
+	// Launcher generated under ~/.ynh/bin/demo
+	launcher := filepath.Join(config.BinDir(), "demo")
+	if _, err := os.Stat(launcher); err != nil {
+		t.Errorf("launcher not generated: %v", err)
+	}
+}
+
+func TestCmdFork_ClashWithExistingFlatTree(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	// Pre-existing flat tree at ~/.ynh/harnesses/demo
+	flatDir := filepath.Join(home, "harnesses", "demo")
+	if err := os.MkdirAll(filepath.Join(flatDir, plugin.PluginDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hj := `{"name":"demo","version":"0.1.0","default_vendor":"claude"}`
+	if err := os.WriteFile(filepath.Join(flatDir, plugin.PluginDir, plugin.PluginFile), []byte(hj), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := filepath.Join(t.TempDir(), "my-demo")
+	err := cmdForkTo([]string{"demo", "--to", dest}, io.Discard, io.Discard)
+	if err == nil {
+		t.Fatal("expected clash error, got nil")
+	}
+	if !strings.Contains(err.Error(), "already installed") {
+		t.Errorf("expected 'already installed' in error, got: %v", err)
+	}
+}
+
+func TestCmdFork_ClashWithExistingPointer(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installForkTestHarness(t, home, "demo", nil)
+
+	// First fork registers the pointer
+	dest1 := filepath.Join(t.TempDir(), "demo-one")
+	if err := cmdForkTo([]string{"demo", "--to", dest1}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("first fork: %v", err)
+	}
+
+	// Second fork must clash on the pointer
+	dest2 := filepath.Join(t.TempDir(), "demo-two")
+	err := cmdForkTo([]string{"demo", "--to", dest2}, io.Discard, io.Discard)
+	if err == nil {
+		t.Fatal("expected clash error on second fork, got nil")
+	}
+	if !strings.Contains(err.Error(), "already installed") {
+		t.Errorf("expected 'already installed' in error, got: %v", err)
+	}
+}
+
+func TestCmdUninstall_PointerRemovesPointerNotSource(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installForkTestHarness(t, home, "demo", nil)
+
+	dest := filepath.Join(t.TempDir(), "my-demo")
+	if err := cmdForkTo([]string{"demo", "--to", dest}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("fork: %v", err)
+	}
+
+	if err := cmdUninstall([]string{"demo"}); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+
+	// Pointer gone
+	if ptr, _ := harness.LoadPointer("demo"); ptr != nil {
+		t.Errorf("pointer still present after uninstall: %+v", ptr)
+	}
+	// Source tree preserved
+	if _, err := os.Stat(filepath.Join(dest, plugin.PluginDir, plugin.PluginFile)); err != nil {
+		t.Errorf("source tree was deleted on uninstall: %v", err)
+	}
+	// Launcher cleaned up
+	if _, err := os.Stat(filepath.Join(config.BinDir(), "demo")); err == nil {
+		t.Errorf("launcher still present after uninstall")
+	}
+}
+
+func TestCmdFork_WithName(t *testing.T) {
+	// --name lets a user fork a harness while keeping upstream installed.
+	// Source "demo" is flat-installed; fork registers as "my-demo" with
+	// the manifest rewritten so identity is coherent.
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	// Source as a flat-installed harness (the case --name solves)
+	srcDir := filepath.Join(home, "harnesses", "demo")
+	if err := os.MkdirAll(filepath.Join(srcDir, plugin.PluginDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hj := `{"name":"demo","version":"0.1.0","default_vendor":"claude"}`
+	if err := os.WriteFile(filepath.Join(srcDir, plugin.PluginDir, plugin.PluginFile), []byte(hj), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := filepath.Join(t.TempDir(), "fork-tree")
+	if err := cmdForkTo([]string{"demo", "--to", dest, "--name", "my-demo"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("cmdForkTo: %v", err)
+	}
+
+	// Pointer registered under the new name, source unchanged
+	ptr, err := harness.LoadPointer("my-demo")
+	if err != nil || ptr == nil {
+		t.Fatalf("pointer for new name not written: %v", err)
+	}
+	if old, _ := harness.LoadPointer("demo"); old != nil {
+		t.Errorf("pointer under source name should not exist: %+v", old)
+	}
+
+	// Manifest in the fork tree was rewritten — identity coherence
+	got, err := plugin.LoadPluginJSON(dest)
+	if err != nil {
+		t.Fatalf("LoadPluginJSON: %v", err)
+	}
+	if got.Name != "my-demo" {
+		t.Errorf("fork manifest name = %q, want my-demo", got.Name)
+	}
+
+	// Source manifest untouched
+	srcManifest, _ := plugin.LoadPluginJSON(srcDir)
+	if srcManifest.Name != "demo" {
+		t.Errorf("source manifest name was mutated: %q", srcManifest.Name)
+	}
+
+	// Launcher under the new name
+	if _, err := os.Stat(filepath.Join(config.BinDir(), "my-demo")); err != nil {
+		t.Errorf("launcher for new name not generated: %v", err)
+	}
+
+	// forked_from preserved (provenance of the upstream identity)
+	ins, err := plugin.LoadInstalledJSON(dest)
+	if err != nil {
+		t.Fatalf("LoadInstalledJSON: %v", err)
+	}
+	if ins.ForkedFrom == nil {
+		t.Error("forked_from should be populated")
+	}
+}
+
+func TestCmdFork_NameInvalid(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installForkTestHarness(t, home, "demo", nil)
+
+	dest := filepath.Join(t.TempDir(), "fork-tree")
+	err := cmdForkTo([]string{"demo", "--to", dest, "--name", "bad/name"}, io.Discard, io.Discard)
+	if err == nil {
+		t.Fatal("expected validation error for invalid --name")
+	}
+	if !strings.Contains(err.Error(), "--name") {
+		t.Errorf("expected '--name' in error, got: %v", err)
+	}
+}
+
+func TestCmdFork_NameClashesOnNewName(t *testing.T) {
+	// Clash check uses the new name, not the source name.
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installForkTestHarness(t, home, "demo", nil)
+
+	// Pre-register a pointer named "my-demo"
+	if err := harness.SavePointer(&harness.Pointer{
+		Name: "my-demo", SourceType: "local",
+		Source: t.TempDir(), InstalledAt: "2026-05-01T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := filepath.Join(t.TempDir(), "fork-tree")
+	err := cmdForkTo([]string{"demo", "--to", dest, "--name", "my-demo"}, io.Discard, io.Discard)
+	if err == nil {
+		t.Fatal("expected clash error on --name target")
+	}
+	if !strings.Contains(err.Error(), "my-demo") {
+		t.Errorf("expected 'my-demo' in error, got: %v", err)
+	}
+}
+
+func TestCmdFork_MissingNameValue(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	err := cmdForkTo([]string{"demo", "--name"}, io.Discard, io.Discard)
+	if err == nil {
+		t.Fatal("expected error for missing --name value")
 	}
 }
 

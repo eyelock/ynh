@@ -427,18 +427,28 @@ func cmdUninstall(args []string) error {
 
 	ref := args[0]
 
-	// Load to resolve the actual on-disk directory (may be namespaced).
-	// Accepts plain "name" or qualified "name@org/repo".
+	// Load to resolve the actual on-disk directory (may be namespaced or
+	// pointer-shaped). Accepts plain "name" or qualified "name@org/repo".
 	p, err := harness.LoadQualified(ref)
 	if err != nil {
 		return fmt.Errorf("harness %q is not installed", ref)
 	}
-	installDir := p.Dir
 	bareName := p.Name // bare name for launcher/run/sources cleanup
 
-	// Remove harness directory
-	if err := os.RemoveAll(installDir); err != nil {
-		return fmt.Errorf("removing harness: %w", err)
+	// Pointer-shaped install: remove only the pointer file. The user owns
+	// the source tree — uninstall is a registration removal, not a
+	// destructive delete. Tree-shaped installs (the original code path) get
+	// the directory removed.
+	var pointerSource string
+	if ptr, err := harness.LoadPointer(bareName); err == nil && ptr != nil {
+		pointerSource = ptr.Source
+		if err := harness.RemovePointer(bareName); err != nil {
+			return fmt.Errorf("removing pointer: %w", err)
+		}
+	} else {
+		if err := os.RemoveAll(p.Dir); err != nil {
+			return fmt.Errorf("removing harness: %w", err)
+		}
 	}
 
 	// Remove launcher script
@@ -464,6 +474,9 @@ func cmdUninstall(args []string) error {
 	}
 
 	fmt.Printf("Uninstalled harness %q\n", bareName)
+	if pointerSource != "" {
+		fmt.Printf("  Source tree left in place: %s\n", pointerSource)
+	}
 	return nil
 }
 
