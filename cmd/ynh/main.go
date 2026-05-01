@@ -427,25 +427,25 @@ func cmdUninstall(args []string) error {
 
 	ref := args[0]
 
-	// Load to resolve the actual on-disk directory (may be namespaced or
-	// pointer-shaped). Accepts plain "name" or qualified "name@org/repo".
-	p, err := harness.LoadQualified(ref)
-	if err != nil {
-		return fmt.Errorf("harness %q is not installed", ref)
-	}
-	bareName := p.Name // bare name for launcher/run/sources cleanup
-
-	// Pointer-shaped install: remove only the pointer file. The user owns
-	// the source tree — uninstall is a registration removal, not a
-	// destructive delete. Tree-shaped installs (the original code path) get
-	// the directory removed.
-	var pointerSource string
-	if ptr, err := harness.LoadPointer(bareName); err == nil && ptr != nil {
+	// Pointer-shaped install: take the pointer path first, before attempting
+	// to load the manifest. Removing a pointer is a metadata operation; it
+	// must succeed even when the pointed-to source tree is missing — that's
+	// the exact case where users most need to uninstall.
+	var bareName, pointerSource string
+	if ptr, err := harness.LoadPointer(ref); err == nil && ptr != nil {
+		bareName = ptr.Name
 		pointerSource = ptr.Source
 		if err := harness.RemovePointer(bareName); err != nil {
 			return fmt.Errorf("removing pointer: %w", err)
 		}
 	} else {
+		// Tree-shaped install: resolve the on-disk directory (may be flat or
+		// namespaced) via the manifest, then remove the directory.
+		p, err := harness.LoadQualified(ref)
+		if err != nil {
+			return fmt.Errorf("harness %q is not installed", ref)
+		}
+		bareName = p.Name
 		if err := os.RemoveAll(p.Dir); err != nil {
 			return fmt.Errorf("removing harness: %w", err)
 		}
@@ -1292,6 +1292,27 @@ func cmdPrune() error {
 		}
 	}
 
+	// Scan for orphan pointer files: pointer exists but its source tree is
+	// gone. The user owned the source — they likely deleted it without
+	// uninstalling first. Removing the pointer is a metadata operation, so
+	// we can do it without consent prompts.
+	orphanPointers := 0
+	if pointers, err := harness.ListPointers(); err == nil {
+		for _, e := range pointers {
+			if _, err := os.Stat(e.Dir); err == nil {
+				continue
+			} else if !os.IsNotExist(err) {
+				continue
+			}
+			if err := harness.RemovePointer(e.Name); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: removing pointer %q: %v\n", e.Name, err)
+				continue
+			}
+			fmt.Printf("Removed orphan pointer: %s (source missing: %s)\n", e.Name, e.Dir)
+			orphanPointers++
+		}
+	}
+
 	// Scan for stale launcher scripts in ~/.ynh/bin/
 	staleLaunchers := 0
 	binDir := config.BinDir()
@@ -1336,7 +1357,7 @@ func cmdPrune() error {
 		}
 	}
 
-	if len(orphans) == 0 && staleLaunchers == 0 && staleRuns == 0 {
+	if len(orphans) == 0 && orphanPointers == 0 && staleLaunchers == 0 && staleRuns == 0 {
 		fmt.Println("No orphaned installations found.")
 	}
 

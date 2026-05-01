@@ -221,6 +221,8 @@ func printListJSON(w io.Writer, checkUpdates bool) error {
 						Source:      ptr.Source,
 						InstalledAt: ptr.InstalledAt,
 					},
+					Includes:    []listInclude{},
+					DelegatesTo: []listDelegate{},
 				})
 			}
 			continue
