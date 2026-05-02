@@ -97,6 +97,35 @@ func mustRunYnd(t *testing.T, args ...string) (stdout, stderr string) {
 	return out, errOut
 }
 
+// runYndInDirEnv executes ynd with cwd=dir and a custom environment.
+// extraEnv is appended after os.Environ() so callers can override PATH or
+// inject vars without losing the rest of the parent env. Returns
+// stdout/stderr/error so tests can inspect output and assert error paths.
+func runYndInDirEnv(t *testing.T, dir string, extraEnv []string, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	cmd := exec.Command(yndBinary(t), args...)
+	cmd.Env = append(os.Environ(), extraEnv...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+	err = cmd.Run()
+	return outBuf.String(), errBuf.String(), err
+}
+
+// mustRunYndInDir runs ynd with cwd=dir, fails on non-zero exit. Use for
+// commands like `ynd create` that operate on the current working directory.
+func mustRunYndInDir(t *testing.T, dir string, args ...string) (stdout, stderr string) {
+	t.Helper()
+	out, errOut, err := runYndInDirEnv(t, dir, nil, args...)
+	if err != nil {
+		t.Fatalf("ynd %s in %s failed: %v\nstdout:\n%s\nstderr:\n%s", strings.Join(args, " "), dir, err, out, errOut)
+	}
+	return out, errOut
+}
+
 // sandbox is a fully isolated ynh environment for one test.
 // home is set as YNH_HOME for the duration of the test.
 type sandbox struct {
