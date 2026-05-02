@@ -64,6 +64,39 @@ func ynhBinary(t *testing.T) string {
 	return bin
 }
 
+// yndBinary returns the absolute path of the ynd developer-tools binary
+// built by `make build`. Same lifecycle guarantees as ynhBinary.
+func yndBinary(t *testing.T) string {
+	t.Helper()
+	bin := filepath.Join(repoRoot(t), "bin", "ynd")
+	if _, err := os.Stat(bin); err != nil {
+		t.Fatalf("ynd binary not found at %s — run `make build` first: %v", bin, err)
+	}
+	return bin
+}
+
+// runYnd executes the ynd binary with args and returns stdout/stderr/error.
+// ynd is filesystem-driven and stateless — no sandbox needed.
+func runYnd(t *testing.T, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	cmd := exec.Command(yndBinary(t), args...)
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+	err = cmd.Run()
+	return outBuf.String(), errBuf.String(), err
+}
+
+// mustRunYnd is runYnd that fails the test on non-zero exit.
+func mustRunYnd(t *testing.T, args ...string) (stdout, stderr string) {
+	t.Helper()
+	out, errOut, err := runYnd(t, args...)
+	if err != nil {
+		t.Fatalf("ynd %s failed: %v\nstdout:\n%s\nstderr:\n%s", strings.Join(args, " "), err, out, errOut)
+	}
+	return out, errOut
+}
+
 // sandbox is a fully isolated ynh environment for one test.
 // home is set as YNH_HOME for the duration of the test.
 type sandbox struct {
