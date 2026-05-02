@@ -26,8 +26,8 @@ func TestPrune_Orphans(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runYnhInDir(t, s, live, "run", "prunable", "-v", "cursor", "--install")
-	runYnhInDir(t, s, orphan, "run", "prunable", "-v", "cursor", "--install")
+	mustRunYnhInDir(t, s, live, "run", "prunable", "-v", "cursor", "--install")
+	mustRunYnhInDir(t, s, orphan, "run", "prunable", "-v", "cursor", "--install")
 
 	// Confirm both installations are recorded by status.
 	out, _ := s.mustRunYnh(t, "status")

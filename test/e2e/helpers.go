@@ -105,6 +105,31 @@ func (s *sandbox) mustRunYnh(t *testing.T, args ...string) (stdout, stderr strin
 	return out, errOut
 }
 
+// runYnhInDirRaw executes the ynh binary with cwd=dir inside sandbox s and
+// returns stdout, stderr, and the resulting error. Used by tests that need
+// to assert behaviour from a project directory rather than a default cwd.
+func runYnhInDirRaw(t *testing.T, s *sandbox, dir string, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	cmd := exec.Command(ynhBinary(t), args...)
+	cmd.Env = append(os.Environ(), "YNH_HOME="+s.home)
+	cmd.Dir = dir
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+	err = cmd.Run()
+	return outBuf.String(), errBuf.String(), err
+}
+
+// mustRunYnhInDir is runYnhInDirRaw that fails the test on non-zero exit.
+func mustRunYnhInDir(t *testing.T, s *sandbox, dir string, args ...string) (stdout, stderr string) {
+	t.Helper()
+	out, errOut, err := runYnhInDirRaw(t, s, dir, args...)
+	if err != nil {
+		t.Fatalf("ynh %s in %s failed: %v\nstdout:\n%s\nstderr:\n%s", strings.Join(args, " "), dir, err, out, errOut)
+	}
+	return out, errOut
+}
+
 // cloneAssistantsAtSHA clones eyelock/assistants into a tempdir and
 // checks out the pinned fixture SHA. Returns the absolute path of the
 // working tree. Tests install fixtures from <clone>/e2e-fixtures/<name>

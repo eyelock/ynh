@@ -4,7 +4,6 @@ package e2e
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -23,7 +22,7 @@ func TestRun_Cursor_InstallClean(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runYnhInDir(t, s, project, "run", "with-skill", "-v", "cursor", "--install")
+	mustRunYnhInDir(t, s, project, "run", "with-skill", "-v", "cursor", "--install")
 
 	cursorSkillsDir := filepath.Join(project, ".cursor", "skills")
 	assertDirExists(t, cursorSkillsDir)
@@ -52,7 +51,7 @@ func TestRun_Cursor_InstallClean(t *testing.T) {
 		}
 	}
 
-	runYnhInDir(t, s, project, "run", "with-skill", "-v", "cursor", "--clean")
+	mustRunYnhInDir(t, s, project, "run", "with-skill", "-v", "cursor", "--clean")
 
 	if _, err := os.Stat(cursorSkillsDir); err == nil {
 		// The dir may legitimately remain empty after clean — only fail if it still has symlinks.
@@ -63,18 +62,6 @@ func TestRun_Cursor_InstallClean(t *testing.T) {
 				t.Errorf(".cursor/skills/%s still a symlink after --clean", e.Name())
 			}
 		}
-	}
-}
-
-// runYnhInDir runs `ynh args...` with cwd=dir inside sandbox s.
-func runYnhInDir(t *testing.T, s *sandbox, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command(ynhBinary(t), args...)
-	cmd.Env = append(os.Environ(), "YNH_HOME="+s.home)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("ynh %s failed in %s: %v\n%s", strings.Join(args, " "), dir, err, out)
 	}
 }
 
