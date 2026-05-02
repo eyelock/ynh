@@ -90,7 +90,44 @@ make lint
 
 # Full CI pipeline (deps, format, lint, test, build)
 make check
+
+# E2E suite (release gate; not part of `make check`)
+make e2e
 ```
+
+### E2E test suite
+
+`make e2e` runs an end-to-end test suite (~100 tests, ~1m wallclock) that exercises both binaries against SHA-pinned fixtures in [eyelock/assistants:e2e-fixtures/](https://github.com/eyelock/assistants/tree/develop/e2e-fixtures). Tests live in `test/e2e/` behind the `e2e` build tag and are **not** part of `make check` or `make test`.
+
+**What the suite locks:**
+
+- Every documented entry point on `ynh` and `ynd` (install, update, fork, delegate, include, run, vendors, sources, paths, status, prune, info, ls, image, search, registry; create, lint, validate, fmt, preview, export, compose, diff, migrate, marketplace, inspect)
+- All three vendor adapters (Claude, Codex, Cursor) end-to-end: instructions files, hooks (with matchers + per-vendor event remapping), MCP servers (command + URL forms, env passthrough)
+- Profile + focus resolution (hook replace + inherit, MCP deep-merge, mutex/unknown errors)
+- Schema/security guards (path traversal, --ref + local, fork update, duplicate sources)
+- JSON error envelope, override semantics (harness AGENTS.md beats include's), symlink stability across reinstall
+- Local file:// registry support (registry add → search → install with namespace collision handling)
+
+The suite is the release gate, not a per-PR gate:
+
+| Trigger | Behaviour |
+|---------|-----------|
+| PR opened/updated targeting `main` | E2E must pass before merge (`.github/workflows/e2e.yml`) |
+| Tag push `v*` | E2E runs as part of `release.yml`, blocking `goreleaser` |
+| Manual `workflow_dispatch` | Ad-hoc "is develop healthy?" check before opening release PR |
+| PR targeting `develop` | Not triggered — feature work stays fast |
+
+Tests clone `eyelock/assistants` over the network and exercise the production binary built via `make build`. Fixture SHAs are pinned in `test/e2e/helpers.go`. When ynh's harness schema legitimately evolves, the same PR that changes the schema must update the affected fixtures in `eyelock/assistants:e2e-fixtures/` and bump the SHA constants.
+
+**Local fixture iteration.** If you have an `eyelock/assistants` worktree checked out at the pinned SHA, point the suite at it to skip the per-test clone:
+
+```bash
+YNH_E2E_ASSISTANTS_PATH=/path/to/assistants/worktree make e2e
+```
+
+The worktree's HEAD must match `AssistantsFixturesSHA` in `helpers.go` — otherwise the suite fails fast (so you can't accidentally pass tests locally with a fixture state CI doesn't share). Iterating on fixtures? Set `YNH_E2E_FIXTURES_LOOSE=1` to bypass the SHA check while you work, but bump the pinned SHA before pushing.
+
+See `.claude/plans/e2e-test-suite.md` for the architecture and coverage matrix.
 
 ### Testing Unreleased ynh Against Downstream Tooling
 

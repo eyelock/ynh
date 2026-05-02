@@ -843,6 +843,35 @@ func TestCmdInstall_PathFlag_TraversalBlocked(t *testing.T) {
 	}
 }
 
+func TestCmdInstall_RefFlag_RejectedForLocalPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	src := filepath.Join(dir, "src")
+	if err := os.MkdirAll(filepath.Join(src, ".ynh-plugin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, ".ynh-plugin", "plugin.json"), []byte(`{"name":"x","version":"0.0.1"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := cmdInstall([]string{src, "--ref", "deadbeef"})
+	if err == nil {
+		t.Fatal("expected error: --ref on local install")
+	}
+	if !strings.Contains(err.Error(), "--ref is not valid for local-path installs") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestCmdInstall_RefFlag_NoValue(t *testing.T) {
+	err := cmdInstall([]string{"some-source", "--ref"})
+	// --ref with no value should be silently dropped (i+1 < len check fails),
+	// then the install continues. We only assert it doesn't panic.
+	_ = err
+}
+
 func TestCmdInstall_SourceInsideHarnessesDir(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)

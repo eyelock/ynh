@@ -38,8 +38,8 @@ func resolveInstallSource(source, existingPath string, cfg *config.Config) (reso
 		return resolvedSource{sourceType: "git"}, nil
 	}
 
-	// Rule 3: Git HTTPS/HTTP URL
-	if strings.HasPrefix(source, "https://") || strings.HasPrefix(source, "http://") {
+	// Rule 3: Git HTTPS/HTTP/file URL
+	if strings.HasPrefix(source, "https://") || strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "file://") {
 		return resolvedSource{sourceType: "git"}, nil
 	}
 
