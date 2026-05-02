@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -44,6 +45,63 @@ func TestInstall_MigratesLegacyHarnessJson(t *testing.T) {
 	}
 	if len(got.Harnesses) != 1 || got.Harnesses[0].Name != "legacy" {
 		t.Fatalf("expected one harness named 'legacy', got %+v", got.Harnesses)
+	}
+}
+
+// TestInstall_BareAgentsMd asserts that a directory containing only an
+// AGENTS.md file (no manifest) is installable — install synthesizes a
+// minimal plugin.json named after the directory. Locks the documented
+// "drop AGENTS.md in any folder and ynh install ./" entry point.
+func TestInstall_BareAgentsMd(t *testing.T) {
+	s := newSandbox(t)
+
+	srcDir := filepath.Join(t.TempDir(), "bare-agents")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "AGENTS.md"),
+		[]byte("# Bare\n\nInstructions.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s.mustRunYnh(t, "install", srcDir)
+
+	installDir := filepath.Join(s.home, "harnesses", "bare-agents")
+	assertFileExists(t, filepath.Join(installDir, ".ynh-plugin", "plugin.json"))
+	assertFileExists(t, filepath.Join(installDir, "AGENTS.md"))
+
+	out, _ := s.mustRunYnh(t, "ls", "--format", "json")
+	var got envelopeLs
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("parsing ls JSON: %v\n%s", err, out)
+	}
+	if len(got.Harnesses) != 1 || got.Harnesses[0].Name != "bare-agents" {
+		t.Fatalf("expected one harness named 'bare-agents', got %+v", got.Harnesses)
+	}
+}
+
+// TestInstall_RejectsNonHarnessDir asserts that installing a directory
+// with no manifest, no AGENTS.md, and no instructions.md fails with a
+// clear error message rather than producing a malformed install.
+func TestInstall_RejectsNonHarnessDir(t *testing.T) {
+	s := newSandbox(t)
+
+	srcDir := filepath.Join(t.TempDir(), "not-a-harness")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Drop in a random file unrelated to the harness format.
+	if err := os.WriteFile(filepath.Join(srcDir, "README.md"),
+		[]byte("# Not a harness\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, errOut, err := s.runYnh(t, "install", srcDir)
+	if err == nil {
+		t.Fatalf("expected install of non-harness dir to fail, got success")
+	}
+	if !strings.Contains(errOut, "manifest") && !strings.Contains(errOut, "AGENTS.md") {
+		t.Errorf("expected error to mention manifest or AGENTS.md, got: %s", errOut)
 	}
 }
 

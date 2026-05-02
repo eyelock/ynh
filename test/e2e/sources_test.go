@@ -71,3 +71,28 @@ func TestSources_AddListRemove(t *testing.T) {
 		t.Errorf("expected sources list to be empty after remove, got %d entries", len(after))
 	}
 }
+
+// TestSources_AddRejectsDuplicate verifies that adding a source with a name
+// that already exists fails with a clear error. The duplicate guard prevents
+// silent overrides of registered sources.
+func TestSources_AddRejectsDuplicate(t *testing.T) {
+	s := newSandbox(t)
+
+	srcA := filepath.Join(t.TempDir(), "a")
+	srcB := filepath.Join(t.TempDir(), "b")
+	for _, d := range []string{srcA, srcB} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	s.mustRunYnh(t, "sources", "add", srcA, "--name", "shared")
+
+	_, errOut, err := s.runYnh(t, "sources", "add", srcB, "--name", "shared")
+	if err == nil {
+		t.Fatalf("expected duplicate-name add to fail, got success")
+	}
+	if !strings.Contains(errOut, "already exists") {
+		t.Errorf("expected error to mention 'already exists', got: %s", errOut)
+	}
+}
