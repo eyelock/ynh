@@ -918,3 +918,62 @@ func TestCmdPrune_NoOrphans(t *testing.T) {
 		t.Fatalf("cmdPrune failed: %v", err)
 	}
 }
+
+// Pointer registers a fork; user later deletes the source tree without
+// uninstalling. ynh uninstall must still remove the pointer — the operation
+// is metadata, not a delete of user-owned files.
+func TestCmdUninstall_OrphanPointerSourceMissing(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	missing := filepath.Join(t.TempDir(), "gone")
+	if err := harness.SavePointer(&harness.Pointer{
+		Name: "stranded", SourceType: "local",
+		Source: missing, InstalledAt: "2026-05-01T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cmdUninstall([]string{"stranded"}); err != nil {
+		t.Fatalf("cmdUninstall failed: %v", err)
+	}
+
+	if _, err := os.Stat(harness.PointerPath("stranded")); !os.IsNotExist(err) {
+		t.Errorf("pointer file still exists after uninstall: err=%v", err)
+	}
+}
+
+// Prune must remove pointers whose source tree no longer exists, alongside
+// the existing symlink-orphan pass. Healthy pointers must survive.
+func TestCmdPrune_OrphanPointer(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+
+	healthySrc := t.TempDir()
+	if err := harness.SavePointer(&harness.Pointer{
+		Name: "healthy", SourceType: "local",
+		Source: healthySrc, InstalledAt: "2026-05-01T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := harness.SavePointer(&harness.Pointer{
+		Name: "stranded", SourceType: "local",
+		Source: filepath.Join(t.TempDir(), "gone"), InstalledAt: "2026-05-01T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cmdPrune(); err != nil {
+		t.Fatalf("cmdPrune failed: %v", err)
+	}
+
+	if _, err := os.Stat(harness.PointerPath("stranded")); !os.IsNotExist(err) {
+		t.Errorf("orphan pointer still present after prune: err=%v", err)
+	}
+	if _, err := os.Stat(harness.PointerPath("healthy")); err != nil {
+		t.Errorf("healthy pointer was removed by prune: %v", err)
+	}
+}

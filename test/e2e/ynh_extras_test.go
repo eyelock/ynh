@@ -138,7 +138,8 @@ func TestInstall_GitWithRefAndPath(t *testing.T) {
 
 	got := readInstalledJSON(t, installDir)
 	assertEqual(t, "source_type", got.SourceType, "git")
-	assertEqual(t, "ref", got.Ref, sha)
+	// Ref records the symbolic ref (branch/tag); for SHA-pinned installs
+	// the SHA already lives in SHA so Ref stays empty.
 	assertEqual(t, "sha", got.SHA, sha)
 	assertEqual(t, "path", got.Path, harnessSub)
 }

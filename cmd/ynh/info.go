@@ -26,7 +26,9 @@ type infoEnvelope struct {
 // infoEntry is the JSON shape for `ynh info` structured output.
 // Carries the same per-harness fields as listEntry, plus the raw manifest.
 type infoEntry struct {
-	Name             string             `json:"name"`
+	Name string `json:"name"`
+	// Kind classifies the install — see listEntry.Kind.
+	Kind             string             `json:"kind"`
 	VersionInstalled string             `json:"version_installed"`
 	VersionAvailable string             `json:"version_available,omitempty"`
 	Description      string             `json:"description,omitempty"`
@@ -34,6 +36,7 @@ type infoEntry struct {
 	Path             string             `json:"path"`
 	RefInstalled     string             `json:"ref_installed,omitempty"`
 	RefAvailable     string             `json:"ref_available,omitempty"`
+	SHAAvailable     string             `json:"sha_available,omitempty"`
 	IsPinned         bool               `json:"is_pinned"`
 	InstalledFrom    *listInstalledFrom `json:"installed_from,omitempty"`
 	Includes         []listInclude      `json:"includes"`
@@ -297,6 +300,7 @@ func printInfoJSON(stdout, stderr io.Writer, name string, checkUpdates bool) err
 	}
 	entry := infoEntry{
 		Name:             base.Name,
+		Kind:             base.Kind,
 		VersionInstalled: base.VersionInstalled,
 		VersionAvailable: base.VersionAvailable,
 		Description:      base.Description,
@@ -304,6 +308,7 @@ func printInfoJSON(stdout, stderr io.Writer, name string, checkUpdates bool) err
 		Path:             base.Path,
 		RefInstalled:     base.RefInstalled,
 		RefAvailable:     base.RefAvailable,
+		SHAAvailable:     base.SHAAvailable,
 		IsPinned:         base.IsPinned,
 		InstalledFrom:    base.InstalledFrom,
 		Includes:         base.Includes,

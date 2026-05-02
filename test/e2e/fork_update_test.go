@@ -21,12 +21,14 @@ func TestFork_UpdateRejected(t *testing.T) {
 
 	s.mustRunYnh(t, "install", srcPath)
 
-	forkDir := filepath.Join(t.TempDir(), "my-fork")
-	s.mustRunYnh(t, "fork", "fork-source", "--to", forkDir)
+	forkDir := filepath.Join(t.TempDir(), "my-fork-ur")
+	// Develop forbids same-name fork while the source is installed; use --name
+	// to disambiguate, then update against the renamed fork.
+	s.mustRunYnh(t, "fork", "fork-source", "--to", forkDir, "--name", "my-fork-ur")
 	s.mustRunYnh(t, "uninstall", "fork-source")
 	s.mustRunYnh(t, "install", forkDir)
 
-	_, errOut, err := s.runYnh(t, "update", "fork-source")
+	_, errOut, err := s.runYnh(t, "update", "my-fork-ur")
 	if err == nil {
 		t.Fatalf("expected `ynh update <fork>` to fail, got success\nstderr:\n%s", errOut)
 	}

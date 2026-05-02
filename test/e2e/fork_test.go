@@ -17,7 +17,10 @@ func TestFork_BasicProvenance(t *testing.T) {
 	s.mustRunYnh(t, "install", srcPath)
 
 	forkDir := filepath.Join(t.TempDir(), "my-fork")
-	s.mustRunYnh(t, "fork", "fork-source", "--to", forkDir)
+	// Develop self-registers forks via a pointer file keyed by harness name.
+	// To fork an already-installed harness, the fork must be renamed (--name)
+	// or the original uninstalled first.
+	s.mustRunYnh(t, "fork", "fork-source", "--to", forkDir, "--name", "my-fork")
 
 	got := readInstalledJSON(t, forkDir)
 	assertEqual(t, "source_type", got.SourceType, "local")
@@ -39,13 +42,16 @@ func TestFork_CarryForward(t *testing.T) {
 	srcPath := filepath.Join(clone, "e2e-fixtures", "fork-source")
 
 	s.mustRunYnh(t, "install", srcPath)
-	forkDir := filepath.Join(t.TempDir(), "my-fork")
-	s.mustRunYnh(t, "fork", "fork-source", "--to", forkDir)
-
+	forkDir := filepath.Join(t.TempDir(), "my-fork-cf")
+	// Develop self-registers forks via a pointer file keyed by harness name.
+	// Use --name to avoid colliding with the installed source. The forked
+	// dir's plugin.json carries the new name; subsequent install registers
+	// under that name.
+	s.mustRunYnh(t, "fork", "fork-source", "--to", forkDir, "--name", "my-fork-cf")
 	s.mustRunYnh(t, "uninstall", "fork-source")
 	s.mustRunYnh(t, "install", forkDir)
 
-	installed := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "fork-source"))
+	installed := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "my-fork-cf"))
 	if installed.ForkedFrom == nil {
 		t.Fatal("expected forked_from to carry forward into re-installed harness")
 	}

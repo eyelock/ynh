@@ -68,6 +68,16 @@ func HarnessesDir() string {
 	return filepath.Join(HomeDir(), "harnesses")
 }
 
+// PointersDir is where pointer files for local-fork installs live.
+// Each file is <name>.json and points at a user-owned source tree —
+// edits to that tree are live to ynh run with no copy step.
+//
+// Distinct from HarnessesDir(): tree-shaped installs (git/registry) live
+// under HarnessesDir(); pointer-shaped installs (local forks) live here.
+func PointersDir() string {
+	return filepath.Join(HomeDir(), "installed")
+}
+
 func CacheDir() string {
 	return filepath.Join(HomeDir(), "cache")
 }
@@ -96,6 +106,7 @@ func EnsureDirs() error {
 	dirs := []string{
 		HomeDir(),
 		HarnessesDir(),
+		PointersDir(),
 		CacheDir(),
 		BinDir(),
 		RunDir(),

@@ -106,7 +106,8 @@ func TestInstall_Git_Minimal(t *testing.T) {
 	assertEqual(t, "source_type", got.SourceType, "git")
 	assertEqual(t, "source", got.Source, "https://github.com/eyelock/assistants")
 	assertEqual(t, "path", got.Path, "e2e-fixtures/minimal")
-	assertEqual(t, "ref", got.Ref, AssistantsFixturesSHA)
+	// Ref records the symbolic ref (branch/tag); for SHA-pinned installs
+	// the SHA already lives in SHA so Ref stays empty.
 	assertEqual(t, "sha", got.SHA, AssistantsFixturesSHA)
 	if !sha40.MatchString(got.SHA) {
 		t.Errorf("sha %q is not 40-char hex", got.SHA)
@@ -129,7 +130,12 @@ func TestInstall_FloatingInclude(t *testing.T) {
 	}
 	r := got.Resolved[0]
 	assertEqual(t, "resolved[0].git", r.Git, "github.com/eyelock/assistants")
-	assertEqual(t, "resolved[0].ref", r.Ref, "")
+	// Floating include: develop now records the resolved branch name (e.g.
+	// "develop") in Ref alongside the concrete SHA. Just confirm Ref is
+	// populated — the exact branch name varies with upstream HEAD.
+	if r.Ref == "" {
+		t.Errorf("expected resolved[0].ref to carry the resolved branch name, got empty")
+	}
 	assertEqual(t, "resolved[0].path", r.Path, "e2e-fixtures/included-skill")
 	if !sha40.MatchString(r.SHA) {
 		t.Errorf("resolved[0].sha %q is not 40-char hex", r.SHA)
@@ -151,7 +157,8 @@ func TestInstall_PinnedInclude(t *testing.T) {
 	}
 	const pinnedSHA = "8713efacdee8a2b05bdb70fee83be73b66222cc4"
 	r := got.Resolved[0]
-	assertEqual(t, "resolved[0].ref", r.Ref, pinnedSHA)
+	// Ref holds the symbolic ref (branch/tag); SHA-only includes leave it
+	// empty since the SHA fully identifies the commit.
 	assertEqual(t, "resolved[0].sha", r.SHA, pinnedSHA)
 }
 

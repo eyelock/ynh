@@ -19,6 +19,21 @@ import (
 // Must start with a letter or digit. Prevents path traversal and shell injection.
 var validName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
+// IsValidName reports whether s is a syntactically valid harness name.
+// Same rule LoadDir applies internally — exposed so callers (e.g. the
+// `ynh fork --name <new>` validator) can reject invalid input up front
+// instead of producing a half-installed harness.
+func IsValidName(s string) bool {
+	return validName.MatchString(s)
+}
+
+// ValidNamePattern returns the regex source string used to validate
+// harness names. Useful for error messages that want to show the
+// permitted shape.
+func ValidNamePattern() string {
+	return validName.String()
+}
+
 // GitSource holds the common fields for any include or delegate source.
 // Exactly one of Git (remote) or Local (filesystem path) is set at any
 // given time. Path is a subdirectory scoped within the source; Ref
@@ -41,6 +56,12 @@ type Include struct {
 	// installed.json's resolved slice. Empty for local-path includes and for
 	// pre-migration installs that predate SHA recording.
 	SHA string
+	// ResolvedRef is the branch name actually tracked at install/update time.
+	// For non-empty manifest refs it equals the manifest ref. For empty
+	// manifest refs it is the cache's resolved default branch (e.g. "main")
+	// captured at clone time. Used by --check-updates so probe targets the
+	// same ref that ynh update tracks. Empty for pre-migration installs.
+	ResolvedRef string
 }
 
 type Delegate struct {
@@ -48,6 +69,8 @@ type Delegate struct {
 	// SHA is the resolved commit at install/update time, populated from
 	// installed.json's resolved slice. Empty for pre-migration installs.
 	SHA string
+	// ResolvedRef — see Include.ResolvedRef.
+	ResolvedRef string
 }
 
 // Provenance records where a harness was installed from.
@@ -132,10 +155,19 @@ func DetectFormat(dir string) string {
 // ErrNotFound is returned when a harness is not installed.
 var ErrNotFound = errors.New("harness not found")
 
-// Load finds and loads an installed harness by name. The migration chain
-// runs inside LoadDir so no legacy handling is needed here. If the flat
-// layout has the harness, use that; otherwise scan the namespaced layout.
+// Load finds and loads an installed harness by name. Resolution precedence:
+//  1. Pointer file at ~/.ynh/installed/<name>.json (local fork)
+//  2. Flat tree at ~/.ynh/harnesses/<name>/
+//  3. Namespaced tree at ~/.ynh/harnesses/<ns--repo>/<name>/
+//
+// The migration chain runs inside LoadDir so no legacy handling is needed
+// here.
 func Load(name string) (*Harness, error) {
+	if ptr, err := LoadPointer(name); err != nil {
+		return nil, err
+	} else if ptr != nil {
+		return loadFromPointer(ptr)
+	}
 	flatDir := InstalledDir(name)
 	if _, err := os.Stat(flatDir); err == nil {
 		return LoadDir(flatDir)
@@ -204,18 +236,38 @@ func List() ([]string, error) {
 	return names, nil
 }
 
-// ListAll returns all installed harnesses with namespace and directory information.
+// ListAll returns all installed harnesses with namespace and directory
+// information. Unions pointer-shaped installs (local forks) with
+// tree-shaped installs (git/registry). Pointer entries take precedence
+// when a name appears in both — a pre-1.0 invariant: ynh fork now refuses
+// to register if a tree of the same name exists, but legacy two-tree
+// installs from before this change may still be on disk.
 func ListAll() ([]ListEntry, error) {
+	pointers, err := ListPointers()
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]bool, len(pointers))
+	for _, p := range pointers {
+		seen[p.Name] = true
+	}
+
 	harnessesDir := config.HarnessesDir()
 	entries, err := os.ReadDir(harnessesDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			sort.Slice(pointers, func(i, j int) bool {
+				if pointers[i].Namespace != pointers[j].Namespace {
+					return pointers[i].Namespace < pointers[j].Namespace
+				}
+				return pointers[i].Name < pointers[j].Name
+			})
+			return pointers, nil
 		}
 		return nil, err
 	}
 
-	var results []ListEntry
+	results := append([]ListEntry(nil), pointers...)
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -232,6 +284,9 @@ func ListAll() ([]ListEntry, error) {
 				if !child.IsDir() {
 					continue
 				}
+				if seen[child.Name()] {
+					continue
+				}
 				childDir := filepath.Join(entryPath, child.Name())
 				if DetectFormat(childDir) != "" {
 					results = append(results, ListEntry{
@@ -243,6 +298,9 @@ func ListAll() ([]ListEntry, error) {
 			}
 		} else {
 			// Flat entry (unmigrated or local install)
+			if seen[entry.Name()] {
+				continue
+			}
 			if DetectFormat(entryPath) != "" {
 				results = append(results, ListEntry{
 					Name: entry.Name(),
@@ -319,26 +377,38 @@ func LoadDir(dir string) (*Harness, error) {
 		})
 	}
 
-	// Backfill resolved SHAs from installed.json onto includes/delegates so
-	// downstream consumers (list, info, --check-updates) have a recorded
-	// commit even for floating refs.
+	// Backfill resolved SHAs and resolved refs from installed.json onto
+	// includes/delegates so downstream consumers (list, info,
+	// --check-updates) have both a recorded commit and the ref that was
+	// actually tracked, even for floating manifest refs.
+	//
+	// Matching: prefer an exact (git, ref, path) match against the manifest
+	// ref. If none, fall back to (git, path). The fallback covers the
+	// floating-ref case where the manifest ref is empty but the resolved
+	// entry's ref records the cache's default branch — e.g. "main" — that
+	// the install actually tracked.
 	if ins, err := plugin.LoadInstalledJSON(dir); err == nil && ins != nil && len(ins.Resolved) > 0 {
-		shaFor := func(git, ref, path string) string {
+		find := func(git, ref, path string) (sha, resolvedRef string) {
 			for _, r := range ins.Resolved {
 				if r.Git == git && r.Ref == ref && r.Path == path {
-					return r.SHA
+					return r.SHA, r.Ref
 				}
 			}
-			return ""
+			for _, r := range ins.Resolved {
+				if r.Git == git && r.Path == path {
+					return r.SHA, r.Ref
+				}
+			}
+			return "", ""
 		}
 		for i := range p.Includes {
 			if p.Includes[i].Git == "" {
 				continue
 			}
-			p.Includes[i].SHA = shaFor(p.Includes[i].Git, p.Includes[i].Ref, p.Includes[i].Path)
+			p.Includes[i].SHA, p.Includes[i].ResolvedRef = find(p.Includes[i].Git, p.Includes[i].Ref, p.Includes[i].Path)
 		}
 		for i := range p.DelegatesTo {
-			p.DelegatesTo[i].SHA = shaFor(p.DelegatesTo[i].Git, p.DelegatesTo[i].Ref, p.DelegatesTo[i].Path)
+			p.DelegatesTo[i].SHA, p.DelegatesTo[i].ResolvedRef = find(p.DelegatesTo[i].Git, p.DelegatesTo[i].Ref, p.DelegatesTo[i].Path)
 		}
 	}
 	if len(hj.Hooks) > 0 {

@@ -216,6 +216,12 @@ func cmdInstall(args []string) error {
 	// 6. Plain word → registry search
 	var srcDir string
 
+	// Captured from EnsureRepo when the install resolves to a git/registry
+	// source. Used to record harness-level provenance into installed.json so
+	// --check-updates can detect drift between the installed harness and
+	// upstream (symmetric to per-include resolved tracking).
+	var harnessSHA, harnessResolvedRef string
+
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
@@ -241,10 +247,6 @@ func cmdInstall(args []string) error {
 		resolved.ref = refFlag
 		resolved.sha = "" // user-provided ref takes precedence; don't verify against a stale registry SHA
 	}
-
-	// resolvedSHA captures the actual commit SHA fetched for git installs;
-	// stays empty for local installs.
-	var resolvedSHA string
 
 	if resolved.localPath != "" {
 		srcDir = resolved.localPath
@@ -272,7 +274,10 @@ func cmdInstall(args []string) error {
 			return err
 		}
 		srcDir = result.Path
-		resolvedSHA = result.SHA
+		// Capture the resolved harness-source SHA and ref so installed.json
+		// can record them. Empty for local installs (set in the local branch).
+		harnessSHA = result.SHA
+		harnessResolvedRef = result.ResolvedRef
 	}
 
 	// Scope to subdirectory if --path was specified
@@ -344,8 +349,8 @@ func cmdInstall(args []string) error {
 	ins := &plugin.InstalledJSON{
 		SourceType:   resolved.sourceType,
 		Source:       provSource,
-		Ref:          resolved.ref,
-		SHA:          resolvedSHA,
+		Ref:          harnessResolvedRef,
+		SHA:          harnessSHA,
 		Path:         pathFlag,
 		Namespace:    resolved.namespace,
 		RegistryName: resolved.registryName,
@@ -378,7 +383,7 @@ func cmdInstall(args []string) error {
 		}
 		ins.Resolved = append(ins.Resolved, plugin.ResolvedSourceJSON{
 			Git:  inc.Git,
-			Ref:  inc.Ref,
+			Ref:  res.ResolvedRef,
 			Path: inc.Path,
 			SHA:  res.SHA,
 		})
@@ -396,7 +401,7 @@ func cmdInstall(args []string) error {
 		}
 		ins.Resolved = append(ins.Resolved, plugin.ResolvedSourceJSON{
 			Git:  del.Git,
-			Ref:  del.Ref,
+			Ref:  res.ResolvedRef,
 			Path: del.Path,
 			SHA:  res.SHA,
 		})
@@ -436,18 +441,28 @@ func cmdUninstall(args []string) error {
 
 	ref := args[0]
 
-	// Load to resolve the actual on-disk directory (may be namespaced).
-	// Accepts plain "name" or qualified "name@org/repo".
-	p, err := harness.LoadQualified(ref)
-	if err != nil {
-		return fmt.Errorf("harness %q is not installed", ref)
-	}
-	installDir := p.Dir
-	bareName := p.Name // bare name for launcher/run/sources cleanup
-
-	// Remove harness directory
-	if err := os.RemoveAll(installDir); err != nil {
-		return fmt.Errorf("removing harness: %w", err)
+	// Pointer-shaped install: take the pointer path first, before attempting
+	// to load the manifest. Removing a pointer is a metadata operation; it
+	// must succeed even when the pointed-to source tree is missing — that's
+	// the exact case where users most need to uninstall.
+	var bareName, pointerSource string
+	if ptr, err := harness.LoadPointer(ref); err == nil && ptr != nil {
+		bareName = ptr.Name
+		pointerSource = ptr.Source
+		if err := harness.RemovePointer(bareName); err != nil {
+			return fmt.Errorf("removing pointer: %w", err)
+		}
+	} else {
+		// Tree-shaped install: resolve the on-disk directory (may be flat or
+		// namespaced) via the manifest, then remove the directory.
+		p, err := harness.LoadQualified(ref)
+		if err != nil {
+			return fmt.Errorf("harness %q is not installed", ref)
+		}
+		bareName = p.Name
+		if err := os.RemoveAll(p.Dir); err != nil {
+			return fmt.Errorf("removing harness: %w", err)
+		}
 	}
 
 	// Remove launcher script
@@ -473,7 +488,27 @@ func cmdUninstall(args []string) error {
 	}
 
 	fmt.Printf("Uninstalled harness %q\n", bareName)
+	if pointerSource != "" {
+		fmt.Printf("  Source tree left in place: %s\n", pointerSource)
+	}
 	return nil
+}
+
+// harnessHasRemoteSource reports whether the harness was installed from a
+// git or registry source we can re-pull. Local installs and forks are
+// excluded — those have no upstream to track.
+func harnessHasRemoteSource(p *harness.Harness) bool {
+	if p.InstalledFrom == nil {
+		return false
+	}
+	if p.InstalledFrom.ForkedFrom != nil {
+		return false
+	}
+	switch p.InstalledFrom.SourceType {
+	case "git", "registry":
+		return p.InstalledFrom.Source != ""
+	}
+	return false
 }
 
 func cmdUpdate(args []string) error {
@@ -494,7 +529,10 @@ func cmdUpdate(args []string) error {
 			"  To incorporate upstream changes, fork again from the re-installed original", name)
 	}
 
-	if len(p.Includes) == 0 && len(p.DelegatesTo) == 0 {
+	// A harness is updateable if it has a remote source (git/registry) OR
+	// any includes/delegates. Pure local installs have nothing to pull.
+	hasHarnessSource := harnessHasRemoteSource(p)
+	if len(p.Includes) == 0 && len(p.DelegatesTo) == 0 && !hasHarnessSource {
 		fmt.Printf("Harness %q has no Git sources to update.\n", name)
 		return nil
 	}
@@ -507,6 +545,48 @@ func cmdUpdate(args []string) error {
 
 	checked := 0
 	updated := 0
+	// Re-pull the harness source itself first so any newly-added includes
+	// or delegates upstream are visible to the include walk below.
+	var harnessSHA, harnessResolvedRef string
+	if hasHarnessSource {
+		gitURL := p.InstalledFrom.Source
+		if err := cfg.CheckRemoteSource(gitURL); err != nil {
+			return fmt.Errorf("harness source %q: %w", gitURL, err)
+		}
+		fmt.Printf("Checking harness source %s...\n", gitURL)
+		ref := p.InstalledFrom.Ref
+		result, err := resolver.EnsureRepo(gitURL, ref)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  Warning: %v\n", err)
+		} else {
+			checked++
+			harnessSHA = result.SHA
+			harnessResolvedRef = result.ResolvedRef
+			if result.Changed {
+				updated++
+				fmt.Printf("  Updated.\n")
+				// Sync the installed harness directory with the new content.
+				// Skip when source path is empty (whole-repo install) or path
+				// doesn't exist in the new tree.
+				newSrcDir := result.Path
+				if p.InstalledFrom.Path != "" {
+					newSrcDir = filepath.Join(result.Path, p.InstalledFrom.Path)
+				}
+				if _, statErr := os.Stat(newSrcDir); statErr == nil {
+					if err := assembler.CopyDir(newSrcDir, p.Dir); err != nil {
+						fmt.Fprintf(os.Stderr, "  Warning: copying refreshed harness: %v\n", err)
+					}
+					// Reload after content refresh so include/delegate slices
+					// reflect any newly-added entries from upstream.
+					if reloaded, reloadErr := harness.LoadDir(p.Dir); reloadErr == nil {
+						p = reloaded
+					}
+				}
+			} else {
+				fmt.Printf("  Already up to date.\n")
+			}
+		}
+	}
 	resolvedSources := make([]plugin.ResolvedSourceJSON, 0, len(p.Includes)+len(p.DelegatesTo))
 	for _, inc := range p.Includes {
 		// Local-path includes have no cache entry to refresh.
@@ -525,7 +605,7 @@ func cmdUpdate(args []string) error {
 		checked++
 		resolvedSources = append(resolvedSources, plugin.ResolvedSourceJSON{
 			Git:  inc.Git,
-			Ref:  inc.Ref,
+			Ref:  result.ResolvedRef,
 			Path: inc.Path,
 			SHA:  result.SHA,
 		})
@@ -549,7 +629,7 @@ func cmdUpdate(args []string) error {
 		checked++
 		resolvedSources = append(resolvedSources, plugin.ResolvedSourceJSON{
 			Git:  del.Git,
-			Ref:  del.Ref,
+			Ref:  result.ResolvedRef,
 			Path: del.Path,
 			SHA:  result.SHA,
 		})
@@ -562,9 +642,17 @@ func cmdUpdate(args []string) error {
 	}
 
 	// Persist resolved SHAs back to installed.json so subsequent --check-updates
-	// queries can compare against the recorded SHA without re-fetching.
+	// queries can compare against the recorded SHA without re-fetching. Also
+	// refresh the harness-level SHA/Ref when re-pulled so the harness's own
+	// drift signal stays accurate.
 	if ins, loadErr := plugin.LoadInstalledJSON(p.Dir); loadErr == nil && ins != nil {
 		ins.Resolved = resolvedSources
+		if hasHarnessSource && harnessSHA != "" {
+			ins.SHA = harnessSHA
+			if harnessResolvedRef != "" {
+				ins.Ref = harnessResolvedRef
+			}
+		}
 		if err := plugin.SaveInstalledJSON(p.Dir, ins); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not update installed.json: %v\n", err)
 		}
@@ -1218,6 +1306,27 @@ func cmdPrune() error {
 		}
 	}
 
+	// Scan for orphan pointer files: pointer exists but its source tree is
+	// gone. The user owned the source — they likely deleted it without
+	// uninstalling first. Removing the pointer is a metadata operation, so
+	// we can do it without consent prompts.
+	orphanPointers := 0
+	if pointers, err := harness.ListPointers(); err == nil {
+		for _, e := range pointers {
+			if _, err := os.Stat(e.Dir); err == nil {
+				continue
+			} else if !os.IsNotExist(err) {
+				continue
+			}
+			if err := harness.RemovePointer(e.Name); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: removing pointer %q: %v\n", e.Name, err)
+				continue
+			}
+			fmt.Printf("Removed orphan pointer: %s (source missing: %s)\n", e.Name, e.Dir)
+			orphanPointers++
+		}
+	}
+
 	// Scan for stale launcher scripts in ~/.ynh/bin/
 	staleLaunchers := 0
 	binDir := config.BinDir()
@@ -1262,7 +1371,7 @@ func cmdPrune() error {
 		}
 	}
 
-	if len(orphans) == 0 && staleLaunchers == 0 && staleRuns == 0 {
+	if len(orphans) == 0 && orphanPointers == 0 && staleLaunchers == 0 && staleRuns == 0 {
 		fmt.Println("No orphaned installations found.")
 	}
 

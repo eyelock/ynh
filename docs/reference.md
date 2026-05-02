@@ -35,7 +35,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh run [harness]` | `-v`, `--profile`, `--install`, `--clean` |
 | `ynh uninstall <harness>` | |
 | `ynh update [harness]` | |
-| `ynh fork <name>` | `--to <path>`, `--format <text\|json>` |
+| `ynh fork <name>` | `--to <path>`, `--name <new>`, `--format <text\|json>` |
 | `ynh ls` | `--format <text\|json>` |
 | `ynh info <harness>` | `--format <text\|json>` |
 | `ynh vendors` | `--format <text\|json>` |
@@ -113,30 +113,34 @@ Per-harness fields:
 | Field | Description |
 |-------|-------------|
 | `name` | Harness name |
+| `kind` | Install kind: `local-fork` (pointer-shaped, registered via `ynh fork`), `local`, `registry`, `git`, or `-` for pre-migration entries |
 | `version_installed` | Version recorded in the harness manifest |
 | `version_available` | Latest version known upstream — **omitted** if `--check-updates` was not passed or the upstream check failed (the "unknown" state) |
 | `description` | Optional human description |
 | `default_vendor` | Vendor for `ynh run` without `-v` |
 | `path` | Absolute path to the installed harness directory |
 | `ref_installed` | Currently installed Git ref or SHA — omitted when there is no Git provenance |
-| `ref_available` | Latest Git SHA known upstream — same omission rules as `version_available` |
+| `ref_available` | Latest Git SHA known upstream — same omission rules as `version_available`. For registry harnesses this is the registry entry's recorded SHA (may lag the actual source); for git harnesses it equals `sha_available` |
+| `sha_available` | Live upstream SHA from a fresh `git ls-remote` against `installed_from.source` at the recorded `installed_from.ref` — answers "has the source moved since I installed?" independently of registry freshness. Omitted with the same rules as `ref_available` |
 | `is_pinned` | `true` iff `ref_installed` matches `^[0-9a-f]{7,40}$` (resolved SHA). Tags and branches are floating |
-| `installed_from` | Provenance object — `source_type`, `source`, `installed_at`, optional `path`, `registry_name`, `forked_from` |
+| `installed_from` | Provenance object — `source_type`, `source`, optional `ref`, `sha`, `path`, `registry_name`, `installed_at`, `forked_from` |
+| `installed_from.ref` | Branch/tag/SHA recorded at install time — the ref this harness actually tracks. Empty for pre-migration installs (re-run `ynh update <name>` to backfill) |
+| `installed_from.sha` | Resolved commit SHA at install time. Empty for pre-migration installs |
 | `installed_from.forked_from` | Upstream a forked harness was copied from — `source_type`, `source`, `version`, `sha`, optional `ref`, `path`, `registry_name`. Absent on non-fork installs |
 | `artifacts` | (`ynh ls` only) Counts: `skills`, `agents`, `rules`, `commands` |
 | `includes` | Array of include objects: `git`, `ref_installed`, `ref_available`, `is_pinned`, optional `path`, `pick` |
-| `delegates_to` | Array of delegate objects: `git`, `ref_installed`, `is_pinned`, optional `path` |
+| `delegates_to` | Array of delegate objects: `git`, `ref_installed`, `ref_available`, `is_pinned`, optional `path` |
 | `manifest` | (`ynh info` only) Raw `.ynh-plugin/plugin.json` body, JSON-compacted |
 
 #### `--check-updates` flag
 
-`ynh info` and `ynh ls` accept `--check-updates` together with `--format json`. The flag opts in to upstream lookups for `version_available` and `ref_available`. Without it, those fields are always omitted (the "unknown" three-state).
+`ynh info` and `ynh ls` accept `--check-updates` together with `--format json`. The flag opts in to upstream lookups for `version_available`, `ref_available`, and `sha_available`. Without it, those fields are always omitted (the "unknown" three-state).
 
 What gets probed:
 
-- **Includes** (per `git`, with a remote URL): `git ls-remote` against the upstream URL, returning the current SHA on `ref_installed`. **Pinned includes** (`is_pinned: true`) probe `HEAD` instead of re-resolving the pinned SHA — otherwise a pinned include could never appear behind upstream.
-- **Registry-installed harnesses**: configured registries are walked and the matching entry's version becomes `version_available`.
-- **Git-installed harnesses**: same as include probing, against the harness's own `installed_from.source`.
+- **Includes and delegates** (per `git`, with a remote URL): `git ls-remote` against the upstream URL, targeting the recorded install ref (`installed.json.resolved[].ref`) — the branch the cache actually tracks. Falls back to the manifest ref for pre-migration installs. **Pinned entries** (`is_pinned: true`) probe `HEAD` instead of re-resolving the pinned SHA — otherwise a pinned entry could never appear behind upstream.
+- **Registry-installed harnesses**: configured registries are walked. The matching entry's version → `version_available`; the entry's recorded SHA → `ref_available` (maintainer-controlled, may be stale). A live `ls-remote` against `installed_from.source` at `installed_from.ref` → `sha_available`.
+- **Git-installed harnesses**: live `ls-remote` against `installed_from.source` at the recorded ref → `ref_available` and `sha_available` (identical for this source type).
 - **Local-only harnesses** (no `installed_from`, or `source_type: "local"` without a remote): no probe possible — fields stay omitted.
 
 > Note: `--check-updates` performs network calls. Failures degrade silently — fields are simply omitted, the command does not error. Default `info` and `ls` calls (without the flag) remain offline, fast, and deterministic. Probes run concurrently (bounded fan-out) so a multi-include harness does not serialize the network.
@@ -178,6 +182,14 @@ The `is_pinned` rule is the same on harnesses and includes:
 
 `forked_from` captures the upstream provenance of the harness at the time of the fork. If the source harness had no upstream (a bare local install), `forked_from.source_type` is `"local"` and `forked_from.source` is the installed directory path.
 
-`ynh update` refuses to run on a fork and prints an explanatory error. To incorporate upstream changes, re-install the original and fork again.
+`ynh fork` self-registers the new fork: a pointer file at `~/.ynh/installed/<name>.json` records `<path>` as the install location, and a launcher script is generated at `~/.ynh/bin/<name>`. The fork is immediately visible in `ynh ls` and runnable via `ynh run <name>` — no follow-up `ynh install` needed. Edits to the source tree are live; YNH never copies it.
 
-`ynh install <fork-path>` preserves `forked_from` when installing a forked harness into `~/.ynh/harnesses/`, so `ynh ls` surfaces the upstream provenance.
+`ynh fork` refuses to register if a flat install of the same name already exists (either a pointer or a tree at `~/.ynh/harnesses/<name>/`). Namespaced installs of the same name are unaffected — they remain accessible via `name@org/repo`. Uninstall the conflicting flat install first if you want the fork to take that name.
+
+**`--name <new>`** registers the fork under a different name without uninstalling the source — the common case where a user wants to keep the upstream installed and fork a copy alongside it. The fork tree's `.ynh-plugin/plugin.json` is rewritten so its `name` field matches the registration; upstream identity survives in `installed_from.forked_from`. The new name is validated against the same regex as harness names (`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`). If `--to` is omitted, the default destination uses the new name (`<cwd>/<new>`).
+
+`ynh uninstall <name>` for a fork removes the pointer file (and launcher, run dir, sources entry) but leaves the source tree on disk — the user owns it. To delete the tree as well, remove the directory after uninstalling.
+
+If the source path recorded in a pointer no longer exists when the fork is loaded, `ynh` prints an actionable error directing the user to either restore the directory or run `ynh uninstall <name>`. There is no auto-relocate in this version.
+
+`ynh update` refuses to run on a fork and prints an explanatory error. To incorporate upstream changes, re-install the original and fork again.
