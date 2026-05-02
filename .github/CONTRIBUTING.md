@@ -97,7 +97,16 @@ make e2e
 
 ### E2E test suite
 
-`make e2e` runs an end-to-end test suite that exercises real install/update/fork/delegate/include flows against SHA-pinned fixtures in [eyelock/assistants:e2e-fixtures/](https://github.com/eyelock/assistants/tree/develop/e2e-fixtures). Tests live in `test/e2e/` behind the `e2e` build tag and are **not** part of `make check` or `make test`.
+`make e2e` runs an end-to-end test suite (~100 tests, ~1m wallclock) that exercises both binaries against SHA-pinned fixtures in [eyelock/assistants:e2e-fixtures/](https://github.com/eyelock/assistants/tree/develop/e2e-fixtures). Tests live in `test/e2e/` behind the `e2e` build tag and are **not** part of `make check` or `make test`.
+
+**What the suite locks:**
+
+- Every documented entry point on `ynh` and `ynd` (install, update, fork, delegate, include, run, vendors, sources, paths, status, prune, info, ls, image, search, registry; create, lint, validate, fmt, preview, export, compose, diff, migrate, marketplace, inspect)
+- All three vendor adapters (Claude, Codex, Cursor) end-to-end: instructions files, hooks (with matchers + per-vendor event remapping), MCP servers (command + URL forms, env passthrough)
+- Profile + focus resolution (hook replace + inherit, MCP deep-merge, mutex/unknown errors)
+- Schema/security guards (path traversal, --ref + local, fork update, duplicate sources)
+- JSON error envelope, override semantics (harness AGENTS.md beats include's), symlink stability across reinstall
+- Local file:// registry support (registry add → search → install with namespace collision handling)
 
 The suite is the release gate, not a per-PR gate:
 
