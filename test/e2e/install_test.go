@@ -181,12 +181,23 @@ func TestInstall_TagInclude(t *testing.T) {
 
 // TestInstall_InvalidSchema_Rejected verifies that ynh refuses a harness
 // with an unknown top-level field (DisallowUnknownFields enforcement).
+//
+// Synthesised in-test rather than checked into eyelock/assistants so the
+// assistants repo's own `ynd validate` CI doesn't trip on a deliberately
+// invalid file.
 func TestInstall_InvalidSchema_Rejected(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
-	fixturePath := filepath.Join(clone, "e2e-fixtures", "invalid-schema")
 
-	_, stderr, err := s.runYnh(t, "install", fixturePath)
+	dir := filepath.Join(t.TempDir(), "invalid-schema")
+	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"invalid","version":"0.1.0","this_field_does_not_exist":true}`
+	if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, stderr, err := s.runYnh(t, "install", dir)
 	if err == nil {
 		t.Fatal("expected install to fail for invalid-schema fixture")
 	}
