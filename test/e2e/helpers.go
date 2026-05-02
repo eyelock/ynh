@@ -163,15 +163,37 @@ func mustRunYnhInDir(t *testing.T, s *sandbox, dir string, args ...string) (stdo
 	return out, errOut
 }
 
-// cloneAssistantsAtSHA clones eyelock/assistants into a tempdir and
-// checks out the pinned fixture SHA. Returns the absolute path of the
-// working tree. Tests install fixtures from <clone>/e2e-fixtures/<name>
-// via `ynh install <local-path>` (source_type=local) — the local-path
-// installer is what gives reproducibility against the pinned SHA.
-// Git-source coverage is deferred to Phase 2 (needs `--ref` on
-// `ynh install`, or live-github structural-only assertions).
+// cloneAssistantsAtSHA returns the absolute path of an eyelock/assistants
+// working tree at AssistantsFixturesSHA. By default it clones into a
+// tempdir over HTTPS — slow but deterministic, and the only mode CI can use.
+//
+// Local override: set YNH_E2E_ASSISTANTS_PATH to an existing worktree to
+// skip the clone. The worktree's HEAD must match AssistantsFixturesSHA, or
+// the test fails fast (so you cannot accidentally pass tests locally with
+// a fixture state that CI doesn't share). Set YNH_E2E_FIXTURES_LOOSE=1 to
+// bypass the SHA check while iterating on fixtures.
 func cloneAssistantsAtSHA(t *testing.T) string {
 	t.Helper()
+
+	if local := os.Getenv("YNH_E2E_ASSISTANTS_PATH"); local != "" {
+		if _, err := os.Stat(filepath.Join(local, ".git")); err != nil {
+			t.Fatalf("YNH_E2E_ASSISTANTS_PATH=%s is not a git working tree: %v", local, err)
+		}
+		if os.Getenv("YNH_E2E_FIXTURES_LOOSE") == "" {
+			out, err := exec.Command("git", "-C", local, "rev-parse", "HEAD").Output()
+			if err != nil {
+				t.Fatalf("reading HEAD of YNH_E2E_ASSISTANTS_PATH=%s: %v", local, err)
+			}
+			head := strings.TrimSpace(string(out))
+			if head != AssistantsFixturesSHA {
+				t.Fatalf("YNH_E2E_ASSISTANTS_PATH=%s HEAD %s does not match pinned SHA %s — "+
+					"checkout the pinned SHA or set YNH_E2E_FIXTURES_LOOSE=1 to bypass",
+					local, head, AssistantsFixturesSHA)
+			}
+		}
+		return local
+	}
+
 	dir := filepath.Join(t.TempDir(), "assistants")
 	mustGit(t, "", "clone", "--quiet", AssistantsRepo, dir)
 	mustGit(t, dir, "checkout", "--quiet", AssistantsFixturesSHA)

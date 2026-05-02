@@ -110,6 +110,14 @@ The suite is the release gate, not a per-PR gate:
 
 Tests clone `eyelock/assistants` over the network and exercise the production binary built via `make build`. Fixture SHAs are pinned in `test/e2e/helpers.go`. When ynh's harness schema legitimately evolves, the same PR that changes the schema must update the affected fixtures in `eyelock/assistants:e2e-fixtures/` and bump the SHA constants.
 
+**Local fixture iteration.** If you have an `eyelock/assistants` worktree checked out at the pinned SHA, point the suite at it to skip the per-test clone:
+
+```bash
+YNH_E2E_ASSISTANTS_PATH=/path/to/assistants/worktree make e2e
+```
+
+The worktree's HEAD must match `AssistantsFixturesSHA` in `helpers.go` — otherwise the suite fails fast (so you can't accidentally pass tests locally with a fixture state CI doesn't share). Iterating on fixtures? Set `YNH_E2E_FIXTURES_LOOSE=1` to bypass the SHA check while you work, but bump the pinned SHA before pushing.
+
 See `.claude/plans/e2e-test-suite.md` for the architecture and coverage matrix.
 
 ### Testing Unreleased ynh Against Downstream Tooling
