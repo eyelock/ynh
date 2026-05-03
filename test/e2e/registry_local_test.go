@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,6 +58,41 @@ func TestInstall_FromRegistryName(t *testing.T) {
 	if !strings.Contains(out, "registry") {
 		t.Errorf("expected install to record source_type=registry, got:\n%s", out)
 	}
+
+	// `ls --format json` must surface the URL-derived namespace so consumers
+	// can disambiguate same-named harnesses across registries. Regression
+	// guard: the field was previously dropped from the output DTO.
+	wantNS := registryNamespace(regURL)
+	var ls envelopeLs
+	if err := json.Unmarshal([]byte(out), &ls); err != nil {
+		t.Fatalf("parsing ls JSON: %v\n%s", err, out)
+	}
+	var found *envelopeItem
+	for i := range ls.Harnesses {
+		if ls.Harnesses[i].Name == "regd" {
+			found = &ls.Harnesses[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("regd not in ls envelope:\n%s", out)
+	}
+	assertEqual(t, "harnesses[regd].namespace", found.Namespace, wantNS)
+
+	// `search --format json` must include namespace on registry entries so
+	// consumers can preview the namespace pre-install.
+	searchOut, _ := s.mustRunYnh(t, "search", "regd", "--format", "json")
+	var results []struct {
+		Name      string `json:"name"`
+		Namespace string `json:"namespace,omitempty"`
+	}
+	if err := json.Unmarshal([]byte(searchOut), &results); err != nil {
+		t.Fatalf("parsing search JSON: %v\n%s", err, searchOut)
+	}
+	if len(results) == 0 {
+		t.Fatalf("search returned no results:\n%s", searchOut)
+	}
+	assertEqual(t, "search[0].namespace", results[0].Namespace, wantNS)
 }
 
 // TestRegistry_NamespaceCollision verifies that two registries publishing a
