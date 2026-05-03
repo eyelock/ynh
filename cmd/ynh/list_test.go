@@ -352,6 +352,37 @@ func TestCmdListJSONNamespacedPath(t *testing.T) {
 	if env.Harnesses[0].Path != wantPath {
 		t.Errorf("path = %q, want %q", env.Harnesses[0].Path, wantPath)
 	}
+	if got, want := env.Harnesses[0].Namespace, "eyelock/assistants"; got != want {
+		t.Errorf("namespace = %q, want %q", got, want)
+	}
+}
+
+// TestCmdListJSONFlatInstallNoNamespace asserts that a flat (non-namespaced)
+// install emits no namespace key — `omitempty` keeps the JSON envelope clean
+// for local harnesses and matches the schema's "nil for flat installs" promise.
+func TestCmdListJSONFlatInstallNoNamespace(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	installListTestHarness(t, home, "alpha",
+		`{"name":"alpha","version":"1.0.0","default_vendor":"claude"}`)
+
+	var stdout bytes.Buffer
+	if err := cmdListTo([]string{"--format", "json"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdListTo: %v", err)
+	}
+
+	if strings.Contains(stdout.String(), `"namespace"`) {
+		t.Errorf("flat install must not emit namespace key; got: %s", stdout.String())
+	}
+
+	var env listEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if env.Harnesses[0].Namespace != "" {
+		t.Errorf("namespace = %q, want empty", env.Harnesses[0].Namespace)
+	}
 }
 
 func TestCmdListMultipleHarnesses(t *testing.T) {

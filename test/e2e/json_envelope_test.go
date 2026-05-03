@@ -17,6 +17,7 @@ type envelopeLs struct {
 
 type envelopeItem struct {
 	Name             string             `json:"name"`
+	Namespace        string             `json:"namespace,omitempty"`
 	VersionInstalled string             `json:"version_installed"`
 	Description      string             `json:"description,omitempty"`
 	DefaultVendor    string             `json:"default_vendor,omitempty"`

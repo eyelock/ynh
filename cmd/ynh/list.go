@@ -27,6 +27,12 @@ type listEnvelope struct {
 // Field order drives JSON key order via MarshalIndent.
 type listEntry struct {
 	Name string `json:"name"`
+	// Namespace is the URL-derived "<org>/<repo>" for namespaced installs
+	// (registry installs, or any install that landed under
+	// ~/.ynh/harnesses/<ns>/<name>/). Empty for flat/local installs.
+	// Downstream consumers compose stable IDs as "<namespace>/<name>" when
+	// present.
+	Namespace string `json:"namespace,omitempty"`
 	// Kind classifies the install: "local-fork" (pointer-shaped, forked
 	// from an upstream), "local" (local path, no upstream), "registry",
 	// "git", or "-" for pre-migration entries with no recorded source.
@@ -292,6 +298,7 @@ func buildListEntry(p *harness.Harness) listEntry {
 
 	entry := listEntry{
 		Name:             p.Name,
+		Namespace:        p.Namespace,
 		Kind:             classifyKind(p.InstalledFrom),
 		VersionInstalled: p.Version,
 		Description:      p.Description,
