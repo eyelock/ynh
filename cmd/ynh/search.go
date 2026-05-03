@@ -64,7 +64,11 @@ func cmdSearchTo(args []string, stdout, stderr io.Writer) error {
 
 // searchResultEntry is a unified result from both registries and local sources.
 type searchResultEntry struct {
-	Name        string     `json:"name"`
+	Name string `json:"name"`
+	// Namespace is the URL-derived "<org>/<repo>" for registry results.
+	// Empty for local-source results. Lets consumers preview the
+	// namespace they'll see post-install without a separate lookup.
+	Namespace   string     `json:"namespace,omitempty"`
 	Description string     `json:"description,omitempty"`
 	Keywords    []string   `json:"keywords,omitempty"`
 	Repo        string     `json:"repo,omitempty"`
@@ -91,6 +95,7 @@ func unifiedSearch(cfg *config.Config, query string) ([]searchResultEntry, error
 		for _, r := range registry.Search(regs, query) {
 			entry := searchResultEntry{
 				Name:        r.Entry.Name,
+				Namespace:   r.Entry.Namespace,
 				Description: r.Entry.Description,
 				Keywords:    r.Entry.Keywords,
 				Repo:        r.Entry.Repo,
