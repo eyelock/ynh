@@ -442,6 +442,47 @@ rm -rf /tmp/ynh-bad-focus
 
 ---
 
+## Sensors
+
+### S1: Declare a command sensor and run it
+
+```bash
+mkdir -p /tmp/ynh-sensors/.ynh-plugin
+cat > /tmp/ynh-sensors/.ynh-plugin/plugin.json << 'EOF'
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "sensor-test",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "sensors": {
+    "build": {
+      "category": "maintainability",
+      "source": { "command": "echo built && exit 0" },
+      "output": { "format": "text" }
+    }
+  }
+}
+EOF
+ynd validate /tmp/ynh-sensors
+ynh install /tmp/ynh-sensors
+ynh sensors ls sensor-test
+ynh sensors run sensor-test build | jq '.exit_code, .output.stdout'
+ynh uninstall sensor-test
+rm -rf /tmp/ynh-sensors
+```
+
+Expected: `valid`, sensor listed in ls output, run result with `exit_code: 0` and stdout `"built\n"`. No `passed` field in run output.
+
+### S2: focus-source sensor returns resolved payload
+
+Re-run S1 with a focus-source sensor and verify `ynh sensors run` returns the resolved focus declaration plus a note that ynh does not invoke the agent runtime.
+
+### S3: Validation rejects two-source declaration
+
+`source` with both `command` and `files` set must error: `sensor "X": source must have exactly one of files, command, focus`.
+
+---
+
 ## Summary
 
 | Section | Tests |
@@ -462,5 +503,6 @@ rm -rf /tmp/ynh-bad-focus
 | Tutorial 14: Focus | 7 |
 | Tutorial 15: Project-Local Config | 4 |
 | Tutorial 16: Structured Output | 11 |
+| Sensors | 3 |
 | Edge Cases | 22 |
 | **Total** | **150** |

@@ -98,6 +98,7 @@ The project-local config pattern works well with focus entries (Tutorial 14) for
 
 ```json
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "default_vendor": "claude",
   "focus": {
     "review": { "prompt": "Review staged changes" },

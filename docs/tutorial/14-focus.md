@@ -1,6 +1,6 @@
 # Tutorial 14: Focus
 
-Define named focus entries that combine a profile with a prompt for repeatable, non-interactive AI execution. Focus entries are the bridge between harness configuration and CI automation.
+Define named focus entries that combine a profile with a prompt for repeatable, non-interactive AI execution. Focus entries are the bridge between harness configuration and CI automation. They can also serve as the source of an agent-driven [sensor](../sensors.md#focus) — referenced by name or inlined inside the sensor.
 
 ## Prerequisites
 

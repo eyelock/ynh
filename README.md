@@ -67,7 +67,7 @@ ynh manages the **guide layer** of that harness: the proactive steering that hap
 
 ## What you can do
 
-**Build** — Create harnesses with skills, agents, rules, and commands. Pull artifacts from any Git repo with cherry-picking (`pick`). Declare hooks, MCP servers, and environment-specific profiles.
+**Build** — Create harnesses with skills, agents, rules, and commands. Pull artifacts from any Git repo with cherry-picking (`pick`). Declare hooks, MCP servers, environment-specific profiles, and [sensors](docs/sensors.md) — observation surfaces that loop drivers consume between agent turns.
 
 **Refine** — Scaffold with `ynd create`, lint and validate with `ynd lint`/`ynd validate`, compress prompts with `ynd compress`, preview assembled output with `ynd preview`, diff across vendors with `ynd diff`.
 

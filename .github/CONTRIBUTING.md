@@ -1,5 +1,16 @@
 # Contributing to ynh
 
+## Design Stance
+
+These principles constrain what gets accepted into ynh. Read them before proposing a feature; they explain why some natural-looking ideas are out of scope.
+
+- **Declarative-first.** Manifests describe; they do not execute. Proposals that require ynh to run code at agent runtime, mutate state mid-session, or own the agent loop belong in a runtime project, not here.
+- **Vendor-neutral.** Every feature must translate cleanly into every supported vendor. A capability that exists in only one vendor either gets a portable abstraction or stays out.
+- **Restraint over richness.** The canonical hook vocabulary, the freeform sensor `format` string, the absence of a `passed` boolean on `ynh sensors run` — these are not gaps. They are deliberate refusals to take on responsibility that belongs to the layer above (the loop driver) or below (the vendor runtime).
+- **Structure where the layer above needs to discover.** When an external consumer needs to know about something — a sensor, a focus, a hook event — it goes in the manifest as structured data with CLI discovery. When the *agent* needs to know about something, it goes in `instructions.md` as prose. The two channels are complementary.
+
+See [Harness Engineering §"Design Stance"](../docs/harness-engineering.md#design-stance--declarative-first-vendor-neutral) for the user-facing version of this rationale.
+
 ## Architecture
 
 ynh is a packaging and distribution tool. It has no runtime component - the AI vendor CLI (Claude, Codex, Cursor) handles all interaction. ynh's job is to resolve, assemble, and launch.

@@ -62,9 +62,83 @@
           "prompt": { "type": "string", "minLength": 1 }
         }
       }
+    },
+    "sensors": {
+      "description": "Named observation surfaces declared by the harness. ynh declares; loop drivers run them. Each sensor is a role declaration over existing primitives — no new artifact type.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/sensor" }
     }
   },
   "$defs": {
+    "sensor": {
+      "type": "object",
+      "required": ["source", "output"],
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "description": "Fowler bucket — free metadata for loop-driver triage.",
+          "type": "string",
+          "enum": ["maintainability", "architecture", "behaviour"]
+        },
+        "role": {
+          "description": "Optional role hint for loop drivers. regular = run between turns; convergence-verifier = the loop's done-check; stuck-recovery = invoked when the stuckness watchdog fires. Pure metadata — ynh does not enforce semantics.",
+          "type": "string",
+          "enum": ["regular", "convergence-verifier", "stuck-recovery"]
+        },
+        "source": { "$ref": "#/$defs/sensor_source" },
+        "output": { "$ref": "#/$defs/sensor_output" }
+      }
+    },
+    "sensor_source": {
+      "description": "Strict one-of: files | command | focus. The set field discriminates the sensor type.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "command": { "type": "string", "minLength": 1 },
+        "focus": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            {
+              "type": "object",
+              "required": ["prompt"],
+              "additionalProperties": false,
+              "properties": {
+                "profile": { "type": "string" },
+                "prompt": { "type": "string", "minLength": 1 }
+              }
+            }
+          ]
+        }
+      },
+      "oneOf": [
+        { "required": ["files"] },
+        { "required": ["command"] },
+        { "required": ["focus"] }
+      ]
+    },
+    "sensor_output": {
+      "type": "object",
+      "required": ["format"],
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "description": "Freeform format identifier — pass-through to loop driver. Conventional names: json, junit-xml, lcov-summary, sarif, markdown, text, ndjson.",
+          "type": "string",
+          "minLength": 1
+        },
+        "channel": {
+          "description": "Where the result emerges. Conventional values: stdout, stdout+exit, file, files. Defaults are inferable from source.",
+          "type": "string",
+          "minLength": 1
+        },
+        "path": { "type": "string" }
+      }
+    },
     "hooks": {
       "type": "object",
       "propertyNames": {

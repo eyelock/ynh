@@ -121,6 +121,7 @@ type Harness struct {
 	MCPServers    map[string]plugin.MCPServer
 	Profiles      map[string]plugin.Profile
 	Focuses       map[string]plugin.Focus
+	Sensors       map[string]plugin.Sensor
 	InstalledFrom *Provenance
 }
 
@@ -423,6 +424,9 @@ func LoadDir(dir string) (*Harness, error) {
 	if len(hj.Focuses) > 0 {
 		p.Focuses = hj.Focuses
 	}
+	if len(hj.Sensors) > 0 {
+		p.Sensors = hj.Sensors
+	}
 
 	// Provenance: prefer installed.json (new format), fall back to InstalledFrom in manifest (legacy).
 	if ins, err := plugin.LoadInstalledJSON(dir); err == nil {
@@ -604,6 +608,9 @@ func LoadFile(path string) (*Harness, error) {
 	}
 	if len(hj.Focuses) > 0 {
 		p.Focuses = hj.Focuses
+	}
+	if len(hj.Sensors) > 0 {
+		p.Sensors = hj.Sensors
 	}
 
 	return p, nil

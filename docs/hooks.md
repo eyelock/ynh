@@ -177,8 +177,13 @@ When writing hook scripts for use across vendors:
 4. **Keep scripts idempotent** — hooks may fire multiple times per session.
 5. **Use absolute paths** — the working directory during hook execution varies by vendor.
 
+## Pairing with Sensors
+
+Hooks fire mid-session (push) and can produce artifacts that [sensors](sensors.md) declare a contract over (pull). The most common production pattern is `after_tool` writing a results file that a `files`-sourced sensor reads — implicit coupling by shared file path. See [Sensors §"Relationship to hooks"](sensors.md#relationship-to-hooks) for the full push/pull comparison and the canonical pairing pattern.
+
 ## See Also
 
 - [Tutorial 4: Hooks](tutorial/10-hooks.md) — step-by-step walkthrough
+- [Sensors](sensors.md) — observation surfaces a loop driver consumes
 - [Harness Engineering](harness-engineering.md) — how hooks bridge guides to sensors
 - [Vendor Support](vendors.md) — vendor capabilities and differences

@@ -227,6 +227,7 @@ func validateHarness(dir string) error {
 			issues = append(issues, validateHarnessMCPServers(hj)...)
 			issues = append(issues, validateHarnessProfiles(hj)...)
 			issues = append(issues, validateHarnessFocus(hj)...)
+			issues = append(issues, validateHarnessSensors(hj)...)
 		}
 	}
 
@@ -517,6 +518,94 @@ func validateHarnessFocus(hj map[string]any) []string {
 		profile, _ := entryMap["profile"].(string)
 		if profile != "" && !profileNames[profile] {
 			issues = append(issues, fmt.Sprintf("focus.%s: references unknown profile %q", name, profile))
+		}
+	}
+
+	return issues
+}
+
+// validateHarnessSensors validates the sensors section inside plugin.json.
+// Schema covers structural rules; this layer enforces cross-field rules
+// (focus references resolve, inline-focus profile references resolve)
+// and emits sensor-name-prefixed errors.
+func validateHarnessSensors(hj map[string]any) []string {
+	var issues []string
+
+	sensors, ok := hj["sensors"]
+	if !ok {
+		return issues
+	}
+	sensorsMap, ok := sensors.(map[string]any)
+	if !ok {
+		issues = append(issues, "'sensors' must be an object")
+		return issues
+	}
+
+	profileNames := map[string]bool{}
+	if profiles, ok := hj["profiles"].(map[string]any); ok {
+		for name := range profiles {
+			profileNames[name] = true
+		}
+	}
+	focusNames := map[string]bool{}
+	if focuses, ok := hj["focus"].(map[string]any); ok {
+		for name := range focuses {
+			focusNames[name] = true
+		}
+	}
+
+	for name, raw := range sensorsMap {
+		prefix := fmt.Sprintf("sensor %q:", name)
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			issues = append(issues, fmt.Sprintf("%s must be an object", prefix))
+			continue
+		}
+		if cat, ok := entry["category"].(string); ok && cat != "" && !plugin.ValidSensorCategories[cat] {
+			issues = append(issues, fmt.Sprintf("%s category %q must be one of maintainability, architecture, behaviour", prefix, cat))
+		}
+		if role, ok := entry["role"].(string); ok && role != "" && !plugin.ValidSensorRoles[role] {
+			issues = append(issues, fmt.Sprintf("%s role %q must be one of regular, convergence-verifier, stuck-recovery", prefix, role))
+		}
+		if out, ok := entry["output"].(map[string]any); ok {
+			if format, _ := out["format"].(string); format == "" {
+				issues = append(issues, fmt.Sprintf("%s output.format must not be empty", prefix))
+			}
+		} else {
+			issues = append(issues, fmt.Sprintf("%s output is required", prefix))
+		}
+		src, ok := entry["source"].(map[string]any)
+		if !ok {
+			issues = append(issues, fmt.Sprintf("%s source is required", prefix))
+			continue
+		}
+		count := 0
+		if _, has := src["files"]; has {
+			count++
+		}
+		if _, has := src["command"]; has {
+			count++
+		}
+		if focus, has := src["focus"]; has {
+			count++
+			switch fv := focus.(type) {
+			case string:
+				if fv == "" {
+					issues = append(issues, fmt.Sprintf("%s source.focus reference must not be empty", prefix))
+				} else if !focusNames[fv] {
+					issues = append(issues, fmt.Sprintf("%s source.focus references undefined focus %q", prefix, fv))
+				}
+			case map[string]any:
+				if prompt, _ := fv["prompt"].(string); prompt == "" {
+					issues = append(issues, fmt.Sprintf("%s source.focus.prompt must not be empty", prefix))
+				}
+				if profile, _ := fv["profile"].(string); profile != "" && !profileNames[profile] {
+					issues = append(issues, fmt.Sprintf("%s source.focus references unknown profile %q", prefix, profile))
+				}
+			}
+		}
+		if count != 1 {
+			issues = append(issues, fmt.Sprintf("%s source must have exactly one of files, command, focus", prefix))
 		}
 	}
 

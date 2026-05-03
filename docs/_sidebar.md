@@ -12,6 +12,7 @@
   * [Hooks](hooks.md)
   * [MCP Servers](mcp.md)
   * [Profiles](profiles.md)
+  * [Sensors](sensors.md)
   * [Namespacing](namespacing.md)
   * [Vendor Support](vendors.md)
 
@@ -49,6 +50,7 @@
   * [15. Registry & Discovery](tutorial/07-registry-and-discovery.md)
   * [16. Docker Images](tutorial/09-docker-image.md)
   * [17. Namespacing & Migration](tutorial/18-namespacing-and-migration.md)
+  * [18. Sensors](tutorial/19-sensors.md)
 
 * **Project**
   * [Migrating to 0.2](migration.md)

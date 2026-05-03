@@ -235,6 +235,8 @@ rm -rf /tmp/ynh-tutorial
 - Hook scripts should exit with code 2 to block actions and include remediation instructions
 - `ynd diff` compares the assembled output across vendors side by side
 
+Hooks often pair with sensors — a hook produces an artifact mid-session that a sensor declares a contract over. See [Tutorial 19: Sensors](19-sensors.md).
+
 ## Next
 
 [Tutorial 5: MCP Servers](tutorial/11-mcp-servers.md) — declare tool dependencies that vendors load automatically.

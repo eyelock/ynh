@@ -46,6 +46,9 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh include add <harness> <url>` | `--path`, `--pick`, `--ref`, `--replace` |
 | `ynh include remove <harness> <url>` | `--path` |
 | `ynh include update <harness> <url>` | `--from-path`, `--path`, `--pick`, `--ref` |
+| `ynh sensors ls <harness>` | `--format <text\|json>` |
+| `ynh sensors show <harness> <name>` | `--format <text\|json>` |
+| `ynh sensors run <harness> <name>` | `--cwd <dir>`, `--no-content` |
 | `ynh sources add <path>` | `--name`, `--description` |
 | `ynh sources list` | `--format <text\|json>` |
 | `ynh sources remove <name>` | |
@@ -82,7 +85,10 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 
 | Command | Structured fields |
 |---------|-------------------|
-| `ynd compose` | Composed harness: `name`, `version`, `description`, `default_vendor`, `artifacts` (with source), `includes`, `delegates_to`, `hooks`, `mcp_servers`, `profiles`, `focuses`, `counts` |
+| `ynd compose` | Composed harness: `name`, `version`, `description`, `default_vendor`, `artifacts` (with source), `includes`, `delegates_to`, `hooks`, `mcp_servers`, `profiles`, `focuses`, `sensors`, `counts` |
+| `ynh sensors ls <harness>` | Array of sensor summaries: `name`, `category`, `role`, `source_kind`, `format`, `inline_focus` (bool) — see [Sensors](sensors.md) |
+| `ynh sensors show <harness> <name>` | Resolved sensor object with inline-focus expansion |
+| `ynh sensors run <harness> <name>` | Sensor run result: `kind`, `exit_code`, `duration_ms`, `output` (raw signal — no `passed` field; pass/fail is loop-driver policy) |
 | `ynh fork <name>` | Envelope (`capabilities`, `ynh_version`, `name`, `path`, `installed_from`) — see [ynh fork output](#ynh-fork-output) below |
 | `ynh info <name>` | Envelope (`capabilities`, `ynh_version`, `harness`) wrapping a single harness object — see [Envelope and harness fields](#envelope-and-harness-fields) below |
 | `ynh ls` | Envelope (`capabilities`, `ynh_version`, `harnesses`) wrapping an array of harness objects — same shape as `ynh info`, plus `artifacts`, minus `manifest` |
