@@ -3,7 +3,9 @@
 package e2e
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,9 +32,10 @@ type sensorShowShape struct {
 		Files   []string `json:"files,omitempty"`
 		Command string   `json:"command,omitempty"`
 		Focus   *struct {
-			Name   string `json:"name,omitempty"`
-			Prompt string `json:"prompt"`
-			Inline bool   `json:"inline"`
+			Name    string `json:"name,omitempty"`
+			Profile string `json:"profile,omitempty"`
+			Prompt  string `json:"prompt"`
+			Inline  bool   `json:"inline"`
 		} `json:"focus,omitempty"`
 	} `json:"source"`
 	Output struct {
@@ -57,9 +60,10 @@ type sensorRunShape struct {
 			Content string `json:"content,omitempty"`
 		} `json:"files,omitempty"`
 		Focus *struct {
-			Name   string `json:"name,omitempty"`
-			Prompt string `json:"prompt"`
-			Inline bool   `json:"inline"`
+			Name    string `json:"name,omitempty"`
+			Profile string `json:"profile,omitempty"`
+			Prompt  string `json:"prompt"`
+			Inline  bool   `json:"inline"`
 		} `json:"focus,omitempty"`
 	} `json:"output"`
 }
@@ -415,5 +419,112 @@ func TestSensors_Validate_OneOfSourceViolation(t *testing.T) {
 	}
 	if !strings.Contains(combined, "exactly one of files, command, focus") {
 		t.Errorf("expected cross-field source rule line in stderr, got:\n%s", combined)
+	}
+}
+
+// sensorsProfileFocusHarnessTmpl is a single harness wiring all three
+// concepts together: a top-level focus declares a profile, a sensor's
+// source references that focus, and the named profile defines a hook
+// that REPLACES the base hook on --profile / --focus invocation.
+const sensorsProfileFocusHarnessTmpl = `{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": %q,
+  "version": "0.1.0",
+  "hooks": {
+    "before_tool": [{"command": "echo BASE"}]
+  },
+  "profiles": {
+    "review": {
+      "hooks": {
+        "before_tool": [{"command": "echo REVIEW"}]
+      }
+    }
+  },
+  "focus": {
+    "audit": {"profile": "review", "prompt": "audit the diff"}
+  },
+  "sensors": {
+    "audit-gate": {
+      "source": { "focus": "audit" },
+      "output": { "format": "markdown" }
+    }
+  }
+}
+`
+
+// TestSensors_ProfileFocusRoundTrip is the integration backstop for the
+// sensor → focus → profile chain. One harness, one fixture, three
+// assertions that together prove a loop driver can:
+//
+//  1. Discover a focus-sourced sensor and read the profile it points at
+//     (`ynh sensors show` exposes source.focus.profile).
+//  2. Run the sensor and receive the same focus payload, including the
+//     profile name (`ynh sensors run` returns output.focus.profile).
+//  3. Hand that profile name back to `ynh run --focus <name>` and have
+//     the named profile's hook override land in the assembled output.
+//
+// If any link breaks, sensors and run go out of sync and the loop driver
+// can no longer chain them. Don't split this test — the value is the
+// shared harness that proves all three commands agree on the wiring.
+func TestSensors_ProfileFocusRoundTrip(t *testing.T) {
+	const harnessName = "sensor-profile-focus"
+
+	src := filepath.Join(t.TempDir(), harnessName)
+	if err := os.MkdirAll(filepath.Join(src, ".ynh-plugin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := fmt.Sprintf(sensorsProfileFocusHarnessTmpl, harnessName)
+	if err := os.WriteFile(filepath.Join(src, ".ynh-plugin", "plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newSandbox(t)
+	s.mustRunYnh(t, "install", src)
+
+	// 1. show — focus reference resolved, profile field surfaced.
+	showOut, _ := s.mustRunYnh(t, "sensors", "show", harnessName, "audit-gate", "--format", "json")
+	var shown sensorShowShape
+	if err := json.Unmarshal([]byte(showOut), &shown); err != nil {
+		t.Fatalf("parsing sensors show JSON: %v\n%s", err, showOut)
+	}
+	if shown.Source.Focus == nil {
+		t.Fatalf("sensors show: source.focus missing — got %+v", shown)
+	}
+	assertEqual(t, "show.focus.name", shown.Source.Focus.Name, "audit")
+	assertEqual(t, "show.focus.profile", shown.Source.Focus.Profile, "review")
+	assertEqual(t, "show.focus.prompt", shown.Source.Focus.Prompt, "audit the diff")
+	assertEqual(t, "show.focus.inline", shown.Source.Focus.Inline, false)
+
+	// 2. run — same focus payload returned to the loop driver.
+	runOut, _ := s.mustRunYnh(t, "sensors", "run", harnessName, "audit-gate")
+	var ran sensorRunShape
+	if err := json.Unmarshal([]byte(runOut), &ran); err != nil {
+		t.Fatalf("parsing sensors run JSON: %v\n%s", err, runOut)
+	}
+	assertEqual(t, "run.kind", ran.Kind, "focus")
+	if ran.Output.Focus == nil {
+		t.Fatalf("sensors run: output.focus missing — got %+v", ran)
+	}
+	assertEqual(t, "run.focus.name", ran.Output.Focus.Name, "audit")
+	assertEqual(t, "run.focus.profile", ran.Output.Focus.Profile, "review")
+
+	// 3. run --focus — same focus name resolves to the same profile and
+	//    the profile's hook REPLACES the base hook in assembled output.
+	project := filepath.Join(t.TempDir(), "project")
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustRunYnhInDir(t, s, project, "run", harnessName, "-v", "cursor", "--focus", "audit", "--install")
+
+	hookFile := filepath.Join(s.home, "run", harnessName, ".cursor", "hooks.json")
+	body, err := os.ReadFile(hookFile)
+	if err != nil {
+		t.Fatalf("reading hook file: %v", err)
+	}
+	if !bytes.Contains(body, []byte("REVIEW")) {
+		t.Errorf("focus did not apply profile — hook file missing REVIEW:\n%s", body)
+	}
+	if bytes.Contains(body, []byte("BASE")) {
+		t.Errorf("hook file should not contain base hook BASE after profile override:\n%s", body)
 	}
 }
