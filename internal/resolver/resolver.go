@@ -204,12 +204,7 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 			return RepoResult{Path: repoDir, SHA: gitHead(repoDir), Cloned: true, Changed: true}, nil
 		}
 		// Branch/tag: use clone --branch for the depth-1 shortcut.
-		args := []string{"clone", "--depth", "1"}
-		if ref != "" {
-			args = append(args, "--branch", ref)
-		}
-		args = append(args, fullURL, repoDir)
-		if err := gitCmd(args...); err != nil {
+		if err := shallowCloneWithRetry(fullURL, ref, repoDir); err != nil {
 			return RepoResult{}, fmt.Errorf("git clone %s: %w", fullURL, err)
 		}
 		return RepoResult{Path: repoDir, SHA: gitHead(repoDir), ResolvedRef: effectiveRef(repoDir, ref), Cloned: true, Changed: true}, nil
@@ -247,12 +242,7 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 		if err := os.RemoveAll(repoDir); err != nil {
 			return RepoResult{}, fmt.Errorf("removing stale registry cache: %w", err)
 		}
-		args := []string{"clone", "--depth", "1"}
-		if ref != "" {
-			args = append(args, "--branch", ref)
-		}
-		args = append(args, fullURL, repoDir)
-		if err := gitCmd(args...); err != nil {
+		if err := shallowCloneWithRetry(fullURL, ref, repoDir); err != nil {
 			return RepoResult{}, fmt.Errorf("git clone %s: %w", fullURL, err)
 		}
 		return RepoResult{Path: repoDir, SHA: gitHead(repoDir), ResolvedRef: effectiveRef(repoDir, ref), Cloned: true, Changed: true}, nil
@@ -468,6 +458,41 @@ var shaLike = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
 func isShaLike(ref string) bool {
 	return shaLike.MatchString(ref)
+}
+
+// isTransientShallowErr reports whether err looks like a known transient
+// git shallow-clone failure that a clean retry can resolve. Git can
+// intermittently produce these on `clone --depth 1` when its own internal
+// state races against the just-written shallow file or a stale lock from
+// an interrupted prior run.
+func isTransientShallowErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "shallow file has changed") ||
+		strings.Contains(s, "shallow.lock") ||
+		strings.Contains(s, "index.lock")
+}
+
+// shallowCloneWithRetry runs `git clone --depth 1 [--branch ref] url dir`,
+// retrying once on transient shallow-clone errors. dir is removed between
+// attempts so the retry sees a clean slate.
+func shallowCloneWithRetry(url, ref, dir string) error {
+	args := []string{"clone", "--depth", "1"}
+	if ref != "" {
+		args = append(args, "--branch", ref)
+	}
+	args = append(args, url, dir)
+
+	err := gitCmd(args...)
+	if err == nil || !isTransientShallowErr(err) {
+		return err
+	}
+	if rmErr := os.RemoveAll(dir); rmErr != nil {
+		return fmt.Errorf("removing partial clone before retry: %w", rmErr)
+	}
+	return gitCmd(args...)
 }
 
 // cloneAtSHA materialises a shallow checkout of url at sha into dir.
