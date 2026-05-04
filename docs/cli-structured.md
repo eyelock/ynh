@@ -80,6 +80,33 @@ Pre-1.0 caveat: breaking changes remain possible across minor versions, but will
 - Booleans are `true` / `false`, never `0` / `1` or `"yes"` / `"no"`.
 - Vendor and adapter IDs use the canonical short form (`claude`, `codex`, `cursor`) — the same identifiers used in `.ynh-plugin/plugin.json` and on the `-v` flag.
 
+## Envelope shape
+
+Some `--format json` commands wrap their result in an envelope:
+
+```json
+{
+  "capabilities": "0.3.0",
+  "ynh_version": "0.3.0",
+  "<payload-key>": <payload>
+}
+```
+
+- `capabilities` — wire-contract version (see below). Lets a consumer gate behaviour on the contract this `ynh` build supports.
+- `ynh_version` — the release version of the `ynh` binary that produced the output. Distinct from `capabilities`: two builds at the same release may bump `capabilities` independently across minor versions, and a developer build will report `dev-*` here while still emitting a stable `capabilities` value.
+- `<payload-key>` — command-specific. `harnesses` (array) for `ls`, `harness` (object) for `info`, etc. Field reference per command lives in [`reference.md`](reference.md).
+
+Not every command envelopes its result. The rule is:
+
+| Shape | When | Commands |
+|---|---|---|
+| **Envelope** (`capabilities` + `ynh_version` + payload) | Harness-centric reads where consumers gate on the wire contract before acting on the payload | `ynh ls`, `ynh info`, `ynh fork` |
+| **Bare value** (object or array, no envelope) | Config introspection and operation results — no per-call wire-contract gating needed; consumers call `ynh version --format json` once at startup | `ynh version`, `ynh paths`, `ynh vendors`, `ynh search`, `ynh sources list`, `ynh registry list`, `ynh sensors ls`, `ynh sensors show`, `ynh sensors run` |
+
+`ynh version --format json` is the canonical wire-contract probe. Consumers that need to gate on `capabilities` should call it once at startup rather than parse the envelope from every response. The envelope on harness reads is a convenience for tools whose entire job revolves around enumerating and acting on installed harnesses (TermQ-style consumers).
+
+This convention is additive-compat: bare-value commands may grow new top-level fields, and envelope commands may grow new envelope-level fields, without bumping the major contract version. New commands choose whichever shape fits — the table above lists the rule, not a closed set.
+
 ## Wire-contract capability (`version --format json`)
 
 Both `ynh version --format json` and `ynd version --format json` emit:

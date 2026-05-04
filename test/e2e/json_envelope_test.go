@@ -5,6 +5,7 @@ package e2e
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -89,6 +90,84 @@ func TestInfo_JSON_Shape(t *testing.T) {
 	if got.Harness.Manifest["default_vendor"] != "claude" {
 		t.Errorf("manifest.default_vendor = %v, want claude", got.Harness.Manifest["default_vendor"])
 	}
+}
+
+// TestStructuredOutput_TopLevelShape locks the convention documented in
+// docs/cli-structured.md: every --format json command emits either an
+// envelope (object with capabilities + ynh_version + payload) or a bare
+// value (object or array). Catches the next envelope-vs-bare drift before
+// it reaches downstream consumers.
+//
+// One harness is installed up front so commands that enumerate harnesses
+// (ls, info) have a non-empty result to validate against.
+func TestStructuredOutput_TopLevelShape(t *testing.T) {
+	s := newSandbox(t)
+	clone := cloneAssistantsAtSHA(t)
+	s.mustRunYnh(t, "install", filepath.Join(clone, "e2e-fixtures", "minimal"))
+
+	cases := []struct {
+		name string
+		args []string
+		// envelopeKey is the payload key for envelope-shape commands
+		// (e.g. "harnesses" for ls). Empty means the command emits a
+		// bare value; the test then asserts shape against bareKind.
+		envelopeKey string
+		// bareKind is "object" or "array" for non-envelope commands.
+		bareKind string
+	}{
+		{name: "ls", args: []string{"ls", "--format", "json"}, envelopeKey: "harnesses"},
+		{name: "info", args: []string{"info", "minimal", "--format", "json"}, envelopeKey: "harness"},
+		{name: "version", args: []string{"version", "--format", "json"}, bareKind: "object"},
+		{name: "paths", args: []string{"paths", "--format", "json"}, bareKind: "object"},
+		{name: "vendors", args: []string{"vendors", "--format", "json"}, bareKind: "array"},
+		{name: "search", args: []string{"search", "--format", "json"}, bareKind: "array"},
+		{name: "sources_list", args: []string{"sources", "list", "--format", "json"}, bareKind: "array"},
+		{name: "registry_list", args: []string{"registry", "list", "--format", "json"}, bareKind: "array"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, _ := s.mustRunYnh(t, tc.args...)
+			trimmed := strings.TrimSpace(out)
+			if trimmed == "" {
+				t.Fatalf("empty output for %v", tc.args)
+			}
+
+			if tc.envelopeKey != "" {
+				var env map[string]json.RawMessage
+				if err := json.Unmarshal([]byte(trimmed), &env); err != nil {
+					t.Fatalf("expected envelope object, got: %v\n%s", err, out)
+				}
+				for _, key := range []string{"capabilities", "ynh_version", tc.envelopeKey} {
+					if _, ok := env[key]; !ok {
+						t.Errorf("envelope missing %q key; got keys: %v", key, mapKeys(env))
+					}
+				}
+				return
+			}
+
+			switch tc.bareKind {
+			case "object":
+				if !strings.HasPrefix(trimmed, "{") {
+					t.Errorf("expected bare object, got: %s", out)
+				}
+			case "array":
+				if !strings.HasPrefix(trimmed, "[") {
+					t.Errorf("expected bare array, got: %s", out)
+				}
+			default:
+				t.Fatalf("test case %q: bareKind must be object or array", tc.name)
+			}
+		})
+	}
+}
+
+func mapKeys(m map[string]json.RawMessage) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 func TestVendors_JSON_Shape(t *testing.T) {
