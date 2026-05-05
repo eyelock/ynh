@@ -86,6 +86,8 @@ func main() {
 		err = cmdPrune()
 	case "migrate":
 		err = cmdMigrate(os.Args[2:])
+	case "quarantine":
+		err = cmdQuarantine(os.Args[2:])
 	case "version", "--version":
 		err = cmdVersion(os.Args[2:])
 	case "help", "--help", "-h":
@@ -457,6 +459,15 @@ func cmdInstall(args []string) error {
 	if !reservedName {
 		if err := generateLauncher(p.Name, canonID); err != nil {
 			return err
+		}
+	}
+
+	// Stamp the home as schema 2 if absent. Fresh installs always produce
+	// canonical-id layout, so the auto-migration gate has nothing to do
+	// and shouldn't re-walk the install dir on the next command.
+	if migration.ReadSchemaVersion(config.HomeDir()) < migration.CurrentSchemaVersion {
+		if err := migration.WriteSchemaVersion(config.HomeDir(), migration.CurrentSchemaVersion); err != nil {
+			return fmt.Errorf("stamping schema version: %w", err)
 		}
 	}
 
@@ -1372,6 +1383,19 @@ func cmdPrune() error {
 		}
 	}
 
+	// Build a set of installed harness names so the launcher / run-dir
+	// scanners can decide "stale" by membership rather than per-entry
+	// Load lookups. Schema 2's id-keyed install layout means
+	// harness.Load(<bare-name>) no longer resolves an install whose
+	// canonical id is e.g. "local/<name>" — using ListAll names directly
+	// is both correct under schema 2 and faster than N Load calls.
+	installedNames := map[string]bool{}
+	if installs, err := harness.ListAll(); err == nil {
+		for _, e := range installs {
+			installedNames[e.Name] = true
+		}
+	}
+
 	// Scan for stale launcher scripts in ~/.ynh/bin/
 	staleLaunchers := 0
 	binDir := config.BinDir()
@@ -1382,7 +1406,7 @@ func cmdPrune() error {
 			if name == "ynh" || name == "ynd" {
 				continue
 			}
-			if _, err := harness.Load(name); err == nil {
+			if installedNames[name] {
 				continue
 			}
 			launcherPath := filepath.Join(binDir, name)
@@ -1406,7 +1430,7 @@ func cmdPrune() error {
 	if err == nil {
 		for _, entry := range runEntries {
 			name := entry.Name()
-			if _, err := harness.Load(name); err == nil {
+			if installedNames[name] {
 				continue
 			}
 			staleRun := filepath.Join(runDir, name)
