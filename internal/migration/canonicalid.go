@@ -67,8 +67,13 @@ func ReadSchemaVersion(home string) int {
 
 // WriteSchemaVersion stamps the schema version file. Called as the last
 // step of MigrateToSchema2 so that partial failure leaves the home at
-// schema 1 and the next run resumes.
+// schema 1 and the next run resumes. Creates the home directory if it
+// doesn't already exist — defensive against being called on a partial
+// home where the parent dir was removed between read and write.
 func WriteSchemaVersion(home string, version int) error {
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		return fmt.Errorf("creating home dir for schema version: %w", err)
+	}
 	path := filepath.Join(home, SchemaVersionPath)
 	return os.WriteFile(path, []byte(fmt.Sprintf("%d\n", version)), 0o644)
 }
@@ -147,8 +152,15 @@ func MigrateToSchema2(home string, opts MigrateOpts) (*Manifest, error) {
 	}
 
 	if !opts.DryRun {
-		if err := writeManifest(home, m); err != nil {
-			return m, fmt.Errorf("writing migration manifest: %w", err)
+		// Only persist a manifest when migration actually moved something.
+		// A no-op migration on a fresh home has nothing to record, and
+		// leaving an empty .migration-manifest.json on disk just clutters
+		// the home and confuses users who'd reasonably wonder what was
+		// migrated.
+		if len(m.Entries) > 0 || len(m.Quarantined) > 0 {
+			if err := writeManifest(home, m); err != nil {
+				return m, fmt.Errorf("writing migration manifest: %w", err)
+			}
 		}
 		if err := WriteSchemaVersion(home, CurrentSchemaVersion); err != nil {
 			return m, fmt.Errorf("stamping schema version: %w", err)
@@ -515,6 +527,9 @@ func homeFromPath(p string) string {
 }
 
 func writeManifest(home string, m *Manifest) error {
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		return fmt.Errorf("creating home dir for manifest: %w", err)
+	}
 	path := filepath.Join(home, MigrationManifestPath)
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {

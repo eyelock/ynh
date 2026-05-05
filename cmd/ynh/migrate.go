@@ -136,6 +136,13 @@ func needsAutoMigrate(cmd string) bool {
 // --skip-broken` explicitly.
 func autoMigrate() error {
 	home := config.HomeDir()
+	// Fresh homes (no ~/.ynh dir at all) need no migration — there's
+	// nothing on disk to convert. The first command that creates the
+	// home (e.g. `ynh init`, `ynh install`) does so via config.EnsureDirs;
+	// migration runs on subsequent invocations once content exists.
+	if _, err := os.Stat(home); os.IsNotExist(err) {
+		return nil
+	}
 	if migration.ReadSchemaVersion(home) >= migration.CurrentSchemaVersion {
 		return nil
 	}
