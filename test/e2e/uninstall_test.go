@@ -20,14 +20,14 @@ func TestUninstall_RemovesHarness(t *testing.T) {
 	s.mustRunYnh(t, "install", harness)
 
 	// Sanity check: harness is visible to ls and the install dir + launcher exist.
-	installDir := filepath.Join(s.home, "harnesses", "doomed")
+	installDir := filepath.Join(s.home, "harnesses", "local--doomed")
 	assertDirExists(t, installDir)
 	launcher := filepath.Join(s.home, "bin", "doomed")
 	if _, err := os.Stat(launcher); err != nil {
 		t.Fatalf("launcher should exist before uninstall: %v", err)
 	}
 
-	out, _ := s.mustRunYnh(t, "uninstall", "doomed")
+	out, _ := s.mustRunYnh(t, "uninstall", "local/doomed")
 	if !strings.Contains(out, "Uninstalled") {
 		t.Errorf("expected 'Uninstalled' confirmation, got: %s", out)
 	}

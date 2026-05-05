@@ -25,7 +25,7 @@ func TestSymlinks_StableAcrossReinstall(t *testing.T) {
 	if err := os.MkdirAll(project, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustRunYnhInDir(t, s, project, "run", "stable", "-v", "cursor", "--install")
+	mustRunYnhInDir(t, s, project, "run", "local/stable", "-v", "cursor", "--install")
 
 	skillsDir := filepath.Join(project, ".cursor", "skills")
 	before, err := os.ReadDir(skillsDir)
@@ -40,7 +40,7 @@ func TestSymlinks_StableAcrossReinstall(t *testing.T) {
 	s.mustRunYnh(t, "install", harness)
 
 	// Re-run to refresh assembled output (matches the documented post-reinstall workflow).
-	mustRunYnhInDir(t, s, project, "run", "stable", "-v", "cursor", "--install")
+	mustRunYnhInDir(t, s, project, "run", "local/stable", "-v", "cursor", "--install")
 
 	// Every project symlink must resolve to a real file under YNH_HOME.
 	after, err := os.ReadDir(skillsDir)

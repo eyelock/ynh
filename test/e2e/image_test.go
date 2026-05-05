@@ -16,7 +16,7 @@ func TestImage_DryRun(t *testing.T) {
 	harness := newSyntheticSkillHarness(t, "imaged")
 	s.mustRunYnh(t, "install", harness)
 
-	out, _ := s.mustRunYnh(t, "image", "imaged", "--dry-run")
+	out, _ := s.mustRunYnh(t, "image", "local/imaged", "--dry-run")
 
 	for _, want := range []string{
 		"FROM ghcr.io/eyelock/ynh:latest",
@@ -39,7 +39,7 @@ func TestImage_DryRun_CustomBase(t *testing.T) {
 	harness := newSyntheticSkillHarness(t, "imaged-custom")
 	s.mustRunYnh(t, "install", harness)
 
-	out, _ := s.mustRunYnh(t, "image", "imaged-custom", "--base", "myorg/ynh:dev", "--dry-run")
+	out, _ := s.mustRunYnh(t, "image", "local/imaged-custom", "--base", "myorg/ynh:dev", "--dry-run")
 	if !strings.Contains(out, "FROM myorg/ynh:dev") {
 		t.Errorf("Dockerfile should honour --base, got:\n%s", out)
 	}

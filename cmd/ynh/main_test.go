@@ -334,16 +334,31 @@ func TestGenerateLauncher(t *testing.T) {
 	}
 }
 
-// installTestHarness creates a fake installed harness with a launcher and run dir.
-func installTestHarness(t *testing.T, name string) {
+// installTestHarness creates a fake installed harness with a launcher and
+// run dir. Writes at the schema-2 path (~/.ynh/harnesses/local--<name>/)
+// AND the legacy schema-1 flat path (~/.ynh/harnesses/<name>/) so tests can
+// drive both LoadQualified-callers (info, ls, fork) and legacy Load-callers
+// (image, install, update) without per-test branching. Returns the
+// canonical id ("local/<name>") for the schema-2 callers.
+func installTestHarness(t *testing.T, name string) string {
 	t.Helper()
+	id := "local/" + name
 
-	// Create harness directory with .harness.json
-	installDir := harness.InstalledDir(name)
-	if err := os.MkdirAll(installDir, 0o755); err != nil {
+	// Schema-1 flat path — for legacy Load(name) callers.
+	flatDir := harness.InstalledDir(name)
+	if err := os.MkdirAll(flatDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	harnessJSON := fmt.Sprintf(`{"name":%q,"version":"0.1.0","default_vendor":"claude"}`, name)
+	if err := os.WriteFile(filepath.Join(flatDir, ".harness.json"), []byte(harnessJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Schema-2 id-keyed path — for LoadQualified/LoadByID callers.
+	installDir := harness.InstalledDirByID(id)
+	if err := os.MkdirAll(installDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(installDir, ".harness.json"), []byte(harnessJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -362,6 +377,7 @@ func installTestHarness(t *testing.T, name string) {
 	if err := os.MkdirAll(runDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	return id
 }
 
 func TestCmdUninstall_RemovesEverything(t *testing.T) {
@@ -371,12 +387,12 @@ func TestCmdUninstall_RemovesEverything(t *testing.T) {
 	installTestHarness(t, "david")
 
 	// Verify everything exists before uninstall
-	installDir := harness.InstalledDir("david")
+	installDir := harness.InstalledDirByID("local/david")
 	if _, err := os.Stat(installDir); err != nil {
 		t.Fatalf("harness not installed: %v", err)
 	}
 
-	if err := cmdUninstall([]string{"david"}); err != nil {
+	if err := cmdUninstall([]string{"local/david"}); err != nil {
 		t.Fatalf("cmdUninstall failed: %v", err)
 	}
 
@@ -408,7 +424,7 @@ func TestCmdUninstall_NamespacedHarness(t *testing.T) {
 	}
 
 	// Install harness at namespaced path (eyelock/assistants → eyelock--assistants)
-	nsDir := filepath.Join(config.HarnessesDir(), "eyelock--assistants", "planner")
+	nsDir := filepath.Join(config.HarnessesDir(), "eyelock--assistants--planner")
 	if err := os.MkdirAll(nsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -417,7 +433,7 @@ func TestCmdUninstall_NamespacedHarness(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := cmdUninstall([]string{"planner"}); err != nil {
+	if err := cmdUninstall([]string{"eyelock/assistants/planner"}); err != nil {
 		t.Fatalf("cmdUninstall failed: %v", err)
 	}
 
@@ -434,7 +450,7 @@ func TestCmdUninstall_NotInstalled(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := cmdUninstall([]string{"nonexistent"})
+	err := cmdUninstall([]string{"local/nonexistent"})
 	if err == nil {
 		t.Fatal("expected error for uninstalling nonexistent harness")
 	}
@@ -477,7 +493,7 @@ func TestCmdUninstall_RemovesSourcesEntry(t *testing.T) {
 
 	installTestHarness(t, "david")
 
-	if err := cmdUninstall([]string{"david"}); err != nil {
+	if err := cmdUninstall([]string{"local/david"}); err != nil {
 		t.Fatalf("cmdUninstall failed: %v", err)
 	}
 
@@ -659,7 +675,7 @@ func TestCmdInfo_Success(t *testing.T) {
 
 	installTestHarness(t, "david")
 
-	err := cmdInfo([]string{"david"})
+	err := cmdInfo([]string{"local/david"})
 	if err != nil {
 		t.Fatalf("cmdInfo failed: %v", err)
 	}
@@ -673,7 +689,7 @@ func TestCmdInfo_NotFound(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := cmdInfo([]string{"nonexistent"})
+	err := cmdInfo([]string{"local/nonexistent"})
 	if err == nil {
 		t.Fatal("expected error for nonexistent harness")
 	}
@@ -713,7 +729,7 @@ func TestCmdInstall_WritesProvenance(t *testing.T) {
 	}
 
 	// Load installed harness and check provenance
-	p, err := harness.Load("provtest")
+	p, err := harness.LoadByID("local/provtest")
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
@@ -749,7 +765,7 @@ func TestCmdUpdate_NotFound(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := cmdUpdate([]string{"nonexistent"})
+	err := cmdUpdate([]string{"local/nonexistent"})
 	if err == nil {
 		t.Fatal("expected error for nonexistent harness")
 	}
@@ -765,7 +781,7 @@ func TestCmdUpdate_NoGitSources(t *testing.T) {
 	// Install a harness with no includes/delegates
 	installTestHarness(t, "minimal")
 
-	err := cmdUpdate([]string{"minimal"})
+	err := cmdUpdate([]string{"local/minimal"})
 	if err != nil {
 		t.Fatalf("cmdUpdate should succeed for harness with no git sources: %v", err)
 	}
@@ -794,7 +810,7 @@ func TestCmdInstall_PathFlag(t *testing.T) {
 	}
 
 	// Verify harness was installed (format migrated to .ynh-plugin/plugin.json)
-	installDir := harness.InstalledDir("alice")
+	installDir := harness.InstalledDirByID("local/alice")
 	if harness.DetectFormat(installDir) == "" {
 		t.Fatal("harness not found after install")
 	}
@@ -880,7 +896,7 @@ func TestCmdInstall_SourceInsideHarnessesDir(t *testing.T) {
 	// Install a harness whose source is already the install location (e.g. the
 	// marketplace browser pointing at an already-installed harness). ynh should
 	// skip the clean+copy and succeed without deleting anything.
-	srcDir := harness.InstalledDir("already-there")
+	srcDir := harness.InstalledDirByID("local/already-there")
 	if err := os.MkdirAll(srcDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -927,6 +943,9 @@ func TestCmdUninstall_OrphanPointerSourceMissing(t *testing.T) {
 	t.Setenv("YNH_HOME", home)
 
 	missing := filepath.Join(t.TempDir(), "gone")
+	// Write the schema-1 pointer (cmdUninstall's first-resort lookup is by
+	// name) so this test exercises uninstall-by-name flow which is still
+	// valid for legacy pointer-shaped installs.
 	if err := harness.SavePointer(&harness.Pointer{
 		Name: "stranded", SourceType: "local",
 		Source: missing, InstalledAt: "2026-05-01T00:00:00Z",
@@ -975,5 +994,37 @@ func TestCmdPrune_OrphanPointer(t *testing.T) {
 	}
 	if _, err := os.Stat(harness.PointerPath("healthy")); err != nil {
 		t.Errorf("healthy pointer was removed by prune: %v", err)
+	}
+}
+
+// TestCanonicalIDResolver_RejectsBareName asserts that schema-2 callers
+// (commands that route through harness.LoadQualified — info, fork, ls) emit
+// the canonical-id rejection hint when given a bare name. Pinned alongside
+// the test fixtures the bare-name → canonical-id rewrite touched, so a
+// regression that re-allows bare-name lookups fails here loudly.
+func TestCanonicalIDResolver_RejectsBareName(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	if _, err := harness.LoadQualified("demo"); err == nil {
+		t.Fatal("expected bare name to be rejected, got nil error")
+	} else if !strings.Contains(err.Error(), "is not a valid harness id") {
+		t.Errorf("expected rejection hint, got: %v", err)
+	} else if !strings.Contains(err.Error(), "local/<name>") {
+		t.Errorf("expected hint to mention 'local/<name>', got: %v", err)
+	}
+}
+
+// TestCanonicalIDResolver_RejectsLegacyAtForm asserts that the legacy
+// "<name>@<org>/<repo>" form (schema-1 namespaced ref) is also rejected
+// with the same canonical-id hint.
+func TestCanonicalIDResolver_RejectsLegacyAtForm(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	if _, err := harness.LoadQualified("planner@eyelock/assistants"); err == nil {
+		t.Fatal("expected legacy @-form to be rejected, got nil error")
+	} else if !strings.Contains(err.Error(), "is not a valid harness id") {
+		t.Errorf("expected rejection hint, got: %v", err)
 	}
 }

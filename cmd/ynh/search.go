@@ -99,10 +99,17 @@ func unifiedSearch(cfg *config.Config, query string) ([]searchResultEntry, error
 			return nil, fmt.Errorf("fetching registries: %w", err)
 		}
 		for _, r := range registry.Search(regs, query) {
+			id := namespace.CanonicalID(r.Entry.Repo, r.Entry.Name)
+			ns, _ := namespace.SplitID(id)
+			// "local" sentinel maps to empty namespace, matching the
+			// schema-1 promise that local installs emit no namespace key.
+			if ns == "local" {
+				ns = ""
+			}
 			entry := searchResultEntry{
-				ID:          namespace.CanonicalID(r.Entry.Repo, r.Entry.Name),
+				ID:          id,
 				Name:        r.Entry.Name,
-				Namespace:   r.Entry.Namespace,
+				Namespace:   ns,
 				Description: r.Entry.Description,
 				Keywords:    r.Entry.Keywords,
 				Repo:        r.Entry.Repo,

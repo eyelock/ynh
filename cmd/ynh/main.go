@@ -17,6 +17,7 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/migration"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/pathutil"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
@@ -322,13 +323,18 @@ func cmdInstall(args []string) error {
 	// Users invoke it with: ynh run ynh
 	reservedName := p.Name == "ynh"
 
-	// Install dir: namespaced when a registry namespace was resolved, else flat.
-	var installDir string
-	if resolved.namespace != "" {
-		installDir = harness.InstalledDirNS(resolved.namespace, p.Name)
-	} else {
-		installDir = harness.InstalledDir(p.Name)
+	// Install dir: schema 2 — id-keyed flat layout under HarnessesDir.
+	// The canonical id is derived from the recorded source URL plus the
+	// harness name. Source URL precedence:
+	//  1. Registry-resolved gitURL (registry installs)
+	//  2. The original `source` arg if it's a remote URL (direct git installs)
+	//  3. Empty (local installs → "local/<name>")
+	sourceForID := resolved.gitURL
+	if sourceForID == "" && resolved.sourceType == "git" {
+		sourceForID = source
 	}
+	canonID := namespace.CanonicalID(sourceForID, p.Name)
+	installDir := harness.InstalledDirByID(canonID)
 
 	// If source == install dir, skip the clean+copy (already in place).
 	// Otherwise remove stale artifacts and copy fresh.
@@ -538,7 +544,7 @@ func cmdUpdate(args []string) error {
 
 	name := args[0]
 
-	p, err := harness.Load(name)
+	p, err := harness.LoadQualified(name)
 	if err != nil {
 		return err
 	}
@@ -717,7 +723,7 @@ func cmdRun(args []string) error {
 	switch {
 	case ra.HarnessName != "":
 		name = ra.HarnessName
-		p, err = harness.Load(name)
+		p, err = harness.LoadQualified(name)
 		if err != nil {
 			return err
 		}
@@ -727,10 +733,6 @@ func cmdRun(args []string) error {
 		p, err = harness.LoadFile(ra.HarnessFile)
 		if err != nil {
 			return err
-		}
-		name = p.Name
-		if name == "" {
-			name = "(inline)"
 		}
 		harnessDir = filepath.Dir(ra.HarnessFile)
 
@@ -751,12 +753,9 @@ func cmdRun(args []string) error {
 		if err != nil {
 			return err
 		}
-		name = p.Name
-		if name == "" {
-			name = "(inline)"
-		}
 		harnessDir = cwd
 	}
+	_ = name // run-dir naming uses p.Name; this var is retained only for legacy logging paths above
 
 	// Resolve focus → profile + prompt
 	if ra.FocusFlag != "" {
@@ -839,7 +838,11 @@ func cmdRun(args []string) error {
 	// Assemble vendor config into deterministic run dir.
 	// We use a stable path instead of a temp dir because syscall.Exec
 	// replaces this process — deferred cleanup would never run.
-	runDirName := name
+	//
+	// Run-dir naming uses the harness's bare Name (not the user-typed
+	// canonical id) so that paths under run/ stay flat and don't contain
+	// slashes. p.Name is set when the harness loaded successfully.
+	runDirName := p.Name
 	if ra.HarnessFile != "" || ra.HarnessName == "" {
 		// Inline/discovered harness: use a hash-based stable dir name
 		h := fmt.Sprintf("%x", hashString(harnessDir))

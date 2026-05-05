@@ -12,15 +12,6 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
-// setupInstalledHarness writes a harness into the ynh harnesses directory and
-// returns the install dir. Requires YNH_HOME to be set via t.Setenv.
-func setupInstalledHarness(t *testing.T, name string) string {
-	t.Helper()
-	dir := InstalledDir(name)
-	writeTestHarness(t, dir, name)
-	return dir
-}
-
 // overrideHarnessesDir points YNH_HOME at a temp dir so installed-harness
 // lookups are isolated per test.
 func overrideHarnessesDir(t *testing.T) {
@@ -43,9 +34,11 @@ func loadIncludes(t *testing.T, dir string) []plugin.IncludeMeta {
 
 func TestResolveEditTarget_InstalledName(t *testing.T) {
 	overrideHarnessesDir(t)
-	dir := setupInstalledHarness(t, "my-harness")
+	id := "local/my-harness"
+	dir := InstalledDirByID(id)
+	writeTestHarness(t, dir, "my-harness")
 
-	got, installed, err := ResolveEditTarget("my-harness")
+	got, installed, err := ResolveEditTarget(id)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -53,16 +46,17 @@ func TestResolveEditTarget_InstalledName(t *testing.T) {
 		t.Errorf("dir = %q, want %q", got, dir)
 	}
 	if !installed {
-		t.Error("expected installed=true for name-based ref")
+		t.Error("expected installed=true for canonical-id ref")
 	}
 }
 
 func TestResolveEditTarget_NamespacedName(t *testing.T) {
 	overrideHarnessesDir(t)
-	dir := InstalledDirNS("org/repo", "my-harness")
+	id := "github.com/org/repo/my-harness"
+	dir := InstalledDirByID(id)
 	writeTestHarness(t, dir, "my-harness")
 
-	got, installed, err := ResolveEditTarget("my-harness")
+	got, installed, err := ResolveEditTarget(id)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -70,7 +64,7 @@ func TestResolveEditTarget_NamespacedName(t *testing.T) {
 		t.Errorf("dir = %q, want %q", got, dir)
 	}
 	if !installed {
-		t.Error("expected installed=true for namespaced harness")
+		t.Error("expected installed=true for namespaced canonical-id ref")
 	}
 }
 

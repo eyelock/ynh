@@ -176,30 +176,39 @@ func Load(name string) (*Harness, error) {
 	return findInNamespacedDirs(name)
 }
 
-// LoadQualified loads an installed harness by ref. Tries canonical id first
-// (LoadByID), then falls back to the schema-1 "name" / "name@org/repo"
-// shapes for compatibility during the migration window.
+// LoadQualified loads an installed harness by canonical id. Schema 2 only:
+// bare names and the legacy "name@org/repo" form are hard-rejected with a
+// hint pointing at the canonical id and the local path alternative.
 //
-// Schema 2 (planned in PR-canonical-3) will hard-reject bare names and
-// "name@org/repo"; until then the ambiguity hint at the call site is the
-// upgrade path for downstream tools.
+// Auto-migration runs before any command (see cmd/ynh autoMigrate), so by
+// the time this function is reached the home is at schema 2 — every
+// installed harness has an id-keyed pointer or tree-shaped install dir.
+// No fallback path: there is exactly one valid ref shape for installed
+// harnesses, which is the whole point of the canonical-id rule.
 func LoadQualified(ref string) (*Harness, error) {
-	if namespace.Classify(ref) == namespace.RefID {
-		if h, err := LoadByID(ref); err == nil {
-			return h, nil
-		}
-		// Fall through to legacy resolution if the canonical-id path
-		// didn't find anything — schema-1 installs may still be on disk
-		// when auto-migration was skipped (e.g. `ynh paths`).
+	if namespace.Classify(ref) != namespace.RefID {
+		return nil, BadRefError(ref)
 	}
-	name, ns, err := namespace.ParseQualified(ref)
-	if err != nil {
-		return nil, err
+	return LoadByID(ref)
+}
+
+// BadRefError formats the rejection message for refs that aren't a valid
+// canonical id. Exported so cmd/ynh callers that pre-classify refs (e.g.
+// to decide between an id and a path) can emit the same hint. The message
+// is multi-line; lint suppresses the trailing-punctuation check via the
+// nolint directive — the hint trailer is intentionally human-readable.
+//
+//nolint:staticcheck // ST1005: multi-line user-facing hint
+func BadRefError(ref string) error {
+	if ref == "" {
+		return fmt.Errorf("missing harness reference")
 	}
-	if ns != "" {
-		return LoadNS(ns, name)
-	}
-	return Load(name)
+	return fmt.Errorf(
+		"%q is not a valid harness id. "+
+			"Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>', "+
+			"or './<path>' for a local harness directory. "+
+			"Run 'ynh ls' to see installed ids",
+		ref)
 }
 
 // LoadNS loads an installed harness by namespace-qualified name.
@@ -287,7 +296,36 @@ func ListAll() ([]ListEntry, error) {
 		}
 		entryPath := filepath.Join(harnessesDir, entry.Name())
 		if strings.Contains(entry.Name(), "--") {
-			// Namespace directory: walk children
+			// Schema-2 install: the dir itself is the harness, named by
+			// its id-fsname (e.g. "local--demo" or
+			// "github.com--eyelock--assistants--planner"). Detected by the
+			// presence of a manifest at the top level — distinguishes from
+			// schema-1 namespace directories which only contain children.
+			if DetectFormat(entryPath) != "" {
+				id := namespace.FSNameToID(entry.Name())
+				name := entry.Name()
+				if i := strings.LastIndex(id, "/"); i >= 0 {
+					name = id[i+1:]
+				}
+				if seen[name] {
+					continue
+				}
+				ns, _ := namespace.SplitID(id)
+				// "local" id namespace is an internal sentinel; downstream
+				// schema-2 emitters override this from the canonical id, but
+				// for schema-1 consumers (text format, namespace==flat) keep
+				// it empty when the id is "local/<name>".
+				if ns == "local" {
+					ns = ""
+				}
+				results = append(results, ListEntry{
+					Name:      name,
+					Namespace: ns,
+					Dir:       entryPath,
+				})
+				continue
+			}
+			// Schema-1 namespace directory: walk children
 			ns := namespace.FromFSName(entry.Name())
 			children, err := os.ReadDir(entryPath)
 			if err != nil {

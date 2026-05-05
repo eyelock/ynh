@@ -11,6 +11,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
@@ -350,7 +351,7 @@ func printInfoJSON(stdout, stderr io.Writer, name string, checkUpdates bool) err
 
 	envelope := infoEnvelope{
 		Capabilities:  config.CapabilitiesVersion,
-		SchemaVersion: config.SchemaVersion,
+		SchemaVersion: migration.ReadSchemaVersion(config.HomeDir()),
 		YnhVersion:    config.Version,
 		Harness:       entry,
 	}

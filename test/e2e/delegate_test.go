@@ -35,12 +35,12 @@ func TestDelegate_AddRemove(t *testing.T) {
 	s.mustRunYnh(t, "install", filepath.Join(clone, "e2e-fixtures", "minimal"))
 
 	delegateURL := "github.com/eyelock/assistants"
-	s.mustRunYnh(t, "delegate", "add", "minimal", delegateURL,
+	s.mustRunYnh(t, "delegate", "add", "local/minimal", delegateURL,
 		"--path", "e2e-fixtures/included-skill",
 		"--ref", AssistantsFixturesSHA,
 	)
 
-	mf := readManifest(t, filepath.Join(s.home, "harnesses", "minimal"))
+	mf := readManifest(t, filepath.Join(s.home, "harnesses", "local--minimal"))
 	if len(mf.DelegatesTo) != 1 {
 		t.Fatalf("expected 1 delegate after add, got %d: %+v", len(mf.DelegatesTo), mf.DelegatesTo)
 	}
@@ -49,9 +49,9 @@ func TestDelegate_AddRemove(t *testing.T) {
 	assertEqual(t, "delegates_to[0].path", d.Path, "e2e-fixtures/included-skill")
 	assertEqual(t, "delegates_to[0].ref", d.Ref, AssistantsFixturesSHA)
 
-	s.mustRunYnh(t, "delegate", "remove", "minimal", delegateURL, "--path", "e2e-fixtures/included-skill")
+	s.mustRunYnh(t, "delegate", "remove", "local/minimal", delegateURL, "--path", "e2e-fixtures/included-skill")
 
-	mf = readManifest(t, filepath.Join(s.home, "harnesses", "minimal"))
+	mf = readManifest(t, filepath.Join(s.home, "harnesses", "local--minimal"))
 	if len(mf.DelegatesTo) != 0 {
 		t.Errorf("expected 0 delegates after remove, got %d", len(mf.DelegatesTo))
 	}
@@ -64,12 +64,12 @@ func TestInclude_AddRemove(t *testing.T) {
 	s.mustRunYnh(t, "install", filepath.Join(clone, "e2e-fixtures", "minimal"))
 
 	includeURL := "github.com/eyelock/assistants"
-	s.mustRunYnh(t, "include", "add", "minimal", includeURL,
+	s.mustRunYnh(t, "include", "add", "local/minimal", includeURL,
 		"--path", "e2e-fixtures/included-skill",
 		"--ref", AssistantsFixturesSHA,
 	)
 
-	mf := readManifest(t, filepath.Join(s.home, "harnesses", "minimal"))
+	mf := readManifest(t, filepath.Join(s.home, "harnesses", "local--minimal"))
 	if len(mf.Includes) != 1 {
 		t.Fatalf("expected 1 include after add, got %d", len(mf.Includes))
 	}
@@ -78,9 +78,9 @@ func TestInclude_AddRemove(t *testing.T) {
 	assertEqual(t, "includes[0].path", i.Path, "e2e-fixtures/included-skill")
 	assertEqual(t, "includes[0].ref", i.Ref, AssistantsFixturesSHA)
 
-	s.mustRunYnh(t, "include", "remove", "minimal", includeURL, "--path", "e2e-fixtures/included-skill")
+	s.mustRunYnh(t, "include", "remove", "local/minimal", includeURL, "--path", "e2e-fixtures/included-skill")
 
-	mf = readManifest(t, filepath.Join(s.home, "harnesses", "minimal"))
+	mf = readManifest(t, filepath.Join(s.home, "harnesses", "local--minimal"))
 	if len(mf.Includes) != 0 {
 		t.Errorf("expected 0 includes after remove, got %d", len(mf.Includes))
 	}
@@ -99,17 +99,17 @@ func TestInclude_Update(t *testing.T) {
 	s.mustRunYnh(t, "install", filepath.Join(clone, "e2e-fixtures", "minimal"))
 
 	includeURL := "github.com/eyelock/assistants"
-	s.mustRunYnh(t, "include", "add", "minimal", includeURL,
+	s.mustRunYnh(t, "include", "add", "local/minimal", includeURL,
 		"--path", "e2e-fixtures/minimal",
 		"--ref", AssistantsFixturesSHA,
 	)
 
-	s.mustRunYnh(t, "include", "update", "minimal", includeURL,
+	s.mustRunYnh(t, "include", "update", "local/minimal", includeURL,
 		"--from-path", "e2e-fixtures/minimal",
 		"--path", "e2e-fixtures/included-skill",
 	)
 
-	mf := readManifest(t, filepath.Join(s.home, "harnesses", "minimal"))
+	mf := readManifest(t, filepath.Join(s.home, "harnesses", "local--minimal"))
 	if len(mf.Includes) != 1 {
 		t.Fatalf("expected 1 include after update, got %d", len(mf.Includes))
 	}
@@ -125,17 +125,17 @@ func TestDelegate_Update(t *testing.T) {
 	s.mustRunYnh(t, "install", filepath.Join(clone, "e2e-fixtures", "minimal"))
 
 	delegateURL := "github.com/eyelock/assistants"
-	s.mustRunYnh(t, "delegate", "add", "minimal", delegateURL,
+	s.mustRunYnh(t, "delegate", "add", "local/minimal", delegateURL,
 		"--path", "e2e-fixtures/included-skill",
 		"--ref", AssistantsFixturesSHA,
 	)
 
-	s.mustRunYnh(t, "delegate", "update", "minimal", delegateURL,
+	s.mustRunYnh(t, "delegate", "update", "local/minimal", delegateURL,
 		"--from-path", "e2e-fixtures/included-skill",
 		"--ref", AssistantsFixturesV1Tag,
 	)
 
-	mf := readManifest(t, filepath.Join(s.home, "harnesses", "minimal"))
+	mf := readManifest(t, filepath.Join(s.home, "harnesses", "local--minimal"))
 	if len(mf.DelegatesTo) != 1 {
 		t.Fatalf("expected 1 delegate after update, got %d", len(mf.DelegatesTo))
 	}

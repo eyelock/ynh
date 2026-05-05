@@ -40,7 +40,7 @@ func TestRun_RejectsLocalPathTraversal(t *testing.T) {
 	if err := os.MkdirAll(project, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_, errOut, err := runYnhInDirRaw(t, s, project, "run", "evil", "-v", "cursor", "--install")
+	_, errOut, err := runYnhInDirRaw(t, s, project, "run", "local/evil", "-v", "cursor", "--install")
 	if err == nil {
 		t.Fatalf("expected run with .. in local include to fail, got success")
 	}
@@ -97,7 +97,7 @@ func TestInstall_TransitiveAgentsMd(t *testing.T) {
 	if err := os.MkdirAll(project, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustRunYnhInDir(t, s, project, "run", "transitive", "-v", "cursor", "--install")
+	mustRunYnhInDir(t, s, project, "run", "local/transitive", "-v", "cursor", "--install")
 
 	body, err := os.ReadFile(filepath.Join(s.home, "run", "transitive", ".cursorrules"))
 	if err != nil {

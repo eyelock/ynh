@@ -78,7 +78,7 @@ func TestInfo_JSON_Shape(t *testing.T) {
 	clone := cloneAssistantsAtSHA(t)
 	s.mustRunYnh(t, "install", filepath.Join(clone, "e2e-fixtures", "minimal"))
 
-	out, _ := s.mustRunYnh(t, "info", "minimal", "--format", "json")
+	out, _ := s.mustRunYnh(t, "info", "local/minimal", "--format", "json")
 
 	var got envelopeInfo
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
@@ -128,7 +128,7 @@ func TestStructuredOutput_TopLevelShape(t *testing.T) {
 		bareKind string
 	}{
 		{name: "ls", args: []string{"ls", "--format", "json"}, envelopeKey: "harnesses"},
-		{name: "info", args: []string{"info", "minimal", "--format", "json"}, envelopeKey: "harness"},
+		{name: "info", args: []string{"info", "local/minimal", "--format", "json"}, envelopeKey: "harness"},
 		{name: "version", args: []string{"version", "--format", "json"}, bareKind: "object"},
 		{name: "paths", args: []string{"paths", "--format", "json"}, bareKind: "object"},
 		{name: "vendors", args: []string{"vendors", "--format", "json"}, bareKind: "array"},

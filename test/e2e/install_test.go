@@ -62,7 +62,7 @@ func TestInstall_Local_Minimal(t *testing.T) {
 		t.Errorf("install stdout missing success line:\n%s", out)
 	}
 
-	harnessDir := filepath.Join(s.home, "harnesses", "minimal")
+	harnessDir := filepath.Join(s.home, "harnesses", "local--minimal")
 	assertDirExists(t, harnessDir)
 	assertDirExists(t, filepath.Join(harnessDir, ".ynh-plugin"))
 	assertFileExists(t, filepath.Join(harnessDir, ".ynh-plugin", "plugin.json"))
@@ -100,7 +100,7 @@ func TestInstall_Git_Minimal(t *testing.T) {
 		t.Errorf("install stdout missing success line:\n%s", out)
 	}
 
-	harnessDir := filepath.Join(s.home, "harnesses", "minimal")
+	harnessDir := filepath.Join(s.home, "harnesses", "github.com--eyelock--assistants--minimal")
 	got := readInstalledJSON(t, harnessDir)
 
 	assertEqual(t, "source_type", got.SourceType, "git")
@@ -123,7 +123,7 @@ func TestInstall_FloatingInclude(t *testing.T) {
 	fixturePath := filepath.Join(clone, "e2e-fixtures", "with-floating-include")
 
 	s.mustRunYnh(t, "install", fixturePath)
-	got := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "with-floating-include"))
+	got := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "local--with-floating-include"))
 
 	if len(got.Resolved) != 1 {
 		t.Fatalf("expected 1 resolved entry, got %d: %+v", len(got.Resolved), got.Resolved)
@@ -150,7 +150,7 @@ func TestInstall_PinnedInclude(t *testing.T) {
 	fixturePath := filepath.Join(clone, "e2e-fixtures", "with-pinned-include")
 
 	s.mustRunYnh(t, "install", fixturePath)
-	got := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "with-pinned-include"))
+	got := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "local--with-pinned-include"))
 
 	if len(got.Resolved) != 1 {
 		t.Fatalf("expected 1 resolved entry, got %d", len(got.Resolved))
@@ -170,7 +170,7 @@ func TestInstall_TagInclude(t *testing.T) {
 	fixturePath := filepath.Join(clone, "e2e-fixtures", "with-tag-include")
 
 	s.mustRunYnh(t, "install", fixturePath)
-	got := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "with-tag-include"))
+	got := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "local--with-tag-include"))
 
 	if len(got.Resolved) != 1 {
 		t.Fatalf("expected 1 resolved entry, got %d", len(got.Resolved))

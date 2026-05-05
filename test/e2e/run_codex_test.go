@@ -23,7 +23,7 @@ func TestRun_Codex_InstallClean(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mustRunYnhInDir(t, s, project, "run", "with-skill-codex", "-v", "codex", "--install")
+	mustRunYnhInDir(t, s, project, "run", "local/with-skill-codex", "-v", "codex", "--install")
 
 	codexSkillsDir := filepath.Join(project, ".codex", "skills")
 	assertDirExists(t, codexSkillsDir)
@@ -52,7 +52,7 @@ func TestRun_Codex_InstallClean(t *testing.T) {
 		}
 	}
 
-	mustRunYnhInDir(t, s, project, "run", "with-skill-codex", "-v", "codex", "--clean")
+	mustRunYnhInDir(t, s, project, "run", "local/with-skill-codex", "-v", "codex", "--clean")
 
 	if _, err := os.Stat(codexSkillsDir); err == nil {
 		entries, _ := os.ReadDir(codexSkillsDir)

@@ -60,7 +60,7 @@ func TestStatus_MultipleInstalls(t *testing.T) {
 		if err := os.MkdirAll(project, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		mustRunYnhInDir(t, s, project, "run", "multi-stat", "-v", "cursor", "--install")
+		mustRunYnhInDir(t, s, project, "run", "local/multi-stat", "-v", "cursor", "--install")
 
 		// Status must mention the project path right after installing.
 		out, _ := s.mustRunYnh(t, "status")

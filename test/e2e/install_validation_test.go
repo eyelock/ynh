@@ -70,7 +70,7 @@ func TestInstall_PickFiltersFiles(t *testing.T) {
 	if err := os.MkdirAll(project, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustRunYnhInDir(t, s, project, "run", "picky", "-v", "claude", "--install")
+	mustRunYnhInDir(t, s, project, "run", "local/picky", "-v", "claude", "--install")
 
 	runDir := filepath.Join(s.home, "run", "picky")
 	keep := filepath.Join(runDir, ".claude", "skills", "keep", "SKILL.md")

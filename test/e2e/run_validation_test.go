@@ -23,7 +23,7 @@ func TestRun_FocusAndProfileMutex(t *testing.T) {
 	}
 
 	_, errOut, err := runYnhInDirRaw(t, s, project,
-		"run", "mutex-test", "-v", "cursor",
+		"run", "local/mutex-test", "-v", "cursor",
 		"--focus", "f", "--profile", "p", "--install")
 	if err == nil {
 		t.Fatalf("expected --focus + --profile to fail, got success")
@@ -47,7 +47,7 @@ func TestRun_FocusUnknown_Errors(t *testing.T) {
 	}
 
 	_, errOut, err := runYnhInDirRaw(t, s, project,
-		"run", "no-focus", "-v", "cursor", "--focus", "phantom", "--install")
+		"run", "local/no-focus", "-v", "cursor", "--focus", "phantom", "--install")
 	if err == nil {
 		t.Fatalf("expected unknown --focus to fail, got success")
 	}

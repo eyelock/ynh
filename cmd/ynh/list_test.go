@@ -14,15 +14,20 @@ import (
 )
 
 // installListTestHarness creates a harness with custom JSON in the harnesses dir.
-func installListTestHarness(t *testing.T, home, name, harnessJSON string) {
+// installListTestHarness writes a schema-2 install at home/harnesses/local--<name>/
+// and returns the canonical id ("local/<name>") that callers should pass to
+// the cmdInfoTo / cmdListTo etc functions under test.
+func installListTestHarness(t *testing.T, home, name, harnessJSON string) string {
 	t.Helper()
-	dir := filepath.Join(home, "harnesses", name)
+	id := "local/" + name
+	dir := harness.InstalledDirByID(id)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(harnessJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	return id
 }
 
 func TestCmdListTextEmpty(t *testing.T) {
@@ -124,7 +129,7 @@ func TestCmdListJSONPopulated(t *testing.T) {
 	installListTestHarness(t, home, "test-harness", hj)
 
 	// Add a skill artifact
-	skillDir := filepath.Join(home, "harnesses", "test-harness", "skills", "greet")
+	skillDir := filepath.Join(home, "harnesses", "local--test-harness", "skills", "greet")
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -159,8 +164,8 @@ func TestCmdListJSONPopulated(t *testing.T) {
 	if e.DefaultVendor != "claude" {
 		t.Errorf("default_vendor = %q, want claude", e.DefaultVendor)
 	}
-	if e.Path != filepath.Join(home, "harnesses", "test-harness") {
-		t.Errorf("path = %q, want %s", e.Path, filepath.Join(home, "harnesses", "test-harness"))
+	if e.Path != filepath.Join(home, "harnesses", "local--test-harness") {
+		t.Errorf("path = %q, want %s", e.Path, filepath.Join(home, "harnesses", "local--test-harness"))
 	}
 
 	// Provenance
@@ -317,18 +322,23 @@ func TestCmdListMissingFormatValue(t *testing.T) {
 	}
 }
 
-// installListTestHarnessNS creates a harness under a namespace subdirectory,
-// mirroring what `ynh install` does for registry harnesses.
-func installListTestHarnessNS(t *testing.T, home, ns, name, harnessJSON string) {
+// installListTestHarnessNS creates a schema-2 namespaced install at
+// home/harnesses/<host--ns--name>/ and returns the canonical id callers
+// pass to commands. For namespaces without an explicit host (legacy
+// "<org>/<repo>"), the id is "<ns>/<name>" — matches the previous
+// schema-1 layout's host-stripped namespace key.
+func installListTestHarnessNS(t *testing.T, home, ns, name, harnessJSON string) string {
 	t.Helper()
-	fsNS := strings.ReplaceAll(ns, "/", "--")
-	dir := filepath.Join(home, "harnesses", fsNS, name)
+	id := ns + "/" + name
+	fsName := strings.ReplaceAll(id, "/", "--")
+	dir := filepath.Join(home, "harnesses", fsName)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(harnessJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	return id
 }
 
 func TestCmdListJSONNamespacedPath(t *testing.T) {
@@ -336,7 +346,8 @@ func TestCmdListJSONNamespacedPath(t *testing.T) {
 	t.Setenv("YNH_HOME", home)
 
 	installListTestHarnessNS(t, home, "eyelock/assistants", "planner",
-		`{"name":"planner","version":"1.0.0","default_vendor":"claude"}`)
+		`{"name":"planner","version":"1.0.0","default_vendor":"claude",
+		  "installed_from":{"source_type":"git","source":"github.com/eyelock/assistants"}}`)
 
 	var stdout bytes.Buffer
 	if err := cmdListTo([]string{"--format", "json"}, &stdout, io.Discard); err != nil {
@@ -351,11 +362,11 @@ func TestCmdListJSONNamespacedPath(t *testing.T) {
 		t.Fatalf("expected 1 entry, got %d", len(env.Harnesses))
 	}
 
-	wantPath := filepath.Join(home, "harnesses", "eyelock--assistants", "planner")
+	wantPath := filepath.Join(home, "harnesses", "eyelock--assistants--planner")
 	if env.Harnesses[0].Path != wantPath {
 		t.Errorf("path = %q, want %q", env.Harnesses[0].Path, wantPath)
 	}
-	if got, want := env.Harnesses[0].Namespace, "eyelock/assistants"; got != want {
+	if got, want := env.Harnesses[0].Namespace, "github.com/eyelock/assistants"; got != want {
 		t.Errorf("namespace = %q, want %q", got, want)
 	}
 }

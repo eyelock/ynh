@@ -19,29 +19,16 @@ func loadManifest(dir string) (*plugin.HarnessJSON, error) {
 }
 
 // ResolveEditTarget resolves a harness reference to a directory.
-// If ref contains a path separator or starts with '.', it is treated as a
-// filesystem path and must contain a harness manifest. Otherwise it is looked up
-// as an installed harness name. Returns the directory and whether the harness
-// is installed (i.e. lives under the ynh harnesses directory).
+// Refs are classified lexically by namespace.Classify:
+//   - RefPath ("./", "../", "/", "~/", drive-letter): filesystem path
+//   - RefID (slash-bearing canonical id): installed harness, looked up by id
+//   - RefInvalid (bare names, "name@org/repo"): rejected with hint
 //
-// Schema 2 (planned in PR-canonical-3) will reject bare names entirely and
-// resolve canonical ids via InstalledDirByID/LoadPointerByID. This PR keeps
-// the schema-1 acceptance for backwards compatibility during the migration
-// window — auto-migration converts the on-disk layout, but the resolver
-// surface still accepts the legacy ref shapes consumers depend on today.
+// Schema 2 only — the on-disk layout is id-keyed, and there is exactly one
+// valid ref shape per kind.
 func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
-	if strings.ContainsRune(ref, filepath.Separator) || strings.HasPrefix(ref, ".") {
-		// Try canonical-id lookup first when the slash form matches an installed id.
-		if namespace.Classify(ref) == namespace.RefID {
-			byID := InstalledDirByID(ref)
-			if DetectFormat(byID) == "plugin" {
-				return byID, true, nil
-			}
-			if ptr, _ := LoadPointerByID(ref); ptr != nil {
-				return ptr.Source, true, nil
-			}
-			// Fall through to filesystem-path interpretation.
-		}
+	switch namespace.Classify(ref) {
+	case namespace.RefPath:
 		abs, absErr := filepath.Abs(ref)
 		if absErr != nil {
 			return "", false, fmt.Errorf("resolving path %q: %w", ref, absErr)
@@ -50,19 +37,18 @@ func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
 			return "", false, fmt.Errorf("no harness manifest found at %q", abs)
 		}
 		return abs, false, nil
+	case namespace.RefID:
+		dir := InstalledDirByID(ref)
+		if DetectFormat(dir) == "plugin" {
+			return dir, true, nil
+		}
+		if ptr, _ := LoadPointerByID(ref); ptr != nil {
+			return ptr.Source, true, nil
+		}
+		return "", false, fmt.Errorf("harness %q: %w", ref, ErrNotFound)
+	default:
+		return "", false, BadRefError(ref)
 	}
-
-	installDir := InstalledDir(ref)
-	if DetectFormat(installDir) == "plugin" {
-		return installDir, true, nil
-	}
-
-	// Not in flat layout — check namespaced dirs.
-	if h, nsErr := findInNamespacedDirs(ref); nsErr == nil {
-		return h.Dir, true, nil
-	}
-
-	return "", false, fmt.Errorf("harness %q: %w", ref, ErrNotFound)
 }
 
 // AddOptions controls ynh include add behaviour.

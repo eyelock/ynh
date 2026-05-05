@@ -217,7 +217,7 @@ func TestCmdImage_DryRun(t *testing.T) {
 	installTestHarness(t, "drytest")
 
 	var stdout bytes.Buffer
-	err := cmdImageTo([]string{"drytest", "--dry-run"}, &stdout, io.Discard)
+	err := cmdImageTo([]string{"local/drytest", "--dry-run"}, &stdout, io.Discard)
 	if err != nil {
 		t.Fatalf("cmdImageTo --dry-run failed: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestCmdImage_HarnessNotFound(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 
-	err := cmdImage([]string{"nonexistent", "--dry-run"})
+	err := cmdImage([]string{"local/nonexistent", "--dry-run"})
 	if err == nil {
 		t.Fatal("expected error for missing harness")
 	}
@@ -264,7 +264,7 @@ func TestCmdImage_NoDocker(t *testing.T) {
 	// Set PATH to empty to ensure docker isn't found
 	t.Setenv("PATH", t.TempDir())
 
-	err := cmdImage([]string{"nodockertest"})
+	err := cmdImage([]string{"local/nodockertest"})
 	if err == nil {
 		t.Fatal("expected error when docker not in PATH")
 	}
@@ -280,7 +280,7 @@ func TestImageAssembly_AllVendors(t *testing.T) {
 	// Create a minimal installed harness
 	installTestHarness(t, "assemblytest")
 
-	err := cmdImageTo([]string{"assemblytest", "--dry-run"}, io.Discard, io.Discard)
+	err := cmdImageTo([]string{"local/assemblytest", "--dry-run"}, io.Discard, io.Discard)
 	if err != nil {
 		t.Fatalf("cmdImageTo failed: %v", err)
 	}

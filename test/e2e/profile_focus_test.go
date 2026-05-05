@@ -42,7 +42,7 @@ func TestRun_ProfileOverridesHooks(t *testing.T) {
 	if err := os.MkdirAll(project, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustRunYnhInDir(t, s, project, "run", "with-profile", "-v", "cursor", "--profile", "review", "--install")
+	mustRunYnhInDir(t, s, project, "run", "local/with-profile", "-v", "cursor", "--profile", "review", "--install")
 
 	hookFile := filepath.Join(s.home, "run", "with-profile", ".cursor", "hooks.json")
 	body, err := os.ReadFile(hookFile)
@@ -69,7 +69,7 @@ func TestRun_FocusResolvesProfile(t *testing.T) {
 	if err := os.MkdirAll(project, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustRunYnhInDir(t, s, project, "run", "with-focus", "-v", "cursor", "--focus", "audit", "--install")
+	mustRunYnhInDir(t, s, project, "run", "local/with-focus", "-v", "cursor", "--focus", "audit", "--install")
 
 	hookFile := filepath.Join(s.home, "run", "with-focus", ".cursor", "hooks.json")
 	body, err := os.ReadFile(hookFile)

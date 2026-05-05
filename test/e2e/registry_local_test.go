@@ -59,10 +59,14 @@ func TestInstall_FromRegistryName(t *testing.T) {
 		t.Errorf("expected install to record source_type=registry, got:\n%s", out)
 	}
 
-	// `ls --format json` must surface the URL-derived namespace so consumers
-	// can disambiguate same-named harnesses across registries. Regression
-	// guard: the field was previously dropped from the output DTO.
-	wantNS := registryNamespace(regURL)
+	// `ls --format json` surfaces the canonical namespace prefix of the
+	// install id. file:// registry URLs are local from the canonical-id
+	// perspective, so the canonical id is "local/<name>" and namespace
+	// is omitted (the "local" sentinel is mapped to empty in the JSON
+	// envelope to match the schema-1 promise that namespace is empty for
+	// flat/local installs).
+	_ = regURL
+	wantNS := ""
 	var ls envelopeLs
 	if err := json.Unmarshal([]byte(out), &ls); err != nil {
 		t.Fatalf("parsing ls JSON: %v\n%s", err, out)
