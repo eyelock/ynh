@@ -21,6 +21,7 @@ import (
 	"github.com/eyelock/ynh/internal/pathutil"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
+	"github.com/eyelock/ynh/internal/sources"
 	"github.com/eyelock/ynh/internal/symlink"
 	"github.com/eyelock/ynh/internal/vendor"
 )
@@ -310,6 +311,48 @@ func cmdInstall(args []string) error {
 		// can record them. Empty for local installs (set in the local branch).
 		harnessSHA = result.SHA
 		harnessResolvedRef = result.ResolvedRef
+	}
+
+	// Canonical-id installs with a name-hint (e.g.
+	// github.com/eyelock/assistants/researcher) don't know where in the
+	// cloned repo the harness lives — the trailing "researcher" segment
+	// is a name to find, not a path. Discover the matching harness by name
+	// and use its directory as the source. The user's explicit --path
+	// takes precedence; we only run discovery when --path is absent.
+	if pathFlag == "" && resolved.nameHint != "" {
+		discovered, derr := sources.Discover(srcDir, 4)
+		if derr == nil {
+			for _, h := range discovered {
+				if h.Name == resolved.nameHint {
+					rel, relErr := filepath.Rel(srcDir, h.Path)
+					if relErr == nil && rel != "." {
+						pathFlag = rel
+					}
+					break
+				}
+			}
+		}
+		if pathFlag == "" {
+			// Last resort: see if there's a harness at the repo root with
+			// the right name. loadOrSynthesizeHarness below handles that
+			// implicitly, but only when the manifest's name matches the
+			// hint. If discovery didn't find anything and the root manifest
+			// (if any) doesn't match, error out with a clear hint instead
+			// of silently installing a different harness.
+			rootHarness, rerr := plugin.LoadHarnessJSON(srcDir)
+			rootMatches := rerr == nil && rootHarness != nil && rootHarness.Name == resolved.nameHint
+			if !rootMatches && plugin.IsPluginDir(srcDir) {
+				if hj, perr := plugin.LoadPluginJSON(srcDir); perr == nil && hj != nil && hj.Name == resolved.nameHint {
+					rootMatches = true
+				}
+			}
+			if !rootMatches {
+				return fmt.Errorf(
+					"no harness named %q found in %s; the canonical id ends in %q but the cloned repo has no matching manifest. "+
+						"Pass --path <subdir> if the harness lives at a non-default location",
+					resolved.nameHint, source, resolved.nameHint)
+			}
+		}
 	}
 
 	// Scope to subdirectory if --path was specified
