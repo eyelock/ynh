@@ -204,9 +204,11 @@ Expected (timestamps and paths will differ):
 ```json
 {
   "capabilities": "0.3.0",
+  "schema_version": 1,
   "ynh_version": "<version>",
   "harnesses": [
     {
+      "id": "local/my-harness",
       "name": "my-harness",
       "version_installed": "0.1.0",
       "description": "Tutorial harness",
@@ -232,7 +234,8 @@ Expected (timestamps and paths will differ):
 ```
 
 Key points:
-- Output is wrapped in an **envelope**: `capabilities` (wire-contract version), `ynh_version` (release), and `harnesses` (the array).
+- Output is wrapped in an **envelope**: `capabilities` (wire-contract version of JSON shapes ynh speaks), `schema_version` (on-disk format version of `~/.ynh`), `ynh_version` (release), and `harnesses` (the array).
+- `id` is the canonical, host-prefixed harness identifier — `<host>/<org>/<repo>/<name>` for installs sourced from a remote registry, or `local/<name>` for local-path installs. This is the single identity form to pass back to ynh at the CLI for any harness-targeting command.
 - `version_installed` is the version recorded in the harness manifest. Pass `--check-updates` to add `version_available` (and `ref_available`) by querying the upstream.
 - `is_pinned` is `true` when the installed Git ref is a resolved SHA (matches `^[0-9a-f]{7,40}$`); `false` for tags, branches, or local-only installs.
 - `path` is the absolute path to the installed harness directory.
@@ -277,6 +280,7 @@ Expected (truncated):
 ```json
 {
   "capabilities": "0.3.0",
+  "schema_version": 1,
   "ynh_version": "<version>",
   "harnesses": []
 }
