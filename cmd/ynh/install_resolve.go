@@ -22,6 +22,13 @@ type resolvedSource struct {
 	registryName string // non-empty for registry lookups (user-declared label)
 	namespace    string // non-empty for registry lookups (URL-derived "org/repo")
 	sourceName   string // non-empty for source lookups (config source name)
+	// nameHint is the trailing segment of a canonical id when we don't
+	// know its in-repo path yet — e.g. for "github.com/org/repo/researcher"
+	// the harness might live at the root, at "harnesses/researcher/", or
+	// anywhere else under the cloned repo. Post-clone discovery scans for
+	// a manifest with this name and sets path accordingly. Empty for refs
+	// where the path is already known (registry lookups, 5+-segment ids).
+	nameHint string
 }
 
 // resolveInstallSource applies disambiguation rules to determine the source type.
@@ -65,17 +72,22 @@ func resolveInstallSource(source, existingPath string, cfg *config.Config) (reso
 				"%q is a local canonical id; install from a filesystem path instead "+
 					"(e.g. 'ynh install ./path/to/harness')", source)
 		}
-		// Canonical ids with more than four segments encode an implicit
-		// --path for monorepos — e.g. github.com/eyelock/assistants/e2e-fixtures/minimal.
-		// For four-segment ids the trailing segment is the harness name
-		// at repo root; we don't set a path so the existing root-level
-		// harness loader handles it. The user's explicit --path takes
-		// precedence (handled by the caller).
-		var path string
+		// Canonical id segments after host/org/repo decompose into either
+		// an explicit subpath (5+ segments — e.g.
+		// github.com/eyelock/assistants/e2e-fixtures/minimal → path
+		// "e2e-fixtures/minimal") or a name hint (4 segments — e.g.
+		// github.com/eyelock/assistants/researcher → "find harness named
+		// researcher anywhere in the cloned repo"). The four-segment case
+		// can't assume the harness lives at the repo root because monorepos
+		// commonly nest harnesses under harnesses/<name>/ or similar; the
+		// caller does post-clone discovery to resolve the actual subpath.
+		var path, nameHint string
 		if strings.Contains(withinRepoPath, "/") {
 			path = withinRepoPath
+		} else {
+			nameHint = withinRepoPath
 		}
-		return resolvedSource{sourceType: "git", gitURL: cloneURL, path: path}, nil
+		return resolvedSource{sourceType: "git", gitURL: cloneURL, path: path, nameHint: nameHint}, nil
 	}
 
 	// Rule 5b: Contains / → Git URL shorthand
