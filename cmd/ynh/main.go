@@ -278,8 +278,17 @@ func cmdInstall(args []string) error {
 		}
 		srcDir = absPath
 	} else {
+		// Clone-URL precedence: when resolveInstallSource synthesised a
+		// gitURL (registry lookup OR canonical-id normalisation), use that
+		// — it's the real repo URL, not the user-typed shape. Fall back
+		// to the original source for direct Git URLs (https://, git@).
+		cloneURL := source
+		if resolved.gitURL != "" {
+			cloneURL = resolved.gitURL
+		}
+
 		// Check remote source against allow-list
-		if err := cfg.CheckRemoteSource(source); err != nil {
+		if err := cfg.CheckRemoteSource(cloneURL); err != nil {
 			return err
 		}
 
@@ -287,9 +296,9 @@ func cmdInstall(args []string) error {
 		// entry that pinned a ref, honor it so the on-disk checkout matches
 		// what the marketplace declared. If a sha is also declared, verify
 		// it against the fetched HEAD.
-		result, err := resolver.EnsureRepo(source, resolved.ref)
+		result, err := resolver.EnsureRepo(cloneURL, resolved.ref)
 		if err != nil {
-			return fmt.Errorf("resolving %s: %w", source, err)
+			return fmt.Errorf("resolving %s: %w", cloneURL, err)
 		}
 		if err := verifyResolvedSHA(result.Path, resolved.sha); err != nil {
 			return err
@@ -359,7 +368,13 @@ func cmdInstall(args []string) error {
 	}
 
 	// Write install provenance to .ynh-plugin/installed.json (separate from plugin.json)
+	// For canonical-id installs (e.g. `ynh install github.com/org/repo/name`),
+	// resolved.gitURL holds the synthesized clone URL — record THAT as the
+	// provenance source, not the canonical id, so re-cloning works.
 	provSource := source
+	if resolved.gitURL != "" {
+		provSource = resolved.gitURL
+	}
 	if resolved.sourceType == "local" {
 		provSource = originalSource
 	} else if resolved.localPath != "" {

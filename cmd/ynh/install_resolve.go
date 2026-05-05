@@ -51,7 +51,34 @@ func resolveInstallSource(source, existingPath string, cfg *config.Config) (reso
 		return lookupFromRegistry(source, cfg)
 	}
 
-	// Rule 5: Contains / → Git URL shorthand
+	// Rule 5a: Canonical-id shape — "<host>/<org>/<repo>/<name>".
+	// Strip the trailing harness-name segment(s) and synthesize the clone
+	// URL from the first three segments. Schema 2's canonical id form
+	// is path-shaped (Go-modules style), so users typing it directly to
+	// `ynh install` need it normalised back to a real Git URL.
+	//
+	// "local/<name>" is rejected — it's not installable as a remote
+	// source; users wanting a local install must pass a filesystem path.
+	if cloneURL, withinRepoPath, isCanonID := canonicalIDToClone(source); isCanonID {
+		if cloneURL == "" {
+			return resolvedSource{}, fmt.Errorf(
+				"%q is a local canonical id; install from a filesystem path instead "+
+					"(e.g. 'ynh install ./path/to/harness')", source)
+		}
+		// Canonical ids with more than four segments encode an implicit
+		// --path for monorepos — e.g. github.com/eyelock/assistants/e2e-fixtures/minimal.
+		// For four-segment ids the trailing segment is the harness name
+		// at repo root; we don't set a path so the existing root-level
+		// harness loader handles it. The user's explicit --path takes
+		// precedence (handled by the caller).
+		var path string
+		if strings.Contains(withinRepoPath, "/") {
+			path = withinRepoPath
+		}
+		return resolvedSource{sourceType: "git", gitURL: cloneURL, path: path}, nil
+	}
+
+	// Rule 5b: Contains / → Git URL shorthand
 	if strings.Contains(source, "/") {
 		return resolvedSource{sourceType: "git"}, nil
 	}
@@ -163,4 +190,40 @@ func searchFromSources(name string, cfg *config.Config) (resolvedSource, bool) {
 		}
 	}
 	return resolvedSource{}, false
+}
+
+// canonicalIDToClone recognises a canonical-id-shaped install source
+// and decomposes it into (cloneURL, withinRepoPath, isCanonID).
+//
+// Returns:
+//   - ("https://<host>/<org>/<repo>", "<within>", true) for canonical ids
+//     of the form "<host>/<org>/<repo>/<within...>" where host contains
+//     a "." (real hostname). withinRepoPath is the path inside the repo
+//     to the harness (last segment is the harness name; preceding
+//     segments form an implicit --path for monorepos). For four-segment
+//     ids ("host/org/repo/name"), withinRepoPath is the bare name and
+//     gets treated as a top-level harness directory by the existing
+//     loader — a no-op when the harness lives at the repo root.
+//   - ("", "", true) for "local/<name>" — recognised as a canonical id
+//     but not installable as a remote source.
+//   - ("", "", false) for everything else (regular Git URLs, monorepo
+//     shorthands like "myorg/myrepo", etc).
+func canonicalIDToClone(source string) (cloneURL, withinRepoPath string, isCanonID bool) {
+	parts := strings.Split(source, "/")
+	if len(parts) < 2 {
+		return "", "", false
+	}
+	if parts[0] == "local" {
+		return "", "", true
+	}
+	if len(parts) < 4 || !strings.Contains(parts[0], ".") {
+		return "", "", false
+	}
+	cloneURL = "https://" + parts[0] + "/" + parts[1] + "/" + parts[2]
+	// Everything after host/org/repo is the within-repo path. For ids
+	// with more than four segments (monorepo subdir), the leading
+	// portion of withinRepoPath becomes an implicit --path; the trailing
+	// segment is the harness name.
+	withinRepoPath = strings.Join(parts[3:], "/")
+	return cloneURL, withinRepoPath, true
 }
