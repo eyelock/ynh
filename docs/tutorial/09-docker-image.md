@@ -8,7 +8,7 @@ Build self-contained Docker images with harnesses baked in. No bind-mounting `~/
 # Clean up from any previous run
 rm -rf /tmp/ynh-tutorial
 docker rmi docker-demo:latest 2>/dev/null
-ynh uninstall docker-demo 2>/dev/null
+ynh uninstall local/docker-demo 2>/dev/null
 
 # Verify Docker is available
 docker version
@@ -156,7 +156,7 @@ docker run --rm \
 
 ## T9.6: Pass vendor flags
 
-Everything after the image name becomes arguments to `ynh run docker-demo`. Unrecognised flags pass through to the vendor CLI:
+Everything after the image name becomes arguments to `ynh run local/docker-demo`. Unrecognised flags pass through to the vendor CLI:
 
 ```bash
 # Model override
@@ -277,7 +277,7 @@ steps:
 ```bash
 docker rmi docker-demo:latest 2>/dev/null
 docker rmi tester:latest 2>/dev/null
-ynh uninstall docker-demo 2>/dev/null
+ynh uninstall local/docker-demo 2>/dev/null
 rm -rf /tmp/ynh-tutorial
 ```
 

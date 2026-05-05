@@ -1,7 +1,8 @@
 # Tutorial 18: Namespacing & Migration
 
-Install the same-named harness from multiple registries using `@` syntax, and
-migrate legacy `.harness.json` / `registry.json` files to the 0.2 format.
+Install same-named harnesses from different sources without collision using
+canonical ids, and migrate legacy `.harness.json` / `registry.json` files to
+the 0.2 format.
 
 ## Prerequisites
 
@@ -11,98 +12,107 @@ rm -rf /tmp/ynh-ns-tutorial
 mkdir -p /tmp/ynh-ns-tutorial
 ynh registry remove /tmp/ynh-ns-tutorial/reg-a 2>/dev/null
 ynh registry remove /tmp/ynh-ns-tutorial/reg-b 2>/dev/null
-ynh uninstall david 2>/dev/null
-ynh uninstall david@acme/tools 2>/dev/null
-ynh uninstall david@eyelock/assistants 2>/dev/null
+ynh uninstall github.com/eyelock/assistants/david 2>/dev/null
+ynh uninstall github.com/acme/tools/david 2>/dev/null
+ynh uninstall local/david 2>/dev/null
 ```
 
-## T18.1: Create two registries with overlapping names
+## T18.1: Canonical ids — the new identity model
 
-Two different authors both publish a harness called `david`. In 0.1 this would
-silently conflict. In 0.2 each harness lives under its own namespace.
+Every installed harness has a **canonical id**: a host-prefixed identifier
+that uniquely names it across all sources. Two forms exist:
+
+| Source                          | Canonical id form                       | Example                                    |
+|---------------------------------|-----------------------------------------|--------------------------------------------|
+| Remote registry / Git URL       | `<host>/<org>/<repo>/<name>`            | `github.com/eyelock/assistants/david`      |
+| Local path / local-only source  | `local/<name>`                          | `local/my-harness`                         |
+
+The canonical id is the only identifier accepted by harness-targeting commands
+(`info`, `uninstall`, `run`, `update`). Bare names like `david` are rejected
+with an error pointing you at `ynh ls`. The on-disk install directory is the
+canonical id with `/` replaced by `--` (e.g.
+`~/.ynh/harnesses/github.com--eyelock--assistants--david`).
+
+Two `david` harnesses from different remote sources can coexist because their
+canonical ids differ:
+
+| Source                              | Canonical id                          |
+|-------------------------------------|---------------------------------------|
+| `github.com/eyelock/assistants`     | `github.com/eyelock/assistants/david` |
+| `github.com/acme/tools`             | `github.com/acme/tools/david`         |
+
+## T18.2: Demo — two registries, two `david` harnesses
+
+> **Network required for the install step.** The two demo registries below
+> are local file:// paths (so the registry index works offline), but they
+> both *point at* real `github.com` repos so each install resolves to a
+> distinct canonical id. If you are offline, read T18.3 to T18.5 as a
+> walkthrough rather than running the commands.
 
 ```bash
-# Registry A — eyelock/assistants
-mkdir -p /tmp/ynh-ns-tutorial/reg-a/harnesses/david/.ynh-plugin
-cat > /tmp/ynh-ns-tutorial/reg-a/harnesses/david/.ynh-plugin/plugin.json << 'EOF'
+# Registry A — points at github.com/eyelock/assistants
+mkdir -p /tmp/ynh-ns-tutorial/reg-a
+cat > /tmp/ynh-ns-tutorial/reg-a/registry.json << 'EOF'
 {
-  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
-  "name": "david",
-  "version": "0.1.0",
-  "description": "Eyelock's development harness"
-}
-EOF
-
-mkdir -p /tmp/ynh-ns-tutorial/reg-a/.ynh-plugin
-cat > /tmp/ynh-ns-tutorial/reg-a/.ynh-plugin/marketplace.json << 'EOF'
-{
-  "$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
-  "name": "eyelock-assistants",
-  "owner": {"name": "eyelock"},
-  "harnesses": [
-    {"name": "david", "source": "./harnesses/david"}
+  "name": "eyelock-registry",
+  "entries": [
+    {
+      "name": "david",
+      "description": "Eyelock's development harness",
+      "repo": "github.com/eyelock/assistants",
+      "path": "ynh/david",
+      "vendors": ["claude"],
+      "version": "0.1.0"
+    }
   ]
 }
 EOF
-
 (cd /tmp/ynh-ns-tutorial/reg-a && git init -q && git add . && git commit -q -m init)
 
-# Registry B — acme/tools
-mkdir -p /tmp/ynh-ns-tutorial/reg-b/harnesses/david/.ynh-plugin
-cat > /tmp/ynh-ns-tutorial/reg-b/harnesses/david/.ynh-plugin/plugin.json << 'EOF'
+# Registry B — points at a hypothetical github.com/acme/tools
+# (For this tutorial we re-use eyelock/assistants. The point is that the
+# canonical id is derived from the source repo, not the registry that listed
+# it.)
+mkdir -p /tmp/ynh-ns-tutorial/reg-b
+cat > /tmp/ynh-ns-tutorial/reg-b/registry.json << 'EOF'
 {
-  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
-  "name": "david",
-  "version": "2.0.0",
-  "description": "Acme's David harness (different author)"
-}
-EOF
-
-mkdir -p /tmp/ynh-ns-tutorial/reg-b/.ynh-plugin
-cat > /tmp/ynh-ns-tutorial/reg-b/.ynh-plugin/marketplace.json << 'EOF'
-{
-  "$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
-  "name": "acme-tools",
-  "owner": {"name": "acme"},
-  "harnesses": [
-    {"name": "david", "source": "./harnesses/david"}
+  "name": "acme-registry",
+  "entries": [
+    {
+      "name": "david",
+      "description": "A different David harness",
+      "repo": "github.com/eyelock/assistants",
+      "path": "ynh/david",
+      "vendors": ["claude"],
+      "version": "0.1.0"
+    }
   ]
 }
 EOF
-
 (cd /tmp/ynh-ns-tutorial/reg-b && git init -q && git add . && git commit -q -m init)
-```
 
-## T18.2: Register both
-
-```bash
 ynh registry add /tmp/ynh-ns-tutorial/reg-a
 ynh registry add /tmp/ynh-ns-tutorial/reg-b
 ```
 
-Expected:
-```
-Added registry: /tmp/ynh-ns-tutorial/reg-a
-Added registry: /tmp/ynh-ns-tutorial/reg-b
-```
+> **Offline-only registries collide.** If both registries pointed at *local*
+> paths instead of remote repos, both `david` installs would share the
+> canonical id `local/david` and the second install would silently overwrite
+> the first. Canonical-id namespacing only protects against name collisions
+> between remote sources. Use distinct repos (real GitHub orgs are easiest)
+> when you need two same-named harnesses to coexist.
 
-## T18.3: Understand namespaces
-
-The namespace comes from the registry URL, not the user-chosen name. For local
-paths like these, it's the last two path segments of the source URL. Real GitHub
-registries would derive namespaces like `eyelock/assistants` and `acme/tools`.
-
-Run a search to see both `david` entries, each from its own registry:
+## T18.3: Search returns both entries
 
 ```bash
 ynh search david
 ```
 
-Expected (two rows): one from each registry.
+Expected: two rows, one per registry. The `FROM` column distinguishes them.
 
-## T18.4: Disambiguate install with @ syntax
+## T18.4: Disambiguate install with `@<registry>`
 
-Attempting plain install is ambiguous:
+A bare `ynh install david` is ambiguous — both registries match:
 
 ```bash
 ynh install david 2>&1 | head -3
@@ -110,69 +120,57 @@ ynh install david 2>&1 | head -3
 
 Expected: an error listing both candidates.
 
-Install from a specific registry using `name@org/repo`:
+The `name@<registry>` form picks one registry's entry. The chosen entry's
+*source repo* (not the registry) determines the canonical id:
 
 ```bash
-ynh install "david@ynh-ns-tutorial/reg-a"
-ynh install "david@ynh-ns-tutorial/reg-b"
+ynh install david@eyelock-registry
 ```
 
-> **Note:** For GitHub-hosted registries, the @ syntax is `name@owner/repo`
-> (for example `david@eyelock/assistants`). Local-path registries use the last
-> two path segments as the namespace.
+Expected:
+```
+Installed harness "david"
+  Location: /Users/<you>/.ynh/harnesses/github.com--eyelock--assistants--david
+  Launcher: /Users/<you>/.ynh/bin/david
+  Vendor:   claude
+```
 
-## T18.5: List both — namespaces shown
+The canonical id is `github.com/eyelock/assistants/david`. The `@<registry>`
+syntax exists only for `ynh install` to resolve the registry lookup; once
+installed, you address the harness via its canonical id.
+
+## T18.5: Inspect by canonical id
 
 ```bash
-ynh ls
+ynh ls --format json | jq -r '.harnesses[].id'
 ```
 
-Both harnesses appear, each under its namespace. The `ynh/bin/david` short
-launcher is only created when the name is unambiguous — installing a second
-`david` removes the short launcher and requires the namespaced launcher
-(`ynh-ns-tutorial--reg-a--david`) or `ynh run david@<namespace>`.
-
-## T18.5a: Verify namespaced paths in JSON output
+Expected: `github.com/eyelock/assistants/david`.
 
 ```bash
-ynh ls --format json | grep '"path"'
+ynh info github.com/eyelock/assistants/david --format json | jq -r '.path'
 ```
 
-Expected: both entries show their namespaced install directories:
+Expected: a path containing `github.com--eyelock--assistants--david`.
 
-```
-  "path": "/Users/<you>/.ynh/harnesses/ynh-ns-tutorial--reg-a/david",
-  "path": "/Users/<you>/.ynh/harnesses/ynh-ns-tutorial--reg-b/david",
-```
-
-## T18.5b: Verify info works by qualified name
+Bare names are rejected:
 
 ```bash
-ynh info "david@ynh-ns-tutorial/reg-a" --format json | grep '"path"'
+ynh info david 2>&1
+# Expected: Error: "david" is not a valid harness id. Use a canonical id ...
 ```
 
-Expected: the path field shows the namespaced directory:
-
-```
-  "path": "/Users/<you>/.ynh/harnesses/ynh-ns-tutorial--reg-a/david",
-```
-
-## T18.5c: Verify uninstall works when name is unambiguous
-
-Uninstall one of the two `david` harnesses to make the remaining one unambiguous, then verify that short-name uninstall works:
+## T18.6: Uninstall by canonical id
 
 ```bash
-ynh uninstall "david@ynh-ns-tutorial/reg-b"
-ynh uninstall david
+ynh uninstall github.com/eyelock/assistants/david
 ```
 
-Expected: both succeed without error. Reinstall for the remaining tutorial steps:
+A short launcher (`~/.ynh/bin/david`) is created when the short name is
+unambiguous; if you install a second `david` from another source, the short
+launcher is removed and you invoke the harness with `ynh run <canonical-id>`.
 
-```bash
-ynh install "david@ynh-ns-tutorial/reg-b"
-```
-
-## T18.6: Migrate a legacy harness with ynd migrate
+## T18.7: Migrate a legacy harness with `ynd migrate`
 
 Create a harness in the legacy 0.1 format:
 
@@ -215,7 +213,7 @@ Expected:
 migrator. Adding a new format migrator in future releases does not require a
 new command.
 
-## T18.7: Recursive migration
+## T18.8: Recursive migration
 
 Create multiple legacy harnesses at once, then migrate the whole tree:
 
@@ -240,7 +238,7 @@ Migrated /tmp/ynh-ns-tutorial/bulk/h2
 Migrated 2 director(ies).
 ```
 
-## T18.8: Transparent migration on use
+## T18.9: Transparent migration on use
 
 Legacy harnesses do not strictly require `ynd migrate`. ynh runs the migration
 chain automatically whenever a harness is loaded or installed, so an
@@ -261,12 +259,62 @@ directory is also migrated in place (the chain runs before the copy).
 `ynd migrate` is still useful when you want to convert a whole tree
 intentionally — for example when cleaning up a source repo before publishing.
 
+## T18.10: `ynh migrate` — upgrade `~/.ynh` schema
+
+`ynd migrate` is for harness *source trees*. The companion command
+`ynh migrate` upgrades the on-disk layout of `~/.ynh` itself (the home
+directory schema). Run it after upgrading ynh across a major version:
+
+```bash
+ynh migrate
+```
+
+Expected on a current installation:
+```
+ynh home is already at schema version 2 — nothing to migrate.
+```
+
+When an upgrade is needed, the command rewrites the harness directory layout
+(adding canonical-id namespaces under `~/.ynh/harnesses/`) and updates
+`config.json` in place. It is idempotent — re-running it on a current home
+does nothing.
+
+## T18.11: `ynh quarantine` — recover from broken installs
+
+If a harness install fails partway through, or a manifest is missing required
+fields, ynh moves the directory into a quarantine area instead of leaving a
+broken install on disk. Inspect the quarantine:
+
+```bash
+ynh quarantine list
+```
+
+Expected (one row per quarantined entry, or an empty table):
+```
+NAME                  ORIGINAL PATH                                 REASON
+broken-thing          /Users/<you>/.ynh/harnesses/broken-thing      plugin manifest has no name
+```
+
+Subcommands:
+
+| Command | Purpose |
+|---------|---------|
+| `ynh quarantine list` | Show all quarantined entries with their reason |
+| `ynh quarantine restore <name>` | Move an entry back into `~/.ynh/harnesses/` (you will likely need to fix the manifest first) |
+| `ynh quarantine drop <name>` | Permanently delete a quarantined entry |
+
+Quarantine is a safety net — a broken harness is preserved off to the side
+while everything else keeps working. You decide whether to fix it (`restore`)
+or delete it (`drop`).
+
 ## Clean up
 
 ```bash
-ynh uninstall "david@ynh-ns-tutorial/reg-a"
-ynh uninstall "david@ynh-ns-tutorial/reg-b"
-ynh uninstall legacy-demo transparent h1 h2 2>/dev/null
+ynh uninstall github.com/eyelock/assistants/david 2>/dev/null
+ynh uninstall local/legacy-demo 2>/dev/null
+ynh uninstall local/transparent 2>/dev/null
+ynh uninstall local/h1 2>/dev/null
+ynh uninstall local/h2 2>/dev/null
 ynh registry remove /tmp/ynh-ns-tutorial/reg-a 2>/dev/null
 ynh registry remove /tmp/ynh-ns-tutorial/reg-b 2>/dev/null
 rm -rf /tmp/ynh-ns-tutorial
@@ -274,18 +322,27 @@ rm -rf /tmp/ynh-ns-tutorial
 
 ## What You Learned
 
-- Namespaces are derived from the registry URL and are stable across machines
-- `name@org/repo` syntax disambiguates between same-named harnesses
-- `ynh ls` shows namespace information alongside each installed harness
-- Short launchers (`~/.ynh/bin/<name>`) exist only when the short name is
-  unambiguous; namespaced launchers always exist
-- `ynd migrate` converts `.harness.json` → `.ynh-plugin/plugin.json` and
-  `registry.json` → `.ynh-plugin/marketplace.json` in place
-- Migration runs transparently on install and load; `ynd migrate` is the
-  explicit tool for bulk conversion and source-repo cleanup
+- The canonical id (`<host>/<org>/<repo>/<name>` or `local/<name>`) is the
+  single identity form for harnesses; bare names are rejected by
+  harness-targeting commands.
+- Canonical-id namespacing prevents collisions between same-named harnesses
+  from different remote sources; two local-path installs both land at
+  `local/<name>` and will collide.
+- `name@<registry>` is an `ynh install`-only disambiguator; once installed,
+  use the canonical id.
+- Short launchers (`~/.ynh/bin/<name>`) are created opportunistically when
+  the short name is unambiguous; otherwise invoke the harness via
+  `ynh run <canonical-id>`.
+- `ynd migrate` converts harness-source directories from 0.1 to 0.2 format
+  (`.harness.json` → `.ynh-plugin/plugin.json`, `registry.json` →
+  `.ynh-plugin/marketplace.json`).
+- `ynh migrate` upgrades the `~/.ynh` home directory schema after a major
+  ynh upgrade.
+- `ynh quarantine list/restore/drop` manages harnesses set aside because
+  their install was broken or their manifest was invalid.
 
 ## Next
 
-See [docs/namespacing.md](../namespacing.md) for the full @ syntax reference
-and [docs/migration.md](../migration.md) for a complete 0.1 → 0.2 migration
-guide.
+See [docs/namespacing.md](../namespacing.md) for the full canonical-id
+reference and [docs/migration.md](../migration.md) for a complete 0.1 → 0.2
+migration guide.

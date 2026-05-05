@@ -8,7 +8,7 @@ This tutorial walks through every sensor source variant, the validation rules, a
 
 ```bash
 rm -rf /tmp/ynh-tutorial
-ynh uninstall sensor-demo 2>/dev/null
+ynh uninstall local/sensor-demo 2>/dev/null
 
 mkdir -p /tmp/ynh-tutorial/sensor-harness/.ynh-plugin
 ```
@@ -146,7 +146,7 @@ Inline focuses are scoped to the sensor that declares them. Install the harness 
 
 ```bash
 ynh install /tmp/ynh-tutorial/sensor-harness
-ynh info sensor-demo | grep -A 3 'Focus:'
+ynh info local/sensor-demo | grep -A 3 'Focus:'
 ```
 
 You should see only `audit-vulns` listed under Focus — `coverage-judge` is a sensor, and its inline focus is hidden inside the sensor declaration.
@@ -156,7 +156,7 @@ You should see only `audit-vulns` listed under Focus — `coverage-judge` is a s
 Loop drivers discover what's declared via the CLI:
 
 ```bash
-ynh sensors ls sensor-demo
+ynh sensors ls local/sensor-demo
 ```
 
 Expected (trimmed):
@@ -173,13 +173,13 @@ security          behaviour         focus      markdown
 The JSON form is what a loop driver actually consumes:
 
 ```bash
-ynh sensors ls sensor-demo --format json
+ynh sensors ls local/sensor-demo --format json
 ```
 
 To resolve a single sensor with its focus expanded into a self-contained payload:
 
 ```bash
-ynh sensors show sensor-demo security
+ynh sensors show local/sensor-demo security
 ```
 
 The string focus reference (`"focus": "audit-vulns"`) is expanded inline so the consumer doesn't have to look up the focus declaration separately.
@@ -250,7 +250,7 @@ Re-install the harness and confirm sensors still appear in the discovery surface
 
 ```bash
 ynh install /tmp/ynh-tutorial/sensor-harness
-ynh sensors ls sensor-demo --format json | jq '.[] | .name'
+ynh sensors ls local/sensor-demo --format json | jq '.[] | .name'
 ```
 
 Expected: each sensor name appears, one per line. Sensors flow from the source `plugin.json` through the install path into the on-disk harness directory and surface back through the discovery CLI unchanged.
@@ -260,7 +260,7 @@ Note: `ynd export` produces vendor-native plugin formats (Claude/Cursor/Codex), 
 ## T19.9: Cleanup
 
 ```bash
-ynh uninstall sensor-demo
+ynh uninstall local/sensor-demo
 rm -rf /tmp/ynh-tutorial
 ```
 

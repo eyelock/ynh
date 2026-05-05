@@ -9,7 +9,7 @@ Make sure `ynh` and `ynd` are installed and on your PATH. See the [install instr
 ```bash
 # Clean up from any previous run
 rm -rf /tmp/ynh-tutorial
-ynh uninstall my-harness 2>/dev/null
+ynh uninstall local/my-harness 2>/dev/null
 
 mkdir -p /tmp/ynh-tutorial
 ```

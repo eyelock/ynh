@@ -434,30 +434,41 @@ Added include "github.com/anthropics/skills"
 When targeting an installed harness by name, ynh pre-fetches the new include immediately so the harness is ready to run without a separate `ynh update`.
 
 ```bash
-# Verify via ynh info
-ynh info base
+# Verify via ynh info — note the canonical id (local/<name> for local-path installs)
+ynh info local/base
 ```
 
-The installed harness's `.ynh-plugin/plugin.json` at `~/.ynh/harnesses/base/.ynh-plugin/plugin.json` now contains the added include.
+The installed harness's `.ynh-plugin/plugin.json` at `~/.ynh/harnesses/local--base/.ynh-plugin/plugin.json` now contains the added include.
+
+`ynh include`'s `<harness>` argument follows the same rule as every other ref-accepting command: a canonical id (`local/<name>` or `<host>/<org>/<repo>/<name>`) for an installed harness, or an explicit filesystem path (`./<dir>`, `/abs/<dir>`) for a directory containing a `.ynh-plugin/plugin.json`. Bare names are rejected with a hint.
 
 ```bash
 # Clean up
-ynh uninstall base 2>/dev/null
+ynh uninstall local/base 2>/dev/null
 ```
 
-## T17.10: Path resolution — name vs path
+## T17.10: Path resolution — id vs path
 
-If your current directory contains a folder with the same name as an installed harness, use an explicit path to avoid ambiguity:
+The `<harness>` argument is classified lexically:
+
+- Starts with `./`, `../`, `/`, `~/`, or a Windows drive letter → filesystem path
+- Slash-bearing without a path prefix → canonical id (e.g. `local/<name>`, `github.com/<org>/<repo>/<name>`)
+- Anything else (bare names, `name@org/repo`) → rejected with a hint
 
 ```bash
-# Force path semantics with ./
+# Filesystem path (must contain .ynh-plugin/plugin.json)
 ynh include add ./my-harness github.com/acme/tools
-
-# Or an absolute path
 ynh include add /tmp/ynh-tutorial-includes/my-harness github.com/acme/tools
+
+# Canonical id (must be installed)
+ynh include add local/my-harness github.com/acme/tools
+
+# Bare name — rejected
+ynh include add my-harness github.com/acme/tools
+# Error: "my-harness" is not a valid harness id. Use a canonical id...
 ```
 
-A bare name (no `/` or leading `.`) is always resolved as an installed harness name.
+There is no ambiguity to resolve: the leading character of the ref decides the kind. Same rule across `info`, `uninstall`, `run`, `update`, `include`, `delegate`.
 
 ## Clean up
 

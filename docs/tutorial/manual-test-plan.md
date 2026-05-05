@@ -266,21 +266,24 @@ ynh install /tmp/ynh-edge/dup
 ynh install /tmp/ynh-edge/dup
 # Expected: overwrites without error (idempotent)
 
-ynh uninstall dup
+ynh uninstall local/dup
 ```
 
 ### E5: Uninstall nonexistent harness
 
 ```bash
-ynh uninstall nonexistent-harness
-# Expected: Error: harness "nonexistent-harness" is not installed
+ynh uninstall local/nonexistent-harness
+# Expected: Error: harness "local/nonexistent-harness" is not installed
 ```
 
 ### E6: Run nonexistent harness
 
 ```bash
 ynh run nonexistent-harness
-# Expected: Error: harness "nonexistent-harness": harness not found
+# Expected: Error: "nonexistent-harness" is not a valid harness id. Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>', or './<path>' for a local harness directory. Run 'ynh ls' to see installed ids
+
+ynh run local/nonexistent
+# Expected: Error: harness "local/nonexistent": harness not found
 ```
 
 ### E7: Export unknown vendor
@@ -382,7 +385,7 @@ mv ~/.ynh/config.json.bak ~/.ynh/config.json
 ### E16: Info on installed harness
 
 ```bash
-ynh info my-harness
+ynh info local/my-harness
 # Expected: Name, Vendor, Installed timestamp, Source (local path), no includes, no delegates
 ```
 
@@ -390,7 +393,10 @@ ynh info my-harness
 
 ```bash
 ynh info nonexistent
-# Expected: Error: harness "nonexistent": harness not found
+# Expected: Error: "nonexistent" is not a valid harness id. Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>', or './<path>' for a local harness directory. Run 'ynh ls' to see installed ids
+
+ynh info local/nonexistent
+# Expected: Error: harness "local/nonexistent": harness not found
 ```
 
 ### E18: Info with no args
@@ -465,9 +471,9 @@ cat > /tmp/ynh-sensors/.ynh-plugin/plugin.json << 'EOF'
 EOF
 ynd validate /tmp/ynh-sensors
 ynh install /tmp/ynh-sensors
-ynh sensors ls sensor-test
-ynh sensors run sensor-test build | jq '.exit_code, .output.stdout'
-ynh uninstall sensor-test
+ynh sensors ls local/sensor-test
+ynh sensors run local/sensor-test build | jq '.exit_code, .output.stdout'
+ynh uninstall local/sensor-test
 rm -rf /tmp/ynh-sensors
 ```
 
