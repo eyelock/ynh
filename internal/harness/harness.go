@@ -176,10 +176,22 @@ func Load(name string) (*Harness, error) {
 	return findInNamespacedDirs(name)
 }
 
-// LoadQualified loads an installed harness by an optionally namespace-qualified
-// ref ("name" or "name@org/repo"). Dispatches to LoadNS when a namespace is
-// present, Load otherwise.
+// LoadQualified loads an installed harness by ref. Tries canonical id first
+// (LoadByID), then falls back to the schema-1 "name" / "name@org/repo"
+// shapes for compatibility during the migration window.
+//
+// Schema 2 (planned in PR-canonical-3) will hard-reject bare names and
+// "name@org/repo"; until then the ambiguity hint at the call site is the
+// upgrade path for downstream tools.
 func LoadQualified(ref string) (*Harness, error) {
+	if namespace.Classify(ref) == namespace.RefID {
+		if h, err := LoadByID(ref); err == nil {
+			return h, nil
+		}
+		// Fall through to legacy resolution if the canonical-id path
+		// didn't find anything — schema-1 installs may still be on disk
+		// when auto-migration was skipped (e.g. `ynh paths`).
+	}
 	name, ns, err := namespace.ParseQualified(ref)
 	if err != nil {
 		return nil, err
@@ -332,6 +344,43 @@ func NamespacedDir(ns, name string) string {
 
 func InstalledDir(name string) string {
 	return filepath.Join(config.HarnessesDir(), name)
+}
+
+// InstalledDirByID returns the schema-2 install directory for a harness with
+// the given canonical id. The directory name is the id with "/" replaced by
+// "--" — same transliteration as PointerPathByID and the cache.
+//
+//	"github.com/eyelock/assistants/planner" → "<HarnessesDir>/github.com--eyelock--assistants--planner"
+//	"local/planner"                         → "<HarnessesDir>/local--planner"
+//
+// This replaces the schema-1 split between InstalledDir (flat) and
+// InstalledDirNS (two-level) with a single id-keyed layout. After schema-2
+// migration, every install lives at InstalledDirByID(id).
+func InstalledDirByID(id string) string {
+	return filepath.Join(config.HarnessesDir(), namespace.IDToFSName(id))
+}
+
+// LoadByID loads an installed harness by its canonical id. Resolution
+// precedence under schema 2:
+//  1. Pointer file at ~/.ynh/installed/<id-fsname>.json (local fork / alias)
+//  2. Tree at ~/.ynh/harnesses/<id-fsname>/
+//
+// Returns ErrNotFound if neither exists. Callers that received a user-typed
+// ref must Classify first and only call LoadByID for RefID kinds.
+func LoadByID(id string) (*Harness, error) {
+	if id == "" {
+		return nil, fmt.Errorf("harness id %q: %w", id, ErrNotFound)
+	}
+	if ptr, err := LoadPointerByID(id); err != nil {
+		return nil, err
+	} else if ptr != nil {
+		return loadFromPointer(ptr)
+	}
+	dir := InstalledDirByID(id)
+	if _, err := os.Stat(dir); err == nil {
+		return LoadDir(dir)
+	}
+	return nil, fmt.Errorf("harness %q: %w", id, ErrNotFound)
 }
 
 // LoadDir loads a harness from a directory. The migration chain runs

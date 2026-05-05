@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/namespace"
 )
 
 // Pointer is the on-disk shape of ~/.ynh/installed/<name>.json.
@@ -24,16 +25,80 @@ import (
 // p.InstalledFrom. The pointer file's role is registration — name binding
 // and where to look — not provenance.
 type Pointer struct {
+	// ID is the canonical, host-prefixed harness id (schema 2). Empty
+	// for legacy pointer files written by pre-schema-2 binaries; the
+	// schema-2 migration backfills it.
+	ID          string `json:"id,omitempty"`
 	Name        string `json:"name"`
 	SourceType  string `json:"source_type"`
 	Source      string `json:"source"`
 	InstalledAt string `json:"installed_at"`
 }
 
-// PointerPath returns the on-disk path of the pointer file for name.
-// Local forks are flat — no namespaced pointer paths in v1.
+// PointerPath returns the on-disk path of the schema-1 (name-keyed) pointer
+// file for name. Retained for the migration window; schema-2 callers use
+// PointerPathByID.
 func PointerPath(name string) string {
 	return filepath.Join(config.PointersDir(), name+".json")
+}
+
+// PointerPathByID returns the on-disk path of the schema-2 (id-keyed)
+// pointer file. The filename is the canonical id with "/" → "--".
+//
+//	"github.com/eyelock/assistants/planner" → "<PointersDir>/github.com--eyelock--assistants--planner.json"
+//	"local/planner"                         → "<PointersDir>/local--planner.json"
+func PointerPathByID(id string) string {
+	return filepath.Join(config.PointersDir(), namespace.IDToFSName(id)+".json")
+}
+
+// LoadPointerByID reads a schema-2 (id-keyed) pointer file. Returns
+// (nil, nil) when no pointer exists for this id.
+func LoadPointerByID(id string) (*Pointer, error) {
+	path := PointerPathByID(id)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("reading pointer %s: %w", path, err)
+	}
+	var p Pointer
+	if err := json.Unmarshal(data, &p); err != nil {
+		return nil, fmt.Errorf("invalid pointer %s: %w", path, err)
+	}
+	return &p, nil
+}
+
+// SavePointerByID writes p to its schema-2 (id-keyed) pointer file path.
+// Pointers must carry a non-empty ID to use this — for backwards
+// compatibility with code that still constructs pointers without setting
+// ID, fall back to SavePointer.
+func SavePointerByID(p *Pointer) error {
+	if p.ID == "" {
+		return fmt.Errorf("pointer for %q has no ID set; cannot save under schema 2", p.Name)
+	}
+	if err := os.MkdirAll(config.PointersDir(), 0o755); err != nil {
+		return fmt.Errorf("creating pointers dir: %w", err)
+	}
+	data, err := json.MarshalIndent(p, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling pointer: %w", err)
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(PointerPathByID(p.ID), data, 0o644); err != nil {
+		return fmt.Errorf("writing pointer: %w", err)
+	}
+	return nil
+}
+
+// RemovePointerByID deletes the schema-2 (id-keyed) pointer file. Returns
+// nil if no pointer exists.
+func RemovePointerByID(id string) error {
+	err := os.Remove(PointerPathByID(id))
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("removing pointer: %w", err)
+	}
+	return nil
 }
 
 // LoadPointer reads and parses the pointer file for name. Returns

@@ -60,6 +60,61 @@ func TestParseQualified(t *testing.T) {
 	}
 }
 
+func TestClassify(t *testing.T) {
+	tests := []struct {
+		ref  string
+		want RefKind
+	}{
+		// Paths
+		{"./planner", RefPath},
+		{"../shared/reviewer", RefPath},
+		{"/abs/path/planner", RefPath},
+		{"~/work/planner", RefPath},
+		{".", RefPath},
+		{"..", RefPath},
+		{"C:/Users/david", RefPath},
+		{`C:\Users\david`, RefPath},
+		{"d:/lower", RefPath},
+		// Canonical ids
+		{"github.com/eyelock/assistants/planner", RefID},
+		{"gitlab.com/myorg/tools/linter", RefID},
+		{"local/planner", RefID},
+		{"a/b", RefID},
+		{"internal/team/planner", RefID},
+		// Invalid
+		{"", RefInvalid},
+		{"planner", RefInvalid},                                  // bare name
+		{"planner@eyelock/assistants", RefInvalid},               // legacy qualified form
+		{"github.com/eyelock/assistants/planner@v2", RefInvalid}, // version pin not yet accepted
+	}
+	for _, tc := range tests {
+		got := Classify(tc.ref)
+		if got != tc.want {
+			t.Errorf("Classify(%q) = %v, want %v", tc.ref, got, tc.want)
+		}
+	}
+}
+
+func TestSplitID(t *testing.T) {
+	tests := []struct {
+		id     string
+		wantNS string
+		wantNm string
+	}{
+		{"github.com/eyelock/assistants/planner", "github.com/eyelock/assistants", "planner"},
+		{"local/planner", "local", "planner"},
+		{"a/b", "a", "b"},
+		{"planner", "", ""},
+		{"", "", ""},
+	}
+	for _, tc := range tests {
+		ns, nm := SplitID(tc.id)
+		if ns != tc.wantNS || nm != tc.wantNm {
+			t.Errorf("SplitID(%q) = (%q, %q), want (%q, %q)", tc.id, ns, nm, tc.wantNS, tc.wantNm)
+		}
+	}
+}
+
 func TestCanonicalID(t *testing.T) {
 	tests := []struct {
 		sourceURL string
