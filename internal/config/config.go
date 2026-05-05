@@ -25,6 +25,27 @@ var Version = "dev"
 // features on it with their own `minimumYNHCapabilities` constant.
 const CapabilitiesVersion = "0.3.0"
 
+// SchemaVersion declares the on-disk format version of the YNH home
+// directory (~/.ynh). Distinct from CapabilitiesVersion: capabilities is
+// the wire-contract version (what JSON shapes / commands this binary
+// speaks), schema_version is the on-disk format version of the user's
+// YNH home that this binary expects.
+//
+// Bumped when the on-disk layout of installed/, harnesses/, cache/, or
+// any associated metadata file changes in a way that requires migration.
+//
+// Schema 1: name-keyed pointer files, host-stripped namespaces
+// (`<org>/<repo>`), no `id` field on disk — `id` is derived on-read.
+//
+// Future schema 2 (planned in PR-canonical-2/3): id-keyed pointer files
+// at `~/.ynh/installed/<host--org--repo--name>.json`, canonical id
+// stored explicitly in installed.json, host-prefixed namespaces.
+//
+// Emitted as a top-level sibling on harness-centric envelopes (ls, info,
+// search, fork) so consumers detect format-level capability in the same
+// round-trip they use for listing.
+const SchemaVersion = 1
+
 const (
 	DefaultDirName = ".ynh"
 	ConfigFile     = "config.json"

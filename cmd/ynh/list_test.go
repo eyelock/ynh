@@ -86,6 +86,9 @@ func TestCmdListJSONEmpty(t *testing.T) {
 	if got.Capabilities == "" {
 		t.Errorf("envelope missing capabilities; output: %s", stdout.String())
 	}
+	if got.SchemaVersion < 1 {
+		t.Errorf("envelope schema_version = %d, want >= 1; output: %s", got.SchemaVersion, stdout.String())
+	}
 	if got.Harnesses == nil {
 		t.Errorf("envelope harnesses is null, expected []; output: %s", stdout.String())
 	}
