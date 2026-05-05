@@ -210,6 +210,7 @@ Expected (timestamps and paths will differ):
     {
       "id": "local/my-harness",
       "name": "my-harness",
+      "kind": "local",
       "version_installed": "0.1.0",
       "description": "Tutorial harness",
       "default_vendor": "claude",

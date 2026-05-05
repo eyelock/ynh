@@ -165,7 +165,7 @@ Expected (trimmed):
 NAME              CATEGORY          SOURCE     FORMAT
 build             -                 command    text
 coverage-judge    -                 focus*     markdown
-security          -                 focus      markdown
+security          behaviour         focus      markdown
 
 * = inline focus
 ```
