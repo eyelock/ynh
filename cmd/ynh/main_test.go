@@ -318,7 +318,7 @@ func TestGenerateLauncher(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 
-	if err := generateLauncher("david"); err != nil {
+	if err := generateLauncher("david", "local/david"); err != nil {
 		t.Fatalf("generateLauncher failed: %v", err)
 	}
 
@@ -331,6 +331,17 @@ func TestGenerateLauncher(t *testing.T) {
 	// Should be executable
 	if info.Mode()&0o111 == 0 {
 		t.Error("launcher is not executable")
+	}
+
+	// Launcher must invoke `ynh run` with the canonical id, not the bare
+	// name — schema 2 rejects bare-name refs at the resolver, so a
+	// bare-name launcher would be unusable.
+	body, err := os.ReadFile(launcherPath)
+	if err != nil {
+		t.Fatalf("reading launcher: %v", err)
+	}
+	if !strings.Contains(string(body), `"local/david"`) {
+		t.Errorf("launcher should embed canonical id; got:\n%s", body)
 	}
 }
 

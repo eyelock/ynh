@@ -211,10 +211,13 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 	}
 
 	// Generate launcher so the fork is fully runnable as `<installName>`,
-	// matching ynh install. Skip for the reserved "ynh" name to avoid
-	// shadowing the binary.
+	// matching ynh install. The launcher delegates to `ynh run <id>` using
+	// the fork's canonical id ("local/<installName>") — schema 2 rejects
+	// bare-name refs at the resolver, so the launcher must pass the id.
+	// Skip for the reserved "ynh" name to avoid shadowing the binary.
 	if installName != "ynh" {
-		if err := generateLauncher(installName); err != nil {
+		forkID := "local/" + installName
+		if err := generateLauncher(installName, forkID); err != nil {
 			_ = harness.RemovePointer(installName)
 			_ = os.RemoveAll(absDestDir)
 			return cliError(stderr, structured, errCodeIOError,
