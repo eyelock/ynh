@@ -86,6 +86,8 @@ func main() {
 		err = cmdPrune()
 	case "migrate":
 		err = cmdMigrate(os.Args[2:])
+	case "quarantine":
+		err = cmdQuarantine(os.Args[2:])
 	case "version", "--version":
 		err = cmdVersion(os.Args[2:])
 	case "help", "--help", "-h":
