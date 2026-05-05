@@ -570,15 +570,21 @@ func migrateOneInstall(installDir, harnessesDir, oldID, kind string, opts Migrat
 	return nil
 }
 
-// loadHarnessName reads the harness name from plugin.json (or legacy
-// .harness.json after the format migrator has already run inside the
-// install dir's load path).
+// loadHarnessName reads the harness name from the install manifest.
+// Prefers the canonical .ynh-plugin/plugin.json layout (what `ynh install`
+// and `ynd create harness` write today); falls back to the legacy
+// .harness.json single-file layout for installs from older binaries that
+// the format migrator hasn't touched yet.
 func loadHarnessName(dir string) string {
-	hj, err := plugin.LoadHarnessJSON(dir)
-	if err != nil || hj == nil {
-		return ""
+	if plugin.IsPluginDir(dir) {
+		if hj, err := plugin.LoadPluginJSON(dir); err == nil && hj != nil {
+			return hj.Name
+		}
 	}
-	return hj.Name
+	if hj, err := plugin.LoadHarnessJSON(dir); err == nil && hj != nil {
+		return hj.Name
+	}
+	return ""
 }
 
 // splitHostFromID returns the first "/"-separated segment of id (the host),

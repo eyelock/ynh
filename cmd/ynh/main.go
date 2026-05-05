@@ -462,6 +462,15 @@ func cmdInstall(args []string) error {
 		}
 	}
 
+	// Stamp the home as schema 2 if absent. Fresh installs always produce
+	// canonical-id layout, so the auto-migration gate has nothing to do
+	// and shouldn't re-walk the install dir on the next command.
+	if migration.ReadSchemaVersion(config.HomeDir()) < migration.CurrentSchemaVersion {
+		if err := migration.WriteSchemaVersion(config.HomeDir(), migration.CurrentSchemaVersion); err != nil {
+			return fmt.Errorf("stamping schema version: %w", err)
+		}
+	}
+
 	fmt.Printf("Installed harness %q\n", p.Name)
 	fmt.Printf("  Location: %s\n", installDir)
 	if reservedName {
