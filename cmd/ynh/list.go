@@ -10,6 +10,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/resolver"
 )
 
@@ -18,20 +19,36 @@ import (
 // ls and info follows this envelope shape so consumers can gate behaviour
 // without re-parsing the per-command body.
 type listEnvelope struct {
-	Capabilities string      `json:"capabilities"`
-	YnhVersion   string      `json:"ynh_version"`
-	Harnesses    []listEntry `json:"harnesses"`
+	Capabilities string `json:"capabilities"`
+	// SchemaVersion is the on-disk format version of ~/.ynh that this
+	// binary expects. Distinct from Capabilities (the wire-contract
+	// version): consumers gate format-level decisions (e.g. "is migration
+	// required before I can trust id?") on schema_version, and gate
+	// shape-level decisions (e.g. "does this binary emit field X?") on
+	// capabilities. See internal/config.SchemaVersion.
+	SchemaVersion int         `json:"schema_version"`
+	YnhVersion    string      `json:"ynh_version"`
+	Harnesses     []listEntry `json:"harnesses"`
 }
 
 // listEntry is the JSON shape for a single harness in the `ynh ls` output.
 // Field order drives JSON key order via MarshalIndent.
 type listEntry struct {
+	// ID is the canonical, host-prefixed harness id —
+	// "<host>/<org>/<repo>/<name>" for remote-sourced installs, or
+	// "local/<name>" for local/forked/aliased installs. This is the single
+	// identity form consumers should pass back to ynh at the CLI boundary
+	// for any harness-targeting command (info, remove, update, uninstall).
+	//
+	// Derived on-read from installed_from.source + name in schema 1; will
+	// be stored explicitly in installed.json under schema 2.
+	ID   string `json:"id"`
 	Name string `json:"name"`
 	// Namespace is the URL-derived "<org>/<repo>" for namespaced installs
 	// (registry installs, or any install that landed under
 	// ~/.ynh/harnesses/<ns>/<name>/). Empty for flat/local installs.
-	// Downstream consumers compose stable IDs as "<namespace>/<name>" when
-	// present.
+	// Retained for back-compat with schema-1 consumers; new consumers
+	// should prefer ID, which is host-prefixed and self-describing.
 	Namespace string `json:"namespace,omitempty"`
 	// Kind classifies the install: "local-fork" (pointer-shaped, forked
 	// from an upstream), "local" (local path, no upstream), "registry",
@@ -219,6 +236,7 @@ func printListJSON(w io.Writer, checkUpdates bool) error {
 			// rows; the JSON contract should be no less informative.
 			if ptr, _ := harness.LoadPointer(e.Name); ptr != nil {
 				entries = append(entries, listEntry{
+					ID:   namespace.CanonicalID(ptr.Source, ptr.Name),
 					Name: ptr.Name,
 					Kind: "local-fork",
 					Path: ptr.Source,
@@ -241,9 +259,10 @@ func printListJSON(w io.Writer, checkUpdates bool) error {
 	}
 
 	envelope := listEnvelope{
-		Capabilities: config.CapabilitiesVersion,
-		YnhVersion:   config.Version,
-		Harnesses:    entries,
+		Capabilities:  config.CapabilitiesVersion,
+		SchemaVersion: config.SchemaVersion,
+		YnhVersion:    config.Version,
+		Harnesses:     entries,
 	}
 
 	data, err := json.MarshalIndent(envelope, "", "  ")
@@ -287,6 +306,17 @@ func backfillProvenanceFromCache(prov *harness.Provenance) {
 	}
 }
 
+// canonicalIDForHarness returns the canonical id for a loaded harness.
+// In schema 1 the id is derived on-read from the recorded source URL; under
+// future schema 2 it will be read directly from installed.json.
+func canonicalIDForHarness(p *harness.Harness) string {
+	var sourceURL string
+	if p.InstalledFrom != nil {
+		sourceURL = p.InstalledFrom.Source
+	}
+	return namespace.CanonicalID(sourceURL, p.Name)
+}
+
 // buildListEntry assembles the structured-output entry for a loaded harness.
 // Shared by cmdListTo and cmdInfoTo so the per-harness shape stays uniform
 // between the two commands.
@@ -297,6 +327,7 @@ func buildListEntry(p *harness.Harness) listEntry {
 	backfillProvenanceFromCache(p.InstalledFrom)
 
 	entry := listEntry{
+		ID:               canonicalIDForHarness(p),
 		Name:             p.Name,
 		Namespace:        p.Namespace,
 		Kind:             classifyKind(p.InstalledFrom),

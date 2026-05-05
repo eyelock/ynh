@@ -78,11 +78,16 @@ func TestInstall_FromRegistryName(t *testing.T) {
 		t.Fatalf("regd not in ls envelope:\n%s", out)
 	}
 	assertEqual(t, "harnesses[regd].namespace", found.Namespace, wantNS)
+	// Canonical id surfaces alongside namespace. file:// registry URLs are
+	// local from the canonical-id perspective (no real host segment), so the
+	// derived id is "local/<name>".
+	assertEqual(t, "harnesses[regd].id", found.ID, "local/regd")
 
-	// `search --format json` must include namespace on registry entries so
-	// consumers can preview the namespace pre-install.
+	// `search --format json` must include namespace and id on registry
+	// entries so consumers can preview both pre-install.
 	searchOut, _ := s.mustRunYnh(t, "search", "regd", "--format", "json")
 	var results []struct {
+		ID        string `json:"id"`
 		Name      string `json:"name"`
 		Namespace string `json:"namespace,omitempty"`
 	}
@@ -93,6 +98,7 @@ func TestInstall_FromRegistryName(t *testing.T) {
 		t.Fatalf("search returned no results:\n%s", searchOut)
 	}
 	assertEqual(t, "search[0].namespace", results[0].Namespace, wantNS)
+	assertEqual(t, "search[0].id", results[0].ID, "local/regd")
 }
 
 // TestRegistry_NamespaceCollision verifies that two registries publishing a

@@ -11,12 +11,14 @@ import (
 
 // envelopeLs is a subset of the `ynh ls --format json` shape.
 type envelopeLs struct {
-	Capabilities string         `json:"capabilities"`
-	YnhVersion   string         `json:"ynh_version"`
-	Harnesses    []envelopeItem `json:"harnesses"`
+	Capabilities  string         `json:"capabilities"`
+	SchemaVersion int            `json:"schema_version"`
+	YnhVersion    string         `json:"ynh_version"`
+	Harnesses     []envelopeItem `json:"harnesses"`
 }
 
 type envelopeItem struct {
+	ID               string             `json:"id"`
 	Name             string             `json:"name"`
 	Namespace        string             `json:"namespace,omitempty"`
 	VersionInstalled string             `json:"version_installed"`
@@ -30,9 +32,10 @@ type envelopeItem struct {
 }
 
 type envelopeInfo struct {
-	Capabilities string `json:"capabilities"`
-	YnhVersion   string `json:"ynh_version"`
-	Harness      struct {
+	Capabilities  string `json:"capabilities"`
+	SchemaVersion int    `json:"schema_version"`
+	YnhVersion    string `json:"ynh_version"`
+	Harness       struct {
 		envelopeItem
 		Manifest map[string]any `json:"manifest"`
 	} `json:"harness"`
@@ -52,6 +55,9 @@ func TestLs_JSON_Shape(t *testing.T) {
 	if got.Capabilities == "" {
 		t.Error("capabilities field empty")
 	}
+	if got.SchemaVersion < 1 {
+		t.Errorf("schema_version = %d, want >= 1", got.SchemaVersion)
+	}
 	if got.YnhVersion == "" {
 		t.Error("ynh_version field empty")
 	}
@@ -60,6 +66,8 @@ func TestLs_JSON_Shape(t *testing.T) {
 	}
 	h := got.Harnesses[0]
 	assertEqual(t, "harnesses[0].name", h.Name, "minimal")
+	// Local install → canonical id is "local/<name>".
+	assertEqual(t, "harnesses[0].id", h.ID, "local/minimal")
 	assertEqual(t, "harnesses[0].version_installed", h.VersionInstalled, "0.1.0")
 	assertEqual(t, "harnesses[0].default_vendor", h.DefaultVendor, "claude")
 	assertEqual(t, "harnesses[0].installed_from.source_type", h.InstalledFrom.SourceType, "local")
@@ -79,7 +87,11 @@ func TestInfo_JSON_Shape(t *testing.T) {
 	if got.Capabilities == "" {
 		t.Error("capabilities field empty")
 	}
+	if got.SchemaVersion < 1 {
+		t.Errorf("schema_version = %d, want >= 1", got.SchemaVersion)
+	}
 	assertEqual(t, "harness.name", got.Harness.Name, "minimal")
+	assertEqual(t, "harness.id", got.Harness.ID, "local/minimal")
 	if got.Harness.Manifest == nil {
 		t.Fatal("expected manifest to be populated")
 	}
@@ -138,7 +150,7 @@ func TestStructuredOutput_TopLevelShape(t *testing.T) {
 				if err := json.Unmarshal([]byte(trimmed), &env); err != nil {
 					t.Fatalf("expected envelope object, got: %v\n%s", err, out)
 				}
-				for _, key := range []string{"capabilities", "ynh_version", tc.envelopeKey} {
+				for _, key := range []string{"capabilities", "schema_version", "ynh_version", tc.envelopeKey} {
 					if _, ok := env[key]; !ok {
 						t.Errorf("envelope missing %q key; got keys: %v", key, mapKeys(env))
 					}

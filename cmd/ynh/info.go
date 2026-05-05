@@ -18,15 +18,21 @@ import (
 // (capabilities) and the ynh release version. Mirrors listEnvelope so
 // consumers can decode either response with the same outer shape.
 type infoEnvelope struct {
-	Capabilities string    `json:"capabilities"`
-	YnhVersion   string    `json:"ynh_version"`
-	Harness      infoEntry `json:"harness"`
+	Capabilities  string    `json:"capabilities"`
+	SchemaVersion int       `json:"schema_version"`
+	YnhVersion    string    `json:"ynh_version"`
+	Harness       infoEntry `json:"harness"`
 }
 
 // infoEntry is the JSON shape for `ynh info` structured output.
 // Carries the same per-harness fields as listEntry, plus the raw manifest.
 type infoEntry struct {
+	// ID is the canonical, host-prefixed harness id — see listEntry.ID.
+	ID   string `json:"id"`
 	Name string `json:"name"`
+	// Namespace is the URL-derived "<org>/<repo>" — see listEntry.Namespace.
+	// Retained for back-compat; new consumers should prefer ID.
+	Namespace string `json:"namespace,omitempty"`
 	// Kind classifies the install — see listEntry.Kind.
 	Kind             string             `json:"kind"`
 	VersionInstalled string             `json:"version_installed"`
@@ -323,7 +329,9 @@ func printInfoJSON(stdout, stderr io.Writer, name string, checkUpdates bool) err
 		base = single[0]
 	}
 	entry := infoEntry{
+		ID:               base.ID,
 		Name:             base.Name,
+		Namespace:        base.Namespace,
 		Kind:             base.Kind,
 		VersionInstalled: base.VersionInstalled,
 		VersionAvailable: base.VersionAvailable,
@@ -341,9 +349,10 @@ func printInfoJSON(stdout, stderr io.Writer, name string, checkUpdates bool) err
 	}
 
 	envelope := infoEnvelope{
-		Capabilities: config.CapabilitiesVersion,
-		YnhVersion:   config.Version,
-		Harness:      entry,
+		Capabilities:  config.CapabilitiesVersion,
+		SchemaVersion: config.SchemaVersion,
+		YnhVersion:    config.Version,
+		Harness:       entry,
 	}
 
 	data, err := json.MarshalIndent(envelope, "", "  ")

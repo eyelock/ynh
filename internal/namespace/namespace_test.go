@@ -60,6 +60,34 @@ func TestParseQualified(t *testing.T) {
 	}
 }
 
+func TestCanonicalID(t *testing.T) {
+	tests := []struct {
+		sourceURL string
+		name      string
+		want      string
+	}{
+		{"https://github.com/eyelock/assistants", "planner", "github.com/eyelock/assistants/planner"},
+		{"https://github.com/eyelock/assistants.git", "planner", "github.com/eyelock/assistants/planner"},
+		{"git@github.com:eyelock/assistants.git", "planner", "github.com/eyelock/assistants/planner"},
+		{"git@github.com:eyelock/assistants", "planner", "github.com/eyelock/assistants/planner"},
+		{"https://gitlab.com/myorg/tools", "linter", "gitlab.com/myorg/tools/linter"},
+		{"http://codeberg.org/team/repo", "fmt", "codeberg.org/team/repo/fmt"},
+		{"", "planner", "local/planner"},
+		{"/Users/david/harnesses", "planner", "local/planner"},
+		{"./harnesses", "planner", "local/planner"},
+		{"~/harnesses", "planner", "local/planner"},
+		{"github.com/eyelock/assistants", "planner", "github.com/eyelock/assistants/planner"}, // host-prefixed, no scheme
+		{"https://example.com", "planner", "local/planner"},                                   // no org/repo
+		{"https://github.com/eyelock/assistants", "", ""},                                     // empty name → empty id
+	}
+	for _, tc := range tests {
+		got := CanonicalID(tc.sourceURL, tc.name)
+		if got != tc.want {
+			t.Errorf("CanonicalID(%q, %q) = %q, want %q", tc.sourceURL, tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestToFromFSName(t *testing.T) {
 	tests := []string{
 		"eyelock/assistants",

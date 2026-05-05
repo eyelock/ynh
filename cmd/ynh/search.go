@@ -9,6 +9,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/registry"
 	"github.com/eyelock/ynh/internal/sources"
 )
@@ -64,10 +65,15 @@ func cmdSearchTo(args []string, stdout, stderr io.Writer) error {
 
 // searchResultEntry is a unified result from both registries and local sources.
 type searchResultEntry struct {
+	// ID is the canonical, host-prefixed harness id this entry would
+	// install as — "<host>/<org>/<repo>/<name>" for registry results,
+	// "local/<name>" for local-source results. Lets consumers preview the
+	// post-install id without a round-trip to ls.
+	ID   string `json:"id"`
 	Name string `json:"name"`
 	// Namespace is the URL-derived "<org>/<repo>" for registry results.
-	// Empty for local-source results. Lets consumers preview the
-	// namespace they'll see post-install without a separate lookup.
+	// Empty for local-source results. Retained for back-compat;
+	// new consumers should prefer ID.
 	Namespace   string     `json:"namespace,omitempty"`
 	Description string     `json:"description,omitempty"`
 	Keywords    []string   `json:"keywords,omitempty"`
@@ -94,6 +100,7 @@ func unifiedSearch(cfg *config.Config, query string) ([]searchResultEntry, error
 		}
 		for _, r := range registry.Search(regs, query) {
 			entry := searchResultEntry{
+				ID:          namespace.CanonicalID(r.Entry.Repo, r.Entry.Name),
 				Name:        r.Entry.Name,
 				Namespace:   r.Entry.Namespace,
 				Description: r.Entry.Description,
@@ -117,6 +124,7 @@ func unifiedSearch(cfg *config.Config, query string) ([]searchResultEntry, error
 		for _, h := range discovered {
 			if matchesSourceQuery(h, q) {
 				entry := searchResultEntry{
+					ID:          namespace.CanonicalID("", h.Name),
 					Name:        h.Name,
 					Description: h.Description,
 					Repo:        h.Path,
