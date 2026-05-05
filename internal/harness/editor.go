@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/migration"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
@@ -22,8 +23,25 @@ func loadManifest(dir string) (*plugin.HarnessJSON, error) {
 // filesystem path and must contain a harness manifest. Otherwise it is looked up
 // as an installed harness name. Returns the directory and whether the harness
 // is installed (i.e. lives under the ynh harnesses directory).
+//
+// Schema 2 (planned in PR-canonical-3) will reject bare names entirely and
+// resolve canonical ids via InstalledDirByID/LoadPointerByID. This PR keeps
+// the schema-1 acceptance for backwards compatibility during the migration
+// window — auto-migration converts the on-disk layout, but the resolver
+// surface still accepts the legacy ref shapes consumers depend on today.
 func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
 	if strings.ContainsRune(ref, filepath.Separator) || strings.HasPrefix(ref, ".") {
+		// Try canonical-id lookup first when the slash form matches an installed id.
+		if namespace.Classify(ref) == namespace.RefID {
+			byID := InstalledDirByID(ref)
+			if DetectFormat(byID) == "plugin" {
+				return byID, true, nil
+			}
+			if ptr, _ := LoadPointerByID(ref); ptr != nil {
+				return ptr.Source, true, nil
+			}
+			// Fall through to filesystem-path interpretation.
+		}
 		abs, absErr := filepath.Abs(ref)
 		if absErr != nil {
 			return "", false, fmt.Errorf("resolving path %q: %w", ref, absErr)
