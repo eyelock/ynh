@@ -35,7 +35,7 @@ func TestSmoke_LiveAssistants(t *testing.T) {
 				t.Errorf("install stdout missing success line for %q:\n%s", name, out)
 			}
 
-			got := readInstalledJSON(t, filepath.Join(s.home, "harnesses", name))
+			got := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "github.com--eyelock--assistants--"+name))
 			assertEqual(t, "source_type", got.SourceType, "git")
 			assertEqual(t, "path", got.Path, path)
 			if !sha40.MatchString(got.SHA) {

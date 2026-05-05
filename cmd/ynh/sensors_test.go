@@ -45,7 +45,7 @@ func TestCmdSensors_Ls_JSON(t *testing.T) {
 	installListTestHarness(t, home, "sh", sensorHarnessJSON)
 
 	var stdout bytes.Buffer
-	err := cmdSensorsTo([]string{"ls", "sh", "--format", "json"}, &stdout, io.Discard)
+	err := cmdSensorsTo([]string{"ls", "local/sh", "--format", "json"}, &stdout, io.Discard)
 	if err != nil {
 		t.Fatalf("cmdSensorsTo: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestCmdSensors_Ls_Text(t *testing.T) {
 	installListTestHarness(t, home, "sh", sensorHarnessJSON)
 
 	var stdout bytes.Buffer
-	if err := cmdSensorsTo([]string{"ls", "sh"}, &stdout, io.Discard); err != nil {
+	if err := cmdSensorsTo([]string{"ls", "local/sh"}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdSensorsTo: %v", err)
 	}
 	out := stdout.String()
@@ -109,7 +109,7 @@ func TestCmdSensors_Show_FocusReferenceExpanded(t *testing.T) {
 	installListTestHarness(t, home, "sh", sensorHarnessJSON)
 
 	var stdout bytes.Buffer
-	if err := cmdSensorsTo([]string{"show", "sh", "sec"}, &stdout, io.Discard); err != nil {
+	if err := cmdSensorsTo([]string{"show", "local/sh", "sec"}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdSensorsTo: %v", err)
 	}
 	var entry sensorShowEntry
@@ -136,7 +136,7 @@ func TestCmdSensors_Show_InlineFocus(t *testing.T) {
 	installListTestHarness(t, home, "sh", sensorHarnessJSON)
 
 	var stdout bytes.Buffer
-	if err := cmdSensorsTo([]string{"show", "sh", "judge"}, &stdout, io.Discard); err != nil {
+	if err := cmdSensorsTo([]string{"show", "local/sh", "judge"}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdSensorsTo: %v", err)
 	}
 	var entry sensorShowEntry
@@ -157,7 +157,7 @@ func TestCmdSensors_Show_NotFound(t *testing.T) {
 	installListTestHarness(t, home, "sh", sensorHarnessJSON)
 
 	var stdout, stderr bytes.Buffer
-	err := cmdSensorsTo([]string{"show", "sh", "nope", "--format", "json"}, &stdout, &stderr)
+	err := cmdSensorsTo([]string{"show", "local/sh", "nope", "--format", "json"}, &stdout, &stderr)
 	if err == nil {
 		t.Fatal("expected error for unknown sensor")
 	}
@@ -172,7 +172,7 @@ func TestCmdSensors_Ls_NoSensors(t *testing.T) {
 	installListTestHarness(t, home, "empty", `{"name":"empty","version":"0.1.0"}`)
 
 	var stdout bytes.Buffer
-	if err := cmdSensorsTo([]string{"ls", "empty"}, &stdout, io.Discard); err != nil {
+	if err := cmdSensorsTo([]string{"ls", "local/empty"}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdSensorsTo: %v", err)
 	}
 	if !strings.Contains(stdout.String(), "no sensors declared") {
@@ -213,7 +213,7 @@ func TestCmdInfo_RendersSensorsSection(t *testing.T) {
 	installListTestHarness(t, home, "sh", sensorHarnessJSON)
 
 	var stdout bytes.Buffer
-	if err := cmdInfoTo([]string{"sh"}, &stdout, io.Discard); err != nil {
+	if err := cmdInfoTo([]string{"local/sh"}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdInfoTo: %v", err)
 	}
 	out := stdout.String()
@@ -245,7 +245,7 @@ func TestCmdSensors_Run_Command(t *testing.T) {
 
 	t.Run("zero exit", func(t *testing.T) {
 		var stdout bytes.Buffer
-		if err := cmdSensorsTo([]string{"run", "sh", "build"}, &stdout, io.Discard); err != nil {
+		if err := cmdSensorsTo([]string{"run", "local/sh", "build"}, &stdout, io.Discard); err != nil {
 			t.Fatalf("cmdSensorsTo: %v", err)
 		}
 		var r sensorRunResult
@@ -265,7 +265,7 @@ func TestCmdSensors_Run_Command(t *testing.T) {
 
 	t.Run("non-zero exit captured, no passed bool", func(t *testing.T) {
 		var stdout bytes.Buffer
-		if err := cmdSensorsTo([]string{"run", "sh", "fail"}, &stdout, io.Discard); err != nil {
+		if err := cmdSensorsTo([]string{"run", "local/sh", "fail"}, &stdout, io.Discard); err != nil {
 			t.Fatalf("cmdSensorsTo: %v", err)
 		}
 		var r sensorRunResult
@@ -308,7 +308,7 @@ func TestCmdSensors_Run_Files(t *testing.T) {
 	}
 
 	var stdout bytes.Buffer
-	if err := cmdSensorsTo([]string{"run", "sh", "reports", "--cwd", work}, &stdout, io.Discard); err != nil {
+	if err := cmdSensorsTo([]string{"run", "local/sh", "reports", "--cwd", work}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdSensorsTo: %v", err)
 	}
 	var r sensorRunResult
@@ -324,7 +324,7 @@ func TestCmdSensors_Run_Files(t *testing.T) {
 
 	// --no-content suppresses content but keeps size/path
 	stdout.Reset()
-	if err := cmdSensorsTo([]string{"run", "sh", "reports", "--cwd", work, "--no-content"}, &stdout, io.Discard); err != nil {
+	if err := cmdSensorsTo([]string{"run", "local/sh", "reports", "--cwd", work, "--no-content"}, &stdout, io.Discard); err != nil {
 		t.Fatalf("--no-content: %v", err)
 	}
 	var r2 sensorRunResult
@@ -345,7 +345,7 @@ func TestCmdSensors_Run_FocusReturnsResolvedPayload(t *testing.T) {
 	installListTestHarness(t, home, "sh", sensorHarnessJSON)
 
 	var stdout bytes.Buffer
-	if err := cmdSensorsTo([]string{"run", "sh", "sec"}, &stdout, io.Discard); err != nil {
+	if err := cmdSensorsTo([]string{"run", "local/sh", "sec"}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdSensorsTo: %v", err)
 	}
 	var r sensorRunResult
@@ -379,7 +379,7 @@ func TestRoleField_ValidatesAndSurfacesInLs(t *testing.T) {
 	}`)
 
 	var stdout bytes.Buffer
-	if err := cmdSensorsTo([]string{"ls", "sh", "--format", "json"}, &stdout, io.Discard); err != nil {
+	if err := cmdSensorsTo([]string{"ls", "local/sh", "--format", "json"}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdSensorsTo: %v", err)
 	}
 	var entries []sensorListEntry

@@ -48,7 +48,7 @@ func TestProfile_HookInheritsBaseEvent(t *testing.T) {
 	if err := os.MkdirAll(project, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustRunYnhInDir(t, s, project, "run", "hook-inherit", "-v", "cursor", "--profile", "p", "--install")
+	mustRunYnhInDir(t, s, project, "run", "local/hook-inherit", "-v", "cursor", "--profile", "p", "--install")
 
 	hookFile := filepath.Join(s.home, "run", "hook-inherit", ".cursor", "hooks.json")
 	got, err := os.ReadFile(hookFile)
@@ -102,7 +102,7 @@ func TestProfile_McpDeepMerge(t *testing.T) {
 	if err := os.MkdirAll(project, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustRunYnhInDir(t, s, project, "run", "mcp-merge", "-v", "cursor", "--profile", "p", "--install")
+	mustRunYnhInDir(t, s, project, "run", "local/mcp-merge", "-v", "cursor", "--profile", "p", "--install")
 
 	mcpFile := filepath.Join(s.home, "run", "mcp-merge", ".cursor", "mcp.json")
 	got, err := os.ReadFile(mcpFile)
@@ -145,7 +145,7 @@ func TestMcp_HttpUrl(t *testing.T) {
 	if err := os.MkdirAll(project, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustRunYnhInDir(t, s, project, "run", name, "-v", "claude", "--install")
+	mustRunYnhInDir(t, s, project, "run", "local/"+name, "-v", "claude", "--install")
 
 	mcpFile := filepath.Join(s.home, "run", name, ".claude", ".mcp.json")
 	body2, err := os.ReadFile(mcpFile)

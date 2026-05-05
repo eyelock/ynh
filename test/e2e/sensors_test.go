@@ -129,7 +129,7 @@ func TestSensors_Install_PreservesAllSourceVariants(t *testing.T) {
 	src := writeSensorHarness(t, manifest)
 	s.mustRunYnh(t, "install", src)
 
-	out, _ := s.mustRunYnh(t, "sensors", "ls", "sensor-demo", "--format", "json")
+	out, _ := s.mustRunYnh(t, "sensors", "ls", "local/sensor-demo", "--format", "json")
 	var got []sensorListShape
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("parsing sensors ls JSON: %v\n%s", err, out)
@@ -183,7 +183,7 @@ func TestSensors_Show_ResolvesFocusReference(t *testing.T) {
 	src := writeSensorHarness(t, manifest)
 	s.mustRunYnh(t, "install", src)
 
-	out, _ := s.mustRunYnh(t, "sensors", "show", "sensor-show", "security", "--format", "json")
+	out, _ := s.mustRunYnh(t, "sensors", "show", "local/sensor-show", "security", "--format", "json")
 	var got sensorShowShape
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("parsing sensors show JSON: %v\n%s", err, out)
@@ -222,7 +222,7 @@ func TestSensors_Run_CommandCapturesExitAndStreams(t *testing.T) {
 
 	// runYnh, not mustRunYnh — sensor command exits non-zero. ynh itself
 	// must still exit 0; the non-zero is reported via JSON.
-	out, _, err := s.runYnh(t, "sensors", "run", "sensor-run-cmd", "noisy")
+	out, _, err := s.runYnh(t, "sensors", "run", "local/sensor-run-cmd", "noisy")
 	if err != nil {
 		t.Fatalf("ynh sensors run unexpectedly failed: %v\n%s", err, out)
 	}
@@ -284,7 +284,7 @@ func TestSensors_Run_FilesGlobAndNoContent(t *testing.T) {
 	}
 
 	// First run: include content.
-	out, _ := s.mustRunYnh(t, "sensors", "run", "sensor-run-files", "results", "--cwd", cwd)
+	out, _ := s.mustRunYnh(t, "sensors", "run", "local/sensor-run-files", "results", "--cwd", cwd)
 	var withContent sensorRunShape
 	if err := json.Unmarshal([]byte(out), &withContent); err != nil {
 		t.Fatalf("parsing run JSON: %v\n%s", err, out)
@@ -303,7 +303,7 @@ func TestSensors_Run_FilesGlobAndNoContent(t *testing.T) {
 	}
 
 	// Second run: --no-content.
-	out2, _ := s.mustRunYnh(t, "sensors", "run", "sensor-run-files", "results", "--cwd", cwd, "--no-content")
+	out2, _ := s.mustRunYnh(t, "sensors", "run", "local/sensor-run-files", "results", "--cwd", cwd, "--no-content")
 	var withoutContent sensorRunShape
 	if err := json.Unmarshal([]byte(out2), &withoutContent); err != nil {
 		t.Fatalf("parsing run JSON: %v\n%s", err, out2)
@@ -351,7 +351,7 @@ func TestSensors_InlineFocus_NotInTopLevelFocus(t *testing.T) {
 
 	// Inspect top-level focus via info text — info JSON does not break
 	// out focus as a discrete field, but the text rendering does.
-	out, _ := s.mustRunYnh(t, "info", "sensor-inline")
+	out, _ := s.mustRunYnh(t, "info", "local/sensor-inline")
 	if !strings.Contains(out, "audit-vulns") {
 		t.Errorf("expected top-level focus 'audit-vulns' in info output:\n%s", out)
 	}
@@ -482,7 +482,7 @@ func TestSensors_ProfileFocusRoundTrip(t *testing.T) {
 	s.mustRunYnh(t, "install", src)
 
 	// 1. show — focus reference resolved, profile field surfaced.
-	showOut, _ := s.mustRunYnh(t, "sensors", "show", harnessName, "audit-gate", "--format", "json")
+	showOut, _ := s.mustRunYnh(t, "sensors", "show", "local/"+harnessName, "audit-gate", "--format", "json")
 	var shown sensorShowShape
 	if err := json.Unmarshal([]byte(showOut), &shown); err != nil {
 		t.Fatalf("parsing sensors show JSON: %v\n%s", err, showOut)
@@ -496,7 +496,7 @@ func TestSensors_ProfileFocusRoundTrip(t *testing.T) {
 	assertEqual(t, "show.focus.inline", shown.Source.Focus.Inline, false)
 
 	// 2. run — same focus payload returned to the loop driver.
-	runOut, _ := s.mustRunYnh(t, "sensors", "run", harnessName, "audit-gate")
+	runOut, _ := s.mustRunYnh(t, "sensors", "run", "local/"+harnessName, "audit-gate")
 	var ran sensorRunShape
 	if err := json.Unmarshal([]byte(runOut), &ran); err != nil {
 		t.Fatalf("parsing sensors run JSON: %v\n%s", err, runOut)
@@ -514,7 +514,7 @@ func TestSensors_ProfileFocusRoundTrip(t *testing.T) {
 	if err := os.MkdirAll(project, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustRunYnhInDir(t, s, project, "run", harnessName, "-v", "cursor", "--focus", "audit", "--install")
+	mustRunYnhInDir(t, s, project, "run", "local/"+harnessName, "-v", "cursor", "--focus", "audit", "--install")
 
 	hookFile := filepath.Join(s.home, "run", harnessName, ".cursor", "hooks.json")
 	body, err := os.ReadFile(hookFile)

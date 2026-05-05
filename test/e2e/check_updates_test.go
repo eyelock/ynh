@@ -64,7 +64,7 @@ func TestLs_CheckUpdates_JSON_Shape(t *testing.T) {
 	}
 
 	// Also sanity-check we can still read installed.json and it agrees with the JSON.
-	inst := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "check-updates-harness"))
+	inst := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "local--check-updates-harness"))
 	if len(inst.Resolved) != 1 {
 		t.Fatalf("installed.json: expected 1 resolved entry, got %d", len(inst.Resolved))
 	}

@@ -30,7 +30,7 @@ func TestStatus_Text(t *testing.T) {
 	if err := os.MkdirAll(project, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustRunYnhInDir(t, s, project, "run", "with-skill-status", "-v", "cursor", "--install")
+	mustRunYnhInDir(t, s, project, "run", "local/with-skill-status", "-v", "cursor", "--install")
 
 	out, _ = s.mustRunYnh(t, "status")
 	for _, want := range []string{"HARNESS", "VENDOR", "PROJECT", "with-skill-status", "cursor", project} {

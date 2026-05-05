@@ -41,7 +41,7 @@ func TestMcp_EnvPassthrough(t *testing.T) {
 	if err := os.MkdirAll(project, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustRunYnhInDir(t, s, project, "run", name, "-v", "claude", "--install")
+	mustRunYnhInDir(t, s, project, "run", "local/"+name, "-v", "claude", "--install")
 
 	mcp, err := os.ReadFile(filepath.Join(s.home, "run", name, ".claude", ".mcp.json"))
 	if err != nil {
@@ -83,7 +83,7 @@ func TestHooks_Matcher(t *testing.T) {
 	if err := os.MkdirAll(project, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mustRunYnhInDir(t, s, project, "run", name, "-v", "claude", "--install")
+	mustRunYnhInDir(t, s, project, "run", "local/"+name, "-v", "claude", "--install")
 
 	hooks, err := os.ReadFile(filepath.Join(s.home, "run", name, ".claude", "hooks", "hooks.json"))
 	if err != nil {

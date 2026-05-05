@@ -59,7 +59,7 @@ func TestInfo_WithIncludes(t *testing.T) {
 	}
 	s.mustRunYnh(t, "install", harness)
 
-	out, _ := s.mustRunYnh(t, "info", "with-include", "--format", "json")
+	out, _ := s.mustRunYnh(t, "info", "local/with-include", "--format", "json")
 	var got envelopeInfo
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("parsing info JSON: %v\n%s", err, out)
@@ -88,7 +88,7 @@ func TestInstall_ReservedNameYnh(t *testing.T) {
 	s.mustRunYnh(t, "install", harness)
 
 	// Harness dir exists.
-	assertDirExists(t, filepath.Join(s.home, "harnesses", "ynh"))
+	assertDirExists(t, filepath.Join(s.home, "harnesses", "local--ynh"))
 
 	// Launcher must NOT exist — would overwrite ynh itself.
 	if _, err := os.Stat(filepath.Join(s.home, "bin", "ynh")); err == nil {
@@ -133,7 +133,7 @@ func TestInstall_GitWithRefAndPath(t *testing.T) {
 
 	// Installed at ~/.ynh/harnesses/harness-a/, with installed.json carrying
 	// the resolved SHA and the --path subdir.
-	installDir := filepath.Join(s.home, "harnesses", "harness-a")
+	installDir := filepath.Join(s.home, "harnesses", "local--harness-a")
 	assertFileExists(t, filepath.Join(installDir, ".ynh-plugin", "plugin.json"))
 
 	got := readInstalledJSON(t, installDir)

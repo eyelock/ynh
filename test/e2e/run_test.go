@@ -22,7 +22,7 @@ func TestRun_Cursor_InstallClean(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mustRunYnhInDir(t, s, project, "run", "with-skill", "-v", "cursor", "--install")
+	mustRunYnhInDir(t, s, project, "run", "local/with-skill", "-v", "cursor", "--install")
 
 	cursorSkillsDir := filepath.Join(project, ".cursor", "skills")
 	assertDirExists(t, cursorSkillsDir)
@@ -51,7 +51,7 @@ func TestRun_Cursor_InstallClean(t *testing.T) {
 		}
 	}
 
-	mustRunYnhInDir(t, s, project, "run", "with-skill", "-v", "cursor", "--clean")
+	mustRunYnhInDir(t, s, project, "run", "local/with-skill", "-v", "cursor", "--clean")
 
 	if _, err := os.Stat(cursorSkillsDir); err == nil {
 		// The dir may legitimately remain empty after clean — only fail if it still has symlinks.

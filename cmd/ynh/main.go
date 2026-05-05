@@ -17,6 +17,7 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/migration"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/pathutil"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
@@ -277,8 +278,17 @@ func cmdInstall(args []string) error {
 		}
 		srcDir = absPath
 	} else {
+		// Clone-URL precedence: when resolveInstallSource synthesised a
+		// gitURL (registry lookup OR canonical-id normalisation), use that
+		// — it's the real repo URL, not the user-typed shape. Fall back
+		// to the original source for direct Git URLs (https://, git@).
+		cloneURL := source
+		if resolved.gitURL != "" {
+			cloneURL = resolved.gitURL
+		}
+
 		// Check remote source against allow-list
-		if err := cfg.CheckRemoteSource(source); err != nil {
+		if err := cfg.CheckRemoteSource(cloneURL); err != nil {
 			return err
 		}
 
@@ -286,9 +296,9 @@ func cmdInstall(args []string) error {
 		// entry that pinned a ref, honor it so the on-disk checkout matches
 		// what the marketplace declared. If a sha is also declared, verify
 		// it against the fetched HEAD.
-		result, err := resolver.EnsureRepo(source, resolved.ref)
+		result, err := resolver.EnsureRepo(cloneURL, resolved.ref)
 		if err != nil {
-			return fmt.Errorf("resolving %s: %w", source, err)
+			return fmt.Errorf("resolving %s: %w", cloneURL, err)
 		}
 		if err := verifyResolvedSHA(result.Path, resolved.sha); err != nil {
 			return err
@@ -322,13 +332,18 @@ func cmdInstall(args []string) error {
 	// Users invoke it with: ynh run ynh
 	reservedName := p.Name == "ynh"
 
-	// Install dir: namespaced when a registry namespace was resolved, else flat.
-	var installDir string
-	if resolved.namespace != "" {
-		installDir = harness.InstalledDirNS(resolved.namespace, p.Name)
-	} else {
-		installDir = harness.InstalledDir(p.Name)
+	// Install dir: schema 2 — id-keyed flat layout under HarnessesDir.
+	// The canonical id is derived from the recorded source URL plus the
+	// harness name. Source URL precedence:
+	//  1. Registry-resolved gitURL (registry installs)
+	//  2. The original `source` arg if it's a remote URL (direct git installs)
+	//  3. Empty (local installs → "local/<name>")
+	sourceForID := resolved.gitURL
+	if sourceForID == "" && resolved.sourceType == "git" {
+		sourceForID = source
 	}
+	canonID := namespace.CanonicalID(sourceForID, p.Name)
+	installDir := harness.InstalledDirByID(canonID)
 
 	// If source == install dir, skip the clean+copy (already in place).
 	// Otherwise remove stale artifacts and copy fresh.
@@ -353,7 +368,13 @@ func cmdInstall(args []string) error {
 	}
 
 	// Write install provenance to .ynh-plugin/installed.json (separate from plugin.json)
+	// For canonical-id installs (e.g. `ynh install github.com/org/repo/name`),
+	// resolved.gitURL holds the synthesized clone URL — record THAT as the
+	// provenance source, not the canonical id, so re-cloning works.
 	provSource := source
+	if resolved.gitURL != "" {
+		provSource = resolved.gitURL
+	}
 	if resolved.sourceType == "local" {
 		provSource = originalSource
 	} else if resolved.localPath != "" {
@@ -434,7 +455,7 @@ func cmdInstall(args []string) error {
 
 	// Generate launcher script (skip for reserved names that conflict with the binary)
 	if !reservedName {
-		if err := generateLauncher(p.Name); err != nil {
+		if err := generateLauncher(p.Name, canonID); err != nil {
 			return err
 		}
 	}
@@ -538,7 +559,7 @@ func cmdUpdate(args []string) error {
 
 	name := args[0]
 
-	p, err := harness.Load(name)
+	p, err := harness.LoadQualified(name)
 	if err != nil {
 		return err
 	}
@@ -717,7 +738,7 @@ func cmdRun(args []string) error {
 	switch {
 	case ra.HarnessName != "":
 		name = ra.HarnessName
-		p, err = harness.Load(name)
+		p, err = harness.LoadQualified(name)
 		if err != nil {
 			return err
 		}
@@ -727,10 +748,6 @@ func cmdRun(args []string) error {
 		p, err = harness.LoadFile(ra.HarnessFile)
 		if err != nil {
 			return err
-		}
-		name = p.Name
-		if name == "" {
-			name = "(inline)"
 		}
 		harnessDir = filepath.Dir(ra.HarnessFile)
 
@@ -751,12 +768,9 @@ func cmdRun(args []string) error {
 		if err != nil {
 			return err
 		}
-		name = p.Name
-		if name == "" {
-			name = "(inline)"
-		}
 		harnessDir = cwd
 	}
+	_ = name // run-dir naming uses p.Name; this var is retained only for legacy logging paths above
 
 	// Resolve focus → profile + prompt
 	if ra.FocusFlag != "" {
@@ -839,7 +853,11 @@ func cmdRun(args []string) error {
 	// Assemble vendor config into deterministic run dir.
 	// We use a stable path instead of a temp dir because syscall.Exec
 	// replaces this process — deferred cleanup would never run.
-	runDirName := name
+	//
+	// Run-dir naming uses the harness's bare Name (not the user-typed
+	// canonical id) so that paths under run/ stay flat and don't contain
+	// slashes. p.Name is set when the harness loaded successfully.
+	runDirName := p.Name
 	if ra.HarnessFile != "" || ra.HarnessName == "" {
 		// Inline/discovered harness: use a hash-based stable dir name
 		h := fmt.Sprintf("%x", hashString(harnessDir))
@@ -1209,17 +1227,24 @@ func hashString(s string) uint64 {
 	return h
 }
 
-func generateLauncher(name string) error {
+// generateLauncher writes the per-harness launcher at ~/.ynh/bin/<name>.
+// The launcher delegates to `ynh run <canonical-id>` rather than the bare
+// name — schema 2 rejects bare names at the resolver, so the launcher must
+// pass the same canonical id form a CLI user would type.
+func generateLauncher(name, canonicalID string) error {
 	binDir := config.BinDir()
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		return err
 	}
 
+	// Filename stays the bare name so users invoke the harness as
+	// `~/.ynh/bin/<name>` (and bare on PATH). Only the embedded `ynh run`
+	// arg is the canonical id.
 	launcherPath := filepath.Join(binDir, name)
 	script := fmt.Sprintf(`#!/bin/bash
 # Generated by ynh - do not edit
 exec ynh run %q "$@"
-`, name)
+`, canonicalID)
 
 	if err := os.WriteFile(launcherPath, []byte(script), 0o755); err != nil {
 		return err

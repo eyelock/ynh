@@ -42,7 +42,7 @@ func TestHooks_PerVendor(t *testing.T) {
 			if err := os.MkdirAll(project, 0o755); err != nil {
 				t.Fatal(err)
 			}
-			mustRunYnhInDir(t, s, project, "run", name, "-v", tc.vendor, "--install")
+			mustRunYnhInDir(t, s, project, "run", "local/"+name, "-v", tc.vendor, "--install")
 
 			runDir := filepath.Join(s.home, "run", name)
 			path := filepath.Join(runDir, tc.hookFile)

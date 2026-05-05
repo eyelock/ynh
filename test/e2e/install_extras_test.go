@@ -31,7 +31,7 @@ func TestInstall_MigratesLegacyHarnessJson(t *testing.T) {
 	s.mustRunYnh(t, "install", srcDir)
 
 	// In the install dir, the legacy file must be gone and the new layout present.
-	installDir := filepath.Join(s.home, "harnesses", "legacy")
+	installDir := filepath.Join(s.home, "harnesses", "local--legacy")
 	if _, err := os.Stat(filepath.Join(installDir, ".harness.json")); !os.IsNotExist(err) {
 		t.Errorf("legacy .harness.json should have been removed in install dir, err=%v", err)
 	}
@@ -66,7 +66,7 @@ func TestInstall_BareAgentsMd(t *testing.T) {
 
 	s.mustRunYnh(t, "install", srcDir)
 
-	installDir := filepath.Join(s.home, "harnesses", "bare-agents")
+	installDir := filepath.Join(s.home, "harnesses", "local--bare-agents")
 	assertFileExists(t, filepath.Join(installDir, ".ynh-plugin", "plugin.json"))
 	assertFileExists(t, filepath.Join(installDir, "AGENTS.md"))
 

@@ -30,6 +30,8 @@ func cmdMigrateTo(args []string, stdout, stderr io.Writer) error {
 			}
 			i++
 			format = args[i]
+		case "--json":
+			format = "json"
 		case "--dry-run":
 			dryRun = true
 		case "--skip-broken":

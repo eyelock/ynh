@@ -25,7 +25,7 @@ func TestRun_Claude_InstallClean(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, _ := mustRunYnhInDir(t, s, project, "run", "with-skill-claude", "-v", "claude", "--install")
+	out, _ := mustRunYnhInDir(t, s, project, "run", "local/with-skill-claude", "-v", "claude", "--install")
 	if !strings.Contains(out, "native plugin loading") {
 		t.Errorf("expected 'native plugin loading' message, got:\n%s", out)
 	}
@@ -40,7 +40,7 @@ func TestRun_Claude_InstallClean(t *testing.T) {
 	// don't assert on it here — the @AGENTS.md import is covered by unit tests.
 
 	// --clean is a no-op for native vendors but should still exit 0.
-	out, _ = mustRunYnhInDir(t, s, project, "run", "with-skill-claude", "-v", "claude", "--clean")
+	out, _ = mustRunYnhInDir(t, s, project, "run", "local/with-skill-claude", "-v", "claude", "--clean")
 	if !strings.Contains(out, "no symlinks to clean") {
 		t.Errorf("expected 'no symlinks to clean' message, got:\n%s", out)
 	}

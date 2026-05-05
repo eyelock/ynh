@@ -10,6 +10,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/resolver"
 )
@@ -235,11 +236,14 @@ func printListJSON(w io.Writer, checkUpdates bool) error {
 			// is missing. Text mode already shows these as "(error: ...)"
 			// rows; the JSON contract should be no less informative.
 			if ptr, _ := harness.LoadPointer(e.Name); ptr != nil {
+				id := namespace.CanonicalID(ptr.Source, ptr.Name)
+				ns, _ := namespace.SplitID(id)
 				entries = append(entries, listEntry{
-					ID:   namespace.CanonicalID(ptr.Source, ptr.Name),
-					Name: ptr.Name,
-					Kind: "local-fork",
-					Path: ptr.Source,
+					ID:        id,
+					Name:      ptr.Name,
+					Namespace: ns,
+					Kind:      "local-fork",
+					Path:      ptr.Source,
 					InstalledFrom: &listInstalledFrom{
 						SourceType:  ptr.SourceType,
 						Source:      ptr.Source,
@@ -260,7 +264,7 @@ func printListJSON(w io.Writer, checkUpdates bool) error {
 
 	envelope := listEnvelope{
 		Capabilities:  config.CapabilitiesVersion,
-		SchemaVersion: config.SchemaVersion,
+		SchemaVersion: migration.ReadSchemaVersion(config.HomeDir()),
 		YnhVersion:    config.Version,
 		Harnesses:     entries,
 	}
@@ -307,14 +311,35 @@ func backfillProvenanceFromCache(prov *harness.Provenance) {
 }
 
 // canonicalIDForHarness returns the canonical id for a loaded harness.
-// In schema 1 the id is derived on-read from the recorded source URL; under
-// future schema 2 it will be read directly from installed.json.
+// Derived on-read from the recorded source URL. Under schema 2 the id is
+// also stamped into installed.json by the migration routine; this helper
+// remains the source of truth for what gets emitted in JSON envelopes
+// because the derive logic is uniform across pre- and post-migration
+// installs.
 func canonicalIDForHarness(p *harness.Harness) string {
 	var sourceURL string
 	if p.InstalledFrom != nil {
 		sourceURL = p.InstalledFrom.Source
 	}
 	return namespace.CanonicalID(sourceURL, p.Name)
+}
+
+// canonicalNamespaceForHarness returns the host-prefixed namespace portion
+// of a harness's canonical id — everything before the last "/". Replaces
+// the legacy host-stripped namespace ("eyelock/assistants") with the full
+// canonical prefix ("github.com/eyelock/assistants" or "local"), so the
+// invariant id == namespace + "/" + name holds in schema 2.
+func canonicalNamespaceForHarness(p *harness.Harness) string {
+	id := canonicalIDForHarness(p)
+	ns, _ := namespace.SplitID(id)
+	// "local" is an internal sentinel; consumers expect empty for flat
+	// (non-namespaced) installs. Keep the canonical id self-describing
+	// while preserving the schema-1 promise that `namespace` is empty
+	// for local harnesses.
+	if ns == "local" {
+		return ""
+	}
+	return ns
 }
 
 // buildListEntry assembles the structured-output entry for a loaded harness.
@@ -329,7 +354,7 @@ func buildListEntry(p *harness.Harness) listEntry {
 	entry := listEntry{
 		ID:               canonicalIDForHarness(p),
 		Name:             p.Name,
-		Namespace:        p.Namespace,
+		Namespace:        canonicalNamespaceForHarness(p),
 		Kind:             classifyKind(p.InstalledFrom),
 		VersionInstalled: p.Version,
 		Description:      p.Description,

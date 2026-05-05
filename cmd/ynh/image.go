@@ -193,7 +193,7 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 		}
 	} else {
 		// Load from installed harnesses
-		p, err = harness.Load(ia.name)
+		p, err = harness.LoadQualified(ia.name)
 		if err != nil {
 			return err
 		}
