@@ -7,7 +7,7 @@ Search for harnesses from curated registries and install them by name. A registr
 ```bash
 # Clean up from any previous run
 rm -rf /tmp/ynh-tutorial
-ynh uninstall david planner tester codereview 2>/dev/null
+ynh uninstall github.com/eyelock/assistants/david github.com/eyelock/assistants/planner github.com/eyelock/assistants/tester local/codereview 2>/dev/null
 ynh registry remove /tmp/ynh-tutorial/my-registry 2>/dev/null
 ynh sources remove codereview 2>/dev/null
 
@@ -140,34 +140,36 @@ Expected: all three harnesses from `tutorial-registry` (david, planner, media-ma
 ynh install david
 ```
 
-Expected: resolves `david` from the registry to `github.com/eyelock/assistants` with `--path ynh/david`, then installs normally. The namespace is derived from the registry URL (`ynh-tutorial/my-registry`), so the harness is installed under a namespaced directory:
+Expected: resolves `david` from the registry to `github.com/eyelock/assistants` with `--path ynh/david`, then installs normally. The canonical id is derived from the harness's source repo (`github.com/eyelock/assistants/david`), and the install lives at the on-disk equivalent:
 
 ```
 Installed harness "david"
-  Location: /Users/<you>/.ynh/harnesses/ynh-tutorial--my-registry/david
+  Location: /Users/<you>/.ynh/harnesses/github.com--eyelock--assistants--david
   Launcher: /Users/<you>/.ynh/bin/david
   Vendor:   claude
 ```
 
-Verify the roundtrip — `ynh ls`, `ynh info`, and `ynh uninstall` all resolve by short name:
+Inspect and uninstall use the canonical id — bare names like `david` are no longer accepted:
 
 ```bash
-ynh ls --format json | grep '"path"'
-# Expected: contains "ynh-tutorial--my-registry/david"
+ynh ls --format json | jq -r '.harnesses[].id'
+# Expected: github.com/eyelock/assistants/david
 
-ynh info david --format json | grep '"path"'
-# Expected: contains "ynh-tutorial--my-registry/david"
+ynh info github.com/eyelock/assistants/david --format json | jq -r '.path'
+# Expected: contains "github.com--eyelock--assistants--david"
 ```
+
+The launcher script (`~/.ynh/bin/david`) keeps the short name while it remains unambiguous; if a second `david` is installed from a different source, the short launcher is removed and you invoke the harness via the canonical id with `ynh run`.
 
 ## T7.6: Install — with registry qualifier
 
-If you have multiple registries and names collide:
+If you have multiple registries and names collide at search time, the `name@registry` form picks one:
 
 ```bash
 ynh install planner@tutorial-registry
 ```
 
-The `name@registry` format bypasses ambiguity.
+After install, refer to the harness by its canonical id (`github.com/eyelock/assistants/planner`) for `info`, `uninstall`, etc. The `@` form is only used to disambiguate `install`.
 
 ## T7.6b: Pin a registry entry to a ref or SHA
 
@@ -243,11 +245,13 @@ ynh install development
 #     david - Full-stack development harness with Go expertise (from tutorial-registry)
 ```
 
-ynh tries an exact name match first. If that fails, it searches descriptions and keywords and shows similar results — but doesn't install automatically. Use the exact name:
+ynh tries an exact name match first. If that fails, it searches descriptions and keywords and shows similar results — but doesn't install automatically. Use the exact registry name:
 
 ```bash
 ynh install david
 ```
+
+(The bare-name form is accepted by `install` because it is a registry lookup. Other commands — `info`, `uninstall`, `run`, `update` — require the canonical id.)
 
 ## T7.9: Install — no match error
 
@@ -339,17 +343,19 @@ ynh install codereview
 Expected:
 ```
 Installed harness "codereview"
-  Location: /Users/<you>/.ynh/harnesses/codereview
+  Location: /Users/<you>/.ynh/harnesses/local--codereview
   Launcher: /Users/<you>/.ynh/bin/codereview
   Vendor:   claude
 ```
+
+A local-source install gets the canonical id `local/codereview` — the source itself has no remote origin to derive a host-prefixed id from.
 
 ## T7.16: Uninstall removes the source entry
 
 When a harness and its source share the same name, uninstalling the harness cleans up the source entry from config automatically:
 
 ```bash
-ynh uninstall codereview
+ynh uninstall local/codereview
 ynh sources list
 ```
 
@@ -402,9 +408,9 @@ Remote registries use Git URLs:
 ## Clean up
 
 ```bash
-ynh uninstall david 2>/dev/null
-ynh uninstall planner 2>/dev/null
-ynh uninstall tester 2>/dev/null
+ynh uninstall github.com/eyelock/assistants/david 2>/dev/null
+ynh uninstall github.com/eyelock/assistants/planner 2>/dev/null
+ynh uninstall github.com/eyelock/assistants/tester 2>/dev/null
 ```
 
 ## What you learned

@@ -203,8 +203,8 @@ ynh ls --format json
 Expected (timestamps and paths will differ):
 ```json
 {
-  "capabilities": "0.3.0",
-  "schema_version": 1,
+  "capabilities": "0.4.0",
+  "schema_version": 2,
   "ynh_version": "<version>",
   "harnesses": [
     {
@@ -214,7 +214,7 @@ Expected (timestamps and paths will differ):
       "version_installed": "0.1.0",
       "description": "Tutorial harness",
       "default_vendor": "claude",
-      "path": "/Users/<you>/.ynh/harnesses/my-harness",
+      "path": "/Users/<you>/.ynh/harnesses/local--my-harness",
       "is_pinned": false,
       "installed_from": {
         "source_type": "local",
@@ -273,15 +273,15 @@ installed
 With no harnesses installed, `harnesses` is an empty array — but the envelope (with `capabilities` and `ynh_version`) is still present:
 
 ```bash
-ynh uninstall my-harness
+ynh uninstall local/my-harness
 ynh ls --format json
 ```
 
 Expected (truncated):
 ```json
 {
-  "capabilities": "0.3.0",
-  "schema_version": 1,
+  "capabilities": "0.4.0",
+  "schema_version": 2,
   "ynh_version": "<version>",
   "harnesses": []
 }
@@ -342,7 +342,7 @@ All seven paths shift to the overridden root.
 ## Clean up
 
 ```bash
-ynh uninstall my-harness 2>/dev/null
+ynh uninstall local/my-harness 2>/dev/null
 rm -rf /tmp/ynh-tutorial
 ```
 

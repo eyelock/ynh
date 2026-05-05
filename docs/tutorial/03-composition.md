@@ -7,7 +7,7 @@ Pull skills from Git repos into your harness using includes. Cherry-pick specifi
 ```bash
 # Clean up from any previous run
 rm -rf /tmp/ynh-tutorial
-ynh uninstall my-dev with-anthropic with-vercel full-stack mixed local-ref pinned david 2>/dev/null
+ynh uninstall local/my-dev local/with-anthropic local/with-vercel local/full-stack local/mixed local/local-ref local/pinned local/david 2>/dev/null
 
 mkdir -p /tmp/ynh-tutorial
 ```
@@ -411,7 +411,7 @@ The `ref` field supports:
 After upstream repos change:
 
 ```bash
-ynh update full-stack
+ynh update local/full-stack
 ```
 
 Expected (one line per include — repos with multiple includes appear multiple times):
@@ -522,7 +522,7 @@ mv ~/.ynh/config.json.bak ~/.ynh/config.json
 ## Clean up
 
 ```bash
-ynh uninstall my-dev with-anthropic with-vercel full-stack mixed local-ref pinned david with-bundled 2>/dev/null
+ynh uninstall local/my-dev local/with-anthropic local/with-vercel local/full-stack local/mixed local/local-ref local/pinned local/david local/with-bundled 2>/dev/null
 ```
 
 ## What you learned

@@ -9,7 +9,7 @@ Make sure `ynh` and `ynd` are installed and on your PATH. See the [install instr
 ```bash
 # Clean up from any previous run
 rm -rf /tmp/ynh-tutorial
-ynh uninstall my-harness 2>/dev/null
+ynh uninstall local/my-harness 2>/dev/null
 
 mkdir -p /tmp/ynh-tutorial
 ```
@@ -212,7 +212,7 @@ ynh status
 Simulate a stale launcher by removing the harness directory but leaving its launcher script:
 
 ```bash
-rm -rf ~/.ynh/harnesses/my-harness
+rm -rf ~/.ynh/harnesses/local--my-harness
 ls ~/.ynh/bin/my-harness
 # Expected: file exists (stale launcher)
 ```

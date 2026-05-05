@@ -7,7 +7,7 @@ Configure environment-specific overrides with profiles. A profile can add rules,
 ```bash
 # Clean up from any previous run
 rm -rf /tmp/ynh-tutorial
-ynh uninstall profile-demo 2>/dev/null
+ynh uninstall local/profile-demo 2>/dev/null
 
 mkdir -p /tmp/ynh-tutorial
 ```
@@ -277,7 +277,7 @@ Paths in `local` are relative to the harness root (or absolute). The `pick` fiel
 ## Clean up
 
 ```bash
-ynh uninstall profile-demo 2>/dev/null
+ynh uninstall local/profile-demo 2>/dev/null
 rm -rf /tmp/ynh-tutorial
 ```
 
