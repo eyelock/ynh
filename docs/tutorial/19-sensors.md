@@ -123,6 +123,7 @@ cat > /tmp/ynh-tutorial/sensor-harness/.ynh-plugin/plugin.json << 'EOF'
       "output": { "format": "text" }
     },
     "security": {
+      "category": "behaviour",
       "source": { "focus": "audit-vulns" },
       "output": { "format": "markdown" }
     },
