@@ -401,9 +401,13 @@ func InstalledDirByID(id string) string {
 // LoadByID loads an installed harness by its canonical id. Resolution
 // precedence under schema 2:
 //  1. Pointer file at ~/.ynh/installed/<id-fsname>.json (local fork / alias)
-//  2. Tree at ~/.ynh/harnesses/<id-fsname>/
+//  2. Schema-1 fallback: for "local/<name>" ids, name-keyed pointer at
+//     ~/.ynh/installed/<name>.json — handles forks created before the
+//     schema-2 pointer writer landed (or in homes already stamped schema-2
+//     when fork wrote a schema-1 file).
+//  3. Tree at ~/.ynh/harnesses/<id-fsname>/
 //
-// Returns ErrNotFound if neither exists. Callers that received a user-typed
+// Returns ErrNotFound if none match. Callers that received a user-typed
 // ref must Classify first and only call LoadByID for RefID kinds.
 func LoadByID(id string) (*Harness, error) {
 	if id == "" {
@@ -413,6 +417,16 @@ func LoadByID(id string) (*Harness, error) {
 		return nil, err
 	} else if ptr != nil {
 		return loadFromPointer(ptr)
+	}
+	// Schema-1 fallback: a fork created by an older binary (or by a binary
+	// that wrote schema-1 into an already-schema-2 home) stores its pointer
+	// as <name>.json rather than local--<name>.json. Try it before giving up.
+	if name, ok := strings.CutPrefix(id, "local/"); ok {
+		if ptr, err := LoadPointer(name); err != nil {
+			return nil, err
+		} else if ptr != nil {
+			return loadFromPointer(ptr)
+		}
 	}
 	dir := InstalledDirByID(id)
 	if _, err := os.Stat(dir); err == nil {
