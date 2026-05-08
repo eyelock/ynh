@@ -173,6 +173,10 @@ After install, refer to the harness by its canonical id (`github.com/eyelock/ass
 
 ## T7.6b: Pin a registry entry to a ref or SHA
 
+**The model in one line: `ref` is the primary identifier; `sha` is an optional integrity pin.**
+
+ynh follows the Claude Code marketplace model — identity is a git ref, optionally anchored to a commit SHA. There is no separate semver resolver. To track "version 1.0" you set `"ref": "v1.0"`, not a version field.
+
 The legacy `registry.json` format used in T7.1 has no per-entry pinning. Modern marketplaces use `.ynh-plugin/marketplace.json` with a `source` object that supports `ref` (branch, tag, or SHA) and `sha` (commit verification):
 
 ```bash
@@ -225,6 +229,16 @@ Error: sha mismatch: registry entry declared 0000... but fetched commit is <actu
 ```
 
 Use `ref` for human-friendly pins (a release tag, a stable branch); add `sha` when you want belt-and-braces protection against branch tip movement or repo tampering.
+
+Three legitimate combinations:
+
+| `ref` | `sha` | Behaviour |
+|---|---|---|
+| `"v1.0"` | _empty_ | Tracks the tag. Tag rewrites are silently honoured. |
+| `"v1.0"` | `"abc123…"` | Fetches `v1.0`, verifies HEAD matches the SHA. Recommended for published releases. |
+| `"abc123…"` (full SHA) | _empty_ | Pins to an exact commit. Never drifts. |
+
+**Tools that compose ynh harnesses (delegate sheets, dashboards, CI integrations) should default to whatever `ref` the user installed with — that's the user's stated tracking intent. Offer SHA-pinning as an opt-in choice, not the default.** See [`docs/integration-notes/delegate-pinning.md`](../integration-notes/delegate-pinning.md) for the full guidance.
 
 ## T7.7: Install — direct URL still works
 

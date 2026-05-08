@@ -131,6 +131,47 @@ The `ynh ls` and `ynh info` JSON envelopes carry `schema_version` as a **dynamic
 
 **When bumping the schema version:** add a new migration step in `internal/migration/canonicalid.go` (or a sibling file), bump `migration.CurrentSchemaVersion`, write tests for the legacy → new round-trip. The auto-migration gate runs on first invocation against a stale home; do not accept stale-home reads anywhere else.
 
+## Versioning & Identifiers
+
+ynh inherits the **git-as-package-manager** model from Claude Code's plugin marketplace: identity is a git ref, optionally anchored to a commit SHA. There is no semver-style version resolver. Several version-shaped fields exist in the schema; only some are load-bearing. The next contributor will be tempted to wire the cosmetic ones into resolution — don't.
+
+### The four identifiers
+
+| Identifier | Where | Load-bearing? |
+|---|---|---|
+| `marketplace.json` `harnesses[].version` | Registry / marketplace metadata | **No.** Cosmetic label, surfaced in `ynh search` output only. Never consulted at install or update time. |
+| `source.ref` (branch, tag, or SHA string) | Marketplace `RemoteSource`, registry `Entry`, `installed.json` | **Yes — primary.** Drives `git fetch` / `git checkout`. Whatever string is here is what the user is tracking. |
+| `source.sha` (40-char commit) | Marketplace `RemoteSource`, registry `Entry`, `installed.json` | **Yes — optional integrity pin.** When set alongside `ref`, install verifies the fetched HEAD matches and aborts on mismatch (`cmd/ynh/install_helpers.go:verifyResolvedSHA`). |
+| `plugin.json` `version` | Harness's own manifest | Cosmetic, surfaced as `version_installed` in `ynh ls`. Authored by the harness, decoupled from any registry's `version` field. |
+
+### The contract: ref is primary, sha is an optional pin
+
+`ref` is the user's stated intent ("track `v1.0`", "track `develop`", "stay on this exact commit"). `sha`, when present, is a belt-and-braces check that the fetched bytes are the bytes the registry author signed off on. Three legitimate combinations:
+
+| `ref` | `sha` | Behaviour |
+|---|---|---|
+| `"v1.0"` | _empty_ | Fetch the tag. Tracks tag updates. (Tag rewrites silently honoured.) |
+| `"v1.0"` | `"abc123…"` | Fetch the tag. Verify HEAD == sha. Abort if mismatch — protects against tag rewrites and tampering. |
+| `"abc123…"` (full SHA) | _empty_ | Fetch by SHA. Immutable. (Resolver mode 3, `cloneAtSHA`.) |
+
+The third row is the "I don't trust the registry to keep tags stable" mode. The second is the standard published-release mode. The first is the lightweight mode for internal/developer registries.
+
+### Don't add a `--version` flag
+
+`ynh install` and `ynh delegate add` accept `--ref` and `--sha`; they do not accept `--version`. Adding a `--version` flag would imply ynh has a version resolver, which it does not. If a user wants "version 1.0," they pin `--ref v1.0`. Mapping a semver request to a ref is the registry's job, not ynh's.
+
+The cosmetic `marketplace.json` `version` field is a known wart kept for display compatibility. It is not a roadmap signal that resolution-by-version is coming. If you find yourself reading `entry.Version` in resolver code, that's the regression this section exists to prevent.
+
+### Guidance for downstream consumers
+
+Tools that compose ynh harnesses (delegate sheets, dashboards, CI integrations) should follow the same model:
+
+1. Default to `installed.json.ref` when proposing a delegate or include — that's the user's stated intent at install time.
+2. Offer `installed.json.sha` as an opt-in **integrity pin** (typically a checkbox: "pin to exact commit"), not as the default.
+3. Don't use the cosmetic `version` field for anything other than display.
+
+A short user-facing version of this guidance lives in `docs/integration-notes/delegate-pinning.md`.
+
 ## Technologies
 
 - **Go 1.25+** - single binary, no runtime dependencies

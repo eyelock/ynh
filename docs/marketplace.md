@@ -363,6 +363,24 @@ Once built, push the output directory to a Git repository. Users can then:
 **Cursor:**
 Add the marketplace URL in Cursor's plugin settings, then install from the IDE marketplace browser.
 
+### Pinning: refs and SHAs
+
+ynh follows the Claude Code marketplace model: identity is a **git ref**, optionally anchored to a **commit SHA**. There is no semver-style version resolver. The `ref` field is the user's stated tracking intent; the `sha` field, when present, is an integrity pin layered on top.
+
+Three legitimate combinations on a registry or marketplace entry:
+
+| `ref` | `sha` | What you get |
+|---|---|---|
+| `"v1.0"` | _empty_ | Tracks the `v1.0` tag. If upstream rewrites the tag, you silently move with it. |
+| `"v1.0"` | `"abc123…"` | Fetches `v1.0`, then verifies the fetched commit equals `abc123…`. Aborts on mismatch. Recommended for published releases. |
+| `"abc123…"` | _empty_ | Fetches the commit directly. Immutable; will never drift. |
+
+**`ref` is primary. `sha` is opt-in.** Defaulting downstream tooling (delegates, dashboards) to SHA-pinning throws away the user's symbolic intent. Default to whatever `ref` was at install time; offer SHA pinning as an explicit "pin to exact commit" choice.
+
+> **Note:** The `harnesses[].version` field in ynh's `marketplace.json` is a cosmetic display label, not a resolution input. Tracking "version 1.0" is done by setting `"ref": "v1.0"`, not by the `version` field. Downstream consumers should not rely on `version` for pinning decisions.
+
+For the architectural rationale and contributor-facing rules, see [`.github/CONTRIBUTING.md` § Versioning & Identifiers](../.github/CONTRIBUTING.md#versioning--identifiers). For downstream-tool guidance, see [`docs/integration-notes/delegate-pinning.md`](integration-notes/delegate-pinning.md).
+
 ### Design Decisions
 
 **Why two marketplace.json files?** Vendor formats reject unknown fields. Claude Code requires `.claude-plugin/marketplace.json`, Cursor requires `.cursor-plugin/marketplace.json`. ynh generates both from the same source config, producing one physical plugin directory that serves both vendors.
