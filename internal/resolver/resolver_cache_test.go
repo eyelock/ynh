@@ -654,3 +654,50 @@ func TestResolveFromCache_WithPath(t *testing.T) {
 		t.Errorf("expected Path=%q, got %q", "pkg", results[0].Path)
 	}
 }
+
+func TestEnsureRepo_ConcurrentCallers_DoNotRace(t *testing.T) {
+	srcDir := t.TempDir()
+	runGit(t, srcDir, "init")
+	runGit(t, srcDir, "config", "user.email", "test@test.com")
+	runGit(t, srcDir, "config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(srcDir, "data.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, srcDir, "add", ".")
+	runGit(t, srcDir, "commit", "-m", "init")
+
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	const N = 8
+	errs := make(chan error, N)
+	paths := make(chan string, N)
+	for i := 0; i < N; i++ {
+		go func() {
+			r, err := EnsureRepo(srcDir, "")
+			errs <- err
+			paths <- r.Path
+		}()
+	}
+	for i := 0; i < N; i++ {
+		if err := <-errs; err != nil {
+			t.Errorf("concurrent EnsureRepo failed: %v", err)
+		}
+	}
+	var first string
+	for i := 0; i < N; i++ {
+		p := <-paths
+		if i == 0 {
+			first = p
+			continue
+		}
+		if p != first {
+			t.Errorf("inconsistent repo path across concurrent callers: %q vs %q", first, p)
+		}
+	}
+	if data, err := os.ReadFile(filepath.Join(first, "data.txt")); err != nil {
+		t.Errorf("cache contents missing after concurrent callers: %v", err)
+	} else if string(data) != "hello" {
+		t.Errorf("cache contents corrupted: %q", string(data))
+	}
+}
