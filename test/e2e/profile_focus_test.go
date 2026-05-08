@@ -24,7 +24,7 @@ const profileHarnessTmpl = `{
       }
     }
   },
-  "focus": {
+  "focuses": {
     "audit": {"profile": "review", "prompt": "audit the diff"}
   }
 }

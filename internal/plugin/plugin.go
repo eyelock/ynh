@@ -22,7 +22,7 @@ type HarnessJSON struct {
 	Hooks         map[string][]HookEntry `json:"hooks,omitempty"`
 	MCPServers    map[string]MCPServer   `json:"mcp_servers,omitempty"`
 	Profiles      map[string]Profile     `json:"profiles,omitempty"`
-	Focuses       map[string]Focus       `json:"focus,omitempty"`
+	Focuses       map[string]Focus       `json:"focuses,omitempty"`
 	Sensors       map[string]Sensor      `json:"sensors,omitempty"`
 	InstalledFrom *ProvenanceMeta        `json:"installed_from,omitempty"`
 }

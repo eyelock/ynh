@@ -39,7 +39,7 @@ func createComposeHarness(t *testing.T) string {
 				},
 			},
 		},
-		"focus": map[string]any{
+		"focuses": map[string]any{
 			"quick": map[string]any{
 				"prompt": "Be concise",
 			},
@@ -626,7 +626,7 @@ func TestCompose_Sensors(t *testing.T) {
 	hj := map[string]any{
 		"name":    "sensor-h",
 		"version": "0.1.0",
-		"focus": map[string]any{
+		"focuses": map[string]any{
 			"audit": map[string]any{"prompt": "audit the diff"},
 		},
 		"sensors": map[string]any{

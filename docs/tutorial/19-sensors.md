@@ -79,7 +79,7 @@ cat > /tmp/ynh-tutorial/sensor-harness/.ynh-plugin/plugin.json << 'EOF'
   "name": "sensor-demo",
   "version": "0.1.0",
   "default_vendor": "claude",
-  "focus": {
+  "focuses": {
     "audit-vulns": {
       "prompt": "Identify any high-severity vulnerabilities in the diff vs main."
     }
@@ -112,7 +112,7 @@ cat > /tmp/ynh-tutorial/sensor-harness/.ynh-plugin/plugin.json << 'EOF'
   "name": "sensor-demo",
   "version": "0.1.0",
   "default_vendor": "claude",
-  "focus": {
+  "focuses": {
     "audit-vulns": {
       "prompt": "Identify any high-severity vulnerabilities in the diff vs main."
     }

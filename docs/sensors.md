@@ -19,7 +19,7 @@ Sensors live under the top-level `sensors` key in `.ynh-plugin/plugin.json`. Eac
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
   "version": "0.1.0",
-  "focus": {
+  "focuses": {
     "infer-vulns": { "prompt": "Identify high-severity vulnerabilities in the changed code" }
   },
   "sensors": {

@@ -14,7 +14,7 @@ const sensorHarnessJSON = `{
   "name": "sh",
   "version": "0.1.0",
   "default_vendor": "claude",
-  "focus": {
+  "focuses": {
     "audit": {"prompt": "audit the diff"}
   },
   "sensors": {

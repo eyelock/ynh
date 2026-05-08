@@ -426,7 +426,7 @@ ynd preview /tmp/some-harness -v claude --focus nonexistent
 mkdir -p /tmp/ynh-bad-focus
 mkdir -p /tmp/ynh-bad-focus/.ynh-plugin
 cat > /tmp/ynh-bad-focus/.ynh-plugin/plugin.json << 'EOF'
-{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0","focus":{"review":{"profile":"ci"}}}
+{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0","focuses":{"review":{"profile":"ci"}}}
 EOF
 ynd validate /tmp/ynh-bad-focus
 # Expected: INVALID with "focus.review: prompt must not be empty"
@@ -439,7 +439,7 @@ rm -rf /tmp/ynh-bad-focus
 mkdir -p /tmp/ynh-bad-focus
 mkdir -p /tmp/ynh-bad-focus/.ynh-plugin
 cat > /tmp/ynh-bad-focus/.ynh-plugin/plugin.json << 'EOF'
-{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0","focus":{"review":{"profile":"nonexistent","prompt":"Review code"}}}
+{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0","focuses":{"review":{"profile":"nonexistent","prompt":"Review code"}}}
 EOF
 ynd validate /tmp/ynh-bad-focus
 # Expected: INVALID with "focus.review: references unknown profile"

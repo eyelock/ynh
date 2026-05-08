@@ -30,7 +30,7 @@ cat > /tmp/ynh-tutorial/my-project/.ynh-plugin/plugin.json << 'EOF'
       { "matcher": "Write", "command": "/usr/local/bin/lint.sh" }
     ]
   },
-  "focus": {
+  "focuses": {
     "review": {
       "prompt": "Review staged changes for quality"
     }
@@ -100,7 +100,7 @@ The project-local config pattern works well with focus entries (Tutorial 14) for
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "default_vendor": "claude",
-  "focus": {
+  "focuses": {
     "review": { "prompt": "Review staged changes" },
     "security": { "profile": "ci", "prompt": "Audit for vulnerabilities" }
   }
