@@ -531,6 +531,76 @@ func TestCmdListCheckUpdatesRequiresJSON(t *testing.T) {
 	}
 }
 
+// Broken-pointer entries (source missing or plugin.json absent) must be emitted
+// as kind "local-fork-broken" with a non-empty broken_reason so JSON consumers
+// (e.g. TermQ) can route them to a QUARANTINED group instead of displaying
+// them as valid but empty-field harnesses.
+func TestCmdListJSON_BrokenPointerKind(t *testing.T) {
+	t.Run("source_path_missing", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("YNH_HOME", home)
+
+		if err := harness.SavePointer(&harness.Pointer{
+			Name: "ghost", SourceType: "local",
+			Source: filepath.Join(t.TempDir(), "gone"), InstalledAt: "2026-05-01T00:00:00Z",
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		var stdout bytes.Buffer
+		if err := cmdListTo([]string{"--format", "json"}, &stdout, io.Discard); err != nil {
+			t.Fatalf("cmdListTo: %v", err)
+		}
+		var got listEnvelope
+		if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+			t.Fatalf("unmarshal: %v\noutput: %s", err, stdout.String())
+		}
+		if len(got.Harnesses) != 1 {
+			t.Fatalf("expected 1 harness, got %d; output: %s", len(got.Harnesses), stdout.String())
+		}
+		h := got.Harnesses[0]
+		if h.Kind != "local-fork-broken" {
+			t.Errorf("kind = %q, want local-fork-broken", h.Kind)
+		}
+		if h.BrokenReason == "" {
+			t.Errorf("broken_reason is empty; expected non-empty reason")
+		}
+	})
+
+	t.Run("plugin_json_missing", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("YNH_HOME", home)
+
+		// Source dir exists but has no .ynh-plugin/plugin.json.
+		srcDir := t.TempDir()
+		if err := harness.SavePointer(&harness.Pointer{
+			Name: "hollow", SourceType: "local",
+			Source: srcDir, InstalledAt: "2026-05-01T00:00:00Z",
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		var stdout bytes.Buffer
+		if err := cmdListTo([]string{"--format", "json"}, &stdout, io.Discard); err != nil {
+			t.Fatalf("cmdListTo: %v", err)
+		}
+		var got listEnvelope
+		if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+			t.Fatalf("unmarshal: %v\noutput: %s", err, stdout.String())
+		}
+		if len(got.Harnesses) != 1 {
+			t.Fatalf("expected 1 harness, got %d; output: %s", len(got.Harnesses), stdout.String())
+		}
+		h := got.Harnesses[0]
+		if h.Kind != "local-fork-broken" {
+			t.Errorf("kind = %q, want local-fork-broken", h.Kind)
+		}
+		if h.BrokenReason == "" {
+			t.Errorf("broken_reason is empty; expected non-empty reason")
+		}
+	})
+}
+
 // Broken-pointer placeholder rows must emit [] not null for empty
 // includes/delegates_to. JSON consumers expect the canonical empty-array shape
 // regardless of whether the source tree could be loaded.
