@@ -170,7 +170,7 @@ Tools that compose ynh harnesses (delegate sheets, dashboards, CI integrations) 
 2. Offer `installed.json.sha` as an opt-in **integrity pin** (typically a checkbox: "pin to exact commit"), not as the default.
 3. Don't use the cosmetic `version` field for anything other than display.
 
-A short user-facing version of this guidance lives in `docs/integration-notes/delegate-pinning.md`.
+The user-facing version of this guidance lives in [`docs/marketplace.md` § Pinning: refs and SHAs](../docs/marketplace.md#pinning-refs-and-shas).
 
 ## Technologies
 

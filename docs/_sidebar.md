@@ -23,7 +23,6 @@
 
 * **Distribute**
   * [Marketplace & Distribution](marketplace.md)
-  * [Delegate Pinning (integration note)](integration-notes/delegate-pinning.md)
   * [Docker](docker.md)
 
 * **Tutorials: Build Your Harness**
