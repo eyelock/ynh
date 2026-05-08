@@ -215,6 +215,43 @@ func TestRemovePointer_Idempotent(t *testing.T) {
 	}
 }
 
+// TestLoadByID_Schema1PointerFallback verifies that LoadByID("local/<name>")
+// resolves a schema-1 name-keyed pointer file (<name>.json) when no schema-2
+// id-keyed file (local--<name>.json) exists. This is the regression test for
+// the bug where ynh fork wrote schema-1 pointers into an already-schema-2 home
+// and ynh info / include update / delegate add all returned "not found".
+func TestLoadByID_Schema1PointerFallback(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	forkDir := t.TempDir()
+	writeForkTree(t, forkDir, "ynh-dev")
+
+	// Write a schema-1 pointer: <name>.json (no id field, no local-- prefix).
+	if err := SavePointer(&Pointer{
+		Name:        "ynh-dev",
+		SourceType:  "local",
+		Source:      forkDir,
+		InstalledAt: "2026-05-08T19:26:52Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Schema-2 id-keyed file must NOT exist (confirms we're testing the fallback).
+	schema2Path := PointerPathByID("local/ynh-dev")
+	if _, err := os.Stat(schema2Path); err == nil {
+		t.Fatalf("unexpected schema-2 pointer at %s", schema2Path)
+	}
+
+	p, err := LoadByID("local/ynh-dev")
+	if err != nil {
+		t.Fatalf("LoadByID: %v", err)
+	}
+	if p.Name != "ynh-dev" {
+		t.Errorf("Name = %q, want ynh-dev", p.Name)
+	}
+}
+
 // contains is a no-stdlib substring check to avoid pulling in strings.Contains
 // for a single helper. Keeps the test file small and obvious.
 func contains(s, sub string) bool {

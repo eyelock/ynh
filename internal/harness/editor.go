@@ -45,6 +45,12 @@ func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
 		if ptr, _ := LoadPointerByID(ref); ptr != nil {
 			return ptr.Source, true, nil
 		}
+		// Schema-1 fallback: fork created before schema-2 pointer writer landed.
+		if name, ok := strings.CutPrefix(ref, "local/"); ok {
+			if ptr, _ := LoadPointer(name); ptr != nil {
+				return ptr.Source, true, nil
+			}
+		}
 		return "", false, fmt.Errorf("harness %q: %w", ref, ErrNotFound)
 	default:
 		return "", false, BadRefError(ref)

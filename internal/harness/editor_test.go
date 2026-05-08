@@ -105,6 +105,38 @@ func TestResolveEditTarget_PathNoHarness(t *testing.T) {
 	}
 }
 
+// TestResolveEditTarget_Schema1PointerFallback verifies that ResolveEditTarget
+// resolves "local/<name>" when only a schema-1 name-keyed pointer file exists
+// (no local--<name>.json). Regression test for the pointer-writer bug where
+// ynh fork wrote schema-1 files into a schema-2 home.
+func TestResolveEditTarget_Schema1PointerFallback(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	forkDir := t.TempDir()
+	writeForkTree(t, forkDir, "my-fork")
+
+	if err := SavePointer(&Pointer{
+		Name:        "my-fork",
+		SourceType:  "local",
+		Source:      forkDir,
+		InstalledAt: "2026-05-08T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, installed, err := ResolveEditTarget("local/my-fork")
+	if err != nil {
+		t.Fatalf("ResolveEditTarget: %v", err)
+	}
+	if got != forkDir {
+		t.Errorf("dir = %q, want %q", got, forkDir)
+	}
+	if !installed {
+		t.Error("expected installed=true for pointer-backed ref")
+	}
+}
+
 // ---- AddInclude -------------------------------------------------------
 
 func TestAddInclude_New(t *testing.T) {
