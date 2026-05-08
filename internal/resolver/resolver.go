@@ -189,6 +189,20 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 	repoDir := filepath.Join(cacheDir, repoDirName(gitURL, ref))
 	fullURL := NormalizeGitURL(gitURL)
 
+	// Serialize concurrent ynh processes against this same cache entry —
+	// without this, racing RemoveAll/clone calls produced "directory not
+	// empty" and "could not lock config file" errors when e.g. a TUI fired
+	// multiple ynh invocations in parallel.
+	var result RepoResult
+	lockErr := withRepoLock(repoDir+".lock", func() error {
+		r, err := ensureRepoLocked(repoDir, fullURL, ref)
+		result = r
+		return err
+	})
+	return result, lockErr
+}
+
+func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 	if _, err := os.Stat(filepath.Join(repoDir, ".git")); os.IsNotExist(err) {
 		// No .git dir — remove any partial/pre-existing directory before cloning.
 		if err := os.RemoveAll(repoDir); err != nil {
