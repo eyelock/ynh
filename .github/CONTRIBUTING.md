@@ -499,6 +499,16 @@ Test fixtures in `testdata/` simulate real-world sources:
 
 `name` and `version` are required for installed harnesses. For project-local manifests (loaded via `--harness-file` or auto-discovered in cwd), they are optional. See the JSON schema at `docs/schema/harness.schema.json` for the full specification. See [Hooks](docs/hooks.md), [MCP Servers](docs/mcp.md), [Profiles](docs/profiles.md), and the focus tutorial (`docs/tutorial/14-focus.md`) for details.
 
+### Delegates: remote-only
+
+Unlike `includes`, `delegates_to` entries must be remote git URLs. The `local` source form is not supported and the schema rejects it. Reasons:
+
+- **Portability.** A delegate path baked into a committed `plugin.json` either breaks on another machine or — worse — silently resolves to a different harness with the same path. Delegates are part of a harness's public contract; they need a stable, shareable identity.
+- **Identity.** ynh keys delegate matching, SHA backfill, and provenance on the git URL. A local path has no global identity, no SHA, and no ref to track.
+- **Post-install resolution.** A relative path written during authoring (`./sibling-harness`) does not resolve from the installed location (`~/.ynh/harnesses/<id>/`). Working pre-install but broken post-install is a worse failure mode than not supporting it at all.
+
+To iterate on a delegate locally, install it (`ynh install <path>`), then reference it by its canonical id from the parent harness — or test the parent with `ynd preview` against an in-tree manifest.
+
 ### Focus Entries
 
 Focus entries combine a profile + prompt for repeatable, non-interactive AI execution. When `ynh run --focus review` is invoked, ynh looks up the focus entry, applies its profile (if any), and sends its prompt to the vendor CLI via `LaunchNonInteractive`.
