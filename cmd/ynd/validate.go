@@ -487,13 +487,13 @@ func validateProfileMCPServers(profile map[string]any) []string {
 func validateHarnessFocus(hj map[string]any) []string {
 	var issues []string
 
-	focus, ok := hj["focus"]
+	focus, ok := hj["focuses"]
 	if !ok {
 		return issues
 	}
 	focusMap, ok := focus.(map[string]any)
 	if !ok {
-		issues = append(issues, "'focus' must be an object")
+		issues = append(issues, "'focuses' must be an object")
 		return issues
 	}
 
@@ -548,7 +548,7 @@ func validateHarnessSensors(hj map[string]any) []string {
 		}
 	}
 	focusNames := map[string]bool{}
-	if focuses, ok := hj["focus"].(map[string]any); ok {
+	if focuses, ok := hj["focuses"].(map[string]any); ok {
 		for name := range focuses {
 			focusNames[name] = true
 		}

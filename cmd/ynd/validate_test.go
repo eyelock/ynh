@@ -807,7 +807,7 @@ func TestValidateHarness_FocusValid(t *testing.T) {
 	hr := filepath.Join(dir, "focus-valid")
 	mkdirAll(t, hr)
 	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
-		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-valid","version":"0.1.0","profiles":{"ci":{}},"focus":{"review":{"profile":"ci","prompt":"Review code"}}}`))
+		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-valid","version":"0.1.0","profiles":{"ci":{}},"focuses":{"review":{"profile":"ci","prompt":"Review code"}}}`))
 
 	if err := validateHarness(hr); err != nil {
 		t.Errorf("valid focus should pass: %v", err)
@@ -821,7 +821,7 @@ func TestValidateHarness_FocusMissingPrompt(t *testing.T) {
 	hr := filepath.Join(dir, "focus-no-prompt")
 	mkdirAll(t, hr)
 	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
-		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-no-prompt","version":"0.1.0","focus":{"review":{"profile":"ci"}}}`))
+		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-no-prompt","version":"0.1.0","focuses":{"review":{"profile":"ci"}}}`))
 
 	err := validateHarness(hr)
 	if err == nil {
@@ -836,7 +836,7 @@ func TestValidateHarness_FocusUnknownProfile(t *testing.T) {
 	hr := filepath.Join(dir, "focus-bad-profile")
 	mkdirAll(t, hr)
 	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
-		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-bad-profile","version":"0.1.0","focus":{"review":{"profile":"nonexistent","prompt":"Review code"}}}`))
+		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-bad-profile","version":"0.1.0","focuses":{"review":{"profile":"nonexistent","prompt":"Review code"}}}`))
 
 	err := validateHarness(hr)
 	if err == nil {
@@ -851,7 +851,7 @@ func TestValidateHarness_FocusNoProfile(t *testing.T) {
 	hr := filepath.Join(dir, "focus-no-profile")
 	mkdirAll(t, hr)
 	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
-		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-no-profile","version":"0.1.0","focus":{"docs":{"prompt":"Generate docs"}}}`))
+		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-no-profile","version":"0.1.0","focuses":{"docs":{"prompt":"Generate docs"}}}`))
 
 	if err := validateHarness(hr); err != nil {
 		t.Errorf("focus without profile ref should pass: %v", err)
@@ -1089,7 +1089,7 @@ func TestValidateDir_NoRootMarketplace(t *testing.T) {
 
 func TestValidateHarnessSensors_Valid(t *testing.T) {
 	hj := map[string]any{
-		"focus": map[string]any{
+		"focuses": map[string]any{
 			"infer-vulns": map[string]any{"prompt": "find vulns"},
 		},
 		"profiles": map[string]any{

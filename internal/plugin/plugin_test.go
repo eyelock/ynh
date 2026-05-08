@@ -465,7 +465,7 @@ func TestLoadHarnessJSON_WithFocus(t *testing.T) {
 	writeHarnessJSON(t, dir, `{
 		"name": "test",
 		"version": "0.1.0",
-		"focus": {
+		"focuses": {
 			"review": {"profile": "ci", "prompt": "Review staged changes"},
 			"docs": {"prompt": "Generate API docs"}
 		}

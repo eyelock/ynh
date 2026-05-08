@@ -50,7 +50,7 @@ cat > /tmp/ynh-tutorial/focus-harness/.ynh-plugin/plugin.json << 'EOF'
       }
     }
   },
-  "focus": {
+  "focuses": {
     "review": {
       "profile": "ci",
       "prompt": "Review staged changes for quality and correctness"

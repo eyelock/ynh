@@ -490,7 +490,7 @@ Test fixtures in `testdata/` simulate real-world sources:
       "mcp_servers": { "github": null }
     }
   },
-  "focus": {
+  "focuses": {
     "review": { "profile": "ci", "prompt": "Review staged changes for quality" },
     "docs": { "prompt": "Generate API documentation for all public interfaces" }
   }

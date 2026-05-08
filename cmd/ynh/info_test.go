@@ -341,7 +341,7 @@ func TestCmdInfoTextRichHarness(t *testing.T) {
 				"mcp_servers": {"staging-db": {"command": "staging-mcp"}}
 			}
 		},
-		"focus": {
+		"focuses": {
 			"quick": {"prompt": "Be concise"},
 			"review": {"profile": "staging", "prompt": "Review mode"}
 		},

@@ -50,7 +50,7 @@
         }
       }
     },
-    "focus": {
+    "focuses": {
       "description": "Named combinations of profile + prompt for repeatable AI execution.",
       "type": "object",
       "additionalProperties": {

@@ -99,7 +99,7 @@ func TestSensors_Install_PreservesAllSourceVariants(t *testing.T) {
   "name": "sensor-demo",
   "version": "0.1.0",
   "default_vendor": "claude",
-  "focus": {
+  "focuses": {
     "audit-vulns": { "prompt": "Audit the diff for vulnerabilities." }
   },
   "sensors": {
@@ -169,7 +169,7 @@ func TestSensors_Show_ResolvesFocusReference(t *testing.T) {
   "name": "sensor-show",
   "version": "0.1.0",
   "default_vendor": "claude",
-  "focus": {
+  "focuses": {
     "audit-vulns": { "prompt": "Audit the diff for vulnerabilities." }
   },
   "sensors": {
@@ -333,7 +333,7 @@ func TestSensors_InlineFocus_NotInTopLevelFocus(t *testing.T) {
   "name": "sensor-inline",
   "version": "0.1.0",
   "default_vendor": "claude",
-  "focus": {
+  "focuses": {
     "audit-vulns": { "prompt": "Audit the diff." }
   },
   "sensors": {
@@ -440,7 +440,7 @@ const sensorsProfileFocusHarnessTmpl = `{
       }
     }
   },
-  "focus": {
+  "focuses": {
     "audit": {"profile": "review", "prompt": "audit the diff"}
   },
   "sensors": {
