@@ -40,7 +40,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh info <harness>` | `--format <text\|json>` |
 | `ynh vendors` | `--format <text\|json>` |
 | `ynh search [query]` | `--format <text\|json>` |
-| `ynh delegate add <harness> <url>` | `--ref`, `--path` |
+| `ynh delegate add <harness> <url>` | `--ref`, `--path` — `<url>` must be a git URL; local paths are not supported (see CONTRIBUTING.md "Delegates: remote-only") |
 | `ynh delegate remove <harness> <url>` | `--path` |
 | `ynh delegate update <harness> <url>` | `--from-path`, `--path`, `--ref` |
 | `ynh include add <harness> <url>` | `--path`, `--pick`, `--ref`, `--replace` |
