@@ -4,6 +4,8 @@ package e2e
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -39,6 +41,55 @@ func TestYnd_Compose_JSON(t *testing.T) {
 	}
 	if got.Counts == nil {
 		t.Errorf("expected counts to be present")
+	}
+}
+
+// TestYnd_Compose_Focuses asserts that `ynd compose --format json` includes
+// the focuses map in its output when the harness declares focuses, and that
+// the shape matches what TermQ's HarnessComposition decoder expects.
+func TestYnd_Compose_Focuses(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "focus-composed",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "profiles": {"thorough": {}},
+  "focuses": {
+    "security-audit": {"profile": "thorough", "prompt": "Review this code for security vulnerabilities."},
+    "code-review":    {"prompt": "Review this code for correctness."}
+  }
+}`
+	if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _ := mustRunYnd(t, "compose", dir, "--format", "json")
+
+	var got struct {
+		Profiles []string `json:"profiles"`
+		Focuses  map[string]struct {
+			Profile string `json:"profile"`
+			Prompt  string `json:"prompt"`
+		} `json:"focuses"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("parsing compose JSON: %v\n%s", err, out)
+	}
+	if len(got.Profiles) != 1 || got.Profiles[0] != "thorough" {
+		t.Errorf("profiles = %v, want [thorough]", got.Profiles)
+	}
+	if len(got.Focuses) != 2 {
+		t.Errorf("focuses len = %d, want 2; output:\n%s", len(got.Focuses), out)
+	}
+	if sec := got.Focuses["security-audit"]; sec.Profile != "thorough" || sec.Prompt == "" {
+		t.Errorf("security-audit focus = %+v, want profile=thorough and non-empty prompt", sec)
+	}
+	if cr := got.Focuses["code-review"]; cr.Profile != "" || cr.Prompt == "" {
+		t.Errorf("code-review focus = %+v, want empty profile and non-empty prompt", cr)
 	}
 }
 
