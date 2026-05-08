@@ -657,6 +657,7 @@ func cmdUpdate(args []string) error {
 			checked++
 			harnessSHA = result.SHA
 			harnessResolvedRef = result.ResolvedRef
+			shaAdvanced := harnessSHA != "" && p.InstalledFrom != nil && harnessSHA != p.InstalledFrom.SHA
 			if result.Changed {
 				updated++
 				fmt.Printf("  Updated.\n")
@@ -677,6 +678,13 @@ func cmdUpdate(args []string) error {
 						p = reloaded
 					}
 				}
+			} else if shaAdvanced {
+				// Cache was already current but the recorded SHA in installed.json
+				// was stale (cache was advanced by a different operation). The SHA
+				// is being written below; count it as updated so callers know
+				// ref_installed changed.
+				updated++
+				fmt.Printf("  Updated.\n")
 			} else {
 				fmt.Printf("  Already up to date.\n")
 			}
@@ -704,7 +712,7 @@ func cmdUpdate(args []string) error {
 			Path: inc.Path,
 			SHA:  result.SHA,
 		})
-		if result.Changed {
+		if result.Changed || result.SHA != inc.SHA {
 			updated++
 			fmt.Printf("  Updated.\n")
 		} else {
@@ -728,7 +736,7 @@ func cmdUpdate(args []string) error {
 			Path: del.Path,
 			SHA:  result.SHA,
 		})
-		if result.Changed {
+		if result.Changed || result.SHA != del.SHA {
 			updated++
 			fmt.Printf("  Updated.\n")
 		} else {

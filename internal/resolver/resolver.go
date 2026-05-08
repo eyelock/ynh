@@ -415,13 +415,35 @@ var LsRemoteFunc = func(gitURL, ref string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("git ls-remote %s: %w", fullURL, err)
 	}
-	// First whitespace-separated token of the first line is the SHA.
-	line := strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)[0]
-	fields := strings.Fields(line)
-	if len(fields) == 0 {
-		return "", fmt.Errorf("git ls-remote %s: no output", fullURL)
+
+	// git ls-remote does suffix pattern matching: passing "main" also matches
+	// branches like "daisy/caffeinate/main". Parse all lines and return the
+	// SHA whose refname is an exact match on the intended canonical name.
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		sha, refName := fields[0], fields[1]
+		if ref == "" {
+			// HEAD probe: accept "HEAD" or any refs/heads/<branch>.
+			if refName == "HEAD" || strings.HasPrefix(refName, "refs/heads/") {
+				return sha, nil
+			}
+			continue
+		}
+		// Named ref: accept an already-qualified ref as-is; otherwise require
+		// an exact refs/heads/<ref> or refs/tags/<ref> match so partial-name
+		// branches (e.g. foo/main) don't shadow the intended target.
+		if strings.HasPrefix(ref, "refs/") {
+			if refName == ref {
+				return sha, nil
+			}
+		} else if refName == "refs/heads/"+ref || refName == "refs/tags/"+ref {
+			return sha, nil
+		}
 	}
-	return fields[0], nil
+	return "", fmt.Errorf("git ls-remote %s: ref %q not found in remote", fullURL, ref)
 }
 
 // PurgeCacheDirsForURL removes all cache directories associated with the given
