@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -236,6 +238,97 @@ func TestCmdDelegateUpdate_Path(t *testing.T) {
 	dels := loadTestDelegates(t, dir)
 	if dels[0].Path != "new" {
 		t.Errorf("expected path=new, got %q", dels[0].Path)
+	}
+}
+
+// ---- validateDelegateTarget -----------------------------------------
+
+func writePluginManifest(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(dir, plugin.PluginDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dir, plugin.PluginDir, plugin.PluginFile),
+		[]byte(`{"name":"x","version":"0.1.0"}`), 0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestValidateDelegateTarget_RootIsHarness(t *testing.T) {
+	dir := t.TempDir()
+	writePluginManifest(t, dir)
+
+	got, err := validateDelegateTarget(dir, "github.com/acme/r", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "" {
+		t.Errorf("expected empty auto-path, got %q", got)
+	}
+}
+
+func TestValidateDelegateTarget_SingleSubdir(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "vendor-harness")
+	writePluginManifest(t, sub)
+
+	got, err := validateDelegateTarget(dir, "github.com/acme/r", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "vendor-harness" {
+		t.Errorf("expected auto-path %q, got %q", "vendor-harness", got)
+	}
+}
+
+func TestValidateDelegateTarget_Ambiguous(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"planner", "vendor-harness", "media"} {
+		writePluginManifest(t, filepath.Join(dir, name))
+	}
+
+	_, err := validateDelegateTarget(dir, "github.com/acme/r", "")
+	if err == nil {
+		t.Fatal("expected ambiguous error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "ambiguous") || !strings.Contains(msg, "--path") {
+		t.Errorf("expected ambiguous + --path hint, got: %q", msg)
+	}
+	for _, name := range []string{"planner", "vendor-harness", "media"} {
+		if !strings.Contains(msg, name) {
+			t.Errorf("expected %q in error, got: %q", name, msg)
+		}
+	}
+}
+
+func TestValidateDelegateTarget_NoManifest(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := validateDelegateTarget(dir, "github.com/acme/r", "")
+	if err == nil {
+		t.Fatal("expected no-manifest error")
+	}
+	if !strings.Contains(err.Error(), "no harness manifest") {
+		t.Errorf("expected no-manifest error, got: %v", err)
+	}
+}
+
+func TestValidateDelegateTarget_GivenPathMissing(t *testing.T) {
+	dir := t.TempDir()
+	// basePath has no manifest; givenPath was non-empty so basePath is the
+	// already-resolved subdir → must not auto-resolve.
+	_, err := validateDelegateTarget(dir, "github.com/acme/r", "subdir")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "github.com/acme/r/subdir") {
+		t.Errorf("expected resolved path in error, got: %v", err)
 	}
 }
 
