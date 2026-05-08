@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 )
 
@@ -68,9 +71,17 @@ func cmdDelegateAdd(args []string, stdout io.Writer) error {
 	}
 
 	if installed {
-		gs := harness.GitSource{Git: url, Ref: opts.Ref}
-		if _, _, fetchErr := resolver.ResolveGitSource(gs); fetchErr != nil {
+		gs := harness.GitSource{Git: url, Ref: opts.Ref, Path: opts.Path}
+		basePath, _, fetchErr := resolver.ResolveGitSource(gs)
+		if fetchErr != nil {
 			return fmt.Errorf("fetching delegate: %w", fetchErr)
+		}
+		autoPath, vErr := validateDelegateTarget(basePath, url, opts.Path)
+		if vErr != nil {
+			return vErr
+		}
+		if opts.Path == "" && autoPath != "" {
+			opts.Path = autoPath
 		}
 	}
 
@@ -195,4 +206,45 @@ func cmdDelegateUpdate(args []string, stdout io.Writer) error {
 
 	_, _ = fmt.Fprintf(stdout, "Updated delegate %q\n", url)
 	return nil
+}
+
+// validateDelegateTarget verifies the resolved basePath points to exactly one
+// harness. Returns an immediate-subdir name to record as the auto-resolved path
+// when basePath is a repo containing a single harness in a subdir; returns ""
+// when basePath itself is the harness root.
+//
+// givenPath is the user-supplied --path (may be empty). When non-empty,
+// basePath already includes it, so we only check basePath itself and never
+// auto-resolve.
+func validateDelegateTarget(basePath, gitURL, givenPath string) (string, error) {
+	if plugin.IsPluginDir(basePath) {
+		return "", nil
+	}
+	if givenPath != "" {
+		return "", fmt.Errorf("delegate target has no harness manifest at %s/%s", gitURL, givenPath)
+	}
+	entries, err := os.ReadDir(basePath)
+	if err != nil {
+		return "", fmt.Errorf("scanning delegate target: %w", err)
+	}
+	var found []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if plugin.IsPluginDir(filepath.Join(basePath, e.Name())) {
+			found = append(found, e.Name())
+		}
+	}
+	switch len(found) {
+	case 0:
+		return "", fmt.Errorf("delegate target has no harness manifest at %s", gitURL)
+	case 1:
+		return found[0], nil
+	default:
+		sort.Strings(found)
+		return "", fmt.Errorf(
+			"delegate target ambiguous — %s contains multiple harnesses (%s); specify one with --path <subdir>",
+			gitURL, strings.Join(found, ", "))
+	}
 }
