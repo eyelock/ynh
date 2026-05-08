@@ -446,6 +446,61 @@ ynd validate /tmp/ynh-bad-focus
 rm -rf /tmp/ynh-bad-focus
 ```
 
+### E23: Fork uninstall via canonical id
+
+`ynh fork` registers a pointer-shaped install. `ynh uninstall local/<name>` must resolve the schema-1 pointer and remove the registration cleanly — this is the form TermQ and other JSON consumers pass back.
+
+```bash
+# Create a minimal harness to fork from
+mkdir -p /tmp/ynh-fork-src/.ynh-plugin
+cat > /tmp/ynh-fork-src/.ynh-plugin/plugin.json << 'EOF'
+{"name":"fork-src","version":"1.0.0","default_vendor":"claude"}
+EOF
+
+# Fork it to a local directory
+ynh fork /tmp/ynh-fork-src --to /tmp/ynh-fork-copy --name fork-copy
+# Expected: Forked "fork-src" → "fork-copy"
+#           Path: /tmp/ynh-fork-copy
+
+# Verify it appears in ls
+ynh ls --format json | jq -r '.harnesses[] | select(.name=="fork-copy") | .id'
+# Expected: local/fork-copy
+
+# Uninstall via canonical id (the form machine consumers use)
+ynh uninstall local/fork-copy
+# Expected: Uninstalled harness "fork-copy"
+#             Source tree left in place: /tmp/ynh-fork-copy
+
+# Verify the pointer is gone
+ynh ls --format json | jq -r '.harnesses[] | select(.name=="fork-copy") | .id'
+# Expected: (empty — no output)
+
+rm -rf /tmp/ynh-fork-src /tmp/ynh-fork-copy
+```
+
+### E24: Broken fork appears as local-fork-broken in ls JSON
+
+When a fork's source directory exists but has no `.ynh-plugin/plugin.json`, `ynh ls --format json` must tag it as `kind: "local-fork-broken"` with a non-empty `broken_reason` rather than emitting an empty-field `local-fork` entry.
+
+```bash
+# Register a pointer to a directory with no manifest
+mkdir -p /tmp/ynh-hollow-src   # exists but no .ynh-plugin/
+export YNH_HOME=$(mktemp -d)
+cat > "$YNH_HOME/installed/hollow.json" << 'EOF'
+{"name":"hollow","source_type":"local","source":"/tmp/ynh-hollow-src","installed_at":"2026-01-01T00:00:00Z"}
+EOF
+
+ynh ls --format json | jq '.harnesses[] | select(.name=="hollow") | {kind, broken_reason}'
+# Expected:
+# {
+#   "kind": "local-fork-broken",
+#   "broken_reason": "no harness manifest found in /tmp/ynh-hollow-src"
+# }
+
+rm -rf /tmp/ynh-hollow-src "$YNH_HOME"
+unset YNH_HOME
+```
+
 ---
 
 ## Sensors
@@ -510,5 +565,5 @@ Re-run S1 with a focus-source sensor and verify `ynh sensors run` returns the re
 | Tutorial 15: Project-Local Config | 4 |
 | Tutorial 16: Structured Output | 11 |
 | Sensors | 3 |
-| Edge Cases | 22 |
-| **Total** | **150** |
+| Edge Cases | 24 |
+| **Total** | **152** |

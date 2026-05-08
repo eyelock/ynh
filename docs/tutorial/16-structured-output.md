@@ -237,6 +237,8 @@ Expected (timestamps and paths will differ):
 Key points:
 - Output is wrapped in an **envelope**: `capabilities` (wire-contract version of JSON shapes ynh speaks), `schema_version` (on-disk format version of `~/.ynh`), `ynh_version` (release), and `harnesses` (the array).
 - `id` is the canonical, host-prefixed harness identifier — `<host>/<org>/<repo>/<name>` for installs sourced from a remote registry, or `local/<name>` for local-path installs. This is the single identity form to pass back to ynh at the CLI for any harness-targeting command.
+- `kind` classifies the install source: `local` (installed from a local path), `local-fork` (registered via `ynh fork`), `local-fork-broken` (fork whose source directory is missing or has no manifest — see `broken_reason`), `git` (installed from a remote git URL), `registry` (installed via a registry reference), or `-` (pre-migration entries with no recorded source).
+- `broken_reason` is present only when `kind` is `local-fork-broken`. It contains the load error string explaining what is wrong (e.g. `"no harness manifest found in <path>"` or a stat error when the source directory is gone). Consumers should surface broken entries distinctly — they are still registered in `~/.ynh` and can be removed with `ynh uninstall <id>`.
 - `version_installed` is the version recorded in the harness manifest. Pass `--check-updates` to add `version_available` (and `ref_available`) by querying the upstream.
 - `is_pinned` is `true` when the installed Git ref is a resolved SHA (matches `^[0-9a-f]{7,40}$`); `false` for tags, branches, or local-only installs.
 - `path` is the absolute path to the installed harness directory.
