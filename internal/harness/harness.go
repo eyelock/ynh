@@ -261,17 +261,21 @@ func List() ([]string, error) {
 // ListAll returns all installed harnesses with namespace and directory
 // information. Unions pointer-shaped installs (local forks) with
 // tree-shaped installs (git/registry). Pointer entries take precedence
-// when a name appears in both — a pre-1.0 invariant: ynh fork now refuses
-// to register if a tree of the same name exists, but legacy two-tree
-// installs from before this change may still be on disk.
+// over a flat/local tree with the same canonical id — a pre-1.0 invariant
+// for the case where ynh fork co-existed with a local tree install. A
+// pointer and a remote registry install can share the same leaf name but
+// have distinct canonical ids (e.g. "local/foo" vs
+// "github.com/org/repo/foo") and must both appear.
 func ListAll() ([]ListEntry, error) {
 	pointers, err := ListPointers()
 	if err != nil {
 		return nil, err
 	}
+	// Key by canonical id, not bare name, so a fork and a registry install
+	// that share only the leaf name are not incorrectly deduplicated.
 	seen := make(map[string]bool, len(pointers))
 	for _, p := range pointers {
-		seen[p.Name] = true
+		seen["local/"+p.Name] = true
 	}
 
 	harnessesDir := config.HarnessesDir()
@@ -307,7 +311,7 @@ func ListAll() ([]ListEntry, error) {
 				if i := strings.LastIndex(id, "/"); i >= 0 {
 					name = id[i+1:]
 				}
-				if seen[name] {
+				if seen[id] {
 					continue
 				}
 				ns, _ := namespace.SplitID(id)
@@ -335,7 +339,7 @@ func ListAll() ([]ListEntry, error) {
 				if !child.IsDir() {
 					continue
 				}
-				if seen[child.Name()] {
+				if seen[ns+"/"+child.Name()] {
 					continue
 				}
 				childDir := filepath.Join(entryPath, child.Name())
@@ -349,7 +353,7 @@ func ListAll() ([]ListEntry, error) {
 			}
 		} else {
 			// Flat entry (unmigrated or local install)
-			if seen[entry.Name()] {
+			if seen["local/"+entry.Name()] {
 				continue
 			}
 			if DetectFormat(entryPath) != "" {
