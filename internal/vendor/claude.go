@@ -1,6 +1,7 @@
 package vendor
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -70,13 +71,46 @@ func (c *Claude) LaunchNonInteractive(configPath string, prompt string, extraArg
 }
 
 func (c *Claude) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []string) error {
-	// Positional arg without -p starts an interactive session with the prompt
-	// pre-loaded as the first user message (documented: claude "query").
-	args := append(extraArgs, prompt)
-	return launchClaude(configPath, args)
+	// Two-step approach: run the prompt non-interactively first (user sees the
+	// response), then resume that session interactively. A direct positional arg
+	// (claude [flags] "prompt") does not submit when --plugin-dir or --add-dir
+	// are present — those flags change Claude's session initialisation path.
+	claudeBin, err := exec.LookPath("claude")
+	if err != nil {
+		return err
+	}
+
+	sessionID, err := randomUUID()
+	if err != nil {
+		return fmt.Errorf("generating session ID: %w", err)
+	}
+
+	// Step 1: establish session context with the focus prompt.
+	step1 := buildClaudeArgs(configPath, append([]string{"-p", prompt, "--session-id", sessionID}, extraArgs...))
+	cmd := exec.Command(claudeBin, step1[1:]...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("focus run: %w", err)
+	}
+
+	// Step 2: resume that session interactively so the user can continue.
+	return launchClaude(configPath, append([]string{"--resume", sessionID}, extraArgs...))
 }
 
 func (c *Claude) SupportsInitialPrompt() bool { return true }
+
+func randomUUID() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant bits
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
+}
 
 // buildClaudeArgs constructs the argument list for the Claude Code CLI.
 // It adds --plugin-dir for artifact loading and --append-system-prompt
