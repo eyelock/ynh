@@ -11,6 +11,11 @@ import (
 // ErrUnknownVendor is returned when a vendor name is not registered.
 var ErrUnknownVendor = errors.New("unknown vendor")
 
+// ErrInitialPromptNotSupported is returned by LaunchWithInitialPrompt on
+// vendors whose CLI has no mechanism to pass an initial message into an
+// interactive session.
+var ErrInitialPromptNotSupported = errors.New("vendor does not support interactive sessions with an initial prompt")
+
 // SymlinkEntry records a single symlink created during Install.
 type SymlinkEntry struct {
 	Target string `json:"target"` // Where the symlink points (staging dir)
@@ -62,6 +67,12 @@ type Adapter interface {
 	// LaunchNonInteractive runs a one-shot prompt.
 	// extraArgs are passed through verbatim to the vendor CLI.
 	LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error
+
+	// LaunchWithInitialPrompt starts an interactive session with the prompt
+	// pre-populated as the first user message. Unlike LaunchNonInteractive,
+	// the session continues after the LLM responds. Vendors that cannot
+	// support this return ErrInitialPromptNotSupported.
+	LaunchWithInitialPrompt(configPath string, prompt string, extraArgs []string) error
 
 	// GenerateSystemPrompt produces vendor-native instruction files from the
 	// harness instructions content. Returns a map of relative file paths to

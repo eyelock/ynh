@@ -272,6 +272,53 @@ func TestParseRunArgs_HarnessFileEnvVar(t *testing.T) {
 	}
 }
 
+func TestParseRunArgs_Interactive(t *testing.T) {
+	t.Setenv("YNH_FOCUS", "")
+	t.Setenv("YNH_HARNESS_FILE", "")
+
+	tests := []struct {
+		name            string
+		args            []string
+		wantInteractive bool
+		wantPrompt      string
+	}{
+		{
+			name:            "--interactive with focus",
+			args:            []string{"my-harness", "--focus", "review", "--interactive"},
+			wantInteractive: true,
+		},
+		{
+			name:            "--interactive with prompt via separator",
+			args:            []string{"my-harness", "--interactive", "--", "fix this"},
+			wantInteractive: true,
+			wantPrompt:      "fix this",
+		},
+		{
+			name:            "--interactive without prompt is parsed",
+			args:            []string{"my-harness", "--interactive"},
+			wantInteractive: true,
+		},
+		{
+			name:            "no --interactive flag",
+			args:            []string{"my-harness", "--", "fix this"},
+			wantInteractive: false,
+			wantPrompt:      "fix this",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ra := parseRunArgs(tt.args)
+			if ra.Interactive != tt.wantInteractive {
+				t.Errorf("Interactive = %v, want %v", ra.Interactive, tt.wantInteractive)
+			}
+			if ra.Prompt != tt.wantPrompt {
+				t.Errorf("Prompt = %q, want %q", ra.Prompt, tt.wantPrompt)
+			}
+		})
+	}
+}
+
 func TestResolveVendor(t *testing.T) {
 	tests := []struct {
 		name          string

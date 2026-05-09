@@ -67,6 +67,15 @@ func (c *Cursor) LaunchNonInteractive(configPath string, prompt string, extraArg
 	return launchCursor(configPath, args)
 }
 
+func (c *Cursor) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []string) error {
+	// Positional arg without -p starts an interactive session with the prompt
+	// pre-loaded as the first user message (documented: agent "query").
+	args := append(extraArgs, prompt)
+	return launchCursor(configPath, args)
+}
+
+func (c *Cursor) SupportsInitialPrompt() bool { return true }
+
 // cursorHookEventMap maps canonical event names to Cursor hook events.
 // Cursor supports: beforeSubmitPrompt, beforeShellExecution, beforeMCPExecution,
 // beforeReadFile, afterFileEdit, stop. There is no afterShellExecution event.
