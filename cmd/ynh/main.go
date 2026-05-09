@@ -153,6 +153,9 @@ Commands:
 
 Run flags:
   -v <vendor>                  Override vendor (claude, codex, cursor)
+  --focus <name>               Load a named focus (sets prompt and profile; implies non-interactive)
+  --profile <name>             Apply a named profile overlay (with a prompt, implies non-interactive)
+  --interactive                Override non-interactive default — stay in session after focus or prompt
   --session-name <name>        Session label (recorded by ynh, not forwarded to vendor CLI)
   --install                    Install symlinks for the vendor in current project
   --clean                      Remove symlinks for the vendor in current project
@@ -167,6 +170,9 @@ Examples:
   ynh install github.com/org/repo --ref v1.2.0
   ynh run david
   ynh run david "review this PR"
+  ynh run david --focus code-review
+  ynh run david --focus code-review --interactive
+  ynh run david --profile thorough -- "audit this module"
   ynh run david -v codex
   ynh run david --model opus -- "fix this bug"
   ynh run david -v codex -- "refactor auth"
