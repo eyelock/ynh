@@ -1,7 +1,6 @@
 package vendor
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -62,61 +61,31 @@ func (c *Claude) Clean(entries []SymlinkEntry) error {
 }
 
 func (c *Claude) LaunchInteractive(configPath string, extraArgs []string) error {
-	return launchClaude(configPath, extraArgs)
+	return launchClaude(configPath, "", extraArgs)
 }
 
 func (c *Claude) LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error {
 	args := append([]string{"-p", prompt}, extraArgs...)
-	return launchClaude(configPath, args)
+	return launchClaude(configPath, "", args)
 }
 
 func (c *Claude) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []string) error {
-	// Two-step approach: run the prompt non-interactively first (user sees the
-	// response), then resume that session interactively. A direct positional arg
-	// (claude [flags] "prompt") does not submit when --plugin-dir or --add-dir
-	// are present — those flags change Claude's session initialisation path.
-	claudeBin, err := exec.LookPath("claude")
-	if err != nil {
-		return err
-	}
-
-	sessionID, err := randomUUID()
-	if err != nil {
-		return fmt.Errorf("generating session ID: %w", err)
-	}
-
-	// Step 1: establish session context with the focus prompt.
-	step1 := buildClaudeArgs(configPath, append([]string{"-p", prompt, "--session-id", sessionID}, extraArgs...))
-	cmd := exec.Command(claudeBin, step1[1:]...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("focus run: %w", err)
-	}
-
-	// Step 2: resume that session interactively so the user can continue.
-	return launchClaude(configPath, append([]string{"--resume", sessionID}, extraArgs...))
+	return launchClaude(configPath, prompt, extraArgs)
 }
 
 func (c *Claude) SupportsInitialPrompt() bool { return true }
 
-func randomUUID() (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
-	}
-	b[6] = (b[6] & 0x0f) | 0x40 // version 4
-	b[8] = (b[8] & 0x3f) | 0x80 // variant bits
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
-		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
-}
-
 // buildClaudeArgs constructs the argument list for the Claude Code CLI.
-// It adds --plugin-dir for artifact loading and --append-system-prompt
-// for harness instructions, then appends any vendor pass-through args.
-func buildClaudeArgs(configPath string, extraArgs []string) []string {
+// initialPrompt, when non-empty, is placed first so it precedes --add-dir;
+// --add-dir suppresses any positional arg that follows it.
+func buildClaudeArgs(configPath string, initialPrompt string, extraArgs []string) []string {
 	args := []string{"claude"}
+
+	// Positional prompt must come before --add-dir; --add-dir suppresses any
+	// positional arg that follows it in the args list.
+	if initialPrompt != "" {
+		args = append(args, initialPrompt)
+	}
 
 	// Load assembled artifacts (skills, agents, rules, commands) via --plugin-dir.
 	// Also --add-dir to grant read access so Claude doesn't prompt for permission
@@ -318,12 +287,12 @@ func (c *Claude) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[str
 	}, nil
 }
 
-func launchClaude(configPath string, extraArgs []string) error {
+func launchClaude(configPath string, initialPrompt string, extraArgs []string) error {
 	claudeBin, err := exec.LookPath("claude")
 	if err != nil {
 		return err
 	}
 
-	args := buildClaudeArgs(configPath, extraArgs)
+	args := buildClaudeArgs(configPath, initialPrompt, extraArgs)
 	return syscall.Exec(claudeBin, args, os.Environ())
 }
