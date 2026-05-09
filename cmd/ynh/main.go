@@ -1081,6 +1081,9 @@ func cmdRun(args []string) error {
 		// Launch
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
 		if prompt != "" {
+			if ra.Interactive {
+				return adapter.LaunchWithInitialPrompt(runDir, prompt, vendorArgs)
+			}
 			return adapter.LaunchNonInteractive(runDir, prompt, vendorArgs)
 		}
 		return adapter.LaunchInteractive(runDir, vendorArgs)
@@ -1093,11 +1096,12 @@ func cmdVendors(args []string) error {
 
 // vendorEntry is the JSON shape for a single vendor in `ynh vendors --format json`.
 type vendorEntry struct {
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name"`
-	CLI         string `json:"cli"`
-	ConfigDir   string `json:"config_dir"`
-	Available   bool   `json:"available"`
+	Name                  string `json:"name"`
+	DisplayName           string `json:"display_name"`
+	CLI                   string `json:"cli"`
+	ConfigDir             string `json:"config_dir"`
+	Available             bool   `json:"available"`
+	SupportsInitialPrompt bool   `json:"supports_initial_prompt"`
 }
 
 func cmdVendorsTo(args []string, stdout, stderr io.Writer) error {
@@ -1155,6 +1159,12 @@ func printVendorsText(w io.Writer) error {
 	return tw.Flush()
 }
 
+// initialPrompter is an optional capability interface for vendors that support
+// starting an interactive session with an initial prompt pre-loaded.
+type initialPrompter interface {
+	SupportsInitialPrompt() bool
+}
+
 func printVendorsJSON(w io.Writer) error {
 	entries := make([]vendorEntry, 0, len(vendor.Available()))
 	for _, name := range vendor.Available() {
@@ -1163,12 +1173,17 @@ func printVendorsJSON(w io.Writer) error {
 			return fmt.Errorf("loading vendor %s: %w", name, err)
 		}
 		_, lookErr := exec.LookPath(adapter.CLIName())
+		supportsIP := false
+		if ip, ok := adapter.(initialPrompter); ok {
+			supportsIP = ip.SupportsInitialPrompt()
+		}
 		entries = append(entries, vendorEntry{
-			Name:        adapter.Name(),
-			DisplayName: adapter.DisplayName(),
-			CLI:         adapter.CLIName(),
-			ConfigDir:   adapter.ConfigDir(),
-			Available:   lookErr == nil,
+			Name:                  adapter.Name(),
+			DisplayName:           adapter.DisplayName(),
+			CLI:                   adapter.CLIName(),
+			ConfigDir:             adapter.ConfigDir(),
+			Available:             lookErr == nil,
+			SupportsInitialPrompt: supportsIP,
 		})
 	}
 
@@ -1233,6 +1248,7 @@ type runArgs struct {
 	Prompt      string   // trailing prompt after --
 	VendorArgs  []string // passthrough args for vendor CLI
 	Action      string   // "install", "clean", or ""
+	Interactive bool     // --interactive: stay in session after initial prompt
 }
 
 func parseRunArgs(args []string) runArgs {
@@ -1273,6 +1289,8 @@ func parseRunArgs(args []string) runArgs {
 			ra.Action = "install"
 		case flagArgs[i] == "--clean":
 			ra.Action = "clean"
+		case flagArgs[i] == "--interactive":
+			ra.Interactive = true
 		case !strings.HasPrefix(flagArgs[i], "-"):
 			if firstPositional {
 				// First positional arg is the harness name

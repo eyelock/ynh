@@ -69,6 +69,15 @@ func (c *Claude) LaunchNonInteractive(configPath string, prompt string, extraArg
 	return launchClaude(configPath, args)
 }
 
+func (c *Claude) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []string) error {
+	// Positional arg without -p starts an interactive session with the prompt
+	// pre-loaded as the first user message (documented: claude "query").
+	args := append(extraArgs, prompt)
+	return launchClaude(configPath, args)
+}
+
+func (c *Claude) SupportsInitialPrompt() bool { return true }
+
 // buildClaudeArgs constructs the argument list for the Claude Code CLI.
 // It adds --plugin-dir for artifact loading and --append-system-prompt
 // for harness instructions, then appends any vendor pass-through args.

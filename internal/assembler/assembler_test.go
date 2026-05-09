@@ -31,6 +31,9 @@ func (m *mockAdapter) Install(stagingDir string, projectDir string) ([]vendor.Sy
 }
 func (m *mockAdapter) Clean(entries []vendor.SymlinkEntry) error                     { return nil }
 func (m *mockAdapter) LaunchInteractive(configPath string, extraArgs []string) error { return nil }
+func (m *mockAdapter) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []string) error {
+	return nil
+}
 func (m *mockAdapter) LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error {
 	return nil
 }
