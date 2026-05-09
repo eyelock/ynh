@@ -315,3 +315,222 @@ func TestMigrate_BrokenPointer_QuarantinedWithSkipBroken(t *testing.T) {
 		t.Errorf("schema version = %d, want 2", v)
 	}
 }
+
+// makeHarnessFixture writes a minimal harness under dir/name with the given
+// source and source_type in installed.json. Used by migrateOneInstall tests.
+func makeHarnessFixture(t *testing.T, dir, name, sourceType, source string) string {
+	t.Helper()
+	hDir := filepath.Join(dir, name)
+	pluginDir := filepath.Join(hDir, ".ynh-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", pluginDir, err)
+	}
+	pluginJSON := `{"name":"` + name + `","version":"0.1.0","description":"fixture"}`
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(pluginJSON), 0o644); err != nil {
+		t.Fatalf("write plugin.json: %v", err)
+	}
+	installedJSON := `{"source_type":"` + sourceType + `","source":"` + source + `","installed_at":"2026-01-01T00:00:00Z"}`
+	if err := os.WriteFile(filepath.Join(pluginDir, "installed.json"), []byte(installedJSON), 0o644); err != nil {
+		t.Fatalf("write installed.json: %v", err)
+	}
+	return hDir
+}
+
+func TestMigrateOneInstall_FlatLocalInstall(t *testing.T) {
+	home := t.TempDir()
+	harnessesDir := filepath.Join(home, "harnesses")
+	_ = os.MkdirAll(harnessesDir, 0o755)
+
+	makeHarnessFixture(t, harnessesDir, "planner", "local", "/Users/david/planner")
+
+	m, err := MigrateToSchema2(home, MigrateOpts{})
+	if err != nil {
+		t.Fatalf("MigrateToSchema2: %v", err)
+	}
+
+	newPath := filepath.Join(harnessesDir, "local--planner")
+	if _, err := os.Stat(newPath); err != nil {
+		t.Fatalf("expected harness at %s: %v", newPath, err)
+	}
+	if _, err := os.Stat(filepath.Join(harnessesDir, "planner")); !os.IsNotExist(err) {
+		t.Errorf("old harness dir still exists")
+	}
+
+	data, err := os.ReadFile(filepath.Join(newPath, ".ynh-plugin", "installed.json"))
+	if err != nil {
+		t.Fatalf("reading installed.json: %v", err)
+	}
+	var ins map[string]any
+	if err := json.Unmarshal(data, &ins); err != nil {
+		t.Fatalf("parsing installed.json: %v", err)
+	}
+	if ins["namespace"] != "local" {
+		t.Errorf("installed.json namespace = %v, want local", ins["namespace"])
+	}
+
+	if len(m.Entries) != 1 {
+		t.Fatalf("expected 1 manifest entry, got %d", len(m.Entries))
+	}
+	e := m.Entries[0]
+	if e.NewID != "local/planner" || e.Kind != "install_tree_flat" {
+		t.Errorf("manifest entry = %+v", e)
+	}
+}
+
+func TestMigrateOneInstall_FlatRemoteInstall(t *testing.T) {
+	home := t.TempDir()
+	harnessesDir := filepath.Join(home, "harnesses")
+	_ = os.MkdirAll(harnessesDir, 0o755)
+
+	makeHarnessFixture(t, harnessesDir, "assistants", "git", "https://github.com/eyelock/assistants")
+
+	m, err := MigrateToSchema2(home, MigrateOpts{})
+	if err != nil {
+		t.Fatalf("MigrateToSchema2: %v", err)
+	}
+
+	newPath := filepath.Join(harnessesDir, "github.com--eyelock--assistants--assistants")
+	if _, err := os.Stat(newPath); err != nil {
+		t.Fatalf("expected harness at %s: %v", newPath, err)
+	}
+	if _, err := os.Stat(filepath.Join(harnessesDir, "assistants")); !os.IsNotExist(err) {
+		t.Errorf("old harness dir still exists")
+	}
+
+	data, err := os.ReadFile(filepath.Join(newPath, ".ynh-plugin", "installed.json"))
+	if err != nil {
+		t.Fatalf("reading installed.json: %v", err)
+	}
+	var ins map[string]any
+	if err := json.Unmarshal(data, &ins); err != nil {
+		t.Fatalf("parsing installed.json: %v", err)
+	}
+	if ins["namespace"] != "github.com/eyelock/assistants" {
+		t.Errorf("installed.json namespace = %v, want github.com/eyelock/assistants", ins["namespace"])
+	}
+
+	if len(m.Entries) != 1 {
+		t.Fatalf("expected 1 manifest entry, got %d", len(m.Entries))
+	}
+	if m.Entries[0].NewID != "github.com/eyelock/assistants/assistants" {
+		t.Errorf("manifest NewID = %q", m.Entries[0].NewID)
+	}
+}
+
+func TestMigrateOneInstall_NamespacedParent(t *testing.T) {
+	home := t.TempDir()
+	harnessesDir := filepath.Join(home, "harnesses")
+	// Two-level legacy layout: harnesses/eyelock--assistants/my-harness/
+	nsParent := filepath.Join(harnessesDir, "eyelock--assistants")
+	_ = os.MkdirAll(nsParent, 0o755)
+	makeHarnessFixture(t, nsParent, "my-harness", "git", "https://github.com/eyelock/assistants")
+
+	m, err := MigrateToSchema2(home, MigrateOpts{})
+	if err != nil {
+		t.Fatalf("MigrateToSchema2: %v", err)
+	}
+
+	newPath := filepath.Join(harnessesDir, "github.com--eyelock--assistants--my-harness")
+	if _, err := os.Stat(newPath); err != nil {
+		t.Fatalf("expected harness at %s: %v", newPath, err)
+	}
+	// Namespaced parent dir is removed once all children are migrated.
+	if _, err := os.Stat(nsParent); !os.IsNotExist(err) {
+		t.Errorf("namespaced parent dir still exists after migration")
+	}
+
+	if len(m.Entries) != 1 {
+		t.Fatalf("expected 1 manifest entry, got %d", len(m.Entries))
+	}
+	if m.Entries[0].Kind != "install_tree_ns" {
+		t.Errorf("manifest kind = %q, want install_tree_ns", m.Entries[0].Kind)
+	}
+}
+
+func TestMigrateOneInstall_DryRun(t *testing.T) {
+	home := t.TempDir()
+	harnessesDir := filepath.Join(home, "harnesses")
+	_ = os.MkdirAll(harnessesDir, 0o755)
+	makeHarnessFixture(t, harnessesDir, "planner", "local", "/path/to/planner")
+
+	m, err := MigrateToSchema2(home, MigrateOpts{DryRun: true})
+	if err != nil {
+		t.Fatalf("MigrateToSchema2 dry-run: %v", err)
+	}
+
+	// On-disk layout unchanged.
+	if _, err := os.Stat(filepath.Join(harnessesDir, "planner")); err != nil {
+		t.Errorf("dry-run removed harness dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(harnessesDir, "local--planner")); !os.IsNotExist(err) {
+		t.Errorf("dry-run created renamed dir")
+	}
+
+	if len(m.Entries) != 1 {
+		t.Fatalf("expected 1 dry-run manifest entry, got %d", len(m.Entries))
+	}
+	if m.Entries[0].Kind != "install_tree_flat" {
+		t.Errorf("dry-run manifest kind = %q, want install_tree_flat", m.Entries[0].Kind)
+	}
+}
+
+func TestMigrateOneInstall_MissingInstalledJSON_Aborts(t *testing.T) {
+	home := t.TempDir()
+	harnessesDir := filepath.Join(home, "harnesses")
+	pluginDir := filepath.Join(harnessesDir, "planner", ".ynh-plugin")
+	_ = os.MkdirAll(pluginDir, 0o755)
+	// plugin.json present, but no installed.json
+	_ = os.WriteFile(filepath.Join(pluginDir, "plugin.json"),
+		[]byte(`{"name":"planner","version":"0.1.0"}`), 0o644)
+
+	_, err := MigrateToSchema2(home, MigrateOpts{})
+	if err == nil {
+		t.Fatal("expected migration to abort on missing installed.json")
+	}
+	if !errors.Is(err, ErrMigrationAborted) {
+		t.Errorf("expected ErrMigrationAborted, got: %v", err)
+	}
+}
+
+func TestMigrateOneInstall_MissingInstalledJSON_QuarantinedWithSkipBroken(t *testing.T) {
+	home := t.TempDir()
+	harnessesDir := filepath.Join(home, "harnesses")
+	pluginDir := filepath.Join(harnessesDir, "planner", ".ynh-plugin")
+	_ = os.MkdirAll(pluginDir, 0o755)
+	_ = os.WriteFile(filepath.Join(pluginDir, "plugin.json"),
+		[]byte(`{"name":"planner","version":"0.1.0"}`), 0o644)
+
+	m, err := MigrateToSchema2(home, MigrateOpts{SkipBroken: true})
+	if err != nil {
+		t.Fatalf("with --skip-broken: %v", err)
+	}
+	if len(m.Quarantined) != 1 {
+		t.Fatalf("expected 1 quarantined entry, got %d", len(m.Quarantined))
+	}
+	if _, err := os.Stat(filepath.Join(harnessesDir, "planner")); !os.IsNotExist(err) {
+		t.Errorf("broken harness still in harnesses dir")
+	}
+}
+
+func TestMigrateOneInstall_AlreadyMigrated_Idempotent(t *testing.T) {
+	home := t.TempDir()
+	harnessesDir := filepath.Join(home, "harnesses")
+	_ = os.MkdirAll(harnessesDir, 0o755)
+	makeHarnessFixture(t, harnessesDir, "planner", "local", "/path/to/planner")
+
+	// First pass — migrates to local--planner.
+	if _, err := MigrateToSchema2(home, MigrateOpts{}); err != nil {
+		t.Fatalf("first migrate: %v", err)
+	}
+	// Second pass — must be a no-op.
+	m2, err := MigrateToSchema2(home, MigrateOpts{})
+	if err != nil {
+		t.Fatalf("second migrate: %v", err)
+	}
+	if len(m2.Entries) != 0 {
+		t.Errorf("idempotent re-run produced entries: %+v", m2.Entries)
+	}
+	if len(m2.Quarantined) != 0 {
+		t.Errorf("idempotent re-run produced quarantined entries: %+v", m2.Quarantined)
+	}
+}

@@ -36,7 +36,7 @@ func TestDelegate_AddRemove(t *testing.T) {
 
 	delegateURL := "github.com/eyelock/assistants"
 	s.mustRunYnh(t, "delegate", "add", "local/minimal", delegateURL,
-		"--path", "e2e-fixtures/included-skill",
+		"--path", "e2e-fixtures/fork-source",
 		"--ref", AssistantsFixturesSHA,
 	)
 
@@ -46,10 +46,10 @@ func TestDelegate_AddRemove(t *testing.T) {
 	}
 	d := mf.DelegatesTo[0]
 	assertEqual(t, "delegates_to[0].git", d.Git, delegateURL)
-	assertEqual(t, "delegates_to[0].path", d.Path, "e2e-fixtures/included-skill")
+	assertEqual(t, "delegates_to[0].path", d.Path, "e2e-fixtures/fork-source")
 	assertEqual(t, "delegates_to[0].ref", d.Ref, AssistantsFixturesSHA)
 
-	s.mustRunYnh(t, "delegate", "remove", "local/minimal", delegateURL, "--path", "e2e-fixtures/included-skill")
+	s.mustRunYnh(t, "delegate", "remove", "local/minimal", delegateURL, "--path", "e2e-fixtures/fork-source")
 
 	mf = readManifest(t, filepath.Join(s.home, "harnesses", "local--minimal"))
 	if len(mf.DelegatesTo) != 0 {
@@ -126,12 +126,12 @@ func TestDelegate_Update(t *testing.T) {
 
 	delegateURL := "github.com/eyelock/assistants"
 	s.mustRunYnh(t, "delegate", "add", "local/minimal", delegateURL,
-		"--path", "e2e-fixtures/included-skill",
+		"--path", "e2e-fixtures/fork-source",
 		"--ref", AssistantsFixturesSHA,
 	)
 
 	s.mustRunYnh(t, "delegate", "update", "local/minimal", delegateURL,
-		"--from-path", "e2e-fixtures/included-skill",
+		"--from-path", "e2e-fixtures/fork-source",
 		"--ref", AssistantsFixturesV1Tag,
 	)
 
@@ -140,7 +140,7 @@ func TestDelegate_Update(t *testing.T) {
 		t.Fatalf("expected 1 delegate after update, got %d", len(mf.DelegatesTo))
 	}
 	assertEqual(t, "delegates_to[0].ref", mf.DelegatesTo[0].Ref, AssistantsFixturesV1Tag)
-	assertEqual(t, "delegates_to[0].path", mf.DelegatesTo[0].Path, "e2e-fixtures/included-skill")
+	assertEqual(t, "delegates_to[0].path", mf.DelegatesTo[0].Path, "e2e-fixtures/fork-source")
 }
 
 func readManifest(t *testing.T, harnessDir string) pluginManifest {
