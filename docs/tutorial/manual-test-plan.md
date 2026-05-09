@@ -478,6 +478,39 @@ ynh ls --format json | jq -r '.harnesses[] | select(.name=="fork-copy") | .id'
 rm -rf /tmp/ynh-fork-src /tmp/ynh-fork-copy
 ```
 
+### E25: Fork and registry install sharing a leaf name both appear in ls
+
+A fork (`local/<name>`) and a registry install (`<host>/…/<name>`) that share the same leaf name but have distinct canonical ids must both appear in `ynh ls`. This is the central scenario the canonical-id work enabled.
+
+```bash
+export YNH_HOME=$(mktemp -d)
+
+# Simulate a registry install (schema-2 tree)
+mkdir -p "$YNH_HOME/harnesses/github.com--eyelock--assistants--shared/.ynh-plugin"
+cat > "$YNH_HOME/harnesses/github.com--eyelock--assistants--shared/.ynh-plugin/plugin.json" << 'EOF'
+{"name":"shared","version":"1.0.0","default_vendor":"claude"}
+EOF
+
+# Register a fork with the same leaf name
+mkdir -p /tmp/ynh-fork-shared/.ynh-plugin
+cat > /tmp/ynh-fork-shared/.ynh-plugin/plugin.json << 'EOF'
+{"name":"shared","version":"2.0.0","default_vendor":"claude"}
+EOF
+cat > "$YNH_HOME/installed/shared.json" << 'EOF'
+{"name":"shared","source_type":"local","source":"/tmp/ynh-fork-shared","installed_at":"2026-01-01T00:00:00Z"}
+EOF
+
+ynh ls --format json | jq '[.harnesses[] | select(.name=="shared") | .id]'
+# Expected (both ids present, order may vary):
+# [
+#   "local/shared",
+#   "github.com/eyelock/assistants/shared"
+# ]
+
+rm -rf /tmp/ynh-fork-shared "$YNH_HOME"
+unset YNH_HOME
+```
+
 ### E24: Broken fork appears as local-fork-broken in ls JSON
 
 When a fork's source directory exists but has no `.ynh-plugin/plugin.json`, `ynh ls --format json` must tag it as `kind: "local-fork-broken"` with a non-empty `broken_reason` rather than emitting an empty-field `local-fork` entry.
@@ -565,5 +598,5 @@ Re-run S1 with a focus-source sensor and verify `ynh sensors run` returns the re
 | Tutorial 15: Project-Local Config | 4 |
 | Tutorial 16: Structured Output | 11 |
 | Sensors | 3 |
-| Edge Cases | 24 |
-| **Total** | **152** |
+| Edge Cases | 25 |
+| **Total** | **153** |

@@ -252,6 +252,56 @@ func TestLoadByID_Schema1PointerFallback(t *testing.T) {
 	}
 }
 
+// A fork (local/<name>) and a remote registry install sharing the same leaf
+// name but with distinct canonical ids must both appear in ListAll. The
+// canonical-id work (#127) made this possible; deduplicating by bare name
+// was the regression.
+func TestListAll_ForkAndRegistryInstallSameLeafName(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	// Pointer-shaped fork: local/termq-dev
+	forkDir := filepath.Join(t.TempDir(), "termq-dev")
+	writeForkTree(t, forkDir, "termq-dev")
+	if err := SavePointer(&Pointer{
+		Name: "termq-dev", SourceType: "local", Source: forkDir,
+		InstalledAt: "2026-05-01T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Schema-2 registry install: github.com/eyelock/assistants/termq-dev
+	// Dir name is the id-fsname: github.com--eyelock--assistants--termq-dev
+	registryDir := filepath.Join(home, "harnesses", "github.com--eyelock--assistants--termq-dev")
+	writeForkTree(t, registryDir, "termq-dev")
+
+	entries, err := ListAll()
+	if err != nil {
+		t.Fatalf("ListAll: %v", err)
+	}
+
+	ids := map[string]string{} // id → dir
+	for _, e := range entries {
+		var id string
+		if e.Namespace == "" {
+			id = "local/" + e.Name
+		} else {
+			id = e.Namespace + "/" + e.Name
+		}
+		ids[id] = e.Dir
+	}
+
+	if _, ok := ids["local/termq-dev"]; !ok {
+		t.Errorf("ListAll missing local/termq-dev; got %+v", ids)
+	}
+	if _, ok := ids["github.com/eyelock/assistants/termq-dev"]; !ok {
+		t.Errorf("ListAll missing github.com/eyelock/assistants/termq-dev; got %+v", ids)
+	}
+	if len(entries) != 2 {
+		t.Errorf("expected 2 entries, got %d: %+v", len(entries), entries)
+	}
+}
+
 // contains is a no-stdlib substring check to avoid pulling in strings.Contains
 // for a single helper. Keeps the test file small and obvious.
 func contains(s, sub string) bool {
