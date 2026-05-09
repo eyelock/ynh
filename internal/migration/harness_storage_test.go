@@ -104,3 +104,49 @@ func TestHarnessStorageMigrator_Run(t *testing.T) {
 		}
 	})
 }
+
+func TestCopyDir(t *testing.T) {
+	src := t.TempDir()
+	// Populate: a file, a nested dir, and a file inside it.
+	writeFile(t, filepath.Join(src, "top.txt"), "hello")
+	writeFile(t, filepath.Join(src, "sub", "nested.txt"), "world")
+
+	dst := filepath.Join(t.TempDir(), "dst")
+	if err := copyDir(src, dst); err != nil {
+		t.Fatalf("copyDir: %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(dst, "top.txt"))
+	if err != nil {
+		t.Fatalf("top.txt missing: %v", err)
+	}
+	if string(got) != "hello" {
+		t.Errorf("top.txt = %q, want hello", got)
+	}
+
+	got2, err := os.ReadFile(filepath.Join(dst, "sub", "nested.txt"))
+	if err != nil {
+		t.Fatalf("sub/nested.txt missing: %v", err)
+	}
+	if string(got2) != "world" {
+		t.Errorf("sub/nested.txt = %q, want world", got2)
+	}
+}
+
+func TestCopyFile(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "src.txt")
+	if err := os.WriteFile(src, []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(t.TempDir(), "dst.txt")
+	if err := copyFile(src, dst, 0o644); err != nil {
+		t.Fatalf("copyFile: %v", err)
+	}
+	got, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatalf("dst missing: %v", err)
+	}
+	if string(got) != "content" {
+		t.Errorf("dst = %q, want content", got)
+	}
+}
