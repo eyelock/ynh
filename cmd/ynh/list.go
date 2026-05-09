@@ -71,8 +71,12 @@ type listEntry struct {
 	IsPinned      bool               `json:"is_pinned"`
 	InstalledFrom *listInstalledFrom `json:"installed_from,omitempty"`
 	Artifacts     listArtifacts      `json:"artifacts"`
-	Includes      []listInclude      `json:"includes"`
-	DelegatesTo   []listDelegate     `json:"delegates_to"`
+	// BrokenReason is non-empty when the harness registration exists but the
+	// source could not be loaded (e.g. plugin.json missing, source path gone).
+	// Kind is "local-fork-broken" in this case. Absent for healthy entries.
+	BrokenReason string         `json:"broken_reason,omitempty"`
+	Includes     []listInclude  `json:"includes"`
+	DelegatesTo  []listDelegate `json:"delegates_to"`
 }
 
 type listInstalledFrom struct {
@@ -231,19 +235,27 @@ func printListJSON(w io.Writer, checkUpdates bool) error {
 	for _, e := range all {
 		p, loadErr := harness.LoadDir(e.Dir)
 		if loadErr != nil {
-			// Surface broken pointer entries as minimal placeholders so the
-			// JSON consumer sees the registration even when the source path
-			// is missing. Text mode already shows these as "(error: ...)"
-			// rows; the JSON contract should be no less informative.
-			if ptr, _ := harness.LoadPointer(e.Name); ptr != nil {
+			// Surface broken pointer entries with kind "local-fork-broken" and
+			// a broken_reason so JSON consumers (e.g. TermQ) can route them to
+			// a QUARANTINED group rather than displaying them as empty-field
+			// healthy harnesses.
+			//
+			// Pointer lookup: try schema-1 (name-keyed) then schema-2 (id-keyed)
+			// so entries written by both fork generations are covered.
+			ptr, _ := harness.LoadPointer(e.Name)
+			if ptr == nil {
+				ptr, _ = harness.LoadPointerByID("local/" + e.Name)
+			}
+			if ptr != nil {
 				id := namespace.CanonicalID(ptr.Source, ptr.Name)
 				ns, _ := namespace.SplitID(id)
 				entries = append(entries, listEntry{
-					ID:        id,
-					Name:      ptr.Name,
-					Namespace: ns,
-					Kind:      "local-fork",
-					Path:      ptr.Source,
+					ID:           id,
+					Name:         ptr.Name,
+					Namespace:    ns,
+					Kind:         "local-fork-broken",
+					Path:         ptr.Source,
+					BrokenReason: loadErr.Error(),
 					InstalledFrom: &listInstalledFrom{
 						SourceType:  ptr.SourceType,
 						Source:      ptr.Source,

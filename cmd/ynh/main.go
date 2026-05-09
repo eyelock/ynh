@@ -540,12 +540,32 @@ func cmdUninstall(args []string) error {
 	// to load the manifest. Removing a pointer is a metadata operation; it
 	// must succeed even when the pointed-to source tree is missing — that's
 	// the exact case where users most need to uninstall.
+	//
+	// Resolution mirrors LoadByID: try schema-2 (id-keyed) first, then fall
+	// back to schema-1 (name-keyed) for "local/<name>" canonical IDs.
 	var bareName, pointerSource string
-	if ptr, err := harness.LoadPointer(ref); err == nil && ptr != nil {
+	ptr, ptrErr := harness.LoadPointerByID(ref)
+	if ptrErr != nil {
+		return fmt.Errorf("checking pointer: %w", ptrErr)
+	}
+	if ptr == nil {
+		if name, ok := strings.CutPrefix(ref, "local/"); ok {
+			var err error
+			ptr, err = harness.LoadPointer(name)
+			if err != nil {
+				return fmt.Errorf("checking pointer: %w", err)
+			}
+		}
+	}
+	if ptr != nil {
 		bareName = ptr.Name
 		pointerSource = ptr.Source
+		// Remove both schemas — RemovePointer* silently no-ops on missing files.
 		if err := harness.RemovePointer(bareName); err != nil {
 			return fmt.Errorf("removing pointer: %w", err)
+		}
+		if err := harness.RemovePointerByID(ref); err != nil {
+			return fmt.Errorf("removing id-keyed pointer: %w", err)
 		}
 	} else {
 		// Tree-shaped install: resolve the on-disk directory (may be flat or

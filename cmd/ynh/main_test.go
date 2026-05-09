@@ -1039,3 +1039,71 @@ func TestCanonicalIDResolver_RejectsLegacyAtForm(t *testing.T) {
 		t.Errorf("expected rejection hint, got: %v", err)
 	}
 }
+
+// ynh uninstall local/<name> must resolve schema-1 pointer-installed forks.
+// This is the canonical form TermQ emits; before the fix, the "local/" prefix
+// caused the pointer lookup to miss and the command returned "not installed".
+func TestCmdUninstall_PointerByCanonicalID(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	// Create a source directory with a valid harness manifest.
+	srcDir := t.TempDir()
+	pluginDir := filepath.Join(srcDir, ".ynh-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"),
+		[]byte(`{"name":"my-fork","version":"1.0.0","default_vendor":"claude"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a schema-1 (name-keyed) pointer — the form ynh fork currently writes.
+	if err := harness.SavePointer(&harness.Pointer{
+		Name: "my-fork", SourceType: "local",
+		Source: srcDir, InstalledAt: "2026-05-01T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Uninstall via canonical id — this is what TermQ passes.
+	if err := cmdUninstall([]string{"local/my-fork"}); err != nil {
+		t.Fatalf("cmdUninstall local/my-fork failed: %v", err)
+	}
+
+	if _, err := os.Stat(harness.PointerPath("my-fork")); !os.IsNotExist(err) {
+		t.Errorf("schema-1 pointer still exists after uninstall: err=%v", err)
+	}
+}
+
+// ynh uninstall with a bare name must still work for backwards compatibility
+// (users who type the name directly rather than the canonical id).
+func TestCmdUninstall_PointerByBareName(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	srcDir := t.TempDir()
+	pluginDir := filepath.Join(srcDir, ".ynh-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"),
+		[]byte(`{"name":"my-fork","version":"1.0.0","default_vendor":"claude"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := harness.SavePointer(&harness.Pointer{
+		Name: "my-fork", SourceType: "local",
+		Source: srcDir, InstalledAt: "2026-05-01T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cmdUninstall([]string{"my-fork"}); err != nil {
+		t.Fatalf("cmdUninstall my-fork (bare name) failed: %v", err)
+	}
+
+	if _, err := os.Stat(harness.PointerPath("my-fork")); !os.IsNotExist(err) {
+		t.Errorf("schema-1 pointer still exists after bare-name uninstall: err=%v", err)
+	}
+}
