@@ -32,7 +32,7 @@ const AssistantsRepo = "https://github.com/eyelock/assistants.git"
 //
 // Pinned to the squash-merge of eyelock/assistants#16 on develop —
 // the commit that landed all Phases 2–4 fixtures.
-const AssistantsFixturesSHA = "7c6793652f818c30e9a6e6cc79afef8f4fbe38e9"
+const AssistantsFixturesSHA = "cbc4730433a640905454fa3b5aa5a7185f0d899f"
 
 // AssistantsFixturesV1Tag is a stable git tag in eyelock/assistants used
 // by the with-tag-include fixture to verify tag-to-SHA resolution.

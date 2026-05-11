@@ -129,7 +129,7 @@ func TestInstall_FloatingInclude(t *testing.T) {
 		t.Fatalf("expected 1 resolved entry, got %d: %+v", len(got.Resolved), got.Resolved)
 	}
 	r := got.Resolved[0]
-	assertEqual(t, "resolved[0].git", r.Git, "github.com/eyelock/assistants")
+	assertEqual(t, "resolved[0].git", r.Git, "https://github.com/eyelock/assistants")
 	// Floating include: develop now records the resolved branch name (e.g.
 	// "develop") in Ref alongside the concrete SHA. Just confirm Ref is
 	// populated — the exact branch name varies with upstream HEAD.
