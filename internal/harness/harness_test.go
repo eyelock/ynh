@@ -41,65 +41,6 @@ func TestDetectFormat_None(t *testing.T) {
 	}
 }
 
-func TestLoad_HarnessFormat(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	t.Setenv("YNH_HOME", "")
-
-	harnessDir := filepath.Join(dir, ".ynh", "harnesses", "mytest")
-	writeTestHarness(t, harnessDir, "mytest")
-
-	p, err := Load("mytest")
-	if err != nil {
-		t.Fatalf("Load failed: %v", err)
-	}
-	if p.Name != "mytest" {
-		t.Errorf("Name = %q, want %q", p.Name, "mytest")
-	}
-	if p.DefaultVendor != "claude" {
-		t.Errorf("DefaultVendor = %q, want %q", p.DefaultVendor, "claude")
-	}
-}
-
-func TestLoad_LegacyFormat(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	t.Setenv("YNH_HOME", "")
-
-	harnessDir := filepath.Join(dir, ".ynh", "harnesses", "old")
-	pluginDir := filepath.Join(harnessDir, ".claude-plugin")
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{"name":"old"}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := Load("old")
-	if err == nil {
-		t.Fatal("expected error for legacy format")
-	}
-	if got := err.Error(); !strings.Contains(got, "legacy") {
-		t.Errorf("error = %q, want legacy format hint", got)
-	}
-}
-
-func TestLoad_NotFound(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	t.Setenv("YNH_HOME", "")
-
-	harnessDir := filepath.Join(dir, ".ynh", "harnesses", "empty")
-	if err := os.MkdirAll(harnessDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := Load("empty")
-	if err == nil {
-		t.Fatal("expected error for directory without harness.json")
-	}
-}
-
 func TestLoadDir_FullMetadata(t *testing.T) {
 	dir := t.TempDir()
 	hj := `{
@@ -711,7 +652,7 @@ func TestScanArtifacts(t *testing.T) {
 		}
 	}
 
-	arts, err := ScanArtifacts("arttest")
+	arts, err := ScanArtifactsDir(harnessDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -744,7 +685,7 @@ func TestScanArtifacts_Empty(t *testing.T) {
 	harnessDir := filepath.Join(dir, ".ynh", "harnesses", "empty")
 	writeTestHarness(t, harnessDir, "empty")
 
-	arts, err := ScanArtifacts("empty")
+	arts, err := ScanArtifactsDir(harnessDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -770,7 +711,7 @@ func TestScanArtifacts_SkillWithoutManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	arts, err := ScanArtifacts("nosk")
+	arts, err := ScanArtifactsDir(harnessDir)
 	if err != nil {
 		t.Fatal(err)
 	}

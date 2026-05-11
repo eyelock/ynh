@@ -472,13 +472,7 @@ func buildDelegates(delegates []harness.Delegate) []listDelegate {
 	return result
 }
 
-// formatArtifactSummary formats the ARTIFACTS column for ynh ls.
-// Shows a compact summary like "1s 2a 1r 1c" (skills, agents, rules, commands).
-func formatArtifactSummary(name string) string {
-	return formatArtifactSummaryDir(harness.InstalledDir(name))
-}
-
-// formatArtifactSummaryDir formats the ARTIFACTS column from an explicit directory.
+// formatArtifactSummaryDir formats the ARTIFACTS column for ynh ls from an explicit directory.
 func formatArtifactSummaryDir(dir string) string {
 	arts, _ := harness.ScanArtifactsDir(dir)
 	if arts.Total() == 0 {

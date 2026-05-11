@@ -402,7 +402,7 @@ func installTestHarness(t *testing.T, name string) string {
 	t.Helper()
 	id := "local/" + name
 
-	// Schema-1 flat path — for legacy Load(name) callers.
+	// Schema-1 flat path — retained for tests that exercise schema-1 compat fallbacks.
 	flatDir := harness.InstalledDir(name)
 	if err := os.MkdirAll(flatDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -709,9 +709,9 @@ func TestFormatArtifactSummary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := formatArtifactSummary("artfmt")
+	got := formatArtifactSummaryDir(harnessDir)
 	if got != "2s 1a" {
-		t.Errorf("formatArtifactSummary() = %q, want %q", got, "2s 1a")
+		t.Errorf("formatArtifactSummaryDir() = %q, want %q", got, "2s 1a")
 	}
 }
 
@@ -721,9 +721,9 @@ func TestFormatArtifactSummary_Empty(t *testing.T) {
 	t.Setenv("YNH_HOME", "")
 
 	installTestHarness(t, "neart")
-	got := formatArtifactSummary("neart")
+	got := formatArtifactSummaryDir(harness.InstalledDirByID("local/neart"))
 	if got != "0" {
-		t.Errorf("formatArtifactSummary() = %q, want %q", got, "0")
+		t.Errorf("formatArtifactSummaryDir() = %q, want %q", got, "0")
 	}
 }
 
