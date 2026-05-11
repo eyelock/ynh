@@ -81,6 +81,8 @@ func main() {
 		err = cmdInclude(os.Args[2:])
 	case "sensors":
 		err = cmdSensors(os.Args[2:])
+	case "agent":
+		err = cmdAgent(os.Args[2:])
 	case "image":
 		err = cmdImage(os.Args[2:])
 	case "prune":
