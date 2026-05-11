@@ -370,3 +370,20 @@ func TestClaudeGenerateHookConfig_EventTranslation(t *testing.T) {
 		}
 	}
 }
+
+func TestClaudeApplyRuntimeInstructions(t *testing.T) {
+	c := &Claude{}
+	args, err := c.ApplyRuntimeInstructions(t.TempDir(), "PR #22 in eyelock/assistants")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(args) != 2 {
+		t.Fatalf("args = %v, want 2 elements", args)
+	}
+	if args[0] != "--append-system-prompt" {
+		t.Errorf("args[0] = %q, want --append-system-prompt", args[0])
+	}
+	if args[1] != "PR #22 in eyelock/assistants" {
+		t.Errorf("args[1] = %q, want PR #22 in eyelock/assistants", args[1])
+	}
+}

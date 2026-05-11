@@ -2,7 +2,9 @@ package vendor
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
@@ -168,5 +170,55 @@ func TestCursorGenerateHookConfig_EventTranslation(t *testing.T) {
 		if _, ok := hooksObj[event]; !ok {
 			t.Errorf("missing event %s", event)
 		}
+	}
+}
+
+func TestCursorApplyRuntimeInstructions(t *testing.T) {
+	runDir := t.TempDir()
+	existing := "harness instructions"
+	if err := os.WriteFile(filepath.Join(runDir, ".cursorrules"), []byte(existing), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	c := &Cursor{}
+	args, err := c.ApplyRuntimeInstructions(runDir, "PR #22 in eyelock/assistants")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(args) != 0 {
+		t.Errorf("args = %v, want empty (Cursor uses file injection)", args)
+	}
+
+	data, err := os.ReadFile(filepath.Join(runDir, ".cursorrules"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	if !strings.HasPrefix(content, existing) {
+		t.Errorf(".cursorrules does not start with original content")
+	}
+	if !strings.Contains(content, "PR #22 in eyelock/assistants") {
+		t.Errorf(".cursorrules missing injected instructions: %q", content)
+	}
+}
+
+func TestCursorApplyRuntimeInstructions_NoExistingFile(t *testing.T) {
+	runDir := t.TempDir()
+
+	c := &Cursor{}
+	args, err := c.ApplyRuntimeInstructions(runDir, "PR #22")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(args) != 0 {
+		t.Errorf("args = %v, want empty", args)
+	}
+
+	data, err := os.ReadFile(filepath.Join(runDir, ".cursorrules"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "PR #22") {
+		t.Errorf(".cursorrules missing injected instructions")
 	}
 }

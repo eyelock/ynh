@@ -156,6 +156,7 @@ Run flags:
   --focus <name>               Load a named focus (sets prompt and profile; implies non-interactive)
   --profile <name>             Apply a named profile overlay (with a prompt, implies non-interactive)
   --interactive                Override non-interactive default — stay in session after focus or prompt
+  --instructions "<text>"      Inject per-invocation context after harness instructions
   --session-name <name>        Session label (recorded by ynh, not forwarded to vendor CLI)
   --install                    Install symlinks for the vendor in current project
   --clean                      Remove symlinks for the vendor in current project
@@ -173,6 +174,8 @@ Examples:
   ynh run david --focus code-review
   ynh run david --focus code-review --interactive
   ynh run david --profile thorough -- "audit this module"
+  ynh run david --instructions "PR #22 in eyelock/assistants"
+  ynh run david --focus code-review --instructions "PR #22 in eyelock/assistants"
   ynh run david -v codex
   ynh run david --model opus -- "fix this bug"
   ynh run david -v codex -- "refactor auth"
@@ -1027,6 +1030,15 @@ func cmdRun(args []string) error {
 		}
 	}
 
+	// Inject per-invocation instructions into the vendor's pipeline.
+	if ra.Instructions != "" {
+		extraArgs, err := adapter.ApplyRuntimeInstructions(runDir, ra.Instructions)
+		if err != nil {
+			return fmt.Errorf("applying runtime instructions: %w", err)
+		}
+		vendorArgs = append(vendorArgs, extraArgs...)
+	}
+
 	// Dispatch based on action.
 	switch action {
 	case "install":
@@ -1245,16 +1257,17 @@ func resolveVendor(flag string, p *harness.Harness) (string, error) {
 // vendor flags take values.
 // runArgs holds parsed arguments for ynh run.
 type runArgs struct {
-	HarnessName string   // positional name, if given
-	HarnessFile string   // --harness-file or YNH_HARNESS_FILE
-	VendorFlag  string   // -v or YNH_VENDOR
-	ProfileFlag string   // --profile or YNH_PROFILE
-	FocusFlag   string   // --focus or YNH_FOCUS
-	SessionName string   // --session-name: consumed by ynh, not forwarded to vendor
-	Prompt      string   // trailing prompt after --
-	VendorArgs  []string // passthrough args for vendor CLI
-	Action      string   // "install", "clean", or ""
-	Interactive bool     // --interactive: stay in session after initial prompt
+	HarnessName  string   // positional name, if given
+	HarnessFile  string   // --harness-file or YNH_HARNESS_FILE
+	VendorFlag   string   // -v or YNH_VENDOR
+	ProfileFlag  string   // --profile or YNH_PROFILE
+	FocusFlag    string   // --focus or YNH_FOCUS
+	SessionName  string   // --session-name: consumed by ynh, not forwarded to vendor
+	Instructions string   // --instructions: per-invocation context injected into vendor pipeline
+	Prompt       string   // trailing prompt after --
+	VendorArgs   []string // passthrough args for vendor CLI
+	Action       string   // "install", "clean", or ""
+	Interactive  bool     // --interactive: stay in session after initial prompt
 }
 
 func parseRunArgs(args []string) runArgs {
@@ -1290,6 +1303,9 @@ func parseRunArgs(args []string) runArgs {
 			i++
 		case flagArgs[i] == "--session-name" && i+1 < len(flagArgs):
 			ra.SessionName = flagArgs[i+1]
+			i++
+		case flagArgs[i] == "--instructions" && i+1 < len(flagArgs):
+			ra.Instructions = flagArgs[i+1]
 			i++
 		case flagArgs[i] == "--install":
 			ra.Action = "install"

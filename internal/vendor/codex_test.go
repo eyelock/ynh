@@ -247,3 +247,20 @@ func TestCodexGenerateHookConfig_EventTranslation(t *testing.T) {
 		}
 	}
 }
+
+func TestCodexApplyRuntimeInstructions(t *testing.T) {
+	c := &Codex{}
+	args, err := c.ApplyRuntimeInstructions(t.TempDir(), "PR #22 in eyelock/assistants")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(args) != 2 {
+		t.Fatalf("args = %v, want 2 elements", args)
+	}
+	if args[0] != "-c" {
+		t.Errorf("args[0] = %q, want -c", args[0])
+	}
+	if args[1] != "developer_instructions=PR #22 in eyelock/assistants" {
+		t.Errorf("args[1] = %q, want developer_instructions=PR #22 in eyelock/assistants", args[1])
+	}
+}

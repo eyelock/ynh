@@ -3,6 +3,7 @@ package vendor
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
@@ -75,6 +76,22 @@ func (c *Cursor) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []
 }
 
 func (c *Cursor) SupportsInitialPrompt() bool { return true }
+
+func (c *Cursor) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
+	cursorrules := filepath.Join(runDir, ".cursorrules")
+	f, err := os.OpenFile(cursorrules, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("opening .cursorrules: %w", err)
+	}
+	if _, err := fmt.Fprintf(f, "\n\n%s\n", text); err != nil {
+		_ = f.Close()
+		return nil, fmt.Errorf("writing runtime instructions: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return nil, fmt.Errorf("closing .cursorrules: %w", err)
+	}
+	return nil, nil
+}
 
 // cursorHookEventMap maps canonical event names to Cursor hook events.
 // Cursor supports: beforeSubmitPrompt, beforeShellExecution, beforeMCPExecution,

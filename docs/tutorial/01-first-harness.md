@@ -227,6 +227,22 @@ my-harness --model opus -- "what are you? one sentence."
 
 `--model opus` passes through to Claude. The prompt comes after `--`.
 
+## T1.8b: Run with per-invocation instructions
+
+`--instructions` injects text into the vendor's instructions pipeline for this session only — after the harness `instructions.md`, before the session starts. It doesn't modify the harness.
+
+```bash
+my-harness --instructions "ticket: PROJ-42 — fix login timeout" -- "what's my current task?"
+```
+
+The agent should reference the ticket context in its response, even though it isn't in the harness `instructions.md`.
+
+Combined with `--focus`:
+
+```bash
+my-harness --focus code-review --instructions "PR #22 in eyelock/assistants"
+```
+
 ## T1.9: Inspect the assembled output
 
 > **Note:** The run directory is created by `ynh run`, which requires a vendor CLI. This step is only verifiable after running T1.6/T1.7/T1.8.
