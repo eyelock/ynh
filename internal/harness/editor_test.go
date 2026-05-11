@@ -173,6 +173,40 @@ func TestResolveEditTarget_LocalInstall(t *testing.T) {
 	}
 }
 
+// TestResolveEditTarget_SourceInstall verifies the same redirect behaviour for
+// source_type == "source" (installed by name from a configured ynh sources
+// entry). The Source field holds a local path just like source_type == "local".
+func TestResolveEditTarget_SourceInstall(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	sourceDir := t.TempDir()
+	writeTestHarness(t, sourceDir, "my-harness")
+
+	id := "local/my-harness"
+	registryDir := InstalledDirByID(id)
+	writeTestHarness(t, registryDir, "my-harness")
+	ins := &plugin.InstalledJSON{
+		SourceType:  "source",
+		Source:      sourceDir,
+		InstalledAt: "2026-05-11T00:00:00Z",
+	}
+	if err := plugin.SaveInstalledJSON(registryDir, ins); err != nil {
+		t.Fatal(err)
+	}
+
+	got, installed, err := ResolveEditTarget(id)
+	if err != nil {
+		t.Fatalf("ResolveEditTarget: %v", err)
+	}
+	if got != sourceDir {
+		t.Errorf("dir = %q, want source dir %q", got, sourceDir)
+	}
+	if !installed {
+		t.Error("expected installed=true")
+	}
+}
+
 // ---- AddInclude -------------------------------------------------------
 
 func TestAddInclude_New(t *testing.T) {
