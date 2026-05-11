@@ -11,7 +11,7 @@ func TestBudget_NotExceeded(t *testing.T) {
 	b.RecordTurn()
 	b.RecordTokens(Usage{InputTokens: 100, OutputTokens: 50})
 
-	reason, code := b.Exceeded()
+	reason, _, code := b.Exceeded()
 	if reason != "" || code != 0 {
 		t.Errorf("expected within budget, got reason=%q code=%d", reason, code)
 	}
@@ -23,7 +23,7 @@ func TestBudget_TurnCap(t *testing.T) {
 	b.RecordTurn()
 	b.RecordTurn()
 
-	reason, code := b.Exceeded()
+	reason, _, code := b.Exceeded()
 	if reason == "" {
 		t.Error("expected turn cap exceeded")
 	}
@@ -37,7 +37,7 @@ func TestBudget_TokenBudget(t *testing.T) {
 	b.Start()
 	b.RecordTokens(Usage{InputTokens: 60, OutputTokens: 50})
 
-	reason, code := b.Exceeded()
+	reason, _, code := b.Exceeded()
 	if reason == "" {
 		t.Error("expected token budget exceeded")
 	}
@@ -51,7 +51,7 @@ func TestBudget_WallClock(t *testing.T) {
 	b.Start()
 	time.Sleep(5 * time.Millisecond)
 
-	reason, code := b.Exceeded()
+	reason, _, code := b.Exceeded()
 	if reason == "" {
 		t.Error("expected wall-clock exceeded")
 	}
@@ -83,7 +83,7 @@ func TestBudget_ZeroLimitsUnlimited(t *testing.T) {
 		b.RecordTurn()
 	}
 	b.RecordTokens(Usage{InputTokens: 1e9, OutputTokens: 1e9})
-	reason, code := b.Exceeded()
+	reason, _, code := b.Exceeded()
 	if reason != "" || code != 0 {
 		t.Errorf("zero limits should be unlimited, got reason=%q code=%d", reason, code)
 	}

@@ -33,8 +33,8 @@ func TestTrajectoryWriter_EmitsValidNDJSON(t *testing.T) {
 		if err := json.Unmarshal(line, &ev); err != nil {
 			t.Errorf("line %d: invalid JSON: %v", i, err)
 		}
-		if ev.Time.IsZero() {
-			t.Errorf("line %d: time is zero", i)
+		if ev.Timestamp.IsZero() {
+			t.Errorf("line %d: timestamp is zero", i)
 		}
 	}
 }

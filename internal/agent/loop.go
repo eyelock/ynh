@@ -249,7 +249,7 @@ func RunLoop(opts RunOptions) error {
 
 		if opts.Interactive {
 			feedback := planTurn.Content
-			if emitErr := traj.Emit(KindTurnApprovalRequired, 0, TurnApprovalData{Feedback: feedback}); emitErr != nil {
+			if emitErr := traj.Emit(KindTurnApprovalRequired, 0, TurnApprovalData{SynthesizedFeedback: feedback}); emitErr != nil {
 				return fmt.Errorf("writing trajectory: %w", emitErr)
 			}
 			action, replacement, aborted := waitForApproval(ctrl, ActionApprovePlan, ActionRejectPlan)
@@ -281,9 +281,9 @@ func RunLoop(opts RunOptions) error {
 
 	for {
 		// ── Budget check ──────────────────────────────────────────────────────
-		if reason, code := budget.Exceeded(); reason != "" {
-			_ = traj.Emit(KindBudgetExceeded, budget.Turns(), BudgetExceededData{Reason: reason})
-			_ = traj.Emit(KindSessionEnd, budget.Turns(), SessionEndData{ExitCode: code, Reason: reason})
+		if reason, budgetKind, code := budget.Exceeded(); reason != "" {
+			_ = traj.Emit(KindBudgetExceeded, budget.Turns(), BudgetExceededData{Budget: budgetKind, Reason: reason})
+			_ = traj.Emit(KindSessionEnd, budget.Turns(), SessionEndData{ExitCode: code, Reason: reason, TotalTurns: budget.Turns(), TotalTokens: budget.Tokens()})
 			return &ExitError{Code: code, Message: reason}
 		}
 
@@ -336,12 +336,12 @@ func RunLoop(opts RunOptions) error {
 		// ── Check convergence ─────────────────────────────────────────────────
 		if converged, feedback := checkConvergence(sensorResults, convergenceSensor, ynh, opts.HarnessName, opts.WorktreeDir, traj, turnN); converged {
 			_ = traj.Emit(KindConverged, turnN, nil)
-			_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitConverged})
+			_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitConverged, TotalTurns: budget.Turns(), TotalTokens: budget.Tokens()})
 			return nil
 		} else if feedback == "" {
 			// All sensors passed but no convergence sensor; treat as converged.
 			_ = traj.Emit(KindConverged, turnN, nil)
-			_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitConverged})
+			_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitConverged, TotalTurns: budget.Turns(), TotalTokens: budget.Tokens()})
 			return nil
 		} else {
 			// ── Stuckness watchdog ─────────────────────────────────────────────
@@ -354,7 +354,7 @@ func RunLoop(opts RunOptions) error {
 
 			// ── Interactive approval ───────────────────────────────────────────
 			if opts.Interactive {
-				if emitErr := traj.Emit(KindTurnApprovalRequired, turnN, TurnApprovalData{Feedback: feedback}); emitErr != nil {
+				if emitErr := traj.Emit(KindTurnApprovalRequired, turnN, TurnApprovalData{SynthesizedFeedback: feedback}); emitErr != nil {
 					return fmt.Errorf("writing trajectory: %w", emitErr)
 				}
 				_, replacement, aborted := waitForApproval(ctrl, ActionApproveTurn, ActionRejectPlan)
@@ -560,8 +560,12 @@ func selectBackend(name string) (WorkerBackend, error) {
 	switch name {
 	case "claude", "":
 		return &ClaudeBackend{}, nil
+	case "codex":
+		return &CodexBackend{}, nil
+	case "cursor":
+		return &CursorBackend{}, nil
 	default:
-		return nil, fmt.Errorf("unknown backend %q (supported: claude)", name)
+		return nil, fmt.Errorf("unknown backend %q (supported: claude, codex, cursor)", name)
 	}
 }
 

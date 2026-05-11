@@ -25,11 +25,14 @@ const (
 )
 
 // Event is a single trajectory event emitted by the loop driver.
+// Wire field names match what TermQ and other consumers expect:
+//   - "type" (not "kind") for the event discriminator
+//   - "timestamp" (not "time") for the wall-clock time
 type Event struct {
-	Time time.Time `json:"time"`
-	Kind EventKind `json:"kind"`
-	Turn int       `json:"turn,omitempty"`
-	Data any       `json:"data,omitempty"`
+	Timestamp time.Time `json:"timestamp"`
+	Kind      EventKind `json:"type"`
+	Turn      int       `json:"turn,omitempty"`
+	Data      any       `json:"data,omitempty"`
 }
 
 // TrajectoryWriter writes trajectory events as NDJSON.
@@ -47,10 +50,10 @@ func NewTrajectoryWriter(w io.Writer) *TrajectoryWriter {
 // Emit writes a single event to the trajectory stream.
 func (t *TrajectoryWriter) Emit(kind EventKind, turn int, data any) error {
 	return t.enc.Encode(Event{
-		Time: time.Now().UTC(),
-		Kind: kind,
-		Turn: turn,
-		Data: data,
+		Timestamp: time.Now().UTC(),
+		Kind:      kind,
+		Turn:      turn,
+		Data:      data,
 	})
 }
 
@@ -75,9 +78,21 @@ type SensorResultData struct {
 	Summary    string `json:"summary,omitempty"`
 }
 
+// BudgetType identifies which budget limit was hit.
+type BudgetType string
+
+const (
+	BudgetTurns     BudgetType = "turns"
+	BudgetTokens    BudgetType = "tokens"
+	BudgetWallClock BudgetType = "wall_clock"
+)
+
 // BudgetExceededData is the payload for KindBudgetExceeded events.
+// Budget holds the machine-readable limit type; Reason holds a human
+// string for logs and UIs that don't switch on Budget.
 type BudgetExceededData struct {
-	Reason string `json:"reason"`
+	Budget BudgetType `json:"budget"`
+	Reason string     `json:"reason"`
 }
 
 // StuckDetectedData is the payload for KindStuckDetected events.
@@ -88,11 +103,14 @@ type StuckDetectedData struct {
 
 // SessionEndData is the payload for KindSessionEnd events.
 type SessionEndData struct {
-	ExitCode int    `json:"exit_code"`
-	Reason   string `json:"reason,omitempty"`
+	ExitCode    int    `json:"exit_code"`
+	Reason      string `json:"reason,omitempty"`
+	TotalTurns  int    `json:"total_turns,omitempty"`
+	TotalTokens int64  `json:"total_tokens,omitempty"`
 }
 
 // TurnApprovalData is the payload for KindTurnApprovalRequired events.
+// SynthesizedFeedback matches the TermQ wire name.
 type TurnApprovalData struct {
-	Feedback string `json:"feedback"`
+	SynthesizedFeedback string `json:"synthesized_feedback"`
 }
