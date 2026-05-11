@@ -37,7 +37,7 @@ jobs:
       - uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
-          args: release --clean --skip=docker,docker_manifests
+          args: release --clean --skip=docker
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
