@@ -21,11 +21,12 @@ And three regulation categories:
 
 ## Where YNH Fits
 
-YNH covers the **guide layer** thoroughly:
+YNH covers the **guide layer** thoroughly and **declares** the sensor layer:
 
 | Harness Concept | YNH Implementation |
 |-----------------|-------------------|
 | Feedforward Guides | Skills, rules, instructions, agents |
+| Feedback Sensors (declared) | `sensors` block — observation surfaces a loop driver consumes |
 | Harness Templates | A harness bundles guides for a use case |
 | Vendor Abstraction | Single harness → Claude/Cursor/Codex layouts |
 | Composition | `includes` (external Git) + `delegates_to` (subagents) |
@@ -33,7 +34,7 @@ YNH covers the **guide layer** thoroughly:
 | Agent Skills Standard | Native [agentskills.io](https://agentskills.io) support |
 | Progressive Disclosure | Skills use catalog → instructions → resources loading |
 
-YNH does **not** include sensors (linters, test runners, CI/CD). These are well-served by existing tools. YNH declares what the harness needs; vendor hook systems and CI pipelines execute it.
+YNH stops at the **runtime loop layer**. It declares both guides (artifacts) and observation surfaces (sensors), and it can mechanically execute an individual sensor on demand via `ynh sensors run`. Orchestration — when to run sensors, what counts as pass, when to stop iterating — belongs to an external loop driver (CI, an orchestrator, a custom tool). See [Sensors](sensors.md) for the full contract.
 
 ### Hooks: Bridge to Feedback Sensors
 
@@ -71,7 +72,22 @@ A YNH harness template can include:
 | Commands | Slash commands / workflows | Feedforward Guide |
 | Instructions | Project-level context (AGENTS.md) | Feedforward Guide |
 | Hooks | Vendor hook declarations | Bridge to Sensors |
+| Sensors | Observation surfaces (declared, not orchestrated) | Feedback Sensor (declared) |
 | MCP Servers | Tool dependencies | Tool Registry |
+
+## Design Stance — Declarative-First, Vendor-Neutral
+
+Two architectural choices constrain everything else and explain why ynh's surface looks the way it does.
+
+**Declarative-first.** A ynh harness is configuration, not code. The manifest emits artifacts and declarations; it never executes the agent loop, mutates session state at runtime, or registers behaviour dynamically. Anything that requires a live runtime — dynamic tool registration, in-process event subscription, mid-session mutation, custom UI — belongs to the runtime that runs the agent, not to the harness.
+
+**Vendor-neutral.** The feature surface is bounded by what is portable across every supported vendor. Hook events, MCP semantics, assembly behaviour, and sensor contracts are all chosen to translate cleanly into each target. Restraint here — a small canonical hook vocabulary instead of a rich one, declared sensors instead of executable observers — is the cost of working everywhere.
+
+**Corollary: structure where prose would suffice in a single runtime.** A runtime that owns its agent loop can drive feedback through prose instructions alone — the runtime obeys its own conventions. ynh cannot. The loop is run by an external consumer (CI, an orchestrator, another tool) that has no way to discover what the harness exposes unless it is declared. Sensors formalise what would otherwise live as informal prose; that formality is the price of portability.
+
+**What this rules out.** Programmatic extensions in the manifest. Runtime hooks beyond the canonical four. Live mutation of artifacts after assembly. A ynh-owned loop driver. These are not gaps to be filled; they are deliberate refusals that protect the portability guarantee.
+
+**What this rules in.** A small, stable, machine-readable surface that any runtime — interactive vendor CLI, headless CI job, custom orchestrator — can consume in the same way. The harness encodes intent; runtimes provide capability.
 
 ## Standards Alignment
 

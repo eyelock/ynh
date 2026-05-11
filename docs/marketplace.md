@@ -363,6 +363,59 @@ Once built, push the output directory to a Git repository. Users can then:
 **Cursor:**
 Add the marketplace URL in Cursor's plugin settings, then install from the IDE marketplace browser.
 
+### Pinning: refs and SHAs
+
+ynh follows the Claude Code marketplace model: identity is a **git ref**, optionally anchored to a **commit SHA**. There is no semver-style version resolver. The `ref` field is the user's stated tracking intent; the `sha` field, when present, is an integrity pin layered on top.
+
+Three legitimate combinations on a registry or marketplace entry:
+
+| `ref` | `sha` | What you get |
+|---|---|---|
+| `"v1.0"` | _empty_ | Tracks the `v1.0` tag. If upstream rewrites the tag, you silently move with it. |
+| `"v1.0"` | `"abc123…"` | Fetches `v1.0`, then verifies the fetched commit equals `abc123…`. Aborts on mismatch. Recommended for published releases. |
+| `"abc123…"` | _empty_ | Fetches the commit directly. Immutable; will never drift. |
+
+**`ref` is primary. `sha` is opt-in.** A user who installs `acme-tools --ref v1.0` is saying "give me 1.0, including future patches of 1.0." Auto-converting that to a SHA pin downstream means they'll never receive those patches even though their original install would. The "safe" default ends up subtly wrong — defaulting to the SHA throws away the user's symbolic tracking intent.
+
+> **Note:** The `harnesses[].version` field in ynh's `marketplace.json` is a cosmetic display label, not a resolution input. Tracking "version 1.0" is done by setting `"ref": "v1.0"`, not by the `version` field. Downstream consumers should not rely on `version` for pinning decisions.
+
+### After install: what the harness records
+
+After install, a harness's `installed.json` records:
+
+| Field | Meaning |
+|---|---|
+| `source` | Where the harness came from (git URL or local path) |
+| `ref` | What the user asked to track: a tag, a branch, or a SHA |
+| `sha` | The commit that was actually fetched at install time |
+
+`ref` and `sha` are independent. `ref` reflects *intent*; `sha` reflects *what we got*. They can disagree — installing `--ref main` today gives you `sha = abc123…`; tomorrow `main` will be a different SHA. `ynh ls` exposes both.
+
+### Guidance for tools that compose ynh harnesses
+
+Delegate-management UIs, dashboards, and CI integrations that pre-fill harness references should follow the same model:
+
+| Pre-filled value | Semantic | Drift behaviour |
+|---|---|---|
+| `installed.json` `ref` (e.g. `"v1.0"`) | "Track what `v1.0` means" | Floats forward when upstream moves the tag |
+| `installed.json` `ref` (e.g. `"main"`) | "Track the branch" | Floats freely with every push |
+| `installed.json` `sha` | "Exact bytes, never drift" | Frozen forever |
+
+Recommended UX:
+
+1. Pre-fill the ref field from `installed.json` `ref`.
+2. Show the resolved SHA as additional information so the user knows what bytes the ref currently points at.
+3. Offer a checkbox like **"Pin to exact commit (integrity check)"**. When ticked, substitute the SHA as the ref — ynh's resolver supports SHA-as-ref directly.
+
+Edge cases:
+
+- **`ref` is empty**: the harness was installed without an explicit ref (tracking HEAD). Pre-fill empty; surface this clearly so the user knows they're floating.
+- **`ref` is a SHA**: the user already chose immutable pinning. Pre-fill the SHA; no further opt-in needed.
+
+If your tool genuinely needs hermetic builds (CI pipelines, reproducible deployments), surface SHA pinning prominently and make it explicit — but as a deliberate choice, not a hidden default.
+
+For the architectural rationale and contributor-facing rules, see [`.github/CONTRIBUTING.md` § Versioning & Identifiers](../.github/CONTRIBUTING.md#versioning--identifiers).
+
 ### Design Decisions
 
 **Why two marketplace.json files?** Vendor formats reject unknown fields. Claude Code requires `.claude-plugin/marketplace.json`, Cursor requires `.cursor-plugin/marketplace.json`. ynh generates both from the same source config, producing one physical plugin directory that serves both vendors.

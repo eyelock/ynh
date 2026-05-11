@@ -624,3 +624,60 @@ func TestResolveGitSource_PathTraversalBlocked(t *testing.T) {
 		}
 	}
 }
+
+// TestLsRemoteFunc_ExactRefMatch ensures that LsRemoteFunc resolves "main" to
+// refs/heads/main only, even when the remote also contains branches whose names
+// end in "/main" (e.g. "daisy/caffeinate/main"). Without exact-match filtering
+// git ls-remote does suffix pattern matching and returns the ambiguous branch
+// first, which caused phantom ref_available drift in ynh status.
+func TestLsRemoteFunc_ExactRefMatch(t *testing.T) {
+	// Build a local bare-ish repo with two branches: "main" and "shadow/main".
+	srcDir := t.TempDir()
+	runGit(t, srcDir, "init", "-b", "main")
+	runGit(t, srcDir, "config", "user.email", "test@test.com")
+	runGit(t, srcDir, "config", "user.name", "Test")
+
+	// First commit on main.
+	f := filepath.Join(srcDir, "file.txt")
+	if err := os.WriteFile(f, []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, srcDir, "add", ".")
+	runGit(t, srcDir, "commit", "-m", "v1")
+	mainSHA := strings.TrimSpace(func() string {
+		cmd := exec.Command("git", "-C", srcDir, "rev-parse", "HEAD")
+		out, _ := cmd.Output()
+		return string(out)
+	}())
+
+	// Create shadow/main at a different commit.
+	runGit(t, srcDir, "checkout", "-b", "shadow/main")
+	if err := os.WriteFile(f, []byte("shadow"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, srcDir, "add", ".")
+	runGit(t, srcDir, "commit", "-m", "shadow")
+	shadowSHA := strings.TrimSpace(func() string {
+		cmd := exec.Command("git", "-C", srcDir, "rev-parse", "HEAD")
+		out, _ := cmd.Output()
+		return string(out)
+	}())
+
+	// Switch back to main so HEAD points there.
+	runGit(t, srcDir, "checkout", "main")
+
+	if mainSHA == shadowSHA {
+		t.Fatal("mainSHA == shadowSHA: branches are identical, test is invalid")
+	}
+
+	got, err := LsRemoteFunc(srcDir, "main")
+	if err != nil {
+		t.Fatalf("LsRemoteFunc: %v", err)
+	}
+	if got != mainSHA {
+		t.Errorf("LsRemoteFunc(main) = %q, want %q (refs/heads/main SHA); got shadow/main SHA instead", got, mainSHA)
+	}
+	if got == shadowSHA {
+		t.Errorf("LsRemoteFunc returned shadow/main SHA — suffix-match bug not fixed")
+	}
+}

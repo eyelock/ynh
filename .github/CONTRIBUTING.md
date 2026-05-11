@@ -1,5 +1,16 @@
 # Contributing to ynh
 
+## Design Stance
+
+These principles constrain what gets accepted into ynh. Read them before proposing a feature; they explain why some natural-looking ideas are out of scope.
+
+- **Declarative-first.** Manifests describe; they do not execute. Proposals that require ynh to run code at agent runtime, mutate state mid-session, or own the agent loop belong in a runtime project, not here.
+- **Vendor-neutral.** Every feature must translate cleanly into every supported vendor. A capability that exists in only one vendor either gets a portable abstraction or stays out.
+- **Restraint over richness.** The canonical hook vocabulary, the freeform sensor `format` string, the absence of a `passed` boolean on `ynh sensors run` — these are not gaps. They are deliberate refusals to take on responsibility that belongs to the layer above (the loop driver) or below (the vendor runtime).
+- **Structure where the layer above needs to discover.** When an external consumer needs to know about something — a sensor, a focus, a hook event — it goes in the manifest as structured data with CLI discovery. When the *agent* needs to know about something, it goes in `instructions.md` as prose. The two channels are complementary.
+
+See [Harness Engineering §"Design Stance"](../docs/harness-engineering.md#design-stance--declarative-first-vendor-neutral) for the user-facing version of this rationale.
+
 ## Architecture
 
 ynh is a packaging and distribution tool. It has no runtime component - the AI vendor CLI (Claude, Codex, Cursor) handles all interaction. ynh's job is to resolve, assemble, and launch.
@@ -7,7 +18,7 @@ ynh is a packaging and distribution tool. It has no runtime component - the AI v
 ### Core Flow
 
 ```
-.harness.json → resolve Git includes → assemble vendor config → launch vendor CLI
+.ynh-plugin/plugin.json → resolve Git includes → assemble vendor config → launch vendor CLI
 ```
 
 1. **Detect** the harness format and load its manifest (`internal/harness/`, `internal/plugin/`)
@@ -60,6 +71,107 @@ docs/                     User guide (GitHub Pages)
 
 **Migration via filter chain.** All backward compatibility lives in `internal/migration/`. Each migration is one struct implementing `Migrator` — its own `Applies` conditions and `Run` transform. Loaders call the chain once before reading; they never branch on old formats themselves. Removing support for a legacy format means deleting that one file and unregistering the struct. No other code changes.
 
+## Harness Identity
+
+Every installed harness has exactly one identity form: a path-shaped, host-prefixed **canonical id**. There is no fallback path; every code path that accepts a user-typed harness reference goes through the same lexical classifier and rejects everything else. This section codifies the rules so the next contributor doesn't accidentally re-introduce a bare-name fallback "for backwards compat" — the whole point of schema 2 is that those branches don't exist.
+
+### The classification rule
+
+`internal/namespace.Classify(ref)` is the single entry point. It returns `RefPath` / `RefID` / `RefInvalid`:
+
+| Ref shape | Classification | Examples |
+|---|---|---|
+| Starts with `./`, `../`, `/`, `~/`, drive-letter | `RefPath` | `./planner`, `~/work/planner`, `/abs/path` |
+| Slash-bearing, no path prefix, no `@` | `RefID` | `github.com/eyelock/assistants/planner`, `local/planner` |
+| Anything else | `RefInvalid` | `planner` (bare), `planner@eyelock/assistants` (legacy `@`-form), `id@v1` (version pin slot, reserved) |
+
+Classify is purely lexical — no `os.Stat`, no heuristic, no fallback. If you find yourself adding "if not found as id, try as bare name" anywhere outside `internal/migration/`, that's a regression of this rule.
+
+### The "no fallback in code paths" contract
+
+PR-canonical-3 deliberately removed every bare-name lookup from the resolver. `harness.LoadQualified` calls `LoadByID` directly when given a `RefID` and returns `BadRefError` for everything else. `harness.ResolveEditTarget` does the same. Under schema 2 there's exactly one valid ref shape per kind.
+
+**Rules for adding a new ref-accepting command:**
+
+1. Take the user input verbatim.
+2. Call `namespace.Classify` once.
+3. Switch on the result. `RefPath` → resolve via filesystem. `RefID` → call `harness.LoadByID`. `RefInvalid` → return `harness.BadRefError(ref)` unchanged.
+4. Do not invent a new ref form. Do not accept "bare name as fallback."
+5. If a downstream library you call wants to look something up by bare name, that library is wrong; convert to a canonical id at the boundary.
+
+### Migration is the only place legacy is touched
+
+`internal/migration/canonicalid.go` runs **once** on schema-1 homes via the auto-migration gate in `cmd/ynh/main.go`. It walks `~/.ynh/installed/`, `~/.ynh/harnesses/`, and `~/.ynh/bin/` exactly once, rewrites everything to schema 2, and stamps `~/.ynh/.schema-version`. After that, the rest of the codebase has no memory that legacy forms ever existed.
+
+When you encounter pre-schema-2 layout in a non-migration code path: that's a bug. Fix the bug by reaching schema 2 before the read, not by teaching the reader about both formats.
+
+### On-disk encoding
+
+Canonical ids contain `/`, which is not a filesystem-safe character. The transliteration is mechanical:
+
+| Layer | Form |
+|---|---|
+| User-typed at CLI / JSON envelope | `github.com/eyelock/assistants/planner` |
+| Pointer file path | `~/.ynh/installed/github.com--eyelock--assistants--planner.json` |
+| Tree-shaped install dir | `~/.ynh/harnesses/github.com--eyelock--assistants--planner/` |
+| `installed.json` `id` field | `github.com/eyelock/assistants/planner` (canonical, never `--`-form) |
+
+`namespace.IDToFSName` and `FSNameToID` are the two adapters between these forms. Users never type `--` on the CLI; ynh never accepts it as input. The transliteration is a one-direction encoding for filesystem safety, same way npm stores `@scope/pkg` under `node_modules/@scope/pkg/`.
+
+### Reserved prefixes
+
+- `local/` — installs that have no remote source (local paths, forks, `--url` aliases). The fork command defaults `--as` to `local/<source-name>`. The CLI accepts `local/<name>` as an id but **rejects it as an install source** (`ynh install local/foo` is an error pointing at "use a filesystem path").
+- `<host-with-dot>/<...>` — registry / Git-URL-derived ids. The host segment must contain a `.` (else it's not a real hostname); the next two segments are org and repo.
+
+### Schema version contract
+
+`~/.ynh/.schema-version` records the on-disk format version. Absent file means **schema 1** (legacy / pre-migration). Content `2` means migrated.
+
+The `ynh ls` and `ynh info` JSON envelopes carry `schema_version` as a **dynamic** field (read from disk via `migration.ReadSchemaVersion(home)`, not the static `config.SchemaVersion` constant). Consumers like TermQ gate their behaviour on this — never on `capabilities`, which is a separate wire-contract version.
+
+**When bumping the schema version:** add a new migration step in `internal/migration/canonicalid.go` (or a sibling file), bump `migration.CurrentSchemaVersion`, write tests for the legacy → new round-trip. The auto-migration gate runs on first invocation against a stale home; do not accept stale-home reads anywhere else.
+
+## Versioning & Identifiers
+
+ynh inherits the **git-as-package-manager** model from Claude Code's plugin marketplace: identity is a git ref, optionally anchored to a commit SHA. There is no semver-style version resolver. Several version-shaped fields exist in the schema; only some are load-bearing. The next contributor will be tempted to wire the cosmetic ones into resolution — don't.
+
+### The four identifiers
+
+| Identifier | Where | Load-bearing? |
+|---|---|---|
+| `marketplace.json` `harnesses[].version` | Registry / marketplace metadata | **No.** Cosmetic label, surfaced in `ynh search` output only. Never consulted at install or update time. |
+| `source.ref` (branch, tag, or SHA string) | Marketplace `RemoteSource`, registry `Entry`, `installed.json` | **Yes — primary.** Drives `git fetch` / `git checkout`. Whatever string is here is what the user is tracking. |
+| `source.sha` (40-char commit) | Marketplace `RemoteSource`, registry `Entry`, `installed.json` | **Yes — optional integrity pin.** When set alongside `ref`, install verifies the fetched HEAD matches and aborts on mismatch (`cmd/ynh/install_helpers.go:verifyResolvedSHA`). |
+| `plugin.json` `version` | Harness's own manifest | Cosmetic, surfaced as `version_installed` in `ynh ls`. Authored by the harness, decoupled from any registry's `version` field. |
+
+### The contract: ref is primary, sha is an optional pin
+
+`ref` is the user's stated intent ("track `v1.0`", "track `develop`", "stay on this exact commit"). `sha`, when present, is a belt-and-braces check that the fetched bytes are the bytes the registry author signed off on. Three legitimate combinations:
+
+| `ref` | `sha` | Behaviour |
+|---|---|---|
+| `"v1.0"` | _empty_ | Fetch the tag. Tracks tag updates. (Tag rewrites silently honoured.) |
+| `"v1.0"` | `"abc123…"` | Fetch the tag. Verify HEAD == sha. Abort if mismatch — protects against tag rewrites and tampering. |
+| `"abc123…"` (full SHA) | _empty_ | Fetch by SHA. Immutable. (Resolver mode 3, `cloneAtSHA`.) |
+
+The third row is the "I don't trust the registry to keep tags stable" mode. The second is the standard published-release mode. The first is the lightweight mode for internal/developer registries.
+
+### Don't add a `--version` flag
+
+`ynh install` and `ynh delegate add` accept `--ref` and `--sha`; they do not accept `--version`. Adding a `--version` flag would imply ynh has a version resolver, which it does not. If a user wants "version 1.0," they pin `--ref v1.0`. Mapping a semver request to a ref is the registry's job, not ynh's.
+
+The cosmetic `marketplace.json` `version` field is a known wart kept for display compatibility. It is not a roadmap signal that resolution-by-version is coming. If you find yourself reading `entry.Version` in resolver code, that's the regression this section exists to prevent.
+
+### Guidance for downstream consumers
+
+Tools that compose ynh harnesses (delegate sheets, dashboards, CI integrations) should follow the same model:
+
+1. Default to `installed.json.ref` when proposing a delegate or include — that's the user's stated intent at install time.
+2. Offer `installed.json.sha` as an opt-in **integrity pin** (typically a checkbox: "pin to exact commit"), not as the default.
+3. Don't use the cosmetic `version` field for anything other than display.
+
+The user-facing version of this guidance lives in [`docs/marketplace.md` § Pinning: refs and SHAs](../docs/marketplace.md#pinning-refs-and-shas).
+
 ## Technologies
 
 - **Go 1.25+** - single binary, no runtime dependencies
@@ -90,7 +202,44 @@ make lint
 
 # Full CI pipeline (deps, format, lint, test, build)
 make check
+
+# E2E suite (release gate; not part of `make check`)
+make e2e
 ```
+
+### E2E test suite
+
+`make e2e` runs an end-to-end test suite (~100 tests, ~1m wallclock) that exercises both binaries against SHA-pinned fixtures in [eyelock/assistants:e2e-fixtures/](https://github.com/eyelock/assistants/tree/develop/e2e-fixtures). Tests live in `test/e2e/` behind the `e2e` build tag and are **not** part of `make check` or `make test`.
+
+**What the suite locks:**
+
+- Every documented entry point on `ynh` and `ynd` (install, update, fork, delegate, include, run, vendors, sources, paths, status, prune, info, ls, image, search, registry; create, lint, validate, fmt, preview, export, compose, diff, migrate, marketplace, inspect)
+- All three vendor adapters (Claude, Codex, Cursor) end-to-end: instructions files, hooks (with matchers + per-vendor event remapping), MCP servers (command + URL forms, env passthrough)
+- Profile + focus resolution (hook replace + inherit, MCP deep-merge, mutex/unknown errors)
+- Schema/security guards (path traversal, --ref + local, fork update, duplicate sources)
+- JSON error envelope, override semantics (harness AGENTS.md beats include's), symlink stability across reinstall
+- Local file:// registry support (registry add → search → install with namespace collision handling)
+
+The suite is the release gate, not a per-PR gate:
+
+| Trigger | Behaviour |
+|---------|-----------|
+| PR opened/updated targeting `main` | E2E must pass before merge (`.github/workflows/e2e.yml`) |
+| Tag push `v*` | E2E runs as part of `release.yml`, blocking `goreleaser` |
+| Manual `workflow_dispatch` | Ad-hoc "is develop healthy?" check before opening release PR |
+| PR targeting `develop` | Not triggered — feature work stays fast |
+
+Tests clone `eyelock/assistants` over the network and exercise the production binary built via `make build`. Fixture SHAs are pinned in `test/e2e/helpers.go`. When ynh's harness schema legitimately evolves, the same PR that changes the schema must update the affected fixtures in `eyelock/assistants:e2e-fixtures/` and bump the SHA constants.
+
+**Local fixture iteration.** If you have an `eyelock/assistants` worktree checked out at the pinned SHA, point the suite at it to skip the per-test clone:
+
+```bash
+YNH_E2E_ASSISTANTS_PATH=/path/to/assistants/worktree make e2e
+```
+
+The worktree's HEAD must match `AssistantsFixturesSHA` in `helpers.go` — otherwise the suite fails fast (so you can't accidentally pass tests locally with a fixture state CI doesn't share). Iterating on fixtures? Set `YNH_E2E_FIXTURES_LOOSE=1` to bypass the SHA check while you work, but bump the pinned SHA before pushing.
+
+See `.claude/plans/e2e-test-suite.md` for the architecture and coverage matrix.
 
 ### Testing Unreleased ynh Against Downstream Tooling
 
@@ -104,12 +253,12 @@ make install
 
 # Verify the contract
 ynh version --format json
-# {"version": "dev-<branch>-<sha>", "capabilities": "0.2.0"}
+# {"version": "dev-<branch>-<sha>", "capabilities": "0.4.0"}
 
 # Downstream tooling on PATH now sees the dev build
 ```
 
-Bump `CapabilitiesVersion` whenever you change a JSON shape, command name, or manifest field that downstream code decodes or depends on. Do **not** bump it for internal refactors, bug fixes, or additive fields that older clients can safely ignore.
+Bump `CapabilitiesVersion` (`internal/config/config.go`) whenever you change a JSON shape, command name, or manifest field that downstream code decodes or depends on. Do **not** bump it for internal refactors, bug fixes, or additive fields that older clients can safely ignore. Distinct from `SchemaVersion`, which is the on-disk format version of `~/.ynh` (see Harness Identity § Schema version contract); they bump independently.
 
 ### Two Binaries
 
@@ -305,7 +454,7 @@ Test fixtures in `testdata/` simulate real-world sources:
 
 ## Configuration
 
-### Harness Manifest (`.harness.json`)
+### Harness Manifest (`.ynh-plugin/plugin.json`)
 
 ```json
 {
@@ -341,14 +490,24 @@ Test fixtures in `testdata/` simulate real-world sources:
       "mcp_servers": { "github": null }
     }
   },
-  "focus": {
+  "focuses": {
     "review": { "profile": "ci", "prompt": "Review staged changes for quality" },
     "docs": { "prompt": "Generate API documentation for all public interfaces" }
   }
 }
 ```
 
-`name` and `version` are required for installed harnesses. For project-local `.harness.json` files (loaded via `--harness-file` or auto-discovered in cwd), they are optional. See the JSON schema at `docs/schema/harness.schema.json` for the full specification. See [Hooks](docs/hooks.md), [MCP Servers](docs/mcp.md), [Profiles](docs/profiles.md), and the focus tutorial (`docs/tutorial/14-focus.md`) for details.
+`name` and `version` are required for installed harnesses. For project-local manifests (loaded via `--harness-file` or auto-discovered in cwd), they are optional. See the JSON schema at `docs/schema/harness.schema.json` for the full specification. See [Hooks](docs/hooks.md), [MCP Servers](docs/mcp.md), [Profiles](docs/profiles.md), and the focus tutorial (`docs/tutorial/14-focus.md`) for details.
+
+### Delegates: remote-only
+
+Unlike `includes`, `delegates_to` entries must be remote git URLs. The `local` source form is not supported and the schema rejects it. Reasons:
+
+- **Portability.** A delegate path baked into a committed `plugin.json` either breaks on another machine or — worse — silently resolves to a different harness with the same path. Delegates are part of a harness's public contract; they need a stable, shareable identity.
+- **Identity.** ynh keys delegate matching, SHA backfill, and provenance on the git URL. A local path has no global identity, no SHA, and no ref to track.
+- **Post-install resolution.** A relative path written during authoring (`./sibling-harness`) does not resolve from the installed location (`~/.ynh/harnesses/<id>/`). Working pre-install but broken post-install is a worse failure mode than not supporting it at all.
+
+To iterate on a delegate locally, install it (`ynh install <path>`), then reference it by its canonical id from the parent harness — or test the parent with `ynd preview` against an in-tree manifest.
 
 ### Focus Entries
 
@@ -360,43 +519,55 @@ Profiles use merge semantics when applied — see `ResolveProfile()` in `interna
 
 When `ynh run` is invoked, the harness source is resolved in this order:
 
-1. **Positional name**: `ynh run my-harness` → loads from `~/.ynh/harnesses/my-harness/`
-2. **`--harness-file`**: `ynh run --harness-file path/.harness.json` → loads directly from file
-3. **Auto-discovery**: bare `ynh run` → looks for `.harness.json` in the current working directory
+1. **Positional canonical id**: `ynh run local/my-harness` (or `ynh run github.com/org/repo/name`) → `harness.LoadQualified` classifies the ref via `namespace.Classify`, then `LoadByID` reads the schema-2 install at `~/.ynh/harnesses/<idfsname>/.ynh-plugin/plugin.json` (or the pointer file at `~/.ynh/installed/<idfsname>.json` for forks). Bare names (`ynh run my-harness`) are rejected with `BadRefError`.
+2. **`--harness-file`**: `ynh run --harness-file path/.harness.json` → loads a legacy single-file manifest directly from the given path. Path-based, no canonical-id classification.
+3. **Auto-discovery**: bare `ynh run` → migrates the current working directory if needed, then loads `.ynh-plugin/plugin.json` from cwd.
 
-For `--harness-file` and auto-discovery, the harness is assembled into `~/.ynh/run/_inline-<hash>/` (hash of the source directory for stable run dirs).
+For `--harness-file` and auto-discovery, the harness is assembled into `~/.ynh/run/_inline-<hash>/` (hash of the source directory for stable run dirs). For positional refs, the run-dir is named after the manifest's bare `Name` field — keeping `~/.ynh/run/` paths flat (no `/` characters).
 
 ### Install Lifecycle
 
-There are two copies of `.harness.json` in a harness's life:
+A harness has two locations in its life:
 
-1. **Source copy** — git-tracked in the harness's repo. Author-managed. Contains `name`, `version`, `includes`, `delegates_to`, `default_vendor`, etc.
-2. **Installed copy** — at `~/.ynh/harnesses/<name>/.harness.json`. Created by `ynh install`. Local-only, not git-tracked.
+1. **Source** — git-tracked in the harness's repo. Author-managed. The author writes `.ynh-plugin/plugin.json` containing `name`, `version`, `includes`, `delegates_to`, `default_vendor`, hooks, MCP servers, profiles, focuses.
+2. **Installed copy** — at `~/.ynh/harnesses/<idfsname>/` where `<idfsname>` is the canonical id with `/` → `--` (e.g. `github.com--eyelock--assistants--planner`). Created by `ynh install`. Local-only, not git-tracked. Contains the copied source plus a separate `.ynh-plugin/installed.json` file written by ynh.
+
+There are two install layouts on disk, chosen by command:
+
+- **Tree-shaped** (`~/.ynh/harnesses/<idfsname>/`) — created by `ynh install` for git and registry sources. The harness lives as a copy under `harnesses/`, with `.ynh-plugin/installed.json` recording provenance in-tree (including the canonical `id` field).
+- **Pointer-shaped** (`~/.ynh/installed/<idfsname>.json`) — created by `ynh fork`. The harness lives at a user-chosen path; the pointer file in `installed/` registers it under the YNH layer using the same id-keyed transliteration. No copy under `harnesses/` is made. Edits to the source tree are live to `ynh run`. The pointer file holds registration metadata (`id`, `name`, source path, timestamp); provenance still lives in the source tree's `.ynh-plugin/installed.json`. `harness.LoadByID(id)` checks pointers before tree directories.
+
+Both layouts are id-keyed under schema 2. The schema-1 layouts (`harnesses/<name>/` flat, `harnesses/<ns--repo>/<name>/` two-level, `installed/<name>.json` name-keyed) are converted in place by the migration in `internal/migration/canonicalid.go`. See § Harness Identity above for the full classification + on-disk encoding rules.
 
 During install:
-- `ynh install` copies the entire harness directory (including `.harness.json`) to `~/.ynh/harnesses/<name>/`.
-- After the copy, ynh injects `installed_from` provenance into the installed `.harness.json`. This records where the harness was installed from (source type, URL/path, timestamp).
+- `ynh install` copies the entire harness directory (including the `.ynh-plugin/` directory) to `~/.ynh/harnesses/<idfsname>/`. The id is derived from the recorded source URL plus the harness name via `namespace.CanonicalID(sourceURL, name)`.
+- For canonical-id install sources (`ynh install github.com/eyelock/assistants/researcher`), `cmdInstall` synthesizes the clone URL from the first three segments and uses `sources.Discover` to find a manifest matching the trailing segment within the cloned repo.
+- If the source uses the legacy `.harness.json` single-file format, the migration chain converts it to `.ynh-plugin/plugin.json` in place during install.
+- ynh writes `~/.ynh/harnesses/<idfsname>/.ynh-plugin/installed.json` recording install provenance — separate from the author-controlled `plugin.json`. This records where the harness was installed from (source type, URL/path, timestamp), and a `resolved[]` slice of per-include/per-delegate SHAs captured at fetch time.
 - ynh then pre-fetches all `includes` and `delegates_to` Git repos into `~/.ynh/cache/`. This ensures `ynh run` works offline and validates all Git refs at install time. If any fetch fails, the install fails with a clear error.
-- The source `.harness.json` is never modified.
+- ynh stamps `~/.ynh/.schema-version` to the current schema version after a successful install, so subsequent commands skip the auto-migrate gate cleanly.
+- The source `.ynh-plugin/plugin.json` is never modified.
 
 At runtime:
-- `ynh run` reads the installed copy at `~/.ynh/harnesses/<name>/.harness.json` to resolve includes, delegates, and vendor settings.
+- `ynh run` reads the installed copy at `~/.ynh/harnesses/<idfsname>/.ynh-plugin/plugin.json` to resolve includes, delegates, and vendor settings. Run-dir naming uses the bare `name` field from the manifest, not the canonical id, so paths under `~/.ynh/run/` stay flat.
 - Cached repos are used as-is without hitting the network. If a cache entry is missing (e.g. manually cleared), ynh falls back to a network fetch with a warning.
+- Launchers at `~/.ynh/bin/<name>` invoke `ynh run "<canonical-id>" "$@"` — the schema-2 resolver rejects bare names, so the embedded ref must be the canonical id.
 
-The `installed_from` field looks like:
+`installed.json` looks like:
 
 ```json
 {
-  "installed_from": {
-    "source_type": "git",
-    "source": "github.com/eyelock/assistants",
-    "path": "ynh/david",
-    "installed_at": "2026-03-22T10:30:00Z"
-  }
+  "source_type": "git",
+  "source": "github.com/eyelock/assistants",
+  "path": "ynh/david",
+  "installed_at": "2026-03-22T10:30:00Z",
+  "resolved": [
+    {"git": "github.com/example/repo", "path": "skills", "sha": "a1b2c3d..."}
+  ]
 }
 ```
 
-Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry installs also include `"registry_name"`.
+Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry installs also include `"registry_name"`. Forks include a `"forked_from"` block recording upstream provenance.
 
 ### Environment Variables
 
@@ -426,25 +597,36 @@ Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry instal
 
 ```
 ~/.ynh/
+├── .schema-version           # On-disk format version (2 = canonical-id layout)
+├── .migration-manifest.json  # Last migration's old_id→new_id map (after first migrate)
+├── .quarantine/              # Entries migration couldn't convert (--skip-broken)
+│   └── broken/
 ├── config.json               # Global configuration
 ├── symlinks.json             # Symlink transaction log (install/clean tracking)
-├── harnesses/                  # Installed harnesses
-│   └── david/
-│       ├── .harness.json
-│       ├── skills/
-│       ├── agents/
-│       ├── rules/
-│       └── commands/
-├── cache/                     # Cloned Git repos
+├── harnesses/                # Installed harnesses (tree-shaped: git, registry)
+│   ├── github.com--eyelock--assistants--david/   # canonical-id-keyed (id with / → --)
+│   │   ├── .ynh-plugin/
+│   │   │   ├── plugin.json   # Author manifest (copied from source)
+│   │   │   └── installed.json  # Install provenance (id, source URL, SHA, timestamp)
+│   │   ├── skills/
+│   │   ├── agents/
+│   │   ├── rules/
+│   │   └── commands/
+│   └── local--my-harness/    # local installs land under "local/" namespace
+├── installed/                # Pointer files for forks (id-keyed)
+│   └── local--researcher.json    # registers a user-owned tree under canonical id
+├── cache/                    # Cloned Git repos (URL-derived hash, not id-keyed)
 │   └── eyelock--assistants--a1b2c3d4/
-├── run/                       # Assembled vendor config (per harness, overwritten each run)
+├── run/                      # Assembled vendor config (keyed by manifest Name, not id)
 │   ├── david/
-│   │   ├── .claude/           # vendor config dir with assembled artifacts
-│   │   └── CLAUDE.md          # vendor instructions file (from instructions.md)
+│   │   ├── .claude/          # vendor config dir with assembled artifacts
+│   │   └── CLAUDE.md         # vendor instructions file (from instructions.md)
 │   └── _inline-a1b2c3d4/     # inline harness run dirs (--harness-file / auto-discovery)
-└── bin/                       # Launcher scripts (add to PATH)
-    └── david                  # -> exec ynh run david "$@"
+└── bin/                      # Launcher scripts (add to PATH)
+    └── david                 # -> exec ynh run "github.com/eyelock/assistants/david" "$@"
 ```
+
+The `<idfsname>` directory naming uses the canonical id with `/` → `--` (one-direction encoding for filesystem safety). Users never type `--` on the CLI; ynh never accepts it. See § Harness Identity → On-disk encoding for the full rule.
 
 ## Using ynh's Own Harness
 

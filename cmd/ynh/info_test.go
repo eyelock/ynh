@@ -23,7 +23,7 @@ func TestCmdInfoTextSuccess(t *testing.T) {
 	}`)
 
 	var stdout bytes.Buffer
-	if err := cmdInfoTo([]string{"demo"}, &stdout, io.Discard); err != nil {
+	if err := cmdInfoTo([]string{"local/demo"}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdInfoTo: %v", err)
 	}
 
@@ -43,10 +43,10 @@ func TestCmdInfoTextExplicit(t *testing.T) {
 	installListTestHarness(t, home, "demo", `{"name": "demo", "version": "0.1.0"}`)
 
 	var defaultBuf, explicitBuf bytes.Buffer
-	if err := cmdInfoTo([]string{"demo"}, &defaultBuf, io.Discard); err != nil {
+	if err := cmdInfoTo([]string{"local/demo"}, &defaultBuf, io.Discard); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmdInfoTo([]string{"demo", "--format", "text"}, &explicitBuf, io.Discard); err != nil {
+	if err := cmdInfoTo([]string{"local/demo", "--format", "text"}, &explicitBuf, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	if defaultBuf.String() != explicitBuf.String() {
@@ -71,20 +71,24 @@ func TestCmdInfoJSONBasic(t *testing.T) {
 	}`)
 
 	var stdout bytes.Buffer
-	if err := cmdInfoTo([]string{"test-harness", "--format", "json"}, &stdout, io.Discard); err != nil {
+	if err := cmdInfoTo([]string{"local/test-harness", "--format", "json"}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdInfoTo: %v", err)
 	}
 
-	var got infoEntry
-	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+	var env infoEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
 		t.Fatalf("unmarshal: %v\noutput: %s", err, stdout.String())
 	}
+	got := env.Harness
 
+	if env.Capabilities == "" {
+		t.Errorf("envelope missing capabilities; output: %s", stdout.String())
+	}
 	if got.Name != "test-harness" {
 		t.Errorf("name = %q, want test-harness", got.Name)
 	}
-	if got.Version != "2.0.0" {
-		t.Errorf("version = %q, want 2.0.0", got.Version)
+	if got.VersionInstalled != "2.0.0" {
+		t.Errorf("version_installed = %q, want 2.0.0", got.VersionInstalled)
 	}
 	if got.Description != "A test harness" {
 		t.Errorf("description = %q, want 'A test harness'", got.Description)
@@ -92,8 +96,8 @@ func TestCmdInfoJSONBasic(t *testing.T) {
 	if got.DefaultVendor != "claude" {
 		t.Errorf("default_vendor = %q, want claude", got.DefaultVendor)
 	}
-	if got.Path != filepath.Join(home, "harnesses", "test-harness") {
-		t.Errorf("path = %q, want %s", got.Path, filepath.Join(home, "harnesses", "test-harness"))
+	if got.Path != filepath.Join(home, "harnesses", "local--test-harness") {
+		t.Errorf("path = %q, want %s", got.Path, filepath.Join(home, "harnesses", "local--test-harness"))
 	}
 
 	// Provenance
@@ -132,7 +136,7 @@ func TestCmdInfoJSONNoDescription(t *testing.T) {
 	installListTestHarness(t, home, "bare", `{"name": "bare", "version": "0.1.0"}`)
 
 	var stdout bytes.Buffer
-	if err := cmdInfoTo([]string{"bare", "--format", "json"}, &stdout, io.Discard); err != nil {
+	if err := cmdInfoTo([]string{"local/bare", "--format", "json"}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdInfoTo: %v", err)
 	}
 
@@ -150,16 +154,16 @@ func TestCmdInfoJSONFormatBeforeName(t *testing.T) {
 
 	// --format json before the harness name
 	var stdout bytes.Buffer
-	if err := cmdInfoTo([]string{"--format", "json", "demo"}, &stdout, io.Discard); err != nil {
+	if err := cmdInfoTo([]string{"--format", "json", "local/demo"}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdInfoTo: %v", err)
 	}
 
-	var got infoEntry
-	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+	var env infoEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
 		t.Fatalf("unmarshal: %v\noutput: %s", err, stdout.String())
 	}
-	if got.Name != "demo" {
-		t.Errorf("name = %q, want demo", got.Name)
+	if env.Harness.Name != "demo" {
+		t.Errorf("name = %q, want demo", env.Harness.Name)
 	}
 }
 
@@ -171,7 +175,7 @@ func TestCmdInfoJSONNotFound(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	err := cmdInfoTo([]string{"nonexistent", "--format", "json"}, &stdout, &stderr)
+	err := cmdInfoTo([]string{"local/nonexistent", "--format", "json"}, &stdout, &stderr)
 	if !errors.Is(err, errStructuredReported) {
 		t.Fatalf("expected errStructuredReported, got: %v", err)
 	}
@@ -206,7 +210,7 @@ func TestCmdInfoNoArgs(t *testing.T) {
 
 func TestCmdInfoUnknownFlag(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	err := cmdInfoTo([]string{"demo", "--nope"}, &stdout, &stderr)
+	err := cmdInfoTo([]string{"local/demo", "--nope"}, &stdout, &stderr)
 	if err == nil {
 		t.Fatal("expected error for unknown flag")
 	}
@@ -217,7 +221,7 @@ func TestCmdInfoInvalidFormat(t *testing.T) {
 	t.Setenv("YNH_HOME", home)
 
 	var stdout, stderr bytes.Buffer
-	err := cmdInfoTo([]string{"demo", "--format", "yaml"}, &stdout, &stderr)
+	err := cmdInfoTo([]string{"local/demo", "--format", "yaml"}, &stdout, &stderr)
 	if err == nil {
 		t.Fatal("expected error for invalid format")
 	}
@@ -231,7 +235,7 @@ func TestCmdInfoJSONErrorEnvelope(t *testing.T) {
 	t.Setenv("YNH_HOME", home)
 
 	var stdout, stderr bytes.Buffer
-	err := cmdInfoTo([]string{"--format", "json", "demo", "extra"}, &stdout, &stderr)
+	err := cmdInfoTo([]string{"--format", "json", "local/demo", "extra"}, &stdout, &stderr)
 	if !errors.Is(err, errStructuredReported) {
 		t.Fatalf("expected errStructuredReported, got: %v", err)
 	}
@@ -278,14 +282,15 @@ func TestCmdInfoManifestPreservesAllFields(t *testing.T) {
 	installListTestHarness(t, home, "rich", hj)
 
 	var stdout bytes.Buffer
-	if err := cmdInfoTo([]string{"rich", "--format", "json"}, &stdout, io.Discard); err != nil {
+	if err := cmdInfoTo([]string{"local/rich", "--format", "json"}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdInfoTo: %v", err)
 	}
 
-	var got infoEntry
-	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+	var env infoEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
+	got := env.Harness
 
 	// The manifest field should contain all the raw fields
 	var manifest map[string]interface{}
@@ -336,7 +341,7 @@ func TestCmdInfoTextRichHarness(t *testing.T) {
 				"mcp_servers": {"staging-db": {"command": "staging-mcp"}}
 			}
 		},
-		"focus": {
+		"focuses": {
 			"quick": {"prompt": "Be concise"},
 			"review": {"profile": "staging", "prompt": "Review mode"}
 		},
@@ -351,14 +356,14 @@ func TestCmdInfoTextRichHarness(t *testing.T) {
 	installListTestHarness(t, home, "rich", hj)
 
 	// Add artifacts
-	skillDir := filepath.Join(home, "harnesses", "rich", "skills", "greet")
+	skillDir := filepath.Join(home, "harnesses", "local--rich", "skills", "greet")
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: greet\n---\nHello"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	agentDir := filepath.Join(home, "harnesses", "rich", "agents")
+	agentDir := filepath.Join(home, "harnesses", "local--rich", "agents")
 	if err := os.MkdirAll(agentDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -367,7 +372,7 @@ func TestCmdInfoTextRichHarness(t *testing.T) {
 	}
 
 	var stdout bytes.Buffer
-	if err := cmdInfoTo([]string{"rich"}, &stdout, io.Discard); err != nil {
+	if err := cmdInfoTo([]string{"local/rich"}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdInfoTo: %v", err)
 	}
 
@@ -474,7 +479,7 @@ func TestCmdInfoTextNoProvenance(t *testing.T) {
 	installListTestHarness(t, home, "bare", `{"name": "bare", "version": "0.1.0"}`)
 
 	var stdout bytes.Buffer
-	if err := cmdInfoTo([]string{"bare"}, &stdout, io.Discard); err != nil {
+	if err := cmdInfoTo([]string{"local/bare"}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdInfoTo: %v", err)
 	}
 
@@ -500,20 +505,20 @@ func TestCmdInfoJSONNamespacedPath(t *testing.T) {
 		`{"name":"planner","version":"1.0.0","default_vendor":"claude"}`)
 
 	var stdout bytes.Buffer
-	if err := cmdInfoTo([]string{"planner", "--format", "json"}, &stdout, io.Discard); err != nil {
+	if err := cmdInfoTo([]string{"eyelock/assistants/planner", "--format", "json"}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdInfoTo: %v", err)
 	}
 
-	var got infoEntry
-	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+	var env infoEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
 		t.Fatalf("unmarshal: %v\noutput: %s", err, stdout.String())
 	}
 
-	wantPath := filepath.Join(home, "harnesses", "eyelock--assistants", "planner")
-	if got.Path != wantPath {
-		t.Errorf("path = %q, want %q", got.Path, wantPath)
+	wantPath := filepath.Join(home, "harnesses", "eyelock--assistants--planner")
+	if env.Harness.Path != wantPath {
+		t.Errorf("path = %q, want %q", env.Harness.Path, wantPath)
 	}
-	if got.Manifest == nil {
+	if env.Harness.Manifest == nil {
 		t.Fatal("manifest is nil")
 	}
 }
@@ -525,7 +530,7 @@ func TestCmdInfoTextNoVendor(t *testing.T) {
 	installListTestHarness(t, home, "no-vendor", `{"name": "no-vendor", "version": "0.1.0"}`)
 
 	var stdout bytes.Buffer
-	if err := cmdInfoTo([]string{"no-vendor"}, &stdout, io.Discard); err != nil {
+	if err := cmdInfoTo([]string{"local/no-vendor"}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdInfoTo: %v", err)
 	}
 

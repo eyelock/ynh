@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage format lint check run docs help docker-build docker-push
+.PHONY: clean deps install build test test-coverage e2e format lint check run docs help docker-build docker-push
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -54,6 +54,9 @@ else
 	$(GO) test ./... -coverprofile=coverage.out -count=1
 	$(GO) tool cover -func=coverage.out
 endif
+
+e2e: build ## Run the E2E test suite (release gate; not part of `make test` or `make check`)
+	$(GO) test -tags=e2e -count=1 -timeout=10m ./test/e2e/...
 
 format: ## Format code
 	$(GOIMPORTS) -w .

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/config"
@@ -165,9 +166,17 @@ func ShortGitURL(url string) string {
 
 // RepoResult describes the outcome of EnsureRepo.
 type RepoResult struct {
-	Path    string // path to the cached repo on disk
-	Cloned  bool   // true if freshly cloned (not previously cached)
-	Changed bool   // true if HEAD moved during update
+	Path string // path to the cached repo on disk
+	SHA  string // resolved commit SHA at HEAD after fetch/checkout
+	// ResolvedRef is the branch name actually tracked by this clone.
+	// For non-empty input refs it equals the input ref. For empty input
+	// refs it is read from the cache's origin/HEAD symref (the default
+	// branch as of clone time, which never auto-updates with upstream
+	// default-branch changes). Used by --check-updates to probe the same
+	// ref that ynh update tracks, so the two stay consistent.
+	ResolvedRef string
+	Cloned      bool // true if freshly cloned (not previously cached)
+	Changed     bool // true if HEAD moved during update
 }
 
 // EnsureRepo clones or updates a Git repo in the cache directory.
@@ -180,21 +189,39 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 	repoDir := filepath.Join(cacheDir, repoDirName(gitURL, ref))
 	fullURL := NormalizeGitURL(gitURL)
 
+	// Serialize concurrent ynh processes against this same cache entry —
+	// without this, racing RemoveAll/clone calls produced "directory not
+	// empty" and "could not lock config file" errors when e.g. a TUI fired
+	// multiple ynh invocations in parallel.
+	var result RepoResult
+	lockErr := withRepoLock(repoDir+".lock", func() error {
+		r, err := ensureRepoLocked(repoDir, fullURL, ref)
+		result = r
+		return err
+	})
+	return result, lockErr
+}
+
+func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 	if _, err := os.Stat(filepath.Join(repoDir, ".git")); os.IsNotExist(err) {
 		// No .git dir — remove any partial/pre-existing directory before cloning.
 		if err := os.RemoveAll(repoDir); err != nil {
 			return RepoResult{}, fmt.Errorf("removing incomplete cache dir: %w", err)
 		}
-		// Clone
-		args := []string{"clone", "--depth", "1"}
-		if ref != "" {
-			args = append(args, "--branch", ref)
+		// SHA refs can't go through `clone --branch <sha>` — git rejects them.
+		// Use init+fetch+checkout, which works against any server that allows
+		// fetch-by-SHA (GitHub does, default uploadpack.allowReachableSHA1InWant).
+		if isShaLike(ref) {
+			if err := cloneAtSHA(repoDir, fullURL, ref); err != nil {
+				return RepoResult{}, err
+			}
+			return RepoResult{Path: repoDir, SHA: gitHead(repoDir), Cloned: true, Changed: true}, nil
 		}
-		args = append(args, fullURL, repoDir)
-		if err := gitCmd(args...); err != nil {
+		// Branch/tag: use clone --branch for the depth-1 shortcut.
+		if err := shallowCloneWithRetry(fullURL, ref, repoDir); err != nil {
 			return RepoResult{}, fmt.Errorf("git clone %s: %w", fullURL, err)
 		}
-		return RepoResult{Path: repoDir, Cloned: true, Changed: true}, nil
+		return RepoResult{Path: repoDir, SHA: gitHead(repoDir), ResolvedRef: effectiveRef(repoDir, ref), Cloned: true, Changed: true}, nil
 	}
 
 	// Update existing clone — capture HEAD before and after
@@ -229,15 +256,10 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 		if err := os.RemoveAll(repoDir); err != nil {
 			return RepoResult{}, fmt.Errorf("removing stale registry cache: %w", err)
 		}
-		args := []string{"clone", "--depth", "1"}
-		if ref != "" {
-			args = append(args, "--branch", ref)
-		}
-		args = append(args, fullURL, repoDir)
-		if err := gitCmd(args...); err != nil {
+		if err := shallowCloneWithRetry(fullURL, ref, repoDir); err != nil {
 			return RepoResult{}, fmt.Errorf("git clone %s: %w", fullURL, err)
 		}
-		return RepoResult{Path: repoDir, Cloned: true, Changed: true}, nil
+		return RepoResult{Path: repoDir, SHA: gitHead(repoDir), ResolvedRef: effectiveRef(repoDir, ref), Cloned: true, Changed: true}, nil
 	}
 
 	if ref != "" {
@@ -251,23 +273,33 @@ func EnsureRepo(gitURL string, ref string) (RepoResult, error) {
 	}
 
 	after := gitHead(repoDir)
-	return RepoResult{Path: repoDir, Changed: before != after}, nil
+	return RepoResult{Path: repoDir, SHA: after, ResolvedRef: effectiveRef(repoDir, ref), Changed: before != after}, nil
 }
 
 // CacheOnlyRepo returns a cached repo without hitting the network.
 // If the cache entry exists, it is returned as-is. If not, it falls back to
 // EnsureRepo (which clones from the network) and prints a warning to stderr.
 func CacheOnlyRepo(gitURL string, ref string) (RepoResult, error) {
-	cacheDir := config.CacheDir()
-	repoDir := filepath.Join(cacheDir, repoDirName(gitURL, ref))
-
-	if _, err := os.Stat(filepath.Join(repoDir, ".git")); err == nil {
-		return RepoResult{Path: repoDir}, nil
+	if res, ok := LookupCache(gitURL, ref); ok {
+		return res, nil
 	}
-
 	// Cache miss — fall back to network fetch.
 	// Caller can detect this via RepoResult.Cloned.
 	return EnsureRepo(gitURL, ref)
+}
+
+// LookupCache returns the cached repo state for (gitURL, ref) without hitting
+// the network. ok=false if no cache entry exists. Used to backfill harness
+// provenance for pre-migration installs whose installed.json predates SHA/ref
+// recording — we can still recover the install ref from the cache's pinned
+// origin/HEAD symref.
+func LookupCache(gitURL string, ref string) (RepoResult, bool) {
+	cacheDir := config.CacheDir()
+	repoDir := filepath.Join(cacheDir, repoDirName(gitURL, ref))
+	if _, err := os.Stat(filepath.Join(repoDir, ".git")); err != nil {
+		return RepoResult{}, false
+	}
+	return RepoResult{Path: repoDir, SHA: gitHead(repoDir), ResolvedRef: effectiveRef(repoDir, ref)}, true
 }
 
 // ResolveGitSourceFromCache is like ResolveGitSource but uses CacheOnlyRepo
@@ -305,6 +337,38 @@ func resolveGitBin() string {
 	return "git" // last resort — let exec fail with a clear error
 }
 
+// resolvedBranchName returns the bare branch name that origin/HEAD points to
+// in the local cache (e.g. "main" or "develop"). Empty if the symref is not
+// set or doesn't point at a remote-tracking branch under origin/.
+//
+// We capture this so --check-updates probes the same ref that ynh update
+// tracks. Git pins this symref at clone time and does not auto-update it
+// when upstream changes its default branch — which is exactly the divergence
+// that makes phantom drift possible.
+func resolvedBranchName(repoDir string) string {
+	cmd := exec.Command(gitBin, "-C", repoDir, "symbolic-ref", "refs/remotes/origin/HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	ref := strings.TrimSpace(string(out))
+	const prefix = "refs/remotes/origin/"
+	if !strings.HasPrefix(ref, prefix) {
+		return ""
+	}
+	return strings.TrimPrefix(ref, prefix)
+}
+
+// effectiveRef returns the ref to record alongside this clone. If the caller
+// supplied an explicit ref it is echoed; otherwise the cache's resolved
+// branch name is returned (empty string if it cannot be determined).
+func effectiveRef(repoDir, inputRef string) string {
+	if inputRef != "" {
+		return inputRef
+	}
+	return resolvedBranchName(repoDir)
+}
+
 func gitHead(repoDir string) string {
 	cmd := exec.Command(gitBin, "-C", repoDir, "rev-parse", "HEAD")
 	out, err := cmd.Output()
@@ -326,6 +390,61 @@ var gitCmdFunc = func(args ...string) error {
 }
 
 func gitCmd(args ...string) error { return gitCmdFunc(args...) }
+
+// LsRemote queries the upstream SHA for ref on gitURL via `git ls-remote`,
+// without cloning. Empty ref resolves to HEAD. Returns the resolved SHA or
+// an error if the network probe fails or the ref is not present upstream.
+//
+// Replaceable in tests via LsRemoteFunc.
+func LsRemote(gitURL, ref string) (string, error) {
+	return LsRemoteFunc(gitURL, ref)
+}
+
+// LsRemoteFunc is the implementation behind LsRemote, broken out so tests
+// can stub network behaviour without shelling out to git.
+var LsRemoteFunc = func(gitURL, ref string) (string, error) {
+	fullURL := NormalizeGitURL(gitURL)
+	args := []string{"ls-remote", "--exit-code", fullURL}
+	if ref != "" {
+		args = append(args, ref)
+	} else {
+		args = append(args, "HEAD")
+	}
+	cmd := exec.Command(gitBin, args...)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git ls-remote %s: %w", fullURL, err)
+	}
+
+	// git ls-remote does suffix pattern matching: passing "main" also matches
+	// branches like "daisy/caffeinate/main". Parse all lines and return the
+	// SHA whose refname is an exact match on the intended canonical name.
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		sha, refName := fields[0], fields[1]
+		if ref == "" {
+			// HEAD probe: accept "HEAD" or any refs/heads/<branch>.
+			if refName == "HEAD" || strings.HasPrefix(refName, "refs/heads/") {
+				return sha, nil
+			}
+			continue
+		}
+		// Named ref: accept an already-qualified ref as-is; otherwise require
+		// an exact refs/heads/<ref> or refs/tags/<ref> match so partial-name
+		// branches (e.g. foo/main) don't shadow the intended target.
+		if strings.HasPrefix(ref, "refs/") {
+			if refName == ref {
+				return sha, nil
+			}
+		} else if refName == "refs/heads/"+ref || refName == "refs/tags/"+ref {
+			return sha, nil
+		}
+	}
+	return "", fmt.Errorf("git ls-remote %s: ref %q not found in remote", fullURL, ref)
+}
 
 // PurgeCacheDirsForURL removes all cache directories associated with the given
 // Git URL (all refs). It derives the org--repo name prefix from the URL and
@@ -369,12 +488,78 @@ func repoDirPrefix(url string) string {
 	return parts[len(parts)-1]
 }
 
+// shaLike matches a 40-character hex commit SHA. Git refuses to take a
+// SHA via `clone --branch`, so SHA pinning has to go through init+fetch.
+var shaLike = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+func isShaLike(ref string) bool {
+	return shaLike.MatchString(ref)
+}
+
+// isTransientShallowErr reports whether err looks like a known transient
+// git shallow-clone failure that a clean retry can resolve. Git can
+// intermittently produce these on `clone --depth 1` when its own internal
+// state races against the just-written shallow file or a stale lock from
+// an interrupted prior run.
+func isTransientShallowErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "shallow file has changed") ||
+		strings.Contains(s, "shallow.lock") ||
+		strings.Contains(s, "index.lock")
+}
+
+// shallowCloneWithRetry runs `git clone --depth 1 [--branch ref] url dir`,
+// retrying once on transient shallow-clone errors. dir is removed between
+// attempts so the retry sees a clean slate.
+func shallowCloneWithRetry(url, ref, dir string) error {
+	args := []string{"clone", "--depth", "1"}
+	if ref != "" {
+		args = append(args, "--branch", ref)
+	}
+	args = append(args, url, dir)
+
+	err := gitCmd(args...)
+	if err == nil || !isTransientShallowErr(err) {
+		return err
+	}
+	if rmErr := os.RemoveAll(dir); rmErr != nil {
+		return fmt.Errorf("removing partial clone before retry: %w", rmErr)
+	}
+	return gitCmd(args...)
+}
+
+// cloneAtSHA materialises a shallow checkout of url at sha into dir.
+// dir must not yet exist.
+func cloneAtSHA(dir, url, sha string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("creating cache dir: %w", err)
+	}
+	if err := gitCmd("-C", dir, "init", "--quiet"); err != nil {
+		return fmt.Errorf("git init in %s: %w", dir, err)
+	}
+	if err := gitCmd("-C", dir, "remote", "add", "origin", url); err != nil {
+		return fmt.Errorf("git remote add: %w", err)
+	}
+	if err := gitCmd("-C", dir, "fetch", "--depth", "1", "origin", sha); err != nil {
+		return fmt.Errorf("git fetch %s %s: %w", url, sha, err)
+	}
+	if err := gitCmd("-C", dir, "checkout", "--quiet", sha); err != nil {
+		return fmt.Errorf("git checkout %s: %w", sha, err)
+	}
+	return nil
+}
+
 // NormalizeGitURL ensures a full Git URL from shorthand.
 // Local paths (starting with / or .) are returned as-is.
 // Shorthand like "github.com/user/repo" becomes "git@github.com:user/repo.git" (SSH).
-// SSH URLs (git@...) and full HTTPS URLs are passed through unchanged.
+// SSH URLs (git@...), HTTPS URLs, and file:// URLs are passed through unchanged.
+// (file:// is a valid git transport for local bare repos and lets the E2E suite
+// exercise the cloner against controlled fixtures without going to the network.)
 func NormalizeGitURL(url string) string {
-	if strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "git@") {
+	if strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "git@") || strings.HasPrefix(url, "file://") {
 		return url
 	}
 	if strings.HasPrefix(url, "/") || strings.HasPrefix(url, ".") {

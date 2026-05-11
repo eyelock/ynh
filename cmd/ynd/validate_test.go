@@ -807,7 +807,7 @@ func TestValidateHarness_FocusValid(t *testing.T) {
 	hr := filepath.Join(dir, "focus-valid")
 	mkdirAll(t, hr)
 	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
-		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-valid","version":"0.1.0","profiles":{"ci":{}},"focus":{"review":{"profile":"ci","prompt":"Review code"}}}`))
+		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-valid","version":"0.1.0","profiles":{"ci":{}},"focuses":{"review":{"profile":"ci","prompt":"Review code"}}}`))
 
 	if err := validateHarness(hr); err != nil {
 		t.Errorf("valid focus should pass: %v", err)
@@ -821,7 +821,7 @@ func TestValidateHarness_FocusMissingPrompt(t *testing.T) {
 	hr := filepath.Join(dir, "focus-no-prompt")
 	mkdirAll(t, hr)
 	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
-		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-no-prompt","version":"0.1.0","focus":{"review":{"profile":"ci"}}}`))
+		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-no-prompt","version":"0.1.0","focuses":{"review":{"profile":"ci"}}}`))
 
 	err := validateHarness(hr)
 	if err == nil {
@@ -836,7 +836,7 @@ func TestValidateHarness_FocusUnknownProfile(t *testing.T) {
 	hr := filepath.Join(dir, "focus-bad-profile")
 	mkdirAll(t, hr)
 	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
-		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-bad-profile","version":"0.1.0","focus":{"review":{"profile":"nonexistent","prompt":"Review code"}}}`))
+		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-bad-profile","version":"0.1.0","focuses":{"review":{"profile":"nonexistent","prompt":"Review code"}}}`))
 
 	err := validateHarness(hr)
 	if err == nil {
@@ -851,7 +851,7 @@ func TestValidateHarness_FocusNoProfile(t *testing.T) {
 	hr := filepath.Join(dir, "focus-no-profile")
 	mkdirAll(t, hr)
 	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
-		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-no-profile","version":"0.1.0","focus":{"docs":{"prompt":"Generate docs"}}}`))
+		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-no-profile","version":"0.1.0","focuses":{"docs":{"prompt":"Generate docs"}}}`))
 
 	if err := validateHarness(hr); err != nil {
 		t.Errorf("focus without profile ref should pass: %v", err)
@@ -1084,5 +1084,89 @@ func TestValidateDir_NoRootMarketplace(t *testing.T) {
 
 	if err := cmdValidate([]string{dir}); err != nil {
 		t.Errorf("expected valid (no marketplace.json is fine), got: %v", err)
+	}
+}
+
+func TestValidateHarnessSensors_Valid(t *testing.T) {
+	hj := map[string]any{
+		"focuses": map[string]any{
+			"infer-vulns": map[string]any{"prompt": "find vulns"},
+		},
+		"profiles": map[string]any{
+			"ci": map[string]any{},
+		},
+		"sensors": map[string]any{
+			"build": map[string]any{
+				"category": "maintainability",
+				"source":   map[string]any{"command": "make check"},
+				"output":   map[string]any{"format": "text"},
+			},
+			"sec": map[string]any{
+				"source": map[string]any{"focus": "infer-vulns"},
+				"output": map[string]any{"format": "markdown"},
+			},
+			"inline": map[string]any{
+				"source": map[string]any{
+					"focus": map[string]any{"profile": "ci", "prompt": "judge"},
+				},
+				"output": map[string]any{"format": "markdown"},
+			},
+		},
+	}
+	if issues := validateHarnessSensors(hj); len(issues) != 0 {
+		t.Errorf("expected no issues, got %v", issues)
+	}
+}
+
+func TestValidateHarnessSensors_Issues(t *testing.T) {
+	hj := map[string]any{
+		"sensors": map[string]any{
+			"two-source": map[string]any{
+				"source": map[string]any{
+					"command": "x",
+					"files":   []any{"a"},
+				},
+				"output": map[string]any{"format": "text"},
+			},
+			"missing-format": map[string]any{
+				"source": map[string]any{"command": "x"},
+				"output": map[string]any{"format": ""},
+			},
+			"unknown-focus": map[string]any{
+				"source": map[string]any{"focus": "missing"},
+				"output": map[string]any{"format": "markdown"},
+			},
+			"bad-category": map[string]any{
+				"category": "wrong",
+				"source":   map[string]any{"command": "x"},
+				"output":   map[string]any{"format": "text"},
+			},
+			"inline-bad-profile": map[string]any{
+				"source": map[string]any{
+					"focus": map[string]any{"profile": "missing", "prompt": "x"},
+				},
+				"output": map[string]any{"format": "markdown"},
+			},
+		},
+	}
+	issues := validateHarnessSensors(hj)
+	wants := []string{
+		`"two-source": source must have exactly one`,
+		`"missing-format": output.format must not be empty`,
+		`"unknown-focus": source.focus references undefined focus "missing"`,
+		`"bad-category": category "wrong"`,
+		`"inline-bad-profile": source.focus references unknown profile "missing"`,
+	}
+	for _, want := range wants {
+		found := false
+		for _, got := range issues {
+			if strings.Contains(got, want) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("missing expected issue %q in %v", want, issues)
+		}
 	}
 }

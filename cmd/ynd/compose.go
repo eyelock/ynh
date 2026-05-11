@@ -26,7 +26,35 @@ type composeOutput struct {
 	MCPServers    map[string]composeMCP    `json:"mcp_servers,omitempty"`
 	Profiles      []string                 `json:"profiles"`
 	Focuses       map[string]composeFocus  `json:"focuses,omitempty"`
+	Sensors       map[string]composeSensor `json:"sensors,omitempty"`
 	Counts        composeCounts            `json:"counts"`
+}
+
+type composeSensor struct {
+	Category string              `json:"category,omitempty"`
+	Role     string              `json:"role,omitempty"`
+	Source   composeSensorSource `json:"source"`
+	Output   composeSensorOutput `json:"output"`
+}
+
+type composeSensorSource struct {
+	Files   []string                  `json:"files,omitempty"`
+	Command string                    `json:"command,omitempty"`
+	Focus   *composeSensorSourceFocus `json:"focus,omitempty"`
+}
+
+type composeSensorSourceFocus struct {
+	// Either a name reference to a top-level focus, OR an inline focus.
+	Name    string `json:"name,omitempty"`
+	Profile string `json:"profile,omitempty"`
+	Prompt  string `json:"prompt,omitempty"`
+	Inline  bool   `json:"inline,omitempty"`
+}
+
+type composeSensorOutput struct {
+	Format  string `json:"format"`
+	Channel string `json:"channel,omitempty"`
+	Path    string `json:"path,omitempty"`
 }
 
 type composeArtifacts struct {
@@ -357,6 +385,37 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 			}
 		}
 		out.Focuses = focuses
+	}
+
+	// Sensors — root harness only (included harnesses' sensors are dropped by design)
+	if len(h.Sensors) > 0 {
+		sensors := make(map[string]composeSensor)
+		for name, s := range h.Sensors {
+			cs := composeSensor{
+				Category: s.Category,
+				Role:     s.Role,
+				Output: composeSensorOutput{
+					Format:  s.Output.Format,
+					Channel: s.Output.Channel,
+					Path:    s.Output.Path,
+				},
+			}
+			cs.Source.Files = s.Source.Files
+			cs.Source.Command = s.Source.Command
+			if s.Source.Focus != nil {
+				if s.Source.Focus.Inline != nil {
+					cs.Source.Focus = &composeSensorSourceFocus{
+						Profile: s.Source.Focus.Inline.Profile,
+						Prompt:  s.Source.Focus.Inline.Prompt,
+						Inline:  true,
+					}
+				} else {
+					cs.Source.Focus = &composeSensorSourceFocus{Name: s.Source.Focus.Name}
+				}
+			}
+			sensors[name] = cs
+		}
+		out.Sensors = sensors
 	}
 
 	// Counts

@@ -140,8 +140,11 @@ Validation runs across all profiles in one pass, reporting errors with the profi
 Error: profile "ci": hooks.before_tool[0]: missing "command" field
 ```
 
+A profile cannot override or add sensors — sensors are observation declarations, not runtime context, and live only at the top level. An [inline focus inside a sensor](sensors.md#focus) can name a profile, but the sensor itself is profile-independent.
+
 ## See Also
 
 - [Hooks](hooks.md) — hook format and vendor translation
 - [MCP Servers](mcp.md) — MCP server format and vendor translation
+- [Sensors](sensors.md) — observation surfaces declared by the harness
 - [Vendor Support](vendors.md) — vendor capabilities and differences

@@ -127,6 +127,47 @@ func TestCmdVendorsJSON_AvailableIsBool(t *testing.T) {
 	}
 }
 
+func TestCmdVendorsJSON_SupportsInitialPrompt(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if err := cmdVendorsTo([]string{"--format", "json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("cmdVendorsTo JSON: %v", err)
+	}
+
+	var raw []map[string]interface{}
+	if err := json.Unmarshal(stdout.Bytes(), &raw); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	for _, entry := range raw {
+		val, ok := entry["supports_initial_prompt"]
+		if !ok {
+			t.Errorf("vendor %q missing supports_initial_prompt field", entry["name"])
+			continue
+		}
+		if _, isBool := val.(bool); !isBool {
+			t.Errorf("vendor %q supports_initial_prompt should be bool, got %T", entry["name"], val)
+		}
+	}
+
+	// All three current vendors support initial prompt.
+	byName := map[string]map[string]interface{}{}
+	for _, entry := range raw {
+		if name, ok := entry["name"].(string); ok {
+			byName[name] = entry
+		}
+	}
+	for _, name := range []string{"claude", "codex", "cursor"} {
+		e, ok := byName[name]
+		if !ok {
+			t.Errorf("missing vendor %q", name)
+			continue
+		}
+		if e["supports_initial_prompt"] != true {
+			t.Errorf("vendor %q supports_initial_prompt = %v, want true", name, e["supports_initial_prompt"])
+		}
+	}
+}
+
 func TestCmdVendors_InvalidFormat(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	err := cmdVendorsTo([]string{"--format", "yaml"}, &stdout, &stderr)

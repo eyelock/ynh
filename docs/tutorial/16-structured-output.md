@@ -202,32 +202,45 @@ ynh ls --format json
 
 Expected (timestamps and paths will differ):
 ```json
-[
-  {
-    "name": "my-harness",
-    "version": "0.1.0",
-    "description": "Tutorial harness",
-    "default_vendor": "claude",
-    "path": "/Users/<you>/.ynh/harnesses/my-harness",
-    "installed_from": {
-      "source_type": "local",
-      "source": "/tmp/ynh-tutorial/my-harness",
-      "installed_at": "<timestamp>"
-    },
-    "artifacts": {
-      "skills": 1,
-      "agents": 0,
-      "rules": 0,
-      "commands": 0
-    },
-    "includes": [],
-    "delegates_to": []
-  }
-]
+{
+  "capabilities": "0.4.0",
+  "schema_version": 2,
+  "ynh_version": "<version>",
+  "harnesses": [
+    {
+      "id": "local/my-harness",
+      "name": "my-harness",
+      "kind": "local",
+      "version_installed": "0.1.0",
+      "description": "Tutorial harness",
+      "default_vendor": "claude",
+      "path": "/Users/<you>/.ynh/harnesses/local--my-harness",
+      "is_pinned": false,
+      "installed_from": {
+        "source_type": "local",
+        "source": "/tmp/ynh-tutorial/my-harness",
+        "installed_at": "<timestamp>"
+      },
+      "artifacts": {
+        "skills": 1,
+        "agents": 0,
+        "rules": 0,
+        "commands": 0
+      },
+      "includes": [],
+      "delegates_to": []
+    }
+  ]
+}
 ```
 
 Key points:
-- Output is a JSON **array** — even with one harness.
+- Output is wrapped in an **envelope**: `capabilities` (wire-contract version of JSON shapes ynh speaks), `schema_version` (on-disk format version of `~/.ynh`), `ynh_version` (release), and `harnesses` (the array).
+- `id` is the canonical, host-prefixed harness identifier — `<host>/<org>/<repo>/<name>` for installs sourced from a remote registry, or `local/<name>` for local-path installs. This is the single identity form to pass back to ynh at the CLI for any harness-targeting command.
+- `kind` classifies the install source: `local` (installed from a local path), `local-fork` (registered via `ynh fork`), `local-fork-broken` (fork whose source directory is missing or has no manifest — see `broken_reason`), `git` (installed from a remote git URL), `registry` (installed via a registry reference), or `-` (pre-migration entries with no recorded source).
+- `broken_reason` is present only when `kind` is `local-fork-broken`. It contains the load error string explaining what is wrong (e.g. `"no harness manifest found in <path>"` or a stat error when the source directory is gone). Consumers should surface broken entries distinctly — they are still registered in `~/.ynh` and can be removed with `ynh uninstall <id>`.
+- `version_installed` is the version recorded in the harness manifest. Pass `--check-updates` to add `version_available` (and `ref_available`) by querying the upstream.
+- `is_pinned` is `true` when the installed Git ref is a resolved SHA (matches `^[0-9a-f]{7,40}$`); `false` for tags, branches, or local-only installs.
 - `path` is the absolute path to the installed harness directory.
 - `artifacts` always includes all four counts (never omitted when zero).
 - `includes` and `delegates_to` are always present, even when empty (`[]`).
@@ -238,7 +251,7 @@ Key points:
 Get just the names:
 
 ```bash
-ynh ls --format json | jq -r '.[].name'
+ynh ls --format json | jq -r '.harnesses[].name'
 ```
 
 Expected:
@@ -249,7 +262,7 @@ my-harness
 Check if a specific harness is installed:
 
 ```bash
-ynh ls --format json | jq -e '.[] | select(.name == "my-harness")' > /dev/null && echo "installed" || echo "not installed"
+ynh ls --format json | jq -e '.harnesses[] | select(.name == "my-harness")' > /dev/null && echo "installed" || echo "not installed"
 ```
 
 Expected:
@@ -259,25 +272,53 @@ installed
 
 ## T16.10: Empty list — JSON
 
-With no harnesses installed, the JSON output is an empty array:
+With no harnesses installed, `harnesses` is an empty array — but the envelope (with `capabilities` and `ynh_version`) is still present:
 
 ```bash
-ynh uninstall my-harness
+ynh uninstall local/my-harness
 ynh ls --format json
 ```
 
-Expected:
+Expected (truncated):
 ```json
-[]
+{
+  "capabilities": "0.4.0",
+  "schema_version": 2,
+  "ynh_version": "<version>",
+  "harnesses": []
+}
 ```
 
-Not `null`, not omitted — a clean empty array. Reinstall for subsequent tutorials:
+`harnesses` is never `null`, never omitted — always at least a clean empty array. Reinstall for subsequent tutorials:
 
 ```bash
 ynh install /tmp/ynh-tutorial/my-harness
 ```
 
-## T16.11: YNH_HOME override
+## T16.11: Check for updates — `--check-updates`
+
+By default `ynh ls` and `ynh info` are **offline** — they read installed manifests and emit local provenance only. To learn whether an installed harness or include is behind upstream, opt in with `--check-updates`:
+
+```bash
+ynh ls --format json --check-updates | jq '.harnesses[0]'
+```
+
+The flag adds two optional fields per harness and per include:
+
+- `version_available` — the latest version known upstream (registry-installed harnesses only)
+- `ref_available` — the latest Git SHA known upstream (anything with a remote)
+
+The fields are **omitted entirely** when:
+
+- `--check-updates` was not passed
+- The probe failed (network down, repo gone, lookup miss)
+- The harness has no upstream (pure local install)
+
+This is the "unknown" arm of a three-state contract — consumers must distinguish *unknown* from *up-to-date* (field present and equal to `*_installed`) from *update available* (field present and different).
+
+> Note: `--check-updates` does network I/O. Probes run concurrently with a bounded fan-out and per-probe failures degrade silently — the command never errors on probe failure. Default calls (without the flag) stay fast and deterministic.
+
+## T16.12: YNH_HOME override
 
 Paths reflect the active `YNH_HOME`, which is useful for testing or multi-environment setups:
 
@@ -303,7 +344,7 @@ All seven paths shift to the overridden root.
 ## Clean up
 
 ```bash
-ynh uninstall my-harness 2>/dev/null
+ynh uninstall local/my-harness 2>/dev/null
 rm -rf /tmp/ynh-tutorial
 ```
 
@@ -311,7 +352,7 @@ rm -rf /tmp/ynh-tutorial
 
 - `--format json` gives machine-readable JSON on stdout; `--format text` is the default
 - The flag is space-separated only (`--format json`, not `--format=json`)
-- `ynh paths --format json` emits a single object; `ynh ls --format json` emits an array
+- `ynh paths --format json` emits a single object; `ynh ls --format json` emits an envelope object with a `harnesses` array
 - Empty arrays are `[]`, never `null` or omitted
 - Optional fields like `description` are omitted when unset, never serialised as `""`
 - Pipe to `jq` for extraction — names, paths, counts, install status checks

@@ -7,7 +7,7 @@ Chain harnesses together. A parent harness can invoke other harnesses as subagen
 ```bash
 # Clean up from any previous run
 rm -rf /tmp/ynh-tutorial
-ynh uninstall team-lead 2>/dev/null
+ynh uninstall local/team-lead 2>/dev/null
 
 mkdir -p /tmp/ynh-tutorial
 ```
@@ -97,8 +97,8 @@ ynh ls
 
 Expected:
 ```
-NAME       VENDOR  SOURCE                          ARTIFACTS  INCLUDES  DELEGATES TO
-team-lead  claude  /tmp/ynh-tutorial/team-lead      ...        0         /tmp/ynh-tutorial/specialist, eyelock/assistants/ynh/researcher
+NAME       KIND   VENDOR  SOURCE                          ARTIFACTS  INCLUDES  DELEGATES TO
+team-lead  local  claude  /tmp/ynh-tutorial/team-lead      ...        0         /tmp/ynh-tutorial/specialist, eyelock/assistants/ynh/researcher
 ```
 
 ## T4.4: Inspect delegate agent files
@@ -140,7 +140,7 @@ This delegates to the researcher harness — a remote delegate from GitHub (from
 ## Clean up
 
 ```bash
-ynh uninstall team-lead
+ynh uninstall local/team-lead
 ```
 
 ## What you learned

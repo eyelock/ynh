@@ -1,13 +1,13 @@
 # Tutorial 14: Focus
 
-Define named focus entries that combine a profile with a prompt for repeatable, non-interactive AI execution. Focus entries are the bridge between harness configuration and CI automation.
+Define named focus entries that combine a profile with a prompt for repeatable, non-interactive AI execution. Focus entries are the bridge between harness configuration and CI automation. They can also serve as the source of an agent-driven [sensor](../sensors.md#focus) — referenced by name or inlined inside the sensor.
 
 ## Prerequisites
 
 ```bash
 # Clean up from any previous run
 rm -rf /tmp/ynh-tutorial
-ynh uninstall focus-demo 2>/dev/null
+ynh uninstall local/focus-demo 2>/dev/null
 
 mkdir -p /tmp/ynh-tutorial
 ```
@@ -50,7 +50,7 @@ cat > /tmp/ynh-tutorial/focus-harness/.ynh-plugin/plugin.json << 'EOF'
       }
     }
   },
-  "focus": {
+  "focuses": {
     "review": {
       "profile": "ci",
       "prompt": "Review staged changes for quality and correctness"
@@ -152,7 +152,7 @@ Expected: same output as `--focus review` — the `ci` profile's hooks merged wi
 
 ```bash
 ynh install /tmp/ynh-tutorial/focus-harness
-ynh info focus-demo
+ynh info local/focus-demo
 ```
 
 Expected output includes a `Focus:` section:
@@ -171,7 +171,7 @@ Profiles:
 ## Clean up
 
 ```bash
-ynh uninstall focus-demo 2>/dev/null
+ynh uninstall local/focus-demo 2>/dev/null
 rm -rf /tmp/ynh-tutorial
 ```
 

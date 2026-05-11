@@ -38,6 +38,7 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 | 12 | [Marketplace](tutorial/06-marketplace.md) | Generate marketplace indexes for team distribution |
 | 13 | [Registry & Discovery](tutorial/07-registry-and-discovery.md) | Search and install harnesses from curated registries |
 | 14 | [Docker Images](tutorial/09-docker-image.md) | Build harness appliance images for CI/CD |
+| 15 | [Sensors](tutorial/19-sensors.md) | Declare observation surfaces a loop driver consumes |
 
 ## Manual Test Plan
 

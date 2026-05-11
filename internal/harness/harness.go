@@ -19,6 +19,21 @@ import (
 // Must start with a letter or digit. Prevents path traversal and shell injection.
 var validName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
+// IsValidName reports whether s is a syntactically valid harness name.
+// Same rule LoadDir applies internally — exposed so callers (e.g. the
+// `ynh fork --name <new>` validator) can reject invalid input up front
+// instead of producing a half-installed harness.
+func IsValidName(s string) bool {
+	return validName.MatchString(s)
+}
+
+// ValidNamePattern returns the regex source string used to validate
+// harness names. Useful for error messages that want to show the
+// permitted shape.
+func ValidNamePattern() string {
+	return validName.String()
+}
+
 // GitSource holds the common fields for any include or delegate source.
 // Exactly one of Git (remote) or Local (filesystem path) is set at any
 // given time. Path is a subdirectory scoped within the source; Ref
@@ -37,10 +52,25 @@ func (g GitSource) IsLocal() bool { return g.Local != "" && g.Git == "" }
 type Include struct {
 	GitSource
 	Pick []string
+	// SHA is the resolved commit at install/update time, populated from
+	// installed.json's resolved slice. Empty for local-path includes and for
+	// pre-migration installs that predate SHA recording.
+	SHA string
+	// ResolvedRef is the branch name actually tracked at install/update time.
+	// For non-empty manifest refs it equals the manifest ref. For empty
+	// manifest refs it is the cache's resolved default branch (e.g. "main")
+	// captured at clone time. Used by --check-updates so probe targets the
+	// same ref that ynh update tracks. Empty for pre-migration installs.
+	ResolvedRef string
 }
 
 type Delegate struct {
 	GitSource
+	// SHA is the resolved commit at install/update time, populated from
+	// installed.json's resolved slice. Empty for pre-migration installs.
+	SHA string
+	// ResolvedRef — see Include.ResolvedRef.
+	ResolvedRef string
 }
 
 // Provenance records where a harness was installed from.
@@ -53,6 +83,29 @@ type Provenance struct {
 	Namespace    string
 	RegistryName string
 	InstalledAt  string
+	ForkedFrom   *ForkedFrom
+}
+
+// ForkedFrom records the upstream that a local harness was forked from.
+type ForkedFrom struct {
+	SourceType   string
+	Source       string
+	Ref          string
+	SHA          string
+	Path         string
+	RegistryName string
+	Version      string
+}
+
+// pinnedRefRe matches a Git SHA (full or short) — 7 to 40 lowercase hex chars.
+// Used to classify an include's ref as pinned (SHA) vs floating (tag/branch).
+var pinnedRefRe = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
+
+// IsPinnedRef reports whether ref looks like a resolved Git SHA.
+// Pinned refs identify a single immutable commit; floating refs (tags,
+// branches, "main", "HEAD") track moving targets. Empty refs are floating.
+func IsPinnedRef(ref string) bool {
+	return ref != "" && pinnedRefRe.MatchString(ref)
 }
 
 type Harness struct {
@@ -68,6 +121,7 @@ type Harness struct {
 	MCPServers    map[string]plugin.MCPServer
 	Profiles      map[string]plugin.Profile
 	Focuses       map[string]plugin.Focus
+	Sensors       map[string]plugin.Sensor
 	InstalledFrom *Provenance
 }
 
@@ -102,10 +156,19 @@ func DetectFormat(dir string) string {
 // ErrNotFound is returned when a harness is not installed.
 var ErrNotFound = errors.New("harness not found")
 
-// Load finds and loads an installed harness by name. The migration chain
-// runs inside LoadDir so no legacy handling is needed here. If the flat
-// layout has the harness, use that; otherwise scan the namespaced layout.
+// Load finds and loads an installed harness by name. Resolution precedence:
+//  1. Pointer file at ~/.ynh/installed/<name>.json (local fork)
+//  2. Flat tree at ~/.ynh/harnesses/<name>/
+//  3. Namespaced tree at ~/.ynh/harnesses/<ns--repo>/<name>/
+//
+// The migration chain runs inside LoadDir so no legacy handling is needed
+// here.
 func Load(name string) (*Harness, error) {
+	if ptr, err := LoadPointer(name); err != nil {
+		return nil, err
+	} else if ptr != nil {
+		return loadFromPointer(ptr)
+	}
 	flatDir := InstalledDir(name)
 	if _, err := os.Stat(flatDir); err == nil {
 		return LoadDir(flatDir)
@@ -113,18 +176,39 @@ func Load(name string) (*Harness, error) {
 	return findInNamespacedDirs(name)
 }
 
-// LoadQualified loads an installed harness by an optionally namespace-qualified
-// ref ("name" or "name@org/repo"). Dispatches to LoadNS when a namespace is
-// present, Load otherwise.
+// LoadQualified loads an installed harness by canonical id. Schema 2 only:
+// bare names and the legacy "name@org/repo" form are hard-rejected with a
+// hint pointing at the canonical id and the local path alternative.
+//
+// Auto-migration runs before any command (see cmd/ynh autoMigrate), so by
+// the time this function is reached the home is at schema 2 — every
+// installed harness has an id-keyed pointer or tree-shaped install dir.
+// No fallback path: there is exactly one valid ref shape for installed
+// harnesses, which is the whole point of the canonical-id rule.
 func LoadQualified(ref string) (*Harness, error) {
-	name, ns, err := namespace.ParseQualified(ref)
-	if err != nil {
-		return nil, err
+	if namespace.Classify(ref) != namespace.RefID {
+		return nil, BadRefError(ref)
 	}
-	if ns != "" {
-		return LoadNS(ns, name)
+	return LoadByID(ref)
+}
+
+// BadRefError formats the rejection message for refs that aren't a valid
+// canonical id. Exported so cmd/ynh callers that pre-classify refs (e.g.
+// to decide between an id and a path) can emit the same hint. The message
+// is multi-line; lint suppresses the trailing-punctuation check via the
+// nolint directive — the hint trailer is intentionally human-readable.
+//
+//nolint:staticcheck // ST1005: multi-line user-facing hint
+func BadRefError(ref string) error {
+	if ref == "" {
+		return fmt.Errorf("missing harness reference")
 	}
-	return Load(name)
+	return fmt.Errorf(
+		"%q is not a valid harness id. "+
+			"Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>', "+
+			"or './<path>' for a local harness directory. "+
+			"Run 'ynh ls' to see installed ids",
+		ref)
 }
 
 // LoadNS loads an installed harness by namespace-qualified name.
@@ -174,25 +258,78 @@ func List() ([]string, error) {
 	return names, nil
 }
 
-// ListAll returns all installed harnesses with namespace and directory information.
+// ListAll returns all installed harnesses with namespace and directory
+// information. Unions pointer-shaped installs (local forks) with
+// tree-shaped installs (git/registry). Pointer entries take precedence
+// over a flat/local tree with the same canonical id — a pre-1.0 invariant
+// for the case where ynh fork co-existed with a local tree install. A
+// pointer and a remote registry install can share the same leaf name but
+// have distinct canonical ids (e.g. "local/foo" vs
+// "github.com/org/repo/foo") and must both appear.
 func ListAll() ([]ListEntry, error) {
+	pointers, err := ListPointers()
+	if err != nil {
+		return nil, err
+	}
+	// Key by canonical id, not bare name, so a fork and a registry install
+	// that share only the leaf name are not incorrectly deduplicated.
+	seen := make(map[string]bool, len(pointers))
+	for _, p := range pointers {
+		seen["local/"+p.Name] = true
+	}
+
 	harnessesDir := config.HarnessesDir()
 	entries, err := os.ReadDir(harnessesDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			sort.Slice(pointers, func(i, j int) bool {
+				if pointers[i].Namespace != pointers[j].Namespace {
+					return pointers[i].Namespace < pointers[j].Namespace
+				}
+				return pointers[i].Name < pointers[j].Name
+			})
+			return pointers, nil
 		}
 		return nil, err
 	}
 
-	var results []ListEntry
+	results := append([]ListEntry(nil), pointers...)
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 		entryPath := filepath.Join(harnessesDir, entry.Name())
 		if strings.Contains(entry.Name(), "--") {
-			// Namespace directory: walk children
+			// Schema-2 install: the dir itself is the harness, named by
+			// its id-fsname (e.g. "local--demo" or
+			// "github.com--eyelock--assistants--planner"). Detected by the
+			// presence of a manifest at the top level — distinguishes from
+			// schema-1 namespace directories which only contain children.
+			if DetectFormat(entryPath) != "" {
+				id := namespace.FSNameToID(entry.Name())
+				name := entry.Name()
+				if i := strings.LastIndex(id, "/"); i >= 0 {
+					name = id[i+1:]
+				}
+				if seen[id] {
+					continue
+				}
+				ns, _ := namespace.SplitID(id)
+				// "local" id namespace is an internal sentinel; downstream
+				// schema-2 emitters override this from the canonical id, but
+				// for schema-1 consumers (text format, namespace==flat) keep
+				// it empty when the id is "local/<name>".
+				if ns == "local" {
+					ns = ""
+				}
+				results = append(results, ListEntry{
+					Name:      name,
+					Namespace: ns,
+					Dir:       entryPath,
+				})
+				continue
+			}
+			// Schema-1 namespace directory: walk children
 			ns := namespace.FromFSName(entry.Name())
 			children, err := os.ReadDir(entryPath)
 			if err != nil {
@@ -200,6 +337,9 @@ func ListAll() ([]ListEntry, error) {
 			}
 			for _, child := range children {
 				if !child.IsDir() {
+					continue
+				}
+				if seen[ns+"/"+child.Name()] {
 					continue
 				}
 				childDir := filepath.Join(entryPath, child.Name())
@@ -213,6 +353,9 @@ func ListAll() ([]ListEntry, error) {
 			}
 		} else {
 			// Flat entry (unmigrated or local install)
+			if seen["local/"+entry.Name()] {
+				continue
+			}
 			if DetectFormat(entryPath) != "" {
 				results = append(results, ListEntry{
 					Name: entry.Name(),
@@ -243,6 +386,57 @@ func NamespacedDir(ns, name string) string {
 
 func InstalledDir(name string) string {
 	return filepath.Join(config.HarnessesDir(), name)
+}
+
+// InstalledDirByID returns the schema-2 install directory for a harness with
+// the given canonical id. The directory name is the id with "/" replaced by
+// "--" — same transliteration as PointerPathByID and the cache.
+//
+//	"github.com/eyelock/assistants/planner" → "<HarnessesDir>/github.com--eyelock--assistants--planner"
+//	"local/planner"                         → "<HarnessesDir>/local--planner"
+//
+// This replaces the schema-1 split between InstalledDir (flat) and
+// InstalledDirNS (two-level) with a single id-keyed layout. After schema-2
+// migration, every install lives at InstalledDirByID(id).
+func InstalledDirByID(id string) string {
+	return filepath.Join(config.HarnessesDir(), namespace.IDToFSName(id))
+}
+
+// LoadByID loads an installed harness by its canonical id. Resolution
+// precedence under schema 2:
+//  1. Pointer file at ~/.ynh/installed/<id-fsname>.json (local fork / alias)
+//  2. Schema-1 fallback: for "local/<name>" ids, name-keyed pointer at
+//     ~/.ynh/installed/<name>.json — handles forks created before the
+//     schema-2 pointer writer landed (or in homes already stamped schema-2
+//     when fork wrote a schema-1 file).
+//  3. Tree at ~/.ynh/harnesses/<id-fsname>/
+//
+// Returns ErrNotFound if none match. Callers that received a user-typed
+// ref must Classify first and only call LoadByID for RefID kinds.
+func LoadByID(id string) (*Harness, error) {
+	if id == "" {
+		return nil, fmt.Errorf("harness id %q: %w", id, ErrNotFound)
+	}
+	if ptr, err := LoadPointerByID(id); err != nil {
+		return nil, err
+	} else if ptr != nil {
+		return loadFromPointer(ptr)
+	}
+	// Schema-1 fallback: a fork created by an older binary (or by a binary
+	// that wrote schema-1 into an already-schema-2 home) stores its pointer
+	// as <name>.json rather than local--<name>.json. Try it before giving up.
+	if name, ok := strings.CutPrefix(id, "local/"); ok {
+		if ptr, err := LoadPointer(name); err != nil {
+			return nil, err
+		} else if ptr != nil {
+			return loadFromPointer(ptr)
+		}
+	}
+	dir := InstalledDirByID(id)
+	if _, err := os.Stat(dir); err == nil {
+		return LoadDir(dir)
+	}
+	return nil, fmt.Errorf("harness %q: %w", id, ErrNotFound)
 }
 
 // LoadDir loads a harness from a directory. The migration chain runs
@@ -288,6 +482,41 @@ func LoadDir(dir string) (*Harness, error) {
 			GitSource: GitSource{Git: del.Git, Ref: del.Ref, Path: del.Path},
 		})
 	}
+
+	// Backfill resolved SHAs and resolved refs from installed.json onto
+	// includes/delegates so downstream consumers (list, info,
+	// --check-updates) have both a recorded commit and the ref that was
+	// actually tracked, even for floating manifest refs.
+	//
+	// Matching: prefer an exact (git, ref, path) match against the manifest
+	// ref. If none, fall back to (git, path). The fallback covers the
+	// floating-ref case where the manifest ref is empty but the resolved
+	// entry's ref records the cache's default branch — e.g. "main" — that
+	// the install actually tracked.
+	if ins, err := plugin.LoadInstalledJSON(dir); err == nil && ins != nil && len(ins.Resolved) > 0 {
+		find := func(git, ref, path string) (sha, resolvedRef string) {
+			for _, r := range ins.Resolved {
+				if r.Git == git && r.Ref == ref && r.Path == path {
+					return r.SHA, r.Ref
+				}
+			}
+			for _, r := range ins.Resolved {
+				if r.Git == git && r.Path == path {
+					return r.SHA, r.Ref
+				}
+			}
+			return "", ""
+		}
+		for i := range p.Includes {
+			if p.Includes[i].Git == "" {
+				continue
+			}
+			p.Includes[i].SHA, p.Includes[i].ResolvedRef = find(p.Includes[i].Git, p.Includes[i].Ref, p.Includes[i].Path)
+		}
+		for i := range p.DelegatesTo {
+			p.DelegatesTo[i].SHA, p.DelegatesTo[i].ResolvedRef = find(p.DelegatesTo[i].Git, p.DelegatesTo[i].Ref, p.DelegatesTo[i].Path)
+		}
+	}
 	if len(hj.Hooks) > 0 {
 		p.Hooks = hj.Hooks
 	}
@@ -299,6 +528,9 @@ func LoadDir(dir string) (*Harness, error) {
 	}
 	if len(hj.Focuses) > 0 {
 		p.Focuses = hj.Focuses
+	}
+	if len(hj.Sensors) > 0 {
+		p.Sensors = hj.Sensors
 	}
 
 	// Provenance: prefer installed.json (new format), fall back to InstalledFrom in manifest (legacy).
@@ -312,6 +544,18 @@ func LoadDir(dir string) (*Harness, error) {
 			Namespace:    ins.Namespace,
 			RegistryName: ins.RegistryName,
 			InstalledAt:  ins.InstalledAt,
+		}
+		if ins.ForkedFrom != nil {
+			ff := ins.ForkedFrom
+			p.InstalledFrom.ForkedFrom = &ForkedFrom{
+				SourceType:   ff.SourceType,
+				Source:       ff.Source,
+				Ref:          ff.Ref,
+				SHA:          ff.SHA,
+				Path:         ff.Path,
+				RegistryName: ff.RegistryName,
+				Version:      ff.Version,
+			}
 		}
 		if p.Namespace == "" && ins.Namespace != "" {
 			p.Namespace = ins.Namespace
@@ -469,6 +713,9 @@ func LoadFile(path string) (*Harness, error) {
 	}
 	if len(hj.Focuses) > 0 {
 		p.Focuses = hj.Focuses
+	}
+	if len(hj.Sensors) > 0 {
+		p.Sensors = hj.Sensors
 	}
 
 	return p, nil

@@ -272,6 +272,53 @@ func TestParseRunArgs_HarnessFileEnvVar(t *testing.T) {
 	}
 }
 
+func TestParseRunArgs_Interactive(t *testing.T) {
+	t.Setenv("YNH_FOCUS", "")
+	t.Setenv("YNH_HARNESS_FILE", "")
+
+	tests := []struct {
+		name            string
+		args            []string
+		wantInteractive bool
+		wantPrompt      string
+	}{
+		{
+			name:            "--interactive with focus",
+			args:            []string{"my-harness", "--focus", "review", "--interactive"},
+			wantInteractive: true,
+		},
+		{
+			name:            "--interactive with prompt via separator",
+			args:            []string{"my-harness", "--interactive", "--", "fix this"},
+			wantInteractive: true,
+			wantPrompt:      "fix this",
+		},
+		{
+			name:            "--interactive without prompt is parsed",
+			args:            []string{"my-harness", "--interactive"},
+			wantInteractive: true,
+		},
+		{
+			name:            "no --interactive flag",
+			args:            []string{"my-harness", "--", "fix this"},
+			wantInteractive: false,
+			wantPrompt:      "fix this",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ra := parseRunArgs(tt.args)
+			if ra.Interactive != tt.wantInteractive {
+				t.Errorf("Interactive = %v, want %v", ra.Interactive, tt.wantInteractive)
+			}
+			if ra.Prompt != tt.wantPrompt {
+				t.Errorf("Prompt = %q, want %q", ra.Prompt, tt.wantPrompt)
+			}
+		})
+	}
+}
+
 func TestResolveVendor(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -318,7 +365,7 @@ func TestGenerateLauncher(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 
-	if err := generateLauncher("david"); err != nil {
+	if err := generateLauncher("david", "local/david"); err != nil {
 		t.Fatalf("generateLauncher failed: %v", err)
 	}
 
@@ -332,18 +379,44 @@ func TestGenerateLauncher(t *testing.T) {
 	if info.Mode()&0o111 == 0 {
 		t.Error("launcher is not executable")
 	}
+
+	// Launcher must invoke `ynh run` with the canonical id, not the bare
+	// name — schema 2 rejects bare-name refs at the resolver, so a
+	// bare-name launcher would be unusable.
+	body, err := os.ReadFile(launcherPath)
+	if err != nil {
+		t.Fatalf("reading launcher: %v", err)
+	}
+	if !strings.Contains(string(body), `"local/david"`) {
+		t.Errorf("launcher should embed canonical id; got:\n%s", body)
+	}
 }
 
-// installTestHarness creates a fake installed harness with a launcher and run dir.
-func installTestHarness(t *testing.T, name string) {
+// installTestHarness creates a fake installed harness with a launcher and
+// run dir. Writes at the schema-2 path (~/.ynh/harnesses/local--<name>/)
+// AND the legacy schema-1 flat path (~/.ynh/harnesses/<name>/) so tests can
+// drive both LoadQualified-callers (info, ls, fork) and legacy Load-callers
+// (image, install, update) without per-test branching. Returns the
+// canonical id ("local/<name>") for the schema-2 callers.
+func installTestHarness(t *testing.T, name string) string {
 	t.Helper()
+	id := "local/" + name
 
-	// Create harness directory with .harness.json
-	installDir := harness.InstalledDir(name)
-	if err := os.MkdirAll(installDir, 0o755); err != nil {
+	// Schema-1 flat path — for legacy Load(name) callers.
+	flatDir := harness.InstalledDir(name)
+	if err := os.MkdirAll(flatDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	harnessJSON := fmt.Sprintf(`{"name":%q,"version":"0.1.0","default_vendor":"claude"}`, name)
+	if err := os.WriteFile(filepath.Join(flatDir, ".harness.json"), []byte(harnessJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Schema-2 id-keyed path — for LoadQualified/LoadByID callers.
+	installDir := harness.InstalledDirByID(id)
+	if err := os.MkdirAll(installDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(installDir, ".harness.json"), []byte(harnessJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -362,6 +435,7 @@ func installTestHarness(t *testing.T, name string) {
 	if err := os.MkdirAll(runDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	return id
 }
 
 func TestCmdUninstall_RemovesEverything(t *testing.T) {
@@ -371,12 +445,12 @@ func TestCmdUninstall_RemovesEverything(t *testing.T) {
 	installTestHarness(t, "david")
 
 	// Verify everything exists before uninstall
-	installDir := harness.InstalledDir("david")
+	installDir := harness.InstalledDirByID("local/david")
 	if _, err := os.Stat(installDir); err != nil {
 		t.Fatalf("harness not installed: %v", err)
 	}
 
-	if err := cmdUninstall([]string{"david"}); err != nil {
+	if err := cmdUninstall([]string{"local/david"}); err != nil {
 		t.Fatalf("cmdUninstall failed: %v", err)
 	}
 
@@ -408,7 +482,7 @@ func TestCmdUninstall_NamespacedHarness(t *testing.T) {
 	}
 
 	// Install harness at namespaced path (eyelock/assistants → eyelock--assistants)
-	nsDir := filepath.Join(config.HarnessesDir(), "eyelock--assistants", "planner")
+	nsDir := filepath.Join(config.HarnessesDir(), "eyelock--assistants--planner")
 	if err := os.MkdirAll(nsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -417,7 +491,7 @@ func TestCmdUninstall_NamespacedHarness(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := cmdUninstall([]string{"planner"}); err != nil {
+	if err := cmdUninstall([]string{"eyelock/assistants/planner"}); err != nil {
 		t.Fatalf("cmdUninstall failed: %v", err)
 	}
 
@@ -434,7 +508,7 @@ func TestCmdUninstall_NotInstalled(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := cmdUninstall([]string{"nonexistent"})
+	err := cmdUninstall([]string{"local/nonexistent"})
 	if err == nil {
 		t.Fatal("expected error for uninstalling nonexistent harness")
 	}
@@ -477,7 +551,7 @@ func TestCmdUninstall_RemovesSourcesEntry(t *testing.T) {
 
 	installTestHarness(t, "david")
 
-	if err := cmdUninstall([]string{"david"}); err != nil {
+	if err := cmdUninstall([]string{"local/david"}); err != nil {
 		t.Fatalf("cmdUninstall failed: %v", err)
 	}
 
@@ -659,7 +733,7 @@ func TestCmdInfo_Success(t *testing.T) {
 
 	installTestHarness(t, "david")
 
-	err := cmdInfo([]string{"david"})
+	err := cmdInfo([]string{"local/david"})
 	if err != nil {
 		t.Fatalf("cmdInfo failed: %v", err)
 	}
@@ -673,7 +747,7 @@ func TestCmdInfo_NotFound(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := cmdInfo([]string{"nonexistent"})
+	err := cmdInfo([]string{"local/nonexistent"})
 	if err == nil {
 		t.Fatal("expected error for nonexistent harness")
 	}
@@ -713,7 +787,7 @@ func TestCmdInstall_WritesProvenance(t *testing.T) {
 	}
 
 	// Load installed harness and check provenance
-	p, err := harness.Load("provtest")
+	p, err := harness.LoadByID("local/provtest")
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
@@ -749,7 +823,7 @@ func TestCmdUpdate_NotFound(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := cmdUpdate([]string{"nonexistent"})
+	err := cmdUpdate([]string{"local/nonexistent"})
 	if err == nil {
 		t.Fatal("expected error for nonexistent harness")
 	}
@@ -765,7 +839,7 @@ func TestCmdUpdate_NoGitSources(t *testing.T) {
 	// Install a harness with no includes/delegates
 	installTestHarness(t, "minimal")
 
-	err := cmdUpdate([]string{"minimal"})
+	err := cmdUpdate([]string{"local/minimal"})
 	if err != nil {
 		t.Fatalf("cmdUpdate should succeed for harness with no git sources: %v", err)
 	}
@@ -794,7 +868,7 @@ func TestCmdInstall_PathFlag(t *testing.T) {
 	}
 
 	// Verify harness was installed (format migrated to .ynh-plugin/plugin.json)
-	installDir := harness.InstalledDir("alice")
+	installDir := harness.InstalledDirByID("local/alice")
 	if harness.DetectFormat(installDir) == "" {
 		t.Fatal("harness not found after install")
 	}
@@ -843,6 +917,35 @@ func TestCmdInstall_PathFlag_TraversalBlocked(t *testing.T) {
 	}
 }
 
+func TestCmdInstall_RefFlag_RejectedForLocalPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	src := filepath.Join(dir, "src")
+	if err := os.MkdirAll(filepath.Join(src, ".ynh-plugin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, ".ynh-plugin", "plugin.json"), []byte(`{"name":"x","version":"0.0.1"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := cmdInstall([]string{src, "--ref", "deadbeef"})
+	if err == nil {
+		t.Fatal("expected error: --ref on local install")
+	}
+	if !strings.Contains(err.Error(), "--ref is not valid for local-path installs") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestCmdInstall_RefFlag_NoValue(t *testing.T) {
+	err := cmdInstall([]string{"some-source", "--ref"})
+	// --ref with no value should be silently dropped (i+1 < len check fails),
+	// then the install continues. We only assert it doesn't panic.
+	_ = err
+}
+
 func TestCmdInstall_SourceInsideHarnessesDir(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
@@ -851,7 +954,7 @@ func TestCmdInstall_SourceInsideHarnessesDir(t *testing.T) {
 	// Install a harness whose source is already the install location (e.g. the
 	// marketplace browser pointing at an already-installed harness). ynh should
 	// skip the clean+copy and succeed without deleting anything.
-	srcDir := harness.InstalledDir("already-there")
+	srcDir := harness.InstalledDirByID("local/already-there")
 	if err := os.MkdirAll(srcDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -887,5 +990,167 @@ func TestCmdPrune_NoOrphans(t *testing.T) {
 
 	if err := cmdPrune(); err != nil {
 		t.Fatalf("cmdPrune failed: %v", err)
+	}
+}
+
+// Pointer registers a fork; user later deletes the source tree without
+// uninstalling. ynh uninstall must still remove the pointer — the operation
+// is metadata, not a delete of user-owned files.
+func TestCmdUninstall_OrphanPointerSourceMissing(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	missing := filepath.Join(t.TempDir(), "gone")
+	// Write the schema-1 pointer (cmdUninstall's first-resort lookup is by
+	// name) so this test exercises uninstall-by-name flow which is still
+	// valid for legacy pointer-shaped installs.
+	if err := harness.SavePointer(&harness.Pointer{
+		Name: "stranded", SourceType: "local",
+		Source: missing, InstalledAt: "2026-05-01T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cmdUninstall([]string{"stranded"}); err != nil {
+		t.Fatalf("cmdUninstall failed: %v", err)
+	}
+
+	if _, err := os.Stat(harness.PointerPath("stranded")); !os.IsNotExist(err) {
+		t.Errorf("pointer file still exists after uninstall: err=%v", err)
+	}
+}
+
+// Prune must remove pointers whose source tree no longer exists, alongside
+// the existing symlink-orphan pass. Healthy pointers must survive.
+func TestCmdPrune_OrphanPointer(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+
+	healthySrc := t.TempDir()
+	if err := harness.SavePointer(&harness.Pointer{
+		Name: "healthy", SourceType: "local",
+		Source: healthySrc, InstalledAt: "2026-05-01T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := harness.SavePointer(&harness.Pointer{
+		Name: "stranded", SourceType: "local",
+		Source: filepath.Join(t.TempDir(), "gone"), InstalledAt: "2026-05-01T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cmdPrune(); err != nil {
+		t.Fatalf("cmdPrune failed: %v", err)
+	}
+
+	if _, err := os.Stat(harness.PointerPath("stranded")); !os.IsNotExist(err) {
+		t.Errorf("orphan pointer still present after prune: err=%v", err)
+	}
+	if _, err := os.Stat(harness.PointerPath("healthy")); err != nil {
+		t.Errorf("healthy pointer was removed by prune: %v", err)
+	}
+}
+
+// TestCanonicalIDResolver_RejectsBareName asserts that schema-2 callers
+// (commands that route through harness.LoadQualified — info, fork, ls) emit
+// the canonical-id rejection hint when given a bare name. Pinned alongside
+// the test fixtures the bare-name → canonical-id rewrite touched, so a
+// regression that re-allows bare-name lookups fails here loudly.
+func TestCanonicalIDResolver_RejectsBareName(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	if _, err := harness.LoadQualified("demo"); err == nil {
+		t.Fatal("expected bare name to be rejected, got nil error")
+	} else if !strings.Contains(err.Error(), "is not a valid harness id") {
+		t.Errorf("expected rejection hint, got: %v", err)
+	} else if !strings.Contains(err.Error(), "local/<name>") {
+		t.Errorf("expected hint to mention 'local/<name>', got: %v", err)
+	}
+}
+
+// TestCanonicalIDResolver_RejectsLegacyAtForm asserts that the legacy
+// "<name>@<org>/<repo>" form (schema-1 namespaced ref) is also rejected
+// with the same canonical-id hint.
+func TestCanonicalIDResolver_RejectsLegacyAtForm(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	if _, err := harness.LoadQualified("planner@eyelock/assistants"); err == nil {
+		t.Fatal("expected legacy @-form to be rejected, got nil error")
+	} else if !strings.Contains(err.Error(), "is not a valid harness id") {
+		t.Errorf("expected rejection hint, got: %v", err)
+	}
+}
+
+// ynh uninstall local/<name> must resolve schema-1 pointer-installed forks.
+// This is the canonical form TermQ emits; before the fix, the "local/" prefix
+// caused the pointer lookup to miss and the command returned "not installed".
+func TestCmdUninstall_PointerByCanonicalID(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	// Create a source directory with a valid harness manifest.
+	srcDir := t.TempDir()
+	pluginDir := filepath.Join(srcDir, ".ynh-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"),
+		[]byte(`{"name":"my-fork","version":"1.0.0","default_vendor":"claude"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a schema-1 (name-keyed) pointer — the form ynh fork currently writes.
+	if err := harness.SavePointer(&harness.Pointer{
+		Name: "my-fork", SourceType: "local",
+		Source: srcDir, InstalledAt: "2026-05-01T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Uninstall via canonical id — this is what TermQ passes.
+	if err := cmdUninstall([]string{"local/my-fork"}); err != nil {
+		t.Fatalf("cmdUninstall local/my-fork failed: %v", err)
+	}
+
+	if _, err := os.Stat(harness.PointerPath("my-fork")); !os.IsNotExist(err) {
+		t.Errorf("schema-1 pointer still exists after uninstall: err=%v", err)
+	}
+}
+
+// ynh uninstall with a bare name must still work for backwards compatibility
+// (users who type the name directly rather than the canonical id).
+func TestCmdUninstall_PointerByBareName(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	srcDir := t.TempDir()
+	pluginDir := filepath.Join(srcDir, ".ynh-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"),
+		[]byte(`{"name":"my-fork","version":"1.0.0","default_vendor":"claude"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := harness.SavePointer(&harness.Pointer{
+		Name: "my-fork", SourceType: "local",
+		Source: srcDir, InstalledAt: "2026-05-01T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cmdUninstall([]string{"my-fork"}); err != nil {
+		t.Fatalf("cmdUninstall my-fork (bare name) failed: %v", err)
+	}
+
+	if _, err := os.Stat(harness.PointerPath("my-fork")); !os.IsNotExist(err) {
+		t.Errorf("schema-1 pointer still exists after bare-name uninstall: err=%v", err)
 	}
 }

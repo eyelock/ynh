@@ -12,15 +12,6 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
-// setupInstalledHarness writes a harness into the ynh harnesses directory and
-// returns the install dir. Requires YNH_HOME to be set via t.Setenv.
-func setupInstalledHarness(t *testing.T, name string) string {
-	t.Helper()
-	dir := InstalledDir(name)
-	writeTestHarness(t, dir, name)
-	return dir
-}
-
 // overrideHarnessesDir points YNH_HOME at a temp dir so installed-harness
 // lookups are isolated per test.
 func overrideHarnessesDir(t *testing.T) {
@@ -43,9 +34,11 @@ func loadIncludes(t *testing.T, dir string) []plugin.IncludeMeta {
 
 func TestResolveEditTarget_InstalledName(t *testing.T) {
 	overrideHarnessesDir(t)
-	dir := setupInstalledHarness(t, "my-harness")
+	id := "local/my-harness"
+	dir := InstalledDirByID(id)
+	writeTestHarness(t, dir, "my-harness")
 
-	got, installed, err := ResolveEditTarget("my-harness")
+	got, installed, err := ResolveEditTarget(id)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -53,16 +46,17 @@ func TestResolveEditTarget_InstalledName(t *testing.T) {
 		t.Errorf("dir = %q, want %q", got, dir)
 	}
 	if !installed {
-		t.Error("expected installed=true for name-based ref")
+		t.Error("expected installed=true for canonical-id ref")
 	}
 }
 
 func TestResolveEditTarget_NamespacedName(t *testing.T) {
 	overrideHarnessesDir(t)
-	dir := InstalledDirNS("org/repo", "my-harness")
+	id := "github.com/org/repo/my-harness"
+	dir := InstalledDirByID(id)
 	writeTestHarness(t, dir, "my-harness")
 
-	got, installed, err := ResolveEditTarget("my-harness")
+	got, installed, err := ResolveEditTarget(id)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -70,7 +64,7 @@ func TestResolveEditTarget_NamespacedName(t *testing.T) {
 		t.Errorf("dir = %q, want %q", got, dir)
 	}
 	if !installed {
-		t.Error("expected installed=true for namespaced harness")
+		t.Error("expected installed=true for namespaced canonical-id ref")
 	}
 }
 
@@ -108,6 +102,38 @@ func TestResolveEditTarget_PathNoHarness(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no harness manifest") {
 		t.Errorf("error should mention missing manifest, got: %v", err)
+	}
+}
+
+// TestResolveEditTarget_Schema1PointerFallback verifies that ResolveEditTarget
+// resolves "local/<name>" when only a schema-1 name-keyed pointer file exists
+// (no local--<name>.json). Regression test for the pointer-writer bug where
+// ynh fork wrote schema-1 files into a schema-2 home.
+func TestResolveEditTarget_Schema1PointerFallback(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	forkDir := t.TempDir()
+	writeForkTree(t, forkDir, "my-fork")
+
+	if err := SavePointer(&Pointer{
+		Name:        "my-fork",
+		SourceType:  "local",
+		Source:      forkDir,
+		InstalledAt: "2026-05-08T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, installed, err := ResolveEditTarget("local/my-fork")
+	if err != nil {
+		t.Fatalf("ResolveEditTarget: %v", err)
+	}
+	if got != forkDir {
+		t.Errorf("dir = %q, want %q", got, forkDir)
+	}
+	if !installed {
+		t.Error("expected installed=true for pointer-backed ref")
 	}
 }
 

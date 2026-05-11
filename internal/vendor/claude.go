@@ -61,19 +61,31 @@ func (c *Claude) Clean(entries []SymlinkEntry) error {
 }
 
 func (c *Claude) LaunchInteractive(configPath string, extraArgs []string) error {
-	return launchClaude(configPath, extraArgs)
+	return launchClaude(configPath, "", extraArgs)
 }
 
 func (c *Claude) LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error {
 	args := append([]string{"-p", prompt}, extraArgs...)
-	return launchClaude(configPath, args)
+	return launchClaude(configPath, "", args)
 }
 
+func (c *Claude) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []string) error {
+	return launchClaude(configPath, prompt, extraArgs)
+}
+
+func (c *Claude) SupportsInitialPrompt() bool { return true }
+
 // buildClaudeArgs constructs the argument list for the Claude Code CLI.
-// It adds --plugin-dir for artifact loading and --append-system-prompt
-// for harness instructions, then appends any vendor pass-through args.
-func buildClaudeArgs(configPath string, extraArgs []string) []string {
+// initialPrompt, when non-empty, is placed first so it precedes --add-dir;
+// --add-dir suppresses any positional arg that follows it.
+func buildClaudeArgs(configPath string, initialPrompt string, extraArgs []string) []string {
 	args := []string{"claude"}
+
+	// Positional prompt must come before --add-dir; --add-dir suppresses any
+	// positional arg that follows it in the args list.
+	if initialPrompt != "" {
+		args = append(args, initialPrompt)
+	}
 
 	// Load assembled artifacts (skills, agents, rules, commands) via --plugin-dir.
 	// Also --add-dir to grant read access so Claude doesn't prompt for permission
@@ -275,12 +287,12 @@ func (c *Claude) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[str
 	}, nil
 }
 
-func launchClaude(configPath string, extraArgs []string) error {
+func launchClaude(configPath string, initialPrompt string, extraArgs []string) error {
 	claudeBin, err := exec.LookPath("claude")
 	if err != nil {
 		return err
 	}
 
-	args := buildClaudeArgs(configPath, extraArgs)
+	args := buildClaudeArgs(configPath, initialPrompt, extraArgs)
 	return syscall.Exec(claudeBin, args, os.Environ())
 }

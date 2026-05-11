@@ -266,21 +266,24 @@ ynh install /tmp/ynh-edge/dup
 ynh install /tmp/ynh-edge/dup
 # Expected: overwrites without error (idempotent)
 
-ynh uninstall dup
+ynh uninstall local/dup
 ```
 
 ### E5: Uninstall nonexistent harness
 
 ```bash
-ynh uninstall nonexistent-harness
-# Expected: Error: harness "nonexistent-harness" is not installed
+ynh uninstall local/nonexistent-harness
+# Expected: Error: harness "local/nonexistent-harness" is not installed
 ```
 
 ### E6: Run nonexistent harness
 
 ```bash
 ynh run nonexistent-harness
-# Expected: Error: harness "nonexistent-harness": harness not found
+# Expected: Error: "nonexistent-harness" is not a valid harness id. Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>', or './<path>' for a local harness directory. Run 'ynh ls' to see installed ids
+
+ynh run local/nonexistent
+# Expected: Error: harness "local/nonexistent": harness not found
 ```
 
 ### E7: Export unknown vendor
@@ -382,7 +385,7 @@ mv ~/.ynh/config.json.bak ~/.ynh/config.json
 ### E16: Info on installed harness
 
 ```bash
-ynh info my-harness
+ynh info local/my-harness
 # Expected: Name, Vendor, Installed timestamp, Source (local path), no includes, no delegates
 ```
 
@@ -390,7 +393,10 @@ ynh info my-harness
 
 ```bash
 ynh info nonexistent
-# Expected: Error: harness "nonexistent": harness not found
+# Expected: Error: "nonexistent" is not a valid harness id. Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>', or './<path>' for a local harness directory. Run 'ynh ls' to see installed ids
+
+ynh info local/nonexistent
+# Expected: Error: harness "local/nonexistent": harness not found
 ```
 
 ### E18: Info with no args
@@ -420,7 +426,7 @@ ynd preview /tmp/some-harness -v claude --focus nonexistent
 mkdir -p /tmp/ynh-bad-focus
 mkdir -p /tmp/ynh-bad-focus/.ynh-plugin
 cat > /tmp/ynh-bad-focus/.ynh-plugin/plugin.json << 'EOF'
-{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0","focus":{"review":{"profile":"ci"}}}
+{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0","focuses":{"review":{"profile":"ci"}}}
 EOF
 ynd validate /tmp/ynh-bad-focus
 # Expected: INVALID with "focus.review: prompt must not be empty"
@@ -433,12 +439,141 @@ rm -rf /tmp/ynh-bad-focus
 mkdir -p /tmp/ynh-bad-focus
 mkdir -p /tmp/ynh-bad-focus/.ynh-plugin
 cat > /tmp/ynh-bad-focus/.ynh-plugin/plugin.json << 'EOF'
-{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0","focus":{"review":{"profile":"nonexistent","prompt":"Review code"}}}
+{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0","focuses":{"review":{"profile":"nonexistent","prompt":"Review code"}}}
 EOF
 ynd validate /tmp/ynh-bad-focus
 # Expected: INVALID with "focus.review: references unknown profile"
 rm -rf /tmp/ynh-bad-focus
 ```
+
+### E23: Fork uninstall via canonical id
+
+`ynh fork` registers a pointer-shaped install. `ynh uninstall local/<name>` must resolve the schema-1 pointer and remove the registration cleanly — this is the form TermQ and other JSON consumers pass back.
+
+```bash
+# Create a minimal harness to fork from
+mkdir -p /tmp/ynh-fork-src/.ynh-plugin
+cat > /tmp/ynh-fork-src/.ynh-plugin/plugin.json << 'EOF'
+{"name":"fork-src","version":"1.0.0","default_vendor":"claude"}
+EOF
+
+# Fork it to a local directory
+ynh fork /tmp/ynh-fork-src --to /tmp/ynh-fork-copy --name fork-copy
+# Expected: Forked "fork-src" → "fork-copy"
+#           Path: /tmp/ynh-fork-copy
+
+# Verify it appears in ls
+ynh ls --format json | jq -r '.harnesses[] | select(.name=="fork-copy") | .id'
+# Expected: local/fork-copy
+
+# Uninstall via canonical id (the form machine consumers use)
+ynh uninstall local/fork-copy
+# Expected: Uninstalled harness "fork-copy"
+#             Source tree left in place: /tmp/ynh-fork-copy
+
+# Verify the pointer is gone
+ynh ls --format json | jq -r '.harnesses[] | select(.name=="fork-copy") | .id'
+# Expected: (empty — no output)
+
+rm -rf /tmp/ynh-fork-src /tmp/ynh-fork-copy
+```
+
+### E25: Fork and registry install sharing a leaf name both appear in ls
+
+A fork (`local/<name>`) and a registry install (`<host>/…/<name>`) that share the same leaf name but have distinct canonical ids must both appear in `ynh ls`. This is the central scenario the canonical-id work enabled.
+
+```bash
+export YNH_HOME=$(mktemp -d)
+
+# Simulate a registry install (schema-2 tree)
+mkdir -p "$YNH_HOME/harnesses/github.com--eyelock--assistants--shared/.ynh-plugin"
+cat > "$YNH_HOME/harnesses/github.com--eyelock--assistants--shared/.ynh-plugin/plugin.json" << 'EOF'
+{"name":"shared","version":"1.0.0","default_vendor":"claude"}
+EOF
+
+# Register a fork with the same leaf name
+mkdir -p /tmp/ynh-fork-shared/.ynh-plugin
+cat > /tmp/ynh-fork-shared/.ynh-plugin/plugin.json << 'EOF'
+{"name":"shared","version":"2.0.0","default_vendor":"claude"}
+EOF
+cat > "$YNH_HOME/installed/shared.json" << 'EOF'
+{"name":"shared","source_type":"local","source":"/tmp/ynh-fork-shared","installed_at":"2026-01-01T00:00:00Z"}
+EOF
+
+ynh ls --format json | jq '[.harnesses[] | select(.name=="shared") | .id]'
+# Expected (both ids present, order may vary):
+# [
+#   "local/shared",
+#   "github.com/eyelock/assistants/shared"
+# ]
+
+rm -rf /tmp/ynh-fork-shared "$YNH_HOME"
+unset YNH_HOME
+```
+
+### E24: Broken fork appears as local-fork-broken in ls JSON
+
+When a fork's source directory exists but has no `.ynh-plugin/plugin.json`, `ynh ls --format json` must tag it as `kind: "local-fork-broken"` with a non-empty `broken_reason` rather than emitting an empty-field `local-fork` entry.
+
+```bash
+# Register a pointer to a directory with no manifest
+mkdir -p /tmp/ynh-hollow-src   # exists but no .ynh-plugin/
+export YNH_HOME=$(mktemp -d)
+cat > "$YNH_HOME/installed/hollow.json" << 'EOF'
+{"name":"hollow","source_type":"local","source":"/tmp/ynh-hollow-src","installed_at":"2026-01-01T00:00:00Z"}
+EOF
+
+ynh ls --format json | jq '.harnesses[] | select(.name=="hollow") | {kind, broken_reason}'
+# Expected:
+# {
+#   "kind": "local-fork-broken",
+#   "broken_reason": "no harness manifest found in /tmp/ynh-hollow-src"
+# }
+
+rm -rf /tmp/ynh-hollow-src "$YNH_HOME"
+unset YNH_HOME
+```
+
+---
+
+## Sensors
+
+### S1: Declare a command sensor and run it
+
+```bash
+mkdir -p /tmp/ynh-sensors/.ynh-plugin
+cat > /tmp/ynh-sensors/.ynh-plugin/plugin.json << 'EOF'
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "sensor-test",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "sensors": {
+    "build": {
+      "category": "maintainability",
+      "source": { "command": "echo built && exit 0" },
+      "output": { "format": "text" }
+    }
+  }
+}
+EOF
+ynd validate /tmp/ynh-sensors
+ynh install /tmp/ynh-sensors
+ynh sensors ls local/sensor-test
+ynh sensors run local/sensor-test build | jq '.exit_code, .output.stdout'
+ynh uninstall local/sensor-test
+rm -rf /tmp/ynh-sensors
+```
+
+Expected: `valid`, sensor listed in ls output, run result with `exit_code: 0` and stdout `"built\n"`. No `passed` field in run output.
+
+### S2: focus-source sensor returns resolved payload
+
+Re-run S1 with a focus-source sensor and verify `ynh sensors run` returns the resolved focus declaration plus a note that ynh does not invoke the agent runtime.
+
+### S3: Validation rejects two-source declaration
+
+`source` with both `command` and `files` set must error: `sensor "X": source must have exactly one of files, command, focus`.
 
 ---
 
@@ -462,5 +597,6 @@ rm -rf /tmp/ynh-bad-focus
 | Tutorial 14: Focus | 7 |
 | Tutorial 15: Project-Local Config | 4 |
 | Tutorial 16: Structured Output | 11 |
-| Edge Cases | 22 |
-| **Total** | **150** |
+| Sensors | 3 |
+| Edge Cases | 25 |
+| **Total** | **153** |

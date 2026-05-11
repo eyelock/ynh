@@ -22,7 +22,7 @@ func TestBuildClaudeArgs_WithInstructions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	args := buildClaudeArgs(configPath, []string{"--model", "opus"})
+	args := buildClaudeArgs(configPath, "", []string{"--model", "opus"})
 
 	expected := []string{
 		"claude",
@@ -50,7 +50,7 @@ func TestBuildClaudeArgs_NoInstructions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	args := buildClaudeArgs(configPath, nil)
+	args := buildClaudeArgs(configPath, "", nil)
 
 	expected := []string{
 		"claude",
@@ -79,7 +79,7 @@ func TestBuildClaudeArgs_EmptyInstructions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	args := buildClaudeArgs(configPath, nil)
+	args := buildClaudeArgs(configPath, "", nil)
 
 	for _, arg := range args {
 		if arg == "--append-system-prompt" {
@@ -95,7 +95,7 @@ func TestBuildClaudeArgs_ExtraArgsLast(t *testing.T) {
 	}
 
 	extra := []string{"--verbose", "--model", "sonnet"}
-	args := buildClaudeArgs(configPath, extra)
+	args := buildClaudeArgs(configPath, "", extra)
 
 	tail := args[len(args)-3:]
 	for i, want := range extra {
@@ -114,7 +114,7 @@ func TestBuildClaudeArgs_NonInteractive(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	args := buildClaudeArgs(configPath, []string{"-p", "fix the bug"})
+	args := buildClaudeArgs(configPath, "", []string{"-p", "fix the bug"})
 
 	foundPlugin := false
 	foundAddDir := false
@@ -138,6 +138,36 @@ func TestBuildClaudeArgs_NonInteractive(t *testing.T) {
 	}
 	if !foundPrompt {
 		t.Error("missing -p prompt")
+	}
+}
+
+func TestBuildClaudeArgs_InitialPromptBeforeAddDir(t *testing.T) {
+	configPath := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(configPath, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	args := buildClaudeArgs(configPath, "do the thing", nil)
+
+	// Prompt must appear before --add-dir
+	promptIdx := -1
+	addDirIdx := -1
+	for i, arg := range args {
+		if arg == "do the thing" {
+			promptIdx = i
+		}
+		if arg == "--add-dir" {
+			addDirIdx = i
+		}
+	}
+	if promptIdx == -1 {
+		t.Fatal("initial prompt not found in args")
+	}
+	if addDirIdx == -1 {
+		t.Fatal("--add-dir not found in args")
+	}
+	if promptIdx > addDirIdx {
+		t.Errorf("prompt at index %d comes after --add-dir at index %d; --add-dir suppresses positional args that follow it", promptIdx, addDirIdx)
 	}
 }
 

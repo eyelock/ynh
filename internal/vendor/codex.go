@@ -70,6 +70,15 @@ func (c *Codex) LaunchNonInteractive(configPath string, prompt string, extraArgs
 	return launchCodex(configPath, args)
 }
 
+func (c *Codex) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []string) error {
+	// Positional arg without exec starts an interactive session with the prompt
+	// pre-loaded as the first user message (documented: codex "query").
+	args := append(extraArgs, prompt)
+	return launchCodex(configPath, args)
+}
+
+func (c *Codex) SupportsInitialPrompt() bool { return true }
+
 // codexHookEventMap maps canonical event names to Codex hook events.
 var codexHookEventMap = map[string]string{
 	"before_tool":   "PreToolUse",

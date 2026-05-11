@@ -31,7 +31,7 @@
       ]
     }
   },
-  "focus": {
+  "focuses": {
     "learn": {
       "prompt": "Walk me through ynh as a first-time user, starting from the README.md. Introduce the core concepts — harnesses, vendors, includes, delegates — with a concrete example for each. When I'm ready, suggest I use /ynh-create-harness to build my own."
     },

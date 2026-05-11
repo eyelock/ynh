@@ -462,6 +462,75 @@ func TestEnsureRepo_ShallowCorruption_RecoversViaReclone(t *testing.T) {
 	}
 }
 
+func TestEnsureRepo_FreshClone_TransientShallowError_RetryRecovers(t *testing.T) {
+	srcDir := t.TempDir()
+	runGit(t, srcDir, "init")
+	runGit(t, srcDir, "config", "user.email", "test@test.com")
+	runGit(t, srcDir, "config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(srcDir, "data.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, srcDir, "add", ".")
+	runGit(t, srcDir, "commit", "-m", "init")
+
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	// First clone call fails with the exact transient error git emits when
+	// its shallow file changes mid-operation. Subsequent calls delegate to
+	// real git so the retry succeeds.
+	callCount := 0
+	orig := gitCmdFunc
+	t.Cleanup(func() { gitCmdFunc = orig })
+	gitCmdFunc = func(args ...string) error {
+		callCount++
+		isClone := len(args) > 0 && args[0] == "clone"
+		if callCount == 1 && isClone {
+			return errors.New("exit status 128\nfatal: shallow file has changed since we read it")
+		}
+		return orig(args...)
+	}
+
+	result, err := EnsureRepo(srcDir, "")
+	if err != nil {
+		t.Fatalf("EnsureRepo should retry on transient shallow error: %v", err)
+	}
+	if !result.Cloned {
+		t.Error("expected Cloned=true after retry")
+	}
+	data, err := os.ReadFile(filepath.Join(result.Path, "data.txt"))
+	if err != nil {
+		t.Fatalf("file not readable after retry: %v", err)
+	}
+	if string(data) != "hello" {
+		t.Errorf("unexpected content: %q", string(data))
+	}
+	if callCount < 2 {
+		t.Errorf("expected at least 2 git calls (initial + retry), got %d", callCount)
+	}
+}
+
+func TestEnsureRepo_FreshClone_NonTransientError_DoesNotRetry(t *testing.T) {
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	callCount := 0
+	orig := gitCmdFunc
+	t.Cleanup(func() { gitCmdFunc = orig })
+	gitCmdFunc = func(args ...string) error {
+		callCount++
+		return errors.New("exit status 128\nfatal: repository not found")
+	}
+
+	_, err := EnsureRepo("https://example.invalid/missing.git", "")
+	if err == nil {
+		t.Fatal("expected error for non-transient failure")
+	}
+	if callCount != 1 {
+		t.Errorf("expected exactly 1 git call (no retry on non-transient error), got %d", callCount)
+	}
+}
+
 func TestEnsureRepo_ExistingDirWithoutGit_ClonesClean(t *testing.T) {
 	srcDir := t.TempDir()
 	runGit(t, srcDir, "init")
@@ -583,5 +652,52 @@ func TestResolveFromCache_WithPath(t *testing.T) {
 	}
 	if results[0].Path != "pkg" {
 		t.Errorf("expected Path=%q, got %q", "pkg", results[0].Path)
+	}
+}
+
+func TestEnsureRepo_ConcurrentCallers_DoNotRace(t *testing.T) {
+	srcDir := t.TempDir()
+	runGit(t, srcDir, "init")
+	runGit(t, srcDir, "config", "user.email", "test@test.com")
+	runGit(t, srcDir, "config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(srcDir, "data.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, srcDir, "add", ".")
+	runGit(t, srcDir, "commit", "-m", "init")
+
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+
+	const N = 8
+	errs := make(chan error, N)
+	paths := make(chan string, N)
+	for i := 0; i < N; i++ {
+		go func() {
+			r, err := EnsureRepo(srcDir, "")
+			errs <- err
+			paths <- r.Path
+		}()
+	}
+	for i := 0; i < N; i++ {
+		if err := <-errs; err != nil {
+			t.Errorf("concurrent EnsureRepo failed: %v", err)
+		}
+	}
+	var first string
+	for i := 0; i < N; i++ {
+		p := <-paths
+		if i == 0 {
+			first = p
+			continue
+		}
+		if p != first {
+			t.Errorf("inconsistent repo path across concurrent callers: %q vs %q", first, p)
+		}
+	}
+	if data, err := os.ReadFile(filepath.Join(first, "data.txt")); err != nil {
+		t.Errorf("cache contents missing after concurrent callers: %v", err)
+	} else if string(data) != "hello" {
+		t.Errorf("cache contents corrupted: %q", string(data))
 	}
 }

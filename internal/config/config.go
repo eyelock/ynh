@@ -23,7 +23,28 @@ var Version = "dev"
 //
 // Consumers (e.g. TermQ) read this via `ynh version --format json` and gate
 // features on it with their own `minimumYNHCapabilities` constant.
-const CapabilitiesVersion = "0.2.0"
+const CapabilitiesVersion = "0.4.0"
+
+// SchemaVersion declares the on-disk format version of the YNH home
+// directory (~/.ynh). Distinct from CapabilitiesVersion: capabilities is
+// the wire-contract version (what JSON shapes / commands this binary
+// speaks), schema_version is the on-disk format version of the user's
+// YNH home that this binary expects.
+//
+// Bumped when the on-disk layout of installed/, harnesses/, cache/, or
+// any associated metadata file changes in a way that requires migration.
+//
+// Schema 1: name-keyed pointer files, host-stripped namespaces
+// (`<org>/<repo>`), no `id` field on disk — `id` is derived on-read.
+//
+// Future schema 2 (planned in PR-canonical-2/3): id-keyed pointer files
+// at `~/.ynh/installed/<host--org--repo--name>.json`, canonical id
+// stored explicitly in installed.json, host-prefixed namespaces.
+//
+// Emitted as a top-level sibling on harness-centric envelopes (ls, info,
+// search, fork) so consumers detect format-level capability in the same
+// round-trip they use for listing.
+const SchemaVersion = 1
 
 const (
 	DefaultDirName = ".ynh"
@@ -68,6 +89,16 @@ func HarnessesDir() string {
 	return filepath.Join(HomeDir(), "harnesses")
 }
 
+// PointersDir is where pointer files for local-fork installs live.
+// Each file is <name>.json and points at a user-owned source tree —
+// edits to that tree are live to ynh run with no copy step.
+//
+// Distinct from HarnessesDir(): tree-shaped installs (git/registry) live
+// under HarnessesDir(); pointer-shaped installs (local forks) live here.
+func PointersDir() string {
+	return filepath.Join(HomeDir(), "installed")
+}
+
 func CacheDir() string {
 	return filepath.Join(HomeDir(), "cache")
 }
@@ -96,6 +127,7 @@ func EnsureDirs() error {
 	dirs := []string{
 		HomeDir(),
 		HarnessesDir(),
+		PointersDir(),
 		CacheDir(),
 		BinDir(),
 		RunDir(),
