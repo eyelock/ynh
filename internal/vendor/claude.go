@@ -75,6 +75,10 @@ func (c *Claude) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []
 
 func (c *Claude) SupportsInitialPrompt() bool { return true }
 
+func (c *Claude) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
+	return []string{"--append-system-prompt", text}, nil
+}
+
 // buildClaudeArgs constructs the argument list for the Claude Code CLI.
 // initialPrompt, when non-empty, is placed first so it precedes --add-dir;
 // --add-dir suppresses any positional arg that follows it.

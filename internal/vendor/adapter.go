@@ -80,6 +80,13 @@ type Adapter interface {
 	// their own files as needed (e.g. CLAUDE.md, .cursorrules).
 	GenerateSystemPrompt(content []byte) map[string][]byte
 
+	// ApplyRuntimeInstructions injects per-invocation context into the vendor's
+	// instructions pipeline. For CLI-flag vendors (Claude, Codex) it returns
+	// extra args to append to the launch call; for file-based vendors (Cursor)
+	// it writes directly to the run dir and returns nil args.
+	// text is guaranteed non-empty by the caller.
+	ApplyRuntimeInstructions(runDir, text string) ([]string, error)
+
 	// GenerateHookConfig translates canonical hook declarations to vendor-native
 	// hook configuration files. Returns a map of relative file paths to file contents.
 	// Returns nil if hooks is nil or empty.
