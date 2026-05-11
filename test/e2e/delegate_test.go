@@ -34,7 +34,7 @@ func TestDelegate_AddRemove(t *testing.T) {
 	clone := cloneAssistantsAtSHA(t)
 	s.mustRunYnh(t, "install", filepath.Join(clone, "e2e-fixtures", "minimal"))
 
-	delegateURL := "github.com/eyelock/assistants"
+	delegateURL := "https://github.com/eyelock/assistants"
 	s.mustRunYnh(t, "delegate", "add", "local/minimal", delegateURL,
 		"--path", "e2e-fixtures/fork-source",
 		"--ref", AssistantsFixturesSHA,
@@ -63,7 +63,7 @@ func TestInclude_AddRemove(t *testing.T) {
 	clone := cloneAssistantsAtSHA(t)
 	s.mustRunYnh(t, "install", filepath.Join(clone, "e2e-fixtures", "minimal"))
 
-	includeURL := "github.com/eyelock/assistants"
+	includeURL := "https://github.com/eyelock/assistants"
 	s.mustRunYnh(t, "include", "add", "local/minimal", includeURL,
 		"--path", "e2e-fixtures/included-skill",
 		"--ref", AssistantsFixturesSHA,
@@ -98,7 +98,7 @@ func TestInclude_Update(t *testing.T) {
 	clone := cloneAssistantsAtSHA(t)
 	s.mustRunYnh(t, "install", filepath.Join(clone, "e2e-fixtures", "minimal"))
 
-	includeURL := "github.com/eyelock/assistants"
+	includeURL := "https://github.com/eyelock/assistants"
 	s.mustRunYnh(t, "include", "add", "local/minimal", includeURL,
 		"--path", "e2e-fixtures/minimal",
 		"--ref", AssistantsFixturesSHA,
@@ -124,7 +124,7 @@ func TestDelegate_Update(t *testing.T) {
 	clone := cloneAssistantsAtSHA(t)
 	s.mustRunYnh(t, "install", filepath.Join(clone, "e2e-fixtures", "minimal"))
 
-	delegateURL := "github.com/eyelock/assistants"
+	delegateURL := "https://github.com/eyelock/assistants"
 	s.mustRunYnh(t, "delegate", "add", "local/minimal", delegateURL,
 		"--path", "e2e-fixtures/fork-source",
 		"--ref", AssistantsFixturesSHA,
