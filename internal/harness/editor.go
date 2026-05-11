@@ -40,6 +40,12 @@ func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
 	case namespace.RefID:
 		dir := InstalledDirByID(ref)
 		if DetectFormat(dir) == "plugin" {
+			// If this harness was installed from a local path, edits must go to
+			// the source tree — not the registry copy — so the change is visible
+			// to git and any other tools watching the authored location.
+			if ins, insErr := plugin.LoadInstalledJSON(dir); insErr == nil && ins != nil && (ins.SourceType == "local" || ins.SourceType == "source") && ins.Source != "" {
+				return ins.Source, true, nil
+			}
 			return dir, true, nil
 		}
 		if ptr, _ := LoadPointerByID(ref); ptr != nil {
