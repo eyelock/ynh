@@ -143,6 +143,85 @@ func TestDelegate_Update(t *testing.T) {
 	assertEqual(t, "delegates_to[0].path", mf.DelegatesTo[0].Path, "e2e-fixtures/fork-source")
 }
 
+// TestInclude_LocalInstall_WritesToSource verifies that include add/remove
+// target the original source directory — not the registry copy — when the
+// harness was installed from a local path. This is the regression test for
+// the bug where ResolveEditTarget returned the registry copy for
+// source_type=local installs.
+func TestInclude_LocalInstall_WritesToSource(t *testing.T) {
+	s := newSandbox(t)
+	clone := cloneAssistantsAtSHA(t)
+	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
+	registryDir := filepath.Join(s.home, "harnesses", "local--minimal")
+
+	s.mustRunYnh(t, "install", sourceDir)
+
+	includeURL := "https://github.com/eyelock/assistants"
+	s.mustRunYnh(t, "include", "add", "local/minimal", includeURL,
+		"--path", "e2e-fixtures/included-skill",
+		"--ref", AssistantsFixturesSHA,
+	)
+
+	// The source dir must have the new include.
+	srcMf := readManifest(t, sourceDir)
+	if len(srcMf.Includes) != 1 {
+		t.Fatalf("source dir: expected 1 include after add, got %d", len(srcMf.Includes))
+	}
+	assertEqual(t, "source includes[0].git", srcMf.Includes[0].Git, includeURL)
+
+	// The registry copy must NOT have been touched.
+	regMf := readManifest(t, registryDir)
+	if len(regMf.Includes) != 0 {
+		t.Errorf("registry copy: expected 0 includes (untouched), got %d: %+v", len(regMf.Includes), regMf.Includes)
+	}
+
+	// Remove also targets the source.
+	s.mustRunYnh(t, "include", "remove", "local/minimal", includeURL, "--path", "e2e-fixtures/included-skill")
+
+	srcMf = readManifest(t, sourceDir)
+	if len(srcMf.Includes) != 0 {
+		t.Errorf("source dir: expected 0 includes after remove, got %d", len(srcMf.Includes))
+	}
+}
+
+// TestDelegate_LocalInstall_WritesToSource mirrors TestInclude_LocalInstall_WritesToSource
+// for the delegate add/remove path.
+func TestDelegate_LocalInstall_WritesToSource(t *testing.T) {
+	s := newSandbox(t)
+	clone := cloneAssistantsAtSHA(t)
+	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
+	registryDir := filepath.Join(s.home, "harnesses", "local--minimal")
+
+	s.mustRunYnh(t, "install", sourceDir)
+
+	delegateURL := "https://github.com/eyelock/assistants"
+	s.mustRunYnh(t, "delegate", "add", "local/minimal", delegateURL,
+		"--path", "e2e-fixtures/fork-source",
+		"--ref", AssistantsFixturesSHA,
+	)
+
+	// The source dir must have the new delegate.
+	srcMf := readManifest(t, sourceDir)
+	if len(srcMf.DelegatesTo) != 1 {
+		t.Fatalf("source dir: expected 1 delegate after add, got %d", len(srcMf.DelegatesTo))
+	}
+	assertEqual(t, "source delegates_to[0].git", srcMf.DelegatesTo[0].Git, delegateURL)
+
+	// The registry copy must NOT have been touched.
+	regMf := readManifest(t, registryDir)
+	if len(regMf.DelegatesTo) != 0 {
+		t.Errorf("registry copy: expected 0 delegates (untouched), got %d: %+v", len(regMf.DelegatesTo), regMf.DelegatesTo)
+	}
+
+	// Remove also targets the source.
+	s.mustRunYnh(t, "delegate", "remove", "local/minimal", delegateURL, "--path", "e2e-fixtures/fork-source")
+
+	srcMf = readManifest(t, sourceDir)
+	if len(srcMf.DelegatesTo) != 0 {
+		t.Errorf("source dir: expected 0 delegates after remove, got %d", len(srcMf.DelegatesTo))
+	}
+}
+
 func readManifest(t *testing.T, harnessDir string) pluginManifest {
 	t.Helper()
 	body, err := os.ReadFile(filepath.Join(harnessDir, ".ynh-plugin", "plugin.json"))
