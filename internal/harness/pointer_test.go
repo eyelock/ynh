@@ -66,15 +66,17 @@ func TestPointer_LoadMissing(t *testing.T) {
 	}
 }
 
-func TestLoad_PointerBeatsTreePrecedence(t *testing.T) {
+func TestLoadByID_PointerBeatsTreePrecedence(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
 
-	// Create a tree-shaped install at ~/.ynh/harnesses/researcher
-	treeDir := filepath.Join(home, "harnesses", "researcher")
+	// Create a tree-shaped install at the schema-2 path
+	treeDir := filepath.Join(home, "harnesses", "local--researcher")
 	writeForkTree(t, treeDir, "researcher")
 
-	// Create a fork tree elsewhere and a pointer registering it
+	// Create a fork tree elsewhere and register it via a schema-1 pointer
+	// (simulating a fork written by an older binary, exercising the fallback
+	// in LoadByID that reads name-keyed pointer files).
 	forkDir := filepath.Join(t.TempDir(), "researcher")
 	writeForkTree(t, forkDir, "researcher")
 	if err := SavePointer(&Pointer{
@@ -86,22 +88,23 @@ func TestLoad_PointerBeatsTreePrecedence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := Load("researcher")
+	p, err := LoadByID("local/researcher")
 	if err != nil {
-		t.Fatalf("Load: %v", err)
+		t.Fatalf("LoadByID: %v", err)
 	}
-	// Pointer must win — Dir resolves to forkDir, not the flat tree.
+	// Pointer must win — Dir resolves to forkDir, not the tree.
 	absFork, _ := filepath.Abs(forkDir)
 	if p.Dir != absFork {
-		t.Errorf("Load resolved to %q, want %q (pointer should beat flat tree)", p.Dir, absFork)
+		t.Errorf("LoadByID resolved to %q, want %q (pointer should beat tree)", p.Dir, absFork)
 	}
 }
 
-func TestLoad_PointerWithMissingSource(t *testing.T) {
+func TestLoadByID_PointerWithMissingSource(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
 
-	// Pointer references a path that doesn't exist
+	// Schema-1 pointer (name-keyed) pointing at a path that no longer exists,
+	// exercising the LoadByID schema-1 fallback for "local/<name>" ids.
 	if err := SavePointer(&Pointer{
 		Name:        "ghost",
 		SourceType:  "local",
@@ -111,7 +114,7 @@ func TestLoad_PointerWithMissingSource(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := Load("ghost")
+	_, err := LoadByID("local/ghost")
 	if err == nil {
 		t.Fatal("expected error for missing pointer source")
 	}

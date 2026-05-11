@@ -156,26 +156,6 @@ func DetectFormat(dir string) string {
 // ErrNotFound is returned when a harness is not installed.
 var ErrNotFound = errors.New("harness not found")
 
-// Load finds and loads an installed harness by name. Resolution precedence:
-//  1. Pointer file at ~/.ynh/installed/<name>.json (local fork)
-//  2. Flat tree at ~/.ynh/harnesses/<name>/
-//  3. Namespaced tree at ~/.ynh/harnesses/<ns--repo>/<name>/
-//
-// The migration chain runs inside LoadDir so no legacy handling is needed
-// here.
-func Load(name string) (*Harness, error) {
-	if ptr, err := LoadPointer(name); err != nil {
-		return nil, err
-	} else if ptr != nil {
-		return loadFromPointer(ptr)
-	}
-	flatDir := InstalledDir(name)
-	if _, err := os.Stat(flatDir); err == nil {
-		return LoadDir(flatDir)
-	}
-	return findInNamespacedDirs(name)
-}
-
 // LoadQualified loads an installed harness by canonical id. Schema 2 only:
 // bare names and the legacy "name@org/repo" form are hard-rejected with a
 // hint pointing at the canonical id and the local path alternative.
@@ -218,28 +198,6 @@ func LoadNS(ns, name string) (*Harness, error) {
 		return nil, fmt.Errorf("harness %q@%q: %w", name, ns, ErrNotFound)
 	}
 	return LoadDir(dir)
-}
-
-// findInNamespacedDirs scans ~/.ynh/harnesses/<ns>/<name>/ for a matching harness.
-func findInNamespacedDirs(name string) (*Harness, error) {
-	harnessesDir := config.HarnessesDir()
-	entries, err := os.ReadDir(harnessesDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("harness %q: %w", name, ErrNotFound)
-		}
-		return nil, err
-	}
-	for _, e := range entries {
-		if !e.IsDir() || !strings.Contains(e.Name(), "--") {
-			continue
-		}
-		candidate := filepath.Join(harnessesDir, e.Name(), name)
-		if DetectFormat(candidate) != "" {
-			return LoadDir(candidate)
-		}
-	}
-	return nil, fmt.Errorf("harness %q: %w", name, ErrNotFound)
 }
 
 // List returns the names of all installed harnesses across all namespaces.
@@ -750,12 +708,6 @@ var ArtifactTypeDirs = []string{"skills"}
 // Keep this list in lock-step with the pick.items pattern in
 // docs/schema/plugin.schema.json.
 var ArtifactTypeFiles = []string{"agents", "rules", "commands"}
-
-// ScanArtifacts discovers local artifacts in a harness's installed directory.
-// Skills are directories containing SKILL.md; agents, rules, and commands are .md files.
-func ScanArtifacts(name string) (*Artifacts, error) {
-	return ScanArtifactsDir(InstalledDir(name))
-}
 
 // ScanArtifactsDir discovers artifacts in an arbitrary directory.
 func ScanArtifactsDir(dir string) (*Artifacts, error) {

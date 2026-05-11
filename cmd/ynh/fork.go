@@ -86,9 +86,8 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 			fmt.Sprintf("invalid --format value %q (want text or json)", format))
 	}
 
-	// Load source harness. LoadQualified accepts both bare names ("researcher")
-	// and namespace-qualified refs ("researcher@org/repo") so callers can
-	// disambiguate when two registries publish the same name.
+	// Load source harness. Rejects bare names and the legacy "@" form — a
+	// canonical id (e.g. "github.com/org/repo/name" or "local/name") is required.
 	p, err := harness.LoadQualified(name)
 	if err != nil {
 		code := errCodeNotFound
@@ -129,12 +128,10 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 			fmt.Sprintf("destination already exists: %s", absDestDir))
 	}
 
-	// Clash check: refuse to register if a flat install already claims the
-	// install name — either a pointer file or a flat tree at
-	// ~/.ynh/harnesses/<installName>/. Namespaced installs of the same name
-	// are fine; they remain accessible via "name@org/repo" while the fork
-	// takes over the bare name. Same rule ynh install uses, applied at
-	// registration time.
+	// Clash check: refuse to register if an install already claims this name —
+	// either a pointer file or a flat tree at ~/.ynh/harnesses/<installName>/.
+	// Installs under a different canonical id (different namespace) are fine.
+	// Same rule ynh install uses, applied at registration time.
 	if existing, err := harness.LoadPointer(installName); err == nil && existing != nil {
 		return cliError(stderr, structured, errCodeInvalidInput,
 			fmt.Sprintf("harness %q is already installed (registered at %s)", installName, existing.Source))
@@ -195,9 +192,9 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 			fmt.Sprintf("saving provenance: %v", saveErr))
 	}
 
-	// Register the fork in the YNH layer via a pointer file. Pointer wins
-	// over tree-shaped installs in Load() so subsequent ynh run / ls / info
-	// resolve to absDestDir directly — no copy under ~/.ynh/harnesses.
+	// Register the fork in the YNH layer via a pointer file so subsequent
+	// ynh run / ls / info resolve to absDestDir directly — no copy under
+	// ~/.ynh/harnesses.
 	ptr := &harness.Pointer{
 		Name:        installName,
 		SourceType:  "local",
