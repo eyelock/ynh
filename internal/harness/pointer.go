@@ -16,8 +16,8 @@ import (
 // Pointer is the on-disk shape of ~/.ynh/installed/<name>.json.
 //
 // Pointer files register a user-owned source tree (a fork) into the YNH layer
-// without copying it. Load(name) prefers a pointer over the tree-shaped
-// install at ~/.ynh/harnesses/<name>/. Edits to the source tree are live to
+// without copying it. LoadByID("local/<name>") resolves via the pointer first,
+// so edits to the source tree are live to
 // ynh run with no sync step.
 //
 // Provenance (what the harness *is*) lives in the source tree at
