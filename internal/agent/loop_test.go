@@ -79,7 +79,7 @@ func TestRunLoop_TurnCapExceeded(t *testing.T) {
 	// MaxTurns=1 should stop after the first act turn is recorded.
 	original := runSensorFn
 	defer func() { runSensorFn = original }()
-	runSensorFn = func(ynh, harnessName, sensorName, cwd string) (*SensorResult, error) {
+	runSensorFn = func(ynh, harnessName, sensorName, cwd, overlayJSON string) (*SensorResult, error) {
 		return &SensorResult{Name: sensorName, Kind: "command", ExitCode: 1}, nil
 	}
 
@@ -131,7 +131,7 @@ func TestRunLoop_SensorFailureSendsFeedback(t *testing.T) {
 	defer func() { runSensorFn = original }()
 
 	callCount := 0
-	runSensorFn = func(ynh, harnessName, sensorName, cwd string) (*SensorResult, error) {
+	runSensorFn = func(ynh, harnessName, sensorName, cwd, overlayJSON string) (*SensorResult, error) {
 		callCount++
 		exitCode := 1
 		if callCount > 1 {

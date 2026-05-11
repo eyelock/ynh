@@ -93,16 +93,20 @@ type SensorFile struct {
 var runSensorFn = defaultRunSensor
 
 // RunSensor executes `ynh sensors run <harness> <name>` and returns the
-// parsed result. The ynh binary at ynhPath is used; cwd is passed as
-// --cwd if non-empty.
-func RunSensor(ynhPath, harnessName, sensorName, cwd string) (*SensorResult, error) {
-	return runSensorFn(ynhPath, harnessName, sensorName, cwd)
+// parsed result. overlayJSON is an optional partial sensor JSON (e.g.
+// `{"source":{"command":"make fast"}}`) merged over the base declaration
+// by the ynh binary before execution. Pass "" for no overlay.
+func RunSensor(ynhPath, harnessName, sensorName, cwd, overlayJSON string) (*SensorResult, error) {
+	return runSensorFn(ynhPath, harnessName, sensorName, cwd, overlayJSON)
 }
 
-func defaultRunSensor(ynhPath, harnessName, sensorName, cwd string) (*SensorResult, error) {
+func defaultRunSensor(ynhPath, harnessName, sensorName, cwd, overlayJSON string) (*SensorResult, error) {
 	args := []string{"sensors", "run", harnessName, sensorName, "--format", "json"}
 	if cwd != "" {
 		args = append(args, "--cwd", cwd)
+	}
+	if overlayJSON != "" {
+		args = append(args, "--sensor-overlay-json", overlayJSON)
 	}
 
 	cmd := exec.Command(ynhPath, args...)

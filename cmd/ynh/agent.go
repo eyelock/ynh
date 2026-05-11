@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -141,6 +142,18 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 				return cliError(stderr, false, errCodeInvalidInput, "--emit-jsonl requires a value")
 			}
 			opts.EmitJSONL = args[i]
+
+		case "--sensor-overlay":
+			i++
+			if i >= len(args) {
+				return cliError(stderr, false, errCodeInvalidInput, "--sensor-overlay requires a value")
+			}
+			var overlay map[string]json.RawMessage
+			if err := json.Unmarshal([]byte(args[i]), &overlay); err != nil {
+				return cliError(stderr, false, errCodeInvalidInput,
+					fmt.Sprintf("--sensor-overlay: invalid JSON: %v", err))
+			}
+			opts.SensorOverlay = overlay
 
 		default:
 			if strings.HasPrefix(arg, "-") {

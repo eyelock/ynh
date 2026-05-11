@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -76,6 +77,12 @@ type RunOptions struct {
 	// YNHBinary is the path to the ynh executable for sensor invocation.
 	// Defaults to os.Executable() if empty.
 	YNHBinary string
+
+	// SensorOverlay is an optional per-sensor JSON patch applied before each
+	// sensor run. Keys are sensor names; values are partial plugin.Sensor JSON
+	// (e.g. `{"source":{"command":"make fast"}}`). Passed to ynh sensors run
+	// via --sensor-overlay-json so the merge happens inside ynh.
+	SensorOverlay map[string]json.RawMessage
 
 	// backendOverride is the resolved WorkerBackend; set by tests or left nil to auto-select.
 	backendOverride WorkerBackend
@@ -316,7 +323,11 @@ func RunLoop(opts RunOptions) error {
 		var sensorResults []*SensorResult
 		for _, name := range sensorNames {
 			_ = traj.Emit(KindSensorRun, turnN, name)
-			result, err := RunSensor(ynh, opts.HarnessName, name, opts.WorktreeDir)
+			var overlayJSON string
+			if raw, ok := opts.SensorOverlay[name]; ok {
+				overlayJSON = string(raw)
+			}
+			result, err := RunSensor(ynh, opts.HarnessName, name, opts.WorktreeDir, overlayJSON)
 			if err != nil {
 				_, _ = fmt.Fprintf(opts.Stderr, "sensor %q error: %v\n", name, err)
 				result = &SensorResult{Name: name, ExitCode: -1}
@@ -400,7 +411,7 @@ func checkConvergence(
 	// All regular sensors green — consult convergence-verifier if declared.
 	if convergenceSensor != "" && ynh != "" && harnessName != "" {
 		_ = traj.Emit(KindSensorRun, turnN, convergenceSensor)
-		cvResult, err := RunSensor(ynh, harnessName, convergenceSensor, cwd)
+		cvResult, err := RunSensor(ynh, harnessName, convergenceSensor, cwd, "")
 		if err != nil || !cvResult.Passed() {
 			var summary string
 			if err != nil {

@@ -374,6 +374,7 @@ func cmdSensorsRun(args []string, stdout, stderr io.Writer) error {
 	cwd := ""
 	includeContent := true
 	var harnessName, sensorName string
+	var overlayJSON string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--cwd":
@@ -393,6 +394,12 @@ func cmdSensorsRun(args []string, stdout, stderr io.Writer) error {
 				return cliError(stderr, structured, errCodeInvalidInput,
 					"ynh sensors run only supports --format json")
 			}
+		case "--sensor-overlay-json":
+			if i+1 >= len(args) {
+				return cliError(stderr, structured, errCodeInvalidInput, "--sensor-overlay-json requires a value")
+			}
+			i++
+			overlayJSON = args[i]
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return cliError(stderr, structured, errCodeInvalidInput,
@@ -422,6 +429,15 @@ func cmdSensorsRun(args []string, stdout, stderr io.Writer) error {
 	if !ok {
 		return cliError(stderr, structured, errCodeNotFound,
 			fmt.Sprintf("sensor %q not declared in harness %q", sensorName, p.Name))
+	}
+
+	if overlayJSON != "" {
+		merged, mergeErr := mergeSensorOverlay(s, []byte(overlayJSON))
+		if mergeErr != nil {
+			return cliError(stderr, structured, errCodeInvalidInput,
+				fmt.Sprintf("--sensor-overlay-json: %v", mergeErr))
+		}
+		s = merged
 	}
 
 	if cwd == "" {
@@ -522,4 +538,35 @@ func runSensor(p *harness.Harness, name string, s plugin.Sensor, cwd string, inc
 	}
 
 	return r, nil
+}
+
+// mergeSensorOverlay applies a partial sensor JSON on top of a base sensor
+// declaration. Only top-level fields present in the overlay replace fields in
+// the base (shallow merge). The overlay is typically sent by the loop driver
+// via --sensor-overlay-json.
+func mergeSensorOverlay(base plugin.Sensor, overlayJSON []byte) (plugin.Sensor, error) {
+	baseData, err := json.Marshal(base)
+	if err != nil {
+		return base, err
+	}
+	var baseMap map[string]json.RawMessage
+	if err := json.Unmarshal(baseData, &baseMap); err != nil {
+		return base, err
+	}
+	var overlayMap map[string]json.RawMessage
+	if err := json.Unmarshal(overlayJSON, &overlayMap); err != nil {
+		return base, fmt.Errorf("invalid JSON: %w", err)
+	}
+	for k, v := range overlayMap {
+		baseMap[k] = v
+	}
+	merged, err := json.Marshal(baseMap)
+	if err != nil {
+		return base, err
+	}
+	var result plugin.Sensor
+	if err := json.Unmarshal(merged, &result); err != nil {
+		return base, fmt.Errorf("applying overlay: %w", err)
+	}
+	return result, nil
 }
