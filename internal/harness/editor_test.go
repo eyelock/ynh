@@ -137,6 +137,76 @@ func TestResolveEditTarget_Schema1PointerFallback(t *testing.T) {
 	}
 }
 
+// TestResolveEditTarget_LocalInstall verifies that when a harness was installed
+// from a local path (source_type == "local"), ResolveEditTarget returns the
+// original source directory rather than the registry copy.
+func TestResolveEditTarget_LocalInstall(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	// Source tree (the authored location outside ~/.ynh/).
+	sourceDir := t.TempDir()
+	writeTestHarness(t, sourceDir, "my-harness")
+
+	// Registry copy: a manifest + installed.json pointing back to the source.
+	id := "local/my-harness"
+	registryDir := InstalledDirByID(id)
+	writeTestHarness(t, registryDir, "my-harness")
+	ins := &plugin.InstalledJSON{
+		SourceType:  "local",
+		Source:      sourceDir,
+		InstalledAt: "2026-05-11T00:00:00Z",
+	}
+	if err := plugin.SaveInstalledJSON(registryDir, ins); err != nil {
+		t.Fatal(err)
+	}
+
+	got, installed, err := ResolveEditTarget(id)
+	if err != nil {
+		t.Fatalf("ResolveEditTarget: %v", err)
+	}
+	if got != sourceDir {
+		t.Errorf("dir = %q, want source dir %q", got, sourceDir)
+	}
+	if !installed {
+		t.Error("expected installed=true")
+	}
+}
+
+// TestResolveEditTarget_SourceInstall verifies the same redirect behaviour for
+// source_type == "source" (installed by name from a configured ynh sources
+// entry). The Source field holds a local path just like source_type == "local".
+func TestResolveEditTarget_SourceInstall(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	sourceDir := t.TempDir()
+	writeTestHarness(t, sourceDir, "my-harness")
+
+	id := "local/my-harness"
+	registryDir := InstalledDirByID(id)
+	writeTestHarness(t, registryDir, "my-harness")
+	ins := &plugin.InstalledJSON{
+		SourceType:  "source",
+		Source:      sourceDir,
+		InstalledAt: "2026-05-11T00:00:00Z",
+	}
+	if err := plugin.SaveInstalledJSON(registryDir, ins); err != nil {
+		t.Fatal(err)
+	}
+
+	got, installed, err := ResolveEditTarget(id)
+	if err != nil {
+		t.Fatalf("ResolveEditTarget: %v", err)
+	}
+	if got != sourceDir {
+		t.Errorf("dir = %q, want source dir %q", got, sourceDir)
+	}
+	if !installed {
+		t.Error("expected installed=true")
+	}
+}
+
 // ---- AddInclude -------------------------------------------------------
 
 func TestAddInclude_New(t *testing.T) {
