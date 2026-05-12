@@ -142,6 +142,38 @@ Error: profile "ci": hooks.before_tool[0]: missing "command" field
 
 A profile cannot override or add sensors — sensors are observation declarations, not runtime context, and live only at the top level. An [inline focus inside a sensor](sensors.md#focus) can name a profile, but the sensor itself is profile-independent.
 
+## CLI Editing
+
+Profiles can be edited from the command line as well as authored directly in the manifest. The CLI mirrors `ynh include` / `ynh delegate` and routes edits through the same resolver, so changes to a pointer-form local install land in your source tree.
+
+```bash
+# Create / remove a profile (errors if any focus still references it)
+ynh profile add <harness> <name>
+ynh profile remove <harness> <name>
+
+# Hooks inside a profile
+ynh profile hook add <harness> <profile> <event> "<command>" [--matcher <pattern>]
+ynh profile hook remove <harness> <profile> <event> <index>
+
+# MCP servers inside a profile
+ynh profile mcp add <harness> <profile> <name> --command <cmd> [--arg <v>...] [--env K=V...]
+ynh profile mcp add <harness> <profile> <name> --url <url> [--header K=V...]
+ynh profile mcp add <harness> <profile> <name> --null         # suppress an inherited server
+ynh profile mcp update <harness> <profile> <name> [flags] [--clear-args|--clear-env|--clear-headers]
+ynh profile mcp remove <harness> <profile> <name>
+
+# Profile-level Git includes (no --pick; whole include is merged in)
+ynh profile include add <harness> <profile> <url> [--path <subdir>] [--ref <ref>] [--replace]
+ynh profile include remove <harness> <profile> <url> [--path <subdir>]
+ynh profile include update <harness> <profile> <url> [--from-path <subdir>] [--path <subdir>] [--ref <ref>]
+```
+
+`<harness>` is a canonical id from `ynh ls` (e.g. `local/my-harness` or `github.com/<org>/<repo>/<name>`). For tree-form (registry/git) installs the edits land in the install copy; for pointer-form (local source) installs they land in your source tree.
+
+`profile remove` refuses if any focus still references the profile and lists the blocking focuses — fix the focuses first, then retry.
+
+See [reference.md](reference.md) for the complete flag matrix.
+
 ## See Also
 
 - [Hooks](hooks.md) — hook format and vendor translation

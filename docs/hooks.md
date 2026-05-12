@@ -181,6 +181,24 @@ When writing hook scripts for use across vendors:
 
 Hooks fire mid-session (push) and can produce artifacts that [sensors](sensors.md) declare a contract over (pull). The most common production pattern is `after_tool` writing a results file that a `files`-sourced sensor reads — implicit coupling by shared file path. See [Sensors §"Relationship to hooks"](sensors.md#relationship-to-hooks) for the full push/pull comparison and the canonical pairing pattern.
 
+## CLI Editing
+
+Hooks can be added and removed from the command line as well as authored directly in the manifest. The CLI distinguishes harness-level (default) hooks from profile-level overrides:
+
+```bash
+# Top-level harness hooks
+ynh hook add <harness> <event> "<command>" [--matcher <pattern>]
+ynh hook remove <harness> <event> <index>
+
+# Profile-level hooks (override the harness-level set when the profile is active)
+ynh profile hook add <harness> <profile> <event> "<command>" [--matcher <pattern>]
+ynh profile hook remove <harness> <profile> <event> <index>
+```
+
+`<event>` is validated against the canonical set: `before_tool`, `after_tool`, `before_prompt`, `on_stop`. `<index>` is zero-based. When the last entry for an event is removed, the event key is dropped from the manifest entirely.
+
+See [reference.md](reference.md) for the complete flag matrix and [profiles.md](profiles.md#cli-editing) for the surrounding profile-editor surface.
+
 ## See Also
 
 - [Tutorial 4: Hooks](tutorial/10-hooks.md) — step-by-step walkthrough
