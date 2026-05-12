@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
@@ -15,19 +16,19 @@ import (
 
 // composeOutput is the top-level JSON shape for `ynd compose`.
 type composeOutput struct {
-	Name          string                   `json:"name"`
-	Version       string                   `json:"version"`
-	Description   string                   `json:"description,omitempty"`
-	DefaultVendor string                   `json:"default_vendor"`
-	Artifacts     composeArtifacts         `json:"artifacts"`
-	Includes      []composeInclude         `json:"includes"`
-	DelegatesTo   []composeDelegate        `json:"delegates_to"`
-	Hooks         map[string][]composeHook `json:"hooks,omitempty"`
-	MCPServers    map[string]composeMCP    `json:"mcp_servers,omitempty"`
-	Profiles      []string                 `json:"profiles"`
-	Focuses       map[string]composeFocus  `json:"focuses,omitempty"`
-	Sensors       map[string]composeSensor `json:"sensors,omitempty"`
-	Counts        composeCounts            `json:"counts"`
+	Name          string                    `json:"name"`
+	Version       string                    `json:"version"`
+	Description   string                    `json:"description,omitempty"`
+	DefaultVendor string                    `json:"default_vendor"`
+	Artifacts     composeArtifacts          `json:"artifacts"`
+	Includes      []composeInclude          `json:"includes"`
+	DelegatesTo   []composeDelegate         `json:"delegates_to"`
+	Hooks         map[string][]composeHook  `json:"hooks,omitempty"`
+	MCPServers    map[string]composeMCP     `json:"mcp_servers,omitempty"`
+	Profiles      map[string]composeProfile `json:"profiles"`
+	Focuses       map[string]composeFocus   `json:"focuses,omitempty"`
+	Sensors       map[string]composeSensor  `json:"sensors,omitempty"`
+	Counts        composeCounts             `json:"counts"`
 }
 
 type composeSensor struct {
@@ -94,6 +95,12 @@ type composeMCP struct {
 	Env     map[string]string `json:"env,omitempty"`
 	URL     string            `json:"url,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
+}
+
+type composeProfile struct {
+	Hooks      map[string][]composeHook `json:"hooks,omitempty"`
+	MCPServers map[string]*composeMCP   `json:"mcp_servers,omitempty"`
+	Includes   []composeInclude         `json:"includes,omitempty"`
 }
 
 type composeFocus struct {
@@ -368,10 +375,47 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 		out.MCPServers = servers
 	}
 
-	// Profiles — just names
-	profiles := make([]string, 0, len(h.Profiles))
-	for name := range h.Profiles {
-		profiles = append(profiles, name)
+	// Profiles — full content so consumers can render/diff without re-parsing
+	// the underlying manifest. Always emit a non-nil map so JSON consumers see
+	// an object (possibly empty) rather than null.
+	profiles := make(map[string]composeProfile, len(h.Profiles))
+	for name, p := range h.Profiles {
+		cp := composeProfile{}
+		if len(p.Hooks) > 0 {
+			cp.Hooks = make(map[string][]composeHook, len(p.Hooks))
+			for event, entries := range p.Hooks {
+				ch := make([]composeHook, len(entries))
+				for i, e := range entries {
+					ch[i] = composeHook{Command: e.Command, Matcher: e.Matcher}
+				}
+				cp.Hooks[event] = ch
+			}
+		}
+		if len(p.MCPServers) > 0 {
+			cp.MCPServers = make(map[string]*composeMCP, len(p.MCPServers))
+			for sName, srv := range p.MCPServers {
+				if srv == nil {
+					cp.MCPServers[sName] = nil
+					continue
+				}
+				cp.MCPServers[sName] = &composeMCP{
+					Command: srv.Command,
+					Args:    srv.Args,
+					Env:     srv.Env,
+					URL:     srv.URL,
+					Headers: srv.Headers,
+				}
+			}
+		}
+		for _, inc := range p.Includes {
+			cp.Includes = append(cp.Includes, composeInclude{
+				Git:  inc.Git,
+				Ref:  inc.Ref,
+				Path: inc.Path,
+				Pick: inc.Pick,
+			})
+		}
+		profiles[name] = cp
 	}
 	out.Profiles = profiles
 
@@ -523,7 +567,12 @@ func printComposeText(w io.Writer, out composeOutput) error {
 	}
 
 	if len(out.Profiles) > 0 {
-		_, _ = fmt.Fprintf(w, "\nProfiles: %s\n", strings.Join(out.Profiles, ", "))
+		names := make([]string, 0, len(out.Profiles))
+		for name := range out.Profiles {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		_, _ = fmt.Fprintf(w, "\nProfiles: %s\n", strings.Join(names, ", "))
 	}
 
 	if len(out.Focuses) > 0 {

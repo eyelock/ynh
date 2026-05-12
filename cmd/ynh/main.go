@@ -79,6 +79,10 @@ func main() {
 		err = cmdFork(os.Args[2:])
 	case "include":
 		err = cmdInclude(os.Args[2:])
+	case "focus":
+		err = cmdFocus(os.Args[2:])
+	case "profile":
+		err = cmdProfile(os.Args[2:])
 	case "sensors":
 		err = cmdSensors(os.Args[2:])
 	case "agent":
@@ -139,6 +143,19 @@ Commands:
   include add <harness> <url>  Add a Git include to a harness
   include remove <harness> <url>  Remove a Git include from a harness
   include update <harness> <url>  Update a Git include's options
+  focus add <harness> <name> <prompt> [--profile <name>]   Add a named focus
+  focus remove <harness> <name>                             Remove a named focus
+  focus update <harness> <name> [--prompt] [--profile] [--clear-profile]  Update a focus
+  profile add <harness> <name>                              Add a named profile
+  profile remove <harness> <name>                           Remove a named profile
+  profile hook add <harness> <profile> <event> <command>    Add a hook to a profile
+  profile hook remove <harness> <profile> <event> <index>   Remove a profile hook by index
+  profile mcp add <harness> <profile> <name> [flags]        Add an MCP server to a profile
+  profile mcp remove <harness> <profile> <name>             Remove a profile MCP server
+  profile mcp update <harness> <profile> <name> [flags]     Update a profile MCP server
+  profile include add <harness> <profile> <url> [flags]     Add a Git include to a profile
+  profile include remove <harness> <profile> <url>          Remove a profile include
+  profile include update <harness> <profile> <url> [flags]  Update a profile include
   sensors ls <harness>         List declared sensors (supports --format json)
   sensors show <harness> <name>  Resolve a sensor declaration (supports --format text|json)
   sensors run <harness> <name>   Run a sensor and emit a JSON result (loop drivers consume this)
