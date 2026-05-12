@@ -11,14 +11,62 @@ Evaluate ALL tutorials. This is a release gate — the verdict must be PASS befo
 
 1. Build and install the latest binaries: `make build && make install`
 2. For EVERY tutorial in `docs/tutorial/` (01 through the highest-numbered tutorial, excluding README.md):
-   - Set up an isolated environment: `export HOME=$(mktemp -d) && export YNH_HOME=""`
+   - **Isolate per tutorial** — see "Sandbox isolation" below. Failure to isolate pollutes the user's real `~/.ynh` and leaves dangling pointers; this is non-negotiable.
    - Use binaries at `/Users/david/.ynh/bin/ynh` and `/Users/david/.ynh/bin/ynd`
    - **ALL file creation and commands MUST run in `/tmp/`** — never in the repo directory. The repo has real `skills/`, `agents/`, `rules/`, `commands/` directories; creating test files there pollutes the working tree. Use `cd /tmp` or absolute `/tmp/...` paths for all tutorial commands.
    - **Use only the Bash tool** for creating files outside the repo. Do NOT use Write/Edit tools for `/tmp/` files (they trigger permission prompts).
    - Execute each step that produces verifiable output
    - Compare actual output against the expected output documented in the tutorial
    - Skip steps that require: network access (git clone from GitHub), vendor CLIs (claude, codex, cursor), or Docker
+   - **Tear down the sandbox** with `rm -rf /tmp/ynh-eval-T<N>` after the tutorial passes
 3. Run the manual test plan (`docs/tutorial/manual-test-plan.md`) error-case section (all E-numbered cases)
+
+## Sandbox isolation
+
+**Each Bash tool invocation runs in a fresh shell.** `export` statements do not survive between calls — anything you set in one Bash call is gone by the next. Relying on `export HOME=...; export YNH_HOME=...` at the top of a tutorial sequence has caused real damage: tutorial 19 installed a harness into the user's real `~/.ynh` and left a dangling pointer after cleanup, because the next Bash call no longer had the sandbox env.
+
+**Use deterministic per-tutorial sandbox paths and prefix every `ynh`/`ynd` invocation inline.** The pattern:
+
+1. **Once at tutorial start** (single Bash invocation):
+
+   ```bash
+   SANDBOX=/tmp/ynh-eval-T<N>            # e.g. T19 for tutorial 19
+   rm -rf "$SANDBOX"
+   mkdir -p "$SANDBOX/.ynh"
+   ```
+
+2. **Every subsequent Bash invocation** for that tutorial prefixes each command:
+
+   ```bash
+   HOME=/tmp/ynh-eval-T<N> YNH_HOME=/tmp/ynh-eval-T<N>/.ynh \
+       /Users/david/.ynh/bin/ynh install /tmp/ynh-tutorial/sensor-harness
+   ```
+
+   The `VAR=val cmd` form sets the variable for that invocation only — no `export`, no reliance on shell state. Works identically across every fresh Bash shell.
+
+3. **Once at tutorial end** (single Bash invocation):
+
+   ```bash
+   rm -rf /tmp/ynh-eval-T<N>
+   ```
+
+**Verify isolation after each tutorial.** Before tearing down, run:
+
+```bash
+ls /tmp/ynh-eval-T<N>/.ynh/harnesses 2>/dev/null
+ls /tmp/ynh-eval-T<N>/.ynh/installed 2>/dev/null
+```
+
+If a tutorial used `ynh install`, the installed entry must appear in the sandbox. If the sandbox is empty AND the tutorial called `ynh install`, isolation failed — the install landed in the real `~/.ynh`. Stop and report; do not continue evaluating other tutorials in that state.
+
+**Anti-pattern — do NOT do this:**
+
+```bash
+# WRONG: export does not survive to the next Bash invocation
+export HOME=$(mktemp -d)
+export YNH_HOME=""
+ynh install /tmp/ynh-tutorial/sensor-harness   # ← real ~/.ynh gets polluted
+```
 
 ## What is locally testable (do NOT skip these)
 
