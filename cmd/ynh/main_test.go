@@ -319,6 +319,60 @@ func TestParseRunArgs_Interactive(t *testing.T) {
 	}
 }
 
+func TestParseRunArgs_Instructions(t *testing.T) {
+	t.Setenv("YNH_FOCUS", "")
+	t.Setenv("YNH_HARNESS_FILE", "")
+
+	tests := []struct {
+		name             string
+		args             []string
+		wantInstructions string
+		wantVendorArgs   []string
+	}{
+		{
+			name:             "instructions flag",
+			args:             []string{"my-harness", "--instructions", "PR #22 in eyelock/assistants"},
+			wantInstructions: "PR #22 in eyelock/assistants",
+		},
+		{
+			name:             "instructions with focus",
+			args:             []string{"my-harness", "--focus", "review", "--instructions", "PR #22"},
+			wantInstructions: "PR #22",
+		},
+		{
+			name:             "instructions not forwarded to vendor",
+			args:             []string{"my-harness", "--instructions", "PR #22", "--model", "opus", "--", "fix this"},
+			wantInstructions: "PR #22",
+			wantVendorArgs:   []string{"--model", "opus"},
+		},
+		{
+			name:             "no instructions",
+			args:             []string{"my-harness"},
+			wantInstructions: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ra := parseRunArgs(tt.args)
+			if ra.Instructions != tt.wantInstructions {
+				t.Errorf("Instructions = %q, want %q", ra.Instructions, tt.wantInstructions)
+			}
+			if tt.wantVendorArgs != nil {
+				if len(ra.VendorArgs) != len(tt.wantVendorArgs) {
+					t.Errorf("VendorArgs = %v, want %v", ra.VendorArgs, tt.wantVendorArgs)
+				} else {
+					for i := range ra.VendorArgs {
+						if ra.VendorArgs[i] != tt.wantVendorArgs[i] {
+							t.Errorf("VendorArgs[%d] = %q, want %q", i, ra.VendorArgs[i], tt.wantVendorArgs[i])
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestResolveVendor(t *testing.T) {
 	tests := []struct {
 		name          string
