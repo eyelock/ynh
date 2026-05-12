@@ -392,6 +392,28 @@ func LoadByID(id string) (*Harness, error) {
 	}
 	dir := InstalledDirByID(id)
 	if _, err := os.Stat(dir); err == nil {
+		// Pre-schema-3 local/source installs lived as content copies under
+		// HarnessesDir with their authored content at ins.Source. The
+		// schema-3 migration collapses these into pointer-form, but until
+		// it runs (e.g. fresh upgrade, first command of the session) we
+		// still encounter them. Redirect reads to ins.Source so the user's
+		// edits are visible — matching where ResolveEditTarget already
+		// routes writes. After migration this branch is unreachable for
+		// local/source installs because no copy dir remains.
+		if ins, _ := plugin.LoadInstalledJSON(dir); IsLocalSource(ins) {
+			if _, err := os.Stat(ins.Source); err != nil {
+				if os.IsNotExist(err) {
+					return nil, fmt.Errorf(
+						"harness %q is registered but its source path no longer exists:\n"+
+							"  %s\n\n"+
+							"If you moved it, restore the directory.\n"+
+							"If it's gone for good, run: ynh uninstall %s",
+						id, ins.Source, id)
+				}
+				return nil, fmt.Errorf("stat install source %s: %w", ins.Source, err)
+			}
+			return loadDirWithProvenance(ins.Source, ins)
+		}
 		return LoadDir(dir)
 	}
 	return nil, fmt.Errorf("harness %q: %w", id, ErrNotFound)
@@ -399,7 +421,22 @@ func LoadByID(id string) (*Harness, error) {
 
 // LoadDir loads a harness from a directory. The migration chain runs
 // transparently, so callers never need to handle legacy formats themselves.
+//
+// Tree-form installs (see topology.go) store their provenance in
+// <dir>/.ynh-plugin/installed.json; LoadDir reads it from there.
+// Pointer-form installs carry their provenance on the pointer file and
+// must use loadDirWithProvenance to supply it explicitly — otherwise the
+// source tree would need a redundant installed.json.
 func LoadDir(dir string) (*Harness, error) {
+	return loadDirWithProvenance(dir, nil)
+}
+
+// loadDirWithProvenance is the implementation of LoadDir with an explicit
+// provenance record. When ins is nil it is read from
+// <contentDir>/.ynh-plugin/installed.json (tree-form behaviour). When ins
+// is supplied (pointer-form) the contentDir need not carry installed.json.
+func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harness, error) {
+	dir := contentDir
 	if _, err := migration.FormatChain().Run(dir); err != nil {
 		return nil, fmt.Errorf("migrating harness manifest: %w", err)
 	}
@@ -409,6 +446,15 @@ func LoadDir(dir string) (*Harness, error) {
 	}
 	if !plugin.IsPluginDir(dir) {
 		return nil, fmt.Errorf("no harness manifest found in %s", dir)
+	}
+
+	if ins == nil {
+		// Tree-form: read provenance from disk. Tolerate absence; the
+		// fields default to zero and callers that need them check
+		// p.InstalledFrom for nil.
+		if disk, err := plugin.LoadInstalledJSON(dir); err == nil {
+			ins = disk
+		}
 	}
 
 	hj, err := plugin.LoadPluginJSON(dir)
@@ -451,7 +497,7 @@ func LoadDir(dir string) (*Harness, error) {
 	// floating-ref case where the manifest ref is empty but the resolved
 	// entry's ref records the cache's default branch — e.g. "main" — that
 	// the install actually tracked.
-	if ins, err := plugin.LoadInstalledJSON(dir); err == nil && ins != nil && len(ins.Resolved) > 0 {
+	if ins != nil && len(ins.Resolved) > 0 {
 		find := func(git, ref, path string) (sha, resolvedRef string) {
 			for _, r := range ins.Resolved {
 				if r.Git == git && r.Ref == ref && r.Path == path {
@@ -491,8 +537,9 @@ func LoadDir(dir string) (*Harness, error) {
 		p.Sensors = hj.Sensors
 	}
 
-	// Provenance: prefer installed.json (new format), fall back to InstalledFrom in manifest (legacy).
-	if ins, err := plugin.LoadInstalledJSON(dir); err == nil {
+	// Provenance: use the supplied/loaded record; fall back to InstalledFrom
+	// in manifest (legacy) is handled by the caller path that left ins nil.
+	if ins != nil {
 		p.InstalledFrom = &Provenance{
 			SourceType:   ins.SourceType,
 			Source:       ins.Source,

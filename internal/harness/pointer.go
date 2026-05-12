@@ -192,10 +192,17 @@ func ListPointers() ([]ListEntry, error) {
 // message at the call site.
 var ErrPointerSourceMissing = errors.New("pointer source path missing")
 
-// loadFromPointer resolves a pointer file to a fully-loaded Harness by
-// running LoadDir(ptr.Source). Returns (nil, ErrPointerSourceMissing,
-// wrapped with the user-facing relocate/uninstall hint) when the source
-// path is gone.
+// loadFromPointer resolves a pointer file to a fully-loaded Harness.
+// Returns (nil, ErrPointerSourceMissing, wrapped with the user-facing
+// relocate/uninstall hint) when the source path is gone.
+//
+// The pointer's embedded plugin.InstalledJSON is the authoritative
+// provenance record (schema 3+). For legacy pointers (pre-schema-3,
+// carrying only source_type/source/installed_at), the rest of the
+// provenance still lives at <source>/.ynh-plugin/installed.json; we
+// merge it in so reads work before the schema-3 migration has run.
+// After migration, the pointer carries the full record and the source
+// tree is free of ynh metadata.
 func loadFromPointer(ptr *Pointer) (*Harness, error) {
 	if _, err := os.Stat(ptr.Source); err != nil {
 		if os.IsNotExist(err) {
@@ -208,5 +215,11 @@ func loadFromPointer(ptr *Pointer) (*Harness, error) {
 		}
 		return nil, fmt.Errorf("stat pointer source %s: %w", ptr.Source, err)
 	}
-	return LoadDir(ptr.Source)
+	ins := ptr.InstalledJSON
+	if len(ins.Resolved) == 0 && ins.ForkedFrom == nil {
+		if disk, err := plugin.LoadInstalledJSON(ptr.Source); err == nil && disk != nil {
+			ins = *disk
+		}
+	}
+	return loadDirWithProvenance(ptr.Source, &ins)
 }
