@@ -55,15 +55,30 @@ func cmdMigrateTo(args []string, stdout, stderr io.Writer) error {
 		return printMigrateNoOp(stdout, format, currentSchema)
 	}
 
-	m, err := migration.MigrateToSchema2(home, migration.MigrateOpts{
-		DryRun:     dryRun,
-		SkipBroken: skipBroken,
-	})
-	if err != nil {
-		return cliError(stderr, structured, errCodeIOError, err.Error())
+	opts := migration.MigrateOpts{DryRun: dryRun, SkipBroken: skipBroken}
+	combined := &migration.Manifest{SchemaVersion: migration.CurrentSchemaVersion}
+	if currentSchema < 2 {
+		m, err := migration.MigrateToSchema2(home, opts)
+		if err != nil {
+			return cliError(stderr, structured, errCodeIOError, err.Error())
+		}
+		combined.Entries = append(combined.Entries, m.Entries...)
+		combined.Quarantined = append(combined.Quarantined, m.Quarantined...)
+		combined.MigratedAt = m.MigratedAt
+	}
+	if currentSchema < 3 {
+		m, err := migration.MigrateToSchema3(home, opts)
+		if err != nil {
+			return cliError(stderr, structured, errCodeIOError, err.Error())
+		}
+		combined.Entries = append(combined.Entries, m.Entries...)
+		combined.Quarantined = append(combined.Quarantined, m.Quarantined...)
+		if combined.MigratedAt == "" {
+			combined.MigratedAt = m.MigratedAt
+		}
 	}
 
-	return printMigrateResult(stdout, format, dryRun, m)
+	return printMigrateResult(stdout, format, dryRun, combined)
 }
 
 func printMigrateNoOp(stdout io.Writer, format string, schemaVersion int) error {
@@ -93,7 +108,7 @@ func printMigrateResult(stdout io.Writer, format string, dryRun bool, m *migrati
 	if dryRun {
 		verb = "would migrate"
 	}
-	_, _ = fmt.Fprintf(stdout, "Schema 1 → 2: %s %d entries", verb, len(m.Entries))
+	_, _ = fmt.Fprintf(stdout, "Schema → %d: %s %d entries", m.SchemaVersion, verb, len(m.Entries))
 	if len(m.Quarantined) > 0 {
 		_, _ = fmt.Fprintf(stdout, " (%d quarantined)", len(m.Quarantined))
 	}
@@ -145,13 +160,22 @@ func autoMigrate() error {
 	if _, err := os.Stat(home); os.IsNotExist(err) {
 		return nil
 	}
-	if migration.ReadSchemaVersion(home) >= migration.CurrentSchemaVersion {
+	current := migration.ReadSchemaVersion(home)
+	if current >= migration.CurrentSchemaVersion {
 		return nil
 	}
 	// Fail-loud default: any broken entry aborts. The user runs
 	// `ynh migrate --skip-broken` themselves to quarantine and continue.
-	if _, err := migration.MigrateToSchema2(home, migration.MigrateOpts{}); err != nil {
-		return fmt.Errorf("auto-migration failed: %w", err)
+	opts := migration.MigrateOpts{}
+	if current < 2 {
+		if _, err := migration.MigrateToSchema2(home, opts); err != nil {
+			return fmt.Errorf("auto-migration to schema 2 failed: %w", err)
+		}
+	}
+	if migration.ReadSchemaVersion(home) < 3 {
+		if _, err := migration.MigrateToSchema3(home, opts); err != nil {
+			return fmt.Errorf("auto-migration to schema 3 failed: %w", err)
+		}
 	}
 	return nil
 }
