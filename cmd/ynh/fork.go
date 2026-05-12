@@ -164,6 +164,16 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 			fmt.Sprintf("copying harness: %v", copyErr))
 	}
 
+	// The copied tree may carry the source harness's installed.json
+	// (e.g. a tree-form install of "registry" type). Strip it: the fork's
+	// provenance lives on the pointer file from schema 3 onward, not in
+	// the user's source tree. Tolerate absence.
+	if err := os.Remove(filepath.Join(absDestDir, plugin.PluginDir, plugin.InstalledFile)); err != nil && !os.IsNotExist(err) {
+		_ = os.RemoveAll(absDestDir)
+		return cliError(stderr, structured, errCodeIOError,
+			fmt.Sprintf("stripping inherited installed.json: %v", err))
+	}
+
 	// Rewrite plugin.json's name field when --name was given. Required
 	// for identity coherence: Load(installName) returns a Harness whose
 	// p.Name must equal installName, otherwise downstream code (run dirs,
@@ -187,31 +197,23 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 	// Build forked_from from source provenance
 	ff := buildForkedFrom(p)
 
-	// Write installed.json marking this as a local fork
-	ins := &plugin.InstalledJSON{
+	// Register the fork via a pointer file. The pointer carries the full
+	// provenance record — source_type, source path, installed_at,
+	// forked_from — so the user's source tree stays free of ynh metadata.
+	// (Pre-schema-3 ynh fork wrote a .ynh-plugin/installed.json into the
+	// source tree; the schema-3 migration absorbs any leftover ones.)
+	ins := plugin.InstalledJSON{
 		SourceType:  "local",
 		Source:      absDestDir,
 		InstalledAt: time.Now().UTC().Format(time.RFC3339),
 		ForkedFrom:  ff,
 	}
-	if saveErr := plugin.SaveInstalledJSON(absDestDir, ins); saveErr != nil {
-		_ = os.RemoveAll(absDestDir)
-		return cliError(stderr, structured, errCodeIOError,
-			fmt.Sprintf("saving provenance: %v", saveErr))
-	}
-
-	// Register the fork in the YNH layer via a pointer file so subsequent
-	// ynh run / ls / info resolve to absDestDir directly — no copy under
-	// ~/.ynh/harnesses.
 	ptr := &harness.Pointer{
-		Name: installName,
-		InstalledJSON: plugin.InstalledJSON{
-			SourceType:  "local",
-			Source:      absDestDir,
-			InstalledAt: ins.InstalledAt,
-		},
+		ID:            forkID,
+		Name:          installName,
+		InstalledJSON: ins,
 	}
-	if err := harness.SavePointer(ptr); err != nil {
+	if err := harness.SavePointerByID(ptr); err != nil {
 		_ = os.RemoveAll(absDestDir)
 		return cliError(stderr, structured, errCodeIOError,
 			fmt.Sprintf("registering fork: %v", err))
@@ -223,9 +225,8 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 	// bare-name refs at the resolver, so the launcher must pass the id.
 	// Skip for the reserved "ynh" name to avoid shadowing the binary.
 	if installName != "ynh" {
-		forkID := "local/" + installName
 		if err := generateLauncher(installName, forkID); err != nil {
-			_ = harness.RemovePointer(installName)
+			_ = harness.RemovePointerByID(forkID)
 			_ = os.RemoveAll(absDestDir)
 			return cliError(stderr, structured, errCodeIOError,
 				fmt.Sprintf("generating launcher: %v", err))

@@ -149,12 +149,12 @@ func TestCmdFork_NamespacedInstall(t *testing.T) {
 		t.Errorf("plugin.json not found in dest: %v", err)
 	}
 
-	ins, err := plugin.LoadInstalledJSON(dest)
-	if err != nil {
-		t.Fatalf("LoadInstalledJSON: %v", err)
+	ptr, err := harness.LoadPointerByID("local/researcher")
+	if err != nil || ptr == nil {
+		t.Fatalf("LoadPointerByID: ptr=%v err=%v", ptr, err)
 	}
-	if ins.ForkedFrom == nil || ins.ForkedFrom.RegistryName != "eyelock-assistants" {
-		t.Errorf("forked_from registry not preserved: %+v", ins.ForkedFrom)
+	if ptr.ForkedFrom == nil || ptr.ForkedFrom.RegistryName != "eyelock-assistants" {
+		t.Errorf("forked_from registry not preserved: %+v", ptr.ForkedFrom)
 	}
 }
 
@@ -186,27 +186,33 @@ func TestCmdFork_ForkedFromPopulated(t *testing.T) {
 		t.Fatalf("cmdForkTo: %v", err)
 	}
 
-	ins, err := plugin.LoadInstalledJSON(dest)
-	if err != nil {
-		t.Fatalf("LoadInstalledJSON: %v", err)
+	// Provenance lives on the pointer (schema 3+), not in the source tree.
+	ptr, err := harness.LoadPointerByID("local/demo")
+	if err != nil || ptr == nil {
+		t.Fatalf("LoadPointerByID: ptr=%v err=%v", ptr, err)
 	}
-	if ins.SourceType != "local" {
-		t.Errorf("source_type = %q, want local", ins.SourceType)
+	if ptr.SourceType != "local" {
+		t.Errorf("source_type = %q, want local", ptr.SourceType)
 	}
-	if ins.ForkedFrom == nil {
+	if ptr.ForkedFrom == nil {
 		t.Fatal("forked_from is nil")
 	}
-	if ins.ForkedFrom.SourceType != "registry" {
-		t.Errorf("forked_from.source_type = %q, want registry", ins.ForkedFrom.SourceType)
+	if ptr.ForkedFrom.SourceType != "registry" {
+		t.Errorf("forked_from.source_type = %q, want registry", ptr.ForkedFrom.SourceType)
 	}
-	if ins.ForkedFrom.Source != "github.com/org/demo" {
-		t.Errorf("forked_from.source = %q, want github.com/org/demo", ins.ForkedFrom.Source)
+	if ptr.ForkedFrom.Source != "github.com/org/demo" {
+		t.Errorf("forked_from.source = %q, want github.com/org/demo", ptr.ForkedFrom.Source)
 	}
-	if ins.ForkedFrom.SHA != "deadbeef" {
-		t.Errorf("forked_from.sha = %q, want deadbeef", ins.ForkedFrom.SHA)
+	if ptr.ForkedFrom.SHA != "deadbeef" {
+		t.Errorf("forked_from.sha = %q, want deadbeef", ptr.ForkedFrom.SHA)
 	}
-	if ins.ForkedFrom.RegistryName != "org-registry" {
-		t.Errorf("forked_from.registry_name = %q, want org-registry", ins.ForkedFrom.RegistryName)
+	if ptr.ForkedFrom.RegistryName != "org-registry" {
+		t.Errorf("forked_from.registry_name = %q, want org-registry", ptr.ForkedFrom.RegistryName)
+	}
+
+	// User's source tree must not carry ynh-owned provenance.
+	if _, err := os.Stat(filepath.Join(dest, plugin.PluginDir, plugin.InstalledFile)); !os.IsNotExist(err) {
+		t.Errorf("installed.json should not exist in source tree: err=%v", err)
 	}
 }
 
@@ -221,15 +227,15 @@ func TestCmdFork_ForkedFromLocalFallback(t *testing.T) {
 		t.Fatalf("cmdForkTo: %v", err)
 	}
 
-	ins, err := plugin.LoadInstalledJSON(dest)
-	if err != nil {
-		t.Fatalf("LoadInstalledJSON: %v", err)
+	ptr, err := harness.LoadPointerByID("local/demo")
+	if err != nil || ptr == nil {
+		t.Fatalf("LoadPointerByID: ptr=%v err=%v", ptr, err)
 	}
-	if ins.ForkedFrom == nil {
+	if ptr.ForkedFrom == nil {
 		t.Fatal("forked_from is nil")
 	}
-	if ins.ForkedFrom.SourceType != "local" {
-		t.Errorf("forked_from.source_type = %q, want local", ins.ForkedFrom.SourceType)
+	if ptr.ForkedFrom.SourceType != "local" {
+		t.Errorf("forked_from.source_type = %q, want local", ptr.ForkedFrom.SourceType)
 	}
 }
 
@@ -334,10 +340,10 @@ func TestCmdFork_WritesPointerAndLauncher(t *testing.T) {
 		t.Fatalf("cmdForkTo: %v", err)
 	}
 
-	// Pointer file written under ~/.ynh/installed/demo.json
-	ptr, err := harness.LoadPointer("demo")
+	// Pointer file written under ~/.ynh/installed/local--demo.json
+	ptr, err := harness.LoadPointerByID("local/demo")
 	if err != nil {
-		t.Fatalf("LoadPointer: %v", err)
+		t.Fatalf("LoadPointerByID: %v", err)
 	}
 	if ptr == nil {
 		t.Fatal("pointer not written")
@@ -419,16 +425,16 @@ func TestCmdUninstall_PointerRemovesPointerNotSource(t *testing.T) {
 		t.Fatalf("fork: %v", err)
 	}
 
-	// cmdUninstall by bare name routes through the pointer-first path
-	// (LoadPointer), so the source tree at the schema-2 install location
-	// is preserved — the test contract is that uninstalling a forked
-	// pointer removes the registration, not the user-owned source.
-	if err := cmdUninstall([]string{"demo"}); err != nil {
+	// cmdUninstall by canonical id routes through the pointer-first path;
+	// the source tree under the user's chosen path is preserved — the test
+	// contract is that uninstalling a forked pointer removes the
+	// registration, not the user-owned source.
+	if err := cmdUninstall([]string{"local/demo"}); err != nil {
 		t.Fatalf("uninstall: %v", err)
 	}
 
-	// Pointer gone
-	if ptr, _ := harness.LoadPointer("demo"); ptr != nil {
+	// Pointer gone (schema-2 id-keyed, which is what fork now writes)
+	if ptr, _ := harness.LoadPointerByID("local/demo"); ptr != nil {
 		t.Errorf("pointer still present after uninstall: %+v", ptr)
 	}
 	// Source tree preserved
@@ -464,11 +470,11 @@ func TestCmdFork_WithName(t *testing.T) {
 	}
 
 	// Pointer registered under the new name, source unchanged
-	ptr, err := harness.LoadPointer("my-demo")
+	ptr, err := harness.LoadPointerByID("local/my-demo")
 	if err != nil || ptr == nil {
 		t.Fatalf("pointer for new name not written: %v", err)
 	}
-	if old, _ := harness.LoadPointer("demo"); old != nil {
+	if old, _ := harness.LoadPointerByID("local/demo"); old != nil {
 		t.Errorf("pointer under source name should not exist: %+v", old)
 	}
 
@@ -493,11 +499,7 @@ func TestCmdFork_WithName(t *testing.T) {
 	}
 
 	// forked_from preserved (provenance of the upstream identity)
-	ins, err := plugin.LoadInstalledJSON(dest)
-	if err != nil {
-		t.Fatalf("LoadInstalledJSON: %v", err)
-	}
-	if ins.ForkedFrom == nil {
+	if ptr.ForkedFrom == nil {
 		t.Error("forked_from should be populated")
 	}
 }
