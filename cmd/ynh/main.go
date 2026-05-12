@@ -83,6 +83,10 @@ func main() {
 		err = cmdFocus(os.Args[2:])
 	case "profile":
 		err = cmdProfile(os.Args[2:])
+	case "hook":
+		err = cmdHook(os.Args[2:])
+	case "mcp":
+		err = cmdMCP(os.Args[2:])
 	case "sensors":
 		err = cmdSensors(os.Args[2:])
 	case "agent":
@@ -156,6 +160,11 @@ Commands:
   profile include add <harness> <profile> <url> [flags]     Add a Git include to a profile
   profile include remove <harness> <profile> <url>          Remove a profile include
   profile include update <harness> <profile> <url> [flags]  Update a profile include
+  hook add <harness> <event> <command> [--matcher <pattern>] Add a top-level hook
+  hook remove <harness> <event> <index>                     Remove a top-level hook by index
+  mcp add <harness> <name> [flags]                          Add a top-level MCP server
+  mcp remove <harness> <name>                               Remove a top-level MCP server
+  mcp update <harness> <name> [flags]                       Update a top-level MCP server
   sensors ls <harness>         List declared sensors (supports --format json)
   sensors show <harness> <name>  Resolve a sensor declaration (supports --format text|json)
   sensors run <harness> <name>   Run a sensor and emit a JSON result (loop drivers consume this)

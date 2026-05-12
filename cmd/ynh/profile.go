@@ -102,7 +102,7 @@ func cmdProfileHook(args []string, stdout io.Writer) error {
 }
 
 func cmdProfileHookAdd(args []string, stdout io.Writer) error {
-	var opts harness.ProfileHookAddOptions
+	var opts harness.HookAddOptions
 	var positional []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -289,7 +289,7 @@ func cmdProfileMCPRemove(args []string, stdout io.Writer) error {
 }
 
 func cmdProfileMCPUpdate(args []string, stdout io.Writer) error {
-	var opts harness.ProfileMCPUpdateOptions
+	var opts harness.MCPUpdateOptions
 	var positional []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {

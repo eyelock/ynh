@@ -669,15 +669,62 @@ func RemoveProfile(dir, name string) error {
 	return plugin.SavePluginJSON(dir, hj)
 }
 
-// ---- profile hooks --------------------------------------------------
+// ---- hooks (harness + profile) -------------------------------------
 
-// ProfileHookAddOptions controls ynh profile hook add behaviour.
-type ProfileHookAddOptions struct {
+// HookAddOptions controls hook-add behaviour. Shared by harness-level
+// (AddHook) and profile-level (AddProfileHook) since the field set is
+// identical — only the storage scope differs.
+type HookAddOptions struct {
 	Matcher string
 }
 
+// AddHook appends a hook entry to a top-level event on the harness.
+func AddHook(dir, event, command string, opts HookAddOptions) error {
+	if !plugin.ValidHookEvents[event] {
+		return fmt.Errorf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop)", event)
+	}
+	if command == "" {
+		return fmt.Errorf("hook command must not be empty")
+	}
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	if hj.Hooks == nil {
+		hj.Hooks = make(map[string][]plugin.HookEntry)
+	}
+	hj.Hooks[event] = append(hj.Hooks[event], plugin.HookEntry{Matcher: opts.Matcher, Command: command})
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// RemoveHook removes a single top-level hook entry by zero-based index.
+// When the last entry for an event is removed, the event key is also deleted.
+func RemoveHook(dir, event string, index int) error {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	entries, ok := hj.Hooks[event]
+	if !ok {
+		return fmt.Errorf("harness %q has no hooks for event %q", hj.Name, event)
+	}
+	if index < 0 || index >= len(entries) {
+		return fmt.Errorf("hook index %d out of range [0, %d) for event %q in harness %q", index, len(entries), event, hj.Name)
+	}
+	entries = append(entries[:index], entries[index+1:]...)
+	if len(entries) == 0 {
+		delete(hj.Hooks, event)
+	} else {
+		hj.Hooks[event] = entries
+	}
+	if len(hj.Hooks) == 0 {
+		hj.Hooks = nil
+	}
+	return plugin.SavePluginJSON(dir, hj)
+}
+
 // AddProfileHook appends a hook entry to an event in a profile.
-func AddProfileHook(dir, profileName, event, command string, opts ProfileHookAddOptions) error {
+func AddProfileHook(dir, profileName, event, command string, opts HookAddOptions) error {
 	if !plugin.ValidHookEvents[event] {
 		return fmt.Errorf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop)", event)
 	}
@@ -731,21 +778,24 @@ func RemoveProfileHook(dir, profileName, event string, index int) error {
 	return plugin.SavePluginJSON(dir, hj)
 }
 
-// ---- profile mcp ----------------------------------------------------
+// ---- mcp (harness + profile) ---------------------------------------
 
-// ProfileMCPAddOptions controls ynh profile mcp add behaviour.
-type ProfileMCPAddOptions struct {
+// MCPAddOptions controls ynh mcp add behaviour (harness-level). The
+// profile-level variant adds a Null flag (see ProfileMCPAddOptions);
+// harness-level entries can't be null — there's nothing to inherit from.
+type MCPAddOptions struct {
 	Command string
 	Args    []string
 	Env     map[string]string
 	URL     string
 	Headers map[string]string
-	Null    bool // explicitly remove an inherited server (null JSON entry)
 }
 
-// ProfileMCPUpdateOptions controls ynh profile mcp update behaviour.
-// Pointer fields and Set* booleans disambiguate "not provided" from "empty".
-type ProfileMCPUpdateOptions struct {
+// MCPUpdateOptions controls mcp update behaviour. Shared by harness-level
+// (UpdateMCP) and profile-level (UpdateProfileMCP) since the update
+// semantics are identical — pointer fields and Set* booleans disambiguate
+// "not provided" from "empty" in both scopes.
+type MCPUpdateOptions struct {
 	Command    *string
 	Args       []string
 	SetArgs    bool
@@ -754,6 +804,103 @@ type ProfileMCPUpdateOptions struct {
 	URL        *string
 	Headers    map[string]string
 	SetHeaders bool
+}
+
+// ProfileMCPAddOptions controls ynh profile mcp add behaviour. Adds the
+// Null flag to MCPAddOptions for explicitly suppressing an inherited
+// harness-level server during merge.
+type ProfileMCPAddOptions struct {
+	Command string
+	Args    []string
+	Env     map[string]string
+	URL     string
+	Headers map[string]string
+	Null    bool
+}
+
+// AddMCP adds a new top-level MCP server entry to the harness.
+func AddMCP(dir, serverName string, opts MCPAddOptions) error {
+	if serverName == "" {
+		return fmt.Errorf("mcp server name must not be empty")
+	}
+	if opts.Command == "" && opts.URL == "" {
+		return fmt.Errorf("mcp add requires --command or --url")
+	}
+	if opts.Command != "" && opts.URL != "" {
+		return fmt.Errorf("mcp add cannot have both --command and --url")
+	}
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	if _, exists := hj.MCPServers[serverName]; exists {
+		return fmt.Errorf("mcp server %q already present in harness %q.\nUse 'ynh mcp update' to change it", serverName, hj.Name)
+	}
+	if hj.MCPServers == nil {
+		hj.MCPServers = make(map[string]plugin.MCPServer)
+	}
+	hj.MCPServers[serverName] = plugin.MCPServer{
+		Command: opts.Command,
+		Args:    opts.Args,
+		Env:     opts.Env,
+		URL:     opts.URL,
+		Headers: opts.Headers,
+	}
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// RemoveMCP deletes a top-level MCP server entry from the harness.
+func RemoveMCP(dir, serverName string) error {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	if _, exists := hj.MCPServers[serverName]; !exists {
+		return fmt.Errorf("mcp server %q not found in harness %q", serverName, hj.Name)
+	}
+	delete(hj.MCPServers, serverName)
+	if len(hj.MCPServers) == 0 {
+		hj.MCPServers = nil
+	}
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// UpdateMCP mutates fields on an existing top-level MCP server.
+func UpdateMCP(dir, serverName string, opts MCPUpdateOptions) error {
+	if opts.Command == nil && !opts.SetArgs && !opts.SetEnv && opts.URL == nil && !opts.SetHeaders {
+		return fmt.Errorf("ynh mcp update: at least one flag must be specified")
+	}
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	srv, exists := hj.MCPServers[serverName]
+	if !exists {
+		return fmt.Errorf("mcp server %q not found in harness %q", serverName, hj.Name)
+	}
+	if opts.Command != nil {
+		srv.Command = *opts.Command
+	}
+	if opts.SetArgs {
+		srv.Args = opts.Args
+	}
+	if opts.SetEnv {
+		srv.Env = opts.Env
+	}
+	if opts.URL != nil {
+		srv.URL = *opts.URL
+	}
+	if opts.SetHeaders {
+		srv.Headers = opts.Headers
+	}
+	if srv.Command == "" && srv.URL == "" {
+		return fmt.Errorf("mcp server %q must have either command or url after update", serverName)
+	}
+	if srv.Command != "" && srv.URL != "" {
+		return fmt.Errorf("mcp server %q cannot have both command and url after update", serverName)
+	}
+	hj.MCPServers[serverName] = srv
+	return plugin.SavePluginJSON(dir, hj)
 }
 
 // AddProfileMCP adds a new MCP server entry to a profile.
@@ -828,7 +975,7 @@ func RemoveProfileMCP(dir, profileName, serverName string) error {
 
 // UpdateProfileMCP mutates fields on an existing MCP server in a profile.
 // Null entries cannot be updated — remove and re-add instead.
-func UpdateProfileMCP(dir, profileName, serverName string, opts ProfileMCPUpdateOptions) error {
+func UpdateProfileMCP(dir, profileName, serverName string, opts MCPUpdateOptions) error {
 	if opts.Command == nil && !opts.SetArgs && !opts.SetEnv && opts.URL == nil && !opts.SetHeaders {
 		return fmt.Errorf("ynh profile mcp update: at least one flag must be specified")
 	}
