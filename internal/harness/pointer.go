@@ -204,22 +204,23 @@ var ErrPointerSourceMissing = errors.New("pointer source path missing")
 // After migration, the pointer carries the full record and the source
 // tree is free of ynh metadata.
 func loadFromPointer(ptr *Pointer) (*Harness, error) {
-	if _, err := os.Stat(ptr.Source); err != nil {
+	ins := ptr.InstalledJSON
+	loadDir := localLoadDir(&ins)
+	if _, err := os.Stat(loadDir); err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf(
 				"harness %q is registered but its source path no longer exists:\n"+
 					"  %s\n\n"+
 					"If you moved it, restore the directory.\n"+
 					"If it's gone for good, run: ynh uninstall %s",
-				ptr.Name, ptr.Source, ptr.Name)
+				ptr.Name, loadDir, ptr.Name)
 		}
-		return nil, fmt.Errorf("stat pointer source %s: %w", ptr.Source, err)
+		return nil, fmt.Errorf("stat pointer source %s: %w", loadDir, err)
 	}
-	ins := ptr.InstalledJSON
 	if len(ins.Resolved) == 0 && ins.ForkedFrom == nil {
-		if disk, err := plugin.LoadInstalledJSON(ptr.Source); err == nil && disk != nil {
+		if disk, err := plugin.LoadInstalledJSON(loadDir); err == nil && disk != nil {
 			ins = *disk
 		}
 	}
-	return loadDirWithProvenance(ptr.Source, &ins)
+	return loadDirWithProvenance(loadDir, &ins)
 }

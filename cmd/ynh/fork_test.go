@@ -587,16 +587,17 @@ func TestCmdInstall_PreservesForkedFrom(t *testing.T) {
 		t.Fatalf("cmdInstall: %v", err)
 	}
 
-	installDir := harness.InstalledDirByID("local/myfork")
-	_ = home // home no longer needed; install path is keyed by canonical id
-	ins, err := plugin.LoadInstalledJSON(installDir)
-	if err != nil {
-		t.Fatalf("LoadInstalledJSON after install: %v", err)
+	// Pointer-form (local) install: the provenance — including forked_from
+	// — lives on the pointer file, not in the source tree.
+	_ = home
+	ptr, err := harness.LoadPointerByID("local/myfork")
+	if err != nil || ptr == nil {
+		t.Fatalf("LoadPointerByID after install: ptr=%v err=%v", ptr, err)
 	}
-	if ins.ForkedFrom == nil {
+	if ptr.ForkedFrom == nil {
 		t.Fatal("forked_from not preserved after ynh install")
 	}
-	if ins.ForkedFrom.Source != "github.com/example/upstream" {
-		t.Errorf("forked_from.source = %q, want github.com/example/upstream", ins.ForkedFrom.Source)
+	if ptr.ForkedFrom.Source != "github.com/example/upstream" {
+		t.Errorf("forked_from.source = %q, want github.com/example/upstream", ptr.ForkedFrom.Source)
 	}
 }

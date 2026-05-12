@@ -128,11 +128,19 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 			fmt.Sprintf("destination already exists: %s", absDestDir))
 	}
 
-	// Clash check: refuse to register if an install already claims this name —
-	// either a pointer file or a flat tree at ~/.ynh/harnesses/<installName>/.
-	// Installs under a different canonical id (different namespace) are fine.
-	// Same rule ynh install uses, applied at registration time.
+	// Clash check: refuse to register if an install already claims this name
+	// via a pointer (schema-1 name-keyed or schema-2 id-keyed) or a schema-1
+	// flat tree at HarnessesDir/<installName>. Schema-2 id-keyed trees at
+	// HarnessesDir/local--<installName> are intentionally NOT clashed: that
+	// is the canonical shape of the install being forked from when forking
+	// without --name. Installs under a different canonical id (different
+	// namespace) are always fine.
+	forkID := "local/" + installName
 	if existing, err := harness.LoadPointer(installName); err == nil && existing != nil {
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("harness %q is already installed (registered at %s)", installName, existing.Source))
+	}
+	if existing, err := harness.LoadPointerByID(forkID); err == nil && existing != nil {
 		return cliError(stderr, structured, errCodeInvalidInput,
 			fmt.Sprintf("harness %q is already installed (registered at %s)", installName, existing.Source))
 	}

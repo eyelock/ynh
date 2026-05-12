@@ -922,10 +922,18 @@ func TestCmdInstall_PathFlag(t *testing.T) {
 		t.Fatalf("cmdInstall with --path failed: %v", err)
 	}
 
-	// Verify harness was installed (format migrated to .ynh-plugin/plugin.json)
-	installDir := harness.InstalledDirByID("local/alice")
-	if harness.DetectFormat(installDir) == "" {
-		t.Fatal("harness not found after install")
+	// Pointer-form (local) install: verify the pointer was written and
+	// that it loads back to the source tree with the format migrated in
+	// place. No content copy under HarnessesDir exists for local installs.
+	h, err := harness.LoadByID("local/alice")
+	if err != nil {
+		t.Fatalf("LoadByID after install: %v", err)
+	}
+	if h.Name != "alice" {
+		t.Errorf("loaded harness name = %q, want alice", h.Name)
+	}
+	if harness.DetectFormat(aliceDir) != "plugin" {
+		t.Fatal("format migration did not run on source tree")
 	}
 }
 

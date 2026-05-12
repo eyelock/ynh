@@ -1,6 +1,10 @@
 package harness
 
-import "github.com/eyelock/ynh/internal/plugin"
+import (
+	"path/filepath"
+
+	"github.com/eyelock/ynh/internal/plugin"
+)
 
 // Install topologies
 //
@@ -37,6 +41,21 @@ import "github.com/eyelock/ynh/internal/plugin"
 // true for pointer-form, false for tree-form. Every code path that
 // needs to choose between "consult the user's source tree" and "consult
 // the install copy" routes through it.
+
+// localLoadDir returns the on-disk directory holding a pointer-form
+// install's content: ins.Source joined with ins.Path. The join handles
+// installs created with --path (where the harness lives in a subdir of
+// the user's repo); for installs at the source root, Path is empty and
+// the join is a no-op.
+func localLoadDir(ins *plugin.InstalledJSON) string {
+	if ins == nil {
+		return ""
+	}
+	if ins.Path == "" {
+		return ins.Source
+	}
+	return filepath.Join(ins.Source, ins.Path)
+}
 
 // IsLocalSource reports whether the installed.json record describes a
 // pointer-form install — one whose content lives in a user-owned source

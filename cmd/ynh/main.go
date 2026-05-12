@@ -402,26 +402,50 @@ func cmdInstall(args []string) error {
 	canonID := namespace.CanonicalID(sourceForID, p.Name)
 	installDir := harness.InstalledDirByID(canonID)
 
-	// If source == install dir, skip the clean+copy (already in place).
-	// Otherwise remove stale artifacts and copy fresh.
-	absSrc, srcErr := filepath.Abs(srcDir)
-	absInstall, instErr := filepath.Abs(installDir)
-	alreadyInstalled := srcErr == nil && instErr == nil && absSrc == absInstall
-	if !alreadyInstalled {
-		if err := os.RemoveAll(installDir); err != nil {
-			return fmt.Errorf("cleaning install dir: %w", err)
-		}
-		if err := os.MkdirAll(installDir, 0o755); err != nil {
-			return fmt.Errorf("creating install directory: %w", err)
-		}
-		if err := assembler.CopyDir(srcDir, installDir); err != nil {
-			return fmt.Errorf("copying harness to install directory: %w", err)
-		}
-	}
+	// Topology branch (see internal/harness/topology.go). Pointer-form
+	// installs (local path, sources: lookup) leave content in the user's
+	// source tree — no copy. Tree-form installs (git, registry) copy
+	// content into installDir as before.
+	isLocal := resolved.sourceType == "local" || resolved.sourceType == "source"
 
-	// Migrate format if needed (converts .harness.json → .ynh-plugin/plugin.json)
-	if _, err := migration.FormatChain().Run(installDir); err != nil {
-		return fmt.Errorf("migrating installed harness format: %w", err)
+	if isLocal {
+		// Pre-schema-3 binaries left a copy dir at installDir for the
+		// same canonical id; remove it so reads land on the source tree.
+		// Skip when the user pointed install at the install dir itself
+		// (rare but possible — e.g. browsing an already-installed copy)
+		// since removing it would delete the source we're about to use.
+		absSrc, srcErr := filepath.Abs(srcDir)
+		absInstall, instErr := filepath.Abs(installDir)
+		if srcErr == nil && instErr == nil && absSrc != absInstall {
+			if err := os.RemoveAll(installDir); err != nil {
+				return fmt.Errorf("cleaning stale install copy: %w", err)
+			}
+		}
+		// Run the format migration against the source tree so the
+		// include/delegate pre-fetch below sees the new plugin.json layout.
+		if _, err := migration.FormatChain().Run(srcDir); err != nil {
+			return fmt.Errorf("migrating source harness format: %w", err)
+		}
+	} else {
+		// If source == install dir, skip the clean+copy (already in place).
+		// Otherwise remove stale artifacts and copy fresh.
+		absSrc, srcErr := filepath.Abs(srcDir)
+		absInstall, instErr := filepath.Abs(installDir)
+		alreadyInstalled := srcErr == nil && instErr == nil && absSrc == absInstall
+		if !alreadyInstalled {
+			if err := os.RemoveAll(installDir); err != nil {
+				return fmt.Errorf("cleaning install dir: %w", err)
+			}
+			if err := os.MkdirAll(installDir, 0o755); err != nil {
+				return fmt.Errorf("creating install directory: %w", err)
+			}
+			if err := assembler.CopyDir(srcDir, installDir); err != nil {
+				return fmt.Errorf("copying harness to install directory: %w", err)
+			}
+		}
+		if _, err := migration.FormatChain().Run(installDir); err != nil {
+			return fmt.Errorf("migrating installed harness format: %w", err)
+		}
 	}
 
 	// Write install provenance to .ynh-plugin/installed.json (separate from plugin.json)
@@ -506,8 +530,26 @@ func cmdInstall(args []string) error {
 		fmt.Printf("  Fetched %s\n", resolver.ShortGitURL(del.Git))
 	}
 
-	if err := plugin.SaveInstalledJSON(installDir, ins); err != nil {
-		return fmt.Errorf("saving provenance: %w", err)
+	if isLocal {
+		// Pointer-form: the install record lives in PointersDir, never in
+		// the user's source tree — the source stays free of ynh metadata.
+		// Drop any stale id-keyed pointer from a prior install of the same
+		// canonical id pointing at a different path.
+		if err := harness.RemovePointerByID(canonID); err != nil {
+			return fmt.Errorf("removing stale pointer: %w", err)
+		}
+		ptr := &harness.Pointer{
+			ID:            canonID,
+			Name:          p.Name,
+			InstalledJSON: *ins,
+		}
+		if err := harness.SavePointerByID(ptr); err != nil {
+			return fmt.Errorf("saving pointer: %w", err)
+		}
+	} else {
+		if err := plugin.SaveInstalledJSON(installDir, ins); err != nil {
+			return fmt.Errorf("saving provenance: %w", err)
+		}
 	}
 
 	// Generate launcher script (skip for reserved names that conflict with the binary)
@@ -527,7 +569,13 @@ func cmdInstall(args []string) error {
 	}
 
 	fmt.Printf("Installed harness %q\n", p.Name)
-	fmt.Printf("  Location: %s\n", installDir)
+	locationDir := installDir
+	if isLocal {
+		// Pointer-form: report the user's source tree, which is where
+		// edits and ynh run both land.
+		locationDir = srcDir
+	}
+	fmt.Printf("  Location: %s\n", locationDir)
 	if reservedName {
 		fmt.Printf("  Launcher: (skipped — conflicts with ynh binary, use \"ynh run %s\")\n", p.Name)
 	} else {
