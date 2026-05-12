@@ -123,13 +123,28 @@ Canonical ids contain `/`, which is not a filesystem-safe character. The transli
 - `local/` — installs that have no remote source (local paths, forks, `--url` aliases). The fork command defaults `--as` to `local/<source-name>`. The CLI accepts `local/<name>` as an id but **rejects it as an install source** (`ynh install local/foo` is an error pointing at "use a filesystem path").
 - `<host-with-dot>/<...>` — registry / Git-URL-derived ids. The host segment must contain a `.` (else it's not a real hostname); the next two segments are org and repo.
 
+### Install topologies
+
+An installed harness lives on disk in one of two shapes. The shape is chosen at install time from the source kind, recorded in `installed.json.source_type`, and is the single source of truth for both reads (LoadByID) and writes (ResolveEditTarget) — they always resolve to the same directory, so the include/delegate edits a user makes are always visible to `ynh run`.
+
+| Topology | `source_type` | Created by | On-disk shape | Reads & writes go to |
+|---|---|---|---|---|
+| **Pointer-form** | `local`, `source` | `ynh install /path`, `ynh install <name>` (sources: entry), `ynh fork` | A single pointer file at `~/.ynh/installed/<id-fsname>.json` carrying both the registration (id, name) and the full provenance (ref, sha, path, namespace, registry_name, forked_from, resolved). No content is copied. | The user's source tree at `installed.json.source`. |
+| **Tree-form** | `git`, `registry` | `ynh install <git-url>`, `ynh install <name>` (registry) | Content copy at `~/.ynh/harnesses/<id-fsname>/` plus a sibling `.ynh-plugin/installed.json` with the provenance. | The copy under HarnessesDir. |
+
+The single classifier `harness.IsLocalSource(ins *plugin.InstalledJSON)` discriminates the two — every code path that needs to choose "consult the user's source tree" vs "consult the install copy" routes through it. See `internal/harness/topology.go`.
+
+**Why two topologies, not one:** remote installs need a local copy (we can't run `ynh run` if the network is down); local installs already have a local copy (the user's working tree), and any second copy is just drift waiting to happen. The split keeps remote installs self-contained while keeping local installs honest about where the canonical source is.
+
+**Why no `installed.json` in the user's source tree:** for pointer-form installs, the provenance record is ynh-owned state — it has no business being in the user's git repository. The pointer file is the home for that data. Prior schemas left a `.ynh-plugin/installed.json` in the source tree; the schema-3 migration absorbs and removes it.
+
 ### Schema version contract
 
-`~/.ynh/.schema-version` records the on-disk format version. Absent file means **schema 1** (legacy / pre-migration). Content `2` means migrated.
+`~/.ynh/.schema-version` records the on-disk format version. Absent file means **schema 1** (legacy / pre-migration). Content `2` means canonical-id layout. Content `3` means pointer-form local installs (see above).
 
 The `ynh ls` and `ynh info` JSON envelopes carry `schema_version` as a **dynamic** field (read from disk via `migration.ReadSchemaVersion(home)`, not the static `config.SchemaVersion` constant). Consumers like TermQ gate their behaviour on this — never on `capabilities`, which is a separate wire-contract version.
 
-**When bumping the schema version:** add a new migration step in `internal/migration/canonicalid.go` (or a sibling file), bump `migration.CurrentSchemaVersion`, write tests for the legacy → new round-trip. The auto-migration gate runs on first invocation against a stale home; do not accept stale-home reads anywhere else.
+**When bumping the schema version:** add a new migration step in `internal/migration/` (one file per schema version — see `local_install_collapse.go` for the schema-3 example), make it write the literal new version at the end of its work (not `CurrentSchemaVersion` — that constant moves), bump `migration.CurrentSchemaVersion`, chain it into `autoMigrate` and `cmdMigrateTo` so a home at any older schema migrates through every step in order, and write tests for both the legacy → new round-trip and idempotent re-runs. The auto-migration gate runs on first invocation against a stale home; do not accept stale-home reads anywhere else.
 
 ## Versioning & Identifiers
 

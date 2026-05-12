@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
@@ -285,6 +286,86 @@ func TestCmdIncludeUpdate_FromPath(t *testing.T) {
 	}
 	if refByPath["a"] != "v2" || refByPath["b"] != "v1" {
 		t.Errorf("unexpected includes after from-path update: %+v", incs)
+	}
+}
+
+// ---- read/write symmetry regression ----------------------------------
+
+// TestLocalInstall_IncludeAddVisibleToLoadByID locks in the schema-3
+// contract: after ynh install /path, an include added to the install's
+// canonical id must be visible to harness.LoadByID (which is what
+// ynh run / info / agent all use). The bug this guards against is the
+// v0.3.1 read/write split where edits landed in the source tree but
+// reads came from the install copy under HarnessesDir — at this layer
+// we go straight through ResolveEditTarget / AddInclude / LoadByID to
+// pin the symmetry without touching the network (the CLI add path
+// pre-fetches remote includes, which we cover via the e2e test).
+func TestLocalInstall_IncludeAddVisibleToLoadByID(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	srcDir := t.TempDir()
+	writeIncludeTestHarness(t, srcDir, "demo")
+
+	if err := cmdInstall([]string{srcDir}); err != nil {
+		t.Fatalf("cmdInstall: %v", err)
+	}
+
+	editDir, _, err := harness.ResolveEditTarget("local/demo")
+	if err != nil {
+		t.Fatalf("ResolveEditTarget: %v", err)
+	}
+	includeURL := "https://github.com/example/inc"
+	if err := harness.AddInclude(editDir, includeURL, harness.AddOptions{Path: "x"}); err != nil {
+		t.Fatalf("AddInclude: %v", err)
+	}
+
+	h, err := harness.LoadByID("local/demo")
+	if err != nil {
+		t.Fatalf("LoadByID: %v", err)
+	}
+	if len(h.Includes) != 1 {
+		t.Fatalf("expected 1 include after add, got %d: %+v", len(h.Includes), h.Includes)
+	}
+	if h.Includes[0].Git != includeURL {
+		t.Errorf("loaded include git = %q, want %q", h.Includes[0].Git, includeURL)
+	}
+}
+
+// TestLocalInstall_DelegateAddVisibleToLoadByID mirrors the include test
+// for the delegate path — both routed through ResolveEditTarget /
+// LoadByID and so both must respect the same symmetry.
+func TestLocalInstall_DelegateAddVisibleToLoadByID(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	srcDir := t.TempDir()
+	writeIncludeTestHarness(t, srcDir, "demo")
+
+	if err := cmdInstall([]string{srcDir}); err != nil {
+		t.Fatalf("cmdInstall: %v", err)
+	}
+
+	editDir, _, err := harness.ResolveEditTarget("local/demo")
+	if err != nil {
+		t.Fatalf("ResolveEditTarget: %v", err)
+	}
+	delegateURL := "https://github.com/example/del"
+	if err := harness.AddDelegate(editDir, delegateURL, harness.DelegateAddOptions{Path: "y"}); err != nil {
+		t.Fatalf("AddDelegate: %v", err)
+	}
+
+	h, err := harness.LoadByID("local/demo")
+	if err != nil {
+		t.Fatalf("LoadByID: %v", err)
+	}
+	if len(h.DelegatesTo) != 1 {
+		t.Fatalf("expected 1 delegate after add, got %d: %+v", len(h.DelegatesTo), h.DelegatesTo)
+	}
+	if h.DelegatesTo[0].Git != delegateURL {
+		t.Errorf("loaded delegate git = %q, want %q", h.DelegatesTo[0].Git, delegateURL)
 	}
 }
 

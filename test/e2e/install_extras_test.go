@@ -30,12 +30,13 @@ func TestInstall_MigratesLegacyHarnessJson(t *testing.T) {
 
 	s.mustRunYnh(t, "install", srcDir)
 
-	// In the install dir, the legacy file must be gone and the new layout present.
-	installDir := filepath.Join(s.home, "harnesses", "local--legacy")
-	if _, err := os.Stat(filepath.Join(installDir, ".harness.json")); !os.IsNotExist(err) {
-		t.Errorf("legacy .harness.json should have been removed in install dir, err=%v", err)
+	// Schema 3: install runs the format migration against the user's
+	// source tree (no copy dir under HarnessesDir). The legacy file must
+	// be gone in srcDir, the new layout must be present there.
+	if _, err := os.Stat(filepath.Join(srcDir, ".harness.json")); !os.IsNotExist(err) {
+		t.Errorf("legacy .harness.json should have been removed in source tree, err=%v", err)
 	}
-	assertFileExists(t, filepath.Join(installDir, ".ynh-plugin", "plugin.json"))
+	assertFileExists(t, filepath.Join(srcDir, ".ynh-plugin", "plugin.json"))
 
 	// And ynh ls should see it under its declared name.
 	out, _ := s.mustRunYnh(t, "ls", "--format", "json")
@@ -66,9 +67,10 @@ func TestInstall_BareAgentsMd(t *testing.T) {
 
 	s.mustRunYnh(t, "install", srcDir)
 
-	installDir := filepath.Join(s.home, "harnesses", "local--bare-agents")
-	assertFileExists(t, filepath.Join(installDir, ".ynh-plugin", "plugin.json"))
-	assertFileExists(t, filepath.Join(installDir, "AGENTS.md"))
+	// Schema 3: synthesised plugin.json lands in the user's source tree
+	// (which IS the install), no copy under HarnessesDir.
+	assertFileExists(t, filepath.Join(srcDir, ".ynh-plugin", "plugin.json"))
+	assertFileExists(t, filepath.Join(srcDir, "AGENTS.md"))
 
 	out, _ := s.mustRunYnh(t, "ls", "--format", "json")
 	var got envelopeLs

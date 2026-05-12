@@ -62,14 +62,15 @@ func TestInstall_Local_Minimal(t *testing.T) {
 		t.Errorf("install stdout missing success line:\n%s", out)
 	}
 
-	harnessDir := filepath.Join(s.home, "harnesses", "local--minimal")
-	assertDirExists(t, harnessDir)
-	assertDirExists(t, filepath.Join(harnessDir, ".ynh-plugin"))
-	assertFileExists(t, filepath.Join(harnessDir, ".ynh-plugin", "plugin.json"))
-	assertFileExists(t, filepath.Join(harnessDir, ".ynh-plugin", "installed.json"))
+	// Schema-3 local install: no copy dir under HarnessesDir. The
+	// provenance lives on the pointer file at PointersDir/<id-fsname>.json.
+	if _, err := os.Stat(filepath.Join(s.home, "harnesses", "local--minimal")); !os.IsNotExist(err) {
+		t.Errorf("expected no copy dir for local install, got err=%v", err)
+	}
+	assertFileExists(t, filepath.Join(s.home, "installed", "local--minimal.json"))
 	assertFileExists(t, filepath.Join(s.home, "bin", "minimal"))
 
-	got := readInstalledJSON(t, harnessDir)
+	got := readInstalledRecord(t, s.home, "local/minimal")
 
 	assertEqual(t, "source_type", got.SourceType, "local")
 	assertEqual(t, "source", got.Source, fixturePath)
@@ -123,7 +124,7 @@ func TestInstall_FloatingInclude(t *testing.T) {
 	fixturePath := filepath.Join(clone, "e2e-fixtures", "with-floating-include")
 
 	s.mustRunYnh(t, "install", fixturePath)
-	got := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "local--with-floating-include"))
+	got := readInstalledRecord(t, s.home, "local/with-floating-include")
 
 	if len(got.Resolved) != 1 {
 		t.Fatalf("expected 1 resolved entry, got %d: %+v", len(got.Resolved), got.Resolved)
@@ -150,7 +151,7 @@ func TestInstall_PinnedInclude(t *testing.T) {
 	fixturePath := filepath.Join(clone, "e2e-fixtures", "with-pinned-include")
 
 	s.mustRunYnh(t, "install", fixturePath)
-	got := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "local--with-pinned-include"))
+	got := readInstalledRecord(t, s.home, "local/with-pinned-include")
 
 	if len(got.Resolved) != 1 {
 		t.Fatalf("expected 1 resolved entry, got %d", len(got.Resolved))
@@ -170,7 +171,7 @@ func TestInstall_TagInclude(t *testing.T) {
 	fixturePath := filepath.Join(clone, "e2e-fixtures", "with-tag-include")
 
 	s.mustRunYnh(t, "install", fixturePath)
-	got := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "local--with-tag-include"))
+	got := readInstalledRecord(t, s.home, "local/with-tag-include")
 
 	if len(got.Resolved) != 1 {
 		t.Fatalf("expected 1 resolved entry, got %d", len(got.Resolved))
@@ -225,4 +226,27 @@ func readInstalledJSON(t *testing.T, harnessDir string) installedJSONShape {
 		t.Fatalf("parsing installed.json: %v\n%s", err, body)
 	}
 	return got
+}
+
+// readInstalledRecord returns the install provenance regardless of
+// topology (see internal/harness/topology.go): pointer-form installs
+// (local/source) carry it on the pointer file at
+// <home>/installed/<id-fsname>.json; tree-form installs (git/registry)
+// keep it next to the copy under <home>/harnesses/<id-fsname>/.
+func readInstalledRecord(t *testing.T, home, id string) installedJSONShape {
+	t.Helper()
+	fsName := strings.ReplaceAll(id, "/", "--")
+	ptrPath := filepath.Join(home, "installed", fsName+".json")
+	if body, err := os.ReadFile(ptrPath); err == nil {
+		var ptr struct {
+			ID   string `json:"id,omitempty"`
+			Name string `json:"name"`
+			installedJSONShape
+		}
+		if err := json.Unmarshal(body, &ptr); err != nil {
+			t.Fatalf("parsing pointer %s: %v\n%s", ptrPath, err, body)
+		}
+		return ptr.installedJSONShape
+	}
+	return readInstalledJSON(t, filepath.Join(home, "harnesses", fsName))
 }

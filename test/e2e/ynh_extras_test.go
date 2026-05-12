@@ -87,8 +87,9 @@ func TestInstall_ReservedNameYnh(t *testing.T) {
 
 	s.mustRunYnh(t, "install", harness)
 
-	// Harness dir exists.
-	assertDirExists(t, filepath.Join(s.home, "harnesses", "local--ynh"))
+	// Pointer exists for the reserved-name install (schema 3: no copy dir
+	// for local installs; the pointer is the registration).
+	assertFileExists(t, filepath.Join(s.home, "installed", "local--ynh.json"))
 
 	// Launcher must NOT exist — would overwrite ynh itself.
 	if _, err := os.Stat(filepath.Join(s.home, "bin", "ynh")); err == nil {

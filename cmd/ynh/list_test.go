@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 // installListTestHarness creates a harness with custom JSON in the harnesses dir.
@@ -541,8 +542,12 @@ func TestCmdListJSON_BrokenPointerKind(t *testing.T) {
 		t.Setenv("YNH_HOME", home)
 
 		if err := harness.SavePointer(&harness.Pointer{
-			Name: "ghost", SourceType: "local",
-			Source: filepath.Join(t.TempDir(), "gone"), InstalledAt: "2026-05-01T00:00:00Z",
+			Name: "ghost",
+			InstalledJSON: plugin.InstalledJSON{
+				SourceType:  "local",
+				Source:      filepath.Join(t.TempDir(), "gone"),
+				InstalledAt: "2026-05-01T00:00:00Z",
+			},
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -574,8 +579,12 @@ func TestCmdListJSON_BrokenPointerKind(t *testing.T) {
 		// Source dir exists but has no .ynh-plugin/plugin.json.
 		srcDir := t.TempDir()
 		if err := harness.SavePointer(&harness.Pointer{
-			Name: "hollow", SourceType: "local",
-			Source: srcDir, InstalledAt: "2026-05-01T00:00:00Z",
+			Name: "hollow",
+			InstalledJSON: plugin.InstalledJSON{
+				SourceType:  "local",
+				Source:      srcDir,
+				InstalledAt: "2026-05-01T00:00:00Z",
+			},
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -609,8 +618,12 @@ func TestCmdListJSONOrphanPointerEmptyArrays(t *testing.T) {
 	t.Setenv("YNH_HOME", home)
 
 	if err := harness.SavePointer(&harness.Pointer{
-		Name: "stranded", SourceType: "local",
-		Source: filepath.Join(t.TempDir(), "gone"), InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "stranded",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      filepath.Join(t.TempDir(), "gone"),
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
