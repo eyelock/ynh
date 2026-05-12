@@ -70,7 +70,9 @@ func TestYnd_Compose_Focuses(t *testing.T) {
 	out, _ := mustRunYnd(t, "compose", dir, "--format", "json")
 
 	var got struct {
-		Profiles []string `json:"profiles"`
+		// profiles is a map keyed by name with full content; we only need
+		// presence + name here, hence the empty struct as value type.
+		Profiles map[string]struct{} `json:"profiles"`
 		Focuses  map[string]struct {
 			Profile string `json:"profile"`
 			Prompt  string `json:"prompt"`
@@ -79,8 +81,8 @@ func TestYnd_Compose_Focuses(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("parsing compose JSON: %v\n%s", err, out)
 	}
-	if len(got.Profiles) != 1 || got.Profiles[0] != "thorough" {
-		t.Errorf("profiles = %v, want [thorough]", got.Profiles)
+	if _, ok := got.Profiles["thorough"]; !ok || len(got.Profiles) != 1 {
+		t.Errorf("profiles = %v, want {thorough:{}}", got.Profiles)
 	}
 	if len(got.Focuses) != 2 {
 		t.Errorf("focuses len = %d, want 2; output:\n%s", len(got.Focuses), out)

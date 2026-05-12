@@ -221,6 +221,24 @@ Expected output shows:
 
 The key difference: the same three hooks declared once in `.ynh-plugin/plugin.json` produce three structurally different config files, each native to the vendor.
 
+## Edit hooks from the command line
+
+Hooks can also be added and removed from the CLI — useful for scripted setup and for GUI consumers. The CLI distinguishes harness-level (default) hooks from profile-level overrides:
+
+```bash
+# Top-level hooks
+ynh hook add /tmp/ynh-tutorial/hook-harness before_tool "echo guard" --matcher Write
+ynh hook remove /tmp/ynh-tutorial/hook-harness before_tool 0
+
+# Profile-level hooks
+ynh profile hook add /tmp/ynh-tutorial/hook-harness <profile> after_tool "echo done"
+ynh profile hook remove /tmp/ynh-tutorial/hook-harness <profile> after_tool 0
+```
+
+The first positional argument accepts either a filesystem path (during authoring) or a canonical harness id (`local/<name>`, `github.com/<org>/<repo>/<name>`) once installed.
+
+`<event>` is validated against the canonical set (`before_tool`, `after_tool`, `before_prompt`, `on_stop`). `<index>` is zero-based; removing the last entry for an event drops the event key entirely. See [hooks.md §"CLI Editing"](../hooks.md#cli-editing) and [reference.md](../reference.md) for the full flag matrix.
+
 ## Clean up
 
 ```bash
@@ -234,6 +252,7 @@ rm -rf /tmp/ynh-tutorial
 - Claude, Cursor, and Codex each use different event names and nesting structures
 - Hook scripts should exit with code 2 to block actions and include remediation instructions
 - `ynd diff` compares the assembled output across vendors side by side
+- Hooks can be edited from the CLI with `ynh hook add/remove` (top-level) and `ynh profile hook add/remove` (profile-level) — the same surface a GUI consumer drives
 
 Hooks often pair with sensors — a hook produces an artifact mid-session that a sensor declares a contract over. See [Tutorial 19: Sensors](19-sensors.md).
 

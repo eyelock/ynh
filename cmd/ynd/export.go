@@ -8,7 +8,9 @@ import (
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/exporter"
+	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/migration"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
@@ -211,8 +213,13 @@ func cmdExport(args []string) error {
 	return nil
 }
 
-// resolveSource determines if source is a local path or Git URL and returns
-// the local directory path. For Git URLs, it resolves via the shared cache.
+// resolveSource determines whether source is a local path, an installed
+// harness canonical id, or a Git URL, and returns the local directory
+// path. Canonical ids (e.g. "local/<name>" or "github.com/<org>/<repo>/<name>")
+// are resolved against the user's installed harnesses via harness.LoadByID,
+// so consumers driving ynd off `ynh ls --format json` ids work without
+// converting them back to filesystem paths. Bare names and other invalid
+// ref shapes fall through to the Git-URL path, preserving prior behaviour.
 func resolveSource(source string) (string, error) {
 	// Local path
 	if strings.HasPrefix(source, ".") || strings.HasPrefix(source, "/") {
@@ -233,6 +240,19 @@ func resolveSource(source string) (string, error) {
 			return "", err
 		}
 		return abs, nil
+	}
+
+	// Installed harness id (canonical ref). When the input lexically looks
+	// like a canonical id, try the installed-harness lookup first so
+	// commands like `ynd compose local/foo` resolve to the on-disk install
+	// instead of attempting a git clone. We only attempt this when the
+	// lookup succeeds; on miss we fall through to the git-URL path, since
+	// a canonical-shaped string that isn't installed is still a valid
+	// upstream reference to clone (e.g. github.com/org/repo/sub).
+	if namespace.Classify(source) == namespace.RefID {
+		if p, err := harness.LoadByID(source); err == nil {
+			return p.Dir, nil
+		}
 	}
 
 	// Git URL — resolve via cache
