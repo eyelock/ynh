@@ -11,28 +11,34 @@ import (
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/namespace"
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
-// Pointer is the on-disk shape of ~/.ynh/installed/<name>.json.
+// Pointer is the on-disk shape of ~/.ynh/installed/<id-fsname>.json.
 //
-// Pointer files register a user-owned source tree (a fork) into the YNH layer
-// without copying it. LoadByID("local/<name>") resolves via the pointer first,
-// so edits to the source tree are live to
-// ynh run with no sync step.
+// Pointer files register a user-owned source tree into the YNH layer
+// without copying it. LoadByID resolves via the pointer first, so edits
+// to the source tree are live to ynh run with no sync step.
 //
-// Provenance (what the harness *is*) lives in the source tree at
-// .ynh-plugin/installed.json and is the authoritative source for
-// p.InstalledFrom. The pointer file's role is registration — name binding
-// and where to look — not provenance.
+// The pointer carries both registration (ID/Name) and the full
+// provenance record by embedding plugin.InstalledJSON. This keeps the
+// authored source tree free of ynh-owned metadata: source_type, source,
+// resolved SHAs, and forked_from all live in the pointer file rather
+// than in <source>/.ynh-plugin/installed.json. Tree-form installs (see
+// topology.go) continue to keep their installed.json next to their
+// content; pointer-form installs do not.
+//
+// Legacy pointer files written by v0.3.x and earlier carry only
+// SourceType, Source, and InstalledAt. Those fields parse cleanly into
+// the embedded record; the schema-3 migration backfills the rest from
+// the source tree's installed.json.
 type Pointer struct {
-	// ID is the canonical, host-prefixed harness id (schema 2). Empty
-	// for legacy pointer files written by pre-schema-2 binaries; the
-	// schema-2 migration backfills it.
-	ID          string `json:"id,omitempty"`
-	Name        string `json:"name"`
-	SourceType  string `json:"source_type"`
-	Source      string `json:"source"`
-	InstalledAt string `json:"installed_at"`
+	// ID is the canonical, host-prefixed harness id. Empty for legacy
+	// pointer files written by pre-schema-2 binaries; the schema-2
+	// migration backfills it.
+	ID                   string `json:"id,omitempty"`
+	Name                 string `json:"name"`
+	plugin.InstalledJSON        // anonymous embed: fields serialise flat
 }
 
 // PointerPath returns the on-disk path of the schema-1 (name-keyed) pointer

@@ -35,10 +35,12 @@ func writeForkTree(t *testing.T, dir, name string) {
 func TestPointer_SaveLoadRoundTrip(t *testing.T) {
 	t.Setenv("YNH_HOME", t.TempDir())
 	ptr := &Pointer{
-		Name:        "researcher",
-		SourceType:  "local",
-		Source:      "/users/x/work/researcher",
-		InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "researcher",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      "/users/x/work/researcher",
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}
 	if err := SavePointer(ptr); err != nil {
 		t.Fatalf("SavePointer: %v", err)
@@ -80,10 +82,12 @@ func TestLoadByID_PointerBeatsTreePrecedence(t *testing.T) {
 	forkDir := filepath.Join(t.TempDir(), "researcher")
 	writeForkTree(t, forkDir, "researcher")
 	if err := SavePointer(&Pointer{
-		Name:        "researcher",
-		SourceType:  "local",
-		Source:      forkDir,
-		InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "researcher",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      forkDir,
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -106,10 +110,12 @@ func TestLoadByID_PointerWithMissingSource(t *testing.T) {
 	// Schema-1 pointer (name-keyed) pointing at a path that no longer exists,
 	// exercising the LoadByID schema-1 fallback for "local/<name>" ids.
 	if err := SavePointer(&Pointer{
-		Name:        "ghost",
-		SourceType:  "local",
-		Source:      filepath.Join(t.TempDir(), "deleted"),
-		InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "ghost",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      filepath.Join(t.TempDir(), "deleted"),
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -138,8 +144,12 @@ func TestListAll_UnionsPointersAndTrees(t *testing.T) {
 	forkDir := filepath.Join(t.TempDir(), "fork-one")
 	writeForkTree(t, forkDir, "fork-one")
 	if err := SavePointer(&Pointer{
-		Name: "fork-one", SourceType: "local", Source: forkDir,
-		InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "fork-one",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      forkDir,
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -173,8 +183,12 @@ func TestListAll_PointerWinsOverTreeOnDuplicate(t *testing.T) {
 	forkDir := filepath.Join(t.TempDir(), "dup")
 	writeForkTree(t, forkDir, "dup")
 	if err := SavePointer(&Pointer{
-		Name: "dup", SourceType: "local", Source: forkDir,
-		InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "dup",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      forkDir,
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +220,12 @@ func TestRemovePointer_Idempotent(t *testing.T) {
 		t.Errorf("RemovePointer on missing: %v", err)
 	}
 	if err := SavePointer(&Pointer{
-		Name: "x", SourceType: "local", Source: "/tmp/x", InstalledAt: "now",
+		Name: "x",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      "/tmp/x",
+			InstalledAt: "now",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -232,10 +251,12 @@ func TestLoadByID_Schema1PointerFallback(t *testing.T) {
 
 	// Write a schema-1 pointer: <name>.json (no id field, no local-- prefix).
 	if err := SavePointer(&Pointer{
-		Name:        "ynh-dev",
-		SourceType:  "local",
-		Source:      forkDir,
-		InstalledAt: "2026-05-08T19:26:52Z",
+		Name: "ynh-dev",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      forkDir,
+			InstalledAt: "2026-05-08T19:26:52Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -267,8 +288,12 @@ func TestListAll_ForkAndRegistryInstallSameLeafName(t *testing.T) {
 	forkDir := filepath.Join(t.TempDir(), "termq-dev")
 	writeForkTree(t, forkDir, "termq-dev")
 	if err := SavePointer(&Pointer{
-		Name: "termq-dev", SourceType: "local", Source: forkDir,
-		InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "termq-dev",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      forkDir,
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}

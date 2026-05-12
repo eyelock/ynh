@@ -117,10 +117,12 @@ func TestResolveEditTarget_Schema1PointerFallback(t *testing.T) {
 	writeForkTree(t, forkDir, "my-fork")
 
 	if err := SavePointer(&Pointer{
-		Name:        "my-fork",
-		SourceType:  "local",
-		Source:      forkDir,
-		InstalledAt: "2026-05-08T00:00:00Z",
+		Name: "my-fork",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      forkDir,
+			InstalledAt: "2026-05-08T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}

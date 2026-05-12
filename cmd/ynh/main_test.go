@@ -10,6 +10,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 func TestParseRunArgs(t *testing.T) {
@@ -1059,8 +1060,12 @@ func TestCmdUninstall_OrphanPointerSourceMissing(t *testing.T) {
 	// name) so this test exercises uninstall-by-name flow which is still
 	// valid for legacy pointer-shaped installs.
 	if err := harness.SavePointer(&harness.Pointer{
-		Name: "stranded", SourceType: "local",
-		Source: missing, InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "stranded",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      missing,
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1085,14 +1090,22 @@ func TestCmdPrune_OrphanPointer(t *testing.T) {
 
 	healthySrc := t.TempDir()
 	if err := harness.SavePointer(&harness.Pointer{
-		Name: "healthy", SourceType: "local",
-		Source: healthySrc, InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "healthy",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      healthySrc,
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := harness.SavePointer(&harness.Pointer{
-		Name: "stranded", SourceType: "local",
-		Source: filepath.Join(t.TempDir(), "gone"), InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "stranded",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      filepath.Join(t.TempDir(), "gone"),
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1161,8 +1174,12 @@ func TestCmdUninstall_PointerByCanonicalID(t *testing.T) {
 
 	// Write a schema-1 (name-keyed) pointer — the form ynh fork currently writes.
 	if err := harness.SavePointer(&harness.Pointer{
-		Name: "my-fork", SourceType: "local",
-		Source: srcDir, InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "my-fork",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      srcDir,
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1194,8 +1211,12 @@ func TestCmdUninstall_PointerByBareName(t *testing.T) {
 	}
 
 	if err := harness.SavePointer(&harness.Pointer{
-		Name: "my-fork", SourceType: "local",
-		Source: srcDir, InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "my-fork",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      srcDir,
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}

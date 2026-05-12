@@ -196,10 +196,12 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 	// ynh run / ls / info resolve to absDestDir directly — no copy under
 	// ~/.ynh/harnesses.
 	ptr := &harness.Pointer{
-		Name:        installName,
-		SourceType:  "local",
-		Source:      absDestDir,
-		InstalledAt: ins.InstalledAt,
+		Name: installName,
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      absDestDir,
+			InstalledAt: ins.InstalledAt,
+		},
 	}
 	if err := harness.SavePointer(ptr); err != nil {
 		_ = os.RemoveAll(absDestDir)

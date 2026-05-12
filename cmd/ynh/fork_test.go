@@ -525,8 +525,12 @@ func TestCmdFork_NameClashesOnNewName(t *testing.T) {
 
 	// Pre-register a pointer named "my-demo"
 	if err := harness.SavePointer(&harness.Pointer{
-		Name: "my-demo", SourceType: "local",
-		Source: t.TempDir(), InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "my-demo",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      t.TempDir(),
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
