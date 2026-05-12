@@ -148,15 +148,16 @@ func TestDelegate_Update(t *testing.T) {
 }
 
 // TestInclude_LocalInstall_WritesToSource verifies that include add/remove
-// target the original source directory — not the registry copy — when the
-// harness was installed from a local path. This is the regression test for
-// the bug where ResolveEditTarget returned the registry copy for
-// source_type=local installs.
+// targets the user's source directory when the harness was installed
+// from a local path. Schema 3 makes this trivially true (the source dir
+// IS the install — there is no copy under HarnessesDir to drift) but
+// the test pins the read/write symmetry that motivated the schema bump:
+// after editing, the same id must load back with the edit visible.
 func TestInclude_LocalInstall_WritesToSource(t *testing.T) {
 	s := newSandbox(t)
 	clone := cloneAssistantsAtSHA(t)
 	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
-	registryDir := filepath.Join(s.home, "harnesses", "local--minimal")
+	copyDir := filepath.Join(s.home, "harnesses", "local--minimal")
 
 	s.mustRunYnh(t, "install", sourceDir)
 
@@ -166,17 +167,15 @@ func TestInclude_LocalInstall_WritesToSource(t *testing.T) {
 		"--ref", AssistantsFixturesSHA,
 	)
 
-	// The source dir must have the new include.
 	srcMf := readManifest(t, sourceDir)
 	if len(srcMf.Includes) != 1 {
 		t.Fatalf("source dir: expected 1 include after add, got %d", len(srcMf.Includes))
 	}
 	assertEqual(t, "source includes[0].git", srcMf.Includes[0].Git, includeURL)
 
-	// The registry copy must NOT have been touched.
-	regMf := readManifest(t, registryDir)
-	if len(regMf.Includes) != 0 {
-		t.Errorf("registry copy: expected 0 includes (untouched), got %d: %+v", len(regMf.Includes), regMf.Includes)
+	// Schema 3: no copy dir for local installs.
+	if _, err := os.Stat(copyDir); !os.IsNotExist(err) {
+		t.Errorf("expected no copy dir for local install, got err=%v", err)
 	}
 
 	// Remove also targets the source.
@@ -188,13 +187,13 @@ func TestInclude_LocalInstall_WritesToSource(t *testing.T) {
 	}
 }
 
-// TestDelegate_LocalInstall_WritesToSource mirrors TestInclude_LocalInstall_WritesToSource
-// for the delegate add/remove path.
+// TestDelegate_LocalInstall_WritesToSource mirrors
+// TestInclude_LocalInstall_WritesToSource for the delegate add/remove path.
 func TestDelegate_LocalInstall_WritesToSource(t *testing.T) {
 	s := newSandbox(t)
 	clone := cloneAssistantsAtSHA(t)
 	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
-	registryDir := filepath.Join(s.home, "harnesses", "local--minimal")
+	copyDir := filepath.Join(s.home, "harnesses", "local--minimal")
 
 	s.mustRunYnh(t, "install", sourceDir)
 
@@ -204,20 +203,16 @@ func TestDelegate_LocalInstall_WritesToSource(t *testing.T) {
 		"--ref", AssistantsFixturesSHA,
 	)
 
-	// The source dir must have the new delegate.
 	srcMf := readManifest(t, sourceDir)
 	if len(srcMf.DelegatesTo) != 1 {
 		t.Fatalf("source dir: expected 1 delegate after add, got %d", len(srcMf.DelegatesTo))
 	}
 	assertEqual(t, "source delegates_to[0].git", srcMf.DelegatesTo[0].Git, delegateURL)
 
-	// The registry copy must NOT have been touched.
-	regMf := readManifest(t, registryDir)
-	if len(regMf.DelegatesTo) != 0 {
-		t.Errorf("registry copy: expected 0 delegates (untouched), got %d: %+v", len(regMf.DelegatesTo), regMf.DelegatesTo)
+	if _, err := os.Stat(copyDir); !os.IsNotExist(err) {
+		t.Errorf("expected no copy dir for local install, got err=%v", err)
 	}
 
-	// Remove also targets the source.
 	s.mustRunYnh(t, "delegate", "remove", "local/minimal", delegateURL, "--path", "e2e-fixtures/fork-source")
 
 	srcMf = readManifest(t, sourceDir)
