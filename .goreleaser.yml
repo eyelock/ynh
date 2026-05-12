@@ -11,6 +11,8 @@ builds:
   - id: ynh
     main: ./cmd/ynh
     binary: ynh
+    flags:
+      - -trimpath
     ldflags:
       - -s -w
       - -X github.com/eyelock/ynh/internal/config.Version={{.Version}}
@@ -25,6 +27,8 @@ builds:
   - id: ynd
     main: ./cmd/ynd
     binary: ynd
+    flags:
+      - -trimpath
     ldflags:
       - -s -w
       - -X github.com/eyelock/ynh/internal/config.Version={{.Version}}
