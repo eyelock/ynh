@@ -32,7 +32,8 @@ type manifestSourceJSON struct {
 func TestDelegate_AddRemove(t *testing.T) {
 	s := newSandbox(t)
 	clone := cloneAssistantsAtSHA(t)
-	s.mustRunYnh(t, "install", filepath.Join(clone, "e2e-fixtures", "minimal"))
+	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
+	s.mustRunYnh(t, "install", sourceDir)
 
 	delegateURL := "https://github.com/eyelock/assistants"
 	s.mustRunYnh(t, "delegate", "add", "local/minimal", delegateURL,
@@ -40,7 +41,7 @@ func TestDelegate_AddRemove(t *testing.T) {
 		"--ref", AssistantsFixturesSHA,
 	)
 
-	mf := readManifest(t, filepath.Join(s.home, "harnesses", "local--minimal"))
+	mf := readManifest(t, sourceDir)
 	if len(mf.DelegatesTo) != 1 {
 		t.Fatalf("expected 1 delegate after add, got %d: %+v", len(mf.DelegatesTo), mf.DelegatesTo)
 	}
@@ -51,7 +52,7 @@ func TestDelegate_AddRemove(t *testing.T) {
 
 	s.mustRunYnh(t, "delegate", "remove", "local/minimal", delegateURL, "--path", "e2e-fixtures/fork-source")
 
-	mf = readManifest(t, filepath.Join(s.home, "harnesses", "local--minimal"))
+	mf = readManifest(t, sourceDir)
 	if len(mf.DelegatesTo) != 0 {
 		t.Errorf("expected 0 delegates after remove, got %d", len(mf.DelegatesTo))
 	}
@@ -61,7 +62,8 @@ func TestDelegate_AddRemove(t *testing.T) {
 func TestInclude_AddRemove(t *testing.T) {
 	s := newSandbox(t)
 	clone := cloneAssistantsAtSHA(t)
-	s.mustRunYnh(t, "install", filepath.Join(clone, "e2e-fixtures", "minimal"))
+	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
+	s.mustRunYnh(t, "install", sourceDir)
 
 	includeURL := "https://github.com/eyelock/assistants"
 	s.mustRunYnh(t, "include", "add", "local/minimal", includeURL,
@@ -69,7 +71,7 @@ func TestInclude_AddRemove(t *testing.T) {
 		"--ref", AssistantsFixturesSHA,
 	)
 
-	mf := readManifest(t, filepath.Join(s.home, "harnesses", "local--minimal"))
+	mf := readManifest(t, sourceDir)
 	if len(mf.Includes) != 1 {
 		t.Fatalf("expected 1 include after add, got %d", len(mf.Includes))
 	}
@@ -80,7 +82,7 @@ func TestInclude_AddRemove(t *testing.T) {
 
 	s.mustRunYnh(t, "include", "remove", "local/minimal", includeURL, "--path", "e2e-fixtures/included-skill")
 
-	mf = readManifest(t, filepath.Join(s.home, "harnesses", "local--minimal"))
+	mf = readManifest(t, sourceDir)
 	if len(mf.Includes) != 0 {
 		t.Errorf("expected 0 includes after remove, got %d", len(mf.Includes))
 	}
@@ -96,7 +98,8 @@ func TestInclude_AddRemove(t *testing.T) {
 func TestInclude_Update(t *testing.T) {
 	s := newSandbox(t)
 	clone := cloneAssistantsAtSHA(t)
-	s.mustRunYnh(t, "install", filepath.Join(clone, "e2e-fixtures", "minimal"))
+	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
+	s.mustRunYnh(t, "install", sourceDir)
 
 	includeURL := "https://github.com/eyelock/assistants"
 	s.mustRunYnh(t, "include", "add", "local/minimal", includeURL,
@@ -109,7 +112,7 @@ func TestInclude_Update(t *testing.T) {
 		"--path", "e2e-fixtures/included-skill",
 	)
 
-	mf := readManifest(t, filepath.Join(s.home, "harnesses", "local--minimal"))
+	mf := readManifest(t, sourceDir)
 	if len(mf.Includes) != 1 {
 		t.Fatalf("expected 1 include after update, got %d", len(mf.Includes))
 	}
@@ -122,7 +125,8 @@ func TestInclude_Update(t *testing.T) {
 func TestDelegate_Update(t *testing.T) {
 	s := newSandbox(t)
 	clone := cloneAssistantsAtSHA(t)
-	s.mustRunYnh(t, "install", filepath.Join(clone, "e2e-fixtures", "minimal"))
+	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
+	s.mustRunYnh(t, "install", sourceDir)
 
 	delegateURL := "https://github.com/eyelock/assistants"
 	s.mustRunYnh(t, "delegate", "add", "local/minimal", delegateURL,
@@ -135,7 +139,7 @@ func TestDelegate_Update(t *testing.T) {
 		"--ref", AssistantsFixturesV1Tag,
 	)
 
-	mf := readManifest(t, filepath.Join(s.home, "harnesses", "local--minimal"))
+	mf := readManifest(t, sourceDir)
 	if len(mf.DelegatesTo) != 1 {
 		t.Fatalf("expected 1 delegate after update, got %d", len(mf.DelegatesTo))
 	}
