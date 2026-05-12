@@ -18,14 +18,19 @@ func loadManifest(dir string) (*plugin.HarnessJSON, error) {
 	return plugin.LoadPluginJSON(dir)
 }
 
-// ResolveEditTarget resolves a harness reference to a directory.
-// Refs are classified lexically by namespace.Classify:
+// ResolveEditTarget resolves a harness reference to the directory where
+// `ynh include/delegate` edits land. Refs are classified lexically by
+// namespace.Classify:
 //   - RefPath ("./", "../", "/", "~/", drive-letter): filesystem path
 //   - RefID (slash-bearing canonical id): installed harness, looked up by id
 //   - RefInvalid (bare names, "name@org/repo"): rejected with hint
 //
-// Schema 2 only — the on-disk layout is id-keyed, and there is exactly one
-// valid ref shape per kind.
+// For installed (RefID) harnesses the resolution mirrors LoadByID: a
+// pointer file (pointer-form install) wins over a tree under
+// HarnessesDir (tree-form). This guarantees reads and writes land at the
+// same place — no divergence between the install copy and the source
+// tree, which was the read/write split that motivated schema 3 (see
+// topology.go).
 func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
 	switch namespace.Classify(ref) {
 	case namespace.RefPath:
@@ -38,24 +43,18 @@ func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
 		}
 		return abs, false, nil
 	case namespace.RefID:
-		dir := InstalledDirByID(ref)
-		if DetectFormat(dir) == "plugin" {
-			// Pointer-form installs (see topology.go) keep their content in
-			// the user's source tree; edits land there, not in the install
-			// copy, so the user's git working tree stays authoritative.
-			if ins, insErr := plugin.LoadInstalledJSON(dir); insErr == nil && IsLocalSource(ins) {
-				return ins.Source, true, nil
-			}
-			return dir, true, nil
-		}
 		if ptr, _ := LoadPointerByID(ref); ptr != nil {
-			return ptr.Source, true, nil
+			return localLoadDir(&ptr.InstalledJSON), true, nil
 		}
 		// Schema-1 fallback: fork created before schema-2 pointer writer landed.
 		if name, ok := strings.CutPrefix(ref, "local/"); ok {
 			if ptr, _ := LoadPointer(name); ptr != nil {
-				return ptr.Source, true, nil
+				return localLoadDir(&ptr.InstalledJSON), true, nil
 			}
+		}
+		treeDir := InstalledDirByID(ref)
+		if DetectFormat(treeDir) == "plugin" {
+			return treeDir, true, nil
 		}
 		return "", false, fmt.Errorf("harness %q: %w", ref, ErrNotFound)
 	default:

@@ -392,29 +392,6 @@ func LoadByID(id string) (*Harness, error) {
 	}
 	dir := InstalledDirByID(id)
 	if _, err := os.Stat(dir); err == nil {
-		// Pre-schema-3 local/source installs lived as content copies under
-		// HarnessesDir with their authored content at ins.Source. The
-		// schema-3 migration collapses these into pointer-form, but until
-		// it runs (e.g. fresh upgrade, first command of the session) we
-		// still encounter them. Redirect reads to ins.Source so the user's
-		// edits are visible — matching where ResolveEditTarget already
-		// routes writes. After migration this branch is unreachable for
-		// local/source installs because no copy dir remains.
-		if ins, _ := plugin.LoadInstalledJSON(dir); IsLocalSource(ins) {
-			loadDir := localLoadDir(ins)
-			if _, err := os.Stat(loadDir); err != nil {
-				if os.IsNotExist(err) {
-					return nil, fmt.Errorf(
-						"harness %q is registered but its source path no longer exists:\n"+
-							"  %s\n\n"+
-							"If you moved it, restore the directory.\n"+
-							"If it's gone for good, run: ynh uninstall %s",
-						id, loadDir, id)
-				}
-				return nil, fmt.Errorf("stat install source %s: %w", loadDir, err)
-			}
-			return loadDirWithProvenance(loadDir, ins)
-		}
 		return LoadDir(dir)
 	}
 	return nil, fmt.Errorf("harness %q: %w", id, ErrNotFound)
