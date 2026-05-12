@@ -705,11 +705,23 @@ func cmdUpdate(args []string) error {
 	}
 
 	// A harness is updateable if it has a remote source (git/registry) OR
-	// any includes/delegates. Pure local installs have nothing to pull.
+	// any remote includes/delegates. Pointer-form installs (local source
+	// or sources: entry) have no upstream to fetch for the harness body
+	// itself — the user's source tree is authoritative; edits are live to
+	// ynh run without any sync step. Any remote includes/delegates the
+	// harness references still get refreshed below.
 	hasHarnessSource := harnessHasRemoteSource(p)
+	isLocalBody := p.InstalledFrom != nil && (p.InstalledFrom.SourceType == "local" || p.InstalledFrom.SourceType == "source")
 	if len(p.Includes) == 0 && len(p.DelegatesTo) == 0 && !hasHarnessSource {
-		fmt.Printf("Harness %q has no Git sources to update.\n", name)
+		if isLocalBody {
+			fmt.Printf("Harness %q is local — edits at %s are live; nothing to fetch.\n", name, p.Dir)
+		} else {
+			fmt.Printf("Harness %q has no Git sources to update.\n", name)
+		}
 		return nil
+	}
+	if isLocalBody {
+		fmt.Printf("Harness %q is local at %s — refreshing remote includes/delegates only.\n", name, p.Dir)
 	}
 
 	// Load config for remote source checking
