@@ -19,9 +19,11 @@ func TestUninstall_RemovesHarness(t *testing.T) {
 	harness := newSyntheticSkillHarness(t, "doomed")
 	s.mustRunYnh(t, "install", harness)
 
-	// Sanity check: harness is visible to ls and the install dir + launcher exist.
-	installDir := filepath.Join(s.home, "harnesses", "local--doomed")
-	assertDirExists(t, installDir)
+	// Sanity check: pointer is present and launcher exists.
+	pointerPath := filepath.Join(s.home, "installed", "local--doomed.json")
+	if _, err := os.Stat(pointerPath); err != nil {
+		t.Fatalf("pointer should exist before uninstall: %v", err)
+	}
 	launcher := filepath.Join(s.home, "bin", "doomed")
 	if _, err := os.Stat(launcher); err != nil {
 		t.Fatalf("launcher should exist before uninstall: %v", err)
@@ -32,9 +34,9 @@ func TestUninstall_RemovesHarness(t *testing.T) {
 		t.Errorf("expected 'Uninstalled' confirmation, got: %s", out)
 	}
 
-	// Install dir gone.
-	if _, err := os.Stat(installDir); !os.IsNotExist(err) {
-		t.Errorf("install dir still exists after uninstall: %s", installDir)
+	// Pointer gone.
+	if _, err := os.Stat(pointerPath); !os.IsNotExist(err) {
+		t.Errorf("pointer still exists after uninstall: %s", pointerPath)
 	}
 	// Launcher gone.
 	if _, err := os.Stat(launcher); !os.IsNotExist(err) {

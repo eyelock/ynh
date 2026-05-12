@@ -57,6 +57,42 @@ func localLoadDir(ins *plugin.InstalledJSON) string {
 	return filepath.Join(ins.Source, ins.Path)
 }
 
+// LoadInstalledRecord returns the install provenance for h, regardless
+// of topology:
+//   - pointer-form (local/source): from the pointer file at
+//     PointersDir/<id-fsname>.json
+//   - tree-form (git/registry): from <h.Dir>/.ynh-plugin/installed.json
+//
+// canonID is the canonical id of h ("local/<name>" or
+// "<host>/<org>/<repo>/<name>"); callers usually already have it
+// (e.g. it's the ref the user passed), so we don't recompute from h.
+// Returns (nil, nil) when no record is found in either location.
+func LoadInstalledRecord(canonID string, h *Harness) (*plugin.InstalledJSON, error) {
+	if ptr, err := LoadPointerByID(canonID); err != nil {
+		return nil, err
+	} else if ptr != nil {
+		ins := ptr.InstalledJSON
+		return &ins, nil
+	}
+	disk, err := plugin.LoadInstalledJSON(h.Dir)
+	if err != nil {
+		return nil, nil
+	}
+	return disk, nil
+}
+
+// SaveInstalledRecord writes the install record to the correct location
+// for h's topology — pointer file for pointer-form installs, sibling
+// installed.json for tree-form. See LoadInstalledRecord for the
+// topology detection rule.
+func SaveInstalledRecord(canonID string, h *Harness, ins *plugin.InstalledJSON) error {
+	if ptr, _ := LoadPointerByID(canonID); ptr != nil {
+		ptr.InstalledJSON = *ins
+		return SavePointerByID(ptr)
+	}
+	return plugin.SaveInstalledJSON(h.Dir, ins)
+}
+
 // IsLocalSource reports whether the installed.json record describes a
 // pointer-form install — one whose content lives in a user-owned source
 // tree rather than a copy under HarnessesDir(). Returns false for nil

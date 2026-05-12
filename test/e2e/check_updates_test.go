@@ -4,7 +4,6 @@ package e2e
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"testing"
 )
 
@@ -63,8 +62,8 @@ func TestLs_CheckUpdates_JSON_Shape(t *testing.T) {
 		t.Errorf("expected ref_installed != ref_available after upstream HEAD moved; both are %s", inc.RefInstalled)
 	}
 
-	// Also sanity-check we can still read installed.json and it agrees with the JSON.
-	inst := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "local--check-updates-harness"))
+	// Also sanity-check the install record agrees with the JSON.
+	inst := readInstalledRecord(t, s.home, "local/check-updates-harness")
 	if len(inst.Resolved) != 1 {
 		t.Fatalf("installed.json: expected 1 resolved entry, got %d", len(inst.Resolved))
 	}

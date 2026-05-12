@@ -462,10 +462,21 @@ func cmdInstall(args []string) error {
 		provSource = resolved.localPath
 	}
 
-	// Carry forward forked_from when installing from a previously forked local directory.
+	// Carry forward forked_from when installing from a previously forked
+	// local directory. Two sources to check:
+	//  - Schema-3+: an existing pointer at this canonical id (ynh fork
+	//    writes forked_from onto the pointer, nothing into the source tree).
+	//  - Pre-schema-3: a leftover <srcDir>/.ynh-plugin/installed.json
+	//    written by an older ynh fork — the schema-3 migration absorbs
+	//    these but a freshly-built source tree may still have one.
 	var forkedFrom *plugin.ForkedFromJSON
-	if srcIns, loadErr := plugin.LoadInstalledJSON(srcDir); loadErr == nil && srcIns.ForkedFrom != nil {
-		forkedFrom = srcIns.ForkedFrom
+	if existing, loadErr := harness.LoadPointerByID(canonID); loadErr == nil && existing != nil && existing.ForkedFrom != nil {
+		forkedFrom = existing.ForkedFrom
+	}
+	if forkedFrom == nil {
+		if srcIns, loadErr := plugin.LoadInstalledJSON(srcDir); loadErr == nil && srcIns.ForkedFrom != nil {
+			forkedFrom = srcIns.ForkedFrom
+		}
 	}
 
 	ins := &plugin.InstalledJSON{
@@ -836,11 +847,15 @@ func cmdUpdate(args []string) error {
 		}
 	}
 
-	// Persist resolved SHAs back to installed.json so subsequent --check-updates
-	// queries can compare against the recorded SHA without re-fetching. Also
-	// refresh the harness-level SHA/Ref when re-pulled so the harness's own
-	// drift signal stays accurate.
-	if ins, loadErr := plugin.LoadInstalledJSON(p.Dir); loadErr == nil && ins != nil {
+	// Persist resolved SHAs back to the install record so subsequent
+	// --check-updates queries can compare against the recorded SHA without
+	// re-fetching. Also refresh the harness-level SHA/Ref when re-pulled
+	// so the harness's own drift signal stays accurate.
+	//
+	// LoadInstalledRecord / SaveInstalledRecord are topology-aware (see
+	// internal/harness/topology.go): pointer-form installs route to the
+	// pointer file, tree-form to <p.Dir>/.ynh-plugin/installed.json.
+	if ins, loadErr := harness.LoadInstalledRecord(name, p); loadErr == nil && ins != nil {
 		ins.Resolved = resolvedSources
 		if hasHarnessSource && harnessSHA != "" {
 			ins.SHA = harnessSHA
@@ -848,8 +863,8 @@ func cmdUpdate(args []string) error {
 				ins.Ref = harnessResolvedRef
 			}
 		}
-		if err := plugin.SaveInstalledJSON(p.Dir, ins); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not update installed.json: %v\n", err)
+		if err := harness.SaveInstalledRecord(name, p, ins); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not update install record: %v\n", err)
 		}
 	}
 
