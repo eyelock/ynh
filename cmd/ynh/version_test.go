@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/clischema"
 	"github.com/eyelock/ynh/internal/config"
 )
 
@@ -80,5 +81,27 @@ func TestCmdVersion_JSONShapeStability(t *testing.T) {
 		if _, ok := raw[key]; !ok {
 			t.Errorf("missing required key %q in version JSON", key)
 		}
+	}
+}
+
+// TestCmdVersion_JSONSchemaRoundTrip is the load-bearing drift-detection
+// test: the live emission from cmdVersionTo must validate against the
+// published version schema. If a field changes shape, this test fails before
+// the change reaches downstream consumers.
+func TestCmdVersion_JSONSchemaRoundTrip(t *testing.T) {
+	var out, errb bytes.Buffer
+	if err := cmdVersionTo([]string{"--format", "json"}, &out, &errb); err != nil {
+		t.Fatalf("cmdVersionTo: %v", err)
+	}
+	var v any
+	if err := json.Unmarshal(out.Bytes(), &v); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	schema, err := clischema.Get("version")
+	if err != nil {
+		t.Fatalf("Get version schema: %v", err)
+	}
+	if err := schema.Validate(v); err != nil {
+		t.Errorf("live version JSON does not validate against schema: %v\noutput: %s", err, out.String())
 	}
 }

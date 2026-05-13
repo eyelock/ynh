@@ -274,6 +274,39 @@ ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile dev | grep dee
 
 Paths in `local` are relative to the harness root (or absolute). The `pick` field filters which artifacts to include from the source. A profile cannot remove base includes — it only appends.
 
+## T13.6: Edit profiles from the command line
+
+Profiles can be authored by hand-editing `.ynh-plugin/plugin.json` — that is what every step above did. They can also be edited from the command line, which is what an interactive consumer like TermQ uses. The CLI mirrors `ynh include` and routes through the same resolver, so edits land in the source tree for pointer-form local installs.
+
+```bash
+# Add a new profile (empty) and a hook inside it
+ynh profile add /tmp/ynh-tutorial/profile-harness staging
+ynh profile hook add /tmp/ynh-tutorial/profile-harness staging before_tool "echo staging guard"
+
+# Add an MCP server to the profile
+ynh profile mcp add /tmp/ynh-tutorial/profile-harness staging \
+    notes --command npx --arg -y --arg @modelcontextprotocol/server-memory
+
+# Verify it landed in the manifest
+ynd compose /tmp/ynh-tutorial/profile-harness --profile staging --format json | grep staging
+# Expected: profiles.staging present with the new hook and mcp_server
+
+# Update the MCP server
+ynh profile mcp update /tmp/ynh-tutorial/profile-harness staging \
+    notes --arg -y --arg @modelcontextprotocol/server-memory --arg --verbose
+
+# Remove individual entries
+ynh profile hook remove /tmp/ynh-tutorial/profile-harness staging before_tool 0
+ynh profile mcp remove /tmp/ynh-tutorial/profile-harness staging notes
+
+# Remove the profile itself (refused if any focus still references it)
+ynh profile remove /tmp/ynh-tutorial/profile-harness staging
+```
+
+The first positional argument is either a filesystem path (as above, while you are authoring) or a canonical harness id (`local/profile-demo`, `github.com/<org>/<repo>/<name>`) once the harness is installed.
+
+See [reference.md](../reference.md) for the full set of `ynh profile` flags and [profiles.md §"CLI Editing"](../profiles.md#cli-editing) for the surrounding surface.
+
 ## Clean up
 
 ```bash
@@ -292,7 +325,8 @@ rm -rf /tmp/ynh-tutorial
 - Invalid profile names produce helpful errors listing available profiles
 - Profile-level `includes` support both remote (`git`) and local (`local`) sources — same shape as top-level includes
 - `ynd validate` checks profile schema validity
+- Profiles can be edited with `ynh profile add/remove`, `ynh profile hook add/remove`, `ynh profile mcp add/update/remove`, and `ynh profile include add/remove/update` — the same surface a GUI consumer drives
 
 ## Next
 
-[Tutorial 7: Developer Tools](tutorial/08-developer-tools.md) — scaffold, lint, validate, format, compress, inspect with ynd.
+[Tutorial 7: Focus](tutorial/14-focus.md) — bind a prompt and profile for repeatable, non-interactive runs.

@@ -46,7 +46,15 @@ const MigrationManifestPath = ".migration-manifest.json"
 const QuarantineDir = ".quarantine"
 
 // CurrentSchemaVersion is the schema version this binary writes.
-const CurrentSchemaVersion = 2
+//
+// Schema 1: pre-canonical-id layout (name-keyed pointers, flat trees).
+// Schema 2: canonical-id layout (id-keyed pointers, id-fsname trees).
+// Schema 3: pointer-form local/source installs — content stays in the
+//
+//	user's source tree, with full provenance carried on the
+//	pointer file. No copy dir under HarnessesDir for local
+//	installs. See internal/harness/topology.go.
+const CurrentSchemaVersion = 3
 
 // ReadSchemaVersion returns the on-disk schema version of home. Absent or
 // invalid content is reported as 1 (pre-schema-version was introduced —
@@ -58,6 +66,8 @@ func ReadSchemaVersion(home string) int {
 	}
 	s := strings.TrimSpace(string(data))
 	switch s {
+	case "3":
+		return 3
 	case "2":
 		return 2
 	default:
@@ -140,7 +150,7 @@ var ErrMigrationAborted = errors.New("migration aborted on broken entry")
 // at schema 1, so the next invocation re-runs from where it left off.
 func MigrateToSchema2(home string, opts MigrateOpts) (*Manifest, error) {
 	m := &Manifest{
-		SchemaVersion: CurrentSchemaVersion,
+		SchemaVersion: 2,
 		MigratedAt:    time.Now().UTC().Format(time.RFC3339),
 	}
 
@@ -165,7 +175,10 @@ func MigrateToSchema2(home string, opts MigrateOpts) (*Manifest, error) {
 				return m, fmt.Errorf("writing migration manifest: %w", err)
 			}
 		}
-		if err := WriteSchemaVersion(home, CurrentSchemaVersion); err != nil {
+		// Schema 2 stamping is literal — this function performs the
+		// 1→2 conversion only. Subsequent migrations (e.g.
+		// MigrateToSchema3) advance the version further.
+		if err := WriteSchemaVersion(home, 2); err != nil {
 			return m, fmt.Errorf("stamping schema version: %w", err)
 		}
 	}

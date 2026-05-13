@@ -116,6 +116,11 @@ func printInfoText(w io.Writer, name string) error {
 		vendorName = "-"
 	}
 
+	// ID is the canonical, host-prefixed id — what every other ynh command
+	// accepts. Surface it first so users copying from info land on the
+	// form that works against run/installed/uninstall/update. Name stays
+	// for human readability but is intentionally secondary.
+	_, _ = fmt.Fprintf(w, "ID:           %s\n", name)
 	_, _ = fmt.Fprintf(w, "Name:         %s\n", p.Name)
 	_, _ = fmt.Fprintf(w, "Vendor:       %s\n", vendorName)
 
@@ -307,7 +312,7 @@ func printInfoJSON(stdout, stderr io.Writer, name string, checkUpdates bool) err
 		return cliError(stderr, true, code, err.Error())
 	}
 
-	// Migration chain has run (harness.Load was called above), so the manifest
+	// Migration chain has run (harness.LoadQualified was called above), so the manifest
 	// is always at the new path.
 	manifestPath := filepath.Join(p.Dir, plugin.PluginDir, plugin.PluginFile)
 	raw, err := os.ReadFile(manifestPath)

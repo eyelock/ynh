@@ -79,6 +79,10 @@ func (c *Codex) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []s
 
 func (c *Codex) SupportsInitialPrompt() bool { return true }
 
+func (c *Codex) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
+	return []string{"-c", "developer_instructions=" + text}, nil
+}
+
 // codexHookEventMap maps canonical event names to Codex hook events.
 var codexHookEventMap = map[string]string{
 	"before_tool":   "PreToolUse",

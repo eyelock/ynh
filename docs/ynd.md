@@ -104,6 +104,7 @@ ynd preview ./my-harness                    # default: Claude vendor, stdout
 ynd preview ./my-harness -v cursor          # specific vendor
 ynd preview ./my-harness -v claude -o ./out # write to directory
 ynd preview ./my-harness --profile strict   # preview with a specific profile
+ynd preview ./my-harness --focus review     # preview with a focus (resolves to its profile)
 ynd preview --harness ./my-harness          # explicit harness flag
 ```
 
@@ -113,6 +114,7 @@ ynd preview --harness ./my-harness          # explicit harness flag
 | `-o, --output <dir>` | Write output to directory instead of stdout |
 | `--harness <dir>` | Harness source directory (alternative to positional arg) |
 | `--profile <name>` | Profile to apply during assembly |
+| `--focus <name>` | Focus to apply during assembly (mutually exclusive with `--profile`) |
 
 When no `-o` flag is given, preview prints a tree with file contents to stdout. With `-o`, it writes the full assembled output to the specified directory.
 
@@ -130,6 +132,7 @@ ynd diff ./my-harness claude cursor         # compare specific vendors (position
 ynd diff ./my-harness -v claude,cursor      # compare specific vendors (flag)
 ynd diff ./my-harness claude cursor codex   # three-way comparison
 ynd diff ./my-harness --profile strict      # diff with a specific profile applied
+ynd diff ./my-harness --focus review        # diff with a focus applied
 ynd diff --harness ./my-harness             # explicit harness flag
 ```
 
@@ -153,6 +156,7 @@ ynd export ./my-harness -o ./out                  # custom output directory
 ynd export ./my-harness --merged                  # single dir with dual manifests
 ynd export ./my-harness --clean                   # remove output dir before export
 ynd export ./my-harness --profile strict          # export with a specific profile applied
+ynd export ./my-harness --focus review            # export with a focus applied (mutex with --profile)
 ynd export --harness ./my-harness                 # explicit harness flag
 ynd export github.com/user/repo --path harnesses/david  # from a monorepo
 ```
@@ -275,6 +279,22 @@ dist/
 
 See [Tutorial 11: Marketplace](tutorial/06-marketplace.md) for a guided walkthrough.
 
+### validate-output
+
+Validate a captured JSON response on stdin against a published CLI schema. Exits 0 on success, non-zero on validation failure (prints the first divergence to stderr).
+
+```bash
+ynh ls --format json | ynd validate-output --schema list
+ynh version --format json | ynd validate-output --schema version
+```
+
+| Flag | Description |
+|------|-------------|
+| `--schema <name>` | Required. Schema name (e.g. `list`, `info`, `version`, `installed`, `error`). |
+| `-h, --help` | Show help |
+
+Schemas are embedded in the binary — `ynh schema <name>` and `ynh schema --all --format json` are the discovery side. See [Published JSON Schemas](schema-cli.md) for the full contract.
+
 ## Common Options
 
 | Flag | Commands | Description |
@@ -285,7 +305,8 @@ See [Tutorial 11: Marketplace](tutorial/06-marketplace.md) for a guided walkthro
 | `--harness <dir>` | preview, diff, export, validate, lint, fmt | Harness source directory. Alternative to positional arg. Also honored via `YNH_HARNESS` env var. |
 | `--clean` | export, marketplace | Remove output directory before writing. |
 | `--merged` | export | Single output dir with dual vendor manifests. |
-| `--profile <name>` | preview, diff, export | Profile to apply during assembly. |
+| `--profile <name>` | preview, diff, export | Profile to apply during assembly. Also honored via `YNH_PROFILE`. |
+| `--focus <name>` | preview, diff, export | Focus to apply (resolves its bound profile). Mutually exclusive with `--profile`. Also honored via `YNH_FOCUS`. |
 | `--path <subdir>` | export | Subdirectory within source (for monorepos). Must be a relative path with no `..` traversal. |
 | `--restore` | compress | Restore a file from its latest backup. |
 | `--list-backups` | compress | Show backup history for a file. |

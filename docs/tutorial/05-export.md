@@ -287,4 +287,4 @@ rm -rf /tmp/ynh-tutorial/no-inst-out
 
 ## Next
 
-[Tutorial 11: Marketplace](tutorial/06-marketplace.md) — generate marketplace indexes for distribution.
+[Tutorial 14: Marketplace](tutorial/06-marketplace.md) — generate marketplace indexes for distribution.

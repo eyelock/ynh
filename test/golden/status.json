@@ -1,0 +1,11 @@
+[
+  {
+    "harness": "local/demo",
+    "vendor": "claude",
+    "project": "/Users/example/projects/app",
+    "timestamp": "2026-05-13T12:00:00Z",
+    "symlinks": [
+      {"target": "/Users/example/.ynh/run/local--demo", "link": "/Users/example/projects/app/.claude"}
+    ]
+  }
+]

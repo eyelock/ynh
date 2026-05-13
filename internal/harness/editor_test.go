@@ -117,10 +117,12 @@ func TestResolveEditTarget_Schema1PointerFallback(t *testing.T) {
 	writeForkTree(t, forkDir, "my-fork")
 
 	if err := SavePointer(&Pointer{
-		Name:        "my-fork",
-		SourceType:  "local",
-		Source:      forkDir,
-		InstalledAt: "2026-05-08T00:00:00Z",
+		Name: "my-fork",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      forkDir,
+			InstalledAt: "2026-05-08T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -134,6 +136,78 @@ func TestResolveEditTarget_Schema1PointerFallback(t *testing.T) {
 	}
 	if !installed {
 		t.Error("expected installed=true for pointer-backed ref")
+	}
+}
+
+// TestResolveEditTarget_LocalInstall verifies that for a pointer-form
+// install (schema 3 — ynh install /path or ynh fork), ResolveEditTarget
+// returns the user's source tree so edits land where the user authored
+// the harness, not in a copy under HarnessesDir.
+func TestResolveEditTarget_LocalInstall(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	sourceDir := t.TempDir()
+	writeTestHarness(t, sourceDir, "my-harness")
+
+	id := "local/my-harness"
+	if err := SavePointerByID(&Pointer{
+		ID:   id,
+		Name: "my-harness",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      sourceDir,
+			InstalledAt: "2026-05-11T00:00:00Z",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, installed, err := ResolveEditTarget(id)
+	if err != nil {
+		t.Fatalf("ResolveEditTarget: %v", err)
+	}
+	if got != sourceDir {
+		t.Errorf("dir = %q, want source dir %q", got, sourceDir)
+	}
+	if !installed {
+		t.Error("expected installed=true")
+	}
+}
+
+// TestResolveEditTarget_SourceInstall covers source_type == "source"
+// (installed by name from a configured ynh sources: entry). The
+// resolution is identical to source_type == "local" because both are
+// pointer-form.
+func TestResolveEditTarget_SourceInstall(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	sourceDir := t.TempDir()
+	writeTestHarness(t, sourceDir, "my-harness")
+
+	id := "local/my-harness"
+	if err := SavePointerByID(&Pointer{
+		ID:   id,
+		Name: "my-harness",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "source",
+			Source:      sourceDir,
+			InstalledAt: "2026-05-11T00:00:00Z",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, installed, err := ResolveEditTarget(id)
+	if err != nil {
+		t.Fatalf("ResolveEditTarget: %v", err)
+	}
+	if got != sourceDir {
+		t.Errorf("dir = %q, want source dir %q", got, sourceDir)
+	}
+	if !installed {
+		t.Error("expected installed=true")
 	}
 }
 

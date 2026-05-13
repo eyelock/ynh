@@ -56,6 +56,9 @@ func (m *mockAdapter) MarketplaceManifestDir() string        { return ".mock-plu
 func (m *mockAdapter) GenerateMarketplaceIndex(cfg vendor.MarketplaceIndexConfig, plugins []vendor.MarketplacePluginInfo) ([]byte, error) {
 	return nil, nil
 }
+func (m *mockAdapter) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
+	return nil, nil
+}
 
 func TestAssembleWithPick(t *testing.T) {
 	// Create a fake repo with skills and agents

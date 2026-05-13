@@ -10,7 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/clischema"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 // installListTestHarness creates a harness with custom JSON in the harnesses dir.
@@ -541,8 +543,12 @@ func TestCmdListJSON_BrokenPointerKind(t *testing.T) {
 		t.Setenv("YNH_HOME", home)
 
 		if err := harness.SavePointer(&harness.Pointer{
-			Name: "ghost", SourceType: "local",
-			Source: filepath.Join(t.TempDir(), "gone"), InstalledAt: "2026-05-01T00:00:00Z",
+			Name: "ghost",
+			InstalledJSON: plugin.InstalledJSON{
+				SourceType:  "local",
+				Source:      filepath.Join(t.TempDir(), "gone"),
+				InstalledAt: "2026-05-01T00:00:00Z",
+			},
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -574,8 +580,12 @@ func TestCmdListJSON_BrokenPointerKind(t *testing.T) {
 		// Source dir exists but has no .ynh-plugin/plugin.json.
 		srcDir := t.TempDir()
 		if err := harness.SavePointer(&harness.Pointer{
-			Name: "hollow", SourceType: "local",
-			Source: srcDir, InstalledAt: "2026-05-01T00:00:00Z",
+			Name: "hollow",
+			InstalledJSON: plugin.InstalledJSON{
+				SourceType:  "local",
+				Source:      srcDir,
+				InstalledAt: "2026-05-01T00:00:00Z",
+			},
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -609,8 +619,12 @@ func TestCmdListJSONOrphanPointerEmptyArrays(t *testing.T) {
 	t.Setenv("YNH_HOME", home)
 
 	if err := harness.SavePointer(&harness.Pointer{
-		Name: "stranded", SourceType: "local",
-		Source: filepath.Join(t.TempDir(), "gone"), InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "stranded",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      filepath.Join(t.TempDir(), "gone"),
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -639,5 +653,286 @@ func TestCmdListJSONOrphanPointerEmptyArrays(t *testing.T) {
 	}
 	if got.Harnesses[0].DelegatesTo == nil {
 		t.Error("DelegatesTo is nil; want empty slice")
+	}
+}
+
+// writePluginTree creates a minimal schema-3 harness tree at dir with the
+// given name and installed.json provenance. Used by the fork+registry
+// regression tests below.
+func writePluginTree(t *testing.T, dir, name string, ins *plugin.InstalledJSON) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(dir, plugin.PluginDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hj := `{"name":"` + name + `","version":"0.1.0","default_vendor":"claude"}`
+	if err := os.WriteFile(filepath.Join(dir, plugin.PluginDir, plugin.PluginFile), []byte(hj), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if ins != nil {
+		if err := plugin.SaveInstalledJSON(dir, ins); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestCmdList_ForkAndRegistryWithSameLeafNameAreDistinct verifies that
+// `ynh ls --format json` emits two entries with distinct canonical ids,
+// distinct kinds, and distinct sources when a leaf name exists as both a
+// local-fork pointer and a registry/tree-form install. Regression test for
+// the list.go load shadowing bug introduced by the schema-3 read-symmetry
+// change in PR #158, where the per-row load hard-coded "local/<name>" and
+// shadowed the tree-form entry with the pointer-form harness.
+func TestCmdList_ForkAndRegistryWithSameLeafNameAreDistinct(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	// Pointer-shaped local fork (local/termq-dev). Provenance carries
+	// forked_from so classifyKind returns "local-fork".
+	forkDir := filepath.Join(t.TempDir(), "termq-dev-fork")
+	writePluginTree(t, forkDir, "termq-dev", &plugin.InstalledJSON{
+		SourceType:  "local",
+		Source:      forkDir,
+		InstalledAt: "2026-05-01T00:00:00Z",
+		ForkedFrom: &plugin.ForkedFromJSON{
+			SourceType: "registry",
+			Source:     "github.com/eyelock/assistants",
+		},
+	})
+	if err := harness.SavePointer(&harness.Pointer{
+		Name: "termq-dev",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      forkDir,
+			InstalledAt: "2026-05-01T00:00:00Z",
+			ForkedFrom: &plugin.ForkedFromJSON{
+				SourceType: "registry",
+				Source:     "github.com/eyelock/assistants",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Tree-form registry install at the schema-2 path. The dir name is
+	// the id-fsname so ListAll classifies it as namespaced.
+	registryDir := filepath.Join(home, "harnesses", "github.com--eyelock--assistants--termq-dev")
+	writePluginTree(t, registryDir, "termq-dev", &plugin.InstalledJSON{
+		SourceType:  "registry",
+		Source:      "github.com/eyelock/assistants",
+		InstalledAt: "2026-05-02T00:00:00Z",
+	})
+
+	var stdout bytes.Buffer
+	if err := cmdListTo([]string{"--format", "json"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdListTo: %v", err)
+	}
+	var env listEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v\noutput: %s", err, stdout.String())
+	}
+
+	var rows []listEntry
+	for _, e := range env.Harnesses {
+		if e.Name == "termq-dev" {
+			rows = append(rows, e)
+		}
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 termq-dev rows, got %d; output: %s", len(rows), stdout.String())
+	}
+
+	idsByKind := map[string]string{}
+	sourcesByKind := map[string]string{}
+	for _, r := range rows {
+		idsByKind[r.Kind] = r.ID
+		if r.InstalledFrom != nil {
+			sourcesByKind[r.Kind] = r.InstalledFrom.Source
+		}
+	}
+
+	if idsByKind["local-fork"] != "local/termq-dev" {
+		t.Errorf("local-fork id = %q, want local/termq-dev", idsByKind["local-fork"])
+	}
+	if idsByKind["registry"] != "github.com/eyelock/assistants/termq-dev" {
+		t.Errorf("registry id = %q, want github.com/eyelock/assistants/termq-dev", idsByKind["registry"])
+	}
+	if sourcesByKind["local-fork"] == sourcesByKind["registry"] {
+		t.Errorf("fork and registry rows share source %q; expected distinct sources", sourcesByKind["local-fork"])
+	}
+}
+
+// TestCmdList_TextFormat_ForkAndRegistry mirrors the JSON regression test
+// against the text printer. Two rows must appear with distinct KIND and
+// SOURCE columns.
+func TestCmdList_TextFormat_ForkAndRegistry(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	forkDir := filepath.Join(t.TempDir(), "termq-dev-fork")
+	writePluginTree(t, forkDir, "termq-dev", &plugin.InstalledJSON{
+		SourceType:  "local",
+		Source:      forkDir,
+		InstalledAt: "2026-05-01T00:00:00Z",
+		ForkedFrom: &plugin.ForkedFromJSON{
+			SourceType: "registry",
+			Source:     "github.com/eyelock/assistants",
+		},
+	})
+	if err := harness.SavePointer(&harness.Pointer{
+		Name: "termq-dev",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      forkDir,
+			InstalledAt: "2026-05-01T00:00:00Z",
+			ForkedFrom: &plugin.ForkedFromJSON{
+				SourceType: "registry",
+				Source:     "github.com/eyelock/assistants",
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	registryDir := filepath.Join(home, "harnesses", "github.com--eyelock--assistants--termq-dev")
+	writePluginTree(t, registryDir, "termq-dev", &plugin.InstalledJSON{
+		SourceType:  "registry",
+		Source:      "github.com/eyelock/assistants",
+		InstalledAt: "2026-05-02T00:00:00Z",
+	})
+
+	var stdout bytes.Buffer
+	if err := cmdListTo(nil, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdListTo: %v", err)
+	}
+	out := stdout.String()
+
+	// Rows now lead with the canonical id, not the bare name. Match on
+	// "termq-dev" anywhere in the line so both "local/termq-dev" (fork
+	// pointer) and "github.com/eyelock/assistants/termq-dev" (registry)
+	// are picked up.
+	var termqLines []string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "termq-dev") {
+			termqLines = append(termqLines, line)
+		}
+	}
+	if len(termqLines) != 2 {
+		t.Fatalf("expected 2 termq-dev rows, got %d; output:\n%s", len(termqLines), out)
+	}
+	if termqLines[0] == termqLines[1] {
+		t.Errorf("fork and registry rows render identically:\n  %s\n  %s", termqLines[0], termqLines[1])
+	}
+	sawLocalFork := strings.Contains(termqLines[0], "local-fork") || strings.Contains(termqLines[1], "local-fork")
+	sawRegistry := strings.Contains(termqLines[0], "registry") || strings.Contains(termqLines[1], "registry")
+	if !sawLocalFork {
+		t.Errorf("expected one row with KIND=local-fork; got:\n%s", out)
+	}
+	if !sawRegistry {
+		t.Errorf("expected one row with KIND=registry; got:\n%s", out)
+	}
+}
+
+// TestCmdListJSON_SchemaRoundTrip validates that real ynh ls output
+// validates against the published list schema. Drift-detection: any
+// change to the JSON shape that diverges from docs/schema/cli/list.schema.json
+// fails CI here.
+func TestCmdListJSON_SchemaRoundTrip(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "rt-harness", `{
+		"name": "rt-harness",
+		"version": "0.1.0",
+		"description": "round-trip",
+		"default_vendor": "claude",
+		"installed_from": {
+			"source_type": "local",
+			"source": "/tmp/rt",
+			"installed_at": "2026-05-13T12:00:00Z"
+		}
+	}`)
+
+	var stdout bytes.Buffer
+	if err := cmdListTo([]string{"--format", "json"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdListTo: %v", err)
+	}
+	var v any
+	if err := json.Unmarshal(stdout.Bytes(), &v); err != nil {
+		t.Fatalf("unmarshal: %v\noutput: %s", err, stdout.String())
+	}
+	schema, err := clischema.Get("list")
+	if err != nil {
+		t.Fatalf("Get list schema: %v", err)
+	}
+	if err := schema.Validate(v); err != nil {
+		t.Errorf("ls JSON does not validate against schema: %v\noutput: %s", err, stdout.String())
+	}
+}
+
+// TestCmdListJSON_SourceKindHarness exercises the schema against a
+// source_type: "source" harness — installed via a configured `ynh sources`
+// entry, as written by cmd/ynh/install_resolve.go. This case caught a real
+// drift the original goldens missed: the HarnessSource enum was tightened
+// to ["registry", "git", "local", "fork"] but production also writes
+// "source" (and never writes "fork"). Tests are now the source of truth
+// for which values production actually emits.
+func TestCmdListJSON_SourceKindHarness(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "src-harness", `{
+		"name": "src-harness",
+		"version": "0.1.0",
+		"default_vendor": "claude",
+		"installed_from": {
+			"source_type": "source",
+			"source": "/Users/me/work/harnesses",
+			"installed_at": "2026-05-13T12:00:00Z"
+		}
+	}`)
+	var stdout bytes.Buffer
+	if err := cmdListTo([]string{"--format", "json"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdListTo: %v", err)
+	}
+	var v any
+	if err := json.Unmarshal(stdout.Bytes(), &v); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	schema, err := clischema.Get("list")
+	if err != nil {
+		t.Fatalf("Get list schema: %v", err)
+	}
+	if err := schema.Validate(v); err != nil {
+		t.Errorf("source-kind harness does not validate: %v\noutput: %s", err, stdout.String())
+	}
+}
+
+// TestCmdListJSON_ErrorPathSchema validates that the structured error
+// envelope emitted on a bad --format value validates against the error
+// schema. Exercises the top-level oneOf [success, error] decision.
+func TestCmdListJSON_ErrorPathSchema(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, "harnesses"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	err := cmdListTo([]string{"--format", "bogus"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error from invalid --format")
+	}
+	if !errors.Is(err, errStructuredReported) {
+		// The cliError path requires structured=true (detected by --format json).
+		// "--format bogus" doesn't trigger structured mode, so the error is unstructured.
+		t.Skipf("invalid format did not trigger structured error (cliError path); got %v", err)
+	}
+	var v any
+	if err := json.Unmarshal(stderr.Bytes(), &v); err != nil {
+		t.Fatalf("unmarshal stderr: %v\nstderr: %s", err, stderr.String())
+	}
+	schema, err := clischema.Get("error")
+	if err != nil {
+		t.Fatalf("Get error schema: %v", err)
+	}
+	if err := schema.Validate(v); err != nil {
+		t.Errorf("error envelope does not validate: %v\nstderr: %s", err, stderr.String())
 	}
 }

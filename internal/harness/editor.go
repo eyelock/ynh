@@ -3,6 +3,7 @@ package harness
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/migration"
@@ -18,14 +19,19 @@ func loadManifest(dir string) (*plugin.HarnessJSON, error) {
 	return plugin.LoadPluginJSON(dir)
 }
 
-// ResolveEditTarget resolves a harness reference to a directory.
-// Refs are classified lexically by namespace.Classify:
+// ResolveEditTarget resolves a harness reference to the directory where
+// `ynh include/delegate` edits land. Refs are classified lexically by
+// namespace.Classify:
 //   - RefPath ("./", "../", "/", "~/", drive-letter): filesystem path
 //   - RefID (slash-bearing canonical id): installed harness, looked up by id
 //   - RefInvalid (bare names, "name@org/repo"): rejected with hint
 //
-// Schema 2 only — the on-disk layout is id-keyed, and there is exactly one
-// valid ref shape per kind.
+// For installed (RefID) harnesses the resolution mirrors LoadByID: a
+// pointer file (pointer-form install) wins over a tree under
+// HarnessesDir (tree-form). This guarantees reads and writes land at the
+// same place — no divergence between the install copy and the source
+// tree, which was the read/write split that motivated schema 3 (see
+// topology.go).
 func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
 	switch namespace.Classify(ref) {
 	case namespace.RefPath:
@@ -38,18 +44,18 @@ func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
 		}
 		return abs, false, nil
 	case namespace.RefID:
-		dir := InstalledDirByID(ref)
-		if DetectFormat(dir) == "plugin" {
-			return dir, true, nil
-		}
 		if ptr, _ := LoadPointerByID(ref); ptr != nil {
-			return ptr.Source, true, nil
+			return localLoadDir(&ptr.InstalledJSON), true, nil
 		}
 		// Schema-1 fallback: fork created before schema-2 pointer writer landed.
 		if name, ok := strings.CutPrefix(ref, "local/"); ok {
 			if ptr, _ := LoadPointer(name); ptr != nil {
-				return ptr.Source, true, nil
+				return localLoadDir(&ptr.InstalledJSON), true, nil
 			}
+		}
+		treeDir := InstalledDirByID(ref)
+		if DetectFormat(treeDir) == "plugin" {
+			return treeDir, true, nil
 		}
 		return "", false, fmt.Errorf("harness %q: %w", ref, ErrNotFound)
 	default:
@@ -527,6 +533,607 @@ func ambiguousDelegateError(url string, delegates []plugin.DelegateMeta, indices
 		"delegate %q matches multiple entries:\n%s\nUse --path (remove) or --from-path (update) to disambiguate",
 		url, strings.Join(paths, "\n"),
 	)
+}
+
+// ---- focus ----------------------------------------------------------
+
+// FocusAddOptions controls ynh focus add behaviour.
+type FocusAddOptions struct {
+	Profile string
+}
+
+// FocusUpdateOptions controls ynh focus update behaviour.
+// Non-nil pointer fields are applied; nil leaves the field unchanged.
+// A non-nil empty Profile clears the focus's profile binding.
+type FocusUpdateOptions struct {
+	Prompt  *string
+	Profile *string
+}
+
+// AddFocus adds a new focus to a harness directory.
+func AddFocus(dir, name, prompt string, opts FocusAddOptions) error {
+	if name == "" {
+		return fmt.Errorf("focus name must not be empty")
+	}
+	if prompt == "" {
+		return fmt.Errorf("focus prompt must not be empty")
+	}
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	if _, exists := hj.Focuses[name]; exists {
+		return fmt.Errorf("focus %q already exists in harness %q.\nUse 'ynh focus update' to change it", name, hj.Name)
+	}
+	if opts.Profile != "" {
+		if _, ok := hj.Profiles[opts.Profile]; !ok {
+			return fmt.Errorf("focus %q references unknown profile %q", name, opts.Profile)
+		}
+	}
+	if hj.Focuses == nil {
+		hj.Focuses = make(map[string]plugin.Focus)
+	}
+	hj.Focuses[name] = plugin.Focus{Profile: opts.Profile, Prompt: prompt}
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// RemoveFocus removes a focus by name.
+func RemoveFocus(dir, name string) error {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	if _, ok := hj.Focuses[name]; !ok {
+		return fmt.Errorf("focus %q not found in harness %q", name, hj.Name)
+	}
+	delete(hj.Focuses, name)
+	if len(hj.Focuses) == 0 {
+		hj.Focuses = nil
+	}
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// UpdateFocus mutates fields on an existing focus.
+func UpdateFocus(dir, name string, opts FocusUpdateOptions) error {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	f, ok := hj.Focuses[name]
+	if !ok {
+		return fmt.Errorf("focus %q not found in harness %q", name, hj.Name)
+	}
+	if opts.Prompt != nil {
+		if *opts.Prompt == "" {
+			return fmt.Errorf("focus prompt must not be empty")
+		}
+		f.Prompt = *opts.Prompt
+	}
+	if opts.Profile != nil {
+		if *opts.Profile != "" {
+			if _, pok := hj.Profiles[*opts.Profile]; !pok {
+				return fmt.Errorf("focus %q references unknown profile %q", name, *opts.Profile)
+			}
+		}
+		f.Profile = *opts.Profile
+	}
+	hj.Focuses[name] = f
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// ---- profile --------------------------------------------------------
+
+// AddProfile creates a new empty profile.
+func AddProfile(dir, name string) error {
+	if name == "" {
+		return fmt.Errorf("profile name must not be empty")
+	}
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	if _, exists := hj.Profiles[name]; exists {
+		return fmt.Errorf("profile %q already exists in harness %q", name, hj.Name)
+	}
+	if hj.Profiles == nil {
+		hj.Profiles = make(map[string]plugin.Profile)
+	}
+	hj.Profiles[name] = plugin.Profile{}
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// RemoveProfile removes a profile by name. Fails if any focus still
+// references the profile, so the caller can fix those first.
+func RemoveProfile(dir, name string) error {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	if _, ok := hj.Profiles[name]; !ok {
+		return fmt.Errorf("profile %q not found in harness %q", name, hj.Name)
+	}
+	var blockers []string
+	for fname, f := range hj.Focuses {
+		if f.Profile == name {
+			blockers = append(blockers, fname)
+		}
+	}
+	if len(blockers) > 0 {
+		sort.Strings(blockers)
+		return fmt.Errorf("profile %q is referenced by focus(es): %s.\nUpdate or remove those focuses first", name, strings.Join(blockers, ", "))
+	}
+	delete(hj.Profiles, name)
+	if len(hj.Profiles) == 0 {
+		hj.Profiles = nil
+	}
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// ---- hooks (harness + profile) -------------------------------------
+
+// HookAddOptions controls hook-add behaviour. Shared by harness-level
+// (AddHook) and profile-level (AddProfileHook) since the field set is
+// identical — only the storage scope differs.
+type HookAddOptions struct {
+	Matcher string
+}
+
+// AddHook appends a hook entry to a top-level event on the harness.
+func AddHook(dir, event, command string, opts HookAddOptions) error {
+	if !plugin.ValidHookEvents[event] {
+		return fmt.Errorf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop)", event)
+	}
+	if command == "" {
+		return fmt.Errorf("hook command must not be empty")
+	}
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	if hj.Hooks == nil {
+		hj.Hooks = make(map[string][]plugin.HookEntry)
+	}
+	hj.Hooks[event] = append(hj.Hooks[event], plugin.HookEntry{Matcher: opts.Matcher, Command: command})
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// RemoveHook removes a single top-level hook entry by zero-based index.
+// When the last entry for an event is removed, the event key is also deleted.
+func RemoveHook(dir, event string, index int) error {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	entries, ok := hj.Hooks[event]
+	if !ok {
+		return fmt.Errorf("harness %q has no hooks for event %q", hj.Name, event)
+	}
+	if index < 0 || index >= len(entries) {
+		return fmt.Errorf("hook index %d out of range [0, %d) for event %q in harness %q", index, len(entries), event, hj.Name)
+	}
+	entries = append(entries[:index], entries[index+1:]...)
+	if len(entries) == 0 {
+		delete(hj.Hooks, event)
+	} else {
+		hj.Hooks[event] = entries
+	}
+	if len(hj.Hooks) == 0 {
+		hj.Hooks = nil
+	}
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// AddProfileHook appends a hook entry to an event in a profile.
+func AddProfileHook(dir, profileName, event, command string, opts HookAddOptions) error {
+	if !plugin.ValidHookEvents[event] {
+		return fmt.Errorf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop)", event)
+	}
+	if command == "" {
+		return fmt.Errorf("hook command must not be empty")
+	}
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	p, ok := hj.Profiles[profileName]
+	if !ok {
+		return fmt.Errorf("profile %q not found in harness %q", profileName, hj.Name)
+	}
+	if p.Hooks == nil {
+		p.Hooks = make(map[string][]plugin.HookEntry)
+	}
+	p.Hooks[event] = append(p.Hooks[event], plugin.HookEntry{Matcher: opts.Matcher, Command: command})
+	hj.Profiles[profileName] = p
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// RemoveProfileHook removes a single hook entry by zero-based index. When
+// the last entry for an event is removed, the event key is also deleted.
+func RemoveProfileHook(dir, profileName, event string, index int) error {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	p, ok := hj.Profiles[profileName]
+	if !ok {
+		return fmt.Errorf("profile %q not found in harness %q", profileName, hj.Name)
+	}
+	entries, ok := p.Hooks[event]
+	if !ok {
+		return fmt.Errorf("profile %q has no hooks for event %q", profileName, event)
+	}
+	if index < 0 || index >= len(entries) {
+		return fmt.Errorf("hook index %d out of range [0, %d) for event %q in profile %q", index, len(entries), event, profileName)
+	}
+	entries = append(entries[:index], entries[index+1:]...)
+	if len(entries) == 0 {
+		delete(p.Hooks, event)
+	} else {
+		p.Hooks[event] = entries
+	}
+	if len(p.Hooks) == 0 {
+		p.Hooks = nil
+	}
+	hj.Profiles[profileName] = p
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// ---- mcp (harness + profile) ---------------------------------------
+
+// MCPAddOptions controls ynh mcp add behaviour (harness-level). The
+// profile-level variant adds a Null flag (see ProfileMCPAddOptions);
+// harness-level entries can't be null — there's nothing to inherit from.
+type MCPAddOptions struct {
+	Command string
+	Args    []string
+	Env     map[string]string
+	URL     string
+	Headers map[string]string
+}
+
+// MCPUpdateOptions controls mcp update behaviour. Shared by harness-level
+// (UpdateMCP) and profile-level (UpdateProfileMCP) since the update
+// semantics are identical — pointer fields and Set* booleans disambiguate
+// "not provided" from "empty" in both scopes.
+type MCPUpdateOptions struct {
+	Command    *string
+	Args       []string
+	SetArgs    bool
+	Env        map[string]string
+	SetEnv     bool
+	URL        *string
+	Headers    map[string]string
+	SetHeaders bool
+}
+
+// ProfileMCPAddOptions controls ynh profile mcp add behaviour. Adds the
+// Null flag to MCPAddOptions for explicitly suppressing an inherited
+// harness-level server during merge.
+type ProfileMCPAddOptions struct {
+	Command string
+	Args    []string
+	Env     map[string]string
+	URL     string
+	Headers map[string]string
+	Null    bool
+}
+
+// AddMCP adds a new top-level MCP server entry to the harness.
+func AddMCP(dir, serverName string, opts MCPAddOptions) error {
+	if serverName == "" {
+		return fmt.Errorf("mcp server name must not be empty")
+	}
+	if opts.Command == "" && opts.URL == "" {
+		return fmt.Errorf("mcp add requires --command or --url")
+	}
+	if opts.Command != "" && opts.URL != "" {
+		return fmt.Errorf("mcp add cannot have both --command and --url")
+	}
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	if _, exists := hj.MCPServers[serverName]; exists {
+		return fmt.Errorf("mcp server %q already present in harness %q.\nUse 'ynh mcp update' to change it", serverName, hj.Name)
+	}
+	if hj.MCPServers == nil {
+		hj.MCPServers = make(map[string]plugin.MCPServer)
+	}
+	hj.MCPServers[serverName] = plugin.MCPServer{
+		Command: opts.Command,
+		Args:    opts.Args,
+		Env:     opts.Env,
+		URL:     opts.URL,
+		Headers: opts.Headers,
+	}
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// RemoveMCP deletes a top-level MCP server entry from the harness.
+func RemoveMCP(dir, serverName string) error {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	if _, exists := hj.MCPServers[serverName]; !exists {
+		return fmt.Errorf("mcp server %q not found in harness %q", serverName, hj.Name)
+	}
+	delete(hj.MCPServers, serverName)
+	if len(hj.MCPServers) == 0 {
+		hj.MCPServers = nil
+	}
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// UpdateMCP mutates fields on an existing top-level MCP server.
+func UpdateMCP(dir, serverName string, opts MCPUpdateOptions) error {
+	if opts.Command == nil && !opts.SetArgs && !opts.SetEnv && opts.URL == nil && !opts.SetHeaders {
+		return fmt.Errorf("ynh mcp update: at least one flag must be specified")
+	}
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	srv, exists := hj.MCPServers[serverName]
+	if !exists {
+		return fmt.Errorf("mcp server %q not found in harness %q", serverName, hj.Name)
+	}
+	if opts.Command != nil {
+		srv.Command = *opts.Command
+	}
+	if opts.SetArgs {
+		srv.Args = opts.Args
+	}
+	if opts.SetEnv {
+		srv.Env = opts.Env
+	}
+	if opts.URL != nil {
+		srv.URL = *opts.URL
+	}
+	if opts.SetHeaders {
+		srv.Headers = opts.Headers
+	}
+	if srv.Command == "" && srv.URL == "" {
+		return fmt.Errorf("mcp server %q must have either command or url after update", serverName)
+	}
+	if srv.Command != "" && srv.URL != "" {
+		return fmt.Errorf("mcp server %q cannot have both command and url after update", serverName)
+	}
+	hj.MCPServers[serverName] = srv
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// AddProfileMCP adds a new MCP server entry to a profile.
+// Null=true writes a JSON null (suppresses an inherited server during merge).
+func AddProfileMCP(dir, profileName, serverName string, opts ProfileMCPAddOptions) error {
+	if serverName == "" {
+		return fmt.Errorf("mcp server name must not be empty")
+	}
+	if opts.Null {
+		if opts.Command != "" || opts.URL != "" {
+			return fmt.Errorf("--null cannot be combined with --command or --url")
+		}
+	} else {
+		if opts.Command == "" && opts.URL == "" {
+			return fmt.Errorf("mcp add requires --command, --url, or --null")
+		}
+		if opts.Command != "" && opts.URL != "" {
+			return fmt.Errorf("mcp add cannot have both --command and --url")
+		}
+	}
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	p, ok := hj.Profiles[profileName]
+	if !ok {
+		return fmt.Errorf("profile %q not found in harness %q", profileName, hj.Name)
+	}
+	if _, exists := p.MCPServers[serverName]; exists {
+		return fmt.Errorf("mcp server %q already present in profile %q.\nUse 'ynh profile mcp update' to change it", serverName, profileName)
+	}
+	if p.MCPServers == nil {
+		p.MCPServers = make(map[string]*plugin.MCPServer)
+	}
+	if opts.Null {
+		p.MCPServers[serverName] = nil
+	} else {
+		p.MCPServers[serverName] = &plugin.MCPServer{
+			Command: opts.Command,
+			Args:    opts.Args,
+			Env:     opts.Env,
+			URL:     opts.URL,
+			Headers: opts.Headers,
+		}
+	}
+	hj.Profiles[profileName] = p
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// RemoveProfileMCP deletes the named MCP server entry from a profile.
+// This is different from a null entry — remove drops the key entirely,
+// so the inherited server (if any) is no longer suppressed.
+func RemoveProfileMCP(dir, profileName, serverName string) error {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	p, ok := hj.Profiles[profileName]
+	if !ok {
+		return fmt.Errorf("profile %q not found in harness %q", profileName, hj.Name)
+	}
+	if _, exists := p.MCPServers[serverName]; !exists {
+		return fmt.Errorf("mcp server %q not found in profile %q", serverName, profileName)
+	}
+	delete(p.MCPServers, serverName)
+	if len(p.MCPServers) == 0 {
+		p.MCPServers = nil
+	}
+	hj.Profiles[profileName] = p
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// UpdateProfileMCP mutates fields on an existing MCP server in a profile.
+// Null entries cannot be updated — remove and re-add instead.
+func UpdateProfileMCP(dir, profileName, serverName string, opts MCPUpdateOptions) error {
+	if opts.Command == nil && !opts.SetArgs && !opts.SetEnv && opts.URL == nil && !opts.SetHeaders {
+		return fmt.Errorf("ynh profile mcp update: at least one flag must be specified")
+	}
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	p, ok := hj.Profiles[profileName]
+	if !ok {
+		return fmt.Errorf("profile %q not found in harness %q", profileName, hj.Name)
+	}
+	srv, exists := p.MCPServers[serverName]
+	if !exists {
+		return fmt.Errorf("mcp server %q not found in profile %q", serverName, profileName)
+	}
+	if srv == nil {
+		return fmt.Errorf("mcp server %q in profile %q is a null entry; remove it and add a new one to replace", serverName, profileName)
+	}
+	if opts.Command != nil {
+		srv.Command = *opts.Command
+	}
+	if opts.SetArgs {
+		srv.Args = opts.Args
+	}
+	if opts.SetEnv {
+		srv.Env = opts.Env
+	}
+	if opts.URL != nil {
+		srv.URL = *opts.URL
+	}
+	if opts.SetHeaders {
+		srv.Headers = opts.Headers
+	}
+	if srv.Command == "" && srv.URL == "" {
+		return fmt.Errorf("mcp server %q must have either command or url after update", serverName)
+	}
+	if srv.Command != "" && srv.URL != "" {
+		return fmt.Errorf("mcp server %q cannot have both command and url after update", serverName)
+	}
+	p.MCPServers[serverName] = srv
+	hj.Profiles[profileName] = p
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// ---- profile includes -----------------------------------------------
+
+// AddProfileInclude mirrors AddInclude but targets a profile's includes slice.
+func AddProfileInclude(dir, profileName, url string, opts AddOptions) error {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	p, ok := hj.Profiles[profileName]
+	if !ok {
+		return fmt.Errorf("profile %q not found in harness %q", profileName, hj.Name)
+	}
+	idx := findInclude(p.Includes, url, opts.Path)
+	if idx >= 0 {
+		if !opts.Replace {
+			msg := fmt.Sprintf("include %q already present in profile %q", url, profileName)
+			if opts.Path != "" {
+				msg = fmt.Sprintf("include %q (path: %q) already present in profile %q", url, opts.Path, profileName)
+			}
+			return fmt.Errorf("%s.\nUse 'ynh profile include update' to change its options, or pass --replace to overwrite", msg)
+		}
+		p.Includes[idx] = plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick}
+	} else {
+		p.Includes = append(p.Includes, plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick})
+	}
+	hj.Profiles[profileName] = p
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// RemoveProfileInclude mirrors RemoveInclude but targets a profile's includes.
+func RemoveProfileInclude(dir, profileName, url string, opts RemoveOptions) error {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	p, ok := hj.Profiles[profileName]
+	if !ok {
+		return fmt.Errorf("profile %q not found in harness %q", profileName, hj.Name)
+	}
+	matches := findAllIncludes(p.Includes, url)
+	if len(matches) == 0 {
+		return fmt.Errorf("include %q not found in profile %q", url, profileName)
+	}
+	if opts.Path == "" && len(matches) > 1 {
+		return ambiguousIncludeError(url, p.Includes, matches)
+	}
+	keep := p.Includes[:0]
+	for _, inc := range p.Includes {
+		if inc.Git == url && (opts.Path == "" || inc.Path == opts.Path) {
+			continue
+		}
+		keep = append(keep, inc)
+	}
+	if len(keep) == len(p.Includes) {
+		return fmt.Errorf("include %q (path: %q) not found in profile %q", url, opts.Path, profileName)
+	}
+	p.Includes = keep
+	hj.Profiles[profileName] = p
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// UpdateProfileInclude mirrors UpdateInclude but targets a profile's includes.
+func UpdateProfileInclude(dir, profileName, url string, opts UpdateOptions) error {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return err
+	}
+	p, ok := hj.Profiles[profileName]
+	if !ok {
+		return fmt.Errorf("profile %q not found in harness %q", profileName, hj.Name)
+	}
+	targetIdx, findErr := findUpdateTarget(p.Includes, url, opts.FromPath, profileName)
+	if findErr != nil {
+		return findErr
+	}
+	inc := &p.Includes[targetIdx]
+	if opts.NewPath != nil {
+		inc.Path = *opts.NewPath
+	}
+	if opts.SetPick {
+		inc.Pick = opts.Pick
+	}
+	if opts.Ref != nil {
+		inc.Ref = *opts.Ref
+	}
+	hj.Profiles[profileName] = p
+	return plugin.SavePluginJSON(dir, hj)
+}
+
+// FindProfileIncludeUpdateTarget mirrors FindUpdateTarget for profile includes.
+func FindProfileIncludeUpdateTarget(dir, profileName, url string, opts UpdateOptions) (plugin.IncludeMeta, error) {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return plugin.IncludeMeta{}, err
+	}
+	p, ok := hj.Profiles[profileName]
+	if !ok {
+		return plugin.IncludeMeta{}, fmt.Errorf("profile %q not found in harness %q", profileName, hj.Name)
+	}
+	targetIdx, findErr := findUpdateTarget(p.Includes, url, opts.FromPath, profileName)
+	if findErr != nil {
+		return plugin.IncludeMeta{}, findErr
+	}
+	inc := p.Includes[targetIdx]
+	if opts.NewPath != nil {
+		inc.Path = *opts.NewPath
+	}
+	if opts.SetPick {
+		inc.Pick = opts.Pick
+	}
+	if opts.Ref != nil {
+		inc.Ref = *opts.Ref
+	}
+	return inc, nil
 }
 
 func formatAvailable(names []string) string {

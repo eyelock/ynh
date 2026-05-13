@@ -22,7 +22,9 @@ func TestFork_BasicProvenance(t *testing.T) {
 	// or the original uninstalled first.
 	s.mustRunYnh(t, "fork", "local/fork-source", "--to", forkDir, "--name", "my-fork")
 
-	got := readInstalledJSON(t, forkDir)
+	// Schema 3: fork provenance lives on the pointer file, not in the
+	// user's source tree.
+	got := readInstalledRecord(t, s.home, "local/my-fork")
 	assertEqual(t, "source_type", got.SourceType, "local")
 	assertEqual(t, "source", got.Source, forkDir)
 	if got.ForkedFrom == nil {
@@ -51,7 +53,7 @@ func TestFork_CarryForward(t *testing.T) {
 	s.mustRunYnh(t, "uninstall", "local/fork-source")
 	s.mustRunYnh(t, "install", forkDir)
 
-	installed := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "local--my-fork-cf"))
+	installed := readInstalledRecord(t, s.home, "local/my-fork-cf")
 	if installed.ForkedFrom == nil {
 		t.Fatal("expected forked_from to carry forward into re-installed harness")
 	}

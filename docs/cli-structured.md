@@ -134,3 +134,15 @@ This document governs *output* shape and stability. It does not govern:
 - Log or diagnostic output from long-running operations (e.g. Git clones) — that remains human-oriented text on `stderr`.
 
 Each structured-output command documents its own field reference in `docs/reference.md` or its command page. This doc is the overarching rule set they all conform to.
+
+## Published JSON Schemas
+
+Every `--format json` command has a published JSON Schema embedded in the binary. The schemas are the machine-readable form of the conventions in this document — wire-protocol versioning, envelope shape, error envelope, additive-compat rules.
+
+- `ynh schema <name>` — print one embedded schema (`version`, `list`, `info`, `installed`, `fork`, `error`, etc.).
+- `ynh schema --all --format json` — manifest of every embedded schema, for tools that load them at startup.
+- `ynd validate-output --schema <name>` — validate a captured response against the schema; exits non-zero on a divergence.
+
+See [Published JSON Schemas](schema-cli.md) for the contract details — capability-bump rule, validator subset, consumer boundary, and the workflow for adding a new schema.
+
+**Error envelope evolution.** The current emission is `{"error": {"code": "...", "message": "..."}}` (the `code` values listed above are the closed enum). Additive fields `category` (coarse routing class), `retryable` (bool), and `hint` (human guidance) are reserved and may appear on a future capabilities bump — consumers must tolerate either shape today.

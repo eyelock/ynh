@@ -35,10 +35,12 @@ func writeForkTree(t *testing.T, dir, name string) {
 func TestPointer_SaveLoadRoundTrip(t *testing.T) {
 	t.Setenv("YNH_HOME", t.TempDir())
 	ptr := &Pointer{
-		Name:        "researcher",
-		SourceType:  "local",
-		Source:      "/users/x/work/researcher",
-		InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "researcher",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      "/users/x/work/researcher",
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}
 	if err := SavePointer(ptr); err != nil {
 		t.Fatalf("SavePointer: %v", err)
@@ -66,52 +68,59 @@ func TestPointer_LoadMissing(t *testing.T) {
 	}
 }
 
-func TestLoad_PointerBeatsTreePrecedence(t *testing.T) {
+func TestLoadByID_PointerBeatsTreePrecedence(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
 
-	// Create a tree-shaped install at ~/.ynh/harnesses/researcher
-	treeDir := filepath.Join(home, "harnesses", "researcher")
+	// Create a tree-shaped install at the schema-2 path
+	treeDir := filepath.Join(home, "harnesses", "local--researcher")
 	writeForkTree(t, treeDir, "researcher")
 
-	// Create a fork tree elsewhere and a pointer registering it
+	// Create a fork tree elsewhere and register it via a schema-1 pointer
+	// (simulating a fork written by an older binary, exercising the fallback
+	// in LoadByID that reads name-keyed pointer files).
 	forkDir := filepath.Join(t.TempDir(), "researcher")
 	writeForkTree(t, forkDir, "researcher")
 	if err := SavePointer(&Pointer{
-		Name:        "researcher",
-		SourceType:  "local",
-		Source:      forkDir,
-		InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "researcher",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      forkDir,
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	p, err := Load("researcher")
+	p, err := LoadByID("local/researcher")
 	if err != nil {
-		t.Fatalf("Load: %v", err)
+		t.Fatalf("LoadByID: %v", err)
 	}
-	// Pointer must win — Dir resolves to forkDir, not the flat tree.
+	// Pointer must win — Dir resolves to forkDir, not the tree.
 	absFork, _ := filepath.Abs(forkDir)
 	if p.Dir != absFork {
-		t.Errorf("Load resolved to %q, want %q (pointer should beat flat tree)", p.Dir, absFork)
+		t.Errorf("LoadByID resolved to %q, want %q (pointer should beat tree)", p.Dir, absFork)
 	}
 }
 
-func TestLoad_PointerWithMissingSource(t *testing.T) {
+func TestLoadByID_PointerWithMissingSource(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
 
-	// Pointer references a path that doesn't exist
+	// Schema-1 pointer (name-keyed) pointing at a path that no longer exists,
+	// exercising the LoadByID schema-1 fallback for "local/<name>" ids.
 	if err := SavePointer(&Pointer{
-		Name:        "ghost",
-		SourceType:  "local",
-		Source:      filepath.Join(t.TempDir(), "deleted"),
-		InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "ghost",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      filepath.Join(t.TempDir(), "deleted"),
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err := Load("ghost")
+	_, err := LoadByID("local/ghost")
 	if err == nil {
 		t.Fatal("expected error for missing pointer source")
 	}
@@ -135,8 +144,12 @@ func TestListAll_UnionsPointersAndTrees(t *testing.T) {
 	forkDir := filepath.Join(t.TempDir(), "fork-one")
 	writeForkTree(t, forkDir, "fork-one")
 	if err := SavePointer(&Pointer{
-		Name: "fork-one", SourceType: "local", Source: forkDir,
-		InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "fork-one",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      forkDir,
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -170,8 +183,12 @@ func TestListAll_PointerWinsOverTreeOnDuplicate(t *testing.T) {
 	forkDir := filepath.Join(t.TempDir(), "dup")
 	writeForkTree(t, forkDir, "dup")
 	if err := SavePointer(&Pointer{
-		Name: "dup", SourceType: "local", Source: forkDir,
-		InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "dup",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      forkDir,
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +220,12 @@ func TestRemovePointer_Idempotent(t *testing.T) {
 		t.Errorf("RemovePointer on missing: %v", err)
 	}
 	if err := SavePointer(&Pointer{
-		Name: "x", SourceType: "local", Source: "/tmp/x", InstalledAt: "now",
+		Name: "x",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      "/tmp/x",
+			InstalledAt: "now",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -229,10 +251,12 @@ func TestLoadByID_Schema1PointerFallback(t *testing.T) {
 
 	// Write a schema-1 pointer: <name>.json (no id field, no local-- prefix).
 	if err := SavePointer(&Pointer{
-		Name:        "ynh-dev",
-		SourceType:  "local",
-		Source:      forkDir,
-		InstalledAt: "2026-05-08T19:26:52Z",
+		Name: "ynh-dev",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      forkDir,
+			InstalledAt: "2026-05-08T19:26:52Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -264,8 +288,12 @@ func TestListAll_ForkAndRegistryInstallSameLeafName(t *testing.T) {
 	forkDir := filepath.Join(t.TempDir(), "termq-dev")
 	writeForkTree(t, forkDir, "termq-dev")
 	if err := SavePointer(&Pointer{
-		Name: "termq-dev", SourceType: "local", Source: forkDir,
-		InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "termq-dev",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      forkDir,
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -291,3 +291,7 @@ rm -rf /tmp/ynh-tutorial
 - Vendor flags pass through to the underlying CLI
 - `--entrypoint` overrides give full ynh/ynd access
 - Harness images are ready for CI/CD pipelines with no host setup
+
+## Next
+
+[Tutorial 17: Namespacing & Migration](tutorial/18-namespacing-and-migration.md) — resolve name collisions across registries and migrate legacy installs.

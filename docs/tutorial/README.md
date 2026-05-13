@@ -14,31 +14,33 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 | 4 | [Hooks](tutorial/10-hooks.md) | Declare vendor-agnostic lifecycle hooks |
 | 5 | [MCP Servers](tutorial/11-mcp-servers.md) | Declare MCP server dependencies per harness |
 | 6 | [Profiles](tutorial/13-profiles.md) | Environment-specific overrides with profiles |
+| 7 | [Focus](tutorial/14-focus.md) | Bind a prompt and profile for repeatable, non-interactive runs |
+| 8 | [Project-Local Config](tutorial/15-project-local-config.md) | Zero-install `.ynh-plugin/plugin.json` in your project root |
 
 ### Refine
 
 | # | Tutorial | What you'll learn |
 |---|----------|-------------------|
-| 7 | [Developer Tools](tutorial/08-developer-tools.md) | Scaffold, lint, validate, format, compress, inspect with ynd |
-| 8 | [Developer Preview](tutorial/12-developer-preview.md) | Preview and diff assembled output across vendors |
-| 9 | [Include Editing](tutorial/17-include-editing.md) | Add, remove, and update includes in an installed harness |
+| 9 | [Developer Tools](tutorial/08-developer-tools.md) | Scaffold, lint, validate, format, compress, inspect with ynd |
+| 10 | [Developer Preview](tutorial/12-developer-preview.md) | Preview and diff assembled output across vendors |
 
 ### Automate
 
 | # | Tutorial | What you'll learn |
 |---|----------|-------------------|
-| 9 | [Structured Output](tutorial/16-structured-output.md) | Use `--format json` for scripts, CI, and tool integration |
+| 11 | [Structured Output](tutorial/16-structured-output.md) | Use `--format json` for scripts, CI, and tool integration |
 
 ### Share & Scale
 
 | # | Tutorial | What you'll learn |
 |---|----------|-------------------|
-| 10 | [Delegation](tutorial/04-delegation.md) | Chain harnesses together as subagents |
-| 11 | [Export](tutorial/05-export.md) | Produce vendor-native distributable plugins |
-| 12 | [Marketplace](tutorial/06-marketplace.md) | Generate marketplace indexes for team distribution |
-| 13 | [Registry & Discovery](tutorial/07-registry-and-discovery.md) | Search and install harnesses from curated registries |
-| 14 | [Docker Images](tutorial/09-docker-image.md) | Build harness appliance images for CI/CD |
-| 15 | [Sensors](tutorial/19-sensors.md) | Declare observation surfaces a loop driver consumes |
+| 12 | [Delegation](tutorial/04-delegation.md) | Chain harnesses together as subagents |
+| 13 | [Export](tutorial/05-export.md) | Produce vendor-native distributable plugins |
+| 14 | [Marketplace](tutorial/06-marketplace.md) | Generate marketplace indexes for team distribution |
+| 15 | [Registry & Discovery](tutorial/07-registry-and-discovery.md) | Search and install harnesses from curated registries |
+| 16 | [Docker Images](tutorial/09-docker-image.md) | Build harness appliance images for CI/CD |
+| 17 | [Namespacing & Migration](tutorial/18-namespacing-and-migration.md) | Resolve name collisions across registries and migrate legacy installs |
+| 18 | [Sensors](tutorial/19-sensors.md) | Declare observation surfaces a loop driver consumes |
 
 ## Manual Test Plan
 

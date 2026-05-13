@@ -441,4 +441,4 @@ ynh uninstall github.com/eyelock/assistants/tester 2>/dev/null
 
 ## Next
 
-[Tutorial 13: Docker Images](tutorial/09-docker-image.md) — build harness appliance images for CI/CD.
+[Tutorial 16: Docker Images](tutorial/09-docker-image.md) — build harness appliance images for CI/CD.

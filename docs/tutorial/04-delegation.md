@@ -154,4 +154,4 @@ ynh uninstall local/team-lead
 
 ## Next
 
-[Tutorial 10: Export](tutorial/05-export.md) — produce vendor-native distributable plugins.
+[Tutorial 13: Export](tutorial/05-export.md) — produce vendor-native distributable plugins.

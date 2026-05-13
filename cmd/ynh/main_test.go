@@ -10,6 +10,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 func TestParseRunArgs(t *testing.T) {
@@ -319,6 +320,60 @@ func TestParseRunArgs_Interactive(t *testing.T) {
 	}
 }
 
+func TestParseRunArgs_Instructions(t *testing.T) {
+	t.Setenv("YNH_FOCUS", "")
+	t.Setenv("YNH_HARNESS_FILE", "")
+
+	tests := []struct {
+		name             string
+		args             []string
+		wantInstructions string
+		wantVendorArgs   []string
+	}{
+		{
+			name:             "instructions flag",
+			args:             []string{"my-harness", "--instructions", "PR #22 in eyelock/assistants"},
+			wantInstructions: "PR #22 in eyelock/assistants",
+		},
+		{
+			name:             "instructions with focus",
+			args:             []string{"my-harness", "--focus", "review", "--instructions", "PR #22"},
+			wantInstructions: "PR #22",
+		},
+		{
+			name:             "instructions not forwarded to vendor",
+			args:             []string{"my-harness", "--instructions", "PR #22", "--model", "opus", "--", "fix this"},
+			wantInstructions: "PR #22",
+			wantVendorArgs:   []string{"--model", "opus"},
+		},
+		{
+			name:             "no instructions",
+			args:             []string{"my-harness"},
+			wantInstructions: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ra := parseRunArgs(tt.args)
+			if ra.Instructions != tt.wantInstructions {
+				t.Errorf("Instructions = %q, want %q", ra.Instructions, tt.wantInstructions)
+			}
+			if tt.wantVendorArgs != nil {
+				if len(ra.VendorArgs) != len(tt.wantVendorArgs) {
+					t.Errorf("VendorArgs = %v, want %v", ra.VendorArgs, tt.wantVendorArgs)
+				} else {
+					for i := range ra.VendorArgs {
+						if ra.VendorArgs[i] != tt.wantVendorArgs[i] {
+							t.Errorf("VendorArgs[%d] = %q, want %q", i, ra.VendorArgs[i], tt.wantVendorArgs[i])
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestResolveVendor(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -402,7 +457,7 @@ func installTestHarness(t *testing.T, name string) string {
 	t.Helper()
 	id := "local/" + name
 
-	// Schema-1 flat path — for legacy Load(name) callers.
+	// Schema-1 flat path — retained for tests that exercise schema-1 compat fallbacks.
 	flatDir := harness.InstalledDir(name)
 	if err := os.MkdirAll(flatDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -709,9 +764,9 @@ func TestFormatArtifactSummary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := formatArtifactSummary("artfmt")
+	got := formatArtifactSummaryDir(harnessDir)
 	if got != "2s 1a" {
-		t.Errorf("formatArtifactSummary() = %q, want %q", got, "2s 1a")
+		t.Errorf("formatArtifactSummaryDir() = %q, want %q", got, "2s 1a")
 	}
 }
 
@@ -721,9 +776,9 @@ func TestFormatArtifactSummary_Empty(t *testing.T) {
 	t.Setenv("YNH_HOME", "")
 
 	installTestHarness(t, "neart")
-	got := formatArtifactSummary("neart")
+	got := formatArtifactSummaryDir(harness.InstalledDirByID("local/neart"))
 	if got != "0" {
-		t.Errorf("formatArtifactSummary() = %q, want %q", got, "0")
+		t.Errorf("formatArtifactSummaryDir() = %q, want %q", got, "0")
 	}
 }
 
@@ -867,10 +922,18 @@ func TestCmdInstall_PathFlag(t *testing.T) {
 		t.Fatalf("cmdInstall with --path failed: %v", err)
 	}
 
-	// Verify harness was installed (format migrated to .ynh-plugin/plugin.json)
-	installDir := harness.InstalledDirByID("local/alice")
-	if harness.DetectFormat(installDir) == "" {
-		t.Fatal("harness not found after install")
+	// Pointer-form (local) install: verify the pointer was written and
+	// that it loads back to the source tree with the format migrated in
+	// place. No content copy under HarnessesDir exists for local installs.
+	h, err := harness.LoadByID("local/alice")
+	if err != nil {
+		t.Fatalf("LoadByID after install: %v", err)
+	}
+	if h.Name != "alice" {
+		t.Errorf("loaded harness name = %q, want alice", h.Name)
+	}
+	if harness.DetectFormat(aliceDir) != "plugin" {
+		t.Fatal("format migration did not run on source tree")
 	}
 }
 
@@ -978,7 +1041,7 @@ func TestCmdStatus_Empty(t *testing.T) {
 	t.Setenv("HOME", dir)
 	t.Setenv("YNH_HOME", "")
 
-	if err := cmdStatus(); err != nil {
+	if err := cmdStatus(nil); err != nil {
 		t.Fatalf("cmdStatus failed: %v", err)
 	}
 }
@@ -1005,8 +1068,12 @@ func TestCmdUninstall_OrphanPointerSourceMissing(t *testing.T) {
 	// name) so this test exercises uninstall-by-name flow which is still
 	// valid for legacy pointer-shaped installs.
 	if err := harness.SavePointer(&harness.Pointer{
-		Name: "stranded", SourceType: "local",
-		Source: missing, InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "stranded",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      missing,
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1031,14 +1098,22 @@ func TestCmdPrune_OrphanPointer(t *testing.T) {
 
 	healthySrc := t.TempDir()
 	if err := harness.SavePointer(&harness.Pointer{
-		Name: "healthy", SourceType: "local",
-		Source: healthySrc, InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "healthy",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      healthySrc,
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := harness.SavePointer(&harness.Pointer{
-		Name: "stranded", SourceType: "local",
-		Source: filepath.Join(t.TempDir(), "gone"), InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "stranded",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      filepath.Join(t.TempDir(), "gone"),
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1107,8 +1182,12 @@ func TestCmdUninstall_PointerByCanonicalID(t *testing.T) {
 
 	// Write a schema-1 (name-keyed) pointer — the form ynh fork currently writes.
 	if err := harness.SavePointer(&harness.Pointer{
-		Name: "my-fork", SourceType: "local",
-		Source: srcDir, InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "my-fork",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      srcDir,
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1140,8 +1219,12 @@ func TestCmdUninstall_PointerByBareName(t *testing.T) {
 	}
 
 	if err := harness.SavePointer(&harness.Pointer{
-		Name: "my-fork", SourceType: "local",
-		Source: srcDir, InstalledAt: "2026-05-01T00:00:00Z",
+		Name: "my-fork",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      srcDir,
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -156,26 +156,6 @@ func DetectFormat(dir string) string {
 // ErrNotFound is returned when a harness is not installed.
 var ErrNotFound = errors.New("harness not found")
 
-// Load finds and loads an installed harness by name. Resolution precedence:
-//  1. Pointer file at ~/.ynh/installed/<name>.json (local fork)
-//  2. Flat tree at ~/.ynh/harnesses/<name>/
-//  3. Namespaced tree at ~/.ynh/harnesses/<ns--repo>/<name>/
-//
-// The migration chain runs inside LoadDir so no legacy handling is needed
-// here.
-func Load(name string) (*Harness, error) {
-	if ptr, err := LoadPointer(name); err != nil {
-		return nil, err
-	} else if ptr != nil {
-		return loadFromPointer(ptr)
-	}
-	flatDir := InstalledDir(name)
-	if _, err := os.Stat(flatDir); err == nil {
-		return LoadDir(flatDir)
-	}
-	return findInNamespacedDirs(name)
-}
-
 // LoadQualified loads an installed harness by canonical id. Schema 2 only:
 // bare names and the legacy "name@org/repo" form are hard-rejected with a
 // hint pointing at the canonical id and the local path alternative.
@@ -218,28 +198,6 @@ func LoadNS(ns, name string) (*Harness, error) {
 		return nil, fmt.Errorf("harness %q@%q: %w", name, ns, ErrNotFound)
 	}
 	return LoadDir(dir)
-}
-
-// findInNamespacedDirs scans ~/.ynh/harnesses/<ns>/<name>/ for a matching harness.
-func findInNamespacedDirs(name string) (*Harness, error) {
-	harnessesDir := config.HarnessesDir()
-	entries, err := os.ReadDir(harnessesDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("harness %q: %w", name, ErrNotFound)
-		}
-		return nil, err
-	}
-	for _, e := range entries {
-		if !e.IsDir() || !strings.Contains(e.Name(), "--") {
-			continue
-		}
-		candidate := filepath.Join(harnessesDir, e.Name(), name)
-		if DetectFormat(candidate) != "" {
-			return LoadDir(candidate)
-		}
-	}
-	return nil, fmt.Errorf("harness %q: %w", name, ErrNotFound)
 }
 
 // List returns the names of all installed harnesses across all namespaces.
@@ -441,7 +399,22 @@ func LoadByID(id string) (*Harness, error) {
 
 // LoadDir loads a harness from a directory. The migration chain runs
 // transparently, so callers never need to handle legacy formats themselves.
+//
+// Tree-form installs (see topology.go) store their provenance in
+// <dir>/.ynh-plugin/installed.json; LoadDir reads it from there.
+// Pointer-form installs carry their provenance on the pointer file and
+// must use loadDirWithProvenance to supply it explicitly — otherwise the
+// source tree would need a redundant installed.json.
 func LoadDir(dir string) (*Harness, error) {
+	return loadDirWithProvenance(dir, nil)
+}
+
+// loadDirWithProvenance is the implementation of LoadDir with an explicit
+// provenance record. When ins is nil it is read from
+// <contentDir>/.ynh-plugin/installed.json (tree-form behaviour). When ins
+// is supplied (pointer-form) the contentDir need not carry installed.json.
+func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harness, error) {
+	dir := contentDir
 	if _, err := migration.FormatChain().Run(dir); err != nil {
 		return nil, fmt.Errorf("migrating harness manifest: %w", err)
 	}
@@ -451,6 +424,15 @@ func LoadDir(dir string) (*Harness, error) {
 	}
 	if !plugin.IsPluginDir(dir) {
 		return nil, fmt.Errorf("no harness manifest found in %s", dir)
+	}
+
+	if ins == nil {
+		// Tree-form: read provenance from disk. Tolerate absence; the
+		// fields default to zero and callers that need them check
+		// p.InstalledFrom for nil.
+		if disk, err := plugin.LoadInstalledJSON(dir); err == nil {
+			ins = disk
+		}
 	}
 
 	hj, err := plugin.LoadPluginJSON(dir)
@@ -493,7 +475,7 @@ func LoadDir(dir string) (*Harness, error) {
 	// floating-ref case where the manifest ref is empty but the resolved
 	// entry's ref records the cache's default branch — e.g. "main" — that
 	// the install actually tracked.
-	if ins, err := plugin.LoadInstalledJSON(dir); err == nil && ins != nil && len(ins.Resolved) > 0 {
+	if ins != nil && len(ins.Resolved) > 0 {
 		find := func(git, ref, path string) (sha, resolvedRef string) {
 			for _, r := range ins.Resolved {
 				if r.Git == git && r.Ref == ref && r.Path == path {
@@ -533,8 +515,9 @@ func LoadDir(dir string) (*Harness, error) {
 		p.Sensors = hj.Sensors
 	}
 
-	// Provenance: prefer installed.json (new format), fall back to InstalledFrom in manifest (legacy).
-	if ins, err := plugin.LoadInstalledJSON(dir); err == nil {
+	// Provenance: use the supplied/loaded record; fall back to InstalledFrom
+	// in manifest (legacy) is handled by the caller path that left ins nil.
+	if ins != nil {
 		p.InstalledFrom = &Provenance{
 			SourceType:   ins.SourceType,
 			Source:       ins.Source,
@@ -750,12 +733,6 @@ var ArtifactTypeDirs = []string{"skills"}
 // Keep this list in lock-step with the pick.items pattern in
 // docs/schema/plugin.schema.json.
 var ArtifactTypeFiles = []string{"agents", "rules", "commands"}
-
-// ScanArtifacts discovers local artifacts in a harness's installed directory.
-// Skills are directories containing SKILL.md; agents, rules, and commands are .md files.
-func ScanArtifacts(name string) (*Artifacts, error) {
-	return ScanArtifactsDir(InstalledDir(name))
-}
 
 // ScanArtifactsDir discovers artifacts in an arbitrary directory.
 func ScanArtifactsDir(dir string) (*Artifacts, error) {

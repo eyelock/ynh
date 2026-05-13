@@ -168,6 +168,26 @@ Profiles:
   ci    hooks: before_tool    mcp_servers: github
 ```
 
+## T14.5: Edit focuses from the command line
+
+Hand-editing the manifest is fine for an author. For an interactive consumer (TermQ, scripts, ad-hoc tweaks) the CLI provides the same surface:
+
+```bash
+# Add a focus
+ynh focus add /tmp/ynh-tutorial/focus-harness security "audit this PR for security issues" --profile ci
+
+# Update prompt or profile binding
+ynh focus update /tmp/ynh-tutorial/focus-harness security --prompt "audit thoroughly for security issues"
+ynh focus update /tmp/ynh-tutorial/focus-harness security --clear-profile
+
+# Remove a focus
+ynh focus remove /tmp/ynh-tutorial/focus-harness security
+```
+
+`--profile` and `--clear-profile` are mutually exclusive on `update`. Adding a focus that references a profile name not defined in the manifest is rejected with an error. Removing a profile referenced by any focus is also rejected (the focus has to be updated or removed first) — see [Tutorial 13: Profiles §"Edit profiles from the command line"](13-profiles.md#t136-edit-profiles-from-the-command-line).
+
+The first positional argument is either a filesystem path (as above, while authoring) or a canonical id (`local/focus-demo`, `github.com/<org>/<repo>/<name>`) once the harness is installed.
+
 ## Clean up
 
 ```bash
@@ -184,7 +204,8 @@ rm -rf /tmp/ynh-tutorial
 - `--focus` and `--profile` are mutually exclusive — focus already includes a profile
 - Focus entries that reference a non-existent profile are caught by `ynd validate`
 - `ynh info` displays focus entries and profiles
+- Focuses can be edited with `ynh focus add/remove/update` — the same surface a GUI consumer drives
 
 ## Next
 
-[Tutorial 15: Project-Local Config](15-project-local-config.md) — use `.ynh-plugin/plugin.json` in your project root for zero-install AI configuration.
+[Tutorial 8: Project-Local Config](tutorial/15-project-local-config.md) — use `.ynh-plugin/plugin.json` in your project root for zero-install AI configuration.
