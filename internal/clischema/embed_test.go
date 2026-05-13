@@ -156,6 +156,43 @@ func TestStatusGolden(t *testing.T)   { validateGolden(t, "status", "status.json
 // TestInstalledGolden validates the install-provenance envelope.
 func TestInstalledGolden(t *testing.T) { validateGolden(t, "installed", "installed.json") }
 
+// TestRaw verifies the byte-getter used by `ynh schema <name>`.
+func TestRaw(t *testing.T) {
+	data, err := Raw("version")
+	if err != nil {
+		t.Fatalf("Raw(version): %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("Raw returned empty bytes")
+	}
+	// Quick sanity check that the bytes parse and carry our $id.
+	if !bytesContains(data, []byte("eyelock.github.io/ynh/schema/cli/version")) {
+		t.Errorf("Raw output missing expected $id; got: %s", string(data))
+	}
+}
+
+func TestRaw_Unknown(t *testing.T) {
+	if _, err := Raw("does-not-exist"); err == nil {
+		t.Error("expected error for unknown schema")
+	}
+}
+
+func bytesContains(haystack, needle []byte) bool {
+	for i := 0; i+len(needle) <= len(haystack); i++ {
+		match := true
+		for j := range needle {
+			if haystack[i+j] != needle[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return true
+		}
+	}
+	return false
+}
+
 func validateGolden(t *testing.T, schemaName, goldenName string) {
 	t.Helper()
 	path := findGolden(t, goldenName)
