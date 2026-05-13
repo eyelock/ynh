@@ -133,6 +133,38 @@ func TestVersionGolden(t *testing.T) {
 	}
 }
 
+// TestListGolden validates the representative list envelope.
+func TestListGolden(t *testing.T) { validateGolden(t, "list", "list.json") }
+
+// TestInfoGolden validates the representative info envelope.
+func TestInfoGolden(t *testing.T) { validateGolden(t, "info", "info.json") }
+
+// TestForkGolden validates the representative fork envelope.
+func TestForkGolden(t *testing.T) { validateGolden(t, "fork", "fork.json") }
+
+func validateGolden(t *testing.T, schemaName, goldenName string) {
+	t.Helper()
+	path := findGolden(t, goldenName)
+	if path == "" {
+		t.Skipf("test/golden/%s not found", goldenName)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read golden: %v", err)
+	}
+	var v any
+	if err := json.Unmarshal(data, &v); err != nil {
+		t.Fatalf("parse golden: %v", err)
+	}
+	s, err := Get(schemaName)
+	if err != nil {
+		t.Fatalf("Get %s: %v", schemaName, err)
+	}
+	if err := s.Validate(v); err != nil {
+		t.Errorf("%s golden does not validate: %v", goldenName, err)
+	}
+}
+
 // TestErrorEnvelopeGolden validates a representative error envelope against
 // the error schema, exercising the cross-cutting failure shape every command
 // can return.

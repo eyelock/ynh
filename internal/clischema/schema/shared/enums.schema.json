@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ynh.dev/schema/v0.4/shared/enums.schema.json",
+  "$id": "https://eyelock.github.io/ynh/schema/shared/enums.schema.json",
   "title": "Shared enum vocabulary",
   "description": "Stable enum vocabulary referenced by multiple schemas. Only enums backed by Go consts with a finite set live here; open-set strings stay as plain string. Consumers MUST tolerate unknown enum members (additive-compat) — adding a member is not a capabilities bump.",
   "x-capabilities": "0.4",

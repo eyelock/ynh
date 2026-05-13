@@ -1,0 +1,17 @@
+{
+  "capabilities": "0.4.0",
+  "ynh_version": "0.3.1",
+  "name": "demo-fork",
+  "path": "/Users/example/.ynh/harnesses/local--demo-fork",
+  "installed_from": {
+    "source_type": "local",
+    "source": "/Users/example/.ynh/harnesses/local--demo-fork",
+    "installed_at": "2026-05-13T12:00:00Z",
+    "forked_from": {
+      "source_type": "registry",
+      "source": "github.com/eyelock/demo",
+      "registry_name": "demo",
+      "version": "1.0.0"
+    }
+  }
+}

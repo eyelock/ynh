@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ynh.dev/schema/v0.4/cli/version.schema.json",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/version.schema.json",
   "title": "ynh version --format json",
   "description": "Output of `ynh version --format json`. Top-level oneOf accepts either the success payload or the cross-cutting error envelope.",
   "x-capabilities": "0.4",
@@ -23,6 +23,6 @@
   },
   "oneOf": [
     {"$ref": "#/$defs/Version"},
-    {"$ref": "https://ynh.dev/schema/v0.4/cli/error.schema.json"}
+    {"$ref": "https://eyelock.github.io/ynh/schema/cli/error.schema.json"}
   ]
 }

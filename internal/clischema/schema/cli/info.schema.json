@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/info.schema.json",
+  "title": "ynh info <name> --format json",
+  "description": "Output of `ynh info <name> --format json` (with or without --check-updates). Single-harness variant of list, with the raw plugin.json manifest attached.",
+  "x-capabilities": "0.4",
+  "$defs": {
+    "Info": {
+      "type": "object",
+      "properties": {
+        "capabilities": {"type": "string"},
+        "schema_version": {"type": "integer"},
+        "ynh_version": {"type": "string"},
+        "harness": {"$ref": "https://eyelock.github.io/ynh/schema/shared/harness.schema.json#/$defs/HarnessWithManifest"}
+      },
+      "required": ["capabilities", "schema_version", "ynh_version", "harness"]
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/Info"},
+    {"$ref": "https://eyelock.github.io/ynh/schema/cli/error.schema.json"}
+  ]
+}

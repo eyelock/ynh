@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ynh.dev/schema/v0.4/cli/error.schema.json",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/error.schema.json",
   "title": "Error envelope (cross-cutting)",
   "description": "Structured error envelope emitted on stderr by any command invoked with --format json when the command fails. The success and error envelopes form a top-level oneOf in every per-command schema. Currently the live emitter only writes code+message; category/retryable/hint are additive (capabilities bump pending) and consumers MUST tolerate either shape.",
   "x-capabilities": "0.4",
@@ -10,14 +10,14 @@
       "description": "Wrapped error object. Carried as the value of the top-level \"error\" field.",
       "properties": {
         "code": {
-          "$ref": "https://ynh.dev/schema/v0.4/shared/enums.schema.json#/$defs/ErrorCode"
+          "$ref": "https://eyelock.github.io/ynh/schema/shared/enums.schema.json#/$defs/ErrorCode"
         },
         "message": {
           "type": "string",
           "description": "Human-readable description. Not for parsing."
         },
         "category": {
-          "$ref": "https://ynh.dev/schema/v0.4/shared/enums.schema.json#/$defs/ErrorCategory"
+          "$ref": "https://eyelock.github.io/ynh/schema/shared/enums.schema.json#/$defs/ErrorCategory"
         },
         "retryable": {
           "type": "boolean",
