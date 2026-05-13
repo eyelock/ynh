@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ynh.dev/schema/v0.4/cli/version.schema.json",
+  "title": "ynh version --format json",
+  "description": "Output of `ynh version --format json`. Top-level oneOf accepts either the success payload or the cross-cutting error envelope.",
+  "x-capabilities": "0.4",
+  "$defs": {
+    "Version": {
+      "type": "object",
+      "description": "Version success payload. version is the binary release version (or a dev-build string); capabilities is the wire-protocol version consumers gate on.",
+      "properties": {
+        "version": {
+          "type": "string",
+          "description": "Binary release version (semver) or dev-build identifier."
+        },
+        "capabilities": {
+          "type": "string",
+          "description": "Wire-protocol version. See CLAUDE.md capability-bump rule."
+        }
+      },
+      "required": ["version", "capabilities"]
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/Version"},
+    {"$ref": "https://ynh.dev/schema/v0.4/cli/error.schema.json"}
+  ]
+}
