@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/list.schema.json",
+  "title": "ynh ls --format json",
+  "description": "Output of `ynh ls --format json` (with or without --check-updates). Top-level oneOf accepts either the success envelope or the cross-cutting error envelope.",
+  "x-capabilities": "0.4",
+  "$defs": {
+    "List": {
+      "type": "object",
+      "description": "Success envelope. capabilities + ynh_version are the wire-protocol identifiers; schema_version is the on-disk format version of ~/.ynh.",
+      "properties": {
+        "capabilities": {"type": "string"},
+        "schema_version": {"type": "integer"},
+        "ynh_version": {"type": "string"},
+        "harnesses": {
+          "type": "array",
+          "items": {"$ref": "https://eyelock.github.io/ynh/schema/shared/harness.schema.json#/$defs/Harness"}
+        }
+      },
+      "required": ["capabilities", "schema_version", "ynh_version", "harnesses"]
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/List"},
+    {"$ref": "https://eyelock.github.io/ynh/schema/cli/error.schema.json"}
+  ]
+}

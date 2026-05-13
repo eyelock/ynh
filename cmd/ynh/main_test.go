@@ -1041,7 +1041,7 @@ func TestCmdStatus_Empty(t *testing.T) {
 	t.Setenv("HOME", dir)
 	t.Setenv("YNH_HOME", "")
 
-	if err := cmdStatus(); err != nil {
+	if err := cmdStatus(nil); err != nil {
 		t.Fatalf("cmdStatus failed: %v", err)
 	}
 }

@@ -61,6 +61,10 @@ func main() {
 		err = cmdList(os.Args[2:])
 	case "info":
 		err = cmdInfo(os.Args[2:])
+	case "installed":
+		err = cmdInstalled(os.Args[2:])
+	case "schema":
+		err = cmdSchema(os.Args[2:])
 	case "vendors":
 		err = cmdVendors(os.Args[2:])
 	case "sources":
@@ -68,7 +72,7 @@ func main() {
 	case "paths":
 		err = cmdPaths(os.Args[2:])
 	case "status":
-		err = cmdStatus()
+		err = cmdStatus(os.Args[2:])
 	case "search":
 		err = cmdSearch(os.Args[2:])
 	case "registry":
@@ -135,6 +139,9 @@ Commands:
   run <name> [flags] [prompt]  Launch a harness session
   ls                           List installed harnesses (supports --format json)
   info <name>                  Show detailed harness information (supports --format json)
+  installed <name>             Show recorded install provenance (supports --format json)
+  schema <name>                Print the embedded JSON schema for a CLI command
+  schema --all --format json   Print every embedded schema as one manifest
   vendors                      List supported vendor adapters (supports --format json)
   search <term>                Search registries and sources (supports --format json)
   sources add <path>           Add a local harness source directory
@@ -1538,25 +1545,95 @@ func cmdCleanVendor(adapter vendor.Adapter, harnessName string) error {
 	return nil
 }
 
-func cmdStatus() error {
+func cmdStatus(args []string) error {
+	return cmdStatusTo(args, os.Stdout, os.Stderr)
+}
+
+// statusInstallation is the JSON shape for a single symlink installation
+// in `ynh status --format json`. Mirrors symlink.Installation; redeclared
+// here so the wire contract is owned by cmd/ynh and not coupled to the
+// internal package's struct evolution.
+type statusInstallation struct {
+	Harness   string                `json:"harness"`
+	Vendor    string                `json:"vendor"`
+	Project   string                `json:"project"`
+	Timestamp string                `json:"timestamp"`
+	Symlinks  []vendor.SymlinkEntry `json:"symlinks"`
+}
+
+func cmdStatusTo(args []string, stdout, stderr io.Writer) error {
+	structured := detectJSONFormat(args)
+
+	format := "text"
+	i := 0
+	for i < len(args) {
+		switch args[i] {
+		case "--format":
+			if i+1 >= len(args) {
+				return cliError(stderr, structured, errCodeInvalidInput, "--format requires a value")
+			}
+			i++
+			format = args[i]
+		default:
+			if strings.HasPrefix(args[i], "-") {
+				return cliError(stderr, structured, errCodeInvalidInput,
+					fmt.Sprintf("unknown flag: %s", args[i]))
+			}
+			return cliError(stderr, structured, errCodeInvalidInput,
+				fmt.Sprintf("unexpected argument: %s", args[i]))
+		}
+		i++
+	}
+
+	switch format {
+	case "text":
+		return printStatusText(stdout)
+	case "json":
+		return printStatusJSON(stdout)
+	default:
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("invalid --format value %q (want text or json)", format))
+	}
+}
+
+func printStatusText(w io.Writer) error {
 	log, err := symlink.LoadLog()
 	if err != nil {
 		return err
 	}
-
 	if len(log.Installations) == 0 {
-		fmt.Println("No symlink installations found.")
+		_, _ = fmt.Fprintln(w, "No symlink installations found.")
 		return nil
 	}
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "HARNESS\tVENDOR\tPROJECT\tSYMLINKS")
-
+	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	_, _ = fmt.Fprintln(tw, "HARNESS\tVENDOR\tPROJECT\tSYMLINKS")
 	for _, inst := range log.Installations {
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", inst.Harness, inst.Vendor, inst.Project, len(inst.Symlinks))
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%d\n", inst.Harness, inst.Vendor, inst.Project, len(inst.Symlinks))
 	}
+	return tw.Flush()
+}
 
-	return w.Flush()
+func printStatusJSON(w io.Writer) error {
+	log, err := symlink.LoadLog()
+	if err != nil {
+		return err
+	}
+	entries := make([]statusInstallation, 0, len(log.Installations))
+	for _, inst := range log.Installations {
+		entries = append(entries, statusInstallation{
+			Harness:   inst.Harness,
+			Vendor:    inst.Vendor,
+			Project:   inst.Project,
+			Timestamp: inst.Timestamp.UTC().Format(time.RFC3339),
+			Symlinks:  inst.Symlinks,
+		})
+	}
+	data, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encoding status: %w", err)
+	}
+	_, err = fmt.Fprintln(w, string(data))
+	return err
 }
 
 func cmdPrune() error {

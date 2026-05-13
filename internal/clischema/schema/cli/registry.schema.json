@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/registry.schema.json",
+  "title": "ynh registry list --format json",
+  "description": "Output of `ynh registry list --format json`. Bare array of configured registries, enriched with name/description from cached registry.json when available. Envelope retrofit and cliError adoption deferred.",
+  "x-capabilities": "0.4",
+  "$defs": {
+    "Registry": {
+      "type": "object",
+      "properties": {
+        "url": {"type": "string"},
+        "ref": {"type": "string"},
+        "name": {"type": "string"},
+        "description": {"type": "string"}
+      },
+      "required": ["url"],
+      "additionalProperties": false
+    }
+  },
+  "type": "array",
+  "items": {"$ref": "#/$defs/Registry"}
+}
