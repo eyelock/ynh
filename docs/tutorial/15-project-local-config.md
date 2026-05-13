@@ -92,9 +92,9 @@ rm -rf /tmp/ynh-tutorial
 - `ynh run --harness-file <path>` points to a specific `.ynh-plugin/plugin.json` file
 - The file format is identical to installed harnesses — same hooks, MCP servers, profiles, and focus entries
 
-## Next
+## Composition with focus
 
-The project-local config pattern works well with focus entries (Tutorial 14) for CI automation:
+The project-local config pattern works well with focus entries (Tutorial 7) for CI automation:
 
 ```json
 {
@@ -106,3 +106,7 @@ The project-local config pattern works well with focus entries (Tutorial 14) for
   }
 }
 ```
+
+## Next
+
+[Tutorial 9: Developer Tools](tutorial/08-developer-tools.md) — scaffold, lint, validate, format, compress, inspect with ynd.

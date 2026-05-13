@@ -12,6 +12,7 @@
   * [Hooks](hooks.md)
   * [MCP Servers](mcp.md)
   * [Profiles](profiles.md)
+  * [Focus](focus.md)
   * [Sensors](sensors.md)
   * [Namespacing](namespacing.md)
   * [Vendor Support](vendors.md)

@@ -329,4 +329,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Tutorial 7: Developer Tools](tutorial/08-developer-tools.md) — scaffold, lint, validate, format, compress, inspect with ynd.
+[Tutorial 7: Focus](tutorial/14-focus.md) — bind a prompt and profile for repeatable, non-interactive runs.

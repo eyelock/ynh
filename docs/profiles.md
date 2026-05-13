@@ -176,6 +176,7 @@ See [reference.md](reference.md) for the complete flag matrix.
 
 ## See Also
 
+- [Focus](focus.md) — bind a prompt to a profile for repeatable, non-interactive runs
 - [Hooks](hooks.md) — hook format and vendor translation
 - [MCP Servers](mcp.md) — MCP server format and vendor translation
 - [Sensors](sensors.md) — observation surfaces declared by the harness
