@@ -343,6 +343,8 @@ rm -rf /tmp/ynh-ns-tutorial
 
 ## Next
 
+[Tutorial 18: Sensors](tutorial/19-sensors.md) — declare observation surfaces a loop driver consumes.
+
 See [docs/namespacing.md](../namespacing.md) for the full canonical-id
 reference and [docs/migration.md](../migration.md) for a complete 0.1 → 0.2
 migration guide.

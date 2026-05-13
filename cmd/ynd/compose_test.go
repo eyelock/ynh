@@ -168,8 +168,11 @@ func TestCmdComposeJSONBasic(t *testing.T) {
 	}
 
 	// Profiles
-	if len(got.Profiles) != 1 || got.Profiles[0] != "staging" {
-		t.Errorf("profiles = %v, want [staging]", got.Profiles)
+	if len(got.Profiles) != 1 {
+		t.Errorf("profiles = %v, want 1 entry", got.Profiles)
+	}
+	if _, ok := got.Profiles["staging"]; !ok {
+		t.Errorf("profiles missing staging key, got %v", got.Profiles)
 	}
 
 	// Focuses
@@ -225,9 +228,9 @@ func TestCmdComposeJSONEmptyArrays(t *testing.T) {
 	if !strings.Contains(out, `"delegates_to": []`) {
 		t.Errorf("expected delegates_to: [], got: %s", out)
 	}
-	// Profiles should be []
-	if !strings.Contains(out, `"profiles": []`) {
-		t.Errorf("expected profiles: [], got: %s", out)
+	// Profiles should be {} (empty object, not null)
+	if !strings.Contains(out, `"profiles": {}`) {
+		t.Errorf("expected profiles: {}, got: %s", out)
 	}
 }
 

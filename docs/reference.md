@@ -9,6 +9,7 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 | `YNH_HOME` | `~/.ynh` | `ynh` (global) | — |
 | `YNH_VENDOR` | _(none)_ | `ynh run`, `ynd preview/export/create/compress/inspect/marketplace` | `-v` flag |
 | `YNH_PROFILE` | _(none)_ | `ynh run`, `ynd export/preview/diff` | `--profile` flag |
+| `YNH_FOCUS` | _(none)_ | `ynh run`, `ynd export/preview/diff` | `--focus` flag |
 | `YNH_HARNESS` | _(none)_ | `ynd preview/export/diff/validate/lint/fmt` | `--harness` flag / positional arg |
 | `YNH_YES` | _(none)_ | `ynd compress/inspect` | `-y` flag |
 | `CI` | _(none)_ | `ynd compress/inspect` | (lowest priority skip-confirm) |
@@ -22,6 +23,7 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 |---------|-----------------|
 | Vendor | `-v` flag > `YNH_VENDOR` > harness `default_vendor` > global config |
 | Profile | `--profile` flag > `YNH_PROFILE` > no profile (top-level) |
+| Focus | `--focus` flag > `YNH_FOCUS` > no focus (mutually exclusive with `--profile`) |
 | Harness source | `--harness` flag > `YNH_HARNESS` > positional arg > `.` (CWD) or error |
 | Non-interactive | `-y` flag > `YNH_YES` > `CI` |
 
@@ -32,7 +34,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | Command | Key Flags |
 |---------|-----------|
 | `ynh install <source>` | `--path`, `-v` |
-| `ynh run [harness]` | `-v`, `--profile`, `--install`, `--clean` |
+| `ynh run [harness]` | `-v`, `--profile`, `--focus`, `--install`, `--clean` |
 | `ynh uninstall <harness>` | |
 | `ynh update [harness]` | |
 | `ynh fork <name>` | `--to <path>`, `--name <new>`, `--format <text\|json>` |
@@ -46,6 +48,24 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh include add <harness> <url>` | `--path`, `--pick`, `--ref`, `--replace` |
 | `ynh include remove <harness> <url>` | `--path` |
 | `ynh include update <harness> <url>` | `--from-path`, `--path`, `--pick`, `--ref` |
+| `ynh focus add <harness> <name> <prompt>` | `--profile <name>` |
+| `ynh focus remove <harness> <name>` | |
+| `ynh focus update <harness> <name>` | `--prompt`, `--profile`, `--clear-profile` |
+| `ynh profile add <harness> <name>` | |
+| `ynh profile remove <harness> <name>` | (refuses if any focus references it) |
+| `ynh profile hook add <harness> <profile> <event> <command>` | `--matcher` |
+| `ynh profile hook remove <harness> <profile> <event> <index>` | |
+| `ynh profile mcp add <harness> <profile> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header`, `--null` |
+| `ynh profile mcp remove <harness> <profile> <name>` | |
+| `ynh profile mcp update <harness> <profile> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header`, `--clear-args`, `--clear-env`, `--clear-headers` |
+| `ynh profile include add <harness> <profile> <url>` | `--path`, `--ref`, `--replace` |
+| `ynh profile include remove <harness> <profile> <url>` | `--path` |
+| `ynh profile include update <harness> <profile> <url>` | `--from-path`, `--path`, `--ref` |
+| `ynh hook add <harness> <event> <command>` | `--matcher` — top-level harness hook |
+| `ynh hook remove <harness> <event> <index>` | top-level harness hook |
+| `ynh mcp add <harness> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header` — top-level harness MCP server (no `--null`; harness-level entries cannot be null) |
+| `ynh mcp remove <harness> <name>` | top-level harness MCP server |
+| `ynh mcp update <harness> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header`, `--clear-args`, `--clear-env`, `--clear-headers` |
 | `ynh sensors ls <harness>` | `--format <text\|json>` |
 | `ynh sensors show <harness> <name>` | `--format <text\|json>` |
 | `ynh sensors run <harness> <name>` | `--cwd <dir>`, `--no-content` |
@@ -72,9 +92,9 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynd compose <source>` | `--harness`, `--profile`, `--format <text\|json>` |
 | `ynd compress [files...]` | `-v`, `-y`, `--restore`, `--list-backups`, `--pick` |
 | `ynd inspect` | `-v`, `-y`, `-o` |
-| `ynd preview <source>` | `-v`, `-o`, `--harness`, `--profile` |
-| `ynd diff <source>` | `-v`, `--harness`, `--profile` |
-| `ynd export <source>` | `-v`, `-o`, `--harness`, `--profile`, `--path`, `--merged`, `--clean` |
+| `ynd preview <source>` | `-v`, `-o`, `--harness`, `--profile`, `--focus` |
+| `ynd diff <source>` | `-v`, `--harness`, `--profile`, `--focus` |
+| `ynd export <source>` | `-v`, `-o`, `--harness`, `--profile`, `--focus`, `--path`, `--merged`, `--clean` |
 | `ynd marketplace build` | `-v`, `-o`, `--clean` |
 
 See [ynd Developer Tools](ynd.md) for detailed command documentation.
@@ -85,7 +105,7 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 
 | Command | Structured fields |
 |---------|-------------------|
-| `ynd compose` | Composed harness: `name`, `version`, `description`, `default_vendor`, `artifacts` (with source), `includes`, `delegates_to`, `hooks`, `mcp_servers`, `profiles`, `focuses`, `sensors`, `counts` |
+| `ynd compose` | Composed harness: `name`, `version`, `description`, `default_vendor`, `artifacts` (with source), `includes`, `delegates_to`, `hooks`, `mcp_servers`, `profiles` (object keyed by name — see breaking change note below), `focuses`, `sensors`, `counts` |
 | `ynh sensors ls <harness>` | Array of sensor summaries: `name`, `category`, `role`, `source_kind`, `format`, `inline_focus` (bool) — see [Sensors](sensors.md) |
 | `ynh sensors show <harness> <name>` | Resolved sensor object with inline-focus expansion |
 | `ynh sensors run <harness> <name>` | Sensor run result: `kind`, `exit_code`, `duration_ms`, `output` (raw signal — no `passed` field; pass/fail is loop-driver policy) |
@@ -99,6 +119,38 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 | `ynh sources list` | Array of source objects: `name`, `path`, `description`, `harnesses` (discovery count) |
 
 Human-readable tabwriter output remains the default for every command. Structured mode is strictly opt-in.
+
+### `ynd compose`: `profiles` field shape (breaking change)
+
+As of this release, `ynd compose --format json` emits `profiles` as a **map keyed by profile name** rather than an array of names. Each value carries the full content of the profile so consumers can render and diff state without re-parsing the manifest:
+
+```json
+{
+  "profiles": {
+    "thorough": {
+      "hooks": {
+        "before_tool": [{"command": "echo before"}]
+      },
+      "mcp_servers": {
+        "github": {"command": "gh", "args": ["mcp"]}
+      },
+      "includes": []
+    }
+  }
+}
+```
+
+Empty case is `"profiles": {}` (empty object), no longer `"profiles": []`. This change is **not backwards-compatible**: decoders written against the old array shape will fail. Update consumers to decode `profiles` as a `map[string]<profile-content>` before upgrading the binary.
+
+### `ynd compose` source argument
+
+`ynd compose <source>` accepts three forms of source:
+
+- **Filesystem path** — absolute, relative, or anything that exists on disk.
+- **Canonical harness id** from `ynh ls --format json` — `local/<name>` or `<host>/<org>/<repo>/<name>`. Resolved against installed harnesses; no clone is attempted.
+- **Git URL** — falls through when the input is neither a path nor an installed canonical id.
+
+`ynd preview`, `diff`, and `export` accept the same forms through the shared resolver.
 
 ### Envelope and harness fields
 

@@ -202,7 +202,13 @@ func printListText(w io.Writer) error {
 	_, _ = fmt.Fprintln(tw, "NAME\tKIND\tVENDOR\tSOURCE\tARTIFACTS\tINCLUDES\tDELEGATES TO")
 
 	for _, e := range entries {
-		p, err := harness.LoadDir(e.Dir)
+		// For pointer-form installs (local harnesses), load via the pointer first
+		// so provenance is included. Fall back to LoadDir for tree-form installs.
+		p, err := harness.LoadByID(canonicalIDForEntry(e))
+		if err != nil {
+			// Not a pointer-form install; try loading as a tree-form install
+			p, err = harness.LoadDir(e.Dir)
+		}
 		if err != nil {
 			_, _ = fmt.Fprintf(tw, "%s\t(error: %v)\t\t\t\t\t\n", e.Name, err)
 			continue
@@ -233,8 +239,16 @@ func printListJSON(w io.Writer, checkUpdates bool) error {
 
 	entries := make([]listEntry, 0, len(all))
 	for _, e := range all {
-		p, loadErr := harness.LoadDir(e.Dir)
+		// For pointer-form installs (local harnesses), load via the pointer first
+		// so provenance is included. Fall back to LoadDir for tree-form installs.
+		p, loadErr := harness.LoadByID(canonicalIDForEntry(e))
 		if loadErr != nil {
+			// Not a pointer-form install; try loading as a tree-form install
+			p, loadErr = harness.LoadDir(e.Dir)
+		}
+
+		if loadErr != nil {
+			// Load failed; check if there's a broken pointer for error details.
 			// Surface broken pointer entries with kind "local-fork-broken" and
 			// a broken_reason so JSON consumers (e.g. TermQ) can route them to
 			// a QUARANTINED group rather than displaying them as empty-field
@@ -244,7 +258,7 @@ func printListJSON(w io.Writer, checkUpdates bool) error {
 			// so entries written by both fork generations are covered.
 			ptr, _ := harness.LoadPointer(e.Name)
 			if ptr == nil {
-				ptr, _ = harness.LoadPointerByID("local/" + e.Name)
+				ptr, _ = harness.LoadPointerByID(canonicalIDForEntry(e))
 			}
 			if ptr != nil {
 				id := namespace.CanonicalID(ptr.Source, ptr.Name)
@@ -289,11 +303,6 @@ func printListJSON(w io.Writer, checkUpdates bool) error {
 	return err
 }
 
-// backfillProvenanceFromCache populates harness-level SHA/Ref from the local
-// git cache when installed.json predates SHA/ref recording. The cache's
-// origin/HEAD symref pins to the branch resolved at clone time and survives
-// upstream default-branch changes, so it's a reliable source for what the
-// install actually tracks. No network call.
 func backfillProvenanceFromCache(prov *harness.Provenance) {
 	if prov == nil {
 		return
@@ -352,6 +361,17 @@ func canonicalNamespaceForHarness(p *harness.Harness) string {
 		return ""
 	}
 	return ns
+}
+
+// canonicalIDForEntry reconstructs the canonical id for a ListAll result.
+// Pointer-form entries arrive with empty Namespace and are conventionally
+// addressed as "local/<name>" (see topology.go). Tree-form entries carry
+// their full namespace (e.g. "github.com/eyelock/assistants").
+func canonicalIDForEntry(e harness.ListEntry) string {
+	if e.Namespace == "" {
+		return "local/" + e.Name
+	}
+	return e.Namespace + "/" + e.Name
 }
 
 // buildListEntry assembles the structured-output entry for a loaded harness.

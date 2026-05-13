@@ -11,28 +11,34 @@ import (
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/namespace"
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
-// Pointer is the on-disk shape of ~/.ynh/installed/<name>.json.
+// Pointer is the on-disk shape of ~/.ynh/installed/<id-fsname>.json.
 //
-// Pointer files register a user-owned source tree (a fork) into the YNH layer
-// without copying it. LoadByID("local/<name>") resolves via the pointer first,
-// so edits to the source tree are live to
-// ynh run with no sync step.
+// Pointer files register a user-owned source tree into the YNH layer
+// without copying it. LoadByID resolves via the pointer first, so edits
+// to the source tree are live to ynh run with no sync step.
 //
-// Provenance (what the harness *is*) lives in the source tree at
-// .ynh-plugin/installed.json and is the authoritative source for
-// p.InstalledFrom. The pointer file's role is registration — name binding
-// and where to look — not provenance.
+// The pointer carries both registration (ID/Name) and the full
+// provenance record by embedding plugin.InstalledJSON. This keeps the
+// authored source tree free of ynh-owned metadata: source_type, source,
+// resolved SHAs, and forked_from all live in the pointer file rather
+// than in <source>/.ynh-plugin/installed.json. Tree-form installs (see
+// topology.go) continue to keep their installed.json next to their
+// content; pointer-form installs do not.
+//
+// Legacy pointer files written by v0.3.x and earlier carry only
+// SourceType, Source, and InstalledAt. Those fields parse cleanly into
+// the embedded record; the schema-3 migration backfills the rest from
+// the source tree's installed.json.
 type Pointer struct {
-	// ID is the canonical, host-prefixed harness id (schema 2). Empty
-	// for legacy pointer files written by pre-schema-2 binaries; the
-	// schema-2 migration backfills it.
-	ID          string `json:"id,omitempty"`
-	Name        string `json:"name"`
-	SourceType  string `json:"source_type"`
-	Source      string `json:"source"`
-	InstalledAt string `json:"installed_at"`
+	// ID is the canonical, host-prefixed harness id. Empty for legacy
+	// pointer files written by pre-schema-2 binaries; the schema-2
+	// migration backfills it.
+	ID                   string `json:"id,omitempty"`
+	Name                 string `json:"name"`
+	plugin.InstalledJSON        // anonymous embed: fields serialise flat
 }
 
 // PointerPath returns the on-disk path of the schema-1 (name-keyed) pointer
@@ -186,21 +192,35 @@ func ListPointers() ([]ListEntry, error) {
 // message at the call site.
 var ErrPointerSourceMissing = errors.New("pointer source path missing")
 
-// loadFromPointer resolves a pointer file to a fully-loaded Harness by
-// running LoadDir(ptr.Source). Returns (nil, ErrPointerSourceMissing,
-// wrapped with the user-facing relocate/uninstall hint) when the source
-// path is gone.
+// loadFromPointer resolves a pointer file to a fully-loaded Harness.
+// Returns (nil, ErrPointerSourceMissing, wrapped with the user-facing
+// relocate/uninstall hint) when the source path is gone.
+//
+// The pointer's embedded plugin.InstalledJSON is the authoritative
+// provenance record (schema 3+). For legacy pointers (pre-schema-3,
+// carrying only source_type/source/installed_at), the rest of the
+// provenance still lives at <source>/.ynh-plugin/installed.json; we
+// merge it in so reads work before the schema-3 migration has run.
+// After migration, the pointer carries the full record and the source
+// tree is free of ynh metadata.
 func loadFromPointer(ptr *Pointer) (*Harness, error) {
-	if _, err := os.Stat(ptr.Source); err != nil {
+	ins := ptr.InstalledJSON
+	loadDir := localLoadDir(&ins)
+	if _, err := os.Stat(loadDir); err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf(
 				"harness %q is registered but its source path no longer exists:\n"+
 					"  %s\n\n"+
 					"If you moved it, restore the directory.\n"+
 					"If it's gone for good, run: ynh uninstall %s",
-				ptr.Name, ptr.Source, ptr.Name)
+				ptr.Name, loadDir, ptr.Name)
 		}
-		return nil, fmt.Errorf("stat pointer source %s: %w", ptr.Source, err)
+		return nil, fmt.Errorf("stat pointer source %s: %w", loadDir, err)
 	}
-	return LoadDir(ptr.Source)
+	if len(ins.Resolved) == 0 && ins.ForkedFrom == nil {
+		if disk, err := plugin.LoadInstalledJSON(loadDir); err == nil && disk != nil {
+			ins = *disk
+		}
+	}
+	return loadDirWithProvenance(loadDir, &ins)
 }

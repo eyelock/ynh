@@ -19,14 +19,14 @@ func TestUpdate_NoChange(t *testing.T) {
 	harness := newLocalFloatingHarness(t, "no-change-harness", upstream)
 
 	s.mustRunYnh(t, "install", harness)
-	before := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "local--no-change-harness"))
+	before := readInstalledRecord(t, s.home, "local/no-change-harness")
 	if len(before.Resolved) != 1 {
 		t.Fatalf("setup: expected 1 resolved entry, got %d", len(before.Resolved))
 	}
 
 	out, _ := s.mustRunYnh(t, "update", "local/no-change-harness")
 
-	after := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "local--no-change-harness"))
+	after := readInstalledRecord(t, s.home, "local/no-change-harness")
 	if len(after.Resolved) != 1 {
 		t.Fatalf("expected 1 resolved entry after update, got %d", len(after.Resolved))
 	}
@@ -51,7 +51,7 @@ func TestUpdate_HeadMoves(t *testing.T) {
 	harness := newLocalFloatingHarness(t, "moving-harness", upstream)
 
 	s.mustRunYnh(t, "install", harness)
-	before := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "local--moving-harness"))
+	before := readInstalledRecord(t, s.home, "local/moving-harness")
 	if len(before.Resolved) != 1 {
 		t.Fatalf("setup: expected 1 resolved entry, got %d", len(before.Resolved))
 	}
@@ -61,7 +61,7 @@ func TestUpdate_HeadMoves(t *testing.T) {
 
 	s.mustRunYnh(t, "update", "local/moving-harness")
 
-	after := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "local--moving-harness"))
+	after := readInstalledRecord(t, s.home, "local/moving-harness")
 	if len(after.Resolved) != 1 {
 		t.Fatalf("expected 1 resolved entry after update, got %d", len(after.Resolved))
 	}

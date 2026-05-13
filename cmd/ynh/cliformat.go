@@ -39,13 +39,11 @@ func cliError(stderr io.Writer, structured bool, code, message string) error {
 	}{}
 	env.Error.Code = code
 	env.Error.Message = message
-	data, marshalErr := json.Marshal(env)
-	if marshalErr != nil {
-		// Fallback: the envelope itself is simple enough that marshal should
-		// never fail, but be defensive so the caller still exits non-zero.
+	enc := json.NewEncoder(stderr)
+	enc.SetEscapeHTML(false)
+	if encErr := enc.Encode(env); encErr != nil {
 		return fmt.Errorf("%s", message)
 	}
-	_, _ = fmt.Fprintln(stderr, string(data))
 	// Return a sentinel-style error so main.go still exits non-zero.
 	// The message duplicates what's already on stderr; main.go's "Error: ..."
 	// line would be printed after the JSON envelope. To keep structured stderr

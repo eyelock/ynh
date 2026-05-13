@@ -255,4 +255,4 @@ rm -rf /tmp/ynh-tutorial/marketplace-*
 
 ## Next
 
-[Tutorial 12: Registry & Discovery](tutorial/07-registry-and-discovery.md) — search and install from curated indexes.
+[Tutorial 15: Registry & Discovery](tutorial/07-registry-and-discovery.md) — search and install from curated indexes.

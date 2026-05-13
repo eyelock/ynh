@@ -1,0 +1,406 @@
+package main
+
+import (
+	"bytes"
+	"strings"
+	"testing"
+
+	"github.com/eyelock/ynh/internal/plugin"
+)
+
+func writeProfileTestHarness(t *testing.T, dir, name string) {
+	t.Helper()
+	hj := &plugin.HarnessJSON{Name: name, Version: "0.1.0"}
+	if err := plugin.SavePluginJSON(dir, hj); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func loadTestProfiles(t *testing.T, dir string) map[string]plugin.Profile {
+	t.Helper()
+	hj, err := plugin.LoadPluginJSON(dir)
+	if err != nil {
+		t.Fatalf("LoadPluginJSON: %v", err)
+	}
+	return hj.Profiles
+}
+
+// ---- routing -----------------------------------------------------
+
+func TestCmdProfile_NoArgs(t *testing.T) {
+	err := cmdProfile([]string{})
+	if err == nil || !strings.Contains(err.Error(), "usage") {
+		t.Errorf("expected usage error, got: %v", err)
+	}
+}
+
+func TestCmdProfile_UnknownSubcommand(t *testing.T) {
+	err := cmdProfile([]string{"bogus"})
+	if err == nil || !strings.Contains(err.Error(), "unknown profile subcommand") {
+		t.Errorf("expected unknown subcommand error, got: %v", err)
+	}
+}
+
+// ---- add / remove ------------------------------------------------
+
+func TestCmdProfileAdd_Basic(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	if err := cmdProfileTo([]string{"add", dir, "thorough"}, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := loadTestProfiles(t, dir)
+	if _, ok := got["thorough"]; !ok {
+		t.Errorf("expected profile thorough, got %+v", got)
+	}
+}
+
+func TestCmdProfileAdd_Duplicate(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+	err := cmdProfileTo([]string{"add", dir, "p"}, &buf)
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("expected duplicate error, got: %v", err)
+	}
+}
+
+func TestCmdProfileRemove_Basic(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+	buf.Reset()
+
+	if err := cmdProfileTo([]string{"remove", dir, "p"}, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(loadTestProfiles(t, dir)) != 0 {
+		t.Errorf("expected no profiles after remove")
+	}
+}
+
+func TestCmdProfileRemove_BlockedByFocus(t *testing.T) {
+	dir := t.TempDir()
+	hj := &plugin.HarnessJSON{
+		Name: "h", Version: "0.1.0",
+		Profiles: map[string]plugin.Profile{"p": {}},
+		Focuses:  map[string]plugin.Focus{"f": {Profile: "p", Prompt: "x"}},
+	}
+	if err := plugin.SavePluginJSON(dir, hj); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	err := cmdProfileTo([]string{"remove", dir, "p"}, &buf)
+	if err == nil || !strings.Contains(err.Error(), "referenced by focus") {
+		t.Errorf("expected referenced-by error, got: %v", err)
+	}
+}
+
+// ---- hook --------------------------------------------------------
+
+func TestCmdProfileHookAdd_Basic(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+	buf.Reset()
+
+	if err := cmdProfileTo([]string{"hook", "add", dir, "p", "before_tool", "echo before"}, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := loadTestProfiles(t, dir)
+	entries := got["p"].Hooks["before_tool"]
+	if len(entries) != 1 || entries[0].Command != "echo before" {
+		t.Errorf("expected one hook entry, got %+v", entries)
+	}
+}
+
+func TestCmdProfileHookAdd_UnknownEvent(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+
+	err := cmdProfileTo([]string{"hook", "add", dir, "p", "garbage", "cmd"}, &buf)
+	if err == nil || !strings.Contains(err.Error(), "unknown hook event") {
+		t.Errorf("expected unknown-event error, got: %v", err)
+	}
+}
+
+func TestCmdProfileHookRemove_Basic(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+	_ = cmdProfileTo([]string{"hook", "add", dir, "p", "before_tool", "a"}, &buf)
+	_ = cmdProfileTo([]string{"hook", "add", dir, "p", "before_tool", "b"}, &buf)
+	buf.Reset()
+
+	if err := cmdProfileTo([]string{"hook", "remove", dir, "p", "before_tool", "0"}, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := loadTestProfiles(t, dir)
+	entries := got["p"].Hooks["before_tool"]
+	if len(entries) != 1 || entries[0].Command != "b" {
+		t.Errorf("expected single remaining entry 'b', got %+v", entries)
+	}
+}
+
+func TestCmdProfileHookRemove_LastEntryDropsKey(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+	_ = cmdProfileTo([]string{"hook", "add", dir, "p", "before_tool", "a"}, &buf)
+
+	if err := cmdProfileTo([]string{"hook", "remove", dir, "p", "before_tool", "0"}, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := loadTestProfiles(t, dir)
+	if _, ok := got["p"].Hooks["before_tool"]; ok {
+		t.Errorf("expected before_tool key to be removed when empty")
+	}
+}
+
+func TestCmdProfileHookRemove_OutOfRange(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+	_ = cmdProfileTo([]string{"hook", "add", dir, "p", "before_tool", "a"}, &buf)
+
+	err := cmdProfileTo([]string{"hook", "remove", dir, "p", "before_tool", "5"}, &buf)
+	if err == nil || !strings.Contains(err.Error(), "out of range") {
+		t.Errorf("expected out-of-range error, got: %v", err)
+	}
+}
+
+// ---- mcp ---------------------------------------------------------
+
+func TestCmdProfileMCPAdd_Command(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+	buf.Reset()
+
+	if err := cmdProfileTo([]string{
+		"mcp", "add", dir, "p", "github",
+		"--command", "gh", "--arg", "mcp", "--env", "TOK=abc",
+	}, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := loadTestProfiles(t, dir)
+	srv := got["p"].MCPServers["github"]
+	if srv == nil || srv.Command != "gh" || len(srv.Args) != 1 || srv.Args[0] != "mcp" || srv.Env["TOK"] != "abc" {
+		t.Errorf("expected gh mcp server, got %+v", srv)
+	}
+}
+
+func TestCmdProfileMCPAdd_Null(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+
+	if err := cmdProfileTo([]string{"mcp", "add", dir, "p", "ditched", "--null"}, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := loadTestProfiles(t, dir)
+	srv, ok := got["p"].MCPServers["ditched"]
+	if !ok || srv != nil {
+		t.Errorf("expected null entry, got %v ok=%v", srv, ok)
+	}
+}
+
+func TestCmdProfileMCPAdd_BothCommandAndURL(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+
+	err := cmdProfileTo([]string{
+		"mcp", "add", dir, "p", "x", "--command", "c", "--url", "u",
+	}, &buf)
+	if err == nil || !strings.Contains(err.Error(), "not both") && !strings.Contains(err.Error(), "cannot have both") {
+		t.Errorf("expected both-error, got: %v", err)
+	}
+}
+
+func TestCmdProfileMCPAdd_Neither(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+
+	err := cmdProfileTo([]string{"mcp", "add", dir, "p", "x"}, &buf)
+	if err == nil || !strings.Contains(err.Error(), "requires --command") {
+		t.Errorf("expected requires-flag error, got: %v", err)
+	}
+}
+
+func TestCmdProfileMCPAdd_BadEnv(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+
+	err := cmdProfileTo([]string{
+		"mcp", "add", dir, "p", "x", "--command", "c", "--env", "MISSING_EQ",
+	}, &buf)
+	if err == nil || !strings.Contains(err.Error(), "K=V") {
+		t.Errorf("expected K=V error, got: %v", err)
+	}
+}
+
+func TestCmdProfileMCPRemove_Basic(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+	_ = cmdProfileTo([]string{"mcp", "add", dir, "p", "x", "--command", "c"}, &buf)
+
+	if err := cmdProfileTo([]string{"mcp", "remove", dir, "p", "x"}, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := loadTestProfiles(t, dir)
+	if _, ok := got["p"].MCPServers["x"]; ok {
+		t.Errorf("expected server removed")
+	}
+}
+
+func TestCmdProfileMCPUpdate_Basic(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+	_ = cmdProfileTo([]string{"mcp", "add", dir, "p", "x", "--command", "old"}, &buf)
+
+	if err := cmdProfileTo([]string{"mcp", "update", dir, "p", "x", "--command", "new"}, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := loadTestProfiles(t, dir)
+	if got["p"].MCPServers["x"].Command != "new" {
+		t.Errorf("expected command=new, got %+v", got["p"].MCPServers["x"])
+	}
+}
+
+func TestCmdProfileMCPUpdate_NullEntry(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+	_ = cmdProfileTo([]string{"mcp", "add", dir, "p", "x", "--null"}, &buf)
+
+	err := cmdProfileTo([]string{"mcp", "update", dir, "p", "x", "--command", "c"}, &buf)
+	if err == nil || !strings.Contains(err.Error(), "null entry") {
+		t.Errorf("expected null-entry error, got: %v", err)
+	}
+}
+
+func TestCmdProfileMCPUpdate_NoFlags(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+	_ = cmdProfileTo([]string{"mcp", "add", dir, "p", "x", "--command", "c"}, &buf)
+
+	err := cmdProfileTo([]string{"mcp", "update", dir, "p", "x"}, &buf)
+	if err == nil || !strings.Contains(err.Error(), "at least one") {
+		t.Errorf("expected at-least-one error, got: %v", err)
+	}
+}
+
+// ---- include -----------------------------------------------------
+
+func TestCmdProfileIncludeAdd_Basic(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+
+	if err := cmdProfileTo([]string{
+		"include", "add", dir, "p", "github.com/acme/tools",
+	}, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := loadTestProfiles(t, dir)
+	incs := got["p"].Includes
+	if len(incs) != 1 || incs[0].Git != "github.com/acme/tools" {
+		t.Errorf("expected one include, got %+v", incs)
+	}
+}
+
+func TestCmdProfileIncludeRemove_Basic(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+	_ = cmdProfileTo([]string{"include", "add", dir, "p", "github.com/acme/tools"}, &buf)
+
+	if err := cmdProfileTo([]string{
+		"include", "remove", dir, "p", "github.com/acme/tools",
+	}, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := loadTestProfiles(t, dir)
+	if len(got["p"].Includes) != 0 {
+		t.Errorf("expected no includes after remove")
+	}
+}
+
+func TestCmdProfileIncludeUpdate_Ref(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+	_ = cmdProfileTo([]string{"include", "add", dir, "p", "github.com/acme/tools", "--ref", "v1"}, &buf)
+
+	if err := cmdProfileTo([]string{
+		"include", "update", dir, "p", "github.com/acme/tools", "--ref", "v2",
+	}, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := loadTestProfiles(t, dir)
+	if got["p"].Includes[0].Ref != "v2" {
+		t.Errorf("expected ref=v2, got %+v", got["p"].Includes[0])
+	}
+}
+
+func TestCmdProfileIncludeUpdate_NoFlags(t *testing.T) {
+	dir := t.TempDir()
+	writeProfileTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf)
+	_ = cmdProfileTo([]string{"include", "add", dir, "p", "github.com/acme/tools"}, &buf)
+
+	err := cmdProfileTo([]string{"include", "update", dir, "p", "github.com/acme/tools"}, &buf)
+	if err == nil || !strings.Contains(err.Error(), "at least one") {
+		t.Errorf("expected at-least-one error, got: %v", err)
+	}
+}

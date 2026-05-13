@@ -54,14 +54,17 @@ func TestMigrate_FromLegacyHome(t *testing.T) {
 	}
 
 	out, _ := s.mustRunYnh(t, "migrate", "--format", "json")
-	if !strings.Contains(out, `"schema_version": 2`) {
-		t.Errorf("migrate output missing schema_version 2:\n%s", out)
+	// CurrentSchemaVersion is 3; running migrate against a schema-1 home
+	// chains 1→2 and 2→3 in a single invocation, so the reported schema
+	// is 3 and the home is stamped 3.
+	if !strings.Contains(out, `"schema_version": 3`) {
+		t.Errorf("migrate output missing schema_version 3:\n%s", out)
 	}
 	if !strings.Contains(out, `"new_id": "local/planner"`) {
 		t.Errorf("migrate output missing manifest entry for local/planner:\n%s", out)
 	}
 
-	// Assert on-disk: legacy path gone, schema-2 path present.
+	// Assert on-disk: legacy path gone, schema-2/3 path present.
 	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
 		t.Errorf("legacy pointer path still exists at %s", legacyPath)
 	}
@@ -70,14 +73,14 @@ func TestMigrate_FromLegacyHome(t *testing.T) {
 		t.Errorf("schema-2 pointer path missing at %s: %v", newPath, err)
 	}
 
-	// Schema-version file is stamped to 2.
+	// Schema-version file is stamped to the current schema version (3).
 	versionPath := filepath.Join(s.home, ".schema-version")
 	data, err := os.ReadFile(versionPath)
 	if err != nil {
 		t.Fatalf("reading .schema-version: %v", err)
 	}
-	if strings.TrimSpace(string(data)) != "2" {
-		t.Errorf(".schema-version content = %q, want 2", string(data))
+	if strings.TrimSpace(string(data)) != "3" {
+		t.Errorf(".schema-version content = %q, want 3", string(data))
 	}
 
 	// Manifest is persisted at <home>/.migration-manifest.json.

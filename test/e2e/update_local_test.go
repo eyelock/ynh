@@ -41,12 +41,12 @@ func TestUpdate_LocalIncludeSkipped(t *testing.T) {
 	}
 	s.mustRunYnh(t, "install", harness)
 
-	before := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "local--local-only"))
+	before := readInstalledRecord(t, s.home, "local/local-only")
 
 	// Update must succeed even though there's nothing remote to refresh.
 	s.mustRunYnh(t, "update", "local/local-only")
 
-	after := readInstalledJSON(t, filepath.Join(s.home, "harnesses", "local--local-only"))
+	after := readInstalledRecord(t, s.home, "local/local-only")
 
 	// Local includes don't get a resolved entry (no SHA to record),
 	// so the count should match before/after.
