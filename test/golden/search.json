@@ -1,0 +1,18 @@
+[
+  {
+    "id": "github.com/eyelock/demo/demo",
+    "name": "demo",
+    "namespace": "eyelock/demo",
+    "description": "Demo harness",
+    "keywords": ["example", "demo"],
+    "repo": "https://github.com/eyelock/demo",
+    "version": "1.0.0",
+    "from": {"type": "registry", "name": "default"}
+  },
+  {
+    "id": "local/local-demo",
+    "name": "local-demo",
+    "path": "/Users/example/projects/local-demo",
+    "from": {"type": "source", "name": "local-sources"}
+  }
+]

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/vendors.schema.json",
+  "title": "ynh vendors --format json",
+  "description": "Output of `ynh vendors --format json`. Bare array of supported vendor adapters with availability info. Envelope retrofit deferred.",
+  "x-capabilities": "0.4",
+  "$defs": {
+    "Vendor": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string"},
+        "display_name": {"type": "string"},
+        "cli": {"type": "string", "description": "Executable name on PATH."},
+        "config_dir": {"type": "string", "description": "Vendor's per-project config directory under the harness root."},
+        "available": {"type": "boolean", "description": "Whether the vendor's CLI is on PATH."},
+        "supports_initial_prompt": {"type": "boolean"}
+      },
+      "required": ["name", "display_name", "cli", "config_dir", "available", "supports_initial_prompt"],
+      "additionalProperties": false
+    }
+  },
+  "type": "array",
+  "items": {"$ref": "#/$defs/Vendor"}
+}

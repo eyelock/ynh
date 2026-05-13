@@ -142,6 +142,17 @@ func TestInfoGolden(t *testing.T) { validateGolden(t, "info", "info.json") }
 // TestForkGolden validates the representative fork envelope.
 func TestForkGolden(t *testing.T) { validateGolden(t, "fork", "fork.json") }
 
+// TestSearchGolden / TestSourcesGolden / TestRegistryGolden / TestPathsGolden /
+// TestVendorsGolden / TestStatusGolden — Phase 3 commands. Schemas describe
+// today's bare-array/bare-object shapes; envelope retrofit is a future
+// capabilities-bumping change tracked outside this plan.
+func TestSearchGolden(t *testing.T)   { validateGolden(t, "search", "search.json") }
+func TestSourcesGolden(t *testing.T)  { validateGolden(t, "sources", "sources.json") }
+func TestRegistryGolden(t *testing.T) { validateGolden(t, "registry", "registry.json") }
+func TestPathsGolden(t *testing.T)    { validateGolden(t, "paths", "paths.json") }
+func TestVendorsGolden(t *testing.T)  { validateGolden(t, "vendors", "vendors.json") }
+func TestStatusGolden(t *testing.T)   { validateGolden(t, "status", "status.json") }
+
 func validateGolden(t *testing.T, schemaName, goldenName string) {
 	t.Helper()
 	path := findGolden(t, goldenName)
