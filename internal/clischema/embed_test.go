@@ -153,6 +153,9 @@ func TestPathsGolden(t *testing.T)    { validateGolden(t, "paths", "paths.json")
 func TestVendorsGolden(t *testing.T)  { validateGolden(t, "vendors", "vendors.json") }
 func TestStatusGolden(t *testing.T)   { validateGolden(t, "status", "status.json") }
 
+// TestInstalledGolden validates the install-provenance envelope.
+func TestInstalledGolden(t *testing.T) { validateGolden(t, "installed", "installed.json") }
+
 func validateGolden(t *testing.T, schemaName, goldenName string) {
 	t.Helper()
 	path := findGolden(t, goldenName)
