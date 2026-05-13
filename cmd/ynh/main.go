@@ -63,6 +63,8 @@ func main() {
 		err = cmdInfo(os.Args[2:])
 	case "installed":
 		err = cmdInstalled(os.Args[2:])
+	case "schema":
+		err = cmdSchema(os.Args[2:])
 	case "vendors":
 		err = cmdVendors(os.Args[2:])
 	case "sources":
@@ -138,6 +140,8 @@ Commands:
   ls                           List installed harnesses (supports --format json)
   info <name>                  Show detailed harness information (supports --format json)
   installed <name>             Show recorded install provenance (supports --format json)
+  schema <name>                Print the embedded JSON schema for a CLI command
+  schema --all --format json   Print every embedded schema as one manifest
   vendors                      List supported vendor adapters (supports --format json)
   search <term>                Search registries and sources (supports --format json)
   sources add <path>           Add a local harness source directory
