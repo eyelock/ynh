@@ -67,9 +67,9 @@ ynh manages the **guide layer** of that harness: the proactive steering that hap
 
 ## What you can do
 
-**Build** — Create harnesses with skills, agents, rules, and commands. Pull artifacts from any Git repo with cherry-picking (`pick`). Declare hooks, MCP servers, environment-specific profiles, and [sensors](docs/sensors.md) — observation surfaces that loop drivers consume between agent turns.
+**Build** — Create harnesses with skills, agents, rules, and commands. Pull artifacts from any Git repo with cherry-picking (`pick`). Declare hooks, MCP servers, environment-specific profiles, [focuses](docs/focus.md) — named prompt-and-profile bindings for repeatable runs — and [sensors](docs/sensors.md) — observation surfaces that loop drivers consume between agent turns.
 
-**Refine** — Scaffold with `ynd create`, lint and validate with `ynd lint`/`ynd validate`, compress prompts with `ynd compress`, preview assembled output with `ynd preview`, diff across vendors with `ynd diff`.
+**Refine** — Scaffold with `ynd create`, lint and validate with `ynd lint`/`ynd validate`, compress prompts with `ynd compress`, preview assembled output with `ynd preview`, diff across vendors with `ynd diff`. Edit focuses, profiles, hooks, MCP servers, includes, and delegates from the CLI with `ynh focus`/`profile`/`hook`/`mcp`/`include`/`delegate` — the same surface a GUI consumer drives.
 
 **Share** — Export as vendor-native plugins with `ynd export`. Build team marketplaces with `ynd marketplace build`. Publish to registries. Bake harnesses into Docker images for CI/CD.
 
@@ -79,7 +79,7 @@ Full docs at **[eyelock.github.io/ynh](https://eyelock.github.io/ynh)**:
 
 - **[Getting Started](https://eyelock.github.io/ynh/#/getting-started)** — Create and run your first harness
 - **[Harness Engineering](https://eyelock.github.io/ynh/#/harness-engineering)** — Why harness management matters
-- **[Tutorials](https://eyelock.github.io/ynh/#/tutorial/)** — 13 progressive tutorials from first harness to Docker images
+- **[Tutorials](https://eyelock.github.io/ynh/#/tutorial/)** — 18 progressive tutorials from first harness to sensors
 - **[Artifacts Guide](https://eyelock.github.io/ynh/#/artifacts)** — Skills, agents, rules, commands
 - **[CLI Reference](https://eyelock.github.io/ynh/#/reference)** — Full command reference for ynh and ynd
 - **[Agent Skills Standard](https://eyelock.github.io/ynh/#/skills-standard)** — Cross-platform spec, discovery paths, catalog budget

@@ -9,6 +9,7 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 | `YNH_HOME` | `~/.ynh` | `ynh` (global) | — |
 | `YNH_VENDOR` | _(none)_ | `ynh run`, `ynd preview/export/create/compress/inspect/marketplace` | `-v` flag |
 | `YNH_PROFILE` | _(none)_ | `ynh run`, `ynd export/preview/diff` | `--profile` flag |
+| `YNH_FOCUS` | _(none)_ | `ynh run`, `ynd export/preview/diff` | `--focus` flag |
 | `YNH_HARNESS` | _(none)_ | `ynd preview/export/diff/validate/lint/fmt` | `--harness` flag / positional arg |
 | `YNH_YES` | _(none)_ | `ynd compress/inspect` | `-y` flag |
 | `CI` | _(none)_ | `ynd compress/inspect` | (lowest priority skip-confirm) |
@@ -22,6 +23,7 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 |---------|-----------------|
 | Vendor | `-v` flag > `YNH_VENDOR` > harness `default_vendor` > global config |
 | Profile | `--profile` flag > `YNH_PROFILE` > no profile (top-level) |
+| Focus | `--focus` flag > `YNH_FOCUS` > no focus (mutually exclusive with `--profile`) |
 | Harness source | `--harness` flag > `YNH_HARNESS` > positional arg > `.` (CWD) or error |
 | Non-interactive | `-y` flag > `YNH_YES` > `CI` |
 
@@ -32,7 +34,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | Command | Key Flags |
 |---------|-----------|
 | `ynh install <source>` | `--path`, `-v` |
-| `ynh run [harness]` | `-v`, `--profile`, `--install`, `--clean` |
+| `ynh run [harness]` | `-v`, `--profile`, `--focus`, `--install`, `--clean` |
 | `ynh uninstall <harness>` | |
 | `ynh update [harness]` | |
 | `ynh fork <name>` | `--to <path>`, `--name <new>`, `--format <text\|json>` |
@@ -90,9 +92,9 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynd compose <source>` | `--harness`, `--profile`, `--format <text\|json>` |
 | `ynd compress [files...]` | `-v`, `-y`, `--restore`, `--list-backups`, `--pick` |
 | `ynd inspect` | `-v`, `-y`, `-o` |
-| `ynd preview <source>` | `-v`, `-o`, `--harness`, `--profile` |
-| `ynd diff <source>` | `-v`, `--harness`, `--profile` |
-| `ynd export <source>` | `-v`, `-o`, `--harness`, `--profile`, `--path`, `--merged`, `--clean` |
+| `ynd preview <source>` | `-v`, `-o`, `--harness`, `--profile`, `--focus` |
+| `ynd diff <source>` | `-v`, `--harness`, `--profile`, `--focus` |
+| `ynd export <source>` | `-v`, `-o`, `--harness`, `--profile`, `--focus`, `--path`, `--merged`, `--clean` |
 | `ynd marketplace build` | `-v`, `-o`, `--clean` |
 
 See [ynd Developer Tools](ynd.md) for detailed command documentation.

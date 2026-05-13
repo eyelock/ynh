@@ -240,6 +240,6 @@ rm -rf /tmp/ynh-tutorial
 - `ynd inspect` analyzes a project and generates skills/agents
 - All ynd commands work on the current directory by default, or target specific files
 
-## Complete
+## Next
 
-[Tutorial 8: Developer Preview](tutorial/12-developer-preview.md) — preview and diff assembled output across vendors.
+[Tutorial 10: Developer Preview](tutorial/12-developer-preview.md) — preview and diff assembled output across vendors.

@@ -208,4 +208,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Tutorial 15: Project-Local Config](15-project-local-config.md) — use `.ynh-plugin/plugin.json` in your project root for zero-install AI configuration.
+[Tutorial 8: Project-Local Config](tutorial/15-project-local-config.md) — use `.ynh-plugin/plugin.json` in your project root for zero-install AI configuration.
