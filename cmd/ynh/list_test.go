@@ -806,9 +806,13 @@ func TestCmdList_TextFormat_ForkAndRegistry(t *testing.T) {
 	}
 	out := stdout.String()
 
+	// Rows now lead with the canonical id, not the bare name. Match on
+	// "termq-dev" anywhere in the line so both "local/termq-dev" (fork
+	// pointer) and "github.com/eyelock/assistants/termq-dev" (registry)
+	// are picked up.
 	var termqLines []string
 	for _, line := range strings.Split(out, "\n") {
-		if strings.HasPrefix(line, "termq-dev") {
+		if strings.Contains(line, "termq-dev") {
 			termqLines = append(termqLines, line)
 		}
 	}
@@ -861,6 +865,43 @@ func TestCmdListJSON_SchemaRoundTrip(t *testing.T) {
 	}
 	if err := schema.Validate(v); err != nil {
 		t.Errorf("ls JSON does not validate against schema: %v\noutput: %s", err, stdout.String())
+	}
+}
+
+// TestCmdListJSON_SourceKindHarness exercises the schema against a
+// source_type: "source" harness — installed via a configured `ynh sources`
+// entry, as written by cmd/ynh/install_resolve.go. This case caught a real
+// drift the original goldens missed: the HarnessSource enum was tightened
+// to ["registry", "git", "local", "fork"] but production also writes
+// "source" (and never writes "fork"). Tests are now the source of truth
+// for which values production actually emits.
+func TestCmdListJSON_SourceKindHarness(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "src-harness", `{
+		"name": "src-harness",
+		"version": "0.1.0",
+		"default_vendor": "claude",
+		"installed_from": {
+			"source_type": "source",
+			"source": "/Users/me/work/harnesses",
+			"installed_at": "2026-05-13T12:00:00Z"
+		}
+	}`)
+	var stdout bytes.Buffer
+	if err := cmdListTo([]string{"--format", "json"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdListTo: %v", err)
+	}
+	var v any
+	if err := json.Unmarshal(stdout.Bytes(), &v); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	schema, err := clischema.Get("list")
+	if err != nil {
+		t.Fatalf("Get list schema: %v", err)
+	}
+	if err := schema.Validate(v); err != nil {
+		t.Errorf("source-kind harness does not validate: %v\noutput: %s", err, stdout.String())
 	}
 }
 

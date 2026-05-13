@@ -17,9 +17,11 @@ func TestLs_TextOutput(t *testing.T) {
 
 	out, _ := s.mustRunYnh(t, "ls")
 
-	// Header columns documented in cmd/ynh/list.go: NAME / VENDOR / SOURCE /
-	// ARTIFACTS / INCLUDES / DELEGATES TO. Plus the harness row.
-	for _, want := range []string{"NAME", "VENDOR", "SOURCE", "ARTIFACTS", "list-me"} {
+	// Header columns documented in cmd/ynh/list.go: ID / KIND / VENDOR /
+	// SOURCE / ARTIFACTS / INCLUDES / DELEGATES TO. ID — not NAME — is the
+	// first column so users copy the canonical form that every harness-
+	// targeting command (run, info, installed, uninstall, update) accepts.
+	for _, want := range []string{"ID", "VENDOR", "SOURCE", "ARTIFACTS", "list-me"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("ls text output missing %q\n%s", want, out)
 		}

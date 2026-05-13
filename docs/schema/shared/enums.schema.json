@@ -7,8 +7,8 @@
   "$defs": {
     "HarnessSource": {
       "type": "string",
-      "description": "Where a harness was installed from. Drives provenance reporting and update behaviour.",
-      "enum": ["registry", "git", "local", "fork"]
+      "description": "Where a harness was installed from, as written by install_resolve. `local` = bare path; `git` = git URL; `registry` = configured registry; `source` = configured ynh-sources entry (resolves a name, not a path — distinct from `local`). Forks are recorded as `local` with a `forked_from` sibling; there is no separate `fork` source_type.",
+      "enum": ["local", "git", "registry", "source"]
     },
     "UpdateState": {
       "type": "string",
