@@ -341,6 +341,58 @@ Expected:
 
 All seven paths shift to the overridden root.
 
+## T16.13: Inspect install provenance
+
+`ynh installed <name> --format json` exposes the recorded install provenance — useful when scripting "where did this harness come from?" without reading `.ynh-plugin/installed.json` directly.
+
+```bash
+ynh installed local/my-harness --format json
+```
+
+Expected:
+```json
+{
+  "capabilities": "0.4.0",
+  "ynh_version": "0.3.x",
+  "id": "local/my-harness",
+  "installed": {
+    "source_type": "local",
+    "source": "<path>",
+    "installed_at": "<timestamp>"
+  }
+}
+```
+
+The `installed` object mirrors the on-disk record byte-for-byte (including any `resolved[]` commit SHAs for includes/delegates). Unlike `ynh info`, this focuses purely on provenance — no manifest, no artifact counts.
+
+## T16.14: Validate output against the published schema
+
+Every `--format json` command has a published JSON Schema. Inspect a schema with `ynh schema <name>`:
+
+```bash
+ynh schema list | jq '.["$id"]'
+```
+
+Expected: `"https://eyelock.github.io/ynh/schema/cli/list.schema.json"`
+
+Validate a captured response with `ynd validate-output --schema <name>`:
+
+```bash
+ynh ls --format json | ynd validate-output --schema list
+```
+
+Expected: `ok` on stdout, exit code 0. If the shape ever drifts, the command exits non-zero and prints the first divergence.
+
+For tools that want every schema at once (MCP servers, codegen), `ynh schema --all --format json` returns a manifest:
+
+```bash
+ynh schema --all --format json | jq '.schemas | keys'
+```
+
+Expected: an array of every embedded schema name (`"cli/list"`, `"cli/info"`, `"shared/harness"`, etc.).
+
+See [Published JSON Schemas](schema-cli.md) for the full contract — capability versioning, envelope shape, error vocabulary, and the workflow for adding a new schema.
+
 ## Clean up
 
 ```bash
@@ -362,6 +414,8 @@ rm -rf /tmp/ynh-tutorial
 - `code` values are stable identifiers for scripting; `message` is for humans
 - `YNH_HOME` changes all resolved paths — useful for testing and multi-environment setups
 - These conventions apply to every command that supports `--format json`
+- `ynh installed <name> --format json` exposes raw install provenance independently of `ynh info`
+- `ynh schema <name>` and `ynh schema --all --format json` expose the published JSON Schemas; `ynd validate-output --schema <name>` confirms a captured response matches
 
 ## Next
 
