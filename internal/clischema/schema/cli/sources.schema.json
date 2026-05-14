@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/cli/sources.schema.json",
   "title": "ynh sources list --format json",
   "description": "Output of `ynh sources list --format json`. Bare array — envelope retrofit deferred.",
-  "x-capabilities": "0.4",
+  "x-capabilities": "0.5",
   "$defs": {
     "Source": {
       "type": "object",
