@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/cli/list.schema.json",
   "title": "ynh ls --format json",
   "description": "Output of `ynh ls --format json` (with or without --check-updates). Top-level oneOf accepts either the success envelope or the cross-cutting error envelope.",
-  "x-capabilities": "0.4",
+  "x-capabilities": "0.5",
   "$defs": {
     "List": {
       "type": "object",

@@ -26,7 +26,7 @@ ynh ls --format json | ynd validate-output --schema list
 
 ## Capability versioning
 
-Every structured response carries a `capabilities` field — `config.CapabilitiesVersion`, currently `0.4.0`. Schemas carry the same value as an `x-capabilities` annotation.
+Every structured response carries a `capabilities` field — `config.CapabilitiesVersion`, currently `0.5.0`. Schemas carry the same value as an `x-capabilities` annotation.
 
 **Capability bumps:**
 - Removing a field; renaming a field; changing a field's type

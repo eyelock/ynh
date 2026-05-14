@@ -71,7 +71,8 @@ func TestTrajectoryWriter_NoHTMLEscape(t *testing.T) {
 
 func TestEventKindConstants(t *testing.T) {
 	kinds := []EventKind{
-		KindSessionStart, KindPlan, KindTurnStart, KindAssistantMessage,
+		KindSessionStart, KindPlan, KindPlanRevised, KindPlanApprovalRequired,
+		KindTurnStart, KindAssistantMessage,
 		KindSensorRun, KindSensorResult, KindFeedbackSent,
 		KindTurnApprovalRequired, KindStuckDetected, KindBudgetExceeded,
 		KindConverged, KindSessionEnd,

@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/cli/info.schema.json",
   "title": "ynh info <name> --format json",
   "description": "Output of `ynh info <name> --format json` (with or without --check-updates). Single-harness variant of list, with the raw plugin.json manifest attached.",
-  "x-capabilities": "0.4",
+  "x-capabilities": "0.5",
   "$defs": {
     "Info": {
       "type": "object",

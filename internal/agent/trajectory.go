@@ -12,11 +12,15 @@ type EventKind string
 const (
 	KindSessionStart         EventKind = "session_start"
 	KindPlan                 EventKind = "plan"
+	KindPlanRevised          EventKind = "plan_revised"
+	KindPlanApprovalRequired EventKind = "plan_approval_required"
 	KindTurnStart            EventKind = "turn_start"
 	KindAssistantMessage     EventKind = "assistant_message"
 	KindSensorRun            EventKind = "sensor_run"
 	KindSensorResult         EventKind = "sensor_result"
 	KindFeedbackSent         EventKind = "feedback_sent"
+	// KindTurnApprovalRequired is emitted only during the act phase (turn ≥ 1).
+	// Plan-phase approval gates use KindPlanApprovalRequired.
 	KindTurnApprovalRequired EventKind = "turn_approval_required"
 	KindStuckDetected        EventKind = "stuck_detected"
 	KindBudgetExceeded       EventKind = "budget_exceeded"
@@ -113,4 +117,25 @@ type SessionEndData struct {
 // SynthesizedFeedback matches the TermQ wire name.
 type TurnApprovalData struct {
 	SynthesizedFeedback string `json:"synthesized_feedback"`
+}
+
+// PlanApprovalData is the payload for KindPlanApprovalRequired events.
+// Plan carries the full plan text as produced by the worker for this
+// iteration; consumers render it directly without walking the trajectory
+// for the preceding KindAssistantMessage. Iteration is 1-indexed; the
+// initial plan is iteration 1, refinements are 2+.
+type PlanApprovalData struct {
+	Plan      string `json:"plan"`
+	Iteration int    `json:"iteration"`
+}
+
+// PlanRevisedData is the payload for KindPlanRevised events. Emitted at
+// the start of plan iterations 2+; the initial plan iteration is bounded
+// by KindPlan instead. Iteration is the iteration we're about to produce
+// (matches the Iteration value of the next KindPlanApprovalRequired).
+// Notes is the user's free-form refinement payload from
+// ActionReplaceFeedback.
+type PlanRevisedData struct {
+	Iteration int    `json:"iteration"`
+	Notes     string `json:"notes"`
 }

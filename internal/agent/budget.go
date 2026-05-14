@@ -56,12 +56,13 @@ func (b *Budget) Exceeded() (reason string, budgetKind BudgetType, exitCode int)
 
 // Exit codes for loop termination.
 const (
-	ExitConverged    = 0
-	ExitIterationCap = 10
-	ExitTokenBudget  = 11
-	ExitWallClock    = 12
-	ExitStuck        = 13
-	ExitTamper       = 14
-	ExitWorkerError  = 20
-	ExitUserAborted  = 30
+	ExitConverged         = 0
+	ExitIterationCap      = 10
+	ExitTokenBudget       = 11
+	ExitWallClock         = 12
+	ExitStuck             = 13
+	ExitTamper            = 14
+	ExitPlanIterationCap  = 15
+	ExitWorkerError       = 20
+	ExitUserAborted       = 30
 )

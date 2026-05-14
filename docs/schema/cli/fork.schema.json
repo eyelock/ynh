@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/cli/fork.schema.json",
   "title": "ynh fork <name> --format json",
   "description": "Output of `ynh fork <name> [--to <path>] [--name <new>] --format json`. Single-result envelope describing the forked harness.",
-  "x-capabilities": "0.4",
+  "x-capabilities": "0.5",
   "$defs": {
     "Fork": {
       "type": "object",
