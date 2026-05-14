@@ -271,7 +271,7 @@ ynh migrate
 
 Expected on a current installation:
 ```
-ynh home is already at schema version 2 — nothing to migrate.
+ynh home is already at schema version 3 — nothing to migrate.
 ```
 
 When an upgrade is needed, the command rewrites the harness directory layout
