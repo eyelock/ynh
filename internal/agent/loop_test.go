@@ -286,3 +286,32 @@ func asExitError(err error, out **ExitError) bool {
 	}
 	return false
 }
+
+func TestValidateBackend(t *testing.T) {
+	t.Run("defaults empty to claude", func(t *testing.T) {
+		got, err := validateBackend("")
+		if err != nil || got != "claude" {
+			t.Errorf("validateBackend(\"\") = (%q, %v), want (\"claude\", nil)", got, err)
+		}
+	})
+	t.Run("accepts canonical names", func(t *testing.T) {
+		for _, name := range []string{"claude", "codex", "cursor"} {
+			got, err := validateBackend(name)
+			if err != nil || got != name {
+				t.Errorf("validateBackend(%q) = (%q, %v); want (%q, nil)", name, got, err, name)
+			}
+		}
+	})
+	t.Run("rejects claude-code with hint", func(t *testing.T) {
+		_, err := validateBackend("claude-code")
+		if err == nil || !strings.Contains(err.Error(), "did you mean \"claude\"") {
+			t.Errorf("expected hinted rejection for claude-code, got: %v", err)
+		}
+	})
+	t.Run("rejects unknown", func(t *testing.T) {
+		_, err := validateBackend("nope")
+		if err == nil {
+			t.Error("expected error for unknown backend")
+		}
+	})
+}

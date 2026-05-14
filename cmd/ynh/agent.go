@@ -65,6 +65,20 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 			}
 			opts.Backend = args[i]
 
+		case "--profile":
+			i++
+			if i >= len(args) {
+				return cliError(stderr, false, errCodeInvalidInput, "--profile requires a value")
+			}
+			opts.Profile = args[i]
+
+		case "--focus":
+			i++
+			if i >= len(args) {
+				return cliError(stderr, false, errCodeInvalidInput, "--focus requires a value")
+			}
+			opts.Focus = args[i]
+
 		case "--sandbox":
 			i++
 			if i >= len(args) {
@@ -165,9 +179,20 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 		}
 	}
 
-	if opts.Task == "" {
+	// Mutual exclusion guards mirror `ynh run`:
+	// focus already provides both prompt and bound profile.
+	if opts.Focus != "" && opts.Task != "" {
 		return cliError(stderr, false, errCodeInvalidInput,
-			"--task is required")
+			"cannot use --focus and --task together (focus includes a prompt)")
+	}
+	if opts.Focus != "" && opts.Profile != "" {
+		return cliError(stderr, false, errCodeInvalidInput,
+			"cannot use --focus and --profile together (focus includes a profile)")
+	}
+
+	if opts.Task == "" && opts.Focus == "" {
+		return cliError(stderr, false, errCodeInvalidInput,
+			"--task or --focus is required")
 	}
 
 	if err := agent.RunLoop(opts); err != nil {

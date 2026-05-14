@@ -39,6 +39,13 @@ type RunOptions struct {
 	HarnessName string
 	// Task is the task text sent as the first user message.
 	Task string
+	// Profile is an optional profile name to apply to the harness before
+	// assembly. Mirrors `ynh run --profile`. Mutually exclusive with Focus.
+	Profile string
+	// Focus is an optional focus name. The focus's prompt becomes the task
+	// and the focus's bound profile (if any) is applied. Mirrors
+	// `ynh run --focus`. Mutually exclusive with Task and Profile.
+	Focus string
 	// Backend selects the worker backend ("claude" or "codex"). Defaults to "claude".
 	Backend string
 	// Sandbox is "srt" or "none". Defaults to "none".
@@ -105,9 +112,11 @@ func RunLoop(opts RunOptions) error {
 	if opts.Stdin == nil {
 		opts.Stdin = os.Stdin
 	}
-	if opts.Backend == "" {
-		opts.Backend = "claude"
+	backend, err := validateBackend(opts.Backend)
+	if err != nil {
+		return err
 	}
+	opts.Backend = backend
 	if opts.WorktreeDir == "" {
 		var err error
 		opts.WorktreeDir, err = os.Getwd()
@@ -143,11 +152,36 @@ func RunLoop(opts RunOptions) error {
 		if err != nil {
 			return fmt.Errorf("loading harness %q: %w", opts.HarnessName, err)
 		}
+
+		// Resolve focus → prompt + bound profile. Mirrors `ynh run --focus`.
+		profileName := opts.Profile
+		if opts.Focus != "" {
+			focus, ok := harnessObj.Focuses[opts.Focus]
+			if !ok {
+				return fmt.Errorf("focus %q not defined in harness", opts.Focus)
+			}
+			if focus.Profile != "" {
+				profileName = focus.Profile
+			}
+			opts.Task = focus.Prompt
+		}
+
+		// Apply profile overlay before assembly so includes/hooks/MCP layered
+		// in by the profile are baked into the assembled harness.
+		if profileName != "" {
+			harnessObj, err = harness.ResolveProfile(harnessObj, profileName)
+			if err != nil {
+				return fmt.Errorf("resolving profile %q: %w", profileName, err)
+			}
+		}
+
 		configPath, err = assembleHarness(harnessObj, opts.Backend)
 		if err != nil {
 			return fmt.Errorf("assembling harness: %w", err)
 		}
 		defer func() { _ = os.RemoveAll(configPath) }()
+	} else if opts.Focus != "" || opts.Profile != "" {
+		return fmt.Errorf("--focus and --profile require --harness")
 	}
 
 	// ── Select backend ────────────────────────────────────────────────────────
@@ -566,10 +600,28 @@ func gitAutoCommit(dir string, turnN int) error {
 	return nil
 }
 
-// selectBackend returns the WorkerBackend for the given name.
+// validateBackend defaults the backend name and rejects unknown values
+// (including common near-misses like "claude-code") with a clear error
+// pointing at the canonical names. Run before any vendor lookup so
+// callers get a useful message instead of "unknown vendor" from deeper in.
+func validateBackend(name string) (string, error) {
+	switch name {
+	case "":
+		return "claude", nil
+	case "claude", "codex", "cursor":
+		return name, nil
+	case "claude-code":
+		return "", fmt.Errorf("unknown backend %q (did you mean \"claude\"?)", name)
+	default:
+		return "", fmt.Errorf("unknown backend %q (supported: claude, codex, cursor)", name)
+	}
+}
+
+// selectBackend returns the WorkerBackend for the given canonical name.
+// Names must be pre-validated via validateBackend.
 func selectBackend(name string) (WorkerBackend, error) {
 	switch name {
-	case "claude", "":
+	case "claude":
 		return &ClaudeBackend{}, nil
 	case "codex":
 		return &CodexBackend{}, nil
