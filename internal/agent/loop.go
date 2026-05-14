@@ -58,6 +58,14 @@ type RunOptions struct {
 	MaxTokens int64
 	MaxWall   time.Duration
 
+	// MaxPlanIterations bounds the plan-refine loop in interactive mode.
+	// Each refine round (replace_feedback during plan approval) costs an
+	// extra LLM round-trip; this guard prevents runaway. Zero applies the
+	// default of 5. Plan iterations do NOT consume MaxTurns budget;
+	// MaxTurns is the act-phase convergence cap. They DO consume tokens
+	// and wall-clock.
+	MaxPlanIterations int
+
 	// ConvergenceSensor is the name of a sensor to consult as a final done-check.
 	// All regular sensors must pass first; then this sensor is consulted.
 	ConvergenceSensor string
@@ -265,47 +273,90 @@ func RunLoop(opts RunOptions) error {
 	} // end else if harnessObj != nil
 
 	// ── Plan phase ────────────────────────────────────────────────────────────
+	// Plan iteration loop: produces a plan, optionally awaits user approval,
+	// loops back into "revise the plan" if the user replied with refinement
+	// feedback. Non-interactive mode runs exactly one iteration and continues
+	// straight into the act phase.
 	if !opts.NoPlan {
+		maxPlanIters := opts.MaxPlanIterations
+		if maxPlanIters <= 0 {
+			maxPlanIters = 5
+		}
 		planMsg := fmt.Sprintf(
 			"Write a plan for the following task. Document it clearly in plan.md in the current directory.\n\nTask: %s",
 			opts.Task,
 		)
-		if emitErr := traj.Emit(KindPlan, 0, nil); emitErr != nil {
-			return fmt.Errorf("writing trajectory: %w", emitErr)
-		}
-		if err := sess.Send(planMsg); err != nil {
-			_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
-			return &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("sending plan request: %v", err)}
-		}
-		planTurn, err := sess.Next()
-		if err == io.EOF {
-			_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: "worker exited during plan phase"})
-			return &ExitError{Code: ExitWorkerError, Message: "worker exited during plan phase"}
-		}
-		if err != nil {
-			_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
-			return &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("plan turn: %v", err)}
-		}
-		_ = traj.Emit(KindAssistantMessage, 0, planTurn.Content)
+	planLoop:
+		for planIter := 1; ; planIter++ {
+			if planIter == 1 {
+				if emitErr := traj.Emit(KindPlan, 0, nil); emitErr != nil {
+					return fmt.Errorf("writing trajectory: %w", emitErr)
+				}
+			}
+			if err := sess.Send(planMsg); err != nil {
+				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
+				return &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("sending plan request: %v", err)}
+			}
+			planTurn, err := sess.Next()
+			if err == io.EOF {
+				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: "worker exited during plan phase"})
+				return &ExitError{Code: ExitWorkerError, Message: "worker exited during plan phase"}
+			}
+			if err != nil {
+				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
+				return &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("plan turn: %v", err)}
+			}
+			_ = traj.Emit(KindAssistantMessage, 0, planTurn.Content)
+			budget.RecordTokens(planTurn.Usage)
 
-		if opts.Interactive {
-			feedback := planTurn.Content
-			if emitErr := traj.Emit(KindTurnApprovalRequired, 0, TurnApprovalData{SynthesizedFeedback: feedback}); emitErr != nil {
+			// Plan iterations consume tokens and wall-clock but not the act-phase
+			// turn cap. budget.Exceeded checks turns first; turns is still 0 here
+			// (RecordTurn is act-phase only) so the turns branch is dormant.
+			if reason, budgetKind, code := budget.Exceeded(); reason != "" {
+				_ = traj.Emit(KindBudgetExceeded, 0, BudgetExceededData{Budget: budgetKind, Reason: reason})
+				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: code, Reason: reason, TotalTokens: budget.Tokens()})
+				return &ExitError{Code: code, Message: reason}
+			}
+
+			if !opts.Interactive {
+				break planLoop
+			}
+
+			if emitErr := traj.Emit(KindPlanApprovalRequired, 0, PlanApprovalData{
+				Plan:      planTurn.Content,
+				Iteration: planIter,
+			}); emitErr != nil {
 				return fmt.Errorf("writing trajectory: %w", emitErr)
 			}
-			action, replacement, aborted := waitForApproval(ctrl, ActionApprovePlan, ActionRejectPlan)
+			action, replyFeedback, aborted := waitForApproval(ctrl, ActionApprovePlan, ActionRejectPlan)
 			if aborted {
 				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitUserAborted, Reason: "user aborted"})
 				return &ExitError{Code: ExitUserAborted, Message: "plan rejected by user"}
 			}
 			if action == ActionRejectPlan {
-				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitUserAborted, Reason: "plan rejected"})
-				return &ExitError{Code: ExitUserAborted, Message: "plan rejected by user"}
+				reason := "plan rejected by user"
+				if replyFeedback != "" {
+					reason = "plan rejected by user: " + replyFeedback
+				}
+				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitUserAborted, Reason: reason})
+				return &ExitError{Code: ExitUserAborted, Message: reason}
 			}
-			if replacement != "" {
-				feedback = replacement
+			// ActionApprovePlan: empty feedback means plain approve; non-empty
+			// means refine — produce a revised plan addressing the feedback.
+			if replyFeedback == "" {
+				break planLoop
 			}
-			_ = feedback // plan approval carries no feedback to the worker
+			if planIter >= maxPlanIters {
+				reason := fmt.Sprintf("plan iteration cap reached (%d/%d)", planIter, maxPlanIters)
+				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitPlanIterationCap, Reason: reason})
+				return &ExitError{Code: ExitPlanIterationCap, Message: reason}
+			}
+			nextIter := planIter + 1
+			_ = traj.Emit(KindPlanRevised, 0, PlanRevisedData{Iteration: nextIter, Notes: replyFeedback})
+			planMsg = fmt.Sprintf(
+				"Revise the plan to address this feedback:\n\n%s\n\nUpdate plan.md accordingly and reply with the revised plan.",
+				replyFeedback,
+			)
 		}
 	}
 
@@ -497,8 +548,18 @@ func synthesizeFeedback(results []*SensorResult) string {
 }
 
 // waitForApproval blocks until the control channel delivers one of the
-// expected approval or abort actions. Returns (action, replacementFeedback, aborted).
-// aborted is true if an interrupt was received.
+// expected approval or abort actions. Returns (action, feedback, aborted).
+//
+// Feedback semantics by action:
+//   - approveAction: feedback is empty (plain approval).
+//   - ActionReplaceFeedback: returned as approveAction with the user's
+//     replacement payload — caller decides whether to augment the next
+//     prompt (act phase) or trigger a refine iteration (plan phase).
+//   - rejectAction: feedback carries the optional "why" payload, surfaced
+//     in KindSessionEnd.Reason for telemetry. Empty if the consumer
+//     rejected without notes.
+//
+// aborted is true if an interrupt was received or stdin closed.
 func waitForApproval(ctrl *ControlReader, approveAction, rejectAction ControlAction) (ControlAction, string, bool) {
 	for msg := range ctrl.C() {
 		switch msg.Action {
@@ -507,7 +568,7 @@ func waitForApproval(ctrl *ControlReader, approveAction, rejectAction ControlAct
 		case ActionReplaceFeedback:
 			return approveAction, msg.Feedback, false
 		case rejectAction, ActionRejectPlan:
-			return rejectAction, "", false
+			return rejectAction, msg.Feedback, false
 		case ActionInterrupt:
 			return ActionInterrupt, "", true
 		}
