@@ -41,6 +41,27 @@ func TestCmdAgentRun_FocusFlagAccepted(t *testing.T) {
 	}
 }
 
+func TestCmdAgentRun_MaxPlanIterationsRequiresValue(t *testing.T) {
+	err := cmdAgentRunTo(t, []string{"--harness", "x", "--task", "t", "--max-plan-iterations"})
+	if err == nil || !strings.Contains(err.Error(), "--max-plan-iterations requires a value") {
+		t.Fatalf("expected --max-plan-iterations value-required, got: %v", err)
+	}
+}
+
+func TestCmdAgentRun_MaxPlanIterationsRejectsNonInt(t *testing.T) {
+	err := cmdAgentRunTo(t, []string{"--harness", "x", "--task", "t", "--max-plan-iterations", "lots"})
+	if err == nil || !strings.Contains(err.Error(), "non-negative integer") {
+		t.Fatalf("expected non-integer rejection, got: %v", err)
+	}
+}
+
+func TestCmdAgentRun_MaxPlanIterationsRejectsNegative(t *testing.T) {
+	err := cmdAgentRunTo(t, []string{"--harness", "x", "--task", "t", "--max-plan-iterations", "-3"})
+	if err == nil || !strings.Contains(err.Error(), "non-negative integer") {
+		t.Fatalf("expected negative rejection, got: %v", err)
+	}
+}
+
 func cmdAgentRunTo(t *testing.T, args []string) error {
 	t.Helper()
 	return cmdAgentRun(args, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))

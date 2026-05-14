@@ -127,6 +127,17 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 			}
 			opts.MaxWall = d
 
+		case "--max-plan-iterations":
+			i++
+			if i >= len(args) {
+				return cliError(stderr, false, errCodeInvalidInput, "--max-plan-iterations requires a value")
+			}
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n < 0 {
+				return cliError(stderr, false, errCodeInvalidInput, "--max-plan-iterations must be a non-negative integer")
+			}
+			opts.MaxPlanIterations = n
+
 		case "--convergence-sensor":
 			i++
 			if i >= len(args) {
