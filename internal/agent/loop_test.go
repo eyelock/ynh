@@ -7,14 +7,20 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 )
 
 // mockBackend is a test WorkerBackend that returns scripted turns.
+// delays and errs are optional parallel slices: when set at position N,
+// Next() applies that delay/error before returning turns[N]. Both are
+// zero-value compatible — tests that don't need them can leave them nil.
 type mockBackend struct {
-	name  string
-	turns []Turn
-	pos   int
-	sends []string
+	name   string
+	turns  []Turn
+	delays []time.Duration
+	errs   []error
+	pos    int
+	sends  []string
 }
 
 func (m *mockBackend) Name() string { return m.name }
@@ -36,9 +42,15 @@ func (s *mockSession) Next() (Turn, error) {
 	if s.backend.pos >= len(s.backend.turns) {
 		return Turn{}, io.EOF
 	}
-	t := s.backend.turns[s.backend.pos]
+	pos := s.backend.pos
 	s.backend.pos++
-	return t, nil
+	if pos < len(s.backend.delays) && s.backend.delays[pos] > 0 {
+		time.Sleep(s.backend.delays[pos])
+	}
+	if pos < len(s.backend.errs) && s.backend.errs[pos] != nil {
+		return Turn{}, s.backend.errs[pos]
+	}
+	return s.backend.turns[pos], nil
 }
 
 func (s *mockSession) Close() error { return nil }
