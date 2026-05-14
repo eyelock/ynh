@@ -1,5 +1,5 @@
 {
-  "capabilities": "0.4.0",
+  "capabilities": "0.5.0",
   "schema_version": 3,
   "ynh_version": "0.3.1",
   "harness": {

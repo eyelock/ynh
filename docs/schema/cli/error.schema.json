@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/cli/error.schema.json",
   "title": "Error envelope (cross-cutting)",
   "description": "Structured error envelope emitted on stderr by any command invoked with --format json when the command fails. The success and error envelopes form a top-level oneOf in every per-command schema. Currently the live emitter only writes code+message; category/retryable/hint are additive (capabilities bump pending) and consumers MUST tolerate either shape.",
-  "x-capabilities": "0.4",
+  "x-capabilities": "0.5",
   "$defs": {
     "Error": {
       "type": "object",

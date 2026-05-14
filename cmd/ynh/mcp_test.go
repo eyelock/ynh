@@ -99,15 +99,17 @@ func TestCmdMCPAdd_Neither(t *testing.T) {
 }
 
 func TestCmdMCPAdd_NoNullSupport(t *testing.T) {
-	// Harness-level entries can't be null — there's no inheritance source
-	// to suppress. Verify --null is rejected as an unknown flag.
+	// Harness-level (top-level) entries can't be null — there's no
+	// inheritance source to suppress, so --null is only meaningful with
+	// --profile. Verify the top-level rejection still fires under the
+	// collapsed surface.
 	dir := t.TempDir()
 	writeMCPTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
 	err := cmdMCPTo([]string{"add", dir, "x", "--null"}, &buf)
-	if err == nil || !strings.Contains(err.Error(), "unknown flag") {
-		t.Errorf("expected unknown-flag error for --null, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "--null is only valid with --profile") {
+		t.Errorf("expected --null-requires-profile error, got: %v", err)
 	}
 }
 

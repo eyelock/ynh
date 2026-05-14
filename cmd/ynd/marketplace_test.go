@@ -54,7 +54,7 @@ func TestCmdMarketplaceBuild(t *testing.T) {
 	configFile := setupMarketplaceTest(t)
 	outputDir := t.TempDir()
 
-	err := cmdMarketplace([]string{"build", configFile, "-o", outputDir})
+	err := cmdMarketplace([]string{configFile, "-o", outputDir})
 	if err != nil {
 		t.Fatalf("cmdMarketplace build: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestCmdMarketplaceBuildClean(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := cmdMarketplace([]string{"build", configFile, "-o", outputDir, "--clean"})
+	err := cmdMarketplace([]string{configFile, "-o", outputDir, "--clean"})
 	if err != nil {
 		t.Fatalf("cmdMarketplace build: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestCmdMarketplaceBuildVendorFilter(t *testing.T) {
 	configFile := setupMarketplaceTest(t)
 	outputDir := t.TempDir()
 
-	err := cmdMarketplace([]string{"build", configFile, "-o", outputDir, "-v", "claude"})
+	err := cmdMarketplace([]string{configFile, "-o", outputDir, "-v", "claude"})
 	if err != nil {
 		t.Fatalf("cmdMarketplace build: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestCmdMarketplaceIndexContent(t *testing.T) {
 	configFile := setupMarketplaceTest(t)
 	outputDir := t.TempDir()
 
-	err := cmdMarketplace([]string{"build", configFile, "-o", outputDir})
+	err := cmdMarketplace([]string{configFile, "-o", outputDir})
 	if err != nil {
 		t.Fatalf("cmdMarketplace build: %v", err)
 	}
@@ -151,19 +151,27 @@ func TestCmdMarketplaceIndexContent(t *testing.T) {
 	}
 }
 
-func TestCmdMarketplaceMissingSubcommand(t *testing.T) {
+func TestCmdMarketplace_MissingConfig(t *testing.T) {
+	// With no args, marketplace looks for ./marketplace.json. Run from
+	// a temp dir that has none and expect a file-open error.
+	dir := t.TempDir()
+	cwd, _ := os.Getwd()
+	defer func() { _ = os.Chdir(cwd) }()
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
 	err := cmdMarketplace([]string{})
 	if err == nil {
-		t.Fatal("expected error for missing subcommand")
+		t.Fatal("expected error for missing marketplace.json")
 	}
 }
 
-func TestCmdMarketplaceUnknownSubcommand(t *testing.T) {
-	err := cmdMarketplace([]string{"destroy"})
+func TestCmdMarketplace_UnknownFlag(t *testing.T) {
+	err := cmdMarketplace([]string{"--bogus"})
 	if err == nil {
-		t.Fatal("expected error for unknown subcommand")
+		t.Fatal("expected error for unknown flag")
 	}
-	if !strings.Contains(err.Error(), "unknown marketplace subcommand") {
+	if !strings.Contains(err.Error(), "unknown flag") {
 		t.Errorf("error = %q", err.Error())
 	}
 }

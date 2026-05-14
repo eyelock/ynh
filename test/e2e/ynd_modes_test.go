@@ -87,7 +87,7 @@ func TestYnd_Marketplace_VendorFilter(t *testing.T) {
 	}
 
 	out := filepath.Join(root, "out")
-	mustRunYnd(t, "marketplace", "build", configFile, "-o", out, "-v", "claude")
+	mustRunYnd(t, "marketplace", configFile, "-o", out, "-v", "claude")
 
 	assertFileExists(t, filepath.Join(out, ".claude-plugin", "marketplace.json"))
 	if _, err := os.Stat(filepath.Join(out, ".cursor-plugin", "marketplace.json")); err == nil {

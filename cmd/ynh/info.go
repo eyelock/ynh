@@ -60,6 +60,7 @@ func cmdInfoTo(args []string, stdout, stderr io.Writer) error {
 
 	format := "text"
 	checkUpdates := false
+	installedOnly := false
 	var name string
 	i := 0
 	for i < len(args) {
@@ -72,6 +73,11 @@ func cmdInfoTo(args []string, stdout, stderr io.Writer) error {
 			format = args[i]
 		case "--check-updates":
 			checkUpdates = true
+		case "--installed":
+			// Surfaces only the install-provenance record (formerly
+			// `ynh installed <name>`). Mutually exclusive with --check-updates
+			// because the installed record does not carry upstream drift info.
+			installedOnly = true
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return cliError(stderr, structured, errCodeInvalidInput,
@@ -87,7 +93,23 @@ func cmdInfoTo(args []string, stdout, stderr io.Writer) error {
 	}
 
 	if name == "" {
-		return cliError(stderr, structured, errCodeInvalidInput, "usage: ynh info <harness-name>")
+		return cliError(stderr, structured, errCodeInvalidInput, "usage: ynh info <harness-name> [--installed] [--check-updates] [--format json]")
+	}
+	if installedOnly && checkUpdates {
+		return cliError(stderr, structured, errCodeInvalidInput,
+			"--installed and --check-updates are mutually exclusive")
+	}
+
+	if installedOnly {
+		switch format {
+		case "text":
+			return printInstalledText(stdout, stderr, name)
+		case "json":
+			return printInstalledJSON(stdout, stderr, name)
+		default:
+			return cliError(stderr, structured, errCodeInvalidInput,
+				fmt.Sprintf("invalid --format value %q (want text or json)", format))
+		}
 	}
 
 	switch format {

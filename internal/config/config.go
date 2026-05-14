@@ -23,7 +23,15 @@ var Version = "dev"
 //
 // Consumers (e.g. TermQ) read this via `ynh version --format json` and gate
 // features on it with their own `minimumYNHCapabilities` constant.
-const CapabilitiesVersion = "0.4.0"
+// 0.5.0 (this branch): the surface refactor — `ynh agent run` collapsed into
+// `ynh run --agent`, `ynh installed` into `ynh info --installed`, `ynh prune`
+// into `ynh status --prune`, `ynd validate-output` into `ynd validate --schema`,
+// `ynd marketplace build` into `ynd marketplace`, `ynd migrate` renamed to
+// `ynd migrate-manifest`. `ynh profile {hook,mcp,include}` sub-trees folded
+// into top-level `ynh {hook,mcp,include}` with `--profile <name>`. Flag
+// renames: `--json` → `--format json`, `--output-dir` / `--to` → `-o, --output`,
+// four `--clear-*` collapsed into `--clear <field>`.
+const CapabilitiesVersion = "0.5.0"
 
 // SchemaVersion declares the on-disk format version of the YNH home
 // directory (~/.ynh). Distinct from CapabilitiesVersion: capabilities is

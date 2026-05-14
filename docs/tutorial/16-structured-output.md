@@ -203,7 +203,7 @@ ynh ls --format json
 Expected (timestamps and paths will differ):
 ```json
 {
-  "capabilities": "0.4.0",
+  "capabilities": "0.5.0",
   "schema_version": 2,
   "ynh_version": "<version>",
   "harnesses": [
@@ -282,7 +282,7 @@ ynh ls --format json
 Expected (truncated):
 ```json
 {
-  "capabilities": "0.4.0",
+  "capabilities": "0.5.0",
   "schema_version": 2,
   "ynh_version": "<version>",
   "harnesses": []
@@ -343,16 +343,16 @@ All seven paths shift to the overridden root.
 
 ## T16.13: Inspect install provenance
 
-`ynh installed <name> --format json` exposes the recorded install provenance — useful when scripting "where did this harness come from?" without reading `.ynh-plugin/installed.json` directly.
+`ynh info <name> --installed --format json` exposes the recorded install provenance — useful when scripting "where did this harness come from?" without reading `.ynh-plugin/installed.json` directly.
 
 ```bash
-ynh installed local/my-harness --format json
+ynh info local/my-harness --installed --format json
 ```
 
 Expected:
 ```json
 {
-  "capabilities": "0.4.0",
+  "capabilities": "0.5.0",
   "ynh_version": "0.3.x",
   "id": "local/my-harness",
   "installed": {
@@ -375,10 +375,10 @@ ynh schema list | jq '.["$id"]'
 
 Expected: `"https://eyelock.github.io/ynh/schema/cli/list.schema.json"`
 
-Validate a captured response with `ynd validate-output --schema <name>`:
+Validate a captured response with `ynd validate --schema <name>`:
 
 ```bash
-ynh ls --format json | ynd validate-output --schema list
+ynh ls --format json | ynd validate --schema list
 ```
 
 Expected: `ok` on stdout, exit code 0. If the shape ever drifts, the command exits non-zero and prints the first divergence.
@@ -414,8 +414,8 @@ rm -rf /tmp/ynh-tutorial
 - `code` values are stable identifiers for scripting; `message` is for humans
 - `YNH_HOME` changes all resolved paths — useful for testing and multi-environment setups
 - These conventions apply to every command that supports `--format json`
-- `ynh installed <name> --format json` exposes raw install provenance independently of `ynh info`
-- `ynh schema <name>` and `ynh schema --all --format json` expose the published JSON Schemas; `ynd validate-output --schema <name>` confirms a captured response matches
+- `ynh info <name> --installed --format json` exposes raw install provenance independently of the default `ynh info` view
+- `ynh schema <name>` and `ynh schema --all --format json` expose the published JSON Schemas; `ynd validate --schema <name>` confirms a captured response matches
 
 ## Next
 

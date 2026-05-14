@@ -19,14 +19,14 @@ Three equivalent forms:
 ## Validation
 
 ```bash
-ynh ls --format json | ynd validate-output --schema list
+ynh ls --format json | ynd validate --schema list
 ```
 
-`ynd validate-output --schema <name>` reads JSON on stdin and exits non-zero on a validation failure. Useful for ad-hoc checks; downstream consumers normally pick their own validator at their own layer (see [Consumer boundary](#consumer-boundary)).
+`ynd validate --schema <name>` reads JSON on stdin and exits non-zero on a validation failure. Useful for ad-hoc checks; downstream consumers normally pick their own validator at their own layer (see [Consumer boundary](#consumer-boundary)).
 
 ## Capability versioning
 
-Every structured response carries a `capabilities` field — `config.CapabilitiesVersion`, currently `0.4.0`. Schemas carry the same value as an `x-capabilities` annotation.
+Every structured response carries a `capabilities` field — `config.CapabilitiesVersion`, currently `0.5.0`. Schemas carry the same value as an `x-capabilities` annotation.
 
 **Capability bumps:**
 - Removing a field; renaming a field; changing a field's type

@@ -25,7 +25,7 @@ func TestYnd_Migrate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mustRunYnd(t, "migrate", filepath.Dir(dir))
+	mustRunYnd(t, "migrate-manifest", filepath.Dir(dir))
 
 	if _, err := os.Stat(filepath.Join(dir, ".harness.json")); !os.IsNotExist(err) {
 		t.Errorf(".harness.json should be removed after migrate, err=%v", err)
@@ -63,7 +63,7 @@ func TestYnd_Marketplace_Build(t *testing.T) {
 	}
 
 	out := filepath.Join(root, "out")
-	mustRunYnd(t, "marketplace", "build", configFile, "-o", out)
+	mustRunYnd(t, "marketplace", configFile, "-o", out)
 
 	// Claude and Cursor each carry a marketplace index in their manifest
 	// dir; Codex uses a different distribution flow and is not produced

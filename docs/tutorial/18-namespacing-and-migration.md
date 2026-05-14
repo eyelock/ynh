@@ -170,7 +170,7 @@ A short launcher (`~/.ynh/bin/david`) is created when the short name is
 unambiguous; if you install a second `david` from another source, the short
 launcher is removed and you invoke the harness with `ynh run <canonical-id>`.
 
-## T18.7: Migrate a legacy harness with `ynd migrate`
+## T18.7: Migrate a legacy harness with `ynd migrate-manifest`
 
 Create a harness in the legacy 0.1 format:
 
@@ -188,7 +188,7 @@ EOF
 Migrate it in place:
 
 ```bash
-ynd migrate /tmp/ynh-ns-tutorial/legacy
+ynd migrate-manifest /tmp/ynh-ns-tutorial/legacy
 ```
 
 Expected:
@@ -209,7 +209,7 @@ Expected:
 /tmp/ynh-ns-tutorial/legacy/.ynh-plugin/plugin.json
 ```
 
-`ynd migrate` runs the migration filter chain — it handles any registered
+`ynd migrate-manifest` runs the migration filter chain — it handles any registered
 migrator. Adding a new format migrator in future releases does not require a
 new command.
 
@@ -226,7 +226,7 @@ cat > /tmp/ynh-ns-tutorial/bulk/h2/.harness.json << 'EOF'
 {"name":"h2","version":"0.1.0"}
 EOF
 
-ynd migrate /tmp/ynh-ns-tutorial/bulk
+ynd migrate-manifest /tmp/ynh-ns-tutorial/bulk
 ```
 
 Expected:
@@ -240,7 +240,7 @@ Migrated 2 director(ies).
 
 ## T18.9: Transparent migration on use
 
-Legacy harnesses do not strictly require `ynd migrate`. ynh runs the migration
+Legacy harnesses do not strictly require `ynd migrate-manifest`. ynh runs the migration
 chain automatically whenever a harness is loaded or installed, so an
 unmigrated 0.1 harness still works:
 
@@ -256,12 +256,12 @@ ynh install /tmp/ynh-ns-tutorial/transparent
 The install succeeds and the installed copy uses the 0.2 format. The source
 directory is also migrated in place (the chain runs before the copy).
 
-`ynd migrate` is still useful when you want to convert a whole tree
+`ynd migrate-manifest` is still useful when you want to convert a whole tree
 intentionally — for example when cleaning up a source repo before publishing.
 
 ## T18.10: `ynh migrate` — upgrade `~/.ynh` schema
 
-`ynd migrate` is for harness *source trees*. The companion command
+`ynd migrate-manifest` is for harness *source trees*. The companion command
 `ynh migrate` upgrades the on-disk layout of `~/.ynh` itself (the home
 directory schema). Run it after upgrading ynh across a major version:
 
@@ -333,7 +333,8 @@ rm -rf /tmp/ynh-ns-tutorial
 - Short launchers (`~/.ynh/bin/<name>`) are created opportunistically when
   the short name is unambiguous; otherwise invoke the harness via
   `ynh run <canonical-id>`.
-- `ynd migrate` converts harness-source directories from 0.1 to 0.2 format
+- `ynd migrate-manifest` converts harness-source directories from 0.1 to 0.2 format
+  (disambiguated from `ynh migrate`, which upgrades the `~/.ynh` home schema)
   (`.harness.json` → `.ynh-plugin/plugin.json`, `registry.json` →
   `.ynh-plugin/marketplace.json`).
 - `ynh migrate` upgrades the `~/.ynh` home directory schema after a major

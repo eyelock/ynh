@@ -11,22 +11,10 @@ import (
 	"github.com/eyelock/ynh/internal/vendor"
 )
 
+// `ynd marketplace` builds a vendor-native marketplace from marketplace.json.
+// The verb-noun-verb form (`marketplace build`) was collapsed — the command
+// had exactly one subcommand, so the verb stood for nothing.
 func cmdMarketplace(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("usage: ynd marketplace build [config-file] [flags]")
-	}
-
-	switch args[0] {
-	case "build":
-		return cmdMarketplaceBuild(args[1:])
-	case "-h", "--help", "help":
-		return errHelp
-	default:
-		return fmt.Errorf("unknown marketplace subcommand: %s\nusage: ynd marketplace build [config-file] [flags]", args[0])
-	}
-}
-
-func cmdMarketplaceBuild(args []string) error {
 	var (
 		outputDir  string
 		vendors    string

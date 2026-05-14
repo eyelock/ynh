@@ -235,7 +235,7 @@ Codex has significant differences from Claude Code and Cursor:
 - **No plugin manifest** — skills are self-describing via SKILL.md frontmatter
 - **Limited marketplace.json** — the format exists but the schema is still evolving
 
-For these reasons, ynh excludes Codex from marketplace generation. When building a marketplace with `ynd marketplace build`, Codex is silently skipped. Individual Codex export (`ynd export -v codex`) produces the `.agents/skills/` layout.
+For these reasons, ynh excludes Codex from marketplace generation. When building a marketplace with `ynd marketplace`, Codex is silently skipped. Individual Codex export (`ynd export -v codex`) produces the `.agents/skills/` layout.
 
 ### Official Resources
 
@@ -246,7 +246,7 @@ For these reasons, ynh excludes Codex from marketplace generation. When building
 
 ## ynh and Marketplaces
 
-ynh acts as the translation layer between your harness definition and vendor-native distribution formats. The `ynd marketplace build` command takes a `marketplace.json` config, resolves all harness includes, and produces a Git-ready directory with dual vendor indexes.
+ynh acts as the translation layer between your harness definition and vendor-native distribution formats. The `ynd marketplace` command takes a `marketplace.json` config, resolves all harness includes, and produces a Git-ready directory with dual vendor indexes.
 
 ### What ynh Does
 
@@ -338,13 +338,13 @@ dist/
 
 ```bash
 # Build from marketplace.json in current directory
-ynd marketplace build
+ynd marketplace
 
 # Custom config, output, and vendor targeting
-ynd marketplace build config/marketplace.json -o ./dist -v claude,cursor
+ynd marketplace config/marketplace.json -o ./dist -v claude,cursor
 
 # Clean rebuild
-ynd marketplace build --clean
+ynd marketplace --clean
 
 # Validate a marketplace.json config
 ynd validate marketplace.json
@@ -447,4 +447,4 @@ For the architectural rationale and contributor-facing rules, see [`.github/CONT
 - Cursor plugins: [cursor.com/docs/plugins](https://cursor.com/docs/plugins)
 - Codex CLI: [developers.openai.com/codex/cli](https://developers.openai.com/codex/cli)
 - ynh marketplace tutorial: [Tutorial 11: Marketplace](tutorial/06-marketplace.md)
-- ynd marketplace command: [ynd Developer Tools](ynd.md#marketplace-build)
+- ynd marketplace command: [ynd Developer Tools](ynd.md#marketplace)

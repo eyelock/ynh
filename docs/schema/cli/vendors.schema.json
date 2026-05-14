@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/cli/vendors.schema.json",
   "title": "ynh vendors --format json",
   "description": "Output of `ynh vendors --format json`. Bare array of supported vendor adapters with availability info. Envelope retrofit deferred.",
-  "x-capabilities": "0.4",
+  "x-capabilities": "0.5",
   "$defs": {
     "Vendor": {
       "type": "object",

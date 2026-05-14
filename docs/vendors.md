@@ -36,7 +36,7 @@ david -v cursor               # launches normally
 david -v cursor --clean       # removes symlinks
 ```
 
-Installations are tracked in `~/.ynh/symlinks.json`. Use `ynh status` to see all installations and `ynh prune` to clean up orphaned ones.
+Installations are tracked in `~/.ynh/symlinks.json`. Use `ynh status` to see all installations and `ynh status --prune` to clean up orphaned ones.
 
 ## Choosing a Vendor
 

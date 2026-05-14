@@ -151,21 +151,21 @@ Profiles can be edited from the command line as well as authored directly in the
 ynh profile add <harness> <name>
 ynh profile remove <harness> <name>
 
-# Hooks inside a profile
-ynh profile hook add <harness> <profile> <event> "<command>" [--matcher <pattern>]
-ynh profile hook remove <harness> <profile> <event> <index>
+# Hooks (use --profile to scope to a profile)
+ynh hook add <harness> <event> "<command>" --profile <profile> [--matcher <pattern>]
+ynh hook remove <harness> <event> <index> --profile <profile>
 
-# MCP servers inside a profile
-ynh profile mcp add <harness> <profile> <name> --command <cmd> [--arg <v>...] [--env K=V...]
-ynh profile mcp add <harness> <profile> <name> --url <url> [--header K=V...]
-ynh profile mcp add <harness> <profile> <name> --null         # suppress an inherited server
-ynh profile mcp update <harness> <profile> <name> [flags] [--clear-args|--clear-env|--clear-headers]
-ynh profile mcp remove <harness> <profile> <name>
+# MCP servers (use --profile to scope to a profile)
+ynh mcp add <harness> <name> --profile <profile> --command <cmd> [--arg <v>...] [--env K=V...]
+ynh mcp add <harness> <name> --profile <profile> --url <url> [--header K=V...]
+ynh mcp add <harness> <name> --profile <profile> --null         # suppress an inherited server
+ynh mcp update <harness> <name> --profile <profile> [flags] [--clear args|--clear env|--clear headers]
+ynh mcp remove <harness> <name> --profile <profile>
 
-# Profile-level Git includes (no --pick; whole include is merged in)
-ynh profile include add <harness> <profile> <url> [--path <subdir>] [--ref <ref>] [--replace]
-ynh profile include remove <harness> <profile> <url> [--path <subdir>]
-ynh profile include update <harness> <profile> <url> [--from-path <subdir>] [--path <subdir>] [--ref <ref>]
+# Profile-scoped Git includes (no --pick; whole include is merged in)
+ynh include add <harness> <url> --profile <profile> [--path <subdir>] [--ref <ref>] [--replace]
+ynh include remove <harness> <url> --profile <profile> [--path <subdir>]
+ynh include update <harness> <url> --profile <profile> [--from-path <subdir>] [--path <subdir>] [--ref <ref>]
 ```
 
 `<harness>` is a canonical id from `ynh ls` (e.g. `local/my-harness` or `github.com/<org>/<repo>/<name>`). For tree-form (registry/git) installs the edits land in the install copy; for pointer-form (local source) installs they land in your source tree.

@@ -84,7 +84,7 @@ ynd compress --restore --pick 2 AGENTS.md  # restore specific backup
 
 Interactive codebase walkthrough. Detects project signals and uses an LLM to suggest skills and agents tailored to your stack.
 
-Generated artifacts are written into the vendor-specific config directory by default (e.g. `.claude/skills/`, `.claude/agents/`). Use `--output-dir` to override.
+Generated artifacts are written into the vendor-specific config directory by default (e.g. `.claude/skills/`, `.claude/agents/`). Use `-o` / `--output` to override.
 
 ```bash
 ynd inspect                    # auto-detect vendor CLI, write to .{vendor}/
@@ -205,16 +205,16 @@ Key differences from runtime layout:
 
 See [Tutorial 10: Export](tutorial/05-export.md) for a guided walkthrough.
 
-### marketplace build
+### marketplace
 
 Build a marketplace from a collection of harnesses and pre-built plugins. Each entry is exported with dual vendor manifests and indexed.
 
 ```bash
-ynd marketplace build                             # uses ./marketplace.json
-ynd marketplace build config/marketplace.json     # custom config path
-ynd marketplace build -o ./marketplace-dist       # custom output directory
-ynd marketplace build -v claude,cursor            # specific vendors
-ynd marketplace build --clean                     # remove output dir before build
+ynd marketplace                             # uses ./marketplace.json
+ynd marketplace config/marketplace.json     # custom config path
+ynd marketplace -o ./marketplace-dist       # custom output directory
+ynd marketplace -v claude,cursor            # specific vendors
+ynd marketplace --clean                     # remove output dir before build
 ```
 
 | Flag | Description |
@@ -241,17 +241,18 @@ ynd marketplace build --clean                     # remove output dir before bui
 - `harness` entries are fully exported — includes resolved, artifacts flattened
 - Codex is excluded (no marketplace system)
 
-### migrate
+### migrate-manifest
 
-Run the format migration chain against a harness or registry directory.
+Run the format migration chain against a harness or registry source directory.
 Handles any registered migrator generically — the command itself knows
 nothing about specific formats. See [docs/migration.md](migration.md) for
-the full 0.1 → 0.2 migration guide.
+the full 0.1 → 0.2 migration guide. (Distinct from `ynh migrate`, which
+migrates the `~/.ynh` home schema.)
 
 ```bash
-ynd migrate                    # current directory
-ynd migrate ./my-harness       # specific directory
-ynd migrate ./harnesses        # walk tree, migrate every match
+ynd migrate-manifest                    # current directory
+ynd migrate-manifest ./my-harness       # specific directory
+ynd migrate-manifest ./harnesses        # walk tree, migrate every match
 ```
 
 Idempotent — safe to run twice. No-op if the target already uses the new
@@ -279,18 +280,18 @@ dist/
 
 See [Tutorial 11: Marketplace](tutorial/06-marketplace.md) for a guided walkthrough.
 
-### validate-output
+### validate --schema
 
-Validate a captured JSON response on stdin against a published CLI schema. Exits 0 on success, non-zero on validation failure (prints the first divergence to stderr).
+In addition to harness validation, `ynd validate` accepts a `--schema <name>` flag that validates a captured JSON response on stdin against a published CLI schema. Exits 0 on success, non-zero on validation failure (prints the first divergence to stderr).
 
 ```bash
-ynh ls --format json | ynd validate-output --schema list
-ynh version --format json | ynd validate-output --schema version
+ynh ls --format json | ynd validate --schema list
+ynh version --format json | ynd validate --schema version
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--schema <name>` | Required. Schema name (e.g. `list`, `info`, `version`, `installed`, `error`). |
+| `--schema <name>` | Schema name (e.g. `list`, `info`, `version`, `installed`, `error`). Switches `ynd validate` into stdin-validation mode. |
 | `-h, --help` | Show help |
 
 Schemas are embedded in the binary — `ynh schema <name>` and `ynh schema --all --format json` are the discovery side. See [Published JSON Schemas](schema-cli.md) for the full contract.
@@ -344,5 +345,5 @@ ynd diff ./ops-team claude cursor
 ynd export ./ops-team -v claude,cursor
 
 # Build a marketplace from multiple harnesses
-ynd marketplace build marketplace.json -o ./dist --clean
+ynd marketplace marketplace.json -o ./dist --clean
 ```

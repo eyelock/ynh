@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/cli/search.schema.json",
   "title": "ynh search <term> --format json",
   "description": "Output of `ynh search <term> --format json`. Currently emits a bare array of search results — does not yet use the {capabilities, ynh_version, ...} envelope. Envelope retrofit is a separate, capabilities-bumping change tracked outside this plan.",
-  "x-capabilities": "0.4",
+  "x-capabilities": "0.5",
   "$defs": {
     "SearchResult": {
       "type": "object",

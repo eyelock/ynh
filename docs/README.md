@@ -56,7 +56,7 @@ team-dev                           # full team context when you need it
 ynh search "go development"       # find harnesses across registries
 ynh install go-dev                 # install by name
 ynd export ./david                 # vendor-native plugins
-ynd marketplace build              # build a shareable marketplace
+ynd marketplace                    # build a shareable marketplace
 ```
 
 **Git is the package manager.** No lock files. No build steps. Skills from [skills.sh](https://skills.sh), agents from your team repo, rules from a company monorepo - they all work as-is. Standard-format files, versioned with Git tags. Registries are just Git repos with a `registry.json`.

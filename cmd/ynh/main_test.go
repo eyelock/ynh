@@ -166,7 +166,10 @@ func TestParseRunArgs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("YNH_FOCUS", "")
 			t.Setenv("YNH_HARNESS_FILE", "")
-			ra := parseRunArgs(tt.args)
+			ra, err := parseRunArgs(tt.args)
+			if err != nil {
+				t.Fatalf("parseRunArgs returned error: %v", err)
+			}
 			if ra.HarnessName != tt.wantName {
 				t.Errorf("HarnessName = %q, want %q", ra.HarnessName, tt.wantName)
 			}
@@ -207,7 +210,10 @@ func TestParseRunArgs(t *testing.T) {
 func TestParseRunArgs_FocusEnvVar(t *testing.T) {
 	t.Setenv("YNH_FOCUS", "review")
 	t.Setenv("YNH_HARNESS_FILE", "")
-	ra := parseRunArgs([]string{"my-harness"})
+	ra, err := parseRunArgs([]string{"my-harness"})
+	if err != nil {
+		t.Fatalf("parseRunArgs: %v", err)
+	}
 	if ra.FocusFlag != "review" {
 		t.Errorf("FocusFlag = %q, want review", ra.FocusFlag)
 	}
@@ -267,7 +273,10 @@ func TestCmdRun_FocusEnvPlusProfileEnvError(t *testing.T) {
 func TestParseRunArgs_HarnessFileEnvVar(t *testing.T) {
 	t.Setenv("YNH_FOCUS", "")
 	t.Setenv("YNH_HARNESS_FILE", "/tmp/test.json")
-	ra := parseRunArgs([]string{})
+	ra, err := parseRunArgs([]string{})
+	if err != nil {
+		t.Fatalf("parseRunArgs: %v", err)
+	}
 	if ra.HarnessFile != "/tmp/test.json" {
 		t.Errorf("HarnessFile = %q, want /tmp/test.json", ra.HarnessFile)
 	}
@@ -309,7 +318,10 @@ func TestParseRunArgs_Interactive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ra := parseRunArgs(tt.args)
+			ra, err := parseRunArgs(tt.args)
+			if err != nil {
+				t.Fatalf("parseRunArgs returned error: %v", err)
+			}
 			if ra.Interactive != tt.wantInteractive {
 				t.Errorf("Interactive = %v, want %v", ra.Interactive, tt.wantInteractive)
 			}
@@ -355,7 +367,10 @@ func TestParseRunArgs_Instructions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ra := parseRunArgs(tt.args)
+			ra, err := parseRunArgs(tt.args)
+			if err != nil {
+				t.Fatalf("parseRunArgs returned error: %v", err)
+			}
 			if ra.Instructions != tt.wantInstructions {
 				t.Errorf("Instructions = %q, want %q", ra.Instructions, tt.wantInstructions)
 			}
@@ -1046,13 +1061,15 @@ func TestCmdStatus_Empty(t *testing.T) {
 	}
 }
 
-func TestCmdPrune_NoOrphans(t *testing.T) {
+func TestCmdStatusPrune_NoOrphans(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	t.Setenv("YNH_HOME", "")
 
-	if err := cmdPrune(); err != nil {
-		t.Fatalf("cmdPrune failed: %v", err)
+	// `ynh prune` collapsed into `ynh status --prune`; invoke the new
+	// surface and check the same post-condition.
+	if err := cmdStatus([]string{"--prune"}); err != nil {
+		t.Fatalf("cmdStatus --prune failed: %v", err)
 	}
 }
 
@@ -1089,7 +1106,7 @@ func TestCmdUninstall_OrphanPointerSourceMissing(t *testing.T) {
 
 // Prune must remove pointers whose source tree no longer exists, alongside
 // the existing symlink-orphan pass. Healthy pointers must survive.
-func TestCmdPrune_OrphanPointer(t *testing.T) {
+func TestCmdStatusPrune_OrphanPointer(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
 	if err := config.EnsureDirs(); err != nil {
@@ -1118,8 +1135,10 @@ func TestCmdPrune_OrphanPointer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := cmdPrune(); err != nil {
-		t.Fatalf("cmdPrune failed: %v", err)
+	// `ynh prune` collapsed into `ynh status --prune`; invoke the new
+	// surface and check the same post-condition.
+	if err := cmdStatus([]string{"--prune"}); err != nil {
+		t.Fatalf("cmdStatus --prune failed: %v", err)
 	}
 
 	if _, err := os.Stat(harness.PointerPath("stranded")); !os.IsNotExist(err) {

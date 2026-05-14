@@ -82,7 +82,7 @@ Expected:
 
 ```
 Installed harness "docker-demo"
-  Location: ~/.ynh/harnesses/docker-demo
+  Location: ~/.ynh/harnesses/local--docker-demo
   Launcher: ~/.ynh/bin/docker-demo
   Vendor:   claude
 ```
@@ -90,7 +90,7 @@ Installed harness "docker-demo"
 ## T9.3: Build a harness image
 
 ```bash
-ynh image docker-demo --tag docker-demo:latest
+ynh image local/docker-demo --tag docker-demo:latest
 ```
 
 Expected:
@@ -177,7 +177,7 @@ docker run --rm -v $(pwd):/workspace -e OPENAI_API_KEY \
 Preview the generated Dockerfile without building:
 
 ```bash
-ynh image docker-demo --dry-run
+ynh image local/docker-demo --dry-run
 ```
 
 Expected output (Dockerfile printed to stdout):

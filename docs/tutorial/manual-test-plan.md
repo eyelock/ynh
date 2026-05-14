@@ -307,7 +307,7 @@ ynd export
 
 ```bash
 cd /tmp
-ynd marketplace build
+ynd marketplace
 # Expected: Error: reading marketplace config: open marketplace.json: no such file or directory
 ```
 
@@ -461,7 +461,7 @@ cat > /tmp/ynh-fork-src/.ynh-plugin/plugin.json << 'EOF'
 EOF
 
 # Fork it to a local directory
-ynh fork /tmp/ynh-fork-src --to /tmp/ynh-fork-copy --name fork-copy
+ynh fork /tmp/ynh-fork-src -o /tmp/ynh-fork-copy --name fork-copy
 # Expected: Forked "fork-src" → "fork-copy"
 #           Path: /tmp/ynh-fork-copy
 
