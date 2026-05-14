@@ -77,10 +77,14 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 
 // buildClaudeStreamArgs constructs arguments for stream-json mode.
 func buildClaudeStreamArgs(opts StartOptions) []string {
+	// claude-code refuses --print --output-format=stream-json without
+	// --verbose. The flag is mandatory for the streaming wire format the
+	// loop driver depends on, so always include it.
 	args := []string{
 		"--input-format", "stream-json",
 		"--output-format", "stream-json",
 		"--print",
+		"--verbose",
 	}
 
 	if opts.ConfigPath != "" {
