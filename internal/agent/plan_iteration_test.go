@@ -117,6 +117,26 @@ func TestRunLoop_PlanRefineOnceThenApprove(t *testing.T) {
 		t.Errorf("revise prompt missing user notes: %q", mb.sends[1])
 	}
 
+	// Plan prompts must not demand a file write — claude in plan mode is
+	// read-only and would stall at its own permission gate.
+	for _, want := range []string{"plan.md", "current directory"} {
+		if strings.Contains(mb.sends[0], want) || strings.Contains(mb.sends[1], want) {
+			t.Errorf("plan prompts must not reference %q (plan mode is read-only); got initial=%q revise=%q",
+				want, mb.sends[0], mb.sends[1])
+		}
+	}
+
+	// Act-phase first message must forward the final approved plan, not
+	// just the original task. Otherwise refinement work evaporates at the
+	// phase boundary.
+	act := mb.sends[2]
+	if !strings.Contains(act, "plan v2") {
+		t.Errorf("act-phase first message must contain the approved plan content (%q); got %q", "plan v2", act)
+	}
+	if !strings.Contains(act, "test task") {
+		t.Errorf("act-phase first message must contain the original task; got %q", act)
+	}
+
 	// Verify KindPlanRevised payload carries iteration=2 and notes.
 	for _, e := range events {
 		if e.Kind != KindPlanRevised {

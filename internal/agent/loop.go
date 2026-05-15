@@ -277,13 +277,24 @@ func RunLoop(opts RunOptions) error {
 	// loops back into "revise the plan" if the user replied with refinement
 	// feedback. Non-interactive mode runs exactly one iteration and continues
 	// straight into the act phase.
+	//
+	// Prompts ask only for an inline reply — no file write. claude in plan
+	// mode is read-only, and demanding a plan.md write there caused the
+	// worker to stall at its own permission gate instead of producing a
+	// plan. The act phase has write access if a plan file is wanted later.
+	//
+	// approvedPlan is lifted out of the loop so the act phase can forward
+	// the final plan content into its first message; otherwise the worker
+	// would enter act mode with only the original task and lose every
+	// refinement it just produced.
+	var approvedPlan string
 	if !opts.NoPlan {
 		maxPlanIters := opts.MaxPlanIterations
 		if maxPlanIters <= 0 {
 			maxPlanIters = 5
 		}
 		planMsg := fmt.Sprintf(
-			"Write a plan for the following task. Document it clearly in plan.md in the current directory.\n\nTask: %s",
+			"Write a clear, structured plan for the following task. Reply with the plan in your message — do not write any files yet.\n\nTask: %s",
 			opts.Task,
 		)
 	planLoop:
@@ -319,6 +330,7 @@ func RunLoop(opts RunOptions) error {
 			}
 
 			if !opts.Interactive {
+				approvedPlan = planTurn.Content
 				break planLoop
 			}
 
@@ -344,6 +356,7 @@ func RunLoop(opts RunOptions) error {
 			// ActionApprovePlan: empty feedback means plain approve; non-empty
 			// means refine — produce a revised plan addressing the feedback.
 			if replyFeedback == "" {
+				approvedPlan = planTurn.Content
 				break planLoop
 			}
 			if planIter >= maxPlanIters {
@@ -354,17 +367,24 @@ func RunLoop(opts RunOptions) error {
 			nextIter := planIter + 1
 			_ = traj.Emit(KindPlanRevised, 0, PlanRevisedData{Iteration: nextIter, Notes: replyFeedback})
 			planMsg = fmt.Sprintf(
-				"Revise the plan to address this feedback:\n\n%s\n\nUpdate plan.md accordingly and reply with the revised plan.",
+				"Revise the plan to address this feedback. Reply with the full revised plan in your message — do not write any files yet.\n\nFeedback:\n%s",
 				replyFeedback,
 			)
 		}
 	}
 
 	// ── Act loop ──────────────────────────────────────────────────────────────
-	// First message: task (or plan-approved continuation).
+	// First message: forward the approved plan into the act phase so the
+	// worker has the full text in context as it transitions to write mode.
+	// Without this, refined plans evaporate at the phase boundary and the
+	// worker re-derives intent from the original task alone.
 	firstMsg := opts.Task
 	if !opts.NoPlan {
-		firstMsg = "Plan approved. Proceed with implementation: " + opts.Task
+		firstMsg = fmt.Sprintf(
+			"Plan approved:\n\n%s\n\nProceed with implementation. Original task: %s",
+			approvedPlan,
+			opts.Task,
+		)
 	}
 	if err := sess.Send(firstMsg); err != nil {
 		_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
