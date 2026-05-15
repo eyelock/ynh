@@ -319,6 +319,10 @@ func RunLoop(opts RunOptions) error {
 			}
 			_ = traj.Emit(KindAssistantMessage, 0, planTurn.Content)
 			budget.RecordTokens(planTurn.Usage)
+			_ = traj.Emit(KindBudgetSnapshot, 0, BudgetSnapshotData{
+				Turns:  budget.Turns(),
+				Tokens: budget.Tokens(),
+			})
 
 			// Plan iterations consume tokens and wall-clock but not the act-phase
 			// turn cap. budget.Exceeded checks turns first; turns is still 0 here
@@ -416,6 +420,10 @@ func RunLoop(opts RunOptions) error {
 
 		budget.RecordTurn()
 		budget.RecordTokens(turn.Usage)
+		_ = traj.Emit(KindBudgetSnapshot, turnN, BudgetSnapshotData{
+			Turns:  budget.Turns(),
+			Tokens: budget.Tokens(),
+		})
 
 		// ── Auto-commit ───────────────────────────────────────────────────────
 		if opts.AutoCommit {

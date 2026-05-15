@@ -74,7 +74,8 @@ func TestEventKindConstants(t *testing.T) {
 		KindSessionStart, KindPlan, KindPlanRevised, KindPlanApprovalRequired,
 		KindTurnStart, KindAssistantMessage,
 		KindSensorRun, KindSensorResult, KindFeedbackSent,
-		KindTurnApprovalRequired, KindStuckDetected, KindBudgetExceeded,
+		KindTurnApprovalRequired, KindStuckDetected,
+		KindBudgetSnapshot, KindBudgetExceeded,
 		KindConverged, KindSessionEnd,
 	}
 	seen := make(map[EventKind]bool)

@@ -23,6 +23,7 @@ const (
 	// Plan-phase approval gates use KindPlanApprovalRequired.
 	KindTurnApprovalRequired EventKind = "turn_approval_required"
 	KindStuckDetected        EventKind = "stuck_detected"
+	KindBudgetSnapshot       EventKind = "budget_snapshot"
 	KindBudgetExceeded       EventKind = "budget_exceeded"
 	KindConverged            EventKind = "converged"
 	KindSessionEnd           EventKind = "session_end"
@@ -127,6 +128,25 @@ type TurnApprovalData struct {
 type PlanApprovalData struct {
 	Plan      string `json:"plan"`
 	Iteration int    `json:"iteration"`
+}
+
+// BudgetSnapshotData is the payload for KindBudgetSnapshot events,
+// emitted once per turn (in both plan and act phases) immediately after
+// the worker's reply is recorded against the budget. Carries running
+// totals consumers can read for live progress UI without shadowing the
+// driver's accounting.
+//
+// Turns reflects the act-phase turn count and is 0 throughout the plan
+// phase — RecordTurn fires only in the act loop. Plan-iteration count
+// is a separate concept (see PlanApprovalData.Iteration); the two are
+// deliberately not folded together to keep the act-turn budget and the
+// plan-iteration budget as distinct surfaces.
+//
+// Tokens is the running total across both phases (plan iterations
+// consume tokens; the count carries forward into the act phase).
+type BudgetSnapshotData struct {
+	Turns  int   `json:"turns"`
+	Tokens int64 `json:"tokens"`
 }
 
 // PlanRevisedData is the payload for KindPlanRevised events. Emitted at
