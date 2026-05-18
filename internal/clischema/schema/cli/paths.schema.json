@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/cli/paths.schema.json",
   "title": "ynh paths --format json",
   "description": "Output of `ynh paths --format json`. Resolved path roots used by ynh. All paths are absolute and fully resolved. Envelope retrofit deferred.",
-  "x-capabilities": "0.4",
+  "x-capabilities": "0.5",
   "type": "object",
   "properties": {
     "home": {"type": "string", "description": "$YNH_HOME or ~/.ynh."},

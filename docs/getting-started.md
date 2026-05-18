@@ -240,7 +240,7 @@ david -v cursor               # launches normally
 david -v cursor --clean       # removes symlinks
 ```
 
-Use `ynh status` to see all symlink installations and `ynh prune` to clean up orphaned ones.
+Use `ynh status` to see all symlink installations and `ynh status --prune` to clean up orphaned ones.
 
 ### Discover and Install From Registries
 

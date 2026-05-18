@@ -107,8 +107,8 @@ func TestProfile_LocalInstall_HookAndMCP(t *testing.T) {
 	s.mustRunYnh(t, "install", sourceDir)
 
 	s.mustRunYnh(t, "profile", "add", "local/minimal", "thorough")
-	s.mustRunYnh(t, "profile", "hook", "add", "local/minimal", "thorough", "before_tool", "echo before")
-	s.mustRunYnh(t, "profile", "mcp", "add", "local/minimal", "thorough", "github",
+	s.mustRunYnh(t, "hook", "add", "local/minimal", "before_tool", "echo before", "--profile", "thorough")
+	s.mustRunYnh(t, "mcp", "add", "local/minimal", "github", "--profile", "thorough",
 		"--command", "gh", "--arg", "mcp", "--env", "TOK=abc")
 
 	mf := readExtendedManifest(t, sourceDir)
@@ -125,7 +125,7 @@ func TestProfile_LocalInstall_HookAndMCP(t *testing.T) {
 	}
 
 	// Profile-level mcp update is a key path TermQ drives.
-	s.mustRunYnh(t, "profile", "mcp", "update", "local/minimal", "thorough", "github",
+	s.mustRunYnh(t, "mcp", "update", "local/minimal", "github", "--profile", "thorough",
 		"--arg", "--verbose")
 	mf = readExtendedManifest(t, sourceDir)
 	srv = mf.Profiles["thorough"].MCPServers["github"]
@@ -133,8 +133,8 @@ func TestProfile_LocalInstall_HookAndMCP(t *testing.T) {
 		t.Errorf("expected args replaced after update, got %+v", srv)
 	}
 
-	s.mustRunYnh(t, "profile", "hook", "remove", "local/minimal", "thorough", "before_tool", "0")
-	s.mustRunYnh(t, "profile", "mcp", "remove", "local/minimal", "thorough", "github")
+	s.mustRunYnh(t, "hook", "remove", "local/minimal", "before_tool", "0", "--profile", "thorough")
+	s.mustRunYnh(t, "mcp", "remove", "local/minimal", "github", "--profile", "thorough")
 	mf = readExtendedManifest(t, sourceDir)
 	if len(mf.Profiles["thorough"].Hooks) != 0 || len(mf.Profiles["thorough"].MCPServers) != 0 {
 		t.Errorf("profile not cleared, got %+v", mf.Profiles["thorough"])
@@ -219,7 +219,7 @@ func TestYndCompose_AcceptsCanonicalID(t *testing.T) {
 	// Seed a profile so the compose output's profiles map has content
 	// and we can assert on the new shape.
 	s.mustRunYnh(t, "profile", "add", "local/minimal", "p1")
-	s.mustRunYnh(t, "profile", "hook", "add", "local/minimal", "p1", "before_tool", "echo from-p1")
+	s.mustRunYnh(t, "hook", "add", "local/minimal", "before_tool", "echo from-p1", "--profile", "p1")
 
 	stdout, _, err := runYndInDirEnv(t, "", []string{"YNH_HOME=" + s.home},
 		"compose", "local/minimal", "--format", "json")

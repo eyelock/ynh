@@ -108,7 +108,7 @@ func TestCmdQuarantine_Restore_ExplicitDest(t *testing.T) {
 	source := filepath.Join(home, ".quarantine", "broken", "broken-harness")
 	dst := filepath.Join(home, "restored-here")
 
-	if err := cmdQuarantineTo([]string{"restore", "broken-harness", "--to", dst}, io.Discard, io.Discard); err != nil {
+	if err := cmdQuarantineTo([]string{"restore", "broken-harness", "-o", dst}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
 	if _, err := os.Stat(dst); err != nil {

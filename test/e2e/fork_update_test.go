@@ -24,7 +24,7 @@ func TestFork_UpdateRejected(t *testing.T) {
 	forkDir := filepath.Join(t.TempDir(), "my-fork-ur")
 	// Develop forbids same-name fork while the source is installed; use --name
 	// to disambiguate, then update against the renamed fork.
-	s.mustRunYnh(t, "fork", "local/fork-source", "--to", forkDir, "--name", "my-fork-ur")
+	s.mustRunYnh(t, "fork", "local/fork-source", "-o", forkDir, "--name", "my-fork-ur")
 	s.mustRunYnh(t, "uninstall", "local/fork-source")
 	s.mustRunYnh(t, "install", forkDir)
 

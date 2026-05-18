@@ -28,15 +28,15 @@ func TestFocus_UpdateClearProfile_LocalInstall(t *testing.T) {
 	}
 
 	// Clear the profile binding.
-	s.mustRunYnh(t, "focus", "update", "local/minimal", "scan", "--clear-profile")
+	s.mustRunYnh(t, "focus", "update", "local/minimal", "scan", "--clear", "profile")
 
 	mf = readExtendedManifest(t, sourceDir)
 	got := mf.Focuses["scan"]
 	if got.Profile != "" {
-		t.Errorf("--clear-profile should drop the binding, got %q", got.Profile)
+		t.Errorf("--clear profile should drop the binding, got %q", got.Profile)
 	}
 	if got.Prompt != "scan everything" {
-		t.Errorf("--clear-profile must preserve prompt, got %q", got.Prompt)
+		t.Errorf("--clear profile must preserve prompt, got %q", got.Prompt)
 	}
 
 	// And the now-unreferenced profile must be removable.

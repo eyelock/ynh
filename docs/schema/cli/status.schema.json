@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/cli/status.schema.json",
   "title": "ynh status --format json",
   "description": "Output of `ynh status --format json`. Bare array of symlink installations recorded across projects. Each entry mirrors symlink.Installation. Envelope retrofit deferred.",
-  "x-capabilities": "0.4",
+  "x-capabilities": "0.5",
   "$defs": {
     "Symlink": {
       "type": "object",

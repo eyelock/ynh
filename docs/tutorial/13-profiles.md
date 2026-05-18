@@ -281,23 +281,23 @@ Profiles can be authored by hand-editing `.ynh-plugin/plugin.json` — that is w
 ```bash
 # Add a new profile (empty) and a hook inside it
 ynh profile add /tmp/ynh-tutorial/profile-harness staging
-ynh profile hook add /tmp/ynh-tutorial/profile-harness staging before_tool "echo staging guard"
+ynh hook add /tmp/ynh-tutorial/profile-harness before_tool "echo staging guard" --profile staging
 
 # Add an MCP server to the profile
-ynh profile mcp add /tmp/ynh-tutorial/profile-harness staging \
-    notes --command npx --arg -y --arg @modelcontextprotocol/server-memory
+ynh mcp add /tmp/ynh-tutorial/profile-harness notes --profile staging \
+    --command npx --arg -y --arg @modelcontextprotocol/server-memory
 
 # Verify it landed in the manifest
 ynd compose /tmp/ynh-tutorial/profile-harness --profile staging --format json | grep staging
 # Expected: profiles.staging present with the new hook and mcp_server
 
 # Update the MCP server
-ynh profile mcp update /tmp/ynh-tutorial/profile-harness staging \
-    notes --arg -y --arg @modelcontextprotocol/server-memory --arg --verbose
+ynh mcp update /tmp/ynh-tutorial/profile-harness notes --profile staging \
+    --arg -y --arg @modelcontextprotocol/server-memory --arg --verbose
 
 # Remove individual entries
-ynh profile hook remove /tmp/ynh-tutorial/profile-harness staging before_tool 0
-ynh profile mcp remove /tmp/ynh-tutorial/profile-harness staging notes
+ynh hook remove /tmp/ynh-tutorial/profile-harness before_tool 0 --profile staging
+ynh mcp remove /tmp/ynh-tutorial/profile-harness notes --profile staging
 
 # Remove the profile itself (refused if any focus still references it)
 ynh profile remove /tmp/ynh-tutorial/profile-harness staging
@@ -305,7 +305,7 @@ ynh profile remove /tmp/ynh-tutorial/profile-harness staging
 
 The first positional argument is either a filesystem path (as above, while you are authoring) or a canonical harness id (`local/profile-demo`, `github.com/<org>/<repo>/<name>`) once the harness is installed.
 
-See [reference.md](../reference.md) for the full set of `ynh profile` flags and [profiles.md §"CLI Editing"](../profiles.md#cli-editing) for the surrounding surface.
+See [reference.md](../reference.md) for the full set of `ynh hook`, `ynh mcp`, `ynh include`, and `ynh profile` flags and [profiles.md §"CLI Editing"](../profiles.md#cli-editing) for the surrounding surface.
 
 ## Clean up
 
@@ -325,7 +325,7 @@ rm -rf /tmp/ynh-tutorial
 - Invalid profile names produce helpful errors listing available profiles
 - Profile-level `includes` support both remote (`git`) and local (`local`) sources — same shape as top-level includes
 - `ynd validate` checks profile schema validity
-- Profiles can be edited with `ynh profile add/remove`, `ynh profile hook add/remove`, `ynh profile mcp add/update/remove`, and `ynh profile include add/remove/update` — the same surface a GUI consumer drives
+- Profiles can be edited with `ynh profile add/remove` for the profile itself, and `ynh hook add/remove`, `ynh mcp add/update/remove`, `ynh include add/remove/update` with `--profile <name>` for profile-level entries — the same surface a GUI consumer drives
 
 ## Next
 

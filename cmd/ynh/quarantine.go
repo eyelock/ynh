@@ -71,8 +71,6 @@ func cmdQuarantineList(args []string, stdout, stderr io.Writer) error {
 			}
 			i++
 			format = args[i]
-		case "--json":
-			format = "json"
 		default:
 			return cliError(stderr, structured, errCodeInvalidInput,
 				fmt.Sprintf("unknown flag: %s", args[i]))
@@ -161,9 +159,9 @@ func cmdQuarantineRestore(args []string, stdout, stderr io.Writer) error {
 	var name, toFlag string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
-		case "--to":
+		case "-o", "--output":
 			if i+1 >= len(args) {
-				return cliError(stderr, structured, errCodeInvalidInput, "--to requires a value")
+				return cliError(stderr, structured, errCodeInvalidInput, "--output requires a value")
 			}
 			i++
 			toFlag = args[i]
@@ -181,7 +179,7 @@ func cmdQuarantineRestore(args []string, stdout, stderr io.Writer) error {
 	}
 	if name == "" {
 		return cliError(stderr, structured, errCodeInvalidInput,
-			"usage: ynh quarantine restore <name> [--to <path>]")
+			"usage: ynh quarantine restore <name> [-o <path>]")
 	}
 
 	home := config.HomeDir()
@@ -210,7 +208,7 @@ func cmdQuarantineRestore(args []string, stdout, stderr io.Writer) error {
 	}
 	if dst == "" {
 		return cliError(stderr, structured, errCodeInvalidInput,
-			fmt.Sprintf("no manifest entry for %q to derive original path; pass --to <path> explicitly", name))
+			fmt.Sprintf("no manifest entry for %q to derive original path; pass -o <path> explicitly", name))
 	}
 
 	if _, err := os.Stat(dst); err == nil {

@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/cli/version.schema.json",
   "title": "ynh version --format json",
   "description": "Output of `ynh version --format json`. Top-level oneOf accepts either the success payload or the cross-cutting error envelope.",
-  "x-capabilities": "0.4",
+  "x-capabilities": "0.5",
   "$defs": {
     "Version": {
       "type": "object",

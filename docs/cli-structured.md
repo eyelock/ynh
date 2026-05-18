@@ -86,8 +86,8 @@ Some `--format json` commands wrap their result in an envelope:
 
 ```json
 {
-  "capabilities": "0.4.0",
-  "ynh_version": "0.4.0",
+  "capabilities": "0.5.0",
+  "ynh_version": "0.5.0",
   "<payload-key>": <payload>
 }
 ```
@@ -113,8 +113,8 @@ Both `ynh version --format json` and `ynd version --format json` emit:
 
 ```json
 {
-  "version": "0.4.0",
-  "capabilities": "0.4.0"
+  "version": "0.5.0",
+  "capabilities": "0.5.0"
 }
 ```
 
@@ -141,7 +141,7 @@ Every `--format json` command has a published JSON Schema embedded in the binary
 
 - `ynh schema <name>` — print one embedded schema (`version`, `list`, `info`, `installed`, `fork`, `error`, etc.).
 - `ynh schema --all --format json` — manifest of every embedded schema, for tools that load them at startup.
-- `ynd validate-output --schema <name>` — validate a captured response against the schema; exits non-zero on a divergence.
+- `ynd validate --schema <name>` — validate a captured response against the schema; exits non-zero on a divergence.
 
 See [Published JSON Schemas](schema-cli.md) for the contract details — capability-bump rule, validator subset, consumer boundary, and the workflow for adding a new schema.
 

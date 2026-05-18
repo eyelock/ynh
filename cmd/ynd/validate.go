@@ -3,17 +3,28 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/clischema"
 	"github.com/eyelock/ynh/internal/marketplace"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
+// `ynd validate` has two modes:
+//
+//  1. Harness validation (default): walks the target tree, checks every
+//     harness manifest, surfaces cross-field issues schema can't express.
+//  2. Schema mode (`--schema <name>`): reads a JSON document from stdin
+//     and validates it against the named published CLI schema. This is
+//     what the standalone `ynd validate-output` used to do; folded in
+//     here so users don't have to remember two near-identical verbs.
 func cmdValidate(args []string) error {
 	var root string
+	var schemaName string
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -23,6 +34,12 @@ func cmdValidate(args []string) error {
 			}
 			i++
 			root = args[i]
+		case "--schema":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--schema requires a value")
+			}
+			i++
+			schemaName = args[i]
 		case "-h", "--help":
 			return errHelp
 		default:
@@ -33,6 +50,14 @@ func cmdValidate(args []string) error {
 				root = args[i]
 			}
 		}
+	}
+
+	// Schema mode: read stdin and validate against named CLI schema.
+	if schemaName != "" {
+		if root != "" {
+			return fmt.Errorf("--schema and a positional target are mutually exclusive (schema mode reads stdin)")
+		}
+		return validateFromStdin(os.Stdin, os.Stdout, os.Stderr, schemaName)
 	}
 
 	// Resolve source: --harness flag > YNH_HARNESS > positional > CWD
@@ -636,5 +661,31 @@ func lintMarketplaceConfig(path string) []lintIssue {
 	if _, err := marketplace.LoadConfig(path); err != nil {
 		return []lintIssue{{File: path, Message: err.Error()}}
 	}
+	return nil
+}
+
+// validateFromStdin reads a JSON document from stdin and validates it against
+// the named published CLI schema (formerly the standalone `ynd validate-output`
+// command). Returns nil on success and a generic error after writing the
+// failure detail to stderr so the exit code is non-zero.
+func validateFromStdin(stdin io.Reader, stdout, stderr io.Writer, schemaName string) error {
+	schema, err := clischema.Get(schemaName)
+	if err != nil {
+		return fmt.Errorf("schema %q: %w", schemaName, err)
+	}
+
+	data, err := io.ReadAll(stdin)
+	if err != nil {
+		return fmt.Errorf("reading stdin: %w", err)
+	}
+	var v any
+	if err := json.Unmarshal(data, &v); err != nil {
+		return fmt.Errorf("input is not valid JSON: %w", err)
+	}
+	if err := schema.Validate(v); err != nil {
+		_, _ = fmt.Fprintf(stderr, "validation failed: %v\n", err)
+		return fmt.Errorf("validation failed")
+	}
+	_, _ = fmt.Fprintln(stdout, "ok")
 	return nil
 }

@@ -98,7 +98,7 @@ Two entry types:
 
 ```bash
 cd /tmp/ynh-tutorial/marketplace-src
-ynd marketplace build -o /tmp/ynh-tutorial/marketplace-out
+ynd marketplace -o /tmp/ynh-tutorial/marketplace-out
 ```
 
 Expected output:
@@ -142,7 +142,7 @@ The output directory is automatically initialized as a Git repo so Claude Code c
 git -C /tmp/ynh-tutorial/marketplace-out log --oneline
 ```
 
-Expected: a single commit with message `ynd marketplace build`.
+Expected: a single commit with message `ynd marketplace`.
 
 Key points:
 - Each plugin has **both** `.claude-plugin/` and `.cursor-plugin/` manifests
@@ -222,17 +222,17 @@ Run from the directory containing `marketplace.json`:
 
 ```bash
 cd /tmp/ynh-tutorial/marketplace-src
-ynd marketplace build -o /tmp/ynh-tutorial/marketplace-out --clean
+ynd marketplace -o /tmp/ynh-tutorial/marketplace-out --clean
 # Removes output dir before rebuilding
 ```
 
-> **Important:** `ynd marketplace build` looks for `marketplace.json` in the current directory. Make sure you're in the directory that contains your marketplace config, not the output directory.
+> **Important:** `ynd marketplace` looks for `marketplace.json` in the current directory. Make sure you're in the directory that contains your marketplace config, not the output directory.
 
 ## T6.7: Build for specific vendors
 
 ```bash
 cd /tmp/ynh-tutorial/marketplace-src
-ynd marketplace build -o /tmp/ynh-tutorial/marketplace-claude -v claude
+ynd marketplace -o /tmp/ynh-tutorial/marketplace-claude -v claude
 # Only generates .claude-plugin/marketplace.json
 # Plugins still get .claude-plugin/plugin.json only
 ```
@@ -245,7 +245,7 @@ rm -rf /tmp/ynh-tutorial/marketplace-*
 
 ## What you learned
 
-- `ynd marketplace build` generates vendor-native marketplace directories
+- `ynd marketplace` generates vendor-native marketplace directories
 - A marketplace config lists `plugin` entries (copy as-is) and `harness` entries (fully exported)
 - Output includes `.claude-plugin/marketplace.json` and `.cursor-plugin/marketplace.json`
 - Plugins get dual manifests so one physical directory serves both vendors

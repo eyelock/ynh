@@ -190,9 +190,9 @@ Hooks can be added and removed from the command line as well as authored directl
 ynh hook add <harness> <event> "<command>" [--matcher <pattern>]
 ynh hook remove <harness> <event> <index>
 
-# Profile-level hooks (override the harness-level set when the profile is active)
-ynh profile hook add <harness> <profile> <event> "<command>" [--matcher <pattern>]
-ynh profile hook remove <harness> <profile> <event> <index>
+# Profile-scoped hooks (override the harness-level set when the profile is active)
+ynh hook add <harness> <event> "<command>" --profile <profile> [--matcher <pattern>]
+ynh hook remove <harness> <event> <index> --profile <profile>
 ```
 
 `<event>` is validated against the canonical set: `before_tool`, `after_tool`, `before_prompt`, `on_stop`. `<index>` is zero-based. When the last entry for an event is removed, the event key is dropped from the manifest entirely.

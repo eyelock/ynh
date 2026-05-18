@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://eyelock.github.io/ynh/schema/cli/installed.schema.json",
-  "title": "ynh installed <name> --format json",
-  "description": "Output of `ynh installed <name> --format json`. Surfaces the install-provenance record recorded by `ynh install` / `ynh update`. The on-disk source of this data is ~/.ynh/harnesses/<id-fsname>/.ynh-plugin/installed.json (tree-form) or the pointer file (pointer-form); this command unifies the read so consumers don't have to know the topology. Top-level oneOf accepts either the success envelope or the cross-cutting error envelope.",
-  "x-capabilities": "0.4",
+  "title": "ynh info <name> --installed --format json",
+  "description": "Output of `ynh info <name> --installed --format json` (formerly the standalone `ynh installed <name>` command, collapsed into `ynh info` in capabilities 0.5.0). Surfaces the install-provenance record recorded by `ynh install` / `ynh update`. The on-disk source of this data is ~/.ynh/harnesses/<id-fsname>/.ynh-plugin/installed.json (tree-form) or the pointer file (pointer-form); this flag unifies the read so consumers don't have to know the topology. Top-level oneOf accepts either the success envelope or the cross-cutting error envelope.",
+  "x-capabilities": "0.5",
   "$defs": {
     "ResolvedSource": {
       "type": "object",

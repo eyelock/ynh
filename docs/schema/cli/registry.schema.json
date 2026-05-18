@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/cli/registry.schema.json",
   "title": "ynh registry list --format json",
   "description": "Output of `ynh registry list --format json`. Bare array of configured registries, enriched with name/description from cached registry.json when available. Envelope retrofit and cliError adoption deferred.",
-  "x-capabilities": "0.4",
+  "x-capabilities": "0.5",
   "$defs": {
     "Registry": {
       "type": "object",
