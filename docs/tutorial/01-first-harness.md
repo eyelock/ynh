@@ -139,8 +139,8 @@ ynh ls
 
 Expected:
 ```
-NAME        KIND   VENDOR  SOURCE                        ARTIFACTS    INCLUDES  DELEGATES TO
-my-harness  local  claude  /tmp/ynh-tutorial/my-harness  1s 1a 1r 1c  0         0
+ID                KIND   VENDOR  SOURCE                        ARTIFACTS    INCLUDES  DELEGATES TO
+local/my-harness  local  claude  /tmp/ynh-tutorial/my-harness  1s 1a 1r 1c  0         0
 ```
 
 The KIND column classifies the install: `local` (installed from a local path), `git`, `registry`, or `local-fork` (a fork registered via `ynh fork`).
