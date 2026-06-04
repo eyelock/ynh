@@ -624,6 +624,169 @@ func TestCmdUninstall_RemovesSourcesEntry(t *testing.T) {
 	}
 }
 
+// installSharedBareNameFixtures sets up two installs that share the bare
+// name "foo" but have distinct canonical ids — a schema-1 pointer
+// registration ("local/foo") and a schema-2 git tree
+// ("github.com/org/repo/foo") — plus the bare-name-shared resources:
+// launcher (targeting the git install), run dir, and a sources entry.
+// Returns the git install's tree directory.
+func installSharedBareNameFixtures(t *testing.T) string {
+	t.Helper()
+
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pointer install: local/foo → source tree with a valid manifest.
+	srcDir := t.TempDir()
+	pluginDir := filepath.Join(srcDir, ".ynh-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"),
+		[]byte(`{"name":"foo","version":"1.0.0","default_vendor":"claude"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := harness.SavePointer(&harness.Pointer{
+		Name: "foo",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      srcDir,
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Tree install: github.com/org/repo/foo at the schema-2 id-keyed path.
+	treeDir := harness.InstalledDirByID("github.com/org/repo/foo")
+	treePluginDir := filepath.Join(treeDir, ".ynh-plugin")
+	if err := os.MkdirAll(treePluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(treePluginDir, "plugin.json"),
+		[]byte(`{"name":"foo","version":"1.0.0","default_vendor":"claude"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Launcher targets the git install (installed last, regenerated last).
+	if err := os.MkdirAll(config.BinDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	launcher := "#!/bin/bash\nexec ynh run \"github.com/org/repo/foo\" \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(config.BinDir(), "foo"), []byte(launcher), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run dir with state, and a bare-name sources entry.
+	runDir := filepath.Join(config.RunDir(), "foo")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{Sources: []config.Source{{Name: "foo", Path: srcDir}}}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+	return treeDir
+}
+
+// Uninstalling one of two same-named installs must not destroy the
+// bare-name-shared resources (launcher, run dir, sources entry) the other
+// install still uses.
+func TestCmdUninstall_SharedBareName_PreservesOtherInstallResources(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	treeDir := installSharedBareNameFixtures(t)
+
+	// Remove only the local pointer registration.
+	if err := cmdUninstall([]string{"local/foo"}); err != nil {
+		t.Fatalf("cmdUninstall local/foo failed: %v", err)
+	}
+
+	if _, err := os.Stat(harness.PointerPath("foo")); !os.IsNotExist(err) {
+		t.Errorf("pointer still exists after uninstall: err=%v", err)
+	}
+	if _, err := os.Stat(treeDir); err != nil {
+		t.Errorf("surviving git install tree was removed: %v", err)
+	}
+
+	// Launcher must survive and still target the surviving install.
+	body, err := os.ReadFile(filepath.Join(config.BinDir(), "foo"))
+	if err != nil {
+		t.Fatalf("launcher was removed despite surviving install: %v", err)
+	}
+	if !strings.Contains(string(body), `"github.com/org/repo/foo"`) {
+		t.Errorf("launcher no longer targets surviving install; got:\n%s", body)
+	}
+
+	// Run dir and sources entry must survive.
+	if _, err := os.Stat(filepath.Join(config.RunDir(), "foo")); err != nil {
+		t.Errorf("run dir was removed despite surviving install: %v", err)
+	}
+	loaded, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Sources) != 1 || loaded.Sources[0].Name != "foo" {
+		t.Errorf("sources entry was removed despite surviving install: %+v", loaded.Sources)
+	}
+}
+
+// Uninstalling the install the launcher targets must regenerate the launcher
+// for the survivor — and once the last same-named install goes, the shared
+// resources must be cleaned up as before.
+func TestCmdUninstall_SharedBareName_RepointsLauncherToSurvivor(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	treeDir := installSharedBareNameFixtures(t)
+
+	// Remove the git install — the one the launcher targets.
+	if err := cmdUninstall([]string{"github.com/org/repo/foo"}); err != nil {
+		t.Fatalf("cmdUninstall github.com/org/repo/foo failed: %v", err)
+	}
+
+	if _, err := os.Stat(treeDir); !os.IsNotExist(err) {
+		t.Errorf("git install tree still exists after uninstall: err=%v", err)
+	}
+	if _, err := os.Stat(harness.PointerPath("foo")); err != nil {
+		t.Errorf("surviving pointer registration was removed: %v", err)
+	}
+
+	// Launcher must be regenerated to target the surviving local install.
+	body, err := os.ReadFile(filepath.Join(config.BinDir(), "foo"))
+	if err != nil {
+		t.Fatalf("launcher was removed despite surviving install: %v", err)
+	}
+	if !strings.Contains(string(body), `"local/foo"`) {
+		t.Errorf("launcher not repointed to surviving install; got:\n%s", body)
+	}
+	if _, err := os.Stat(filepath.Join(config.RunDir(), "foo")); err != nil {
+		t.Errorf("run dir was removed despite surviving install: %v", err)
+	}
+
+	// Last one out: removing the surviving install cleans up everything.
+	if err := cmdUninstall([]string{"local/foo"}); err != nil {
+		t.Fatalf("cmdUninstall local/foo failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(config.BinDir(), "foo")); !os.IsNotExist(err) {
+		t.Errorf("launcher still exists after last uninstall: err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(config.RunDir(), "foo")); !os.IsNotExist(err) {
+		t.Errorf("run dir still exists after last uninstall: err=%v", err)
+	}
+	loaded, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range loaded.Sources {
+		if s.Name == "foo" {
+			t.Errorf("sources entry still present after last uninstall: %+v", loaded.Sources)
+		}
+	}
+}
+
 func TestCmdList_Empty(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
