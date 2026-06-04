@@ -11,6 +11,7 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/migration"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/symlink"
@@ -55,13 +56,11 @@ func cmdRun(args []string) error {
 
 	// Resolve harness source.
 	var p *harness.Harness
-	var name string
 	var harnessDir string
 
 	switch {
 	case ra.HarnessName != "":
-		name = ra.HarnessName
-		p, err = harness.LoadQualified(name)
+		p, err = harness.LoadQualified(ra.HarnessName)
 		if err != nil {
 			return err
 		}
@@ -91,7 +90,6 @@ func cmdRun(args []string) error {
 		}
 		harnessDir = cwd
 	}
-	_ = name
 
 	if ra.FocusFlag != "" {
 		focus, ok := p.Focuses[ra.FocusFlag]
@@ -164,15 +162,23 @@ func cmdRun(args []string) error {
 	content = append(content, localContent)
 
 	// Assemble vendor config into deterministic run dir.
-	runDirName := p.Name
+	//
+	// Run-dir naming uses the canonical id's fs name ("local/foo" →
+	// "local--foo") so same-named installs with distinct canonical ids get
+	// distinct run dirs and can't clobber each other's live sessions.
+	// LoadQualified already enforced that ra.HarnessName is a canonical id.
+	// Inline/discovered harnesses have no canonical id and use a hash-based
+	// name instead.
+	runDirName := namespace.IDToFSName(ra.HarnessName)
 	if ra.HarnessFile != "" || ra.HarnessName == "" {
 		h := fmt.Sprintf("%x", hashString(harnessDir))
 		runDirName = "_inline-" + h[:8]
 	}
 	runDir := filepath.Join(config.RunDir(), runDirName)
-	vendorRunDir := filepath.Join(runDir, vendorName)
-	if info, err := os.Stat(vendorRunDir); err == nil && info.IsDir() {
-		runDir = vendorRunDir
+	preassembledDir, preassembled := findPreassembledVendorDir(runDirName, p.Name, vendorName)
+	if preassembled {
+		// Pre-assembled layout (baked harness image) — use directly.
+		runDir = preassembledDir
 	} else {
 		if err := assembler.AssembleTo(runDir, adapter, content); err != nil {
 			return fmt.Errorf("assembling config: %w", err)
@@ -233,6 +239,12 @@ func cmdRun(args []string) error {
 			if err := os.WriteFile(absPath, content, 0o644); err != nil {
 				return fmt.Errorf("writing manifest %s: %w", relPath, err)
 			}
+		}
+
+		// Keep the legacy bare-name run path resolving for project symlinks
+		// planted before run dirs were keyed by canonical id.
+		if ra.HarnessName != "" {
+			updateLegacyRunAlias(p.Name, runDirName)
 		}
 	}
 
@@ -306,6 +318,70 @@ func cmdRun(args []string) error {
 			return adapter.LaunchNonInteractive(runDir, prompt, vendorArgs)
 		}
 		return adapter.LaunchInteractive(runDir, vendorArgs)
+	}
+}
+
+// findPreassembledVendorDir looks for a baked vendor layout (harness image)
+// under the id-keyed run dir first, then under the legacy bare-name run dir
+// for images assembled by older ynh. Host-assembled run dirs never contain a
+// bare vendor-name subdirectory (vendor config dirs are dot-prefixed:
+// .claude, .codex, .cursor), so a match is always a baked layout.
+func findPreassembledVendorDir(runDirName, bareName, vendorName string) (string, bool) {
+	candidates := []string{filepath.Join(config.RunDir(), runDirName, vendorName)}
+	if bareName != "" && bareName != runDirName {
+		candidates = append(candidates, filepath.Join(config.RunDir(), bareName, vendorName))
+	}
+	for _, dir := range candidates {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return dir, true
+		}
+	}
+	return "", false
+}
+
+// updateLegacyRunAlias maintains a bare-name symlink run/<name> →
+// <id-fsname> beside the id-keyed run dir. Project symlinks planted by
+// older ynh point through the bare-name path; the alias keeps them
+// resolving after the id-keyed re-key. When several installs claim the
+// name the alias is removed instead — a bare-name path can't say which
+// install it means, and a dangling project link surfaces loudly (run
+// re-plants it, see symlinkIntact) where a silently re-bound one wouldn't.
+// Best-effort: alias failures degrade to the dangling-link path, never
+// fail the run.
+func updateLegacyRunAlias(bareName, runDirName string) {
+	if bareName == "" || bareName == runDirName {
+		return
+	}
+	alias := filepath.Join(config.RunDir(), bareName)
+	entries, err := harness.ListAll()
+	if err != nil {
+		return // can't tell who claims the name — leave the alias alone
+	}
+	// Count distinct canonical ids, not entries: a stale schema-1 duplicate
+	// of the same install (flat tree beside the id-keyed tree) is one
+	// logical claimant, not two.
+	claimants := map[string]bool{}
+	for _, e := range entries {
+		if e.Name == bareName {
+			claimants[canonicalIDForEntry(e)] = true
+		}
+	}
+	if len(claimants) > 1 {
+		// Only remove an alias we own (a symlink); never a real directory.
+		if fi, err := os.Lstat(alias); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+			_ = os.Remove(alias)
+		}
+		return
+	}
+	// Unambiguous: (re)point the alias. A real directory here is a stale
+	// pre-re-key assembly — the old flow clobbered it via AssembleTo on
+	// every run anyway, so replacing it with the alias loses nothing.
+	if err := os.RemoveAll(alias); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not refresh legacy run alias %s: %v\n", alias, err)
+		return
+	}
+	if err := os.Symlink(runDirName, alias); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not create legacy run alias %s: %v\n", alias, err)
 	}
 }
 
@@ -400,11 +476,19 @@ func cmdCleanVendor(adapter vendor.Adapter, harnessName string) error {
 }
 
 // symlinkIntact returns true if at least one symlink from the installation
-// still exists on disk.
+// still exists on disk AND resolves to a live target. Returns false if all
+// symlinks are missing (e.g. the user deleted the vendor config directory)
+// or dangling (e.g. the run dir they point into was removed or re-keyed) —
+// either way the installation needs re-planting against the current run dir.
 func symlinkIntact(inst *symlink.Installation) bool {
 	for _, entry := range inst.Symlinks {
 		info, err := os.Lstat(entry.Link)
-		if err == nil && info.Mode()&os.ModeSymlink != 0 {
+		if err != nil || info.Mode()&os.ModeSymlink == 0 {
+			continue
+		}
+		// Stat follows the link: an error here means the target is gone —
+		// a dangling link is not intact.
+		if _, err := os.Stat(entry.Link); err == nil {
 			return true
 		}
 	}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/symlink"
 )
 
@@ -56,10 +57,15 @@ func runPrune(stdout io.Writer, quiet bool) error {
 		}
 	}
 
+	// Membership covers both name forms: bare names (launchers, legacy run
+	// dirs, and the bare-name run alias — load-bearing for project symlinks
+	// planted before the id-keyed re-key) and id fs-names (run dirs keyed
+	// by canonical id, e.g. "local--foo").
 	installedNames := map[string]bool{}
 	if installs, err := harness.ListAll(); err == nil {
 		for _, e := range installs {
 			installedNames[e.Name] = true
+			installedNames[namespace.IDToFSName(canonicalIDForEntry(e))] = true
 		}
 	}
 

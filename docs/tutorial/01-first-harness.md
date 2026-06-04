@@ -124,12 +124,12 @@ ynh install /tmp/ynh-tutorial/my-harness
 Expected:
 ```
 Installed harness "my-harness"
-  Location: /Users/<you>/.ynh/harnesses/local--my-harness
+  Location: /tmp/ynh-tutorial/my-harness
   Launcher: /Users/<you>/.ynh/bin/my-harness
   Vendor:   claude
 ```
 
-The install lives at `local--my-harness` (the on-disk form of the canonical id `local/my-harness`). The launcher keeps the short name because it's unambiguous.
+A local directory install is registered in place — the source tree stays where it is and ynh records it under the canonical id `local/my-harness` (on-disk form `local--my-harness`). The launcher keeps the short name because it's unambiguous.
 
 ## T1.5: List installed harnesses
 
@@ -250,7 +250,7 @@ my-harness --focus code-review --instructions "PR #22 in eyelock/assistants"
 > **Note:** The run directory is created by `ynh run`, which requires a vendor CLI. This step is only verifiable after running T1.6/T1.7/T1.8.
 
 ```bash
-ls -Ra ~/.ynh/run/my-harness/
+ls -Ra ~/.ynh/run/local--my-harness/
 ```
 
 Expected (stylized — actual `ls -Ra` format uses directory headers):
@@ -286,7 +286,7 @@ The `remove` alias also works: `ynh remove local/my-harness`.
 - `instructions.md` becomes vendor-specific project instructions
 - `ynh install` copies the harness and generates a launcher script
 - The launcher is a shell script that calls `ynh run`
-- `ynh run` assembles artifacts into `~/.ynh/run/<name>/` and launches the vendor CLI
+- `ynh run` assembles artifacts into `~/.ynh/run/<id>/` (the canonical id with `/` as `--`, e.g. `local--my-harness`) and launches the vendor CLI
 
 ## Next
 

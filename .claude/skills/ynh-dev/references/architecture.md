@@ -8,7 +8,7 @@
 
 1. **Detect** harness format and load manifest (`internal/harness/`, `internal/plugin/`)
 2. **Resolve** Git includes from local cache (`internal/resolver/`) — repos are pre-fetched at install time; run uses cache-only with fallback fetch on miss
-3. **Assemble** vendor config into `~/.ynh/run/<name>/` (`internal/assembler/`)
+3. **Assemble** vendor config into `~/.ynh/run/<id-fsname>/` (e.g. `run/local--foo/`) (`internal/assembler/`)
 4. **Launch** vendor CLI, adapting to each vendor's capabilities (`internal/vendor/`)
 
 ## Package structure
@@ -39,7 +39,7 @@ testdata/                 Test fixtures (sample-harness, monorepo, etc.)
 - **Vendor is a deployment concern** - harnesses define what, adapters decide where/how
 - **Git is the package manager** - no registry, content cached locally by URL+ref hash
 - **Vendor-adaptive launch** - Claude uses `syscall.Exec` (native `--plugin-dir`), Codex/Cursor use child process with signal forwarding (symlink-based install)
-- **Deterministic run dir** - `~/.ynh/run/<name>/` overwritten each run (no temp dir leaks)
+- **Deterministic run dir** - `~/.ynh/run/<id-fsname>/` (keyed by canonical id) overwritten each run (no temp dir leaks; same-named installs don't clobber each other)
 - **Single manifest** - `.harness.json` for all config (identity, includes, hooks, MCP servers, profiles)
 
 ## Adapter interface
