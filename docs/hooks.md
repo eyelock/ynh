@@ -97,13 +97,31 @@ Because `--plugin-dir` hooks don't auto-activate, the way to make hooks — and 
 | `ynh run` (staging dir + `--plugin-dir`) | assembled `.claude/hooks/hooks.json` | only after `/plugin install` (Claude limitation); Codex/Cursor activate via symlink |
 | Plain `claude` in the project | project `.claude/settings.json` | every session, automatically |
 
-For an always-on, sensor-driven repo, put the hooks in `.claude/settings.json`. Three rules:
+For an always-on, sensor-driven repo, declare the hooks once in `.ynh-plugin/plugin.json` (canonical names) and let ynh write them into the settings file:
+
+```bash
+ynh hook export <harness> --target settings   # → .claude/settings.json (committed, team-wide)
+ynh hook export <harness> --target local      # → .claude/settings.local.json (gitignored, personal)
+ynh hook export <harness> --target settings --dry-run   # preview, write nothing
+```
+
+`hook export` translates canonical events to Claude-native names, applies the nested shape, and anchors relative command paths to `$CLAUDE_PROJECT_DIR` (see rules below). It **merges** — non-hook keys (`permissions`, `env`, …) and your own existing hooks are preserved, and re-running adds nothing already present, so it's safe to run repeatedly. `--target` is required; there is no default, so you always choose committed vs. personal explicitly.
+
+Then confirm the wiring:
+
+```bash
+ynh doctor   # checks .claude/settings.json + settings.local.json for the silent-failure traps below
+```
+
+`ynh doctor` flags canonical names that leaked into a settings file (where Claude ignores them), cwd-relative hook commands, and a project with no settings file at all (hooks declared but not wired).
+
+If you hand-author the settings file instead, three rules:
 
 1. **Use Claude-native event names and the nested shape** — `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop`, each `{ "matcher": …, "hooks": [ { "type": "command", "command": … } ] }`. The canonical names (`before_tool`, `on_stop`, …) are valid **only** in `.ynh-plugin/plugin.json`; Claude silently ignores them in `settings.json`. Don't copy the `plugin.json` shape into `settings.json`.
 2. **Anchor command paths to `$CLAUDE_PROJECT_DIR`** — `$CLAUDE_PROJECT_DIR/tools/hooks/foo.sh`. Claude runs each hook via `/bin/sh` in the **agent's current working directory**, not the project root, so a relative path like `./tools/hooks/foo.sh` silently breaks the moment the agent does `cd` into a subdirectory — and a *blocking* guard hook then fails open (stops guarding) without erroring. `$CLAUDE_PROJECT_DIR` is cwd-independent; it's also more portable than an absolute path, since `settings.json` is checked in and shared across machines.
 3. **Keep the canonical declarations in `plugin.json` too** if you also use `ynh run` or `ynd export` — they activate there via `/plugin install`, Codex, or Cursor.
 
-Example `.claude/settings.json`:
+Example `.claude/settings.json` (what `hook export` produces):
 
 ```json
 {
@@ -267,6 +285,18 @@ ynh profile hook remove <harness> <profile> <event> <index>
 ```
 
 `<event>` is validated against the canonical set: `before_tool`, `after_tool`, `before_prompt`, `on_stop`. `<index>` is zero-based. When the last entry for an event is removed, the event key is dropped from the manifest entirely.
+
+To translate a harness's declared hooks into a Claude settings file (so they fire in a plain session — see [Running hooks in a plain Claude session](#running-hooks-in-a-plain-claude-session)):
+
+```bash
+ynh hook export <harness> --target <settings|local> [-v claude] [--dry-run]
+```
+
+And to check that the project's settings files are correctly wired:
+
+```bash
+ynh doctor
+```
 
 See [reference.md](reference.md) for the complete flag matrix and [profiles.md](profiles.md#cli-editing) for the surrounding profile-editor surface.
 

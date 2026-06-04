@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"syscall"
 
 	"github.com/eyelock/ynh/internal/plugin"
@@ -116,6 +117,27 @@ var claudeHookEventMap = map[string]string{
 	"on_stop":       "Stop",
 }
 
+// anchorHookCommand rewrites a leading "./" in a hook command so it resolves
+// from the project root via $CLAUDE_PROJECT_DIR, which Claude Code injects into
+// the hook subprocess. Without this, a relative command breaks the moment the
+// agent's working directory moves into a subdirectory — and a blocking guard
+// hook then silently fails open. Commands that are absolute, already anchored
+// to a variable, or PATH-style (no leading "./") are left unchanged.
+func anchorHookCommand(cmd string) string {
+	if strings.HasPrefix(cmd, "./") {
+		return "$CLAUDE_PROJECT_DIR/" + cmd[2:]
+	}
+	return cmd
+}
+
+// ClaudeHookEvent returns the Claude-native event name for a canonical event
+// (e.g. "after_tool" → "PostToolUse"), or ("", false) if the name is not a
+// canonical event. It is the single source of the canonical→Claude mapping.
+func ClaudeHookEvent(canonical string) (string, bool) {
+	native, ok := claudeHookEventMap[canonical]
+	return native, ok
+}
+
 func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
 	if len(hooks) == 0 {
 		return nil, nil
@@ -171,7 +193,7 @@ func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[st
 		for _, g := range groups {
 			var inner []claudeInnerHook
 			for _, cmd := range g.cmds {
-				inner = append(inner, claudeInnerHook{Type: "command", Command: cmd})
+				inner = append(inner, claudeInnerHook{Type: "command", Command: anchorHookCommand(cmd)})
 			}
 			hookGroups = append(hookGroups, claudeHookGroup{
 				Matcher: g.matcher,
