@@ -118,7 +118,7 @@ Or inline:
 
 Inline focuses are scoped to the sensor that declares them — they do **not** appear in `ynh info` Focus list, and they are not selectable via `--focus` or `YNH_FOCUS`. Use a string reference when the same focus is invoked both standalone and as a sensor; use inline when the focus exists only to drive this sensor.
 
-When the loop driver runs a focus-sourced sensor via `ynh sensors run`, ynh returns the resolved focus declaration; the loop driver invokes the agent runtime itself. ynh owns no agent-invocation surface.
+When a loop driver runs a focus-sourced sensor via `ynh sensors run`, ynh returns the resolved focus declaration; the loop driver invokes the agent runtime itself. `ynh sensors run` never invokes an agent runtime — that contract holds for external loop drivers and for ynh's built-in one (`ynh run <harness> --agent`) alike.
 
 ## Output contract
 

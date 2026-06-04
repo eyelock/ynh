@@ -34,7 +34,8 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | Command | Key Flags |
 |---------|-----------|
 | `ynh install <source>` | `--path`, `-v` |
-| `ynh run [harness]` | `-v`, `--profile`, `--focus`, `--install`, `--clean` |
+| `ynh run [harness]` | `-v`, `--profile`, `--focus`, `--harness-file`, `--session-name`, `--instructions`, `--install`, `--clean`, `--interactive` — unknown flags pass through to the vendor CLI |
+| `ynh run <harness> --agent` | `--task <text\|@file\|->` (required), `--backend <claude\|codex\|cursor>`, `--sandbox <srt\|none>`, `--model`, `--max-turns <n>`, `--max-tokens <n>`, `--max-wall <duration>`, `--convergence-sensor <name>`, `--auto-commit`, `--no-plan`, `--worktree <path>`, `--emit-jsonl <path\|->`, `--sensor-overlay <json>` — autonomous agent loop instead of vendor launch |
 | `ynh uninstall <harness>` | |
 | `ynh update [harness]` | |
 | `ynh fork <name>` | `-o, --output <path>`, `--name <new>`, `--format <text\|json>` |

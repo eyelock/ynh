@@ -35,7 +35,7 @@ import (
 //
 //	--agent              Switch from vendor launch to agent loop
 //	--task <text|@file|->        Task text (inline / file / stdin)
-//	--backend <name>             Worker backend (claude|codex; default claude)
+//	--backend <name>             Worker backend (claude|codex|cursor; default claude)
 //	--sandbox <mode>             Sandbox mode (srt|none)
 //	--model <name>               Worker model override
 //	--max-turns <n>              Turn budget (0 = unlimited)
