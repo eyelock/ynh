@@ -209,10 +209,10 @@ ynh status
 
 ### Prune stale launchers
 
-Simulate a stale launcher by removing the harness directory but leaving its launcher script:
+Simulate a stale launcher by removing the install record but leaving its launcher script:
 
 ```bash
-rm -rf ~/.ynh/harnesses/local--my-harness
+rm ~/.ynh/installed/local--my-harness.json
 ls ~/.ynh/bin/my-harness
 # Expected: file exists (stale launcher)
 ```
@@ -226,7 +226,6 @@ ynh prune
 Expected:
 ```
 Removed stale launcher: /Users/<you>/.ynh/bin/my-harness
-Removed stale run dir: /Users/<you>/.ynh/run/my-harness
 ```
 
 Verify the launcher was removed:

@@ -89,6 +89,8 @@ func main() {
 		err = cmdProfile(os.Args[2:])
 	case "hook":
 		err = cmdHook(os.Args[2:])
+	case "doctor":
+		err = cmdDoctor(os.Args[2:])
 	case "mcp":
 		err = cmdMCP(os.Args[2:])
 	case "sensors":
@@ -169,6 +171,8 @@ Commands:
   profile include update <harness> <profile> <url> [flags]  Update a profile include
   hook add <harness> <event> <command> [--matcher <pattern>] Add a top-level hook
   hook remove <harness> <event> <index>                     Remove a top-level hook by index
+  hook export <harness> --target <settings|local> [--dry-run]  Write a harness's hooks into a Claude settings file
+  doctor                       Check Claude hook wiring in the current project
   mcp add <harness> <name> [flags]                          Add a top-level MCP server
   mcp remove <harness> <name>                               Remove a top-level MCP server
   mcp update <harness> <name> [flags]                       Update a top-level MCP server

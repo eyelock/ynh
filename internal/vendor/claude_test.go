@@ -272,6 +272,65 @@ func TestClaudeGenerateHookConfig_ThreeLevelNesting(t *testing.T) {
 	}
 }
 
+func TestAnchorHookCommand(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"relative dot-slash", "./tools/hooks/x.sh", "$CLAUDE_PROJECT_DIR/tools/hooks/x.sh"},
+		{"relative with args", "./tools/hooks/x.sh --flag a", "$CLAUDE_PROJECT_DIR/tools/hooks/x.sh --flag a"},
+		{"absolute path untouched", "/usr/local/bin/x.sh", "/usr/local/bin/x.sh"},
+		{"already anchored untouched", "$CLAUDE_PROJECT_DIR/x.sh", "$CLAUDE_PROJECT_DIR/x.sh"},
+		{"path-style command untouched", "make build", "make build"},
+		{"bare relative untouched", "tools/hooks/x.sh", "tools/hooks/x.sh"},
+		{"parent relative untouched", "../x.sh", "../x.sh"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := anchorHookCommand(tt.in); got != tt.want {
+				t.Errorf("anchorHookCommand(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestClaudeGenerateHookConfig_AnchorsRelativePaths(t *testing.T) {
+	c := &Claude{}
+	hooks := map[string][]plugin.HookEntry{
+		"before_tool": {
+			{Matcher: "Bash", Command: "./tools/hooks/guard.sh"},
+		},
+		"on_stop": {
+			{Command: "make check"},
+		},
+	}
+
+	result, err := c.GenerateHookConfig(hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := result[filepath.Join(".claude", "hooks", "hooks.json")]
+
+	var settings struct {
+		Hooks map[string][]struct {
+			Hooks []struct {
+				Command string `json:"command"`
+			} `json:"hooks"`
+		} `json:"hooks"`
+	}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	if got := settings.Hooks["PreToolUse"][0].Hooks[0].Command; got != "$CLAUDE_PROJECT_DIR/tools/hooks/guard.sh" {
+		t.Errorf("relative command not anchored: got %q", got)
+	}
+	if got := settings.Hooks["Stop"][0].Hooks[0].Command; got != "make check" {
+		t.Errorf("path-style command should be untouched: got %q", got)
+	}
+}
+
 func TestClaudeGenerateMCPConfig_NilServers(t *testing.T) {
 	c := &Claude{}
 	result, err := c.GenerateMCPConfig(nil)

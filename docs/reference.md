@@ -65,6 +65,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh profile include update <harness> <profile> <url>` | `--from-path`, `--path`, `--ref` |
 | `ynh hook add <harness> <event> <command>` | `--matcher` — top-level harness hook |
 | `ynh hook remove <harness> <event> <index>` | top-level harness hook |
+| `ynh hook export <harness>` | `--target <settings\|local>` (required), `-v <vendor>` (claude), `--dry-run` — write a harness's hooks into a Claude settings file ([why](hooks.md#running-hooks-in-a-plain-claude-session)) |
 | `ynh mcp add <harness> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header` — top-level harness MCP server (no `--null`; harness-level entries cannot be null) |
 | `ynh mcp remove <harness> <name>` | top-level harness MCP server |
 | `ynh mcp update <harness> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header`, `--clear-args`, `--clear-env`, `--clear-headers` |
@@ -82,6 +83,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh paths` | `--format <text\|json>` |
 | `ynh status` | |
 | `ynh prune` | |
+| `ynh doctor` | check Claude hook wiring in `.claude/settings.json` / `settings.local.json` for the current project |
 
 ## ynd Commands
 
