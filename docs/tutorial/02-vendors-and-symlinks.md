@@ -89,7 +89,7 @@ Expected:
 cursor requires symlinks in your project directory.
 The following symlinks will be created in /tmp/ynh-tutorial/project:
 
-  .cursor/skills/ping -> /Users/<you>/.ynh/run/my-harness/.cursor/skills/ping
+  .cursor/skills/ping -> /Users/<you>/.ynh/run/local--my-harness/.cursor/skills/ping
 
 Install 1 symlinks? [Y/n]
 ```
@@ -112,7 +112,7 @@ Expected:
 ```
 Installed 1 symlinks for my-harness (cursor) in /tmp/ynh-tutorial/project:
 
-  .cursor/skills/ping -> /Users/<you>/.ynh/run/my-harness/.cursor/skills/ping
+  .cursor/skills/ping -> /Users/<you>/.ynh/run/local--my-harness/.cursor/skills/ping
 ```
 
 ### Verify symlinks
@@ -121,7 +121,7 @@ Installed 1 symlinks for my-harness (cursor) in /tmp/ynh-tutorial/project:
 ls -la .cursor/skills/
 ```
 
-Symlinks point back to `~/.ynh/run/my-harness/`.
+Symlinks point back to `~/.ynh/run/local--my-harness/`.
 
 ### Check installation status
 

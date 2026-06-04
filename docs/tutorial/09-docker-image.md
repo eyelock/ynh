@@ -82,7 +82,7 @@ Expected:
 
 ```
 Installed harness "docker-demo"
-  Location: ~/.ynh/harnesses/docker-demo
+  Location: /tmp/ynh-tutorial/docker-harness
   Launcher: ~/.ynh/bin/docker-demo
   Vendor:   claude
 ```
@@ -90,7 +90,7 @@ Installed harness "docker-demo"
 ## T9.3: Build a harness image
 
 ```bash
-ynh image docker-demo --tag docker-demo:latest
+ynh image local/docker-demo --tag docker-demo:latest
 ```
 
 Expected:
@@ -177,7 +177,7 @@ docker run --rm -v $(pwd):/workspace -e OPENAI_API_KEY \
 Preview the generated Dockerfile without building:
 
 ```bash
-ynh image docker-demo --dry-run
+ynh image local/docker-demo --dry-run
 ```
 
 Expected output (Dockerfile printed to stdout):
@@ -186,18 +186,18 @@ Expected output (Dockerfile printed to stdout):
 FROM ghcr.io/eyelock/ynh:latest
 
 # Pre-assembled vendor layouts (all three, ready to use)
-COPY --link --chown=ynh:ynh vendors/claude/ /home/ynh/.ynh/run/docker-demo/claude/
-COPY --link --chown=ynh:ynh vendors/codex/ /home/ynh/.ynh/run/docker-demo/codex/
-COPY --link --chown=ynh:ynh vendors/cursor/ /home/ynh/.ynh/run/docker-demo/cursor/
+COPY --link --chown=ynh:ynh vendors/claude/ /home/ynh/.ynh/run/local--docker-demo/claude/
+COPY --link --chown=ynh:ynh vendors/codex/ /home/ynh/.ynh/run/local--docker-demo/codex/
+COPY --link --chown=ynh:ynh vendors/cursor/ /home/ynh/.ynh/run/local--docker-demo/cursor/
 
 # Harness source (metadata for ynh run)
-COPY --link --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/docker-demo/
+COPY --link --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--docker-demo/
 
 # Default vendor (override: docker run -e YNH_VENDOR=codex)
 ENV YNH_VENDOR=claude
 
 # Baked entrypoint — just pass the prompt as CMD
-ENTRYPOINT ["tini", "-s", "--", "ynh", "run", "docker-demo"]
+ENTRYPOINT ["tini", "-s", "--", "ynh", "run", "local/docker-demo"]
 CMD []
 
 LABEL dev.ynh.harness="docker-demo" \
@@ -222,11 +222,11 @@ Verify the remote includes were resolved and baked in:
 
 ```bash
 docker run --rm --entrypoint sh tester:latest -c \
-  "find /home/ynh/.ynh/run/tester/claude -type f | sort"
+  "find /home/ynh/.ynh/run/local--tester/claude -type f | sort"
 # Expected: skills from github.com/eyelock/assistants assembled into the image:
-#   /home/ynh/.ynh/run/tester/claude/.claude/skills/dev-quality/SKILL.md
-#   /home/ynh/.ynh/run/tester/claude/.claude/skills/go-lang/SKILL.md
-#   /home/ynh/.ynh/run/tester/claude/.claude/skills/go-lang/assets/...
+#   /home/ynh/.ynh/run/local--tester/claude/.claude/skills/dev-quality/SKILL.md
+#   /home/ynh/.ynh/run/local--tester/claude/.claude/skills/go-lang/SKILL.md
+#   /home/ynh/.ynh/run/local--tester/claude/.claude/skills/go-lang/assets/...
 ```
 
 ## T9.9: Override entrypoint
