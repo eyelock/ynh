@@ -43,6 +43,8 @@ Commands:
   profile remove <harness> <name>                           Remove a named profile
   hook add <harness> <event> <command> [--profile <p>] [--matcher <pattern>]  Add a hook
   hook remove <harness> <event> <index> [--profile <p>]                       Remove a hook by index
+  hook export <harness> --target <settings|local> [--dry-run]  Write a harness's hooks into a Claude settings file
+  doctor                       Check Claude hook wiring in the current project
   mcp add <harness> <name> [--profile <p>] [flags]          Add an MCP server
   mcp remove <harness> <name> [--profile <p>]               Remove an MCP server
   mcp update <harness> <name> [--profile <p>] [flags]       Update an MCP server (--clear field repeatable)

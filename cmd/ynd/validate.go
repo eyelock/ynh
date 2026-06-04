@@ -362,6 +362,30 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
+// vendorHookEventNames maps known vendor-native hook event names to their
+// canonical equivalent. plugin.json declares hooks with canonical names; a
+// vendor-native name here is a common copy-paste mistake from a settings file,
+// so it earns a targeted hint rather than a generic "unknown event".
+var vendorHookEventNames = map[string]string{
+	"PreToolUse":           "before_tool",
+	"PostToolUse":          "after_tool",
+	"UserPromptSubmit":     "before_prompt",
+	"Stop":                 "on_stop",
+	"beforeShellExecution": "before_tool",
+	"afterFileEdit":        "after_tool",
+	"beforeSubmitPrompt":   "before_prompt",
+	"stop":                 "on_stop",
+}
+
+// hookEventMessage returns the validation message for an invalid hook event,
+// upgrading to a targeted correction when the event is a known vendor name.
+func hookEventMessage(event string) string {
+	if canonical, ok := vendorHookEventNames[event]; ok {
+		return fmt.Sprintf("event %q is a vendor-native name — plugin.json uses canonical events; use %q (ynh translates it per vendor)", event, canonical)
+	}
+	return fmt.Sprintf("unknown event %q (valid: before_tool, after_tool, before_prompt, on_stop)", event)
+}
+
 // validateHarnessHooks validates the hooks section inside harness.json.
 func validateHarnessHooks(hj map[string]any) []string {
 	var issues []string
@@ -378,7 +402,7 @@ func validateHarnessHooks(hj map[string]any) []string {
 
 	for event, entries := range hooksMap {
 		if !plugin.ValidHookEvents[event] {
-			issues = append(issues, fmt.Sprintf("hooks: unknown event %q (valid: before_tool, after_tool, before_prompt, on_stop)", event))
+			issues = append(issues, "hooks: "+hookEventMessage(event))
 		}
 		arr, ok := entries.([]any)
 		if !ok {

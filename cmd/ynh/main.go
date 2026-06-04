@@ -71,6 +71,8 @@ func main() {
 		err = cmdProfile(os.Args[2:])
 	case "hook":
 		err = cmdHook(os.Args[2:])
+	case "doctor":
+		err = cmdDoctor(os.Args[2:])
 	case "mcp":
 		err = cmdMCP(os.Args[2:])
 	case "sensors":
