@@ -139,8 +139,8 @@ ynh ls
 
 Expected:
 ```
-ID                  KIND   VENDOR  SOURCE                        ARTIFACTS    INCLUDES  DELEGATES TO
-local/my-harness    local  claude  /tmp/ynh-tutorial/my-harness  1s 1a 1r 1c  0         0
+ID                KIND   VENDOR  SOURCE                        ARTIFACTS    INCLUDES  DELEGATES TO
+local/my-harness  local  claude  /tmp/ynh-tutorial/my-harness  1s 1a 1r 1c  0         0
 ```
 
 The ID column carries the canonical, host-prefixed id — `local/<name>` for local installs, `<host>/<org>/<repo>/<name>` for git/registry installs. Other ynh commands accept this id (run, info, uninstall, update, fork).
@@ -158,6 +158,7 @@ ynh info local/my-harness
 
 Expected:
 ```
+ID:           local/my-harness
 Name:         my-harness
 Vendor:       claude
 Installed:    <timestamp>
