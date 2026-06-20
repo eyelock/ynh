@@ -245,6 +245,8 @@ ynd validate /tmp/ynh-tutorial/sensor-harness
 
 The hook produces the file mid-session; the sensor consumes it between iterations. Coupling is by shared file path — implicit, no schema link needed.
 
+> **For the hook to actually fire in a plain Claude session**, declare it in the project's `.claude/settings.json` (Claude-native event names, project-relative paths) — not only in `plugin.json`, whose hooks don't auto-activate under `ynh run`. An `on_stop` sweep that feeds its verdict back to the agent must also route output to stderr + `exit 2` and guard against the `stop_hook_active` loop. See [Hooks §"Running hooks in a plain Claude session"](../hooks.md#running-hooks-in-a-plain-claude-session) and [§"on_stop output semantics"](../hooks.md#on_stop-output-semantics-claude).
+
 ## T19.8: Install round-trip preserves sensors
 
 Re-install the harness and confirm sensors still appear in the discovery surface:

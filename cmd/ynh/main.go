@@ -89,6 +89,8 @@ func main() {
 		err = cmdProfile(os.Args[2:])
 	case "hook":
 		err = cmdHook(os.Args[2:])
+	case "doctor":
+		err = cmdDoctor(os.Args[2:])
 	case "mcp":
 		err = cmdMCP(os.Args[2:])
 	case "sensors":
@@ -169,6 +171,8 @@ Commands:
   profile include update <harness> <profile> <url> [flags]  Update a profile include
   hook add <harness> <event> <command> [--matcher <pattern>] Add a top-level hook
   hook remove <harness> <event> <index>                     Remove a top-level hook by index
+  hook export <harness> --target <settings|local> [--dry-run]  Write a harness's hooks into a Claude settings file
+  doctor                       Check Claude hook wiring in the current project
   mcp add <harness> <name> [flags]                          Add a top-level MCP server
   mcp remove <harness> <name>                               Remove a top-level MCP server
   mcp update <harness> <name> [flags]                       Update a top-level MCP server
@@ -692,33 +696,149 @@ func cmdUninstall(args []string) error {
 		}
 	}
 
-	// Remove launcher script
-	launcherPath := filepath.Join(config.BinDir(), bareName)
-	_ = os.Remove(launcherPath) // ignore error if launcher doesn't exist
+	// Run dirs are keyed by canonical id ("local--foo"), so the removed
+	// install's run dirs are exclusively its own — remove them outright.
+	// Both id forms in uninstalledIDs may have dirs; removing a missing one
+	// is a no-op.
+	uninstalledIDs := map[string]bool{ref: true}
+	if ptr != nil {
+		// Pointer registrations are listed under "local/<name>" regardless
+		// of the ref form used to remove them.
+		uninstalledIDs["local/"+bareName] = true
+	}
+	for id := range uninstalledIDs {
+		_ = os.RemoveAll(filepath.Join(config.RunDir(), namespace.IDToFSName(id)))
+	}
 
-	// Remove run directory
-	runDir := filepath.Join(config.RunDir(), bareName)
-	_ = os.RemoveAll(runDir) // ignore error if not present
+	// The launcher (~/.ynh/bin/<name>), legacy bare-name run path
+	// (~/.ynh/run/<name>) and sources entry are keyed by bare name and
+	// therefore shared across installs whose canonical ids differ only in
+	// namespace (e.g. "local/foo" vs "github.com/org/repo/foo"). Remove
+	// them only when no other install still claims the name; otherwise
+	// leave them for the survivor, repointing the launcher and the legacy
+	// run alias if they targeted the install just removed.
+	var launcherNote string
+	survivors, surErr := bareNameSurvivors(bareName, uninstalledIDs)
+	switch {
+	case surErr != nil:
+		// Can't tell whether the name is still claimed — leave the shared
+		// resources in place rather than risk orphaning a surviving install.
+		fmt.Fprintf(os.Stderr, "warning: could not check for other installs named %q: %v\n", bareName, surErr)
+		fmt.Fprintf(os.Stderr, "  launcher, run alias and sources entry left in place\n")
+	case len(survivors) == 0:
+		// Remove launcher script
+		launcherPath := filepath.Join(config.BinDir(), bareName)
+		_ = os.Remove(launcherPath) // ignore error if launcher doesn't exist
 
-	// Remove matching sources entry if present
-	if cfg, err := config.Load(); err == nil {
-		remaining := make([]config.Source, 0, len(cfg.Sources))
-		for _, s := range cfg.Sources {
-			if s.Name != bareName {
-				remaining = append(remaining, s)
+		// Remove legacy bare-name run path (pre-re-key real dir or alias
+		// symlink — RemoveAll removes a symlink without following it)
+		runDir := filepath.Join(config.RunDir(), bareName)
+		_ = os.RemoveAll(runDir) // ignore error if not present
+
+		// Remove matching sources entry if present
+		if cfg, err := config.Load(); err == nil {
+			remaining := make([]config.Source, 0, len(cfg.Sources))
+			for _, s := range cfg.Sources {
+				if s.Name != bareName {
+					remaining = append(remaining, s)
+				}
+			}
+			cfg.Sources = remaining
+			if err := cfg.Save(); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not update config after uninstall: %v\n", err)
 			}
 		}
-		cfg.Sources = remaining
-		if err := cfg.Save(); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: could not update config after uninstall: %v\n", err)
-		}
+	default:
+		launcherNote = repointLauncher(bareName, survivors)
+		repointLegacyRunAlias(bareName, uninstalledIDs, survivors)
 	}
 
 	fmt.Printf("Uninstalled harness %q\n", bareName)
+	if launcherNote != "" {
+		fmt.Printf("  %s\n", launcherNote)
+	}
 	if pointerSource != "" {
 		fmt.Printf("  Source tree left in place: %s\n", pointerSource)
 	}
 	return nil
+}
+
+// bareNameSurvivors returns the canonical ids of installed harnesses that
+// still claim bareName after an uninstall. Runs post-removal, so the removed
+// install is already absent from ListAll; uninstalledIDs additionally drops
+// stale duplicate registrations of the just-removed canonical id (e.g. an
+// unmigrated schema-1 flat tree shadowing the schema-2 dir that was removed).
+// Results keep ListAll order (namespace, then name) so callers that pick one
+// get a deterministic choice.
+func bareNameSurvivors(bareName string, uninstalledIDs map[string]bool) ([]string, error) {
+	entries, err := harness.ListAll()
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for _, e := range entries {
+		if e.Name != bareName {
+			continue
+		}
+		if id := canonicalIDForEntry(e); !uninstalledIDs[id] {
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
+}
+
+// repointLauncher keeps the bare-name launcher usable for the installs that
+// still claim the name after an uninstall. If the launcher already targets
+// one of the survivors it is left untouched; otherwise it is regenerated for
+// the first survivor. Returns a user-facing note for the uninstall summary,
+// or "" when there is nothing to report (reserved names never get a
+// launcher — see cmdInstall).
+func repointLauncher(bareName string, survivors []string) string {
+	if bareName == "ynh" {
+		return ""
+	}
+	launcherPath := filepath.Join(config.BinDir(), bareName)
+	if body, err := os.ReadFile(launcherPath); err == nil {
+		for _, id := range survivors {
+			if strings.Contains(string(body), fmt.Sprintf("ynh run %q", id)) {
+				return fmt.Sprintf("Launcher kept: targets surviving install %s", id)
+			}
+		}
+	}
+	if err := generateLauncher(bareName, survivors[0]); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not regenerate launcher for %s: %v\n", survivors[0], err)
+		return ""
+	}
+	return fmt.Sprintf("Launcher repointed to surviving install %s", survivors[0])
+}
+
+// repointLegacyRunAlias keeps the legacy bare-name run path (run/<name>,
+// a symlink to an id-keyed run dir — see updateLegacyRunAlias) coherent
+// after an uninstall with survivors. An alias targeting a removed install's
+// run dir is repointed to the sole survivor, or removed when several
+// survivors make the bare name ambiguous. A real directory (stale
+// pre-re-key assembly) or an alias already targeting a survivor is left
+// alone. Best-effort: failures leave a dangling alias, which run repairs.
+func repointLegacyRunAlias(bareName string, uninstalledIDs map[string]bool, survivors []string) {
+	alias := filepath.Join(config.RunDir(), bareName)
+	target, err := os.Readlink(alias)
+	if err != nil {
+		return // no alias (or a real dir) — nothing to repoint
+	}
+	removed := false
+	for id := range uninstalledIDs {
+		if target == namespace.IDToFSName(id) {
+			removed = true
+			break
+		}
+	}
+	if !removed {
+		return
+	}
+	_ = os.Remove(alias)
+	if len(survivors) == 1 {
+		_ = os.Symlink(namespace.IDToFSName(survivors[0]), alias)
+	}
 }
 
 // harnessHasRemoteSource reports whether the harness was installed from a
@@ -941,14 +1061,12 @@ func cmdRun(args []string) error {
 
 	// Resolve harness source: name > --harness-file > .harness.json in cwd > error
 	var p *harness.Harness
-	var name string
 	var harnessDir string // directory containing harness content (for local artifacts)
 	var err error
 
 	switch {
 	case ra.HarnessName != "":
-		name = ra.HarnessName
-		p, err = harness.LoadQualified(name)
+		p, err = harness.LoadQualified(ra.HarnessName)
 		if err != nil {
 			return err
 		}
@@ -980,7 +1098,6 @@ func cmdRun(args []string) error {
 		}
 		harnessDir = cwd
 	}
-	_ = name // run-dir naming uses p.Name; this var is retained only for legacy logging paths above
 
 	// Resolve focus → profile + prompt
 	if ra.FocusFlag != "" {
@@ -1064,22 +1181,25 @@ func cmdRun(args []string) error {
 	// We use a stable path instead of a temp dir because syscall.Exec
 	// replaces this process — deferred cleanup would never run.
 	//
-	// Run-dir naming uses the harness's bare Name (not the user-typed
-	// canonical id) so that paths under run/ stay flat and don't contain
-	// slashes. p.Name is set when the harness loaded successfully.
-	runDirName := p.Name
+	// Run-dir naming uses the canonical id's fs name ("local/foo" →
+	// "local--foo") so same-named installs with distinct canonical ids get
+	// distinct run dirs and can't clobber each other's live sessions.
+	// LoadQualified already enforced that ra.HarnessName is a canonical id.
+	// Inline/discovered harnesses have no canonical id and use a hash-based
+	// name instead.
+	runDirName := namespace.IDToFSName(ra.HarnessName)
 	if ra.HarnessFile != "" || ra.HarnessName == "" {
 		// Inline/discovered harness: use a hash-based stable dir name
 		h := fmt.Sprintf("%x", hashString(harnessDir))
 		runDirName = "_inline-" + h[:8]
 	}
 	runDir := filepath.Join(config.RunDir(), runDirName)
-	vendorRunDir := filepath.Join(runDir, vendorName)
-	if info, err := os.Stat(vendorRunDir); err == nil && info.IsDir() {
+	preassembledDir, preassembled := findPreassembledVendorDir(runDirName, p.Name, vendorName)
+	if preassembled {
 		// Pre-assembled layout (baked harness image) — use directly.
 		// Skip AssembleTo, delegate allow-list check, AND AssembleDelegates —
 		// everything was vetted and assembled at image build time.
-		runDir = vendorRunDir
+		runDir = preassembledDir
 	} else {
 		// Normal host flow — assemble now
 		if err := assembler.AssembleTo(runDir, adapter, content); err != nil {
@@ -1146,6 +1266,12 @@ func cmdRun(args []string) error {
 			if err := os.WriteFile(absPath, content, 0o644); err != nil {
 				return fmt.Errorf("writing manifest %s: %w", relPath, err)
 			}
+		}
+
+		// Keep the legacy bare-name run path resolving for project symlinks
+		// planted before run dirs were keyed by canonical id.
+		if ra.HarnessName != "" {
+			updateLegacyRunAlias(p.Name, runDirName)
 		}
 	}
 
@@ -1224,6 +1350,70 @@ func cmdRun(args []string) error {
 			return adapter.LaunchNonInteractive(runDir, prompt, vendorArgs)
 		}
 		return adapter.LaunchInteractive(runDir, vendorArgs)
+	}
+}
+
+// findPreassembledVendorDir looks for a baked vendor layout (harness image)
+// under the id-keyed run dir first, then under the legacy bare-name run dir
+// for images assembled by older ynh. Host-assembled run dirs never contain a
+// bare vendor-name subdirectory (vendor config dirs are dot-prefixed:
+// .claude, .codex, .cursor), so a match is always a baked layout.
+func findPreassembledVendorDir(runDirName, bareName, vendorName string) (string, bool) {
+	candidates := []string{filepath.Join(config.RunDir(), runDirName, vendorName)}
+	if bareName != "" && bareName != runDirName {
+		candidates = append(candidates, filepath.Join(config.RunDir(), bareName, vendorName))
+	}
+	for _, dir := range candidates {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return dir, true
+		}
+	}
+	return "", false
+}
+
+// updateLegacyRunAlias maintains a bare-name symlink run/<name> →
+// <id-fsname> beside the id-keyed run dir. Project symlinks planted by
+// older ynh point through the bare-name path; the alias keeps them
+// resolving after the id-keyed re-key. When several installs claim the
+// name the alias is removed instead — a bare-name path can't say which
+// install it means, and a dangling project link surfaces loudly (run
+// re-plants it, see symlinkIntact) where a silently re-bound one wouldn't.
+// Best-effort: alias failures degrade to the dangling-link path, never
+// fail the run.
+func updateLegacyRunAlias(bareName, runDirName string) {
+	if bareName == "" || bareName == runDirName {
+		return
+	}
+	alias := filepath.Join(config.RunDir(), bareName)
+	entries, err := harness.ListAll()
+	if err != nil {
+		return // can't tell who claims the name — leave the alias alone
+	}
+	// Count distinct canonical ids, not entries: a stale schema-1 duplicate
+	// of the same install (flat tree beside the id-keyed tree) is one
+	// logical claimant, not two.
+	claimants := map[string]bool{}
+	for _, e := range entries {
+		if e.Name == bareName {
+			claimants[canonicalIDForEntry(e)] = true
+		}
+	}
+	if len(claimants) > 1 {
+		// Only remove an alias we own (a symlink); never a real directory.
+		if fi, err := os.Lstat(alias); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+			_ = os.Remove(alias)
+		}
+		return
+	}
+	// Unambiguous: (re)point the alias. A real directory here is a stale
+	// pre-re-key assembly — the old flow clobbered it via AssembleTo on
+	// every run anyway, so replacing it with the alias loses nothing.
+	if err := os.RemoveAll(alias); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not refresh legacy run alias %s: %v\n", alias, err)
+		return
+	}
+	if err := os.Symlink(runDirName, alias); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not create legacy run alias %s: %v\n", alias, err)
 	}
 }
 
@@ -1689,10 +1879,16 @@ func cmdPrune() error {
 	// harness.Load(<bare-name>) no longer resolves an install whose
 	// canonical id is e.g. "local/<name>" — using ListAll names directly
 	// is both correct under schema 2 and faster than N Load calls.
+	//
+	// Membership covers both name forms: bare names (launchers, legacy run
+	// dirs, and the bare-name run alias — load-bearing for project symlinks
+	// planted before the id-keyed re-key) and id fs-names (run dirs keyed
+	// by canonical id, e.g. "local--foo").
 	installedNames := map[string]bool{}
 	if installs, err := harness.ListAll(); err == nil {
 		for _, e := range installs {
 			installedNames[e.Name] = true
+			installedNames[namespace.IDToFSName(canonicalIDForEntry(e))] = true
 		}
 	}
 
@@ -1748,12 +1944,19 @@ func cmdPrune() error {
 }
 
 // symlinkIntact returns true if at least one symlink from the installation
-// still exists on disk. Returns false if all symlinks are missing (e.g. the
-// user deleted the vendor config directory).
+// still exists on disk AND resolves to a live target. Returns false if all
+// symlinks are missing (e.g. the user deleted the vendor config directory)
+// or dangling (e.g. the run dir they point into was removed or re-keyed) —
+// either way the installation needs re-planting against the current run dir.
 func symlinkIntact(inst *symlink.Installation) bool {
 	for _, entry := range inst.Symlinks {
 		info, err := os.Lstat(entry.Link)
-		if err == nil && info.Mode()&os.ModeSymlink != 0 {
+		if err != nil || info.Mode()&os.ModeSymlink == 0 {
+			continue
+		}
+		// Stat follows the link: an error here means the target is gone —
+		// a dangling link is not intact.
+		if _, err := os.Stat(entry.Link); err == nil {
 			return true
 		}
 	}

@@ -139,8 +139,8 @@ ynh ls
 
 Expected:
 ```
-NAME        KIND   VENDOR  SOURCE                        ARTIFACTS    INCLUDES  DELEGATES TO
-my-harness  local  claude  /tmp/ynh-tutorial/my-harness  1s 1a 1r 1c  0         0
+ID                KIND   VENDOR  SOURCE                        ARTIFACTS    INCLUDES  DELEGATES TO
+local/my-harness  local  claude  /tmp/ynh-tutorial/my-harness  1s 1a 1r 1c  0         0
 ```
 
 The KIND column classifies the install: `local` (installed from a local path), `git`, `registry`, or `local-fork` (a fork registered via `ynh fork`).
@@ -248,7 +248,7 @@ my-harness --focus code-review --instructions "PR #22 in eyelock/assistants"
 > **Note:** The run directory is created by `ynh run`, which requires a vendor CLI. This step is only verifiable after running T1.6/T1.7/T1.8.
 
 ```bash
-ls -Ra ~/.ynh/run/my-harness/
+ls -Ra ~/.ynh/run/local--my-harness/
 ```
 
 Expected (stylized — actual `ls -Ra` format uses directory headers):
@@ -284,7 +284,7 @@ The `remove` alias also works: `ynh remove local/my-harness`.
 - `instructions.md` becomes vendor-specific project instructions
 - `ynh install` copies the harness and generates a launcher script
 - The launcher is a shell script that calls `ynh run`
-- `ynh run` assembles artifacts into `~/.ynh/run/<name>/` and launches the vendor CLI
+- `ynh run` assembles artifacts into `~/.ynh/run/<id>/` (the canonical id with `/` as `--`, e.g. `local--my-harness`) and launches the vendor CLI
 
 ## Next
 

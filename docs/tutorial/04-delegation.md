@@ -112,13 +112,13 @@ team-lead "list your available agents"
 Check what was generated:
 
 ```bash
-ls ~/.ynh/run/team-lead/.claude/agents/
+ls ~/.ynh/run/local--team-lead/.claude/agents/
 ```
 
 Expected: `specialist.md` and `researcher.md` — generated agent files with the delegate's instructions, rules, and skill lists inlined.
 
 ```bash
-cat ~/.ynh/run/team-lead/.claude/agents/specialist.md
+cat ~/.ynh/run/local--team-lead/.claude/agents/specialist.md
 ```
 
 Expected: frontmatter with name/description, then sections for Instructions, Rules, and Available Skills — all pulled from the specialist harness.
