@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -15,23 +16,37 @@ import (
 // Next() applies that delay/error before returning turns[N]. Both are
 // zero-value compatible — tests that don't need them can leave them nil.
 type mockBackend struct {
-	name   string
-	turns  []Turn
-	delays []time.Duration
-	errs   []error
-	pos    int
-	sends  []string
+	name        string
+	turns       []Turn
+	delays      []time.Duration
+	errs        []error
+	pos         int
+	sends       []string
+	resumeToken string         // returned by the session's ResumeToken()
+	startOpts   []StartOptions // captures each Start call for resume assertions
+
+	// Stop hooks (1-indexed Next() call number). When the matching call is
+	// reached, the mock triggers a stop and blocks until the loop's context is
+	// cancelled, then reports the cancellation so the loop takes the interrupt
+	// path deterministically (turn N-1 stays the last completed turn).
+	interruptAtCall int       // writes {"action":"interrupt"} to interruptWriter
+	interruptWriter io.Writer // sink wired to the loop's control stdin
+	sigtermAtCall   int       // raises SIGTERM at the process
 }
 
 func (m *mockBackend) Name() string { return m.name }
 
-func (m *mockBackend) Start(_ context.Context, _ StartOptions) (WorkerSession, error) {
-	return &mockSession{backend: m}, nil
+func (m *mockBackend) Start(ctx context.Context, opts StartOptions) (WorkerSession, error) {
+	m.startOpts = append(m.startOpts, opts)
+	return &mockSession{backend: m, ctx: ctx}, nil
 }
 
 type mockSession struct {
 	backend *mockBackend
+	ctx     context.Context
 }
+
+func (s *mockSession) ResumeToken() string { return s.backend.resumeToken }
 
 func (s *mockSession) Send(msg string) error {
 	s.backend.sends = append(s.backend.sends, msg)
@@ -39,18 +54,32 @@ func (s *mockSession) Send(msg string) error {
 }
 
 func (s *mockSession) Next() (Turn, error) {
-	if s.backend.pos >= len(s.backend.turns) {
+	mb := s.backend
+	if mb.pos >= len(mb.turns) {
 		return Turn{}, io.EOF
 	}
-	pos := s.backend.pos
-	s.backend.pos++
-	if pos < len(s.backend.delays) && s.backend.delays[pos] > 0 {
-		time.Sleep(s.backend.delays[pos])
+	pos := mb.pos
+	mb.pos++
+	call := pos + 1 // 1-indexed Next() call number
+
+	if mb.interruptAtCall == call && mb.interruptWriter != nil {
+		_, _ = mb.interruptWriter.Write([]byte(`{"action":"interrupt"}` + "\n"))
+		<-s.ctx.Done()
+		return Turn{}, s.ctx.Err()
 	}
-	if pos < len(s.backend.errs) && s.backend.errs[pos] != nil {
-		return Turn{}, s.backend.errs[pos]
+	if mb.sigtermAtCall == call {
+		_ = syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+		<-s.ctx.Done()
+		return Turn{}, s.ctx.Err()
 	}
-	return s.backend.turns[pos], nil
+
+	if pos < len(mb.delays) && mb.delays[pos] > 0 {
+		time.Sleep(mb.delays[pos])
+	}
+	if pos < len(mb.errs) && mb.errs[pos] != nil {
+		return Turn{}, mb.errs[pos]
+	}
+	return mb.turns[pos], nil
 }
 
 func (s *mockSession) Close() error { return nil }

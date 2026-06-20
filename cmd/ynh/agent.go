@@ -168,6 +168,13 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 			}
 			opts.EmitJSONL = args[i]
 
+		case "--resume":
+			i++
+			if i >= len(args) {
+				return cliError(stderr, false, errCodeInvalidInput, "--resume requires a value")
+			}
+			opts.Resume = args[i]
+
 		case "--sensor-overlay":
 			i++
 			if i >= len(args) {
@@ -201,7 +208,9 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 			"cannot use --focus and --profile together (focus includes a profile)")
 	}
 
-	if opts.Task == "" && opts.Focus == "" {
+	// On --resume the task is restored from the checkpoint, so it need not be
+	// supplied again.
+	if opts.Resume == "" && opts.Task == "" && opts.Focus == "" {
 		return cliError(stderr, false, errCodeInvalidInput,
 			"--task or --focus is required")
 	}

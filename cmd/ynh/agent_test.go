@@ -27,6 +27,13 @@ func TestCmdAgentRun_RequiresTaskOrFocus(t *testing.T) {
 	}
 }
 
+func TestCmdAgentRun_ResumeRequiresValue(t *testing.T) {
+	err := cmdAgentRunTo(t, []string{"--resume"})
+	if err == nil || !strings.Contains(err.Error(), "--resume requires a value") {
+		t.Fatalf("expected --resume value-required, got: %v", err)
+	}
+}
+
 func TestCmdAgentRun_ProfileFlagAccepted(t *testing.T) {
 	err := cmdAgentRunTo(t, []string{"--harness", "x", "--profile"})
 	if err == nil || !strings.Contains(err.Error(), "--profile requires a value") {

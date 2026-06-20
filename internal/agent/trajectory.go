@@ -10,7 +10,11 @@ import (
 type EventKind string
 
 const (
-	KindSessionStart         EventKind = "session_start"
+	KindSessionStart EventKind = "session_start"
+	// KindSessionResumed is emitted once at the head of a resumed trajectory
+	// (a --resume relaunch) before the act loop continues. It delimits the
+	// boundary between the prior session's appended events and the new ones.
+	KindSessionResumed       EventKind = "session_resumed"
 	KindPlan                 EventKind = "plan"
 	KindPlanRevised          EventKind = "plan_revised"
 	KindPlanApprovalRequired EventKind = "plan_approval_required"
@@ -70,6 +74,23 @@ type SessionStartData struct {
 	Harness   string `json:"harness"`
 	Backend   string `json:"backend"`
 	Task      string `json:"task"`
+}
+
+// SessionResumedData is the payload for KindSessionResumed events. Emitted
+// once at the start of a resumed trajectory before the loop continues.
+// ResumedAtTurn is the act-phase turn number the loop will produce next
+// (the checkpoint's last_completed_turn + 1). RestoredTurns/RestoredTokens
+// echo the budget counters carried over from the checkpoint so consumers can
+// re-seed live progress without replaying the prior trajectory. PendingApproval
+// is "plan" or "turn" when the prior session stopped at an approval gate that
+// the resume will re-prompt, otherwise empty.
+type SessionResumedData struct {
+	SessionID       string `json:"session_id"`
+	Backend         string `json:"backend"`
+	ResumedAtTurn   int    `json:"resumed_at_turn"`
+	RestoredTurns   int    `json:"restored_turns"`
+	RestoredTokens  int64  `json:"restored_tokens"`
+	PendingApproval string `json:"pending_approval,omitempty"`
 }
 
 // SensorResultData is the payload for KindSensorResult events.

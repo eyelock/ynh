@@ -8,7 +8,7 @@ import (
 )
 
 func TestCmdValidateOutput_OK(t *testing.T) {
-	input := `{"version": "0.3.1", "capabilities": "0.5.0"}`
+	input := `{"version": "0.3.1", "capabilities": "0.6.0"}`
 	var out, errb bytes.Buffer
 	err := cmdValidateOutputTo([]string{"--schema", "version"}, strings.NewReader(input), &out, &errb)
 	if err != nil {

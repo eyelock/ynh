@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/shared/harness.schema.json",
   "title": "Harness (shared)",
   "description": "Per-harness payload shapes shared by ynh ls, ynh info, ynh fork, and ynh installed. Defined once here, referenced by every command schema that surfaces a harness.",
-  "x-capabilities": "0.5",
+  "x-capabilities": "0.6",
   "$defs": {
     "Harness": {
       "type": "object",
