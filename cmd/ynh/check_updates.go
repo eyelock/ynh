@@ -154,7 +154,10 @@ func probeHarness(entry *listEntry, probe updateProbe, mu *sync.Mutex) {
 		//   sha_available — live ls-remote against the underlying git source
 		// They answer different questions ("has the registry entry moved?"
 		// vs "has the source moved since I installed?"). Consumers may want
-		// both — TermQ's badge logic can pick the stricter signal.
+		// both. Exception: when sha_available matches ref_installed (no
+		// drift), version_available is clamped to version_installed below —
+		// a stale marketplace.json version string must never contradict a
+		// live signal that says nothing changed.
 		if version, sha, ok := probe.registry(entry.Name, prov.Source, prov.Path); ok {
 			mu.Lock()
 			if version != "" {
@@ -169,6 +172,16 @@ func probeHarness(entry *listEntry, probe updateProbe, mu *sync.Mutex) {
 			if sha, ok := probe.git(prov.Source, prov.Ref); ok {
 				mu.Lock()
 				entry.SHAAvailable = sha
+				// The live SHA probe shows no drift since install — the
+				// source hasn't moved. A version_available that disagrees
+				// with version_installed here reflects a stale/unvalidated
+				// marketplace.json version string, not a real available
+				// update; clamp it so consumers don't offer an update (or
+				// worse, a downgrade) for a harness already at the
+				// upstream HEAD it was installed from.
+				if sha != "" && sha == entry.RefInstalled {
+					entry.VersionAvailable = entry.VersionInstalled
+				}
 				mu.Unlock()
 			}
 		}
