@@ -504,6 +504,8 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	}
 	if len(hj.MCPServers) > 0 {
 		p.MCPServers = hj.MCPServers
+	} else if fallback, err := plugin.LoadMCPJSON(dir); err == nil && len(fallback) > 0 {
+		p.MCPServers = fallback
 	}
 	if len(hj.Profiles) > 0 {
 		p.Profiles = hj.Profiles
