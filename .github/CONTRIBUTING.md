@@ -412,7 +412,7 @@ The resolver clones Git repos into `~/.ynh/cache/` using a deterministic directo
 
 ### Assembler
 
-The assembler builds a deterministic run directory (`~/.ynh/run/<name>/`) with the vendor's expected layout. It accepts the narrow `LayoutProvider` interface (not the full `Adapter`) and copies files from resolved content into the right artifact directories (e.g., `skills/` files go into `.claude/skills/`), and copies instructions (`instructions.md` or `AGENTS.md` as fallback) to the vendor's project instructions file (e.g., `CLAUDE.md`). After assembly, hook and MCP configs are generated via the adapter's `GenerateHookConfig()` and `GenerateMCPConfig()` methods, and plugin manifests via `GeneratePluginManifest()`. The run directory is cleaned and repopulated on each run. Two modes:
+The assembler builds a deterministic run directory (`~/.ynh/run/<idfsname>/`, e.g. `run/local--foo/`) with the vendor's expected layout. It accepts the narrow `LayoutProvider` interface (not the full `Adapter`) and copies files from resolved content into the right artifact directories (e.g., `skills/` files go into `.claude/skills/`), and copies instructions (`instructions.md` or `AGENTS.md` as fallback) to the vendor's project instructions file (e.g., `CLAUDE.md`). After assembly, hook and MCP configs are generated via the adapter's `GenerateHookConfig()` and `GenerateMCPConfig()` methods, and plugin manifests via `GeneratePluginManifest()`. The run directory is cleaned and repopulated on each run. Two modes:
 
 - **With pick list**: Only specified paths are copied
 - **Without pick list**: All recognized artifact directories are scanned and copied
@@ -538,7 +538,7 @@ When `ynh run` is invoked, the harness source is resolved in this order:
 2. **`--harness-file`**: `ynh run --harness-file path/.harness.json` → loads a legacy single-file manifest directly from the given path. Path-based, no canonical-id classification.
 3. **Auto-discovery**: bare `ynh run` → migrates the current working directory if needed, then loads `.ynh-plugin/plugin.json` from cwd.
 
-For `--harness-file` and auto-discovery, the harness is assembled into `~/.ynh/run/_inline-<hash>/` (hash of the source directory for stable run dirs). For positional refs, the run-dir is named after the manifest's bare `Name` field — keeping `~/.ynh/run/` paths flat (no `/` characters).
+For `--harness-file` and auto-discovery, the harness is assembled into `~/.ynh/run/_inline-<hash>/` (hash of the source directory for stable run dirs). For positional refs, the run-dir is the canonical id's fs name (`local/foo` → `~/.ynh/run/local--foo/`) — keeping `~/.ynh/run/` paths flat while giving same-named installs with distinct canonical ids distinct run dirs. While a bare name is unambiguous (one install claims it), run also maintains a legacy alias symlink (`run/<name>` → `<idfsname>`) so project symlinks planted before the id-keyed re-key keep resolving; when several installs claim the name the alias is removed and dangling project symlinks are re-planted on the next run (see `symlinkIntact`).
 
 ### Install Lifecycle
 
@@ -564,7 +564,7 @@ During install:
 - The source `.ynh-plugin/plugin.json` is never modified.
 
 At runtime:
-- `ynh run` reads the installed copy at `~/.ynh/harnesses/<idfsname>/.ynh-plugin/plugin.json` to resolve includes, delegates, and vendor settings. Run-dir naming uses the bare `name` field from the manifest, not the canonical id, so paths under `~/.ynh/run/` stay flat.
+- `ynh run` reads the installed copy at `~/.ynh/harnesses/<idfsname>/.ynh-plugin/plugin.json` to resolve includes, delegates, and vendor settings. Run-dir naming uses the canonical id's fs name (`run/<idfsname>/`), so same-named installs with distinct canonical ids can't clobber each other's assembled layouts or live sessions.
 - Cached repos are used as-is without hitting the network. If a cache entry is missing (e.g. manually cleared), ynh falls back to a network fetch with a warning.
 - Launchers at `~/.ynh/bin/<name>` invoke `ynh run "<canonical-id>" "$@"` — the schema-2 resolver rejects bare names, so the embedded ref must be the canonical id.
 

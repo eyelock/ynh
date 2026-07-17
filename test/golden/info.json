@@ -1,0 +1,26 @@
+{
+  "capabilities": "0.4.0",
+  "schema_version": 3,
+  "ynh_version": "0.3.1",
+  "harness": {
+    "id": "local/demo",
+    "name": "demo",
+    "kind": "local",
+    "version_installed": "1.0.0",
+    "default_vendor": "claude",
+    "path": "/Users/example/.ynh/harnesses/local--demo",
+    "is_pinned": false,
+    "installed_from": {
+      "source_type": "local",
+      "source": "/tmp/demo",
+      "installed_at": "2026-05-13T12:00:00Z"
+    },
+    "includes": [],
+    "delegates_to": [],
+    "manifest": {
+      "name": "demo",
+      "version": "1.0.0",
+      "default_vendor": "claude"
+    }
+  }
+}

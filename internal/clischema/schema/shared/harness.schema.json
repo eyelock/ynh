@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/shared/harness.schema.json",
+  "title": "Harness (shared)",
+  "description": "Per-harness payload shapes shared by ynh ls, ynh info, ynh fork, and ynh installed. Defined once here, referenced by every command schema that surfaces a harness.",
+  "x-capabilities": "0.4",
+  "$defs": {
+    "Harness": {
+      "type": "object",
+      "description": "The fields ynh ls emits per harness. ynh info extends this with a manifest field; ynh fork uses a narrower variant (see Fork).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Canonical, host-prefixed harness id. \"<host>/<org>/<repo>/<name>\" for remote installs, \"local/<name>\" for local/forked/aliased."
+        },
+        "name": {"type": "string"},
+        "namespace": {
+          "type": "string",
+          "description": "URL-derived \"<org>/<repo>\" for namespaced installs. Empty for flat/local. Back-compat only; new consumers should prefer id."
+        },
+        "kind": {
+          "type": "string",
+          "description": "Open-set classification: local-fork, local, registry, git, local-fork-broken, or \"-\" for pre-migration entries with no recorded source. Consumers MUST tolerate unknown values."
+        },
+        "version_installed": {"type": "string"},
+        "version_available": {"type": "string"},
+        "description": {"type": "string"},
+        "default_vendor": {"type": "string"},
+        "path": {"type": "string"},
+        "ref_installed": {"type": "string"},
+        "ref_available": {"type": "string"},
+        "sha_available": {
+          "type": "string",
+          "description": "Live upstream SHA for the harness source itself (probed via ls-remote). Distinct from ref_available, which for registry harnesses comes from the registry entry's recorded SHA."
+        },
+        "is_pinned": {"type": "boolean"},
+        "installed_from": {"$ref": "#/$defs/InstalledFrom"},
+        "artifacts": {"$ref": "#/$defs/Artifacts"},
+        "broken_reason": {
+          "type": "string",
+          "description": "Non-empty when the harness registration exists but the source could not be loaded. Kind is \"local-fork-broken\" in this case."
+        },
+        "includes": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/Include"}
+        },
+        "delegates_to": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/Delegate"}
+        }
+      },
+      "required": [
+        "id", "name", "kind", "version_installed", "default_vendor", "path",
+        "is_pinned", "artifacts", "includes", "delegates_to"
+      ],
+      "additionalProperties": false
+    },
+    "HarnessWithManifest": {
+      "type": "object",
+      "description": "Harness as emitted by ynh info — same fields as Harness plus the raw plugin.json manifest. Modeled separately rather than as allOf because the artifacts field is omitted in info per current emission.",
+      "properties": {
+        "id": {"type": "string"},
+        "name": {"type": "string"},
+        "namespace": {"type": "string"},
+        "kind": {"type": "string"},
+        "version_installed": {"type": "string"},
+        "version_available": {"type": "string"},
+        "description": {"type": "string"},
+        "default_vendor": {"type": "string"},
+        "path": {"type": "string"},
+        "ref_installed": {"type": "string"},
+        "ref_available": {"type": "string"},
+        "sha_available": {"type": "string"},
+        "is_pinned": {"type": "boolean"},
+        "installed_from": {"$ref": "#/$defs/InstalledFrom"},
+        "includes": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/Include"}
+        },
+        "delegates_to": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/Delegate"}
+        },
+        "manifest": {
+          "type": "object",
+          "description": "Raw plugin.json (passed through unmodified). Schema available at docs/schema/plugin.schema.json — not validated by this envelope.",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "id", "name", "kind", "version_installed", "default_vendor", "path",
+        "is_pinned", "includes", "delegates_to", "manifest"
+      ],
+      "additionalProperties": false
+    },
+    "InstalledFrom": {
+      "type": "object",
+      "description": "Provenance of the harness — where it came from, when, and (for forks) what it was forked from.",
+      "properties": {
+        "source_type": {
+          "$ref": "https://eyelock.github.io/ynh/schema/shared/enums.schema.json#/$defs/HarnessSource"
+        },
+        "source": {"type": "string"},
+        "ref": {"type": "string", "description": "Branch/tag/SHA recorded at install time — the ref this harness tracks."},
+        "sha": {"type": "string"},
+        "path": {"type": "string"},
+        "registry_name": {"type": "string"},
+        "installed_at": {"type": "string", "description": "ISO 8601 UTC timestamp."},
+        "forked_from": {"$ref": "#/$defs/ForkedFrom"}
+      },
+      "required": ["source_type", "source", "installed_at"],
+      "additionalProperties": false
+    },
+    "ForkedFrom": {
+      "type": "object",
+      "description": "Upstream provenance for a forked harness. Populated by ynh fork; absent otherwise.",
+      "properties": {
+        "source_type": {
+          "$ref": "https://eyelock.github.io/ynh/schema/shared/enums.schema.json#/$defs/HarnessSource"
+        },
+        "source": {"type": "string"},
+        "ref": {"type": "string"},
+        "sha": {"type": "string"},
+        "path": {"type": "string"},
+        "registry_name": {"type": "string"},
+        "version": {"type": "string"}
+      },
+      "required": ["source_type", "source"],
+      "additionalProperties": false
+    },
+    "Artifacts": {
+      "type": "object",
+      "description": "Per-kind artifact counts for the harness, summed across the harness root and any resolved includes/delegates.",
+      "properties": {
+        "skills": {"type": "integer"},
+        "agents": {"type": "integer"},
+        "rules": {"type": "integer"},
+        "commands": {"type": "integer"}
+      },
+      "required": ["skills", "agents", "rules", "commands"],
+      "additionalProperties": false
+    },
+    "Include": {
+      "type": "object",
+      "description": "Git include reference declared by the harness manifest.",
+      "properties": {
+        "git": {"type": "string"},
+        "ref_installed": {"type": "string"},
+        "ref_available": {"type": "string"},
+        "is_pinned": {"type": "boolean"},
+        "path": {"type": "string"},
+        "pick": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Per-include allowlist of relative paths."
+        }
+      },
+      "required": ["git", "is_pinned"],
+      "additionalProperties": false
+    },
+    "Delegate": {
+      "type": "object",
+      "description": "Git delegate reference declared by the harness manifest.",
+      "properties": {
+        "git": {"type": "string"},
+        "ref_installed": {"type": "string"},
+        "ref_available": {"type": "string"},
+        "is_pinned": {"type": "boolean"},
+        "path": {"type": "string"}
+      },
+      "required": ["git", "is_pinned"],
+      "additionalProperties": false
+    }
+  }
+}

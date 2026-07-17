@@ -279,6 +279,22 @@ dist/
 
 See [Tutorial 11: Marketplace](tutorial/06-marketplace.md) for a guided walkthrough.
 
+### validate-output
+
+Validate a captured JSON response on stdin against a published CLI schema. Exits 0 on success, non-zero on validation failure (prints the first divergence to stderr).
+
+```bash
+ynh ls --format json | ynd validate-output --schema list
+ynh version --format json | ynd validate-output --schema version
+```
+
+| Flag | Description |
+|------|-------------|
+| `--schema <name>` | Required. Schema name (e.g. `list`, `info`, `version`, `installed`, `error`). |
+| `-h, --help` | Show help |
+
+Schemas are embedded in the binary — `ynh schema <name>` and `ynh schema --all --format json` are the discovery side. See [Published JSON Schemas](schema-cli.md) for the full contract.
+
 ## Common Options
 
 | Flag | Commands | Description |

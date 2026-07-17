@@ -1,0 +1,9 @@
+{
+  "home": "/Users/example/.ynh",
+  "config": "/Users/example/.ynh/config.json",
+  "harnesses": "/Users/example/.ynh/harnesses",
+  "symlinks": "/Users/example/.ynh/symlinks.json",
+  "cache": "/Users/example/.ynh/cache",
+  "run": "/Users/example/.ynh/run",
+  "bin": "/Users/example/.ynh/bin"
+}

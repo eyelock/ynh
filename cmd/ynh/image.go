@@ -26,21 +26,27 @@ type imageTemplateData struct {
 
 // imageDockerfileTmpl is the Dockerfile template for harness images.
 // It layers pre-assembled vendor layouts on top of the base ynh image.
+//
+// All baked paths use the canonical-id layout: the harness source lands at
+// the schema-2 install path (harnesses/local--<name>) and vendor layouts at
+// the id-keyed run dirs (run/local--<name>/<vendor>), so the entrypoint's
+// "ynh run local/<name>" resolves them directly. The entrypoint must be a
+// canonical id — LoadQualified hard-rejects bare names.
 var imageDockerfileTmpl = template.Must(template.New("Dockerfile").Parse(`FROM {{.Base}}
 
 # Pre-assembled vendor layouts (all three, ready to use)
-COPY --link --chown=ynh:ynh vendors/claude/ /home/ynh/.ynh/run/{{.Name}}/claude/
-COPY --link --chown=ynh:ynh vendors/codex/ /home/ynh/.ynh/run/{{.Name}}/codex/
-COPY --link --chown=ynh:ynh vendors/cursor/ /home/ynh/.ynh/run/{{.Name}}/cursor/
+COPY --link --chown=ynh:ynh vendors/claude/ /home/ynh/.ynh/run/local--{{.Name}}/claude/
+COPY --link --chown=ynh:ynh vendors/codex/ /home/ynh/.ynh/run/local--{{.Name}}/codex/
+COPY --link --chown=ynh:ynh vendors/cursor/ /home/ynh/.ynh/run/local--{{.Name}}/cursor/
 
 # Harness source (metadata for ynh run)
-COPY --link --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/{{.Name}}/
+COPY --link --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--{{.Name}}/
 
 # Default vendor (override: docker run -e YNH_VENDOR=codex)
 ENV YNH_VENDOR={{.DefaultVendor}}
 
 # Baked entrypoint — just pass the prompt as CMD
-ENTRYPOINT ["tini", "-s", "--", "ynh", "run", "{{.Name}}"]
+ENTRYPOINT ["tini", "-s", "--", "ynh", "run", "local/{{.Name}}"]
 CMD []
 
 LABEL dev.ynh.harness="{{.Name}}" \

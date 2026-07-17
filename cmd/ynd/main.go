@@ -43,6 +43,8 @@ func main() {
 		err = cmdMarketplace(os.Args[2:])
 	case "migrate":
 		err = cmdMigrate(os.Args[2:])
+	case "validate-output":
+		err = cmdValidateOutput(os.Args[2:])
 	case "version", "--version", "-v":
 		err = cmdVersion(os.Args[2:])
 	case "help", "--help", "-h":
@@ -80,6 +82,8 @@ Commands:
   diff <source> [vendors]    Compare assembled output across vendors
   marketplace build          Build a vendor-native marketplace from marketplace.json
   migrate <path>             Convert .harness.json → .ynh-plugin/plugin.json in-place
+  validate-output --schema <name> [< file.json]
+                             Validate JSON on stdin against the named CLI schema
   version                    Print version
   help                       Show this help
 

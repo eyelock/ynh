@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/shared/envelope.schema.json",
+  "title": "Envelope (shared)",
+  "description": "Base envelope shared by every list/info-style structured response. Carries the wire-protocol capabilities version and the ynh release version. Envelopes use additionalProperties: true so new top-level fields can be added without a capabilities bump.",
+  "x-capabilities": "0.4",
+  "$defs": {
+    "Envelope": {
+      "type": "object",
+      "description": "Required envelope fields. Concrete responses extend this with their payload field (e.g. harnesses[], harness{}, vendors[]).",
+      "properties": {
+        "capabilities": {
+          "type": "string",
+          "description": "Wire-protocol version. Bumped when a structured response changes shape in a way consumers must adapt to. See CLAUDE.md capability-bump rule."
+        },
+        "ynh_version": {
+          "type": "string",
+          "description": "The ynh binary release version that produced this response. Informational; does not gate behaviour."
+        },
+        "schema_version": {
+          "type": "integer",
+          "description": "On-disk schema version of ~/.ynh. Distinct from capabilities: consumers gate format-level decisions (e.g. has migration run?) on schema_version. Optional in envelopes that have no on-disk dependency."
+        }
+      },
+      "required": ["capabilities", "ynh_version"]
+    }
+  }
+}

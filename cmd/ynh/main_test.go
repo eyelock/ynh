@@ -11,6 +11,8 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/symlink"
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 func TestParseRunArgs(t *testing.T) {
@@ -485,10 +487,11 @@ func installTestHarness(t *testing.T, name string) string {
 		t.Fatal(err)
 	}
 
-	// Create run directory
-	runDir := filepath.Join(config.RunDir(), name)
-	if err := os.MkdirAll(runDir, 0o755); err != nil {
-		t.Fatal(err)
+	// Create run directories: legacy bare-name path and id-keyed path
+	for _, dir := range []string{name, "local--" + name} {
+		if err := os.MkdirAll(filepath.Join(config.RunDir(), dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return id
 }
@@ -520,10 +523,12 @@ func TestCmdUninstall_RemovesEverything(t *testing.T) {
 		t.Error("launcher still exists after uninstall")
 	}
 
-	// Run dir should be gone
-	runDir := filepath.Join(config.RunDir(), "david")
-	if _, err := os.Stat(runDir); !os.IsNotExist(err) {
-		t.Error("run directory still exists after uninstall")
+	// Run dirs should be gone — both the legacy bare-name path and the
+	// id-keyed path
+	for _, dir := range []string{"david", "local--david"} {
+		if _, err := os.Stat(filepath.Join(config.RunDir(), dir)); !os.IsNotExist(err) {
+			t.Errorf("run directory %q still exists after uninstall", dir)
+		}
 	}
 }
 
@@ -621,6 +626,335 @@ func TestCmdUninstall_RemovesSourcesEntry(t *testing.T) {
 	}
 	if len(loaded.Sources) != 1 || loaded.Sources[0].Name != "other" {
 		t.Errorf("unexpected sources after uninstall: %+v", loaded.Sources)
+	}
+}
+
+// installSharedBareNameFixtures sets up two installs that share the bare
+// name "foo" but have distinct canonical ids — a schema-1 pointer
+// registration ("local/foo") and a schema-2 git tree
+// ("github.com/org/repo/foo") — plus the bare-name-shared resources:
+// launcher (targeting the git install), run dir, and a sources entry.
+// Returns the git install's tree directory.
+func installSharedBareNameFixtures(t *testing.T) string {
+	t.Helper()
+
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pointer install: local/foo → source tree with a valid manifest.
+	srcDir := t.TempDir()
+	pluginDir := filepath.Join(srcDir, ".ynh-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"),
+		[]byte(`{"name":"foo","version":"1.0.0","default_vendor":"claude"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := harness.SavePointer(&harness.Pointer{
+		Name: "foo",
+		InstalledJSON: plugin.InstalledJSON{
+			SourceType:  "local",
+			Source:      srcDir,
+			InstalledAt: "2026-05-01T00:00:00Z",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Tree install: github.com/org/repo/foo at the schema-2 id-keyed path.
+	treeDir := harness.InstalledDirByID("github.com/org/repo/foo")
+	treePluginDir := filepath.Join(treeDir, ".ynh-plugin")
+	if err := os.MkdirAll(treePluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(treePluginDir, "plugin.json"),
+		[]byte(`{"name":"foo","version":"1.0.0","default_vendor":"claude"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Launcher targets the git install (installed last, regenerated last).
+	if err := os.MkdirAll(config.BinDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	launcher := "#!/bin/bash\nexec ynh run \"github.com/org/repo/foo\" \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(config.BinDir(), "foo"), []byte(launcher), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Id-keyed run dirs for both installs, plus the legacy bare-name alias
+	// pointing at the git install (run last). See updateLegacyRunAlias.
+	for _, fsName := range []string{"local--foo", "github.com--org--repo--foo"} {
+		if err := os.MkdirAll(filepath.Join(config.RunDir(), fsName), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink("github.com--org--repo--foo", filepath.Join(config.RunDir(), "foo")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bare-name sources entry.
+	cfg := &config.Config{Sources: []config.Source{{Name: "foo", Path: srcDir}}}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+	return treeDir
+}
+
+// Uninstalling one of two same-named installs must not destroy the
+// bare-name-shared resources (launcher, run dir, sources entry) the other
+// install still uses.
+func TestCmdUninstall_SharedBareName_PreservesOtherInstallResources(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	treeDir := installSharedBareNameFixtures(t)
+
+	// Remove only the local pointer registration.
+	if err := cmdUninstall([]string{"local/foo"}); err != nil {
+		t.Fatalf("cmdUninstall local/foo failed: %v", err)
+	}
+
+	if _, err := os.Stat(harness.PointerPath("foo")); !os.IsNotExist(err) {
+		t.Errorf("pointer still exists after uninstall: err=%v", err)
+	}
+	if _, err := os.Stat(treeDir); err != nil {
+		t.Errorf("surviving git install tree was removed: %v", err)
+	}
+
+	// Launcher must survive and still target the surviving install.
+	body, err := os.ReadFile(filepath.Join(config.BinDir(), "foo"))
+	if err != nil {
+		t.Fatalf("launcher was removed despite surviving install: %v", err)
+	}
+	if !strings.Contains(string(body), `"github.com/org/repo/foo"`) {
+		t.Errorf("launcher no longer targets surviving install; got:\n%s", body)
+	}
+
+	// The removed install's id-keyed run dir goes; the survivor's stays,
+	// and the legacy alias still targets the survivor.
+	if _, err := os.Stat(filepath.Join(config.RunDir(), "local--foo")); !os.IsNotExist(err) {
+		t.Errorf("uninstalled install's run dir still exists: err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(config.RunDir(), "github.com--org--repo--foo")); err != nil {
+		t.Errorf("surviving install's run dir was removed: %v", err)
+	}
+	if target, err := os.Readlink(filepath.Join(config.RunDir(), "foo")); err != nil || target != "github.com--org--repo--foo" {
+		t.Errorf("legacy run alias disturbed: target=%q err=%v", target, err)
+	}
+	loaded, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Sources) != 1 || loaded.Sources[0].Name != "foo" {
+		t.Errorf("sources entry was removed despite surviving install: %+v", loaded.Sources)
+	}
+}
+
+// Uninstalling the install the launcher targets must regenerate the launcher
+// for the survivor — and once the last same-named install goes, the shared
+// resources must be cleaned up as before.
+func TestCmdUninstall_SharedBareName_RepointsLauncherToSurvivor(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	treeDir := installSharedBareNameFixtures(t)
+
+	// Remove the git install — the one the launcher targets.
+	if err := cmdUninstall([]string{"github.com/org/repo/foo"}); err != nil {
+		t.Fatalf("cmdUninstall github.com/org/repo/foo failed: %v", err)
+	}
+
+	if _, err := os.Stat(treeDir); !os.IsNotExist(err) {
+		t.Errorf("git install tree still exists after uninstall: err=%v", err)
+	}
+	if _, err := os.Stat(harness.PointerPath("foo")); err != nil {
+		t.Errorf("surviving pointer registration was removed: %v", err)
+	}
+
+	// Launcher must be regenerated to target the surviving local install.
+	body, err := os.ReadFile(filepath.Join(config.BinDir(), "foo"))
+	if err != nil {
+		t.Fatalf("launcher was removed despite surviving install: %v", err)
+	}
+	if !strings.Contains(string(body), `"local/foo"`) {
+		t.Errorf("launcher not repointed to surviving install; got:\n%s", body)
+	}
+
+	// The removed install's id-keyed run dir goes; the survivor's stays.
+	// The legacy alias targeted the removed install — it must be repointed
+	// to the sole survivor.
+	if _, err := os.Stat(filepath.Join(config.RunDir(), "github.com--org--repo--foo")); !os.IsNotExist(err) {
+		t.Errorf("uninstalled install's run dir still exists: err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(config.RunDir(), "local--foo")); err != nil {
+		t.Errorf("surviving install's run dir was removed: %v", err)
+	}
+	if target, err := os.Readlink(filepath.Join(config.RunDir(), "foo")); err != nil || target != "local--foo" {
+		t.Errorf("legacy run alias not repointed to survivor: target=%q err=%v", target, err)
+	}
+
+	// Last one out: removing the surviving install cleans up everything.
+	if err := cmdUninstall([]string{"local/foo"}); err != nil {
+		t.Fatalf("cmdUninstall local/foo failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(config.BinDir(), "foo")); !os.IsNotExist(err) {
+		t.Errorf("launcher still exists after last uninstall: err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(config.RunDir(), "local--foo")); !os.IsNotExist(err) {
+		t.Errorf("id-keyed run dir still exists after last uninstall: err=%v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(config.RunDir(), "foo")); !os.IsNotExist(err) {
+		t.Errorf("legacy run alias still exists after last uninstall: err=%v", err)
+	}
+	loaded, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range loaded.Sources {
+		if s.Name == "foo" {
+			t.Errorf("sources entry still present after last uninstall: %+v", loaded.Sources)
+		}
+	}
+}
+
+// updateLegacyRunAlias must plant the bare-name alias for a single-claimant
+// name, repoint it when the target changes, and replace a stale pre-re-key
+// real directory.
+func TestUpdateLegacyRunAlias_PlantsRepointsAndReplaces(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+	installTestHarness(t, "foo") // single claimant of "foo"
+	alias := filepath.Join(config.RunDir(), "foo")
+	// installTestHarness pre-creates run/foo as a real dir (legacy layout);
+	// the first alias update must replace it.
+	updateLegacyRunAlias("foo", "local--foo")
+	if target, err := os.Readlink(alias); err != nil || target != "local--foo" {
+		t.Fatalf("alias not planted over stale real dir: target=%q err=%v", target, err)
+	}
+	// Repoint to a different id-keyed dir.
+	updateLegacyRunAlias("foo", "github.com--org--repo--foo")
+	if target, err := os.Readlink(alias); err != nil || target != "github.com--org--repo--foo" {
+		t.Fatalf("alias not repointed: target=%q err=%v", target, err)
+	}
+}
+
+// With several installs claiming the bare name, the alias is ambiguous and
+// must be removed, not silently re-bound.
+func TestUpdateLegacyRunAlias_AmbiguousRemovesAlias(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	installSharedBareNameFixtures(t) // two installs named "foo", alias planted
+
+	alias := filepath.Join(config.RunDir(), "foo")
+	updateLegacyRunAlias("foo", "local--foo")
+	if _, err := os.Lstat(alias); !os.IsNotExist(err) {
+		t.Errorf("ambiguous alias should be removed: err=%v", err)
+	}
+}
+
+// findPreassembledVendorDir must prefer the id-keyed baked layout and fall
+// back to the legacy bare-name layout for images baked by older ynh.
+func TestFindPreassembledVendorDir_LegacyFallback(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Nothing baked: not found.
+	if dir, ok := findPreassembledVendorDir("local--foo", "foo", "claude"); ok {
+		t.Fatalf("expected no pre-assembled dir, got %q", dir)
+	}
+
+	// Legacy bare-name layout only (old image): found via fallback.
+	legacy := filepath.Join(config.RunDir(), "foo", "claude")
+	if err := os.MkdirAll(legacy, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if dir, ok := findPreassembledVendorDir("local--foo", "foo", "claude"); !ok || dir != legacy {
+		t.Fatalf("legacy fallback failed: dir=%q ok=%v", dir, ok)
+	}
+
+	// Id-keyed layout present: preferred over legacy.
+	idKeyed := filepath.Join(config.RunDir(), "local--foo", "claude")
+	if err := os.MkdirAll(idKeyed, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if dir, ok := findPreassembledVendorDir("local--foo", "foo", "claude"); !ok || dir != idKeyed {
+		t.Fatalf("id-keyed layout not preferred: dir=%q ok=%v", dir, ok)
+	}
+}
+
+// A symlink whose target is gone (run dir removed or re-keyed) must not
+// count as intact — ynh run uses this to re-plant project symlinks.
+func TestSymlinkIntact_DanglingNotIntact(t *testing.T) {
+	dir := t.TempDir()
+
+	target := filepath.Join(dir, "target")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	inst := &symlink.Installation{
+		Symlinks: []vendor.SymlinkEntry{{Target: target, Link: link}},
+	}
+	if !symlinkIntact(inst) {
+		t.Fatal("live symlink should be intact")
+	}
+
+	// Remove the target: the link now dangles.
+	if err := os.RemoveAll(target); err != nil {
+		t.Fatal(err)
+	}
+	if symlinkIntact(inst) {
+		t.Error("dangling symlink should not be intact")
+	}
+}
+
+// Prune must keep id-keyed run dirs and the legacy bare-name alias of
+// installed harnesses, and still remove genuinely stale run dirs.
+func TestCmdPrune_RunDirKeying(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+
+	installTestHarness(t, "foo")
+	// installTestHarness creates run/foo (real dir) and run/local--foo.
+	// Replace the legacy real dir with the alias form and add an orphan.
+	if err := os.RemoveAll(filepath.Join(config.RunDir(), "foo")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("local--foo", filepath.Join(config.RunDir(), "foo")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(config.RunDir(), "orphan"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cmdPrune(); err != nil {
+		t.Fatalf("cmdPrune failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(config.RunDir(), "local--foo")); err != nil {
+		t.Errorf("id-keyed run dir of installed harness was pruned: %v", err)
+	}
+	if target, err := os.Readlink(filepath.Join(config.RunDir(), "foo")); err != nil || target != "local--foo" {
+		t.Errorf("legacy run alias of installed harness was pruned: target=%q err=%v", target, err)
+	}
+	if _, err := os.Stat(filepath.Join(config.RunDir(), "orphan")); !os.IsNotExist(err) {
+		t.Errorf("stale run dir survived prune: err=%v", err)
 	}
 }
 
@@ -1041,7 +1375,7 @@ func TestCmdStatus_Empty(t *testing.T) {
 	t.Setenv("HOME", dir)
 	t.Setenv("YNH_HOME", "")
 
-	if err := cmdStatus(); err != nil {
+	if err := cmdStatus(nil); err != nil {
 		t.Fatalf("cmdStatus failed: %v", err)
 	}
 }

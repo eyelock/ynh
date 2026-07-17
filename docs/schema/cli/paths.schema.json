@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/paths.schema.json",
+  "title": "ynh paths --format json",
+  "description": "Output of `ynh paths --format json`. Resolved path roots used by ynh. All paths are absolute and fully resolved. Envelope retrofit deferred.",
+  "x-capabilities": "0.4",
+  "type": "object",
+  "properties": {
+    "home": {"type": "string", "description": "$YNH_HOME or ~/.ynh."},
+    "config": {"type": "string"},
+    "harnesses": {"type": "string"},
+    "symlinks": {"type": "string"},
+    "cache": {"type": "string"},
+    "run": {"type": "string"},
+    "bin": {"type": "string"}
+  },
+  "required": ["home", "config", "harnesses", "symlinks", "cache", "run", "bin"],
+  "additionalProperties": false
+}

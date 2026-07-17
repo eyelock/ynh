@@ -1,0 +1,8 @@
+[
+  {
+    "url": "https://github.com/eyelock/ynh-registry",
+    "ref": "main",
+    "name": "eyelock",
+    "description": "Default ynh registry"
+  }
+]

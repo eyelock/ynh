@@ -654,6 +654,30 @@ func TestValidateHarness_HooksUnknownEvent(t *testing.T) {
 	}
 }
 
+func TestHookEventMessage(t *testing.T) {
+	tests := []struct {
+		event       string
+		wantContain string
+	}{
+		{"PreToolUse", "before_tool"},
+		{"PostToolUse", "after_tool"},
+		{"afterFileEdit", "after_tool"},
+		{"stop", "on_stop"},
+		{"totally_made_up", "unknown event"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.event, func(t *testing.T) {
+			got := hookEventMessage(tt.event)
+			if !strings.Contains(got, tt.wantContain) {
+				t.Errorf("hookEventMessage(%q) = %q, want contains %q", tt.event, got, tt.wantContain)
+			}
+			if _, isVendor := vendorHookEventNames[tt.event]; isVendor && !strings.Contains(got, "vendor-native") {
+				t.Errorf("vendor name %q should yield a vendor-native hint, got %q", tt.event, got)
+			}
+		})
+	}
+}
+
 func TestValidateHarness_HooksEmptyCommand(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)

@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/clischema"
 )
 
 func TestCmdInfoTextSuccess(t *testing.T) {
@@ -536,5 +538,37 @@ func TestCmdInfoTextNoVendor(t *testing.T) {
 
 	if !strings.Contains(stdout.String(), "Vendor:       -") {
 		t.Error("expected dash for missing vendor")
+	}
+}
+
+// TestCmdInfoJSON_SchemaRoundTrip validates real ynh info output against
+// the published info schema.
+func TestCmdInfoJSON_SchemaRoundTrip(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "rt", `{
+		"name": "rt",
+		"version": "0.1.0",
+		"default_vendor": "claude",
+		"installed_from": {
+			"source_type": "local",
+			"source": "/tmp/rt",
+			"installed_at": "2026-05-13T12:00:00Z"
+		}
+	}`)
+	var stdout bytes.Buffer
+	if err := cmdInfoTo([]string{"--format", "json", "local/rt"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+	var v any
+	if err := json.Unmarshal(stdout.Bytes(), &v); err != nil {
+		t.Fatalf("unmarshal: %v\noutput: %s", err, stdout.String())
+	}
+	schema, err := clischema.Get("info")
+	if err != nil {
+		t.Fatalf("Get info schema: %v", err)
+	}
+	if err := schema.Validate(v); err != nil {
+		t.Errorf("info JSON does not validate: %v\noutput: %s", err, stdout.String())
 	}
 }

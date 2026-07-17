@@ -221,6 +221,8 @@ Requires Docker installed and running.
 | T16.9 | List harnesses — jq extraction | [T16.9](tutorial/16-structured-output.md#t169-list-harnesses--extract-with-jq) |
 | T16.10 | Empty list — JSON | [T16.10](tutorial/16-structured-output.md#t1610-empty-list--json) |
 | T16.11 | YNH_HOME override | [T16.11](tutorial/16-structured-output.md#t1611-ynh_home-override) |
+| T16.13 | Inspect install provenance | [T16.13](tutorial/16-structured-output.md#t1613-inspect-install-provenance) |
+| T16.14 | Validate output against the published schema | [T16.14](tutorial/16-structured-output.md#t1614-validate-output-against-the-published-schema) |
 
 ---
 

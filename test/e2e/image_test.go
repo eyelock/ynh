@@ -25,7 +25,7 @@ func TestImage_DryRun(t *testing.T) {
 		"COPY --link --chown=ynh:ynh vendors/cursor/",
 		"ENV YNH_VENDOR=claude",
 		`dev.ynh.harness="imaged"`,
-		`ENTRYPOINT ["tini", "-s", "--", "ynh", "run", "imaged"]`,
+		`ENTRYPOINT ["tini", "-s", "--", "ynh", "run", "local/imaged"]`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("Dockerfile missing line %q\n--- got ---\n%s", want, out)

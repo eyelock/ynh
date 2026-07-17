@@ -116,6 +116,11 @@ func printInfoText(w io.Writer, name string) error {
 		vendorName = "-"
 	}
 
+	// ID is the canonical, host-prefixed id — what every other ynh command
+	// accepts. Surface it first so users copying from info land on the
+	// form that works against run/installed/uninstall/update. Name stays
+	// for human readability but is intentionally secondary.
+	_, _ = fmt.Fprintf(w, "ID:           %s\n", name)
 	_, _ = fmt.Fprintf(w, "Name:         %s\n", p.Name)
 	_, _ = fmt.Fprintf(w, "Vendor:       %s\n", vendorName)
 

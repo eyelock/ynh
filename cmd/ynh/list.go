@@ -199,18 +199,25 @@ func printListText(w io.Writer) error {
 	}
 
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "NAME\tKIND\tVENDOR\tSOURCE\tARTIFACTS\tINCLUDES\tDELEGATES TO")
+	// ID column carries the canonical id — `local/<name>` or
+	// `<host>/<org>/<repo>/<name>` — because that's what every harness-
+	// targeting command (info, run, installed, uninstall, update) accepts.
+	// Showing the bare name here invited users to copy it and hit "not
+	// installed" errors; eradicated in the structured-output overhaul and
+	// kept out here.
+	_, _ = fmt.Fprintln(tw, "ID\tKIND\tVENDOR\tSOURCE\tARTIFACTS\tINCLUDES\tDELEGATES TO")
 
 	for _, e := range entries {
+		id := canonicalIDForEntry(e)
 		// For pointer-form installs (local harnesses), load via the pointer first
 		// so provenance is included. Fall back to LoadDir for tree-form installs.
-		p, err := harness.LoadByID(canonicalIDForEntry(e))
+		p, err := harness.LoadByID(id)
 		if err != nil {
 			// Not a pointer-form install; try loading as a tree-form install
 			p, err = harness.LoadDir(e.Dir)
 		}
 		if err != nil {
-			_, _ = fmt.Fprintf(tw, "%s\t(error: %v)\t\t\t\t\t\n", e.Name, err)
+			_, _ = fmt.Fprintf(tw, "%s\t(error: %v)\t\t\t\t\t\n", id, err)
 			continue
 		}
 
@@ -225,7 +232,7 @@ func printListText(w io.Writer) error {
 		includes := formatIncludes(p.Includes)
 		delegates := formatDelegates(p.DelegatesTo)
 
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", p.Name, kind, vendorName, source, artifacts, includes, delegates)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", id, kind, vendorName, source, artifacts, includes, delegates)
 	}
 
 	return tw.Flush()

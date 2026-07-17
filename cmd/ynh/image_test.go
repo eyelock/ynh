@@ -154,15 +154,17 @@ func TestGenerateDockerfile(t *testing.T) {
 		t.Fatalf("generateDockerfile failed: %v", err)
 	}
 
-	// Check key lines are present
+	// Check key lines are present. Baked paths use the canonical-id layout
+	// (run/local--<name>, harnesses/local--<name>) and the entrypoint passes
+	// a canonical id — LoadQualified rejects bare names.
 	checks := []string{
 		"FROM ghcr.io/eyelock/ynh:latest",
-		"vendors/claude/ /home/ynh/.ynh/run/david/claude/",
-		"vendors/codex/ /home/ynh/.ynh/run/david/codex/",
-		"vendors/cursor/ /home/ynh/.ynh/run/david/cursor/",
-		"harness/ /home/ynh/.ynh/harnesses/david/",
+		"vendors/claude/ /home/ynh/.ynh/run/local--david/claude/",
+		"vendors/codex/ /home/ynh/.ynh/run/local--david/codex/",
+		"vendors/cursor/ /home/ynh/.ynh/run/local--david/cursor/",
+		"harness/ /home/ynh/.ynh/harnesses/local--david/",
 		"ENV YNH_VENDOR=claude",
-		`ENTRYPOINT ["tini", "-s", "--", "ynh", "run", "david"]`,
+		`ENTRYPOINT ["tini", "-s", "--", "ynh", "run", "local/david"]`,
 		`dev.ynh.harness="david"`,
 		`dev.ynh.harness.default-vendor="claude"`,
 		`dev.ynh.assembled-by="v1.2.3"`,

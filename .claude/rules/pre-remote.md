@@ -23,7 +23,16 @@ If the changeset affects assembled output (`internal/assembler/`, `internal/harn
 - Run `ynd preview` or equivalent and verify the output looks correct
 - Clean up the test harness
 
-## Gate 4: CI after push
+## Gate 4: Capability-bump rule (structured output)
+
+If the changeset affects the JSON shape of any `--format json` response (envelope fields, payload fields, error envelope fields, enum members), apply the capability-bump rule in `CLAUDE.md`:
+
+- Removing/renaming a field, narrowing a type, tightening an enum, or making optional required → bump `config.CapabilitiesVersion`, update goldens, update `docs/schema/cli/` schema.
+- Adding an optional field, adding an enum member to an open-set enum, or relaxing a constraint → no bump required, but goldens/schema must still reflect the new shape.
+
+If unsure whether a change qualifies, treat it as a bump.
+
+## Gate 5: CI after push
 
 After pushing and creating a PR, run `gh pr checks <number> --watch` and wait for CI to pass before merging. If CI is still running, tell the user and wait. Never merge without green CI.
 

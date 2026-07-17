@@ -6,7 +6,7 @@ ynh is a harness template manager for AI coding assistants (Claude Code, OpenAI 
 
 ## Two Binaries
 
-- **`ynh`** (`cmd/ynh/`) — Harness manager: init, install, uninstall, update, run, ls, info, vendors, search, registry, image, status, prune
+- **`ynh`** (`cmd/ynh/`) — Harness manager: init, install, uninstall, update, run, ls, info, vendors, search, registry, image, status, prune, hook, doctor
 - **`ynd`** (`cmd/ynd/`) — Developer tools: create, lint, validate, fmt, compress, inspect
 
 Both built by `make build`, released together via goreleaser (single `v*` tag).
@@ -77,6 +77,27 @@ This applies to everything — code, docs, tutorials. Pushing a fix that hasn't 
 - Standard `testing` package, `t.TempDir()`, `t.Setenv()` for isolation
 - errcheck is strict — all returned errors must be checked
 - Coverage target: 90%+ on testable code
+
+## Capability-Bump Rule
+
+`config.CapabilitiesVersion` is the wire-protocol version every structured response carries. Bump it when consumers must adapt. Do not bump it for additive changes.
+
+**Bumps `CapabilitiesVersion`:**
+- Removing a field from any structured response
+- Renaming a field
+- Changing a field's type
+- Narrowing a type (e.g. `string` → `enum`)
+- Tightening an enum (removing a member)
+- Making an optional field required
+- Changing the meaning of an existing field value
+
+**Does NOT bump:**
+- Adding an optional field
+- Adding a new enum member to an open-set enum (consumers MUST tolerate unknowns per `docs/cli-structured.md`)
+- Adding a new schema entirely
+- Relaxing a constraint
+
+Any change that bumps capabilities MUST also update goldens under `test/golden/<command>.json` and the relevant schema under `docs/schema/cli/`.
 
 ## Environment Variables
 

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/shared/enums.schema.json",
+  "title": "Shared enum vocabulary",
+  "description": "Stable enum vocabulary referenced by multiple schemas. Only enums backed by Go consts with a finite set live here; open-set strings stay as plain string. Consumers MUST tolerate unknown enum members (additive-compat) — adding a member is not a capabilities bump.",
+  "x-capabilities": "0.4",
+  "$defs": {
+    "HarnessSource": {
+      "type": "string",
+      "description": "Where a harness was installed from, as written by install_resolve. `local` = bare path; `git` = git URL; `registry` = configured registry; `source` = configured ynh-sources entry (resolves a name, not a path — distinct from `local`). Forks are recorded as `local` with a `forked_from` sibling; there is no separate `fork` source_type.",
+      "enum": ["local", "git", "registry", "source"]
+    },
+    "UpdateState": {
+      "type": "string",
+      "description": "Update status of an installed harness against its upstream.",
+      "enum": ["none", "versioned", "unversioned-drift"]
+    },
+    "ErrorCategory": {
+      "type": "string",
+      "description": "Coarse classification of an error for routing/retry decisions. Consumers map this to their own error model (e.g. MCP error codes).",
+      "enum": ["not-found", "validation", "network", "permission", "internal"]
+    },
+    "ErrorCode": {
+      "type": "string",
+      "description": "Stable error code identifier. Closed enum — adding a new code is a schema PR. Tightening enforcement that a code never changes meaning once shipped.",
+      "enum": [
+        "invalid_input",
+        "not_found",
+        "config_error",
+        "io_error"
+      ]
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/fork.schema.json",
+  "title": "ynh fork <name> --format json",
+  "description": "Output of `ynh fork <name> [--to <path>] [--name <new>] --format json`. Single-result envelope describing the forked harness.",
+  "x-capabilities": "0.4",
+  "$defs": {
+    "Fork": {
+      "type": "object",
+      "description": "Successful fork result. installed_from carries the upstream provenance via its forked_from field.",
+      "properties": {
+        "capabilities": {"type": "string"},
+        "ynh_version": {"type": "string"},
+        "name": {"type": "string"},
+        "path": {"type": "string"},
+        "installed_from": {
+          "$ref": "https://eyelock.github.io/ynh/schema/shared/harness.schema.json#/$defs/InstalledFrom"
+        }
+      },
+      "required": ["capabilities", "ynh_version", "name", "path"]
+    }
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/Fork"},
+    {"$ref": "https://eyelock.github.io/ynh/schema/cli/error.schema.json"}
+  ]
+}

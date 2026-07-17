@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/search.schema.json",
+  "title": "ynh search <term> --format json",
+  "description": "Output of `ynh search <term> --format json`. Currently emits a bare array of search results — does not yet use the {capabilities, ynh_version, ...} envelope. Envelope retrofit is a separate, capabilities-bumping change tracked outside this plan.",
+  "x-capabilities": "0.4",
+  "$defs": {
+    "SearchResult": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "string", "description": "Canonical host-prefixed harness id this result would install as."},
+        "name": {"type": "string"},
+        "namespace": {"type": "string"},
+        "description": {"type": "string"},
+        "keywords": {"type": "array", "items": {"type": "string"}},
+        "repo": {"type": "string"},
+        "path": {"type": "string"},
+        "version": {"type": "string"},
+        "from": {
+          "type": "object",
+          "properties": {
+            "type": {"type": "string", "enum": ["registry", "source"]},
+            "name": {"type": "string"}
+          },
+          "required": ["type", "name"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["id", "name", "from"],
+      "additionalProperties": false
+    }
+  },
+  "type": "array",
+  "items": {"$ref": "#/$defs/SearchResult"}
+}

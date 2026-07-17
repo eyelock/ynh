@@ -73,7 +73,7 @@ my-dev "list your skills"
 ```
 
 ```bash
-ls ~/.ynh/run/my-dev/.claude/skills/
+ls ~/.ynh/run/local--my-dev/.claude/skills/
 # Expected: dev-project/ dev-quality/ go-lang/ help-me-answer/ (only the 4 picked skills)
 # NOT: dev-review/ dev-backend/ dev-ui/ etc.
 ```
@@ -212,7 +212,7 @@ full-stack "list your skills"
 ```
 
 ```bash
-ls ~/.ynh/run/full-stack/.claude/skills/
+ls ~/.ynh/run/local--full-stack/.claude/skills/
 # Expected: dev-project/ dev-quality/ dev-review/ go-lang/ frontend-design/
 ```
 
@@ -258,7 +258,7 @@ mixed "what skills do you have?"
 ```
 
 ```bash
-ls ~/.ynh/run/mixed/.claude/skills/
+ls ~/.ynh/run/local--mixed/.claude/skills/
 # Expected: my-custom-skill/ take-a-moment/ (local + remote)
 ```
 
@@ -316,7 +316,7 @@ local-ref "what skills do you have?"
 ```
 
 ```bash
-ls ~/.ynh/run/local-ref/.claude/skills/
+ls ~/.ynh/run/local--local-ref/.claude/skills/
 # Expected: fast-deploy/
 ```
 
@@ -351,7 +351,7 @@ with-bundled "what skills do you have?"
 ```
 
 ```bash
-ls ~/.ynh/run/with-bundled/.claude/skills/
+ls ~/.ynh/run/local--with-bundled/.claude/skills/
 # Expected: team-standards/
 ```
 
@@ -397,7 +397,7 @@ pinned "what skills do you have?"
 ```
 
 ```bash
-ls ~/.ynh/run/pinned/.claude/skills/
+ls ~/.ynh/run/local--pinned/.claude/skills/
 # Expected: help-me-answer/
 ```
 

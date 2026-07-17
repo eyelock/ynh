@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/status.schema.json",
+  "title": "ynh status --format json",
+  "description": "Output of `ynh status --format json`. Bare array of symlink installations recorded across projects. Each entry mirrors symlink.Installation. Envelope retrofit deferred.",
+  "x-capabilities": "0.4",
+  "$defs": {
+    "Symlink": {
+      "type": "object",
+      "properties": {
+        "target": {"type": "string", "description": "Where the symlink points (staging dir)."},
+        "link": {"type": "string", "description": "Where the symlink lives (project dir)."}
+      },
+      "required": ["target", "link"],
+      "additionalProperties": false
+    },
+    "Installation": {
+      "type": "object",
+      "properties": {
+        "harness": {"type": "string"},
+        "vendor": {"type": "string"},
+        "project": {"type": "string"},
+        "timestamp": {"type": "string", "description": "ISO 8601 UTC timestamp recorded at install time."},
+        "symlinks": {"type": "array", "items": {"$ref": "#/$defs/Symlink"}}
+      },
+      "required": ["harness", "vendor", "project", "timestamp", "symlinks"],
+      "additionalProperties": false
+    }
+  },
+  "type": "array",
+  "items": {"$ref": "#/$defs/Installation"}
+}
