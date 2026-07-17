@@ -217,6 +217,50 @@ func TestFillUpdates_RegistryHarness_LiveSHAProbe(t *testing.T) {
 	}
 }
 
+func TestFillUpdates_RegistryHarness_NoDriftClampsStaleVersion(t *testing.T) {
+	// Issue #177: marketplace.json's version string can trail what's
+	// actually installed (e.g. the maintainer bumped the SHA/ref without
+	// bumping version). When the live SHA probe shows ref_installed ==
+	// sha_available — no drift since install — version_available must not
+	// report a stale/lower version implying an update (or downgrade) is
+	// available.
+	entries := []listEntry{{
+		Name:             "demo",
+		VersionInstalled: "0.2.0",
+		RefInstalled:     "0ffa9a4a504d89173ee8a9f66d027d293b768519",
+		InstalledFrom: &listInstalledFrom{
+			SourceType: "registry",
+			Source:     "github.com/example/registry-harness",
+			Ref:        "develop",
+			Path:       "harnesses/demo",
+		},
+	}}
+
+	fp := &fakeProbe{
+		gitResults: map[string]struct {
+			sha string
+			ok  bool
+		}{
+			"github.com/example/registry-harness|develop": {sha: "0ffa9a4a504d89173ee8a9f66d027d293b768519", ok: true},
+		},
+		registryResults: map[string]struct {
+			version string
+			sha     string
+			ok      bool
+		}{
+			"demo|github.com/example/registry-harness|harnesses/demo": {version: "0.1.0", ok: true},
+		},
+	}
+	fillUpdates(entries, fp.probe())
+
+	if entries[0].VersionAvailable != "0.2.0" {
+		t.Errorf("version_available = %q, want 0.2.0 (clamped to version_installed, no drift)", entries[0].VersionAvailable)
+	}
+	if entries[0].SHAAvailable != "0ffa9a4a504d89173ee8a9f66d027d293b768519" {
+		t.Errorf("sha_available = %q, want 0ffa9a4a504d89173ee8a9f66d027d293b768519", entries[0].SHAAvailable)
+	}
+}
+
 func TestFillUpdates_GitHarness_PrefersRecordedRef(t *testing.T) {
 	// Git harness with a recorded install ref — probe targets THAT ref, not
 	// the upstream HEAD. Catches the regression that motivated this fix:
