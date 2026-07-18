@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,6 +28,19 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 	}
 
 	args := buildClaudeStreamArgs(opts)
+
+	// Resume token = claude session id. We control it explicitly: a fresh run
+	// passes --session-id <uuid> so the id is known up front (and persisted to
+	// the checkpoint before the first turn); a resume passes --resume <uuid> to
+	// reload the prior conversation. claude persists sessions on disk by
+	// default, keyed by cwd — which is stable across relaunches (WorktreeDir).
+	sessionID := opts.ResumeToken
+	if sessionID == "" {
+		sessionID = newClaudeSessionID()
+		args = append(args, "--session-id", sessionID)
+	} else {
+		args = append(args, "--resume", sessionID)
+	}
 
 	var cmd *exec.Cmd
 	if opts.Sandbox == "srt" {
@@ -69,18 +83,33 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 	scanner.Buffer(make([]byte, 2<<20), 2<<20) // 2 MB — handles large tool outputs
 
 	return &claudeSession{
-		cmd:     cmd,
-		stdin:   stdinPipe,
-		scanner: scanner,
+		cmd:       cmd,
+		stdin:     stdinPipe,
+		scanner:   scanner,
+		sessionID: sessionID,
 	}, nil
+}
+
+// newClaudeSessionID returns a fresh RFC 4122 version-4 UUID string, the
+// format claude's --session-id flag expects.
+func newClaudeSessionID() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
 // buildClaudeStreamArgs constructs arguments for stream-json mode.
 func buildClaudeStreamArgs(opts StartOptions) []string {
+	// claude-code refuses --print --output-format=stream-json without
+	// --verbose. The flag is mandatory for the streaming wire format the
+	// loop driver depends on, so always include it.
 	args := []string{
 		"--input-format", "stream-json",
 		"--output-format", "stream-json",
 		"--print",
+		"--verbose",
 	}
 
 	if opts.ConfigPath != "" {
@@ -102,10 +131,14 @@ func buildClaudeStreamArgs(opts StartOptions) []string {
 
 // claudeSession is a running Claude Code subprocess in stream-json mode.
 type claudeSession struct {
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	scanner *bufio.Scanner
+	cmd       *exec.Cmd
+	stdin     io.WriteCloser
+	scanner   *bufio.Scanner
+	sessionID string
 }
+
+// ResumeToken returns the claude session id driving this conversation.
+func (s *claudeSession) ResumeToken() string { return s.sessionID }
 
 // stream-json input message shapes.
 type claudeUserMsg struct {

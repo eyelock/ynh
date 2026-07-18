@@ -22,6 +22,12 @@ type WorkerSession interface {
 	// Next blocks until the worker completes the current assistant turn.
 	// Returns io.EOF when the worker has exited cleanly.
 	Next() (Turn, error)
+	// ResumeToken returns the backend-native handle (claude session id,
+	// cursor chatId, codex session id) that a later relaunch supplies via
+	// StartOptions.ResumeToken to reconstruct this conversation. Returns an
+	// empty string before the token is known (e.g. a backend that only learns
+	// its session id after the first turn) or for backends that cannot resume.
+	ResumeToken() string
 	// Close terminates the worker process.
 	Close() error
 }
@@ -36,6 +42,11 @@ type StartOptions struct {
 	Sandbox string
 	// Model overrides the default model. Empty means backend default.
 	Model string
+	// ResumeToken, when non-empty, starts the worker in resume mode against a
+	// prior conversation rather than a fresh one. The value is a backend-native
+	// handle previously obtained from WorkerSession.ResumeToken (claude session
+	// id, cursor chatId, codex session id).
+	ResumeToken string
 	// Env holds additional environment variables to pass to the subprocess.
 	Env []string
 	// Stderr captures subprocess stderr if non-nil.

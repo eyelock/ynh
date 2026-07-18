@@ -51,7 +51,7 @@ func TestResolveYNHBinary_FallsBackToExecutable(t *testing.T) {
 
 func TestOpenTrajectory_Stdout(t *testing.T) {
 	var buf bytes.Buffer
-	w, cleanup, err := openTrajectory("-", &buf)
+	w, cleanup, err := openTrajectory("-", &buf, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestOpenTrajectory_Stdout(t *testing.T) {
 func TestOpenTrajectory_File(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "traj.jsonl")
-	w, cleanup, err := openTrajectory(path, io.Discard)
+	w, cleanup, err := openTrajectory(path, io.Discard, false)
 	if err != nil {
 		t.Fatalf("openTrajectory: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestOpenTrajectory_File(t *testing.T) {
 }
 
 func TestOpenTrajectory_BadPath(t *testing.T) {
-	_, _, err := openTrajectory("/no/such/dir/traj.jsonl", io.Discard)
+	_, _, err := openTrajectory("/no/such/dir/traj.jsonl", io.Discard, false)
 	if err == nil {
 		t.Error("expected error opening file in nonexistent dir")
 	}
