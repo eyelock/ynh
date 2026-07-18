@@ -124,12 +124,12 @@ ynh install /tmp/ynh-tutorial/my-harness
 Expected:
 ```
 Installed harness "my-harness"
-  Location: /Users/<you>/.ynh/harnesses/local--my-harness
+  Location: /tmp/ynh-tutorial/my-harness
   Launcher: /Users/<you>/.ynh/bin/my-harness
   Vendor:   claude
 ```
 
-The install lives at `local--my-harness` (the on-disk form of the canonical id `local/my-harness`). The launcher keeps the short name because it's unambiguous.
+Local installs are pointer-form: the install record (keyed by the canonical id `local/my-harness`) lives in `~/.ynh`, but `Location` reports your source tree, since that's where edits and `ynh run` both land. The launcher keeps the short name because it's unambiguous.
 
 ## T1.5: List installed harnesses
 
@@ -157,6 +157,7 @@ ynh info local/my-harness
 
 Expected:
 ```
+ID:           local/my-harness
 Name:         my-harness
 Vendor:       claude
 Installed:    <timestamp>
