@@ -3,11 +3,18 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/config"
 )
 
 func TestCmdVendorsOutput(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("YNH_HOME", "")
+
 	var stdout, stderr bytes.Buffer
 	if err := cmdVendorsTo(nil, &stdout, &stderr); err != nil {
 		t.Fatalf("cmdVendorsTo: %v", err)
@@ -64,6 +71,9 @@ func TestCmdVendorsOutput(t *testing.T) {
 }
 
 func TestCmdVendorsJSON(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("YNH_HOME", "")
+
 	var stdout, stderr bytes.Buffer
 	if err := cmdVendorsTo([]string{"--format", "json"}, &stdout, &stderr); err != nil {
 		t.Fatalf("cmdVendorsTo JSON: %v", err)
@@ -104,6 +114,9 @@ func TestCmdVendorsJSON(t *testing.T) {
 }
 
 func TestCmdVendorsJSON_AvailableIsBool(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("YNH_HOME", "")
+
 	var stdout, stderr bytes.Buffer
 	if err := cmdVendorsTo([]string{"--format", "json"}, &stdout, &stderr); err != nil {
 		t.Fatalf("cmdVendorsTo JSON: %v", err)
@@ -128,6 +141,9 @@ func TestCmdVendorsJSON_AvailableIsBool(t *testing.T) {
 }
 
 func TestCmdVendorsJSON_SupportsInitialPrompt(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("YNH_HOME", "")
+
 	var stdout, stderr bytes.Buffer
 	if err := cmdVendorsTo([]string{"--format", "json"}, &stdout, &stderr); err != nil {
 		t.Fatalf("cmdVendorsTo JSON: %v", err)
@@ -169,9 +185,119 @@ func TestCmdVendorsJSON_SupportsInitialPrompt(t *testing.T) {
 }
 
 func TestCmdVendors_InvalidFormat(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("YNH_HOME", "")
+
 	var stdout, stderr bytes.Buffer
 	err := cmdVendorsTo([]string{"--format", "yaml"}, &stdout, &stderr)
 	if err == nil {
 		t.Fatal("expected error for invalid format")
 	}
+}
+
+func TestCmdVendorsJSON_BackendRows(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("YNH_HOME", "")
+
+	cfg := &config.Config{
+		Backends: map[string]config.BackendDef{
+			"ollama": {
+				Vendors: map[string]config.BackendConnection{
+					"claude": {BaseURL: "http://localhost:11434", AuthToken: "ollama"},
+					"codex":  {BaseURL: "http://localhost:11434/v1/"},
+				},
+			},
+		},
+	}
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("saving config: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := cmdVendorsTo([]string{"--format", "json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("cmdVendorsTo JSON: %v", err)
+	}
+
+	var entries []vendorEntry
+	if err := json.Unmarshal(stdout.Bytes(), &entries); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+
+	byName := map[string]vendorEntry{}
+	for _, e := range entries {
+		byName[e.Name] = e
+	}
+
+	claudeRow, ok := byName["ollama/claude"]
+	if !ok {
+		t.Fatal("missing backend row \"ollama/claude\"")
+	}
+	if claudeRow.CLI != "claude" || claudeRow.ConfigDir != ".claude" {
+		t.Errorf("ollama/claude row = %+v, want cli=claude config_dir=.claude", claudeRow)
+	}
+
+	if _, ok := byName["ollama/codex"]; !ok {
+		t.Fatal("missing backend row \"ollama/codex\"")
+	}
+
+	// Plain vendor rows still present alongside backend rows.
+	if _, ok := byName["claude"]; !ok {
+		t.Error("missing plain \"claude\" vendor row")
+	}
+}
+
+func TestCmdVendorsJSON_BackendRowsExpandToInstalledModels(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"models":[{"name":"qwen3:latest"}]}`))
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("YNH_HOME", "")
+
+	cfg := &config.Config{
+		Backends: map[string]config.BackendDef{
+			"ollama": {
+				Type: "ollama",
+				Vendors: map[string]config.BackendConnection{
+					"claude": {BaseURL: server.URL},
+				},
+			},
+		},
+	}
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("saving config: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := cmdVendorsTo([]string{"--format", "json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("cmdVendorsTo JSON: %v", err)
+	}
+
+	var entries []vendorEntry
+	if err := json.Unmarshal(stdout.Bytes(), &entries); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+
+	byName := map[string]vendorEntry{}
+	for _, e := range entries {
+		byName[e.Name] = e
+	}
+
+	if _, ok := byName["ollama/claude/qwen3:latest"]; !ok {
+		t.Fatalf("missing model-expanded row \"ollama/claude/qwen3:latest\"; got names: %v", names(entries))
+	}
+	if _, ok := byName["ollama/claude"]; ok {
+		t.Error("bare \"ollama/claude\" row should not appear once models were successfully enumerated")
+	}
+}
+
+func names(entries []vendorEntry) []string {
+	out := make([]string, len(entries))
+	for i, e := range entries {
+		out[i] = e.Name
+	}
+	return out
 }

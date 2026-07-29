@@ -391,12 +391,14 @@ func TestResolveVendor(t *testing.T) {
 		{"env var", "", "codex", "claude", "codex"},
 		{"flag beats env var", "claude", "codex", "cursor", "claude"},
 		{"empty env var falls through", "", "", "codex", "codex"},
+		{"flag carries a backend spec through untouched", "ollama/claude/qwen3", "", "codex", "ollama/claude/qwen3"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			t.Setenv("HOME", dir)
+			t.Setenv("YNH_HOME", "")
 			if tt.envVar != "" {
 				t.Setenv("YNH_VENDOR", tt.envVar)
 			} else {
@@ -408,7 +410,12 @@ func TestResolveVendor(t *testing.T) {
 				DefaultVendor: tt.harnessVendor,
 			}
 
-			got, err := resolveVendor(tt.flag, p)
+			cfg, err := config.Load()
+			if err != nil {
+				t.Fatalf("config.Load failed: %v", err)
+			}
+
+			got, err := resolveVendor(tt.flag, p, cfg)
 			if err != nil {
 				t.Fatalf("resolveVendor failed: %v", err)
 			}

@@ -9,11 +9,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/eyelock/ynh/internal/assembler"
+	"github.com/eyelock/ynh/internal/backend"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/migration"
@@ -77,6 +79,8 @@ func main() {
 		err = cmdSearch(os.Args[2:])
 	case "registry":
 		err = cmdRegistry(os.Args[2:])
+	case "backend":
+		err = cmdBackend(os.Args[2:])
 	case "delegate":
 		err = cmdDelegate(os.Args[2:])
 	case "fork":
@@ -184,6 +188,9 @@ Commands:
   registry list                Show configured registries (supports --format json)
   registry remove <url>        Remove a registry
   registry update              Refresh all cached registries
+  backend add <name> <vendor> --base-url <url> [--auth-token <token>] [--type <type>]  Add a local model backend
+  backend list                 Show configured backends (supports --format json)
+  backend remove <name> [<vendor>]  Remove a backend, or one vendor's connection within it
   image <name> [flags]         Build a Docker image with a harness baked in
   paths                        Show resolved path roots (supports --format json)
   status                       Show symlink installations across projects
@@ -192,7 +199,7 @@ Commands:
   help                         Show this help
 
 Run flags:
-  -v <vendor>                  Override vendor (claude, codex, cursor)
+  -v <vendor>                  Override vendor (claude, codex, cursor), or "<backend>/<vendor>[/<model>]" to redirect at a local model backend (see: ynh backend)
   --focus <name>               Load a named focus (sets prompt and profile; implies non-interactive)
   --profile <name>             Apply a named profile overlay (with a prompt, implies non-interactive)
   --interactive                Override non-interactive default — stay in session after focus or prompt
@@ -1123,21 +1130,44 @@ func cmdRun(args []string) error {
 	vendorArgs := ra.VendorArgs
 	action := ra.Action
 
-	// Determine vendor
-	vendorName, err := resolveVendor(ra.VendorFlag, p)
+	// Load config for vendor resolution and remote source checking
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+
+	// Determine vendor. The resolved spec may itself be a plain vendor name
+	// ("claude") or a backend redirection ("ollama/claude/qwen3") — both
+	// travel through the same -v flag / YNH_VENDOR / default_vendor
+	// precedence chain, so a local model backend is just another vendor
+	// spec, not a separate flag.
+	spec, err := resolveVendor(ra.VendorFlag, p, cfg)
 	if err != nil {
 		return err
 	}
+	vs, err := backend.ParseSpec(spec)
+	if err != nil {
+		return err
+	}
+	vendorName := vs.Vendor
 
 	adapter, err := vendor.Get(vendorName)
 	if err != nil {
 		return err
 	}
 
-	// Load config for remote source checking
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
+	// Redirect the vendor CLI at the backend named in the spec, if any.
+	// No-op otherwise — vendor talks to its normal cloud API.
+	if vs.Backend != "" {
+		conn, err := backend.Lookup(cfg, vs)
+		if err != nil {
+			return err
+		}
+		extra, err := backend.Apply(vendorName, vs.Backend, conn, vs.Model)
+		if err != nil {
+			return err
+		}
+		vendorArgs = append(extra, vendorArgs...)
 	}
 
 	// Resolve Git includes from cache (no network access unless cache miss)
@@ -1467,20 +1497,21 @@ func cmdVendorsTo(args []string, stdout, stderr io.Writer) error {
 }
 
 func printVendorsText(w io.Writer) error {
+	entries, err := vendorEntries()
+	if err != nil {
+		return err
+	}
+
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	_, _ = fmt.Fprintln(tw, "NAME\tDISPLAY NAME\tCLI\tCONFIG DIR\tAVAILABLE")
 
-	for _, name := range vendor.Available() {
-		adapter, err := vendor.Get(name)
-		if err != nil {
-			return fmt.Errorf("loading vendor %s: %w", name, err)
-		}
+	for _, e := range entries {
 		available := "false"
-		if _, err := exec.LookPath(adapter.CLIName()); err == nil {
+		if e.Available {
 			available = "true"
 		}
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
-			adapter.Name(), adapter.DisplayName(), adapter.CLIName(), adapter.ConfigDir(), available)
+			e.Name, e.DisplayName, e.CLI, e.ConfigDir, available)
 	}
 
 	return tw.Flush()
@@ -1492,12 +1523,18 @@ type initialPrompter interface {
 	SupportsInitialPrompt() bool
 }
 
-func printVendorsJSON(w io.Writer) error {
+// vendorEntries lists the registered vendor adapters, plus one extra row per
+// (backend, vendor) pair declared in ~/.ynh/config.json's "backends" map.
+// Backend rows use the same "<backend>/<vendor>" spec accepted by -v (see
+// backend.ParseSpec) as their name — discoverable without guessing at
+// installed models, which config deliberately doesn't store (the model is
+// supplied live in the -v string, not pinned in config).
+func vendorEntries() ([]vendorEntry, error) {
 	entries := make([]vendorEntry, 0, len(vendor.Available()))
 	for _, name := range vendor.Available() {
 		adapter, err := vendor.Get(name)
 		if err != nil {
-			return fmt.Errorf("loading vendor %s: %w", name, err)
+			return nil, fmt.Errorf("loading vendor %s: %w", name, err)
 		}
 		_, lookErr := exec.LookPath(adapter.CLIName())
 		supportsIP := false
@@ -1514,6 +1551,77 @@ func printVendorsJSON(w io.Writer) error {
 		})
 	}
 
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+
+	var backendNames []string
+	for name := range cfg.Backends {
+		backendNames = append(backendNames, name)
+	}
+	sort.Strings(backendNames)
+
+	for _, backendName := range backendNames {
+		var vendorNames []string
+		for name := range cfg.Backends[backendName].Vendors {
+			vendorNames = append(vendorNames, name)
+		}
+		sort.Strings(vendorNames)
+
+		// Query the backend for installed models, if it declares a type ynh
+		// knows how to ask (currently just "ollama"). This is best-effort:
+		// an unreachable server or unrecognized type just falls back to a
+		// bare "<backend>/<vendor>" row instead of failing the listing.
+		models, _ := backend.ListModels(cfg, backendName)
+
+		for _, vn := range vendorNames {
+			adapter, err := vendor.Get(vn)
+			if err != nil {
+				// Config names a vendor ynh doesn't know; skip it rather
+				// than failing the whole listing over one bad entry.
+				continue
+			}
+			_, lookErr := exec.LookPath(adapter.CLIName())
+			supportsIP := false
+			if ip, ok := adapter.(initialPrompter); ok {
+				supportsIP = ip.SupportsInitialPrompt()
+			}
+
+			if len(models) == 0 {
+				entries = append(entries, vendorEntry{
+					Name:                  backendName + "/" + vn,
+					DisplayName:           fmt.Sprintf("%s (%s)", adapter.DisplayName(), backendName),
+					CLI:                   adapter.CLIName(),
+					ConfigDir:             adapter.ConfigDir(),
+					Available:             lookErr == nil,
+					SupportsInitialPrompt: supportsIP,
+				})
+				continue
+			}
+
+			for _, model := range models {
+				entries = append(entries, vendorEntry{
+					Name:                  backendName + "/" + vn + "/" + model,
+					DisplayName:           fmt.Sprintf("%s (%s · %s)", adapter.DisplayName(), backendName, model),
+					CLI:                   adapter.CLIName(),
+					ConfigDir:             adapter.ConfigDir(),
+					Available:             lookErr == nil,
+					SupportsInitialPrompt: supportsIP,
+				})
+			}
+		}
+	}
+
+	return entries, nil
+}
+
+func printVendorsJSON(w io.Writer) error {
+	entries, err := vendorEntries()
+	if err != nil {
+		return err
+	}
+
 	data, err := json.MarshalIndent(entries, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encoding vendors: %w", err)
@@ -1522,8 +1630,11 @@ func printVendorsJSON(w io.Writer) error {
 	return err
 }
 
-// resolveVendor picks the vendor: CLI flag > YNH_VENDOR env > harness default > global config.
-func resolveVendor(flag string, p *harness.Harness) (string, error) {
+// resolveVendor determines the vendor spec string to launch — a plain
+// vendor name ("claude") or a backend redirection ("ollama/claude/qwen3");
+// see backend.ParseSpec. Both forms flow through the same precedence chain:
+// CLI flag (-v) > YNH_VENDOR env > harness default > global config.
+func resolveVendor(flag string, p *harness.Harness, cfg *config.Config) (string, error) {
 	if flag != "" {
 		return flag, nil
 	}
@@ -1532,11 +1643,6 @@ func resolveVendor(flag string, p *harness.Harness) (string, error) {
 	}
 	if p.DefaultVendor != "" {
 		return p.DefaultVendor, nil
-	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		return "", err
 	}
 	if cfg.DefaultVendor != "" {
 		return cfg.DefaultVendor, nil
@@ -1548,9 +1654,12 @@ func resolveVendor(flag string, p *harness.Harness) (string, error) {
 // parseRunArgs separates ynh's own flags from vendor pass-through args and the prompt.
 //
 // ynh flags consumed:
-//   - -v <vendor>  : override vendor
-//   - --install    : install symlinks for the vendor
-//   - --clean      : remove symlinks for the vendor
+//   - -v <vendor>   : override vendor. Also accepts a backend-redirected
+//     spec — "<backend>/<vendor>" or "<backend>/<vendor>/<model>" — to
+//     launch that vendor against a local model backend (e.g. Ollama)
+//     instead of its normal cloud API. See docs/vendors.md.
+//   - --install     : install symlinks for the vendor
+//   - --clean       : remove symlinks for the vendor
 //
 // All other arguments are passed through to the vendor CLI verbatim.
 // Use -- to separate vendor flags from the prompt when vendor flags take values:
