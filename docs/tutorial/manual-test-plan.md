@@ -548,7 +548,7 @@ export YNH_HOME=$(mktemp -d)
 echo '{"backends":{"ollama":{"vendors":{"claude":{"base_url":"http://localhost:11434","auth_token":"ollama"}}}}}' > "$YNH_HOME/config.json"
 
 cd /tmp/ynh-backend-edge
-ynh run backend-edge -v ollama/codex
+ynh run -v ollama/codex
 # Expected: Error: backend "ollama" has no config for vendor "codex" (add backends.ollama.vendors.codex to ~/.ynh/config.json)
 
 ynh vendors --format json | jq '.[] | select(.name=="ollama/claude")'
