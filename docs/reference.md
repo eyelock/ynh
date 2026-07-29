@@ -21,7 +21,7 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 
 | Setting | Resolution Order |
 |---------|-----------------|
-| Vendor | `-v` flag > `YNH_VENDOR` > harness `default_vendor` > global config |
+| Vendor | `-v` flag > `YNH_VENDOR` > harness `default_vendor` > global config. Any of these also accepts a backend-redirected spec (`<backend>/<vendor>` or `<backend>/<vendor>/<model>`) — see [Local Model Backends](vendors.md#local-model-backends). |
 | Profile | `--profile` flag > `YNH_PROFILE` > no profile (top-level) |
 | Focus | `--focus` flag > `YNH_FOCUS` > no focus (mutually exclusive with `--profile`) |
 | Harness source | `--harness` flag > `YNH_HARNESS` > positional arg > `.` (CWD) or error |
@@ -120,7 +120,7 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 | `ynh schema <name>` | The raw JSON schema for the named CLI command (e.g. `version`, `list`, `info`, `installed`, `error`). With `--all --format json`: a manifest `{capabilities, ynh_version, schemas: {...}}`. See [Published JSON Schemas](schema-cli.md). |
 | `ynh paths` | `home`, `config`, `harnesses`, `symlinks`, `cache`, `run`, `bin` — all absolute paths resolved for the current `$YNH_HOME` |
 | `ynh search [query]` | Array of result objects: `name`, `description`, `keywords`, `repo`, `path`, `vendors`, `version`, `from` (`type`, `name`) |
-| `ynh vendors` | Array of vendor objects: `name`, `display_name`, `cli`, `config_dir`, `available` (bool) |
+| `ynh vendors` | Array of vendor objects: `name`, `display_name`, `cli`, `config_dir`, `available` (bool), `supports_initial_prompt` (bool). Plus one row per configured local model backend (see [Local Model Backends](vendors.md#local-model-backends)) — `name` becomes the `<backend>/<vendor>` or, when models were discoverable, `<backend>/<vendor>/<model>` spec `-v` accepts |
 | `ynh version` / `ynd version` | `version` (release), `capabilities` (wire-contract). See [Wire-contract capability](cli-structured.md#wire-contract-capability-version---format-json). |
 | `ynh sources list` | Array of source objects: `name`, `path`, `description`, `harnesses` (discovery count) |
 

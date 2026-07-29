@@ -14,6 +14,8 @@ codex    codex    .codex
 cursor   agent    .cursor
 ```
 
+If `~/.ynh/config.json` declares any [local model backends](#local-model-backends), `ynh vendors` (including `--format json`) also lists one extra row per configured `<backend>/<vendor>` pair — the exact spec string `-v` accepts — so a caller can discover what's launchable on this machine without parsing config.json itself.
+
 ## Launch Strategies
 
 Each vendor gets the strategy that matches its capabilities:
@@ -63,6 +65,94 @@ david -v codex
 Resolution order: **CLI flag (`-v`) > `YNH_VENDOR` env var > harness default > global config**.
 
 `YNH_VENDOR` is honored by both `ynh` commands (`ynh run`) and `ynd` commands (`preview`, `export`, `create`, `compress`, `inspect`, `marketplace`).
+
+Any of these — the flag, the env var, or either `default_vendor` — also accepts a **backend-redirected spec** instead of a plain vendor name, to run that vendor against a local model instead of its cloud API. See [Local Model Backends](#local-model-backends) below.
+
+## Local Model Backends
+
+By default a vendor CLI talks to its normal cloud API (Anthropic for Claude Code, OpenAI for Codex). A **backend spec** redirects it at a different model server instead — e.g. a local [Ollama](https://ollama.com) instance — without changing anything else about the session: same CLI, same MCP servers, same tools, same skills. Quality then depends entirely on the local model, not on ynh.
+
+A backend isn't a separate flag — it's the same `-v` you already use for vendor selection, extended with two optional `/`-separated segments:
+
+```
+-v <vendor>                    # plain vendor, e.g. -v claude — unchanged, no backend
+-v <backend>/<vendor>          # vendor's default model against <backend>
+-v <backend>/<vendor>/<model>  # explicit model against <backend>
+```
+
+`<backend>` is a name you define in `~/.ynh/config.json`; `<vendor>` and `<model>` are otherwise ordinary vendor/model names. This flows through the exact same `-v` / `YNH_VENDOR` / harness `default_vendor` / global `default_vendor` precedence chain as plain vendor selection — no separate resolution rule to learn.
+
+### Setting up Ollama
+
+1. Install Ollama: `brew install ollama` (macOS) or see [ollama.com/download](https://ollama.com/download).
+2. Start the server, if it isn't already running as a background service: `ollama serve`. Check with `curl http://localhost:11434/api/tags`.
+3. Pull a model: `ollama pull qwen3` (or any tool-calling-capable model — see caveats below). This can be several GB.
+4. Define the `ollama` backend's connection details in `~/.ynh/config.json` (below), then select it per invocation with `-v ollama/<vendor>/<model>` — no separate config entry needed per model.
+
+### Configuring a backend
+
+`~/.ynh/config.json`'s `backends` map is keyed by backend name. Each entry has an optional `type` (used for live model discovery — see below) and a `vendors` map, one connection per vendor, since the wire format (notably `base_url`) differs by vendor even against the same server:
+
+```json
+{
+  "backends": {
+    "ollama": {
+      "type": "ollama",
+      "vendors": {
+        "claude": {
+          "base_url": "http://localhost:11434",
+          "auth_token": "ollama"
+        },
+        "codex": {
+          "base_url": "http://localhost:11434/v1/"
+        }
+      }
+    }
+  }
+}
+```
+
+Then:
+
+```bash
+ynh run david -v ollama/claude/qwen3        # Claude Code against local qwen3
+ynh run david -v ollama/codex/gpt-oss:120b  # Codex against local gpt-oss:120b
+```
+
+With no backend segment (`-v claude`), behavior is unchanged — the vendor talks to its real cloud API. Note the `base_url` format is **not interchangeable** between vendors: Codex's OpenAI-compatible endpoint needs the `/v1/` suffix; Claude's Anthropic-compatible one does not.
+
+Each vendor's connection is applied differently:
+
+- **`claude`** — sets `ANTHROPIC_BASE_URL` to `base_url` verbatim, sets `ANTHROPIC_AUTH_TOKEN` to `auth_token`, and clears `ANTHROPIC_API_KEY` so no real key leaks to the local server. The model segment becomes `--model <model>`.
+- **`codex`** — writes a `[model_providers.<backend>]` block into `~/.codex/config.toml` with `base_url` verbatim and `wire_api = "responses"`, then passes `-c model_provider=<backend>` and `-c model=<model>`.
+
+An `env` map on a `backends.<name>.vendors.<vendor>` entry is an escape hatch for anything backend-specific beyond these fields.
+
+`-v ollama/claude` with no model segment does **not** prompt you to pick one — it launches with the vendor's own default model id, which Ollama won't recognize, and the vendor CLI errors out. Use `ynh vendors` (below) to see which models are actually installed before picking one.
+
+### Discovering installed models
+
+Set `"type": "ollama"` on a backend and `ynh vendors --format json` queries that server's `/api/tags` live and expands its rows into one per **installed** model — `"ollama/claude/qwen3"`, not just `"ollama/claude"` — using whichever vendor connection is configured (the model list comes from the server itself, independent of vendor). This is how a caller enumerates exactly which specs will actually work, without guessing at model names or parsing `config.json`:
+
+```bash
+$ ynh vendors
+NAME                  DISPLAY NAME                  CLI     CONFIG DIR  AVAILABLE
+claude                Claude Code                   claude  .claude     true
+codex                 OpenAI Codex                   codex   .codex      true
+cursor                Cursor                         agent   .cursor     true
+ollama/claude/qwen3   Claude Code (ollama · qwen3)   claude  .claude     true
+```
+
+If the server is unreachable, or `type` is omitted/unrecognized, `ynh vendors` falls back to the plain `"<backend>/<vendor>"` row instead of failing the whole listing — model discovery is best-effort, not a hard dependency of vendor listing.
+
+### Ollama caveats
+
+These come from Ollama's own docs, not ynh:
+
+- Tool-calling reliability depends entirely on the local model — qwen3-class models are what's documented as working well; not every model on [ollama.com/library](https://ollama.com/library) supports tool calling.
+- Use a model with at least a 64k context window for non-trivial repos (`ollama show <model>` reports a model's context length).
+- Claude Code's extended-thinking and prompt-caching behavior isn't something Ollama's Anthropic-compatible API actually implements — the parameters are accepted but have no effect.
+- `tool_choice` forcing, token-counting, the Batches API, PDF input, and image-by-URL are not supported by Ollama's Anthropic compatibility layer.
 
 ## Vendor Notes
 

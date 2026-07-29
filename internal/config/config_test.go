@@ -50,6 +50,61 @@ func TestSaveAndLoad(t *testing.T) {
 	}
 }
 
+func TestSaveAndLoadBackends(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	cfg := &Config{
+		DefaultVendor: "claude",
+		Backends: map[string]BackendDef{
+			"ollama": {
+				Type: "ollama",
+				Vendors: map[string]BackendConnection{
+					"claude": {
+						BaseURL:   "http://localhost:11434",
+						AuthToken: "ollama",
+					},
+					"codex": {
+						BaseURL: "http://localhost:11434/v1/",
+					},
+				},
+			},
+		},
+	}
+
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	loaded, err := Load()
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	def, ok := loaded.Backends["ollama"]
+	if !ok {
+		t.Fatal("Backends[\"ollama\"] missing after round-trip")
+	}
+	if def.Type != "ollama" {
+		t.Errorf("Type = %q, want %q", def.Type, "ollama")
+	}
+	claude, ok := def.Vendors["claude"]
+	if !ok {
+		t.Fatal("Backends[\"ollama\"].Vendors[\"claude\"] missing after round-trip")
+	}
+	if claude.BaseURL != "http://localhost:11434" || claude.AuthToken != "ollama" {
+		t.Errorf("claude connection round-trip mismatch: %+v", claude)
+	}
+	codex, ok := def.Vendors["codex"]
+	if !ok {
+		t.Fatal("Backends[\"ollama\"].Vendors[\"codex\"] missing after round-trip")
+	}
+	if codex.BaseURL != "http://localhost:11434/v1/" {
+		t.Errorf("codex connection round-trip mismatch: %+v", codex)
+	}
+}
+
 func TestDirPaths(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
