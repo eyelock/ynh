@@ -91,7 +91,23 @@ A backend isn't a separate flag — it's the same `-v` you already use for vendo
 
 ### Configuring a backend
 
-`~/.ynh/config.json`'s `backends` map is keyed by backend name. Each entry has an optional `type` (used for live model discovery — see below) and a `vendors` map, one connection per vendor, since the wire format (notably `base_url`) differs by vendor even against the same server:
+Use `ynh backend add` rather than hand-editing `~/.ynh/config.json` — it validates the vendor name and won't silently create a malformed entry:
+
+```bash
+ynh backend add ollama claude --base-url http://localhost:11434 --auth-token ollama --type ollama
+ynh backend add ollama codex  --base-url http://localhost:11434/v1/
+```
+
+```bash
+ynh backend list                    # human-readable, includes live-discovered models
+ynh backend list --format json      # structured: backend, vendor, type, base_url, has_auth_token, models
+ynh backend remove ollama codex     # drop just the codex connection
+ynh backend remove ollama           # drop the whole backend
+```
+
+`--type` (currently only `ollama` is recognized) enables live model discovery — see below. `--env KEY=VALUE` (repeatable) is an escape hatch for anything backend-specific beyond `base_url`/`auth_token`.
+
+This writes to the same `~/.ynh/config.json` `backends` map either way — `ynh backend add` is just a validated way to get there. Directly, the shape is:
 
 ```json
 {

@@ -79,6 +79,9 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh registry list` | `--format <text\|json>` |
 | `ynh registry remove <url>` | |
 | `ynh registry update` | |
+| `ynh backend add <name> <vendor>` | `--base-url` (required), `--auth-token`, `--type`, `--env KEY=VALUE` (repeatable) |
+| `ynh backend list` | `--format <text\|json>` |
+| `ynh backend remove <name> [<vendor>]` | |
 | `ynh image <subcommand>` | |
 | `ynh paths` | `--format <text\|json>` |
 | `ynh status` | |
@@ -123,6 +126,7 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 | `ynh vendors` | Array of vendor objects: `name`, `display_name`, `cli`, `config_dir`, `available` (bool), `supports_initial_prompt` (bool). Plus one row per configured local model backend (see [Local Model Backends](vendors.md#local-model-backends)) — `name` becomes the `<backend>/<vendor>` or, when models were discoverable, `<backend>/<vendor>/<model>` spec `-v` accepts |
 | `ynh version` / `ynd version` | `version` (release), `capabilities` (wire-contract). See [Wire-contract capability](cli-structured.md#wire-contract-capability-version---format-json). |
 | `ynh sources list` | Array of source objects: `name`, `path`, `description`, `harnesses` (discovery count) |
+| `ynh backend list` | Array of objects: `backend`, `vendor`, `type`, `base_url`, `has_auth_token` (bool), `models` (array, present when live-discoverable) |
 
 Human-readable tabwriter output remains the default for every command. Structured mode is strictly opt-in.
 
