@@ -136,11 +136,15 @@ Note: Different format from Claude/Cursor — uses `source` object with `source`
 - Delegates — NOT supported
 - LSP servers — NOT documented
 
-## Known ynh Discrepancies (as of 2026-04-07)
+## Known ynh Discrepancies (as of 2026-07-30)
 
-- ynh does NOT generate `.codex-plugin/plugin.json` — NEEDS FIX
-- ynh exports skills to `.agents/skills/` — should be `skills/` at plugin root — NEEDS FIX
-- ynh writes MCP to `.codex/config.toml` (TOML) — should be `.mcp.json` (JSON) — NEEDS FIX
-- ynh excludes Codex from marketplace generation — Codex now supports it — NEEDS FIX
+All discrepancies noted on 2026-04-07 were fixed in the same PR (#23, "modernize Codex adapter to current plugin spec"):
+
+- ynh generates `.codex-plugin/plugin.json` — OK
+- ynh exports skills to `skills/` at plugin root — OK
+- ynh writes MCP to `.mcp.json` (JSON) — OK
+- ynh includes Codex in marketplace generation (`.agents/plugins/marketplace.json`) and merged export — OK
 - ynh hook format matches Codex spec — OK
 - ynh hook path `.codex/hooks.json` matches Codex spec — OK
+
+No known discrepancies at this time.

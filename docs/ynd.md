@@ -201,13 +201,13 @@ Key differences from runtime layout:
 - Export places artifacts at the plugin root (`skills/`), not inside the vendor config dir (`.claude/skills/`)
 - Claude export writes `AGENTS.md` for instructions, not `CLAUDE.md` (which would conflict with the installing project's own `CLAUDE.md`)
 - Codex is limited to skills only — agents, rules, commands, and delegates are excluded with warnings
-- `--merged` produces one directory with both `.claude-plugin/` and `.cursor-plugin/` manifests; Codex is excluded from merged mode
+- `--merged` produces one directory with `.claude-plugin/`, `.cursor-plugin/`, and `.codex-plugin/` manifests all sharing the same `skills/` directory
 
 See [Tutorial 10: Export](tutorial/05-export.md) for a guided walkthrough.
 
 ### marketplace build
 
-Build a marketplace from a collection of harnesses and pre-built plugins. Each entry is exported with dual vendor manifests and indexed.
+Build a marketplace from a collection of harnesses and pre-built plugins. Each entry is exported with vendor manifests for Claude Code, Cursor, and Codex, and indexed for all three.
 
 ```bash
 ynd marketplace build                             # uses ./marketplace.json
@@ -220,7 +220,7 @@ ynd marketplace build --clean                     # remove output dir before bui
 | Flag | Description |
 |------|-------------|
 | `-o, --output <dir>` | Output directory. Default: `./dist` |
-| `-v, --vendor <names>` | Comma-separated vendors. Default: `claude,cursor` |
+| `-v, --vendor <names>` | Comma-separated vendors. Default: `claude,cursor,codex` |
 | `--clean` | Remove output dir before building |
 
 **Config format** (`marketplace.json`):
@@ -239,7 +239,7 @@ ynd marketplace build --clean                     # remove output dir before bui
 
 - `plugin` entries are copied as-is (already in vendor-native format)
 - `harness` entries are fully exported — includes resolved, artifacts flattened
-- Codex is excluded (no marketplace system)
+- Codex participates like the other vendors: it gets its own index at `.agents/plugins/marketplace.json` using its native `source`/`policy` format
 
 ### migrate
 
