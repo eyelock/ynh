@@ -168,11 +168,18 @@ func applyClaude(conn config.BackendConnection, model string) ([]string, error) 
 		}
 	}
 
-	var args []string
+	// Set the model via ANTHROPIC_MODEL rather than passing --model on the
+	// command line. Claude Code treats a --model flag (or /model command) as
+	// an explicit user choice and persists it to ~/.claude/settings.json as
+	// the default for all future sessions — which would leak this backend's
+	// model (e.g. "qwen3") into unrelated, non-redirected sessions launched
+	// afterward. ANTHROPIC_MODEL only affects the current process.
 	if model != "" {
-		args = append(args, "--model", model)
+		if err := os.Setenv("ANTHROPIC_MODEL", model); err != nil {
+			return nil, fmt.Errorf("setting ANTHROPIC_MODEL: %w", err)
+		}
 	}
-	return args, nil
+	return nil, nil
 }
 
 func applyCodex(backendName string, conn config.BackendConnection, model string) ([]string, error) {

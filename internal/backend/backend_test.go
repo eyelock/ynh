@@ -154,9 +154,8 @@ func TestApplyClaude(t *testing.T) {
 		t.Fatalf("Apply failed: %v", err)
 	}
 
-	wantArgs := []string{"--model", "qwen3"}
-	if strings.Join(args, " ") != strings.Join(wantArgs, " ") {
-		t.Errorf("args = %v, want %v", args, wantArgs)
+	if len(args) != 0 {
+		t.Errorf("args = %v, want none — model must travel via ANTHROPIC_MODEL, not a CLI flag", args)
 	}
 
 	if v := os.Getenv("ANTHROPIC_BASE_URL"); v != "http://localhost:11434" {
@@ -167,6 +166,9 @@ func TestApplyClaude(t *testing.T) {
 	}
 	if v := os.Getenv("ANTHROPIC_API_KEY"); v != "" {
 		t.Errorf("ANTHROPIC_API_KEY = %q, want cleared", v)
+	}
+	if v := os.Getenv("ANTHROPIC_MODEL"); v != "qwen3" {
+		t.Errorf("ANTHROPIC_MODEL = %q, want %q", v, "qwen3")
 	}
 	if v := os.Getenv("EXTRA_VAR"); v != "extra-value" {
 		t.Errorf("EXTRA_VAR = %q", v)
