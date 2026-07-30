@@ -47,6 +47,7 @@ internal/
     adapter.go            Interface definition + registry
     claude.go             Claude Code adapter (exec with --plugin-dir)
     codex.go              OpenAI Codex adapter (child process + symlinks)
+    copilot.go            GitHub Copilot CLI adapter (exec with --plugin-dir)
     cursor.go             Cursor adapter (child process + symlinks)
     symlinks.go           Shared symlink install/clean helpers
     process.go            Child process management with signal forwarding
@@ -404,7 +405,7 @@ func launchMyVendor(configPath string, extraArgs []string) error {
 }
 ```
 
-The `init()` function registers the adapter automatically via Go's init mechanism. See `internal/vendor/claude.go`, `codex.go`, and `cursor.go` for working examples.
+The `init()` function registers the adapter automatically via Go's init mechanism. See `internal/vendor/claude.go`, `codex.go`, `copilot.go`, and `cursor.go` for working examples.
 
 ### Resolver
 
@@ -457,7 +458,7 @@ The include/subpath logic has many combinations. Integration tests in `internal/
 | `MultiSourceComposition` | 2+embed | mixed | yes | Integration using testdata fixtures |
 | `MonorepoNoPickIncludesAll` | 1 | yes | no | Integration with testdata monorepo |
 | `SkillsRepoFullInclude` | 1 | no | no | Integration with testdata skills-repo |
-| `CrossVendorAssembly` | 1 | no | yes | Same content assembled for 3 vendors |
+| `CrossVendorAssembly` | 1 | no | yes | Same content assembled for 4 vendors |
 
 Test fixtures in `testdata/` simulate real-world sources:
 - `skills-repo/` - standalone skills library with skills, agents, and rules

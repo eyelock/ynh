@@ -9,8 +9,11 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
+	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/eyelock/ynh/internal/assembler"
@@ -39,6 +42,13 @@ type RunOptions struct {
 	HarnessName string
 	// Task is the task text sent as the first user message.
 	Task string
+	// Profile is an optional profile name to apply to the harness before
+	// assembly. Mirrors `ynh run --profile`. Mutually exclusive with Focus.
+	Profile string
+	// Focus is an optional focus name. The focus's prompt becomes the task
+	// and the focus's bound profile (if any) is applied. Mirrors
+	// `ynh run --focus`. Mutually exclusive with Task and Profile.
+	Focus string
 	// Backend selects the worker backend ("claude" or "codex"). Defaults to "claude".
 	Backend string
 	// Sandbox is "srt" or "none". Defaults to "none".
@@ -50,6 +60,14 @@ type RunOptions struct {
 	MaxTurns  int
 	MaxTokens int64
 	MaxWall   time.Duration
+
+	// MaxPlanIterations bounds the plan-refine loop in interactive mode.
+	// Each refine round (replace_feedback during plan approval) costs an
+	// extra LLM round-trip; this guard prevents runaway. Zero applies the
+	// default of 5. Plan iterations do NOT consume MaxTurns budget;
+	// MaxTurns is the act-phase convergence cap. They DO consume tokens
+	// and wall-clock.
+	MaxPlanIterations int
 
 	// ConvergenceSensor is the name of a sensor to consult as a final done-check.
 	// All regular sensors must pass first; then this sensor is consulted.
@@ -68,6 +86,13 @@ type RunOptions struct {
 	// EmitJSONL is the path for trajectory output. "-" writes to Stdout.
 	// If empty, trajectory events are discarded.
 	EmitJSONL string
+
+	// Resume, when non-empty, is the session directory of a prior run. The
+	// loop reads <dir>/checkpoint.json and continues from the last completed
+	// turn with budget counters and the worker conversation restored. The
+	// trajectory is appended (not truncated); EmitJSONL defaults to
+	// <dir>/trajectory.jsonl when not given explicitly.
+	Resume string
 
 	// I/O streams. Defaults to os.Stdout / os.Stderr / os.Stdin.
 	Stdout io.Writer
@@ -105,9 +130,11 @@ func RunLoop(opts RunOptions) error {
 	if opts.Stdin == nil {
 		opts.Stdin = os.Stdin
 	}
-	if opts.Backend == "" {
-		opts.Backend = "claude"
+	backend, err := validateBackend(opts.Backend)
+	if err != nil {
+		return err
 	}
+	opts.Backend = backend
 	if opts.WorktreeDir == "" {
 		var err error
 		opts.WorktreeDir, err = os.Getwd()
@@ -121,10 +148,26 @@ func RunLoop(opts RunOptions) error {
 		return err
 	}
 
-	// ── Trajectory writer ─────────────────────────────────────────────────────
+	// ── Resume state ──────────────────────────────────────────────────────────
+	var resumeCP *Checkpoint
+	resuming := opts.Resume != ""
+	if resuming {
+		var rerr error
+		resumeCP, rerr = readCheckpoint(opts.Resume)
+		if rerr != nil {
+			return &ExitError{Code: ExitResumeError, Message: rerr.Error()}
+		}
+		// The trajectory lives in the session directory; default it so callers
+		// can pass just --resume <dir>.
+		if opts.EmitJSONL == "" {
+			opts.EmitJSONL = filepath.Join(opts.Resume, "trajectory.jsonl")
+		}
+	}
+
+	// ── Trajectory writer (append on resume, truncate on a fresh run) ─────────
 	traj := newNullTrajectory()
 	if opts.EmitJSONL != "" {
-		tw, cleanup, err := openTrajectory(opts.EmitJSONL, opts.Stdout)
+		tw, cleanup, err := openTrajectory(opts.EmitJSONL, opts.Stdout, resuming)
 		if err != nil {
 			return err
 		}
@@ -132,7 +175,17 @@ func RunLoop(opts RunOptions) error {
 		traj = tw
 	}
 
+	// Session directory holds checkpoint.json beside the trajectory. Durability
+	// is enabled only when there is a real file path to anchor it.
+	sessionDir := opts.Resume
+	if sessionDir == "" {
+		sessionDir = sessionDirFromEmit(opts.EmitJSONL)
+	}
+
 	sessionID := newSessionID()
+	if resuming {
+		sessionID = resumeCP.SessionID
+	}
 
 	// ── Load and assemble harness ─────────────────────────────────────────────
 	var configPath string
@@ -143,11 +196,36 @@ func RunLoop(opts RunOptions) error {
 		if err != nil {
 			return fmt.Errorf("loading harness %q: %w", opts.HarnessName, err)
 		}
+
+		// Resolve focus → prompt + bound profile. Mirrors `ynh run --focus`.
+		profileName := opts.Profile
+		if opts.Focus != "" {
+			focus, ok := harnessObj.Focuses[opts.Focus]
+			if !ok {
+				return fmt.Errorf("focus %q not defined in harness", opts.Focus)
+			}
+			if focus.Profile != "" {
+				profileName = focus.Profile
+			}
+			opts.Task = focus.Prompt
+		}
+
+		// Apply profile overlay before assembly so includes/hooks/MCP layered
+		// in by the profile are baked into the assembled harness.
+		if profileName != "" {
+			harnessObj, err = harness.ResolveProfile(harnessObj, profileName)
+			if err != nil {
+				return fmt.Errorf("resolving profile %q: %w", profileName, err)
+			}
+		}
+
 		configPath, err = assembleHarness(harnessObj, opts.Backend)
 		if err != nil {
 			return fmt.Errorf("assembling harness: %w", err)
 		}
 		defer func() { _ = os.RemoveAll(configPath) }()
+	} else if opts.Focus != "" || opts.Profile != "" {
+		return fmt.Errorf("--focus and --profile require --harness")
 	}
 
 	// ── Select backend ────────────────────────────────────────────────────────
@@ -159,27 +237,94 @@ func RunLoop(opts RunOptions) error {
 		}
 	}
 
-	// ── Session start ─────────────────────────────────────────────────────────
-	ctx := context.Background()
+	// ── Budget (restored on resume so caps carry across the relaunch) ─────────
+	budget := &Budget{
+		MaxTurns:  opts.MaxTurns,
+		MaxTokens: opts.MaxTokens,
+		MaxWall:   opts.MaxWall,
+	}
+	if resuming {
+		budget.Resume(
+			resumeCP.Budget.Turns,
+			resumeCP.Budget.Tokens,
+			time.Duration(resumeCP.Budget.WallConsumedMS)*time.Millisecond,
+		)
+	} else {
+		budget.Start()
+	}
 
+	// Resume past an already-exceeded budget: honor the cap immediately and
+	// exit before spawning a worker or starting a new turn.
+	if resuming {
+		if reason, budgetKind, code := budget.Exceeded(); reason != "" {
+			_ = traj.Emit(KindBudgetExceeded, budget.Turns(), BudgetExceededData{Budget: budgetKind, Reason: reason})
+			_ = traj.Emit(KindSessionEnd, budget.Turns(), SessionEndData{ExitCode: code, Reason: reason, TotalTurns: budget.Turns(), TotalTokens: budget.Tokens()})
+			return &ExitError{Code: code, Message: reason}
+		}
+	}
+
+	// ── Cancellable context + stop signals ────────────────────────────────────
+	// SIGINT/SIGTERM cancel the worker context so an in-flight Next() unblocks;
+	// the loop then exits with the last completed turn already checkpointed, so
+	// a later --resume continues from there. (TermQ sends an interrupt control
+	// message first, then SIGTERM after a grace period.)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+	go func() {
+		select {
+		case <-sigCh:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
+	// ── Session start / resumed ───────────────────────────────────────────────
 	harnessName := opts.HarnessName
 	if harnessName == "" {
 		harnessName = "(none)"
 	}
-	if emitErr := traj.Emit(KindSessionStart, 0, SessionStartData{
-		SessionID: sessionID,
-		Harness:   harnessName,
-		Backend:   wb.Name(),
-		Task:      opts.Task,
-	}); emitErr != nil {
-		return fmt.Errorf("writing trajectory: %w", emitErr)
+	if resuming {
+		resumedAtTurn := resumeCP.LastCompletedTurn + 1
+		if emitErr := traj.Emit(KindSessionResumed, budget.Turns(), SessionResumedData{
+			SessionID:       sessionID,
+			Backend:         wb.Name(),
+			ResumedAtTurn:   resumedAtTurn,
+			RestoredTurns:   budget.Turns(),
+			RestoredTokens:  budget.Tokens(),
+			PendingApproval: resumeCP.PendingApproval,
+		}); emitErr != nil {
+			return fmt.Errorf("writing trajectory: %w", emitErr)
+		}
+	} else {
+		if emitErr := traj.Emit(KindSessionStart, 0, SessionStartData{
+			SessionID: sessionID,
+			Harness:   harnessName,
+			Backend:   wb.Name(),
+			Task:      opts.Task,
+		}); emitErr != nil {
+			return fmt.Errorf("writing trajectory: %w", emitErr)
+		}
 	}
 
+	// ── Start (or reconstruct) the worker ─────────────────────────────────────
+	var resumeToken string
+	if resuming {
+		resumeToken = resumeCP.ResumeToken
+		if resumeToken == "" {
+			_, _ = fmt.Fprintf(opts.Stderr,
+				"resume: no backend resume token for %s; continuing with fresh conversation context (loop accounting restored)\n",
+				wb.Name())
+		}
+	}
 	sess, err := wb.Start(ctx, StartOptions{
 		WorktreeDir: opts.WorktreeDir,
 		ConfigPath:  configPath,
 		Sandbox:     opts.Sandbox,
 		Model:       opts.Model,
+		ResumeToken: resumeToken,
 		Stderr:      opts.Stderr,
 	})
 	if err != nil {
@@ -188,17 +333,73 @@ func RunLoop(opts RunOptions) error {
 	}
 	defer func() { _ = sess.Close() }()
 
-	// ── Budget + watchdog ─────────────────────────────────────────────────────
-	budget := &Budget{
-		MaxTurns:  opts.MaxTurns,
-		MaxTokens: opts.MaxTokens,
-		MaxWall:   opts.MaxWall,
-	}
-	budget.Start()
 	watchdog := NewWatchdog()
 
 	// ── Control channel ───────────────────────────────────────────────────────
 	ctrl := NewControlReader(opts.Stdin)
+
+	// In non-interactive mode nothing else consumes the control channel, so a
+	// dedicated reader turns {"action":"interrupt"} into a context cancel.
+	// Interactive mode handles interrupt inside the approval gates instead.
+	if !opts.Interactive {
+		go func() {
+			for msg := range ctrl.C() {
+				if msg.Action == ActionInterrupt {
+					cancel()
+					return
+				}
+			}
+		}()
+	}
+
+	// ── Checkpoint writer ─────────────────────────────────────────────────────
+	// cp is mutated and re-saved at each turn boundary; ResumeToken/Budget are
+	// refreshed from live state on every write.
+	cp := &Checkpoint{
+		SessionID: sessionID,
+		Backend:   wb.Name(),
+		Task:      opts.Task,
+	}
+	planIterations := 0
+	if resuming {
+		// Carry the prior checkpoint's state forward so per-turn saves preserve
+		// plan/approval fields across a second interrupt-and-resume.
+		planIterations = resumeCP.Budget.PlanIterations
+		cp.Phase = resumeCP.Phase
+		cp.PlanFinalized = resumeCP.PlanFinalized
+		cp.ApprovedPlan = resumeCP.ApprovedPlan
+		cp.LastCompletedTurn = resumeCP.LastCompletedTurn
+		cp.PendingMessage = resumeCP.PendingMessage
+		cp.PendingApproval = resumeCP.PendingApproval
+		if opts.Task == "" {
+			cp.Task = resumeCP.Task
+		}
+	}
+	saveCheckpoint := func() {
+		if sessionDir == "" {
+			return
+		}
+		cp.ResumeToken = sess.ResumeToken()
+		cp.Budget = CheckpointBudget{
+			Turns:          budget.Turns(),
+			Tokens:         budget.Tokens(),
+			WallConsumedMS: budget.WallConsumed().Milliseconds(),
+			PlanIterations: planIterations,
+		}
+		if err := writeCheckpoint(sessionDir, cp); err != nil {
+			_, _ = fmt.Fprintf(opts.Stderr, "checkpoint write failed: %v\n", err)
+		}
+	}
+	interruptExit := func(atTurn int) error {
+		const reason = "interrupted (resumable)"
+		_ = traj.Emit(KindSessionEnd, atTurn, SessionEndData{
+			ExitCode:    ExitInterrupted,
+			Reason:      reason,
+			TotalTurns:  budget.Turns(),
+			TotalTokens: budget.Tokens(),
+		})
+		return &ExitError{Code: ExitInterrupted, Message: reason}
+	}
 
 	// ── Collect sensors ───────────────────────────────────────────────────────
 	var sensorNames []string
@@ -231,62 +432,176 @@ func RunLoop(opts RunOptions) error {
 	} // end else if harnessObj != nil
 
 	// ── Plan phase ────────────────────────────────────────────────────────────
-	if !opts.NoPlan {
+	// Plan iteration loop: produces a plan, optionally awaits user approval,
+	// loops back into "revise the plan" if the user replied with refinement
+	// feedback. Non-interactive mode runs exactly one iteration and continues
+	// straight into the act phase.
+	//
+	// Prompts ask only for an inline reply — no file write. claude in plan
+	// mode is read-only, and demanding a plan.md write there caused the
+	// worker to stall at its own permission gate instead of producing a
+	// plan. The act phase has write access if a plan file is wanted later.
+	//
+	// approvedPlan is lifted out of the loop so the act phase can forward
+	// the final plan content into its first message; otherwise the worker
+	// would enter act mode with only the original task and lose every
+	// refinement it just produced.
+	var approvedPlan string
+	runPlan := !opts.NoPlan
+	if resuming && resumeCP.Phase == PhaseAct {
+		// Plan was already finalized (or skipped via --no-plan) before the
+		// checkpoint; continue straight into the act phase.
+		runPlan = false
+		approvedPlan = resumeCP.ApprovedPlan
+	}
+	if runPlan {
+		// Persist a plan-phase checkpoint so a crash during planning is
+		// resumable (the plan phase is simply re-run from scratch on resume).
+		cp.Phase = PhasePlan
+		cp.PlanFinalized = false
+		cp.LastCompletedTurn = 0
+		cp.PendingMessage = ""
+		saveCheckpoint()
+
+		maxPlanIters := opts.MaxPlanIterations
+		if maxPlanIters <= 0 {
+			maxPlanIters = 5
+		}
 		planMsg := fmt.Sprintf(
-			"Write a plan for the following task. Document it clearly in plan.md in the current directory.\n\nTask: %s",
+			"Write a clear, structured plan for the following task. Reply with the plan in your message — do not write any files yet.\n\nTask: %s",
 			opts.Task,
 		)
-		if emitErr := traj.Emit(KindPlan, 0, nil); emitErr != nil {
-			return fmt.Errorf("writing trajectory: %w", emitErr)
-		}
-		if err := sess.Send(planMsg); err != nil {
-			_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
-			return &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("sending plan request: %v", err)}
-		}
-		planTurn, err := sess.Next()
-		if err == io.EOF {
-			_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: "worker exited during plan phase"})
-			return &ExitError{Code: ExitWorkerError, Message: "worker exited during plan phase"}
-		}
-		if err != nil {
-			_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
-			return &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("plan turn: %v", err)}
-		}
-		_ = traj.Emit(KindAssistantMessage, 0, planTurn.Content)
+	planLoop:
+		for planIter := 1; ; planIter++ {
+			planIterations = planIter
+			if planIter == 1 {
+				if emitErr := traj.Emit(KindPlan, 0, nil); emitErr != nil {
+					return fmt.Errorf("writing trajectory: %w", emitErr)
+				}
+			}
+			if err := sess.Send(planMsg); err != nil {
+				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
+				return &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("sending plan request: %v", err)}
+			}
+			planTurn, err := sess.Next()
+			if err == io.EOF {
+				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: "worker exited during plan phase"})
+				return &ExitError{Code: ExitWorkerError, Message: "worker exited during plan phase"}
+			}
+			if err != nil {
+				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
+				return &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("plan turn: %v", err)}
+			}
+			_ = traj.Emit(KindAssistantMessage, 0, planTurn.Content)
+			budget.RecordTokens(planTurn.Usage)
+			_ = traj.Emit(KindBudgetSnapshot, 0, BudgetSnapshotData{
+				Turns:  budget.Turns(),
+				Tokens: budget.Tokens(),
+			})
 
-		if opts.Interactive {
-			feedback := planTurn.Content
-			if emitErr := traj.Emit(KindTurnApprovalRequired, 0, TurnApprovalData{SynthesizedFeedback: feedback}); emitErr != nil {
+			// Plan iterations consume tokens and wall-clock but not the act-phase
+			// turn cap. budget.Exceeded checks turns first; turns is still 0 here
+			// (RecordTurn is act-phase only) so the turns branch is dormant.
+			if reason, budgetKind, code := budget.Exceeded(); reason != "" {
+				_ = traj.Emit(KindBudgetExceeded, 0, BudgetExceededData{Budget: budgetKind, Reason: reason})
+				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: code, Reason: reason, TotalTokens: budget.Tokens()})
+				return &ExitError{Code: code, Message: reason}
+			}
+
+			if !opts.Interactive {
+				approvedPlan = planTurn.Content
+				break planLoop
+			}
+
+			if emitErr := traj.Emit(KindPlanApprovalRequired, 0, PlanApprovalData{
+				Plan:      planTurn.Content,
+				Iteration: planIter,
+			}); emitErr != nil {
 				return fmt.Errorf("writing trajectory: %w", emitErr)
 			}
-			action, replacement, aborted := waitForApproval(ctrl, ActionApprovePlan, ActionRejectPlan)
+			action, replyFeedback, aborted := waitForApproval(ctrl, ActionApprovePlan, ActionRejectPlan)
 			if aborted {
-				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitUserAborted, Reason: "user aborted"})
-				return &ExitError{Code: ExitUserAborted, Message: "plan rejected by user"}
+				// Interrupt/SIGTERM during plan approval: the plan-phase
+				// checkpoint already exists, so --resume re-runs the plan.
+				return interruptExit(0)
 			}
 			if action == ActionRejectPlan {
-				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitUserAborted, Reason: "plan rejected"})
-				return &ExitError{Code: ExitUserAborted, Message: "plan rejected by user"}
+				reason := "plan rejected by user"
+				if replyFeedback != "" {
+					reason = "plan rejected by user: " + replyFeedback
+				}
+				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitUserAborted, Reason: reason})
+				return &ExitError{Code: ExitUserAborted, Message: reason}
 			}
-			if replacement != "" {
-				feedback = replacement
+			// ActionApprovePlan: empty feedback means plain approve; non-empty
+			// means refine — produce a revised plan addressing the feedback.
+			if replyFeedback == "" {
+				approvedPlan = planTurn.Content
+				break planLoop
 			}
-			_ = feedback // plan approval carries no feedback to the worker
+			if planIter >= maxPlanIters {
+				reason := fmt.Sprintf("plan iteration cap reached (%d/%d)", planIter, maxPlanIters)
+				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitPlanIterationCap, Reason: reason})
+				return &ExitError{Code: ExitPlanIterationCap, Message: reason}
+			}
+			nextIter := planIter + 1
+			_ = traj.Emit(KindPlanRevised, 0, PlanRevisedData{Iteration: nextIter, Notes: replyFeedback})
+			planMsg = fmt.Sprintf(
+				"Revise the plan to address this feedback. Reply with the full revised plan in your message — do not write any files yet.\n\nFeedback:\n%s",
+				replyFeedback,
+			)
 		}
 	}
 
 	// ── Act loop ──────────────────────────────────────────────────────────────
-	// First message: task (or plan-approved continuation).
-	firstMsg := opts.Task
-	if !opts.NoPlan {
-		firstMsg = "Plan approved. Proceed with implementation: " + opts.Task
+	// First message: forward the approved plan into the act phase so the
+	// worker has the full text in context as it transitions to write mode.
+	// Without this, refined plans evaporate at the phase boundary and the
+	// worker re-derives intent from the original task alone. On resume the
+	// pending message from the checkpoint is re-sent instead, which redoes at
+	// most the interrupted turn.
+	var firstMsg string
+	switch {
+	case resuming && resumeCP.Phase == PhaseAct:
+		firstMsg = resumeCP.PendingMessage
+	case runPlan:
+		firstMsg = fmt.Sprintf(
+			"Plan approved:\n\n%s\n\nProceed with implementation. Original task: %s",
+			approvedPlan,
+			opts.Task,
+		)
+	default: // --no-plan fresh run
+		firstMsg = opts.Task
 	}
+
+	// Persist the act-entry checkpoint for fresh runs and resume-restarted
+	// plans. A phase==act resume already has an authoritative checkpoint, so
+	// it is left untouched (last_completed_turn and pending_message stand).
+	// (!resuming short-circuits before the nil resumeCP deref.)
+	if !resuming || resumeCP.Phase != PhaseAct {
+		cp.Phase = PhaseAct
+		cp.PlanFinalized = runPlan
+		cp.ApprovedPlan = approvedPlan
+		cp.LastCompletedTurn = budget.Turns()
+		cp.PendingMessage = firstMsg
+		cp.PendingApproval = ""
+		saveCheckpoint()
+	}
+
 	if err := sess.Send(firstMsg); err != nil {
 		_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
 		return &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("sending first message: %v", err)}
 	}
 
 	for {
+		// ── Interrupt check ───────────────────────────────────────────────────
+		// An interrupt/SIGTERM that arrived between turns (e.g. a cursor turn
+		// that ran to completion before the cancel took effect). The last
+		// completed turn is already checkpointed, so --resume continues from it.
+		if ctx.Err() != nil {
+			return interruptExit(budget.Turns())
+		}
+
 		// ── Budget check ──────────────────────────────────────────────────────
 		if reason, budgetKind, code := budget.Exceeded(); reason != "" {
 			_ = traj.Emit(KindBudgetExceeded, budget.Turns(), BudgetExceededData{Budget: budgetKind, Reason: reason})
@@ -299,6 +614,11 @@ func RunLoop(opts RunOptions) error {
 
 		// ── Wait for assistant turn ───────────────────────────────────────────
 		turn, err := sess.Next()
+		// A cancelled context means an interrupt/SIGTERM killed the worker
+		// mid-turn; the partial turn is discarded and resume redoes it.
+		if ctx.Err() != nil {
+			return interruptExit(turnN)
+		}
 		if err == io.EOF {
 			_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitWorkerError, Reason: "worker exited unexpectedly"})
 			return &ExitError{Code: ExitWorkerError, Message: "worker exited before convergence"}
@@ -311,6 +631,10 @@ func RunLoop(opts RunOptions) error {
 
 		budget.RecordTurn()
 		budget.RecordTokens(turn.Usage)
+		_ = traj.Emit(KindBudgetSnapshot, turnN, BudgetSnapshotData{
+			Turns:  budget.Turns(),
+			Tokens: budget.Tokens(),
+		})
 
 		// ── Auto-commit ───────────────────────────────────────────────────────
 		if opts.AutoCommit {
@@ -370,8 +694,9 @@ func RunLoop(opts RunOptions) error {
 				}
 				_, replacement, aborted := waitForApproval(ctrl, ActionApproveTurn, ActionRejectPlan)
 				if aborted {
-					_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitUserAborted, Reason: "user interrupted"})
-					return &ExitError{Code: ExitUserAborted, Message: "session interrupted by user"}
+					// Interrupt at the turn gate: the checkpoint reflects the
+					// last completed turn, so --resume redoes this turn.
+					return interruptExit(turnN)
 				}
 				if replacement != "" {
 					feedback = replacement
@@ -383,6 +708,14 @@ func RunLoop(opts RunOptions) error {
 				_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
 				return &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("sending feedback turn %d: %v", turnN, err)}
 			}
+
+			// ── Checkpoint the completed turn ──────────────────────────────────
+			// Turn turnN is now fully observed and its feedback is queued as the
+			// next message; persist so a crash redoes at most this next turn.
+			cp.Phase = PhaseAct
+			cp.LastCompletedTurn = turnN
+			cp.PendingMessage = feedback
+			saveCheckpoint()
 		}
 	}
 }
@@ -463,8 +796,18 @@ func synthesizeFeedback(results []*SensorResult) string {
 }
 
 // waitForApproval blocks until the control channel delivers one of the
-// expected approval or abort actions. Returns (action, replacementFeedback, aborted).
-// aborted is true if an interrupt was received.
+// expected approval or abort actions. Returns (action, feedback, aborted).
+//
+// Feedback semantics by action:
+//   - approveAction: feedback is empty (plain approval).
+//   - ActionReplaceFeedback: returned as approveAction with the user's
+//     replacement payload — caller decides whether to augment the next
+//     prompt (act phase) or trigger a refine iteration (plan phase).
+//   - rejectAction: feedback carries the optional "why" payload, surfaced
+//     in KindSessionEnd.Reason for telemetry. Empty if the consumer
+//     rejected without notes.
+//
+// aborted is true if an interrupt was received or stdin closed.
 func waitForApproval(ctrl *ControlReader, approveAction, rejectAction ControlAction) (ControlAction, string, bool) {
 	for msg := range ctrl.C() {
 		switch msg.Action {
@@ -473,7 +816,7 @@ func waitForApproval(ctrl *ControlReader, approveAction, rejectAction ControlAct
 		case ActionReplaceFeedback:
 			return approveAction, msg.Feedback, false
 		case rejectAction, ActionRejectPlan:
-			return rejectAction, "", false
+			return rejectAction, msg.Feedback, false
 		case ActionInterrupt:
 			return ActionInterrupt, "", true
 		}
@@ -566,10 +909,28 @@ func gitAutoCommit(dir string, turnN int) error {
 	return nil
 }
 
-// selectBackend returns the WorkerBackend for the given name.
+// validateBackend defaults the backend name and rejects unknown values
+// (including common near-misses like "claude-code") with a clear error
+// pointing at the canonical names. Run before any vendor lookup so
+// callers get a useful message instead of "unknown vendor" from deeper in.
+func validateBackend(name string) (string, error) {
+	switch name {
+	case "":
+		return "claude", nil
+	case "claude", "codex", "cursor":
+		return name, nil
+	case "claude-code":
+		return "", fmt.Errorf("unknown backend %q (did you mean \"claude\"?)", name)
+	default:
+		return "", fmt.Errorf("unknown backend %q (supported: claude, codex, cursor)", name)
+	}
+}
+
+// selectBackend returns the WorkerBackend for the given canonical name.
+// Names must be pre-validated via validateBackend.
 func selectBackend(name string) (WorkerBackend, error) {
 	switch name {
-	case "claude", "":
+	case "claude":
 		return &ClaudeBackend{}, nil
 	case "codex":
 		return &CodexBackend{}, nil
@@ -594,12 +955,18 @@ func resolveYNHBinary(override string) (string, error) {
 
 // openTrajectory opens a trajectory output destination.
 // If path is "-", it returns the provided stdout writer.
+// A fresh run truncates the file; a resume run (appendMode) opens with
+// O_APPEND so the prior trajectory survives and new events are appended.
 // Returns the writer and a cleanup function.
-func openTrajectory(path string, stdout io.Writer) (*TrajectoryWriter, func(), error) {
+func openTrajectory(path string, stdout io.Writer, appendMode bool) (*TrajectoryWriter, func(), error) {
 	if path == "-" {
 		return NewTrajectoryWriter(stdout), func() {}, nil
 	}
-	f, err := os.Create(path)
+	flags := os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+	if appendMode {
+		flags = os.O_CREATE | os.O_WRONLY | os.O_APPEND
+	}
+	f, err := os.OpenFile(path, flags, 0o644)
 	if err != nil {
 		return nil, nil, fmt.Errorf("opening trajectory file %q: %w", path, err)
 	}

@@ -25,7 +25,16 @@ func (b *CodexBackend) Start(ctx context.Context, opts StartOptions) (WorkerSess
 		return nil, fmt.Errorf("codex not found on PATH: %w", err)
 	}
 
-	args := []string{"exec", "--json"}
+	// Resume token = codex session id. codex persists session rollouts and
+	// resumes them via `codex exec resume <id>`. The id is not known up front
+	// (codex assigns it), so it is captured from the --json stream on the first
+	// turn (see codexSession.Next) and only then becomes available to persist.
+	var args []string
+	if opts.ResumeToken != "" {
+		args = []string{"exec", "resume", opts.ResumeToken, "--json"}
+	} else {
+		args = []string{"exec", "--json"}
+	}
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}
@@ -56,9 +65,10 @@ func (b *CodexBackend) Start(ctx context.Context, opts StartOptions) (WorkerSess
 	scanner.Buffer(make([]byte, 2<<20), 2<<20)
 
 	return &codexSession{
-		cmd:     cmd,
-		stdin:   stdinPipe,
-		scanner: scanner,
+		cmd:       cmd,
+		stdin:     stdinPipe,
+		scanner:   scanner,
+		sessionID: opts.ResumeToken,
 	}, nil
 }
 
@@ -69,11 +79,16 @@ type codexUserMsg struct {
 }
 
 // codex NDJSON output event shapes.
-// Codex emits typed events; we only need "message" and "result" to drive the loop.
+// Codex emits typed events; we only need "message" and "result" to drive the
+// loop, plus a session/thread id (emitted on an init/session event) to capture
+// the resume token. Field names cover the known codex variants; unknown shapes
+// are tolerated because absent fields decode to the zero value.
 type codexOutputEvent struct {
-	Type    string      `json:"type"`
-	Message *codexMsg   `json:"message,omitempty"`
-	Usage   *codexUsage `json:"usage,omitempty"`
+	Type      string      `json:"type"`
+	Message   *codexMsg   `json:"message,omitempty"`
+	Usage     *codexUsage `json:"usage,omitempty"`
+	SessionID string      `json:"session_id,omitempty"`
+	ThreadID  string      `json:"thread_id,omitempty"`
 }
 
 type codexMsg struct {
@@ -92,10 +107,16 @@ type codexUsage struct {
 }
 
 type codexSession struct {
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	scanner *bufio.Scanner
+	cmd       *exec.Cmd
+	stdin     io.WriteCloser
+	scanner   *bufio.Scanner
+	sessionID string
 }
+
+// ResumeToken returns the codex session id once captured from the event
+// stream. Empty until the first turn surfaces it (or if codex did not emit
+// one, in which case resume falls back to loop accounting only).
+func (s *codexSession) ResumeToken() string { return s.sessionID }
 
 // Send delivers a user-turn message to the codex subprocess via NDJSON.
 func (s *codexSession) Send(msg string) error {
@@ -124,6 +145,16 @@ func (s *codexSession) Next() (Turn, error) {
 		var ev codexOutputEvent
 		if err := json.Unmarshal(line, &ev); err != nil {
 			continue
+		}
+
+		// Capture the session/thread id the first time codex emits it so a
+		// later relaunch can resume via `codex exec resume <id>`.
+		if s.sessionID == "" {
+			if ev.SessionID != "" {
+				s.sessionID = ev.SessionID
+			} else if ev.ThreadID != "" {
+				s.sessionID = ev.ThreadID
+			}
 		}
 
 		switch ev.Type {

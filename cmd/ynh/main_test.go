@@ -10,6 +10,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/symlink"
 	"github.com/eyelock/ynh/internal/vendor"
@@ -390,12 +391,14 @@ func TestResolveVendor(t *testing.T) {
 		{"env var", "", "codex", "claude", "codex"},
 		{"flag beats env var", "claude", "codex", "cursor", "claude"},
 		{"empty env var falls through", "", "", "codex", "codex"},
+		{"flag carries a backend spec through untouched", "ollama/claude/qwen3", "", "codex", "ollama/claude/qwen3"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			t.Setenv("HOME", dir)
+			t.Setenv("YNH_HOME", "")
 			if tt.envVar != "" {
 				t.Setenv("YNH_VENDOR", tt.envVar)
 			} else {
@@ -407,7 +410,12 @@ func TestResolveVendor(t *testing.T) {
 				DefaultVendor: tt.harnessVendor,
 			}
 
-			got, err := resolveVendor(tt.flag, p)
+			cfg, err := config.Load()
+			if err != nil {
+				t.Fatalf("config.Load failed: %v", err)
+			}
+
+			got, err := resolveVendor(tt.flag, p, cfg)
 			if err != nil {
 				t.Fatalf("resolveVendor failed: %v", err)
 			}
@@ -1367,6 +1375,50 @@ func TestCmdInstall_SourceInsideHarnessesDir(t *testing.T) {
 	// Harness must still be loadable after install from already-installed location
 	if harness.DetectFormat(srcDir) == "" {
 		t.Error("harness missing after install from already-installed location")
+	}
+}
+
+// Local installs must persist an absolute Source in the pointer record.
+// Relative paths break later loads from a different cwd (daemon, embedding
+// host) with a misleading "manifest not found" error.
+func TestCmdInstall_LocalRelativePath_PersistsAbsolute(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("YNH_HOME", "")
+
+	src := filepath.Join(dir, "rel-src")
+	if err := os.MkdirAll(filepath.Join(src, ".ynh-plugin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, ".ynh-plugin", "plugin.json"),
+		[]byte(`{"name":"relx","version":"0.0.1"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	if err := os.Chdir(src); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cmdInstall([]string{"."}); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+
+	ptr, err := harness.LoadPointerByID(namespace.CanonicalID("", "relx"))
+	if err != nil {
+		t.Fatalf("load pointer: %v", err)
+	}
+	if !filepath.IsAbs(ptr.Source) {
+		t.Errorf("pointer Source = %q; want absolute path", ptr.Source)
+	}
+	wantSrc, _ := filepath.EvalSymlinks(src)
+	gotSrc, _ := filepath.EvalSymlinks(ptr.Source)
+	if gotSrc != wantSrc {
+		t.Errorf("pointer Source = %q; want %q", gotSrc, wantSrc)
 	}
 }
 

@@ -61,7 +61,7 @@ Each hook entry has:
 
 ## Vendor Translation
 
-Each vendor uses different event names and config file formats:
+Each vendor uses different event names and config file formats. **GitHub Copilot CLI is not in this table** — Copilot hooks silently no-op in folders the CLI hasn't marked as trusted, and no flag exists to grant that trust per-invocation, so `ynh`-assembled hook config would appear to work but never actually fire. Copilot's adapter always emits no hook config rather than shipping something misleadingly inert. See the Copilot row in [Vendor Support](vendors.md#vendor-notes) for detail.
 
 ### Event Name Mapping
 

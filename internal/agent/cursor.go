@@ -28,16 +28,26 @@ func (b *CursorBackend) Start(_ context.Context, opts StartOptions) (WorkerSessi
 		return nil, fmt.Errorf("cursor not found on PATH: %w", err)
 	}
 
-	// Generate a unique chat ID for this session.
-	b8 := make([]byte, 8)
-	_, _ = rand.Read(b8)
-	chatID := hex.EncodeToString(b8)
+	// Resume token = cursor chatId. cursor already persists chats on disk and
+	// resumes them with --resume <chatId> (it spawns a fresh subprocess per
+	// turn), so the chatId is all we need to carry across a relaunch. A resume
+	// adopts the prior chatId and uses --resume from the very first turn; a
+	// fresh run generates a new chatId and omits --resume on turn one.
+	chatID := opts.ResumeToken
+	firstTurn := true
+	if chatID != "" {
+		firstTurn = false
+	} else {
+		b8 := make([]byte, 8)
+		_, _ = rand.Read(b8)
+		chatID = hex.EncodeToString(b8)
+	}
 
 	return &cursorSession{
 		cursorBin: cursorBin,
 		chatID:    chatID,
 		opts:      opts,
-		firstTurn: true,
+		firstTurn: firstTurn,
 	}, nil
 }
 
@@ -49,6 +59,9 @@ type cursorSession struct {
 	firstTurn bool
 	pending   string // message queued for the next Next() call
 }
+
+// ResumeToken returns the cursor chatId driving this conversation.
+func (s *cursorSession) ResumeToken() string { return s.chatID }
 
 // Send queues the user message for the next subprocess invocation.
 func (s *cursorSession) Send(msg string) error {

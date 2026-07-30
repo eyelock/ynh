@@ -21,6 +21,23 @@ func (b *Budget) Start() {
 	b.startTime = time.Now()
 }
 
+// Resume restores counters from a checkpoint so caps carry across a relaunch.
+// wallConsumed is the wall-clock already spent in prior sessions; the start
+// time is back-dated by that amount so Exceeded() measures cumulative elapsed
+// time, not just this process's lifetime. Use instead of Start on resume.
+func (b *Budget) Resume(turns int, tokens int64, wallConsumed time.Duration) {
+	b.turns = turns
+	b.tokens = tokens
+	b.startTime = time.Now().Add(-wallConsumed)
+}
+
+// WallConsumed returns the cumulative wall-clock elapsed since the (possibly
+// back-dated) start time. Persisted into a checkpoint so a later Resume can
+// continue the wall-clock budget from where this session left off.
+func (b *Budget) WallConsumed() time.Duration {
+	return time.Since(b.startTime)
+}
+
 // RecordTurn increments the completed-turn counter.
 func (b *Budget) RecordTurn() {
 	b.turns++
@@ -56,12 +73,15 @@ func (b *Budget) Exceeded() (reason string, budgetKind BudgetType, exitCode int)
 
 // Exit codes for loop termination.
 const (
-	ExitConverged    = 0
-	ExitIterationCap = 10
-	ExitTokenBudget  = 11
-	ExitWallClock    = 12
-	ExitStuck        = 13
-	ExitTamper       = 14
-	ExitWorkerError  = 20
-	ExitUserAborted  = 30
+	ExitConverged        = 0
+	ExitIterationCap     = 10
+	ExitTokenBudget      = 11
+	ExitWallClock        = 12
+	ExitStuck            = 13
+	ExitTamper           = 14
+	ExitPlanIterationCap = 15
+	ExitWorkerError      = 20
+	ExitResumeError      = 21
+	ExitUserAborted      = 30
+	ExitInterrupted      = 31
 )
