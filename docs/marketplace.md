@@ -231,11 +231,10 @@ Codex's marketplace is curated rather than open. It supports:
 Codex has significant differences from Claude Code and Cursor:
 
 - **No self-hosted marketplaces** — the catalog is centrally managed (as of March 2026)
-- **Skills-only distribution** — Codex discovers skills via `.agents/skills/` but has no loading mechanism for agents, rules, or commands as separate artifacts
-- **No plugin manifest** — skills are self-describing via SKILL.md frontmatter
+- **Skills-only distribution** — Codex loads skills but has no loading mechanism for agents, rules, or commands as separate artifacts
 - **Limited marketplace.json** — the format exists but the schema is still evolving
 
-For these reasons, ynh excludes Codex from marketplace generation. When building a marketplace with `ynd marketplace build`, Codex is silently skipped. Individual Codex export (`ynd export -v codex`) produces the `.agents/skills/` layout.
+ynh includes Codex in marketplace generation. `ynd marketplace build` writes a Codex-specific index at `.agents/plugins/marketplace.json` (source/path pointers and an install policy per plugin) alongside the Claude Code and Cursor indexes. Individual Codex export (`ynd export -v codex`) produces a `.codex-plugin/plugin.json` manifest with a `skills/` directory at the plugin root.
 
 ### Official Resources
 
@@ -246,7 +245,7 @@ For these reasons, ynh excludes Codex from marketplace generation. When building
 
 ## ynh and Marketplaces
 
-ynh acts as the translation layer between your harness definition and vendor-native distribution formats. The `ynd marketplace build` command takes a `marketplace.json` config, resolves all harness includes, and produces a Git-ready directory with dual vendor indexes.
+ynh acts as the translation layer between your harness definition and vendor-native distribution formats. The `ynd marketplace build` command takes a `marketplace.json` config, resolves all harness includes, and produces a Git-ready directory with vendor indexes for Claude Code, Cursor, and Codex.
 
 ### What ynh Does
 
@@ -420,7 +419,7 @@ For the architectural rationale and contributor-facing rules, see [`.github/CONT
 
 **Why two marketplace.json files?** Vendor formats reject unknown fields. Claude Code requires `.claude-plugin/marketplace.json`, Cursor requires `.cursor-plugin/marketplace.json`. ynh generates both from the same source config, producing one physical plugin directory that serves both vendors.
 
-**Why exclude Codex?** Codex has no self-hosted marketplace system and limited artifact support (skills only). Generating a Codex marketplace index would have no consumer. Individual Codex export is still supported via `ynd export -v codex`.
+**Why does Codex get its own index format?** Codex's marketplace schema uses `source`/`policy` objects rather than the Claude/Cursor plugin-directory convention, so it can't share a marketplace.json with the other two vendors. `ynd marketplace build` generates a third index at `.agents/plugins/marketplace.json` alongside the Claude and Cursor ones, using Codex's native format. Codex's artifact support is still limited to skills (no agents, rules, or commands), so plugins in a Codex-consumed marketplace are skills-only regardless of what the harness defines for the other vendors.
 
 **Why auto-init Git?** Claude Code's plugin loader resolves relative `source` paths (e.g., `./plugins/formatter`) within the Git working tree. A marketplace directory that isn't a Git repo causes path resolution failures at install time.
 
@@ -433,10 +432,10 @@ For the architectural rationale and contributor-facing rules, see [`.github/CONT
 | Rules | Yes | Yes | No |
 | Commands | Yes | Yes | No |
 | Instructions | AGENTS.md | .cursorrules + AGENTS.md | AGENTS.md |
-| Plugin manifest | .claude-plugin/ | .cursor-plugin/ | None |
-| Marketplace index | .claude-plugin/marketplace.json | .cursor-plugin/marketplace.json | N/A |
+| Plugin manifest | .claude-plugin/ | .cursor-plugin/ | .codex-plugin/ |
+| Marketplace index | .claude-plugin/marketplace.json | .cursor-plugin/marketplace.json | .agents/plugins/marketplace.json |
 | Delegates | Yes (subagent) | Yes (subagent) | No |
-| Merged export | Yes | Yes | Excluded |
+| Merged export | Yes | Yes | Yes |
 
 ## References
 
