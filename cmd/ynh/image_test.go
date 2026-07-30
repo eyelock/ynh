@@ -162,6 +162,7 @@ func TestGenerateDockerfile(t *testing.T) {
 		"vendors/claude/ /home/ynh/.ynh/run/local--david/claude/",
 		"vendors/codex/ /home/ynh/.ynh/run/local--david/codex/",
 		"vendors/cursor/ /home/ynh/.ynh/run/local--david/cursor/",
+		"vendors/copilot/ /home/ynh/.ynh/run/local--david/copilot/",
 		"harness/ /home/ynh/.ynh/harnesses/local--david/",
 		"ENV YNH_VENDOR=claude",
 		`ENTRYPOINT ["tini", "-s", "--", "ynh", "run", "local/david"]`,

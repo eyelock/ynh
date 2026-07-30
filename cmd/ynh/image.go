@@ -34,10 +34,11 @@ type imageTemplateData struct {
 // canonical id — LoadQualified hard-rejects bare names.
 var imageDockerfileTmpl = template.Must(template.New("Dockerfile").Parse(`FROM {{.Base}}
 
-# Pre-assembled vendor layouts (all three, ready to use)
+# Pre-assembled vendor layouts (all four, ready to use)
 COPY --link --chown=ynh:ynh vendors/claude/ /home/ynh/.ynh/run/local--{{.Name}}/claude/
 COPY --link --chown=ynh:ynh vendors/codex/ /home/ynh/.ynh/run/local--{{.Name}}/codex/
 COPY --link --chown=ynh:ynh vendors/cursor/ /home/ynh/.ynh/run/local--{{.Name}}/cursor/
+COPY --link --chown=ynh:ynh vendors/copilot/ /home/ynh/.ynh/run/local--{{.Name}}/copilot/
 
 # Harness source (metadata for ynh run)
 COPY --link --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--{{.Name}}/

@@ -277,21 +277,34 @@ func TestIntegration_CrossVendorAssembly(t *testing.T) {
 	}
 	defer Cleanup(cursorDir)
 
+	// Assemble for Copilot
+	copilotAdapter, _ := vendor.Get("copilot")
+	copilotDir, err := Assemble(copilotAdapter, content)
+	if err != nil {
+		t.Fatalf("Assemble for copilot failed: %v", err)
+	}
+	defer Cleanup(copilotDir)
+
 	// Each should have the skill in their vendor-specific directory
 	assertFileExists(t, filepath.Join(claudeDir, ".claude", "skills", "commit", "SKILL.md"))
 	assertFileExists(t, filepath.Join(codexDir, ".codex", "skills", "commit", "SKILL.md"))
 	assertFileExists(t, filepath.Join(cursorDir, ".cursor", "skills", "commit", "SKILL.md"))
+	assertFileExists(t, filepath.Join(copilotDir, ".copilot", "skills", "commit", "SKILL.md"))
 
 	// Content should be identical across vendors
 	claudeContent, _ := os.ReadFile(filepath.Join(claudeDir, ".claude", "skills", "commit", "SKILL.md"))
 	codexContent, _ := os.ReadFile(filepath.Join(codexDir, ".codex", "skills", "commit", "SKILL.md"))
 	cursorContent, _ := os.ReadFile(filepath.Join(cursorDir, ".cursor", "skills", "commit", "SKILL.md"))
+	copilotContent, _ := os.ReadFile(filepath.Join(copilotDir, ".copilot", "skills", "commit", "SKILL.md"))
 
 	if string(claudeContent) != string(codexContent) {
 		t.Error("claude and codex skill content differ")
 	}
 	if string(claudeContent) != string(cursorContent) {
 		t.Error("claude and cursor skill content differ")
+	}
+	if string(claudeContent) != string(copilotContent) {
+		t.Error("claude and copilot skill content differ")
 	}
 }
 
@@ -316,6 +329,7 @@ func TestIntegration_InstructionsFileCrossVendor(t *testing.T) {
 		{"claude", "CLAUDE.md"},
 		{"codex", "codex.md"},
 		{"cursor", ".cursorrules"},
+		{"copilot", "AGENTS.md"},
 	}
 
 	for _, tt := range tests {
