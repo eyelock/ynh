@@ -141,7 +141,7 @@ With no backend segment (`-v claude`), behavior is unchanged — the vendor talk
 
 Each vendor's connection is applied differently:
 
-- **`claude`** — sets `ANTHROPIC_BASE_URL` to `base_url` verbatim, sets `ANTHROPIC_AUTH_TOKEN` to `auth_token`, and clears `ANTHROPIC_API_KEY` so no real key leaks to the local server. The model segment becomes `--model <model>`.
+- **`claude`** — sets `ANTHROPIC_BASE_URL` to `base_url` verbatim, sets `ANTHROPIC_AUTH_TOKEN` to `auth_token`, and clears `ANTHROPIC_API_KEY` so no real key leaks to the local server. The model segment becomes the `ANTHROPIC_MODEL` env var, not a `--model` CLI flag — Claude Code treats `--model`/`/model` as an explicit user choice and persists it to `~/.claude/settings.json` as the default for *all future sessions*, which would leak a backend's model (e.g. `qwen3`) into unrelated, non-redirected launches. `ANTHROPIC_MODEL` only affects the current process.
 - **`codex`** — writes a `[model_providers.<backend>]` block into `~/.codex/config.toml` with `base_url` verbatim and `wire_api = "responses"`, then passes `-c model_provider=<backend>` and `-c model=<model>`.
 
 An `env` map on a `backends.<name>.vendors.<vendor>` entry is an escape hatch for anything backend-specific beyond these fields.
