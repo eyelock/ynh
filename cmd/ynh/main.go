@@ -199,7 +199,7 @@ Commands:
   help                         Show this help
 
 Run flags:
-  -v <vendor>                  Override vendor (claude, codex, cursor), or "<backend>/<vendor>[/<model>]" to redirect at a local model backend (see: ynh backend)
+  -v <vendor>                  Override vendor (claude, codex, cursor, copilot), or "<backend>/<vendor>[/<model>]" to redirect at a local model backend (see: ynh backend)
   --focus <name>               Load a named focus (sets prompt and profile; implies non-interactive)
   --profile <name>             Apply a named profile overlay (with a prompt, implies non-interactive)
   --interactive                Override non-interactive default — stay in session after focus or prompt

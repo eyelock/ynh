@@ -67,8 +67,8 @@ func TestExportAllVendors(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	if len(results) != 3 {
-		t.Fatalf("expected 3 results, got %d", len(results))
+	if len(results) != 4 {
+		t.Fatalf("expected 4 results, got %d", len(results))
 	}
 
 	// Each vendor should have its own directory

@@ -11,6 +11,7 @@ $ ynh vendors
 NAME     CLI      CONFIG DIR
 claude   claude   .claude
 codex    codex    .codex
+copilot  copilot  .copilot
 cursor   agent    .cursor
 ```
 
@@ -25,8 +26,9 @@ Each vendor gets the strategy that matches its capabilities:
 | **Claude** | `syscall.Exec` with `--plugin-dir` | Native plugin loading | Clean handoff (ynh exits) |
 | **Codex** | Child process with `cmd.Dir` | Symlinks into project | Managed (signal forwarding) |
 | **Cursor** | Child process with `cmd.Dir` | Symlinks into project | Managed (signal forwarding) |
+| **Copilot** | `syscall.Exec` with `--plugin-dir` | Native plugin loading | Clean handoff (ynh exits) |
 
-Claude supports `--plugin-dir` natively, so ynh can exec directly into it. Codex and Cursor don't have plugin loading, so ynh installs symlinks and manages the child process for signal forwarding.
+Claude and Copilot support `--plugin-dir` natively, so ynh can exec directly into them. Codex and Cursor don't have plugin loading, so ynh installs symlinks and manages the child process for signal forwarding.
 
 ### Symlink Installation (Codex/Cursor)
 
@@ -155,6 +157,7 @@ $ ynh vendors
 NAME                  DISPLAY NAME                  CLI     CONFIG DIR  AVAILABLE
 claude                Claude Code                   claude  .claude     true
 codex                 OpenAI Codex                   codex   .codex      true
+copilot               GitHub Copilot CLI             copilot .copilot    true
 cursor                Cursor                         agent   .cursor     true
 ollama/claude/qwen3   Claude Code (ollama · qwen3)   claude  .claude     true
 ```
@@ -178,19 +181,21 @@ These come from Ollama's own docs, not ynh:
 
 **Cursor Agent** - Full interactive and non-interactive support. Uses symlink-based artifact installation. Requires `agent` CLI installed (`curl https://cursor.com/install -fsS | bash`). Uses `-p` for non-interactive prompts. See [cursor.com/cli](https://cursor.com/cli).
 
+**GitHub Copilot CLI** - Full interactive and non-interactive support. Uses `--plugin-dir` for artifact loading, like Claude. Requires `copilot` CLI installed. Non-interactive runs need `--allow-all-tools` (added automatically). Harness instructions and MCP servers are projected into the calling project's `.github/instructions/ynh-harness.instructions.md` and `.github/mcp.json` — Copilot doesn't read plugin-bundled `AGENTS.md`/`.mcp.json` via `--plugin-dir`. **Hooks are not supported**: Copilot silently no-ops hooks in folders it hasn't marked as trusted, and no CLI flag exists to grant that trust per-invocation, so `ynh`-managed hook config would silently fail rather than run. See [github.com/features/copilot/cli](https://github.com/features/copilot/cli).
+
 ## Export Output by Vendor
 
 `ynd export` produces vendor-native plugin layouts. Each vendor has a different file structure:
 
-| | Claude | Cursor | Codex |
-|---|---|---|---|
-| **Manifest** | `.claude-plugin/plugin.json` | `.cursor-plugin/plugin.json` | `.codex-plugin/plugin.json` |
-| **Skills** | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` |
-| **Agents** | `agents/<name>.md` | `agents/<name>.md` | *excluded* |
-| **Rules** | `rules/<name>.md` | `rules/<name>.md` | *excluded* |
-| **Commands** | `commands/<name>.md` | `commands/<name>.md` | *excluded* |
-| **Instructions** | `AGENTS.md` | `.cursorrules` + `AGENTS.md` | `AGENTS.md` |
-| **Marketplace** | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` | `.agents/plugins/marketplace.json` |
+| | Claude | Cursor | Codex | Copilot |
+|---|---|---|---|---|
+| **Manifest** | `.claude-plugin/plugin.json` | `.cursor-plugin/plugin.json` | `.codex-plugin/plugin.json` | `.claude-plugin/plugin.json` |
+| **Skills** | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` |
+| **Agents** | `agents/<name>.md` | `agents/<name>.md` | *excluded* | `agents/<name>.md` |
+| **Rules** | `rules/<name>.md` | `rules/<name>.md` | *excluded* | *excluded* |
+| **Commands** | `commands/<name>.md` | `commands/<name>.md` | *excluded* | *excluded* |
+| **Instructions** | `AGENTS.md` | `.cursorrules` + `AGENTS.md` | `AGENTS.md` | `AGENTS.md` |
+| **Marketplace** | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` | `.agents/plugins/marketplace.json` | `.github/plugin/marketplace.json` (best-effort, unverified) |
 
 Key differences between runtime and export:
 
@@ -199,6 +204,8 @@ Key differences between runtime and export:
 - Claude export writes `AGENTS.md` for instructions, not `CLAUDE.md` (which would conflict with the installing project's own)
 - Codex export is limited to skills — agents, rules, commands, and delegates are excluded with warnings
 - Codex is excluded from merged export mode (different marketplace format)
+- Copilot export is limited to skills and agents — rules and commands are excluded with warnings
+- Copilot uses Claude's plugin manifest format (`.claude-plugin/plugin.json`), since Copilot's own plugin loader reads the same schema
 
 See [ynd export](ynd.md#export) for full command reference.
 

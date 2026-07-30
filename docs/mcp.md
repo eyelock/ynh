@@ -74,6 +74,7 @@ Each server must have either `command` or `url`, not both. Validation rejects se
 | Claude Code | `.claude/.mcp.json` | JSON with `mcpServers` key (inside plugin dir) |
 | Cursor | `.cursor/mcp.json` | JSON with `mcpServers` key |
 | Codex | `.mcp.json` | JSON with `mcpServers` key (at plugin root) |
+| Copilot | `.github/mcp.json` (project root) | JSON with `mcpServers` key, each server requires an explicit `"type": "local"|"http"` field |
 
 > **Claude Code runtime limitation:** MCP servers in `--plugin-dir` plugins are not auto-activated during `ynh run` sessions. They work correctly when the plugin is installed via `/plugin install` or when using Codex/Cursor. See [Hooks](hooks.md#claude-code-runtime-limitation) for details.
 
@@ -132,6 +133,25 @@ Codex uses `.mcp.json` at the plugin root with the same JSON format as Claude:
   }
 }
 ```
+
+### Copilot Format
+
+Copilot requires an explicit `"type"` field per server (`"local"` for a `command`-based server, `"http"` for a `url`-based one) — unlike the other three vendors, which infer the server kind from which fields are present:
+
+```json
+{
+  "mcpServers": {
+    "sqlite": {
+      "type": "local",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sqlite", "/path/to/db.sqlite"],
+      "tools": ["*"]
+    }
+  }
+}
+```
+
+**Delivery is project-root, not plugin-dir.** Copilot does not read a plugin-bundled `.mcp.json` via `--plugin-dir` (confirmed by hand-testing), so `ynh run` projects the generated config directly into the calling project's `.github/mcp.json` instead — a file fully owned by ynh, distinct from anything the user might hand-author. `ynd export` writes the vendor-native `.mcp.json` at the plugin root as usual; it is inert until copied into a real project's `.github/` by the consumer, since export has no project-root context to project into.
 
 ## Root-Harness-Only Rule
 
