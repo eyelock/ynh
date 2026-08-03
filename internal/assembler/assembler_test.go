@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
@@ -35,6 +36,13 @@ func (m *mockAdapter) LaunchWithInitialPrompt(configPath, prompt string, extraAr
 	return nil
 }
 func (m *mockAdapter) LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error {
+	return nil
+}
+func (m *mockAdapter) SupportsResume() bool { return false }
+func (m *mockAdapter) ResolveLastSession(cwd string, notBefore time.Time) (string, error) {
+	return "", vendor.ErrSessionLookupUnavailable
+}
+func (m *mockAdapter) LaunchResume(configPath, sessionID string, extraArgs []string) error {
 	return nil
 }
 func (m *mockAdapter) GenerateSystemPrompt(content []byte) map[string][]byte {

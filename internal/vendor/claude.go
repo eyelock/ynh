@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
 )
@@ -75,6 +76,71 @@ func (c *Claude) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []
 }
 
 func (c *Claude) SupportsInitialPrompt() bool { return true }
+
+func (c *Claude) SupportsResume() bool { return true }
+
+// ResolveLastSession reads Claude's own session store. Claude writes one
+// <session-uuid>.jsonl per conversation into
+// ~/.claude/projects/<slugified-cwd>/, so the newest file's stem is the id
+// `--resume` wants.
+//
+// This lookup is only correct because Claude is launched via syscall.Exec and
+// therefore inherits ynh's cwd — the project directory. (Codex and Cursor set
+// cmd.Dir to the run dir, so a cwd-keyed lookup would be meaningless for them.)
+func (c *Claude) ResolveLastSession(cwd string, notBefore time.Time) (string, error) {
+	home, err := vendorHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	projectDir := filepath.Join(home, ".claude", "projects", claudeProjectSlug(cwd))
+	entries, err := dirEntriesByModTimeDesc(projectDir)
+	if err != nil {
+		return "", err
+	}
+
+	candidates := make([]sessionCandidate, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".jsonl" {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		candidates = append(candidates, sessionCandidate{
+			id:      strings.TrimSuffix(e.Name(), ".jsonl"),
+			modTime: info.ModTime(),
+		})
+	}
+	return newestCandidate(candidates, notBefore)
+}
+
+// claudeProjectSlug converts an absolute path into the directory name Claude
+// uses under ~/.claude/projects. Every "/" and "." becomes "-", so a leading
+// slash yields a leading dash and "/foo/.worktrees" yields "-foo--worktrees".
+// Verified against real directory names; other characters are left alone.
+//
+// The mapping is lossy (a path containing "-" is indistinguishable from one
+// containing "/") so it is only ever computed forward from a known cwd. Never
+// try to recover a path from a slug.
+func claudeProjectSlug(dir string) string {
+	return strings.NewReplacer("/", "-", ".", "-").Replace(dir)
+}
+
+// LaunchResume continues a prior Claude conversation. An empty sessionID falls
+// back to --continue, which Claude documents as "the most recent conversation
+// in the current directory" — directory-scoped, so it stays bound to this
+// project. A bare --resume is never emitted: it opens the session picker.
+func (c *Claude) LaunchResume(configPath, sessionID string, extraArgs []string) error {
+	var resumeArgs []string
+	if sessionID != "" {
+		resumeArgs = []string{"--resume", sessionID}
+	} else {
+		resumeArgs = []string{"--continue"}
+	}
+	return launchClaude(configPath, "", append(resumeArgs, extraArgs...))
+}
 
 func (c *Claude) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
 	return []string{"--append-system-prompt", text}, nil

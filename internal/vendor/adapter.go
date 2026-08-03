@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
 )
@@ -15,6 +16,26 @@ var ErrUnknownVendor = errors.New("unknown vendor")
 // vendors whose CLI has no mechanism to pass an initial message into an
 // interactive session.
 var ErrInitialPromptNotSupported = errors.New("vendor does not support interactive sessions with an initial prompt")
+
+// ErrResumeNotSupported is returned by LaunchResume on vendors whose CLI has
+// no mechanism to continue a previous interactive session.
+var ErrResumeNotSupported = errors.New("vendor does not support resuming sessions")
+
+// ErrNoResumableSession is returned by ResolveLastSession when the vendor's
+// session store was readable but holds nothing for the given directory.
+// Callers treat this as "launch cold", not as a failure: there is genuinely no
+// prior session, so the vendor's continue-last form would find nothing either
+// (or worse, for Copilot, would resume some other directory's session).
+var ErrNoResumableSession = errors.New("no resumable session found")
+
+// ErrSessionLookupUnavailable is returned by ResolveLastSession on vendors that
+// cannot identify a session id locally at all — Codex (store is sqlite, which
+// ynh will not take a driver for) and Cursor (chats are server-side).
+//
+// Distinct from ErrNoResumableSession because it says nothing about whether a
+// session exists: these vendors can still resume via their continue-last form,
+// so callers should resume with an empty id rather than launching cold.
+var ErrSessionLookupUnavailable = errors.New("vendor cannot resolve session ids locally")
 
 // SymlinkEntry records a single symlink created during Install.
 type SymlinkEntry struct {
@@ -73,6 +94,39 @@ type Adapter interface {
 	// the session continues after the LLM responds. Vendors that cannot
 	// support this return ErrInitialPromptNotSupported.
 	LaunchWithInitialPrompt(configPath string, prompt string, extraArgs []string) error
+
+	// SupportsResume reports whether this vendor's CLI can continue a previous
+	// interactive session at all. Drives `supports_resume` in
+	// `ynh vendors --format json`.
+	//
+	// Note this is true for every current vendor, so it says nothing about
+	// whether a *specific* session can be pinned — that additionally requires a
+	// readable local session store, which only Claude and Copilot have.
+	SupportsResume() bool
+
+	// ResolveLastSession returns the id of the most recent session the vendor
+	// recorded for cwd. It returns ErrNoResumableSession when the store was
+	// readable but empty for cwd, and ErrSessionLookupUnavailable when this
+	// vendor cannot resolve ids locally at all — the two lead callers to
+	// different fallbacks, so keep them distinct.
+	// notBefore, when non-zero, ignores sessions last touched before it.
+	//
+	// Implementations read the vendor's own on-disk session store. They must
+	// never parse terminal output: the resume banner a CLI prints on exit is
+	// undocumented UI that changes without notice, and the same identifier is
+	// already on disk.
+	ResolveLastSession(cwd string, notBefore time.Time) (string, error)
+
+	// LaunchResume starts an interactive session continuing sessionID. An empty
+	// sessionID means "whatever the vendor considers most recent".
+	//
+	// Implementations MUST NOT emit a bare resume flag. On every current vendor
+	// a bare --resume opens an interactive session *picker* rather than
+	// resuming the latest, which would hang an unattended relaunch waiting for
+	// a keypress. Emit an explicit id, or the vendor's continue-last form
+	// (claude --continue, codex resume --last, cursor --continue) — never
+	// neither.
+	LaunchResume(configPath string, sessionID string, extraArgs []string) error
 
 	// GenerateSystemPrompt produces vendor-native instruction files from the
 	// harness instructions content. Returns a map of relative file paths to
