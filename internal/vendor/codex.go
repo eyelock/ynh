@@ -87,13 +87,18 @@ func (c *Codex) SupportsResume() bool { return true }
 //
 // Codex does keep a local store — ~/.codex/state_<N>.sqlite, table
 // threads(id, cwd, updated_at, archived) — but reading it would require a
-// sqlite driver, and ynh is deliberately standard-library-only. The dependency
-// is not worth it here: `resume --last` already covers the one-session-per-
-// directory case, and a cwd-keyed lookup would be wrong for Codex anyway, since
-// launchCodex sets cmd.Dir to ynh's run dir rather than the project directory.
+// sqlite driver, and ynh is deliberately standard-library-only. That is the
+// decisive reason; `resume --last` already covers the one-session-per-directory
+// case that motivates resume in the first place.
 //
-// If per-session pinning is ever needed for Codex, revisit the driver decision
-// and the cmd.Dir behaviour together.
+// A cwd-keyed lookup may also be a poor fit here, though this is unverified:
+// launchCodex sets cmd.Dir to ynh's run dir rather than the project directory,
+// and if Codex records that as a thread's cwd then the key would identify the
+// harness rather than the project. Nobody has confirmed what Codex actually
+// writes there.
+//
+// If per-session pinning is ever needed for Codex, settle that question first,
+// then revisit the driver decision and the cmd.Dir behaviour together.
 func (c *Codex) ResolveLastSession(cwd string, notBefore time.Time) (string, error) {
 	return "", ErrSessionLookupUnavailable
 }
