@@ -226,7 +226,12 @@ func (c *Cursor) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[str
 		return nil, nil
 	}
 
-	// Cursor uses .cursor/mcp.json with "mcpServers" key — same structure as Claude
+	// Cursor uses "mcpServers" key — same structure as Claude. Written at two
+	// locations: .cursor/mcp.json for project-level config (read by `ynh run`
+	// staging) and mcp.json (no dot) at plugin root for plugin-format export
+	// (cursor.com/docs/reference/plugins). Both are the same content; there's
+	// no "is this a plugin export" flag threaded through Adapter, so both are
+	// always emitted — the unused one is simply inert in the other context.
 	config := map[string]any{
 		"mcpServers": servers,
 	}
@@ -239,6 +244,7 @@ func (c *Cursor) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[str
 
 	return map[string][]byte{
 		filepath.Join(".cursor", "mcp.json"): data,
+		"mcp.json":                           data,
 	}, nil
 }
 

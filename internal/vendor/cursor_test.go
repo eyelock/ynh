@@ -188,6 +188,30 @@ func TestCursorGenerateMCPConfig_Format(t *testing.T) {
 	}
 }
 
+func TestCursorGenerateMCPConfig_PluginRootAlsoWritten(t *testing.T) {
+	c := &Cursor{}
+	servers := map[string]plugin.MCPServer{
+		"github": {Command: "npx"},
+	}
+
+	result, err := c.GenerateMCPConfig(servers)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	projectData, ok := result[filepath.Join(".cursor", "mcp.json")]
+	if !ok {
+		t.Fatal("expected .cursor/mcp.json key")
+	}
+	rootData, ok := result["mcp.json"]
+	if !ok {
+		t.Fatal("expected plugin-root mcp.json key")
+	}
+	if string(projectData) != string(rootData) {
+		t.Errorf("expected identical content, .cursor/mcp.json=%q mcp.json=%q", projectData, rootData)
+	}
+}
+
 func TestCursorGenerateHookConfig_EventTranslation(t *testing.T) {
 	c := &Cursor{}
 	hooks := map[string][]plugin.HookEntry{
