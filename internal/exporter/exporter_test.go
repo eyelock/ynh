@@ -334,8 +334,10 @@ func TestExportWithMCPServers(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	// Cursor should have .cursor/mcp.json
+	// Cursor should have .cursor/mcp.json (project-level) and mcp.json at
+	// plugin root (plugin format, no dot prefix)
 	assertFileExists(t, filepath.Join(outputDir2, "cursor", ".cursor", "mcp.json"))
+	assertFileExists(t, filepath.Join(outputDir2, "cursor", "mcp.json"))
 
 	// Test Codex export
 	outputDir3 := t.TempDir()
