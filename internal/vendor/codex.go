@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
 )
@@ -78,6 +79,43 @@ func (c *Codex) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []s
 }
 
 func (c *Codex) SupportsInitialPrompt() bool { return true }
+
+func (c *Codex) SupportsResume() bool { return true }
+
+// ResolveLastSession always reports no resumable session, so Codex resumes via
+// `resume --last` rather than by id.
+//
+// Codex does keep a local store — ~/.codex/state_<N>.sqlite, table
+// threads(id, cwd, updated_at, archived) — but reading it would require a
+// sqlite driver, and ynh is deliberately standard-library-only. That is the
+// decisive reason; `resume --last` already covers the one-session-per-directory
+// case that motivates resume in the first place.
+//
+// A cwd-keyed lookup may also be a poor fit here, though this is unverified:
+// launchCodex sets cmd.Dir to ynh's run dir rather than the project directory,
+// and if Codex records that as a thread's cwd then the key would identify the
+// harness rather than the project. Nobody has confirmed what Codex actually
+// writes there.
+//
+// If per-session pinning is ever needed for Codex, settle that question first,
+// then revisit the driver decision and the cmd.Dir behaviour together.
+func (c *Codex) ResolveLastSession(cwd string, notBefore time.Time) (string, error) {
+	return "", ErrSessionLookupUnavailable
+}
+
+// LaunchResume continues a prior Codex session. `resume` is a subcommand rather
+// than a flag, so it is prepended the same way LaunchNonInteractive prepends
+// `exec`. A bare `resume` is never emitted: Codex documents it as
+// "picker by default; use --last to continue the most recent".
+func (c *Codex) LaunchResume(configPath, sessionID string, extraArgs []string) error {
+	args := []string{"resume"}
+	if sessionID != "" {
+		args = append(args, sessionID)
+	} else {
+		args = append(args, "--last")
+	}
+	return launchCodex(configPath, append(args, extraArgs...))
+}
 
 func (c *Codex) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
 	return []string{"-c", "developer_instructions=" + text}, nil

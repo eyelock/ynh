@@ -205,6 +205,8 @@ Run flags:
   --interactive                Override non-interactive default — stay in session after focus or prompt
   --instructions "<text>"      Inject per-invocation context after harness instructions
   --session-name <name>        Session label (recorded by ynh, not forwarded to vendor CLI)
+  --resume                     Continue the previous session in this directory
+  --resume=<id>                Continue one specific session by id
   --install                    Install symlinks for the vendor in current project
   --clean                      Remove symlinks for the vendor in current project
   All other flags are passed through to the vendor CLI.
@@ -221,6 +223,8 @@ Examples:
   ynh run david --focus code-review
   ynh run david --focus code-review --interactive
   ynh run david --profile thorough -- "audit this module"
+  ynh run david --resume
+  ynh run david --resume=6187c041-ee79-4646-b101-82f89c3e50ca
   ynh run david --instructions "PR #22 in eyelock/assistants"
   ynh run david --focus code-review --instructions "PR #22 in eyelock/assistants"
   ynh run david -v codex
@@ -1373,6 +1377,18 @@ func cmdRun(args []string) error {
 
 		// Launch
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
+		if ra.Resume {
+			if !adapter.SupportsResume() {
+				return fmt.Errorf("%s does not support resuming sessions", adapter.Name())
+			}
+			sessionID, resumed := resolveResumeSession(adapter, ra.ResumeID, os.Stderr)
+			if resumed {
+				return adapter.LaunchResume(runDir, sessionID, vendorArgs)
+			}
+			// Nothing to resume: fall through to a normal cold launch rather
+			// than failing. A card relaunching for the first time must still
+			// start.
+		}
 		if prompt != "" {
 			if ra.Interactive {
 				return adapter.LaunchWithInitialPrompt(runDir, prompt, vendorArgs)
@@ -1380,6 +1396,50 @@ func cmdRun(args []string) error {
 			return adapter.LaunchNonInteractive(runDir, prompt, vendorArgs)
 		}
 		return adapter.LaunchInteractive(runDir, vendorArgs)
+	}
+}
+
+// resolveResumeSession decides which session `--resume` should continue.
+//
+// It returns the session id to resume and whether to resume at all. An empty id
+// with resume==true means "use the vendor's continue-last form" — which is a
+// real, working resume, not a fallback to nothing.
+//
+// The three outcomes:
+//
+//   - explicit id given            → resume that session
+//   - vendor cannot look up ids    → resume with an empty id (continue-last)
+//   - store readable, nothing here → do not resume; the caller launches cold
+//
+// The last case is deliberately not an error. Relaunching a terminal whose
+// first session never existed must still start the CLI, and a hard failure
+// there would strand the caller. Warn instead.
+func resolveResumeSession(adapter vendor.Adapter, explicitID string, stderr io.Writer) (string, bool) {
+	if explicitID != "" {
+		return explicitID, true
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "resume: cannot determine working directory (%v); starting a new session\n", err)
+		return "", false
+	}
+
+	sessionID, err := adapter.ResolveLastSession(cwd, time.Time{})
+	switch {
+	case err == nil:
+		return sessionID, true
+	case errors.Is(err, vendor.ErrSessionLookupUnavailable):
+		// The vendor keeps no id we can read, but can still continue its own
+		// most recent session.
+		return "", true
+	case errors.Is(err, vendor.ErrNoResumableSession):
+		_, _ = fmt.Fprintf(stderr, "resume: no previous session found for %s; starting a new session\n", cwd)
+		return "", false
+	default:
+		// A malformed or unreadable store is not worth failing a launch over.
+		_, _ = fmt.Fprintf(stderr, "resume: could not read session history (%v); starting a new session\n", err)
+		return "", false
 	}
 }
 
@@ -1459,6 +1519,7 @@ type vendorEntry struct {
 	ConfigDir             string `json:"config_dir"`
 	Available             bool   `json:"available"`
 	SupportsInitialPrompt bool   `json:"supports_initial_prompt"`
+	SupportsResume        bool   `json:"supports_resume"`
 }
 
 func cmdVendorsTo(args []string, stdout, stderr io.Writer) error {
@@ -1548,6 +1609,7 @@ func vendorEntries() ([]vendorEntry, error) {
 			ConfigDir:             adapter.ConfigDir(),
 			Available:             lookErr == nil,
 			SupportsInitialPrompt: supportsIP,
+			SupportsResume:        adapter.SupportsResume(),
 		})
 	}
 
@@ -1596,6 +1658,7 @@ func vendorEntries() ([]vendorEntry, error) {
 					ConfigDir:             adapter.ConfigDir(),
 					Available:             lookErr == nil,
 					SupportsInitialPrompt: supportsIP,
+					SupportsResume:        adapter.SupportsResume(),
 				})
 				continue
 			}
@@ -1608,6 +1671,7 @@ func vendorEntries() ([]vendorEntry, error) {
 					ConfigDir:             adapter.ConfigDir(),
 					Available:             lookErr == nil,
 					SupportsInitialPrompt: supportsIP,
+					SupportsResume:        adapter.SupportsResume(),
 				})
 			}
 		}
@@ -1686,6 +1750,8 @@ type runArgs struct {
 	VendorArgs   []string // passthrough args for vendor CLI
 	Action       string   // "install", "clean", or ""
 	Interactive  bool     // --interactive: stay in session after initial prompt
+	Resume       bool     // --resume: continue a previous session
+	ResumeID     string   // --resume=<id>: continue one specific session
 }
 
 func parseRunArgs(args []string) runArgs {
@@ -1725,6 +1791,14 @@ func parseRunArgs(args []string) runArgs {
 		case flagArgs[i] == "--instructions" && i+1 < len(flagArgs):
 			ra.Instructions = flagArgs[i+1]
 			i++
+		// Only the "=" form takes an id: `--resume <id>` would be ambiguous with
+		// the positional harness name. This also matches how Copilot's own CLI
+		// spells it (`copilot --resume=<session-id>`).
+		case flagArgs[i] == "--resume":
+			ra.Resume = true
+		case strings.HasPrefix(flagArgs[i], "--resume="):
+			ra.Resume = true
+			ra.ResumeID = strings.TrimPrefix(flagArgs[i], "--resume=")
 		case flagArgs[i] == "--install":
 			ra.Action = "install"
 		case flagArgs[i] == "--clean":
