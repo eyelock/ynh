@@ -227,7 +227,12 @@ ynh status --prune
 Expected:
 ```
 Removed stale launcher: /Users/<you>/.ynh/bin/my-harness
+Removed stale run dir: /Users/<you>/.ynh/run/local--my-harness
+Removed stale run dir: /Users/<you>/.ynh/run/my-harness
 ```
+
+Prune also removes the id-keyed and legacy bare-name run dirs left behind by
+the removed install — both are now orphaned since nothing points at them.
 
 Verify the launcher was removed:
 
