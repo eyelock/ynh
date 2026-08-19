@@ -30,6 +30,9 @@ type resumeEnv struct {
 	shimDir  string
 	argvFile string
 	project  string
+	// Where a vendor CLI would record sessions for `project`: the same
+	// directory with symlinks resolved.
+	resolvedProject string
 }
 
 // newResumeEnv builds the fake vendor CLIs, an isolated HOME, and a local
@@ -53,13 +56,21 @@ func newResumeEnv(t *testing.T) *resumeEnv {
 		}
 	}
 
-	// t.TempDir() hands back a symlinked path on macOS (/var/... -> /private/var/...).
-	// ynh resolves cwd via os.Getwd(), which returns the real path — and so does
-	// the vendor CLI when it records the session. Store fixtures must therefore be
-	// keyed on the resolved path, or the lookup misses for reasons that have
-	// nothing to do with the code under test.
+	// Two forms of the same directory, and the gap between them is the bug this
+	// setup exists to reproduce. t.TempDir() hands back a symlinked path on
+	// macOS (/var/... -> /private/var/...), mirroring /tmp -> /private/tmp.
+	//
+	//   env.project          logical — what a shell reports, what PWD is set to
+	//                        below, and therefore what os.Getwd hands ynh
+	//   env.resolvedProject  resolved — where a vendor CLI actually files its
+	//                        session, because they all resolve before recording
+	//
+	// Writing fixtures under the logical path instead would let this test pass
+	// against code that cannot bridge the two. That is precisely how the bug
+	// escaped into manual testing the first time round.
+	env.resolvedProject = env.project
 	if resolved, err := filepath.EvalSymlinks(env.project); err == nil {
-		env.project = resolved
+		env.resolvedProject = resolved
 	}
 
 	// One shim per vendor binary. "agent" is Cursor's CLI name.
@@ -115,6 +126,10 @@ func (e *resumeEnv) run(t *testing.T, args ...string) (argv []string, stderr str
 		"PATH="+e.shimDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"YNH_HOME="+e.sandbox.home,
 		"ARGV_OUT="+e.argvFile,
+		// A shell exports PWD as the logical path, and Go's os.Getwd honours it.
+		// Without this the child would see only the resolved path and the
+		// logical-vs-resolved mismatch would go unexercised.
+		"PWD="+e.project,
 	)
 	cmd.Env = environ
 
@@ -192,8 +207,8 @@ func TestResume_NoStoreLaunchesColdWithWarning(t *testing.T) {
 
 func TestResume_ResolvesNewestClaudeSessionForCwd(t *testing.T) {
 	env := newResumeEnv(t)
-	env.writeClaudeSession(t, env.project, "session-old", true)
-	env.writeClaudeSession(t, env.project, "session-new", false)
+	env.writeClaudeSession(t, env.resolvedProject, "session-old", true)
+	env.writeClaudeSession(t, env.resolvedProject, "session-new", false)
 
 	argv, _ := env.run(t, "-v", "claude", "--resume")
 
@@ -209,7 +224,7 @@ func TestResume_ResolvesNewestClaudeSessionForCwd(t *testing.T) {
 // so a session belonging to a different worktree must never be selected.
 func TestResume_CopilotIgnoresSessionsFromOtherDirectories(t *testing.T) {
 	env := newResumeEnv(t)
-	env.writeCopilotSession(t, env.project, "mine")
+	env.writeCopilotSession(t, env.resolvedProject, "mine")
 	env.writeCopilotSession(t, "/some/other/project", "elsewhere")
 
 	argv, _ := env.run(t, "-v", "copilot", "--resume")
@@ -224,7 +239,7 @@ func TestResume_CopilotIgnoresSessionsFromOtherDirectories(t *testing.T) {
 
 func TestResume_ExplicitIDBypassesTheStore(t *testing.T) {
 	env := newResumeEnv(t)
-	env.writeClaudeSession(t, env.project, "from-store", false)
+	env.writeClaudeSession(t, env.resolvedProject, "from-store", false)
 
 	argv, _ := env.run(t, "-v", "claude", "--resume=explicit-id")
 
@@ -267,7 +282,7 @@ func TestResume_LookupUnavailableVendorsUseContinueLast(t *testing.T) {
 
 func TestResume_AbsentFlagLaunchesNormally(t *testing.T) {
 	env := newResumeEnv(t)
-	env.writeClaudeSession(t, env.project, "available-session", false)
+	env.writeClaudeSession(t, env.resolvedProject, "available-session", false)
 
 	argv, _ := env.run(t, "-v", "claude")
 

@@ -271,3 +271,74 @@ func containsPair(args []string, first, second string) bool {
 	}
 	return false
 }
+
+// Regression: a shell reports the logical path (/tmp/x) while the vendor CLI
+// resolves it before recording (/private/tmp/x on macOS). Resolution must find
+// the session through that mismatch — this is the failure that reached manual
+// testing, where ynh looked under "-tmp-resume-test" for a session Claude had
+// filed under "-private-tmp-resume-test".
+func TestClaudeResolveLastSession_ThroughSymlinkedCwd(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	realDir := filepath.Join(t.TempDir(), "real-project")
+	if err := os.MkdirAll(realDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	linkDir := filepath.Join(t.TempDir(), "linked-project")
+	if err := os.Symlink(realDir, linkDir); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	// The vendor records the resolved path...
+	resolved, err := filepath.EvalSymlinks(realDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := filepath.Join(home, ".claude", "projects", claudeProjectSlug(resolved))
+	writeFileAt(t, filepath.Join(store, "recorded-session.jsonl"), "{}", time.Now())
+
+	// ...while ynh is handed the symlinked one.
+	got, err := (&Claude{}).ResolveLastSession(linkDir, time.Time{})
+	if err != nil {
+		t.Fatalf("ResolveLastSession through a symlinked cwd: %v", err)
+	}
+	if got != "recorded-session" {
+		t.Errorf("session id = %q, want %q", got, "recorded-session")
+	}
+}
+
+func TestDirCandidates(t *testing.T) {
+	// A path with no symlink component yields exactly one candidate. Resolve
+	// first: t.TempDir() itself sits under a symlink on macOS (/var ->
+	// /private/var), so the raw value would legitimately produce two.
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := dirCandidates(root); len(got) != 1 {
+		t.Errorf("dirCandidates(%q) = %v, want a single entry", root, got)
+	}
+
+	// A symlinked path yields the resolved form first, then the literal one.
+	target := filepath.Join(t.TempDir(), "target")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	got := dirCandidates(link)
+	if len(got) != 2 {
+		t.Fatalf("dirCandidates(%q) = %v, want two entries", link, got)
+	}
+	resolved, _ := filepath.EvalSymlinks(target)
+	if got[0] != resolved {
+		t.Errorf("first candidate = %q, want the resolved path %q", got[0], resolved)
+	}
+	if got[1] != link {
+		t.Errorf("second candidate = %q, want the literal path %q", got[1], link)
+	}
+}

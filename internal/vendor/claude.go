@@ -2,6 +2,7 @@ package vendor
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -93,25 +94,34 @@ func (c *Claude) ResolveLastSession(cwd string, notBefore time.Time) (string, er
 		return "", err
 	}
 
-	projectDir := filepath.Join(home, ".claude", "projects", claudeProjectSlug(cwd))
-	entries, err := dirEntriesByModTimeDesc(projectDir)
-	if err != nil {
-		return "", err
-	}
-
-	candidates := make([]sessionCandidate, 0, len(entries))
-	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".jsonl" {
-			continue
-		}
-		info, err := e.Info()
+	// Claude records the cwd it resolved, which is not necessarily the one ynh
+	// was handed: os.Getwd honours $PWD, so a shell sitting in /tmp/x reports
+	// that while Claude writes its store under -private-tmp-x. Try every form
+	// the directory might have been recorded as.
+	var candidates []sessionCandidate
+	for _, dir := range dirCandidates(cwd) {
+		projectDir := filepath.Join(home, ".claude", "projects", claudeProjectSlug(dir))
+		entries, err := dirEntriesByModTimeDesc(projectDir)
 		if err != nil {
-			continue
+			if errors.Is(err, ErrNoResumableSession) {
+				continue
+			}
+			return "", err
 		}
-		candidates = append(candidates, sessionCandidate{
-			id:      strings.TrimSuffix(e.Name(), ".jsonl"),
-			modTime: info.ModTime(),
-		})
+
+		for _, e := range entries {
+			if e.IsDir() || filepath.Ext(e.Name()) != ".jsonl" {
+				continue
+			}
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			candidates = append(candidates, sessionCandidate{
+				id:      strings.TrimSuffix(e.Name(), ".jsonl"),
+				modTime: info.ModTime(),
+			})
+		}
 	}
 	return newestCandidate(candidates, notBefore)
 }

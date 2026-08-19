@@ -96,6 +96,29 @@ func dirEntriesByModTimeDesc(dir string) ([]os.DirEntry, error) {
 	return ordered, nil
 }
 
+// dirCandidates returns the forms of dir a vendor might have recorded, most
+// likely first: the symlink-resolved path, then the path as given.
+//
+// This exists because the two ends disagree in practice. Go's os.Getwd honours
+// $PWD, so ynh sees the logical path a shell reports (/tmp/x), while a vendor
+// CLI resolves it before recording (/private/tmp/x on macOS, where /tmp is a
+// symlink to /private/tmp). A lookup keyed on only one form silently finds
+// nothing and the launch falls back to a cold session.
+func dirCandidates(dir string) []string {
+	clean := filepath.Clean(dir)
+	candidates := []string{}
+
+	if resolved, err := filepath.EvalSymlinks(clean); err == nil {
+		candidates = append(candidates, resolved)
+	}
+	for _, existing := range candidates {
+		if existing == clean {
+			return candidates
+		}
+	}
+	return append(candidates, clean)
+}
+
 // sameDir reports whether two paths refer to the same directory, after
 // normalising separators and resolving symlinks where possible. Vendor stores
 // record the cwd as the CLI saw it, which may differ textually from the path
