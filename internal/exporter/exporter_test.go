@@ -51,6 +51,21 @@ func TestExportSingleVendorCursor(t *testing.T) {
 
 	// Skills present
 	assertFileExists(t, filepath.Join(cursorDir, "skills", "dev-project", "SKILL.md"))
+
+	// Rules exported as .mdc with frontmatter, not plain .md
+	if _, err := os.Stat(filepath.Join(cursorDir, "rules", "be-concise.md")); !os.IsNotExist(err) {
+		t.Error("expected plain .md rule to be absent from Cursor export")
+	}
+	data, err := os.ReadFile(filepath.Join(cursorDir, "rules", "be-concise.mdc"))
+	if err != nil {
+		t.Fatalf("expected be-concise.mdc: %v", err)
+	}
+	if !strings.HasPrefix(string(data), "---\ndescription:") {
+		t.Errorf("expected .mdc frontmatter, got %q", string(data))
+	}
+	if !strings.Contains(string(data), "alwaysApply: true") {
+		t.Errorf("expected alwaysApply: true in frontmatter, got %q", string(data))
+	}
 }
 
 func TestExportAllVendors(t *testing.T) {

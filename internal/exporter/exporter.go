@@ -167,9 +167,11 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 		return nil, fmt.Errorf("creating output: %w", err)
 	}
 
-	// Copy artifacts once (using standard artifact dirs)
+	// Copy artifacts once (using standard artifact dirs), shared across all
+	// vendors in this merged output — no per-vendor transform applies here,
+	// since a rename for one vendor would corrupt the shared copy for others.
 	artifactDirs := vendor.DefaultArtifactDirs()
-	if err := copyContent(outputDir, content, artifactDirs); err != nil {
+	if err := copyContent(outputDir, content, artifactDirs, nil); err != nil {
 		return nil, err
 	}
 
@@ -262,7 +264,11 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 	if artifactDirs == nil {
 		artifactDirs = adapter.ArtifactDirs()
 	}
-	if err := copyContent(outputDir, content, artifactDirs); err != nil {
+	var transform assembler.ArtifactTransform
+	if t, ok := adapter.(assembler.ArtifactTransformer); ok {
+		transform = t.TransformArtifact
+	}
+	if err := copyContent(outputDir, content, artifactDirs, transform); err != nil {
 		return result, err
 	}
 
@@ -385,15 +391,15 @@ func writeGeneratedFiles(baseDir string, files map[string][]byte) error {
 }
 
 // copyContent copies resolved content into the target directory using the given artifact dirs mapping.
-func copyContent(targetBaseDir string, content []resolver.ResolvedContent, artifactDirs map[string]string) error {
+func copyContent(targetBaseDir string, content []resolver.ResolvedContent, artifactDirs map[string]string, transform assembler.ArtifactTransform) error {
 	for _, rc := range content {
 		if len(rc.Paths) == 0 {
-			if err := assembler.CopyAllArtifacts(rc.BasePath, targetBaseDir, artifactDirs); err != nil {
+			if err := assembler.CopyAllArtifacts(rc.BasePath, targetBaseDir, artifactDirs, transform); err != nil {
 				return err
 			}
 		} else {
 			for _, picked := range rc.Paths {
-				if err := assembler.CopyPicked(rc.BasePath, picked, targetBaseDir, artifactDirs); err != nil {
+				if err := assembler.CopyPicked(rc.BasePath, picked, targetBaseDir, artifactDirs, transform); err != nil {
 					return err
 				}
 			}
