@@ -144,7 +144,12 @@ alwaysApply: true
 ```
 
 Frontmatter fields: `description`, `globs` (file pattern), `alwaysApply` (boolean).
-ynh currently writes `.md` rules — Cursor expects `.mdc` with frontmatter. NEEDS RESEARCH on whether plain `.md` rules are read.
+CONFIRMED (cursor.com/docs/advanced/rules): plain `.md` files in `.cursor/rules` are
+silently ignored. ynh's Cursor adapter (`internal/vendor/cursor.go`,
+`Cursor.TransformArtifact`) renames `.md` → `.mdc` and injects
+`description`/`alwaysApply: true` frontmatter at copy time (both `ynh run` staging and
+`ynh export`). No `globs` is emitted — ynh has no per-rule glob metadata to source it
+from.
 
 ## Key CLI Details
 
@@ -155,17 +160,20 @@ ynh currently writes `.md` rules — Cursor expects `.mdc` with frontmatter. NEE
 ## What Cursor Supports That ynh Maps
 
 - Skills: YES (skills/<name>/SKILL.md)
-- Agents/subagents: YES (agents/<name>.md) — delegation support NEEDS RESEARCH
-- Rules: YES (.cursor/rules/<name>.mdc) — format mismatch with ynh (.md vs .mdc)
+- Agents/subagents: YES (agents/<name>.md) — CONFIRMED (cursor.com/docs/subagents):
+  reads `name`/`description` frontmatter (required — `description` drives delegation
+  routing), plus optional `model`/`readonly`/`is_background`. ynh's delegate generator
+  (`internal/assembler/delegates.go`) already emits `name`+`description`.
+- Rules: YES (.cursor/rules/<name>.mdc) — FIXED: ynh now writes `.mdc` with frontmatter
 - Commands: YES (commands/<name>.md)
 - Hooks: YES (two formats — plugin vs settings)
 - MCP: YES (.cursor/mcp.json or mcp.json in plugin)
 - Marketplace: YES (.cursor-plugin/marketplace.json)
 - .agents/skills/: PARTIAL — Cursor reads `.agents/skills/` but NOT `.agents/rules/` or other subdirs
 
-## Known ynh Discrepancies (as of 2026-04-07)
+## Known ynh Discrepancies (as of 2026-08-19)
 
-- ynh writes hooks to `.cursor/hooks.json` with flat format — may need plugin-format `hooks/hooks.json` for plugins
-- ynh writes rules as `.md` — Cursor expects `.mdc` with frontmatter (globs, alwaysApply)
-- ynh writes MCP to `.cursor/mcp.json` — correct for project, but plugin format uses `mcp.json` (no dot prefix)
-- Cursor delegation/subagent support needs further research
+- ynh writes hooks to `.cursor/hooks.json` with flat format — may need plugin-format `hooks/hooks.json` for plugins (tracked separately, see #197)
+- ~~ynh writes rules as `.md`~~ FIXED: ynh writes `.mdc` with `description`/`alwaysApply: true` frontmatter (see `Cursor.TransformArtifact`)
+- ynh writes MCP to `.cursor/mcp.json` — correct for project, but plugin format also needs `mcp.json` (no dot prefix) at plugin root (tracked separately, see #198)
+- Cursor delegation/subagent support: CONFIRMED working, ynh's frontmatter already matches requirements

@@ -10,6 +10,50 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
+func TestCursorTransformArtifact_RulesRenamedToMdc(t *testing.T) {
+	c := &Cursor{}
+	newName, newData := c.TransformArtifact("rules", "artifact-authoring.md", []byte("be specific"))
+
+	if newName != "artifact-authoring.mdc" {
+		t.Errorf("newName = %q, want artifact-authoring.mdc", newName)
+	}
+	if !strings.Contains(string(newData), "be specific") {
+		t.Errorf("transformed content missing original body: %q", string(newData))
+	}
+}
+
+func TestCursorTransformArtifact_FrontmatterShape(t *testing.T) {
+	c := &Cursor{}
+	_, newData := c.TransformArtifact("rules", "artifact-authoring.md", []byte("body text"))
+
+	want := "---\ndescription: Artifact Authoring\nalwaysApply: true\n---\n\nbody text"
+	if string(newData) != want {
+		t.Errorf("frontmatter mismatch:\ngot:  %q\nwant: %q", string(newData), want)
+	}
+}
+
+func TestCursorTransformArtifact_NonRulesPassthrough(t *testing.T) {
+	c := &Cursor{}
+	data := []byte("skill content")
+	newName, newData := c.TransformArtifact("skills", "SKILL.md", data)
+
+	if newName != "SKILL.md" {
+		t.Errorf("newName = %q, want unchanged SKILL.md", newName)
+	}
+	if string(newData) != "skill content" {
+		t.Errorf("content should pass through unchanged, got %q", string(newData))
+	}
+}
+
+func TestCursorTransformArtifact_NonMdRulesPassthrough(t *testing.T) {
+	c := &Cursor{}
+	newName, newData := c.TransformArtifact("rules", "already.mdc", []byte("body"))
+
+	if newName != "already.mdc" || string(newData) != "body" {
+		t.Errorf("expected passthrough for non-.md rule, got name=%q data=%q", newName, newData)
+	}
+}
+
 func TestCursorGenerateHookConfig_NilHooks(t *testing.T) {
 	c := &Cursor{}
 	result, err := c.GenerateHookConfig(nil)

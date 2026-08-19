@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/eyelock/ynh/internal/plugin"
 )
@@ -239,6 +240,41 @@ func (c *Cursor) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[str
 	return map[string][]byte{
 		filepath.Join(".cursor", "mcp.json"): data,
 	}, nil
+}
+
+// TransformArtifact rewrites Cursor rule files to the .mdc format Cursor
+// requires: renamed from .md to .mdc with injected frontmatter. Plain .md
+// files under .cursor/rules are silently ignored by Cursor. Other artifact
+// types pass through unchanged.
+func (c *Cursor) TransformArtifact(artifactType, name string, data []byte) (string, []byte) {
+	if artifactType != "rules" || !strings.HasSuffix(name, ".md") {
+		return name, data
+	}
+
+	newName := strings.TrimSuffix(name, ".md") + ".mdc"
+	description := humanizeRuleName(strings.TrimSuffix(name, ".md"))
+
+	var b strings.Builder
+	b.WriteString("---\n")
+	fmt.Fprintf(&b, "description: %s\n", description)
+	b.WriteString("alwaysApply: true\n")
+	b.WriteString("---\n\n")
+	b.Write(data)
+
+	return newName, []byte(b.String())
+}
+
+// humanizeRuleName turns a rule filename stem (e.g. "artifact-authoring")
+// into a human-readable title (e.g. "Artifact Authoring").
+func humanizeRuleName(stem string) string {
+	words := strings.FieldsFunc(stem, func(r rune) bool { return r == '-' || r == '_' })
+	for i, w := range words {
+		if w == "" {
+			continue
+		}
+		words[i] = strings.ToUpper(w[:1]) + w[1:]
+	}
+	return strings.Join(words, " ")
 }
 
 func launchCursor(configPath string, extraArgs []string) error {
