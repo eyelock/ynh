@@ -272,8 +272,10 @@ func TestExportWithHooks(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	// Cursor should have .cursor/hooks.json
+	// Cursor should have .cursor/hooks.json (project-level) and hooks/hooks.json
+	// at plugin root (plugin format)
 	assertFileExists(t, filepath.Join(outputDir2, "cursor", ".cursor", "hooks.json"))
+	assertFileExists(t, filepath.Join(outputDir2, "cursor", "hooks", "hooks.json"))
 
 	// Test Codex export
 	outputDir3 := t.TempDir()

@@ -175,9 +175,9 @@ What ynh calls each concept vs what each vendor calls it and where it lives.
 | .harness.json      | hooks/hooks.json (plugin)        | .codex/hooks.json                | hooks/hooks.json (plugin)        |
 |   hooks: {}       | .claude/settings.json (project)  | ~/.codex/hooks.json (user)       | .cursor/settings.json (project)  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
-| Format:           | Three-level nesting:             | Three-level nesting:             | Two formats:                     |
-|                   | event > matcher > hooks[]        | event > matcher > hooks[]        | - Plugin: flat (legacy names)    |
-|                   |                                  |                                  | - Settings: three-level          |
+| Format:           | Three-level nesting:             | Three-level nesting:             | Flat format, same at both paths: |
+|                   | event > matcher > hooks[]        | event > matcher > hooks[]        | {event: [{command}]} — CONFIRMED |
+|                   |                                  |                                  | ynh writes both paths identically|
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Events            | 25 events (see Claude docs)      | 5 events: SessionStart,          | 25 events (same as Claude)       |
 | (vendor-native):  | Key: PreToolUse, PostToolUse,    | PreToolUse, PostToolUse,         |                                  |
@@ -473,29 +473,34 @@ not conflict with the project's own `CLAUDE.md`.
 +------+------------------------------------------+------------+
 | Prio | Gap                                      | Vendor     |
 +------+------------------------------------------+------------+
-| HIGH | Codex plugin manifest not generated       | Codex      |
-| HIGH | Codex skills export path wrong            | Codex      |
-|      |   (.agents/skills/ should be skills/)    |            |
-| HIGH | Codex MCP format wrong                   | Codex      |
-|      |   (TOML should be JSON .mcp.json)        |            |
-| HIGH | Codex marketplace not generated           | Codex      |
 | ---  | Claude AGENTS.md: RESOLVED               | Claude     |
 |      |   (CLAUDE.md with @AGENTS.md import)     |            |
-| MED  | Cursor plugin hooks format               | Cursor     |
-|      |   (flat legacy vs three-level settings)  |            |
-| MED  | Cursor .mdc rules format                 | Cursor     |
-|      |   (ynh writes .md, Cursor wants .mdc     |            |
-|      |    with globs/alwaysApply frontmatter)    |            |
-| LOW  | SessionStart canonical event             | All        |
-|      |   (Codex + Claude support it, not mapped) |            |
+| ---  | Codex plugin manifest: RESOLVED          | Codex      |
+| ---  | Codex skills export path: RESOLVED       | Codex      |
+| ---  | Codex MCP format: RESOLVED               | Codex      |
+| ---  | Codex marketplace: RESOLVED              | Codex      |
+| ---  | Cursor .mdc rules format: RESOLVED       | Cursor     |
+|      |   (see internal/vendor/cursor.go,        |            |
+|      |    Cursor.TransformArtifact)              |            |
+| ---  | Cursor plugin hooks path: RESOLVED       | Cursor     |
+|      |   (writes both .cursor/hooks.json and    |            |
+|      |    hooks/hooks.json — same format/names)  |            |
+| ---  | Cursor plugin MCP path: RESOLVED         | Cursor     |
+|      |   (writes both .cursor/mcp.json and      |            |
+|      |    mcp.json at plugin root)                |            |
+| ---  | Cursor subagent/delegation support:      | Cursor     |
+|      |   RESOLVED — confirmed working, ynh's    |            |
+|      |   name+description frontmatter matches   |            |
+|      |   Cursor's requirements                   |            |
 | LOW  | Hook types beyond "command"              | Claude,    |
 |      |   (prompt, http, agent not mapped)       | Cursor     |
-| LOW  | Cursor subagent/delegation support       | Cursor     |
-|      |   (needs research)                       |            |
 | LOW  | Cursor CLI flags for non-interactive     | Cursor     |
 |      |   (needs research)                       |            |
 +------+------------------------------------------+------------+
 ```
+
+Note: `on_session_start` canonical event mapping (#199) is tracked as a separate
+in-flight PR, not listed above as a gap — see the stacked-PR plan for eyelock/ynh#199.
 
 ## Workflow
 

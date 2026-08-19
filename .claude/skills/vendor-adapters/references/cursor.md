@@ -87,16 +87,28 @@ command, http, prompt, agent (same as Claude Code)
 }
 ```
 
-IMPORTANT: ynh currently uses the legacy flat format with the plugin event names
-(beforeShellExecution, afterFileEdit, beforeSubmitPrompt, stop) and writes to
-`.cursor/hooks.json`. This needs verification — does Cursor read `.cursor/hooks.json`
-the same way as `hooks/hooks.json` inside a plugin? The event name mapping may differ.
+CONFIRMED (cursor.com/docs/hooks, cursor.com/docs/reference/plugins): both locations
+use the SAME flat/lowercase-camelCase format and event names — only the path differs.
+Project-level `.cursor/hooks.json` (also `.cursor/hooks.json` gitignored-local,
+`~/.cursor/hooks.json` user, and OS-specific enterprise paths) vs plugin-format
+`hooks/hooks.json` at plugin root. ynh's Cursor adapter (`Cursor.GenerateHookConfig`)
+now writes both paths with identical content.
+
+Full supported event list confirmed via docs: `sessionStart`, `sessionEnd`,
+`preToolUse`, `postToolUse`, `postToolUseFailure`, `subagentStart`, `subagentStop`,
+`beforeShellExecution`, `afterShellExecution`, `beforeMCPExecution`,
+`afterMCPExecution`, `beforeReadFile`, `afterFileEdit`, `beforeSubmitPrompt`,
+`preCompact`, `stop`, `afterAgentResponse`, `afterAgentThought` (plus Tab hooks
+`beforeTabFileRead`/`afterTabFileEdit` and app-lifecycle `workspaceOpen`, not
+currently mapped by ynh). ynh's canonical map only covers 4 events today; see #199
+for `on_session_start`.
 
 ## MCP Format
 
 Project: `.cursor/mcp.json`
 User: `~/.cursor/mcp.json`
 Plugin: `mcp.json` (at plugin root, NO dot prefix — differs from Claude's `.mcp.json`)
+FIXED: ynh writes both — `Cursor.GenerateMCPConfig` emits identical content to both paths.
 
 ```json
 {
@@ -166,14 +178,12 @@ from.
   (`internal/assembler/delegates.go`) already emits `name`+`description`.
 - Rules: YES (.cursor/rules/<name>.mdc) — FIXED: ynh now writes `.mdc` with frontmatter
 - Commands: YES (commands/<name>.md)
-- Hooks: YES (two formats — plugin vs settings)
-- MCP: YES (.cursor/mcp.json or mcp.json in plugin)
+- Hooks: YES — FIXED: ynh writes both `.cursor/hooks.json` (project) and `hooks/hooks.json` (plugin root), same format/event names in both
+- MCP: YES — FIXED: ynh writes both `.cursor/mcp.json` (project) and `mcp.json` (plugin root, no dot)
 - Marketplace: YES (.cursor-plugin/marketplace.json)
 - .agents/skills/: PARTIAL — Cursor reads `.agents/skills/` but NOT `.agents/rules/` or other subdirs
 
 ## Known ynh Discrepancies (as of 2026-08-19)
 
-- ynh writes hooks to `.cursor/hooks.json` with flat format — may need plugin-format `hooks/hooks.json` for plugins (tracked separately, see #197)
-- ~~ynh writes rules as `.md`~~ FIXED: ynh writes `.mdc` with `description`/`alwaysApply: true` frontmatter (see `Cursor.TransformArtifact`)
-- ynh writes MCP to `.cursor/mcp.json` — correct for project, but plugin format also needs `mcp.json` (no dot prefix) at plugin root (tracked separately, see #198)
-- Cursor delegation/subagent support: CONFIRMED working, ynh's frontmatter already matches requirements
+All four tracked discrepancies (#196, #197, #198, #200) are resolved as of this note —
+see the FIXED/CONFIRMED markers above.
