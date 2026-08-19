@@ -222,10 +222,11 @@ func TestCodexGenerateMCPConfig_WithHeaders(t *testing.T) {
 func TestCodexGenerateHookConfig_EventTranslation(t *testing.T) {
 	c := &Codex{}
 	hooks := map[string][]plugin.HookEntry{
-		"before_tool":   {{Command: "cmd1"}},
-		"after_tool":    {{Command: "cmd2"}},
-		"before_prompt": {{Command: "cmd3"}},
-		"on_stop":       {{Command: "cmd4"}},
+		"before_tool":      {{Command: "cmd1"}},
+		"after_tool":       {{Command: "cmd2"}},
+		"before_prompt":    {{Command: "cmd3"}},
+		"on_stop":          {{Command: "cmd4"}},
+		"on_session_start": {{Command: "cmd5"}},
 	}
 
 	result, err := c.GenerateHookConfig(hooks)
@@ -240,7 +241,7 @@ func TestCodexGenerateHookConfig_EventTranslation(t *testing.T) {
 	}
 
 	hooksObj := config["hooks"].(map[string]any)
-	expectedEvents := []string{"PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop"}
+	expectedEvents := []string{"PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop", "SessionStart"}
 	for _, event := range expectedEvents {
 		if _, ok := hooksObj[event]; !ok {
 			t.Errorf("missing event %s", event)

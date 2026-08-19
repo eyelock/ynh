@@ -84,11 +84,15 @@ func (c *Codex) ApplyRuntimeInstructions(runDir, text string) ([]string, error) 
 }
 
 // codexHookEventMap maps canonical event names to Codex hook events.
+// SessionStart entries can filter on source (startup|resume) via the
+// existing generic HookEntry.Matcher field — authors set it themselves,
+// no special-casing needed here.
 var codexHookEventMap = map[string]string{
-	"before_tool":   "PreToolUse",
-	"after_tool":    "PostToolUse",
-	"before_prompt": "UserPromptSubmit",
-	"on_stop":       "Stop",
+	"before_tool":      "PreToolUse",
+	"after_tool":       "PostToolUse",
+	"before_prompt":    "UserPromptSubmit",
+	"on_stop":          "Stop",
+	"on_session_start": "SessionStart",
 }
 
 func (c *Codex) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {

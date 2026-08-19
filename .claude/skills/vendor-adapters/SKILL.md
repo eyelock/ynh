@@ -188,6 +188,7 @@ What ynh calls each concept vs what each vendor calls it and where it lives.
 | event mapping:    | after_tool  -> PostToolUse       | after_tool  -> PostToolUse       | after_tool  -> afterFileEdit     |
 |                   | before_prompt -> UserPromptSubmit| before_prompt -> UserPromptSubmit| before_prompt -> beforeSubmit    |
 |                   | on_stop -> Stop                  | on_stop -> Stop                  | on_stop -> stop                  |
+|                   | on_session_start -> SessionStart | on_session_start -> SessionStart | on_session_start -> sessionStart |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Hook types:       | command, http, prompt, agent     | command only                     | command, prompt, http, agent     |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
