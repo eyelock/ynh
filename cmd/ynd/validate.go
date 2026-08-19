@@ -346,10 +346,12 @@ var vendorHookEventNames = map[string]string{
 	"PostToolUse":          "after_tool",
 	"UserPromptSubmit":     "before_prompt",
 	"Stop":                 "on_stop",
+	"SessionStart":         "on_session_start",
 	"beforeShellExecution": "before_tool",
 	"afterFileEdit":        "after_tool",
 	"beforeSubmitPrompt":   "before_prompt",
 	"stop":                 "on_stop",
+	"sessionStart":         "on_session_start",
 }
 
 // hookEventMessage returns the validation message for an invalid hook event,
@@ -358,7 +360,7 @@ func hookEventMessage(event string) string {
 	if canonical, ok := vendorHookEventNames[event]; ok {
 		return fmt.Sprintf("event %q is a vendor-native name — plugin.json uses canonical events; use %q (ynh translates it per vendor)", event, canonical)
 	}
-	return fmt.Sprintf("unknown event %q (valid: before_tool, after_tool, before_prompt, on_stop)", event)
+	return fmt.Sprintf("unknown event %q (valid: before_tool, after_tool, before_prompt, on_stop, on_session_start)", event)
 }
 
 // validateHarnessHooks validates the hooks section inside harness.json.

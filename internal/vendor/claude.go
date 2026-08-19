@@ -111,10 +111,11 @@ func buildClaudeArgs(configPath string, initialPrompt string, extraArgs []string
 
 // claudeHookEventMap maps canonical event names to Claude Code hook events.
 var claudeHookEventMap = map[string]string{
-	"before_tool":   "PreToolUse",
-	"after_tool":    "PostToolUse",
-	"before_prompt": "UserPromptSubmit",
-	"on_stop":       "Stop",
+	"before_tool":      "PreToolUse",
+	"after_tool":       "PostToolUse",
+	"before_prompt":    "UserPromptSubmit",
+	"on_stop":          "Stop",
+	"on_session_start": "SessionStart",
 }
 
 // anchorHookCommand rewrites a leading "./" in a hook command so it resolves

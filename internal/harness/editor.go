@@ -681,7 +681,7 @@ type HookAddOptions struct {
 // AddHook appends a hook entry to a top-level event on the harness.
 func AddHook(dir, event, command string, opts HookAddOptions) error {
 	if !plugin.ValidHookEvents[event] {
-		return fmt.Errorf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop)", event)
+		return fmt.Errorf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop, on_session_start)", event)
 	}
 	if command == "" {
 		return fmt.Errorf("hook command must not be empty")
@@ -726,7 +726,7 @@ func RemoveHook(dir, event string, index int) error {
 // AddProfileHook appends a hook entry to an event in a profile.
 func AddProfileHook(dir, profileName, event, command string, opts HookAddOptions) error {
 	if !plugin.ValidHookEvents[event] {
-		return fmt.Errorf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop)", event)
+		return fmt.Errorf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop, on_session_start)", event)
 	}
 	if command == "" {
 		return fmt.Errorf("hook command must not be empty")

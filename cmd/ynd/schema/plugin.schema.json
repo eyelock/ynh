@@ -142,7 +142,7 @@
     "hooks": {
       "type": "object",
       "propertyNames": {
-        "enum": ["before_tool", "after_tool", "before_prompt", "on_stop"]
+        "enum": ["before_tool", "after_tool", "before_prompt", "on_stop", "on_session_start"]
       },
       "additionalProperties": {
         "type": "array",

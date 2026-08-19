@@ -275,10 +275,11 @@ type HookEntry struct {
 
 // ValidHookEvents lists the canonical hook event names.
 var ValidHookEvents = map[string]bool{
-	"before_tool":   true,
-	"after_tool":    true,
-	"before_prompt": true,
-	"on_stop":       true,
+	"before_tool":      true,
+	"after_tool":       true,
+	"before_prompt":    true,
+	"on_stop":          true,
+	"on_session_start": true,
 }
 
 // ValidateHooks checks that hook event names are valid and commands are non-empty.
@@ -286,7 +287,7 @@ func ValidateHooks(hooks map[string][]HookEntry) []string {
 	var issues []string
 	for event, entries := range hooks {
 		if !ValidHookEvents[event] {
-			issues = append(issues, fmt.Sprintf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop)", event))
+			issues = append(issues, fmt.Sprintf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop, on_session_start)", event))
 		}
 		for i, entry := range entries {
 			if entry.Command == "" {

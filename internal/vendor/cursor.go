@@ -96,12 +96,15 @@ func (c *Cursor) ApplyRuntimeInstructions(runDir, text string) ([]string, error)
 
 // cursorHookEventMap maps canonical event names to Cursor hook events.
 // Cursor supports: beforeSubmitPrompt, beforeShellExecution, beforeMCPExecution,
-// beforeReadFile, afterFileEdit, stop. There is no afterShellExecution event.
+// beforeReadFile, afterFileEdit, stop, sessionStart, and more (see
+// cursor.com/docs/hooks for the full list). There is no afterShellExecution
+// event mapped to before_tool/after_tool — see cursor.md reference doc.
 var cursorHookEventMap = map[string]string{
-	"before_tool":   "beforeShellExecution",
-	"after_tool":    "afterFileEdit",
-	"before_prompt": "beforeSubmitPrompt",
-	"on_stop":       "stop",
+	"before_tool":      "beforeShellExecution",
+	"after_tool":       "afterFileEdit",
+	"before_prompt":    "beforeSubmitPrompt",
+	"on_stop":          "stop",
+	"on_session_start": "sessionStart",
 }
 
 func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
