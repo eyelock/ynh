@@ -152,8 +152,16 @@ func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[st
 	}
 	data = append(data, '\n')
 
+	// Same JSON shape and event names in both locations — only the path
+	// differs: .cursor/hooks.json for project-level config (read by `ynh run`
+	// staging), hooks/hooks.json at plugin root for plugin-format export
+	// (cursor.com/docs/reference/plugins, "Define hooks in hooks/hooks.json").
+	// There's no "is this a plugin export" flag threaded through Adapter, so
+	// both are always emitted — the unused one is simply inert in the other
+	// context.
 	return map[string][]byte{
 		filepath.Join(".cursor", "hooks.json"): data,
+		filepath.Join("hooks", "hooks.json"):   data,
 	}, nil
 }
 

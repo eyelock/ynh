@@ -54,6 +54,30 @@ func TestCursorTransformArtifact_NonMdRulesPassthrough(t *testing.T) {
 	}
 }
 
+func TestCursorGenerateHookConfig_PluginRootAlsoWritten(t *testing.T) {
+	c := &Cursor{}
+	hooks := map[string][]plugin.HookEntry{
+		"on_stop": {{Command: "echo done"}},
+	}
+
+	result, err := c.GenerateHookConfig(hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	projectData, ok := result[filepath.Join(".cursor", "hooks.json")]
+	if !ok {
+		t.Fatal("expected .cursor/hooks.json key")
+	}
+	rootData, ok := result[filepath.Join("hooks", "hooks.json")]
+	if !ok {
+		t.Fatal("expected plugin-root hooks/hooks.json key")
+	}
+	if string(projectData) != string(rootData) {
+		t.Errorf("expected identical content, .cursor/hooks.json=%q hooks/hooks.json=%q", projectData, rootData)
+	}
+}
+
 func TestCursorGenerateHookConfig_NilHooks(t *testing.T) {
 	c := &Cursor{}
 	result, err := c.GenerateHookConfig(nil)
