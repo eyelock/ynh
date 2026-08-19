@@ -256,8 +256,9 @@ func TestSaveHarnessJSON_RoundTrip(t *testing.T) {
 
 func TestValidateHooks_Valid(t *testing.T) {
 	hooks := map[string][]HookEntry{
-		"before_tool": {{Matcher: "Bash", Command: "echo hi"}},
-		"on_stop":     {{Command: "echo bye"}},
+		"before_tool":      {{Matcher: "Bash", Command: "echo hi"}},
+		"on_stop":          {{Command: "echo bye"}},
+		"on_session_start": {{Matcher: "startup|resume", Command: "echo start"}},
 	}
 	issues := ValidateHooks(hooks)
 	if len(issues) != 0 {

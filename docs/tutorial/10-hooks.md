@@ -237,7 +237,7 @@ ynh hook remove /tmp/ynh-tutorial/hook-harness after_tool 0 --profile <profile>
 
 The first positional argument accepts either a filesystem path (during authoring) or a canonical harness id (`local/<name>`, `github.com/<org>/<repo>/<name>`) once installed.
 
-`<event>` is validated against the canonical set (`before_tool`, `after_tool`, `before_prompt`, `on_stop`). `<index>` is zero-based; removing the last entry for an event drops the event key entirely. See [hooks.md §"CLI Editing"](../hooks.md#cli-editing) and [reference.md](../reference.md) for the full flag matrix.
+`<event>` is validated against the canonical set (`before_tool`, `after_tool`, `before_prompt`, `on_stop`, `on_session_start`). `<index>` is zero-based; removing the last entry for an event drops the event key entirely. See [hooks.md §"CLI Editing"](../hooks.md#cli-editing) and [reference.md](../reference.md) for the full flag matrix.
 
 ## Clean up
 

@@ -6,9 +6,11 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
+	"github.com/eyelock/ynh/internal/backend"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/vendor"
@@ -64,20 +66,21 @@ func cmdVendorsTo(args []string, stdout, stderr io.Writer) error {
 }
 
 func printVendorsText(w io.Writer) error {
+	entries, err := vendorEntries()
+	if err != nil {
+		return err
+	}
+
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	_, _ = fmt.Fprintln(tw, "NAME\tDISPLAY NAME\tCLI\tCONFIG DIR\tAVAILABLE")
 
-	for _, name := range vendor.Available() {
-		adapter, err := vendor.Get(name)
-		if err != nil {
-			return fmt.Errorf("loading vendor %s: %w", name, err)
-		}
+	for _, e := range entries {
 		available := "false"
-		if _, err := exec.LookPath(adapter.CLIName()); err == nil {
+		if e.Available {
 			available = "true"
 		}
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n",
-			adapter.Name(), adapter.DisplayName(), adapter.CLIName(), adapter.ConfigDir(), available)
+			e.Name, e.DisplayName, e.CLI, e.ConfigDir, available)
 	}
 
 	return tw.Flush()
@@ -89,12 +92,18 @@ type initialPrompter interface {
 	SupportsInitialPrompt() bool
 }
 
-func printVendorsJSON(w io.Writer) error {
+// vendorEntries lists the registered vendor adapters, plus one extra row per
+// (backend, vendor) pair declared in ~/.ynh/config.json's "backends" map.
+// Backend rows use the same "<backend>/<vendor>" spec accepted by -v (see
+// backend.ParseSpec) as their name — discoverable without guessing at
+// installed models, which config deliberately doesn't store (the model is
+// supplied live in the -v string, not pinned in config).
+func vendorEntries() ([]vendorEntry, error) {
 	entries := make([]vendorEntry, 0, len(vendor.Available()))
 	for _, name := range vendor.Available() {
 		adapter, err := vendor.Get(name)
 		if err != nil {
-			return fmt.Errorf("loading vendor %s: %w", name, err)
+			return nil, fmt.Errorf("loading vendor %s: %w", name, err)
 		}
 		_, lookErr := exec.LookPath(adapter.CLIName())
 		supportsIP := false
@@ -109,6 +118,77 @@ func printVendorsJSON(w io.Writer) error {
 			Available:             lookErr == nil,
 			SupportsInitialPrompt: supportsIP,
 		})
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+
+	var backendNames []string
+	for name := range cfg.Backends {
+		backendNames = append(backendNames, name)
+	}
+	sort.Strings(backendNames)
+
+	for _, backendName := range backendNames {
+		var vendorNames []string
+		for name := range cfg.Backends[backendName].Vendors {
+			vendorNames = append(vendorNames, name)
+		}
+		sort.Strings(vendorNames)
+
+		// Query the backend for installed models, if it declares a type ynh
+		// knows how to ask (currently just "ollama"). This is best-effort:
+		// an unreachable server or unrecognized type just falls back to a
+		// bare "<backend>/<vendor>" row instead of failing the listing.
+		models, _ := backend.ListModels(cfg, backendName)
+
+		for _, vn := range vendorNames {
+			adapter, err := vendor.Get(vn)
+			if err != nil {
+				// Config names a vendor ynh doesn't know; skip it rather
+				// than failing the whole listing over one bad entry.
+				continue
+			}
+			_, lookErr := exec.LookPath(adapter.CLIName())
+			supportsIP := false
+			if ip, ok := adapter.(initialPrompter); ok {
+				supportsIP = ip.SupportsInitialPrompt()
+			}
+
+			if len(models) == 0 {
+				entries = append(entries, vendorEntry{
+					Name:                  backendName + "/" + vn,
+					DisplayName:           fmt.Sprintf("%s (%s)", adapter.DisplayName(), backendName),
+					CLI:                   adapter.CLIName(),
+					ConfigDir:             adapter.ConfigDir(),
+					Available:             lookErr == nil,
+					SupportsInitialPrompt: supportsIP,
+				})
+				continue
+			}
+
+			for _, model := range models {
+				entries = append(entries, vendorEntry{
+					Name:                  backendName + "/" + vn + "/" + model,
+					DisplayName:           fmt.Sprintf("%s (%s · %s)", adapter.DisplayName(), backendName, model),
+					CLI:                   adapter.CLIName(),
+					ConfigDir:             adapter.ConfigDir(),
+					Available:             lookErr == nil,
+					SupportsInitialPrompt: supportsIP,
+				})
+			}
+		}
+	}
+
+	return entries, nil
+}
+
+func printVendorsJSON(w io.Writer) error {
+	entries, err := vendorEntries()
+	if err != nil {
+		return err
 	}
 
 	data, err := json.MarshalIndent(entries, "", "  ")

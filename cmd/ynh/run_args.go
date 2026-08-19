@@ -47,6 +47,8 @@ import (
 //	--worktree <path>            Run worker in <path>
 //	--emit-jsonl <path>          Trajectory output (- = stdout)
 //	--sensor-overlay <json>      Per-sensor JSON patch
+//	--resume <session-dir>       Resume a prior run from its checkpoint
+//	--max-plan-iterations <n>    Cap the interactive plan-refine loop (default 5)
 //
 // All other arguments are passed through to the vendor CLI verbatim.
 // Use -- to separate vendor flags from the prompt when vendor flags take values.
@@ -79,6 +81,8 @@ type runArgs struct {
 	AgentWorktree    string
 	AgentEmitJSONL   string
 	AgentSensorOver  map[string]json.RawMessage
+	AgentResume      string
+	AgentMaxPlanIter int
 }
 
 // runArgsError is returned by parseRunArgs when a flag value is malformed.
@@ -241,6 +245,18 @@ func parseRunArgs(args []string) (runArgs, error) {
 					return ra, &runArgsError{msg: fmt.Sprintf("--sensor-overlay: invalid JSON: %v", err)}
 				}
 				ra.AgentSensorOver = overlay
+				i++
+				continue
+			case a == "--resume" && i+1 < len(flagArgs):
+				ra.AgentResume = flagArgs[i+1]
+				i++
+				continue
+			case a == "--max-plan-iterations" && i+1 < len(flagArgs):
+				n, err := strconv.Atoi(flagArgs[i+1])
+				if err != nil || n < 0 {
+					return ra, &runArgsError{msg: "--max-plan-iterations must be a non-negative integer"}
+				}
+				ra.AgentMaxPlanIter = n
 				i++
 				continue
 			}

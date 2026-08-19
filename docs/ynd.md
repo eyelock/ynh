@@ -127,7 +127,7 @@ See [Tutorial 8: Developer Preview](tutorial/12-developer-preview.md) for a guid
 Compare assembled harness output across two or more vendors. Shows which files are unique to each vendor, which have different content, and which are identical.
 
 ```bash
-ynd diff ./my-harness                       # compare all vendors (claude, codex, cursor)
+ynd diff ./my-harness                       # compare all vendors (claude, codex, copilot, cursor)
 ynd diff ./my-harness claude cursor         # compare specific vendors (positional)
 ynd diff ./my-harness -v claude,cursor      # compare specific vendors (flag)
 ynd diff ./my-harness claude cursor codex   # three-way comparison
@@ -164,7 +164,7 @@ ynd export github.com/user/repo --path harnesses/david  # from a monorepo
 | Flag | Description |
 |------|-------------|
 | `-o, --output <dir>` | Output directory. Default: `./dist/<harness-name>/` |
-| `-v, --vendor <names>` | Comma-separated vendors. Default: all registered (`claude,codex,cursor`) |
+| `-v, --vendor <names>` | Comma-separated vendors. Default: all registered (`claude,codex,copilot,cursor`) |
 | `--harness <dir>` | Harness source directory (alternative to positional arg) |
 | `--path <subdir>` | Subdirectory within source (for monorepos). Must be a relative path with no `..` traversal. |
 | `--profile <name>` | Profile to apply during assembly |
@@ -190,9 +190,14 @@ dist/my-harness/
 │   ├── commands/
 │   ├── .cursorrules
 │   └── AGENTS.md
-└── codex/
-    ├── .codex-plugin/plugin.json
+├── codex/
+│   ├── .codex-plugin/plugin.json
+│   ├── skills/<name>/SKILL.md
+│   └── AGENTS.md
+└── copilot/
+    ├── .claude-plugin/plugin.json
     ├── skills/<name>/SKILL.md
+    ├── agents/<name>.md
     └── AGENTS.md
 ```
 
@@ -201,13 +206,15 @@ Key differences from runtime layout:
 - Export places artifacts at the plugin root (`skills/`), not inside the vendor config dir (`.claude/skills/`)
 - Claude export writes `AGENTS.md` for instructions, not `CLAUDE.md` (which would conflict with the installing project's own `CLAUDE.md`)
 - Codex is limited to skills only — agents, rules, commands, and delegates are excluded with warnings
-- `--merged` produces one directory with both `.claude-plugin/` and `.cursor-plugin/` manifests; Codex is excluded from merged mode
+- Copilot is limited to skills and agents — rules and commands are excluded with warnings
+- Copilot reuses Claude's `.claude-plugin/plugin.json` schema (Copilot's plugin loader reads the same format)
+- `--merged` produces one directory with all vendor manifests; Claude and Copilot share the same `.claude-plugin/` manifest path harmlessly (identical schema)
 
 See [Tutorial 10: Export](tutorial/05-export.md) for a guided walkthrough.
 
 ### marketplace
 
-Build a marketplace from a collection of harnesses and pre-built plugins. Each entry is exported with dual vendor manifests and indexed.
+Build a marketplace from a collection of harnesses and pre-built plugins. Each entry is exported with vendor manifests for Claude Code, Cursor, Codex, and Copilot, and indexed for all four.
 
 ```bash
 ynd marketplace                             # uses ./marketplace.json
@@ -220,7 +227,7 @@ ynd marketplace --clean                     # remove output dir before build
 | Flag | Description |
 |------|-------------|
 | `-o, --output <dir>` | Output directory. Default: `./dist` |
-| `-v, --vendor <names>` | Comma-separated vendors. Default: `claude,cursor` |
+| `-v, --vendor <names>` | Comma-separated vendors. Default: `claude,cursor,codex,copilot` |
 | `--clean` | Remove output dir before building |
 
 **Config format** (`marketplace.json`):
@@ -239,7 +246,7 @@ ynd marketplace --clean                     # remove output dir before build
 
 - `plugin` entries are copied as-is (already in vendor-native format)
 - `harness` entries are fully exported — includes resolved, artifacts flattened
-- Codex is excluded (no marketplace system)
+- Codex participates like the other vendors: it gets its own index at `.agents/plugins/marketplace.json` using its native `source`/`policy` format
 
 ### migrate-manifest
 

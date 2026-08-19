@@ -203,7 +203,7 @@ ynh ls --format json
 Expected (timestamps and paths will differ):
 ```json
 {
-  "capabilities": "0.5.0",
+  "capabilities": "0.7.0",
   "schema_version": 2,
   "ynh_version": "<version>",
   "harnesses": [
@@ -282,7 +282,7 @@ ynh ls --format json
 Expected (truncated):
 ```json
 {
-  "capabilities": "0.5.0",
+  "capabilities": "0.7.0",
   "schema_version": 2,
   "ynh_version": "<version>",
   "harnesses": []
@@ -352,7 +352,7 @@ ynh info local/my-harness --installed --format json
 Expected:
 ```json
 {
-  "capabilities": "0.5.0",
+  "capabilities": "0.7.0",
   "ynh_version": "0.3.x",
   "id": "local/my-harness",
   "installed": {

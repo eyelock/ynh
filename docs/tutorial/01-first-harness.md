@@ -129,7 +129,7 @@ Installed harness "my-harness"
   Vendor:   claude
 ```
 
-A local directory install is registered in place — the source tree stays where it is and ynh records it under the canonical id `local/my-harness` (on-disk form `local--my-harness`). The launcher keeps the short name because it's unambiguous.
+Local installs are pointer-form: the install record (keyed by the canonical id `local/my-harness`, on-disk form `local--my-harness`) lives in `~/.ynh`, but `Location` reports your source tree, since that's where edits and `ynh run` both land. The launcher keeps the short name because it's unambiguous.
 
 ## T1.5: List installed harnesses
 

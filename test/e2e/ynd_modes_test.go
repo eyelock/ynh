@@ -62,7 +62,7 @@ func TestYnd_Export_Clean(t *testing.T) {
 	}
 }
 
-// TestYnd_Marketplace_VendorFilter asserts `-v claude` on `marketplace build`
+// TestYnd_Marketplace_VendorFilter asserts `-v claude` on `marketplace`
 // produces only the .claude-plugin/marketplace.json index, not .cursor-plugin/.
 func TestYnd_Marketplace_VendorFilter(t *testing.T) {
 	root := t.TempDir()

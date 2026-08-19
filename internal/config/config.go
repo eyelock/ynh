@@ -23,7 +23,11 @@ var Version = "dev"
 //
 // Consumers (e.g. TermQ) read this via `ynh version --format json` and gate
 // features on it with their own `minimumYNHCapabilities` constant.
-// 0.5.0 (this branch): the surface refactor — `ynh agent run` collapsed into
+// 0.6.0: local model backends (`ynh backend`, `-v <backend>/<vendor>[/<model>]`
+// redirection) — `ynh vendors` gained extra rows per configured backend
+// connection.
+//
+// 0.7.0 (this branch): the surface refactor — `ynh agent run` collapsed into
 // `ynh run --agent`, `ynh installed` into `ynh info --installed`, `ynh prune`
 // into `ynh status --prune`, `ynd validate-output` into `ynd validate --schema`,
 // `ynd marketplace build` into `ynd marketplace`, `ynd migrate` renamed to
@@ -31,7 +35,7 @@ var Version = "dev"
 // into top-level `ynh {hook,mcp,include}` with `--profile <name>`. Flag
 // renames: `--json` → `--format json`, `--output-dir` / `--to` → `-o, --output`,
 // four `--clear-*` collapsed into `--clear <field>`.
-const CapabilitiesVersion = "0.5.0"
+const CapabilitiesVersion = "0.7.0"
 
 // SchemaVersion declares the on-disk format version of the YNH home
 // directory (~/.ynh). Distinct from CapabilitiesVersion: capabilities is
@@ -73,11 +77,37 @@ type Source struct {
 	Description string `json:"description,omitempty"`
 }
 
+// BackendConnection holds the connection details for redirecting one vendor
+// CLI at one local model backend (e.g. Ollama) instead of its default cloud
+// API. Keyed two levels deep in Config.Backends — backend name, then vendor
+// name — because the connection details (notably base_url's wire format)
+// differ per vendor even against the same backend server. The model is
+// deliberately not stored here: it's supplied per invocation via the vendor
+// spec string (e.g. "-v ollama/claude/qwen3"), not pinned in config.
+type BackendConnection struct {
+	BaseURL   string            `json:"base_url"`
+	AuthToken string            `json:"auth_token,omitempty"`
+	Env       map[string]string `json:"env,omitempty"`
+}
+
+// BackendDef declares one local model backend: what kind of server it is
+// (Type, used to decide how to query it for installed models) and its
+// per-vendor connection details.
+type BackendDef struct {
+	// Type identifies the backend server so ynh knows how to query it for
+	// installed models — e.g. "ollama" queries Ollama's native /api/tags.
+	// Empty (or unrecognized) means model discovery isn't available; the
+	// backend still works for launching, just without live enumeration.
+	Type    string                       `json:"type,omitempty"`
+	Vendors map[string]BackendConnection `json:"vendors"`
+}
+
 type Config struct {
-	DefaultVendor        string           `json:"default_vendor,omitempty"`
-	AllowedRemoteSources []string         `json:"allowed_remote_sources,omitempty"`
-	Registries           []RegistrySource `json:"registries,omitempty"`
-	Sources              []Source         `json:"sources,omitempty"`
+	DefaultVendor        string                `json:"default_vendor,omitempty"`
+	AllowedRemoteSources []string              `json:"allowed_remote_sources,omitempty"`
+	Registries           []RegistrySource      `json:"registries,omitempty"`
+	Sources              []Source              `json:"sources,omitempty"`
+	Backends             map[string]BackendDef `json:"backends,omitempty"`
 }
 
 // HomeDir returns the ynh home directory.

@@ -14,7 +14,7 @@ OpenAI's harness engineering guidance emphasizes that hook blocking messages sho
 
 ## Canonical Events
 
-ynh defines four canonical hook events. Each vendor translates these to its native event names.
+ynh defines five canonical hook events. Each vendor translates these to its native event names.
 
 | Canonical Event | Description |
 |----------------|-------------|
@@ -22,6 +22,7 @@ ynh defines four canonical hook events. Each vendor translates these to its nati
 | `after_tool` | Runs after a tool/command completes. Can reject the result. |
 | `before_prompt` | Runs before a user prompt is submitted to the model. |
 | `on_stop` | Runs when the agent finishes responding. On Claude Code this fires at the **end of every turn**, not once at session end — see [on_stop output semantics](#on_stop-output-semantics-claude). |
+| `on_session_start` | Runs when a session/agent starts. Codex supports filtering on `source` (`startup`\|`resume`) via the hook entry's existing `matcher` field. |
 
 ## Manifest Format
 
@@ -61,7 +62,7 @@ Each hook entry has:
 
 ## Vendor Translation
 
-Each vendor uses different event names and config file formats:
+Each vendor uses different event names and config file formats. **GitHub Copilot CLI is not in this table** — Copilot hooks silently no-op in folders the CLI hasn't marked as trusted, and no flag exists to grant that trust per-invocation, so `ynh`-assembled hook config would appear to work but never actually fire. Copilot's adapter always emits no hook config rather than shipping something misleadingly inert. See the Copilot row in [Vendor Support](vendors.md#vendor-notes) for detail.
 
 ### Event Name Mapping
 
@@ -71,6 +72,7 @@ Each vendor uses different event names and config file formats:
 | `after_tool` | `PostToolUse` | `afterFileEdit` | `PostToolUse` |
 | `before_prompt` | `UserPromptSubmit` | `beforeSubmitPrompt` | `UserPromptSubmit` |
 | `on_stop` | `Stop` | `stop` | `Stop` |
+| `on_session_start` | `SessionStart` | `sessionStart` | `SessionStart` |
 
 ### Config File Locations
 
@@ -284,7 +286,7 @@ ynh hook add <harness> <event> "<command>" --profile <profile> [--matcher <patte
 ynh hook remove <harness> <event> <index> --profile <profile>
 ```
 
-`<event>` is validated against the canonical set: `before_tool`, `after_tool`, `before_prompt`, `on_stop`. `<index>` is zero-based. When the last entry for an event is removed, the event key is dropped from the manifest entirely.
+`<event>` is validated against the canonical set: `before_tool`, `after_tool`, `before_prompt`, `on_stop`, `on_session_start`. `<index>` is zero-based. When the last entry for an event is removed, the event key is dropped from the manifest entirely.
 
 To translate a harness's declared hooks into a Claude settings file (so they fire in a plain session — see [Running hooks in a plain Claude session](#running-hooks-in-a-plain-claude-session)):
 

@@ -72,6 +72,7 @@ Expected output:
 Exported for claude → /tmp/ynh-tutorial/export-output/claude (2 skills, 1 agents)
 Exported for codex → /tmp/ynh-tutorial/export-output/codex (2 skills, 0 agents)
   warning: codex: skipping 1 agents (not supported)
+Exported for copilot → /tmp/ynh-tutorial/export-output/copilot (2 skills, 1 agents)
 Exported for cursor → /tmp/ynh-tutorial/export-output/cursor (2 skills, 1 agents)
 ```
 
@@ -229,9 +230,9 @@ ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/clean-test
 # Second export adds a new vendor dir from a different run
 ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/clean-test -v claude
 
-# Old cursor/ and codex/ dirs still exist from first run
+# Old codex/, copilot/, cursor/ dirs still exist from first run
 ls /tmp/ynh-tutorial/clean-test/
-# Expected: claude/ cursor/ codex/
+# Expected: claude/ codex/ copilot/ cursor/
 
 # --clean removes entire output first
 ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/clean-test -v claude --clean

@@ -226,7 +226,7 @@ func discoverExistingAgents(root string) []string {
 }
 
 // supportedVendors lists the vendor CLI names whose config dirs we search.
-var supportedVendors = []string{"claude", "cursor", "codex"}
+var supportedVendors = []string{"claude", "cursor", "codex", "copilot"}
 
 // discoverExistingSkillsAll finds SKILL.md files in skills/ at the project root
 // and inside each supported vendor config directory (e.g. .claude/skills/).

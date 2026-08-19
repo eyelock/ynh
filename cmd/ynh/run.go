@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/assembler"
+	"github.com/eyelock/ynh/internal/backend"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/migration"
@@ -113,19 +114,43 @@ func cmdRun(args []string) error {
 	vendorArgs := ra.VendorArgs
 	action := ra.Action
 
-	vendorName, err := resolveVendor(ra.VendorFlag, p)
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+
+	// Determine vendor. The resolved spec may itself be a plain vendor name
+	// ("claude") or a backend redirection ("ollama/claude/qwen3") — both
+	// travel through the same -v flag / YNH_VENDOR / default_vendor
+	// precedence chain, so a local model backend is just another vendor
+	// spec, not a separate flag.
+	spec, err := resolveVendor(ra.VendorFlag, p)
 	if err != nil {
 		return err
 	}
+	vs, err := backend.ParseSpec(spec)
+	if err != nil {
+		return err
+	}
+	vendorName := vs.Vendor
 
 	adapter, err := vendor.Get(vendorName)
 	if err != nil {
 		return err
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
+	// Redirect the vendor CLI at the backend named in the spec, if any.
+	// No-op otherwise — vendor talks to its normal cloud API.
+	if vs.Backend != "" {
+		conn, err := backend.Lookup(cfg, vs)
+		if err != nil {
+			return err
+		}
+		extra, err := backend.Apply(vendorName, vs.Backend, conn, vs.Model)
+		if err != nil {
+			return err
+		}
+		vendorArgs = append(extra, vendorArgs...)
 	}
 
 	if len(p.Includes) > 0 {

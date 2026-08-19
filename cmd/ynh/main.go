@@ -59,6 +59,8 @@ func main() {
 		err = cmdSearch(os.Args[2:])
 	case "registry":
 		err = cmdRegistry(os.Args[2:])
+	case "backend":
+		err = cmdBackend(os.Args[2:])
 	case "delegate":
 		err = cmdDelegate(os.Args[2:])
 	case "fork":

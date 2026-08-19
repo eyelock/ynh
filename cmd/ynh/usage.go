@@ -55,6 +55,9 @@ Commands:
   registry list                Show configured registries (supports --format json)
   registry remove <url>        Remove a registry
   registry update              Refresh all cached registries
+  backend add <name> <vendor> --base-url <url> [--auth-token <token>] [--type <type>]  Add a local model backend
+  backend list                 Show configured backends (supports --format json)
+  backend remove <name> [<vendor>]  Remove a backend, or one vendor's connection within it
   image <name> [flags]         Build a Docker image with a harness baked in
   paths                        Show resolved path roots (supports --format json)
   status [--prune]             Show symlink installations (--prune removes orphans)
@@ -64,7 +67,7 @@ Commands:
   help                         Show this help
 
 Run flags:
-  -v <vendor>                  Override vendor (claude, codex, cursor)
+  -v <vendor>                  Override vendor (claude, codex, cursor, copilot), or "<backend>/<vendor>[/<model>]" to redirect at a local model backend (see: ynh backend)
   --focus <name>               Load a named focus (sets prompt and profile; implies non-interactive)
   --profile <name>             Apply a named profile overlay (with a prompt, implies non-interactive)
   --interactive                Override non-interactive default — stay in session after focus or prompt

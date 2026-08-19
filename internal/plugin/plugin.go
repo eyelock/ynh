@@ -246,6 +246,7 @@ type MCPServer struct {
 	Command string            `json:"command,omitempty"`
 	Args    []string          `json:"args,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
+	Cwd     string            `json:"cwd,omitempty"`
 	URL     string            `json:"url,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
 }
@@ -274,10 +275,11 @@ type HookEntry struct {
 
 // ValidHookEvents lists the canonical hook event names.
 var ValidHookEvents = map[string]bool{
-	"before_tool":   true,
-	"after_tool":    true,
-	"before_prompt": true,
-	"on_stop":       true,
+	"before_tool":      true,
+	"after_tool":       true,
+	"before_prompt":    true,
+	"on_stop":          true,
+	"on_session_start": true,
 }
 
 // ValidateHooks checks that hook event names are valid and commands are non-empty.
@@ -285,7 +287,7 @@ func ValidateHooks(hooks map[string][]HookEntry) []string {
 	var issues []string
 	for event, entries := range hooks {
 		if !ValidHookEvents[event] {
-			issues = append(issues, fmt.Sprintf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop)", event))
+			issues = append(issues, fmt.Sprintf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop, on_session_start)", event))
 		}
 		for i, entry := range entries {
 			if entry.Command == "" {
@@ -443,6 +445,34 @@ func LoadPluginJSON(dir string) (*HarnessJSON, error) {
 	}
 
 	return &hj, nil
+}
+
+// MCPJSONFile is the vendor-convention (Claude Code) filename for MCP server
+// declarations at the plugin root, as an alternative to mcp_servers in
+// plugin.json.
+const MCPJSONFile = ".mcp.json"
+
+// LoadMCPJSON reads a root .mcp.json (Claude Code convention:
+// {"mcpServers": {...}}) from dir, for plugins that declare MCP servers that
+// way instead of via mcp_servers in plugin.json. Returns nil, nil if the
+// file does not exist.
+func LoadMCPJSON(dir string) (map[string]MCPServer, error) {
+	data, err := os.ReadFile(filepath.Join(dir, MCPJSONFile))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("reading %s: %w", MCPJSONFile, err)
+	}
+
+	var doc struct {
+		MCPServers map[string]MCPServer `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("invalid %s: %w", MCPJSONFile, err)
+	}
+
+	return doc.MCPServers, nil
 }
 
 // SavePluginJSON writes hj to .ynh-plugin/plugin.json in dir.

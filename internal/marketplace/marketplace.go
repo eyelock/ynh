@@ -156,7 +156,7 @@ type BuildOptions struct {
 	ConfigDir string
 	// OutputDir is where to write the marketplace output.
 	OutputDir string
-	// Vendors lists target vendors (default: claude, cursor).
+	// Vendors lists target vendors (default: claude, cursor, codex, copilot).
 	Vendors []string
 	// Config provides remote source checking.
 	Config *config.Config
@@ -166,7 +166,7 @@ type BuildOptions struct {
 func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 	vendors := opts.Vendors
 	if len(vendors) == 0 {
-		vendors = []string{"claude", "cursor", "codex"}
+		vendors = []string{"claude", "cursor", "codex", "copilot"}
 	}
 
 	pluginsDir := filepath.Join(opts.OutputDir, "plugins")
@@ -378,7 +378,7 @@ func initGitRepo(dir string) error {
 	for _, args := range [][]string{
 		{"init"},
 		{"add", "."},
-		{"-c", "user.name=ynd", "-c", "user.email=ynd@localhost", "commit", "-m", "ynd marketplace build"},
+		{"-c", "user.name=ynd", "-c", "user.email=ynd@localhost", "commit", "-m", "ynd marketplace"},
 	} {
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir

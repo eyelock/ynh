@@ -13,7 +13,7 @@ func TestClaudeBackend_Name(t *testing.T) {
 
 func TestBuildClaudeStreamArgs_Minimal(t *testing.T) {
 	args := buildClaudeStreamArgs(StartOptions{})
-	required := []string{"--input-format", "stream-json", "--output-format", "stream-json", "--print"}
+	required := []string{"--input-format", "stream-json", "--output-format", "stream-json", "--print", "--verbose"}
 	for _, r := range required {
 		found := false
 		for _, a := range args {

@@ -217,7 +217,15 @@ func cmdInstall(args []string) error {
 		provSource = resolved.gitURL
 	}
 	if resolved.sourceType == "local" {
-		provSource = originalSource
+		// Resolve to absolute path so the pointer record stays valid
+		// regardless of the cwd of the consumer (CLI, daemon, embedding
+		// host) that later loads it. Relative paths persisted here
+		// silently break with a misleading "manifest not found" error.
+		absSource, absErr := filepath.Abs(originalSource)
+		if absErr != nil {
+			return fmt.Errorf("resolving absolute path for %s: %w", originalSource, absErr)
+		}
+		provSource = absSource
 	} else if resolved.localPath != "" {
 		provSource = resolved.localPath
 	}

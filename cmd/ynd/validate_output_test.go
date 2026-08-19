@@ -11,7 +11,7 @@ import (
 )
 
 func TestValidateSchema_OK(t *testing.T) {
-	input := `{"version": "0.3.1", "capabilities": "0.4.0"}`
+	input := `{"version": "0.3.1", "capabilities": "0.7.0"}`
 	var out, errb bytes.Buffer
 	err := validateFromStdin(strings.NewReader(input), &out, &errb, "version")
 	if err != nil {

@@ -537,6 +537,30 @@ rm -rf /tmp/ynh-hollow-src "$YNH_HOME"
 unset YNH_HOME
 ```
 
+### E26: Local model backend spec — unknown vendor, and vendors listing fallback
+
+```bash
+mkdir -p /tmp/ynh-backend-edge/.ynh-plugin
+cat > /tmp/ynh-backend-edge/.ynh-plugin/plugin.json << 'EOF'
+{"name":"backend-edge","version":"0.1.0","default_vendor":"claude"}
+EOF
+export YNH_HOME=$(mktemp -d)
+echo '{"backends":{"ollama":{"vendors":{"claude":{"base_url":"http://localhost:11434","auth_token":"ollama"}}}}}' > "$YNH_HOME/config.json"
+
+cd /tmp/ynh-backend-edge
+ynh run -v ollama/codex
+# Expected: Error: backend "ollama" has no config for vendor "codex" (add backends.ollama.vendors.codex to ~/.ynh/config.json)
+
+ynh vendors --format json | jq '.[] | select(.name=="ollama/claude")'
+# Expected: a row present (name, display_name, cli, config_dir, available, supports_initial_prompt).
+# No live Ollama server is required for this check: model discovery is best-effort — an
+# unreachable/unconfigured-type backend falls back to the bare "<backend>/<vendor>" row
+# instead of erroring the whole `ynh vendors` listing.
+
+rm -rf /tmp/ynh-backend-edge "$YNH_HOME"
+unset YNH_HOME
+```
+
 ---
 
 ## Sensors
@@ -601,5 +625,5 @@ Re-run S1 with a focus-source sensor and verify `ynh sensors run` returns the re
 | Tutorial 15: Project-Local Config | 4 |
 | Tutorial 16: Structured Output | 11 |
 | Sensors | 3 |
-| Edge Cases | 25 |
-| **Total** | **153** |
+| Edge Cases | 26 |
+| **Total** | **154** |

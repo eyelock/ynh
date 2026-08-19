@@ -86,7 +86,7 @@ Some `--format json` commands wrap their result in an envelope:
 
 ```json
 {
-  "capabilities": "0.5.0",
+  "capabilities": "0.7.0",
   "ynh_version": "0.5.0",
   "<payload-key>": <payload>
 }
@@ -114,7 +114,7 @@ Both `ynh version --format json` and `ynd version --format json` emit:
 ```json
 {
   "version": "0.5.0",
-  "capabilities": "0.5.0"
+  "capabilities": "0.7.0"
 }
 ```
 

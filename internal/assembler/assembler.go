@@ -21,6 +21,17 @@ type LayoutProvider interface {
 	InstructionsFile() string
 }
 
+// ArtifactTransform rewrites a single artifact file's name and content before
+// it is written to the target directory. Used by vendors whose plugin format
+// differs from the raw source layout (e.g. Cursor's .mdc rules with frontmatter).
+type ArtifactTransform func(artifactType, name string, data []byte) (string, []byte)
+
+// ArtifactTransformer is an optional capability a LayoutProvider may implement
+// to rewrite an artifact file's name/content during copy.
+type ArtifactTransformer interface {
+	TransformArtifact(artifactType, name string, data []byte) (string, []byte)
+}
+
 // Assemble creates a temporary directory with vendor-specific config layout
 // populated from resolved Git content.
 func Assemble(adapter LayoutProvider, content []resolver.ResolvedContent) (string, error) {
@@ -61,16 +72,21 @@ func assembleInto(workDir string, adapter LayoutProvider, content []resolver.Res
 		}
 	}
 
+	var transform ArtifactTransform
+	if t, ok := adapter.(ArtifactTransformer); ok {
+		transform = t.TransformArtifact
+	}
+
 	// Copy content into the right places
 	for _, rc := range content {
 		if len(rc.Paths) == 0 {
 			// No pick list - include everything that matches artifact types
-			if err := CopyAllArtifacts(rc.BasePath, configDir, artifactDirs); err != nil {
+			if err := CopyAllArtifacts(rc.BasePath, configDir, artifactDirs, transform); err != nil {
 				return err
 			}
 		} else {
 			for _, picked := range rc.Paths {
-				if err := CopyPicked(rc.BasePath, picked, configDir, artifactDirs); err != nil {
+				if err := CopyPicked(rc.BasePath, picked, configDir, artifactDirs, transform); err != nil {
 					return err
 				}
 			}
@@ -105,7 +121,7 @@ func Cleanup(workDir string) {
 // picked is like "skills/commit" or "agents/code-reviewer.md".
 // targetBaseDir is where artifact type directories live (e.g., workDir/.claude/ for runtime,
 // or pluginRoot/ for export).
-func CopyPicked(repoBase string, picked string, targetBaseDir string, artifactDirs map[string]string) error {
+func CopyPicked(repoBase string, picked string, targetBaseDir string, artifactDirs map[string]string, transform ArtifactTransform) error {
 	// Determine which artifact type this belongs to
 	parts := strings.SplitN(picked, "/", 2)
 	if len(parts) < 2 {
@@ -119,7 +135,6 @@ func CopyPicked(repoBase string, picked string, targetBaseDir string, artifactDi
 	}
 
 	src := filepath.Join(repoBase, picked)
-	dst := filepath.Join(targetBaseDir, targetDir, parts[1])
 
 	info, err := os.Stat(src)
 	if err != nil {
@@ -127,15 +142,15 @@ func CopyPicked(repoBase string, picked string, targetBaseDir string, artifactDi
 	}
 
 	if info.IsDir() {
-		return CopyDir(src, dst)
+		return CopyDir(src, filepath.Join(targetBaseDir, targetDir, parts[1]))
 	}
-	return CopyFile(src, dst)
+	return copyArtifactFile(artifactType, src, targetBaseDir, targetDir, parts[1], transform)
 }
 
 // CopyAllArtifacts scans the repo for known artifact type directories and copies them.
 // targetBaseDir is where artifact type directories live (e.g., workDir/.claude/ for runtime,
 // or pluginRoot/ for export).
-func CopyAllArtifacts(repoBase string, targetBaseDir string, artifactDirs map[string]string) error {
+func CopyAllArtifacts(repoBase string, targetBaseDir string, artifactDirs map[string]string, transform ArtifactTransform) error {
 	for artifactType, targetDir := range artifactDirs {
 		srcDir := filepath.Join(repoBase, artifactType)
 		if _, err := os.Stat(srcDir); os.IsNotExist(err) {
@@ -149,20 +164,43 @@ func CopyAllArtifacts(repoBase string, targetBaseDir string, artifactDirs map[st
 
 		for _, entry := range entries {
 			src := filepath.Join(srcDir, entry.Name())
-			dst := filepath.Join(targetBaseDir, targetDir, entry.Name())
 
 			if entry.IsDir() {
-				if err := CopyDir(src, dst); err != nil {
+				if err := CopyDir(src, filepath.Join(targetBaseDir, targetDir, entry.Name())); err != nil {
 					return err
 				}
 			} else {
-				if err := CopyFile(src, dst); err != nil {
+				if err := copyArtifactFile(artifactType, src, targetBaseDir, targetDir, entry.Name(), transform); err != nil {
 					return err
 				}
 			}
 		}
 	}
 	return nil
+}
+
+// copyArtifactFile copies a single artifact file, applying transform (if non-nil)
+// to rewrite its name/content before writing.
+func copyArtifactFile(artifactType, src, targetBaseDir, targetDir, name string, transform ArtifactTransform) error {
+	if transform == nil {
+		return CopyFile(src, filepath.Join(targetBaseDir, targetDir, name))
+	}
+
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	newName, newData := transform(artifactType, name, data)
+	dst := filepath.Join(targetBaseDir, targetDir, newName)
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(dst, newData, info.Mode())
 }
 
 // CopyFile copies a single file from src to dst, creating parent directories as needed.

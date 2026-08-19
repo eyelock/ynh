@@ -49,10 +49,11 @@ ynh vendors
 
 Expected:
 ```
-NAME    DISPLAY NAME  CLI     CONFIG DIR  AVAILABLE
-claude  Claude Code   claude  .claude     true
-codex   OpenAI Codex  codex   .codex      true
-cursor  Cursor        agent   .cursor     true
+NAME     DISPLAY NAME        CLI      CONFIG DIR  AVAILABLE
+claude   Claude Code         claude   .claude     true
+codex    OpenAI Codex        codex    .codex      true
+copilot  GitHub Copilot CLI  copilot  .copilot    true
+cursor   Cursor              agent    .cursor     true
 ```
 
 ## How vendor resolution works
