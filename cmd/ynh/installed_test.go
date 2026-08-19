@@ -1,3 +1,7 @@
+// Tests for `ynh info <name> --installed` (formerly the standalone
+// `ynh installed <name>` command). The file name reflects the original
+// command name to keep `go test -run` muscle memory working; the tests
+// exercise the folded surface.
 package main
 
 import (
@@ -12,7 +16,7 @@ import (
 	"github.com/eyelock/ynh/internal/clischema"
 )
 
-func TestCmdInstalled_JSONSchemaRoundTrip(t *testing.T) {
+func TestCmdInfoInstalled_JSONSchemaRoundTrip(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
 	installListTestHarness(t, home, "rt", `{
@@ -20,7 +24,6 @@ func TestCmdInstalled_JSONSchemaRoundTrip(t *testing.T) {
 		"version": "0.1.0",
 		"default_vendor": "claude"
 	}`)
-	// Write a .ynh-plugin/installed.json so LoadInstalledRecord finds it.
 	insDir := filepath.Join(home, "harnesses", "local--rt", ".ynh-plugin")
 	if err := os.MkdirAll(insDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -35,8 +38,8 @@ func TestCmdInstalled_JSONSchemaRoundTrip(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := cmdInstalledTo([]string{"local/rt", "--format", "json"}, &out, io.Discard); err != nil {
-		t.Fatalf("cmdInstalledTo: %v", err)
+	if err := cmdInfoTo([]string{"local/rt", "--installed", "--format", "json"}, &out, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo --installed: %v", err)
 	}
 	var v any
 	if err := json.Unmarshal(out.Bytes(), &v); err != nil {
@@ -51,21 +54,20 @@ func TestCmdInstalled_JSONSchemaRoundTrip(t *testing.T) {
 	}
 }
 
-func TestCmdInstalled_NotFound(t *testing.T) {
+func TestCmdInfoInstalled_NotFound(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
 	if err := os.MkdirAll(filepath.Join(home, "harnesses"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	var out, errb bytes.Buffer
-	err := cmdInstalledTo([]string{"local/missing", "--format", "json"}, &out, &errb)
+	err := cmdInfoTo([]string{"local/missing", "--installed", "--format", "json"}, &out, &errb)
 	if !errors.Is(err, errStructuredReported) {
 		t.Fatalf("expected errStructuredReported, got %v", err)
 	}
 	if out.Len() != 0 {
 		t.Errorf("stdout should be empty on error, got: %s", out.String())
 	}
-	// Validate the error envelope shape.
 	var env any
 	if err := json.Unmarshal(errb.Bytes(), &env); err != nil {
 		t.Fatalf("error envelope not JSON: %v\nstderr: %s", err, errb.String())
@@ -79,10 +81,10 @@ func TestCmdInstalled_NotFound(t *testing.T) {
 	}
 }
 
-func TestCmdInstalled_NoArgs(t *testing.T) {
+func TestCmdInfoInstalled_MutuallyExclusiveWithCheckUpdates(t *testing.T) {
 	var out, errb bytes.Buffer
-	err := cmdInstalledTo(nil, &out, &errb)
+	err := cmdInfoTo([]string{"local/x", "--installed", "--check-updates", "--format", "json"}, &out, &errb)
 	if err == nil {
-		t.Fatal("expected error for no args")
+		t.Fatal("expected error for --installed + --check-updates")
 	}
 }

@@ -230,7 +230,7 @@ ynh mcp update /tmp/ynh-tutorial/mcp-harness github --env GITHUB_TOKEN=ghp_new
 ynh mcp remove /tmp/ynh-tutorial/mcp-harness api
 
 # Profile-level overlay (with optional --null to suppress an inherited entry)
-ynh profile mcp add /tmp/ynh-tutorial/mcp-harness <profile> postgres --null
+ynh mcp add /tmp/ynh-tutorial/mcp-harness postgres --profile <profile> --null
 ```
 
 `--command` and `--url` are mutually exclusive; at least one is required at add time. `--null` is profile-only (harness-level entries cannot be null — see [mcp.md §"CLI Editing"](../mcp.md#cli-editing)).
@@ -250,7 +250,7 @@ rm -rf /tmp/ynh-tutorial
 - All three vendors use JSON with a `mcpServers` key, but in different file locations
 - Claude places MCP config at `.claude/.mcp.json`, Cursor at `.cursor/mcp.json`, and Codex at `.mcp.json` (plugin root)
 - `ynd preview` and `ynd diff` let you verify MCP config without installing
-- MCP servers can be edited from the CLI with `ynh mcp add/update/remove` (top-level) and `ynh profile mcp add/update/remove` (profile-level), with `--null` available on profile-level to suppress an inherited entry
+- MCP servers can be edited from the CLI with `ynh mcp add/update/remove` — pass `--profile <name>` for profile-level overrides, with `--null` available on profile-level to suppress an inherited entry
 
 ## Next
 

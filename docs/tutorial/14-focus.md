@@ -178,13 +178,13 @@ ynh focus add /tmp/ynh-tutorial/focus-harness security "audit this PR for securi
 
 # Update prompt or profile binding
 ynh focus update /tmp/ynh-tutorial/focus-harness security --prompt "audit thoroughly for security issues"
-ynh focus update /tmp/ynh-tutorial/focus-harness security --clear-profile
+ynh focus update /tmp/ynh-tutorial/focus-harness security --clear profile
 
 # Remove a focus
 ynh focus remove /tmp/ynh-tutorial/focus-harness security
 ```
 
-`--profile` and `--clear-profile` are mutually exclusive on `update`. Adding a focus that references a profile name not defined in the manifest is rejected with an error. Removing a profile referenced by any focus is also rejected (the focus has to be updated or removed first) — see [Tutorial 13: Profiles §"Edit profiles from the command line"](13-profiles.md#t136-edit-profiles-from-the-command-line).
+`--profile` and `--clear profile` are mutually exclusive on `update`. Adding a focus that references a profile name not defined in the manifest is rejected with an error. Removing a profile referenced by any focus is also rejected (the focus has to be updated or removed first) — see [Tutorial 13: Profiles §"Edit profiles from the command line"](13-profiles.md#t136-edit-profiles-from-the-command-line).
 
 The first positional argument is either a filesystem path (as above, while authoring) or a canonical id (`local/focus-demo`, `github.com/<org>/<repo>/<name>`) once the harness is installed.
 

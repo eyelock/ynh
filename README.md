@@ -71,7 +71,7 @@ ynh manages the **guide layer** of that harness: the proactive steering that hap
 
 **Refine** — Scaffold with `ynd create`, lint and validate with `ynd lint`/`ynd validate`, compress prompts with `ynd compress`, preview assembled output with `ynd preview`, diff across vendors with `ynd diff`. Edit focuses, profiles, hooks, MCP servers, includes, and delegates from the CLI with `ynh focus`/`profile`/`hook`/`mcp`/`include`/`delegate` — the same surface a GUI consumer drives.
 
-**Share** — Export as vendor-native plugins with `ynd export`. Build team marketplaces with `ynd marketplace build`. Publish to registries. Bake harnesses into Docker images for CI/CD.
+**Share** — Export as vendor-native plugins with `ynd export`. Build team marketplaces with `ynd marketplace`. Publish to registries. Bake harnesses into Docker images for CI/CD.
 
 ## Documentation
 

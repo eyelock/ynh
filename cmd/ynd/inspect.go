@@ -158,7 +158,7 @@ func parseInspectArgs(args []string) (vendor string, skipConfirm bool, outputDir
 			}
 			vendor = args[i+1]
 			i++
-		case "-o", "--output-dir":
+		case "-o", "--output":
 			if i+1 >= len(args) {
 				return "", false, "", fmt.Errorf("-o requires a directory path")
 			}

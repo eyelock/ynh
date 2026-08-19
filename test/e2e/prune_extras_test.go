@@ -26,7 +26,7 @@ func TestPrune_StaleLaunchers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, _ := s.mustRunYnh(t, "prune")
+	out, _ := s.mustRunYnh(t, "status", "--prune")
 	if !strings.Contains(out, "stale launcher") && !strings.Contains(out, "Removed stale launcher") {
 		t.Errorf("expected prune output to mention removed stale launcher, got:\n%s", out)
 	}
@@ -49,7 +49,7 @@ func TestPrune_StaleRunDirs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, _ := s.mustRunYnh(t, "prune")
+	out, _ := s.mustRunYnh(t, "status", "--prune")
 	if !strings.Contains(out, "stale run dir") && !strings.Contains(out, "Removed stale run") {
 		t.Errorf("expected prune output to mention removed stale run dir, got:\n%s", out)
 	}

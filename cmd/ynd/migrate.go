@@ -1,3 +1,10 @@
+// `ynd migrate-manifest` walks a directory tree and converts every legacy
+// harness/registry manifest it finds to the current format. Idempotent —
+// runs every registered format migrator in internal/migration/. Adding or
+// removing a migrator there changes what this command handles automatically.
+//
+// Renamed from `ynd migrate` to disambiguate from `ynh migrate`, which
+// migrates the ynh home directory schema rather than harness source trees.
 package main
 
 import (
@@ -10,20 +17,13 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
-// cmdMigrate runs the format migration chain against a directory tree.
-// Idempotent — the chain no-ops when no migrator applies.
-//
-// The command itself knows nothing about specific migrations. Adding or
-// removing a migrator in internal/migration/ changes what this command
-// handles automatically. Storage relocation is intentionally excluded;
-// ynh itself triggers that when installing or relocating harnesses.
-func cmdMigrate(args []string) error {
+func cmdMigrateManifest(args []string) error {
 	var target string
 
 	for _, a := range args {
 		switch a {
 		case "-h", "--help":
-			printMigrateUsage()
+			printMigrateManifestUsage()
 			return nil
 		default:
 			if strings.HasPrefix(a, "-") {
@@ -105,16 +105,19 @@ func findMigratableDirs(root string, chain migration.Chain) []string {
 	return dirs
 }
 
-func printMigrateUsage() {
-	fmt.Println(`ynd migrate - run the format migration chain
+func printMigrateManifestUsage() {
+	fmt.Println(`ynd migrate-manifest - convert legacy harness manifests to the current format
 
 Runs every registered format migrator against the target directory tree.
 Migrators decide whether they apply based on the directory contents,
 so the command works for any format transition handled by the chain.
 
 Usage:
-  ynd migrate [path]              Migrate all matching dirs under path (default: .)
+  ynd migrate-manifest [path]     Migrate all matching dirs under path (default: .)
 
 Options:
-  -h, --help                      Show this help`)
+  -h, --help                      Show this help
+
+Compared with 'ynh migrate', which upgrades the ~/.ynh home schema,
+'ynd migrate-manifest' operates on harness *source* directories.`)
 }

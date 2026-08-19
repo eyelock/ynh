@@ -378,7 +378,7 @@ func initGitRepo(dir string) error {
 	for _, args := range [][]string{
 		{"init"},
 		{"add", "."},
-		{"-c", "user.name=ynd", "-c", "user.email=ynd@localhost", "commit", "-m", "ynd marketplace build"},
+		{"-c", "user.name=ynd", "-c", "user.email=ynd@localhost", "commit", "-m", "ynd marketplace"},
 	} {
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir

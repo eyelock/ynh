@@ -50,7 +50,7 @@ func TestCmdFork_BasicText(t *testing.T) {
 
 	dest := filepath.Join(t.TempDir(), "my-demo")
 	var stdout bytes.Buffer
-	if err := cmdForkTo([]string{"local/demo", "--to", dest}, &stdout, io.Discard); err != nil {
+	if err := cmdForkTo([]string{"local/demo", "-o", dest}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdForkTo: %v", err)
 	}
 
@@ -97,7 +97,7 @@ func TestCmdFork_DestAlreadyExists(t *testing.T) {
 	installForkTestHarness(t, home, "demo", nil)
 
 	dest := t.TempDir() // already exists
-	err := cmdForkTo([]string{"local/demo", "--to", dest}, io.Discard, io.Discard)
+	err := cmdForkTo([]string{"local/demo", "-o", dest}, io.Discard, io.Discard)
 	if err == nil {
 		t.Fatal("expected error for existing destination, got nil")
 	}
@@ -141,7 +141,7 @@ func TestCmdFork_NamespacedInstall(t *testing.T) {
 	})
 
 	dest := filepath.Join(t.TempDir(), "forked-researcher")
-	if err := cmdForkTo([]string{"eyelock/assistants/researcher", "--to", dest}, io.Discard, io.Discard); err != nil {
+	if err := cmdForkTo([]string{"eyelock/assistants/researcher", "-o", dest}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("cmdForkTo: %v", err)
 	}
 
@@ -163,7 +163,7 @@ func TestCmdFork_NotFound(t *testing.T) {
 	t.Setenv("YNH_HOME", home)
 
 	dest := filepath.Join(t.TempDir(), "nowhere")
-	err := cmdForkTo([]string{"local/nonexistent", "--to", dest}, io.Discard, io.Discard)
+	err := cmdForkTo([]string{"local/nonexistent", "-o", dest}, io.Discard, io.Discard)
 	if err == nil {
 		t.Fatal("expected error for non-existent harness")
 	}
@@ -182,7 +182,7 @@ func TestCmdFork_ForkedFromPopulated(t *testing.T) {
 	})
 
 	dest := filepath.Join(t.TempDir(), "my-demo")
-	if err := cmdForkTo([]string{"local/demo", "--to", dest}, io.Discard, io.Discard); err != nil {
+	if err := cmdForkTo([]string{"local/demo", "-o", dest}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("cmdForkTo: %v", err)
 	}
 
@@ -223,7 +223,7 @@ func TestCmdFork_ForkedFromLocalFallback(t *testing.T) {
 	installForkTestHarness(t, home, "demo", nil) // no provenance
 
 	dest := filepath.Join(t.TempDir(), "my-demo")
-	if err := cmdForkTo([]string{"local/demo", "--to", dest}, io.Discard, io.Discard); err != nil {
+	if err := cmdForkTo([]string{"local/demo", "-o", dest}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("cmdForkTo: %v", err)
 	}
 
@@ -250,7 +250,7 @@ func TestCmdFork_JSONOutput(t *testing.T) {
 
 	dest := filepath.Join(t.TempDir(), "my-demo")
 	var stdout bytes.Buffer
-	if err := cmdForkTo([]string{"local/demo", "--to", dest, "--format", "json"}, &stdout, io.Discard); err != nil {
+	if err := cmdForkTo([]string{"local/demo", "-o", dest, "--format", "json"}, &stdout, io.Discard); err != nil {
 		t.Fatalf("cmdForkTo: %v", err)
 	}
 
@@ -295,9 +295,9 @@ func TestCmdFork_MissingToValue(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
 
-	err := cmdForkTo([]string{"local/demo", "--to"}, io.Discard, io.Discard)
+	err := cmdForkTo([]string{"local/demo", "-o"}, io.Discard, io.Discard)
 	if err == nil {
-		t.Fatal("expected error for missing --to value")
+		t.Fatal("expected error for missing -o value")
 	}
 }
 
@@ -336,7 +336,7 @@ func TestCmdFork_WritesPointerAndLauncher(t *testing.T) {
 	})
 
 	dest := filepath.Join(t.TempDir(), "my-demo")
-	if err := cmdForkTo([]string{"local/demo", "--to", dest}, io.Discard, io.Discard); err != nil {
+	if err := cmdForkTo([]string{"local/demo", "-o", dest}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("cmdForkTo: %v", err)
 	}
 
@@ -384,7 +384,7 @@ func TestCmdFork_ClashWithExistingFlatTree(t *testing.T) {
 	}
 
 	dest := filepath.Join(t.TempDir(), "my-demo")
-	err := cmdForkTo([]string{"local/demo", "--to", dest}, io.Discard, io.Discard)
+	err := cmdForkTo([]string{"local/demo", "-o", dest}, io.Discard, io.Discard)
 	if err == nil {
 		t.Fatal("expected clash error, got nil")
 	}
@@ -400,13 +400,13 @@ func TestCmdFork_ClashWithExistingPointer(t *testing.T) {
 
 	// First fork registers the pointer
 	dest1 := filepath.Join(t.TempDir(), "demo-one")
-	if err := cmdForkTo([]string{"local/demo", "--to", dest1}, io.Discard, io.Discard); err != nil {
+	if err := cmdForkTo([]string{"local/demo", "-o", dest1}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("first fork: %v", err)
 	}
 
 	// Second fork must clash on the pointer
 	dest2 := filepath.Join(t.TempDir(), "demo-two")
-	err := cmdForkTo([]string{"local/demo", "--to", dest2}, io.Discard, io.Discard)
+	err := cmdForkTo([]string{"local/demo", "-o", dest2}, io.Discard, io.Discard)
 	if err == nil {
 		t.Fatal("expected clash error on second fork, got nil")
 	}
@@ -421,7 +421,7 @@ func TestCmdUninstall_PointerRemovesPointerNotSource(t *testing.T) {
 	installForkTestHarness(t, home, "demo", nil)
 
 	dest := filepath.Join(t.TempDir(), "my-demo")
-	if err := cmdForkTo([]string{"local/demo", "--to", dest}, io.Discard, io.Discard); err != nil {
+	if err := cmdForkTo([]string{"local/demo", "-o", dest}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("fork: %v", err)
 	}
 
@@ -465,7 +465,7 @@ func TestCmdFork_WithName(t *testing.T) {
 	}
 
 	dest := filepath.Join(t.TempDir(), "fork-tree")
-	if err := cmdForkTo([]string{"local/demo", "--to", dest, "--name", "my-demo"}, io.Discard, io.Discard); err != nil {
+	if err := cmdForkTo([]string{"local/demo", "-o", dest, "--name", "my-demo"}, io.Discard, io.Discard); err != nil {
 		t.Fatalf("cmdForkTo: %v", err)
 	}
 
@@ -510,7 +510,7 @@ func TestCmdFork_NameInvalid(t *testing.T) {
 	installForkTestHarness(t, home, "demo", nil)
 
 	dest := filepath.Join(t.TempDir(), "fork-tree")
-	err := cmdForkTo([]string{"local/demo", "--to", dest, "--name", "bad/name"}, io.Discard, io.Discard)
+	err := cmdForkTo([]string{"local/demo", "-o", dest, "--name", "bad/name"}, io.Discard, io.Discard)
 	if err == nil {
 		t.Fatal("expected validation error for invalid --name")
 	}
@@ -538,7 +538,7 @@ func TestCmdFork_NameClashesOnNewName(t *testing.T) {
 	}
 
 	dest := filepath.Join(t.TempDir(), "fork-tree")
-	err := cmdForkTo([]string{"local/demo", "--to", dest, "--name", "my-demo"}, io.Discard, io.Discard)
+	err := cmdForkTo([]string{"local/demo", "-o", dest, "--name", "my-demo"}, io.Discard, io.Discard)
 	if err == nil {
 		t.Fatal("expected clash error on --name target")
 	}

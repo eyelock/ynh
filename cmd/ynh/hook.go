@@ -20,6 +20,10 @@ func cmdHook(args []string) error {
 	return cmdHookTo(args, os.Stdout)
 }
 
+// cmdHookTo dispatches `ynh hook add|remove|export`. add and remove accept a
+// `--profile <name>` flag that scopes the hook to a profile overlay (the
+// behaviour formerly served by `ynh profile hook ...`). Without --profile,
+// the hook is registered at the harness top level.
 func cmdHookTo(args []string, stdout io.Writer) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: ynh hook <add|remove|export>")
@@ -38,6 +42,7 @@ func cmdHookTo(args []string, stdout io.Writer) error {
 
 func cmdHookAdd(args []string, stdout io.Writer) error {
 	var opts harness.HookAddOptions
+	var profileName string
 	var positional []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -47,6 +52,12 @@ func cmdHookAdd(args []string, stdout io.Writer) error {
 			}
 			i++
 			opts.Matcher = args[i]
+		case "--profile":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--profile requires a value")
+			}
+			i++
+			profileName = args[i]
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return fmt.Errorf("unknown flag: %s", args[i])
@@ -55,13 +66,20 @@ func cmdHookAdd(args []string, stdout io.Writer) error {
 		}
 	}
 	if len(positional) != 3 {
-		return fmt.Errorf("usage: ynh hook add <harness> <event> <command> [--matcher <pattern>]")
+		return fmt.Errorf("usage: ynh hook add <harness> <event> <command> [--matcher <pattern>] [--profile <name>]")
 	}
 	harnessRef, event, command := positional[0], positional[1], positional[2]
 
 	dir, _, err := harness.ResolveEditTarget(harnessRef)
 	if err != nil {
 		return err
+	}
+	if profileName != "" {
+		if err := harness.AddProfileHook(dir, profileName, event, command, opts); err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintf(stdout, "Added hook to profile %q (event %s)\n", profileName, event)
+		return nil
 	}
 	if err := harness.AddHook(dir, event, command, opts); err != nil {
 		return err
@@ -71,15 +89,25 @@ func cmdHookAdd(args []string, stdout io.Writer) error {
 }
 
 func cmdHookRemove(args []string, stdout io.Writer) error {
+	var profileName string
 	var positional []string
-	for _, a := range args {
-		if strings.HasPrefix(a, "-") {
-			return fmt.Errorf("unknown flag: %s", a)
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--profile":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--profile requires a value")
+			}
+			i++
+			profileName = args[i]
+		default:
+			if strings.HasPrefix(args[i], "-") {
+				return fmt.Errorf("unknown flag: %s", args[i])
+			}
+			positional = append(positional, args[i])
 		}
-		positional = append(positional, a)
 	}
 	if len(positional) != 3 {
-		return fmt.Errorf("usage: ynh hook remove <harness> <event> <index>")
+		return fmt.Errorf("usage: ynh hook remove <harness> <event> <index> [--profile <name>]")
 	}
 	harnessRef, event, idxStr := positional[0], positional[1], positional[2]
 	index, err := strconv.Atoi(idxStr)
@@ -90,6 +118,13 @@ func cmdHookRemove(args []string, stdout io.Writer) error {
 	dir, _, rErr := harness.ResolveEditTarget(harnessRef)
 	if rErr != nil {
 		return rErr
+	}
+	if profileName != "" {
+		if err := harness.RemoveProfileHook(dir, profileName, event, index); err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintf(stdout, "Removed hook %d from profile %q (event %s)\n", index, profileName, event)
+		return nil
 	}
 	if err := harness.RemoveHook(dir, event, index); err != nil {
 		return err

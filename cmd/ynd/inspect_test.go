@@ -92,7 +92,7 @@ func TestParseInspectArgs_OutputDir(t *testing.T) {
 }
 
 func TestParseInspectArgs_LongOutputDir(t *testing.T) {
-	_, _, outDir, err := parseInspectArgs([]string{"--output-dir", "/tmp/custom"})
+	_, _, outDir, err := parseInspectArgs([]string{"--output", "/tmp/custom"})
 	if err != nil {
 		t.Fatal(err)
 	}

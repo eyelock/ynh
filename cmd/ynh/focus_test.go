@@ -170,7 +170,7 @@ func TestCmdFocusUpdate_ClearProfile(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := cmdFocusTo([]string{"update", dir, "f", "--clear-profile"}, &buf); err != nil {
+	if err := cmdFocusTo([]string{"update", dir, "f", "--clear", "profile"}, &buf); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := loadTestFocuses(t, dir)
@@ -186,7 +186,7 @@ func TestCmdFocusUpdate_ProfileAndClearMutex(t *testing.T) {
 	var buf bytes.Buffer
 	_ = cmdFocusTo([]string{"add", dir, "f", "p"}, &buf)
 
-	err := cmdFocusTo([]string{"update", dir, "f", "--profile", "x", "--clear-profile"}, &buf)
+	err := cmdFocusTo([]string{"update", dir, "f", "--profile", "x", "--clear", "profile"}, &buf)
 	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
 		t.Errorf("expected mutually-exclusive error, got: %v", err)
 	}

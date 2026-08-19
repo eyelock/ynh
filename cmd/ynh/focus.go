@@ -117,7 +117,16 @@ func cmdFocusUpdate(args []string, stdout io.Writer) error {
 			i++
 			v := args[i]
 			opts.Profile = &v
-		case "--clear-profile":
+		case "--clear":
+			// `--clear profile` is the only field a focus can clear.
+			// Symmetrical with `ynh mcp update --clear <field>`.
+			if i+1 >= len(args) {
+				return fmt.Errorf("--clear requires a value (only 'profile' is supported for focuses)")
+			}
+			i++
+			if args[i] != "profile" {
+				return fmt.Errorf("--clear %q: only 'profile' is supported for focuses", args[i])
+			}
 			clearProfile = true
 		default:
 			if strings.HasPrefix(args[i], "-") {
@@ -129,18 +138,18 @@ func cmdFocusUpdate(args []string, stdout io.Writer) error {
 
 	if clearProfile {
 		if opts.Profile != nil {
-			return fmt.Errorf("--profile and --clear-profile are mutually exclusive")
+			return fmt.Errorf("--profile and --clear profile are mutually exclusive")
 		}
 		empty := ""
 		opts.Profile = &empty
 	}
 
 	if len(positional) != 2 {
-		return fmt.Errorf("usage: ynh focus update <harness> <name> [--prompt <text>] [--profile <name>] [--clear-profile]")
+		return fmt.Errorf("usage: ynh focus update <harness> <name> [--prompt <text>] [--profile <name>] [--clear profile]")
 	}
 
 	if opts.Prompt == nil && opts.Profile == nil {
-		return fmt.Errorf("ynh focus update: at least one of --prompt, --profile, or --clear-profile must be specified")
+		return fmt.Errorf("ynh focus update: at least one of --prompt, --profile, or --clear profile must be specified")
 	}
 
 	harnessRef, name := positional[0], positional[1]

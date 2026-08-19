@@ -20,7 +20,7 @@ func TestSchemaPipeline_LsValidatesAgainstSchema(t *testing.T) {
 	s := newSandbox(t)
 	lsOut, _ := s.mustRunYnh(t, "ls", "--format", "json")
 
-	cmd := exec.Command(yndBinary(t), "validate-output", "--schema", "list")
+	cmd := exec.Command(yndBinary(t), "validate", "--schema", "list")
 	cmd.Stdin = strings.NewReader(lsOut)
 	var out, errOut bytes.Buffer
 	cmd.Stdout = &out
@@ -82,7 +82,7 @@ func TestSchemaPipeline_ManifestRoundTrip(t *testing.T) {
 func TestSchemaPipeline_ValidateOutputDetectsBadInput(t *testing.T) {
 	// Missing the required "capabilities" field — must fail.
 	bad := `{"version": "0.3.1"}`
-	cmd := exec.Command(yndBinary(t), "validate-output", "--schema", "version")
+	cmd := exec.Command(yndBinary(t), "validate", "--schema", "version")
 	cmd.Stdin = strings.NewReader(bad)
 	var out, errOut bytes.Buffer
 	cmd.Stdout = &out

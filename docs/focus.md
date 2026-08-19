@@ -97,7 +97,7 @@ ynh focus add <harness> <name> "<prompt>" [--profile <name>]
 ynh focus remove <harness> <name>
 
 # Update a focus — change prompt, change profile, or clear the profile binding
-ynh focus update <harness> <name> [--prompt "<new>"] [--profile <name>] [--clear-profile]
+ynh focus update <harness> <name> [--prompt "<new>"] [--profile <name>] [--clear profile]
 ```
 
 `<harness>` is a canonical id from `ynh ls` (e.g. `local/my-harness` or `github.com/<org>/<repo>/<name>`). For tree-form (registry/git) installs the edits land in the install copy; for pointer-form (local source) installs they land in your source tree.

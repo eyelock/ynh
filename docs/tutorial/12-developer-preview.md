@@ -119,7 +119,7 @@ Expected output structure:
   agents/
   commands/
   rules/
-    safety.md
+    safety.mdc
   skills/
     deploy/
       SKILL.md
@@ -128,12 +128,16 @@ Expected output structure:
 .cursor-plugin/
   plugin.json
 .cursorrules
+hooks/
+  hooks.json
+mcp.json
 ```
 
 Note the differences from Claude:
 - Instructions go to `.cursorrules` instead of `CLAUDE.md`
-- Hooks go to `.cursor/hooks.json` instead of `.claude/hooks/hooks.json`
-- MCP config goes to `.cursor/mcp.json` instead of `.claude/.mcp.json`
+- Rules go to `.cursor/rules/*.mdc` (with frontmatter) instead of `.claude/rules/*.md`
+- Hooks go to `.cursor/hooks.json` instead of `.claude/hooks/hooks.json` — Cursor's plugin loader also expects a copy at the plugin root (`hooks/hooks.json`), so both are written
+- MCP config goes to `.cursor/mcp.json` instead of `.claude/.mcp.json` — likewise mirrored at the plugin root (`mcp.json`)
 - Artifacts are under `.cursor/` instead of `.claude/`
 
 ## T12.3: Compare Claude vs Cursor output
@@ -157,9 +161,11 @@ Only in cursor:
   .cursor-plugin/plugin.json
   .cursor/hooks.json
   .cursor/mcp.json
-  .cursor/rules/safety.md
+  .cursor/rules/safety.mdc
   .cursor/skills/deploy/SKILL.md
   .cursorrules
+  hooks/hooks.json
+  mcp.json
 ```
 
 The diff shows which files are vendor-specific and which content is shared. Artifacts like skills and rules may appear as identical content under different directory prefixes.

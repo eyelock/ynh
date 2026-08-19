@@ -39,7 +39,7 @@ func TestPrune_Orphans(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pruneOut, _ := s.mustRunYnh(t, "prune")
+	pruneOut, _ := s.mustRunYnh(t, "status", "--prune")
 	if !strings.Contains(pruneOut, orphan) {
 		t.Errorf("prune output should mention orphan project %q:\n%s", orphan, pruneOut)
 	}

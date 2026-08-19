@@ -44,9 +44,9 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 			}
 			i++
 			format = args[i]
-		case "--to":
+		case "-o", "--output":
 			if i+1 >= len(args) {
-				return cliError(stderr, structured, errCodeInvalidInput, "--to requires a value")
+				return cliError(stderr, structured, errCodeInvalidInput, "--output requires a value")
 			}
 			i++
 			toPath = args[i]
@@ -71,7 +71,7 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 	}
 
 	if name == "" {
-		return cliError(stderr, structured, errCodeInvalidInput, "usage: ynh fork <harness-name> [--to <path>] [--name <new>]")
+		return cliError(stderr, structured, errCodeInvalidInput, "usage: ynh fork <harness-name> [-o <path>] [--name <new>]")
 	}
 	if newName != "" && !harness.IsValidName(newName) {
 		return cliError(stderr, structured, errCodeInvalidInput,

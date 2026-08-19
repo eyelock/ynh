@@ -357,7 +357,7 @@ ynh install codereview
 Expected:
 ```
 Installed harness "codereview"
-  Location: /Users/<you>/.ynh/harnesses/local--codereview
+  Location: /tmp/ynh-tutorial/sources/codereview
   Launcher: /Users/<you>/.ynh/bin/codereview
   Vendor:   claude
 ```

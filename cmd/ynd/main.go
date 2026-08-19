@@ -41,10 +41,8 @@ func main() {
 		err = cmdDiff(os.Args[2:])
 	case "marketplace":
 		err = cmdMarketplace(os.Args[2:])
-	case "migrate":
-		err = cmdMigrate(os.Args[2:])
-	case "validate-output":
-		err = cmdValidateOutput(os.Args[2:])
+	case "migrate-manifest":
+		err = cmdMigrateManifest(os.Args[2:])
 	case "version", "--version", "-v":
 		err = cmdVersion(os.Args[2:])
 	case "help", "--help", "-h":
@@ -80,10 +78,9 @@ Commands:
   export <source>            Export harness as vendor-native plugin directories
   preview <source>           Show assembled vendor output without installing
   diff <source> [vendors]    Compare assembled output across vendors
-  marketplace build          Build a vendor-native marketplace from marketplace.json
-  migrate <path>             Convert .harness.json → .ynh-plugin/plugin.json in-place
-  validate-output --schema <name> [< file.json]
-                             Validate JSON on stdin against the named CLI schema
+  marketplace [config-file]  Build a vendor-native marketplace from marketplace.json
+  migrate-manifest <path>    Convert .harness.json → .ynh-plugin/plugin.json in-place
+  validate --schema <name>   Validate a JSON document on stdin against a published CLI schema
   version                    Print version
   help                       Show this help
 
@@ -98,7 +95,7 @@ Options:
   [file]                     Target a specific file (default: recurse CWD)
   -v, --vendor <name>        Vendor CLI for compress/inspect (default: auto-detect)
   -y, --yes                  Skip confirmation prompts
-  -o, --output-dir <path>    Output directory for inspect artifacts (default: .{vendor}/)
+  -o, --output <path>        Output directory for inspect/export/marketplace artifacts
   --restore                  Restore a file from its latest compress backup
   --list-backups             Show compress backup history for a file
   --pick <N>                 With --restore, pick a specific backup by number

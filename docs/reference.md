@@ -34,41 +34,33 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | Command | Key Flags |
 |---------|-----------|
 | `ynh install <source>` | `--path`, `-v` |
-| `ynh run [harness]` | `-v`, `--profile`, `--focus`, `--install`, `--clean` |
+| `ynh run [harness]` | `-v`, `--profile`, `--focus`, `--harness-file`, `--session-name`, `--instructions`, `--install`, `--clean`, `--interactive` — unknown flags pass through to the vendor CLI |
+| `ynh run <harness> --agent` | `--task <text\|@file\|->` (required), `--backend <claude\|codex\|cursor>`, `--sandbox <srt\|none>`, `--model`, `--max-turns <n>`, `--max-tokens <n>`, `--max-wall <duration>`, `--convergence-sensor <name>`, `--auto-commit`, `--no-plan`, `--worktree <path>`, `--emit-jsonl <path\|->`, `--sensor-overlay <json>` — autonomous agent loop instead of vendor launch |
 | `ynh uninstall <harness>` | |
 | `ynh update [harness]` | |
-| `ynh fork <name>` | `--to <path>`, `--name <new>`, `--format <text\|json>` |
+| `ynh fork <name>` | `-o, --output <path>`, `--name <new>`, `--format <text\|json>` |
 | `ynh ls` | `--format <text\|json>` |
-| `ynh info <harness>` | `--format <text\|json>` |
-| `ynh installed <harness>` | `--format <text\|json>` |
+| `ynh info <harness>` | `--installed`, `--format <text\|json>` |
 | `ynh schema <name>` | (or `ynh schema --all --format json`) — print embedded JSON schemas |
 | `ynh vendors` | `--format <text\|json>` |
 | `ynh search [query]` | `--format <text\|json>` |
 | `ynh delegate add <harness> <url>` | `--ref`, `--path` — `<url>` must be a git URL; local paths are not supported (see CONTRIBUTING.md "Delegates: remote-only") |
 | `ynh delegate remove <harness> <url>` | `--path` |
 | `ynh delegate update <harness> <url>` | `--from-path`, `--path`, `--ref` |
-| `ynh include add <harness> <url>` | `--path`, `--pick`, `--ref`, `--replace` |
-| `ynh include remove <harness> <url>` | `--path` |
-| `ynh include update <harness> <url>` | `--from-path`, `--path`, `--pick`, `--ref` |
+| `ynh include add <harness> <url>` | `--path`, `--pick`, `--ref`, `--replace`, `--profile <name>` |
+| `ynh include remove <harness> <url>` | `--path`, `--profile <name>` |
+| `ynh include update <harness> <url>` | `--from-path`, `--path`, `--pick`, `--ref`, `--profile <name>` |
 | `ynh focus add <harness> <name> <prompt>` | `--profile <name>` |
 | `ynh focus remove <harness> <name>` | |
-| `ynh focus update <harness> <name>` | `--prompt`, `--profile`, `--clear-profile` |
+| `ynh focus update <harness> <name>` | `--prompt`, `--profile`, `--clear profile` |
 | `ynh profile add <harness> <name>` | |
 | `ynh profile remove <harness> <name>` | (refuses if any focus references it) |
-| `ynh profile hook add <harness> <profile> <event> <command>` | `--matcher` |
-| `ynh profile hook remove <harness> <profile> <event> <index>` | |
-| `ynh profile mcp add <harness> <profile> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header`, `--null` |
-| `ynh profile mcp remove <harness> <profile> <name>` | |
-| `ynh profile mcp update <harness> <profile> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header`, `--clear-args`, `--clear-env`, `--clear-headers` |
-| `ynh profile include add <harness> <profile> <url>` | `--path`, `--ref`, `--replace` |
-| `ynh profile include remove <harness> <profile> <url>` | `--path` |
-| `ynh profile include update <harness> <profile> <url>` | `--from-path`, `--path`, `--ref` |
-| `ynh hook add <harness> <event> <command>` | `--matcher` — top-level harness hook |
-| `ynh hook remove <harness> <event> <index>` | top-level harness hook |
+| `ynh hook add <harness> <event> <command>` | `--matcher`, `--profile <name>` — top-level harness hook (or profile-scoped with `--profile`) |
+| `ynh hook remove <harness> <event> <index>` | `--profile <name>` |
 | `ynh hook export <harness>` | `--target <settings\|local>` (required), `-v <vendor>` (claude), `--dry-run` — write a harness's hooks into a Claude settings file ([why](hooks.md#running-hooks-in-a-plain-claude-session)) |
-| `ynh mcp add <harness> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header` — top-level harness MCP server (no `--null`; harness-level entries cannot be null) |
-| `ynh mcp remove <harness> <name>` | top-level harness MCP server |
-| `ynh mcp update <harness> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header`, `--clear-args`, `--clear-env`, `--clear-headers` |
+| `ynh mcp add <harness> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header`, `--null` (profile-scoped only), `--profile <name>` |
+| `ynh mcp remove <harness> <name>` | `--profile <name>` |
+| `ynh mcp update <harness> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header`, `--clear args`, `--clear env`, `--clear headers`, `--profile <name>` |
 | `ynh sensors ls <harness>` | `--format <text\|json>` |
 | `ynh sensors show <harness> <name>` | `--format <text\|json>` |
 | `ynh sensors run <harness> <name>` | `--cwd <dir>`, `--no-content` |
@@ -84,8 +76,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh backend remove <name> [<vendor>]` | |
 | `ynh image <subcommand>` | |
 | `ynh paths` | `--format <text\|json>` |
-| `ynh status` | |
-| `ynh prune` | |
+| `ynh status` | `--prune` |
 | `ynh doctor` | check Claude hook wiring in `.claude/settings.json` / `settings.local.json` for the current project |
 
 ## ynd Commands
@@ -102,7 +93,9 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynd preview <source>` | `-v`, `-o`, `--harness`, `--profile`, `--focus` |
 | `ynd diff <source>` | `-v`, `--harness`, `--profile`, `--focus` |
 | `ynd export <source>` | `-v`, `-o`, `--harness`, `--profile`, `--focus`, `--path`, `--merged`, `--clean` |
-| `ynd marketplace build` | `-v`, `-o`, `--clean` |
+| `ynd marketplace [config-file]` | `-v`, `-o`, `--clean` |
+| `ynd validate --schema <name>` | Validate captured `--format json` output on stdin against the named published schema |
+| `ynd migrate-manifest [path]` | Run the harness-source-tree migration chain (renamed from `ynd migrate`) |
 
 See [ynd Developer Tools](ynd.md) for detailed command documentation.
 
@@ -118,7 +111,7 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 | `ynh sensors run <harness> <name>` | Sensor run result: `kind`, `exit_code`, `duration_ms`, `output` (raw signal — no `passed` field; pass/fail is loop-driver policy) |
 | `ynh fork <name>` | Envelope (`capabilities`, `ynh_version`, `name`, `path`, `installed_from`) — see [ynh fork output](#ynh-fork-output) below |
 | `ynh info <name>` | Envelope (`capabilities`, `ynh_version`, `harness`) wrapping a single harness object — see [Envelope and harness fields](#envelope-and-harness-fields) below |
-| `ynh installed <name>` | Envelope (`capabilities`, `ynh_version`, `id`, `installed`) where `installed` mirrors the on-disk `.ynh-plugin/installed.json` (including `resolved[]` commit SHAs). Schema: `cli/installed.schema.json` |
+| `ynh info <name> --installed` | Envelope (`capabilities`, `ynh_version`, `id`, `installed`) where `installed` mirrors the on-disk `.ynh-plugin/installed.json` (including `resolved[]` commit SHAs). Schema: `cli/installed.schema.json` |
 | `ynh ls` | Envelope (`capabilities`, `ynh_version`, `harnesses`) wrapping an array of harness objects — same shape as `ynh info`, plus `artifacts`, minus `manifest` |
 | `ynh schema <name>` | The raw JSON schema for the named CLI command (e.g. `version`, `list`, `info`, `installed`, `error`). With `--all --format json`: a manifest `{capabilities, ynh_version, schemas: {...}}`. See [Published JSON Schemas](schema-cli.md). |
 | `ynh paths` | `home`, `config`, `harnesses`, `symlinks`, `cache`, `run`, `bin` — all absolute paths resolved for the current `$YNH_HOME` |
@@ -168,7 +161,7 @@ Empty case is `"profiles": {}` (empty object), no longer `"profiles": []`. This 
 
 ```json
 {
-  "capabilities": "0.3.0",
+  "capabilities": "0.5.0",
   "ynh_version": "0.x.y",
   "harnesses": [ /* ynh ls — array */ ]
 }
@@ -230,7 +223,7 @@ The `is_pinned` rule is the same on harnesses and includes:
 
 ```json
 {
-  "capabilities": "0.3.0",
+  "capabilities": "0.5.0",
   "ynh_version": "0.x.y",
   "name": "demo",
   "path": "/absolute/path/to/fork",
@@ -254,7 +247,7 @@ The `is_pinned` rule is the same on harnesses and includes:
 
 `ynh fork` refuses to register if a flat install of the same name already exists (either a pointer or a tree at `~/.ynh/harnesses/<name>/`). Namespaced installs of the same name are unaffected — they remain accessible via `name@org/repo`. Uninstall the conflicting flat install first if you want the fork to take that name.
 
-**`--name <new>`** registers the fork under a different name without uninstalling the source — the common case where a user wants to keep the upstream installed and fork a copy alongside it. The fork tree's `.ynh-plugin/plugin.json` is rewritten so its `name` field matches the registration; upstream identity survives in `installed_from.forked_from`. The new name is validated against the same regex as harness names (`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`). If `--to` is omitted, the default destination uses the new name (`<cwd>/<new>`).
+**`--name <new>`** registers the fork under a different name without uninstalling the source — the common case where a user wants to keep the upstream installed and fork a copy alongside it. The fork tree's `.ynh-plugin/plugin.json` is rewritten so its `name` field matches the registration; upstream identity survives in `installed_from.forked_from`. The new name is validated against the same regex as harness names (`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`). If `-o`/`--output` is omitted, the default destination uses the new name (`<cwd>/<new>`).
 
 `ynh uninstall <name>` for a fork removes the pointer file (and launcher, run dir, sources entry) but leaves the source tree on disk — the user owns it. To delete the tree as well, remove the directory after uninstalling.
 
