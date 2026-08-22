@@ -13,9 +13,10 @@
         "cli": {"type": "string", "description": "Executable name on PATH."},
         "config_dir": {"type": "string", "description": "Vendor's per-project config directory under the harness root."},
         "available": {"type": "boolean", "description": "Whether the vendor's CLI is on PATH."},
-        "supports_initial_prompt": {"type": "boolean"}
+        "supports_initial_prompt": {"type": "boolean"},
+        "supports_resume": {"type": "boolean", "description": "Whether the vendor's CLI can continue a previous interactive session. True for every current vendor, so it does not imply a specific session can be pinned — that additionally requires a readable local session store."}
       },
-      "required": ["name", "display_name", "cli", "config_dir", "available", "supports_initial_prompt"],
+      "required": ["name", "display_name", "cli", "config_dir", "available", "supports_initial_prompt", "supports_resume"],
       "additionalProperties": false
     }
   },

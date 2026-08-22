@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
@@ -35,6 +36,13 @@ func (m *mockAdapter) LaunchWithInitialPrompt(configPath, prompt string, extraAr
 	return nil
 }
 func (m *mockAdapter) LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error {
+	return nil
+}
+func (m *mockAdapter) SupportsResume() bool { return false }
+func (m *mockAdapter) ResolveLastSession(cwd string, notBefore time.Time) (string, error) {
+	return "", vendor.ErrSessionLookupUnavailable
+}
+func (m *mockAdapter) LaunchResume(configPath, sessionID string, extraArgs []string) error {
 	return nil
 }
 func (m *mockAdapter) GenerateSystemPrompt(content []byte) map[string][]byte {
@@ -109,6 +117,74 @@ func TestAssembleWithPick(t *testing.T) {
 	}
 	if string(data) != "reviewer agent" {
 		t.Errorf("agent content = %q", string(data))
+	}
+}
+
+// transformMockAdapter wraps mockAdapter and rewrites rule files as .mdc,
+// verifying the assembler wires TransformArtifact through ArtifactTransformer.
+type transformMockAdapter struct {
+	mockAdapter
+}
+
+func (m *transformMockAdapter) TransformArtifact(artifactType, name string, data []byte) (string, []byte) {
+	if artifactType != "rules" {
+		return name, data
+	}
+	return name + "c", append([]byte("transformed: "), data...)
+}
+
+func TestAssembleAllArtifacts_WithTransform(t *testing.T) {
+	repoDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoDir, "rules"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "rules", "be-nice.md"), []byte("be nice"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	content := []resolver.ResolvedContent{{BasePath: repoDir}}
+	adapter := &transformMockAdapter{}
+	workDir, err := Assemble(adapter, content)
+	if err != nil {
+		t.Fatalf("Assemble failed: %v", err)
+	}
+	defer Cleanup(workDir)
+
+	if _, err := os.Stat(filepath.Join(workDir, ".mock", "rules", "be-nice.md")); !os.IsNotExist(err) {
+		t.Error("expected original be-nice.md to be absent after transform")
+	}
+	data, err := os.ReadFile(filepath.Join(workDir, ".mock", "rules", "be-nice.mdc"))
+	if err != nil {
+		t.Fatalf("transformed rule not found: %v", err)
+	}
+	if string(data) != "transformed: be nice" {
+		t.Errorf("transformed content = %q", string(data))
+	}
+}
+
+func TestAssembleWithPick_WithTransform(t *testing.T) {
+	repoDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoDir, "rules"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, "rules", "be-nice.md"), []byte("be nice"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	content := []resolver.ResolvedContent{{BasePath: repoDir, Paths: []string{"rules/be-nice.md"}}}
+	adapter := &transformMockAdapter{}
+	workDir, err := Assemble(adapter, content)
+	if err != nil {
+		t.Fatalf("Assemble failed: %v", err)
+	}
+	defer Cleanup(workDir)
+
+	data, err := os.ReadFile(filepath.Join(workDir, ".mock", "rules", "be-nice.mdc"))
+	if err != nil {
+		t.Fatalf("transformed rule not found: %v", err)
+	}
+	if string(data) != "transformed: be nice" {
+		t.Errorf("transformed content = %q", string(data))
 	}
 }
 

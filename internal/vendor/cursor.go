@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
 )
@@ -77,6 +79,32 @@ func (c *Cursor) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []
 
 func (c *Cursor) SupportsInitialPrompt() bool { return true }
 
+func (c *Cursor) SupportsResume() bool { return true }
+
+// ResolveLastSession always reports no resumable session: Cursor keeps no local
+// session store to read. ~/.cursor/ holds configuration only and
+// ~/.local/share/cursor-agent/ holds nothing but installed versions — chats
+// appear to live server-side, reachable only through the CLI's own picker.
+//
+// Cursor can still resume (see LaunchResume); it just cannot be told *which*
+// session from here unless a caller supplies an id from elsewhere.
+func (c *Cursor) ResolveLastSession(cwd string, notBefore time.Time) (string, error) {
+	return "", ErrSessionLookupUnavailable
+}
+
+// LaunchResume continues a prior Cursor chat. An empty sessionID uses
+// --continue ("Continue previous session"). A bare --resume is never emitted:
+// Cursor documents it as "Select a session to resume", i.e. a picker.
+func (c *Cursor) LaunchResume(configPath, sessionID string, extraArgs []string) error {
+	var resumeArgs []string
+	if sessionID != "" {
+		resumeArgs = []string{"--resume", sessionID}
+	} else {
+		resumeArgs = []string{"--continue"}
+	}
+	return launchCursor(configPath, append(resumeArgs, extraArgs...))
+}
+
 func (c *Cursor) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
 	cursorrules := filepath.Join(runDir, ".cursorrules")
 	f, err := os.OpenFile(cursorrules, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
@@ -95,12 +123,15 @@ func (c *Cursor) ApplyRuntimeInstructions(runDir, text string) ([]string, error)
 
 // cursorHookEventMap maps canonical event names to Cursor hook events.
 // Cursor supports: beforeSubmitPrompt, beforeShellExecution, beforeMCPExecution,
-// beforeReadFile, afterFileEdit, stop. There is no afterShellExecution event.
+// beforeReadFile, afterFileEdit, stop, sessionStart, and more (see
+// cursor.com/docs/hooks for the full list). There is no afterShellExecution
+// event mapped to before_tool/after_tool — see cursor.md reference doc.
 var cursorHookEventMap = map[string]string{
-	"before_tool":   "beforeShellExecution",
-	"after_tool":    "afterFileEdit",
-	"before_prompt": "beforeSubmitPrompt",
-	"on_stop":       "stop",
+	"before_tool":      "beforeShellExecution",
+	"after_tool":       "afterFileEdit",
+	"before_prompt":    "beforeSubmitPrompt",
+	"on_stop":          "stop",
+	"on_session_start": "sessionStart",
 }
 
 func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
@@ -151,8 +182,16 @@ func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[st
 	}
 	data = append(data, '\n')
 
+	// Same JSON shape and event names in both locations — only the path
+	// differs: .cursor/hooks.json for project-level config (read by `ynh run`
+	// staging), hooks/hooks.json at plugin root for plugin-format export
+	// (cursor.com/docs/reference/plugins, "Define hooks in hooks/hooks.json").
+	// There's no "is this a plugin export" flag threaded through Adapter, so
+	// both are always emitted — the unused one is simply inert in the other
+	// context.
 	return map[string][]byte{
 		filepath.Join(".cursor", "hooks.json"): data,
+		filepath.Join("hooks", "hooks.json"):   data,
 	}, nil
 }
 
@@ -225,7 +264,12 @@ func (c *Cursor) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[str
 		return nil, nil
 	}
 
-	// Cursor uses .cursor/mcp.json with "mcpServers" key — same structure as Claude
+	// Cursor uses "mcpServers" key — same structure as Claude. Written at two
+	// locations: .cursor/mcp.json for project-level config (read by `ynh run`
+	// staging) and mcp.json (no dot) at plugin root for plugin-format export
+	// (cursor.com/docs/reference/plugins). Both are the same content; there's
+	// no "is this a plugin export" flag threaded through Adapter, so both are
+	// always emitted — the unused one is simply inert in the other context.
 	config := map[string]any{
 		"mcpServers": servers,
 	}
@@ -238,7 +282,43 @@ func (c *Cursor) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[str
 
 	return map[string][]byte{
 		filepath.Join(".cursor", "mcp.json"): data,
+		"mcp.json":                           data,
 	}, nil
+}
+
+// TransformArtifact rewrites Cursor rule files to the .mdc format Cursor
+// requires: renamed from .md to .mdc with injected frontmatter. Plain .md
+// files under .cursor/rules are silently ignored by Cursor. Other artifact
+// types pass through unchanged.
+func (c *Cursor) TransformArtifact(artifactType, name string, data []byte) (string, []byte) {
+	if artifactType != "rules" || !strings.HasSuffix(name, ".md") {
+		return name, data
+	}
+
+	newName := strings.TrimSuffix(name, ".md") + ".mdc"
+	description := humanizeRuleName(strings.TrimSuffix(name, ".md"))
+
+	var b strings.Builder
+	b.WriteString("---\n")
+	fmt.Fprintf(&b, "description: %s\n", description)
+	b.WriteString("alwaysApply: true\n")
+	b.WriteString("---\n\n")
+	b.Write(data)
+
+	return newName, []byte(b.String())
+}
+
+// humanizeRuleName turns a rule filename stem (e.g. "artifact-authoring")
+// into a human-readable title (e.g. "Artifact Authoring").
+func humanizeRuleName(stem string) string {
+	words := strings.FieldsFunc(stem, func(r rune) bool { return r == '-' || r == '_' })
+	for i, w := range words {
+		if w == "" {
+			continue
+		}
+		words[i] = strings.ToUpper(w[:1]) + w[1:]
+	}
+	return strings.Join(words, " ")
 }
 
 func launchCursor(configPath string, extraArgs []string) error {

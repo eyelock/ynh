@@ -51,6 +51,21 @@ func TestExportSingleVendorCursor(t *testing.T) {
 
 	// Skills present
 	assertFileExists(t, filepath.Join(cursorDir, "skills", "dev-project", "SKILL.md"))
+
+	// Rules exported as .mdc with frontmatter, not plain .md
+	if _, err := os.Stat(filepath.Join(cursorDir, "rules", "be-concise.md")); !os.IsNotExist(err) {
+		t.Error("expected plain .md rule to be absent from Cursor export")
+	}
+	data, err := os.ReadFile(filepath.Join(cursorDir, "rules", "be-concise.mdc"))
+	if err != nil {
+		t.Fatalf("expected be-concise.mdc: %v", err)
+	}
+	if !strings.HasPrefix(string(data), "---\ndescription:") {
+		t.Errorf("expected .mdc frontmatter, got %q", string(data))
+	}
+	if !strings.Contains(string(data), "alwaysApply: true") {
+		t.Errorf("expected alwaysApply: true in frontmatter, got %q", string(data))
+	}
 }
 
 func TestExportAllVendors(t *testing.T) {
@@ -257,8 +272,10 @@ func TestExportWithHooks(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	// Cursor should have .cursor/hooks.json
+	// Cursor should have .cursor/hooks.json (project-level) and hooks/hooks.json
+	// at plugin root (plugin format)
 	assertFileExists(t, filepath.Join(outputDir2, "cursor", ".cursor", "hooks.json"))
+	assertFileExists(t, filepath.Join(outputDir2, "cursor", "hooks", "hooks.json"))
 
 	// Test Codex export
 	outputDir3 := t.TempDir()
@@ -319,8 +336,10 @@ func TestExportWithMCPServers(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	// Cursor should have .cursor/mcp.json
+	// Cursor should have .cursor/mcp.json (project-level) and mcp.json at
+	// plugin root (plugin format, no dot prefix)
 	assertFileExists(t, filepath.Join(outputDir2, "cursor", ".cursor", "mcp.json"))
+	assertFileExists(t, filepath.Join(outputDir2, "cursor", "mcp.json"))
 
 	// Test Codex export
 	outputDir3 := t.TempDir()

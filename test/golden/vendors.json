@@ -5,7 +5,8 @@
     "cli": "claude",
     "config_dir": ".claude",
     "available": true,
-    "supports_initial_prompt": true
+    "supports_initial_prompt": true,
+    "supports_resume": true
   },
   {
     "name": "codex",
@@ -13,6 +14,7 @@
     "cli": "codex",
     "config_dir": ".codex",
     "available": false,
-    "supports_initial_prompt": false
+    "supports_initial_prompt": false,
+    "supports_resume": true
   }
 ]

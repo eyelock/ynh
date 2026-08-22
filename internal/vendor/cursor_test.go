@@ -10,6 +10,74 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
+func TestCursorTransformArtifact_RulesRenamedToMdc(t *testing.T) {
+	c := &Cursor{}
+	newName, newData := c.TransformArtifact("rules", "artifact-authoring.md", []byte("be specific"))
+
+	if newName != "artifact-authoring.mdc" {
+		t.Errorf("newName = %q, want artifact-authoring.mdc", newName)
+	}
+	if !strings.Contains(string(newData), "be specific") {
+		t.Errorf("transformed content missing original body: %q", string(newData))
+	}
+}
+
+func TestCursorTransformArtifact_FrontmatterShape(t *testing.T) {
+	c := &Cursor{}
+	_, newData := c.TransformArtifact("rules", "artifact-authoring.md", []byte("body text"))
+
+	want := "---\ndescription: Artifact Authoring\nalwaysApply: true\n---\n\nbody text"
+	if string(newData) != want {
+		t.Errorf("frontmatter mismatch:\ngot:  %q\nwant: %q", string(newData), want)
+	}
+}
+
+func TestCursorTransformArtifact_NonRulesPassthrough(t *testing.T) {
+	c := &Cursor{}
+	data := []byte("skill content")
+	newName, newData := c.TransformArtifact("skills", "SKILL.md", data)
+
+	if newName != "SKILL.md" {
+		t.Errorf("newName = %q, want unchanged SKILL.md", newName)
+	}
+	if string(newData) != "skill content" {
+		t.Errorf("content should pass through unchanged, got %q", string(newData))
+	}
+}
+
+func TestCursorTransformArtifact_NonMdRulesPassthrough(t *testing.T) {
+	c := &Cursor{}
+	newName, newData := c.TransformArtifact("rules", "already.mdc", []byte("body"))
+
+	if newName != "already.mdc" || string(newData) != "body" {
+		t.Errorf("expected passthrough for non-.md rule, got name=%q data=%q", newName, newData)
+	}
+}
+
+func TestCursorGenerateHookConfig_PluginRootAlsoWritten(t *testing.T) {
+	c := &Cursor{}
+	hooks := map[string][]plugin.HookEntry{
+		"on_stop": {{Command: "echo done"}},
+	}
+
+	result, err := c.GenerateHookConfig(hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	projectData, ok := result[filepath.Join(".cursor", "hooks.json")]
+	if !ok {
+		t.Fatal("expected .cursor/hooks.json key")
+	}
+	rootData, ok := result[filepath.Join("hooks", "hooks.json")]
+	if !ok {
+		t.Fatal("expected plugin-root hooks/hooks.json key")
+	}
+	if string(projectData) != string(rootData) {
+		t.Errorf("expected identical content, .cursor/hooks.json=%q hooks/hooks.json=%q", projectData, rootData)
+	}
+}
+
 func TestCursorGenerateHookConfig_NilHooks(t *testing.T) {
 	c := &Cursor{}
 	result, err := c.GenerateHookConfig(nil)
@@ -144,13 +212,38 @@ func TestCursorGenerateMCPConfig_Format(t *testing.T) {
 	}
 }
 
+func TestCursorGenerateMCPConfig_PluginRootAlsoWritten(t *testing.T) {
+	c := &Cursor{}
+	servers := map[string]plugin.MCPServer{
+		"github": {Command: "npx"},
+	}
+
+	result, err := c.GenerateMCPConfig(servers)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	projectData, ok := result[filepath.Join(".cursor", "mcp.json")]
+	if !ok {
+		t.Fatal("expected .cursor/mcp.json key")
+	}
+	rootData, ok := result["mcp.json"]
+	if !ok {
+		t.Fatal("expected plugin-root mcp.json key")
+	}
+	if string(projectData) != string(rootData) {
+		t.Errorf("expected identical content, .cursor/mcp.json=%q mcp.json=%q", projectData, rootData)
+	}
+}
+
 func TestCursorGenerateHookConfig_EventTranslation(t *testing.T) {
 	c := &Cursor{}
 	hooks := map[string][]plugin.HookEntry{
-		"before_tool":   {{Command: "cmd1"}},
-		"after_tool":    {{Command: "cmd2"}},
-		"before_prompt": {{Command: "cmd3"}},
-		"on_stop":       {{Command: "cmd4"}},
+		"before_tool":      {{Command: "cmd1"}},
+		"after_tool":       {{Command: "cmd2"}},
+		"before_prompt":    {{Command: "cmd3"}},
+		"on_stop":          {{Command: "cmd4"}},
+		"on_session_start": {{Command: "cmd5"}},
 	}
 
 	result, err := c.GenerateHookConfig(hooks)
@@ -165,7 +258,7 @@ func TestCursorGenerateHookConfig_EventTranslation(t *testing.T) {
 	}
 
 	hooksObj := config["hooks"].(map[string]any)
-	expectedEvents := []string{"beforeShellExecution", "afterFileEdit", "beforeSubmitPrompt", "stop"}
+	expectedEvents := []string{"beforeShellExecution", "afterFileEdit", "beforeSubmitPrompt", "stop", "sessionStart"}
 	for _, event := range expectedEvents {
 		if _, ok := hooksObj[event]; !ok {
 			t.Errorf("missing event %s", event)

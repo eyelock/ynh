@@ -7,7 +7,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
 )
@@ -94,6 +96,109 @@ func (c *Copilot) LaunchWithInitialPrompt(configPath, prompt string, extraArgs [
 }
 
 func (c *Copilot) SupportsInitialPrompt() bool { return true }
+
+func (c *Copilot) SupportsResume() bool { return true }
+
+// ResolveLastSession reads Copilot's own session store. Each session gets a
+// ~/.copilot/session-state/<id>/workspace.yaml recording its id and cwd, so
+// resolution is a newest-first directory walk that stops at the first entry
+// matching cwd.
+//
+// Copilot also maintains ~/.copilot/session-store.db, a sqlite index carrying
+// the same id→cwd mapping. The flat files are used instead because reading
+// sqlite would mean taking a driver dependency, and ynh is deliberately
+// standard-library-only.
+//
+// workspace.yaml is an internal file with no compatibility promise (shape
+// confirmed against copilot 1.0.77). Every parse failure degrades to
+// ErrNoResumableSession — a cold launch — rather than an error.
+func (c *Copilot) ResolveLastSession(cwd string, notBefore time.Time) (string, error) {
+	home, err := vendorHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	stateDir := filepath.Join(home, ".copilot", "session-state")
+	entries, err := dirEntriesByModTimeDesc(stateDir)
+	if err != nil {
+		return "", err
+	}
+
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if !notBefore.IsZero() && info.ModTime().Before(notBefore) {
+			// Entries are newest-first, so everything after this is older too.
+			break
+		}
+
+		id, sessionCwd, err := readCopilotWorkspace(filepath.Join(stateDir, e.Name(), "workspace.yaml"))
+		if err != nil || !sameDir(sessionCwd, cwd) {
+			continue
+		}
+		if id == "" {
+			// Fall back to the directory name, which is the id too.
+			id = e.Name()
+		}
+		return id, nil
+	}
+	return "", ErrNoResumableSession
+}
+
+// readCopilotWorkspace extracts the id and cwd from a Copilot workspace.yaml.
+// Hand-parsed rather than pulled through a YAML library: the file is flat, only
+// two top-level scalars are needed, and ynh takes no external dependencies.
+func readCopilotWorkspace(path string) (id string, cwd string, err error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", "", err
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		key, value, found := strings.Cut(line, ":")
+		if !found || strings.HasPrefix(strings.TrimSpace(key), "#") {
+			continue
+		}
+		// Only top-level keys: anything indented belongs to a nested mapping.
+		if key != strings.TrimLeft(key, " \t") {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		value = strings.Trim(value, `"'`)
+		switch strings.TrimSpace(key) {
+		case "id":
+			id = value
+		case "cwd":
+			cwd = value
+		}
+	}
+	if cwd == "" {
+		return "", "", fmt.Errorf("no cwd recorded in %s", path)
+	}
+	return id, cwd, nil
+}
+
+// LaunchResume continues a prior Copilot session.
+//
+// An empty sessionID uses --continue, but that is a deliberate last resort:
+// Copilot documents --continue as "the most recent session" with no directory
+// qualifier, so it can resume a session belonging to an entirely different
+// worktree. Prefer an explicit id. A bare --resume is never emitted — Copilot's
+// own help describes it as "using session picker".
+func (c *Copilot) LaunchResume(configPath, sessionID string, extraArgs []string) error {
+	var resumeArgs []string
+	if sessionID != "" {
+		resumeArgs = []string{"--resume=" + sessionID}
+	} else {
+		resumeArgs = []string{"--continue"}
+	}
+	return launchCopilot(configPath, "", append(resumeArgs, extraArgs...))
+}
 
 // ApplyRuntimeInstructions appends per-invocation text to the assembled
 // AGENTS.md in runDir. buildCopilotArgs reads that same file later in this
