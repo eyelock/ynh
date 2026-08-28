@@ -199,6 +199,7 @@ Commands:
   sensors run <harness> <name>   Run a sensor and emit a JSON result (loop drivers consume this)
   check <harness>              Run every declared sensor and gate on the result
                                (exit 0 pass, 1 a blocking sensor failed, 2 could not run)
+                               --update-baseline accepts current failures so only new ones gate
   agent run --task <text> [flags]  Run an autonomous agent loop session
   registry add <url>           Add a harness registry
   registry list                Show configured registries (supports --format json)
