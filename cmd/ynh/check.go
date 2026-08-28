@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"text/tabwriter"
 
+	"github.com/eyelock/ynh/internal/baseline"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 )
@@ -26,6 +28,7 @@ const (
 	statusReported = "reported" // files sensor: content surfaced, no verdict derivable
 	statusDeferred = "deferred" // focus sensor: needs an agent runtime ynh does not own
 	statusSkipped  = "skipped"  // filtered out by --only
+	statusKnown    = "known"    // failing, but every failure is in the baseline
 )
 
 // checkEnvelope is the `ynh check --format json` payload.
@@ -36,6 +39,16 @@ type checkEnvelope struct {
 	Verdict      string        `json:"verdict"` // pass | blocked
 	Summary      checkSummary  `json:"summary"`
 	Sensors      []checkResult `json:"sensors"`
+	Baseline     *baselineInfo `json:"baseline,omitempty"`
+}
+
+// baselineInfo tells a consumer whether a ratchet is in play and whether it
+// could be tightened. Absent when no baseline has been recorded.
+type baselineInfo struct {
+	RecordedAt string `json:"recorded_at"`
+	Known      int    `json:"known"` // pre-existing failures forgiven this run
+	Fixed      int    `json:"fixed"` // baseline entries no longer failing
+	Stale      bool   `json:"stale"` // true when Fixed > 0: the baseline can be narrowed
 }
 
 type checkSummary struct {
@@ -46,6 +59,7 @@ type checkSummary struct {
 	Reported int `json:"reported"`
 	Deferred int `json:"deferred"`
 	Skipped  int `json:"skipped"`
+	Known    int `json:"known"` // sensors failing only in ways the baseline records
 }
 
 type checkResult struct {
@@ -59,6 +73,12 @@ type checkResult struct {
 	Stdout     string `json:"stdout,omitempty"`
 	Stderr     string `json:"stderr,omitempty"`
 	Note       string `json:"note,omitempty"`
+	// NewCount and KnownCount are set for failing command sensors when a
+	// baseline exists. NewOutput carries only the lines not in the baseline —
+	// the ones the author is actually being asked to fix.
+	NewCount   int    `json:"new_count,omitempty"`
+	KnownCount int    `json:"known_count,omitempty"`
+	NewOutput  string `json:"new_output,omitempty"`
 }
 
 func cmdCheck(args []string, stdout, stderr io.Writer) error {
@@ -66,6 +86,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 	cwd := ""
 	var harnessName string
 	var only []string
+	var updateBaseline, ignoreBaseline bool
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -75,6 +96,10 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			}
 			i++
 			cwd = args[i]
+		case "--update-baseline":
+			updateBaseline = true
+		case "--no-baseline":
+			ignoreBaseline = true
 		case "--only":
 			if i+1 >= len(args) {
 				return checkExecErr(cliError(stderr, structured, errCodeInvalidInput, "--only requires a value"))
@@ -125,6 +150,25 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 		cwd, _ = os.Getwd()
 	}
 
+	// CI must never write the ratchet. A gate that rewrites its own reference
+	// point from a feature branch forgives whatever that branch introduced,
+	// which is exactly backwards.
+	if updateBaseline && os.Getenv("CI") != "" {
+		return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
+			"--update-baseline refuses to run in CI: the baseline is a repository decision, "+
+				"not a side effect of a build. Run it locally and commit the result."))
+	}
+
+	var base *baseline.Baseline
+	if !ignoreBaseline {
+		loaded, bErr := baseline.Load(cwd)
+		if bErr != nil {
+			return checkExecErr(cliError(stderr, structured, errCodeInvalidInput, bErr.Error()))
+		}
+		base = loaded
+	}
+	recording := &baseline.Baseline{Sensors: map[string]baseline.SensorBaseline{}}
+
 	wanted := map[string]bool{}
 	for _, n := range only {
 		if _, ok := p.Sensors[n]; !ok {
@@ -147,6 +191,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 		Verdict:      "pass",
 	}
 
+	var totalKnown, totalFixed int
 	for _, name := range names {
 		s := p.Sensors[name]
 		res := checkResult{
@@ -179,13 +224,41 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			if run.ExitCode == 0 {
 				res.Status = statusPass
 				env.Summary.Passed++
-			} else {
-				res.Status = statusFail
-				env.Summary.Failed++
-				if res.Tolerance == "blocking" {
-					env.Summary.Blocking++
-					env.Verdict = "blocked"
+				break
+			}
+
+			raw := run.Output.Stdout + "\n" + run.Output.Stderr
+			current := baseline.Fingerprints(raw, cwd)
+			if updateBaseline {
+				recording.Sensors[name] = baseline.Record(statusFail, raw, cwd)
+			}
+
+			newFPs, known, fixed := base.Compare(name, current)
+			res.NewCount = len(newFPs)
+			res.KnownCount = known
+			totalKnown += known
+			totalFixed += fixed
+
+			// A sensor whose every failure is already recorded is debt, not a
+			// regression. Reporting it as a failure on every run is what makes
+			// a gate feel like noise and gets it switched off.
+			if base != nil && len(newFPs) == 0 && known > 0 {
+				res.Status = statusKnown
+				env.Summary.Known++
+				break
+			}
+
+			res.Status = statusFail
+			env.Summary.Failed++
+			if base != nil {
+				res.NewOutput = selectLines(raw, cwd, newFPs)
+				if base.Truncated(name) {
+					res.Note = "baseline was truncated for this sensor; new-failure detection is approximate"
 				}
+			}
+			if res.Tolerance == "blocking" {
+				env.Summary.Blocking++
+				env.Verdict = "blocked"
 			}
 		case "files":
 			// No verdict is mechanically derivable from a file glob, so a
@@ -201,6 +274,29 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 		env.Sensors = append(env.Sensors, res)
 	}
 	env.Summary.Total = len(env.Sensors)
+	if base != nil {
+		env.Baseline = &baselineInfo{
+			RecordedAt: base.RecordedAt,
+			Known:      totalKnown,
+			Fixed:      totalFixed,
+			Stale:      totalFixed > 0,
+		}
+	}
+
+	if updateBaseline {
+		if err := baseline.Save(cwd, recording); err != nil {
+			return checkExecErr(cliError(stderr, structured, errCodeIOError, err.Error()))
+		}
+		if !structured {
+			if _, wErr := fmt.Fprintf(stdout, "\nbaseline recorded at %s — commit it\n",
+				filepath.Join(baseline.Dir, baseline.File)); wErr != nil {
+				return wErr
+			}
+		}
+		// Recording is an explicit act of accepting current state, so it
+		// reports what it accepted rather than gating on it.
+		return nil
+	}
 
 	if structured {
 		data, encErr := json.MarshalIndent(env, "", "  ")
@@ -238,6 +334,30 @@ func checkExecErr(err error) error {
 	return fmt.Errorf("%w: %w", errCheckExec, err)
 }
 
+// selectLines returns only those output lines whose fingerprint is in want.
+// Showing an author the twelve issues they did not introduce alongside the one
+// they did is how a useful gate becomes an ignored one.
+func selectLines(raw, root string, want []string) string {
+	if len(want) == 0 {
+		return ""
+	}
+	wanted := make(map[string]bool, len(want))
+	for _, fp := range want {
+		wanted[fp] = true
+	}
+	var keep []string
+	for _, line := range strings.Split(raw, "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		fps := baseline.Fingerprints(line, root)
+		if len(fps) == 1 && wanted[fps[0]] {
+			keep = append(keep, strings.TrimSpace(line))
+		}
+	}
+	return strings.Join(keep, "\n")
+}
+
 const maxSensorOutput = 4096
 
 func truncateOutput(s string) string {
@@ -267,10 +387,20 @@ func writeCheckText(w io.Writer, env checkEnvelope) error {
 			mark = "✓"
 		case statusFail:
 			mark = "✗"
+		case statusKnown:
+			mark = "~"
 		}
 		detail := r.Status
+		switch {
+		case r.Status == statusKnown:
+			detail = fmt.Sprintf("known (%d)", r.KnownCount)
+		case r.Status == statusFail && r.NewCount > 0 && r.KnownCount > 0:
+			detail = fmt.Sprintf("%d new, %d known", r.NewCount, r.KnownCount)
+		case r.Status == statusFail && r.NewCount > 0:
+			detail = fmt.Sprintf("%d new", r.NewCount)
+		}
 		if r.Status == statusFail && r.Tolerance != "blocking" {
-			detail = r.Status + " (" + r.Tolerance + ")"
+			detail += " (" + r.Tolerance + ")"
 		}
 		if _, err := fmt.Fprintf(tw, "  %s\t%s\t%s\t%dms\n", mark, r.Name, detail, r.DurationMS); err != nil {
 			return err
@@ -286,19 +416,54 @@ func writeCheckText(w io.Writer, env checkEnvelope) error {
 		if r.Status != statusFail {
 			continue
 		}
-		body := strings.TrimSpace(r.Stdout + "\n" + r.Stderr)
+		// With a baseline in play, show only what this change introduced.
+		body := strings.TrimSpace(r.NewOutput)
+		if body == "" {
+			body = strings.TrimSpace(r.Stdout + "\n" + r.Stderr)
+		}
 		if body == "" {
 			continue
 		}
-		if _, err := fmt.Fprintf(w, "\n%s:\n%s\n", r.Name, body); err != nil {
+		header := r.Name
+		if r.KnownCount > 0 {
+			header = fmt.Sprintf("%s — %d new (%d pre-existing not shown)", r.Name, r.NewCount, r.KnownCount)
+		}
+		if _, err := fmt.Fprintf(w, "\n%s:\n%s\n", header, body); err != nil {
 			return err
+		}
+		if r.Note != "" {
+			if _, err := fmt.Fprintf(w, "note: %s\n", r.Note); err != nil {
+				return err
+			}
 		}
 	}
 
 	if env.Verdict == "blocked" {
-		_, err := fmt.Fprintf(w, "\nblocked: %d of %d sensors failed\n", env.Summary.Blocking, env.Summary.Total)
+		if _, err := fmt.Fprintf(w, "\nblocked: %d of %d sensors failed\n",
+			env.Summary.Blocking, env.Summary.Total); err != nil {
+			return err
+		}
+		return writeBaselineFooter(w, env)
+	}
+	tail := fmt.Sprintf("\nok: %d passed", env.Summary.Passed)
+	if env.Summary.Known > 0 {
+		tail += fmt.Sprintf(", %d known", env.Summary.Known)
+	}
+	if _, err := fmt.Fprintln(w, tail); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(w, "\nok: %d passed\n", env.Summary.Passed)
+	return writeBaselineFooter(w, env)
+}
+
+// writeBaselineFooter surfaces a ratchet that has slack in it. Debt paid off
+// stays forgiven until someone narrows the baseline, so the gate says when
+// that is worth doing rather than waiting to be asked.
+func writeBaselineFooter(w io.Writer, env checkEnvelope) error {
+	if env.Baseline == nil || !env.Baseline.Stale {
+		return nil
+	}
+	_, err := fmt.Fprintf(w,
+		"\nbaseline: %d recorded failures are now fixed — `ynh check --update-baseline` to lock that in\n",
+		env.Baseline.Fixed)
 	return err
 }
