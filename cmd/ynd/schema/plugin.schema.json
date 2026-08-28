@@ -85,6 +85,12 @@
           "type": "string",
           "enum": ["regular", "convergence-verifier", "stuck-recovery"]
         },
+        "tolerance": {
+          "description": "How `ynh check` treats a failing result. blocking (default) gates the run; advisory reports the failure without gating; report is pure observation. Only command sensors can gate — files and focus sensors report regardless.",
+          "type": "string",
+          "enum": ["blocking", "advisory", "report"],
+          "default": "blocking"
+        },
         "source": { "$ref": "#/$defs/sensor_source" },
         "output": { "$ref": "#/$defs/sensor_output" }
       }
