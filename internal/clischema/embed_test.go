@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -28,6 +29,17 @@ func TestSchemasCompile(t *testing.T) {
 // repo holds two copies because go:embed cannot traverse "..", so docs/
 // hosts the discoverable copy and internal/clischema/schema/ is the embed
 // authoritative. Any drift is a CI failure.
+// pinExempt lists published schemas with no embedded counterpart, each for a
+// stated reason. An exemption must be named here rather than achieved by
+// narrowing the walk — a silent scope is how five path-traversal guards
+// diverged between the published plugin schema and the one ynd enforces.
+var pinExempt = map[string]bool{
+	// Describes the legacy .harness.json manifest, which no current code
+	// path validates — it exists so manifests still in the wild resolve
+	// their $schema URL. Delete alongside the legacy format itself.
+	"harness.schema.json": true,
+}
+
 func TestSchemaParityWithDocs(t *testing.T) {
 	docsRoot := docsSchemaRoot(t)
 	if docsRoot == "" {
@@ -43,30 +55,31 @@ func TestSchemaParityWithDocs(t *testing.T) {
 		embedPaths[name+".schema.json"] = data
 	}
 
-	// Parity scope: only docs/schema/cli/ and docs/schema/shared/. The
-	// existing author-controlled schemas at docs/schema/{plugin,marketplace,harness}.schema.json
-	// describe author-authored files (plugin.json, marketplace.json) and are
-	// not embedded by this package.
+	// Parity scope is the WHOLE tree, author-facing schemas included.
+	// Scoping it to cli/ and shared/ is exactly how plugin.schema.json and
+	// marketplace.schema.json drifted: five path-traversal guards were added
+	// to the published copy and never reached the copy ynd actually
+	// enforces. Anything embedded must be pinned to what is published.
 	var docsList []string
-	for _, sub := range []string{"cli", "shared"} {
-		root := filepath.Join(docsRoot, sub)
-		if _, err := os.Stat(root); err != nil {
-			continue
+	walkErr := filepath.Walk(docsRoot, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
 		}
-		walkErr := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if info.IsDir() {
-				return nil
-			}
-			rel, _ := filepath.Rel(docsRoot, path)
-			docsList = append(docsList, rel)
+		if info.IsDir() || !strings.HasSuffix(info.Name(), ".schema.json") {
 			return nil
-		})
-		if walkErr != nil {
-			t.Fatalf("walk %s: %v", root, walkErr)
 		}
+		rel, relErr := filepath.Rel(docsRoot, path)
+		if relErr != nil {
+			return relErr
+		}
+		if pinExempt[rel] {
+			return nil
+		}
+		docsList = append(docsList, rel)
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("walk %s: %v", docsRoot, walkErr)
 	}
 	sort.Strings(docsList)
 

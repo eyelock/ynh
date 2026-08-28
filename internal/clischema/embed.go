@@ -61,6 +61,18 @@ func Raw(name string) ([]byte, error) {
 	return schemaFS.ReadFile("schema/cli/" + name + ".schema.json")
 }
 
+// RawAuthored returns the unparsed bytes for an author-facing schema — the
+// ones describing files a harness author writes (plugin.json,
+// marketplace.json), as opposed to the CLI response schemas under cli/.
+//
+// These live in the same embed tree so the repo has exactly one embedded
+// copy of every schema. They are deliberately not compiled by this package:
+// ynd validates them with a full JSON Schema implementation, while this
+// package's compiler targets the narrower CLI response shapes.
+func RawAuthored(name string) ([]byte, error) {
+	return schemaFS.ReadFile("schema/" + name + ".schema.json")
+}
+
 // AllRaw returns every embedded schema keyed by canonical path
 // (e.g. "cli/version", "shared/envelope"). Used by `ynh schema --all`.
 func AllRaw() (map[string][]byte, error) {
@@ -104,6 +116,12 @@ func loadAll() {
 			return err
 		}
 		if d.IsDir() || !strings.HasSuffix(path, ".schema.json") {
+			return nil
+		}
+		// Author-facing schemas (plugin, marketplace) sit at the tree root
+		// and are served raw via RawAuthored; only the CLI response schemas
+		// and their shared defs are compiled here.
+		if !strings.Contains(path, "/cli/") && !strings.Contains(path, "/shared/") {
 			return nil
 		}
 		data, rerr := schemaFS.ReadFile(path)

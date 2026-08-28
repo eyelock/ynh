@@ -121,7 +121,7 @@
         "url": { "type": "string" },
         "path": {
           "type": "string",
-          "description": "Subdirectory to sparse-clone. Required — no point in sparse clone of the root."
+          "description": "Subdirectory to sparse-clone. Must be relative and must not traverse above the source root."
         },
         "ref": { "type": "string" },
         "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
