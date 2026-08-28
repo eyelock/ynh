@@ -156,6 +156,8 @@ func TestStatusGolden(t *testing.T)   { validateGolden(t, "status", "status.json
 // TestInstalledGolden validates the install-provenance envelope.
 func TestInstalledGolden(t *testing.T) { validateGolden(t, "installed", "installed.json") }
 
+func TestCheckGolden(t *testing.T) { validateGolden(t, "check", "check.json") }
+
 // TestRaw verifies the byte-getter used by `ynh schema <name>`.
 func TestRaw(t *testing.T) {
 	data, err := Raw("version")

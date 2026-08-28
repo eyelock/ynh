@@ -1,0 +1,53 @@
+{
+  "capabilities": "0.7.0",
+  "ynh_version": "0.3.1",
+  "harness": "demo",
+  "verdict": "blocked",
+  "summary": {
+    "total": 4,
+    "passed": 1,
+    "failed": 1,
+    "blocking": 1,
+    "reported": 1,
+    "deferred": 1,
+    "skipped": 0
+  },
+  "sensors": [
+    {
+      "name": "build",
+      "kind": "command",
+      "category": "maintainability",
+      "tolerance": "blocking",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_ms": 412
+    },
+    {
+      "name": "coverage",
+      "kind": "files",
+      "tolerance": "report",
+      "status": "reported",
+      "exit_code": 0,
+      "duration_ms": 3
+    },
+    {
+      "name": "lint",
+      "kind": "command",
+      "category": "maintainability",
+      "tolerance": "blocking",
+      "status": "fail",
+      "exit_code": 1,
+      "duration_ms": 188,
+      "stdout": "internal/foo.go:12: exported func Bar should have comment\n"
+    },
+    {
+      "name": "review",
+      "kind": "focus",
+      "tolerance": "advisory",
+      "status": "deferred",
+      "exit_code": 0,
+      "duration_ms": 1,
+      "note": "focus sensors require a loop driver; ynh resolves the declaration only"
+    }
+  ]
+}
