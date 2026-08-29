@@ -623,6 +623,10 @@ func TestCheck_OverlayDoesNotClaimDebtIsFixed(t *testing.T) {
 func TestCheck_UnreadableBaselineIsFatalEvenWithNoBaseline(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
+	// --update-baseline refuses when either is set; this test is about the
+	// baseline being unreadable, not about the environment.
+	t.Setenv("CI", "")
+	t.Setenv("YNH_AGENT_SESSION", "")
 	installListTestHarness(t, home, "ch", checkHarnessJSON)
 	cwd := t.TempDir()
 
