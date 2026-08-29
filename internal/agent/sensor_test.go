@@ -2,6 +2,8 @@ package agent
 
 import (
 	"testing"
+
+	"github.com/eyelock/ynh/internal/gate"
 )
 
 func TestSensorResult_Passed_Command(t *testing.T) {
@@ -60,53 +62,6 @@ func TestSensorResult_Summary_Command(t *testing.T) {
 	}
 }
 
-func TestSensorHash_Deterministic(t *testing.T) {
-	results := []*SensorResult{
-		{Name: "build", ExitCode: 0},
-		{Name: "test", ExitCode: 1},
-	}
-	h1 := SensorHash(results)
-	h2 := SensorHash(results)
-	if h1 != h2 {
-		t.Error("SensorHash should be deterministic")
-	}
-}
-
-func TestSensorHash_DifferentOnChange(t *testing.T) {
-	before := []*SensorResult{{Name: "build", ExitCode: 0}}
-	after := []*SensorResult{{Name: "build", ExitCode: 1}}
-	if SensorHash(before) == SensorHash(after) {
-		t.Error("different exit codes should produce different hashes")
-	}
-}
-
-func TestSensorHash_EmptySlice(t *testing.T) {
-	h := SensorHash(nil)
-	if h == "" {
-		t.Error("SensorHash of empty slice should still return a string")
-	}
-}
-
-func TestSensorTier(t *testing.T) {
-	cases := []struct {
-		category string
-		tier     int
-	}{
-		{"maintainability", 1},
-		{"Maintainability", 1},
-		{"architecture", 2},
-		{"behaviour", 3},
-		{"quality", 4},
-		{"", 4},
-		{"", 4},
-	}
-	for _, c := range cases {
-		if got := sensorTier(c.category); got != c.tier {
-			t.Errorf("sensorTier(%q): expected %d, got %d", c.category, c.tier, got)
-		}
-	}
-}
-
 func TestRunSensor_MockReplacement(t *testing.T) {
 	original := runSensorFn
 	defer func() { runSensorFn = original }()
@@ -121,5 +76,43 @@ func TestRunSensor_MockReplacement(t *testing.T) {
 	}
 	if result.Name != "build" || result.ExitCode != 0 {
 		t.Errorf("unexpected result: %+v", result)
+	}
+}
+
+func TestSensorHash_Deterministic(t *testing.T) {
+	e := env(
+		gate.Result{Name: "build", Status: gate.StatusPass},
+		gate.Result{Name: "test", Kind: "command", Tolerance: "blocking", Status: gate.StatusFail},
+	)
+	first := SensorHash(e)
+	if second := SensorHash(e); first != second {
+		t.Errorf("SensorHash should be deterministic: %q then %q", first, second)
+	}
+}
+
+func TestSensorHash_DifferentOnChange(t *testing.T) {
+	before := env(gate.Result{Name: "build", Kind: "command", Status: gate.StatusPass})
+	after := env(gate.Result{Name: "build", Kind: "command", Status: gate.StatusFail})
+	if SensorHash(before) == SensorHash(after) {
+		t.Error("a sensor changing status should produce a different hash")
+	}
+}
+
+// A skipped sensor did not run, so it must contribute nothing. Otherwise the
+// watchdog would see the sensor set change every time --only changed.
+func TestSensorHash_IgnoresSkipped(t *testing.T) {
+	with := env(
+		gate.Result{Name: "build", Kind: "command", Status: gate.StatusPass},
+		gate.Result{Name: "slow", Kind: "command", Status: gate.StatusSkipped},
+	)
+	without := env(gate.Result{Name: "build", Kind: "command", Status: gate.StatusPass})
+	if SensorHash(with) != SensorHash(without) {
+		t.Error("a skipped sensor did not run and must not affect the hash")
+	}
+}
+
+func TestSensorHash_NilEnvelope(t *testing.T) {
+	if SensorHash(nil) == "" {
+		t.Error("SensorHash of a nil envelope should still return a string")
 	}
 }

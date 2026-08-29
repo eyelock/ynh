@@ -18,6 +18,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/gate"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
@@ -536,15 +537,9 @@ func RunLoop(opts RunOptions) error {
 				sensorNames = append(sensorNames, name)
 			}
 		}
-		// Sort by tier (build → lint → test → other), then alphabetically within tier.
-		sort.Slice(sensorNames, func(i, j int) bool {
-			ti := sensorTier(harnessObj.Sensors[sensorNames[i]].Category)
-			tj := sensorTier(harnessObj.Sensors[sensorNames[j]].Category)
-			if ti != tj {
-				return ti < tj
-			}
-			return sensorNames[i] < sensorNames[j]
-		})
+		// Sorted only so --only and the trajectory are deterministic. Execution
+		// order is `ynh check`'s to decide now that it runs them.
+		sort.Strings(sensorNames)
 	} // end else if harnessObj != nil
 
 	// ── Plan phase ────────────────────────────────────────────────────────────
@@ -759,40 +754,52 @@ func RunLoop(opts RunOptions) error {
 			}
 		}
 
-		// ── Run sensors ───────────────────────────────────────────────────────
-		var sensorResults []*SensorResult
-		for _, name := range sensorNames {
-			_ = traj.Emit(KindSensorRun, turnN, name)
-			var overlayJSON string
-			if raw, ok := opts.SensorOverlay[name]; ok {
-				overlayJSON = string(raw)
+		// ── Run the gate ──────────────────────────────────────────────────────
+		// One `ynh check` call rather than one `ynh sensors run` per sensor, so
+		// the loop inherits the gate's policy instead of re-deriving a second,
+		// contradictory one: the baseline ratchet, the tolerance rules, and the
+		// verdict all now come from the same place a human running `ynh check`
+		// would get them from.
+		var checkEnv *gate.Envelope
+		if len(sensorNames) > 0 {
+			for _, name := range sensorNames {
+				_ = traj.Emit(KindSensorRun, turnN, name)
 			}
-			result, err := RunSensor(ynh, opts.HarnessName, name, opts.WorktreeDir, overlayJSON)
-			if err != nil {
-				_, _ = fmt.Fprintf(opts.Stderr, "sensor %q error: %v\n", name, err)
-				result = &SensorResult{Name: name, ExitCode: -1}
+			env, checkErr := RunCheck(ynh, opts.HarnessName, opts.WorktreeDir, sensorNames, opts.SensorOverlay)
+			if checkErr != nil {
+				// A gate that cannot run is an operator fault, not agent work.
+				// Degrading to "no sensor results" would keep sending the worker
+				// turns nothing could verify until the budget ran out, and then
+				// report that exhaustion as the agent's failure.
+				_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitGateError, Reason: checkErr.Error()})
+				return &ExitError{Code: ExitGateError, Message: fmt.Sprintf("gate turn %d: %v", turnN, checkErr)}
 			}
-			// Tolerance comes from the declaration rather than the sensor-run
-			// wire format, which does not carry it. Reading it here keeps the
-			// loop's gating policy identical to `ynh check`'s.
-			if harnessObj != nil {
-				result.Tolerance = harnessObj.Sensors[name].EffectiveTolerance()
+			checkEnv = env
+			for _, r := range env.Sensors {
+				if !r.Ran() {
+					continue
+				}
+				_ = traj.Emit(KindSensorResult, turnN, SensorResultData{
+					Name:       r.Name,
+					Kind:       r.Kind,
+					Status:     r.Status,
+					ExitCode:   r.ExitCode,
+					DurationMS: r.DurationMS,
+					Tolerance:  r.Tolerance,
+					KnownCount: r.KnownCount,
+					NewCount:   r.NewCount,
+					// Passed stays "did this sensor pass", not "did it block".
+					// Tolerance is what explains a failure that did not gate;
+					// folding the two together would hide advisory failures from
+					// anyone reading the trajectory afterwards.
+					Passed:  r.Status != gate.StatusFail,
+					Summary: resultSummary(r),
+				})
 			}
-			sensorResults = append(sensorResults, result)
-			_ = traj.Emit(KindSensorResult, turnN, SensorResultData{
-				Name:       result.Name,
-				Kind:       result.Kind,
-				Role:       result.Role,
-				ExitCode:   result.ExitCode,
-				DurationMS: result.DurationMS,
-				Tolerance:  result.Tolerance,
-				Passed:     result.Passed(),
-				Summary:    result.Summary(),
-			})
 		}
 
 		// ── Check convergence ─────────────────────────────────────────────────
-		if converged, feedback := checkConvergence(sensorResults, convergenceSensor, ynh, opts.HarnessName, opts.WorktreeDir, traj, turnN, verificationExpected); converged {
+		if converged, feedback := checkConvergence(checkEnv, convergenceSensor, ynh, opts.HarnessName, opts.WorktreeDir, traj, turnN, verificationExpected); converged {
 			_ = traj.Emit(KindConverged, turnN, nil)
 			_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitConverged, TotalTurns: budget.Turns(), TotalTokens: budget.Tokens()})
 			return nil
@@ -803,7 +810,7 @@ func RunLoop(opts RunOptions) error {
 			return nil
 		} else {
 			// ── Stuckness watchdog ─────────────────────────────────────────────
-			sensorHash := SensorHash(sensorResults)
+			sensorHash := SensorHash(checkEnv)
 			if reason := watchdog.RecordTurn(turn.Content, sensorHash); reason != "" {
 				_ = traj.Emit(KindStuckDetected, turnN, StuckDetectedData{Reason: reason, TurnCount: budget.Turns()})
 				_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitStuck, Reason: reason})
@@ -843,13 +850,18 @@ func RunLoop(opts RunOptions) error {
 	}
 }
 
-// checkConvergence returns (converged=true, feedback="") when all sensors
-// pass and the convergence sensor (if any) confirms done.
+// checkConvergence decides whether the turn's gate result means done.
+//
+// The verdict is `ynh check`'s, not the loop's. What blocks — tolerance,
+// baseline forgiveness, the pass/fail rule for each sensor kind — is settled
+// there, so a run and a human at a terminal cannot reach opposite conclusions
+// about the same manifest.
+//
 // Returns (converged=false, feedback=<synthesized feedback>) when work remains.
 // verificationExpected is true when the run was configured to verify itself —
 // a harness was named, or this is a resume that should have restored one.
 func checkConvergence(
-	results []*SensorResult,
+	env *gate.Envelope,
 	convergenceSensor, ynh, harnessName, cwd string,
 	traj *TrajectoryWriter,
 	turnN int,
@@ -864,37 +876,39 @@ func checkConvergence(
 	// verified and is just an agent runner, so the worker declaring itself done
 	// is the only signal there is. A run that expected a harness and has no
 	// results has lost something, and must not claim a verdict it cannot back.
-	if verificationExpected && len(results) == 0 {
+	ran := 0
+	canGate := 0
+	if env != nil {
+		for _, r := range env.Sensors {
+			if !r.Ran() {
+				continue
+			}
+			ran++
+			// Only a blocking *command* sensor can ever produce a blocked
+			// verdict. A files sensor has no derivable pass/fail and a focus
+			// sensor needs a runtime ynh does not own, so counting either as
+			// gating just because its tolerance says "blocking" would let a
+			// harness that gates on nothing satisfy the guard below without
+			// ever being able to fail.
+			if r.Tolerance == "blocking" && r.Kind == "command" {
+				canGate++
+			}
+		}
+	}
+	if verificationExpected && ran == 0 {
 		return false, "verification was expected but no sensors ran, so convergence cannot be confirmed"
 	}
-
-	// Only blocking sensors gate. `report` is documented as pure observation
-	// and `advisory` as non-gating, but the loop treated every result alike,
-	// so a report sensor that never passes blocked convergence forever — the
-	// loop and `ynh check` applied contradictory policy to one declaration.
-	gating := make([]*SensorResult, 0, len(results))
-	for _, r := range results {
-		if r.Tolerance == "advisory" || r.Tolerance == "report" {
-			continue
-		}
-		gating = append(gating, r)
-	}
-	if verificationExpected && len(results) > 0 && len(gating) == 0 {
-		return false, "every sensor is advisory or report, so nothing gates convergence"
+	if verificationExpected && ran > 0 && canGate == 0 {
+		return false, "no blocking command sensor ran, so nothing gates convergence"
 	}
 
-	allPassed := true
-	for _, r := range gating {
-		if !r.Passed() {
-			allPassed = false
-		}
+	if env != nil && env.Verdict == gate.VerdictBlocked {
+		return false, synthesizeFeedback(env)
 	}
 
-	if !allPassed {
-		return false, synthesizeFeedback(gating)
-	}
-
-	// All regular sensors green — consult convergence-verifier if declared.
+	// Gate green — consult convergence-verifier if declared. It stays a
+	// direct sensor run: resolving a focus sensor needs an agent runtime,
+	// which is why `ynh check` reports it as deferred rather than judging it.
 	if convergenceSensor != "" && ynh != "" && harnessName != "" {
 		_ = traj.Emit(KindSensorRun, turnN, convergenceSensor)
 		cvResult, err := RunSensor(ynh, harnessName, convergenceSensor, cwd, "")
@@ -925,26 +939,93 @@ func checkConvergence(
 	return true, ""
 }
 
+// maxFeedbackLines caps how much of one sensor's output reaches the worker.
+//
+// The old cap was three lines, which for a linter meant the agent was told
+// there was a problem and had to re-run the tool itself to find out what —
+// paying for the sensor twice. With a baseline in play the body is already
+// narrowed to the lines this change introduced, so a larger cap costs little
+// and usually carries the whole remediation.
+const maxFeedbackLines = 20
+
+// resultSummary renders the part of a sensor result the worker should act on.
+//
+// For a failing sensor with a baseline that is only the new lines. Showing an
+// agent the twelve findings it did not introduce alongside the one it did is
+// how a turn gets spent fixing someone else's debt — and, at the end of it,
+// how a converged run turns out to have rewritten files nobody asked about.
+func resultSummary(r gate.Result) string {
+	switch r.Status {
+	case gate.StatusPass:
+		return "passed"
+	case gate.StatusKnown:
+		return fmt.Sprintf("failing, but all %d %s recorded in the baseline — pre-existing, not yours to fix",
+			r.KnownCount, pluralise(r.KnownCount, "failure"))
+	case gate.StatusReported:
+		return "reported — observation only, no pass/fail verdict"
+	case gate.StatusDeferred:
+		return "deferred — needs an agent runtime"
+	case gate.StatusSkipped:
+		return "skipped"
+	}
+
+	body := strings.TrimSpace(r.NewOutput)
+	if body == "" {
+		body = strings.TrimSpace(r.Stdout)
+	}
+	if body == "" {
+		body = strings.TrimSpace(r.Stderr)
+	}
+	if body == "" {
+		return fmt.Sprintf("failed (exit %d)", r.ExitCode)
+	}
+	lines := strings.Split(body, "\n")
+	if len(lines) > maxFeedbackLines {
+		lines = append(lines[:maxFeedbackLines:maxFeedbackLines], "…")
+	}
+	return strings.Join(lines, "\n")
+}
+
+func pluralise(n int, word string) string {
+	if n == 1 {
+		return word
+	}
+	return word + "s"
+}
+
 // synthesizeFeedback produces the user-turn message injected after a
-// non-converged turn. Format mirrors the plan §7.3 sensor-results block.
-func synthesizeFeedback(results []*SensorResult) string {
+// non-converged turn.
+//
+// Every sensor that ran is listed with the gate's own status word, so
+// "known" and "reported" are visible as distinct from "fail". An agent shown
+// a bare failed/passed split has no way to tell recorded debt from a
+// regression it just caused, and will try to fix both.
+func synthesizeFeedback(env *gate.Envelope) string {
 	var sb strings.Builder
 	sb.WriteString("<sensor-results>\n")
-	for _, r := range results {
-		status := "passed"
-		if !r.Passed() {
-			status = "failed"
+	for _, r := range env.Sensors {
+		if !r.Ran() {
+			continue
 		}
 		durationSec := float64(r.DurationMS) / 1000
-		_, _ = fmt.Fprintf(&sb, "  <%s status=%q duration=%.1fs", r.Name, status, durationSec)
-		if summary := r.Summary(); !r.Passed() && summary != "" && summary != "passed" && summary != "failed" {
-			_, _ = fmt.Fprintf(&sb, ">\n%s\n  </%s>", summary, r.Name)
-		} else {
+		_, _ = fmt.Fprintf(&sb, "  <%s status=%q duration=%.1fs", r.Name, r.Status, durationSec)
+		if r.Status == gate.StatusFail && r.Tolerance != "blocking" {
+			_, _ = fmt.Fprintf(&sb, " tolerance=%q", r.Tolerance)
+		}
+		summary := resultSummary(r)
+		if r.Status == gate.StatusPass || summary == "" {
 			sb.WriteString("/>")
+		} else {
+			_, _ = fmt.Fprintf(&sb, ">\n%s\n  </%s>", summary, r.Name)
 		}
 		sb.WriteString("\n")
 	}
-	sb.WriteString("</sensor-results>\n\nContinue work. Address the failing sensors first.")
+	sb.WriteString("</sensor-results>\n\n")
+	if env.Baseline != nil && env.Baseline.Known > 0 {
+		_, _ = fmt.Fprintf(&sb, "%d pre-existing failure(s) are recorded in the baseline and are not "+
+			"blocking. Do not fix them unless the task asks you to.\n\n", env.Baseline.Known)
+	}
+	sb.WriteString("Continue work. Address the failing sensors first.")
 	return sb.String()
 }
 

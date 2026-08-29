@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/baseline"
+	"github.com/eyelock/ynh/internal/gate"
 )
 
 // SensorResult is the parsed output of `ynh sensors run`.
@@ -134,47 +135,41 @@ func defaultRunSensor(ynhPath, harnessName, sensorName, cwd, overlayJSON string)
 	return &r, nil
 }
 
-// SensorHash produces a stable short hash over a set of sensor results, used
-// by the watchdog to detect when sensors stop changing between turns.
+// SensorHash produces a stable short hash over a turn's gate result, used by
+// the watchdog to detect when sensors stop changing between turns.
 //
-// The hash covers each sensor's output, not just its exit code. Hashing
-// name and exit code alone meant that fixing three of fifty lint findings
-// produced an identical hash — real progress read as no progress, and the
-// watchdog killed the run at the no-progress threshold for doing exactly what
-// it was asked to do.
+// The hash covers each sensor's output, not just its status. Hashing name and
+// exit code alone meant that fixing three of fifty lint findings produced an
+// identical hash — real progress read as no progress, and the watchdog killed
+// the run at the no-progress threshold for doing exactly what it was asked to
+// do.
+//
+// Where a baseline is in play the new-failure set is hashed rather than the
+// whole output, so the watchdog tracks the same surface the gate blocks on:
+// churn among findings that were already forgiven is not progress either.
 //
 // Output is fingerprinted rather than hashed raw so that file positions
 // shifting (a line inserted above an existing finding) does not read as
-// progress either. The same normalisation the baseline uses.
-func SensorHash(results []*SensorResult) string {
+// progress. The same normalisation the baseline uses.
+func SensorHash(env *gate.Envelope) string {
+	if env == nil {
+		return contentHash("")
+	}
 	var sb strings.Builder
-	for _, r := range results {
-		fmt.Fprintf(&sb, "%s:%d:", r.Name, r.ExitCode)
-		for _, fp := range baseline.Fingerprints(r.Output.Stdout+"\n"+r.Output.Stderr, "") {
+	for _, r := range env.Sensors {
+		if !r.Ran() {
+			continue
+		}
+		fmt.Fprintf(&sb, "%s:%s:", r.Name, r.Status)
+		out := r.NewOutput
+		if out == "" {
+			out = r.Stdout + "\n" + r.Stderr
+		}
+		for _, fp := range baseline.Fingerprints(out, "") {
 			sb.WriteString(fp)
 			sb.WriteByte(',')
 		}
 		sb.WriteByte('|')
 	}
 	return contentHash(sb.String())
-}
-
-// sensorTier returns a sort priority for sensor execution order, cheapest
-// signal first so an obviously broken turn fails fast.
-//
-// This switched on "build", "lint" and "test", which are not sensor
-// categories — the schema permits only maintainability, architecture and
-// behaviour, and validation enforces it. Every sensor therefore landed in the
-// default tier and ordering was alphabetical, so the function did nothing.
-func sensorTier(category string) int {
-	switch strings.ToLower(category) {
-	case "maintainability": // formatters, linters, vet — fast
-		return 1
-	case "architecture": // structural checks — usually cheap
-		return 2
-	case "behaviour": // test suites — slowest
-		return 3
-	default: // uncategorised
-		return 4
-	}
 }

@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/eyelock/ynh/internal/gate"
 )
 
 // mockBackend is a test WorkerBackend that returns scripted turns.
@@ -118,11 +120,9 @@ func TestRunLoop_ConvergesWhenNoSensors(t *testing.T) {
 func TestRunLoop_TurnCapExceeded(t *testing.T) {
 	// Worker keeps responding, sensors always fail → no convergence.
 	// MaxTurns=1 should stop after the first act turn is recorded.
-	original := runSensorFn
-	defer func() { runSensorFn = original }()
-	runSensorFn = func(ynh, harnessName, sensorName, cwd, overlayJSON string) (*SensorResult, error) {
-		return &SensorResult{Name: sensorName, Kind: "command", ExitCode: 1}, nil
-	}
+	stubCheck(t, func(_ int, name string) gate.Result {
+		return gate.Result{Name: name, Kind: "command", Tolerance: "blocking", Status: gate.StatusFail, ExitCode: 1}
+	})
 
 	mb := &mockBackend{
 		name: "mock",
@@ -149,9 +149,6 @@ func TestRunLoop_TurnCapExceeded(t *testing.T) {
 func TestRunLoop_WorkerEOFBeforeConvergence(t *testing.T) {
 	// Worker exits after one turn but sensors (if any) didn't all pass.
 	// With sensors mocked to fail, worker EOF is a worker error.
-	original := runSensorFn
-	defer func() { runSensorFn = original }()
-
 	mb := &mockBackend{
 		name:  "mock",
 		turns: []Turn{{Content: "partial work"}},
@@ -168,18 +165,13 @@ func TestRunLoop_WorkerEOFBeforeConvergence(t *testing.T) {
 
 func TestRunLoop_SensorFailureSendsFeedback(t *testing.T) {
 	// Sensor fails on turn 1, passes on turn 2. Loop should converge on turn 2.
-	original := runSensorFn
-	defer func() { runSensorFn = original }()
-
-	callCount := 0
-	runSensorFn = func(ynh, harnessName, sensorName, cwd, overlayJSON string) (*SensorResult, error) {
-		callCount++
-		exitCode := 1
-		if callCount > 1 {
-			exitCode = 0 // pass on second sensor run
+	stubCheck(t, func(call int, name string) gate.Result {
+		r := gate.Result{Name: name, Kind: "command", Tolerance: "blocking", Status: gate.StatusPass}
+		if call == 1 {
+			r.Status, r.ExitCode = gate.StatusFail, 1
 		}
-		return &SensorResult{Name: sensorName, Kind: "command", ExitCode: exitCode}, nil
-	}
+		return r
+	})
 
 	mb := &mockBackend{
 		name: "mock",
@@ -290,20 +282,23 @@ func TestSelectBackend(t *testing.T) {
 }
 
 func TestSynthesizeFeedback(t *testing.T) {
-	results := []*SensorResult{
-		{Name: "build", Kind: "command", ExitCode: 0, DurationMS: 800},
-		{Name: "test", Kind: "command", ExitCode: 1, DurationMS: 2100,
-			Output: SensorRunOutput{Stdout: "FAIL: TestFoo"}},
-	}
-	fb := synthesizeFeedback(results)
+	fb := synthesizeFeedback(env(
+		gate.Result{Name: "build", Kind: "command", Tolerance: "blocking",
+			Status: gate.StatusPass, DurationMS: 800},
+		gate.Result{Name: "test", Kind: "command", Tolerance: "blocking",
+			Status: gate.StatusFail, ExitCode: 1, DurationMS: 2100, Stdout: "FAIL: TestFoo"},
+	))
 	if !strings.Contains(fb, "<sensor-results>") {
 		t.Error("feedback should contain <sensor-results>")
 	}
-	if !strings.Contains(fb, `status="failed"`) {
+	if !strings.Contains(fb, `status="fail"`) {
 		t.Error("feedback should mark test as failed")
 	}
-	if !strings.Contains(fb, `status="passed"`) {
+	if !strings.Contains(fb, `status="pass"`) {
 		t.Error("feedback should mark build as passed")
+	}
+	if !strings.Contains(fb, "FAIL: TestFoo") {
+		t.Error("feedback should carry the failing output the worker must act on")
 	}
 }
 

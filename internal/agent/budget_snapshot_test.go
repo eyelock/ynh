@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/gate"
 )
 
 // budgetSnapshotsFromTrajectory extracts decoded BudgetSnapshotData
@@ -41,11 +43,9 @@ func TestRunLoop_BudgetSnapshotPerActTurn(t *testing.T) {
 		},
 	}
 	// Failing sensor keeps the loop going for 3 turns.
-	original := runSensorFn
-	defer func() { runSensorFn = original }()
-	runSensorFn = func(ynh, harnessName, sensorName, cwd, overlayJSON string) (*SensorResult, error) {
-		return &SensorResult{Name: sensorName, Kind: "command", ExitCode: 1}, nil
-	}
+	stubCheck(t, func(_ int, name string) gate.Result {
+		return gate.Result{Name: name, Kind: "command", Tolerance: "blocking", Status: gate.StatusFail, ExitCode: 1}
+	})
 
 	var traj bytes.Buffer
 	opts := baseOpts(mb, &traj, &bytes.Buffer{}, strings.NewReader(""))
@@ -113,11 +113,9 @@ func TestRunLoop_BudgetSnapshotMatchesSessionEnd(t *testing.T) {
 			{Content: "turn 2", Usage: Usage{InputTokens: 200, OutputTokens: 75}},
 		},
 	}
-	original := runSensorFn
-	defer func() { runSensorFn = original }()
-	runSensorFn = func(ynh, harnessName, sensorName, cwd, overlayJSON string) (*SensorResult, error) {
-		return &SensorResult{Name: sensorName, Kind: "command", ExitCode: 1}, nil
-	}
+	stubCheck(t, func(_ int, name string) gate.Result {
+		return gate.Result{Name: name, Kind: "command", Tolerance: "blocking", Status: gate.StatusFail, ExitCode: 1}
+	})
 
 	var traj bytes.Buffer
 	opts := baseOpts(mb, &traj, &bytes.Buffer{}, strings.NewReader(""))

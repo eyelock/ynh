@@ -13,74 +13,9 @@ import (
 
 	"github.com/eyelock/ynh/internal/baseline"
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/gate"
 	"github.com/eyelock/ynh/internal/harness"
 )
-
-// Sensor statuses reported by `ynh check`.
-//
-// ynh deliberately owns only the thinnest possible pass/fail policy: a
-// command sensor passes when it exits 0. Anything richer — thresholds,
-// severity filters, convergence judgments — still belongs to a loop driver.
-// Sensors whose result cannot be reduced to pass/fail mechanically say so
-// rather than guessing, and never gate.
-const (
-	statusPass     = "pass"     // command sensor exited 0
-	statusFail     = "fail"     // command sensor exited non-zero
-	statusReported = "reported" // files sensor: content surfaced, no verdict derivable
-	statusDeferred = "deferred" // focus sensor: needs an agent runtime ynh does not own
-	statusSkipped  = "skipped"  // filtered out by --only
-	statusKnown    = "known"    // failing, but every failure is in the baseline
-)
-
-// checkEnvelope is the `ynh check --format json` payload.
-type checkEnvelope struct {
-	Capabilities string        `json:"capabilities"`
-	YnhVersion   string        `json:"ynh_version"`
-	Harness      string        `json:"harness"`
-	Verdict      string        `json:"verdict"` // pass | blocked
-	Summary      checkSummary  `json:"summary"`
-	Sensors      []checkResult `json:"sensors"`
-	Baseline     *baselineInfo `json:"baseline,omitempty"`
-}
-
-// baselineInfo tells a consumer whether a ratchet is in play and whether it
-// could be tightened. Absent when no baseline has been recorded.
-type baselineInfo struct {
-	RecordedAt string `json:"recorded_at"`
-	Known      int    `json:"known"` // pre-existing failures forgiven this run
-	Fixed      int    `json:"fixed"` // baseline entries no longer failing
-	Stale      bool   `json:"stale"` // true when Fixed > 0: the baseline can be narrowed
-}
-
-type checkSummary struct {
-	Total    int `json:"total"`
-	Passed   int `json:"passed"`
-	Failed   int `json:"failed"`
-	Blocking int `json:"blocking"` // failures that caused a block
-	Reported int `json:"reported"`
-	Deferred int `json:"deferred"`
-	Skipped  int `json:"skipped"`
-	Known    int `json:"known"` // sensors failing only in ways the baseline records
-}
-
-type checkResult struct {
-	Name       string `json:"name"`
-	Kind       string `json:"kind"`
-	Category   string `json:"category,omitempty"`
-	Tolerance  string `json:"tolerance"`
-	Status     string `json:"status"`
-	ExitCode   int    `json:"exit_code"`
-	DurationMS int64  `json:"duration_ms"`
-	Stdout     string `json:"stdout,omitempty"`
-	Stderr     string `json:"stderr,omitempty"`
-	Note       string `json:"note,omitempty"`
-	// NewCount and KnownCount are set for failing command sensors when a
-	// baseline exists. NewOutput carries only the lines not in the baseline —
-	// the ones the author is actually being asked to fix.
-	NewCount   int    `json:"new_count,omitempty"`
-	KnownCount int    `json:"known_count,omitempty"`
-	NewOutput  string `json:"new_output,omitempty"`
-}
 
 func cmdCheck(args []string, stdout, stderr io.Writer) error {
 	structured := false
@@ -88,6 +23,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 	var harnessName string
 	var only []string
 	var updateBaseline, ignoreBaseline bool
+	overlay := map[string]json.RawMessage{}
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -101,6 +37,21 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			updateBaseline = true
 		case "--no-baseline":
 			ignoreBaseline = true
+		case "--sensor-overlay":
+			// A JSON object keyed by sensor name, each value a partial sensor
+			// declaration merged over the base before the sensor runs. The
+			// agent loop uses it to substitute a faster inner-loop command
+			// for the same declared sensor, and needs the substitution to go
+			// through the gate rather than around it.
+			if i+1 >= len(args) {
+				return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
+					"--sensor-overlay requires a value"))
+			}
+			i++
+			if err := json.Unmarshal([]byte(args[i]), &overlay); err != nil {
+				return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
+					fmt.Sprintf("--sensor-overlay: invalid JSON: %v", err)))
+			}
 		case "--only":
 			if i+1 >= len(args) {
 				return checkExecErr(cliError(stderr, structured, errCodeInvalidInput, "--only requires a value"))
@@ -158,6 +109,16 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 	// grant itself blanket amnesty and then converge — the exact "forgives
 	// whatever it introduced" failure the CI check was written to prevent,
 	// reached by the one path the check did not cover.
+	// A baseline records what a declared sensor produces. Recording one while
+	// a substitute command is running would file the proxy's output under the
+	// real sensor's name, and every later run would compare the real command
+	// against a fingerprint set it never produced.
+	if updateBaseline && len(overlay) > 0 {
+		return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
+			"--update-baseline cannot be combined with --sensor-overlay: a baseline must record "+
+				"what the declared sensor produces, not what a substitute command produces."))
+	}
+
 	if updateBaseline {
 		if session := os.Getenv("YNH_AGENT_SESSION"); session != "" {
 			recordBaselineWriteAttempt(session)
@@ -199,6 +160,15 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 		}
 		wanted[n] = true
 	}
+	// An overlay for a sensor that does not exist is a typo that would
+	// otherwise be silently ignored — the caller would believe it had
+	// substituted a command and be gated on the original.
+	for n := range overlay {
+		if _, ok := p.Sensors[n]; !ok {
+			return checkExecErr(cliError(stderr, structured, errCodeNotFound,
+				fmt.Sprintf("--sensor-overlay names sensor %q, not declared in harness %q", n, p.Name)))
+		}
+	}
 
 	names := make([]string, 0, len(p.Sensors))
 	for n := range p.Sensors {
@@ -206,17 +176,26 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 	}
 	sort.Strings(names)
 
-	env := checkEnvelope{
+	env := gate.Envelope{
 		Capabilities: config.CapabilitiesVersion,
 		YnhVersion:   config.Version,
 		Harness:      p.Name,
-		Verdict:      "pass",
+		Verdict:      gate.VerdictPass,
 	}
 
 	var totalKnown, totalFixed int
 	for _, name := range names {
 		s := p.Sensors[name]
-		res := checkResult{
+		_, overlaid := overlay[name]
+		if raw, ok := overlay[name]; ok {
+			merged, mergeErr := mergeSensorOverlay(s, raw)
+			if mergeErr != nil {
+				return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
+					fmt.Sprintf("--sensor-overlay %q: %v", name, mergeErr)))
+			}
+			s = merged
+		}
+		res := gate.Result{
 			Name:      name,
 			Kind:      s.Source.Kind(),
 			Category:  s.Category,
@@ -224,7 +203,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 		}
 
 		if len(wanted) > 0 && !wanted[name] {
-			res.Status = statusSkipped
+			res.Status = gate.StatusSkipped
 			env.Summary.Skipped++
 			env.Sensors = append(env.Sensors, res)
 			continue
@@ -244,12 +223,19 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 		switch s.Source.Kind() {
 		case "command":
 			if run.ExitCode == 0 {
-				res.Status = statusPass
+				res.Status = gate.StatusPass
 				env.Summary.Passed++
 				// Going fully green is the clearest signal the ratchet can be
 				// tightened, so its recorded debt has to count as fixed here —
 				// this path never reaches Compare.
-				totalFixed += base.RecordedCount(p.Name, name)
+				//
+				// Unless a substitute command produced the green. `make fast`
+				// passing says nothing about what `make check` records, and
+				// telling the operator to lock that in would erase real debt
+				// on the strength of a proxy.
+				if !overlaid {
+					totalFixed += base.RecordedCount(p.Name, name)
+				}
 				if updateBaseline {
 					recording.Clear(p.Name, name)
 				}
@@ -259,14 +245,20 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			raw := run.Output.Stdout + "\n" + run.Output.Stderr
 			current := baseline.Fingerprints(raw, cwd)
 			if updateBaseline {
-				recording.Set(p.Name, name, baseline.Record(statusFail, raw, cwd))
+				recording.Set(p.Name, name, baseline.Record(gate.StatusFail, raw, cwd))
 			}
 
 			cmp := base.Compare(p.Name, name, current, len(current))
 			res.NewCount = len(cmp.New)
 			res.KnownCount = cmp.Known
 			totalKnown += cmp.Known
-			totalFixed += cmp.Fixed
+			// Forgiveness still applies under an overlay — a substitute
+			// command is normally a subset of the declared one, and its
+			// shared findings fingerprint identically. Absence of a finding
+			// under a subset is not evidence it was fixed, so Fixed is not.
+			if !overlaid {
+				totalFixed += cmp.Fixed
+			}
 
 			// A sensor whose failures are all already recorded is debt, not a
 			// regression. The test is that the baseline has an entry for it —
@@ -275,7 +267,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			// baselined at all.
 			forgiven := base.Has(p.Name, name) && len(cmp.New) == 0 && !cmp.Regressed
 			if forgiven {
-				res.Status = statusKnown
+				res.Status = gate.StatusKnown
 				env.Summary.Known++
 				if cmp.Approximate {
 					res.Note = "baseline is count-based for this sensor; comparison is approximate"
@@ -283,7 +275,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 				break
 			}
 
-			res.Status = statusFail
+			res.Status = gate.StatusFail
 			env.Summary.Failed++
 			if base != nil {
 				res.NewOutput = selectLines(raw, cwd, cmp.New)
@@ -293,16 +285,16 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			}
 			if res.Tolerance == "blocking" {
 				env.Summary.Blocking++
-				env.Verdict = "blocked"
+				env.Verdict = gate.VerdictBlocked
 			}
 		case "files":
 			// No verdict is mechanically derivable from a file glob, so a
 			// files sensor reports and never gates, whatever its tolerance.
-			res.Status = statusReported
+			res.Status = gate.StatusReported
 			env.Summary.Reported++
 		case "focus":
 			// Resolving a focus needs an agent runtime ynh does not own.
-			res.Status = statusDeferred
+			res.Status = gate.StatusDeferred
 			res.Note = "focus sensors require a loop driver; ynh resolves the declaration only"
 			env.Summary.Deferred++
 		}
@@ -310,7 +302,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 	}
 	env.Summary.Total = len(env.Sensors)
 	if base != nil {
-		env.Baseline = &baselineInfo{
+		env.Baseline = &gate.BaselineInfo{
 			RecordedAt: base.RecordedAt,
 			Known:      totalKnown,
 			Fixed:      totalFixed,
@@ -326,8 +318,8 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 		// reports what it accepted rather than gating on it. Both output modes
 		// must say something: a structured consumer that gets empty stdout
 		// cannot tell success from a crash.
-		env.Verdict = "pass"
-		env.Baseline = &baselineInfo{RecordedAt: recording.RecordedAt}
+		env.Verdict = gate.VerdictPass
+		env.Baseline = &gate.BaselineInfo{RecordedAt: recording.RecordedAt}
 		if structured {
 			data, encErr := json.MarshalIndent(env, "", "  ")
 			if encErr != nil {
@@ -355,7 +347,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 		return wErr
 	}
 
-	if env.Verdict == "blocked" {
+	if env.Verdict == gate.VerdictBlocked {
 		return errCheckBlocked
 	}
 	return nil
@@ -443,7 +435,7 @@ func truncateOutput(s string) string {
 	return s[:maxSensorOutput] + "\n… truncated"
 }
 
-func writeCheckText(w io.Writer, env checkEnvelope) error {
+func writeCheckText(w io.Writer, env gate.Envelope) error {
 	if len(env.Sensors) == 0 {
 		_, err := fmt.Fprintf(w, "%s: no sensors declared\n", env.Harness)
 		return err
@@ -454,28 +446,28 @@ func writeCheckText(w io.Writer, env checkEnvelope) error {
 		// The inner loop runs filtered on every turn, so a skipped sensor
 		// must cost nothing to read. It stays in the JSON payload, where a
 		// consumer may want the full declared set.
-		if r.Status == statusSkipped {
+		if r.Status == gate.StatusSkipped {
 			continue
 		}
 		mark := "·"
 		switch r.Status {
-		case statusPass:
+		case gate.StatusPass:
 			mark = "✓"
-		case statusFail:
+		case gate.StatusFail:
 			mark = "✗"
-		case statusKnown:
+		case gate.StatusKnown:
 			mark = "~"
 		}
 		detail := r.Status
 		switch {
-		case r.Status == statusKnown:
+		case r.Status == gate.StatusKnown:
 			detail = fmt.Sprintf("known (%d)", r.KnownCount)
-		case r.Status == statusFail && r.NewCount > 0 && r.KnownCount > 0:
+		case r.Status == gate.StatusFail && r.NewCount > 0 && r.KnownCount > 0:
 			detail = fmt.Sprintf("%d new, %d known", r.NewCount, r.KnownCount)
-		case r.Status == statusFail && r.NewCount > 0:
+		case r.Status == gate.StatusFail && r.NewCount > 0:
 			detail = fmt.Sprintf("%d new", r.NewCount)
 		}
-		if r.Status == statusFail && r.Tolerance != "blocking" {
+		if r.Status == gate.StatusFail && r.Tolerance != "blocking" {
 			detail += " (" + r.Tolerance + ")"
 		}
 		if _, err := fmt.Fprintf(tw, "  %s\t%s\t%s\t%dms\n", mark, r.Name, detail, r.DurationMS); err != nil {
@@ -489,7 +481,7 @@ func writeCheckText(w io.Writer, env checkEnvelope) error {
 	// Failing output is the remediation the agent acts on, so it goes to
 	// the operator verbatim rather than being summarised away.
 	for _, r := range env.Sensors {
-		if r.Status != statusFail {
+		if r.Status != gate.StatusFail {
 			continue
 		}
 		// With a baseline in play, show only what this change introduced.
@@ -514,7 +506,7 @@ func writeCheckText(w io.Writer, env checkEnvelope) error {
 		}
 	}
 
-	if env.Verdict == "blocked" {
+	if env.Verdict == gate.VerdictBlocked {
 		// Count what actually ran. Reporting "1 of 4" when --only filtered
 		// three of them out invites the reader to go looking for failures
 		// that were never evaluated.
@@ -538,7 +530,7 @@ func writeCheckText(w io.Writer, env checkEnvelope) error {
 // writeBaselineFooter surfaces a ratchet that has slack in it. Debt paid off
 // stays forgiven until someone narrows the baseline, so the gate says when
 // that is worth doing rather than waiting to be asked.
-func writeBaselineFooter(w io.Writer, env checkEnvelope) error {
+func writeBaselineFooter(w io.Writer, env gate.Envelope) error {
 	if env.Baseline == nil || !env.Baseline.Stale {
 		return nil
 	}

@@ -104,6 +104,11 @@ const (
 	ExitPlanIterationCap = 15
 	ExitWorkerError      = 20
 	ExitResumeError      = 21
-	ExitUserAborted      = 30
-	ExitInterrupted      = 31
+	// ExitGateError mirrors `ynh check`'s own exit 2: the gate could not run
+	// at all. Distinct from ExitWorkerError so a batch of runs can tell "the
+	// agent failed" from "the harness is broken" without reading logs — the
+	// second is an operator fault and every run in the batch will hit it.
+	ExitGateError   = 22
+	ExitUserAborted = 30
+	ExitInterrupted = 31
 )

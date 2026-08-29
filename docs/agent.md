@@ -6,8 +6,10 @@ and stops when the sensors agree the work is done or a budget is spent.
 
 It is the one place ynh runs an agent rather than assembling a harness for one.
 Everything it decides comes from declarations already in the manifest — sensors,
-tolerances, focuses, profiles — so the loop applies the same policy as
-[`ynh check`](sensors.md#ynh-check).
+tolerances, focuses, profiles. Between turns it runs
+[`ynh check`](sensors.md#ynh-check) itself rather than re-implementing it, so
+the loop and a human at a terminal cannot reach different conclusions about the
+same manifest.
 
 > Sensors are what the loop iterates against. If a harness declares none, the
 > loop has nothing to verify and cannot converge.
@@ -80,17 +82,28 @@ upon. ynh does not provide isolation; it runs inside one you configured.
 
 ## Convergence
 
-After each turn the loop runs the declared sensors and decides whether to stop.
+After each turn the loop runs `ynh check` over the harness's sensors and stops
+when its verdict is `pass`.
 
 - Only **blocking** sensors gate. `advisory` and `report` sensors are reported
   and fed back, but never hold convergence open — the same rule `ynh check`
   applies, from the same `tolerance` declaration.
-- When every blocking sensor passes and a `--convergence-sensor` is declared,
-  that sensor is consulted as the final say.
+- **Failures already in the [baseline](sensors.md#baseline--inheriting-a-repo-that-already-fails)
+  do not gate.** A sensor whose every failure is recorded reports `known`, and
+  the loop treats it as debt the run inherited rather than work it owes. Only
+  the lines a turn actually introduced are fed back, so the agent is not asked
+  to clean a repository it was pointed at.
+- When the gate is green and a `--convergence-sensor` is declared, that sensor
+  is consulted as the final say. It stays a direct `ynh sensors run`: resolving
+  a focus sensor needs an agent runtime, which is why `ynh check` reports one as
+  `deferred` rather than judging it.
 - **A run that expected verification and produced no sensor results does not
   converge.** This matters on resume: a session whose harness cannot be restored
   has no sensors, and a verdict with no evidence behind it is worse than no
-  verdict. The loop reports why and exits non-zero.
+  verdict. The loop reports why and exits non-zero. The same applies when
+  nothing that ran could ever block — only a blocking *command* sensor can
+  produce a blocked verdict, so a harness whose only blocking sensor is a file
+  glob verifies nothing and is told so.
 
 A run started with no `--harness` is a plain agent runner — nothing was asked to
 verify it, so the worker finishing is the only available signal and the loop
@@ -101,9 +114,11 @@ converges on it.
 Two detectors stop a loop that is not going anywhere:
 
 - **No progress** — the sensor picture is unchanged for several turns. The
-  comparison covers each sensor's *output*, not just its exit code, so fixing
-  some findings while a sensor still fails counts as progress. File positions
-  are normalised, so a finding moving down a file does not.
+  comparison covers each sensor's *output*, not just its status, so fixing some
+  findings while a sensor still fails counts as progress. File positions are
+  normalised, so a finding moving down a file does not. Where a baseline is in
+  play it compares the *new* failures only: churn among findings that were
+  already forgiven is not progress either.
 - **Edit loop** — the agent repeats itself across turns.
 
 ## Resume
@@ -139,12 +154,21 @@ warns and continues, but cannot converge — it has no sensors to converge on.
 | 15 | plan-iteration cap reached |
 | 20 | worker error |
 | 21 | resume error |
+| 22 | gate error — `ynh check` could not run |
 | 30 | aborted by user |
 | 31 | interrupted |
 
 Anything non-zero means the loop stopped without the sensors agreeing the work
-was done. Codes 10–12 are budgets, 13–15 are the loop deciding to stop, 20–21
+was done. Codes 10–12 are budgets, 13–15 are the loop deciding to stop, 20–22
 are failures to run, and 30–31 are external interruption.
+
+Code 22 mirrors `ynh check`'s own exit 2 and is an operator fault, not the
+agent's: the harness is missing, a sensor command cannot be executed, or the
+gate crashed. It is distinct from 20 so a batch of runs can tell "this agent
+failed" from "this harness is broken and every run will hit it". The loop stops
+at the first occurrence rather than continuing against no signal — spending a
+whole budget on turns nothing could verify, and then reporting the exhaustion as
+the agent's failure, hides the real fault.
 
 ## Trajectory
 
@@ -167,8 +191,11 @@ a run without parsing terminal output.
 | `converged` | Sensors agree the work is done |
 | `session_end` | Run finished, with exit code and totals |
 
-`sensor_result` carries the sensor's `tolerance`, so a consumer can tell why a
-failing sensor did not gate.
+`sensor_result` carries the gate's `status` word (`pass`, `fail`, `known`,
+`reported`, `deferred`) alongside `passed` and `tolerance`, plus `new_count` and
+`known_count` when a baseline is in play. `passed` alone cannot express
+"failing, but every failure is already recorded" — which is the difference
+between a regression this run caused and debt it inherited.
 
 ## Relationship to `ynh check`
 
@@ -179,12 +206,16 @@ They apply the same policy to the same declarations and differ in who drives:
 | Runs sensors | once | between every turn |
 | Drives an agent | no | yes |
 | Gating rule | blocking sensors only | blocking sensors only |
-| Baseline / ratchet | yes | not yet |
+| Baseline / ratchet | yes | yes — the loop runs `ynh check` |
 | Typical use | a gate, in CI or a hook | unattended iteration |
 
-The loop does not yet honour [baselines](sensors.md#baseline--inheriting-a-repo-that-already-fails),
-so on a repository with pre-existing failures it will iterate against debt it
-did not create. Use it on a clean tree, or scope `--worktree` to one.
+There is one policy, in one place. The loop shells out to `ynh check --format
+json` between turns rather than running sensors itself, so the ratchet, the
+tolerance rules and the verdict are the same ones a human gets at a terminal.
+
+The loop may not write the baseline. `--update-baseline` refuses inside an agent
+session and records the attempt: nothing being gated may rewrite the gate's
+reference point.
 
 ## See also
 

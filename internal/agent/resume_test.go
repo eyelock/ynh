@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/gate"
 )
 
 // resumeOpts builds RunOptions wired to a real session directory so the
@@ -28,23 +30,19 @@ func resumeOpts(backend WorkerBackend, dir string) RunOptions {
 	}
 }
 
-// failSensor / passSensor swap the package sensor hook for the duration of a test.
+// failSensor / passSensor swap the package gate hook for the duration of a test.
 func failSensor(t *testing.T) {
 	t.Helper()
-	orig := runSensorFn
-	t.Cleanup(func() { runSensorFn = orig })
-	runSensorFn = func(_, _, name, _, _ string) (*SensorResult, error) {
-		return &SensorResult{Name: name, Kind: "command", ExitCode: 1}, nil
-	}
+	stubCheck(t, func(_ int, name string) gate.Result {
+		return gate.Result{Name: name, Kind: "command", Tolerance: "blocking", Status: gate.StatusFail, ExitCode: 1}
+	})
 }
 
 func passSensor(t *testing.T) {
 	t.Helper()
-	orig := runSensorFn
-	t.Cleanup(func() { runSensorFn = orig })
-	runSensorFn = func(_, _, name, _, _ string) (*SensorResult, error) {
-		return &SensorResult{Name: name, Kind: "command", ExitCode: 0}, nil
-	}
+	stubCheck(t, func(_ int, name string) gate.Result {
+		return gate.Result{Name: name, Kind: "command", Tolerance: "blocking", Status: gate.StatusPass}
+	})
 }
 
 func readTrajectoryFile(t *testing.T, path string) []Event {
