@@ -185,6 +185,17 @@ const baselineHarnessJSON = `{
 func runBaselineCheck(t *testing.T, home, work string, args ...string) (checkEnvelope, string, error) {
 	t.Helper()
 	t.Setenv("YNH_HOME", home)
+	// Neutralise the guards that read the ambient environment, so a test
+	// asserts the behaviour it names rather than the behaviour of the machine
+	// it runs on. Without this every --update-baseline test passes locally and
+	// fails in CI — where CI is set and the guard correctly refuses — which is
+	// the one place nobody was looking until stacked PRs started running CI.
+	//
+	// A test that wants one of these guards to fire must drive cmdCheck
+	// directly: this helper runs after the caller's own t.Setenv and would
+	// undo it. See TestCheck_UpdateBaselineRefusedInCI.
+	t.Setenv("CI", "")
+	t.Setenv("YNH_AGENT_SESSION", "")
 	var stdout bytes.Buffer
 	full := append([]string{"local/bl", "--cwd", work, "--format", "json"}, args...)
 	err := cmdCheck(full, &stdout, io.Discard)
@@ -329,8 +340,11 @@ func TestCheck_ReportsFixedDebtSoRatchetCanTighten(t *testing.T) {
 // whatever that branch introduced.
 func TestCheck_UpdateBaselineRefusedInCI(t *testing.T) {
 	home, work := setupBaselineRepo(t, preExisting)
+	t.Setenv("YNH_HOME", home)
+	t.Setenv("YNH_AGENT_SESSION", "")
 	t.Setenv("CI", "true")
-	_, _, err := runBaselineCheck(t, home, work, "--update-baseline")
+	err := cmdCheck([]string{"local/bl", "--cwd", work, "--format", "json", "--update-baseline"},
+		&bytes.Buffer{}, io.Discard)
 	if !errors.Is(err, errCheckExec) {
 		t.Fatalf("want errCheckExec, got %v", err)
 	}
