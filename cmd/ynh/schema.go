@@ -74,7 +74,7 @@ func cmdSchemaTo(args []string, stdout, stderr io.Writer) error {
 }
 
 // schemaManifest is the JSON shape of `ynh schema --all --format json`.
-// One round-trip for consumers (TermQ-style MCP servers, codegen tools)
+// One round-trip for consumers (MCP servers, codegen tools)
 // that want every schema at startup without forking N subprocesses.
 type schemaManifest struct {
 	Capabilities string                     `json:"capabilities"`

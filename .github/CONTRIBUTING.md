@@ -143,7 +143,7 @@ The single classifier `harness.IsLocalSource(ins *plugin.InstalledJSON)` discrim
 
 `~/.ynh/.schema-version` records the on-disk format version. Absent file means **schema 1** (legacy / pre-migration). Content `2` means canonical-id layout. Content `3` means pointer-form local installs (see above).
 
-The `ynh ls` and `ynh info` JSON envelopes carry `schema_version` as a **dynamic** field (read from disk via `migration.ReadSchemaVersion(home)`, not the static `config.SchemaVersion` constant). Consumers like TermQ gate their behaviour on this — never on `capabilities`, which is a separate wire-contract version.
+The `ynh ls` and `ynh info` JSON envelopes carry `schema_version` as a **dynamic** field (read from disk via `migration.ReadSchemaVersion(home)`, not the static `config.SchemaVersion` constant). Consumers like a structured consumer gate their behaviour on this — never on `capabilities`, which is a separate wire-contract version.
 
 **When bumping the schema version:** add a new migration step in `internal/migration/` (one file per schema version — see `local_install_collapse.go` for the schema-3 example), make it write the literal new version at the end of its work (not `CurrentSchemaVersion` — that constant moves), bump `migration.CurrentSchemaVersion`, chain it into `autoMigrate` and `cmdMigrateTo` so a home at any older schema migrates through every step in order, and write tests for both the legacy → new round-trip and idempotent re-runs. The auto-migration gate runs on first invocation against a stale home; do not accept stale-home reads anywhere else.
 
@@ -259,7 +259,7 @@ See `.claude/plans/e2e-test-suite.md` for the architecture and coverage matrix.
 
 ### Testing Unreleased ynh Against Downstream Tooling
 
-Downstream consumers (e.g. TermQ) gate on `ynh`'s wire-contract version, exposed as `capabilities` in `ynh version --format json`. Unlike `version` (release tag, injected via ldflags), `capabilities` is a source constant in `internal/config/config.go` — `make install` produces a developer build that honestly reports whatever contract the current branch implements.
+Downstream consumers (for example) gate on `ynh`'s wire-contract version, exposed as `capabilities` in `ynh version --format json`. Unlike `version` (release tag, injected via ldflags), `capabilities` is a source constant in `internal/config/config.go` — `make install` produces a developer build that honestly reports whatever contract the current branch implements.
 
 To test a branch against downstream tooling without cutting a release:
 

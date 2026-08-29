@@ -170,7 +170,7 @@ Profiles:
 
 ## Edit focuses from the command line
 
-Hand-editing the manifest is fine for an author. For an interactive consumer (TermQ, scripts, ad-hoc tweaks) the CLI provides the same surface:
+Hand-editing the manifest is fine for an author. For an interactive consumer (a structured consumer, scripts, ad-hoc tweaks) the CLI provides the same surface:
 
 ```bash
 # Add a focus

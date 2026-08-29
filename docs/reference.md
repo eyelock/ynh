@@ -119,6 +119,7 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 | `ynh sensors show <harness> <name>` | Resolved sensor object with inline-focus expansion |
 | `ynh sensors run <harness> <name>` | Sensor run result: `kind`, `exit_code`, `duration_ms`, `output` (raw signal — no `passed` field; pass/fail is loop-driver policy) |
 | `ynh agent run` | Run result: `exit_code`, `reason`, `converged`, `budgets`/`budget_sources`/`consumed` with `bound_by`, `convergence`, `sensors[]`, `changed_files` — see [Agent](agent.md#run-result) |
+| `ynh baseline <harness>` | What the ratchet forgives: per-sensor `recorded`, `recorded_at`, `forgiven`, and under `--explain` the `findings` themselves — see [Sensors](sensors.md#reading-the-ratchet) |
 | `ynh check <harness> --calibrate` | Calibration result: `verdict` (`calibrated`\|`broken`), per-sensor `status` (`calibrated`\|`failed`\|`uncalibrated`\|`error`) with `expected`/`observed` — see [Sensors](sensors.md#reference-proving-a-sensor-still-observes) |
 | `ynh check <harness>` | Gate result: `verdict` (`pass`\|`blocked`), `summary` counts, `sensors[]` with `status`, `tolerance`, `new_count`/`known_count`, and `baseline` when a ratchet is in play — see [Sensors](sensors.md#tolerance) |
 | `ynh fork <name>` | Envelope (`capabilities`, `ynh_version`, `name`, `path`, `installed_from`) — see [ynh fork output](#ynh-fork-output) below |
@@ -218,7 +219,7 @@ What gets probed:
 
 > Note: `--check-updates` performs network calls. Failures degrade silently — fields are simply omitted, the command does not error. Default `info` and `ls` calls (without the flag) remain offline, fast, and deterministic. Probes run concurrently (bounded fan-out) so a multi-include harness does not serialize the network.
 
-Three-state rendering on the consumer side (TermQ and similar):
+Three-state rendering on the consumer side:
 
 - Field omitted ⇒ **unknown** (probe failed, not requested, or no upstream)
 - Field present and equal to `*_installed` ⇒ **up-to-date**
