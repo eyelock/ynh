@@ -119,6 +119,7 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 | `ynh sensors show <harness> <name>` | Resolved sensor object with inline-focus expansion |
 | `ynh sensors run <harness> <name>` | Sensor run result: `kind`, `exit_code`, `duration_ms`, `output` (raw signal — no `passed` field; pass/fail is loop-driver policy) |
 | `ynh agent run` | Run result: `exit_code`, `reason`, `converged`, `budgets`/`budget_sources`/`consumed` with `bound_by`, `convergence`, `sensors[]`, `changed_files` — see [Agent](agent.md#run-result) |
+| `ynh check <harness> --calibrate` | Calibration result: `verdict` (`calibrated`\|`broken`), per-sensor `status` (`calibrated`\|`failed`\|`uncalibrated`\|`error`) with `expected`/`observed` — see [Sensors](sensors.md#reference--proving-a-sensor-still-observes) |
 | `ynh check <harness>` | Gate result: `verdict` (`pass`\|`blocked`), `summary` counts, `sensors[]` with `status`, `tolerance`, `new_count`/`known_count`, and `baseline` when a ratchet is in play — see [Sensors](sensors.md#tolerance) |
 | `ynh fork <name>` | Envelope (`capabilities`, `ynh_version`, `name`, `path`, `installed_from`) — see [ynh fork output](#ynh-fork-output) below |
 | `ynh info <name>` | Envelope (`capabilities`, `ynh_version`, `harness`) wrapping a single harness object — see [Envelope and harness fields](#envelope-and-harness-fields) below |

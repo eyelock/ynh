@@ -151,6 +151,68 @@ If `channel` is omitted, `ynh sensors run` infers it from the source kind:
 | `command` | `stdout+exit` |
 | `focus` | `stdout` |
 
+### `reference` — proving a sensor still observes
+
+```json
+"lint": {
+  "tolerance": "blocking",
+  "source": { "command": "golangci-lint run ./..." },
+  "reference": { "path": "testdata/calibration/lint", "expect": "fail" },
+  "output": { "format": "text" }
+}
+```
+
+Optional. `ynh check --calibrate` runs each sensor against its reference and
+reports whether it still detects what it claims to.
+
+**Why it matters.** A sensor is a command plus an expectation about its exit
+code. If the command quietly stops examining anything — a config change
+excluding a directory, an upgrade renaming a rule, a path that no longer
+matches — it exits 0 and `ynh check` reports **green**. Everything else depends
+on sensors telling the truth: the ratchet forgives against their output, the
+loop converges on their verdicts, and any yield figure derives from them. A
+sensor that has quietly stopped working makes every other control decorative
+while appearing to function.
+
+Note the asymmetry this closes. Judged sensors already require verdict
+stability before they may gate. Deterministic sensors, trusted more, had no
+check at all.
+
+**A sensor that passes an `expect: fail` fixture is broken** — it should have
+failed. `expect: pass` catches the opposite, a sensor firing on clean input,
+which is why `expect` is not a boolean.
+
+```
+$ ynh check local/demo --calibrate
+  ✓ working-lint     calibrated (testdata/calibration/lint → fail)
+  ✗ stopped-lint     FAILED   expected fail, observed pass —
+                              the sensor passed a fixture built to trip it — it is no longer observing
+  · no-reference     uncalibrated
+
+3 sensors: 1 calibrated, 1 failed, 0 errored, 1 uncalibrated
+```
+
+Four properties are load-bearing:
+
+- **A separate mode.** `ynh check` stays fast and never runs references. A gate
+  that calibrates on every invocation is a gate people disable — and then
+  nothing is calibrated at all.
+- **The fixture lives outside the agent's write path.** A reference an agent
+  can edit calibrates nothing. `reference.path` is relative to the harness and
+  rejects absolute paths and `..`.
+- **Absent is not empty.** A sensor with no reference reports *uncalibrated*,
+  distinct from *failed calibration*, and never breaks the run. How much of a
+  gate is proven to observe is itself a number worth reading.
+- **Not mandatory.** Adding it to every sensor would break every existing
+  harness.
+
+Only a **command** sensor can be calibrated: no verdict is derivable from a
+file glob or a focus, so there is nothing to compare against.
+
+Exit codes match `ynh check`: `0` everything behaved as declared, `1` a sensor
+did not, `2` ynh could not run the calibration. Shape:
+[`docs/schema/cli/check-calibrate.schema.json`](schema/cli/check-calibrate.schema.json).
+
 ### `convergence-verifier` needs a source that can decide
 
 A sensor with `role: convergence-verifier` tells the loop the run is finished,

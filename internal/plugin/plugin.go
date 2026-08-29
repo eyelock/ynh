@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
 // HarnessJSON represents the .harness.json manifest — single source of truth.
@@ -56,9 +57,40 @@ type Sensor struct {
 	// A corpus graded across weeks cannot defend a yield number without it: a
 	// change in findings and a change in the tool are otherwise the same
 	// observation.
-	VersionCommand string       `json:"version_command,omitempty"`
-	Source         SensorSource `json:"source"`
-	Output         SensorOutput `json:"output"`
+	VersionCommand string `json:"version_command,omitempty"`
+	// Reference names a fixture this sensor must produce a known result on.
+	//
+	// Nothing else verifies that a sensor still detects what it claims to. A
+	// sensor is a command plus an expectation about its exit code; if the
+	// command quietly stops examining anything — a config change excluding a
+	// directory, an upgrade renaming a rule, a path that no longer matches —
+	// it exits 0 and the gate reports green. Everything else depends on
+	// sensors telling the truth: the ratchet forgives against their output,
+	// the loop converges on their verdicts, and any yield figure derives from
+	// them.
+	Reference *SensorReference `json:"reference,omitempty"`
+	Source    SensorSource     `json:"source"`
+	Output    SensorOutput     `json:"output"`
+}
+
+// SensorReference is a fixture with a known answer, used by
+// `ynh check --calibrate` to prove a sensor still observes.
+type SensorReference struct {
+	// Path is the fixture directory the sensor runs against, relative to the
+	// harness. It must live outside the agent's write path: a reference an
+	// agent can edit calibrates nothing.
+	Path string `json:"path"`
+	// Expect is the result the fixture must produce. "fail" is the case that
+	// matters — a sensor that passes a fixture designed to trip it has stopped
+	// observing. "pass" catches the opposite failure, a sensor that fires on
+	// clean input.
+	Expect string `json:"expect"`
+}
+
+// ValidSensorExpectations lists the answers a reference fixture may declare.
+var ValidSensorExpectations = map[string]bool{
+	"fail": true,
+	"pass": true,
 }
 
 // ValidSensorTolerances lists how `ynh check` treats a failing sensor.
@@ -229,6 +261,26 @@ func ValidateSensors(sensors map[string]Sensor, profileNames, focusNames map[str
 		// StatusReported and never StatusPass. Refusing it here as well means
 		// the author is told at `ynd validate` time rather than discovering it
 		// as a run that silently never converges.
+		if s.Reference != nil {
+			if s.Reference.Path == "" {
+				issues = append(issues, fmt.Sprintf("%s reference.path must be non-empty", prefix))
+			}
+			if strings.HasPrefix(s.Reference.Path, "/") || strings.Contains(s.Reference.Path, "..") {
+				issues = append(issues, fmt.Sprintf(
+					"%s reference.path %q must be a relative path inside the harness", prefix, s.Reference.Path))
+			}
+			if !ValidSensorExpectations[s.Reference.Expect] {
+				issues = append(issues, fmt.Sprintf(
+					"%s reference.expect %q must be one of fail, pass", prefix, s.Reference.Expect))
+			}
+			// Only a command sensor produces a verdict, so only a command
+			// sensor can be calibrated against one. Same rule that stops a
+			// files sensor converging a run.
+			if k := s.Source.Kind(); k != "" && k != "command" {
+				issues = append(issues, fmt.Sprintf(
+					"%s reference requires a command source: no verdict is derivable from a %s sensor", prefix, k))
+			}
+		}
 		if s.Role == "convergence-verifier" && s.Source.Kind() == "files" {
 			issues = append(issues, fmt.Sprintf(
 				"%s role convergence-verifier requires a command source: no verdict is derivable from a file glob", prefix))
