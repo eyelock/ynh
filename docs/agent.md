@@ -34,6 +34,7 @@ ynh agent run --resume <session-dir> [flags]
 | `--convergence-sensor <name>` | Sensor consulted once all blocking sensors pass |
 | `--sensor-overlay <json>` | Per-run sensor overrides |
 | `--worktree <dir>` | Directory the agent works in and sensors run against |
+| `--format <text\|json>` | `json` prints the run result as one object when the run ends |
 | `--sandbox <mode>` | Sandbox mode passed to the backend |
 | `--auto-commit` | Commit after each converged turn |
 | `--interactive` | Pause for approval at turn boundaries |
@@ -211,6 +212,37 @@ failed" from "this harness is broken and every run will hit it". The loop stops
 at the first occurrence rather than continuing against no signal — spending a
 whole budget on turns nothing could verify, and then reporting the exhaustion as
 the agent's failure, hides the real fault.
+
+## Run result
+
+`--format json` prints one object when the run ends, on **every** path —
+converged or not. A run that did not converge is the one worth investigating,
+so it still reports what it consumed and what it touched.
+
+```bash
+ynh agent run --harness demo --task "..." --format json
+```
+
+It carries the exit code and reason, the caps in force **and where each came
+from**, what was actually consumed and **which cap bound the run**, the
+convergence verifier's last word, the final gate result, and the files the run
+changed relative to the commit it started from.
+
+`--emit-jsonl` remains an event *stream*. Reconstructing a result by tailing
+NDJSON and inferring across events is exactly the bespoke tooling this exists to
+remove. When `--emit-jsonl -` is streaming the trajectory to stdout, the result
+goes to stderr so the NDJSON stays clean.
+
+Two fields earn their place in a batch of a hundred runs:
+
+- **`bound_by`** names the cap that ended the run. Read with `budget_sources`,
+  it separates *a cap nobody chose fired* from *the cap you set fired* — the
+  first is noise, the second is a finding.
+- **`changed_files`** includes new files, not just tracked edits. A converged
+  run that changed nothing, and a run that rewrote forty files nobody asked
+  about, are both findings.
+
+Shape: [`docs/schema/cli/agent-run.schema.json`](schema/cli/agent-run.schema.json).
 
 ## Trajectory
 

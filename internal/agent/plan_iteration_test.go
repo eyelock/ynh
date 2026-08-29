@@ -66,7 +66,7 @@ func TestRunLoop_PlanApproveOnFirstIteration(t *testing.T) {
 	var traj bytes.Buffer
 	opts := planOpts(mb, &traj, strings.NewReader(`{"action":"approve_plan"}`+"\n"))
 
-	if err := RunLoop(opts); err != nil {
+	if _, err := RunLoop(opts); err != nil {
 		t.Fatalf("RunLoop: %v", err)
 	}
 
@@ -99,7 +99,7 @@ func TestRunLoop_PlanRefineOnceThenApprove(t *testing.T) {
 		`{"action":"approve_plan"}` + "\n"
 	opts := planOpts(mb, &traj, strings.NewReader(ctrl))
 
-	if err := RunLoop(opts); err != nil {
+	if _, err := RunLoop(opts); err != nil {
 		t.Fatalf("RunLoop: %v", err)
 	}
 
@@ -171,7 +171,7 @@ func TestRunLoop_PlanRefineHitsCap(t *testing.T) {
 	opts := planOpts(mb, &traj, strings.NewReader(ctrl))
 	opts.MaxPlanIterations = 2
 
-	err := RunLoop(opts)
+	_, err := RunLoop(opts)
 	var ee *ExitError
 	if !asExitError(err, &ee) || ee.Code != ExitPlanIterationCap {
 		t.Fatalf("expected ExitPlanIterationCap (%d), got %v", ExitPlanIterationCap, err)
@@ -196,7 +196,7 @@ func TestRunLoop_PlanRejectWithNotes(t *testing.T) {
 	ctrl := `{"action":"reject_plan","feedback":"completely wrong direction"}` + "\n"
 	opts := planOpts(mb, &traj, strings.NewReader(ctrl))
 
-	err := RunLoop(opts)
+	_, err := RunLoop(opts)
 	var ee *ExitError
 	if !asExitError(err, &ee) || ee.Code != ExitUserAborted {
 		t.Fatalf("expected ExitUserAborted, got %v", err)
@@ -238,7 +238,7 @@ func TestRunLoop_PlanRefineTokenBudget(t *testing.T) {
 	opts := planOpts(mb, &traj, strings.NewReader(ctrl))
 	opts.MaxTokens = 1500
 
-	err := RunLoop(opts)
+	_, err := RunLoop(opts)
 	var ee *ExitError
 	if !asExitError(err, &ee) || ee.Code != ExitTokenBudget {
 		t.Fatalf("expected ExitTokenBudget (%d), got %v", ExitTokenBudget, err)
@@ -264,7 +264,7 @@ func TestRunLoop_PlanRefineWallBudget(t *testing.T) {
 	opts := planOpts(mb, &traj, strings.NewReader(ctrl))
 	opts.MaxWall = 5 * time.Millisecond
 
-	err := RunLoop(opts)
+	_, err := RunLoop(opts)
 	var ee *ExitError
 	if !asExitError(err, &ee) || ee.Code != ExitWallClock {
 		t.Fatalf("expected ExitWallClock (%d), got %v", ExitWallClock, err)
@@ -288,7 +288,7 @@ func TestRunLoop_PlanRefineWorkerError(t *testing.T) {
 	ctrl := `{"action":"replace_feedback","feedback":"again"}` + "\n"
 	opts := planOpts(mb, &traj, strings.NewReader(ctrl))
 
-	err := RunLoop(opts)
+	_, err := RunLoop(opts)
 	var ee *ExitError
 	if !asExitError(err, &ee) || ee.Code != ExitWorkerError {
 		t.Fatalf("expected ExitWorkerError, got %v", err)
