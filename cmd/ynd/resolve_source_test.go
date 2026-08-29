@@ -25,7 +25,7 @@ func writeMinimalHarness(t *testing.T, dir, name string) {
 // TestResolveSource_CanonicalIDResolvesToInstalledPointer verifies that
 // a canonical id like "local/<name>" returned by `ynh ls` resolves to the
 // installed harness directory rather than being treated as a Git URL.
-// Regression test for TermQ's `ynd compose <harness-id>` flow.
+// Regression test for a structured consumer's `ynd compose <harness-id>` flow.
 func TestResolveSource_CanonicalIDResolvesToInstalledPointer(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)

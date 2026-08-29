@@ -41,7 +41,7 @@ const (
 )
 
 // Event is a single trajectory event emitted by the loop driver.
-// Wire field names match what TermQ and other consumers expect:
+// Wire field names match what structured consumers expect:
 //   - "type" (not "kind") for the event discriminator
 //   - "timestamp" (not "time") for the wall-clock time
 type Event struct {
@@ -226,7 +226,7 @@ type WorkerEnvData struct {
 }
 
 // TurnApprovalData is the payload for KindTurnApprovalRequired events.
-// SynthesizedFeedback matches the TermQ wire name.
+// SynthesizedFeedback matches the wire name consumers expect.
 type TurnApprovalData struct {
 	SynthesizedFeedback string `json:"synthesized_feedback"`
 }

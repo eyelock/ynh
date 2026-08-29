@@ -451,7 +451,7 @@ rm -rf /tmp/ynh-bad-focus
 
 ### E23: Fork uninstall via canonical id
 
-`ynh fork` registers a pointer-shaped install. `ynh uninstall local/<name>` must resolve the schema-1 pointer and remove the registration cleanly — this is the form TermQ and other JSON consumers pass back.
+`ynh fork` registers a pointer-shaped install. `ynh uninstall local/<name>` must resolve the schema-1 pointer and remove the registration cleanly — this is the form JSON consumers pass back.
 
 ```bash
 # Create a minimal harness to fork from

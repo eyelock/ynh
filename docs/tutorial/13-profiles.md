@@ -276,7 +276,7 @@ Paths in `local` are relative to the harness root (or absolute). The `pick` fiel
 
 ## T13.6: Edit profiles from the command line
 
-Profiles can be authored by hand-editing `.ynh-plugin/plugin.json` — that is what every step above did. They can also be edited from the command line, which is what an interactive consumer like TermQ uses. The CLI mirrors `ynh include` and routes through the same resolver, so edits land in the source tree for pointer-form local installs.
+Profiles can be authored by hand-editing `.ynh-plugin/plugin.json` — that is what every step above did. They can also be edited from the command line, which is what an interactive consumer like a structured consumer uses. The CLI mirrors `ynh include` and routes through the same resolver, so edits land in the source tree for pointer-form local installs.
 
 ```bash
 # Add a new profile (empty) and a hook inside it
