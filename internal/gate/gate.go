@@ -69,16 +69,21 @@ type Summary struct {
 
 // Result is one sensor's outcome.
 type Result struct {
-	Name       string `json:"name"`
-	Kind       string `json:"kind"`
-	Category   string `json:"category,omitempty"`
-	Tolerance  string `json:"tolerance"`
-	Status     string `json:"status"`
-	ExitCode   int    `json:"exit_code"`
-	DurationMS int64  `json:"duration_ms"`
-	Stdout     string `json:"stdout,omitempty"`
-	Stderr     string `json:"stderr,omitempty"`
-	Note       string `json:"note,omitempty"`
+	Name      string `json:"name"`
+	Kind      string `json:"kind"`
+	Category  string `json:"category,omitempty"`
+	Tolerance string `json:"tolerance"`
+	Status    string `json:"status"`
+	// ToolVersion is what the sensor's declared version_command printed.
+	// Empty when none was declared or the probe failed — a corpus graded over
+	// weeks needs to tell a change in findings from a change in the tool, and
+	// an absent version says "cannot tell" rather than implying stability.
+	ToolVersion string `json:"tool_version,omitempty"`
+	ExitCode    int    `json:"exit_code"`
+	DurationMS  int64  `json:"duration_ms"`
+	Stdout      string `json:"stdout,omitempty"`
+	Stderr      string `json:"stderr,omitempty"`
+	Note        string `json:"note,omitempty"`
 	// NewCount and KnownCount are set for failing command sensors when a
 	// baseline exists. NewOutput carries only the lines not in the baseline —
 	// the ones the author is actually being asked to fix.
