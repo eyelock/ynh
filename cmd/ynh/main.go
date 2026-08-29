@@ -1308,7 +1308,16 @@ func cmdRun(args []string) error {
 		}
 
 		// Generate vendor plugin manifest (after hooks/MCP so path pointers are accurate)
-		pj := &plugin.HarnessJSON{Name: p.Name, Version: "0.0.0", Description: p.Description}
+		// The real manifest, not a synthesized one. h.Version is populated and
+		// correct here; hardcoding "0.0.0" made this path disagree with
+		// `ynd export` and with what actually ships, for the same harness.
+		pj := &plugin.HarnessJSON{
+			Name:        p.Name,
+			Version:     p.Version,
+			Description: p.Description,
+			Author:      p.Author,
+			Keywords:    p.Keywords,
+		}
 		manifestFiles, mErr := adapter.GeneratePluginManifest(pj, runDir)
 		if mErr != nil {
 			return fmt.Errorf("writing plugin manifest: %w", mErr)
