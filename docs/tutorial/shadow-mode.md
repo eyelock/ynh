@@ -16,6 +16,67 @@ routing around.
 **Prerequisites.** [The Agent Loop](tutorial/agent-loop.md), a repository with
 history, and a harness whose sensors cover the class of fix you are sampling.
 
+The rig, end to end — one historical fix yields one graded attempt, and the
+answer is withheld from the agent that has to reproduce it:
+
+<svg viewBox="0 0 720 330" role="img" aria-label="Shadow mode rig: a historical fix commit is split into a base state and a ground-truth fix, the agent works from the base, and the two patches are compared into five graded outcomes">
+<defs><marker id="a5_R" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<polygon points="0,1 9,5 0,9" fill="currentColor"/></marker></defs>
+<g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor">
+
+<rect x="14" y="44" width="128" height="52" fill="none" stroke="currentColor" stroke-width="1.5"/>
+<text x="78" y="32" text-anchor="middle" font-size="9" opacity=".65" font-weight="600">GIT HISTORY</text>
+<text x="78" y="64" text-anchor="middle" font-size="10.5" font-weight="600">fix commit</text>
+<text x="78" y="80" text-anchor="middle" font-size="9" opacity=".75">known-good</text>
+
+<rect x="14" y="128" width="128" height="52" fill="none" stroke="currentColor" opacity=".55"/>
+<text x="78" y="148" text-anchor="middle" font-size="10">parent commit</text>
+<text x="78" y="164" text-anchor="middle" font-size="9" opacity=".75">= the base state</text>
+<line x1="78" y1="96" x2="78" y2="126" stroke="currentColor" marker-end="url(#a5_R)"/>
+
+<rect x="14" y="212" width="128" height="60" fill="none" stroke="#8f6714" stroke-width="1.5"/>
+<text x="78" y="232" text-anchor="middle" font-size="10" fill="#8f6714" font-weight="600">TASK SPEC</text>
+<text x="78" y="248" text-anchor="middle" font-size="9" opacity=".8">issue text · linter</text>
+<text x="78" y="261" text-anchor="middle" font-size="9" opacity=".8">output at that time</text>
+<line x1="78" y1="180" x2="78" y2="210" stroke="currentColor" marker-end="url(#a5_R)"/>
+<text x="152" y="242" font-size="9" fill="#8f6714">never the fix message —</text>
+<text x="152" y="255" font-size="9" fill="#8f6714">that leaks the answer</text>
+
+<rect x="196" y="112" width="180" height="96" fill="none" stroke="currentColor" stroke-width="1.5"/>
+<text x="286" y="100" text-anchor="middle" font-size="9" opacity=".65" font-weight="600">CONTAINER</text>
+<text x="286" y="136" text-anchor="middle" font-size="11" font-weight="600">ynh agent run</text>
+<text x="286" y="155" text-anchor="middle" font-size="9.5" opacity=".8">factory harness</text>
+<text x="286" y="169" text-anchor="middle" font-size="9.5" opacity=".8">sensors + ratchet</text>
+<text x="286" y="185" text-anchor="middle" font-size="9" fill="#93372c" font-weight="600">no --auto-commit · never merges</text>
+<path d="M142 242 L170 242 L170 160 L194 160" fill="none" stroke="currentColor" marker-end="url(#a5_R)"/>
+
+<rect x="424" y="128" width="120" height="52" fill="none" stroke="currentColor" opacity=".55"/>
+<text x="484" y="148" text-anchor="middle" font-size="10">agent patch</text>
+<text x="484" y="164" text-anchor="middle" font-size="9" opacity=".75">+ trajectory</text>
+<line x1="376" y1="154" x2="422" y2="154" stroke="currentColor" marker-end="url(#a5_R)"/>
+
+<path d="M142 70 L400 70 L400 126" fill="none" stroke="currentColor" opacity=".6" stroke-dasharray="4 3"/>
+<text x="270" y="62" text-anchor="middle" font-size="9" opacity=".7">ground truth, withheld from the agent</text>
+
+<rect x="424" y="212" width="120" height="44" fill="none" stroke="#1d5a66" stroke-width="1.5"/>
+<text x="484" y="231" text-anchor="middle" font-size="10.5" font-weight="600" fill="#1d5a66">GRADE</text>
+<text x="484" y="246" text-anchor="middle" font-size="9" opacity=".8">blind, by a human</text>
+<line x1="484" y1="180" x2="484" y2="210" stroke="currentColor" marker-end="url(#a5_R)"/>
+
+<text x="588" y="120" font-size="9.5" font-weight="600" opacity=".8">FIVE OUTCOMES</text>
+<line x1="576" y1="128" x2="706" y2="128" stroke="currentColor" opacity=".3"/>
+<circle cx="584" cy="142" r="3.5" fill="#37704a"/><text x="596" y="146" font-size="9.5">equivalent</text>
+<circle cx="584" cy="160" r="3.5" fill="#37704a"/><text x="596" y="164" font-size="9.5">different, valid</text>
+<circle cx="584" cy="178" r="3.5" fill="#8f6714"/><text x="596" y="182" font-size="9.5">superficial</text>
+<circle cx="584" cy="196" r="3.5" fill="#93372c"/><text x="596" y="200" font-size="9.5">wrong</text>
+<circle cx="584" cy="214" r="3.5" fill="#93372c"/><text x="596" y="218" font-size="9.5">broken</text>
+<line x1="544" y1="234" x2="574" y2="234" stroke="currentColor" opacity=".5"/>
+<text x="580" y="238" font-size="9" opacity=".7">yield = green ÷ all</text>
+
+<line x1="14" y1="292" x2="706" y2="292" stroke="currentColor" opacity=".25"/>
+<text x="14" y="310" font-size="9.5" opacity=".75">Every graded unit is also one labelled example for evaluating a judge — obtained as a by-product rather than as a research project.</text>
+</g></svg>
+
 ## Select candidates
 
 Find closed fixes:
