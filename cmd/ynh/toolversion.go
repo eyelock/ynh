@@ -46,6 +46,13 @@ func toolVersion(cmdline, cwd string) string {
 
 	cmd := exec.CommandContext(ctx, "sh", "-c", cmdline)
 	cmd.Dir = cwd
+	// CommandContext kills the shell when the context expires, but Run blocks
+	// until the output pipes close — and a shell that forks rather than execs
+	// leaves its child holding them open. `sh -c "sleep 30"` therefore ran the
+	// full thirty seconds on Linux while returning promptly on macOS, so the
+	// bound was real only on the platform this was written on. WaitDelay caps
+	// how long Run waits for that I/O after the kill.
+	cmd.WaitDelay = time.Second
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

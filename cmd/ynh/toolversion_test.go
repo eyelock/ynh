@@ -108,3 +108,24 @@ func readFileOrEmpty(t *testing.T, path string) string {
 	}
 	return string(data)
 }
+
+// The CI-only failure this guards against.
+//
+// CommandContext kills the shell when the context expires, but Run blocks
+// until the output pipes close, and a shell that *forks* rather than execs
+// leaves its child holding them. `sh -c "sleep 30"` returned promptly on macOS
+// and ran the full thirty seconds on Linux, so the bound was real only on the
+// platform it was written on. A backgrounded child reproduces that everywhere.
+func TestToolVersion_BoundHoldsWhenAChildKeepsThePipesOpen(t *testing.T) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		toolVersion("sleep 30 & sleep 30", t.TempDir())
+	}()
+	select {
+	case <-done:
+	case <-time.After(toolVersionTimeout + 5*time.Second):
+		t.Fatal("the probe outlived its bound while a child held the output pipes — " +
+			"a gate that hangs is worse than one with no version recorded")
+	}
+}
