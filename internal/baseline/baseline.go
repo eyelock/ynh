@@ -11,12 +11,31 @@
 // So a baseline stores a fingerprint per output line. A failure whose
 // fingerprints are all present in the baseline is pre-existing and does not
 // block; anything new does, and only the new lines are shown.
+//
+// # On-disk layout
+//
+// One file per sensor, under .ynh/baseline/<harness>/<sensor>.json.
+//
+// A single repository-wide file of sorted hash arrays is maximally
+// conflict-prone and minimally mergeable: with several branches in flight
+// against one repository, every one of them touches the same lines. That
+// matters more than it looks, because **every natural resolution of a baseline
+// conflict widens the amnesty** — union keeps both sides' forgiveness, `-X
+// ours` keeps one branch's, and regenerating accepts whatever is failing right
+// now. A ratchet is monotonic only if nothing concurrent quietly loosens it.
+//
+// Splitting per sensor means two branches touching different sensors never
+// conflict at all, and a conflict that does happen is scoped to one sensor and
+// legible in the diff. It cannot make a conflict resolve itself correctly —
+// nothing can — so conflicts are surfaced and refused rather than merged. See
+// ErrConflicted.
 package baseline
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,42 +48,61 @@ import (
 // Dir is the per-repository directory holding gate state.
 const Dir = ".ynh"
 
-// File is the baseline filename within Dir. It is meant to be committed:
-// the ratchet is a property of the repository, not of one developer.
-const File = "baseline.json"
+// SubDir is the directory within Dir holding one file per sensor. It is meant
+// to be committed: the ratchet is a property of the repository, not of one
+// developer.
+const SubDir = "baseline"
 
-// Version is the on-disk format version.
-const Version = 1
+// legacyFile is the single-file layout this format replaced. `ynh check` has
+// never been released, so nothing in the wild carries one — but a working copy
+// from earlier in development might, and silently ignoring it would drop a
+// ratchet the developer believes is in force.
+const legacyFile = "baseline.json"
+
+// Version is the on-disk format version of a single sensor file.
+const Version = 2
 
 // maxFingerprints caps what a single sensor may record. A sensor emitting
 // more distinct lines than this is producing noise rather than a violation
 // list, and storing it all would bloat a committed file for no benefit.
 const maxFingerprints = 2000
 
-// Baseline is the recorded state at the moment it was taken, scoped by
-// harness id.
+// ErrConflicted reports a baseline file left with git conflict markers.
+//
+// It is deliberately fatal rather than best-effort. Every way of resolving a
+// baseline conflict automatically forgives more than either side intended, so
+// the only safe behaviour is to stop and say so. Resolving one is a human
+// decision about which failures a repository accepts — never an agent's.
+var ErrConflicted = errors.New("baseline file contains unresolved merge conflict markers")
+
+// Baseline is the recorded state, scoped by harness id.
 //
 // The scoping is not cosmetic. One repository may be checked by more than one
 // harness, and sensor names are only unique within a harness — two harnesses
 // each declaring "lint" would otherwise share, and overwrite, one entry.
 type Baseline struct {
-	Version    int                        `json:"version"`
-	RecordedAt string                     `json:"recorded_at"`
-	Harnesses  map[string]HarnessBaseline `json:"harnesses"`
+	Harnesses map[string]HarnessBaseline
 }
 
 // HarnessBaseline is one harness's recorded sensor state.
 type HarnessBaseline struct {
-	Sensors map[string]SensorBaseline `json:"sensors"`
+	Sensors map[string]SensorBaseline
 }
 
-// SensorBaseline is one sensor's recorded failure surface.
+// SensorBaseline is one sensor's recorded failure surface — the content of one
+// file on disk.
 type SensorBaseline struct {
+	Version int    `json:"version"`
+	Harness string `json:"harness"`
+	Sensor  string `json:"sensor"`
+	// RecordedAt is when this sensor's debt was accepted, not when the file
+	// was last written. It only moves when the recorded failures actually
+	// change, so an untouched sensor produces byte-identical output on every
+	// save — which is what keeps unrelated branches from conflicting.
+	RecordedAt string `json:"recorded_at"`
 	// Status is the sensor's status when recorded. Only failing sensors are
 	// worth recording; a passing sensor has nothing to forgive.
 	Status string `json:"status"`
-	// Fingerprints are the normalised, sorted hashes of each output line.
-	Fingerprints []string `json:"fingerprints"`
 	// Count is the number of distinct output lines recorded. For a truncated
 	// sensor it is the true count even though Fingerprints is empty, because
 	// it is the only thing left to ratchet against.
@@ -79,6 +117,10 @@ type SensorBaseline struct {
 	// permanently blocking. A truncated sensor ratchets on count alone, and
 	// callers must report that the comparison is approximate.
 	Truncated bool `json:"truncated,omitempty"`
+	// Fingerprints are the normalised, sorted hashes of each output line. One
+	// per line in the encoded file, so a diff shows which findings a branch
+	// accepted rather than one unreadable hunk.
+	Fingerprints []string `json:"fingerprints"`
 }
 
 // Comparison is the result of measuring a sensor's current failures against
@@ -133,7 +175,8 @@ func Fingerprints(output, root string) []string {
 	return out
 }
 
-// Record builds a SensorBaseline from raw output.
+// Record builds a SensorBaseline from raw output. RecordedAt is left empty;
+// Set fills it, so an unchanged entry keeps the timestamp it already had.
 func Record(status, output, root string) SensorBaseline {
 	fps := Fingerprints(output, root)
 	sb := SensorBaseline{Status: status, Count: len(fps)}
@@ -216,6 +259,31 @@ func (b *Baseline) Truncated(harness, sensor string) bool {
 	return ok && sb.Truncated
 }
 
+// OldestRecordedAt returns the earliest timestamp across every recorded
+// sensor, or "" when nothing is recorded.
+//
+// Oldest rather than newest: a ratchet is only as tight as its oldest
+// forgiveness, and the entry nobody has revisited since spring is the one
+// most likely to be forgiving something that was fixed long ago. Reporting
+// the most recent write would hide exactly that.
+func (b *Baseline) OldestRecordedAt() string {
+	if b == nil {
+		return ""
+	}
+	oldest := ""
+	for _, hb := range b.Harnesses {
+		for _, sb := range hb.Sensors {
+			if sb.RecordedAt == "" {
+				continue
+			}
+			if oldest == "" || sb.RecordedAt < oldest {
+				oldest = sb.RecordedAt
+			}
+		}
+	}
+	return oldest
+}
+
 func (b *Baseline) entry(harness, sensor string) (SensorBaseline, bool) {
 	if b == nil {
 		return SensorBaseline{}, false
@@ -240,6 +308,11 @@ func (b *Baseline) Clear(harness, sensor string) {
 }
 
 // Set records one sensor's state, creating the harness scope if needed.
+//
+// RecordedAt is carried over from any existing entry whose recorded failures
+// are identical. Refreshing it on every save would rewrite every file on every
+// `--update-baseline`, turning an unrelated branch's no-op into a conflict —
+// and would erase the age signal OldestRecordedAt depends on.
 func (b *Baseline) Set(harness, sensor string, sb SensorBaseline) {
 	if b.Harnesses == nil {
 		b.Harnesses = map[string]HarnessBaseline{}
@@ -248,56 +321,272 @@ func (b *Baseline) Set(harness, sensor string, sb SensorBaseline) {
 	if !ok || hb.Sensors == nil {
 		hb = HarnessBaseline{Sensors: map[string]SensorBaseline{}}
 	}
+	sb.Version = Version
+	sb.Harness = harness
+	sb.Sensor = sensor
+	if prev, had := hb.Sensors[sensor]; had && prev.RecordedAt != "" && sameFailures(prev, sb) {
+		sb.RecordedAt = prev.RecordedAt
+	} else if sb.RecordedAt == "" {
+		sb.RecordedAt = time.Now().UTC().Format(time.RFC3339)
+	}
 	hb.Sensors[sensor] = sb
 	b.Harnesses[harness] = hb
 }
 
-// Path returns the baseline file path for a repository root.
-func Path(root string) string {
-	return filepath.Join(root, Dir, File)
+func sameFailures(a, b SensorBaseline) bool {
+	if a.Status != b.Status || a.Count != b.Count || a.Truncated != b.Truncated {
+		return false
+	}
+	if len(a.Fingerprints) != len(b.Fingerprints) {
+		return false
+	}
+	for i := range a.Fingerprints {
+		if a.Fingerprints[i] != b.Fingerprints[i] {
+			return false
+		}
+	}
+	return true
 }
 
-// Load reads the baseline for root. A missing file is not an error — it
-// means no baseline has been taken, and every failure is new. Callers get a
-// nil Baseline, which Compare treats as "nothing is forgiven".
+// Root returns the baseline directory for a repository root.
+func Root(root string) string { return filepath.Join(root, Dir, SubDir) }
+
+// Path returns the file a sensor's baseline is stored in.
+func Path(root, harness, sensor string) string {
+	return filepath.Join(Root(root), safeName(harness), safeName(sensor)+".json")
+}
+
+// safeName maps a harness or sensor name to a filename component that cannot
+// escape the baseline directory or collide with another name.
+//
+// Harness names are constrained by the schema, but sensor names are not: they
+// are free-form map keys, so "../../etc/passwd" is a legal declaration. The
+// name is not read back from the path — every file records its own harness and
+// sensor — so this only has to be safe and unique, not reversible. A name that
+// is already safe is used verbatim, because a readable path is what makes a
+// baseline diff worth reviewing.
+func safeName(name string) string {
+	safe := name != "" && name != "." && name != ".."
+	var b strings.Builder
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9',
+			r == '.', r == '_', r == '-':
+			b.WriteRune(r)
+		default:
+			safe = false
+			b.WriteByte('-')
+		}
+	}
+	if safe {
+		return name
+	}
+	sum := sha256.Sum256([]byte(name))
+	return b.String() + "-" + hex.EncodeToString(sum[:])[:8]
+}
+
+// Load reads every sensor baseline under root. A missing directory is not an
+// error — it means no baseline has been taken, and every failure is new.
+// Callers get a nil Baseline, which Compare treats as "nothing is forgiven".
 func Load(root string) (*Baseline, error) {
-	data, err := os.ReadFile(Path(root))
+	if _, err := os.Stat(filepath.Join(root, Dir, legacyFile)); err == nil {
+		return nil, fmt.Errorf("%s predates the per-sensor baseline layout: delete it and "+
+			"re-record with `ynh check <harness> --update-baseline`",
+			filepath.Join(Dir, legacyFile))
+	}
+
+	dir := Root(root)
+	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("reading baseline: %w", err)
 	}
-	var b Baseline
-	if err := json.Unmarshal(data, &b); err != nil {
-		return nil, fmt.Errorf("parsing %s: %w", Path(root), err)
+
+	b := &Baseline{Harnesses: map[string]HarnessBaseline{}}
+	found := false
+	for _, hd := range entries {
+		if !hd.IsDir() {
+			continue
+		}
+		files, rErr := os.ReadDir(filepath.Join(dir, hd.Name()))
+		if rErr != nil {
+			return nil, fmt.Errorf("reading baseline: %w", rErr)
+		}
+		for _, f := range files {
+			if f.IsDir() || !strings.HasSuffix(f.Name(), ".json") {
+				continue
+			}
+			path := filepath.Join(dir, hd.Name(), f.Name())
+			sb, lErr := loadSensor(path)
+			if lErr != nil {
+				return nil, lErr
+			}
+			b.Set(sb.Harness, sb.Sensor, sb)
+			found = true
+		}
 	}
-	if b.Version != Version {
-		return nil, fmt.Errorf("%s has version %d, this ynh understands %d", Path(root), b.Version, Version)
+	if !found {
+		return nil, nil
 	}
-	if b.Harnesses == nil {
-		b.Harnesses = map[string]HarnessBaseline{}
-	}
-	return &b, nil
+	return b, nil
 }
 
-// Save writes the baseline, creating .ynh if needed.
-func Save(root string, b *Baseline) error {
-	b.Version = Version
-	if b.RecordedAt == "" {
-		b.RecordedAt = time.Now().UTC().Format(time.RFC3339)
-	}
-	dir := filepath.Join(root, Dir)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("creating %s: %w", dir, err)
-	}
-	data, err := json.MarshalIndent(b, "", "  ")
+func loadSensor(path string) (SensorBaseline, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("encoding baseline: %w", err)
+		return SensorBaseline{}, fmt.Errorf("reading %s: %w", path, err)
 	}
-	data = append(data, '\n')
-	if err := os.WriteFile(Path(root), data, 0o644); err != nil {
-		return fmt.Errorf("writing baseline: %w", err)
+	// Check before parsing: a conflicted file is usually still invalid JSON,
+	// but "invalid character '<'" tells the reader nothing about what to do.
+	if hasConflictMarkers(data) {
+		return SensorBaseline{}, fmt.Errorf("%s: %w — resolve it by deciding which failures this "+
+			"repository accepts. Do not take either side wholesale, and do not let an agent "+
+			"resolve it: every automatic resolution forgives more than either branch intended",
+			path, ErrConflicted)
+	}
+	var sb SensorBaseline
+	if err := json.Unmarshal(data, &sb); err != nil {
+		return SensorBaseline{}, fmt.Errorf("parsing %s: %w", path, err)
+	}
+	if sb.Version != Version {
+		return SensorBaseline{}, fmt.Errorf("%s has version %d, this ynh understands %d",
+			path, sb.Version, Version)
+	}
+	if sb.Harness == "" || sb.Sensor == "" {
+		return SensorBaseline{}, fmt.Errorf("%s names no harness or sensor", path)
+	}
+	return sb, nil
+}
+
+func hasConflictMarkers(data []byte) bool {
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "<<<<<<< ") || strings.HasPrefix(line, ">>>>>>> ") {
+			return true
+		}
+	}
+	return false
+}
+
+// Save writes one file per recorded sensor and removes files for sensors no
+// longer recorded, so a sensor that went green stops being forgiven.
+func Save(root string, b *Baseline) error {
+	dir := Root(root)
+	want := map[string]bool{}
+
+	for harness, hb := range b.Harnesses {
+		for sensor, sb := range hb.Sensors {
+			path := Path(root, harness, sensor)
+			want[path] = true
+			sb.Version = Version
+			sb.Harness = harness
+			sb.Sensor = sensor
+			if sb.RecordedAt == "" {
+				sb.RecordedAt = time.Now().UTC().Format(time.RFC3339)
+			}
+			if sb.Fingerprints == nil {
+				sb.Fingerprints = []string{}
+			}
+			data, err := json.MarshalIndent(sb, "", "  ")
+			if err != nil {
+				return fmt.Errorf("encoding baseline for %s/%s: %w", harness, sensor, err)
+			}
+			data = append(data, '\n')
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				return fmt.Errorf("creating %s: %w", filepath.Dir(path), err)
+			}
+			if err := os.WriteFile(path, data, 0o644); err != nil {
+				return fmt.Errorf("writing %s: %w", path, err)
+			}
+		}
+	}
+
+	return pruneStale(dir, want)
+}
+
+// pruneStale removes baseline files no longer wanted, and any harness
+// directory left empty. A sensor that now passes must stop being forgiven, or
+// the ratchet only ever loosens.
+func pruneStale(dir string, want map[string]bool) error {
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("reading baseline: %w", err)
+	}
+	for _, hd := range entries {
+		if !hd.IsDir() {
+			continue
+		}
+		hdir := filepath.Join(dir, hd.Name())
+		files, rErr := os.ReadDir(hdir)
+		if rErr != nil {
+			return fmt.Errorf("reading baseline: %w", rErr)
+		}
+		remaining := 0
+		for _, f := range files {
+			path := filepath.Join(hdir, f.Name())
+			if f.IsDir() || !strings.HasSuffix(f.Name(), ".json") {
+				remaining++
+				continue
+			}
+			if want[path] {
+				remaining++
+				continue
+			}
+			if err := os.Remove(path); err != nil {
+				return fmt.Errorf("removing %s: %w", path, err)
+			}
+		}
+		if remaining == 0 {
+			if err := os.Remove(hdir); err != nil {
+				return fmt.Errorf("removing %s: %w", hdir, err)
+			}
+		}
 	}
 	return nil
+}
+
+// Fingerprint returns a stable hash over every recorded baseline file, so a
+// caller can tell whether the ratchet moved while it was not looking.
+//
+// This is what makes "the agent may not rewrite its own gate" enforceable
+// rather than merely refused: `ynh check --update-baseline` declines inside an
+// agent session, but nothing stops a worker editing the JSON directly.
+// Comparing this across a run detects that.
+func Fingerprint(root string) (string, error) {
+	b, err := Load(root)
+	if err != nil {
+		return "", err
+	}
+	if b == nil {
+		return "empty", nil
+	}
+	harnesses := make([]string, 0, len(b.Harnesses))
+	for h := range b.Harnesses {
+		harnesses = append(harnesses, h)
+	}
+	sort.Strings(harnesses)
+
+	var sb strings.Builder
+	for _, h := range harnesses {
+		sensors := make([]string, 0, len(b.Harnesses[h].Sensors))
+		for s := range b.Harnesses[h].Sensors {
+			sensors = append(sensors, s)
+		}
+		sort.Strings(sensors)
+		for _, s := range sensors {
+			e := b.Harnesses[h].Sensors[s]
+			// RecordedAt is deliberately excluded: it moves only when the
+			// recorded failures move, so including it would add nothing, and
+			// excluding it keeps the fingerprint a statement about what is
+			// forgiven rather than about when.
+			fmt.Fprintf(&sb, "%s\x00%s\x00%s\x00%d\x00%t\x00%s\n",
+				h, s, e.Status, e.Count, e.Truncated, strings.Join(e.Fingerprints, ","))
+		}
+	}
+	sum := sha256.Sum256([]byte(sb.String()))
+	return hex.EncodeToString(sum[:])[:16], nil
 }

@@ -150,7 +150,7 @@ warns and continues, but cannot converge — it has no sensors to converge on.
 | 11 | token budget exceeded |
 | 12 | wall-clock limit reached |
 | 13 | stuck |
-| 14 | tamper detected |
+| 14 | tamper detected — the baseline moved during the run |
 | 15 | plan-iteration cap reached |
 | 20 | worker error |
 | 21 | resume error |
@@ -161,6 +161,16 @@ warns and continues, but cannot converge — it has no sensors to converge on.
 Anything non-zero means the loop stopped without the sensors agreeing the work
 was done. Codes 10–12 are budgets, 13–15 are the loop deciding to stop, 20–22
 are failures to run, and 30–31 are external interruption.
+
+Code 14 is the one a pipeline must **escalate rather than retry**. It means the
+gate's own reference point moved while the run was in progress: the
+[baseline](sensors.md#baseline--inheriting-a-repo-that-already-fails) changed,
+or stopped being readable. `ynh check --update-baseline` refuses inside an
+agent session, but that only closes the front door — nothing stops a worker
+editing the baseline files directly, and an agent that cannot converge has
+every incentive to. The loop checks before consulting the gate, not after, so a
+widened baseline never gets the chance to forgive the failures that turn
+introduced.
 
 Code 22 mirrors `ynh check`'s own exit 2 and is an operator fault, not the
 agent's: the harness is missing, a sensor command cannot be executed, or the
@@ -187,6 +197,7 @@ a run without parsing terminal output.
 | `feedback_sent` | Sensor results sent back to the agent |
 | `turn_approval_required` | Act phase is waiting for approval |
 | `stuck_detected` | A stuckness detector fired |
+| `tamper_detected` | The baseline moved during the run |
 | `budget_snapshot` / `budget_exceeded` | Budget state, and a cap being hit |
 | `converged` | Sensors agree the work is done |
 | `session_end` | Run finished, with exit code and totals |
@@ -214,8 +225,9 @@ json` between turns rather than running sensors itself, so the ratchet, the
 tolerance rules and the verdict are the same ones a human gets at a terminal.
 
 The loop may not write the baseline. `--update-baseline` refuses inside an agent
-session and records the attempt: nothing being gated may rewrite the gate's
-reference point.
+session and records the attempt; a baseline that changes by any other route
+ends the run with exit 14. Nothing being gated may rewrite the gate's reference
+point.
 
 ## See also
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/baseline"
 	"github.com/eyelock/ynh/internal/gate"
 )
 
@@ -246,5 +247,73 @@ func TestRunLoop_GateErrorIsNotAgentFailure(t *testing.T) {
 	}
 	if !strings.Contains(exitErr.Message, "not installed") {
 		t.Errorf("the operator must be told what broke, got %q", exitErr.Message)
+	}
+}
+
+// ExitTamper was declared in the exit-code table and documented in
+// docs/agent.md, but nothing in the loop ever emitted it — a documented code
+// CI could branch on that could never occur. This is what it means: the gate's
+// own reference point moved while the run was in progress.
+//
+// `ynh check --update-baseline` refuses inside an agent session, but that only
+// closes the front door. Nothing stops a worker editing the baseline files
+// directly, and an agent that cannot converge has every incentive to.
+func TestRunLoop_BaselineEditedMidRunIsTamper(t *testing.T) {
+	work := t.TempDir()
+	b := &baseline.Baseline{}
+	b.Set("demo", "lint", baseline.Record("fail", "old.go:1: debt", ""))
+	if err := baseline.Save(work, b); err != nil {
+		t.Fatal(err)
+	}
+
+	// The worker "edits" the baseline during its first turn, widening the
+	// amnesty so the failure it just introduced would be forgiven.
+	mb := &mockBackend{name: "mock", turns: []Turn{{Content: "work"}, {Content: "more"}}}
+	mb.onTurn = func(int) {
+		b.Set("demo", "lint", baseline.Record("fail", "old.go:1: debt\nmine.go:2: mine", ""))
+		if err := baseline.Save(work, b); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var stdout, stderr bytes.Buffer
+	opts := baseOpts(mb, &stdout, &stderr, strings.NewReader(""))
+	opts.WorktreeDir = work
+	opts.testSensorNames = []string{"lint"}
+	stubCheck(t, func(_ int, name string) gate.Result {
+		return gate.Result{Name: name, Kind: "command", Tolerance: "blocking", Status: gate.StatusPass}
+	})
+
+	err := RunLoop(opts)
+	var exitErr *ExitError
+	if !asExitError(err, &exitErr) || exitErr.Code != ExitTamper {
+		t.Fatalf("want ExitTamper (%d), got %v", ExitTamper, err)
+	}
+	if !strings.Contains(exitErr.Message, "reference point") {
+		t.Errorf("the message should say what was violated, got %q", exitErr.Message)
+	}
+}
+
+// A run against an untouched baseline must not read as tampering, or the
+// detector is useless — every run would trip it.
+func TestRunLoop_UntouchedBaselineIsNotTamper(t *testing.T) {
+	work := t.TempDir()
+	b := &baseline.Baseline{}
+	b.Set("demo", "lint", baseline.Record("fail", "old.go:1: debt", ""))
+	if err := baseline.Save(work, b); err != nil {
+		t.Fatal(err)
+	}
+
+	mb := &mockBackend{name: "mock", turns: []Turn{{Content: "work"}}}
+	var stdout, stderr bytes.Buffer
+	opts := baseOpts(mb, &stdout, &stderr, strings.NewReader(""))
+	opts.WorktreeDir = work
+	opts.testSensorNames = []string{"lint"}
+	stubCheck(t, func(_ int, name string) gate.Result {
+		return gate.Result{Name: name, Kind: "command", Tolerance: "blocking", Status: gate.StatusPass}
+	})
+
+	if err := RunLoop(opts); err != nil {
+		t.Fatalf("an untouched baseline must not read as tampering: %v", err)
 	}
 }

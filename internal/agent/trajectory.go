@@ -27,10 +27,15 @@ const (
 	// Plan-phase approval gates use KindPlanApprovalRequired.
 	KindTurnApprovalRequired EventKind = "turn_approval_required"
 	KindStuckDetected        EventKind = "stuck_detected"
-	KindBudgetSnapshot       EventKind = "budget_snapshot"
-	KindBudgetExceeded       EventKind = "budget_exceeded"
-	KindConverged            EventKind = "converged"
-	KindSessionEnd           EventKind = "session_end"
+	// KindTamperDetected is emitted when the gate's own reference point moved
+	// during a run. `ynh check --update-baseline` refuses inside an agent
+	// session, but nothing stops a worker editing the baseline files directly,
+	// and an agent that cannot converge has every incentive to.
+	KindTamperDetected EventKind = "tamper_detected"
+	KindBudgetSnapshot EventKind = "budget_snapshot"
+	KindBudgetExceeded EventKind = "budget_exceeded"
+	KindConverged      EventKind = "converged"
+	KindSessionEnd     EventKind = "session_end"
 )
 
 // Event is a single trajectory event emitted by the loop driver.
@@ -133,6 +138,15 @@ type SensorResultData struct {
 	NewCount   int    `json:"new_count,omitempty"`
 	Passed     bool   `json:"passed"`
 	Summary    string `json:"summary,omitempty"`
+}
+
+// TamperData is the payload for KindTamperDetected events. The fingerprints
+// are recorded so an operator can confirm the move rather than take the
+// loop's word for it.
+type TamperData struct {
+	What   string `json:"what"`
+	Before string `json:"before"`
+	After  string `json:"after"`
 }
 
 // BudgetType identifies which budget limit was hit.

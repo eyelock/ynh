@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/baseline"
 	"github.com/eyelock/ynh/internal/gate"
 )
 
@@ -612,5 +613,45 @@ func TestCheck_OverlayDoesNotClaimDebtIsFixed(t *testing.T) {
 	if env.Baseline.Stale || env.Baseline.Fixed != 0 {
 		t.Errorf("a proxy command passing is not evidence the recorded debt is fixed: fixed=%d stale=%v",
 			env.Baseline.Fixed, env.Baseline.Stale)
+	}
+}
+
+// The baseline was loaded twice and the second error swallowed, so
+// `--no-baseline --update-baseline` against an unreadable file started from an
+// empty map — and saving an empty map prunes every entry the load could not
+// see. Silent data loss across other sensors and other harnesses.
+func TestCheck_UnreadableBaselineIsFatalEvenWithNoBaseline(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	// --update-baseline refuses when either is set; this test is about the
+	// baseline being unreadable, not about the environment.
+	t.Setenv("CI", "")
+	t.Setenv("YNH_AGENT_SESSION", "")
+	installListTestHarness(t, home, "ch", checkHarnessJSON)
+	cwd := t.TempDir()
+
+	// Record real debt for a sensor this run will not look at.
+	var rec bytes.Buffer
+	if err := cmdCheck([]string{"local/ch", "--only", "soft", "--cwd", cwd, "--update-baseline"},
+		&rec, io.Discard); err != nil {
+		t.Fatalf("recording baseline: %v", err)
+	}
+	// Then corrupt a different sensor's file, as a merge would.
+	conflicted := filepath.Join(baseline.Root(cwd), "ch", "red.json")
+	if err := os.MkdirAll(filepath.Dir(conflicted), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(conflicted,
+		[]byte("<<<<<<< HEAD\n{}\n=======\n{}\n>>>>>>> other\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := cmdCheck([]string{"local/ch", "--only", "green", "--cwd", cwd,
+		"--no-baseline", "--update-baseline"}, &bytes.Buffer{}, io.Discard)
+	if !errors.Is(err, errCheckExec) {
+		t.Fatalf("an unreadable baseline must be fatal, got %v", err)
+	}
+	if _, sErr := os.Stat(baseline.Path(cwd, "ch", "soft")); sErr != nil {
+		t.Errorf("the untouched sensor's recorded debt was destroyed: %v", sErr)
 	}
 }
