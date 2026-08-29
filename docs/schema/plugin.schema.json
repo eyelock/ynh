@@ -195,6 +195,9 @@
         "version_command": {
           "type": "string",
           "description": "Optional shell command that prints the version of the tool this sensor runs, e.g. \"golangci-lint --version\". Recorded on the result so a corpus graded across weeks can tell a genuine change in findings from the linter changing underneath it. Declared rather than inferred: guessing `<first token> --version` is wrong for a wrapper like `make lint`, and hangs on commands that do not support it. Failure to run it is never a sensor failure \u2014 the version is simply absent."
+        },
+        "reference": {
+          "$ref": "#/$defs/sensor_reference"
         }
       }
     },
@@ -472,6 +475,29 @@
           "path": {
             "type": "string"
           }
+        }
+      }
+    },
+    "sensor_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "expect"
+      ],
+      "description": "A fixture with a known answer, run by `ynh check --calibrate` to prove the sensor still observes. Nothing else verifies that a sensor still detects what it claims to: a command that quietly stops examining anything exits 0 and the gate reports green.",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Fixture directory, relative to the harness. Must live outside the agent's write path \u2014 a reference an agent can edit calibrates nothing."
+        },
+        "expect": {
+          "type": "string",
+          "enum": [
+            "fail",
+            "pass"
+          ],
+          "description": "The result the fixture must produce. `fail` is the case that matters: a sensor that passes a fixture designed to trip it has stopped observing. `pass` catches the opposite failure, a sensor that fires on clean input."
         }
       }
     }

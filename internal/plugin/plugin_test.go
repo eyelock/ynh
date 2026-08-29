@@ -571,3 +571,53 @@ func TestValidate_ConvergenceVerifierRejectsFilesSource(t *testing.T) {
 		})
 	}
 }
+
+// A reference an agent can edit calibrates nothing, and only a command sensor
+// produces a verdict to calibrate against.
+func TestValidate_SensorReference(t *testing.T) {
+	cmdSrc := SensorSource{Command: "make lint"}
+	out := SensorOutput{Format: "text"}
+	cases := []struct {
+		name   string
+		sensor Sensor
+		want   string // substring the issue must contain; "" means no issue
+	}{
+		{"valid fail reference", Sensor{Source: cmdSrc, Output: out,
+			Reference: &SensorReference{Path: "testdata/calibration/lint", Expect: "fail"}}, ""},
+		{"valid pass reference", Sensor{Source: cmdSrc, Output: out,
+			Reference: &SensorReference{Path: "testdata/clean", Expect: "pass"}}, ""},
+		{"empty path", Sensor{Source: cmdSrc, Output: out,
+			Reference: &SensorReference{Expect: "fail"}}, "reference.path must be non-empty"},
+		{"absolute path escapes the harness", Sensor{Source: cmdSrc, Output: out,
+			Reference: &SensorReference{Path: "/etc", Expect: "fail"}}, "relative path inside the harness"},
+		{"traversal escapes the harness", Sensor{Source: cmdSrc, Output: out,
+			Reference: &SensorReference{Path: "../../elsewhere", Expect: "fail"}}, "relative path inside the harness"},
+		{"unknown expectation", Sensor{Source: cmdSrc, Output: out,
+			Reference: &SensorReference{Path: "testdata/x", Expect: "maybe"}}, "must be one of fail, pass"},
+		{"files sensor cannot be calibrated", Sensor{Source: SensorSource{Files: []string{"*.json"}}, Output: out,
+			Reference: &SensorReference{Path: "testdata/x", Expect: "fail"}}, "requires a command source"},
+		{"no reference is legal", Sensor{Source: cmdSrc, Output: out}, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			issues := ValidateSensors(map[string]Sensor{"s": c.sensor}, nil, nil)
+			found := ""
+			for _, i := range issues {
+				if c.want != "" && strings.Contains(i, c.want) {
+					found = i
+				}
+			}
+			if c.want == "" {
+				for _, i := range issues {
+					if strings.Contains(i, "reference") {
+						t.Errorf("unexpected reference issue: %s", i)
+					}
+				}
+				return
+			}
+			if found == "" {
+				t.Errorf("expected an issue containing %q, got %v", c.want, issues)
+			}
+		})
+	}
+}
