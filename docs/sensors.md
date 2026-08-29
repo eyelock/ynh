@@ -151,6 +151,38 @@ If `channel` is omitted, `ynh sensors run` infers it from the source kind:
 | `command` | `stdout+exit` |
 | `focus` | `stdout` |
 
+### Reading the ratchet
+
+```
+$ ynh baseline local/demo
+  · build                    nothing recorded — no failures are forgiven
+  ● lint                     12 forgiven, accepted 2026-08-20T09:14:02Z
+
+2 sensors: 1 with recorded debt (12 findings forgiven), 1 with none
+```
+
+The baseline stores twelve-character fingerprints rather than findings, so the
+file answers *how much* is forgiven and *when* it was accepted, but not *what*.
+`--explain` runs the sensors and matches current output against the recorded
+hashes, which is the only way to turn a fingerprint back into the line it
+forgives:
+
+```
+$ ynh baseline local/demo --explain
+  ● lint                     12 forgiven, accepted 2026-08-20T09:14:02Z
+      internal/handler/route.go:41: error return value not checked
+      internal/handler/route.go:88: error return value not checked
+```
+
+That costs a sensor run, so it is opt-in rather than the default.
+
+A finding that no longer appears is omitted: it has been fixed, and the
+baseline can be narrowed. **A sensor with nothing recorded forgives nothing** —
+which is different from one recording zero, and the report says so rather than
+leaving a reader to infer it.
+
+Shape: [`docs/schema/cli/baseline.schema.json`](schema/cli/baseline.schema.json).
+
 ### `ratchet` — when the count is the finding
 
 ```json
