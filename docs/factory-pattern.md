@@ -311,15 +311,22 @@ to the same test, which leaves four things worth having:
 - the exact harness and image the run executed against, so it can be repeated rather than merely described
 - a baseline the agent cannot write, so forgiven findings cannot be forged
 
-ynh gives you two of those directly. The trajectory is written by
-[`--emit-jsonl`](tutorial/agent-loop.md#reading-a-trajectory), and the baseline
-is unforgeable by construction: a run that alters what it is judged against
-fails on that basis instead of passing. The other two are yours to supply, for
-the same reason [containment
-is](harness-engineering.md#ynh-does-not-own-containment) — ynh executes against
-whatever harness and image you pin, and cannot attest that you pinned anything.
-A factory whose runs are not pinned generates evidence for a run that nobody can
-reproduce, which is a description rather than a record.
+ynh produces all four. `ynh agent run --format json` returns one result object
+for the run — its exit code and the reason for it, whether it converged, what it
+consumed against which budgets and where each budget came from, the sensor
+verdicts, and the files it changed. The trajectory is written by
+[`--emit-jsonl`](tutorial/agent-loop.md#reading-a-trajectory). The result also
+carries `harness.sha`, `base_commit` and `image_digest`, so a run names the
+harness commit, the tree and the image it actually executed against rather than
+merely asserting them. And the baseline is unforgeable by construction: a run
+that alters what it is judged against fails on that basis instead of passing.
+
+That combination is what lets a reviewer reconstruct a run instead of trusting a
+summary of it, and lets someone asking later whether the gate was genuinely
+green check rather than accept an answer. Sensor results also carry
+`tool_version`, which is the difference between *the linter passed* and *this
+version of the linter passed* — the second is auditable a year later and the
+first is not.
 
 **Downstream disclosure has no settled answer, and inventing one here would be
 worse than saying so.** If you publish a library or run a service, are consumers
@@ -332,13 +339,19 @@ has not converged, and this page will not pretend it has. Decide, write down why
 you decided it, and revisit it when the norm settles.
 
 **The audit record is also a liability.** Trajectories can contain credentials,
-customer data and source, which has two consequences. Redaction is a
-precondition for retaining them at all, and ynh does not redact — whatever
-writes and stores them is where that has to happen [4]. And the retention period
-is a real trade rather than an administrative default: the longer they are kept,
-the more can be answered later, and the larger the thing you are holding when
-something goes wrong. Pick the period deliberately, and write it down alongside
-your stop conditions rather than discovering it during an incident.
+customer data and source. ynh redacts known secret values from a trajectory
+before it is written, and does not pass the operator's environment through to
+the worker — a credential the run never receives cannot be recorded [4]. Neither
+is a guarantee about your data: redaction substitutes values it can identify,
+and customer data pulled from a database mid-run looks like ordinary text. Treat
+the trajectory as sensitive and satisfy yourself about what a real one contains
+before deciding where it may be stored.
+
+Retention is then a real trade rather than an administrative default: the longer
+they are kept, the more can be answered later, and the larger the thing you are
+holding when something goes wrong. Pick the period deliberately and write it
+down alongside your stop conditions, rather than discovering it during an
+incident.
 
 ## Where ynh Stops
 

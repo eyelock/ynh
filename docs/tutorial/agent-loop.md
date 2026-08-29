@@ -137,7 +137,12 @@ the same verdict a human gets at a terminal, and neither can be talked out of it
 by the agent.
 
 `--convergence-sensor <name>` narrows the question to a single sensor when a
-task is scoped to one signal.
+task is scoped to one signal. Only a sensor that can actually *pass* may
+converge a run, which in practice means a command sensor: a `files` sensor
+reports rather than passing, so it cannot end a run. That is not a special rule
+bolted on — it falls out of the same status model the gate uses. It matters
+because the earlier behaviour ended runs on the existence of a path the agent
+itself could create, without ever reading what was in it.
 
 The loop is also refused the ability to move its own goalposts:
 `--update-baseline` is rejected inside an agent run. An agent that can rewrite
@@ -176,6 +181,7 @@ for l in open('run.jsonl'):
 
 ```
 session_start      turn=
+worker_env         turn=
 plan               turn=
 assistant_message  turn=
 budget_snapshot    turn=
@@ -203,9 +209,71 @@ A run that hits its cap instead ends like this — the same fixture with
 {"exit_code": 10, "reason": "turn cap reached (3/3)"}
 ```
 
+`worker_env` is the second event of every run, and it records what the worker
+was actually given: the variables passed, the ones the harness declared in
+`env_passthrough`, and any it declared that were not set. A run whose
+`env_passthrough` is empty passes nothing — the worker does not inherit your
+environment, so it cannot leak a credential it never held, and the event says so
+rather than leaving you to assume it.
+
+Values that *are* secret are redacted from the trajectory before it is written,
+by value rather than by pattern — ynh substitutes the specific strings it knows
+are credentials wherever they appear. Do not read that as a general secret
+scanner: it cannot redact a token the run fetched from a vault mid-turn, or
+customer data pulled from a database, because it has never seen those values.
+The trajectory is a sensitive artifact. Decide where it may be stored on the
+basis of what a real one from your harness contains.
+
 Note what the trajectory is *not*: evidence. It is the agent narrating its own
-work. Useful for debugging your harness, worthless for verifying a change — see
+work. Useful for debugging your harness, worthless for verifying a change — for
+that, see [the run result](#the-run-result), and
 [what actually reduces review time](factory-pattern.md#what-actually-reduces-review-time).
+
+## The run result
+
+The trajectory is the stream; the result is the answer. `--format json` returns
+one object when the run ends:
+
+```bash
+ynh agent run --harness local/demo --focus tidy --format json
+```
+
+```json
+{
+  "exit_code": 13,
+  "reason": "stuck: sensors unchanged for 3 turns",
+  "converged": false,
+  "session_id": "20260829-190412-a3f9",
+  "harness": { "name": "local/demo", "version": "0.2.0", "sha": "4c1f9ab…" },
+  "budgets":        { "max_turns": 25, "max_tokens": 2000000, "max_wall_ms": 3600000 },
+  "budget_sources": { "turns": "default", "tokens": "manifest", "wall": "flag" },
+  "consumed":       { "turns": 7, "tokens": 418233, "wall_ms": 512400, "plan_iterations": 1 },
+  "convergence": {
+    "sensor": "reviewer",
+    "passed": false,
+    "summary": "the new handler has no test covering the error branch"
+  },
+  "changed_files": ["internal/handler/route.go", "internal/handler/route_test.go"],
+  "base_commit": "9f2c1ab…",
+  "image_digest": "sha256:9f2c1ab…"
+}
+```
+
+Three parts of this are worth more than the rest.
+
+`reason` is the sentence form of `exit_code`. A pipeline branches on the number;
+a human reads the string, and neither has to reconstruct it from log output.
+
+`budgets` alongside `budget_sources` and `consumed` answers *what stopped this
+run* without inference. Knowing the wall-clock cap was 3600000ms is much less
+useful than knowing it came from a flag rather than the manifest — that is the
+difference between a cap somebody chose for this run and one nobody has looked
+at in months.
+
+`harness.sha`, `base_commit` and `image_digest` are what make the run
+reproducible rather than merely described. They name the harness commit, the
+tree it started from and the image it executed in. Without them a result says a
+run happened; with them, somebody else can run it again and compare.
 
 ## Exit codes
 
@@ -294,6 +362,9 @@ holds every credential the operator holds, which is not a default anyone chose.
   flag → manifest → default, and the source of each cap is recorded.
 - The loop is silent on success. Branch on the exit code.
 - `--emit-jsonl` explains a run. It does not evidence one.
+- `--format json` returns the run's result: why it stopped, what it consumed
+  against which budgets, and the harness commit, base commit and image digest
+  that make it reproducible.
 - Containment belongs to the runtime. An unattended loop needs a container and
   an egress policy you own.
 
