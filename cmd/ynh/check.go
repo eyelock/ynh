@@ -167,7 +167,15 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 		}
 		base = loaded
 	}
-	recording := &baseline.Baseline{Sensors: map[string]baseline.SensorBaseline{}}
+	// Start from what is on disk, not from empty. --update-baseline must
+	// refresh the sensors that actually ran and leave every other entry —
+	// other sensors, other harnesses — untouched. Writing a freshly built map
+	// would silently erase the forgiven debt of anything filtered out by
+	// --only, and of every other harness sharing this repository.
+	recording := &baseline.Baseline{}
+	if existing, rErr := baseline.Load(cwd); rErr == nil && existing != nil {
+		recording = existing
+	}
 
 	wanted := map[string]bool{}
 	for _, n := range only {
@@ -224,36 +232,49 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			if run.ExitCode == 0 {
 				res.Status = statusPass
 				env.Summary.Passed++
+				// Going fully green is the clearest signal the ratchet can be
+				// tightened, so its recorded debt has to count as fixed here —
+				// this path never reaches Compare.
+				totalFixed += base.RecordedCount(p.Name, name)
+				if updateBaseline {
+					recording.Clear(p.Name, name)
+				}
 				break
 			}
 
 			raw := run.Output.Stdout + "\n" + run.Output.Stderr
 			current := baseline.Fingerprints(raw, cwd)
 			if updateBaseline {
-				recording.Sensors[name] = baseline.Record(statusFail, raw, cwd)
+				recording.Set(p.Name, name, baseline.Record(statusFail, raw, cwd))
 			}
 
-			newFPs, known, fixed := base.Compare(name, current)
-			res.NewCount = len(newFPs)
-			res.KnownCount = known
-			totalKnown += known
-			totalFixed += fixed
+			cmp := base.Compare(p.Name, name, current, len(current))
+			res.NewCount = len(cmp.New)
+			res.KnownCount = cmp.Known
+			totalKnown += cmp.Known
+			totalFixed += cmp.Fixed
 
-			// A sensor whose every failure is already recorded is debt, not a
-			// regression. Reporting it as a failure on every run is what makes
-			// a gate feel like noise and gets it switched off.
-			if base != nil && len(newFPs) == 0 && known > 0 {
+			// A sensor whose failures are all already recorded is debt, not a
+			// regression. The test is that the baseline has an entry for it —
+			// not that some fingerprint matched, because a sensor that fails
+			// with no output produces none and could otherwise never be
+			// baselined at all.
+			forgiven := base.Has(p.Name, name) && len(cmp.New) == 0 && !cmp.Regressed
+			if forgiven {
 				res.Status = statusKnown
 				env.Summary.Known++
+				if cmp.Approximate {
+					res.Note = "baseline is count-based for this sensor; comparison is approximate"
+				}
 				break
 			}
 
 			res.Status = statusFail
 			env.Summary.Failed++
 			if base != nil {
-				res.NewOutput = selectLines(raw, cwd, newFPs)
-				if base.Truncated(name) {
-					res.Note = "baseline was truncated for this sensor; new-failure detection is approximate"
+				res.NewOutput = selectLines(raw, cwd, cmp.New)
+				if cmp.Approximate {
+					res.Note = "baseline is count-based for this sensor; new-failure detection is approximate"
 				}
 			}
 			if res.Tolerance == "blocking" {
@@ -287,14 +308,24 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 		if err := baseline.Save(cwd, recording); err != nil {
 			return checkExecErr(cliError(stderr, structured, errCodeIOError, err.Error()))
 		}
-		if !structured {
-			if _, wErr := fmt.Fprintf(stdout, "\nbaseline recorded at %s — commit it\n",
-				filepath.Join(baseline.Dir, baseline.File)); wErr != nil {
-				return wErr
-			}
-		}
 		// Recording is an explicit act of accepting current state, so it
-		// reports what it accepted rather than gating on it.
+		// reports what it accepted rather than gating on it. Both output modes
+		// must say something: a structured consumer that gets empty stdout
+		// cannot tell success from a crash.
+		env.Verdict = "pass"
+		env.Baseline = &baselineInfo{RecordedAt: recording.RecordedAt}
+		if structured {
+			data, encErr := json.MarshalIndent(env, "", "  ")
+			if encErr != nil {
+				return fmt.Errorf("encoding check: %w", encErr)
+			}
+			_, wErr := fmt.Fprintln(stdout, string(data))
+			return wErr
+		}
+		if _, wErr := fmt.Fprintf(stdout, "\nbaseline recorded at %s — commit it\n",
+			filepath.Join(baseline.Dir, baseline.File)); wErr != nil {
+			return wErr
+		}
 		return nil
 	}
 
