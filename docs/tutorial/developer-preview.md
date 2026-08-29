@@ -147,22 +147,32 @@ Expected output:
 ```
 === claude vs cursor ===
 Only in claude:
-  .claude-plugin/plugin.json
   .claude/.mcp.json
   .claude/hooks/hooks.json
-  .claude/rules/safety.md
-  .claude/skills/deploy/SKILL.md
-  CLAUDE.md
 Only in cursor:
-  .cursor-plugin/plugin.json
   .cursor/hooks.json
   .cursor/mcp.json
-  .cursor/rules/safety.md
-  .cursor/skills/deploy/SKILL.md
-  .cursorrules
+  hooks/hooks.json
+  mcp.json
+Same content, vendor-specific rendering:
+  .claude/rules/safety.md ↔ .cursor/rules/safety.mdc
+Identical:
+  .claude-plugin/plugin.json
+  .claude/skills/deploy/SKILL.md
+  CLAUDE.md
 ```
 
-The diff shows which files are vendor-specific and which content is shared. Artifacts like skills and rules may appear as identical content under different directory prefixes.
+Read the four groups as answers to different questions. **Identical** is the
+interesting one: the plugin manifest, the skill and the instructions file are
+byte-for-byte the same, so the vendors differ less than the directory names
+suggest. **Same content, vendor-specific rendering** pairs files that say the
+same thing under names each vendor requires — `safety.md` against `safety.mdc`.
+Only the first two groups are genuine divergence, and here it is confined to
+how hooks and MCP config are laid out.
+
+`ynd diff` normalises each vendor's prefixes before comparing — `.claude/`,
+`.claude-plugin/` and `CLAUDE.md` against `.cursor/`, `.cursor-plugin/` and
+`.cursorrules` — which is what lets the two file sets intersect at all.
 
 ## Preview a harness with hooks
 
