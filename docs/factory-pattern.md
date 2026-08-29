@@ -87,7 +87,7 @@ Below `y*` you are paying review time for work you then do again anyway.
   attempts you rejected. A review that ends in "no" still cost its full price.
   This is the input most often understated.
 - **`y`** — measure it before trusting it, against work whose correct answer is
-  already known. That is what shadow mode is for.
+  already known. That is what [shadow mode](tutorial/22-shadow-mode.md) is for.
 
 **A worked example — the numbers below are invented, and yours will differ.**
 Say a task takes `h = 4` hours by hand, and reviewing one attempt takes
@@ -232,10 +232,10 @@ can show the number, not when the calendar says so.
    trusted.*
 2. **Take a baseline.** Record the debt that already exists so the gate becomes
    reachable on a real repository. *Measurement: a clean run on unchanged code.*
-3. **Measure before trusting.** Run shadow mode
+3. **Measure before trusting.** Run [shadow mode](tutorial/22-shadow-mode.md)
    against your own history. *Measurement: an observed `y`, with its confidence
    interval stated.*
-4. **Run the loop propose-only.** [`ynh agent run`](agent.md)
+4. **Run the loop propose-only.** [`ynh agent run`](tutorial/21-agent-loop.md)
    without `--auto-commit`, output routed to code owners as a proposal. Never
    auto-merge. *Measurement: an observed `r` from real reviews.*
 5. **Widen only on evidence.** A second task class is justified by the first

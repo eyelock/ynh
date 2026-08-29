@@ -45,16 +45,18 @@
 
 * **Tutorials: Automate**
   * [11. Structured Output](tutorial/16-structured-output.md)
+  * [12. The Agent Loop](tutorial/21-agent-loop.md)
+  * [13. Shadow Mode](tutorial/22-shadow-mode.md)
 
 * **Tutorials: Share & Scale**
-  * [12. Delegation](tutorial/04-delegation.md)
-  * [13. Export](tutorial/05-export.md)
-  * [14. Marketplace](tutorial/06-marketplace.md)
-  * [15. Registry & Discovery](tutorial/07-registry-and-discovery.md)
-  * [16. Docker Images](tutorial/09-docker-image.md)
-  * [17. Namespacing & Migration](tutorial/18-namespacing-and-migration.md)
-  * [18. Sensors](tutorial/19-sensors.md)
-  * [19. Gating with ynh check](tutorial/20-check.md)
+  * [14. Delegation](tutorial/04-delegation.md)
+  * [15. Export](tutorial/05-export.md)
+  * [16. Marketplace](tutorial/06-marketplace.md)
+  * [17. Registry & Discovery](tutorial/07-registry-and-discovery.md)
+  * [18. Docker Images](tutorial/09-docker-image.md)
+  * [19. Namespacing & Migration](tutorial/18-namespacing-and-migration.md)
+  * [20. Sensors](tutorial/19-sensors.md)
+  * [21. Gating with ynh check](tutorial/20-check.md)
 
 * **Project**
   * [Migrating to 0.2](migration.md)
