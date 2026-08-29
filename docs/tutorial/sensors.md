@@ -282,3 +282,7 @@ ynh runs the declared set as a gate itself — see [Gating with `ynh check`](tut
 - Hooks and sensors are complementary — push vs pull, in-session vs between-turn.
 
 Hooks often pair with sensors — see [Hooks](tutorial/hooks.md).
+
+## Next
+
+[Gating with `ynh check`](tutorial/check.md) — run the sensors as a gate, and baseline pre-existing failures.

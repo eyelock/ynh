@@ -30,8 +30,10 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 | Tutorial | What you'll learn |
 |---|---|
 | [Structured Output](tutorial/structured-output.md) | Use `--format json` for scripts, CI, and tool integration |
+| [Sensors](tutorial/sensors.md) | Declare observation surfaces a loop driver consumes |
+| [Gating with `ynh check`](tutorial/check.md) | Run sensors as a gate, and baseline pre-existing failures |
 | [The Agent Loop](tutorial/agent-loop.md) | Run the loop with budgets, convergence, trajectories, and exit codes |
-| [Shadow Mode](tutorial/shadow-mode.md) | Measure a harness against your own git history before trusting it |
+| [Shadow Mode](tutorial/shadow-mode.md) | Measure the loop against your own git history before trusting it |
 
 ### Share & Scale
 
@@ -43,8 +45,6 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 | [Registry & Discovery](tutorial/registry-and-discovery.md) | Search and install harnesses from curated registries |
 | [Docker Images](tutorial/docker-image.md) | Build harness appliance images for CI/CD |
 | [Namespacing & Migration](tutorial/namespacing-and-migration.md) | Resolve name collisions across registries and migrate legacy installs |
-| [Sensors](tutorial/sensors.md) | Declare observation surfaces a loop driver consumes |
-| [Gating with `ynh check`](tutorial/check.md) | Run sensors as a gate, and baseline pre-existing failures |
 
 ## Manual Test Plan
 

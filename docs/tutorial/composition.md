@@ -541,4 +541,4 @@ ynh uninstall local/my-dev local/with-anthropic local/with-vercel local/full-sta
 
 ## Next
 
-[Hooks](tutorial/hooks.md) — declare vendor-agnostic lifecycle hooks.
+[Include Editing](tutorial/include-editing.md) — add, remove, and update includes from the CLI.

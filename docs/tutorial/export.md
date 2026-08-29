@@ -288,4 +288,4 @@ rm -rf /tmp/ynh-tutorial/no-inst-out
 
 ## Next
 
-[Marketplace](tutorial/marketplace.md) — generate marketplace indexes for distribution.
+[Marketplace](tutorial/marketplace.md) — generate marketplace indexes for team distribution.

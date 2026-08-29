@@ -490,4 +490,4 @@ rm -rf /tmp/ynh-tutorial-includes
 
 ## Next
 
-[Composition](tutorial/composition.md) — the `includes` field in detail, pick filtering, and allow-lists.
+[Hooks](tutorial/hooks.md) — declare vendor-agnostic lifecycle hooks.

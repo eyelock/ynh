@@ -255,4 +255,4 @@ ls ~/.ynh/bin/ynh ~/.ynh/bin/ynd
 
 ## Next
 
-[Composition](tutorial/composition.md) — pull skills from Git repos.
+[Composition](tutorial/composition.md) — pull skills from Git repos with pick, path, and ref.

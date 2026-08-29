@@ -26,6 +26,8 @@ var (
 	tutorialNumber = regexp.MustCompile(`Tutorial \d+|\bT\d+\.\d+`)
 	sidebarEntry   = regexp.MustCompile(`^\s+\* \[\d+\. (.+?)\]\(tutorial/(.+?)\.md\)`)
 	readmeEntry    = regexp.MustCompile(`^\| \[(.+?)\]\(tutorial/(.+?)\.md\) \|`)
+	nextEntry      = regexp.MustCompile(`(?m)^## Next\n\n\[([^\]]+)\]\(tutorial/([a-z0-9-]+)\.md\)`)
+	firstHeading   = regexp.MustCompile(`(?m)^# (.+?)\s*$`)
 )
 
 // tutorialSlugs lists the tutorial pages, excluding the two index documents.
@@ -170,4 +172,67 @@ func collect(t *testing.T, path string, re *regexp.Regexp) []string {
 		t.Fatalf("%s: matched no tutorial entries — the pattern and the file have diverged", path)
 	}
 	return out
+}
+
+// TestNextLinksFollowSidebar checks that each tutorial's "## Next" link points
+// at its successor in docs/_sidebar.md, and that the last tutorial has none.
+//
+// The Next chain was a fourth competing ordering. It followed the original file
+// numbers, so it skipped include-editing entirely and dead-ended at sensors,
+// leaving the gate, the loop and shadow mode reachable only from the sidebar. A
+// reader working through the series in order simply stopped early.
+//
+// Reading order has one home now. This test is what keeps it that way: move a
+// tutorial in the sidebar without repointing the Next links and CI says so.
+func TestNextLinksFollowSidebar(t *testing.T) {
+	root := docsRoot(t)
+	if root == "" {
+		t.Skip("docs/ not reachable from package CWD")
+	}
+
+	order := collect(t, filepath.Join(root, "_sidebar.md"), sidebarEntry)
+	for i, slug := range order {
+		path := filepath.Join(root, "tutorial", slug+".md")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		m := nextEntry.FindStringSubmatch(string(data))
+
+		if i == len(order)-1 {
+			if m != nil {
+				t.Errorf("tutorial/%s.md is last in _sidebar.md but links onward to %s", slug, m[2])
+			}
+			continue
+		}
+		want := order[i+1]
+		if m == nil {
+			t.Errorf("tutorial/%s.md has no \"## Next\" link; _sidebar.md puts %s after it", slug, want)
+			continue
+		}
+		if m[2] != want {
+			t.Errorf("tutorial/%s.md links on to %s, but _sidebar.md puts %s after it", slug, m[2], want)
+			continue
+		}
+		// The label must be the target's own title. A hand-written label is
+		// how "Tutorial 4: Hooks" survived on a page pointing at file 10.
+		if title := tutorialTitle(t, root, want); m[1] != title {
+			t.Errorf("tutorial/%s.md labels its Next link %q, but tutorial/%s.md is titled %q",
+				slug, m[1], want, title)
+		}
+	}
+}
+
+// tutorialTitle returns a tutorial's H1 text.
+func tutorialTitle(t *testing.T, root, slug string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, "tutorial", slug+".md"))
+	if err != nil {
+		t.Fatalf("read tutorial/%s.md: %v", slug, err)
+	}
+	m := firstHeading.FindSubmatch(data)
+	if m == nil {
+		t.Fatalf("tutorial/%s.md has no H1", slug)
+	}
+	return string(m[1])
 }

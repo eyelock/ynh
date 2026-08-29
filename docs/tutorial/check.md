@@ -318,3 +318,7 @@ rm -rf /tmp/ynh-t20
   only the new lines.
 - Baselines tighten deliberately, and never from CI.
 - Exit 1 (code failing) and exit 2 (gate broken) are different answers.
+
+## Next
+
+[The Agent Loop](tutorial/agent-loop.md) — prompt, act, re-observe — and halt on the gate's verdict.

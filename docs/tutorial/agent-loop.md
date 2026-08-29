@@ -297,5 +297,6 @@ holds every credential the operator holds, which is not a default anyone chose.
 - Containment belongs to the runtime. An unattended loop needs a container and
   an egress policy you own.
 
-Next: [Shadow Mode](tutorial/shadow-mode.md) — measuring whether the loop is actually
-any good, against your own git history.
+## Next
+
+[Shadow Mode](tutorial/shadow-mode.md) — measure the loop against your own git history before trusting it.

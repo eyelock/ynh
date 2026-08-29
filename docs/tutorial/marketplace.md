@@ -255,4 +255,4 @@ rm -rf /tmp/ynh-tutorial/marketplace-*
 
 ## Next
 
-[Registry & Discovery](tutorial/registry-and-discovery.md) — search and install from curated indexes.
+[Registry & Discovery](tutorial/registry-and-discovery.md) — search and install harnesses from curated registries.

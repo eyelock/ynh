@@ -419,6 +419,6 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Delegation](tutorial/delegation.md) — chain harnesses together as subagents.
+[Sensors](tutorial/sensors.md) — declare the observation surfaces a gate and a loop both consume.
 
 The `--format json` pattern established here will appear on additional commands as structured output is added. See [Structured CLI Output](cli-structured.md) for the full conventions.

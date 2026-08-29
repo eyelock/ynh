@@ -230,3 +230,7 @@ than as a project.
   and watch for *superficial*.
 - Report the confidence interval and the per-repository split. Treat the number
   as an upper bound.
+
+## Next
+
+[Delegation](tutorial/delegation.md) — chain harnesses together as subagents.
