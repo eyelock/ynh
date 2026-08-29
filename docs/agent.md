@@ -70,7 +70,39 @@ finding — they have to be told apart.
 ## What the agent can see
 
 The worker receives only the environment variables the harness declares in
-`env_passthrough` — not the operator's environment. An agent that inherits the
+`env_passthrough`, plus the process minimum (`PATH`, `HOME`, `USER`, `SHELL`,
+`TMPDIR`, `TZ`, `LANG`, `TERM`, `LC_*`) — not the operator's environment.
+
+Those few are process mechanics rather than configuration: without `PATH` the
+vendor binary cannot be found and without `HOME` it cannot locate its own
+credentials. Anything that is policy stays out, **proxy settings included** — a
+proxy URL can carry credentials, and inheriting one silently is the same
+default this removes. A harness behind a proxy declares it.
+
+Every run emits a `worker_env` trajectory event naming what was passed, what
+was declared, and which declared variables were **not set** — names only, never
+values. A worker that starts and cannot authenticate is otherwise
+indistinguishable from one that is simply failing.
+
+## Redaction
+
+Trajectories are redacted **by value**. At startup ynh takes the values of
+every environment variable whose name looks like a credential — `TOKEN`,
+`SECRET`, `PASSWORD`, `API_KEY`, `PAT`, `CREDENTIAL`, `AUTH`, `PRIVATE` — and
+replaces every occurrence of those exact strings in the trajectory with
+`[redacted:NAME]`.
+
+By value rather than by pattern, because pattern-matching for secrets misses
+bespoke formats and mangles innocent text, whereas the values a run was given
+are known exactly. The realistic leak is a sensor echoing one: a `curl` that
+fails and prints its own `Authorization` header lands in the trajectory
+otherwise.
+
+**This is not a general secret scanner.** A credential ynh was never given —
+one the agent generated, or read from a file — is not covered. The label names
+the variable rather than blanking the text, so a reader can tell "the run's
+GitHub token appeared here" from "some unknown string was removed"; the first
+is a finding about the harness, the second is noise. An agent that inherits the
 parent process environment holds every credential the operator holds, which is
 not a default anyone chose. See [MCP credentials](mcp.md) for the declaration
 and how a profile narrows it.

@@ -212,6 +212,13 @@ func RunLoop(opts RunOptions) error {
 			return err
 		}
 		defer cleanup()
+		// Redact from the operator's whole environment, not merely what was
+		// passed through. A variable the worker never received can still reach
+		// the trajectory — a sensor subprocess inherits more than the worker
+		// does, and a failing command prints what it was given. Redacting the
+		// broader set costs nothing and covers the case the narrower one
+		// misses.
+		tw.SetRedactor(NewRedactor(os.Environ()))
 		traj = tw
 	}
 
@@ -431,6 +438,26 @@ func RunLoop(opts RunOptions) error {
 			}
 		}
 	}
+	// Record what actually reached the worker, names only. An agent that
+	// cannot authenticate because a variable was never declared is otherwise
+	// indistinguishable from one that is simply failing.
+	{
+		var declared, missing []string
+		if harnessObj != nil {
+			declared = harnessObj.EnvPassthrough
+			for _, name := range declared {
+				if _, ok := os.LookupEnv(name); !ok {
+					missing = append(missing, name)
+				}
+			}
+		}
+		_ = traj.Emit(KindWorkerEnv, 0, WorkerEnvData{
+			Passed:   envNames(workerEnvFor(workerEnv)),
+			Declared: declared,
+			Missing:  missing,
+		})
+	}
+
 	sess, err := wb.Start(ctx, StartOptions{
 		WorktreeDir: opts.WorktreeDir,
 		ConfigPath:  configPath,
