@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/gate"
+	"github.com/eyelock/ynh/internal/harness"
 )
 
 // The point of C1: a pipeline gets one object instead of tailing NDJSON and
@@ -204,5 +205,106 @@ func TestRunLoop_NoHarnessReportsNoHarness(t *testing.T) {
 	}
 	if res.Harness != nil {
 		t.Errorf("harness must be absent when none was named, got %+v", res.Harness)
+	}
+}
+
+// A run cannot observe its own image digest, so it is passed in. Absent must
+// mean "not recorded" rather than a guess — a wrong digest in a graded corpus
+// is indistinguishable from a right one until someone tries to reproduce the
+// run and cannot.
+func TestImageDigest_ComesFromTheLauncherOrNotAtAll(t *testing.T) {
+	t.Run("absent when unset", func(t *testing.T) {
+		t.Setenv(imageDigestEnv, "")
+		if got := imageDigest(); got != "" {
+			t.Errorf("got %q, want empty", got)
+		}
+	})
+	t.Run("recorded when the launcher passes it", func(t *testing.T) {
+		const d = "sha256:9f2c1ab4e7d3c0518b6a2f4d9e8c7b1a3f5d6e2077aa11bb22cc33dd44ee5566"
+		t.Setenv(imageDigestEnv, "  "+d+"\n")
+		if got := imageDigest(); got != d {
+			t.Errorf("got %q, want %q trimmed", got, d)
+		}
+	})
+}
+
+// Version alone is an author-declared string that can be reused across
+// different content. The SHA is what actually pins a run to one set of
+// sensors, so a result that has provenance must carry it.
+func TestRunLoop_CarriesHarnessSHAAndImageDigest(t *testing.T) {
+	const digest = "sha256:abc123def456"
+	t.Setenv(imageDigestEnv, digest)
+
+	mb := &mockBackend{name: "mock", turns: []Turn{{Content: "done"}}}
+	var stdout, stderr bytes.Buffer
+	opts := baseOpts(mb, &stdout, &stderr, strings.NewReader(""))
+
+	res, err := RunLoop(opts)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if res.ImageDigest != digest {
+		t.Errorf("image_digest = %q, want %q", res.ImageDigest, digest)
+	}
+}
+
+// Version is author-declared and can be reused across different content; the
+// SHA is what pins a run to one set of sensors. An untested provenance field
+// is worse than none — it looks like evidence.
+func TestHarnessProvenance(t *testing.T) {
+	cases := []struct {
+		name     string
+		hName    string
+		h        *harness.Harness
+		wantNil  bool
+		wantVer  string
+		wantSHA  string
+		wantName string
+	}{
+		{
+			name:    "no harness named — the run verified nothing",
+			hName:   "",
+			h:       &harness.Harness{Version: "1.0"},
+			wantNil: true,
+		},
+		{
+			name:     "installed from git — SHA pins the sensors",
+			hName:    "eyelock/demo",
+			h:        &harness.Harness{Version: "0.2.0", InstalledFrom: &harness.Provenance{SHA: "9f2c1ab"}},
+			wantName: "eyelock/demo",
+			wantVer:  "0.2.0",
+			wantSHA:  "9f2c1ab",
+		},
+		{
+			name:     "local harness with no recorded SHA",
+			hName:    "local/demo",
+			h:        &harness.Harness{Version: "0.1.0", InstalledFrom: &harness.Provenance{SourceType: "local"}},
+			wantName: "local/demo",
+			wantVer:  "0.1.0",
+		},
+		{
+			name:     "named but unloadable — the name is still worth recording",
+			hName:    "local/demo",
+			h:        nil,
+			wantName: "local/demo",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := harnessProvenance(c.hName, c.h)
+			if c.wantNil {
+				if got != nil {
+					t.Fatalf("want nil, got %+v", got)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatal("want a harness, got nil")
+			}
+			if got.Name != c.wantName || got.Version != c.wantVer || got.SHA != c.wantSHA {
+				t.Errorf("got %+v, want name=%q version=%q sha=%q",
+					got, c.wantName, c.wantVer, c.wantSHA)
+			}
+		})
 	}
 }

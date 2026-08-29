@@ -103,7 +103,14 @@ type SessionStartData struct {
 	Model          string `json:"model,omitempty"`
 	YnhVersion     string `json:"ynh_version,omitempty"`
 	HarnessVersion string `json:"harness_version,omitempty"`
-	BaseCommit     string `json:"base_commit,omitempty"`
+	// HarnessSHA is the resolved commit the harness was installed from.
+	// Version alone is an author-declared string that can be reused across
+	// content; the SHA is what actually pins a run to one set of sensors.
+	HarnessSHA string `json:"harness_sha,omitempty"`
+	// ImageDigest pins the run to a toolchain. Passed in by the launcher —
+	// a run cannot observe its own image digest.
+	ImageDigest string `json:"image_digest,omitempty"`
+	BaseCommit  string `json:"base_commit,omitempty"`
 	// Budgets records the caps in force and where each came from. A cap nobody
 	// chose that fires is noise in a batch result; a chosen cap that fires is a
 	// finding. Aggregating a hundred runs needs them distinguishable.

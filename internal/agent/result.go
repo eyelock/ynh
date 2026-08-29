@@ -2,11 +2,13 @@ package agent
 
 import (
 	"errors"
+	"os"
 	"os/exec"
 	"sort"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/gate"
+	"github.com/eyelock/ynh/internal/harness"
 )
 
 // RunResult is the machine-readable outcome of one agent run.
@@ -59,6 +61,9 @@ type RunResult struct {
 	// that rewrote forty files nobody asked about, are both findings.
 	ChangedFiles []string `json:"changed_files"`
 	BaseCommit   string   `json:"base_commit,omitempty"`
+	// ImageDigest pins the run to a toolchain. Absent means it was not
+	// recorded, not that the run was uncontainerised — see imageDigest.
+	ImageDigest string `json:"image_digest,omitempty"`
 
 	// budget and planIterations are read by finalise. They are held rather
 	// than copied at each of the loop's twenty-odd exit points, because one of
@@ -174,4 +179,49 @@ func changedFiles(dir, base string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// imageDigestEnv names the variable a launcher uses to tell a run which image
+// it is executing inside.
+const imageDigestEnv = "YNH_IMAGE_DIGEST"
+
+// imageDigest reports the digest of the container image this run executes in,
+// or "" when it was not recorded.
+//
+// A run cannot observe this for itself. A digest is computed *after* a build,
+// so it cannot be stamped into the image it identifies, and a process inside a
+// container has no portable way to learn its own image — /proc/self/cgroup
+// carries a container ID, not a digest, and is unreliable across cgroup v2,
+// Docker Desktop and podman. The runtime knows; the process does not.
+//
+// So it is passed in, and absent means "not recorded" rather than "not
+// containerised". Guessing would be worse than silence: a wrong digest in a
+// graded corpus is indistinguishable from a right one until someone tries to
+// reproduce the run and cannot.
+func imageDigest() string {
+	return strings.TrimSpace(os.Getenv(imageDigestEnv))
+}
+
+// harnessProvenance builds the harness identity for a run result.
+//
+// Split out from the loop so the mapping is testable without standing up an
+// installed harness: no loop test loads one, so inline this branch would ship
+// unexercised, and an untested provenance field is worse than none — it looks
+// like evidence.
+//
+// Version is an author-declared string that can be reused across different
+// content. The SHA is what actually pins a run to one set of sensors, so it is
+// carried whenever the install recorded one.
+func harnessProvenance(name string, h *harness.Harness) *RunHarness {
+	if name == "" {
+		return nil
+	}
+	rh := &RunHarness{Name: name}
+	if h != nil {
+		rh.Version = h.Version
+		if h.InstalledFrom != nil {
+			rh.SHA = h.InstalledFrom.SHA
+		}
+	}
+	return rh
 }
