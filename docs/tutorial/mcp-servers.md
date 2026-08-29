@@ -122,6 +122,7 @@ cat > /tmp/ynh-tutorial/mcp-harness/.ynh-plugin/plugin.json << 'EOF'
   "name": "mcp-demo",
   "version": "0.1.0",
   "default_vendor": "claude",
+  "env_passthrough": ["DOCS_API_KEY"],
   "mcp_servers": {
     "sqlite": {
       "command": "npx",
@@ -141,13 +142,41 @@ cat > /tmp/ynh-tutorial/mcp-harness/.ynh-plugin/plugin.json << 'EOF'
 EOF
 ```
 
-Preview for Claude to see both servers:
+`${DOCS_API_KEY}` is a reference, not a value — the credential stays out of the
+manifest, and therefore out of the repository. It only resolves because the
+variable is named in `env_passthrough`.
+
+That allowlist is load-bearing, and two rules keep it from becoming a hole of
+its own.
+
+Drop `DOCS_API_KEY` from `env_passthrough` and the reference is refused rather
+than resolved, so a manifest cannot name an arbitrary variable in your
+environment and quietly copy it into a config file:
+
+```
+Error: mcp server "docs-api": headers.Authorization references ${DOCS_API_KEY}, which is not in env_passthrough
+```
+
+Keep it declared but leave it unset and that is an error too — an empty
+credential would fail somewhere far from its cause. Preview now and you get:
 
 ```bash
 ynd preview /tmp/ynh-tutorial/mcp-harness -v claude
 ```
 
-Expected `.claude/.mcp.json` now includes both servers:
+```
+Error: mcp server "docs-api": headers.Authorization references ${DOCS_API_KEY}, which is not set
+```
+
+So set it, then preview:
+
+```bash
+export DOCS_API_KEY=sk-demo-123
+ynd preview /tmp/ynh-tutorial/mcp-harness -v claude
+```
+
+Expected `.claude/.mcp.json` now includes both servers, with the reference
+resolved:
 
 ```json
 {
@@ -155,7 +184,7 @@ Expected `.claude/.mcp.json` now includes both servers:
     "docs-api": {
       "url": "https://docs.example.com/mcp",
       "headers": {
-        "Authorization": "Bearer ${DOCS_API_KEY}"
+        "Authorization": "Bearer sk-demo-123"
       }
     },
     "sqlite": {
@@ -183,7 +212,7 @@ Expected `.mcp.json` (at plugin root):
     "docs-api": {
       "url": "https://docs.example.com/mcp",
       "headers": {
-        "Authorization": "Bearer ${DOCS_API_KEY}"
+        "Authorization": "Bearer sk-demo-123"
       }
     },
     "sqlite": {
@@ -196,6 +225,10 @@ Expected `.mcp.json` (at plugin root):
   }
 }
 ```
+
+Note what that means: the assembled config holds the real credential, expanded.
+The manifest is safe to commit; the assembled output is not. It belongs in the
+run directory and in `.gitignore`, never in a harness you publish.
 
 ## Compare MCP config across vendors
 
