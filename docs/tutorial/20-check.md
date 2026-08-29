@@ -1,6 +1,6 @@
 # Tutorial 20: Gating with `ynh check`
 
-[Tutorial 19](19-sensors.md) declared sensors. This one runs them as a gate.
+[Tutorial 19](tutorial/19-sensors.md) declared sensors. This one runs them as a gate.
 
 `ynh check` executes every declared sensor and returns a verdict. It owns the
 thinnest possible pass/fail policy — a command sensor passes when it exits 0 —

@@ -233,7 +233,7 @@ ynh mcp remove /tmp/ynh-tutorial/mcp-harness api
 ynh profile mcp add /tmp/ynh-tutorial/mcp-harness <profile> postgres --null
 ```
 
-`--command` and `--url` are mutually exclusive; at least one is required at add time. `--null` is profile-only (harness-level entries cannot be null — see [mcp.md §"CLI Editing"](../mcp.md#cli-editing)).
+`--command` and `--url` are mutually exclusive; at least one is required at add time. `--null` is profile-only (harness-level entries cannot be null — see [mcp.md §"CLI Editing"](mcp.md#cli-editing)).
 
 The first positional argument accepts either a filesystem path (during authoring) or a canonical harness id (`local/<name>`, `github.com/<org>/<repo>/<name>`) once installed.
 

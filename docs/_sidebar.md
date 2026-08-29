@@ -14,6 +14,7 @@
   * [Profiles](profiles.md)
   * [Focus](focus.md)
   * [Sensors](sensors.md)
+  * [Agent Loop](agent.md)
   * [Namespacing](namespacing.md)
   * [Vendor Support](vendors.md)
 

@@ -402,6 +402,9 @@ Everything richer than this — thresholds, severity filters, convergence
 judgments — still belongs to a loop driver. `ynh check` answers "did the
 declared command succeed", nothing more.
 
+Sensors are also what [`ynh agent run`](agent.md) iterates against between
+turns, applying the same `tolerance` rule.
+
 ## `ynh check`
 
 Runs every declared sensor and returns a gate verdict.
