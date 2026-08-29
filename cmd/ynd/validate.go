@@ -228,6 +228,7 @@ func validateHarness(dir string) error {
 			issues = append(issues, validateHarnessProfiles(hj)...)
 			issues = append(issues, validateHarnessFocus(hj)...)
 			issues = append(issues, validateHarnessSensors(hj)...)
+			issues = append(issues, validateMCPEnvDeclarations(data)...)
 		}
 	}
 
@@ -666,4 +667,43 @@ func lintMarketplaceConfig(path string) []lintIssue {
 		return []lintIssue{{File: path, Message: err.Error()}}
 	}
 	return nil
+}
+
+// validateMCPEnvDeclarations catches an MCP ${VAR} reference the harness never
+// declared in env_passthrough — a defect that used to surface only at
+// assembly, and worst under automation, where an unattended `ynh agent run`
+// does its setup and dies on a config error CI could have caught.
+//
+// It decodes to the typed manifest and calls plugin.UndeclaredMCPEnvRefs, the
+// same rule ExpandMCPEnv enforces, rather than re-walking the raw map. Two
+// implementations of one rule is how they drift.
+//
+// The check is deliberately silent when a harness declares no env_passthrough
+// at all: such a harness may be authored purely for distribution, where
+// `ynd export` leaves ${VAR} literal for the consumer's own CLI and strips
+// env_passthrough from the artifact entirely. Erroring there would redden a
+// harness that works today, and demand an allowlist that never reaches the
+// thing it ships. A harness that declares an allowlist and misses an entry is
+// the realistic mistake.
+func validateMCPEnvDeclarations(data []byte) []string {
+	var hj plugin.HarnessJSON
+	if err := json.Unmarshal(data, &hj); err != nil {
+		return nil // malformed JSON is already reported by the caller
+	}
+	issues := plugin.UndeclaredMCPEnvRefs(hj.MCPServers, hj.EnvPassthrough)
+	for _, prof := range hj.Profiles {
+		allowed := hj.EnvPassthrough
+		if prof.EnvPassthrough != nil {
+			allowed = prof.EnvPassthrough
+		}
+		// A profile's servers are pointers; flatten so one rule covers both.
+		flat := make(map[string]plugin.MCPServer, len(prof.MCPServers))
+		for n, srv := range prof.MCPServers {
+			if srv != nil {
+				flat[n] = *srv
+			}
+		}
+		issues = append(issues, plugin.UndeclaredMCPEnvRefs(flat, allowed)...)
+	}
+	return issues
 }

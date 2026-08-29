@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -744,6 +745,66 @@ var envRef = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 //   - A reference to an allowed-but-unset variable is also an error. Emitting
 //     an empty credential produces a failure far from its cause, and a control
 //     that silently degrades is the failure this whole area exists to avoid.
+//
+// UndeclaredMCPEnvRefs lists ${VAR} references in MCP env and headers that the
+// harness does not declare in env_passthrough.
+//
+// It checks *declaration* only, never whether a variable is set. An unset
+// variable is legitimately a run-time condition; an undeclared one never is.
+// That is what makes this safe to run before assembly, where ExpandMCPEnv
+// cannot: the same rule, minus the part that needs a live environment.
+//
+// It returns nothing when the harness declares no env_passthrough at all.
+// Such a harness may be authored purely for distribution: `ynd export`
+// deliberately leaves ${VAR} literal so the exporter's credentials are not
+// baked into a shared bundle, and strips env_passthrough from the artifact
+// entirely — it is a local-assembly allowlist and never reaches the consumer.
+// Flagging that case would redden a harness that works, and demand an
+// allowlist with no effect on the thing it ships.
+//
+// A harness that declares an allowlist and misses one entry is the realistic
+// mistake, and that is what this catches.
+func UndeclaredMCPEnvRefs(servers map[string]MCPServer, allowed []string) []string {
+	if len(servers) == 0 || len(allowed) == 0 {
+		return nil
+	}
+	allow := make(map[string]bool, len(allowed))
+	for _, name := range allowed {
+		allow[name] = true
+	}
+
+	var issues []string
+	names := make([]string, 0, len(servers))
+	for name := range servers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		s := servers[name]
+		for _, field := range []struct {
+			label string
+			m     map[string]string
+		}{{"env", s.Env}, {"headers", s.Headers}} {
+			keys := make([]string, 0, len(field.m))
+			for k := range field.m {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				for _, match := range envRef.FindAllStringSubmatch(field.m[k], -1) {
+					if v := match[1]; !allow[v] {
+						issues = append(issues, fmt.Sprintf(
+							"mcp server %q: %s.%s references ${%s}, which is not in %s",
+							name, field.label, k, v, EnvPassthroughField))
+					}
+				}
+			}
+		}
+	}
+	return issues
+}
+
 func ExpandMCPEnv(servers map[string]MCPServer, allowed []string, lookup func(string) (string, bool)) (map[string]MCPServer, error) {
 	if len(servers) == 0 {
 		return servers, nil
