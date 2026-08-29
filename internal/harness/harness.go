@@ -109,9 +109,15 @@ func IsPinnedRef(ref string) bool {
 }
 
 type Harness struct {
-	Name           string
-	Version        string
-	Description    string
+	Name        string
+	Version     string
+	Description string
+	// Author and Keywords exist so an assembled vendor manifest can carry what
+	// the source manifest declared. Without them a *Harness cannot reproduce
+	// its own plugin.json, and every path that assembles from one — `ynh run`
+	// and `ynd preview` — silently ships less than `ynd export` does.
+	Author         *plugin.AuthorInfo
+	Keywords       []string
 	DefaultVendor  string
 	Namespace      string // e.g. "eyelock/assistants"; empty for local/unqualified installs
 	Dir            string // absolute path to the harness directory — the base for relative local includes
@@ -446,7 +452,8 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 		return nil, fmt.Errorf("invalid harness name %q: must match %s", hj.Name, validName.String())
 	}
 
-	p := &Harness{Name: hj.Name, Version: hj.Version, Description: hj.Description}
+	p := &Harness{Name: hj.Name, Version: hj.Version, Description: hj.Description,
+		Author: hj.Author, Keywords: hj.Keywords}
 	p.DefaultVendor = hj.DefaultVendor
 	p.Namespace = inferNamespace(dir)
 	if abs, err := filepath.Abs(dir); err == nil {
@@ -693,7 +700,8 @@ func LoadFile(path string) (*Harness, error) {
 		return nil, err
 	}
 
-	p := &Harness{Name: hj.Name, Version: hj.Version, Description: hj.Description}
+	p := &Harness{Name: hj.Name, Version: hj.Version, Description: hj.Description,
+		Author: hj.Author, Keywords: hj.Keywords}
 	p.DefaultVendor = hj.DefaultVendor
 
 	for _, inc := range hj.Includes {
