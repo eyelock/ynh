@@ -268,97 +268,87 @@ A number agreed in advance is the only thing that survives that conversation.
 
 ## Governance
 
-Everything above measures whether a factory works. Governance is what makes a
-change it produced defensible six months later, when whoever merged it has moved
-on and somebody is asking how it got in.
+Everything above measures whether a factory works. This is what makes a change
+it produced defensible later, when whoever merged it has moved on and somebody
+is asking how it got in.
 
-The split is the one [§The Economics](#the-economics-as-a-method) already drew.
-The practices below transfer; the policy does not. Who may sign, what the
-approval chain looks like, how long a trajectory is kept and what any of it has
-to satisfy are yours to decide. **This is not compliance guidance and could not
-be** — a tool's documentation telling you what discharges your obligations would
-be worse than silence. ynh produces evidence. Whether that evidence is
-sufficient is your determination, not this page's.
+Four things to settle before the first merge. The practices transfer; the policy
+does not — who may sign, and how long you keep a trajectory, are yours. **This
+is not compliance guidance**: ynh produces evidence, and whether that evidence
+is sufficient is your determination.
 
-**Attribution has to survive the merge.** A machine-proposed change should
-durably record that it was one, and the mechanic matters more than the
-intention. A squash-merge collapses the branch and leaves PR comments behind, so
-attribution that lives in a comment does not survive contact with the merge
-button. A commit trailer does, because it is part of the message the squash
-keeps.
+### 1. Put attribution in the commit message
 
-This is not ceremony. Attribution is the join key for everything in
-[§Stop Conditions](#stop-conditions). An escaped-defect limit is unenforceable
-if you cannot say which escaped defects came from the factory, and you cannot
-say that if the provenance was discarded at merge time. Choose the mechanism
-before the first merge rather than after the first incident.
+```
+Co-Authored-By: <backend/model>
+YNH-Session: 20260829-190412-a3f9
+```
 
-**A named human owns the merge.** The tool proposes; approving is a human act
-that happens outside it, and [§Where ynh Stops](#where-ynh-stops) is the
-architectural form of the same sentence. *The agent did it* is not an answer to
-who approved a change, and a review that cannot be attributed to a person is not
-a review [10]. This is also what the rubber-stamping detector is watching for:
-in the record, sign-off that has gone reflexive is indistinguishable from
-sign-off that never happened.
+In the message, not the pull request. A squash merge keeps the message and
+discards the thread, so a trailer survives and a comment does not.
 
-**Evidence a reviewer can check without trusting the agent.**
+The session id comes from `session_id` in the run result. Note what does *not*
+do this job: `--auto-commit` writes `agent: turn N` per turn, which is a working
+commit inside the run, not attribution — it disappears in the squash like
+everything else on the branch.
+
+Without a trailer you cannot answer *which of these defects came from the
+factory*, which makes the escaped-defect limit in
+[§Stop Conditions](#stop-conditions) unenforceable. Choose the mechanism before
+the first merge, not after the first incident.
+
+### 2. A named person approves the merge
+
+The tool proposes; approving is a human act outside it — that is
+[§Where ynh Stops](#where-ynh-stops) restated at the level of who signs. *The
+agent did it* is not an answer to who approved a change [10].
+
+This is what the rubber-stamping detector is watching: in the record, sign-off
+that has gone reflexive looks identical to sign-off that never happened.
+
+### 3. Capture the run result
+
+```bash
+ynh agent run --harness local/demo --focus tidy --format json > run.json
+```
+
+One object per run, and the only evidence here the agent did not narrate —
 [§What Actually Reduces Review Time](#what-actually-reduces-review-time) rejects
-anything the system under review produced about itself. Audit evidence answers
-to the same test, which leaves four things worth having:
+the rest:
 
-- a machine-readable result for each run, so the outcome is a record rather than scrollback
-- the trajectory — what the agent did, as distinct from its account of what it did
-- the exact harness and image the run executed against, so it can be repeated rather than merely described
-- a baseline the agent cannot write, so forgiven findings cannot be forged
+| Field | Answers |
+|---|---|
+| `exit_code`, `reason`, `converged` | how the run ended, and why |
+| `budgets`, `budget_sources`, `consumed` | what stopped it, and whether a human chose that cap |
+| `harness.sha`, `base_commit`, `image_digest` | what it ran against, so it can be repeated |
+| `sensors`, `changed_files` | what the gate saw, and what moved |
 
-ynh produces all four. `ynh agent run --format json` returns one result object
-for the run — its exit code and the reason for it, whether it converged, what it
-consumed against which budgets and where each budget came from, the sensor
-verdicts, and the files it changed. The trajectory is written by
-[`--emit-jsonl`](tutorial/agent-loop.md#reading-a-trajectory). The result also
-carries `harness.sha`, `base_commit` and `image_digest`, so a run names the
-harness commit, the tree and the image it actually executed against rather than
-merely asserting them. And the baseline is unforgeable by construction: a run
-that alters what it is judged against fails on that basis instead of passing.
+Declare [`version_command`](sensors.md#version-command-which-tool-produced-this)
+on your sensors too, or the record cannot say *which* linter passed. And the
+baseline is unforgeable by construction: a run that alters what it is judged
+against fails rather than passes.
 
-What ynh does not produce is any assurance that the run was contained while it
-did all this. [Containment is the runtime's](harness-engineering.md#ynh-does-not-own-containment),
-and evidence of a well-behaved run is not evidence that misbehaviour was
-prevented — the two are separate claims and only one of them is in the box.
+One thing this does not contain is any assurance the run was
+[contained](harness-engineering.md#ynh-does-not-own-containment) while it
+happened. A well-behaved run and a run that could not misbehave are separate
+claims, and only the first is in the box.
 
-That combination is what lets a reviewer reconstruct a run instead of trusting a
-summary of it, and lets someone asking later whether the gate was genuinely
-green check rather than accept an answer. Worth adding to it: a sensor that
-declares [`version_command`](sensors.md#version-command-which-tool-produced-this)
-has its result stamped with `tool_version`, which is the difference between *the
-linter passed* and *this version of the linter passed* — the second is auditable
-a year later and the first is not. It is off unless you declare it, and a
-factory being measured over time should declare it everywhere.
+### 4. Write down two decisions before you need them
 
-**Downstream disclosure has no settled answer, and inventing one here would be
-worse than saying so.** If you publish a library or run a service, are consumers
-told that a change was agent-authored? The case for is that it is material to
-someone deciding how much to trust a dependency, and that discovering it later
-costs more than disclosing it now. The case against is that it singles out one
-authorship route among many when the obligation that actually matters —
-the change is correct, reviewed and owned — is identical either way. The field
-has not converged, and this page will not pretend it has. Decide, write down why
-you decided it, and revisit it when the norm settles.
+**Do you tell downstream consumers?** If you publish a library or run a service,
+are they told a change was agent-authored? For: it is material to anyone
+deciding how far to trust a dependency, and finding out later costs more.
+Against: it singles out one authorship route when the obligation that matters —
+correct, reviewed, owned — is identical either way. The field has not settled
+this. Decide, record why, revisit it.
 
-**The audit record is also a liability.** Trajectories can contain credentials,
-customer data and source. ynh redacts known secret values from a trajectory
-before it is written, and does not pass the operator's environment through to
-the worker — a credential the run never receives cannot be recorded [4]. Neither
-is a guarantee about your data: redaction substitutes values it can identify,
-and customer data pulled from a database mid-run looks like ordinary text. Treat
-the trajectory as sensitive and satisfy yourself about what a real one contains
-before deciding where it may be stored.
-
-Retention is then a real trade rather than an administrative default: the longer
-they are kept, the more can be answered later, and the larger the thing you are
-holding when something goes wrong. Pick the period deliberately and write it
-down alongside your stop conditions, rather than discovering it during an
-incident.
+**How long do you keep trajectories?** They can hold credentials, customer data
+and source. ynh redacts secret values it knows and does not pass your
+environment to the worker [4], but it is not a sanitiser — it cannot redact a
+token fetched mid-run or a customer record read from a database, having never
+seen them. Read a real one from your own harness, then pick a period: longer
+answers more questions later and is a larger thing to be holding when something
+goes wrong.
 
 ## Where ynh Stops
 
