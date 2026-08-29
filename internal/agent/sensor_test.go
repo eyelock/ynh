@@ -92,12 +92,12 @@ func TestSensorTier(t *testing.T) {
 		category string
 		tier     int
 	}{
-		{"build", 1},
-		{"Build", 1},
-		{"lint", 2},
-		{"test", 3},
+		{"maintainability", 1},
+		{"Maintainability", 1},
+		{"architecture", 2},
+		{"behaviour", 3},
 		{"quality", 4},
-		{"behaviour", 4},
+		{"", 4},
 		{"", 4},
 	}
 	for _, c := range cases {

@@ -59,7 +59,19 @@ type Checkpoint struct {
 	PendingApproval   string           `json:"pending_approval,omitempty"`
 	Budget            CheckpointBudget `json:"budget"`
 	Task              string           `json:"task,omitempty"`
-	UpdatedAt         string           `json:"updated_at"`
+	// HarnessName, Profile and ConvergenceSensor are the run's identity.
+	// Without them a resume that omits --harness silently continues with no
+	// harness and therefore no sensors, which used to report converged.
+	// Recording them lets a resume restore the run it is actually resuming.
+	HarnessName       string `json:"harness_name,omitempty"`
+	Profile           string `json:"profile,omitempty"`
+	ConvergenceSensor string `json:"convergence_sensor,omitempty"`
+	// MaxTurns and MaxTokens are the caps, not the counters. Budget carries
+	// consumption; without the caps a resume silently re-derives them from
+	// defaults and can run far past what the original invocation allowed.
+	MaxTurns  int    `json:"max_turns,omitempty"`
+	MaxTokens int64  `json:"max_tokens,omitempty"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 // checkpointPath returns the checkpoint file path inside a session directory.
