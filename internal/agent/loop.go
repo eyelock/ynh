@@ -946,7 +946,16 @@ func checkConvergence(
 	if convergenceSensor != "" && ynh != "" && harnessName != "" {
 		_ = traj.Emit(KindSensorRun, turnN, convergenceSensor)
 		cvResult, err := RunSensor(ynh, harnessName, convergenceSensor, cwd, "")
-		if err != nil || !cvResult.Passed() {
+		// Convergence is gate.StatusPass, not a locally invented verdict.
+		// #214 routed the gate through `ynh check` but left this call site
+		// deriving its own answer, and that answer said a files sensor had
+		// converged because a path existed — contents never read, and the
+		// path inside the agent's own write path. A files sensor now yields
+		// StatusReported, which is not StatusPass, so it cannot converge:
+		// the refusal falls out of existing doctrine rather than adding a rule.
+		converged := err == nil &&
+			gate.StatusForKind(cvResult.Kind, cvResult.ExitCode) == gate.StatusPass
+		if !converged {
 			var summary string
 			if err != nil {
 				summary = err.Error()

@@ -98,5 +98,30 @@ func (r Result) Gating() bool {
 	return r.Status == StatusFail && r.Tolerance == "blocking"
 }
 
+// StatusForKind derives the status of a sensor that ran to completion, before
+// any baseline is applied.
+//
+// It exists so there is exactly one answer to "can this kind of sensor produce
+// a verdict". A files sensor surfaces content and no verdict is mechanically
+// derivable from a glob; a focus sensor needs an agent runtime ynh does not
+// own. Only a command sensor decides anything, and only by its exit code.
+//
+// `ynh check` layers baseline comparison on top of this for command sensors —
+// a failure already recorded is debt, not a regression — but the kinds that
+// cannot produce a verdict at all are settled here, once, for every caller.
+func StatusForKind(kind string, exitCode int) string {
+	switch kind {
+	case "files":
+		return StatusReported
+	case "focus":
+		return StatusDeferred
+	default:
+		if exitCode == 0 {
+			return StatusPass
+		}
+		return StatusFail
+	}
+}
+
 // Ran reports whether the sensor was actually executed this run.
 func (r Result) Ran() bool { return r.Status != StatusSkipped }

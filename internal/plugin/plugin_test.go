@@ -512,3 +512,62 @@ func writeHarnessJSON(t *testing.T, dir string, content string) {
 		t.Fatal(err)
 	}
 }
+
+// A convergence verifier decides a run is finished, so it must be able to
+// produce a verdict. A files sensor cannot — it would end the run because a
+// path exists, with contents never read, and the path sits inside the agent's
+// own write path.
+func TestValidate_ConvergenceVerifierRejectsFilesSource(t *testing.T) {
+	cases := []struct {
+		name    string
+		sensor  Sensor
+		wantErr bool
+	}{
+		{
+			name: "files source as convergence verifier is refused",
+			sensor: Sensor{
+				Role:   "convergence-verifier",
+				Source: SensorSource{Files: []string{"reports/done.txt"}},
+				Output: SensorOutput{Format: "text"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "command source as convergence verifier is fine",
+			sensor: Sensor{
+				Role:   "convergence-verifier",
+				Source: SensorSource{Command: "make verify"},
+				Output: SensorOutput{Format: "text"},
+			},
+		},
+		{
+			name: "a files sensor with no special role stays legal",
+			sensor: Sensor{
+				Source: SensorSource{Files: []string{"reports/*.json"}},
+				Output: SensorOutput{Format: "json"},
+			},
+		},
+		{
+			name: "focus source as convergence verifier stays legal — a runtime resolves it",
+			sensor: Sensor{
+				Role:   "convergence-verifier",
+				Source: SensorSource{Focus: &FocusRef{Name: "reviewer"}},
+				Output: SensorOutput{Format: "text"},
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			issues := ValidateSensors(map[string]Sensor{"s": c.sensor}, nil, map[string]bool{"reviewer": true})
+			found := false
+			for _, i := range issues {
+				if strings.Contains(i, "requires a command source") {
+					found = true
+				}
+			}
+			if found != c.wantErr {
+				t.Errorf("rejected=%v want=%v; issues: %v", found, c.wantErr, issues)
+			}
+		})
+	}
+}

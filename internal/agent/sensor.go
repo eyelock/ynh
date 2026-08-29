@@ -27,23 +27,6 @@ type SensorResult struct {
 	Output     SensorRunOutput `json:"output"`
 }
 
-// Passed applies loop-driver policy:
-//   - command sensors: exit_code == 0
-//   - files sensors: at least one file matched
-//   - focus sensors: always informational (true); driver handles agent invocation
-func (r *SensorResult) Passed() bool {
-	switch r.Kind {
-	case "command":
-		return r.ExitCode == 0
-	case "files":
-		return len(r.Output.Files) > 0
-	case "focus":
-		return true
-	default:
-		return r.ExitCode == 0
-	}
-}
-
 // Summary returns a short human-readable description of the sensor result.
 func (r *SensorResult) Summary() string {
 	switch r.Kind {

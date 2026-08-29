@@ -6,44 +6,6 @@ import (
 	"github.com/eyelock/ynh/internal/gate"
 )
 
-func TestSensorResult_Passed_Command(t *testing.T) {
-	cases := []struct {
-		exit   int
-		passed bool
-	}{
-		{0, true},
-		{1, false},
-		{127, false},
-	}
-	for _, c := range cases {
-		r := &SensorResult{Kind: "command", ExitCode: c.exit}
-		if r.Passed() != c.passed {
-			t.Errorf("exit=%d: expected Passed()=%v", c.exit, c.passed)
-		}
-	}
-}
-
-func TestSensorResult_Passed_Files(t *testing.T) {
-	empty := &SensorResult{Kind: "files"}
-	if empty.Passed() {
-		t.Error("files sensor with no files should not pass")
-	}
-
-	withFiles := &SensorResult{Kind: "files", Output: SensorRunOutput{
-		Files: []SensorFile{{Path: "foo.txt"}},
-	}}
-	if !withFiles.Passed() {
-		t.Error("files sensor with files should pass")
-	}
-}
-
-func TestSensorResult_Passed_Focus(t *testing.T) {
-	r := &SensorResult{Kind: "focus"}
-	if !r.Passed() {
-		t.Error("focus sensor should always pass (informational)")
-	}
-}
-
 func TestSensorResult_Summary_Command(t *testing.T) {
 	passing := &SensorResult{Kind: "command", ExitCode: 0}
 	if passing.Summary() != "passed" {
