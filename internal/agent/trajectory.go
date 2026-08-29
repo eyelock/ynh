@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"time"
@@ -25,6 +26,7 @@ const (
 	KindFeedbackSent         EventKind = "feedback_sent"
 	// KindTurnApprovalRequired is emitted only during the act phase (turn ≥ 1).
 	// Plan-phase approval gates use KindPlanApprovalRequired.
+	KindWorkerEnv            EventKind = "worker_env"
 	KindTurnApprovalRequired EventKind = "turn_approval_required"
 	KindStuckDetected        EventKind = "stuck_detected"
 	// KindTamperDetected is emitted when the gate's own reference point moved
@@ -51,24 +53,39 @@ type Event struct {
 
 // TrajectoryWriter writes trajectory events as NDJSON.
 type TrajectoryWriter struct {
-	enc *json.Encoder
+	w   io.Writer
+	red *Redactor
 }
 
 // NewTrajectoryWriter returns a writer that emits one JSON object per line.
 func NewTrajectoryWriter(w io.Writer) *TrajectoryWriter {
-	enc := json.NewEncoder(w)
-	enc.SetEscapeHTML(false)
-	return &TrajectoryWriter{enc: enc}
+	return &TrajectoryWriter{w: w}
 }
+
+// SetRedactor installs value-based redaction over everything this writer
+// emits.
+//
+// Applied to the encoded line rather than to individual fields, because a
+// secret reaches a trajectory through whatever a sensor or a worker happened
+// to print — not through a field anyone thought to guard.
+func (t *TrajectoryWriter) SetRedactor(r *Redactor) { t.red = r }
 
 // Emit writes a single event to the trajectory stream.
 func (t *TrajectoryWriter) Emit(kind EventKind, turn int, data any) error {
-	return t.enc.Encode(Event{
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(Event{
 		Timestamp: time.Now().UTC(),
 		Kind:      kind,
 		Turn:      turn,
 		Data:      data,
-	})
+	}); err != nil {
+		return err
+	}
+	line := t.red.Redact(buf.String())
+	_, err := io.WriteString(t.w, line)
+	return err
 }
 
 // Typed data payloads for specific event kinds.
@@ -86,7 +103,14 @@ type SessionStartData struct {
 	Model          string `json:"model,omitempty"`
 	YnhVersion     string `json:"ynh_version,omitempty"`
 	HarnessVersion string `json:"harness_version,omitempty"`
-	BaseCommit     string `json:"base_commit,omitempty"`
+	// HarnessSHA is the resolved commit the harness was installed from.
+	// Version alone is an author-declared string that can be reused across
+	// content; the SHA is what actually pins a run to one set of sensors.
+	HarnessSHA string `json:"harness_sha,omitempty"`
+	// ImageDigest pins the run to a toolchain. Passed in by the launcher —
+	// a run cannot observe its own image digest.
+	ImageDigest string `json:"image_digest,omitempty"`
+	BaseCommit  string `json:"base_commit,omitempty"`
 	// Budgets records the caps in force and where each came from. A cap nobody
 	// chose that fires is noise in a batch result; a chosen cap that fires is a
 	// finding. Aggregating a hundred runs needs them distinguishable.
@@ -133,11 +157,14 @@ type SensorResultData struct {
 	// already in the baseline", which is the difference between a regression
 	// this run caused and debt it inherited. Empty for the convergence
 	// verifier, which does not go through the gate.
-	Status     string `json:"status,omitempty"`
-	KnownCount int    `json:"known_count,omitempty"`
-	NewCount   int    `json:"new_count,omitempty"`
-	Passed     bool   `json:"passed"`
-	Summary    string `json:"summary,omitempty"`
+	Status string `json:"status,omitempty"`
+	// ToolVersion is the version of the tool that produced this result, when
+	// the sensor declares a version_command.
+	ToolVersion string `json:"tool_version,omitempty"`
+	KnownCount  int    `json:"known_count,omitempty"`
+	NewCount    int    `json:"new_count,omitempty"`
+	Passed      bool   `json:"passed"`
+	Summary     string `json:"summary,omitempty"`
 }
 
 // TamperData is the payload for KindTamperDetected events. The fingerprints
@@ -178,6 +205,24 @@ type SessionEndData struct {
 	Reason      string `json:"reason,omitempty"`
 	TotalTurns  int    `json:"total_turns,omitempty"`
 	TotalTokens int64  `json:"total_tokens,omitempty"`
+}
+
+// WorkerEnvData is the payload for KindWorkerEnv events.
+//
+// Names only, never values. A run that fails for want of a variable has to be
+// diagnosable, but a trajectory that carried the values would be the leak the
+// allowlist exists to prevent — and trajectories are written to disk and read
+// by whatever grades the corpus.
+type WorkerEnvData struct {
+	// Passed names every variable the worker process received.
+	Passed []string `json:"passed"`
+	// Declared names what the harness asked for via env_passthrough, so a
+	// variable that was declared but not set in the operator's environment is
+	// visible as a gap rather than a mystery.
+	Declared []string `json:"declared,omitempty"`
+	// Missing names declared variables that were not set, which is the
+	// single most likely cause of a worker that starts and cannot authenticate.
+	Missing []string `json:"missing,omitempty"`
 }
 
 // TurnApprovalData is the payload for KindTurnApprovalRequired events.

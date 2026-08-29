@@ -151,6 +151,26 @@ If `channel` is omitted, `ynh sensors run` infers it from the source kind:
 | `command` | `stdout+exit` |
 | `focus` | `stdout` |
 
+### `convergence-verifier` needs a source that can decide
+
+A sensor with `role: convergence-verifier` tells the loop the run is finished,
+so it must be able to produce a verdict. **A `files` source cannot**, and
+`ynd validate` refuses the combination.
+
+No verdict is mechanically derivable from a glob. A files sensor declared as
+the verifier would end the run because a path exists — contents never read,
+`output.format` never consulted — and that path sits inside the agent's own
+write path, so the run could manufacture its own convergence by touching a
+file. The failure direction is the wrong way round too: a missing file fails
+loudly, while a stale or forged one passes silently.
+
+The refusal is structural rather than a special case. Convergence is
+`status: pass`, a files sensor is always `status: reported`, and `reported` is
+not `pass` — the same rule that stops a files sensor gating `ynh check`.
+
+Use a command source that exits non-zero until the work is done, or a focus
+source, which a loop driver resolves with an agent runtime.
+
 ## Validation
 
 `ynd validate` checks:
@@ -177,7 +197,13 @@ sensor "security-scan": source.focus references undefined focus "infer-vulns"
 
 ### Includes — root-only
 
-Sensors declared in *included* harnesses are dropped during assembly, identical to the existing rule for hooks. Composed harnesses cannot silently inject observation surfaces the root harness author did not declare. If an included harness needs a sensor, copy its declaration into the root harness's `plugin.json`.
+Only the root harness's sensors are used. An included harness contributes `skills/`, `agents/`, `rules/` and `commands/` — files — and nothing else.
+
+Nothing is *dropped*: `resolveWith` iterates includes flat, with no recursion, and returns file paths. **It never opens an included harness's `plugin.json`,** so a sensor declared there is never read in the first place. Root-only is a property of the resolver, not a filter applied afterwards.
+
+That is deliberate. It keeps the answer to "what observes this repository" in one committed file a reviewer can read, and stops a composed harness turning inert included content into an execution surface the root author never declared.
+
+If an included harness needs a sensor, copy its declaration into the root harness's `plugin.json`. Merging that copy at authoring time — generated, labelled blocks with drift detection — is the agreed direction rather than resolving includes at run time.
 
 ### Profiles — out of scope for v1
 
@@ -407,6 +433,37 @@ turns. The loop does not apply its own policy: it runs `ynh check --format
 json` and takes its verdict, so the
 [ratchet](harness-engineering.md#sensor-gate-ratchet-loop) and the tolerance
 rules are the same ones a human gets at a terminal.
+
+### `version_command` — which tool produced this
+
+```json
+"lint": {
+  "tolerance": "blocking",
+  "source": { "command": "golangci-lint run ./..." },
+  "version_command": "golangci-lint --version",
+  "output": { "format": "text" }
+}
+```
+
+Optional. When declared, `ynh check` runs it and records the first line on the
+sensor's result as `tool_version`, in `--format json` and on the agent
+trajectory.
+
+It matters as soon as results are compared over time. A corpus graded across
+weeks cannot tell a genuine change in findings from the linter changing
+underneath it — those are the same observation without a recorded version.
+
+**Declared, not inferred.** Guessing `<first token> --version` reports make's
+version for `make lint`, not the linter's, and hangs outright on commands that
+do not support the flag.
+
+The probe is bounded at five seconds and cached for the life of the process, so
+an inner loop running the gate every turn does not re-learn a constant. **A
+failed probe is never a sensor failure** — a missing tool, a non-zero exit or a
+timeout simply leaves the version absent, which honestly says "cannot tell"
+rather than implying a stability nobody verified. The version is read from
+stdout; stderr counts only on a clean exit, so `java -version` works while
+`sh: foo: command not found` is not mistaken for a version.
 
 ## `ynh check`
 

@@ -460,10 +460,14 @@ cat > /tmp/ynh-fork-src/.ynh-plugin/plugin.json << 'EOF'
 {"name":"fork-src","version":"1.0.0","default_vendor":"claude"}
 EOF
 
-# Fork it to a local directory
-ynh fork /tmp/ynh-fork-src --to /tmp/ynh-fork-copy --name fork-copy
-# Expected: Forked "fork-src" → "fork-copy"
-#           Path: /tmp/ynh-fork-copy
+# Install it, then fork by canonical id. `ynh fork` takes an installed
+# harness, not a source directory — see `ynh fork <harness-name>` in
+# docs/reference.md. Forking a path has never been supported.
+ynh install /tmp/ynh-fork-src
+ynh fork local/fork-src --to /tmp/ynh-fork-copy --name fork-copy
+# Expected: Forked harness "fork-src" as "fork-copy" to /tmp/ynh-fork-copy
+#             Source:  /tmp/ynh-fork-src (local)
+#             Version: 1.0.0
 
 # Verify it appears in ls
 ynh ls --format json | jq -r '.harnesses[] | select(.name=="fork-copy") | .id'
@@ -488,10 +492,15 @@ A fork (`local/<name>`) and a registry install (`<host>/…/<name>`) that share 
 ```bash
 export YNH_HOME=$(mktemp -d)
 
-# Simulate a registry install (schema-2 tree)
+# Simulate a registry install (schema-2 tree). installed.json is not optional:
+# a tree without it is a broken entry, and auto-migration aborts on one rather
+# than guessing where it came from.
 mkdir -p "$YNH_HOME/harnesses/github.com--eyelock--assistants--shared/.ynh-plugin"
 cat > "$YNH_HOME/harnesses/github.com--eyelock--assistants--shared/.ynh-plugin/plugin.json" << 'EOF'
 {"name":"shared","version":"1.0.0","default_vendor":"claude"}
+EOF
+cat > "$YNH_HOME/harnesses/github.com--eyelock--assistants--shared/.ynh-plugin/installed.json" << 'EOF'
+{"source_type":"registry","source":"github.com/eyelock/assistants","namespace":"github.com/eyelock/assistants","registry_name":"shared","installed_at":"2026-01-01T00:00:00Z"}
 EOF
 
 # Register a fork with the same leaf name

@@ -46,9 +46,19 @@ type Sensor struct {
 	// Empty means "blocking" — the safe default for a gate. This is the one
 	// piece of pass/fail policy ynh owns; everything richer (thresholds,
 	// severity filters, convergence) still belongs to a loop driver.
-	Tolerance string       `json:"tolerance,omitempty"`
-	Source    SensorSource `json:"source"`
-	Output    SensorOutput `json:"output"`
+	Tolerance string `json:"tolerance,omitempty"`
+	// VersionCommand prints the version of the tool this sensor runs, e.g.
+	// "golangci-lint --version".
+	//
+	// Declared rather than inferred. Guessing `<first token> --version` is
+	// wrong for a wrapper — `make lint` would report make's version, not the
+	// linter's — and hangs outright on commands that do not support the flag.
+	// A corpus graded across weeks cannot defend a yield number without it: a
+	// change in findings and a change in the tool are otherwise the same
+	// observation.
+	VersionCommand string       `json:"version_command,omitempty"`
+	Source         SensorSource `json:"source"`
+	Output         SensorOutput `json:"output"`
 }
 
 // ValidSensorTolerances lists how `ynh check` treats a failing sensor.
@@ -208,6 +218,20 @@ func ValidateSensors(sensors map[string]Sensor, profileNames, focusNames map[str
 		}
 		if s.Role != "" && !ValidSensorRoles[s.Role] {
 			issues = append(issues, fmt.Sprintf("%s role %q must be one of regular, convergence-verifier, stuck-recovery", prefix, s.Role))
+		}
+		// A convergence verifier decides that a run is finished, so it must be
+		// able to produce a verdict. No verdict is mechanically derivable from
+		// a file glob: such a sensor would end the run because a path exists,
+		// with contents never read — and the path sits inside the agent's own
+		// write path, so the run could manufacture its own convergence.
+		//
+		// The loop refuses this at runtime because a files sensor is
+		// StatusReported and never StatusPass. Refusing it here as well means
+		// the author is told at `ynd validate` time rather than discovering it
+		// as a run that silently never converges.
+		if s.Role == "convergence-verifier" && s.Source.Kind() == "files" {
+			issues = append(issues, fmt.Sprintf(
+				"%s role convergence-verifier requires a command source: no verdict is derivable from a file glob", prefix))
 		}
 		if s.Tolerance != "" && !ValidSensorTolerances[s.Tolerance] {
 			issues = append(issues, fmt.Sprintf("%s tolerance %q must be one of blocking, advisory, report", prefix, s.Tolerance))

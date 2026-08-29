@@ -123,7 +123,22 @@ type RunOptions struct {
 
 // RunLoop executes the agent loop. It returns an *ExitError on non-zero
 // termination so the CLI handler can map it to os.Exit.
-func RunLoop(opts RunOptions) error {
+// RunLoop drives one agent session and returns its machine-readable result
+// alongside the error.
+//
+// The result is returned on every path, including failures: a pipeline needs to
+// know what a run consumed and what it touched precisely when it did not
+// converge. It is populated by a deferred finaliser so the twenty-odd exit
+// points do not each have to remember to fill it in — one of them forgetting
+// would produce a plausible-looking result that quietly lied.
+func RunLoop(opts RunOptions) (result *RunResult, err error) {
+	result = &RunResult{
+		Capabilities: config.CapabilitiesVersion,
+		YnhVersion:   config.Version,
+		ChangedFiles: []string{},
+	}
+	defer func() { result.finalise(err) }()
+
 	// ── I/O defaults ─────────────────────────────────────────────────────────
 	if opts.Stdout == nil {
 		opts.Stdout = os.Stdout
@@ -136,23 +151,26 @@ func RunLoop(opts RunOptions) error {
 	}
 	backend, err := validateBackend(opts.Backend)
 	if err != nil {
-		return err
+		return result, err
 	}
 	opts.Backend = backend
 	if err := validateSandbox(opts.Sandbox, opts.Backend); err != nil {
-		return err
+		return result, err
 	}
 	if opts.WorktreeDir == "" {
 		var err error
 		opts.WorktreeDir, err = os.Getwd()
 		if err != nil {
-			return fmt.Errorf("resolving working directory: %w", err)
+			return result, fmt.Errorf("resolving working directory: %w", err)
 		}
 	}
 
+	result.Worktree = opts.WorktreeDir
+	result.BaseCommit = baseCommit(opts.WorktreeDir)
+
 	ynh, err := resolveYNHBinary(opts.YNHBinary)
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	// ── Resume state ──────────────────────────────────────────────────────────
@@ -166,7 +184,7 @@ func RunLoop(opts RunOptions) error {
 		var rerr error
 		resumeCP, rerr = readCheckpoint(opts.Resume)
 		if rerr != nil {
-			return &ExitError{Code: ExitResumeError, Message: rerr.Error()}
+			return result, &ExitError{Code: ExitResumeError, Message: rerr.Error()}
 		}
 		// The trajectory lives in the session directory; default it so callers
 		// can pass just --resume <dir>.
@@ -209,9 +227,16 @@ func RunLoop(opts RunOptions) error {
 	if opts.EmitJSONL != "" {
 		tw, cleanup, err := openTrajectory(opts.EmitJSONL, opts.Stdout, resuming)
 		if err != nil {
-			return err
+			return result, err
 		}
 		defer cleanup()
+		// Redact from the operator's whole environment, not merely what was
+		// passed through. A variable the worker never received can still reach
+		// the trajectory — a sensor subprocess inherits more than the worker
+		// does, and a failing command prints what it was given. Redacting the
+		// broader set costs nothing and covers the case the narrower one
+		// misses.
+		tw.SetRedactor(NewRedactor(os.Environ()))
 		traj = tw
 	}
 
@@ -234,7 +259,7 @@ func RunLoop(opts RunOptions) error {
 	if opts.HarnessName != "" {
 		harnessObj, err = harness.LoadQualified(opts.HarnessName)
 		if err != nil {
-			return fmt.Errorf("loading harness %q: %w", opts.HarnessName, err)
+			return result, fmt.Errorf("loading harness %q: %w", opts.HarnessName, err)
 		}
 
 		// Resolve focus → prompt + bound profile. Mirrors `ynh run --focus`.
@@ -242,7 +267,7 @@ func RunLoop(opts RunOptions) error {
 		if opts.Focus != "" {
 			focus, ok := harnessObj.Focuses[opts.Focus]
 			if !ok {
-				return fmt.Errorf("focus %q not defined in harness", opts.Focus)
+				return result, fmt.Errorf("focus %q not defined in harness", opts.Focus)
 			}
 			if focus.Profile != "" {
 				profileName = focus.Profile
@@ -255,17 +280,17 @@ func RunLoop(opts RunOptions) error {
 		if profileName != "" {
 			harnessObj, err = harness.ResolveProfile(harnessObj, profileName)
 			if err != nil {
-				return fmt.Errorf("resolving profile %q: %w", profileName, err)
+				return result, fmt.Errorf("resolving profile %q: %w", profileName, err)
 			}
 		}
 
 		configPath, err = assembleHarness(harnessObj, opts.Backend)
 		if err != nil {
-			return fmt.Errorf("assembling harness: %w", err)
+			return result, fmt.Errorf("assembling harness: %w", err)
 		}
 		defer func() { _ = os.RemoveAll(configPath) }()
 	} else if opts.Focus != "" || opts.Profile != "" {
-		return fmt.Errorf("--focus and --profile require --harness")
+		return result, fmt.Errorf("--focus and --profile require --harness")
 	}
 
 	// ── Select backend ────────────────────────────────────────────────────────
@@ -273,7 +298,7 @@ func RunLoop(opts RunOptions) error {
 	if wb == nil {
 		wb, err = selectBackend(opts.Backend)
 		if err != nil {
-			return err
+			return result, err
 		}
 	}
 
@@ -307,7 +332,7 @@ func RunLoop(opts RunOptions) error {
 		if harnessObj != nil && harnessObj.Agent != nil && harnessObj.Agent.MaxWall != "" {
 			d, dErr := time.ParseDuration(harnessObj.Agent.MaxWall)
 			if dErr != nil {
-				return fmt.Errorf("harness agent.max_wall %q: %w", harnessObj.Agent.MaxWall, dErr)
+				return result, fmt.Errorf("harness agent.max_wall %q: %w", harnessObj.Agent.MaxWall, dErr)
 			}
 			opts.MaxWall = d
 		}
@@ -322,6 +347,13 @@ func RunLoop(opts RunOptions) error {
 		MaxTokens: opts.MaxTokens,
 		MaxWall:   opts.MaxWall,
 	}
+	result.budget = budget
+	result.Budgets = BudgetLimits{
+		MaxTurns:  opts.MaxTurns,
+		MaxTokens: opts.MaxTokens,
+		MaxWallMS: opts.MaxWall.Milliseconds(),
+	}
+	result.BudgetSources = budgetSource
 	if resuming {
 		budget.Resume(
 			resumeCP.Budget.Turns,
@@ -336,9 +368,10 @@ func RunLoop(opts RunOptions) error {
 	// exit before spawning a worker or starting a new turn.
 	if resuming {
 		if reason, budgetKind, code := budget.Exceeded(); reason != "" {
+			result.BoundBy = string(budgetKind)
 			_ = traj.Emit(KindBudgetExceeded, budget.Turns(), BudgetExceededData{Budget: budgetKind, Reason: reason})
 			_ = traj.Emit(KindSessionEnd, budget.Turns(), SessionEndData{ExitCode: code, Reason: reason, TotalTurns: budget.Turns(), TotalTokens: budget.Tokens()})
-			return &ExitError{Code: code, Message: reason}
+			return result, &ExitError{Code: code, Message: reason}
 		}
 	}
 
@@ -375,7 +408,7 @@ func RunLoop(opts RunOptions) error {
 			RestoredTokens:  budget.Tokens(),
 			PendingApproval: resumeCP.PendingApproval,
 		}); emitErr != nil {
-			return fmt.Errorf("writing trajectory: %w", emitErr)
+			return result, fmt.Errorf("writing trajectory: %w", emitErr)
 		}
 	} else {
 		start := SessionStartData{
@@ -395,11 +428,26 @@ func RunLoop(opts RunOptions) error {
 		}
 		if harnessObj != nil {
 			start.HarnessVersion = harnessObj.Version
+			if harnessObj.InstalledFrom != nil {
+				start.HarnessSHA = harnessObj.InstalledFrom.SHA
+			}
 		}
+		start.ImageDigest = imageDigest()
 		if emitErr := traj.Emit(KindSessionStart, 0, start); emitErr != nil {
-			return fmt.Errorf("writing trajectory: %w", emitErr)
+			return result, fmt.Errorf("writing trajectory: %w", emitErr)
 		}
 	}
+
+	result.SessionID = sessionID
+	result.SessionDir = sessionDir
+	result.Backend = wb.Name()
+	result.Model = opts.Model
+	// opts.HarnessName, not harnessName: the latter is "(none)" for display in
+	// the trajectory when no harness was given, and a structured consumer
+	// reading a harness literally named "(none)" would be worse served than by
+	// the field being absent, which is what "this run verified nothing" means.
+	result.Harness = harnessProvenance(opts.HarnessName, harnessObj)
+	result.ImageDigest = imageDigest()
 
 	// ── Start (or reconstruct) the worker ─────────────────────────────────────
 	var resumeToken string
@@ -431,6 +479,26 @@ func RunLoop(opts RunOptions) error {
 			}
 		}
 	}
+	// Record what actually reached the worker, names only. An agent that
+	// cannot authenticate because a variable was never declared is otherwise
+	// indistinguishable from one that is simply failing.
+	{
+		var declared, missing []string
+		if harnessObj != nil {
+			declared = harnessObj.EnvPassthrough
+			for _, name := range declared {
+				if _, ok := os.LookupEnv(name); !ok {
+					missing = append(missing, name)
+				}
+			}
+		}
+		_ = traj.Emit(KindWorkerEnv, 0, WorkerEnvData{
+			Passed:   envNames(workerEnvFor(workerEnv)),
+			Declared: declared,
+			Missing:  missing,
+		})
+	}
+
 	sess, err := wb.Start(ctx, StartOptions{
 		WorktreeDir: opts.WorktreeDir,
 		ConfigPath:  configPath,
@@ -442,7 +510,7 @@ func RunLoop(opts RunOptions) error {
 	})
 	if err != nil {
 		_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
-		return &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("starting worker: %v", err)}
+		return result, &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("starting worker: %v", err)}
 	}
 	defer func() { _ = sess.Close() }()
 
@@ -479,6 +547,7 @@ func RunLoop(opts RunOptions) error {
 		MaxTokens:         opts.MaxTokens,
 	}
 	planIterations := 0
+	result.planIterations = &planIterations
 	if resuming {
 		// Carry the prior checkpoint's state forward so per-turn saves preserve
 		// plan/approval fields across a second interrupt-and-resume.
@@ -588,21 +657,21 @@ func RunLoop(opts RunOptions) error {
 			planIterations = planIter
 			if planIter == 1 {
 				if emitErr := traj.Emit(KindPlan, 0, nil); emitErr != nil {
-					return fmt.Errorf("writing trajectory: %w", emitErr)
+					return result, fmt.Errorf("writing trajectory: %w", emitErr)
 				}
 			}
 			if err := sess.Send(planMsg); err != nil {
 				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
-				return &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("sending plan request: %v", err)}
+				return result, &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("sending plan request: %v", err)}
 			}
 			planTurn, err := sess.Next()
 			if err == io.EOF {
 				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: "worker exited during plan phase"})
-				return &ExitError{Code: ExitWorkerError, Message: "worker exited during plan phase"}
+				return result, &ExitError{Code: ExitWorkerError, Message: "worker exited during plan phase"}
 			}
 			if err != nil {
 				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
-				return &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("plan turn: %v", err)}
+				return result, &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("plan turn: %v", err)}
 			}
 			_ = traj.Emit(KindAssistantMessage, 0, planTurn.Content)
 			budget.RecordTokens(planTurn.Usage)
@@ -615,9 +684,10 @@ func RunLoop(opts RunOptions) error {
 			// turn cap. budget.Exceeded checks turns first; turns is still 0 here
 			// (RecordTurn is act-phase only) so the turns branch is dormant.
 			if reason, budgetKind, code := budget.Exceeded(); reason != "" {
+				result.BoundBy = string(budgetKind)
 				_ = traj.Emit(KindBudgetExceeded, 0, BudgetExceededData{Budget: budgetKind, Reason: reason})
 				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: code, Reason: reason, TotalTokens: budget.Tokens()})
-				return &ExitError{Code: code, Message: reason}
+				return result, &ExitError{Code: code, Message: reason}
 			}
 
 			if !opts.Interactive {
@@ -629,13 +699,13 @@ func RunLoop(opts RunOptions) error {
 				Plan:      planTurn.Content,
 				Iteration: planIter,
 			}); emitErr != nil {
-				return fmt.Errorf("writing trajectory: %w", emitErr)
+				return result, fmt.Errorf("writing trajectory: %w", emitErr)
 			}
 			action, replyFeedback, aborted := waitForApproval(ctrl, ActionApprovePlan, ActionRejectPlan)
 			if aborted {
 				// Interrupt/SIGTERM during plan approval: the plan-phase
 				// checkpoint already exists, so --resume re-runs the plan.
-				return interruptExit(0)
+				return result, interruptExit(0)
 			}
 			if action == ActionRejectPlan {
 				reason := "plan rejected by user"
@@ -643,7 +713,7 @@ func RunLoop(opts RunOptions) error {
 					reason = "plan rejected by user: " + replyFeedback
 				}
 				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitUserAborted, Reason: reason})
-				return &ExitError{Code: ExitUserAborted, Message: reason}
+				return result, &ExitError{Code: ExitUserAborted, Message: reason}
 			}
 			// ActionApprovePlan: empty feedback means plain approve; non-empty
 			// means refine — produce a revised plan addressing the feedback.
@@ -654,7 +724,7 @@ func RunLoop(opts RunOptions) error {
 			if planIter >= maxPlanIters {
 				reason := fmt.Sprintf("plan iteration cap reached (%d/%d)", planIter, maxPlanIters)
 				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitPlanIterationCap, Reason: reason})
-				return &ExitError{Code: ExitPlanIterationCap, Message: reason}
+				return result, &ExitError{Code: ExitPlanIterationCap, Message: reason}
 			}
 			nextIter := planIter + 1
 			_ = traj.Emit(KindPlanRevised, 0, PlanRevisedData{Iteration: nextIter, Notes: replyFeedback})
@@ -712,12 +782,12 @@ func RunLoop(opts RunOptions) error {
 		// A baseline that cannot be read before the run has even started is a
 		// broken gate, not tampering — nothing has had the chance to touch it.
 		_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitGateError, Reason: fpErr.Error()})
-		return &ExitError{Code: ExitGateError, Message: fmt.Sprintf("reading baseline: %v", fpErr)}
+		return result, &ExitError{Code: ExitGateError, Message: fmt.Sprintf("reading baseline: %v", fpErr)}
 	}
 
 	if err := sess.Send(firstMsg); err != nil {
 		_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
-		return &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("sending first message: %v", err)}
+		return result, &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("sending first message: %v", err)}
 	}
 
 	for {
@@ -726,14 +796,15 @@ func RunLoop(opts RunOptions) error {
 		// that ran to completion before the cancel took effect). The last
 		// completed turn is already checkpointed, so --resume continues from it.
 		if ctx.Err() != nil {
-			return interruptExit(budget.Turns())
+			return result, interruptExit(budget.Turns())
 		}
 
 		// ── Budget check ──────────────────────────────────────────────────────
 		if reason, budgetKind, code := budget.Exceeded(); reason != "" {
+			result.BoundBy = string(budgetKind)
 			_ = traj.Emit(KindBudgetExceeded, budget.Turns(), BudgetExceededData{Budget: budgetKind, Reason: reason})
 			_ = traj.Emit(KindSessionEnd, budget.Turns(), SessionEndData{ExitCode: code, Reason: reason, TotalTurns: budget.Turns(), TotalTokens: budget.Tokens()})
-			return &ExitError{Code: code, Message: reason}
+			return result, &ExitError{Code: code, Message: reason}
 		}
 
 		turnN := budget.Turns() + 1
@@ -744,15 +815,15 @@ func RunLoop(opts RunOptions) error {
 		// A cancelled context means an interrupt/SIGTERM killed the worker
 		// mid-turn; the partial turn is discarded and resume redoes it.
 		if ctx.Err() != nil {
-			return interruptExit(turnN)
+			return result, interruptExit(turnN)
 		}
 		if err == io.EOF {
 			_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitWorkerError, Reason: "worker exited unexpectedly"})
-			return &ExitError{Code: ExitWorkerError, Message: "worker exited before convergence"}
+			return result, &ExitError{Code: ExitWorkerError, Message: "worker exited before convergence"}
 		}
 		if err != nil {
 			_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
-			return &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("worker turn %d: %v", turnN, err)}
+			return result, &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("worker turn %d: %v", turnN, err)}
 		}
 		_ = traj.Emit(KindAssistantMessage, turnN, turn.Content)
 
@@ -777,7 +848,7 @@ func RunLoop(opts RunOptions) error {
 				What: "baseline", Before: baselineFP, After: after,
 			})
 			_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitTamper, Reason: reason})
-			return &ExitError{Code: ExitTamper, Message: reason +
+			return result, &ExitError{Code: ExitTamper, Message: reason +
 				" — nothing being gated may rewrite the gate's reference point"}
 		}
 
@@ -806,22 +877,24 @@ func RunLoop(opts RunOptions) error {
 				// turns nothing could verify until the budget ran out, and then
 				// report that exhaustion as the agent's failure.
 				_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitGateError, Reason: checkErr.Error()})
-				return &ExitError{Code: ExitGateError, Message: fmt.Sprintf("gate turn %d: %v", turnN, checkErr)}
+				return result, &ExitError{Code: ExitGateError, Message: fmt.Sprintf("gate turn %d: %v", turnN, checkErr)}
 			}
 			checkEnv = env
+			result.Sensors = env.Sensors
 			for _, r := range env.Sensors {
 				if !r.Ran() {
 					continue
 				}
 				_ = traj.Emit(KindSensorResult, turnN, SensorResultData{
-					Name:       r.Name,
-					Kind:       r.Kind,
-					Status:     r.Status,
-					ExitCode:   r.ExitCode,
-					DurationMS: r.DurationMS,
-					Tolerance:  r.Tolerance,
-					KnownCount: r.KnownCount,
-					NewCount:   r.NewCount,
+					Name:        r.Name,
+					Kind:        r.Kind,
+					Status:      r.Status,
+					ExitCode:    r.ExitCode,
+					DurationMS:  r.DurationMS,
+					Tolerance:   r.Tolerance,
+					ToolVersion: r.ToolVersion,
+					KnownCount:  r.KnownCount,
+					NewCount:    r.NewCount,
 					// Passed stays "did this sensor pass", not "did it block".
 					// Tolerance is what explains a failure that did not gate;
 					// folding the two together would hide advisory failures from
@@ -833,34 +906,38 @@ func RunLoop(opts RunOptions) error {
 		}
 
 		// ── Check convergence ─────────────────────────────────────────────────
-		if converged, feedback := checkConvergence(checkEnv, convergenceSensor, ynh, opts.HarnessName, opts.WorktreeDir, traj, turnN, verificationExpected); converged {
+		converged, feedback, convergence := checkConvergence(checkEnv, convergenceSensor, ynh, opts.HarnessName, opts.WorktreeDir, traj, turnN, verificationExpected)
+		if convergence != nil {
+			result.Convergence = convergence
+		}
+		if converged {
 			_ = traj.Emit(KindConverged, turnN, nil)
 			_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitConverged, TotalTurns: budget.Turns(), TotalTokens: budget.Tokens()})
-			return nil
+			return result, nil
 		} else if feedback == "" {
 			// All sensors passed but no convergence sensor; treat as converged.
 			_ = traj.Emit(KindConverged, turnN, nil)
 			_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitConverged, TotalTurns: budget.Turns(), TotalTokens: budget.Tokens()})
-			return nil
+			return result, nil
 		} else {
 			// ── Stuckness watchdog ─────────────────────────────────────────────
 			sensorHash := SensorHash(checkEnv)
 			if reason := watchdog.RecordTurn(turn.Content, sensorHash); reason != "" {
 				_ = traj.Emit(KindStuckDetected, turnN, StuckDetectedData{Reason: reason, TurnCount: budget.Turns()})
 				_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitStuck, Reason: reason})
-				return &ExitError{Code: ExitStuck, Message: "stuck: " + reason}
+				return result, &ExitError{Code: ExitStuck, Message: "stuck: " + reason}
 			}
 
 			// ── Interactive approval ───────────────────────────────────────────
 			if opts.Interactive {
 				if emitErr := traj.Emit(KindTurnApprovalRequired, turnN, TurnApprovalData{SynthesizedFeedback: feedback}); emitErr != nil {
-					return fmt.Errorf("writing trajectory: %w", emitErr)
+					return result, fmt.Errorf("writing trajectory: %w", emitErr)
 				}
 				_, replacement, aborted := waitForApproval(ctrl, ActionApproveTurn, ActionRejectPlan)
 				if aborted {
 					// Interrupt at the turn gate: the checkpoint reflects the
 					// last completed turn, so --resume redoes this turn.
-					return interruptExit(turnN)
+					return result, interruptExit(turnN)
 				}
 				if replacement != "" {
 					feedback = replacement
@@ -870,7 +947,7 @@ func RunLoop(opts RunOptions) error {
 			_ = traj.Emit(KindFeedbackSent, turnN, feedback)
 			if err := sess.Send(feedback); err != nil {
 				_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
-				return &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("sending feedback turn %d: %v", turnN, err)}
+				return result, &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("sending feedback turn %d: %v", turnN, err)}
 			}
 
 			// ── Checkpoint the completed turn ──────────────────────────────────
@@ -900,7 +977,7 @@ func checkConvergence(
 	traj *TrajectoryWriter,
 	turnN int,
 	verificationExpected bool,
-) (bool, string) {
+) (bool, string, *RunConvergence) {
 	// Convergence needs evidence when verification was asked for. An empty
 	// result set made allPassed vacuously true, so a run whose harness went
 	// missing — which is what --resume without --harness produced — reported
@@ -930,14 +1007,14 @@ func checkConvergence(
 		}
 	}
 	if verificationExpected && ran == 0 {
-		return false, "verification was expected but no sensors ran, so convergence cannot be confirmed"
+		return false, "verification was expected but no sensors ran, so convergence cannot be confirmed", nil
 	}
 	if verificationExpected && ran > 0 && canGate == 0 {
-		return false, "no blocking command sensor ran, so nothing gates convergence"
+		return false, "no blocking command sensor ran, so nothing gates convergence", nil
 	}
 
 	if env != nil && env.Verdict == gate.VerdictBlocked {
-		return false, synthesizeFeedback(env)
+		return false, synthesizeFeedback(env), nil
 	}
 
 	// Gate green — consult convergence-verifier if declared. It stays a
@@ -946,7 +1023,16 @@ func checkConvergence(
 	if convergenceSensor != "" && ynh != "" && harnessName != "" {
 		_ = traj.Emit(KindSensorRun, turnN, convergenceSensor)
 		cvResult, err := RunSensor(ynh, harnessName, convergenceSensor, cwd, "")
-		if err != nil || !cvResult.Passed() {
+		// Convergence is gate.StatusPass, not a locally invented verdict.
+		// #214 routed the gate through `ynh check` but left this call site
+		// deriving its own answer, and that answer said a files sensor had
+		// converged because a path existed — contents never read, and the
+		// path inside the agent's own write path. A files sensor now yields
+		// StatusReported, which is not StatusPass, so it cannot converge:
+		// the refusal falls out of existing doctrine rather than adding a rule.
+		converged := err == nil &&
+			gate.StatusForKind(cvResult.Kind, cvResult.ExitCode) == gate.StatusPass
+		if !converged {
 			var summary string
 			if err != nil {
 				summary = err.Error()
@@ -960,7 +1046,8 @@ func checkConvergence(
 				Passed:  false,
 				Summary: summary,
 			})
-			return false, "All sensors passed but convergence verifier says: " + summary
+			return false, "All sensors passed but convergence verifier says: " + summary,
+				&RunConvergence{Sensor: convergenceSensor, Passed: false, Summary: summary}
 		}
 		_ = traj.Emit(KindSensorResult, turnN, SensorResultData{
 			Name:   convergenceSensor,
@@ -968,9 +1055,10 @@ func checkConvergence(
 			Role:   "convergence-verifier",
 			Passed: true,
 		})
+		return true, "", &RunConvergence{Sensor: convergenceSensor, Passed: true}
 	}
 
-	return true, ""
+	return true, "", nil
 }
 
 // maxFeedbackLines caps how much of one sensor's output reaches the worker.

@@ -205,10 +205,11 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			s = merged
 		}
 		res := gate.Result{
-			Name:      name,
-			Kind:      s.Source.Kind(),
-			Category:  s.Category,
-			Tolerance: s.EffectiveTolerance(),
+			Name:        name,
+			Kind:        s.Source.Kind(),
+			Category:    s.Category,
+			Tolerance:   s.EffectiveTolerance(),
+			ToolVersion: toolVersion(s.VersionCommand, cwd),
 		}
 
 		if len(wanted) > 0 && !wanted[name] {
@@ -299,11 +300,11 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 		case "files":
 			// No verdict is mechanically derivable from a file glob, so a
 			// files sensor reports and never gates, whatever its tolerance.
-			res.Status = gate.StatusReported
+			res.Status = gate.StatusForKind("files", 0)
 			env.Summary.Reported++
 		case "focus":
 			// Resolving a focus needs an agent runtime ynh does not own.
-			res.Status = gate.StatusDeferred
+			res.Status = gate.StatusForKind("focus", 0)
 			res.Note = "focus sensors require a loop driver; ynh resolves the declaration only"
 			env.Summary.Deferred++
 		}

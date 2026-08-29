@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/agent-run.schema.json",
+  "title": "ynh agent run --format json",
+  "description": "Final result of `ynh agent run --format json`. One object per run, emitted on every path \u2014 converged or not, because a run that did not converge is the one worth investigating. Distinct from `--emit-jsonl`, which is an event stream. Goes to stderr when `--emit-jsonl -` is streaming the trajectory to stdout, so NDJSON stays clean.",
+  "x-capabilities": "0.7",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "capabilities",
+    "ynh_version",
+    "exit_code",
+    "converged",
+    "budgets",
+    "budget_sources",
+    "consumed",
+    "changed_files"
+  ],
+  "properties": {
+    "capabilities": {
+      "type": "string",
+      "description": "Wire-protocol version. See CLAUDE.md capability-bump rule."
+    },
+    "ynh_version": {
+      "type": "string",
+      "description": "Binary release version or dev-build identifier."
+    },
+    "exit_code": {
+      "type": "integer",
+      "description": "Mirrors the process exit code, so a consumer reading this and a consumer branching on $? never disagree. 0 converged; 10 turn cap; 11 token budget; 12 wall clock; 13 stuck; 14 tamper \u2014 the baseline moved during the run; 15 plan-iteration cap; 20 worker error; 21 resume error; 22 gate error \u2014 `ynh check` could not run; 30 aborted by user; 31 interrupted."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Why the run ended, when it was not a clean convergence."
+    },
+    "converged": {
+      "type": "boolean",
+      "description": "True only when the sensors agreed the work was done. Never true alongside a non-zero exit_code."
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "session_dir": {
+      "type": "string",
+      "description": "Directory holding the checkpoint, trajectory and any recorded gate-write attempts."
+    },
+    "worktree": {
+      "type": "string",
+      "description": "Directory the agent worked in and sensors ran against."
+    },
+    "backend": {
+      "type": "string",
+      "description": "Worker backend that drove the agent."
+    },
+    "model": {
+      "type": "string"
+    },
+    "harness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "description": "The harness the run was verified against. Absent when no harness was named \u2014 such a run is a plain agent runner and was never asked to verify itself.",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "sha": {
+          "type": "string",
+          "description": "Resolved commit the harness was installed from, recorded by `ynh install`. Version alone is an author-declared string that can be reused across different content; the SHA is what pins a run to one set of sensors."
+        }
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_turns",
+        "max_tokens",
+        "max_wall_ms"
+      ],
+      "description": "The caps in force for this run.",
+      "properties": {
+        "max_turns": {
+          "type": "integer"
+        },
+        "max_tokens": {
+          "type": "integer"
+        },
+        "max_wall_ms": {
+          "type": "integer"
+        }
+      }
+    },
+    "budget_sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "turns",
+        "tokens",
+        "wall"
+      ],
+      "description": "Where each cap came from. A cap nobody chose that fires is noise in a batch of runs; a cap that was chosen and fires is a finding. These must be distinguishable.",
+      "properties": {
+        "turns": {
+          "type": "string",
+          "enum": [
+            "flag",
+            "manifest",
+            "default"
+          ]
+        },
+        "tokens": {
+          "type": "string",
+          "enum": [
+            "flag",
+            "manifest",
+            "default"
+          ]
+        },
+        "wall": {
+          "type": "string",
+          "enum": [
+            "flag",
+            "manifest",
+            "default"
+          ]
+        }
+      }
+    },
+    "consumed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "turns",
+        "tokens",
+        "wall_ms"
+      ],
+      "description": "What the run actually spent. Reported on failure as well as success.",
+      "properties": {
+        "turns": {
+          "type": "integer"
+        },
+        "tokens": {
+          "type": "integer"
+        },
+        "wall_ms": {
+          "type": "integer"
+        },
+        "plan_iterations": {
+          "type": "integer"
+        }
+      }
+    },
+    "bound_by": {
+      "type": "string",
+      "enum": [
+        "turns",
+        "tokens",
+        "wall_clock"
+      ],
+      "description": "Which cap ended the run. Absent when no cap bound it."
+    },
+    "convergence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sensor",
+        "passed"
+      ],
+      "description": "The convergence-verifier's last word. Absent means none was declared, which is different from one that ran and disagreed.",
+      "properties": {
+        "sensor": {
+          "type": "string"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "summary": {
+          "type": "string"
+        }
+      }
+    },
+    "sensors": {
+      "type": "array",
+      "description": "The final gate result \u2014 the evidence behind `converged`. Same per-sensor shape as `ynh check --format json`.",
+      "items": {
+        "type": "object"
+      }
+    },
+    "changed_files": {
+      "type": "array",
+      "description": "Paths the run modified relative to base_commit, including new files. A converged run that changed nothing, and a run that rewrote forty files nobody asked about, are both findings.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "base_commit": {
+      "type": "string",
+      "description": "Commit the work started from."
+    },
+    "image_digest": {
+      "type": "string",
+      "description": "Digest of the container image this run executed in, from the YNH_IMAGE_DIGEST environment variable. A run cannot observe this for itself \u2014 a digest is computed after a build, and a process inside a container has no portable way to learn its own image \u2014 so the launcher passes it in. Absent means not recorded, not uncontainerised."
+    }
+  }
+}

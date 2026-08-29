@@ -61,7 +61,7 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 	if opts.WorktreeDir != "" {
 		cmd.Dir = opts.WorktreeDir
 	}
-	cmd.Env = append(os.Environ(), opts.Env...)
+	cmd.Env = workerEnvFor(opts.Env)
 	if opts.Stderr != nil {
 		cmd.Stderr = opts.Stderr
 	}

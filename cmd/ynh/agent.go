@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -31,6 +32,7 @@ func cmdAgentTo(args []string, stdout, stderr io.Writer, stdin io.Reader) error 
 }
 
 func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error {
+	resultFormat := "text"
 	opts := agent.RunOptions{
 		Stdout: stdout,
 		Stderr: stderr,
@@ -161,6 +163,19 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 			}
 			opts.WorktreeDir = args[i]
 
+		case "--format":
+			i++
+			if i >= len(args) {
+				return cliError(stderr, false, errCodeInvalidInput, "--format requires a value")
+			}
+			switch args[i] {
+			case "json", "text":
+				resultFormat = args[i]
+			default:
+				return cliError(stderr, false, errCodeInvalidInput,
+					fmt.Sprintf("unknown format: %s (want text or json)", args[i]))
+			}
+
 		case "--emit-jsonl":
 			i++
 			if i >= len(args) {
@@ -215,9 +230,34 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 			"--task or --focus is required")
 	}
 
-	if err := agent.RunLoop(opts); err != nil {
-		if exitErr, ok := err.(*agent.ExitError); ok {
-			_, _ = fmt.Fprintf(stderr, "Error: %v\n", exitErr)
+	result, err := agent.RunLoop(opts)
+
+	// The result is emitted on every path, converged or not. A pipeline needs
+	// to know what a run consumed and what it touched precisely when it did
+	// not converge — that is the case worth investigating.
+	//
+	// It goes to stderr when the trajectory is streaming to stdout, so a
+	// consumer piping `--emit-jsonl -` still gets clean NDJSON.
+	if resultFormat == "json" {
+		sink := stdout
+		if opts.EmitJSONL == "-" {
+			sink = stderr
+		}
+		data, encErr := json.MarshalIndent(result, "", "  ")
+		if encErr != nil {
+			return fmt.Errorf("encoding run result: %w", encErr)
+		}
+		if _, wErr := fmt.Fprintln(sink, string(data)); wErr != nil {
+			return wErr
+		}
+	}
+
+	if err != nil {
+		var exitErr *agent.ExitError
+		if errors.As(err, &exitErr) {
+			if resultFormat != "json" {
+				_, _ = fmt.Fprintf(stderr, "Error: %v\n", exitErr)
+			}
 			os.Exit(exitErr.Code)
 		}
 		return err

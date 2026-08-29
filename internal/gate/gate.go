@@ -69,16 +69,21 @@ type Summary struct {
 
 // Result is one sensor's outcome.
 type Result struct {
-	Name       string `json:"name"`
-	Kind       string `json:"kind"`
-	Category   string `json:"category,omitempty"`
-	Tolerance  string `json:"tolerance"`
-	Status     string `json:"status"`
-	ExitCode   int    `json:"exit_code"`
-	DurationMS int64  `json:"duration_ms"`
-	Stdout     string `json:"stdout,omitempty"`
-	Stderr     string `json:"stderr,omitempty"`
-	Note       string `json:"note,omitempty"`
+	Name      string `json:"name"`
+	Kind      string `json:"kind"`
+	Category  string `json:"category,omitempty"`
+	Tolerance string `json:"tolerance"`
+	Status    string `json:"status"`
+	// ToolVersion is what the sensor's declared version_command printed.
+	// Empty when none was declared or the probe failed — a corpus graded over
+	// weeks needs to tell a change in findings from a change in the tool, and
+	// an absent version says "cannot tell" rather than implying stability.
+	ToolVersion string `json:"tool_version,omitempty"`
+	ExitCode    int    `json:"exit_code"`
+	DurationMS  int64  `json:"duration_ms"`
+	Stdout      string `json:"stdout,omitempty"`
+	Stderr      string `json:"stderr,omitempty"`
+	Note        string `json:"note,omitempty"`
 	// NewCount and KnownCount are set for failing command sensors when a
 	// baseline exists. NewOutput carries only the lines not in the baseline —
 	// the ones the author is actually being asked to fix.
@@ -96,6 +101,31 @@ type Result struct {
 // tolerance makes it gate.
 func (r Result) Gating() bool {
 	return r.Status == StatusFail && r.Tolerance == "blocking"
+}
+
+// StatusForKind derives the status of a sensor that ran to completion, before
+// any baseline is applied.
+//
+// It exists so there is exactly one answer to "can this kind of sensor produce
+// a verdict". A files sensor surfaces content and no verdict is mechanically
+// derivable from a glob; a focus sensor needs an agent runtime ynh does not
+// own. Only a command sensor decides anything, and only by its exit code.
+//
+// `ynh check` layers baseline comparison on top of this for command sensors —
+// a failure already recorded is debt, not a regression — but the kinds that
+// cannot produce a verdict at all are settled here, once, for every caller.
+func StatusForKind(kind string, exitCode int) string {
+	switch kind {
+	case "files":
+		return StatusReported
+	case "focus":
+		return StatusDeferred
+	default:
+		if exitCode == 0 {
+			return StatusPass
+		}
+		return StatusFail
+	}
 }
 
 // Ran reports whether the sensor was actually executed this run.

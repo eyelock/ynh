@@ -34,6 +34,7 @@ ynh agent run --resume <session-dir> [flags]
 | `--convergence-sensor <name>` | Sensor consulted once all blocking sensors pass |
 | `--sensor-overlay <json>` | Per-run sensor overrides |
 | `--worktree <dir>` | Directory the agent works in and sensors run against |
+| `--format <text\|json>` | `json` prints the run result as one object when the run ends |
 | `--sandbox <mode>` | Sandbox mode passed to the backend |
 | `--auto-commit` | Commit after each converged turn |
 | `--interactive` | Pause for approval at turn boundaries |
@@ -70,7 +71,39 @@ finding — they have to be told apart.
 ## What the agent can see
 
 The worker receives only the environment variables the harness declares in
-`env_passthrough` — not the operator's environment. An agent that inherits the
+`env_passthrough`, plus the process minimum (`PATH`, `HOME`, `USER`, `SHELL`,
+`TMPDIR`, `TZ`, `LANG`, `TERM`, `LC_*`) — not the operator's environment.
+
+Those few are process mechanics rather than configuration: without `PATH` the
+vendor binary cannot be found and without `HOME` it cannot locate its own
+credentials. Anything that is policy stays out, **proxy settings included** — a
+proxy URL can carry credentials, and inheriting one silently is the same
+default this removes. A harness behind a proxy declares it.
+
+Every run emits a `worker_env` trajectory event naming what was passed, what
+was declared, and which declared variables were **not set** — names only, never
+values. A worker that starts and cannot authenticate is otherwise
+indistinguishable from one that is simply failing.
+
+## Redaction
+
+Trajectories are redacted **by value**. At startup ynh takes the values of
+every environment variable whose name looks like a credential — `TOKEN`,
+`SECRET`, `PASSWORD`, `API_KEY`, `PAT`, `CREDENTIAL`, `AUTH`, `PRIVATE` — and
+replaces every occurrence of those exact strings in the trajectory with
+`[redacted:NAME]`.
+
+By value rather than by pattern, because pattern-matching for secrets misses
+bespoke formats and mangles innocent text, whereas the values a run was given
+are known exactly. The realistic leak is a sensor echoing one: a `curl` that
+fails and prints its own `Authorization` header lands in the trajectory
+otherwise.
+
+**This is not a general secret scanner.** A credential ynh was never given —
+one the agent generated, or read from a file — is not covered. The label names
+the variable rather than blanking the text, so a reader can tell "the run's
+GitHub token appeared here" from "some unknown string was removed"; the first
+is a finding about the harness, the second is noise. An agent that inherits the
 parent process environment holds every credential the operator holds, which is
 not a default anyone chose. See [MCP credentials](mcp.md) for the declaration
 and how a profile narrows it.
@@ -179,6 +212,58 @@ failed" from "this harness is broken and every run will hit it". The loop stops
 at the first occurrence rather than continuing against no signal — spending a
 whole budget on turns nothing could verify, and then reporting the exhaustion as
 the agent's failure, hides the real fault.
+
+## Run result
+
+`--format json` prints one object when the run ends, on **every** path —
+converged or not. A run that did not converge is the one worth investigating,
+so it still reports what it consumed and what it touched.
+
+```bash
+ynh agent run --harness demo --task "..." --format json
+```
+
+It carries the exit code and reason, the caps in force **and where each came
+from**, what was actually consumed and **which cap bound the run**, the
+convergence verifier's last word, the final gate result, and the files the run
+changed relative to the commit it started from.
+
+`--emit-jsonl` remains an event *stream*. Reconstructing a result by tailing
+NDJSON and inferring across events is exactly the bespoke tooling this exists to
+remove. When `--emit-jsonl -` is streaming the trajectory to stdout, the result
+goes to stderr so the NDJSON stays clean.
+
+Two fields earn their place in a batch of a hundred runs:
+
+- **`bound_by`** names the cap that ended the run. Read with `budget_sources`,
+  it separates *a cap nobody chose fired* from *the cap you set fired* — the
+  first is noise, the second is a finding.
+- **`changed_files`** includes new files, not just tracked edits. A converged
+  run that changed nothing, and a run that rewrote forty files nobody asked
+  about, are both findings.
+
+### Pinning a run to a toolchain
+
+`harness.sha` is the resolved commit the harness was installed from. `version`
+is an author-declared string that can be reused across different content; the
+SHA is what actually pins a run to one set of sensors.
+
+`image_digest` records the container image the run executed in. **A run cannot
+observe this for itself** — a digest is computed *after* a build, so it cannot
+be stamped into the image it identifies, and a process inside a container has
+no portable way to learn its own image. The launcher passes it in:
+
+```bash
+docker run -e YNH_IMAGE_DIGEST="$(docker inspect --format '{{index .RepoDigests 0}}' my-harness)" …
+```
+
+Absent means **not recorded**, not "not containerised". Guessing would be worse
+than silence: a wrong digest in a graded corpus is indistinguishable from a
+right one until someone tries to reproduce the run and cannot.
+
+Both fields also appear on the trajectory's `session_start` event.
+
+Shape: [`docs/schema/cli/agent-run.schema.json`](schema/cli/agent-run.schema.json).
 
 ## Trajectory
 
