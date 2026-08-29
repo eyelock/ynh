@@ -375,7 +375,7 @@ func TestCheckConvergence_FilesVerifierDoesNotConvergeTheLoop(t *testing.T) {
 	}
 
 	env := &gate.Envelope{Verdict: gate.VerdictPass}
-	converged, reason := checkConvergence(env, "verifier", "ynh", "local/demo",
+	converged, reason, _ := checkConvergence(env, "verifier", "ynh", "local/demo",
 		t.TempDir(), newNullTrajectory(), 1, false)
 	if converged {
 		t.Fatal("a files sensor converged the run because a path existed — " +
@@ -396,7 +396,7 @@ func TestCheckConvergence_CommandVerifierStillConverges(t *testing.T) {
 	}
 
 	env := &gate.Envelope{Verdict: gate.VerdictPass}
-	converged, _ := checkConvergence(env, "verifier", "ynh", "local/demo",
+	converged, _, _ := checkConvergence(env, "verifier", "ynh", "local/demo",
 		t.TempDir(), newNullTrajectory(), 1, false)
 	if !converged {
 		t.Error("a clean command verifier must still converge the run")
