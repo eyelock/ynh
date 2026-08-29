@@ -275,16 +275,23 @@ ynh check local/gate-demo --format json | head -20
 ```
 
 The payload carries `verdict`, `summary` counts (including `known`), and per
-sensor `status`, `tolerance`, `new_count`/`known_count`, `new_output` and
-`tool_version`. When a baseline is loaded, a top-level `baseline` object reports
-`known`, `fixed` and `stale`.
+sensor `status`, `tolerance`, `new_count`/`known_count` and `new_output`. When a
+baseline is loaded, a top-level `baseline` object reports `known`, `fixed` and
+`stale`.
 
-`tool_version` records what the sensor's command reported about itself, captured
-at the moment it ran. It is what turns a green run into a green run *of a known
-tool*: a linter that silently stopped examining anything still exits 0, and the
-only external evidence that the instrument changed is its version string moving.
-Shadow mode leans on this directly — a sample split across a toolchain upgrade
-measures two different things, and this is the field that shows it.
+One further field appears only if you ask for it. A sensor that declares
+[`version_command`](sensors.md#version-command-which-tool-produced-this) has its
+result annotated with `tool_version` — the first line that command printed. The
+sensors above declare none, so their results carry none: absent means *cannot
+tell*, not *unchanged*.
+
+It is worth declaring as soon as results are compared over time, because it
+turns a green run into a green run *of a known tool*. A linter that silently
+stopped examining anything still exits 0, and the version string moving is the
+only external evidence that the instrument changed rather than the code.
+[Shadow mode](tutorial/shadow-mode.md) depends on it directly: a sample split
+across a toolchain upgrade measures two different things, and this is the field
+that shows it.
 
 ## Wire it into the edit loop
 
