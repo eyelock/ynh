@@ -84,7 +84,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh backend add <name> <vendor>` | `--base-url` (required), `--auth-token`, `--type`, `--env KEY=VALUE` (repeatable) |
 | `ynh backend list` | `--format <text\|json>` |
 | `ynh backend remove <name> [<vendor>]` | |
-| `ynh image <subcommand>` | |
+| `ynh image <name>` | `--tag`, `--base`, `--from`, `--path`, `--entrypoint <run\|agent>`, `--dry-run` |
 | `ynh paths` | `--format <text\|json>` |
 | `ynh status` | |
 | `ynh prune` | |

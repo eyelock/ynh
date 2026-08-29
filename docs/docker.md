@@ -273,6 +273,57 @@ docker inspect ynh-ynh:latest --format '{{json .Config.Labels}}' | jq .
 | `dev.ynh.codex.version` | Codex CLI version |
 | `dev.ynh.cursor-agent.version` | Cursor Agent CLI version |
 
+A **harness image** built with `ynh image` carries a further set describing what
+it holds, so an orchestrator can learn it with `docker inspect` without running
+anything:
+
+| Label | Description |
+|-------|-------------|
+| `dev.ynh.harness` | Harness name |
+| `dev.ynh.harness.version` | Author-declared version from the manifest |
+| `dev.ynh.harness.sha` | **Commit the harness came from.** Empty when there is none to name |
+| `dev.ynh.harness.default-vendor` | Vendor baked as the default |
+| `dev.ynh.entrypoint` | `run` or `agent` — see below |
+| `dev.ynh.assembled-by` | Version of ynh that built the image |
+
+`dev.ynh.harness.sha` is the field that pins an image to one set of sensors and
+guards. `version` is an author-declared string that can be reused across
+different content; the SHA cannot. It comes from the ref resolved by
+`--from`, or from the provenance `ynh install` recorded.
+
+**Empty is deliberate** for a harness built from a local working directory:
+there is no commit to name, and a label reading `unknown` would be worse,
+because a reader could not tell a missing value from a real one.
+
+## Interactive or autonomous
+
+`ynh image` bakes an entrypoint. The default starts an interactive vendor
+session, unchanged:
+
+```bash
+ynh image my-harness
+docker run -it ynh-my-harness:latest "review this diff"
+```
+
+`--entrypoint agent` bakes the autonomous loop instead, which is what a factory
+run needs — an image that can only start an interactive session cannot do batch
+work:
+
+```bash
+ynh image my-harness --entrypoint agent
+docker run ynh-my-harness:latest --task "fix the failing test" --format json
+```
+
+`CMD` stays empty in both, so the prompt or the task arrives as arguments.
+
+Pair it with the image digest so the run is reproducible — a run cannot observe
+its own digest, so the launcher passes it (see [Agent](agent.md#pinning-a-run-to-a-toolchain)):
+
+```bash
+docker run -e YNH_IMAGE_DIGEST="$(docker inspect --format '{{index .RepoDigests 0}}' ynh-my-harness)" \
+  ynh-my-harness:latest --task "..." --format json
+```
+
 ## Image Contents
 
 | Component | Source |
