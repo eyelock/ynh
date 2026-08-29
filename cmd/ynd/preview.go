@@ -240,7 +240,11 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 
 	// Generate MCP config
 	if len(h.MCPServers) > 0 {
-		mcpFiles, err := adapter.GenerateMCPConfig(h.MCPServers)
+		servers, expErr := plugin.ExpandMCPEnv(h.MCPServers, h.EnvPassthrough, os.LookupEnv)
+		if expErr != nil {
+			return "", expErr
+		}
+		mcpFiles, err := adapter.GenerateMCPConfig(servers)
 		if err != nil {
 			return "", fmt.Errorf("generating MCP config: %w", err)
 		}

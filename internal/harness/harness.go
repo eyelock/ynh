@@ -109,20 +109,21 @@ func IsPinnedRef(ref string) bool {
 }
 
 type Harness struct {
-	Name          string
-	Version       string
-	Description   string
-	DefaultVendor string
-	Namespace     string // e.g. "eyelock/assistants"; empty for local/unqualified installs
-	Dir           string // absolute path to the harness directory — the base for relative local includes
-	Includes      []Include
-	DelegatesTo   []Delegate
-	Hooks         map[string][]plugin.HookEntry
-	MCPServers    map[string]plugin.MCPServer
-	Profiles      map[string]plugin.Profile
-	Focuses       map[string]plugin.Focus
-	Sensors       map[string]plugin.Sensor
-	InstalledFrom *Provenance
+	Name           string
+	Version        string
+	Description    string
+	DefaultVendor  string
+	Namespace      string // e.g. "eyelock/assistants"; empty for local/unqualified installs
+	Dir            string // absolute path to the harness directory — the base for relative local includes
+	Includes       []Include
+	DelegatesTo    []Delegate
+	Hooks          map[string][]plugin.HookEntry
+	MCPServers     map[string]plugin.MCPServer
+	EnvPassthrough []string
+	Profiles       map[string]plugin.Profile
+	Focuses        map[string]plugin.Focus
+	Sensors        map[string]plugin.Sensor
+	InstalledFrom  *Provenance
 }
 
 // ListEntry is one installed harness with its namespace.
@@ -504,6 +505,7 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	}
 	if len(hj.MCPServers) > 0 {
 		p.MCPServers = hj.MCPServers
+		p.EnvPassthrough = hj.EnvPassthrough
 	} else if fallback, err := plugin.LoadMCPJSON(dir); err == nil && len(fallback) > 0 {
 		p.MCPServers = fallback
 	}
@@ -599,6 +601,13 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 		resolved.Hooks = merged
 	}
 
+	// Replace the env allowlist rather than union it. A profile that exists to
+	// restrict what an agent can see has to be able to; a union could only ever
+	// widen, which is the wrong direction for a containment declaration.
+	if profile.EnvPassthrough != nil {
+		resolved.EnvPassthrough = profile.EnvPassthrough
+	}
+
 	// Merge MCP servers: deep merge, nil removes inherited
 	if profile.MCPServers != nil {
 		merged := make(map[string]plugin.MCPServer)
@@ -692,6 +701,7 @@ func LoadFile(path string) (*Harness, error) {
 	}
 	if len(hj.MCPServers) > 0 {
 		p.MCPServers = hj.MCPServers
+		p.EnvPassthrough = hj.EnvPassthrough
 	}
 	if len(hj.Profiles) > 0 {
 		p.Profiles = hj.Profiles

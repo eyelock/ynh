@@ -1288,7 +1288,11 @@ func cmdRun(args []string) error {
 
 		// Generate vendor-native MCP config files
 		if len(p.MCPServers) > 0 {
-			mcpFiles, err := adapter.GenerateMCPConfig(p.MCPServers)
+			servers, expErr := plugin.ExpandMCPEnv(p.MCPServers, p.EnvPassthrough, os.LookupEnv)
+			if expErr != nil {
+				return expErr
+			}
+			mcpFiles, err := adapter.GenerateMCPConfig(servers)
 			if err != nil {
 				return fmt.Errorf("generating MCP config: %w", err)
 			}

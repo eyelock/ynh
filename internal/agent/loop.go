@@ -19,6 +19,7 @@ import (
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
 )
@@ -136,6 +137,9 @@ func RunLoop(opts RunOptions) error {
 		return err
 	}
 	opts.Backend = backend
+	if err := validateSandbox(opts.Sandbox, opts.Backend); err != nil {
+		return err
+	}
 	if opts.WorktreeDir == "" {
 		var err error
 		opts.WorktreeDir, err = os.Getwd()
@@ -353,12 +357,26 @@ func RunLoop(opts RunOptions) error {
 				wb.Name())
 		}
 	}
+	// The worker gets the variables the harness declared, and nothing else.
+	// StartOptions.Env existed and was never populated, so the worker inherited
+	// the parent environment wholesale — meaning the agent held every credential
+	// the operator held. ynh declares the scope; the process boundary that makes
+	// it meaningful is the container's (see "ynh does not own containment").
+	var workerEnv []string
+	if harnessObj != nil {
+		for _, name := range harnessObj.EnvPassthrough {
+			if v, ok := os.LookupEnv(name); ok {
+				workerEnv = append(workerEnv, name+"="+v)
+			}
+		}
+	}
 	sess, err := wb.Start(ctx, StartOptions{
 		WorktreeDir: opts.WorktreeDir,
 		ConfigPath:  configPath,
 		Sandbox:     opts.Sandbox,
 		Model:       opts.Model,
 		ResumeToken: resumeToken,
+		Env:         workerEnv,
 		Stderr:      opts.Stderr,
 	})
 	if err != nil {
@@ -961,7 +979,12 @@ func assembleHarness(h *harness.Harness, backendName string) (string, error) {
 
 	// Generate vendor-native MCP config.
 	if len(h.MCPServers) > 0 {
-		mcpFiles, err := adapter.GenerateMCPConfig(h.MCPServers)
+		servers, expErr := plugin.ExpandMCPEnv(h.MCPServers, h.EnvPassthrough, os.LookupEnv)
+		if expErr != nil {
+			_ = os.RemoveAll(dir)
+			return "", expErr
+		}
+		mcpFiles, err := adapter.GenerateMCPConfig(servers)
 		if err != nil {
 			_ = os.RemoveAll(dir)
 			return "", fmt.Errorf("generating MCP config: %w", err)
@@ -1006,6 +1029,32 @@ func gitAutoCommit(dir string, turnN int) error {
 // (including common near-misses like "claude-code") with a clear error
 // pointing at the canonical names. Run before any vendor lookup so
 // callers get a useful message instead of "unknown vendor" from deeper in.
+// validateSandbox rejects a sandbox request the chosen backend cannot honour.
+//
+// `--sandbox srt` was read only by the Claude backend; codex and cursor
+// contained no reference to it, so `--sandbox srt --backend codex` ran
+// completely unsandboxed and said nothing. A declared containment control that
+// silently does not apply is worse than an absent one, because it gets relied
+// upon — see "ynh does not own containment" in docs/harness-engineering.md.
+//
+// This is an error, not a warning. A warning on stderr is not a control.
+func validateSandbox(sandbox, backend string) error {
+	switch sandbox {
+	case "", "none":
+		return nil
+	case "srt":
+		if backend != "claude" {
+			return fmt.Errorf(
+				"--sandbox srt is not supported by the %s backend (only claude implements it); "+
+					"run inside a container you configured, or use --sandbox none to proceed deliberately unsandboxed",
+				backend)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unknown sandbox %q (supported: none, srt)", sandbox)
+	}
+}
+
 func validateBackend(name string) (string, error) {
 	switch name {
 	case "":

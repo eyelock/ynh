@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 )
 
 // HarnessJSON represents the .harness.json manifest — single source of truth.
@@ -21,10 +22,16 @@ type HarnessJSON struct {
 	DelegatesTo   []DelegateMeta         `json:"delegates_to,omitempty"`
 	Hooks         map[string][]HookEntry `json:"hooks,omitempty"`
 	MCPServers    map[string]MCPServer   `json:"mcp_servers,omitempty"`
-	Profiles      map[string]Profile     `json:"profiles,omitempty"`
-	Focuses       map[string]Focus       `json:"focuses,omitempty"`
-	Sensors       map[string]Sensor      `json:"sensors,omitempty"`
-	InstalledFrom *ProvenanceMeta        `json:"installed_from,omitempty"`
+	// EnvPassthrough names the environment variables a harness may see:
+	// which ${VAR} references its MCP declarations may resolve, and which
+	// variables reach an agent worker's process. Empty means none — a worker
+	// inheriting the operator's whole environment holds every credential the
+	// operator holds, which is not a default anyone chose.
+	EnvPassthrough []string           `json:"env_passthrough,omitempty"`
+	Profiles       map[string]Profile `json:"profiles,omitempty"`
+	Focuses        map[string]Focus   `json:"focuses,omitempty"`
+	Sensors        map[string]Sensor  `json:"sensors,omitempty"`
+	InstalledFrom  *ProvenanceMeta    `json:"installed_from,omitempty"`
 }
 
 // Sensor declares an observation surface — a feedforward signal a loop
@@ -258,6 +265,11 @@ type Profile struct {
 	Hooks      map[string][]HookEntry `json:"hooks,omitempty"`
 	MCPServers map[string]*MCPServer  `json:"mcp_servers,omitempty"`
 	Includes   []IncludeMeta          `json:"includes,omitempty"`
+	// EnvPassthrough replaces the harness-level list when the profile is
+	// selected, so a posture can widen or narrow what the agent sees without
+	// editing the base manifest. Replacement rather than union: a profile
+	// meant to restrict must be able to.
+	EnvPassthrough []string `json:"env_passthrough,omitempty"`
 }
 
 // AuthorInfo holds harness author information.
@@ -617,4 +629,85 @@ func SaveHarnessJSON(dir string, hj *HarnessJSON) error {
 	}
 
 	return nil
+}
+
+// EnvPassthroughField is the manifest key declaring which environment
+// variables a harness may see. It governs two things at once, deliberately:
+// which variables an MCP server declaration may interpolate, and which reach
+// an agent worker's process. One declaration, one place to review.
+const EnvPassthroughField = "env_passthrough"
+
+// envRef matches a ${VAR} reference. Bare $VAR is deliberately not supported —
+// it collides with ordinary shell and path content in a manifest, and a
+// credential mechanism should not depend on guessing intent.
+var envRef = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+
+// ExpandMCPEnv resolves ${VAR} references in every server's env values and
+// headers, drawing only from allowed.
+//
+// Without this an MCP server's credentials have to be literal values in the
+// manifest, which means committing them. With it the manifest declares which
+// variable carries the secret and the secret itself never enters the repo.
+//
+// Two rules keep it from becoming a hole of its own:
+//
+//   - A reference to a variable outside the allowlist is an error, not an
+//     empty string. Otherwise any manifest could name any variable in the
+//     operator's environment and quietly copy it into a config file.
+//   - A reference to an allowed-but-unset variable is also an error. Emitting
+//     an empty credential produces a failure far from its cause, and a control
+//     that silently degrades is the failure this whole area exists to avoid.
+func ExpandMCPEnv(servers map[string]MCPServer, allowed []string, lookup func(string) (string, bool)) (map[string]MCPServer, error) {
+	if len(servers) == 0 {
+		return servers, nil
+	}
+	allow := make(map[string]bool, len(allowed))
+	for _, name := range allowed {
+		allow[name] = true
+	}
+
+	out := make(map[string]MCPServer, len(servers))
+	for name, s := range servers {
+		expandMap := func(field string, in map[string]string) (map[string]string, error) {
+			if len(in) == 0 {
+				return in, nil
+			}
+			res := make(map[string]string, len(in))
+			for k, v := range in {
+				var bad error
+				res[k] = envRef.ReplaceAllStringFunc(v, func(match string) string {
+					varName := envRef.FindStringSubmatch(match)[1]
+					if !allow[varName] {
+						bad = fmt.Errorf("mcp server %q: %s.%s references ${%s}, which is not in %s",
+							name, field, k, varName, EnvPassthroughField)
+						return ""
+					}
+					val, ok := lookup(varName)
+					if !ok {
+						bad = fmt.Errorf("mcp server %q: %s.%s references ${%s}, which is not set",
+							name, field, k, varName)
+						return ""
+					}
+					return val
+				})
+				if bad != nil {
+					return nil, bad
+				}
+			}
+			return res, nil
+		}
+
+		env, err := expandMap("env", s.Env)
+		if err != nil {
+			return nil, err
+		}
+		headers, err := expandMap("headers", s.Headers)
+		if err != nil {
+			return nil, err
+		}
+		s.Env = env
+		s.Headers = headers
+		out[name] = s
+	}
+	return out, nil
 }

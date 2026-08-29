@@ -36,6 +36,11 @@
     "includes": { "$ref": "#/$defs/includes" },
     "delegates_to": { "$ref": "#/$defs/delegates" },
     "hooks": { "$ref": "#/$defs/hooks" },
+    "env_passthrough": {
+      "description": "Environment variables this harness may see. Governs two things deliberately: which ${VAR} references its MCP declarations may resolve, and which variables reach an agent worker's process. Absent or empty means none — a worker inheriting the operator's whole environment holds every credential the operator holds. A reference to a variable outside this list, or to one that is unset, is an error rather than an empty value.",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }
+    },
     "mcp_servers": { "$ref": "#/$defs/mcp_servers" },
     "profiles": {
       "description": "Named configuration variants. Merge semantics: mcp_servers are deep-merged (profile keys win), hooks use per-event replace (profile event replaces default, absent events inherited), includes are appended to the base harness's includes when the profile is active. Set a server to null to remove it.",
@@ -46,7 +51,12 @@
         "properties": {
           "hooks": { "$ref": "#/$defs/hooks" },
           "mcp_servers": { "$ref": "#/$defs/profile_mcp_servers" },
-          "includes": { "$ref": "#/$defs/includes" }
+          "includes": { "$ref": "#/$defs/includes" },
+          "env_passthrough": {
+            "description": "Replaces the harness-level env_passthrough when this profile is selected. Replacement rather than union: a profile that exists to restrict what an agent can see has to be able to, and a union could only ever widen.",
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }
+          }
         }
       }
     },
