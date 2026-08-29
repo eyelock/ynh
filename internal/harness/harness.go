@@ -506,10 +506,19 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	}
 	if len(hj.MCPServers) > 0 {
 		p.MCPServers = hj.MCPServers
-		p.EnvPassthrough = hj.EnvPassthrough
-		p.Agent = hj.Agent
 	} else if fallback, err := plugin.LoadMCPJSON(dir); err == nil && len(fallback) > 0 {
 		p.MCPServers = fallback
+	}
+	// env_passthrough and agent are not MCP settings and must not be
+	// conditional on MCP servers existing. They were loaded inside that branch,
+	// so a harness declaring env_passthrough or agent budgets but no MCP server
+	// silently lost both: the worker allowlist had nothing to admit, and
+	// manifest budget defaults were ignored in favour of the built-in ones.
+	if len(hj.EnvPassthrough) > 0 {
+		p.EnvPassthrough = hj.EnvPassthrough
+	}
+	if hj.Agent != nil {
+		p.Agent = hj.Agent
 	}
 	if len(hj.Profiles) > 0 {
 		p.Profiles = hj.Profiles
@@ -703,7 +712,12 @@ func LoadFile(path string) (*Harness, error) {
 	}
 	if len(hj.MCPServers) > 0 {
 		p.MCPServers = hj.MCPServers
+	}
+	// See above: neither of these is an MCP setting.
+	if len(hj.EnvPassthrough) > 0 {
 		p.EnvPassthrough = hj.EnvPassthrough
+	}
+	if hj.Agent != nil {
 		p.Agent = hj.Agent
 	}
 	if len(hj.Profiles) > 0 {

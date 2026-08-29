@@ -802,3 +802,42 @@ func TestIsPinnedRef(t *testing.T) {
 		}
 	}
 }
+
+// env_passthrough and agent are not MCP settings, and were loaded inside the
+// `if len(hj.MCPServers) > 0` branch.
+//
+// A harness declaring either but no MCP server silently lost both: the worker
+// env allowlist had nothing to admit, so a declared credential never reached
+// the agent, and manifest budget defaults were ignored in favour of the
+// built-in ones. Found by spot-checking a real run, not by any test.
+func TestLoadDir_EnvPassthroughAndAgentDoNotRequireMCPServers(t *testing.T) {
+	dir := t.TempDir()
+	pluginDir := filepath.Join(dir, plugin.PluginDir)
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const manifest = `{
+	  "name": "no-mcp",
+	  "version": "0.1.0",
+	  "default_vendor": "claude",
+	  "env_passthrough": ["ANTHROPIC_API_KEY", "DECLARED_VAR"],
+	  "agent": {"max_turns": 7}
+	}`
+	if err := os.WriteFile(filepath.Join(pluginDir, plugin.PluginFile), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h, err := LoadDir(dir)
+	if err != nil {
+		t.Fatalf("LoadDir: %v", err)
+	}
+	if len(h.EnvPassthrough) != 2 {
+		t.Errorf("env_passthrough = %v, want both entries — a harness with no MCP server still declares what its worker may see", h.EnvPassthrough)
+	}
+	if h.Agent == nil {
+		t.Fatal("agent config dropped — manifest budgets would be silently replaced by built-in defaults")
+	}
+	if h.Agent.MaxTurns != 7 {
+		t.Errorf("agent.max_turns = %d, want 7", h.Agent.MaxTurns)
+	}
+}

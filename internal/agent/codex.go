@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 )
 
@@ -43,7 +42,7 @@ func (b *CodexBackend) Start(ctx context.Context, opts StartOptions) (WorkerSess
 	if opts.WorktreeDir != "" {
 		cmd.Dir = opts.WorktreeDir
 	}
-	cmd.Env = append(os.Environ(), opts.Env...)
+	cmd.Env = workerEnvFor(opts.Env)
 	if opts.Stderr != nil {
 		cmd.Stderr = opts.Stderr
 	}

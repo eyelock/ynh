@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 )
 
@@ -102,7 +101,7 @@ func (s *cursorSession) Next() (Turn, error) {
 	if s.opts.WorktreeDir != "" {
 		cmd.Dir = s.opts.WorktreeDir
 	}
-	cmd.Env = append(os.Environ(), s.opts.Env...)
+	cmd.Env = workerEnvFor(s.opts.Env)
 	if s.opts.Stderr != nil {
 		cmd.Stderr = s.opts.Stderr
 	}
