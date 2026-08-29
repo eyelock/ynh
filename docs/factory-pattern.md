@@ -287,10 +287,12 @@ YNH-Session: 20260829-190412-a3f9
 In the message, not the pull request. A squash merge keeps the message and
 discards the thread, so a trailer survives and a comment does not.
 
-The session id comes from `session_id` in the run result. Note what does *not*
-do this job: `--auto-commit` writes `agent: turn N` per turn, which is a working
-commit inside the run, not attribution — it disappears in the squash like
-everything else on the branch.
+The session id comes from `session_id` in the run result, and the trailer is
+written by whatever opens the pull request — your CI job or the script that
+raises it. ynh does not add it. Note in particular what does *not* do this job:
+`--auto-commit` writes `agent: turn N` per turn, a working commit inside the run
+rather than attribution, and it disappears in the squash like everything else on
+the branch.
 
 Without a trailer you cannot answer *which of these defects came from the
 factory*, which makes the escaped-defect limit in
@@ -324,9 +326,16 @@ the rest:
 | `sensors`, `changed_files` | what the gate saw, and what moved |
 
 Declare [`version_command`](sensors.md#version-command-which-tool-produced-this)
-on your sensors too, or the record cannot say *which* linter passed. And the
-baseline is unforgeable by construction: a run that alters what it is judged
-against fails rather than passes.
+on your sensors, or the record cannot say *which* linter passed. Then declare a
+[`reference`](sensors.md#reference-proving-a-sensor-still-observes) and run
+`ynh check --calibrate`, which reports per sensor whether it is `calibrated`,
+`failed`, `uncalibrated` or `error`. A version says which instrument ran;
+calibration says it still fires. *The gate was green* and *the gate was green
+and the linter was proven to still detect* are different claims, and only the
+second survives a sensor that has quietly stopped examining anything.
+
+A run that alters what it is judged against fails rather than passes, which
+makes the baseline tamper-evident.
 
 One thing this does not contain is any assurance the run was
 [contained](harness-engineering.md#ynh-does-not-own-containment) while it
