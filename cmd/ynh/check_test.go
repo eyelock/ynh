@@ -191,11 +191,20 @@ func runBaselineCheck(t *testing.T, home, work string, args ...string) (checkEnv
 	// fails in CI — where CI is set and the guard correctly refuses — which is
 	// the one place nobody was looking until stacked PRs started running CI.
 	//
-	// A test that wants one of these guards to fire must drive cmdCheck
-	// directly: this helper runs after the caller's own t.Setenv and would
-	// undo it. See TestCheck_UpdateBaselineRefusedInCI.
+	// A test whose subject *is* the ambient environment uses
+	// runBaselineCheckInEnv instead: this helper runs after the caller's own
+	// t.Setenv and would undo it.
 	t.Setenv("CI", "")
 	t.Setenv("YNH_AGENT_SESSION", "")
+	return runBaselineCheckInEnv(t, home, work, args...)
+}
+
+// runBaselineCheckInEnv is runBaselineCheck without the environment
+// neutralisation, for the guard tests that need the ambient environment they
+// set to survive.
+func runBaselineCheckInEnv(t *testing.T, home, work string, args ...string) (checkEnvelope, string, error) {
+	t.Helper()
+	t.Setenv("YNH_HOME", home)
 	var stdout bytes.Buffer
 	full := append([]string{"local/bl", "--cwd", work, "--format", "json"}, args...)
 	err := cmdCheck(full, &stdout, io.Discard)
@@ -340,11 +349,9 @@ func TestCheck_ReportsFixedDebtSoRatchetCanTighten(t *testing.T) {
 // whatever that branch introduced.
 func TestCheck_UpdateBaselineRefusedInCI(t *testing.T) {
 	home, work := setupBaselineRepo(t, preExisting)
-	t.Setenv("YNH_HOME", home)
 	t.Setenv("YNH_AGENT_SESSION", "")
 	t.Setenv("CI", "true")
-	err := cmdCheck([]string{"local/bl", "--cwd", work, "--format", "json", "--update-baseline"},
-		&bytes.Buffer{}, io.Discard)
+	_, _, err := runBaselineCheckInEnv(t, home, work, "--update-baseline")
 	if !errors.Is(err, errCheckExec) {
 		t.Fatalf("want errCheckExec, got %v", err)
 	}
