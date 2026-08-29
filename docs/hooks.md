@@ -254,9 +254,13 @@ Cursor's `stop` and Codex's `Stop` route output and guard against loops differen
 
 ## Root-Harness-Only Rule
 
-Hooks declared in **included harnesses** (via `includes`) are dropped during assembly. Only the root harness's hooks are used. This prevents composed harnesses from silently injecting lifecycle behavior that the harness author didn't explicitly declare.
+Only the root harness's hooks are used. An included harness contributes `skills/`, `agents/`, `rules/` and `commands/` — files — and nothing else.
 
-If an included harness needs hooks, copy its hook declarations into the root harness's `.ynh-plugin/plugin.json`.
+Nothing is *dropped*: `resolveWith` iterates includes flat, with no recursion, and returns file paths. **It never opens an included harness's `plugin.json`,** so a hook declared there is never read in the first place. Root-only is a property of the resolver, not a filter applied afterwards.
+
+That is deliberate. A hook is command execution on every lifecycle event, so an include that could contribute one would turn inert composed content into an execution surface the root author never declared.
+
+If an included harness needs hooks, copy its hook declarations into the root harness's `.ynh-plugin/plugin.json`. Merging that copy at authoring time — generated, labelled blocks with drift detection — is the agreed direction rather than resolving includes at run time.
 
 ## Portable Hook Script Advice
 

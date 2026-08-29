@@ -177,7 +177,13 @@ sensor "security-scan": source.focus references undefined focus "infer-vulns"
 
 ### Includes — root-only
 
-Sensors declared in *included* harnesses are dropped during assembly, identical to the existing rule for hooks. Composed harnesses cannot silently inject observation surfaces the root harness author did not declare. If an included harness needs a sensor, copy its declaration into the root harness's `plugin.json`.
+Only the root harness's sensors are used. An included harness contributes `skills/`, `agents/`, `rules/` and `commands/` — files — and nothing else.
+
+Nothing is *dropped*: `resolveWith` iterates includes flat, with no recursion, and returns file paths. **It never opens an included harness's `plugin.json`,** so a sensor declared there is never read in the first place. Root-only is a property of the resolver, not a filter applied afterwards.
+
+That is deliberate. It keeps the answer to "what observes this repository" in one committed file a reviewer can read, and stops a composed harness turning inert included content into an execution surface the root author never declared.
+
+If an included harness needs a sensor, copy its declaration into the root harness's `plugin.json`. Merging that copy at authoring time — generated, labelled blocks with drift detection — is the agreed direction rather than resolving includes at run time.
 
 ### Profiles — out of scope for v1
 
