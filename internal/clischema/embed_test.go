@@ -239,3 +239,8 @@ func findGolden(t *testing.T, name string) string {
 	}
 	return ""
 }
+
+// TestAgentRunGolden validates the agent-run result envelope. The golden is a
+// non-converged run on purpose: that is the case a pipeline actually has to
+// read, and the one where under-reporting would go unnoticed.
+func TestAgentRunGolden(t *testing.T) { validateGolden(t, "agent-run", "agent-run.json") }

@@ -119,7 +119,7 @@ func TestRunLoop_ConvergesWhenNoSensors(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	opts := baseOpts(mb, &stdout, &stderr, strings.NewReader(""))
 
-	err := RunLoop(opts)
+	_, err := RunLoop(opts)
 	if err != nil {
 		t.Fatalf("expected convergence, got: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestRunLoop_TurnCapExceeded(t *testing.T) {
 	opts.MaxTurns = 1
 	opts.testSensorNames = []string{"build"}
 
-	err := RunLoop(opts)
+	_, err := RunLoop(opts)
 	var exitErr *ExitError
 	if err == nil {
 		t.Fatal("expected ExitError, got nil")
@@ -165,7 +165,7 @@ func TestRunLoop_WorkerEOFBeforeConvergence(t *testing.T) {
 	opts := baseOpts(mb, &stdout, &stderr, strings.NewReader(""))
 
 	// Worker returns EOF after 1 turn; since there are no sensors, loop converges.
-	err := RunLoop(opts)
+	_, err := RunLoop(opts)
 	if err != nil {
 		t.Fatalf("no sensors → should converge on first turn, got: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestRunLoop_SensorFailureSendsFeedback(t *testing.T) {
 	opts := baseOpts(mb, &stdout, &stderr, strings.NewReader(""))
 	opts.testSensorNames = []string{"build"} // inject sensor without real harness
 
-	err := RunLoop(opts)
+	_, err := RunLoop(opts)
 	if err != nil {
 		t.Fatalf("expected convergence after retry, got: %v", err)
 	}
@@ -212,7 +212,7 @@ func TestRunLoop_TrajectoryContainsSessionStart(t *testing.T) {
 	opts.EmitJSONL = "-"
 	opts.Stdout = &traj
 
-	if err := RunLoop(opts); err != nil {
+	if _, err := RunLoop(opts); err != nil {
 		t.Fatalf("RunLoop: %v", err)
 	}
 
@@ -240,7 +240,7 @@ func TestRunLoop_TrajectoryEndsWithSessionEnd(t *testing.T) {
 	opts.EmitJSONL = "-"
 	opts.Stdout = &traj
 
-	if err := RunLoop(opts); err != nil {
+	if _, err := RunLoop(opts); err != nil {
 		t.Fatalf("RunLoop: %v", err)
 	}
 
@@ -265,7 +265,7 @@ func TestRunLoop_TaskRequired(t *testing.T) {
 	// Should not crash — missing task is detected by the CLI layer.
 	// But if somehow called with empty task, the loop will send "" as first message.
 	// This test verifies no panic occurs.
-	err := RunLoop(opts)
+	_, err := RunLoop(opts)
 	// With no turns and empty task, worker returns EOF immediately.
 	// That's a worker error since convergence wasn't reached.
 	if err == nil {

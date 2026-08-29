@@ -91,7 +91,7 @@ func TestRunLoop_ResumeRestoresBudgetAndContinues(t *testing.T) {
 	}
 	opts1 := resumeOpts(mb1, dir)
 	opts1.MaxTurns = 2
-	err1 := RunLoop(opts1)
+	_, err1 := RunLoop(opts1)
 	var ee *ExitError
 	if !asExitError(err1, &ee) || ee.Code != ExitIterationCap {
 		t.Fatalf("run 1: expected ExitIterationCap, got %v", err1)
@@ -124,7 +124,7 @@ func TestRunLoop_ResumeRestoresBudgetAndContinues(t *testing.T) {
 	opts2 := resumeOpts(mb2, dir)
 	opts2.Resume = dir
 	opts2.MaxTurns = 5
-	if err := RunLoop(opts2); err != nil {
+	if _, err := RunLoop(opts2); err != nil {
 		t.Fatalf("run 2 (resume): expected convergence, got %v", err)
 	}
 
@@ -184,7 +184,7 @@ func TestRunLoop_FreshRunTruncatesTrajectory(t *testing.T) {
 		mb := &mockBackend{name: "mock", turns: []Turn{{Content: "done"}}}
 		opts := resumeOpts(mb, dir)
 		opts.Task = task
-		if err := RunLoop(opts); err != nil {
+		if _, err := RunLoop(opts); err != nil {
 			t.Fatalf("run %q: %v", task, err)
 		}
 	}
@@ -222,7 +222,7 @@ func TestRunLoop_InterruptLeavesResumableCheckpoint(t *testing.T) {
 	opts1 := resumeOpts(mb1, dir)
 	opts1.Stdin = pr
 	opts1.MaxTurns = 10
-	err1 := RunLoop(opts1)
+	_, err1 := RunLoop(opts1)
 	var ee *ExitError
 	if !asExitError(err1, &ee) || ee.Code != ExitInterrupted {
 		t.Fatalf("expected ExitInterrupted, got %v", err1)
@@ -242,7 +242,7 @@ func TestRunLoop_InterruptLeavesResumableCheckpoint(t *testing.T) {
 	opts2 := resumeOpts(mb2, dir)
 	opts2.Resume = dir
 	opts2.MaxTurns = 10
-	if err := RunLoop(opts2); err != nil {
+	if _, err := RunLoop(opts2); err != nil {
 		t.Fatalf("resume after interrupt: %v", err)
 	}
 	if len(mb2.sends) != 1 {
@@ -273,7 +273,7 @@ func TestRunLoop_DoubleInterruptResumes(t *testing.T) {
 	o1 := resumeOpts(mb1, dir)
 	o1.Stdin = pr1
 	o1.MaxTurns = 20
-	if err := RunLoop(o1); err == nil {
+	if _, err := RunLoop(o1); err == nil {
 		t.Fatal("run 1 should interrupt")
 	}
 	if cp, _ := readCheckpoint(dir); cp.LastCompletedTurn != 1 {
@@ -290,7 +290,7 @@ func TestRunLoop_DoubleInterruptResumes(t *testing.T) {
 	o2.Resume = dir
 	o2.Stdin = pr2
 	o2.MaxTurns = 20
-	if err := RunLoop(o2); err == nil {
+	if _, err := RunLoop(o2); err == nil {
 		t.Fatal("run 2 should interrupt")
 	}
 	cp2, _ := readCheckpoint(dir)
@@ -307,7 +307,7 @@ func TestRunLoop_DoubleInterruptResumes(t *testing.T) {
 	o3 := resumeOpts(mb3, dir)
 	o3.Resume = dir
 	o3.MaxTurns = 20
-	if err := RunLoop(o3); err != nil {
+	if _, err := RunLoop(o3); err != nil {
 		t.Fatalf("run 3 should converge, got %v", err)
 	}
 	if len(mb3.sends) != 1 {
@@ -329,7 +329,7 @@ func TestRunLoop_SIGTERMLeavesResumableCheckpoint(t *testing.T) {
 	}
 	opts := resumeOpts(mb, dir)
 	opts.MaxTurns = 10
-	err := RunLoop(opts)
+	_, err := RunLoop(opts)
 	var ee *ExitError
 	if !asExitError(err, &ee) || ee.Code != ExitInterrupted {
 		t.Fatalf("expected ExitInterrupted from SIGTERM, got %v", err)
@@ -369,7 +369,7 @@ func TestRunLoop_ResumePastExceededBudgetExits(t *testing.T) {
 	opts.Resume = dir
 	opts.MaxTurns = 3 // already exceeded by the restored 5
 
-	err := RunLoop(opts)
+	_, err := RunLoop(opts)
 	var ee *ExitError
 	if !asExitError(err, &ee) || ee.Code != ExitIterationCap {
 		t.Fatalf("expected ExitIterationCap, got %v", err)
@@ -388,7 +388,7 @@ func TestRunLoop_ResumeMissingCheckpointFails(t *testing.T) {
 	mb := &mockBackend{name: "mock"}
 	opts := resumeOpts(mb, t.TempDir())
 	opts.Resume = t.TempDir() // empty dir, no checkpoint.json
-	err := RunLoop(opts)
+	_, err := RunLoop(opts)
 	var ee *ExitError
 	if !asExitError(err, &ee) || ee.Code != ExitResumeError {
 		t.Fatalf("expected ExitResumeError for missing checkpoint, got %v", err)

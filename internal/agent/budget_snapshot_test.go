@@ -54,7 +54,7 @@ func TestRunLoop_BudgetSnapshotPerActTurn(t *testing.T) {
 	opts.MaxTurns = 3
 	opts.testSensorNames = []string{"build"}
 
-	_ = RunLoop(opts)
+	_, _ = RunLoop(opts)
 
 	snaps := budgetSnapshotsFromTrajectory(t, &traj)
 	if len(snaps) != 3 {
@@ -86,7 +86,7 @@ func TestRunLoop_BudgetSnapshotInPlanPhase(t *testing.T) {
 	var traj bytes.Buffer
 	opts := planOpts(mb, &traj, strings.NewReader(`{"action":"approve_plan"}`+"\n"))
 
-	if err := RunLoop(opts); err != nil {
+	if _, err := RunLoop(opts); err != nil {
 		t.Fatalf("RunLoop: %v", err)
 	}
 
@@ -124,7 +124,7 @@ func TestRunLoop_BudgetSnapshotMatchesSessionEnd(t *testing.T) {
 	opts.MaxTurns = 2
 	opts.testSensorNames = []string{"build"}
 
-	_ = RunLoop(opts)
+	_, _ = RunLoop(opts)
 
 	snaps := budgetSnapshotsFromTrajectory(t, &traj)
 	if len(snaps) == 0 {

@@ -1,0 +1,63 @@
+{
+  "capabilities": "0.7.0",
+  "ynh_version": "0.3.1",
+  "exit_code": 13,
+  "reason": "stuck: sensors unchanged for 3 turns",
+  "converged": false,
+  "session_id": "20260829-190412-a3f9",
+  "session_dir": "/Users/dev/.ynh/agent/sessions/20260829-190412-a3f9",
+  "worktree": "/Users/dev/src/demo",
+  "backend": "claude",
+  "model": "claude-opus-5",
+  "harness": {
+    "name": "local/demo",
+    "version": "0.2.0"
+  },
+  "budgets": {
+    "max_turns": 25,
+    "max_tokens": 2000000,
+    "max_wall_ms": 3600000
+  },
+  "budget_sources": {
+    "turns": "default",
+    "tokens": "manifest",
+    "wall": "flag"
+  },
+  "consumed": {
+    "turns": 7,
+    "tokens": 418233,
+    "wall_ms": 512400,
+    "plan_iterations": 1
+  },
+  "convergence": {
+    "sensor": "reviewer",
+    "passed": false,
+    "summary": "the new handler has no test covering the error branch"
+  },
+  "sensors": [
+    {
+      "name": "build",
+      "kind": "command",
+      "category": "maintainability",
+      "tolerance": "blocking",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_ms": 412
+    },
+    {
+      "name": "lint",
+      "kind": "command",
+      "category": "maintainability",
+      "tolerance": "blocking",
+      "status": "known",
+      "exit_code": 1,
+      "duration_ms": 903,
+      "known_count": 12
+    }
+  ],
+  "changed_files": [
+    "internal/handler/route.go",
+    "internal/handler/route_test.go"
+  ],
+  "base_commit": "9f2c1ab4e7d3c0518b6a2f4d9e8c7b1a3f5d6e20"
+}
