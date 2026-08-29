@@ -52,6 +52,9 @@ func runCheck(t *testing.T, args ...string) (gate.Envelope, string, error) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
+	t.Setenv("CI", "")
+	t.Setenv("YNH_AGENT_SESSION", "")
+
 	installListTestHarness(t, home, "ch", checkHarnessJSON)
 
 	// Always run against a scratch directory. Without --cwd, cmdCheck falls
@@ -215,7 +218,7 @@ func runBaselineCheck(t *testing.T, home, work string, args ...string) (gate.Env
 // runBaselineCheckInEnv is runBaselineCheck without the environment
 // neutralisation, for the guard tests that need the ambient environment they
 // set to survive.
-func runBaselineCheckInEnv(t *testing.T, home, work string, args ...string) (checkEnvelope, string, error) {
+func runBaselineCheckInEnv(t *testing.T, home, work string, args ...string) (gate.Envelope, string, error) {
 	t.Helper()
 	t.Setenv("YNH_HOME", home)
 	var stdout bytes.Buffer
@@ -579,6 +582,11 @@ func TestCheck_UpdateBaselineRejectsAnOverlay(t *testing.T) {
 func TestCheck_OverlayDoesNotClaimDebtIsFixed(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
+	// --update-baseline refuses when either of these is set, so a test that
+	// drives cmdCheck directly must say which environment it means. Without
+	// it this passes on a laptop and fails in CI.
+	t.Setenv("CI", "")
+	t.Setenv("YNH_AGENT_SESSION", "")
 	installListTestHarness(t, home, "ch", checkHarnessJSON)
 	cwd := t.TempDir()
 
