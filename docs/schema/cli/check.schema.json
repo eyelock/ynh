@@ -171,6 +171,10 @@
         "tool_version": {
           "type": "string",
           "description": "Version of the tool that produced this result, from the sensor's declared version_command. Absent when none is declared or the probe failed \u2014 which says \"cannot tell\" rather than implying a stability nobody verified."
+        },
+        "count_delta": {
+          "type": "integer",
+          "description": "For a count-ratchet sensor, how far the total has moved since the baseline: positive is new findings, negative is removed ones. Absent for fingerprint-ratcheted sensors."
         }
       },
       "required": [

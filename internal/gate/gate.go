@@ -79,11 +79,15 @@ type Result struct {
 	// weeks needs to tell a change in findings from a change in the tool, and
 	// an absent version says "cannot tell" rather than implying stability.
 	ToolVersion string `json:"tool_version,omitempty"`
-	ExitCode    int    `json:"exit_code"`
-	DurationMS  int64  `json:"duration_ms"`
-	Stdout      string `json:"stdout,omitempty"`
-	Stderr      string `json:"stderr,omitempty"`
-	Note        string `json:"note,omitempty"`
+	// CountDelta is how far a count-ratchet sensor has moved since the
+	// baseline: positive is new findings, negative is removed ones. Saying how
+	// much worse is more useful than saying only that it is worse.
+	CountDelta int    `json:"count_delta,omitempty"`
+	ExitCode   int    `json:"exit_code"`
+	DurationMS int64  `json:"duration_ms"`
+	Stdout     string `json:"stdout,omitempty"`
+	Stderr     string `json:"stderr,omitempty"`
+	Note       string `json:"note,omitempty"`
 	// NewCount and KnownCount are set for failing command sensors when a
 	// baseline exists. NewOutput carries only the lines not in the baseline —
 	// the ones the author is actually being asked to fix.

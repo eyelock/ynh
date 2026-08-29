@@ -694,3 +694,48 @@ func TestUndeclaredMCPEnvRefs_DoesNotRequireTheVariableToBeSet(t *testing.T) {
 		t.Errorf("a declared but unset variable must not fail validation, got %v", got)
 	}
 }
+
+func TestValidate_SensorRatchet(t *testing.T) {
+	cmdSrc := SensorSource{Command: "grep -rn nolint ."}
+	out := SensorOutput{Format: "text"}
+	cases := []struct {
+		name   string
+		sensor Sensor
+		want   string // substring the issue must contain; "" means none
+	}{
+		{"count on a command sensor", Sensor{Source: cmdSrc, Output: out, Ratchet: "count"}, ""},
+		{"fingerprint is explicit and fine", Sensor{Source: cmdSrc, Output: out, Ratchet: "fingerprint"}, ""},
+		{"absent defaults to fingerprint", Sensor{Source: cmdSrc, Output: out}, ""},
+		{"unknown mode", Sensor{Source: cmdSrc, Output: out, Ratchet: "vibes"},
+			"must be one of fingerprint, count"},
+		{"count on a files sensor has nothing countable",
+			Sensor{Source: SensorSource{Files: []string{"*.go"}}, Output: out, Ratchet: "count"},
+			"requires a command source"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			issues := ValidateSensors(map[string]Sensor{"s": c.sensor}, nil, nil)
+			hit := false
+			for _, i := range issues {
+				if c.want != "" && strings.Contains(i, c.want) {
+					hit = true
+				}
+				if c.want == "" && strings.Contains(i, "ratchet") {
+					t.Errorf("unexpected ratchet issue: %s", i)
+				}
+			}
+			if c.want != "" && !hit {
+				t.Errorf("expected an issue containing %q, got %v", c.want, issues)
+			}
+		})
+	}
+}
+
+func TestEffectiveRatchet(t *testing.T) {
+	if got := (Sensor{}).EffectiveRatchet(); got != "fingerprint" {
+		t.Errorf("default = %q, want fingerprint — changing the default would affect every existing harness", got)
+	}
+	if got := (Sensor{Ratchet: "count"}).EffectiveRatchet(); got != "count" {
+		t.Errorf("got %q", got)
+	}
+}

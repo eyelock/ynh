@@ -151,6 +151,47 @@ If `channel` is omitted, `ynh sensors run` infers it from the source kind:
 | `command` | `stdout+exit` |
 | `focus` | `stdout` |
 
+### `ratchet` — when the count is the finding
+
+```json
+"suppressions": {
+  "tolerance": "blocking",
+  "ratchet": "count",
+  "source": { "command": "grep -rn 'nolint\\|eslint-disable\\|# noqa\\|SuppressWarnings' ." },
+  "output": { "format": "text" }
+}
+```
+
+The baseline normally forgives by **fingerprint**: each finding is hashed, a
+fixed one stops being forgiven, and a new one is flagged wherever it appears.
+Line numbers are normalised to `:N` so moving code is not a regression, and
+identical lines are deduplicated.
+
+That is the right behaviour for a linter and the wrong one for a suppression
+scan. **The gaming vector for a ratchet is suppression, not relocation.** An
+agent that cannot fix a finding can silence it — and a second `//nolint` in a
+file that already has one changes neither the fingerprint set nor the
+distinct-line count. It is invisible.
+
+`ratchet: "count"` measures the **total** instead, so the second one is a
+regression:
+
+```
+$ ynh check local/demo            # after an agent adds one //nolint
+  suppressions   fail   count_delta +1
+```
+
+Removing suppressions is progress, not a regression, and the reduced total is
+recorded on the next `--update-baseline` — which is what stops a count creeping
+back to an old high-water mark.
+
+Requires a command source: only a command sensor produces countable findings.
+`fingerprint` remains the default, so no existing harness changes behaviour.
+
+**What it does not cover.** A deleted test is not a suppression. This catches
+silencing, not removal — a sensor counting tests would catch that, and it is a
+different declaration.
+
 ### `reference` — proving a sensor still observes
 
 ```json
