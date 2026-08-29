@@ -427,7 +427,7 @@ Edge cases:
 
 If your tool genuinely needs hermetic builds (CI pipelines, reproducible deployments), surface SHA pinning prominently and make it explicit — but as a deliberate choice, not a hidden default.
 
-For the architectural rationale and contributor-facing rules, see [`.github/CONTRIBUTING.md` § Versioning & Identifiers](../.github/CONTRIBUTING.md#versioning--identifiers).
+For the architectural rationale and contributor-facing rules, see [`.github/CONTRIBUTING.md` § Versioning & Identifiers](https://github.com/eyelock/ynh/blob/main/.github/CONTRIBUTING.md#versioning--identifiers).
 
 ### Design Decisions
 
