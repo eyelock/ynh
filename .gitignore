@@ -35,3 +35,6 @@ Thumbs.db
 *.tfstate.backup
 *.tfvars
 !terraform.tfvars.example
+
+# SkillSpector scan output
+.skillspector-sarif/

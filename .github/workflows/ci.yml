@@ -49,6 +49,7 @@ jobs:
               - '.ynh-plugin/**'
               - '**/plugin.json'
               - 'AGENTS.md'
+              - '.skillspector-baseline.yaml'
               - 'Makefile'
               - '.github/workflows/**'
 
@@ -123,10 +124,41 @@ jobs:
       - name: Validate and lint harness artifacts
         run: make check-artifacts
 
+  skill-security:
+    name: Skill Security
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.artifacts == 'true'
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      # Pinned to a tag on purpose. SkillSpector is not on PyPI, so this is a
+      # git install; unpinned, an upstream push would silently change what
+      # gates our merges — the supply-chain risk the scanner exists to catch.
+      - name: Install SkillSpector
+        run: pip install "git+https://github.com/NVIDIA/SkillSpector.git@v2.11.0"
+      - name: Scan harness artifacts
+        run: make scan-artifacts
+      # Advisory upload: the gate is the scan's exit code above. A code
+      # scanning misconfiguration must not mask a real finding, nor block a
+      # merge on its own.
+      - name: Upload SARIF to code scanning
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: .skillspector-sarif
+          category: skillspector
+
   all-clear:
     name: All Clear
     runs-on: ubuntu-latest
-    needs: [changes, build, test, lint, format, artifacts]
+    needs: [changes, build, test, lint, format, artifacts, skill-security]
     if: always()
     steps:
       - name: Check results
@@ -138,6 +170,7 @@ jobs:
           echo "  lint: ${{ needs.lint.result }}"
           echo "  format: ${{ needs.format.result }}"
           echo "  artifacts: ${{ needs.artifacts.result }}"
+          echo "  skill-security: ${{ needs['skill-security'].result }}"
 
           if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
             echo "One or more required checks failed"

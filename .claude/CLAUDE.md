@@ -27,7 +27,20 @@ make test-coverage FILE=./cmd/ynd  # coverage for specific package
 make clean              # remove build artifacts and caches
 make clean && make build  # fresh build (use when binary seems stale)
 make check-artifacts    # ynd validate + ynd lint over skills/ agents/ rules/ .claude/
+make scan-artifacts     # SkillSpector security scan of the same dirs (needs Python)
 ```
+
+`scan-artifacts` is deliberately NOT part of `make check` — it needs SkillSpector
+installed from Python, and a missing optional tool should not fail a contributor's
+build. CI runs it on every change to the harness artifacts. Install it with:
+
+```bash
+pip install 'git+https://github.com/NVIDIA/SkillSpector.git@v2.11.0'
+```
+
+Findings are triaged by hand into `.skillspector-baseline.yaml`. Every suppression
+needs a scoped `path:` and a written `reason:` — never a bare rule id, which would
+silence the whole rule family repo-wide.
 
 **Do not use:** `go build ./...`, `go test ./...`, `golangci-lint run` directly. They miss flags, ldflags, or tool paths that the Makefile provides.
 
