@@ -317,3 +317,88 @@ func TestRunLoop_UntouchedBaselineIsNotTamper(t *testing.T) {
 		t.Fatalf("an untouched baseline must not read as tampering: %v", err)
 	}
 }
+
+// A files sensor must never converge a run.
+//
+// #214 routed the gate through `ynh check` but left the convergence call site
+// deriving its own verdict, and that verdict said a files sensor had passed
+// because a path existed. Contents were never read, output.format was carried
+// and never consulted, and the path sits inside the agent's own write path —
+// so a run could manufacture its own convergence by touching a file.
+//
+// The failure direction was the dangerous way round: a missing file failed
+// loudly, while a stale, forged, or all-tests-failed file passed silently.
+func TestConvergence_FilesSensorCannotConverge(t *testing.T) {
+	for _, exit := range []int{0, 1} {
+		if gate.StatusForKind("files", exit) == gate.StatusPass {
+			t.Fatalf("a files sensor reached StatusPass at exit %d — it could converge a run", exit)
+		}
+	}
+	// And the refusal is structural, not a special case: it holds because
+	// StatusReported is not StatusPass, which is the same rule Gating() uses.
+	r := gate.Result{Status: gate.StatusForKind("files", 0), Tolerance: "blocking"}
+	if r.Gating() {
+		t.Error("a files sensor must not gate either — it has no derivable verdict")
+	}
+}
+
+// The counterpart: a command sensor that exits non-zero must not converge,
+// and one that exits clean must.
+func TestConvergence_CommandSensorDecidesByExitCode(t *testing.T) {
+	if gate.StatusForKind("command", 0) != gate.StatusPass {
+		t.Error("a clean command sensor must be able to converge")
+	}
+	if gate.StatusForKind("command", 1) == gate.StatusPass {
+		t.Error("a failing command sensor must not converge")
+	}
+}
+
+// The call site itself, not just the derivation it now uses.
+//
+// This is the test whose absence let the bug live: `runSensorFn` has been a
+// seam since the sensor package was written, so the convergence path was
+// always testable — it simply never was, and #214 rewrote everything around
+// it without touching it. A mutation reverting the call site to the old
+// `len(Output.Files) > 0` verdict passed every existing test.
+func TestCheckConvergence_FilesVerifierDoesNotConvergeTheLoop(t *testing.T) {
+	restore := runSensorFn
+	t.Cleanup(func() { runSensorFn = restore })
+
+	// A files sensor that matched a file. Under the old logic this converged
+	// the run; the file is one the agent itself can create.
+	runSensorFn = func(_, _, _, _, _ string) (*SensorResult, error) {
+		return &SensorResult{
+			Kind:     "files",
+			ExitCode: 0,
+			Output:   SensorRunOutput{Files: []SensorFile{{Path: "reports/done.txt"}}},
+		}, nil
+	}
+
+	env := &gate.Envelope{Verdict: gate.VerdictPass}
+	converged, reason := checkConvergence(env, "verifier", "ynh", "local/demo",
+		t.TempDir(), newNullTrajectory(), 1, false)
+	if converged {
+		t.Fatal("a files sensor converged the run because a path existed — " +
+			"contents never read, and the path is inside the agent's write path")
+	}
+	if reason == "" {
+		t.Error("a refusal must say why, or the loop cannot feed it back to the agent")
+	}
+}
+
+// The same seam, proving a command verifier still works — the fix must not
+// make convergence unreachable.
+func TestCheckConvergence_CommandVerifierStillConverges(t *testing.T) {
+	restore := runSensorFn
+	t.Cleanup(func() { runSensorFn = restore })
+	runSensorFn = func(_, _, _, _, _ string) (*SensorResult, error) {
+		return &SensorResult{Kind: "command", ExitCode: 0}, nil
+	}
+
+	env := &gate.Envelope{Verdict: gate.VerdictPass}
+	converged, _ := checkConvergence(env, "verifier", "ynh", "local/demo",
+		t.TempDir(), newNullTrajectory(), 1, false)
+	if !converged {
+		t.Error("a clean command verifier must still converge the run")
+	}
+}

@@ -151,6 +151,26 @@ If `channel` is omitted, `ynh sensors run` infers it from the source kind:
 | `command` | `stdout+exit` |
 | `focus` | `stdout` |
 
+### `convergence-verifier` needs a source that can decide
+
+A sensor with `role: convergence-verifier` tells the loop the run is finished,
+so it must be able to produce a verdict. **A `files` source cannot**, and
+`ynd validate` refuses the combination.
+
+No verdict is mechanically derivable from a glob. A files sensor declared as
+the verifier would end the run because a path exists — contents never read,
+`output.format` never consulted — and that path sits inside the agent's own
+write path, so the run could manufacture its own convergence by touching a
+file. The failure direction is the wrong way round too: a missing file fails
+loudly, while a stale or forged one passes silently.
+
+The refusal is structural rather than a special case. Convergence is
+`status: pass`, a files sensor is always `status: reported`, and `reported` is
+not `pass` — the same rule that stops a files sensor gating `ynh check`.
+
+Use a command source that exits non-zero until the work is done, or a focus
+source, which a loop driver resolves with an agent runtime.
+
 ## Validation
 
 `ynd validate` checks:

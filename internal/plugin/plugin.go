@@ -209,6 +209,20 @@ func ValidateSensors(sensors map[string]Sensor, profileNames, focusNames map[str
 		if s.Role != "" && !ValidSensorRoles[s.Role] {
 			issues = append(issues, fmt.Sprintf("%s role %q must be one of regular, convergence-verifier, stuck-recovery", prefix, s.Role))
 		}
+		// A convergence verifier decides that a run is finished, so it must be
+		// able to produce a verdict. No verdict is mechanically derivable from
+		// a file glob: such a sensor would end the run because a path exists,
+		// with contents never read — and the path sits inside the agent's own
+		// write path, so the run could manufacture its own convergence.
+		//
+		// The loop refuses this at runtime because a files sensor is
+		// StatusReported and never StatusPass. Refusing it here as well means
+		// the author is told at `ynd validate` time rather than discovering it
+		// as a run that silently never converges.
+		if s.Role == "convergence-verifier" && s.Source.Kind() == "files" {
+			issues = append(issues, fmt.Sprintf(
+				"%s role convergence-verifier requires a command source: no verdict is derivable from a file glob", prefix))
+		}
 		if s.Tolerance != "" && !ValidSensorTolerances[s.Tolerance] {
 			issues = append(issues, fmt.Sprintf("%s tolerance %q must be one of blocking, advisory, report", prefix, s.Tolerance))
 		}

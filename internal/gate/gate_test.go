@@ -42,3 +42,46 @@ func TestResultRan(t *testing.T) {
 		}
 	}
 }
+
+// One answer to "can this kind of sensor produce a verdict at all".
+//
+// The loop used to answer this for itself and said a files sensor had
+// converged because a path existed — contents never read, and the path inside
+// the agent's own write path, so a run could manufacture its own convergence.
+func TestStatusForKind(t *testing.T) {
+	cases := []struct {
+		kind string
+		exit int
+		want string
+	}{
+		{"command", 0, StatusPass},
+		{"command", 1, StatusFail},
+		{"command", 127, StatusFail},
+		// No verdict is derivable from a glob, whatever it matched.
+		{"files", 0, StatusReported},
+		{"files", 1, StatusReported},
+		// Resolving a focus needs a runtime ynh does not own.
+		{"focus", 0, StatusDeferred},
+		{"focus", 1, StatusDeferred},
+		// An unknown kind is treated as a command rather than silently passing.
+		{"", 0, StatusPass},
+		{"", 1, StatusFail},
+	}
+	for _, c := range cases {
+		if got := StatusForKind(c.kind, c.exit); got != c.want {
+			t.Errorf("StatusForKind(%q, %d) = %q, want %q", c.kind, c.exit, got, c.want)
+		}
+	}
+}
+
+// The property the whole fix rests on: only a command sensor can converge,
+// because only StatusPass converges and only a command sensor produces it.
+func TestStatusForKind_OnlyCommandCanEverPass(t *testing.T) {
+	for _, kind := range []string{"files", "focus"} {
+		for _, exit := range []int{0, 1, 127} {
+			if StatusForKind(kind, exit) == StatusPass {
+				t.Errorf("%s sensor reached StatusPass at exit %d — it could then converge a run", kind, exit)
+			}
+		}
+	}
+}
