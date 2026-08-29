@@ -68,17 +68,45 @@ work you are glad you did not do.
   and stores hashes rather than findings, so forgiveness cannot be audited from
   the file.
 
-## Decisions — David's, not the implementer's. Do not build unasked.
+## Decisions
 
-**B3 — guard composition.** Should an *included* harness contribute hooks,
-sensors and MCP to its parent? Today they are dropped at assembly by design
-(`docs/sensors.md:180`, `docs/hooks.md:257`) because silent injection of
-executable config through composition is the poisoned-template attack. Options:
-(a) keep the rule, duplicate guards per root harness with a drift check;
-(b) explicit per-capability `trust:` opt-in named in the root manifest.
-(b) fits the factory and is additive to the schema, but **reverses a documented
-refusal** and needs `docs/sensors.md` and `docs/harness-engineering.md` updated
-as a stance change rather than a feature.
+B3 is decided and recorded below. C5 is still David's — do not build it unasked.
+
+**B3 — guard composition. DECIDED: option (c), merge at authoring time.**
+
+`ynh include sync` copies an included harness's hook, sensor and MCP
+declarations into the **root** manifest as clearly marked generated blocks,
+with drift detection in `ynh doctor`. Nothing is resolved from includes at run
+time.
+
+*Why (c) over (b).* It keeps the property that makes the design auditable: the
+answer to "what governs this repository" stays one committed file a reviewer
+can read. Under (b) that answer requires resolving remote includes at runtime,
+which is exactly the audit-evidence problem. And (c) does not convert inert
+included content into an execution surface — under (b) an include gains command
+execution every turn. The honest cost is that every repo's `plugin.json` grows
+and needs re-syncing on upgrade; that cost is visible and diffable, which is
+the right kind.
+
+*Correcting this file's earlier framing.* An earlier reconstruction of this
+roadmap described (b) as "additive to the schema" and framed the change as
+reversing a documented refusal. Both are wrong.
+`internal/resolver/resolver.go:91` — `resolveWith` iterates `p.Includes` once,
+flat, with no recursion, and returns file paths (`BasePath` + `Pick`). **It
+never opens the included harness's `plugin.json`.** So "parent" and "root" are
+the same thing, includes do not nest, and nothing is being *dropped* — it is
+never read. (b) is therefore not a schema addition but new resolver machinery:
+loading included manifests, merge semantics, conflict resolution, precedence,
+and `ynh info` surfacing. (c) is a generator plus a drift check.
+
+*Usability is an acceptance criterion, not a nicety:*
+- Generated blocks delimited and labelled with their source and ref
+- `ynh doctor` reporting drift in plain language — "guard-common has moved on
+  since this was synced"
+- `ynh include sync --check` exiting non-zero for CI
+
+If a reader cannot tell at a glance which declarations are theirs and which are
+generated, the option has failed.
 
 **C5 — is assembling the evidence bundle ynh's job?** Doctrine says ynh returns
 raw signal and pass/fail policy lives above it. A set difference between two
