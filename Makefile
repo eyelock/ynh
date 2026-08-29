@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage e2e format lint check check-artifacts scan-artifacts run docs help docker-build docker-push
+.PHONY: clean deps install build test test-coverage e2e format lint check check-artifacts check-vendor-parity scan-artifacts run docs help docker-build docker-push
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -98,6 +98,9 @@ scan-artifacts: ## Security-scan the harness artifacts with SkillSpector
 		echo "Skill security scan clean."; \
 	fi; \
 	exit $$rc
+
+check-vendor-parity: build ## Assert every vendor is documented and assembles the same artifacts
+	@./scripts/vendor-parity.sh
 
 check-artifacts: build ## Validate and lint the harness artifacts this repo ships
 	@echo "==> ynd validate ."
