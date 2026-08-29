@@ -81,6 +81,14 @@ func TestCmdMarketplaceBuildClean(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// --clean now asks before deleting a non-empty directory. Answer it
+	// explicitly: a test that relied on the old unconditional delete would
+	// otherwise pass for the wrong reason.
+	restorePrompt := promptActionFunc
+	t.Cleanup(func() { promptActionFunc = restorePrompt })
+	asked := false
+	promptActionFunc = func(_ string, _ ...string) string { asked = true; return "y" }
+
 	err := cmdMarketplace([]string{"build", configFile, "-o", outputDir, "--clean"})
 	if err != nil {
 		t.Fatalf("cmdMarketplace build: %v", err)
@@ -89,6 +97,9 @@ func TestCmdMarketplaceBuildClean(t *testing.T) {
 	// Stale file should be gone
 	if _, err := os.Stat(staleFile); err == nil {
 		t.Error("stale file should have been removed by --clean")
+	}
+	if !asked {
+		t.Error("--clean deleted a non-empty directory without asking")
 	}
 
 	// Fresh content should exist
