@@ -1,4 +1,4 @@
-# Tutorial 2: Vendors & Symlinks
+# Vendors & Symlinks
 
 Run the same harness with different AI coding assistants. Understand how ynh adapts to each vendor's capabilities.
 
@@ -14,7 +14,7 @@ ynh uninstall local/my-harness 2>/dev/null
 mkdir -p /tmp/ynh-tutorial
 ```
 
-## T2.1: Create and install a test harness
+## Create and install a test harness
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/my-harness/skills/ping
@@ -41,7 +41,7 @@ ynh install /tmp/ynh-tutorial/my-harness
 # Expected: Installed harness "my-harness"
 ```
 
-## T2.2: List available vendors
+## List available vendors
 
 ```bash
 ynh vendors
@@ -63,7 +63,7 @@ ynh picks the vendor in this order:
 2. Harness's `default_vendor` in `.ynh-plugin/plugin.json`
 3. Global `~/.ynh/config.json` default (fallback: "claude")
 
-## T2.3: Switch vendors
+## Switch vendors
 
 ```bash
 my-harness -v codex
@@ -74,7 +74,7 @@ Each launches the same harness through a different vendor CLI. Artifacts are rea
 
 **Note:** Codex and Cursor require their CLIs installed separately. If missing, you'll see: `exec: "codex": executable file not found in $PATH`.
 
-## T2.4: Symlinks — automatic prompt
+## Symlinks — automatic prompt
 
 When you run a harness with a symlink vendor (`-v codex` or `-v cursor`), ynh checks if symlinks are already installed in the current project directory. If not, it **automatically prompts** you:
 
@@ -99,7 +99,7 @@ Press `Y` — ynh creates the symlinks and then launches the vendor CLI.
 
 On subsequent runs from the same directory, ynh sees the symlinks are already in place and launches immediately without prompting.
 
-## T2.5: Symlinks — explicit install and clean
+## Symlinks — explicit install and clean
 
 You can also manage symlinks explicitly without launching a session:
 
@@ -153,7 +153,7 @@ ynh status
 # Expected: No symlink installations found.
 ```
 
-## T2.6: Symlinks — Claude doesn't need them
+## Symlinks — Claude doesn't need them
 
 ```bash
 my-harness -v claude --install
@@ -163,7 +163,7 @@ my-harness -v claude --clean
 # Expected: "claude uses native plugin loading - no symlinks to clean."
 ```
 
-## T2.7: Prune orphaned installations
+## Prune orphaned installations
 
 If a project directory is deleted while symlinks are still registered, `ynh prune` cleans up the stale entries. It also removes stale launcher scripts from `~/.ynh/bin/` when their harness no longer exists.
 
@@ -255,4 +255,4 @@ ls ~/.ynh/bin/ynh ~/.ynh/bin/ynd
 
 ## Next
 
-[Tutorial 3: Composition](tutorial/03-composition.md) — pull skills from Git repos.
+[Composition](tutorial/composition.md) — pull skills from Git repos.

@@ -88,7 +88,7 @@ when its verdict is `pass`.
 - Only **blocking** sensors gate. `advisory` and `report` sensors are reported
   and fed back, but never hold convergence open — the same rule `ynh check`
   applies, from the same `tolerance` declaration.
-- **Failures already in the [baseline](sensors.md#baseline--inheriting-a-repo-that-already-fails)
+- **Failures already in the [baseline](sensors.md#baseline-inheriting-a-repo-that-already-fails)
   do not gate.** A sensor whose every failure is recorded reports `known`, and
   the loop treats it as debt the run inherited rather than work it owes. Only
   the lines a turn actually introduced are fed back, so the agent is not asked
@@ -164,7 +164,7 @@ are failures to run, and 30–31 are external interruption.
 
 Code 14 is the one a pipeline must **escalate rather than retry**. It means the
 gate's own reference point moved while the run was in progress: the
-[baseline](sensors.md#baseline--inheriting-a-repo-that-already-fails) changed,
+[baseline](sensors.md#baseline-inheriting-a-repo-that-already-fails) changed,
 or stopped being readable. `ynh check --update-baseline` refuses inside an
 agent session, but that only closes the front door — nothing stops a worker
 editing the baseline files directly, and an agent that cannot converge has
@@ -233,5 +233,5 @@ point.
 ## See also
 
 - [Sensors](sensors.md) — declaring what the loop observes
-- [Tutorial 20](tutorial/20-check.md) — the gate, and baselines
+- [Gating with `ynh check`](tutorial/check.md) — the gate, and baselines
 - [Harness Engineering](harness-engineering.md) — where the loop sits

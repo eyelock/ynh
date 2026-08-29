@@ -1,4 +1,4 @@
-# Tutorial 22: Shadow Mode
+# Shadow Mode
 
 Before trusting a loop with real work, measure it against work whose correct
 answer is already known. Your git history is full of such work: every closed fix
@@ -13,10 +13,10 @@ This is built from `ynh`, `git` and a shell loop. Nothing else. If it starts
 needing a bespoke tool, that is a finding about ynh worth reporting rather than
 routing around.
 
-**Prerequisites.** [Tutorial 21](tutorial/21-agent-loop.md), a repository with
+**Prerequisites.** [The Agent Loop](tutorial/agent-loop.md), a repository with
 history, and a harness whose sensors cover the class of fix you are sampling.
 
-## T22.1: Select candidates
+## Select candidates
 
 Find closed fixes:
 
@@ -40,7 +40,7 @@ For `8382382` the honest prompt is the issue title (`#173`) and the failing
 behaviour. Not "preserve bare-name resources claimed by another install", which
 tells the agent both the diagnosis and the strategy.
 
-## T22.2: Build the base state
+## Build the base state
 
 ```bash
 FIX=8382382
@@ -56,7 +56,7 @@ parent: 1ca2a94 feat(hooks): wire sensors into plain Claude sessions (#172)
 `$FIX^` is the parent — the tree as it stood with the bug present. A detached
 worktree keeps your own checkout untouched.
 
-## T22.3: Pin the harness, do not inherit it
+## Pin the harness, do not inherit it
 
 The obvious move is to use the harness as it existed at the base commit. It is
 the wrong move, and the repository will usually tell you so:
@@ -85,7 +85,7 @@ tree**. The harness is the instrument; changing it mid-run means the early and
 late halves of your sample were measured with different rulers, and the number
 you get is the average of two experiments.
 
-## T22.4: Capture the finding as it stood
+## Capture the finding as it stood
 
 Record the failing state before the agent touches anything:
 
@@ -101,7 +101,7 @@ If the gate already passes at the base commit, discard the candidate. Your
 sensors do not detect this class of bug, and no result the agent produces will
 mean anything.
 
-## T22.5: Run the loop against the base state
+## Run the loop against the base state
 
 ```bash
 ynh agent run \
@@ -120,9 +120,9 @@ its work in the worktree as uncommitted changes.
 Record the exit code with the result. A run that ended at `10` (turn cap) is a
 different observation from one that ended at `0`, and lumping them together
 hides the shape of the failure. See the [exit code
-table](tutorial/21-agent-loop.md#t217-exit-codes).
+table](tutorial/agent-loop.md#exit-codes).
 
-## T22.6: Compare
+## Compare
 
 ```bash
 git -C /tmp/shadow/base diff > /tmp/shadow/agent-173.patch
@@ -140,7 +140,7 @@ Compare behaviour, not text. The `before.json` capture and the sensor verdict
 after the run are the objective part. The rest is judgement, which is why the
 next step is a human one.
 
-## T22.7: Grade blind
+## Grade blind
 
 Grade against a fixed rubric, without knowing which patch came from where:
 
@@ -160,7 +160,7 @@ assertion passes the gate.
 Blind grading is not ceremony. The grader who knows which patch is the machine's
 grades it differently, in both directions.
 
-## T22.8: Read the result honestly
+## Read the result honestly
 
 Five things inflate the number. Every one of them makes a factory look better
 than it is.
@@ -174,7 +174,7 @@ model's training cutoff, the model may have memorised it. Split the sample at
 the cutoff date and report both halves. A large gap between them is the
 finding — it means you measured recall, not repair.
 
-**Toolchain drift.** T22.3 is the version of this you can see. The subtler one:
+**Toolchain drift.** [Pin the harness, do not inherit it](#pin-the-harness-do-not-inherit-it) is the version of this you can see. The subtler one:
 a linter minor version landing midway through a long run silently splits the
 sample. Pin the whole run — harness, linter versions, container image — and
 record what you pinned alongside the result.
@@ -187,7 +187,7 @@ a third and four fifths". State the interval, not the point estimate.
 repositories. Report per-repository as well as pooled — a pooled number hides
 the case where one repository carries the whole result.
 
-## T22.9: Aggregate
+## Aggregate
 
 ```bash
 for FIX in $(cat /tmp/shadow/candidates.txt); do

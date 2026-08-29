@@ -1,4 +1,4 @@
-# Tutorial 17: Include Editing
+# Include Editing
 
 Add, remove, and update includes in an existing harness from the CLI — no manual JSON editing required.
 
@@ -10,7 +10,7 @@ rm -rf /tmp/ynh-tutorial-includes
 mkdir -p /tmp/ynh-tutorial-includes
 ```
 
-## T17.1: Add an include
+## Add an include
 
 Start with a bare harness and add a Git include to it:
 
@@ -56,7 +56,7 @@ Expected:
 }
 ```
 
-## T17.2: Add with flags
+## Add with flags
 
 Add a second include scoped to a subdirectory with specific picks and a pinned ref:
 
@@ -108,7 +108,7 @@ Expected:
 | `--pick <items>` | Comma-separated artifact paths in `type/name` form: `skills/<name>`, `agents/<name>.md`, `rules/<name>.md`, `commands/<name>.md`. All others excluded. |
 | `--ref <ref>` | Pin to a branch, tag, or commit SHA |
 
-## T17.3: Duplicate add → error
+## Duplicate add → error
 
 Adding the same URL + path combination a second time is an error:
 
@@ -122,7 +122,7 @@ Error: include "github.com/anthropics/skills" already present in harness "my-har
 Use 'ynh include update' to change its options, or pass --replace to overwrite
 ```
 
-## T17.4: Replace an existing include
+## Replace an existing include
 
 Use `--replace` to overwrite an existing include rather than erroring:
 
@@ -168,7 +168,7 @@ Expected:
 }
 ```
 
-## T17.5: Update an include
+## Update an include
 
 Change an include's options without removing and re-adding it. Only the flags you supply are updated; others are left unchanged.
 
@@ -217,7 +217,7 @@ Expected:
 }
 ```
 
-## T17.6: Update a path value
+## Update a path value
 
 `--path` on `update` changes the path field — it does not control which include is targeted (that's `--from-path`):
 
@@ -262,7 +262,7 @@ Expected:
 }
 ```
 
-## T17.7: Remove an include
+## Remove an include
 
 ```bash
 ynh include remove /tmp/ynh-tutorial-includes/my-harness github.com/anthropics/skills
@@ -298,7 +298,7 @@ Expected:
 }
 ```
 
-## T17.8: Disambiguating a monorepo
+## Disambiguating a monorepo
 
 A harness can include the same repo at two different paths. When a URL matches multiple includes, `--path` (for `remove`) or `--from-path` (for `update`) is required to disambiguate.
 
@@ -402,7 +402,7 @@ Expected:
 }
 ```
 
-## T17.9: Installed harnesses — name-based targeting (network required)
+## Installed harnesses — name-based targeting (network required)
 
 > **Skip in evals** — requires network access for the pre-fetch.
 
@@ -447,7 +447,7 @@ The installed harness's `.ynh-plugin/plugin.json` at `~/.ynh/harnesses/local--ba
 ynh uninstall local/base 2>/dev/null
 ```
 
-## T17.10: Path resolution — id vs path
+## Path resolution — id vs path
 
 The `<harness>` argument is classified lexically:
 
@@ -490,4 +490,4 @@ rm -rf /tmp/ynh-tutorial-includes
 
 ## Next
 
-[Tutorial 3: Composition](tutorial/03-composition.md) — the `includes` field in detail, pick filtering, and allow-lists.
+[Composition](tutorial/composition.md) — the `includes` field in detail, pick filtering, and allow-lists.

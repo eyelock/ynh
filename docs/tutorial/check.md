@@ -1,6 +1,6 @@
-# Tutorial 20: Gating with `ynh check`
+# Gating with `ynh check`
 
-[Tutorial 19](tutorial/19-sensors.md) declared sensors. This one runs them as a gate.
+[Sensors](tutorial/sensors.md) declared sensors. This one runs them as a gate.
 
 `ynh check` executes every declared sensor and returns a verdict. It owns the
 thinnest possible pass/fail policy — a command sensor passes when it exits 0 —
@@ -17,7 +17,7 @@ mkdir -p /tmp/ynh-t20/work && cd /tmp/ynh-t20
 export YNH_HOME=/tmp/ynh-t20/home
 ```
 
-## T20.1: Declare sensors with a tolerance
+## Declare sensors with a tolerance
 
 ```bash
 mkdir -p gate-demo/.ynh-plugin
@@ -44,7 +44,7 @@ ynh install ./gate-demo
 
 `tolerance` is optional and defaults to `blocking` — the safe default for a gate.
 
-## T20.2: A clean run
+## A clean run
 
 ```bash
 cd /tmp/ynh-t20/work
@@ -64,7 +64,7 @@ exit=0
 report — the filtered run is the edit-time path, and it has to cost nothing to
 read. They remain in `--format json`.
 
-## T20.3: A blocking failure gates
+## A blocking failure gates
 
 ```bash
 cat > issues.txt <<'EOF'
@@ -98,7 +98,7 @@ Three things to notice:
 - **The failing output is printed verbatim.** That output is the remediation an
   agent acts on, so it is not summarised away.
 
-## T20.4: The problem with inheriting a repository
+## The problem with inheriting a repository
 
 `lint` is failing on two issues that were there before you arrived. As it
 stands, the gate blocks every run until someone fixes them — so the first run
@@ -107,7 +107,7 @@ on any repository that is not already clean is unwinnable.
 A gate nobody can satisfy is a gate everybody disables. That is what a baseline
 is for.
 
-## T20.5: Record a baseline
+## Record a baseline
 
 ```bash
 ynh check local/gate-demo --update-baseline
@@ -165,7 +165,7 @@ different sensors never conflict; when one does, `ynh check` refuses to run
 against it rather than guessing, because deciding which failures a repository
 accepts is a human call.
 
-## T20.6: Only new failures gate
+## Only new failures gate
 
 Add one issue of your own to the two you inherited:
 
@@ -190,7 +190,7 @@ exit=1
 Only your issue is shown. Listing the two you did not introduce alongside the
 one you did is how a useful gate becomes an ignored one.
 
-## T20.7: Moving code is not a new failure
+## Moving code is not a new failure
 
 Insert lines above the existing issues so their reported positions shift:
 
@@ -215,7 +215,7 @@ absolute paths are made relative to the working directory. Without the first,
 inserting a line would report the whole file as new on your next run; without
 the second, a baseline recorded on a laptop would not match on a CI runner.
 
-## T20.8: Paying off debt tightens the ratchet
+## Paying off debt tightens the ratchet
 
 ```bash
 cat > issues.txt <<'EOF'
@@ -235,7 +235,7 @@ baseline: 1 recorded failure is now fixed — `ynh check --update-baseline` to l
 The baseline never narrows itself. It reports the slack and offers the command;
 tightening is a deliberate act.
 
-## T20.9: CI cannot write a baseline
+## CI cannot write a baseline
 
 ```bash
 CI=true ynh check local/gate-demo --update-baseline
@@ -259,7 +259,7 @@ ynh check local/gate-demo --only lint --no-baseline
 echo "exit=$?"          # 1 — the baseline is ignored
 ```
 
-## T20.10: Exit codes and structured output
+## Exit codes and structured output
 
 | Code | Meaning |
 |------|---------|
@@ -279,7 +279,7 @@ sensor `status`, `tolerance`, `new_count`/`known_count` and `new_output`. When a
 baseline is loaded, a top-level `baseline` object reports `known`, `fixed` and
 `stale`.
 
-## T20.11: Wire it into the edit loop
+## Wire it into the edit loop
 
 A hook turns the gate into something that runs without being asked:
 
@@ -300,7 +300,7 @@ Vendor support differs: where a vendor fires `on_stop` once per session, or
 cannot block on it, the edit-time loop does not exist and the CI gate is the
 one that matters.
 
-## T20.12: Cleanup
+## Cleanup
 
 ```bash
 ynh uninstall local/gate-demo

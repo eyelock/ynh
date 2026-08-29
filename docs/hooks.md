@@ -21,7 +21,7 @@ ynh defines five canonical hook events. Each vendor translates these to its nati
 | `before_tool` | Runs before a tool/command is invoked. Can block execution. |
 | `after_tool` | Runs after a tool/command completes. Can reject the result. |
 | `before_prompt` | Runs before a user prompt is submitted to the model. |
-| `on_stop` | Runs when the agent finishes responding. On Claude Code this fires at the **end of every turn**, not once at session end — see [on_stop output semantics](#on_stop-output-semantics-claude). |
+| `on_stop` | Runs when the agent finishes responding. On Claude Code this fires at the **end of every turn**, not once at session end — see [on_stop output semantics](#on-stop-output-semantics-claude). |
 | `on_session_start` | Runs when a session/agent starts. Codex supports filtering on `source` (`startup`\|`resume`) via the hook entry's existing `matcher` field. |
 
 ## Manifest Format
@@ -138,7 +138,7 @@ Example `.claude/settings.json` (what `hook export` produces):
 }
 ```
 
-The `Stop` entry above needs the loop-guard and output-routing discipline described in [on_stop output semantics](#on_stop-output-semantics-claude).
+The `Stop` entry above needs the loop-guard and output-routing discipline described in [on_stop output semantics](#on-stop-output-semantics-claude).
 
 ### Claude Code Format
 
@@ -304,7 +304,7 @@ See [reference.md](reference.md) for the complete flag matrix and [profiles.md](
 
 ## See Also
 
-- [Tutorial 4: Hooks](tutorial/10-hooks.md) — step-by-step walkthrough
+- [Hooks](tutorial/hooks.md) — step-by-step walkthrough
 - [Sensors](sensors.md) — observation surfaces a loop driver consumes
 - [Harness Engineering](harness-engineering.md) — how hooks bridge guides to sensors
 - [Vendor Support](vendors.md) — vendor capabilities and differences

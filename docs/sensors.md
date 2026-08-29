@@ -296,7 +296,7 @@ The most common integration is a hook that produces an artifact a sensor declare
 
 The hook is the runtime mechanism that produces the data; the sensor is the declarative contract over reading it. Coupling is **by shared file path** — implicit, no schema link needed.
 
-> **Making the hook actually fire.** For an always-on sensor loop in a plain Claude session, the hooks must live in the project's `.claude/settings.json`, not just `.ynh-plugin/plugin.json` — and an `on_stop` sweep that feeds a verdict back to the agent has specific output and loop-guard requirements. See [Hooks §"Running hooks in a plain Claude session"](hooks.md#running-hooks-in-a-plain-claude-session) and [Hooks §"on_stop output semantics"](hooks.md#on_stop-output-semantics-claude).
+> **Making the hook actually fire.** For an always-on sensor loop in a plain Claude session, the hooks must live in the project's `.claude/settings.json`, not just `.ynh-plugin/plugin.json` — and an `on_stop` sweep that feeds a verdict back to the agent has specific output and loop-guard requirements. See [Hooks §"Running hooks in a plain Claude session"](hooks.md#running-hooks-in-a-plain-claude-session) and [Hooks §"on_stop output semantics"](hooks.md#on-stop-output-semantics-claude).
 
 ### Same script, different driver
 
@@ -376,7 +376,7 @@ ynh does **not** ship a loop driver. Orchestration policy — when to run sensor
 
 - [Hooks](hooks.md)
 - [Profiles](profiles.md)
-- [Focus](tutorial/14-focus.md)
+- [Focus](tutorial/focus.md)
 - [Harness engineering](harness-engineering.md)
 - [CLI structured output](cli-structured.md)
 

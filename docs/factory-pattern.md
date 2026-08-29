@@ -9,7 +9,7 @@ worth saying plainly what is being claimed and what is not, before anything
 else.
 
 This page is about *whether* to build one and *how to know if it is working*.
-For the mechanics, see [Sensors](sensors.md), [Gating with `ynh check`](tutorial/20-check.md)
+For the mechanics, see [Sensors](sensors.md), [Gating with `ynh check`](tutorial/check.md)
 and the [Agent Loop](agent.md).
 
 ## What a Factory Is Here
@@ -87,7 +87,7 @@ Below `y*` you are paying review time for work you then do again anyway.
   attempts you rejected. A review that ends in "no" still cost its full price.
   This is the input most often understated.
 - **`y`** — measure it before trusting it, against work whose correct answer is
-  already known. That is what [shadow mode](tutorial/22-shadow-mode.md) is for.
+  already known. That is what [shadow mode](tutorial/shadow-mode.md) is for.
 
 **A worked example — the numbers below are invented, and yours will differ.**
 Say a task takes `h = 4` hours by hand, and reviewing one attempt takes
@@ -226,16 +226,16 @@ does; it is the measurement it produces.
 Each rung ends in a measurement rather than a date. A rung is complete when you
 can show the number, not when the calendar says so.
 
-1. **Declare sensors and gate on them.** Get [`ynh check`](tutorial/20-check.md)
+1. **Declare sensors and gate on them.** Get [`ynh check`](tutorial/check.md)
    running with explicit `tolerance` and a pipeline that branches on its exit
    code. *Measurement: the gate runs on every change and its verdict is
    trusted.*
 2. **Take a baseline.** Record the debt that already exists so the gate becomes
    reachable on a real repository. *Measurement: a clean run on unchanged code.*
-3. **Measure before trusting.** Run [shadow mode](tutorial/22-shadow-mode.md)
+3. **Measure before trusting.** Run [shadow mode](tutorial/shadow-mode.md)
    against your own history. *Measurement: an observed `y`, with its confidence
    interval stated.*
-4. **Run the loop propose-only.** [`ynh agent run`](tutorial/21-agent-loop.md)
+4. **Run the loop propose-only.** [`ynh agent run`](tutorial/agent-loop.md)
    without `--auto-commit`, output routed to code owners as a proposal. Never
    auto-merge. *Measurement: an observed `r` from real reviews.*
 5. **Widen only on evidence.** A second task class is justified by the first

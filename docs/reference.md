@@ -127,7 +127,7 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 | `ynh paths` | `home`, `config`, `harnesses`, `symlinks`, `cache`, `run`, `bin` — all absolute paths resolved for the current `$YNH_HOME` |
 | `ynh search [query]` | Array of result objects: `name`, `description`, `keywords`, `repo`, `path`, `vendors`, `version`, `from` (`type`, `name`) |
 | `ynh vendors` | Array of vendor objects: `name`, `display_name`, `cli`, `config_dir`, `available` (bool), `supports_initial_prompt` (bool). Plus one row per configured local model backend (see [Local Model Backends](vendors.md#local-model-backends)) — `name` becomes the `<backend>/<vendor>` or, when models were discoverable, `<backend>/<vendor>/<model>` spec `-v` accepts |
-| `ynh version` / `ynd version` | `version` (release), `capabilities` (wire-contract). See [Wire-contract capability](cli-structured.md#wire-contract-capability-version---format-json). |
+| `ynh version` / `ynd version` | `version` (release), `capabilities` (wire-contract). See [Wire-contract capability](cli-structured.md#wire-contract-capability-version-format-json). |
 | `ynh sources list` | Array of source objects: `name`, `path`, `description`, `harnesses` (discovery count) |
 | `ynh backend list` | Array of objects: `backend`, `vendor`, `type`, `base_url`, `has_auth_token` (bool), `models` (array, present when live-discoverable) |
 

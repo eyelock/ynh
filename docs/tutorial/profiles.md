@@ -1,4 +1,4 @@
-# Tutorial 13: Profiles
+# Profiles
 
 Configure environment-specific overrides with profiles. A profile can add rules, hooks, MCP servers, and other settings that activate only when the profile is selected.
 
@@ -12,7 +12,7 @@ ynh uninstall local/profile-demo 2>/dev/null
 mkdir -p /tmp/ynh-tutorial
 ```
 
-## T13.1: Add profiles to the plugin manifest
+## Add profiles to the plugin manifest
 
 Create a harness with a `ci` profile that adds stricter rules and a lint hook:
 
@@ -86,7 +86,7 @@ Key points:
 - MCP servers are deep-merged (profile keys win on collision); hooks use per-event replace
 - Set an MCP server to `null` in a profile to remove an inherited server
 
-## T13.2: Validate profiles
+## Validate profiles
 
 ```bash
 ynd validate /tmp/ynh-tutorial/profile-harness
@@ -99,7 +99,7 @@ Expected:
 
 The validator checks that profile names are valid and profile contents use the correct schema.
 
-## T13.3: Preview with --profile ci
+## Preview with --profile ci
 
 ```bash
 ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile ci
@@ -117,7 +117,7 @@ ynd preview /tmp/ynh-tutorial/profile-harness -v claude
 
 Expected: `.claude/hooks/hooks.json` has only the base `after_tool` hook. No `.claude/.mcp.json` (no MCP servers in base config).
 
-## T13.4: Run with --profile ci
+## Run with --profile ci
 
 Install the harness first:
 
@@ -148,7 +148,7 @@ The `ci` profile's `before_tool` hook replaces the base, and the `ci-db` MCP ser
 
 > **Note:** Claude Code's `--plugin-dir` auto-activates skills and commands but not hooks or MCP servers. The `/plugin enable` + `/reload-plugins` step is needed to activate them. This is a Claude Code limitation — Codex and Cursor activate all plugin components automatically.
 
-## T13.5: Try --profile nonexistent
+## Try --profile nonexistent
 
 ```bash
 ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile nonexistent
@@ -159,7 +159,7 @@ Expected error:
 Error: profile "nonexistent" not defined in harness manifest
 ```
 
-## T13.6: Use YNH_PROFILE env var
+## Use YNH_PROFILE env var
 
 The `YNH_PROFILE` environment variable activates a profile without the flag:
 
@@ -179,7 +179,7 @@ steps:
   - run: profile-demo -- "run deployment checks"
 ```
 
-## T13.7: Both flag and env var — flag wins
+## Both flag and env var — flag wins
 
 ```bash
 YNH_PROFILE=local ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile ci
@@ -189,7 +189,7 @@ Expected: the `ci` profile is active (not `local`). The `--profile` flag takes p
 
 Verify by checking the MCP output — you should see `ci-db` (from the `ci` profile), not `dev-db` (from the `local` profile).
 
-## T13.8: Use ynd diff --profile ci
+## Use ynd diff --profile ci
 
 Compare base vs profile output across vendors:
 
@@ -207,7 +207,7 @@ Compare with no profile to see what the profile adds:
 ynd diff /tmp/ynh-tutorial/profile-harness claude cursor
 ```
 
-## T13.9: Profile-level includes — bundle extra artifacts per profile
+## Profile-level includes — bundle extra artifacts per profile
 
 Profiles can also declare their own `includes` array. When the profile is active, those artifact sources are **appended** to the base harness's includes. This is how a single harness can carry a "user view" by default and a "contributor view" under a dev profile.
 
@@ -274,7 +274,7 @@ ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile dev | grep dee
 
 Paths in `local` are relative to the harness root (or absolute). The `pick` field filters which artifacts to include from the source. A profile cannot remove base includes — it only appends.
 
-## T13.6: Edit profiles from the command line
+## Edit profiles from the command line
 
 Profiles can be authored by hand-editing `.ynh-plugin/plugin.json` — that is what every step above did. They can also be edited from the command line, which is what an interactive consumer like TermQ uses. The CLI mirrors `ynh include` and routes through the same resolver, so edits land in the source tree for pointer-form local installs.
 
@@ -329,4 +329,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Tutorial 7: Focus](tutorial/14-focus.md) — bind a prompt and profile for repeatable, non-interactive runs.
+[Focus](tutorial/focus.md) — bind a prompt and profile for repeatable, non-interactive runs.

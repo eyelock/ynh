@@ -1,15 +1,15 @@
-# Tutorial 21: The Agent Loop
+# The Agent Loop
 
 `ynh agent run` prompts a model, lets it act, re-observes with your sensors, and
 halts on convergence or on a budget. This tutorial builds a harness with one
 sensor, runs the loop against it, and reads what came out.
 
 **Prerequisites.** A configured vendor CLI (this tutorial uses `claude`). No
-other credentials are needed. The loop consumes [`ynh check`](tutorial/20-check.md), so
+other credentials are needed. The loop consumes [`ynh check`](tutorial/check.md), so
 read that tutorial first — everything about tolerance and the
 [ratchet](harness-engineering.md#sensor-gate-ratchet-loop) applies here unchanged.
 
-## T21.1: A harness with one sensor and a focus
+## A harness with one sensor and a focus
 
 ```bash
 mkdir -p /tmp/loop-demo/.ynh-plugin && cd /tmp/loop-demo
@@ -64,7 +64,7 @@ blocked: 1 of 1 sensor failed
 
 Exit code `1`.
 
-## T21.2: Run the loop
+## Run the loop
 
 ```bash
 ynh agent run --harness local/demo --focus tidy --max-turns 5 --max-wall 4m --emit-jsonl run.jsonl
@@ -76,7 +76,7 @@ exit=0
 ```
 
 That is the entire output. **On success the loop prints nothing** — no summary,
-no banner. This is deliberate and T21.7 explains why.
+no banner. This is deliberate and [Exit codes](#exit-codes) explains why.
 
 The work did happen:
 
@@ -95,7 +95,7 @@ are mutually exclusive:
 Error: cannot use --focus and --task together (focus includes a prompt)
 ```
 
-## T21.3: Budgets, and where the defaults come from
+## Budgets, and where the defaults come from
 
 Every run is bounded on three axes. A loop with no caps is not an unbounded
 loop by choice — it is the absence of a control, and token consumption between
@@ -125,7 +125,7 @@ ynh agent run --harness local/demo --task "x" --max-turns -1
 Error: --max-turns must be a non-negative integer
 ```
 
-## T21.4: Convergence
+## Convergence
 
 The loop does not decide for itself when it is done, and it does not ask the
 model. After each turn it runs `ynh check --format json` and takes that verdict.
@@ -143,7 +143,7 @@ The loop is also refused the ability to move its own goalposts:
 `--update-baseline` is rejected inside an agent run. An agent that can rewrite
 the record of what counts as failure can declare itself finished.
 
-## T21.5: Running against a scratch checkout
+## Running against a scratch checkout
 
 ```bash
 ynh agent run --harness local/demo --focus tidy --worktree /path/to/scratch
@@ -151,7 +151,7 @@ ynh agent run --harness local/demo --focus tidy --worktree /path/to/scratch
 
 `--worktree` runs the loop with its working directory set elsewhere — typically
 a `git worktree` created for the purpose. The harness stays where it is; only
-the tree being modified moves. This is the basis of shadow mode (Tutorial 22),
+the tree being modified moves. This is the basis of [shadow mode](tutorial/shadow-mode.md),
 where the loop runs against a historical commit and must not touch your
 checkout.
 
@@ -161,9 +161,9 @@ The path must exist:
 Error: starting worker: starting claude: chdir /nope/nothing: no such file or directory
 ```
 
-## T21.6: Reading a trajectory
+## Reading a trajectory
 
-`--emit-jsonl <file>` writes one JSON object per event. From the run in T21.2:
+`--emit-jsonl <file>` writes one JSON object per event. From the run in [Run the loop](#run-the-loop):
 
 ```bash
 python3 -c "
@@ -207,9 +207,9 @@ Note what the trajectory is *not*: evidence. It is the agent narrating its own
 work. Useful for debugging your harness, worthless for verifying a change — see
 [what actually reduces review time](factory-pattern.md#what-actually-reduces-review-time).
 
-## T21.7: Exit codes
+## Exit codes
 
-A pipeline branches on the exit code. It does not parse output — as T21.2
+A pipeline branches on the exit code. It does not parse output — as [Run the loop](#run-the-loop)
 showed, a successful run has no output to parse.
 
 | Code | Meaning |
@@ -232,7 +232,7 @@ the run is over, nothing is broken. `20`–`22` are faults, and `22` in
 particular says the harness is broken rather than the agent — in a batch, every
 run will hit it, and it is the operator's fault not the model's.
 
-## T21.8: Resuming
+## Resuming
 
 A run writes `checkpoint.json` into its working directory on every turn:
 
@@ -263,7 +263,7 @@ turn 20 of 25 gets five more turns, not twenty-five.
 Error: no checkpoint found in "deadbeef": open deadbeef/checkpoint.json: no such file or directory
 ```
 
-## T21.9: The controls a run does not have
+## The controls a run does not have
 
 `ynh agent run` starts a worker. It does not contain one.
 
@@ -297,5 +297,5 @@ holds every credential the operator holds, which is not a default anyone chose.
 - Containment belongs to the runtime. An unattended loop needs a container and
   an egress policy you own.
 
-Next: [Shadow Mode](tutorial/22-shadow-mode.md) — measuring whether the loop is actually
+Next: [Shadow Mode](tutorial/shadow-mode.md) — measuring whether the loop is actually
 any good, against your own git history.

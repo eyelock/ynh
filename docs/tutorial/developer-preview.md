@@ -1,4 +1,4 @@
-# Tutorial 12: Developer Preview
+# Developer Preview
 
 Use `ynd preview` and `ynd diff` to inspect assembled harness output without installing. These tools let you iterate on harness design and verify vendor-specific behavior before shipping.
 
@@ -72,7 +72,7 @@ You are a DevOps assistant. Use the deployment skill for releases and query the 
 EOF
 ```
 
-## T12.1: Preview a harness for Claude
+## Preview a harness for Claude
 
 Preview shows the fully assembled vendor-native output as a tree with file contents:
 
@@ -106,7 +106,7 @@ Key things to verify:
 - `.claude/hooks/hooks.json` has hooks in Claude's three-level format
 - `.claude/.mcp.json` has the MCP server config
 
-## T12.2: Preview the same harness for Cursor
+## Preview the same harness for Cursor
 
 ```bash
 ynd preview /tmp/ynh-tutorial/preview-harness -v cursor
@@ -136,7 +136,7 @@ Note the differences from Claude:
 - MCP config goes to `.cursor/mcp.json` instead of `.claude/.mcp.json`
 - Artifacts are under `.cursor/` instead of `.claude/`
 
-## T12.3: Compare Claude vs Cursor output
+## Compare Claude vs Cursor output
 
 ```bash
 ynd diff /tmp/ynh-tutorial/preview-harness claude cursor
@@ -164,7 +164,7 @@ Only in cursor:
 
 The diff shows which files are vendor-specific and which content is shared. Artifacts like skills and rules may appear as identical content under different directory prefixes.
 
-## T12.4: Preview a harness with hooks
+## Preview a harness with hooks
 
 Write the preview to a directory for closer inspection:
 
@@ -225,7 +225,7 @@ Expected:
 }
 ```
 
-## T12.5: Preview a harness with MCP servers
+## Preview a harness with MCP servers
 
 Inspect MCP config for each vendor:
 
@@ -288,4 +288,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Tutorial 11: Structured Output](tutorial/16-structured-output.md) — use `--format json` for scripts, CI, and tool integration.
+[Structured Output](tutorial/structured-output.md) — use `--format json` for scripts, CI, and tool integration.

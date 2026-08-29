@@ -1,4 +1,4 @@
-# Tutorial 11: MCP Servers
+# MCP Servers
 
 Declare MCP server dependencies in a harness and preview how each vendor configures them. MCP servers give agents access to tools like databases, APIs, and documentation.
 
@@ -9,7 +9,7 @@ Declare MCP server dependencies in a harness and preview how each vendor configu
 rm -rf /tmp/ynh-tutorial
 ```
 
-## T11.1: Add a stdio MCP server to a harness
+## Add a stdio MCP server to a harness
 
 Create a harness with an MCP server declaration:
 
@@ -39,7 +39,7 @@ You are a data analyst assistant with access to a SQLite database via MCP.
 EOF
 ```
 
-## T11.2: Preview for Claude
+## Preview for Claude
 
 ```bash
 ynd preview /tmp/ynh-tutorial/mcp-harness -v claude
@@ -63,7 +63,7 @@ Expected output includes `.claude/.mcp.json`:
 
 Claude uses `.claude/.mcp.json` with a `mcpServers` key — the server definition passes through directly.
 
-## T11.3: Preview for Cursor
+## Preview for Cursor
 
 ```bash
 ynd preview /tmp/ynh-tutorial/mcp-harness -v cursor
@@ -87,7 +87,7 @@ Expected output includes `.cursor/mcp.json`:
 
 Cursor uses the same JSON structure as Claude but places the file at `.cursor/mcp.json` instead of `.claude/.mcp.json`.
 
-## T11.4: Preview for Codex
+## Preview for Codex
 
 ```bash
 ynd preview /tmp/ynh-tutorial/mcp-harness -v codex
@@ -111,7 +111,7 @@ Expected output includes `.mcp.json` with JSON format (same structure as Claude,
 
 Codex uses the same JSON format as Claude with a `mcpServers` key, placed at the plugin root as `.mcp.json`.
 
-## T11.5: Add an HTTP MCP server
+## Add an HTTP MCP server
 
 Add a second server using HTTP transport:
 
@@ -197,7 +197,7 @@ Expected `.mcp.json` (at plugin root):
 }
 ```
 
-## T11.6: Compare MCP config across vendors
+## Compare MCP config across vendors
 
 ```bash
 ynd diff /tmp/ynh-tutorial/mcp-harness claude cursor codex
@@ -254,4 +254,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Tutorial 6: Profiles](tutorial/13-profiles.md) — configure environment-specific overrides with profiles.
+[Profiles](tutorial/profiles.md) — configure environment-specific overrides with profiles.

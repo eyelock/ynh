@@ -30,33 +30,34 @@
 
 * **Tutorials: Build Your Harness**
   * [Tutorial Overview](tutorial/README.md)
-  * [1. First Harness](tutorial/01-first-harness.md)
-  * [2. Vendors & Symlinks](tutorial/02-vendors-and-symlinks.md)
-  * [3. Composition](tutorial/03-composition.md)
-  * [4. Hooks](tutorial/10-hooks.md)
-  * [5. MCP Servers](tutorial/11-mcp-servers.md)
-  * [6. Profiles](tutorial/13-profiles.md)
-  * [7. Focus](tutorial/14-focus.md)
-  * [8. Project-Local Config](tutorial/15-project-local-config.md)
+  * [1. First Harness](tutorial/first-harness.md)
+  * [2. Vendors & Symlinks](tutorial/vendors-and-symlinks.md)
+  * [3. Composition](tutorial/composition.md)
+  * [4. Include Editing](tutorial/include-editing.md)
+  * [5. Hooks](tutorial/hooks.md)
+  * [6. MCP Servers](tutorial/mcp-servers.md)
+  * [7. Profiles](tutorial/profiles.md)
+  * [8. Focus](tutorial/focus.md)
+  * [9. Project-Local Config](tutorial/project-local-config.md)
 
 * **Tutorials: Refine**
-  * [9. Developer Tools](tutorial/08-developer-tools.md)
-  * [10. Developer Preview](tutorial/12-developer-preview.md)
+  * [10. Developer Tools](tutorial/developer-tools.md)
+  * [11. Developer Preview](tutorial/developer-preview.md)
 
 * **Tutorials: Automate**
-  * [11. Structured Output](tutorial/16-structured-output.md)
-  * [12. The Agent Loop](tutorial/21-agent-loop.md)
-  * [13. Shadow Mode](tutorial/22-shadow-mode.md)
+  * [12. Structured Output](tutorial/structured-output.md)
+  * [13. The Agent Loop](tutorial/agent-loop.md)
+  * [14. Shadow Mode](tutorial/shadow-mode.md)
 
 * **Tutorials: Share & Scale**
-  * [14. Delegation](tutorial/04-delegation.md)
-  * [15. Export](tutorial/05-export.md)
-  * [16. Marketplace](tutorial/06-marketplace.md)
-  * [17. Registry & Discovery](tutorial/07-registry-and-discovery.md)
-  * [18. Docker Images](tutorial/09-docker-image.md)
-  * [19. Namespacing & Migration](tutorial/18-namespacing-and-migration.md)
-  * [20. Sensors](tutorial/19-sensors.md)
-  * [21. Gating with ynh check](tutorial/20-check.md)
+  * [15. Delegation](tutorial/delegation.md)
+  * [16. Export](tutorial/export.md)
+  * [17. Marketplace](tutorial/marketplace.md)
+  * [18. Registry & Discovery](tutorial/registry-and-discovery.md)
+  * [19. Docker Images](tutorial/docker-image.md)
+  * [20. Namespacing & Migration](tutorial/namespacing-and-migration.md)
+  * [21. Sensors](tutorial/sensors.md)
+  * [22. Gating with `ynh check`](tutorial/check.md)
 
 * **Project**
   * [Migrating to 0.2](migration.md)

@@ -1,4 +1,4 @@
-# Tutorial 6: Marketplace
+# Marketplace
 
 Generate vendor-native marketplace indexes from a collection of harnesses and plugins. The output is a Git repo that Claude Code and Cursor can add as a custom marketplace.
 
@@ -11,7 +11,7 @@ rm -rf /tmp/ynh-tutorial
 mkdir -p /tmp/ynh-tutorial
 ```
 
-## T6.1: Set up source material
+## Set up source material
 
 Create a small marketplace with one harness and one standalone plugin:
 
@@ -66,7 +66,7 @@ You are a code reviewer. Be thorough but constructive.
 EOF
 ```
 
-## T6.2: Create the marketplace config
+## Create the marketplace config
 
 ```bash
 cat > /tmp/ynh-tutorial/marketplace-src/marketplace.json << 'EOF'
@@ -94,7 +94,7 @@ Two entry types:
 - **`plugin`** — already a valid plugin directory. Copied as-is, missing vendor manifests generated.
 - **`harness`** — has `.ynh-plugin/plugin.json` with includes. Fully exported (includes resolved, pick applied, delegates generated).
 
-## T6.3: Build the marketplace
+## Build the marketplace
 
 ```bash
 cd /tmp/ynh-tutorial/marketplace-src
@@ -106,7 +106,7 @@ Expected output:
 Marketplace built → /tmp/ynh-tutorial/marketplace-out (2 plugins)
 ```
 
-## T6.4: Verify the output
+## Verify the output
 
 ### Directory structure
 
@@ -188,7 +188,7 @@ cat /tmp/ynh-tutorial/marketplace-out/.cursor-plugin/marketplace.json
 
 Same structure but in `.cursor-plugin/`. Both point to the same `./plugins/` relative paths.
 
-## T6.5: Test with Claude Code
+## Test with Claude Code
 
 Claude Code requires local marketplaces to be Git repos (relative source paths like `./plugins/formatter` only resolve within a Git working tree):
 
@@ -216,7 +216,7 @@ Now test in a Claude Code session:
 
 > **Note:** This is a Claude Code requirement, not a ynh limitation. When distributing via GitHub (the normal path), the repo is already a Git repo. The `git init` step is only needed for local testing.
 
-## T6.6: Build with --clean
+## Build with --clean
 
 Run from the directory containing `marketplace.json`:
 
@@ -228,7 +228,7 @@ ynd marketplace build -o /tmp/ynh-tutorial/marketplace-out --clean
 
 > **Important:** `ynd marketplace build` looks for `marketplace.json` in the current directory. Make sure you're in the directory that contains your marketplace config, not the output directory.
 
-## T6.7: Build for specific vendors
+## Build for specific vendors
 
 ```bash
 cd /tmp/ynh-tutorial/marketplace-src
@@ -255,4 +255,4 @@ rm -rf /tmp/ynh-tutorial/marketplace-*
 
 ## Next
 
-[Tutorial 15: Registry & Discovery](tutorial/07-registry-and-discovery.md) — search and install from curated indexes.
+[Registry & Discovery](tutorial/registry-and-discovery.md) — search and install from curated indexes.

@@ -190,7 +190,7 @@ See [reference.md](reference.md) for the complete flag matrix and [profiles.md](
 
 ## See Also
 
-- [Tutorial 5: MCP Servers](tutorial/11-mcp-servers.md) — step-by-step walkthrough
+- [MCP Servers](tutorial/mcp-servers.md) — step-by-step walkthrough
 - [Hooks](hooks.md) — lifecycle hooks that bridge guides to sensors
 - [Vendor Support](vendors.md) — vendor capabilities and differences
 

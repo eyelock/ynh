@@ -1,4 +1,4 @@
-# Tutorial 19: Sensors
+# Sensors
 
 Declare observation surfaces that a loop driver — CI, an orchestrator, a custom tool — runs between agent turns. ynh declares; the loop driver runs.
 
@@ -13,7 +13,7 @@ ynh uninstall local/sensor-demo 2>/dev/null
 mkdir -p /tmp/ynh-tutorial/sensor-harness/.ynh-plugin
 ```
 
-## T19.1: A `files` sensor
+## A `files` sensor
 
 The simplest sensor reads pre-existing artifacts. Create a harness that declares a coverage sensor:
 
@@ -39,7 +39,7 @@ ynd validate /tmp/ynh-tutorial/sensor-harness
 
 Expected output: `valid`.
 
-## T19.2: A `command` sensor
+## A `command` sensor
 
 Add a sensor that runs a shell command. Edit the manifest:
 
@@ -68,7 +68,7 @@ EOF
 ynd validate /tmp/ynh-tutorial/sensor-harness
 ```
 
-## T19.3: A `focus`-referencing sensor
+## A `focus`-referencing sensor
 
 Sensors can reuse a top-level focus. Add a focus and reference it:
 
@@ -101,7 +101,7 @@ EOF
 ynd validate /tmp/ynh-tutorial/sensor-harness
 ```
 
-## T19.4: An inline-focus sensor
+## An inline-focus sensor
 
 Sometimes a focus exists only to drive one sensor. Inline it directly:
 
@@ -152,7 +152,7 @@ ynh info local/sensor-demo | grep -A 3 'Focus:'
 
 You should see only `audit-vulns` listed under Focus — `coverage-judge` is a sensor, and its inline focus is hidden inside the sensor declaration.
 
-## T19.5: Discovery — `ynh sensors ls/show`
+## Discovery — `ynh sensors ls/show`
 
 Loop drivers discover what's declared via the CLI:
 
@@ -185,7 +185,7 @@ ynh sensors show local/sensor-demo security
 
 The string focus reference (`"focus": "audit-vulns"`) is expanded inline so the consumer doesn't have to look up the focus declaration separately.
 
-## T19.6: Validation — every rule produces a clear error
+## Validation — every rule produces a clear error
 
 Demonstrate one validation rule. Set two source fields:
 
@@ -214,7 +214,7 @@ sensors/broken/source: 'oneOf' failed, subschemas 0, 1 matched
 sensor "broken": source must have exactly one of files, command, focus
 ```
 
-## T19.7: Hook–sensor pairing
+## Hook–sensor pairing
 
 The most common production pattern: a hook produces an artifact, a sensor declares its contract over that artifact. Re-link the harness to the previous sensors plus a hook:
 
@@ -245,9 +245,9 @@ ynd validate /tmp/ynh-tutorial/sensor-harness
 
 The hook produces the file mid-session; the sensor consumes it between iterations. Coupling is by shared file path — implicit, no schema link needed.
 
-> **For the hook to actually fire in a plain Claude session**, declare it in the project's `.claude/settings.json` (Claude-native event names, project-relative paths) — not only in `plugin.json`, whose hooks don't auto-activate under `ynh run`. An `on_stop` sweep that feeds its verdict back to the agent must also route output to stderr + `exit 2` and guard against the `stop_hook_active` loop. See [Hooks §"Running hooks in a plain Claude session"](hooks.md#running-hooks-in-a-plain-claude-session) and [§"on_stop output semantics"](hooks.md#on_stop-output-semantics-claude).
+> **For the hook to actually fire in a plain Claude session**, declare it in the project's `.claude/settings.json` (Claude-native event names, project-relative paths) — not only in `plugin.json`, whose hooks don't auto-activate under `ynh run`. An `on_stop` sweep that feeds its verdict back to the agent must also route output to stderr + `exit 2` and guard against the `stop_hook_active` loop. See [Hooks §"Running hooks in a plain Claude session"](hooks.md#running-hooks-in-a-plain-claude-session) and [§"on_stop output semantics"](hooks.md#on-stop-output-semantics-claude).
 
-## T19.8: Install round-trip preserves sensors
+## Install round-trip preserves sensors
 
 Re-install the harness and confirm sensors still appear in the discovery surface:
 
@@ -260,7 +260,7 @@ Expected: each sensor name appears, one per line. Sensors flow from the source `
 
 Note: `ynd export` produces vendor-native plugin formats (Claude/Cursor/Codex), and vendors have no concept of sensors today. Sensors live only in the ynh manifest and are consumed by loop drivers via `ynh sensors`. They are not part of vendor export.
 
-## T19.9: Cleanup
+## Cleanup
 
 ```bash
 ynh uninstall local/sensor-demo
@@ -271,7 +271,7 @@ rm -rf /tmp/ynh-tutorial
 
 A loop driver wraps an agent runtime (Claude Code, Codex, etc.) and runs sensors between turns. Discovery is `ynh sensors ls --format json`; resolution is `ynh sensors show --format json`; execution is `ynh sensors run`. ynh emits raw signal — exit codes, output, file contents — and the loop driver turns that into pass/fail policy and feedback for the next turn.
 
-ynh runs the declared set as a gate itself — see [Tutorial 20](tutorial/20-check.md) — but owns no iteration: when to re-prompt an agent, what counts as convergence, and when to stop remain the loop driver's. See [Sensors reference §"Consuming sensors"](sensors.md#consuming-sensors-for-loop-driver-authors) for the consumer pattern, and [harness engineering](harness-engineering.md) for the architectural framing.
+ynh runs the declared set as a gate itself — see [Gating with `ynh check`](tutorial/check.md) — but owns no iteration: when to re-prompt an agent, what counts as convergence, and when to stop remain the loop driver's. See [Sensors reference §"Consuming sensors"](sensors.md#consuming-sensors-for-loop-driver-authors) for the consumer pattern, and [harness engineering](harness-engineering.md) for the architectural framing.
 
 ## What you learned
 
@@ -281,4 +281,4 @@ ynh runs the declared set as a gate itself — see [Tutorial 20](tutorial/20-che
 - The discovery surface (`ls`, `show`) is the contract loop drivers consume.
 - Hooks and sensors are complementary — push vs pull, in-session vs between-turn.
 
-Hooks often pair with sensors — see [Tutorial 4 (Hooks)](tutorial/10-hooks.md).
+Hooks often pair with sensors — see [Hooks](tutorial/hooks.md).
