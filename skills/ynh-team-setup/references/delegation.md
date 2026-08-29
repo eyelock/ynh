@@ -37,6 +37,10 @@ ynh delegates to the local `git` binary. If `git clone <url>` works on the machi
 | Claude | `claude` | `.claude` | `CLAUDE.md` |
 | Codex | `codex` | `.codex` | `codex.md` |
 | Cursor | `agent` | `.cursor` | `.cursorrules` |
+| Copilot | `copilot` | `.copilot` | `AGENTS.md` |
+
+Run `ynh vendors` for the live list — it reflects the adapters actually
+compiled in, which this table cannot.
 
 Setting `default_vendor` in the team harness standardizes the vendor across the team. Individual members can override with `-v` at runtime.
 

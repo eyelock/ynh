@@ -18,7 +18,7 @@ Read these references to understand what inspect does and the artifact formats i
 Confirm the user has:
 
 1. `ynd` built and on PATH (or they know the path to the binary)
-2. An LLM CLI installed (`claude`, `codex`, or `cursor`)
+2. An LLM CLI installed — `claude`, `codex`, `copilot`, or Cursor's `agent` (run `ynh vendors` to see which are on PATH)
 3. A project directory with recognizable files (go.mod, package.json, Makefile, etc.)
 
 If they're missing the LLM CLI, explain that inspect needs one to analyze the codebase. Point them to installation docs.
