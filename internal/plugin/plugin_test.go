@@ -621,3 +621,76 @@ func TestValidate_SensorReference(t *testing.T) {
 		})
 	}
 }
+
+// The rule ExpandMCPEnv enforces at assembly, minus the part that needs a live
+// environment — so it can run before assembly, where the failure is cheap.
+func TestUndeclaredMCPEnvRefs(t *testing.T) {
+	srv := func(headers, env map[string]string) map[string]MCPServer {
+		return map[string]MCPServer{"s": {URL: "https://x", Headers: headers, Env: env}}
+	}
+	cases := []struct {
+		name    string
+		servers map[string]MCPServer
+		allowed []string
+		want    int
+	}{
+		{
+			name:    "declared and missing one — the realistic author slip",
+			servers: srv(map[string]string{"Authorization": "Bearer ${MISSING}"}, nil),
+			allowed: []string{"KNOWN"},
+			want:    1,
+		},
+		{
+			name:    "declared and complete",
+			servers: srv(map[string]string{"Authorization": "Bearer ${TOKEN}"}, nil),
+			allowed: []string{"TOKEN"},
+			want:    0,
+		},
+		{
+			// export leaves ${VAR} literal and strips env_passthrough from the
+			// artifact, so a distribution-only harness works today. Flagging
+			// it would redden something that is not broken.
+			name:    "no allowlist at all — may be distribution-only",
+			servers: srv(map[string]string{"Authorization": "Bearer ${DOCS_API_KEY}"}, nil),
+			allowed: nil,
+			want:    0,
+		},
+		{
+			name:    "env field is checked too, not just headers",
+			servers: srv(nil, map[string]string{"API": "${NOPE}"}),
+			allowed: []string{"KNOWN"},
+			want:    1,
+		},
+		{
+			name:    "several references, several issues",
+			servers: srv(map[string]string{"A": "${ONE}", "B": "${TWO}"}, map[string]string{"C": "${THREE}"}),
+			allowed: []string{"KNOWN"},
+			want:    3,
+		},
+		{
+			name:    "no servers",
+			servers: nil,
+			allowed: []string{"KNOWN"},
+			want:    0,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := UndeclaredMCPEnvRefs(c.servers, c.allowed)
+			if len(got) != c.want {
+				t.Errorf("got %d issues %v, want %d", len(got), got, c.want)
+			}
+		})
+	}
+}
+
+// Declaration only. An unset variable is legitimately a run-time condition —
+// a developer without the credential still needs `ynd validate` to pass.
+func TestUndeclaredMCPEnvRefs_DoesNotRequireTheVariableToBeSet(t *testing.T) {
+	// Deliberately not set: the point is that validation does not need it.
+	servers := map[string]MCPServer{"s": {URL: "https://x",
+		Headers: map[string]string{"Authorization": "Bearer ${DECLARED_BUT_UNSET}"}}}
+	if got := UndeclaredMCPEnvRefs(servers, []string{"DECLARED_BUT_UNSET"}); len(got) != 0 {
+		t.Errorf("a declared but unset variable must not fail validation, got %v", got)
+	}
+}

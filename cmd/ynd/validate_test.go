@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -1193,4 +1194,102 @@ func TestValidateHarnessSensors_Issues(t *testing.T) {
 			t.Errorf("missing expected issue %q in %v", want, issues)
 		}
 	}
+}
+
+// The defect: a manifest referencing ${VAR} it never declared passed validate
+// and lint, then failed at assembly. Worst under automation — an unattended
+// `ynh agent run` does its setup and dies on a config error CI could have
+// caught.
+func TestValidate_CatchesUndeclaredMCPEnvRef(t *testing.T) {
+	dir := writeValidateHarness(t, `{
+      "$schema": "https://ynh.sh/schema/plugin.schema.json",
+      "name": "a", "version": "0.1.0", "default_vendor": "claude",
+      "env_passthrough": ["KNOWN"],
+      "mcp_servers": {"docs": {"url": "https://x", "headers": {"Authorization": "Bearer ${MISSING}"}}}
+    }`)
+	if err := validateHarness(dir); err == nil {
+		t.Fatal("an undeclared ${VAR} must fail validation when an allowlist exists")
+	}
+	// validateHarness prints detail and returns only a count, so assert the
+	// message on the rule itself — a report that says "1 issue" without
+	// naming the variable is not actionable.
+	data, err := os.ReadFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	issues := validateMCPEnvDeclarations(data)
+	if len(issues) != 1 {
+		t.Fatalf("got %v", issues)
+	}
+	if !strings.Contains(issues[0], "${MISSING}") || !strings.Contains(issues[0], "env_passthrough") {
+		t.Errorf("the issue must name the variable and the field, got: %s", issues[0])
+	}
+}
+
+// The counter-example that shaped the design. `ynd export` deliberately leaves
+// ${VAR} literal — resolving there would bake the exporter's credentials into
+// a shared bundle — and strips env_passthrough from the artifact entirely. A
+// harness authored purely for distribution therefore works today, and must not
+// be reddened for an allowlist that never reaches what it ships.
+func TestValidate_DistributionOnlyHarnessIsNotFlagged(t *testing.T) {
+	dir := writeValidateHarness(t, `{
+      "$schema": "https://ynh.sh/schema/plugin.schema.json",
+      "name": "c", "version": "0.1.0", "default_vendor": "claude",
+      "mcp_servers": {"docs": {"url": "https://x", "headers": {"Authorization": "Bearer ${DOCS_API_KEY}"}}}
+    }`)
+	if err := validateHarness(dir); err != nil {
+		t.Fatalf("a harness declaring no env_passthrough may be distribution-only: %v", err)
+	}
+}
+
+// A complete allowlist must pass, or the check is just noise.
+func TestValidate_CompleteAllowlistPasses(t *testing.T) {
+	dir := writeValidateHarness(t, `{
+      "$schema": "https://ynh.sh/schema/plugin.schema.json",
+      "name": "b", "version": "0.1.0", "default_vendor": "claude",
+      "env_passthrough": ["TOKEN"],
+      "mcp_servers": {"docs": {"url": "https://x", "headers": {"Authorization": "Bearer ${TOKEN}"}}}
+    }`)
+	if err := validateHarness(dir); err != nil {
+		t.Fatalf("a complete allowlist must validate: %v", err)
+	}
+}
+
+// A profile may replace the allowlist, so its servers are checked against the
+// one actually in force for it.
+func TestValidate_ProfileAllowlistIsHonoured(t *testing.T) {
+	dir := writeValidateHarness(t, `{
+      "$schema": "https://ynh.sh/schema/plugin.schema.json",
+      "name": "d", "version": "0.1.0", "default_vendor": "claude",
+      "env_passthrough": ["ROOT_TOKEN"],
+      "profiles": {"ci": {
+        "env_passthrough": ["CI_TOKEN"],
+        "mcp_servers": {"docs": {"url": "https://x", "headers": {"Authorization": "Bearer ${ROOT_TOKEN}"}}}
+      }}
+    }`)
+	if err := validateHarness(dir); err == nil {
+		t.Fatal("a profile that replaces the allowlist no longer permits the root's variables")
+	}
+	data, err := os.ReadFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	issues := validateMCPEnvDeclarations(data)
+	if len(issues) != 1 || !strings.Contains(issues[0], "${ROOT_TOKEN}") {
+		t.Errorf("got %v", issues)
+	}
+}
+
+// writeValidateHarness writes a manifest into a temp harness dir.
+func writeValidateHarness(t *testing.T, manifest string) string {
+	t.Helper()
+	dir := t.TempDir()
+	pd := filepath.Join(dir, ".ynh-plugin")
+	if err := os.MkdirAll(pd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pd, "plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
 }
