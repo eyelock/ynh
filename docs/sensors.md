@@ -432,7 +432,7 @@ disables. So `ynh check` records what was already failing and blocks only on
 what is new.
 
 ```bash
-ynh check local/demo --update-baseline   # accept current state; writes .ynh/baseline.json
+ynh check local/demo --update-baseline   # accept current state; writes .ynh/baseline/
 ynh check local/demo                     # blocks only on failures not in the baseline
 ynh check local/demo --no-baseline       # ignore the ratchet, show everything
 ```
@@ -448,14 +448,48 @@ Only the new failure is shown. Listing the three issues the author did not
 introduce alongside the one they did is how a useful gate becomes an ignored
 one.
 
-**Commit `.ynh/baseline.json`.** The ratchet is a property of the repository,
-not of one developer.
+**Commit `.ynh/baseline/`.** The ratchet is a property of the repository, not
+of one developer.
+
+#### Layout, and why it is one file per sensor
+
+```
+.ynh/baseline/<harness>/<sensor>.json
+```
 
 Entries are scoped by harness id, because sensor names are only unique within a
 harness — two harnesses in one repository each declaring `lint` would otherwise
 share, and overwrite, a single entry. `--update-baseline` refreshes only the
 sensors that actually ran and leaves every other entry untouched, so combining
 it with `--only` is safe.
+
+The split matters at scale. A single repository-wide file of sorted hash arrays
+is maximally conflict-prone and minimally mergeable: with several branches in
+flight, every one of them touches the same lines. And **every natural
+resolution of a baseline conflict widens the amnesty** — union keeps both
+sides' forgiveness, `-X ours` keeps one branch's, and regenerating accepts
+whatever happens to be failing now. A ratchet is monotonic only if nothing
+concurrent quietly loosens it.
+
+One file per sensor means two branches touching different sensors never
+conflict at all, and a conflict that does happen is scoped to one sensor and
+readable in the diff. `recorded_at` records when a sensor's debt was *accepted*
+rather than when the file was last written, so re-running `--update-baseline`
+leaves untouched sensors byte-identical.
+
+`--no-baseline` means *do not forgive*, not *tolerate a corrupt ratchet*: a
+baseline that cannot be read is fatal either way, because recording over one
+would prune every entry the read could not see.
+
+**A baseline conflict is a human decision, and never an agent's.** `ynh check`
+refuses to run against a file carrying conflict markers rather than guessing,
+and says so: resolving one means deciding which failures the repository
+accepts. A sensor that no longer fails has its file deleted, so debt stops
+being forgiven the moment it is paid.
+
+Sensor names are free-form, so one containing a path separator is encoded on
+disk with a short hash suffix. Each file records its own harness and sensor
+name, so the path is only an organising key.
 
 How it works: each failing sensor's output is reduced to one fingerprint per
 line, with file positions (`:12:5`) collapsed and absolute paths made relative
@@ -495,7 +529,7 @@ Exit codes are the contract:
 |---|---|
 | 0 | every blocking sensor passed |
 | 1 | a blocking sensor failed — the report is on stdout |
-| 2 | ynh could not run the check at all |
+| 2 | ynh could not run the check at all — including an unresolved baseline conflict |
 
 1 and 2 are deliberately distinct: a red CI job has to distinguish "your code
 is failing" from "the gate itself is broken". `ynh agent run` makes the same

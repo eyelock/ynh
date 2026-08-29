@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/eyelock/ynh/internal/assembler"
+	"github.com/eyelock/ynh/internal/baseline"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/gate"
 	"github.com/eyelock/ynh/internal/harness"
@@ -699,6 +700,21 @@ func RunLoop(opts RunOptions) error {
 		saveCheckpoint()
 	}
 
+	// Snapshot the gate's own reference point.
+	//
+	// `ynh check --update-baseline` refuses inside an agent session, but that
+	// only closes the front door: nothing stops a worker editing the baseline
+	// files directly, and an agent that cannot converge has every incentive
+	// to. Comparing this each turn is what makes "the agent may not rewrite
+	// its own gate" enforced rather than merely refused.
+	baselineFP, fpErr := baseline.Fingerprint(opts.WorktreeDir)
+	if fpErr != nil {
+		// A baseline that cannot be read before the run has even started is a
+		// broken gate, not tampering — nothing has had the chance to touch it.
+		_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitGateError, Reason: fpErr.Error()})
+		return &ExitError{Code: ExitGateError, Message: fmt.Sprintf("reading baseline: %v", fpErr)}
+	}
+
 	if err := sess.Send(firstMsg); err != nil {
 		_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
 		return &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("sending first message: %v", err)}
@@ -746,6 +762,24 @@ func RunLoop(opts RunOptions) error {
 			Turns:  budget.Turns(),
 			Tokens: budget.Tokens(),
 		})
+
+		// ── Gate integrity ────────────────────────────────────────────────────
+		// Before the gate is consulted, and before auto-commit: a baseline the
+		// worker just widened would otherwise forgive the very failures this
+		// turn introduced, and the run would converge on amnesty it granted
+		// itself — with the tampering committed on the way past.
+		if fp, err := baseline.Fingerprint(opts.WorktreeDir); err != nil || fp != baselineFP {
+			after, reason := "unreadable", "the baseline can no longer be read"
+			if err == nil {
+				after, reason = fp, "the baseline changed during the run"
+			}
+			_ = traj.Emit(KindTamperDetected, turnN, TamperData{
+				What: "baseline", Before: baselineFP, After: after,
+			})
+			_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitTamper, Reason: reason})
+			return &ExitError{Code: ExitTamper, Message: reason +
+				" — nothing being gated may rewrite the gate's reference point"}
+		}
 
 		// ── Auto-commit ───────────────────────────────────────────────────────
 		if opts.AutoCommit {

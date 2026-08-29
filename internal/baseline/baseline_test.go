@@ -1,8 +1,10 @@
 package baseline
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -120,7 +122,7 @@ func TestLoadSave_RoundTrip(t *testing.T) {
 	if err := Save(root, want); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, Dir, File)); err != nil {
+	if _, err := os.Stat(Path(root, "h", "lint")); err != nil {
 		t.Fatalf("baseline not written: %v", err)
 	}
 
@@ -128,8 +130,8 @@ func TestLoadSave_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got.Version != Version || got.RecordedAt == "" {
-		t.Errorf("version/timestamp not persisted: %+v", got)
+	if e := got.Harnesses["h"].Sensors["lint"]; e.Version != Version || e.RecordedAt == "" {
+		t.Errorf("version/timestamp not persisted: %+v", e)
 	}
 	if got.Harnesses["h"].Sensors["lint"].Count != 2 {
 		t.Errorf("count = %d, want 2", got.Harnesses["h"].Sensors["lint"].Count)
@@ -138,14 +140,20 @@ func TestLoadSave_RoundTrip(t *testing.T) {
 
 func TestLoad_RejectsFutureVersion(t *testing.T) {
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, Dir), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(Path(root), []byte(`{"version":99,"harnesses":{}}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeSensorFile(t, root, "h", "lint", `{"version":99,"harness":"h","sensor":"lint"}`)
 	if _, err := Load(root); err == nil {
 		t.Error("a baseline from a newer ynh must be rejected, not silently ignored")
+	}
+}
+
+func writeSensorFile(t *testing.T, root, harness, sensor, body string) {
+	t.Helper()
+	path := Path(root, harness, sensor)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -241,5 +249,242 @@ func TestRecordedCount_ReportsDebtForClearedSensor(t *testing.T) {
 	}
 	if got := b.RecordedCount("h", "absent"); got != 0 {
 		t.Errorf("absent sensor RecordedCount = %d, want 0", got)
+	}
+}
+
+// One file per sensor is the whole point of the layout: two branches touching
+// different sensors must not touch the same bytes. A single repo-wide file of
+// sorted hash arrays conflicts on every concurrent change, and every natural
+// resolution of such a conflict widens the amnesty.
+func TestSave_OneFilePerSensor(t *testing.T) {
+	root := t.TempDir()
+	b := &Baseline{}
+	b.Set("h", "lint", Record("fail", "a\nb", ""))
+	b.Set("h", "vet", Record("fail", "c", ""))
+	if err := Save(root, b); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	for _, s := range []string{"lint", "vet"} {
+		if _, err := os.Stat(Path(root, "h", s)); err != nil {
+			t.Errorf("%s has no file of its own: %v", s, err)
+		}
+	}
+}
+
+// Rewriting an untouched sensor's file turns an unrelated branch's no-op into
+// a merge conflict. RecordedAt therefore tracks when the failures were
+// accepted, not when the file was last written.
+func TestSave_UntouchedSensorIsByteIdentical(t *testing.T) {
+	root := t.TempDir()
+	b := &Baseline{}
+	b.Set("h", "lint", Record("fail", "a", ""))
+	b.Set("h", "vet", Record("fail", "c", ""))
+	if err := Save(root, b); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(Path(root, "h", "vet"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded, err := Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Model what `ynh check --update-baseline` actually does: re-Set every
+	// failing sensor, not only the changed one. A Set that refreshed the
+	// timestamp unconditionally would rewrite every file on every run, and
+	// turn an unrelated branch's no-op into a merge conflict.
+	reloaded.Set("h", "lint", Record("fail", "a\nb", "")) // findings changed
+	reloaded.Set("h", "vet", Record("fail", "c", ""))     // findings identical
+	if err := Save(root, reloaded); err != nil {
+		t.Fatal(err)
+	}
+
+	after, err := os.ReadFile(Path(root, "h", "vet"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Errorf("an untouched sensor's file was rewritten:\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+// Sensor names are free-form map keys — the schema constrains harness names
+// but not these — so "../../etc/passwd" is a legal declaration. A file-per-
+// sensor layout must not turn that into a write outside the baseline
+// directory.
+func TestPath_UnsafeSensorNameCannotEscape(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"../../etc/passwd", "..", ".", "", "a/b", `c\d`} {
+		p := Path(root, "h", name)
+		rel, err := filepath.Rel(Root(root), p)
+		if err != nil || strings.HasPrefix(rel, "..") || filepath.Dir(rel) != "h" {
+			t.Errorf("sensor %q escapes the baseline directory: %s", name, p)
+		}
+	}
+}
+
+// Two unsafe names that sanitise to the same characters must not share a file,
+// or one sensor's forgiveness would silently become another's.
+func TestPath_UnsafeNamesDoNotCollide(t *testing.T) {
+	root := t.TempDir()
+	if Path(root, "h", "a/b") == Path(root, "h", `a\b`) {
+		t.Error("distinct sensor names must not map to one file")
+	}
+}
+
+// Every automatic resolution of a baseline conflict forgives more than either
+// branch intended, so the only safe behaviour is to stop. "invalid character
+// '<'" would tell the reader nothing about what to do.
+func TestLoad_RefusesConflictedFile(t *testing.T) {
+	root := t.TempDir()
+	writeSensorFile(t, root, "h", "lint", "<<<<<<< HEAD\n{\"version\":2}\n=======\n{}\n>>>>>>> other\n")
+
+	_, err := Load(root)
+	if err == nil {
+		t.Fatal("a conflicted baseline must not load")
+	}
+	if !errors.Is(err, ErrConflicted) {
+		t.Errorf("error should identify the conflict, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "agent") {
+		t.Errorf("the error must say a conflict is not an agent's to resolve, got %q", err)
+	}
+}
+
+// `ynh check` never shipped the single-file layout, but a working copy from
+// earlier in development may carry one. Silently ignoring it would drop a
+// ratchet the developer believes is in force.
+func TestLoad_RejectsLegacySingleFile(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, Dir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, Dir, "baseline.json"),
+		[]byte(`{"version":1,"harnesses":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(root); err == nil {
+		t.Error("a pre-split baseline must be reported, not silently ignored")
+	}
+}
+
+// A sensor that now passes must stop being forgiven, or the ratchet only ever
+// loosens. With a file per sensor that means deleting the file.
+func TestSave_PrunesClearedSensors(t *testing.T) {
+	root := t.TempDir()
+	b := &Baseline{}
+	b.Set("h", "lint", Record("fail", "a", ""))
+	b.Set("h", "vet", Record("fail", "c", ""))
+	if err := Save(root, b); err != nil {
+		t.Fatal(err)
+	}
+
+	b.Clear("h", "vet")
+	if err := Save(root, b); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(Path(root, "h", "vet")); err == nil {
+		t.Error("a cleared sensor's file must be removed, or its debt stays forgiven")
+	}
+	if _, err := os.Stat(Path(root, "h", "lint")); err != nil {
+		t.Errorf("the remaining sensor must survive the prune: %v", err)
+	}
+
+	b.Clear("h", "lint")
+	if err := Save(root, b); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(Root(root), "h")); err == nil {
+		t.Error("an emptied harness directory should not be left behind")
+	}
+}
+
+// A ratchet is only as tight as its oldest forgiveness. Reporting the most
+// recent write would hide the entry nobody has revisited.
+func TestOldestRecordedAt(t *testing.T) {
+	b := &Baseline{}
+	b.Set("h", "old", SensorBaseline{Status: "fail", RecordedAt: "2026-01-02T00:00:00Z"})
+	b.Set("h", "new", SensorBaseline{Status: "fail", RecordedAt: "2026-08-02T00:00:00Z"})
+	if got := b.OldestRecordedAt(); got != "2026-01-02T00:00:00Z" {
+		t.Errorf("OldestRecordedAt() = %q, want the earliest entry", got)
+	}
+	if got := (*Baseline)(nil).OldestRecordedAt(); got != "" {
+		t.Errorf("no baseline should report no timestamp, got %q", got)
+	}
+}
+
+// Fingerprint is what makes "the agent may not rewrite its own gate"
+// enforceable rather than merely refused: --update-baseline declines inside an
+// agent session, but nothing stops a worker editing the JSON directly.
+func TestFingerprint_MovesOnlyWhenForgivenessMoves(t *testing.T) {
+	root := t.TempDir()
+	b := &Baseline{}
+	b.Set("h", "lint", Record("fail", "a\nb", ""))
+	if err := Save(root, b); err != nil {
+		t.Fatal(err)
+	}
+	first, err := Fingerprint(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-saving identical state must not move it, or every run would look
+	// like tampering.
+	if err := Save(root, b); err != nil {
+		t.Fatal(err)
+	}
+	if again, fErr := Fingerprint(root); fErr != nil || again != first {
+		t.Errorf("an unchanged baseline must fingerprint the same: %q vs %q (%v)", first, again, fErr)
+	}
+
+	b.Set("h", "lint", Record("fail", "a\nb\nc", ""))
+	if err := Save(root, b); err != nil {
+		t.Fatal(err)
+	}
+	after, err := Fingerprint(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after == first {
+		t.Error("forgiving one more failure must change the fingerprint")
+	}
+}
+
+func TestFingerprint_EmptyIsStable(t *testing.T) {
+	root := t.TempDir()
+	fp, err := Fingerprint(root)
+	if err != nil {
+		t.Fatalf("no baseline is not an error: %v", err)
+	}
+	if fp == "" {
+		t.Error("an absent baseline should still fingerprint to something comparable")
+	}
+}
+
+// `ynh check --update-baseline` re-Sets every failing sensor, not only the
+// ones whose findings moved. If Set refreshed the timestamp unconditionally,
+// every run would rewrite every file — turning an unrelated branch's no-op
+// into a merge conflict, and destroying the age signal OldestRecordedAt reads.
+//
+// Asserted directly rather than through Save: RFC3339 has second granularity,
+// so a test that compares two writes inside the same second passes whether or
+// not the timestamp was preserved.
+func TestSet_KeepsTimestampWhenFailuresUnchanged(t *testing.T) {
+	const then = "2026-01-02T03:04:05Z"
+	b := &Baseline{}
+	rec := Record("fail", "a\nb", "")
+	rec.RecordedAt = then
+	b.Set("h", "lint", rec)
+
+	b.Set("h", "lint", Record("fail", "a\nb", "")) // same failures, no timestamp
+	if got := b.Harnesses["h"].Sensors["lint"].RecordedAt; got != then {
+		t.Errorf("re-recording identical failures moved the timestamp: %q, want %q", got, then)
+	}
+
+	b.Set("h", "lint", Record("fail", "a\nb\nc", "")) // a new failure accepted
+	if got := b.Harnesses["h"].Sensors["lint"].RecordedAt; got == then {
+		t.Error("accepting a new failure is a new acceptance and must be timestamped as one")
 	}
 }

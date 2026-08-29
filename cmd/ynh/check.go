@@ -134,22 +134,31 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 		}
 	}
 
+	// Load once, and treat a load failure as fatal even under --no-baseline.
+	//
+	// This used to load twice and swallow the second error, which was silent
+	// data loss waiting to happen: --no-baseline --update-baseline against an
+	// unreadable file left `recording` empty, and saving an empty map prunes
+	// every entry the load could not see — other sensors, other harnesses.
+	// --no-baseline means "do not forgive", not "tolerate a corrupt ratchet".
+	loaded, bErr := baseline.Load(cwd)
+	if bErr != nil {
+		return checkExecErr(cliError(stderr, structured, errCodeInvalidInput, bErr.Error()))
+	}
+
 	var base *baseline.Baseline
 	if !ignoreBaseline {
-		loaded, bErr := baseline.Load(cwd)
-		if bErr != nil {
-			return checkExecErr(cliError(stderr, structured, errCodeInvalidInput, bErr.Error()))
-		}
 		base = loaded
 	}
+
 	// Start from what is on disk, not from empty. --update-baseline must
 	// refresh the sensors that actually ran and leave every other entry —
 	// other sensors, other harnesses — untouched. Writing a freshly built map
 	// would silently erase the forgiven debt of anything filtered out by
 	// --only, and of every other harness sharing this repository.
-	recording := &baseline.Baseline{}
-	if existing, rErr := baseline.Load(cwd); rErr == nil && existing != nil {
-		recording = existing
+	recording := loaded
+	if recording == nil {
+		recording = &baseline.Baseline{}
 	}
 
 	wanted := map[string]bool{}
@@ -303,7 +312,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 	env.Summary.Total = len(env.Sensors)
 	if base != nil {
 		env.Baseline = &gate.BaselineInfo{
-			RecordedAt: base.RecordedAt,
+			RecordedAt: base.OldestRecordedAt(),
 			Known:      totalKnown,
 			Fixed:      totalFixed,
 			Stale:      totalFixed > 0,
@@ -319,7 +328,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 		// must say something: a structured consumer that gets empty stdout
 		// cannot tell success from a crash.
 		env.Verdict = gate.VerdictPass
-		env.Baseline = &gate.BaselineInfo{RecordedAt: recording.RecordedAt}
+		env.Baseline = &gate.BaselineInfo{RecordedAt: recording.OldestRecordedAt()}
 		if structured {
 			data, encErr := json.MarshalIndent(env, "", "  ")
 			if encErr != nil {
@@ -328,8 +337,8 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			_, wErr := fmt.Fprintln(stdout, string(data))
 			return wErr
 		}
-		if _, wErr := fmt.Fprintf(stdout, "\nbaseline recorded at %s — commit it\n",
-			filepath.Join(baseline.Dir, baseline.File)); wErr != nil {
+		if _, wErr := fmt.Fprintf(stdout, "\nbaseline recorded under %s — commit it\n",
+			filepath.Join(baseline.Dir, baseline.SubDir)); wErr != nil {
 			return wErr
 		}
 		return nil

@@ -115,7 +115,7 @@ echo "exit=$?"
 ```
 
 ```
-baseline recorded at .ynh/baseline.json — commit it
+baseline recorded under .ynh/baseline — commit it
 exit=0
 ```
 
@@ -134,12 +134,35 @@ exit=0
 ```
 
 `known` means failing, but only in ways the baseline already records — debt,
-not a regression. **Commit `.ynh/baseline.json`**: the ratchet is a property of
+not a regression. **Commit `.ynh/baseline/`**: the ratchet is a property of
 the repository, not of one developer.
+
+It is one file per sensor:
+
+```bash
+find .ynh -type f | sort
+```
+
+```
+.ynh/baseline/gate-demo/lint.json
+.ynh/baseline/gate-demo/typos.json
+```
+
+`typos` is recorded even though it never gated. A baseline records what was
+failing, not what blocked — so if its tolerance is tightened to `blocking`
+later, the debt it already had is still forgiven and only new failures gate.
 
 Entries are scoped by harness, so a repository checked by more than one harness
 keeps them separate. `--update-baseline` refreshes only the sensors that ran, so
 combining it with `--only` never discards what it did not look at.
+
+The split is not filing tidiness. One repository-wide file of hash arrays
+conflicts on every concurrent branch, and every natural resolution of such a
+conflict — union, `-X ours`, regenerate — *widens* the amnesty. A ratchet is
+monotonic only if nothing quietly loosens it. Per sensor, two branches touching
+different sensors never conflict; when one does, `ynh check` refuses to run
+against it rather than guessing, because deciding which failures a repository
+accepts is a human call.
 
 ## T20.6: Only new failures gate
 

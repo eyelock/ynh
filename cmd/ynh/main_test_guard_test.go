@@ -19,12 +19,12 @@ import (
 // Deleting the file would hide the next occurrence, so this reports instead.
 func TestMain(m *testing.M) {
 	code := m.Run()
-	if _, err := os.Stat(baseline.Path(".")); err == nil {
+	if _, err := os.Stat(baseline.Root(".")); err == nil {
 		fmt.Fprintf(os.Stderr,
 			"\nthis package's tests wrote %s into the source tree.\n"+
 				"A check test must pass --cwd; without it the suite gates on the repository's own\n"+
 				"baseline and leaves state behind that changes later runs. Delete the file and add --cwd.\n",
-			baseline.Path("."))
+			baseline.Root("."))
 		if code == 0 {
 			code = 1
 		}

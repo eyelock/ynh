@@ -34,6 +34,10 @@ type mockBackend struct {
 	interruptAtCall int       // writes {"action":"interrupt"} to interruptWriter
 	interruptWriter io.Writer // sink wired to the loop's control stdin
 	sigtermAtCall   int       // raises SIGTERM at the process
+
+	// onTurn runs as the worker produces turn N, for tests that need the
+	// worktree to change while a turn is in flight.
+	onTurn func(call int)
 }
 
 func (m *mockBackend) Name() string { return m.name }
@@ -63,6 +67,10 @@ func (s *mockSession) Next() (Turn, error) {
 	pos := mb.pos
 	mb.pos++
 	call := pos + 1 // 1-indexed Next() call number
+
+	if mb.onTurn != nil {
+		mb.onTurn(call)
+	}
 
 	if mb.interruptAtCall == call && mb.interruptWriter != nil {
 		_, _ = mb.interruptWriter.Write([]byte(`{"action":"interrupt"}` + "\n"))
