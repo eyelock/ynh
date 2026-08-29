@@ -70,8 +70,21 @@ type Sensor struct {
 	// the loop converges on their verdicts, and any yield figure derives from
 	// them.
 	Reference *SensorReference `json:"reference,omitempty"`
-	Source    SensorSource     `json:"source"`
-	Output    SensorOutput     `json:"output"`
+	// Ratchet selects how the baseline forgives this sensor's failures.
+	//
+	// "fingerprint" (the default) matches individual findings, so a fixed one
+	// stops being forgiven and a new one is flagged wherever it appears.
+	//
+	// "count" ratchets the total instead. It exists because fingerprints
+	// normalise line numbers and deduplicate, so a second identical finding in
+	// a file that already has one produces no new fingerprint and no change in
+	// the distinct-line count — it is invisible. That is the wrong answer for
+	// anything whose *quantity* is the finding, suppression directives above
+	// all: the gaming vector for a ratchet is suppression, not relocation, and
+	// an agent that adds `//nolint` beside an existing one must not pass.
+	Ratchet string       `json:"ratchet,omitempty"`
+	Source  SensorSource `json:"source"`
+	Output  SensorOutput `json:"output"`
 }
 
 // SensorReference is a fixture with a known answer, used by
@@ -86,6 +99,20 @@ type SensorReference struct {
 	// observing. "pass" catches the opposite failure, a sensor that fires on
 	// clean input.
 	Expect string `json:"expect"`
+}
+
+// ValidSensorRatchets lists how a sensor's baseline forgives failures.
+var ValidSensorRatchets = map[string]bool{
+	"fingerprint": true,
+	"count":       true,
+}
+
+// EffectiveRatchet returns the ratchet mode, defaulting to fingerprint.
+func (s Sensor) EffectiveRatchet() string {
+	if s.Ratchet == "" {
+		return "fingerprint"
+	}
+	return s.Ratchet
 }
 
 // ValidSensorExpectations lists the answers a reference fixture may declare.
@@ -262,6 +289,13 @@ func ValidateSensors(sensors map[string]Sensor, profileNames, focusNames map[str
 		// StatusReported and never StatusPass. Refusing it here as well means
 		// the author is told at `ynd validate` time rather than discovering it
 		// as a run that silently never converges.
+		if s.Ratchet != "" && !ValidSensorRatchets[s.Ratchet] {
+			issues = append(issues, fmt.Sprintf("%s ratchet %q must be one of fingerprint, count", prefix, s.Ratchet))
+		}
+		if s.Ratchet == "count" && s.Source.Kind() != "" && s.Source.Kind() != "command" {
+			issues = append(issues, fmt.Sprintf(
+				"%s ratchet count requires a command source: only a command sensor produces countable findings", prefix))
+		}
 		if s.Reference != nil {
 			if s.Reference.Path == "" {
 				issues = append(issues, fmt.Sprintf("%s reference.path must be non-empty", prefix))

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -702,5 +703,92 @@ func TestCheck_RecordsDeclaredToolVersion(t *testing.T) {
 	// shell's error message as if it were a version.
 	if got["broken"] != "" {
 		t.Errorf("a failed probe must record nothing, got %q", got["broken"])
+	}
+}
+
+// The gaming vector for a ratchet is suppression, not relocation.
+//
+// A second identical suppression in a file that already has one changes
+// neither the fingerprint set (line numbers are normalised to :N) nor the
+// distinct-line count. Under the default ratchet it is invisible. This asserts
+// both halves: count catches it, fingerprint does not — which is why the mode
+// exists rather than the default being changed.
+func TestCheck_CountRatchetCatchesADuplicateSuppression(t *testing.T) {
+	const manifest = `{
+      "name": "%s", "version": "0.1.0", "default_vendor": "claude",
+      "sensors": {"suppressions": {
+        "tolerance": "blocking"%s,
+        "source": {"command": "grep -rn nolint . || true; test -z \"$(grep -rn nolint .)\""},
+        "output": {"format": "text"}
+      }}
+    }`
+	run := func(t *testing.T, name, ratchetField string) string {
+		t.Helper()
+		home := t.TempDir()
+		t.Setenv("YNH_HOME", home)
+		t.Setenv("CI", "")
+		t.Setenv("YNH_AGENT_SESSION", "")
+		installListTestHarness(t, home, name, fmt.Sprintf(manifest, name, ratchetField))
+
+		work := t.TempDir()
+		one := "package a\n\n//nolint:errcheck\nfunc A() {}\n"
+		if err := os.WriteFile(filepath.Join(work, "a.go"), []byte(one), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		// Accept the existing suppression as debt.
+		if err := cmdCheck([]string{"local/" + name, "--cwd", work, "--update-baseline"},
+			io.Discard, io.Discard); err != nil {
+			t.Fatalf("recording the baseline: %v", err)
+		}
+		// An agent adds a second, identical suppression.
+		two := one + "\n//nolint:errcheck\nfunc B() {}\n"
+		if err := os.WriteFile(filepath.Join(work, "a.go"), []byte(two), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		var out bytes.Buffer
+		_ = cmdCheck([]string{"local/" + name, "--cwd", work, "--format", "json"}, &out, io.Discard)
+		var env gate.Envelope
+		if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+			t.Fatalf("decoding: %v\n%s", err, out.String())
+		}
+		return env.Verdict
+	}
+
+	if v := run(t, "supcount", `, "ratchet": "count"`); v != gate.VerdictBlocked {
+		t.Errorf("count ratchet: verdict = %q, want blocked — a new suppression must not pass", v)
+	}
+	if v := run(t, "supfp", ""); v != gate.VerdictPass {
+		t.Errorf("fingerprint ratchet: verdict = %q, want pass — this is the gap being closed, "+
+			"and if it now blocks, the default changed and every existing harness is affected", v)
+	}
+}
+
+// Removing suppressions is progress, not a regression.
+func TestCheck_CountRatchetAllowsFewer(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	t.Setenv("CI", "")
+	t.Setenv("YNH_AGENT_SESSION", "")
+	installListTestHarness(t, home, "supless", `{
+      "name": "supless", "version": "0.1.0", "default_vendor": "claude",
+      "sensors": {"suppressions": {
+        "tolerance": "blocking", "ratchet": "count",
+        "source": {"command": "grep -rn nolint . || true; test -z \"$(grep -rn nolint .)\""},
+        "output": {"format": "text"}
+      }}
+    }`)
+	work := t.TempDir()
+	both := "package a\n\n//nolint:errcheck\nfunc A() {}\n\n//nolint:errcheck\nfunc B() {}\n"
+	if err := os.WriteFile(filepath.Join(work, "a.go"), []byte(both), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdCheck([]string{"local/supless", "--cwd", work, "--update-baseline"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("recording: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(work, "a.go"), []byte("package a\n\nfunc A() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdCheck([]string{"local/supless", "--cwd", work}, io.Discard, io.Discard); err != nil {
+		t.Errorf("removing every suppression must pass: %v", err)
 	}
 }

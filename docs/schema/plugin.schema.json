@@ -198,6 +198,15 @@
         },
         "reference": {
           "$ref": "#/$defs/sensor_reference"
+        },
+        "ratchet": {
+          "type": "string",
+          "enum": [
+            "fingerprint",
+            "count"
+          ],
+          "default": "fingerprint",
+          "description": "How the baseline forgives this sensor's failures. `fingerprint` (default) matches individual findings, so a fixed one stops being forgiven and a new one is flagged wherever it appears. `count` ratchets the total instead, for a sensor whose quantity is the finding \u2014 suppression directives above all. Fingerprints normalise line numbers and deduplicate, so a second identical finding in a file that already has one is invisible to the default; `count` is what sees it. Requires a command source."
         }
       }
     },

@@ -107,6 +107,13 @@ type SensorBaseline struct {
 	// sensor it is the true count even though Fingerprints is empty, because
 	// it is the only thing left to ratchet against.
 	Count int `json:"count"`
+	// Total is every emitted line, not only the distinct ones. A count-ratchet
+	// sensor is measured against this: fingerprints normalise line numbers and
+	// deduplicate, so a second identical finding in a file that already has
+	// one changes neither Fingerprints nor Count. For a sensor whose quantity
+	// is the finding — suppression directives above all — that is the wrong
+	// answer, and Total is the only field that moves.
+	Total int `json:"total,omitempty"`
 	// Truncated records that the sensor emitted more distinct lines than
 	// maxFingerprints.
 	//
@@ -133,6 +140,10 @@ type Comparison struct {
 	Known int
 	// Fixed counts baseline entries no longer failing — debt paid off.
 	Fixed int
+	// CountDelta is how far a count-ratchet sensor has moved: positive is new
+	// suppressions, negative is removed ones. Stating the number means a
+	// report says how much worse, not merely that it is worse.
+	CountDelta int
 	// Approximate is set for a truncated sensor: the verdict came from
 	// counting lines, not identifying them.
 	Approximate bool
@@ -179,7 +190,7 @@ func Fingerprints(output, root string) []string {
 // Set fills it, so an unchanged entry keeps the timestamp it already had.
 func Record(status, output, root string) SensorBaseline {
 	fps := Fingerprints(output, root)
-	sb := SensorBaseline{Status: status, Count: len(fps)}
+	sb := SensorBaseline{Status: status, Count: len(fps), Total: CountLines(output)}
 	if len(fps) > maxFingerprints {
 		// Store none rather than an arbitrary subset — see Truncated.
 		sb.Truncated = true
@@ -187,6 +198,42 @@ func Record(status, output, root string) SensorBaseline {
 	}
 	sb.Fingerprints = fps
 	return sb
+}
+
+// CountLines counts every non-empty line, without normalising or
+// deduplicating. Two identical findings count twice — which is the whole point
+// for a sensor whose quantity is the finding.
+func CountLines(output string) int {
+	n := 0
+	for _, line := range strings.Split(output, "\n") {
+		if strings.TrimSpace(line) != "" {
+			n++
+		}
+	}
+	return n
+}
+
+// CompareTotals ratchets a sensor on how many findings it emits rather than
+// which ones.
+//
+// A nil baseline or an unrecorded sensor means nothing is forgiven. Otherwise
+// any increase is a regression, and a decrease is progress worth recording —
+// which is what stops a ratchet from silently permitting the count to creep
+// back up to an old high-water mark.
+func (b *Baseline) CompareTotals(harness, sensor string, currentTotal int) Comparison {
+	sb, ok := b.entry(harness, sensor)
+	if !ok {
+		if currentTotal == 0 {
+			return Comparison{}
+		}
+		return Comparison{Regressed: true, CountDelta: currentTotal}
+	}
+	return Comparison{
+		Known:      min(currentTotal, sb.Total),
+		Fixed:      max(0, sb.Total-currentTotal),
+		Regressed:  currentTotal > sb.Total,
+		CountDelta: currentTotal - sb.Total,
+	}
 }
 
 // Compare measures a sensor's current failures against what was recorded.

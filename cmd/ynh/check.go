@@ -277,7 +277,19 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 				recording.Set(p.Name, name, baseline.Record(gate.StatusFail, raw, cwd))
 			}
 
-			cmp := base.Compare(p.Name, name, current, len(current))
+			// A count-ratchet sensor is measured on how many findings it
+			// emits, not which ones. Fingerprints normalise line numbers and
+			// deduplicate, so a second `//nolint` beside an existing one
+			// changes neither the fingerprint set nor the distinct-line count.
+			// For a sensor whose quantity *is* the finding, that would forgive
+			// exactly the thing it exists to catch.
+			var cmp baseline.Comparison
+			if s.EffectiveRatchet() == "count" {
+				cmp = base.CompareTotals(p.Name, name, baseline.CountLines(raw))
+				res.CountDelta = cmp.CountDelta
+			} else {
+				cmp = base.Compare(p.Name, name, current, len(current))
+			}
 			res.NewCount = len(cmp.New)
 			res.KnownCount = cmp.Known
 			totalKnown += cmp.Known
