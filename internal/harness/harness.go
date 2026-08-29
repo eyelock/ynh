@@ -120,6 +120,7 @@ type Harness struct {
 	Hooks          map[string][]plugin.HookEntry
 	MCPServers     map[string]plugin.MCPServer
 	EnvPassthrough []string
+	Agent          *plugin.AgentConfig
 	Profiles       map[string]plugin.Profile
 	Focuses        map[string]plugin.Focus
 	Sensors        map[string]plugin.Sensor
@@ -506,6 +507,7 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	if len(hj.MCPServers) > 0 {
 		p.MCPServers = hj.MCPServers
 		p.EnvPassthrough = hj.EnvPassthrough
+		p.Agent = hj.Agent
 	} else if fallback, err := plugin.LoadMCPJSON(dir); err == nil && len(fallback) > 0 {
 		p.MCPServers = fallback
 	}
@@ -702,6 +704,7 @@ func LoadFile(path string) (*Harness, error) {
 	if len(hj.MCPServers) > 0 {
 		p.MCPServers = hj.MCPServers
 		p.EnvPassthrough = hj.EnvPassthrough
+		p.Agent = hj.Agent
 	}
 	if len(hj.Profiles) > 0 {
 		p.Profiles = hj.Profiles

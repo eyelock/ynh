@@ -71,6 +71,28 @@ func (b *Budget) Exceeded() (reason string, budgetKind BudgetType, exitCode int)
 	return "", "", 0
 }
 
+// Default budget caps, applied when a run declares none.
+//
+// A loop with no caps is unbounded in turns, tokens and wall clock. That is not
+// a control anyone chose — it is the absence of one, and token consumption
+// between runs on the same task varies by more than an order of magnitude, so
+// the tail is real. These are a starting point to be retuned against measured
+// distributions, not tuned values.
+const (
+	DefaultMaxTurns  = 25
+	DefaultMaxTokens = 2_000_000
+	DefaultMaxWall   = 60 * time.Minute
+)
+
+// BudgetSource records whether a cap was chosen or defaulted. Analysing a
+// batch of runs, a cap nobody chose that fires is noise in the result; a cap
+// that was chosen and fires is a finding. They must be distinguishable.
+type BudgetSource struct {
+	Turns  string `json:"turns"`  // "flag" | "manifest" | "default"
+	Tokens string `json:"tokens"` // "
+	Wall   string `json:"wall"`   // "
+}
+
 // Exit codes for loop termination.
 const (
 	ExitConverged        = 0

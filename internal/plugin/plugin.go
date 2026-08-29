@@ -22,6 +22,9 @@ type HarnessJSON struct {
 	DelegatesTo   []DelegateMeta         `json:"delegates_to,omitempty"`
 	Hooks         map[string][]HookEntry `json:"hooks,omitempty"`
 	MCPServers    map[string]MCPServer   `json:"mcp_servers,omitempty"`
+	// Agent carries loop defaults a harness can set once rather than every
+	// caller passing flags.
+	Agent *AgentConfig `json:"agent,omitempty"`
 	// EnvPassthrough names the environment variables a harness may see:
 	// which ${VAR} references its MCP declarations may resolve, and which
 	// variables reach an agent worker's process. Empty means none — a worker
@@ -270,6 +273,14 @@ type Profile struct {
 	// editing the base manifest. Replacement rather than union: a profile
 	// meant to restrict must be able to.
 	EnvPassthrough []string `json:"env_passthrough,omitempty"`
+}
+
+// AgentConfig holds harness-level defaults for `ynh agent run`. Flags win over
+// these; these win over the built-in defaults.
+type AgentConfig struct {
+	MaxTurns  int    `json:"max_turns,omitempty"`
+	MaxTokens int64  `json:"max_tokens,omitempty"`
+	MaxWall   string `json:"max_wall,omitempty"` // Go duration, e.g. "45m"
 }
 
 // AuthorInfo holds harness author information.

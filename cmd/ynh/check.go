@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/eyelock/ynh/internal/baseline"
 	"github.com/eyelock/ynh/internal/config"
@@ -150,13 +151,26 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 		cwd, _ = os.Getwd()
 	}
 
-	// CI must never write the ratchet. A gate that rewrites its own reference
-	// point from a feature branch forgives whatever that branch introduced,
-	// which is exactly backwards.
-	if updateBaseline && os.Getenv("CI") != "" {
-		return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
-			"--update-baseline refuses to run in CI: the baseline is a repository decision, "+
-				"not a side effect of a build. Run it locally and commit the result."))
+	// Nothing being gated may rewrite the gate's reference point.
+	//
+	// The CI guard alone protected the wrong process. An agent runs in a
+	// worktree where CI is unset, so an agent that could not converge could
+	// grant itself blanket amnesty and then converge — the exact "forgives
+	// whatever it introduced" failure the CI check was written to prevent,
+	// reached by the one path the check did not cover.
+	if updateBaseline {
+		if session := os.Getenv("YNH_AGENT_SESSION"); session != "" {
+			recordBaselineWriteAttempt(session)
+			return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
+				"--update-baseline refuses to run inside an agent session: nothing being gated may "+
+					"rewrite the gate's reference point. Ask a human to review the failures and "+
+					"record the baseline deliberately."))
+		}
+		if os.Getenv("CI") != "" {
+			return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
+				"--update-baseline refuses to run in CI: the baseline is a repository decision, "+
+					"not a side effect of a build. Run it locally and commit the result."))
+		}
 	}
 
 	var base *baseline.Baseline
@@ -387,6 +401,37 @@ func selectLines(raw, root string, want []string) string {
 		}
 	}
 	return strings.Join(keep, "\n")
+}
+
+// recordBaselineWriteAttempt appends the refusal to the agent's session
+// directory.
+//
+// Blocking the write is the safety property; recording it is the useful one.
+// An agent reaching for --update-baseline when it cannot converge is a direct
+// measurement of how often the loop tries to buy its way past the gate rather
+// than satisfy it — which is the number that sizes how much containment the
+// rest of the system needs. Best effort: failing the check because a
+// measurement could not be written would be the wrong trade.
+func recordBaselineWriteAttempt(session string) {
+	dir := os.Getenv("YNH_AGENT_SESSION_DIR")
+	if dir == "" {
+		return
+	}
+	line, err := json.Marshal(map[string]string{
+		"at":      time.Now().UTC().Format(time.RFC3339),
+		"session": session,
+		"attempt": "check --update-baseline",
+	})
+	if err != nil {
+		return
+	}
+	f, err := os.OpenFile(filepath.Join(dir, "gate-write-attempts.jsonl"),
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+	_, _ = f.Write(append(line, '\n'))
 }
 
 const maxSensorOutput = 4096
