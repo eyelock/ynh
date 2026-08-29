@@ -428,7 +428,11 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		}
 		if harnessObj != nil {
 			start.HarnessVersion = harnessObj.Version
+			if harnessObj.InstalledFrom != nil {
+				start.HarnessSHA = harnessObj.InstalledFrom.SHA
+			}
 		}
+		start.ImageDigest = imageDigest()
 		if emitErr := traj.Emit(KindSessionStart, 0, start); emitErr != nil {
 			return result, fmt.Errorf("writing trajectory: %w", emitErr)
 		}
@@ -442,12 +446,8 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	// the trajectory when no harness was given, and a structured consumer
 	// reading a harness literally named "(none)" would be worse served than by
 	// the field being absent, which is what "this run verified nothing" means.
-	if opts.HarnessName != "" {
-		result.Harness = &RunHarness{Name: opts.HarnessName}
-		if harnessObj != nil {
-			result.Harness.Version = harnessObj.Version
-		}
-	}
+	result.Harness = harnessProvenance(opts.HarnessName, harnessObj)
+	result.ImageDigest = imageDigest()
 
 	// ── Start (or reconstruct) the worker ─────────────────────────────────────
 	var resumeToken string

@@ -242,6 +242,27 @@ Two fields earn their place in a batch of a hundred runs:
   run that changed nothing, and a run that rewrote forty files nobody asked
   about, are both findings.
 
+### Pinning a run to a toolchain
+
+`harness.sha` is the resolved commit the harness was installed from. `version`
+is an author-declared string that can be reused across different content; the
+SHA is what actually pins a run to one set of sensors.
+
+`image_digest` records the container image the run executed in. **A run cannot
+observe this for itself** — a digest is computed *after* a build, so it cannot
+be stamped into the image it identifies, and a process inside a container has
+no portable way to learn its own image. The launcher passes it in:
+
+```bash
+docker run -e YNH_IMAGE_DIGEST="$(docker inspect --format '{{index .RepoDigests 0}}' my-harness)" …
+```
+
+Absent means **not recorded**, not "not containerised". Guessing would be worse
+than silence: a wrong digest in a graded corpus is indistinguishable from a
+right one until someone tries to reproduce the run and cannot.
+
+Both fields also appear on the trajectory's `session_start` event.
+
 Shape: [`docs/schema/cli/agent-run.schema.json`](schema/cli/agent-run.schema.json).
 
 ## Trajectory
