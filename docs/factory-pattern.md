@@ -321,12 +321,19 @@ harness commit, the tree and the image it actually executed against rather than
 merely asserting them. And the baseline is unforgeable by construction: a run
 that alters what it is judged against fails on that basis instead of passing.
 
+What ynh does not produce is any assurance that the run was contained while it
+did all this. [Containment is the runtime's](harness-engineering.md#ynh-does-not-own-containment),
+and evidence of a well-behaved run is not evidence that misbehaviour was
+prevented — the two are separate claims and only one of them is in the box.
+
 That combination is what lets a reviewer reconstruct a run instead of trusting a
 summary of it, and lets someone asking later whether the gate was genuinely
-green check rather than accept an answer. Sensor results also carry
-`tool_version`, which is the difference between *the linter passed* and *this
-version of the linter passed* — the second is auditable a year later and the
-first is not.
+green check rather than accept an answer. Worth adding to it: a sensor that
+declares [`version_command`](sensors.md#version-command-which-tool-produced-this)
+has its result stamped with `tool_version`, which is the difference between *the
+linter passed* and *this version of the linter passed* — the second is auditable
+a year later and the first is not. It is off unless you declare it, and a
+factory being measured over time should declare it everywhere.
 
 **Downstream disclosure has no settled answer, and inventing one here would be
 worse than saying so.** If you publish a library or run a service, are consumers
