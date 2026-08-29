@@ -43,9 +43,27 @@ ynh agent run --resume <session-dir> [flags]
 | `--emit-jsonl <path>` | Write the trajectory; `-` for stdout |
 | `--resume <dir>` | Continue a previous session from its directory |
 
-**Budgets are unset by default, and unset means unlimited.** A loop with no
-`--max-turns`, `--max-tokens` or `--max-wall` will keep going until it converges
-or gets stuck. Set at least one for any unattended run.
+### Budgets
+
+Every run is bounded. Caps resolve in order — **flag, then harness manifest,
+then built-in default** — so there is no unlimited state to fall into:
+
+| Cap | Default |
+|---|---|
+| `--max-turns` | 25 |
+| `--max-tokens` | 2,000,000 |
+| `--max-wall` | 60m |
+
+A harness can carry its own envelope rather than every caller passing flags:
+
+```json
+"agent": { "max_turns": 40, "max_tokens": 4000000, "max_wall": "90m" }
+```
+
+The `session_start` trajectory event records the caps in force **and where each
+came from** (`flag`, `manifest`, `default`). Aggregating a batch of runs, a cap
+nobody chose that fires is noise in the result and a chosen cap that fires is a
+finding — they have to be told apart.
 
 ## What the agent can see
 
@@ -135,7 +153,7 @@ a run without parsing terminal output.
 
 | Event | Emitted when |
 |---|---|
-| `session_start` | Run begins |
+| `session_start` | Run begins — carries model, ynh version, harness version, base commit, and the resolved budgets with their sources |
 | `session_resumed` | Resumed run begins, before the first new turn |
 | `plan` / `plan_revised` | Plan produced or revised |
 | `plan_approval_required` | Plan phase is waiting for approval |

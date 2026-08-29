@@ -276,6 +276,45 @@ func RunLoop(opts RunOptions) error {
 	}
 
 	// ── Budget (restored on resume so caps carry across the relaunch) ─────────
+	// Precedence: flag, then harness manifest, then built-in default. A run
+	// with no caps at all is unbounded, which is the absence of a control
+	// rather than a choice, so there is no "unlimited" state to fall into.
+	budgetSource := BudgetSource{Turns: "flag", Tokens: "flag", Wall: "flag"}
+	if opts.MaxTurns == 0 {
+		budgetSource.Turns = "manifest"
+		if harnessObj != nil && harnessObj.Agent != nil {
+			opts.MaxTurns = harnessObj.Agent.MaxTurns
+		}
+	}
+	if opts.MaxTurns == 0 {
+		budgetSource.Turns = "default"
+		opts.MaxTurns = DefaultMaxTurns
+	}
+	if opts.MaxTokens == 0 {
+		budgetSource.Tokens = "manifest"
+		if harnessObj != nil && harnessObj.Agent != nil {
+			opts.MaxTokens = harnessObj.Agent.MaxTokens
+		}
+	}
+	if opts.MaxTokens == 0 {
+		budgetSource.Tokens = "default"
+		opts.MaxTokens = DefaultMaxTokens
+	}
+	if opts.MaxWall == 0 {
+		budgetSource.Wall = "manifest"
+		if harnessObj != nil && harnessObj.Agent != nil && harnessObj.Agent.MaxWall != "" {
+			d, dErr := time.ParseDuration(harnessObj.Agent.MaxWall)
+			if dErr != nil {
+				return fmt.Errorf("harness agent.max_wall %q: %w", harnessObj.Agent.MaxWall, dErr)
+			}
+			opts.MaxWall = d
+		}
+	}
+	if opts.MaxWall == 0 {
+		budgetSource.Wall = "default"
+		opts.MaxWall = DefaultMaxWall
+	}
+
 	budget := &Budget{
 		MaxTurns:  opts.MaxTurns,
 		MaxTokens: opts.MaxTokens,
@@ -337,12 +376,25 @@ func RunLoop(opts RunOptions) error {
 			return fmt.Errorf("writing trajectory: %w", emitErr)
 		}
 	} else {
-		if emitErr := traj.Emit(KindSessionStart, 0, SessionStartData{
-			SessionID: sessionID,
-			Harness:   harnessName,
-			Backend:   wb.Name(),
-			Task:      opts.Task,
-		}); emitErr != nil {
+		start := SessionStartData{
+			SessionID:  sessionID,
+			Harness:    harnessName,
+			Backend:    wb.Name(),
+			Task:       opts.Task,
+			Model:      opts.Model,
+			YnhVersion: config.Version,
+			BaseCommit: baseCommit(opts.WorktreeDir),
+			Budgets: &BudgetLimits{
+				MaxTurns:  opts.MaxTurns,
+				MaxTokens: opts.MaxTokens,
+				MaxWallMS: opts.MaxWall.Milliseconds(),
+			},
+			BudgetSources: &budgetSource,
+		}
+		if harnessObj != nil {
+			start.HarnessVersion = harnessObj.Version
+		}
+		if emitErr := traj.Emit(KindSessionStart, 0, start); emitErr != nil {
 			return fmt.Errorf("writing trajectory: %w", emitErr)
 		}
 	}
@@ -362,7 +414,14 @@ func RunLoop(opts RunOptions) error {
 	// the parent environment wholesale — meaning the agent held every credential
 	// the operator held. ynh declares the scope; the process boundary that makes
 	// it meaningful is the container's (see "ynh does not own containment").
-	var workerEnv []string
+	// Mark the worker as an agent session. This is ynh's own variable, not a
+	// passthrough of the operator's environment, and it is what lets a gate
+	// recognise that the process asking it a question is the process it is
+	// gating. See the baseline write refusal in cmd/ynh/check.go.
+	workerEnv := []string{"YNH_AGENT_SESSION=" + sessionID}
+	if sessionDir != "" {
+		workerEnv = append(workerEnv, "YNH_AGENT_SESSION_DIR="+sessionDir)
+	}
 	if harnessObj != nil {
 		for _, name := range harnessObj.EnvPassthrough {
 			if v, ok := os.LookupEnv(name); ok {
@@ -1135,4 +1194,17 @@ func dirOf(path string) string {
 		}
 	}
 	return "."
+}
+
+// baseCommit records the commit the run started from, so a trajectory can be
+// replayed against the tree it actually saw. Best effort: a worktree that is
+// not a git repository is a legitimate target, and failing the run over
+// missing provenance would be worse than recording none.
+func baseCommit(dir string) string {
+	cmd := exec.Command("git", "-C", dir, "rev-parse", "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }

@@ -74,6 +74,26 @@ type SessionStartData struct {
 	Harness   string `json:"harness"`
 	Backend   string `json:"backend"`
 	Task      string `json:"task"`
+	// The fields below make a run reproducible. Without the model, the harness
+	// version and the commit the work started from, a trajectory records what
+	// happened but not what it happened to, and cannot be replayed or audited
+	// after the fact.
+	Model          string `json:"model,omitempty"`
+	YnhVersion     string `json:"ynh_version,omitempty"`
+	HarnessVersion string `json:"harness_version,omitempty"`
+	BaseCommit     string `json:"base_commit,omitempty"`
+	// Budgets records the caps in force and where each came from. A cap nobody
+	// chose that fires is noise in a batch result; a chosen cap that fires is a
+	// finding. Aggregating a hundred runs needs them distinguishable.
+	Budgets       *BudgetLimits `json:"budgets,omitempty"`
+	BudgetSources *BudgetSource `json:"budget_sources,omitempty"`
+}
+
+// BudgetLimits is the resolved cap set for a run.
+type BudgetLimits struct {
+	MaxTurns  int   `json:"max_turns"`
+	MaxTokens int64 `json:"max_tokens"`
+	MaxWallMS int64 `json:"max_wall_ms"`
 }
 
 // SessionResumedData is the payload for KindSessionResumed events. Emitted

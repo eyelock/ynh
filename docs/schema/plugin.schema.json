@@ -36,6 +36,16 @@
     "includes": { "$ref": "#/$defs/includes" },
     "delegates_to": { "$ref": "#/$defs/delegates" },
     "hooks": { "$ref": "#/$defs/hooks" },
+    "agent": {
+      "description": "Harness-level defaults for `ynh agent run`. Flags win over these; these win over the built-in defaults. Setting them here means a harness carries its own spend envelope rather than every caller passing flags.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_turns": { "type": "integer", "minimum": 1, "description": "Cap on act-phase turns." },
+        "max_tokens": { "type": "integer", "minimum": 1, "description": "Cap on total tokens." },
+        "max_wall": { "type": "string", "description": "Wall-clock cap as a Go duration, e.g. \"45m\"." }
+      }
+    },
     "env_passthrough": {
       "description": "Environment variables this harness may see. Governs two things deliberately: which ${VAR} references its MCP declarations may resolve, and which variables reach an agent worker's process. Absent or empty means none — a worker inheriting the operator's whole environment holds every credential the operator holds. A reference to a variable outside this list, or to one that is unset, is an error rather than an empty value.",
       "type": "array",

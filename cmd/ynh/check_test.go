@@ -452,3 +452,57 @@ func TestCheck_UpdateBaselineEmitsJSON(t *testing.T) {
 		t.Errorf("verdict = %q, want pass", env.Verdict)
 	}
 }
+
+// The CI guard alone protected the wrong process: an agent runs in a worktree
+// where CI is unset, so an agent that could not converge could grant itself
+// blanket amnesty and then converge.
+func TestCheck_UpdateBaselineRefusedInsideAgentSession(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	t.Setenv("YNH_AGENT_SESSION", "sess-123")
+	_, _, err := runBaselineCheck(t, home, work, "--update-baseline")
+	if !errors.Is(err, errCheckExec) {
+		t.Fatalf("want refusal, got %v", err)
+	}
+}
+
+// Blocking is the safety property; recording is the measurement. An agent
+// reaching for --update-baseline when it cannot converge is a direct signal of
+// how often the loop tries to buy past the gate rather than satisfy it.
+func TestCheck_BaselineWriteAttemptIsRecorded(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	sessionDir := t.TempDir()
+	t.Setenv("YNH_AGENT_SESSION", "sess-abc")
+	t.Setenv("YNH_AGENT_SESSION_DIR", sessionDir)
+
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err == nil {
+		t.Fatal("expected the write to be refused")
+	}
+
+	data, err := os.ReadFile(filepath.Join(sessionDir, "gate-write-attempts.jsonl"))
+	if err != nil {
+		t.Fatalf("attempt not recorded: %v", err)
+	}
+	if !strings.Contains(string(data), "sess-abc") {
+		t.Errorf("record does not identify the session: %s", data)
+	}
+}
+
+// A refusal must not depend on a writable session directory — failing the
+// check because a measurement could not be written is the wrong trade.
+func TestCheck_RefusalWorksWithoutASessionDir(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	t.Setenv("YNH_AGENT_SESSION", "sess-nodir")
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err == nil {
+		t.Fatal("expected refusal even with no session dir set")
+	}
+}
+
+// A human on their own machine is the intended caller and must not be blocked.
+func TestCheck_UpdateBaselineAllowedForAHuman(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	t.Setenv("YNH_AGENT_SESSION", "")
+	t.Setenv("CI", "")
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatalf("a human recording a baseline must be allowed: %v", err)
+	}
+}
