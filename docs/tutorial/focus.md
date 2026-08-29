@@ -1,4 +1,4 @@
-# Tutorial 14: Focus
+# Focus
 
 Define named focus entries that combine a profile with a prompt for repeatable, non-interactive AI execution. Focus entries are the bridge between harness configuration and CI automation. They can also serve as the source of an agent-driven [sensor](sensors.md#focus) — referenced by name or inlined inside the sensor.
 
@@ -12,7 +12,7 @@ ynh uninstall local/focus-demo 2>/dev/null
 mkdir -p /tmp/ynh-tutorial
 ```
 
-## T14.1: Create a harness with focus entries
+## Create a harness with focus entries
 
 Create a harness with profiles and focus entries that reference them:
 
@@ -83,7 +83,7 @@ Key points:
 - The `docs` focus has no profile — it uses the base configuration
 - The `ci` profile uses `null` to remove the inherited `github` MCP server
 
-## T14.2: Validate focus entries
+## Validate focus entries
 
 ```bash
 ynd validate /tmp/ynh-tutorial/focus-harness
@@ -96,7 +96,7 @@ Expected:
 
 The validator checks that each focus entry has a non-empty `prompt` and that any referenced profile exists.
 
-## T14.3: Preview with --focus review
+## Preview with --focus review
 
 ```bash
 ynd preview /tmp/ynh-tutorial/focus-harness -v claude --focus review
@@ -114,7 +114,7 @@ ynd preview /tmp/ynh-tutorial/focus-harness -v claude --focus docs
 
 Expected: `.claude/hooks/hooks.json` has only the base `after_tool` hook (PostToolUse). `.claude/.mcp.json` has the `github` MCP server (inherited from base).
 
-## T14.4: Focus and profile are mutually exclusive
+## Focus and profile are mutually exclusive
 
 ```bash
 ynd preview /tmp/ynh-tutorial/focus-harness -v claude --focus review --profile ci
@@ -127,7 +127,7 @@ Error: cannot use --focus and --profile together
 
 A focus already includes a profile — specifying both is ambiguous.
 
-## T14.5: Unknown focus is an error
+## Unknown focus is an error
 
 ```bash
 ynd preview /tmp/ynh-tutorial/focus-harness -v claude --focus nonexistent
@@ -138,7 +138,7 @@ Expected error:
 Error: focus "nonexistent" not defined in harness
 ```
 
-## T14.6: Use YNH_FOCUS env var
+## Use YNH_FOCUS env var
 
 The `YNH_FOCUS` environment variable activates a focus without the flag:
 
@@ -148,7 +148,7 @@ YNH_FOCUS=review ynd preview /tmp/ynh-tutorial/focus-harness -v claude
 
 Expected: same output as `--focus review` — the `ci` profile's hooks merged with base, no MCP servers.
 
-## T14.7: Install and view focus in ynh info
+## Install and view focus in ynh info
 
 ```bash
 ynh install /tmp/ynh-tutorial/focus-harness
@@ -168,9 +168,9 @@ Profiles:
   ci    hooks: before_tool    mcp_servers: github
 ```
 
-## T14.5: Edit focuses from the command line
+## Edit focuses from the command line
 
-Hand-editing the manifest is fine for an author. For an interactive consumer (a structured consumer, scripts, ad-hoc tweaks) the CLI provides the same surface:
+Hand-editing the manifest is fine for an author. For an interactive consumer — a UI over the manifest, a script, an ad-hoc tweak — the CLI provides the same surface:
 
 ```bash
 # Add a focus
@@ -184,7 +184,7 @@ ynh focus update /tmp/ynh-tutorial/focus-harness security --clear-profile
 ynh focus remove /tmp/ynh-tutorial/focus-harness security
 ```
 
-`--profile` and `--clear-profile` are mutually exclusive on `update`. Adding a focus that references a profile name not defined in the manifest is rejected with an error. Removing a profile referenced by any focus is also rejected (the focus has to be updated or removed first) — see [Tutorial 13: Profiles §"Edit profiles from the command line"](tutorial/13-profiles.md#t136-edit-profiles-from-the-command-line).
+`--profile` and `--clear-profile` are mutually exclusive on `update`. Adding a focus that references a profile name not defined in the manifest is rejected with an error. Removing a profile referenced by any focus is also rejected (the focus has to be updated or removed first) — see [Profiles §"Edit profiles from the command line"](tutorial/profiles.md#edit-profiles-from-the-command-line).
 
 The first positional argument is either a filesystem path (as above, while authoring) or a canonical id (`local/focus-demo`, `github.com/<org>/<repo>/<name>`) once the harness is installed.
 
@@ -208,4 +208,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Tutorial 8: Project-Local Config](tutorial/15-project-local-config.md) — use `.ynh-plugin/plugin.json` in your project root for zero-install AI configuration.
+[Project-Local Config](tutorial/project-local-config.md) — use `.ynh-plugin/plugin.json` in your project root for zero-install configuration.

@@ -1,4 +1,4 @@
-# Tutorial 10: Hooks
+# Hooks
 
 Declare vendor-agnostic hooks in a harness and preview the assembled output for each vendor. Hooks bridge the guide layer to feedback sensors like linters and validators.
 
@@ -9,7 +9,7 @@ Declare vendor-agnostic hooks in a harness and preview the assembled output for 
 rm -rf /tmp/ynh-tutorial
 ```
 
-## T10.1: Add hooks to a harness
+## Add hooks to a harness
 
 Create a harness with hook declarations in `.ynh-plugin/plugin.json`:
 
@@ -64,7 +64,7 @@ ls -aR /tmp/ynh-tutorial/hook-harness/ | grep -v '^\.\{1,2\}$\|^\.:'
 # Expected lines include: .ynh-plugin, instructions.md, rules, safety.md
 ```
 
-## T10.2: Preview for Claude
+## Preview for Claude
 
 ```bash
 ynd preview /tmp/ynh-tutorial/hook-harness -v claude
@@ -103,7 +103,7 @@ Expected output includes `.claude/hooks/hooks.json` with Claude's three-level ho
 
 Note: Claude groups hooks under matcher objects and wraps each command in `{"type": "command", ...}`.
 
-## T10.3: Preview for Cursor
+## Preview for Cursor
 
 ```bash
 ynd preview /tmp/ynh-tutorial/hook-harness -v cursor
@@ -130,7 +130,7 @@ Expected output includes `.cursor/hooks.json` with Cursor's format:
 
 Note: Cursor uses different event names (`beforeShellExecution` / `afterFileEdit` vs `PreToolUse` / `PostToolUse`), includes a `version: 1` key, and a flat structure without matchers or type wrappers.
 
-## T10.4: Preview for Codex
+## Preview for Codex
 
 ```bash
 ynd preview /tmp/ynh-tutorial/hook-harness -v codex
@@ -169,7 +169,7 @@ Expected output includes `.codex/hooks.json` with Codex's three-level format (sa
 
 Note: Codex uses the same event names and three-level nesting as Claude — matcher objects wrapping hook arrays with `{"type": "command", ...}` entries.
 
-## T10.5: Write a blocking hook example
+## Write a blocking hook example
 
 Create a hook script that blocks destructive git operations with agent-legible remediation:
 
@@ -205,7 +205,7 @@ echo "Exit code: $?"
 # Expected: no output, Exit code: 0
 ```
 
-## T10.6: Compare hook config across vendors
+## Compare hook config across vendors
 
 Use `ynd diff` to see how the same hooks translate differently:
 
@@ -254,8 +254,8 @@ rm -rf /tmp/ynh-tutorial
 - `ynd diff` compares the assembled output across vendors side by side
 - Hooks can be edited from the CLI with `ynh hook add/remove` (top-level) and `ynh profile hook add/remove` (profile-level) — the same surface a GUI consumer drives
 
-Hooks often pair with sensors — a hook produces an artifact mid-session that a sensor declares a contract over. See [Tutorial 19: Sensors](tutorial/19-sensors.md).
+Hooks often pair with sensors — a hook produces an artifact mid-session that a sensor declares a contract over. See [Sensors](tutorial/sensors.md).
 
 ## Next
 
-[Tutorial 5: MCP Servers](tutorial/11-mcp-servers.md) — declare tool dependencies that vendors load automatically.
+[MCP Servers](tutorial/mcp-servers.md) — declare tool dependencies that vendors load automatically.

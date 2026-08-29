@@ -103,7 +103,7 @@ Not every command envelopes its result. The rule is:
 | **Envelope** (`capabilities` + `ynh_version` + payload) | Harness-centric reads where consumers gate on the wire contract before acting on the payload | `ynh ls`, `ynh info`, `ynh fork` |
 | **Bare value** (object or array, no envelope) | Config introspection and operation results — no per-call wire-contract gating needed; consumers call `ynh version --format json` once at startup | `ynh version`, `ynh paths`, `ynh vendors`, `ynh search`, `ynh sources list`, `ynh registry list`, `ynh sensors ls`, `ynh sensors show`, `ynh sensors run` |
 
-`ynh version --format json` is the canonical wire-contract probe. Consumers that need to gate on `capabilities` should call it once at startup rather than parse the envelope from every response. The envelope on harness reads is a convenience for tools whose entire job revolves around enumerating and acting on installed harnesses (a structured consumer-style consumers).
+`ynh version --format json` is the canonical wire-contract probe. Consumers that need to gate on `capabilities` should call it once at startup rather than parse the envelope from every response. The envelope on harness reads is a convenience for tools whose entire job revolves around enumerating and acting on installed harnesses (the kind whose entire job is that enumeration).
 
 This convention is additive-compat: bare-value commands may grow new top-level fields, and envelope commands may grow new envelope-level fields, without bumping the major contract version. New commands choose whichever shape fits — the table above lists the rule, not a closed set.
 

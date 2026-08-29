@@ -513,7 +513,7 @@ Test fixtures in `testdata/` simulate real-world sources:
 }
 ```
 
-`name` and `version` are required for installed harnesses. For project-local manifests (loaded via `--harness-file` or auto-discovered in cwd), they are optional. See the JSON schema at `docs/schema/harness.schema.json` for the full specification. See [Hooks](docs/hooks.md), [MCP Servers](docs/mcp.md), [Profiles](docs/profiles.md), and the focus tutorial (`docs/tutorial/14-focus.md`) for details.
+`name` and `version` are required for installed harnesses. For project-local manifests (loaded via `--harness-file` or auto-discovered in cwd), they are optional. See the JSON schema at `docs/schema/harness.schema.json` for the full specification. See [Hooks](../docs/hooks.md), [MCP Servers](../docs/mcp.md), [Profiles](../docs/profiles.md), and the focus tutorial (`docs/tutorial/focus.md`) for details.
 
 ### Delegates: remote-only
 
