@@ -134,7 +134,8 @@ exit=0
 ```
 
 `known` means failing, but only in ways the baseline already records — debt,
-not a regression. **Commit `.ynh/baseline/`**: the ratchet is a property of
+not a regression. **Commit `.ynh/baseline/`**: the
+[ratchet](harness-engineering.md#sensor-gate-ratchet-loop) is a property of
 the repository, not of one developer.
 
 It is one file per sensor:

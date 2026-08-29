@@ -404,8 +404,9 @@ declared command succeed", nothing more.
 
 Sensors are also what [`ynh agent run`](agent.md) iterates against between
 turns. The loop does not apply its own policy: it runs `ynh check --format
-json` and takes its verdict, so the ratchet and the tolerance rules are the
-same ones a human gets at a terminal.
+json` and takes its verdict, so the
+[ratchet](harness-engineering.md#sensor-gate-ratchet-loop) and the tolerance
+rules are the same ones a human gets at a terminal.
 
 ## `ynh check`
 

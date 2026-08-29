@@ -221,7 +221,8 @@ They apply the same policy to the same declarations and differ in who drives:
 | Typical use | a gate, in CI or a hook | unattended iteration |
 
 There is one policy, in one place. The loop shells out to `ynh check --format
-json` between turns rather than running sensors itself, so the ratchet, the
+json` between turns rather than running sensors itself, so the
+[ratchet](harness-engineering.md#sensor-gate-ratchet-loop), the
 tolerance rules and the verdict are the same ones a human gets at a terminal.
 
 The loop may not write the baseline. `--update-baseline` refuses inside an agent

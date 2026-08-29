@@ -19,6 +19,37 @@ And three regulation categories:
 2. **Architecture Fitness** — structural constraints (dependency boundaries, performance budgets)
 3. **Behaviour** — functional correctness (tests, mutation testing, specs)
 
+## Sensor, Gate, Ratchet, Loop
+
+Four terms carry most of the weight in the rest of these docs, and they collapse
+into one another easily. A reader who has finished [Sensors](sensors.md) and
+[Agent Loop](agent.md) can still be unsure how a gate differs from a ratchet.
+
+| Term | Definition | Implementation |
+|------|------------|----------------|
+| **Sensor** | One declared observation — a linter, a test suite, a build. Emits raw signal, passes no judgement | `Sensor{Category, Role, Tolerance, Source, Output}` |
+| **Gate** | Runs the sensors and decides pass or fail. What a pipeline blocks on | `ynh check` |
+| **Ratchet** | The gate's record of debt that already existed, so it fails only on *new* findings | `internal/baseline/` |
+| **Loop** | Prompts a model, lets it act, re-observes, halts on convergence or budget. **Consumes** a ratchet; it is not one | `internal/agent/` |
+
+**How the ratchet works.** Each line of sensor output is reduced to a
+fingerprint: paths are made relative to the repository root, line and column
+positions are collapsed to a placeholder, and what remains is hashed. Comparing
+a run against the record sorts findings into *new* (fails the build), *known*
+(forgiven) and *fixed* (debt paid off). Collapsing the positions is what makes
+it a ratchet rather than a tripwire — a finding does not become a different
+finding because someone inserted a line above it.
+
+**Why it is load-bearing.** Without a ratchet, "done" means zero findings. Every
+repository worth gating already carries thousands, so every run fails on
+arrival. The ratchet converts an unreachable absolute into a reachable relative
+one: *no findings that were not already there.*
+
+None of this is a ynh invention — ESLint and Checkstyle keep baseline files,
+SonarQube gates on "new code". What ynh adds is that a single recorded set is
+consumed by both the gate and the loop, so an agent is held to exactly the
+standard the pipeline enforces.
+
 ## Where YNH Fits
 
 YNH covers the **guide layer** thoroughly and **declares** the sensor layer:

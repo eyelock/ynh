@@ -247,7 +247,7 @@ outcome: the server cannot run without a credential the profile has withheld.
 
 `ynd export` leaves `${VAR}` references literal. Assembly for a local run
 resolves them because the config is about to be used by this operator on this
-machine; an export is a distributable artefact, and resolving there would bake
+machine; an export is a distributable artifact, and resolving there would bake
 whoever ran the export's credentials into a bundle meant to be shared.
 
 ### What this is not
