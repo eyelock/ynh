@@ -205,10 +205,11 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			s = merged
 		}
 		res := gate.Result{
-			Name:      name,
-			Kind:      s.Source.Kind(),
-			Category:  s.Category,
-			Tolerance: s.EffectiveTolerance(),
+			Name:        name,
+			Kind:        s.Source.Kind(),
+			Category:    s.Category,
+			Tolerance:   s.EffectiveTolerance(),
+			ToolVersion: toolVersion(s.VersionCommand, cwd),
 		}
 
 		if len(wanted) > 0 && !wanted[name] {

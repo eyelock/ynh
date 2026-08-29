@@ -433,6 +433,37 @@ turns. The loop does not apply its own policy: it runs `ynh check --format
 json` and takes its verdict, so the ratchet and the tolerance rules are the
 same ones a human gets at a terminal.
 
+### `version_command` — which tool produced this
+
+```json
+"lint": {
+  "tolerance": "blocking",
+  "source": { "command": "golangci-lint run ./..." },
+  "version_command": "golangci-lint --version",
+  "output": { "format": "text" }
+}
+```
+
+Optional. When declared, `ynh check` runs it and records the first line on the
+sensor's result as `tool_version`, in `--format json` and on the agent
+trajectory.
+
+It matters as soon as results are compared over time. A corpus graded across
+weeks cannot tell a genuine change in findings from the linter changing
+underneath it — those are the same observation without a recorded version.
+
+**Declared, not inferred.** Guessing `<first token> --version` reports make's
+version for `make lint`, not the linter's, and hangs outright on commands that
+do not support the flag.
+
+The probe is bounded at five seconds and cached for the life of the process, so
+an inner loop running the gate every turn does not re-learn a constant. **A
+failed probe is never a sensor failure** — a missing tool, a non-zero exit or a
+timeout simply leaves the version absent, which honestly says "cannot tell"
+rather than implying a stability nobody verified. The version is read from
+stdout; stderr counts only on a clean exit, so `java -version` works while
+`sh: foo: command not found` is not mistaken for a version.
+
 ## `ynh check`
 
 Runs every declared sensor and returns a gate verdict.

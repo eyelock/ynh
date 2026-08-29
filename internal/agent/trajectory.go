@@ -150,11 +150,14 @@ type SensorResultData struct {
 	// already in the baseline", which is the difference between a regression
 	// this run caused and debt it inherited. Empty for the convergence
 	// verifier, which does not go through the gate.
-	Status     string `json:"status,omitempty"`
-	KnownCount int    `json:"known_count,omitempty"`
-	NewCount   int    `json:"new_count,omitempty"`
-	Passed     bool   `json:"passed"`
-	Summary    string `json:"summary,omitempty"`
+	Status string `json:"status,omitempty"`
+	// ToolVersion is the version of the tool that produced this result, when
+	// the sensor declares a version_command.
+	ToolVersion string `json:"tool_version,omitempty"`
+	KnownCount  int    `json:"known_count,omitempty"`
+	NewCount    int    `json:"new_count,omitempty"`
+	Passed      bool   `json:"passed"`
+	Summary     string `json:"summary,omitempty"`
 }
 
 // TamperData is the payload for KindTamperDetected events. The fingerprints

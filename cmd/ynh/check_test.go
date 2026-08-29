@@ -655,3 +655,52 @@ func TestCheck_UnreadableBaselineIsFatalEvenWithNoBaseline(t *testing.T) {
 		t.Errorf("the untouched sensor's recorded debt was destroyed: %v", sErr)
 	}
 }
+
+// A corpus graded across weeks cannot defend a yield number without knowing
+// which tool produced each result: a change in findings and a change in the
+// linter are otherwise the same observation.
+func TestCheck_RecordsDeclaredToolVersion(t *testing.T) {
+	const harnessJSON = `{
+      "name": "tv", "version": "0.1.0", "default_vendor": "claude",
+      "sensors": {
+        "versioned":   {"source": {"command": "exit 0"}, "output": {"format": "text"},
+                        "version_command": "printf 'demolint 4.2.0\\n'"},
+        "unversioned": {"source": {"command": "exit 0"}, "output": {"format": "text"}},
+        "broken":      {"source": {"command": "exit 0"}, "output": {"format": "text"},
+                        "version_command": "definitely-not-a-real-binary-xyz --version"}
+      }
+    }`
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	t.Setenv("CI", "")
+	t.Setenv("YNH_AGENT_SESSION", "")
+	installListTestHarness(t, home, "tv", harnessJSON)
+
+	var out bytes.Buffer
+	if err := cmdCheck([]string{"local/tv", "--cwd", t.TempDir(), "--format", "json"},
+		&out, io.Discard); err != nil {
+		t.Fatalf("all sensors pass, so the gate should not block: %v", err)
+	}
+	var env gate.Envelope
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+
+	got := map[string]string{}
+	for _, s := range env.Sensors {
+		got[s.Name] = s.ToolVersion
+	}
+	if got["versioned"] != "demolint 4.2.0" {
+		t.Errorf("versioned tool_version = %q, want %q", got["versioned"], "demolint 4.2.0")
+	}
+	// Absent says "cannot tell", which is honest. A placeholder would imply
+	// stability nobody verified.
+	if got["unversioned"] != "" {
+		t.Errorf("a sensor declaring no version_command must carry none, got %q", got["unversioned"])
+	}
+	// A broken probe must not fail the sensor, and must not record the
+	// shell's error message as if it were a version.
+	if got["broken"] != "" {
+		t.Errorf("a failed probe must record nothing, got %q", got["broken"])
+	}
+}

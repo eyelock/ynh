@@ -8,7 +8,7 @@
     "Check": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Check success payload. Emitted for both pass and blocked verdicts — a blocked gate is a successful run that found failures, not an execution error.",
+      "description": "Check success payload. Emitted for both pass and blocked verdicts \u2014 a blocked gate is a successful run that found failures, not an execution error.",
       "properties": {
         "capabilities": {
           "type": "string",
@@ -125,7 +125,7 @@
             "advisory",
             "report"
           ],
-          "description": "Effective tolerance — the default (blocking) is materialised here rather than omitted."
+          "description": "Effective tolerance \u2014 the default (blocking) is materialised here rather than omitted."
         },
         "status": {
           "type": "string",
@@ -166,7 +166,11 @@
         },
         "new_output": {
           "type": "string",
-          "description": "Only the output lines absent from the baseline — what the author is actually being asked to fix."
+          "description": "Only the output lines absent from the baseline \u2014 what the author is actually being asked to fix."
+        },
+        "tool_version": {
+          "type": "string",
+          "description": "Version of the tool that produced this result, from the sensor's declared version_command. Absent when none is declared or the probe failed \u2014 which says \"cannot tell\" rather than implying a stability nobody verified."
         }
       },
       "required": [
@@ -193,7 +197,7 @@
         },
         "fixed": {
           "type": "integer",
-          "description": "Baseline entries that no longer fail — debt paid off. Zero after --update-baseline, which reports what it recorded rather than comparing."
+          "description": "Baseline entries that no longer fail \u2014 debt paid off. Zero after --update-baseline, which reports what it recorded rather than comparing."
         },
         "stale": {
           "type": "boolean",

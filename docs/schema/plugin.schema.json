@@ -191,6 +191,10 @@
         },
         "output": {
           "$ref": "#/$defs/sensor_output"
+        },
+        "version_command": {
+          "type": "string",
+          "description": "Optional shell command that prints the version of the tool this sensor runs, e.g. \"golangci-lint --version\". Recorded on the result so a corpus graded across weeks can tell a genuine change in findings from the linter changing underneath it. Declared rather than inferred: guessing `<first token> --version` is wrong for a wrapper like `make lint`, and hangs on commands that do not support it. Failure to run it is never a sensor failure \u2014 the version is simply absent."
         }
       }
     },

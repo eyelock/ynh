@@ -46,9 +46,19 @@ type Sensor struct {
 	// Empty means "blocking" — the safe default for a gate. This is the one
 	// piece of pass/fail policy ynh owns; everything richer (thresholds,
 	// severity filters, convergence) still belongs to a loop driver.
-	Tolerance string       `json:"tolerance,omitempty"`
-	Source    SensorSource `json:"source"`
-	Output    SensorOutput `json:"output"`
+	Tolerance string `json:"tolerance,omitempty"`
+	// VersionCommand prints the version of the tool this sensor runs, e.g.
+	// "golangci-lint --version".
+	//
+	// Declared rather than inferred. Guessing `<first token> --version` is
+	// wrong for a wrapper — `make lint` would report make's version, not the
+	// linter's — and hangs outright on commands that do not support the flag.
+	// A corpus graded across weeks cannot defend a yield number without it: a
+	// change in findings and a change in the tool are otherwise the same
+	// observation.
+	VersionCommand string       `json:"version_command,omitempty"`
+	Source         SensorSource `json:"source"`
+	Output         SensorOutput `json:"output"`
 }
 
 // ValidSensorTolerances lists how `ynh check` treats a failing sensor.

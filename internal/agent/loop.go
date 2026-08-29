@@ -841,14 +841,15 @@ func RunLoop(opts RunOptions) error {
 					continue
 				}
 				_ = traj.Emit(KindSensorResult, turnN, SensorResultData{
-					Name:       r.Name,
-					Kind:       r.Kind,
-					Status:     r.Status,
-					ExitCode:   r.ExitCode,
-					DurationMS: r.DurationMS,
-					Tolerance:  r.Tolerance,
-					KnownCount: r.KnownCount,
-					NewCount:   r.NewCount,
+					Name:        r.Name,
+					Kind:        r.Kind,
+					Status:      r.Status,
+					ExitCode:    r.ExitCode,
+					DurationMS:  r.DurationMS,
+					Tolerance:   r.Tolerance,
+					ToolVersion: r.ToolVersion,
+					KnownCount:  r.KnownCount,
+					NewCount:    r.NewCount,
 					// Passed stays "did this sensor pass", not "did it block".
 					// Tolerance is what explains a failure that did not gate;
 					// folding the two together would hide advisory failures from
