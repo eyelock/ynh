@@ -41,6 +41,7 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 | 16 | [Docker Images](tutorial/09-docker-image.md) | Build harness appliance images for CI/CD |
 | 17 | [Namespacing & Migration](tutorial/18-namespacing-and-migration.md) | Resolve name collisions across registries and migrate legacy installs |
 | 18 | [Sensors](tutorial/19-sensors.md) | Declare observation surfaces a loop driver consumes |
+| 19 | [Gating with `ynh check`](tutorial/20-check.md) | Run sensors as a gate, and baseline pre-existing failures |
 
 ## Manual Test Plan
 
