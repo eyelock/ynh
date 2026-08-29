@@ -4,7 +4,8 @@
 
 ```
 my-harness/
-├── .harness.json           # required - name, version, vendor, includes, delegates
+├── .ynh-plugin/
+│   └── plugin.json     # required - name, version, vendor, includes, delegates
 ├── AGENTS.md              # optional - read natively by most vendors; ynh shims Claude via @-import
 ├── skills/
 │   └── <name>/
@@ -17,11 +18,11 @@ my-harness/
     └── <name>.md
 ```
 
-## .harness.json
+## .ynh-plugin/plugin.json
 
 ```json
 {
-  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "david",
   "version": "0.1.0",
   "description": "David's coding harness",

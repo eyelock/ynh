@@ -14,12 +14,17 @@ Read these references to understand the current formats and conventions:
 1. Read `references/harness-format.md` for manifest syntax, directory structure, and install/run commands
 2. Read `references/artifact-formats.md` for skill, agent, rule, and command formats
 
-Also read the working examples in `testdata/sample-harness/` to see realistic artifacts:
-- `testdata/sample-harness/.harness.json`
-- `testdata/sample-harness/skills/hello/SKILL.md`
-- `testdata/sample-harness/agents/code-reviewer.md`
-- `testdata/sample-harness/rules/be-concise.md`
-- `testdata/sample-harness/commands/check.md`
+Also read the working examples in `testdata/export-harness/` to see realistic artifacts:
+- `testdata/export-harness/.ynh-plugin/plugin.json`
+- `testdata/export-harness/skills/dev-quality/SKILL.md`
+- `testdata/export-harness/agents/planner.md`
+- `testdata/export-harness/rules/be-concise.md`
+- `testdata/export-harness/commands/check.md`
+
+Use `export-harness`, not `sample-harness`. The `sample-harness`, `team-harness`
+and `composed-harness` fixtures still carry a top-level `.harness.json` on
+purpose — they are the inputs that exercise `ynd migrate`. Reading them as
+authoring examples teaches the format ynh migrates away from.
 
 ## Step 1: Harness name
 
@@ -54,7 +59,8 @@ Create the directory structure based on their choices:
 
 ```
 <output-dir>/
-├── .harness.json
+├── .ynh-plugin/
+│   └── plugin.json
 ├── AGENTS.md            (optional - read natively by most vendors; ynh shims Claude via @-import)
 ├── skills/              (if selected)
 │   └── <example>/
@@ -67,11 +73,11 @@ Create the directory structure based on their choices:
     └── <example>.md
 ```
 
-For `.harness.json`:
+For `.ynh-plugin/plugin.json`:
 
 ```json
 {
-  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "<their-name>",
   "version": "0.1.0",
   "description": "<their description>",
@@ -114,6 +120,6 @@ If `ynh` isn't on their PATH, remind them about the build step (`make build`) an
 
 After the harness is working, mention:
 
-1. **Add external skills** - They can pull skills from any Git repo by adding `includes` to `.harness.json`. See `references/harness-format.md` for the syntax.
+1. **Add external skills** - They can pull skills from any Git repo by adding `includes` to `.ynh-plugin/plugin.json`. See `references/harness-format.md` for the syntax.
 2. **Team setup** - When ready, they can use `/ynh-team-setup` to create a team harness with delegation.
 3. **Private repos** - If they need private Git repos, SSH URLs (`git@github.com:...`) are recommended. ynh delegates to the local `git` binary - if `git clone` works, ynh works.
