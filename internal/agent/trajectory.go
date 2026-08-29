@@ -100,8 +100,11 @@ type SensorResultData struct {
 	Role       string `json:"role,omitempty"`
 	ExitCode   int    `json:"exit_code,omitempty"`
 	DurationMS int64  `json:"duration_ms"`
-	Passed     bool   `json:"passed"`
-	Summary    string `json:"summary,omitempty"`
+	// Tolerance is why a failing sensor may not have gated: advisory and
+	// report sensors are non-gating by declaration.
+	Tolerance string `json:"tolerance,omitempty"`
+	Passed    bool   `json:"passed"`
+	Summary   string `json:"summary,omitempty"`
 }
 
 // BudgetType identifies which budget limit was hit.

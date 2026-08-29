@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/eyelock/ynh/internal/assembler"
+	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
@@ -151,6 +152,10 @@ func RunLoop(opts RunOptions) error {
 	// ── Resume state ──────────────────────────────────────────────────────────
 	var resumeCP *Checkpoint
 	resuming := opts.Resume != ""
+	// A resume always expected verification — the original invocation had a
+	// harness or it would not have been checkpointing sensor state — so a
+	// resume that cannot restore one must not be able to claim convergence.
+	verificationExpected := opts.HarnessName != "" || resuming
 	if resuming {
 		var rerr error
 		resumeCP, rerr = readCheckpoint(opts.Resume)
@@ -161,6 +166,35 @@ func RunLoop(opts RunOptions) error {
 		// can pass just --resume <dir>.
 		if opts.EmitJSONL == "" {
 			opts.EmitJSONL = filepath.Join(opts.Resume, "trajectory.jsonl")
+		}
+		// Restore the run's identity. A resume that omits --harness previously
+		// continued with no harness, therefore no sensors, and reported
+		// converged — the safety verdict was forgeable by leaving out a flag.
+		if opts.HarnessName == "" {
+			opts.HarnessName = resumeCP.HarnessName
+		}
+		if opts.Profile == "" {
+			opts.Profile = resumeCP.Profile
+		}
+		if opts.ConvergenceSensor == "" {
+			opts.ConvergenceSensor = resumeCP.ConvergenceSensor
+		}
+		if opts.MaxTurns == 0 {
+			opts.MaxTurns = resumeCP.MaxTurns
+		}
+		if opts.MaxTokens == 0 {
+			opts.MaxTokens = resumeCP.MaxTokens
+		}
+		verificationExpected = true
+		// A checkpoint written before these fields existed has none to restore.
+		// Warn rather than refuse: failing here would break resumes that are
+		// otherwise fine, and it is no longer load-bearing for safety —
+		// checkConvergence declines to converge on an empty result set, so the
+		// run can end un-converged but never falsely converged.
+		if opts.HarnessName == "" {
+			_, _ = fmt.Fprintln(opts.Stderr,
+				"warning: this checkpoint records no harness, so no sensors will run. "+
+					"This run cannot converge — pass --harness <name> to resume with verification.")
 		}
 	}
 
@@ -356,9 +390,14 @@ func RunLoop(opts RunOptions) error {
 	// cp is mutated and re-saved at each turn boundary; ResumeToken/Budget are
 	// refreshed from live state on every write.
 	cp := &Checkpoint{
-		SessionID: sessionID,
-		Backend:   wb.Name(),
-		Task:      opts.Task,
+		SessionID:         sessionID,
+		Backend:           wb.Name(),
+		Task:              opts.Task,
+		HarnessName:       opts.HarnessName,
+		Profile:           opts.Profile,
+		ConvergenceSensor: opts.ConvergenceSensor,
+		MaxTurns:          opts.MaxTurns,
+		MaxTokens:         opts.MaxTokens,
 	}
 	planIterations := 0
 	if resuming {
@@ -656,6 +695,12 @@ func RunLoop(opts RunOptions) error {
 				_, _ = fmt.Fprintf(opts.Stderr, "sensor %q error: %v\n", name, err)
 				result = &SensorResult{Name: name, ExitCode: -1}
 			}
+			// Tolerance comes from the declaration rather than the sensor-run
+			// wire format, which does not carry it. Reading it here keeps the
+			// loop's gating policy identical to `ynh check`'s.
+			if harnessObj != nil {
+				result.Tolerance = harnessObj.Sensors[name].EffectiveTolerance()
+			}
 			sensorResults = append(sensorResults, result)
 			_ = traj.Emit(KindSensorResult, turnN, SensorResultData{
 				Name:       result.Name,
@@ -663,13 +708,14 @@ func RunLoop(opts RunOptions) error {
 				Role:       result.Role,
 				ExitCode:   result.ExitCode,
 				DurationMS: result.DurationMS,
+				Tolerance:  result.Tolerance,
 				Passed:     result.Passed(),
 				Summary:    result.Summary(),
 			})
 		}
 
 		// ── Check convergence ─────────────────────────────────────────────────
-		if converged, feedback := checkConvergence(sensorResults, convergenceSensor, ynh, opts.HarnessName, opts.WorktreeDir, traj, turnN); converged {
+		if converged, feedback := checkConvergence(sensorResults, convergenceSensor, ynh, opts.HarnessName, opts.WorktreeDir, traj, turnN, verificationExpected); converged {
 			_ = traj.Emit(KindConverged, turnN, nil)
 			_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitConverged, TotalTurns: budget.Turns(), TotalTokens: budget.Tokens()})
 			return nil
@@ -723,22 +769,52 @@ func RunLoop(opts RunOptions) error {
 // checkConvergence returns (converged=true, feedback="") when all sensors
 // pass and the convergence sensor (if any) confirms done.
 // Returns (converged=false, feedback=<synthesized feedback>) when work remains.
+// verificationExpected is true when the run was configured to verify itself —
+// a harness was named, or this is a resume that should have restored one.
 func checkConvergence(
 	results []*SensorResult,
 	convergenceSensor, ynh, harnessName, cwd string,
 	traj *TrajectoryWriter,
 	turnN int,
+	verificationExpected bool,
 ) (bool, string) {
-	// Check all regular sensors.
-	allPassed := true
+	// Convergence needs evidence when verification was asked for. An empty
+	// result set made allPassed vacuously true, so a run whose harness went
+	// missing — which is what --resume without --harness produced — reported
+	// converged and exited 0 after one turn, having verified nothing.
+	//
+	// The distinction matters: a run started with no harness never asked to be
+	// verified and is just an agent runner, so the worker declaring itself done
+	// is the only signal there is. A run that expected a harness and has no
+	// results has lost something, and must not claim a verdict it cannot back.
+	if verificationExpected && len(results) == 0 {
+		return false, "verification was expected but no sensors ran, so convergence cannot be confirmed"
+	}
+
+	// Only blocking sensors gate. `report` is documented as pure observation
+	// and `advisory` as non-gating, but the loop treated every result alike,
+	// so a report sensor that never passes blocked convergence forever — the
+	// loop and `ynh check` applied contradictory policy to one declaration.
+	gating := make([]*SensorResult, 0, len(results))
 	for _, r := range results {
+		if r.Tolerance == "advisory" || r.Tolerance == "report" {
+			continue
+		}
+		gating = append(gating, r)
+	}
+	if verificationExpected && len(results) > 0 && len(gating) == 0 {
+		return false, "every sensor is advisory or report, so nothing gates convergence"
+	}
+
+	allPassed := true
+	for _, r := range gating {
 		if !r.Passed() {
 			allPassed = false
 		}
 	}
 
 	if !allPassed {
-		return false, synthesizeFeedback(results)
+		return false, synthesizeFeedback(gating)
 	}
 
 	// All regular sensors green — consult convergence-verifier if declared.
@@ -829,6 +905,10 @@ func waitForApproval(ctrl *ControlReader, approveAction, rejectAction ControlAct
 // a temporary directory. The caller is responsible for os.RemoveAll on the
 // returned path.
 func assembleHarness(h *harness.Harness, backendName string) (string, error) {
+	cfg, cfgErr := config.Load()
+	if cfgErr != nil {
+		return "", fmt.Errorf("loading config: %w", cfgErr)
+	}
 	adapter, err := vendor.Get(backendName)
 	if err != nil {
 		return "", fmt.Errorf("vendor %q: %w", backendName, err)
@@ -839,7 +919,20 @@ func assembleHarness(h *harness.Harness, backendName string) (string, error) {
 		return "", fmt.Errorf("creating temp dir: %w", err)
 	}
 
-	content := []resolver.ResolvedContent{{BasePath: h.Dir}}
+	// Resolve includes exactly as `ynh run` does. Assembling from h.Dir alone
+	// silently dropped every base and profile include, so a harness composed
+	// from other repositories ran the loop with none of that content — and
+	// profile-level artifact swapping was a no-op.
+	resolved, resErr := resolver.Resolve(h, cfg)
+	if resErr != nil {
+		_ = os.RemoveAll(dir)
+		return "", fmt.Errorf("resolving includes: %w", resErr)
+	}
+	var content []resolver.ResolvedContent
+	for _, r := range resolved {
+		content = append(content, r.Content)
+	}
+	content = append(content, resolver.ResolvedContent{BasePath: h.Dir})
 
 	if err := assembler.AssembleTo(dir, adapter, content); err != nil {
 		_ = os.RemoveAll(dir)
