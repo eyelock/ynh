@@ -488,3 +488,67 @@ func TestSet_KeepsTimestampWhenFailuresUnchanged(t *testing.T) {
 		t.Error("accepting a new failure is a new acceptance and must be timestamped as one")
 	}
 }
+
+func TestCountLines_CountsDuplicatesSeparately(t *testing.T) {
+	// The whole point: two identical findings count twice. Fingerprints
+	// deduplicate them into one.
+	out := "a.go:12: nolint\na.go:99: nolint\n\n  \nb.go:1: nolint\n"
+	if got := CountLines(out); got != 3 {
+		t.Errorf("CountLines = %d, want 3 (blank and whitespace lines ignored)", got)
+	}
+	if got := len(Fingerprints(out, "")); got != 2 {
+		t.Errorf("Fingerprints = %d, want 2 — this is the gap CountLines closes", got)
+	}
+}
+
+// The gaming vector for a ratchet is suppression, not relocation. An agent
+// that adds //nolint beside an existing one must not pass.
+func TestCompareTotals(t *testing.T) {
+	b := &Baseline{Harnesses: map[string]HarnessBaseline{}}
+	b.Set("h", "sup", SensorBaseline{Status: "fail", Total: 3})
+
+	t.Run("unchanged is forgiven", func(t *testing.T) {
+		c := b.CompareTotals("h", "sup", 3)
+		if c.Regressed || c.CountDelta != 0 || c.Known != 3 {
+			t.Errorf("got %+v", c)
+		}
+	})
+	t.Run("one more is a regression, and says how much", func(t *testing.T) {
+		c := b.CompareTotals("h", "sup", 4)
+		if !c.Regressed || c.CountDelta != 1 {
+			t.Errorf("got %+v, want regressed with delta 1", c)
+		}
+	})
+	t.Run("fewer is progress", func(t *testing.T) {
+		c := b.CompareTotals("h", "sup", 1)
+		if c.Regressed {
+			t.Error("removing suppressions must not be a regression")
+		}
+		if c.Fixed != 2 || c.CountDelta != -2 {
+			t.Errorf("got %+v, want 2 fixed and delta -2", c)
+		}
+	})
+	t.Run("unrecorded sensor forgives nothing", func(t *testing.T) {
+		c := b.CompareTotals("h", "never-seen", 2)
+		if !c.Regressed || c.CountDelta != 2 {
+			t.Errorf("got %+v — a sensor absent from the baseline was passing when it was taken", c)
+		}
+	})
+	t.Run("unrecorded and clean is fine", func(t *testing.T) {
+		if c := b.CompareTotals("h", "never-seen", 0); c.Regressed {
+			t.Errorf("got %+v", c)
+		}
+	})
+}
+
+// Record must capture the raw total, not only the distinct count, or a
+// count-ratchet sensor has nothing to measure against.
+func TestRecord_CapturesTheRawTotal(t *testing.T) {
+	sb := Record("fail", "a.go:12: nolint\na.go:99: nolint\n", "")
+	if sb.Total != 2 {
+		t.Errorf("Total = %d, want 2", sb.Total)
+	}
+	if sb.Count != 1 {
+		t.Errorf("Count = %d, want 1 — distinct lines, which is why Total is needed", sb.Count)
+	}
+}

@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strings"
 )
 
 // HarnessJSON represents the .harness.json manifest — single source of truth.
@@ -56,9 +58,67 @@ type Sensor struct {
 	// A corpus graded across weeks cannot defend a yield number without it: a
 	// change in findings and a change in the tool are otherwise the same
 	// observation.
-	VersionCommand string       `json:"version_command,omitempty"`
-	Source         SensorSource `json:"source"`
-	Output         SensorOutput `json:"output"`
+	VersionCommand string `json:"version_command,omitempty"`
+	// Reference names a fixture this sensor must produce a known result on.
+	//
+	// Nothing else verifies that a sensor still detects what it claims to. A
+	// sensor is a command plus an expectation about its exit code; if the
+	// command quietly stops examining anything — a config change excluding a
+	// directory, an upgrade renaming a rule, a path that no longer matches —
+	// it exits 0 and the gate reports green. Everything else depends on
+	// sensors telling the truth: the ratchet forgives against their output,
+	// the loop converges on their verdicts, and any yield figure derives from
+	// them.
+	Reference *SensorReference `json:"reference,omitempty"`
+	// Ratchet selects how the baseline forgives this sensor's failures.
+	//
+	// "fingerprint" (the default) matches individual findings, so a fixed one
+	// stops being forgiven and a new one is flagged wherever it appears.
+	//
+	// "count" ratchets the total instead. It exists because fingerprints
+	// normalise line numbers and deduplicate, so a second identical finding in
+	// a file that already has one produces no new fingerprint and no change in
+	// the distinct-line count — it is invisible. That is the wrong answer for
+	// anything whose *quantity* is the finding, suppression directives above
+	// all: the gaming vector for a ratchet is suppression, not relocation, and
+	// an agent that adds `//nolint` beside an existing one must not pass.
+	Ratchet string       `json:"ratchet,omitempty"`
+	Source  SensorSource `json:"source"`
+	Output  SensorOutput `json:"output"`
+}
+
+// SensorReference is a fixture with a known answer, used by
+// `ynh check --calibrate` to prove a sensor still observes.
+type SensorReference struct {
+	// Path is the fixture directory the sensor runs against, relative to the
+	// harness. It must live outside the agent's write path: a reference an
+	// agent can edit calibrates nothing.
+	Path string `json:"path"`
+	// Expect is the result the fixture must produce. "fail" is the case that
+	// matters — a sensor that passes a fixture designed to trip it has stopped
+	// observing. "pass" catches the opposite failure, a sensor that fires on
+	// clean input.
+	Expect string `json:"expect"`
+}
+
+// ValidSensorRatchets lists how a sensor's baseline forgives failures.
+var ValidSensorRatchets = map[string]bool{
+	"fingerprint": true,
+	"count":       true,
+}
+
+// EffectiveRatchet returns the ratchet mode, defaulting to fingerprint.
+func (s Sensor) EffectiveRatchet() string {
+	if s.Ratchet == "" {
+		return "fingerprint"
+	}
+	return s.Ratchet
+}
+
+// ValidSensorExpectations lists the answers a reference fixture may declare.
+var ValidSensorExpectations = map[string]bool{
+	"fail": true,
+	"pass": true,
 }
 
 // ValidSensorTolerances lists how `ynh check` treats a failing sensor.
@@ -229,6 +289,33 @@ func ValidateSensors(sensors map[string]Sensor, profileNames, focusNames map[str
 		// StatusReported and never StatusPass. Refusing it here as well means
 		// the author is told at `ynd validate` time rather than discovering it
 		// as a run that silently never converges.
+		if s.Ratchet != "" && !ValidSensorRatchets[s.Ratchet] {
+			issues = append(issues, fmt.Sprintf("%s ratchet %q must be one of fingerprint, count", prefix, s.Ratchet))
+		}
+		if s.Ratchet == "count" && s.Source.Kind() != "" && s.Source.Kind() != "command" {
+			issues = append(issues, fmt.Sprintf(
+				"%s ratchet count requires a command source: only a command sensor produces countable findings", prefix))
+		}
+		if s.Reference != nil {
+			if s.Reference.Path == "" {
+				issues = append(issues, fmt.Sprintf("%s reference.path must be non-empty", prefix))
+			}
+			if strings.HasPrefix(s.Reference.Path, "/") || strings.Contains(s.Reference.Path, "..") {
+				issues = append(issues, fmt.Sprintf(
+					"%s reference.path %q must be a relative path inside the harness", prefix, s.Reference.Path))
+			}
+			if !ValidSensorExpectations[s.Reference.Expect] {
+				issues = append(issues, fmt.Sprintf(
+					"%s reference.expect %q must be one of fail, pass", prefix, s.Reference.Expect))
+			}
+			// Only a command sensor produces a verdict, so only a command
+			// sensor can be calibrated against one. Same rule that stops a
+			// files sensor converging a run.
+			if k := s.Source.Kind(); k != "" && k != "command" {
+				issues = append(issues, fmt.Sprintf(
+					"%s reference requires a command source: no verdict is derivable from a %s sensor", prefix, k))
+			}
+		}
 		if s.Role == "convergence-verifier" && s.Source.Kind() == "files" {
 			issues = append(issues, fmt.Sprintf(
 				"%s role convergence-verifier requires a command source: no verdict is derivable from a file glob", prefix))
@@ -692,6 +779,66 @@ var envRef = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 //   - A reference to an allowed-but-unset variable is also an error. Emitting
 //     an empty credential produces a failure far from its cause, and a control
 //     that silently degrades is the failure this whole area exists to avoid.
+//
+// UndeclaredMCPEnvRefs lists ${VAR} references in MCP env and headers that the
+// harness does not declare in env_passthrough.
+//
+// It checks *declaration* only, never whether a variable is set. An unset
+// variable is legitimately a run-time condition; an undeclared one never is.
+// That is what makes this safe to run before assembly, where ExpandMCPEnv
+// cannot: the same rule, minus the part that needs a live environment.
+//
+// It returns nothing when the harness declares no env_passthrough at all.
+// Such a harness may be authored purely for distribution: `ynd export`
+// deliberately leaves ${VAR} literal so the exporter's credentials are not
+// baked into a shared bundle, and strips env_passthrough from the artifact
+// entirely — it is a local-assembly allowlist and never reaches the consumer.
+// Flagging that case would redden a harness that works, and demand an
+// allowlist with no effect on the thing it ships.
+//
+// A harness that declares an allowlist and misses one entry is the realistic
+// mistake, and that is what this catches.
+func UndeclaredMCPEnvRefs(servers map[string]MCPServer, allowed []string) []string {
+	if len(servers) == 0 || len(allowed) == 0 {
+		return nil
+	}
+	allow := make(map[string]bool, len(allowed))
+	for _, name := range allowed {
+		allow[name] = true
+	}
+
+	var issues []string
+	names := make([]string, 0, len(servers))
+	for name := range servers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		s := servers[name]
+		for _, field := range []struct {
+			label string
+			m     map[string]string
+		}{{"env", s.Env}, {"headers", s.Headers}} {
+			keys := make([]string, 0, len(field.m))
+			for k := range field.m {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				for _, match := range envRef.FindAllStringSubmatch(field.m[k], -1) {
+					if v := match[1]; !allow[v] {
+						issues = append(issues, fmt.Sprintf(
+							"mcp server %q: %s.%s references ${%s}, which is not in %s",
+							name, field.label, k, v, EnvPassthroughField))
+					}
+				}
+			}
+		}
+	}
+	return issues
+}
+
 func ExpandMCPEnv(servers map[string]MCPServer, allowed []string, lookup func(string) (string, bool)) (map[string]MCPServer, error) {
 	if len(servers) == 0 {
 		return servers, nil

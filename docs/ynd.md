@@ -39,7 +39,29 @@ ynd lint --harness ./my-harness  # explicit harness flag
 
 Validate harness structure: required files, frontmatter fields, directory layout,
 and JSON Schema conformance (`plugin.json` against `plugin.schema.json`;
-`.ynh-plugin/marketplace.json` against `marketplace.schema.json`).
+`.ynh-plugin/marketplace.json` against `marketplace.schema.json`), plus the
+cross-field rules assembly enforces that a schema cannot express.
+
+One of those is worth naming. An MCP `env`/`headers` value referencing
+`${VAR}` that the harness does not list in `env_passthrough` **cannot
+assemble** — `ynd preview`, `ynh run` and `ynh agent run` all reject it. It
+used to pass `validate` and `lint` and fail only at run time, which is worst
+under automation: an unattended agent run does its setup and dies on a config
+error a pre-flight check could have caught.
+
+`validate` checks **declaration only**, never whether the variable is set. An
+unset variable is legitimately a run-time condition — a developer without the
+credential still needs validation to pass; an undeclared one never is.
+
+The check is **silent when a harness declares no `env_passthrough` at all**.
+Such a harness may be authored purely for distribution: `ynd export`
+deliberately leaves `${VAR}` literal so the exporter's credentials are not
+baked into a shared bundle, and strips `env_passthrough` from the artifact
+entirely — it is a local-assembly allowlist that never reaches the consumer,
+whose own CLI resolves the variable. Flagging that would redden a harness that
+works, and demand an allowlist with no effect on the thing it ships. A harness
+that declares an allowlist and misses an entry is the realistic mistake, and
+that is what this catches.
 
 When given a directory, validates all harnesses found within it and also checks
 for a `.ynh-plugin/marketplace.json` at the root of that directory.

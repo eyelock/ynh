@@ -43,7 +43,8 @@
       "new_count": 1,
       "known_count": 3,
       "new_output": "internal/foo.go:12: exported func Bar should have comment",
-      "tool_version": "golangci-lint has version 1.62.0"
+      "tool_version": "golangci-lint has version 1.62.0",
+      "count_delta": 2
     },
     {
       "name": "review",

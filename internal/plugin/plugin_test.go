@@ -571,3 +571,171 @@ func TestValidate_ConvergenceVerifierRejectsFilesSource(t *testing.T) {
 		})
 	}
 }
+
+// A reference an agent can edit calibrates nothing, and only a command sensor
+// produces a verdict to calibrate against.
+func TestValidate_SensorReference(t *testing.T) {
+	cmdSrc := SensorSource{Command: "make lint"}
+	out := SensorOutput{Format: "text"}
+	cases := []struct {
+		name   string
+		sensor Sensor
+		want   string // substring the issue must contain; "" means no issue
+	}{
+		{"valid fail reference", Sensor{Source: cmdSrc, Output: out,
+			Reference: &SensorReference{Path: "testdata/calibration/lint", Expect: "fail"}}, ""},
+		{"valid pass reference", Sensor{Source: cmdSrc, Output: out,
+			Reference: &SensorReference{Path: "testdata/clean", Expect: "pass"}}, ""},
+		{"empty path", Sensor{Source: cmdSrc, Output: out,
+			Reference: &SensorReference{Expect: "fail"}}, "reference.path must be non-empty"},
+		{"absolute path escapes the harness", Sensor{Source: cmdSrc, Output: out,
+			Reference: &SensorReference{Path: "/etc", Expect: "fail"}}, "relative path inside the harness"},
+		{"traversal escapes the harness", Sensor{Source: cmdSrc, Output: out,
+			Reference: &SensorReference{Path: "../../elsewhere", Expect: "fail"}}, "relative path inside the harness"},
+		{"unknown expectation", Sensor{Source: cmdSrc, Output: out,
+			Reference: &SensorReference{Path: "testdata/x", Expect: "maybe"}}, "must be one of fail, pass"},
+		{"files sensor cannot be calibrated", Sensor{Source: SensorSource{Files: []string{"*.json"}}, Output: out,
+			Reference: &SensorReference{Path: "testdata/x", Expect: "fail"}}, "requires a command source"},
+		{"no reference is legal", Sensor{Source: cmdSrc, Output: out}, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			issues := ValidateSensors(map[string]Sensor{"s": c.sensor}, nil, nil)
+			found := ""
+			for _, i := range issues {
+				if c.want != "" && strings.Contains(i, c.want) {
+					found = i
+				}
+			}
+			if c.want == "" {
+				for _, i := range issues {
+					if strings.Contains(i, "reference") {
+						t.Errorf("unexpected reference issue: %s", i)
+					}
+				}
+				return
+			}
+			if found == "" {
+				t.Errorf("expected an issue containing %q, got %v", c.want, issues)
+			}
+		})
+	}
+}
+
+// The rule ExpandMCPEnv enforces at assembly, minus the part that needs a live
+// environment — so it can run before assembly, where the failure is cheap.
+func TestUndeclaredMCPEnvRefs(t *testing.T) {
+	srv := func(headers, env map[string]string) map[string]MCPServer {
+		return map[string]MCPServer{"s": {URL: "https://x", Headers: headers, Env: env}}
+	}
+	cases := []struct {
+		name    string
+		servers map[string]MCPServer
+		allowed []string
+		want    int
+	}{
+		{
+			name:    "declared and missing one — the realistic author slip",
+			servers: srv(map[string]string{"Authorization": "Bearer ${MISSING}"}, nil),
+			allowed: []string{"KNOWN"},
+			want:    1,
+		},
+		{
+			name:    "declared and complete",
+			servers: srv(map[string]string{"Authorization": "Bearer ${TOKEN}"}, nil),
+			allowed: []string{"TOKEN"},
+			want:    0,
+		},
+		{
+			// export leaves ${VAR} literal and strips env_passthrough from the
+			// artifact, so a distribution-only harness works today. Flagging
+			// it would redden something that is not broken.
+			name:    "no allowlist at all — may be distribution-only",
+			servers: srv(map[string]string{"Authorization": "Bearer ${DOCS_API_KEY}"}, nil),
+			allowed: nil,
+			want:    0,
+		},
+		{
+			name:    "env field is checked too, not just headers",
+			servers: srv(nil, map[string]string{"API": "${NOPE}"}),
+			allowed: []string{"KNOWN"},
+			want:    1,
+		},
+		{
+			name:    "several references, several issues",
+			servers: srv(map[string]string{"A": "${ONE}", "B": "${TWO}"}, map[string]string{"C": "${THREE}"}),
+			allowed: []string{"KNOWN"},
+			want:    3,
+		},
+		{
+			name:    "no servers",
+			servers: nil,
+			allowed: []string{"KNOWN"},
+			want:    0,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := UndeclaredMCPEnvRefs(c.servers, c.allowed)
+			if len(got) != c.want {
+				t.Errorf("got %d issues %v, want %d", len(got), got, c.want)
+			}
+		})
+	}
+}
+
+// Declaration only. An unset variable is legitimately a run-time condition —
+// a developer without the credential still needs `ynd validate` to pass.
+func TestUndeclaredMCPEnvRefs_DoesNotRequireTheVariableToBeSet(t *testing.T) {
+	// Deliberately not set: the point is that validation does not need it.
+	servers := map[string]MCPServer{"s": {URL: "https://x",
+		Headers: map[string]string{"Authorization": "Bearer ${DECLARED_BUT_UNSET}"}}}
+	if got := UndeclaredMCPEnvRefs(servers, []string{"DECLARED_BUT_UNSET"}); len(got) != 0 {
+		t.Errorf("a declared but unset variable must not fail validation, got %v", got)
+	}
+}
+
+func TestValidate_SensorRatchet(t *testing.T) {
+	cmdSrc := SensorSource{Command: "grep -rn nolint ."}
+	out := SensorOutput{Format: "text"}
+	cases := []struct {
+		name   string
+		sensor Sensor
+		want   string // substring the issue must contain; "" means none
+	}{
+		{"count on a command sensor", Sensor{Source: cmdSrc, Output: out, Ratchet: "count"}, ""},
+		{"fingerprint is explicit and fine", Sensor{Source: cmdSrc, Output: out, Ratchet: "fingerprint"}, ""},
+		{"absent defaults to fingerprint", Sensor{Source: cmdSrc, Output: out}, ""},
+		{"unknown mode", Sensor{Source: cmdSrc, Output: out, Ratchet: "vibes"},
+			"must be one of fingerprint, count"},
+		{"count on a files sensor has nothing countable",
+			Sensor{Source: SensorSource{Files: []string{"*.go"}}, Output: out, Ratchet: "count"},
+			"requires a command source"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			issues := ValidateSensors(map[string]Sensor{"s": c.sensor}, nil, nil)
+			hit := false
+			for _, i := range issues {
+				if c.want != "" && strings.Contains(i, c.want) {
+					hit = true
+				}
+				if c.want == "" && strings.Contains(i, "ratchet") {
+					t.Errorf("unexpected ratchet issue: %s", i)
+				}
+			}
+			if c.want != "" && !hit {
+				t.Errorf("expected an issue containing %q, got %v", c.want, issues)
+			}
+		})
+	}
+}
+
+func TestEffectiveRatchet(t *testing.T) {
+	if got := (Sensor{}).EffectiveRatchet(); got != "fingerprint" {
+		t.Errorf("default = %q, want fingerprint — changing the default would affect every existing harness", got)
+	}
+	if got := (Sensor{Ratchet: "count"}).EffectiveRatchet(); got != "count" {
+		t.Errorf("got %q", got)
+	}
+}

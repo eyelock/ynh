@@ -244,3 +244,10 @@ func findGolden(t *testing.T, name string) string {
 // non-converged run on purpose: that is the case a pipeline actually has to
 // read, and the one where under-reporting would go unnoticed.
 func TestAgentRunGolden(t *testing.T) { validateGolden(t, "agent-run", "agent-run.json") }
+
+// TestCheckCalibrateGolden validates the calibration envelope. The golden is a
+// broken run on purpose: it carries one of each outcome, including the one
+// that matters — a sensor that passed a fixture built to trip it.
+func TestCheckCalibrateGolden(t *testing.T) {
+	validateGolden(t, "check-calibrate", "check-calibrate.json")
+}

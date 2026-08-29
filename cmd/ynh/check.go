@@ -22,7 +22,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 	cwd := ""
 	var harnessName string
 	var only []string
-	var updateBaseline, ignoreBaseline bool
+	var updateBaseline, ignoreBaseline, calibrate bool
 	overlay := map[string]json.RawMessage{}
 
 	for i := 0; i < len(args); i++ {
@@ -33,6 +33,8 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			}
 			i++
 			cwd = args[i]
+		case "--calibrate":
+			calibrate = true
 		case "--update-baseline":
 			updateBaseline = true
 		case "--no-baseline":
@@ -179,6 +181,23 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 		}
 	}
 
+	// Calibration is a separate mode, not an extra step. `ynh check` stays
+	// fast and never runs references: a gate that calibrates on every
+	// invocation is a gate people disable, and then nothing is calibrated at
+	// all. Baseline flags are meaningless here — a fixture has no debt to
+	// ratchet — so they are rejected rather than silently ignored.
+	if calibrate {
+		if updateBaseline || ignoreBaseline {
+			return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
+				"--calibrate does not take baseline flags: a reference fixture has no recorded debt"))
+		}
+		if len(overlay) > 0 {
+			return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
+				"--calibrate does not take --sensor-overlay: calibrating a substituted command proves nothing about the declared one"))
+		}
+		return runCalibration(p, wanted, stdout, stderr, structured)
+	}
+
 	names := make([]string, 0, len(p.Sensors))
 	for n := range p.Sensors {
 		names = append(names, n)
@@ -258,7 +277,19 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 				recording.Set(p.Name, name, baseline.Record(gate.StatusFail, raw, cwd))
 			}
 
-			cmp := base.Compare(p.Name, name, current, len(current))
+			// A count-ratchet sensor is measured on how many findings it
+			// emits, not which ones. Fingerprints normalise line numbers and
+			// deduplicate, so a second `//nolint` beside an existing one
+			// changes neither the fingerprint set nor the distinct-line count.
+			// For a sensor whose quantity *is* the finding, that would forgive
+			// exactly the thing it exists to catch.
+			var cmp baseline.Comparison
+			if s.EffectiveRatchet() == "count" {
+				cmp = base.CompareTotals(p.Name, name, baseline.CountLines(raw))
+				res.CountDelta = cmp.CountDelta
+			} else {
+				cmp = base.Compare(p.Name, name, current, len(current))
+			}
 			res.NewCount = len(cmp.New)
 			res.KnownCount = cmp.Known
 			totalKnown += cmp.Known
