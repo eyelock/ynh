@@ -137,6 +137,10 @@ exit=0
 not a regression. **Commit `.ynh/baseline.json`**: the ratchet is a property of
 the repository, not of one developer.
 
+Entries are scoped by harness, so a repository checked by more than one harness
+keeps them separate. `--update-baseline` refreshes only the sensors that ran, so
+combining it with `--only` never discards what it did not look at.
+
 ## T20.6: Only new failures gate
 
 Add one issue of your own to the two you inherited:

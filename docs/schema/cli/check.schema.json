@@ -181,7 +181,7 @@
     "BaselineInfo": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Present when a baseline was loaded from .ynh/baseline.json. Absent when none exists or --no-baseline was passed.",
+      "description": "Present when a baseline was loaded from .ynh/baseline.json, or after --update-baseline wrote one. Absent when no baseline exists or --no-baseline was passed. Entries in the file are scoped by harness id.",
       "properties": {
         "recorded_at": {
           "type": "string",
@@ -189,22 +189,19 @@
         },
         "known": {
           "type": "integer",
-          "description": "Pre-existing failures forgiven across all sensors this run."
+          "description": "Pre-existing failures forgiven across all sensors this run. Zero after --update-baseline, which reports what it recorded rather than comparing."
         },
         "fixed": {
           "type": "integer",
-          "description": "Baseline entries that no longer fail — debt paid off."
+          "description": "Baseline entries that no longer fail — debt paid off. Zero after --update-baseline, which reports what it recorded rather than comparing."
         },
         "stale": {
           "type": "boolean",
-          "description": "True when fixed > 0: the baseline can be narrowed with --update-baseline."
+          "description": "True when fixed > 0: the baseline can be narrowed with --update-baseline. Zero after --update-baseline, which reports what it recorded rather than comparing."
         }
       },
       "required": [
-        "recorded_at",
-        "known",
-        "fixed",
-        "stale"
+        "recorded_at"
       ]
     }
   },

@@ -170,6 +170,11 @@ const baselineHarnessJSON = `{
       "tolerance": "blocking",
       "source": {"command": "cat issues.txt >&2; exit 1"},
       "output": {"format": "text"}
+    },
+    "quiet": {
+      "tolerance": "blocking",
+      "source": {"command": "exit 1"},
+      "output": {"format": "text"}
     }
   }
 }`
@@ -190,6 +195,19 @@ func runBaselineCheck(t *testing.T, home, work string, args ...string) (checkEnv
 		}
 	}
 	return env, stdout.String(), err
+}
+
+// sensorNamed finds a result by name. Indexing is fragile: results are sorted
+// and --only leaves filtered sensors in the payload as skipped.
+func sensorNamed(t *testing.T, env checkEnvelope, name string) checkResult {
+	t.Helper()
+	for _, r := range env.Sensors {
+		if r.Name == name {
+			return r
+		}
+	}
+	t.Fatalf("sensor %q not in result", name)
+	return checkResult{}
 }
 
 func setupBaselineRepo(t *testing.T, issues string) (home, work string) {
@@ -221,8 +239,8 @@ func TestCheck_WithoutBaselineDirtyRepoBlocks(t *testing.T) {
 	if !errors.Is(err, errCheckBlocked) {
 		t.Fatalf("want blocked, got %v", err)
 	}
-	if env.Sensors[0].NewCount != 2 {
-		t.Errorf("new_count = %d, want 2", env.Sensors[0].NewCount)
+	if got := sensorNamed(t, env, "lint").NewCount; got != 2 {
+		t.Errorf("lint new_count = %d, want 2", got)
 	}
 }
 
@@ -238,8 +256,11 @@ func TestCheck_BaselineForgivesPreExistingFailures(t *testing.T) {
 	if env.Verdict != "pass" {
 		t.Errorf("verdict = %q, want pass", env.Verdict)
 	}
-	if env.Sensors[0].Status != statusKnown || env.Summary.Known != 1 {
-		t.Errorf("status = %q known = %d, want known/1", env.Sensors[0].Status, env.Summary.Known)
+	if got := sensorNamed(t, env, "lint").Status; got != statusKnown {
+		t.Errorf("lint status = %q, want known", got)
+	}
+	if env.Summary.Known != 2 {
+		t.Errorf("known = %d, want 2 (lint and quiet both baselined)", env.Summary.Known)
 	}
 }
 
@@ -256,7 +277,7 @@ func TestCheck_NewFailureBlocksAndIsolated(t *testing.T) {
 	if !errors.Is(err, errCheckBlocked) {
 		t.Fatalf("a new failure must block, got %v", err)
 	}
-	r := env.Sensors[0]
+	r := sensorNamed(t, env, "lint")
 	if r.NewCount != 1 || r.KnownCount != 2 {
 		t.Errorf("new=%d known=%d, want 1/2", r.NewCount, r.KnownCount)
 	}
@@ -283,8 +304,8 @@ src/util.go:88:2: unused variable tmp
 	if err != nil {
 		t.Fatalf("moved line numbers must not block, got %v", err)
 	}
-	if env.Sensors[0].Status != statusKnown {
-		t.Errorf("status = %q, want known", env.Sensors[0].Status)
+	if got := sensorNamed(t, env, "lint").Status; got != statusKnown {
+		t.Errorf("lint status = %q, want known", got)
 	}
 }
 
@@ -326,5 +347,87 @@ func TestCheck_NoBaselineFlagShowsUnratchetedTruth(t *testing.T) {
 	}
 	if env.Baseline != nil {
 		t.Errorf("baseline info should be absent with --no-baseline, got %+v", env.Baseline)
+	}
+}
+
+// --- regressions ---
+
+// --update-baseline used to write a freshly built map, so any sensor filtered
+// out by --only lost its recorded debt. Silent, and unrecoverable without git.
+func TestCheck_UpdateBaselineWithOnlyPreservesOtherSensors(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-record only a sensor that is not "lint".
+	if _, _, err := runBaselineCheck(t, home, work, "--only", "quiet", "--update-baseline"); err != nil {
+		t.Fatalf("scoped update: %v", err)
+	}
+
+	// lint's forgiveness must survive.
+	env, _, err := runBaselineCheck(t, home, work, "--only", "lint")
+	if err != nil {
+		t.Fatalf("lint should still be forgiven after a scoped update, got %v", err)
+	}
+	if got := sensorNamed(t, env, "lint").Status; got != statusKnown {
+		t.Errorf("lint status = %q, want known — its baseline entry was erased", got)
+	}
+}
+
+// A sensor that fails with no output produces no fingerprints, so forgiveness
+// keyed on a non-zero known count could never apply to it.
+func TestCheck_SilentFailureCanBeBaselined(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatal(err)
+	}
+	env, _, err := runBaselineCheck(t, home, work, "--only", "quiet")
+	if err != nil {
+		t.Fatalf("a baselined silent failure must not gate, got %v", err)
+	}
+	if got := sensorNamed(t, env, "quiet").Status; got != statusKnown {
+		t.Errorf("quiet status = %q, want known", got)
+	}
+	if env.Baseline != nil && env.Baseline.Stale {
+		t.Error("nothing changed, so the baseline must not report fixed debt")
+	}
+}
+
+// A sensor going fully green is the clearest signal the ratchet can tighten,
+// but that path returns before Compare, so its debt was never counted.
+func TestCheck_GreenSensorReportsClearedDebt(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatal(err)
+	}
+	writeIssues(t, work, "") // lint now passes entirely
+
+	env, _, err := runBaselineCheck(t, home, work, "--only", "lint")
+	if err != nil {
+		t.Fatalf("want pass, got %v", err)
+	}
+	if env.Baseline == nil || !env.Baseline.Stale || env.Baseline.Fixed != 2 {
+		t.Errorf("baseline = %+v, want fixed=2 stale=true", env.Baseline)
+	}
+}
+
+// An empty stdout leaves a structured consumer unable to tell success from a
+// crash.
+func TestCheck_UpdateBaselineEmitsJSON(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	_, out, err := runBaselineCheck(t, home, work, "--update-baseline")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(out) == "" {
+		t.Fatal("--update-baseline --format json wrote nothing to stdout")
+	}
+	var env checkEnvelope
+	if uErr := json.Unmarshal([]byte(out), &env); uErr != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", uErr, out)
+	}
+	if env.Verdict != "pass" {
+		t.Errorf("verdict = %q, want pass", env.Verdict)
 	}
 }

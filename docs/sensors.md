@@ -439,6 +439,12 @@ one.
 **Commit `.ynh/baseline.json`.** The ratchet is a property of the repository,
 not of one developer.
 
+Entries are scoped by harness id, because sensor names are only unique within a
+harness — two harnesses in one repository each declaring `lint` would otherwise
+share, and overwrite, a single entry. `--update-baseline` refreshes only the
+sensors that actually ran and leaves every other entry untouched, so combining
+it with `--only` is safe.
+
 How it works: each failing sensor's output is reduced to one fingerprint per
 line, with file positions (`:12:5`) collapsed and absolute paths made relative
 to the working directory. Position collapsing is load-bearing — without it,
@@ -457,9 +463,15 @@ Baselines only tighten by an explicit act. **CI cannot write one** — with
 `CI` set, `--update-baseline` refuses. A gate that rewrites its own reference
 point from a feature branch forgives whatever that branch introduced.
 
-A sensor emitting more than 2000 distinct lines is recorded truncated, its
-new-failure detection becomes approximate, and the report says so rather than
-silently under-reporting.
+A sensor emitting more than 2000 distinct lines is recorded **truncated**: no
+fingerprints are stored, and it ratchets on the count of distinct failing lines
+alone. Keeping a subset would be worse than keeping none — fingerprints are
+sorted, so a subset is whichever hashes happen to sort first, and every line
+outside it would be permanently new and permanently blocking. The report says
+the comparison is approximate rather than implying precision it does not have.
+
+A sensor that fails with no output at all can still be baselined: forgiveness
+depends on the sensor having a recorded entry, not on any fingerprint matching.
 
 Exit codes are the contract:
 
