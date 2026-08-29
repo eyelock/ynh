@@ -1,5 +1,6 @@
 * **Why**
   * [Harness Engineering](harness-engineering.md)
+  * [The Factory Pattern](factory-pattern.md)
 
 * **Start**
   * [Overview](README.md)
