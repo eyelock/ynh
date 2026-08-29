@@ -29,7 +29,7 @@ ynh is a packaging and distribution tool. It has no runtime component - the AI v
 ### Package Structure
 
 ```
-cmd/ynh/                  CLI entry point: harness template manager (init, install, uninstall, update, run, ls, info, vendors, search, registry, image, status, prune)
+cmd/ynh/                  CLI entry point: harness template manager (init, install, uninstall, update, run, ls, info, installed, schema, vendors, sources, paths, status, search, registry, backend, delegate, fork, include, focus, profile, hook, doctor, mcp, sensors, check, agent, image, prune, migrate, quarantine)
 cmd/ynd/                  CLI entry point: developer tools (create, lint, validate, fmt, compress, export, marketplace, inspect, preview, diff)
 internal/
   config/                 Global config (~/.ynh/) and path management
@@ -229,7 +229,7 @@ make e2e
 
 **What the suite locks:**
 
-- Every documented entry point on `ynh` and `ynd` (install, update, fork, delegate, include, run, vendors, sources, paths, status, prune, info, ls, image, search, registry; create, lint, validate, fmt, preview, export, compose, diff, migrate, marketplace, inspect)
+- Every documented entry point on `ynh` and `ynd` (init, install, uninstall, update, run, ls, info, installed, schema, vendors, sources, paths, status, search, registry, backend, delegate, fork, include, focus, profile, hook, doctor, mcp, sensors, check, agent, image, prune, migrate, quarantine; create, lint, validate, fmt, compress, inspect, export, compose, preview, diff, marketplace, migrate, validate-output)
 - All three vendor adapters (Claude, Codex, Cursor) end-to-end: instructions files, hooks (with matchers + per-vendor event remapping), MCP servers (command + URL forms, env passthrough)
 - Profile + focus resolution (hook replace + inherit, MCP deep-merge, mutex/unknown errors)
 - Schema/security guards (path traversal, --ref + local, fork update, duplicate sources)

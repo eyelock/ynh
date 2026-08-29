@@ -439,8 +439,12 @@ func writeCheckText(w io.Writer, env checkEnvelope) error {
 	}
 
 	if env.Verdict == "blocked" {
-		if _, err := fmt.Fprintf(w, "\nblocked: %d of %d sensors failed\n",
-			env.Summary.Blocking, env.Summary.Total); err != nil {
+		// Count what actually ran. Reporting "1 of 4" when --only filtered
+		// three of them out invites the reader to go looking for failures
+		// that were never evaluated.
+		ran := env.Summary.Total - env.Summary.Skipped
+		if _, err := fmt.Fprintf(w, "\nblocked: %d of %d %s failed\n",
+			env.Summary.Blocking, ran, plural(ran, "sensor")); err != nil {
 			return err
 		}
 		return writeBaselineFooter(w, env)
@@ -462,8 +466,21 @@ func writeBaselineFooter(w io.Writer, env checkEnvelope) error {
 	if env.Baseline == nil || !env.Baseline.Stale {
 		return nil
 	}
+	n := env.Baseline.Fixed
+	verb := "are"
+	if n == 1 {
+		verb = "is"
+	}
 	_, err := fmt.Fprintf(w,
-		"\nbaseline: %d recorded failures are now fixed — `ynh check --update-baseline` to lock that in\n",
-		env.Baseline.Fixed)
+		"\nbaseline: %d recorded %s %s now fixed — `ynh check --update-baseline` to lock that in\n",
+		n, plural(n, "failure"), verb)
 	return err
+}
+
+// plural returns word or its plural, so counted output reads as English.
+func plural(n int, word string) string {
+	if n == 1 {
+		return word
+	}
+	return word + "s"
 }
