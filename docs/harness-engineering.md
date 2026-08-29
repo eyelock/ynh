@@ -91,6 +91,32 @@ Two architectural choices constrain everything else and explain why ynh's surfac
 
 **What this rules in.** A small, stable, machine-readable surface that any runtime — interactive vendor CLI, headless CI job, custom orchestrator — can consume in the same way. The harness encodes intent; runtimes provide capability.
 
+## ynh does not own containment
+
+A line worth stating plainly, because every request of a particular shape
+pushes on it:
+
+> ynh executes declarations and reports verdicts. **ynh does not own
+> containment.** Its answer to "is this safe" is *"run me inside a container you
+> configured"* — never *"ynh provides isolation."*
+
+This decides a whole class of question the same way each time. `--sandbox` may
+hand a request to a sandbox the operator installed; it may not claim to *be*
+one, and where a backend cannot honour it, ynh must fail rather than proceed
+unsandboxed. Credential scoping is **declared** in the manifest — which
+variables reach the agent — while the process boundary that makes the
+declaration meaningful is the container's.
+
+The reason to write it down is that the alternative is attractive and wrong.
+A harness manager that ships isolation has to be correct on every platform and
+every vendor simultaneously, and the failure mode is silent: a control that is
+declared, believed, and absent. Refusing the responsibility means ynh can be
+honest about what it does not do, which is what makes the parts it *does* do
+trustworthy.
+
+The corollary is that ynh must never degrade quietly. A containment control
+that cannot be applied is an error, not a warning.
+
 ## Standards Alignment
 
 | Standard | YNH Status |

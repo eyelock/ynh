@@ -47,6 +47,19 @@ ynh agent run --resume <session-dir> [flags]
 `--max-turns`, `--max-tokens` or `--max-wall` will keep going until it converges
 or gets stuck. Set at least one for any unattended run.
 
+## What the agent can see
+
+The worker receives only the environment variables the harness declares in
+`env_passthrough` — not the operator's environment. An agent that inherits the
+parent process environment holds every credential the operator holds, which is
+not a default anyone chose. See [MCP credentials](mcp.md) for the declaration
+and how a profile narrows it.
+
+`--sandbox srt` is honoured by the `claude` backend only. Requesting it with
+`codex` or `cursor` is an **error**, not a warning — a containment control that
+silently does not apply is worse than an absent one, because it gets relied
+upon. ynh does not provide isolation; it runs inside one you configured.
+
 ## Convergence
 
 After each turn the loop runs the declared sensors and decides whether to stop.
