@@ -42,7 +42,7 @@ func TestCmdVersion_JSON(t *testing.T) {
 		t.Errorf("Capabilities = %q, want %q", payload.Capabilities, config.CapabilitiesVersion)
 	}
 	if payload.Capabilities == "" {
-		t.Error("Capabilities must not be empty — TermQ relies on this field for gating")
+		t.Error("Capabilities must not be empty — structured consumers rely on this field for gating")
 	}
 }
 
@@ -63,9 +63,9 @@ func TestCmdVersion_UnknownFlag(t *testing.T) {
 }
 
 // TestCmdVersion_JSONShapeStability pins the JSON field names. Downstream
-// consumers (TermQ) decode this into their own struct; renaming a field is
+// consumers decode this into their own struct; renaming a field is
 // a breaking contract change that must be accompanied by a CapabilitiesVersion
-// bump and a coordinated TermQ release.
+// bump and a coordinated consumer release.
 func TestCmdVersion_JSONShapeStability(t *testing.T) {
 	var out, errb bytes.Buffer
 	if err := cmdVersionTo([]string{"--format", "json"}, &out, &errb); err != nil {

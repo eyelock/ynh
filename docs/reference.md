@@ -218,7 +218,7 @@ What gets probed:
 
 > Note: `--check-updates` performs network calls. Failures degrade silently — fields are simply omitted, the command does not error. Default `info` and `ls` calls (without the flag) remain offline, fast, and deterministic. Probes run concurrently (bounded fan-out) so a multi-include harness does not serialize the network.
 
-Three-state rendering on the consumer side (TermQ and similar):
+Three-state rendering on the consumer side:
 
 - Field omitted ⇒ **unknown** (probe failed, not requested, or no upstream)
 - Field present and equal to `*_installed` ⇒ **up-to-date**
