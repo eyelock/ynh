@@ -458,8 +458,9 @@ func TestCheck_UpdateBaselineEmitsJSON(t *testing.T) {
 // blanket amnesty and then converge.
 func TestCheck_UpdateBaselineRefusedInsideAgentSession(t *testing.T) {
 	home, work := setupBaselineRepo(t, preExisting)
+	t.Setenv("CI", "")
 	t.Setenv("YNH_AGENT_SESSION", "sess-123")
-	_, _, err := runBaselineCheck(t, home, work, "--update-baseline")
+	_, _, err := runBaselineCheckInEnv(t, home, work, "--update-baseline")
 	if !errors.Is(err, errCheckExec) {
 		t.Fatalf("want refusal, got %v", err)
 	}
@@ -471,10 +472,11 @@ func TestCheck_UpdateBaselineRefusedInsideAgentSession(t *testing.T) {
 func TestCheck_BaselineWriteAttemptIsRecorded(t *testing.T) {
 	home, work := setupBaselineRepo(t, preExisting)
 	sessionDir := t.TempDir()
+	t.Setenv("CI", "")
 	t.Setenv("YNH_AGENT_SESSION", "sess-abc")
 	t.Setenv("YNH_AGENT_SESSION_DIR", sessionDir)
 
-	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err == nil {
+	if _, _, err := runBaselineCheckInEnv(t, home, work, "--update-baseline"); err == nil {
 		t.Fatal("expected the write to be refused")
 	}
 
@@ -491,8 +493,9 @@ func TestCheck_BaselineWriteAttemptIsRecorded(t *testing.T) {
 // check because a measurement could not be written is the wrong trade.
 func TestCheck_RefusalWorksWithoutASessionDir(t *testing.T) {
 	home, work := setupBaselineRepo(t, preExisting)
+	t.Setenv("CI", "")
 	t.Setenv("YNH_AGENT_SESSION", "sess-nodir")
-	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err == nil {
+	if _, _, err := runBaselineCheckInEnv(t, home, work, "--update-baseline"); err == nil {
 		t.Fatal("expected refusal even with no session dir set")
 	}
 }
