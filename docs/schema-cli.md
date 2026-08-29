@@ -1,6 +1,6 @@
 # Published JSON Schemas for ynh CLI Output
 
-Every `ynh` command that supports `--format json` has a published JSON Schema. Consumers — a structured consumer, IDE integrations, scripts — can validate responses, codegen types, or branch on the schema at runtime.
+Every `ynh` command that supports `--format json` has a published JSON Schema. Consumers — editor integrations, scripts, anything reading the JSON — can validate responses, codegen types, or branch on the schema at runtime.
 
 This document is the contract: the schemas live in `docs/schema/cli/` and `docs/schema/shared/`, and a mirror under `internal/clischema/schema/` is embedded into the `ynh` and `ynd` binaries. A parity test fails CI if the two trees drift.
 
@@ -106,7 +106,7 @@ live ynh <command> --format json  →  internal/jsonschema validator  →  PASS
 
 Any drift between Go emission and the schema fails CI. Schemas are the published contract.
 
-**Runtime validation in consumers is the consumer's choice and the consumer's dependency.** YNH does not ship a runtime validator library; the in-tree `internal/jsonschema` is consumer-internal. Consumers (a structured consumer MCP server, IDE plugins, codegen tools) pick their own validator at their own layer.
+**Runtime validation in consumers is the consumer's choice and the consumer's dependency.** YNH does not ship a runtime validator library; the in-tree `internal/jsonschema` is consumer-internal. Consumers (an MCP server, an IDE plugin, a codegen tool) pick their own validator at their own layer.
 
 ## Validator subset
 

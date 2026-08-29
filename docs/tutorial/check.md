@@ -165,6 +165,51 @@ different sensors never conflict; when one does, `ynh check` refuses to run
 against it rather than guessing, because deciding which failures a repository
 accepts is a human call.
 
+## Read what the ratchet forgives
+
+A baseline that nobody can read is a list of hashes somebody agreed to ignore.
+`ynh baseline` says what is in it:
+
+```bash
+ynh baseline local/gate-demo
+```
+
+```
+Baseline for gate-demo
+
+  · build                    nothing recorded — no failures are forgiven
+  ● lint                     2 forgiven, accepted 2026-08-29T22:42:23Z
+
+2 sensors: 1 with recorded debt (2 findings forgiven), 1 with none
+
+Run with --explain to resolve the recorded fingerprints into the findings
+they forgive. That runs the sensors, so it is not the default.
+```
+
+The file stores fingerprints, not findings, so it can answer *how much* is
+forgiven and *when* that was accepted — but not *what*. `--explain` re-runs the
+sensors and matches their current output against the recorded hashes, which is
+the only way back to the lines themselves:
+
+```bash
+ynh baseline local/gate-demo --explain
+```
+
+```
+Baseline for gate-demo
+
+  · build                    nothing recorded — no failures are forgiven
+  ● lint                     2 forgiven, accepted 2026-08-29T22:42:23Z
+      src/legacy.go:12:5: exported func Old should have comment
+      src/util.go:8:2: unused variable tmp
+
+2 sensors: 1 with recorded debt (2 findings forgiven), 1 with none
+```
+
+Note `build`: **a sensor with nothing recorded forgives nothing.** An empty
+baseline is not a permissive one, and the distinction matters when reviewing
+what a repository has agreed to carry.
+
 ## Only new failures gate
 
 Add one issue of your own to the two you inherited:
