@@ -1,6 +1,6 @@
 Before ANY remote operation (`git push`, `gh pr create`, `gh pr merge`), ALL of the following gates must pass. No exceptions. If blocked, stop and ask the user for help.
 
-**PR target:** feature and fix branches always PR into `develop`, not `main`. Only `develop` and `hotfix/*` may target `main`.
+**PR target:** feature and fix branches always PR into `develop`, not `main`. Only `develop` and `hotfix/*` may target `main`. A PR in a [stack](branching.md#stacked-prs) targets the branch below it; only the bottom of the stack targets `develop`.
 
 ## Gate 1: make check
 
@@ -35,6 +35,8 @@ If unsure whether a change qualifies, treat it as a bump.
 ## Gate 5: CI after push
 
 After pushing and creating a PR, run `gh pr checks <number> --watch` and wait for CI to pass before merging. If CI is still running, tell the user and wait. Never merge without green CI.
+
+This applies to stacked PRs too — `ci.yml` runs on every pull request regardless of base branch, so there is no such thing as an ungated PR here. If `gh pr checks` reports "no checks reported", that is a problem to fix, not a gate to skip.
 
 ## What to do when blocked
 

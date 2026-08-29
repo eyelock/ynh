@@ -3,8 +3,13 @@ name: CI
 on:
   push:
     branches: [main, develop, 'hotfix/*']
+  # No branch filter: CI must run on every pull request, including one whose
+  # base is another feature branch. Stacked PRs are how a large change gets
+  # reviewed in reviewable pieces, and a stacked PR that cannot run CI cannot
+  # satisfy the pre-remote gates — so the work either goes ungated or gets
+  # squashed into one unreviewable PR. Both are worse than running CI a few
+  # extra times.
   pull_request:
-    branches: [main, develop]
   workflow_dispatch:
 
 permissions:
