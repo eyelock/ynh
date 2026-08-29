@@ -22,6 +22,11 @@
             "matcher": "Bash",
             "command": "sh -c 'case \"$YNH_TOOL_INPUT\" in *\"git push\"*|*\"gh pr create\"*|*\"gh pr merge\"*) echo \"Reminder: .claude/rules/pre-remote.md requires make check + /evals before remote operations\" >&2 ;; esac; exit 0'"
           }
+        ],
+        "on_stop": [
+          {
+            "command": "ynh check local/ynh-guide --only fmt"
+          }
         ]
       },
       "includes": [
@@ -51,6 +56,38 @@
     "release": {
       "profile": "ynh-dev",
       "prompt": "Walk me through preparing a ynh release. Confirm we are on develop, run /evals to gate the release, update the changelog, then create a release PR per .claude/rules/branching.md. The full sequence is documented in .claude/commands/release.md."
+    }
+  },
+  "sensors": {
+    "fmt": {
+      "category": "maintainability",
+      "tolerance": "blocking",
+      "source": {
+        "command": "sh -c 'out=$(gofmt -l cmd internal); if [ -n \"$out\" ]; then echo \"unformatted:\" >&2; echo \"$out\" >&2; echo \"fix with: make format\" >&2; exit 1; fi'"
+      },
+      "output": {
+        "format": "text"
+      }
+    },
+    "vet": {
+      "category": "maintainability",
+      "tolerance": "advisory",
+      "source": {
+        "command": "go vet ./..."
+      },
+      "output": {
+        "format": "text"
+      }
+    },
+    "check": {
+      "category": "behaviour",
+      "tolerance": "blocking",
+      "source": {
+        "command": "make check"
+      },
+      "output": {
+        "format": "text"
+      }
     }
   }
 }

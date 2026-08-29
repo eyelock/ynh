@@ -40,7 +40,7 @@ A harness is a directory with a `.ynh-plugin/plugin.json` and your artifacts:
 `.ynh-plugin/plugin.json`:
 ```json
 {
-  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "david",
   "version": "0.1.0",
   "default_vendor": "claude"
@@ -85,7 +85,7 @@ Point your harness at any Git repo. Skills are used as-is - no wrapping, no buil
 `.ynh-plugin/plugin.json`:
 ```json
 {
-  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "david",
   "version": "0.1.0",
   "default_vendor": "claude",

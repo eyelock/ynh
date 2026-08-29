@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -23,86 +24,67 @@ func TestSchemasCompile(t *testing.T) {
 	}
 }
 
-// TestSchemaParityWithDocs guarantees the embedded source-of-truth schemas
-// and the publish-facing copy under docs/schema/ stay byte-identical. The
-// repo holds two copies because go:embed cannot traverse "..", so docs/
-// hosts the discoverable copy and internal/clischema/schema/ is the embed
-// authoritative. Any drift is a CI failure.
-func TestSchemaParityWithDocs(t *testing.T) {
-	docsRoot := docsSchemaRoot(t)
-	if docsRoot == "" {
-		t.Skip("docs/schema not reachable from package CWD")
+// TestSingleSchemaTree guards the invariant that replaced the old
+// embed-vs-docs parity test: there is exactly one copy of every schema, at
+// docs/schema, embedded from there by docs/schema/embed.go.
+//
+// The repo previously held three trees — docs/schema, cmd/ynd/schema, and
+// internal/clischema/schema — of which only two were pinned to each other.
+// The unpinned pair drifted: five path-traversal guards lived in the
+// published plugin and marketplace schemas and in neither copy any validator
+// loaded, so a documented guarantee went unenforced. A parity test can only
+// detect that after it happens; a single directory makes it unrepresentable.
+// This test is what keeps a second directory from quietly reappearing.
+func TestSingleSchemaTree(t *testing.T) {
+	root := repoRoot(t)
+	if root == "" {
+		t.Skip("repo root not reachable from package CWD")
 	}
+	canonical := filepath.Join(root, "docs", "schema")
 
-	embedPaths := map[string][]byte{}
-	allRaw, err := AllRaw()
-	if err != nil {
-		t.Fatalf("AllRaw: %v", err)
-	}
-	for name, data := range allRaw {
-		embedPaths[name+".schema.json"] = data
-	}
-
-	// Parity scope: only docs/schema/cli/ and docs/schema/shared/. The
-	// existing author-controlled schemas at docs/schema/{plugin,marketplace,harness}.schema.json
-	// describe author-authored files (plugin.json, marketplace.json) and are
-	// not embedded by this package.
-	var docsList []string
-	for _, sub := range []string{"cli", "shared"} {
-		root := filepath.Join(docsRoot, sub)
-		if _, err := os.Stat(root); err != nil {
-			continue
-		}
-		walkErr := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if info.IsDir() {
-				return nil
-			}
-			rel, _ := filepath.Rel(docsRoot, path)
-			docsList = append(docsList, rel)
-			return nil
-		})
-		if walkErr != nil {
-			t.Fatalf("walk %s: %v", root, walkErr)
-		}
-	}
-	sort.Strings(docsList)
-
-	for _, rel := range docsList {
-		data, err := os.ReadFile(filepath.Join(docsRoot, rel))
+	var strays []string
+	walkErr := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			t.Errorf("read %s: %v", rel, err)
-			continue
+			return nil // unreadable trees are not this test's business
 		}
-		emb, ok := embedPaths[rel]
-		if !ok {
-			t.Errorf("docs has %s but embed does not", rel)
-			continue
+		if info.IsDir() {
+			switch info.Name() {
+			case ".git", "bin", "dist", "node_modules", ".worktrees", "testdata":
+				return filepath.SkipDir
+			}
+			return nil
 		}
-		if string(emb) != string(data) {
-			t.Errorf("drift: %s differs between embed and docs/schema/", rel)
+		if !strings.HasSuffix(info.Name(), ".schema.json") {
+			return nil
 		}
-		delete(embedPaths, rel)
+		if strings.HasPrefix(path, canonical+string(filepath.Separator)) {
+			return nil
+		}
+		rel, _ := filepath.Rel(root, path)
+		strays = append(strays, rel)
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("walk: %v", walkErr)
 	}
-	for rel := range embedPaths {
-		t.Errorf("embed has %s but docs/schema/ does not", rel)
+	sort.Strings(strays)
+	for _, rel := range strays {
+		t.Errorf("schema outside docs/schema: %s\n"+
+			"Every schema lives once, at docs/schema, embedded by docs/schema/embed.go. "+
+			"A second copy is how the published and enforced schemas silently diverged.", rel)
 	}
 }
 
-// docsSchemaRoot resolves the repo's docs/schema directory by walking up
-// from the package CWD. Returns "" if not found (test will skip).
-func docsSchemaRoot(t *testing.T) string {
+// repoRoot walks up from the package CWD to the module root.
+func repoRoot(t *testing.T) string {
 	t.Helper()
 	wd, err := os.Getwd()
 	if err != nil {
 		return ""
 	}
 	for dir := wd; dir != "/"; dir = filepath.Dir(dir) {
-		candidate := filepath.Join(dir, "docs", "schema")
-		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-			return candidate
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
 		}
 	}
 	return ""
@@ -155,6 +137,8 @@ func TestStatusGolden(t *testing.T)   { validateGolden(t, "status", "status.json
 
 // TestInstalledGolden validates the install-provenance envelope.
 func TestInstalledGolden(t *testing.T) { validateGolden(t, "installed", "installed.json") }
+
+func TestCheckGolden(t *testing.T) { validateGolden(t, "check", "check.json") }
 
 // TestRaw verifies the byte-getter used by `ynh schema <name>`.
 func TestRaw(t *testing.T) {

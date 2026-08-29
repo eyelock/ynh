@@ -30,10 +30,33 @@ type HarnessJSON struct {
 // Sensor declares an observation surface — a feedforward signal a loop
 // driver consumes between agent turns. ynh declares; the loop driver runs.
 type Sensor struct {
-	Category string       `json:"category,omitempty"`
-	Role     string       `json:"role,omitempty"`
-	Source   SensorSource `json:"source"`
-	Output   SensorOutput `json:"output"`
+	Category string `json:"category,omitempty"`
+	Role     string `json:"role,omitempty"`
+	// Tolerance declares how a failing result is treated by `ynh check`.
+	// Empty means "blocking" — the safe default for a gate. This is the one
+	// piece of pass/fail policy ynh owns; everything richer (thresholds,
+	// severity filters, convergence) still belongs to a loop driver.
+	Tolerance string       `json:"tolerance,omitempty"`
+	Source    SensorSource `json:"source"`
+	Output    SensorOutput `json:"output"`
+}
+
+// ValidSensorTolerances lists how `ynh check` treats a failing sensor.
+// Maps onto the three enforcement loops: blocking sensors gate a merge,
+// advisory sensors report loudly without failing the run, report sensors
+// are pure observation.
+var ValidSensorTolerances = map[string]bool{
+	"blocking": true,
+	"advisory": true,
+	"report":   true,
+}
+
+// Tolerance returns the effective tolerance, defaulting to "blocking".
+func (s Sensor) EffectiveTolerance() string {
+	if s.Tolerance == "" {
+		return "blocking"
+	}
+	return s.Tolerance
 }
 
 // ValidSensorRoles lists the role hints loop drivers can use to discover
@@ -175,6 +198,9 @@ func ValidateSensors(sensors map[string]Sensor, profileNames, focusNames map[str
 		}
 		if s.Role != "" && !ValidSensorRoles[s.Role] {
 			issues = append(issues, fmt.Sprintf("%s role %q must be one of regular, convergence-verifier, stuck-recovery", prefix, s.Role))
+		}
+		if s.Tolerance != "" && !ValidSensorTolerances[s.Tolerance] {
+			issues = append(issues, fmt.Sprintf("%s tolerance %q must be one of blocking, advisory, report", prefix, s.Tolerance))
 		}
 		if s.Source.Kind() == "" {
 			issues = append(issues, fmt.Sprintf("%s source must have exactly one of files, command, focus", prefix))

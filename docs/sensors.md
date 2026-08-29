@@ -58,6 +58,7 @@ Sensors live under the top-level `sensors` key in `.ynh-plugin/plugin.json`. Eac
 |---|---|---|---|
 | `category` | enum | No | Fowler bucket: `maintainability`, `architecture`, `behaviour`. Free metadata for loop-driver triage. |
 | `role` | enum | No | Role hint: `regular` (default), `convergence-verifier`, `stuck-recovery`. Pure metadata — ynh does not enforce semantics. Loop drivers filter sensors by role to discover which one is the loop's done-check or the recovery sensor. |
+| `tolerance` | enum | No | How `ynh check` treats a failure: `blocking` (default), `advisory`, `report`. See [Tolerance](#tolerance). |
 | `source` | object | **Yes** | Strict one-of: `files` \| `command` \| `focus`. Discriminates the sensor type. |
 | `output` | object | **Yes** | Where the sensor's result lives and what shape it's in. |
 
@@ -378,3 +379,49 @@ ynh does **not** ship a loop driver. Orchestration policy — when to run sensor
 - [Focus](tutorial/14-focus.md)
 - [Harness engineering](harness-engineering.md)
 - [CLI structured output](cli-structured.md)
+
+## Tolerance
+
+`tolerance` is the one piece of pass/fail policy ynh owns. It declares how
+`ynh check` treats a failing sensor, which is also how the three enforcement
+loops are expressed without ynh owning a scheduler:
+
+| Value | `ynh check` behaviour | Typical loop |
+|---|---|---|
+| `blocking` (default) | Failure sets the verdict to `blocked` and exits 1 | PR gate |
+| `advisory` | Failure is reported in full but does not gate | edit-time feedback |
+| `report` | Pure observation | scheduled analysis |
+
+Only **command** sensors can gate. A `files` sensor has no mechanically
+derivable verdict, so it reports (`status: reported`); a `focus` sensor needs
+an agent runtime ynh does not own, so it defers (`status: deferred`). Neither
+ever blocks, whatever tolerance is declared — a gate that guesses is worse
+than one that admits what it cannot judge.
+
+Everything richer than this — thresholds, severity filters, convergence
+judgments — still belongs to a loop driver. `ynh check` answers "did the
+declared command succeed", nothing more.
+
+## `ynh check`
+
+Runs every declared sensor and returns a gate verdict.
+
+```bash
+ynh check local/demo                      # run all sensors, text report
+ynh check local/demo --only fmt,vet       # filter — the edit-time loop
+ynh check local/demo --format json        # machine-readable, for CI and consumers
+```
+
+Exit codes are the contract:
+
+| Code | Meaning |
+|---|---|
+| 0 | every blocking sensor passed |
+| 1 | a blocking sensor failed — the report is on stdout |
+| 2 | ynh could not run the check at all |
+
+1 and 2 are deliberately distinct: a red CI job has to distinguish "your code
+is failing" from "the gate itself is broken".
+
+Failing sensor output is printed verbatim rather than summarised, because that
+output is the remediation an agent acts on.

@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/check.schema.json",
+  "title": "ynh check --format json",
+  "description": "Output of `ynh check --format json`. Runs every declared sensor and reports a gate verdict. Exit code 0 = pass, 1 = a blocking sensor failed, 2 = ynh could not run the check. Top-level oneOf accepts either the success payload or the cross-cutting error envelope.",
+  "x-capabilities": "0.7",
+  "$defs": {
+    "Check": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Check success payload. Emitted for both pass and blocked verdicts — a blocked gate is a successful run that found failures, not an execution error.",
+      "properties": {
+        "capabilities": {
+          "type": "string",
+          "description": "Wire-protocol version. See CLAUDE.md capability-bump rule."
+        },
+        "ynh_version": {
+          "type": "string",
+          "description": "Binary release version or dev-build identifier."
+        },
+        "harness": {
+          "type": "string",
+          "description": "Name of the harness whose sensors were run."
+        },
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "blocked"
+          ],
+          "description": "blocked when at least one sensor with tolerance=blocking failed."
+        },
+        "summary": {
+          "$ref": "#/$defs/Summary"
+        },
+        "sensors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SensorResult"
+          }
+        }
+      },
+      "required": [
+        "capabilities",
+        "ynh_version",
+        "harness",
+        "verdict",
+        "summary",
+        "sensors"
+      ]
+    },
+    "Summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "total": {
+          "type": "integer"
+        },
+        "passed": {
+          "type": "integer"
+        },
+        "failed": {
+          "type": "integer"
+        },
+        "blocking": {
+          "type": "integer",
+          "description": "Failures that caused the verdict to be blocked. Always <= failed."
+        },
+        "reported": {
+          "type": "integer"
+        },
+        "deferred": {
+          "type": "integer"
+        },
+        "skipped": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total",
+        "passed",
+        "failed",
+        "blocking",
+        "reported",
+        "deferred",
+        "skipped"
+      ]
+    },
+    "SensorResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "files",
+            "command",
+            "focus"
+          ],
+          "description": "Source variant of the sensor declaration."
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "maintainability",
+            "architecture",
+            "behaviour"
+          ]
+        },
+        "tolerance": {
+          "type": "string",
+          "enum": [
+            "blocking",
+            "advisory",
+            "report"
+          ],
+          "description": "Effective tolerance — the default (blocking) is materialised here rather than omitted."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "reported",
+            "deferred",
+            "skipped"
+          ],
+          "description": "pass/fail apply only to command sensors. reported = a files sensor surfaced content with no verdict derivable. deferred = a focus sensor needs an agent runtime ynh does not own. skipped = filtered out by --only. Only fail can gate."
+        },
+        "exit_code": {
+          "type": "integer"
+        },
+        "duration_ms": {
+          "type": "integer"
+        },
+        "stdout": {
+          "type": "string",
+          "description": "Truncated at 4096 bytes."
+        },
+        "stderr": {
+          "type": "string",
+          "description": "Truncated at 4096 bytes."
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "tolerance",
+        "status",
+        "exit_code",
+        "duration_ms"
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Check"
+    },
+    {
+      "$ref": "https://eyelock.github.io/ynh/schema/cli/error.schema.json"
+    }
+  ]
+}

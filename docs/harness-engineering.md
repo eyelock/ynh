@@ -34,7 +34,7 @@ YNH covers the **guide layer** thoroughly and **declares** the sensor layer:
 | Agent Skills Standard | Native [agentskills.io](https://agentskills.io) support |
 | Progressive Disclosure | Skills use catalog → instructions → resources loading |
 
-YNH stops at the **runtime loop layer**. It declares both guides (artifacts) and observation surfaces (sensors), and it can mechanically execute an individual sensor on demand via `ynh sensors run`. Orchestration — when to run sensors, what counts as pass, when to stop iterating — belongs to an external loop driver (CI, an orchestrator, a custom tool). See [Sensors](sensors.md) for the full contract.
+YNH declares both guides (artifacts) and observation surfaces (sensors), executes an individual sensor via `ynh sensors run`, and runs the whole declared set as a gate via `ynh check`. What it does **not** own is iteration: deciding when to re-prompt an agent, what counts as convergence, and when to stop belongs to a loop driver (CI, an orchestrator, a custom tool). See [Sensors](sensors.md) for the full contract.
 
 ### Hooks: Bridge to Feedback Sensors
 
@@ -85,7 +85,9 @@ Two architectural choices constrain everything else and explain why ynh's surfac
 
 **Corollary: structure where prose would suffice in a single runtime.** A runtime that owns its agent loop can drive feedback through prose instructions alone — the runtime obeys its own conventions. ynh cannot. The loop is run by an external consumer (CI, an orchestrator, another tool) that has no way to discover what the harness exposes unless it is declared. Sensors formalise what would otherwise live as informal prose; that formality is the price of portability.
 
-**What this rules out.** Programmatic extensions in the manifest. Runtime hooks beyond the canonical four. Live mutation of artifacts after assembly. A ynh-owned loop driver. These are not gaps to be filled; they are deliberate refusals that protect the portability guarantee.
+**What this rules out.** Programmatic extensions in the manifest. Runtime hooks beyond the canonical four. Live mutation of artifacts after assembly. These are not gaps to be filled; they are deliberate refusals that protect the portability guarantee.
+
+**What changed, and why.** This section previously also ruled out *any* pass/fail policy in ynh, on the grounds that a verdict is loop-driver business. That was too strict, and the cost was that nothing consumed the sensor contract at all. `ynh check` now owns the thinnest possible policy — a command sensor passes when it exits 0, and `tolerance` says whether a failure gates — because a declared observation surface that cannot answer "did it pass" is not usable by any consumer without every consumer reinventing the same answer. Everything above that line (thresholds, severity, convergence, when to iterate) is still refused. Declarative-first survives: ynh executes declarations, it does not become a runtime.
 
 **What this rules in.** A small, stable, machine-readable surface that any runtime — interactive vendor CLI, headless CI job, custom orchestrator — can consume in the same way. The harness encodes intent; runtimes provide capability.
 

@@ -2,20 +2,33 @@ package main
 
 import (
 	"bytes"
-	_ "embed"
 	"fmt"
 	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
+
+	"github.com/eyelock/ynh/internal/clischema"
 )
 
-//go:embed schema/plugin.schema.json
-var pluginSchemaData []byte
+// Schemas are read from the single embedded tree in internal/clischema
+// rather than a second copy under cmd/ynd. go:embed cannot traverse "..",
+// so the repo keeps exactly two copies — that embed tree and the published
+// mirror under docs/schema/ — pinned byte-identical by
+// TestSchemaParityWithDocs. A third copy here is how they silently drifted.
+func mustAuthoredSchema(name string) []byte {
+	data, err := clischema.RawAuthored(name)
+	if err != nil {
+		panic(fmt.Sprintf("reading %s schema: %v", name, err))
+	}
+	return data
+}
 
-//go:embed schema/marketplace.schema.json
-var marketplaceSchemaData []byte
+var (
+	pluginSchemaData      = mustAuthoredSchema("plugin")
+	marketplaceSchemaData = mustAuthoredSchema("marketplace")
+)
 
 const (
 	pluginSchemaID      = "https://eyelock.github.io/ynh/schema/plugin.schema.json"

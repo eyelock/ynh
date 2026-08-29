@@ -99,6 +99,8 @@ func main() {
 		err = cmdMCP(os.Args[2:])
 	case "sensors":
 		err = cmdSensors(os.Args[2:])
+	case "check":
+		err = cmdCheck(os.Args[2:], os.Stdout, os.Stderr)
 	case "agent":
 		err = cmdAgent(os.Args[2:])
 	case "image":
@@ -120,6 +122,18 @@ func main() {
 	}
 
 	if err != nil {
+		// `ynh check` distinguishes its two failure modes by exit code so a
+		// gate is unambiguous: 1 means a blocking sensor failed (the report
+		// is already on stdout), 2 means ynh could not run the check.
+		if errors.Is(err, errCheckBlocked) {
+			os.Exit(1)
+		}
+		if errors.Is(err, errCheckExec) {
+			if !errors.Is(err, errStructuredReported) {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			}
+			os.Exit(2)
+		}
 		// errStructuredReported means the command has already emitted a JSON
 		// error envelope to stderr — print nothing more to keep structured
 		// consumer stdout/stderr clean. errors.Is so a wrapped sentinel still
@@ -183,6 +197,8 @@ Commands:
   sensors ls <harness>         List declared sensors (supports --format json)
   sensors show <harness> <name>  Resolve a sensor declaration (supports --format text|json)
   sensors run <harness> <name>   Run a sensor and emit a JSON result (loop drivers consume this)
+  check <harness>              Run every declared sensor and gate on the result
+                               (exit 0 pass, 1 a blocking sensor failed, 2 could not run)
   agent run --task <text> [flags]  Run an autonomous agent loop session
   registry add <url>           Add a harness registry
   registry list                Show configured registries (supports --format json)
