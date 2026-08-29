@@ -22,6 +22,16 @@ type imageTemplateData struct {
 	Name          string // harness name
 	DefaultVendor string // e.g. "claude"
 	YnhVersion    string // version of ynh that assembled the image
+	// HarnessVersion and HarnessSHA make the image self-describing. Version is
+	// an author-declared string that can be reused across different content;
+	// the SHA is what pins the image to one set of sensors and guards. An
+	// orchestrator reads both with `docker inspect`, without running anything.
+	HarnessVersion string
+	HarnessSHA     string
+	// Entrypoint is "run" (interactive vendor session) or "agent" (the
+	// autonomous loop). A factory image that can only start an interactive
+	// session cannot do batch work.
+	Entrypoint string
 }
 
 // imageDockerfileTmpl is the Dockerfile template for harness images.
@@ -46,29 +56,40 @@ COPY --link --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--{{.Name}}/
 # Default vendor (override: docker run -e YNH_VENDOR=codex)
 ENV YNH_VENDOR={{.DefaultVendor}}
 
-# Baked entrypoint — just pass the prompt as CMD
+{{if eq .Entrypoint "agent"}}# Autonomous loop. Pass the task as CMD:
+#   docker run <image> --task "fix the failing test"
+ENTRYPOINT ["tini", "-s", "--", "ynh", "agent", "run", "--harness", "local/{{.Name}}"]
+{{else}}# Interactive vendor session. Pass the prompt as CMD.
 ENTRYPOINT ["tini", "-s", "--", "ynh", "run", "local/{{.Name}}"]
-CMD []
+{{end}}CMD []
 
 LABEL dev.ynh.harness="{{.Name}}" \
       dev.ynh.harness.default-vendor="{{.DefaultVendor}}" \
+      dev.ynh.harness.version="{{.HarnessVersion}}" \
+      dev.ynh.harness.sha="{{.HarnessSHA}}" \
+      dev.ynh.entrypoint="{{.Entrypoint}}" \
       dev.ynh.assembled-by="{{.YnhVersion}}"
 `))
 
 // imageArgs holds parsed flags for the image command.
 type imageArgs struct {
-	name   string
-	tag    string
-	base   string
-	dryRun bool
-	from   string
-	path   string
+	name       string
+	tag        string
+	base       string
+	dryRun     bool
+	from       string
+	path       string
+	entrypoint string
+	// sha is the commit resolved from --from, filled in during the build
+	// rather than parsed from a flag.
+	sha string
 }
 
 // parseImageArgs parses flags for the image command.
 func parseImageArgs(args []string) (imageArgs, error) {
 	var ia imageArgs
 	ia.base = "ghcr.io/eyelock/ynh:latest"
+	ia.entrypoint = "run"
 
 	var remaining []string
 	for i := 0; i < len(args); i++ {
@@ -85,6 +106,17 @@ func parseImageArgs(args []string) (imageArgs, error) {
 			}
 			i++
 			ia.base = args[i]
+		case "--entrypoint":
+			if i+1 >= len(args) {
+				return ia, fmt.Errorf("--entrypoint requires a value")
+			}
+			i++
+			switch args[i] {
+			case "run", "agent":
+				ia.entrypoint = args[i]
+			default:
+				return ia, fmt.Errorf("unknown --entrypoint %q (want run or agent)", args[i])
+			}
 		case "--dry-run":
 			ia.dryRun = true
 		case "--from":
@@ -105,7 +137,7 @@ func parseImageArgs(args []string) (imageArgs, error) {
 	}
 
 	if len(remaining) < 1 {
-		return ia, fmt.Errorf("usage: ynh image <name> [--tag <tag>] [--base <image>] [--from <source>] [--path <subdir>] [--dry-run]")
+		return ia, fmt.Errorf("usage: ynh image <name> [--tag <tag>] [--base <image>] [--from <source>] [--path <subdir>] [--entrypoint run|agent] [--dry-run]")
 	}
 	ia.name = remaining[0]
 
@@ -184,6 +216,7 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 			if err := verifyResolvedSHA(result.Path, resolved.sha); err != nil {
 				return err
 			}
+			ia.sha = resolved.sha
 			harnessSrcDir = result.Path
 		}
 
@@ -269,10 +302,13 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 
 	// Generate Dockerfile
 	data := imageTemplateData{
-		Base:          ia.base,
-		Name:          p.Name,
-		DefaultVendor: defaultVendor,
-		YnhVersion:    config.Version,
+		Base:           ia.base,
+		Name:           p.Name,
+		DefaultVendor:  defaultVendor,
+		YnhVersion:     config.Version,
+		HarnessVersion: p.Version,
+		HarnessSHA:     harnessSHA(p, ia),
+		Entrypoint:     ia.entrypoint,
 	}
 
 	dockerfile, err := generateDockerfile(data)
@@ -307,4 +343,23 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 	_, _ = fmt.Fprintf(stderr, "\nHarness image built: %s\n", ia.tag)
 	_, _ = fmt.Fprintf(stderr, "Run: docker run --rm -v $(pwd):/workspace -e ANTHROPIC_API_KEY %s -- \"your prompt\"\n", ia.tag)
 	return nil
+}
+
+// harnessSHA resolves the commit the baked harness came from.
+//
+// Two paths reach an image build. `--from <git>` resolves a ref to a SHA
+// before cloning, and that SHA is the pin. An installed harness carries its
+// own in installed.json, recorded by `ynh install`.
+//
+// Empty is honest and expected: a harness built from a local working directory
+// has no commit to name, and a label reading "unknown" would be worse than an
+// absent one, because a reader cannot tell a missing value from a real one.
+func harnessSHA(p *harness.Harness, ia imageArgs) string {
+	if ia.sha != "" {
+		return ia.sha
+	}
+	if p != nil && p.InstalledFrom != nil {
+		return p.InstalledFrom.SHA
+	}
+	return ""
 }

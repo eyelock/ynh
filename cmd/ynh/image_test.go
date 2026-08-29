@@ -327,3 +327,125 @@ func TestPreAssembledRunDir(t *testing.T) {
 		t.Errorf("marker content = %q, want %q", string(data), "pre-assembled")
 	}
 }
+
+// An image that cannot say which harness commit it holds cannot be pinned to
+// one set of sensors and guards. Version is author-declared and reusable
+// across different content; the SHA is the pin.
+func TestHarnessSHA(t *testing.T) {
+	cases := []struct {
+		name string
+		p    *harness.Harness
+		ia   imageArgs
+		want string
+	}{
+		{
+			name: "--from a git ref: the resolved commit is the pin",
+			p:    &harness.Harness{Name: "x"},
+			ia:   imageArgs{sha: "4c1f9ab27de3055a8b6c1f2e4d9a8c7b3f5d6e21"},
+			want: "4c1f9ab27de3055a8b6c1f2e4d9a8c7b3f5d6e21",
+		},
+		{
+			name: "installed harness: the SHA ynh install recorded",
+			p:    &harness.Harness{Name: "x", InstalledFrom: &harness.Provenance{SHA: "9f2c1ab"}},
+			want: "9f2c1ab",
+		},
+		{
+			name: "--from wins over install provenance — it is what was actually baked",
+			p:    &harness.Harness{Name: "x", InstalledFrom: &harness.Provenance{SHA: "stale00"}},
+			ia:   imageArgs{sha: "fresh11"},
+			want: "fresh11",
+		},
+		{
+			// Empty is honest. A label reading "unknown" would be worse: a
+			// reader could not tell a missing value from a real one.
+			name: "local working directory: no commit to name",
+			p:    &harness.Harness{Name: "x", InstalledFrom: &harness.Provenance{SourceType: "local"}},
+			want: "",
+		},
+		{
+			name: "no harness loaded at all",
+			p:    nil,
+			want: "",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := harnessSHA(c.p, c.ia); got != c.want {
+				t.Errorf("harnessSHA = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// A factory image that can only start an interactive vendor session cannot do
+// batch work. `--entrypoint agent` bakes the autonomous loop instead.
+func TestGenerateDockerfile_Entrypoint(t *testing.T) {
+	base := imageTemplateData{Base: "b", Name: "demo", DefaultVendor: "claude", YnhVersion: "0.7.0"}
+
+	run := base
+	run.Entrypoint = "run"
+	out, err := generateDockerfile(run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `ENTRYPOINT ["tini", "-s", "--", "ynh", "run", "local/demo"]`) {
+		t.Errorf("the interactive entrypoint must be unchanged:\n%s", out)
+	}
+	if strings.Contains(out, "agent") {
+		t.Error("the default build must not bake the agent loop")
+	}
+
+	agent := base
+	agent.Entrypoint = "agent"
+	out, err = generateDockerfile(agent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `ENTRYPOINT ["tini", "-s", "--", "ynh", "agent", "run", "--harness", "local/demo"]`) {
+		t.Errorf("the agent entrypoint is missing:\n%s", out)
+	}
+	// CMD must stay empty so the task arrives as `docker run <image> --task ...`.
+	if !strings.Contains(out, "CMD []") {
+		t.Error("CMD must stay empty so the caller supplies the task")
+	}
+}
+
+// An orchestrator reads these with `docker inspect`, without running anything.
+func TestGenerateDockerfile_LabelsDescribeTheImage(t *testing.T) {
+	out, err := generateDockerfile(imageTemplateData{
+		Base: "b", Name: "demo", DefaultVendor: "codex", YnhVersion: "0.7.0",
+		HarnessVersion: "2.1.0", HarnessSHA: "4c1f9ab", Entrypoint: "agent",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`dev.ynh.harness="demo"`,
+		`dev.ynh.harness.default-vendor="codex"`,
+		`dev.ynh.harness.version="2.1.0"`,
+		`dev.ynh.harness.sha="4c1f9ab"`,
+		`dev.ynh.entrypoint="agent"`,
+		`dev.ynh.assembled-by="0.7.0"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("label missing: %s\n%s", want, out)
+		}
+	}
+}
+
+func TestParseImageArgs_Entrypoint(t *testing.T) {
+	ia, err := parseImageArgs([]string{"demo"})
+	if err != nil || ia.entrypoint != "run" {
+		t.Errorf("default entrypoint = %q (err %v), want run — existing builds must not change", ia.entrypoint, err)
+	}
+	ia, err = parseImageArgs([]string{"demo", "--entrypoint", "agent"})
+	if err != nil || ia.entrypoint != "agent" {
+		t.Errorf("got %q (err %v), want agent", ia.entrypoint, err)
+	}
+	if _, err := parseImageArgs([]string{"demo", "--entrypoint", "sideways"}); err == nil {
+		t.Error("an unknown entrypoint must be rejected, not silently ignored")
+	}
+	if _, err := parseImageArgs([]string{"demo", "--entrypoint"}); err == nil {
+		t.Error("--entrypoint with no value must error")
+	}
+}
