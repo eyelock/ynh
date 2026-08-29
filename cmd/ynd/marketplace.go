@@ -100,8 +100,8 @@ func cmdMarketplaceBuild(args []string) error {
 
 	// Handle --clean
 	if clean {
-		if err := os.RemoveAll(outputDir); err != nil {
-			return fmt.Errorf("cleaning output dir: %w", err)
+		if err := cleanOutputDir(outputDir, skipConfirmEnv()); err != nil {
+			return err
 		}
 	}
 
