@@ -81,6 +81,12 @@ func TestCmdMarketplaceBuildClean(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Neutralise the environment: skipConfirmEnv honours CI and YNH_YES, and CI
+	// is always set in Actions. Without this the prompt is skipped there and
+	// the test asserts the machine it runs on rather than the behaviour.
+	t.Setenv("CI", "")
+	t.Setenv("YNH_YES", "")
+
 	// --clean now asks before deleting a non-empty directory. Answer it
 	// explicitly: a test that relied on the old unconditional delete would
 	// otherwise pass for the wrong reason.
