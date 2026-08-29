@@ -123,8 +123,16 @@ type SensorResultData struct {
 	// Tolerance is why a failing sensor may not have gated: advisory and
 	// report sensors are non-gating by declaration.
 	Tolerance string `json:"tolerance,omitempty"`
-	Passed    bool   `json:"passed"`
-	Summary   string `json:"summary,omitempty"`
+	// Status is `ynh check`'s verdict word — pass, fail, known, reported,
+	// deferred. Passed alone cannot express "failing, but every failure is
+	// already in the baseline", which is the difference between a regression
+	// this run caused and debt it inherited. Empty for the convergence
+	// verifier, which does not go through the gate.
+	Status     string `json:"status,omitempty"`
+	KnownCount int    `json:"known_count,omitempty"`
+	NewCount   int    `json:"new_count,omitempty"`
+	Passed     bool   `json:"passed"`
+	Summary    string `json:"summary,omitempty"`
 }
 
 // BudgetType identifies which budget limit was hit.

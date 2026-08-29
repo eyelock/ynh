@@ -403,7 +403,9 @@ judgments — still belongs to a loop driver. `ynh check` answers "did the
 declared command succeed", nothing more.
 
 Sensors are also what [`ynh agent run`](agent.md) iterates against between
-turns, applying the same `tolerance` rule.
+turns. The loop does not apply its own policy: it runs `ynh check --format
+json` and takes its verdict, so the ratchet and the tolerance rules are the
+same ones a human gets at a terminal.
 
 ## `ynh check`
 
@@ -414,6 +416,13 @@ ynh check local/demo                      # run all sensors, text report
 ynh check local/demo --only fmt,vet       # filter — the edit-time loop
 ynh check local/demo --format json        # machine-readable, for CI and consumers
 ```
+
+`--sensor-overlay '{"test":{"source":{"command":"go test -short ./..."}}}'`
+substitutes a command for a declared sensor for one run. It exists so an inner
+loop can buy a faster signal without leaving the gate — a driver that ran the
+substituted command directly would be applying its own policy again, which is
+the split the gate exists to close. Naming a sensor the harness does not declare
+is an error rather than a silent no-op.
 
 ### Baseline — inheriting a repo that already fails
 
@@ -462,9 +471,13 @@ gate. When recorded failures stop appearing, `ynh check` says so:
 baseline: 2 recorded failures are now fixed — `ynh check --update-baseline` to lock that in
 ```
 
-Baselines only tighten by an explicit act. **CI cannot write one** — with
-`CI` set, `--update-baseline` refuses. A gate that rewrites its own reference
-point from a feature branch forgives whatever that branch introduced.
+Baselines only tighten by an explicit act, and nothing being gated may perform
+it. **CI cannot write one** — with `CI` set, `--update-baseline` refuses; a gate
+that rewrites its own reference point from a feature branch forgives whatever
+that branch introduced. **Nor can an agent** — `--update-baseline` refuses
+inside an [agent session](agent.md) and appends the refused attempt to the
+session's `gate-write-attempts.jsonl`, because an agent that cannot converge
+reaching for blanket amnesty is worth measuring, not just blocking.
 
 A sensor emitting more than 2000 distinct lines is recorded **truncated**: no
 fingerprints are stored, and it ratchets on the count of distinct failing lines
@@ -485,7 +498,9 @@ Exit codes are the contract:
 | 2 | ynh could not run the check at all |
 
 1 and 2 are deliberately distinct: a red CI job has to distinguish "your code
-is failing" from "the gate itself is broken".
+is failing" from "the gate itself is broken". `ynh agent run` makes the same
+split — a failing sensor is a turn's feedback, while a gate that cannot run
+ends the session with exit 22.
 
 Failing sensor output is printed verbatim rather than summarised, because that
 output is the remediation an agent acts on.

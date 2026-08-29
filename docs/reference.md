@@ -72,7 +72,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh sensors ls <harness>` | `--format <text\|json>` |
 | `ynh sensors show <harness> <name>` | `--format <text\|json>` |
 | `ynh sensors run <harness> <name>` | `--cwd <dir>`, `--no-content` |
-| `ynh check <harness>` | `--only <a,b>`, `--cwd <dir>`, `--update-baseline`, `--no-baseline`, `--format <text\|json>` |
+| `ynh check <harness>` | `--only <a,b>`, `--cwd <dir>`, `--update-baseline`, `--no-baseline`, `--sensor-overlay <json>`, `--format <text\|json>` |
 | `ynh agent run` | `--harness`, `--task`, `--focus`, `--profile`, `--backend`, `--model`, `--convergence-sensor`, `--sensor-overlay`, `--worktree`, `--sandbox`, `--auto-commit`, `--interactive`, `--no-plan`, `--max-turns`, `--max-tokens`, `--max-wall`, `--max-plan-iterations`, `--emit-jsonl`, `--resume` — see [Agent Loop](agent.md) |
 | `ynh sources add <path>` | `--name`, `--description` |
 | `ynh sources list` | `--format <text\|json>` |

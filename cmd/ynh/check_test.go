@@ -7,8 +7,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/gate"
 )
 
 const checkHarnessJSON = `{
@@ -45,16 +48,26 @@ const checkHarnessJSON = `{
   }
 }`
 
-func runCheck(t *testing.T, args ...string) (checkEnvelope, string, error) {
+func runCheck(t *testing.T, args ...string) (gate.Envelope, string, error) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
 	installListTestHarness(t, home, "ch", checkHarnessJSON)
 
+	// Always run against a scratch directory. Without --cwd, cmdCheck falls
+	// back to os.Getwd() — the package directory — so the suite would read
+	// the repository's own .ynh/baseline.json, and one --update-baseline
+	// would leave a file behind that silently changed every later result.
+	// It did: a stray entry turned an advisory failure into "known" and the
+	// suite passed or failed depending on what had run before.
+	if !slices.Contains(args, "--cwd") {
+		args = append(args, "--cwd", t.TempDir())
+	}
+
 	var stdout bytes.Buffer
 	err := cmdCheck(append([]string{"local/ch"}, args...), &stdout, io.Discard)
 
-	var env checkEnvelope
+	var env gate.Envelope
 	// An execution error reports on stderr and writes no payload, so only
 	// decode when there is one.
 	if strings.Contains(strings.Join(args, " "), "json") && stdout.Len() > 0 {
@@ -108,15 +121,15 @@ func TestCheck_NonCommandSensorsNeverGate(t *testing.T) {
 	if env.Verdict != "pass" {
 		t.Fatalf("verdict = %q, want pass", env.Verdict)
 	}
-	byName := map[string]checkResult{}
+	byName := map[string]gate.Result{}
 	for _, r := range env.Sensors {
 		byName[r.Name] = r
 	}
-	if got := byName["files"].Status; got != statusReported {
-		t.Errorf("files status = %q, want %q", got, statusReported)
+	if got := byName["files"].Status; got != gate.StatusReported {
+		t.Errorf("files status = %q, want %q", got, gate.StatusReported)
 	}
-	if got := byName["judged"].Status; got != statusDeferred {
-		t.Errorf("judged status = %q, want %q", got, statusDeferred)
+	if got := byName["judged"].Status; got != gate.StatusDeferred {
+		t.Errorf("judged status = %q, want %q", got, gate.StatusDeferred)
 	}
 }
 
@@ -182,7 +195,7 @@ const baselineHarnessJSON = `{
 // runBaselineCheck runs cmdCheck with cwd pointed at a scratch work dir whose
 // issues.txt is the sensor's output, so a test can move the failure surface
 // around the way a real edit would.
-func runBaselineCheck(t *testing.T, home, work string, args ...string) (checkEnvelope, string, error) {
+func runBaselineCheck(t *testing.T, home, work string, args ...string) (gate.Envelope, string, error) {
 	t.Helper()
 	t.Setenv("YNH_HOME", home)
 	// Neutralise the guards that read the ambient environment, so a test
@@ -208,7 +221,7 @@ func runBaselineCheckInEnv(t *testing.T, home, work string, args ...string) (che
 	var stdout bytes.Buffer
 	full := append([]string{"local/bl", "--cwd", work, "--format", "json"}, args...)
 	err := cmdCheck(full, &stdout, io.Discard)
-	var env checkEnvelope
+	var env gate.Envelope
 	if stdout.Len() > 0 {
 		if uErr := json.Unmarshal(stdout.Bytes(), &env); uErr != nil {
 			t.Fatalf("decoding: %v\n%s", uErr, stdout.String())
@@ -219,7 +232,7 @@ func runBaselineCheckInEnv(t *testing.T, home, work string, args ...string) (che
 
 // sensorNamed finds a result by name. Indexing is fragile: results are sorted
 // and --only leaves filtered sensors in the payload as skipped.
-func sensorNamed(t *testing.T, env checkEnvelope, name string) checkResult {
+func sensorNamed(t *testing.T, env gate.Envelope, name string) gate.Result {
 	t.Helper()
 	for _, r := range env.Sensors {
 		if r.Name == name {
@@ -227,7 +240,7 @@ func sensorNamed(t *testing.T, env checkEnvelope, name string) checkResult {
 		}
 	}
 	t.Fatalf("sensor %q not in result", name)
-	return checkResult{}
+	return gate.Result{}
 }
 
 func setupBaselineRepo(t *testing.T, issues string) (home, work string) {
@@ -276,7 +289,7 @@ func TestCheck_BaselineForgivesPreExistingFailures(t *testing.T) {
 	if env.Verdict != "pass" {
 		t.Errorf("verdict = %q, want pass", env.Verdict)
 	}
-	if got := sensorNamed(t, env, "lint").Status; got != statusKnown {
+	if got := sensorNamed(t, env, "lint").Status; got != gate.StatusKnown {
 		t.Errorf("lint status = %q, want known", got)
 	}
 	if env.Summary.Known != 2 {
@@ -324,7 +337,7 @@ src/util.go:88:2: unused variable tmp
 	if err != nil {
 		t.Fatalf("moved line numbers must not block, got %v", err)
 	}
-	if got := sensorNamed(t, env, "lint").Status; got != statusKnown {
+	if got := sensorNamed(t, env, "lint").Status; got != gate.StatusKnown {
 		t.Errorf("lint status = %q, want known", got)
 	}
 }
@@ -391,7 +404,7 @@ func TestCheck_UpdateBaselineWithOnlyPreservesOtherSensors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lint should still be forgiven after a scoped update, got %v", err)
 	}
-	if got := sensorNamed(t, env, "lint").Status; got != statusKnown {
+	if got := sensorNamed(t, env, "lint").Status; got != gate.StatusKnown {
 		t.Errorf("lint status = %q, want known — its baseline entry was erased", got)
 	}
 }
@@ -407,7 +420,7 @@ func TestCheck_SilentFailureCanBeBaselined(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a baselined silent failure must not gate, got %v", err)
 	}
-	if got := sensorNamed(t, env, "quiet").Status; got != statusKnown {
+	if got := sensorNamed(t, env, "quiet").Status; got != gate.StatusKnown {
 		t.Errorf("quiet status = %q, want known", got)
 	}
 	if env.Baseline != nil && env.Baseline.Stale {
@@ -444,7 +457,7 @@ func TestCheck_UpdateBaselineEmitsJSON(t *testing.T) {
 	if strings.TrimSpace(out) == "" {
 		t.Fatal("--update-baseline --format json wrote nothing to stdout")
 	}
-	var env checkEnvelope
+	var env gate.Envelope
 	if uErr := json.Unmarshal([]byte(out), &env); uErr != nil {
 		t.Fatalf("output is not valid JSON: %v\n%s", uErr, out)
 	}
@@ -507,5 +520,89 @@ func TestCheck_UpdateBaselineAllowedForAHuman(t *testing.T) {
 	t.Setenv("CI", "")
 	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
 		t.Fatalf("a human recording a baseline must be allowed: %v", err)
+	}
+}
+
+// The agent loop substitutes a faster command for the same declared sensor on
+// its inner turns. That substitution has to go through the gate, not around
+// it — a loop that ran `ynh sensors run` directly to get an overlay would be
+// applying its own policy again, which is the split B1 closed.
+func TestCheck_SensorOverlayReplacesTheCommand(t *testing.T) {
+	env, _, err := runCheck(t, "--only", "red", "--format", "json",
+		"--sensor-overlay", `{"red":{"source":{"command":"exit 0"}}}`)
+	if err != nil {
+		t.Fatalf("overlay made red pass, so the gate should not block: %v", err)
+	}
+	if env.Verdict != gate.VerdictPass {
+		t.Errorf("verdict = %q, want pass once the overlay replaced the failing command", env.Verdict)
+	}
+	for _, s := range env.Sensors {
+		if s.Name == "red" && s.Status != gate.StatusPass {
+			t.Errorf("red status = %q, want pass — the overlay did not take effect", s.Status)
+		}
+	}
+}
+
+// An overlay naming a sensor the harness does not declare is a typo. Ignoring
+// it silently would leave the caller believing it had substituted a command
+// while being gated on the original.
+func TestCheck_SensorOverlayForUnknownSensorIsAnError(t *testing.T) {
+	_, _, err := runCheck(t, "--format", "json",
+		"--sensor-overlay", `{"rde":{"source":{"command":"exit 0"}}}`)
+	if !errors.Is(err, errCheckExec) {
+		t.Fatalf("want exec error for an overlay naming no declared sensor, got %v", err)
+	}
+}
+
+func TestCheck_SensorOverlayRejectsInvalidJSON(t *testing.T) {
+	_, _, err := runCheck(t, "--format", "json", "--sensor-overlay", `{`)
+	if !errors.Is(err, errCheckExec) {
+		t.Fatalf("want exec error for malformed overlay JSON, got %v", err)
+	}
+}
+
+// A baseline records what a declared sensor produces. Writing one while a
+// substitute command runs would file the proxy's output under the real
+// sensor's name, and every later run would compare the real command against
+// fingerprints it never produced.
+func TestCheck_UpdateBaselineRejectsAnOverlay(t *testing.T) {
+	_, _, err := runCheck(t, "--update-baseline",
+		"--sensor-overlay", `{"red":{"source":{"command":"exit 0"}}}`)
+	if !errors.Is(err, errCheckExec) {
+		t.Fatalf("recording a baseline from a substitute command must be refused, got %v", err)
+	}
+}
+
+// A substitute command passing says nothing about what the declared one
+// records. Reporting its debt as fixed would invite the operator to narrow the
+// ratchet — erasing real findings on the strength of a proxy.
+func TestCheck_OverlayDoesNotClaimDebtIsFixed(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "ch", checkHarnessJSON)
+	cwd := t.TempDir()
+
+	var rec bytes.Buffer
+	if err := cmdCheck([]string{"local/ch", "--only", "red", "--cwd", cwd, "--update-baseline"},
+		&rec, io.Discard); err != nil {
+		t.Fatalf("recording baseline: %v", err)
+	}
+
+	var out bytes.Buffer
+	err := cmdCheck([]string{"local/ch", "--only", "red", "--cwd", cwd, "--format", "json",
+		"--sensor-overlay", `{"red":{"source":{"command":"exit 0"}}}`}, &out, io.Discard)
+	if err != nil {
+		t.Fatalf("overlay made red pass: %v", err)
+	}
+	var env gate.Envelope
+	if uErr := json.Unmarshal(out.Bytes(), &env); uErr != nil {
+		t.Fatalf("decoding: %v", uErr)
+	}
+	if env.Baseline == nil {
+		t.Fatal("a baseline was recorded, so the envelope should report one")
+	}
+	if env.Baseline.Stale || env.Baseline.Fixed != 0 {
+		t.Errorf("a proxy command passing is not evidence the recorded debt is fixed: fixed=%d stale=%v",
+			env.Baseline.Fixed, env.Baseline.Stale)
 	}
 }
