@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -154,5 +156,299 @@ func TestCheck_RequiresHarnessName(t *testing.T) {
 	err := cmdCheck(nil, io.Discard, io.Discard)
 	if !errors.Is(err, errCheckExec) {
 		t.Fatalf("want errCheckExec, got %v", err)
+	}
+}
+
+// --- baseline ---
+
+const baselineHarnessJSON = `{
+  "name": "bl",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "sensors": {
+    "lint": {
+      "tolerance": "blocking",
+      "source": {"command": "cat issues.txt >&2; exit 1"},
+      "output": {"format": "text"}
+    },
+    "quiet": {
+      "tolerance": "blocking",
+      "source": {"command": "exit 1"},
+      "output": {"format": "text"}
+    }
+  }
+}`
+
+// runBaselineCheck runs cmdCheck with cwd pointed at a scratch work dir whose
+// issues.txt is the sensor's output, so a test can move the failure surface
+// around the way a real edit would.
+func runBaselineCheck(t *testing.T, home, work string, args ...string) (checkEnvelope, string, error) {
+	t.Helper()
+	t.Setenv("YNH_HOME", home)
+	// Neutralise the guards that read the ambient environment, so a test
+	// asserts the behaviour it names rather than the behaviour of the machine
+	// it runs on. Without this every --update-baseline test passes locally and
+	// fails in CI — where CI is set and the guard correctly refuses — which is
+	// the one place nobody was looking until stacked PRs started running CI.
+	//
+	// A test whose subject *is* the ambient environment uses
+	// runBaselineCheckInEnv instead: this helper runs after the caller's own
+	// t.Setenv and would undo it.
+	t.Setenv("CI", "")
+	t.Setenv("YNH_AGENT_SESSION", "")
+	return runBaselineCheckInEnv(t, home, work, args...)
+}
+
+// runBaselineCheckInEnv is runBaselineCheck without the environment
+// neutralisation, for the guard tests that need the ambient environment they
+// set to survive.
+func runBaselineCheckInEnv(t *testing.T, home, work string, args ...string) (checkEnvelope, string, error) {
+	t.Helper()
+	t.Setenv("YNH_HOME", home)
+	var stdout bytes.Buffer
+	full := append([]string{"local/bl", "--cwd", work, "--format", "json"}, args...)
+	err := cmdCheck(full, &stdout, io.Discard)
+	var env checkEnvelope
+	if stdout.Len() > 0 {
+		if uErr := json.Unmarshal(stdout.Bytes(), &env); uErr != nil {
+			t.Fatalf("decoding: %v\n%s", uErr, stdout.String())
+		}
+	}
+	return env, stdout.String(), err
+}
+
+// sensorNamed finds a result by name. Indexing is fragile: results are sorted
+// and --only leaves filtered sensors in the payload as skipped.
+func sensorNamed(t *testing.T, env checkEnvelope, name string) checkResult {
+	t.Helper()
+	for _, r := range env.Sensors {
+		if r.Name == name {
+			return r
+		}
+	}
+	t.Fatalf("sensor %q not in result", name)
+	return checkResult{}
+}
+
+func setupBaselineRepo(t *testing.T, issues string) (home, work string) {
+	t.Helper()
+	home = t.TempDir()
+	work = t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "bl", baselineHarnessJSON)
+	writeIssues(t, work, issues)
+	return home, work
+}
+
+func writeIssues(t *testing.T, work, issues string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(work, "issues.txt"), []byte(issues), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+const preExisting = `src/legacy.go:12:5: exported func Old should have comment
+src/util.go:8:2: unused variable tmp
+`
+
+// The trap this feature exists to remove: without a baseline, inheriting a
+// repo that already fails means turn one is unwinnable.
+func TestCheck_WithoutBaselineDirtyRepoBlocks(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	env, _, err := runBaselineCheck(t, home, work)
+	if !errors.Is(err, errCheckBlocked) {
+		t.Fatalf("want blocked, got %v", err)
+	}
+	if got := sensorNamed(t, env, "lint").NewCount; got != 2 {
+		t.Errorf("lint new_count = %d, want 2", got)
+	}
+}
+
+func TestCheck_BaselineForgivesPreExistingFailures(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatalf("--update-baseline: %v", err)
+	}
+	env, _, err := runBaselineCheck(t, home, work)
+	if err != nil {
+		t.Fatalf("want pass after baseline, got %v", err)
+	}
+	if env.Verdict != "pass" {
+		t.Errorf("verdict = %q, want pass", env.Verdict)
+	}
+	if got := sensorNamed(t, env, "lint").Status; got != statusKnown {
+		t.Errorf("lint status = %q, want known", got)
+	}
+	if env.Summary.Known != 2 {
+		t.Errorf("known = %d, want 2 (lint and quiet both baselined)", env.Summary.Known)
+	}
+}
+
+// The load-bearing case: a new issue must still block, and the report must
+// show only it — not the debt the author did not introduce.
+func TestCheck_NewFailureBlocksAndIsolated(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatal(err)
+	}
+	writeIssues(t, work, preExisting+"src/feature.go:3:1: exported func New should have comment\n")
+
+	env, _, err := runBaselineCheck(t, home, work)
+	if !errors.Is(err, errCheckBlocked) {
+		t.Fatalf("a new failure must block, got %v", err)
+	}
+	r := sensorNamed(t, env, "lint")
+	if r.NewCount != 1 || r.KnownCount != 2 {
+		t.Errorf("new=%d known=%d, want 1/2", r.NewCount, r.KnownCount)
+	}
+	if !strings.Contains(r.NewOutput, "feature.go") {
+		t.Errorf("new output missing the new issue: %q", r.NewOutput)
+	}
+	if strings.Contains(r.NewOutput, "legacy.go") {
+		t.Errorf("new output leaked pre-existing debt, which is what makes a gate ignorable: %q", r.NewOutput)
+	}
+}
+
+// Without position normalisation this is the bug that would make baselines
+// useless in practice: inserting lines above an issue would report the whole
+// file as new on every edit.
+func TestCheck_LineNumberDriftIsNotANewFailure(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatal(err)
+	}
+	writeIssues(t, work, `src/legacy.go:112:5: exported func Old should have comment
+src/util.go:88:2: unused variable tmp
+`)
+	env, _, err := runBaselineCheck(t, home, work)
+	if err != nil {
+		t.Fatalf("moved line numbers must not block, got %v", err)
+	}
+	if got := sensorNamed(t, env, "lint").Status; got != statusKnown {
+		t.Errorf("lint status = %q, want known", got)
+	}
+}
+
+func TestCheck_ReportsFixedDebtSoRatchetCanTighten(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatal(err)
+	}
+	writeIssues(t, work, "src/legacy.go:12:5: exported func Old should have comment\n")
+
+	env, _, err := runBaselineCheck(t, home, work)
+	if err != nil {
+		t.Fatalf("want pass, got %v", err)
+	}
+	if env.Baseline == nil || env.Baseline.Fixed != 1 || !env.Baseline.Stale {
+		t.Errorf("baseline info = %+v, want fixed=1 stale=true", env.Baseline)
+	}
+}
+
+// A gate that rewrites its own reference point from a feature branch forgives
+// whatever that branch introduced.
+func TestCheck_UpdateBaselineRefusedInCI(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	t.Setenv("YNH_AGENT_SESSION", "")
+	t.Setenv("CI", "true")
+	_, _, err := runBaselineCheckInEnv(t, home, work, "--update-baseline")
+	if !errors.Is(err, errCheckExec) {
+		t.Fatalf("want errCheckExec, got %v", err)
+	}
+}
+
+func TestCheck_NoBaselineFlagShowsUnratchetedTruth(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatal(err)
+	}
+	env, _, err := runBaselineCheck(t, home, work, "--no-baseline")
+	if !errors.Is(err, errCheckBlocked) {
+		t.Fatalf("--no-baseline must ignore the ratchet, got %v", err)
+	}
+	if env.Baseline != nil {
+		t.Errorf("baseline info should be absent with --no-baseline, got %+v", env.Baseline)
+	}
+}
+
+// --- regressions ---
+
+// --update-baseline used to write a freshly built map, so any sensor filtered
+// out by --only lost its recorded debt. Silent, and unrecoverable without git.
+func TestCheck_UpdateBaselineWithOnlyPreservesOtherSensors(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-record only a sensor that is not "lint".
+	if _, _, err := runBaselineCheck(t, home, work, "--only", "quiet", "--update-baseline"); err != nil {
+		t.Fatalf("scoped update: %v", err)
+	}
+
+	// lint's forgiveness must survive.
+	env, _, err := runBaselineCheck(t, home, work, "--only", "lint")
+	if err != nil {
+		t.Fatalf("lint should still be forgiven after a scoped update, got %v", err)
+	}
+	if got := sensorNamed(t, env, "lint").Status; got != statusKnown {
+		t.Errorf("lint status = %q, want known — its baseline entry was erased", got)
+	}
+}
+
+// A sensor that fails with no output produces no fingerprints, so forgiveness
+// keyed on a non-zero known count could never apply to it.
+func TestCheck_SilentFailureCanBeBaselined(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatal(err)
+	}
+	env, _, err := runBaselineCheck(t, home, work, "--only", "quiet")
+	if err != nil {
+		t.Fatalf("a baselined silent failure must not gate, got %v", err)
+	}
+	if got := sensorNamed(t, env, "quiet").Status; got != statusKnown {
+		t.Errorf("quiet status = %q, want known", got)
+	}
+	if env.Baseline != nil && env.Baseline.Stale {
+		t.Error("nothing changed, so the baseline must not report fixed debt")
+	}
+}
+
+// A sensor going fully green is the clearest signal the ratchet can tighten,
+// but that path returns before Compare, so its debt was never counted.
+func TestCheck_GreenSensorReportsClearedDebt(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatal(err)
+	}
+	writeIssues(t, work, "") // lint now passes entirely
+
+	env, _, err := runBaselineCheck(t, home, work, "--only", "lint")
+	if err != nil {
+		t.Fatalf("want pass, got %v", err)
+	}
+	if env.Baseline == nil || !env.Baseline.Stale || env.Baseline.Fixed != 2 {
+		t.Errorf("baseline = %+v, want fixed=2 stale=true", env.Baseline)
+	}
+}
+
+// An empty stdout leaves a structured consumer unable to tell success from a
+// crash.
+func TestCheck_UpdateBaselineEmitsJSON(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	_, out, err := runBaselineCheck(t, home, work, "--update-baseline")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(out) == "" {
+		t.Fatal("--update-baseline --format json wrote nothing to stdout")
+	}
+	var env checkEnvelope
+	if uErr := json.Unmarshal([]byte(out), &env); uErr != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", uErr, out)
+	}
+	if env.Verdict != "pass" {
+		t.Errorf("verdict = %q, want pass", env.Verdict)
 	}
 }

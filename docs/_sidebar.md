@@ -52,6 +52,7 @@
   * [16. Docker Images](tutorial/09-docker-image.md)
   * [17. Namespacing & Migration](tutorial/18-namespacing-and-migration.md)
   * [18. Sensors](tutorial/19-sensors.md)
+  * [19. Gating with ynh check](tutorial/20-check.md)
 
 * **Project**
   * [Migrating to 0.2](migration.md)

@@ -6,8 +6,8 @@ ynh is a harness template manager for AI coding assistants (Claude Code, OpenAI 
 
 ## Two Binaries
 
-- **`ynh`** (`cmd/ynh/`) — Harness manager: init, install, uninstall, update, run, ls, info, vendors, search, registry, image, status, prune, hook, doctor
-- **`ynd`** (`cmd/ynd/`) — Developer tools: create, lint, validate, fmt, compress, inspect
+- **`ynh`** (`cmd/ynh/`) — Harness manager: init, install, uninstall, update, run, ls, info, installed, schema, vendors, sources, paths, status, search, registry, backend, delegate, fork, include, focus, profile, hook, doctor, mcp, sensors, check, agent, image, prune, migrate, quarantine
+- **`ynd`** (`cmd/ynd/`) — Developer tools: create, lint, validate, fmt, compress, inspect, export, compose, preview, diff, marketplace, migrate, validate-output
 
 Both built by `make build`, released together via goreleaser (single `v*` tag).
 

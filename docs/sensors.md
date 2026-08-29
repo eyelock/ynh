@@ -412,6 +412,67 @@ ynh check local/demo --only fmt,vet       # filter — the edit-time loop
 ynh check local/demo --format json        # machine-readable, for CI and consumers
 ```
 
+### Baseline — inheriting a repo that already fails
+
+Blocking on the exit code alone makes the first run unwinnable on any repo
+that is not already clean, and a gate nobody can satisfy is a gate everybody
+disables. So `ynh check` records what was already failing and blocks only on
+what is new.
+
+```bash
+ynh check local/demo --update-baseline   # accept current state; writes .ynh/baseline.json
+ynh check local/demo                     # blocks only on failures not in the baseline
+ynh check local/demo --no-baseline       # ignore the ratchet, show everything
+```
+
+```
+  ✗  lint  1 new, 3 known  15ms
+
+lint — 1 new (3 pre-existing not shown):
+src/feature.go:3:1: exported func New should have comment
+```
+
+Only the new failure is shown. Listing the three issues the author did not
+introduce alongside the one they did is how a useful gate becomes an ignored
+one.
+
+**Commit `.ynh/baseline.json`.** The ratchet is a property of the repository,
+not of one developer.
+
+Entries are scoped by harness id, because sensor names are only unique within a
+harness — two harnesses in one repository each declaring `lint` would otherwise
+share, and overwrite, a single entry. `--update-baseline` refreshes only the
+sensors that actually ran and leaves every other entry untouched, so combining
+it with `--only` is safe.
+
+How it works: each failing sensor's output is reduced to one fingerprint per
+line, with file positions (`:12:5`) collapsed and absolute paths made relative
+to the working directory. Position collapsing is load-bearing — without it,
+inserting a line above an existing issue would report the whole file as new on
+the next run. Path relativisation lets a baseline recorded on a laptop match on
+a CI runner.
+
+A sensor whose failures are all in the baseline reports `known` and does not
+gate. When recorded failures stop appearing, `ynh check` says so:
+
+```
+baseline: 2 recorded failures are now fixed — `ynh check --update-baseline` to lock that in
+```
+
+Baselines only tighten by an explicit act. **CI cannot write one** — with
+`CI` set, `--update-baseline` refuses. A gate that rewrites its own reference
+point from a feature branch forgives whatever that branch introduced.
+
+A sensor emitting more than 2000 distinct lines is recorded **truncated**: no
+fingerprints are stored, and it ratchets on the count of distinct failing lines
+alone. Keeping a subset would be worse than keeping none — fingerprints are
+sorted, so a subset is whichever hashes happen to sort first, and every line
+outside it would be permanently new and permanently blocking. The report says
+the comparison is approximate rather than implying precision it does not have.
+
+A sensor that fails with no output at all can still be baselined: forgiveness
+depends on the sensor having a recorded entry, not on any fingerprint matching.
+
 Exit codes are the contract:
 
 | Code | Meaning |

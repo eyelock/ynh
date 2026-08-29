@@ -38,6 +38,9 @@
           "items": {
             "$ref": "#/$defs/SensorResult"
           }
+        },
+        "baseline": {
+          "$ref": "#/$defs/BaselineInfo"
         }
       },
       "required": [
@@ -74,6 +77,10 @@
         },
         "skipped": {
           "type": "integer"
+        },
+        "known": {
+          "type": "integer",
+          "description": "Sensors failing only in ways the baseline already records."
         }
       },
       "required": [
@@ -83,7 +90,8 @@
         "blocking",
         "reported",
         "deferred",
-        "skipped"
+        "skipped",
+        "known"
       ]
     },
     "SensorResult": {
@@ -124,11 +132,12 @@
           "enum": [
             "pass",
             "fail",
+            "known",
             "reported",
             "deferred",
             "skipped"
           ],
-          "description": "pass/fail apply only to command sensors. reported = a files sensor surfaced content with no verdict derivable. deferred = a focus sensor needs an agent runtime ynh does not own. skipped = filtered out by --only. Only fail can gate."
+          "description": "pass/fail/known apply only to command sensors. known = failing, but every failure is recorded in the baseline, so it is pre-existing debt rather than a regression and does not gate. reported = a files sensor surfaced content with no verdict derivable. deferred = a focus sensor needs an agent runtime ynh does not own. skipped = filtered out by --only. Only fail can gate."
         },
         "exit_code": {
           "type": "integer"
@@ -146,6 +155,18 @@
         },
         "note": {
           "type": "string"
+        },
+        "new_count": {
+          "type": "integer",
+          "description": "Failures not present in the baseline. Set only for failing command sensors when a baseline exists."
+        },
+        "known_count": {
+          "type": "integer",
+          "description": "Failures already present in the baseline."
+        },
+        "new_output": {
+          "type": "string",
+          "description": "Only the output lines absent from the baseline — what the author is actually being asked to fix."
         }
       },
       "required": [
@@ -155,6 +176,32 @@
         "status",
         "exit_code",
         "duration_ms"
+      ]
+    },
+    "BaselineInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Present when a baseline was loaded from .ynh/baseline.json, or after --update-baseline wrote one. Absent when no baseline exists or --no-baseline was passed. Entries in the file are scoped by harness id.",
+      "properties": {
+        "recorded_at": {
+          "type": "string",
+          "description": "When the baseline was taken (RFC 3339)."
+        },
+        "known": {
+          "type": "integer",
+          "description": "Pre-existing failures forgiven across all sensors this run. Zero after --update-baseline, which reports what it recorded rather than comparing."
+        },
+        "fixed": {
+          "type": "integer",
+          "description": "Baseline entries that no longer fail — debt paid off. Zero after --update-baseline, which reports what it recorded rather than comparing."
+        },
+        "stale": {
+          "type": "boolean",
+          "description": "True when fixed > 0: the baseline can be narrowed with --update-baseline. Zero after --update-baseline, which reports what it recorded rather than comparing."
+        }
+      },
+      "required": [
+        "recorded_at"
       ]
     }
   },
