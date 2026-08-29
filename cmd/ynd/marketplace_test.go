@@ -178,3 +178,62 @@ func writeTestJSON(t *testing.T, path string, v any) {
 		t.Fatal(err)
 	}
 }
+
+// The guard at marketplace.go skipped only vendor.Get validation — which would
+// have passed, since codex is a registered adapter — while codex stayed in
+// vendorList and reached Build regardless. Codex's manifest dir is
+// .agents/plugins, so it genuinely got an index all along.
+//
+// The code said one thing, did another, and docs/ynd.md said a third. This
+// asserts what actually happens.
+func TestCmdMarketplaceBuild_CodexGetsAnIndex(t *testing.T) {
+	configFile := setupMarketplaceTest(t)
+	outputDir := t.TempDir()
+
+	if err := cmdMarketplace([]string{"build", configFile, "-o", outputDir, "-v", "codex"}); err != nil {
+		t.Fatalf("cmdMarketplace build -v codex: %v", err)
+	}
+	assertExists(t, filepath.Join(outputDir, ".agents", "plugins", "marketplace.json"))
+}
+
+// An unknown vendor must still be rejected — deleting the codex branch must not
+// weaken validation.
+func TestCmdMarketplaceBuild_UnknownVendorStillRejected(t *testing.T) {
+	configFile := setupMarketplaceTest(t)
+	outputDir := t.TempDir()
+
+	err := cmdMarketplace([]string{"build", configFile, "-o", outputDir, "-v", "not-a-vendor"})
+	if err == nil {
+		t.Fatal("an unknown vendor must be rejected")
+	}
+}
+
+// config.Load returns an empty config for an absent file, so an error there
+// means the file exists and is malformed. Swallowing it produced a confusing
+// resolution failure several steps later instead of the parse error.
+func TestCmdMarketplaceBuild_MalformedGlobalConfigFailsImmediately(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	if err := os.WriteFile(filepath.Join(home, "config.json"), []byte("{ not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	configFile := setupMarketplaceTest(t)
+	err := cmdMarketplace([]string{"build", configFile, "-o", t.TempDir()})
+	if err == nil {
+		t.Fatal("a malformed global config must fail the build, not be replaced with an empty one")
+	}
+	if !strings.Contains(err.Error(), "global config") {
+		t.Errorf("the error should name what failed, got: %v", err)
+	}
+}
+
+// A genuinely absent global config must keep working — the fix must not turn
+// "no config yet" into an error.
+func TestCmdMarketplaceBuild_AbsentGlobalConfigStillWorks(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	configFile := setupMarketplaceTest(t)
+	if err := cmdMarketplace([]string{"build", configFile, "-o", t.TempDir()}); err != nil {
+		t.Fatalf("an absent global config must not fail the build: %v", err)
+	}
+}

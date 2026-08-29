@@ -92,9 +92,6 @@ func cmdMarketplaceBuild(args []string) error {
 		vendorList = strings.Split(vendors, ",")
 		for _, v := range vendorList {
 			trimmed := strings.TrimSpace(v)
-			if trimmed == "codex" {
-				continue // silently skip codex for marketplace
-			}
 			if _, err := vendor.Get(trimmed); err != nil {
 				return err
 			}
@@ -112,10 +109,13 @@ func cmdMarketplaceBuild(args []string) error {
 		return fmt.Errorf("creating output dir: %w", err)
 	}
 
-	// Load global config for remote source checking
+	// Load global config for remote source checking. config.Load already
+	// returns an empty config for an absent file, so an error here means the
+	// file exists and is malformed — worth failing on immediately rather than
+	// surfacing several steps later as a confusing resolution failure.
 	globalCfg, err := config.Load()
 	if err != nil {
-		globalCfg = &config.Config{}
+		return fmt.Errorf("loading global config: %w", err)
 	}
 
 	configDir, err := filepath.Abs(filepath.Dir(configFile))
