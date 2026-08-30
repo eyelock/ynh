@@ -39,6 +39,12 @@ ynd validate /tmp/ynh-tutorial/sensor-harness
 
 Expected output: `valid`.
 
+Because the artifact is produced elsewhere, `ynh check` will refuse to believe
+it once it stops describing the tree — a missing or stale `coverage/lcov.info`
+fails the gate rather than reporting green. Declare `observes` to say what the
+artifact depends on. See [a `files` sensor gates on
+freshness](tutorial/check.md#a-files-sensor-gates-on-freshness).
+
 ## A `command` sensor
 
 Add a sensor that runs a shell command. Edit the manifest:
