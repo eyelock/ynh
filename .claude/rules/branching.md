@@ -39,7 +39,7 @@ CI enforces `hotfix/*` for hotfixes targeting `main`. Release tags are cut from 
 - Any auto-generated files CI writes directly to `main` after a release must also be forward-ported to `develop` in the same or a follow-up PR.
 - Hotfixes off `main` back-merge to `develop` the same way.
 
-Full step-by-step procedure lives in the `release` skill (`references/stable.md`).
+Full step-by-step procedure lives in `.claude/commands/release.md`, and the `ynh-releaser` agent follows it.
 
 ## Workflow
 
