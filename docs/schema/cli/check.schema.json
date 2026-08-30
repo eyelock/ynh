@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/cli/check.schema.json",
   "title": "ynh check --format json",
   "description": "Output of `ynh check --format json`. Runs every declared sensor and reports a gate verdict. Exit code 0 = pass, 1 = a blocking sensor failed, 2 = ynh could not run the check. Top-level oneOf accepts either the success payload or the cross-cutting error envelope.",
-  "x-capabilities": "0.7",
+  "x-capabilities": "0.8",
   "$defs": {
     "Check": {
       "type": "object",

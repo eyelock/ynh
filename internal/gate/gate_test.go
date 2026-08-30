@@ -16,8 +16,10 @@ func TestResultGating(t *testing.T) {
 		// Recorded debt is not a regression. Blocking on it makes the first
 		// run unwinnable on any repository that is not already clean.
 		{"baselined failure does not", Result{Kind: "command", Tolerance: "blocking", Status: StatusKnown}, false},
-		// A files sensor has no derivable verdict and a focus sensor needs a
-		// runtime ynh does not own, so neither gates whatever its tolerance.
+		// A fresh files sensor surfaced content on which no verdict is
+		// derivable, and a focus sensor needs a runtime ynh does not own, so
+		// neither gates whatever its tolerance. A files sensor reaches
+		// StatusFail on freshness alone, and that does gate.
 		{"files sensor does not", Result{Kind: "files", Tolerance: "blocking", Status: StatusReported}, false},
 		{"focus sensor does not", Result{Kind: "focus", Tolerance: "blocking", Status: StatusDeferred}, false},
 		{"passing does not", Result{Kind: "command", Tolerance: "blocking", Status: StatusPass}, false},

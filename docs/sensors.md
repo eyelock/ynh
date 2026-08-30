@@ -140,6 +140,21 @@ Declare the paths the artifact actually depends on:
 Now editing `README.md` leaves the sensor fresh, and editing
 `services/gateway/auth.go` makes it stale.
 
+**Patterns are not `filepath.Glob`.** Go's matcher treats `**` as an ordinary
+`*` — it matches inside one path element and never descends — so a pattern that
+looks recursive would quietly observe the wrong set. ynh expands them instead:
+
+| Pattern | Observes |
+|---|---|
+| `services` | every file under `services/`, at any depth |
+| `services/*` | the same — a directory match means its whole subtree |
+| `services/**` | the same |
+| `services/**/*.go` | every `.go` file under `services/`, at any depth |
+| `services/*.go` | only `.go` files directly in `services/` |
+
+A pattern resolving to a directory means that directory's whole subtree, so the
+three spellings above agree rather than two of them observing nothing.
+
 **If you omit `observes`, the whole tracked tree counts.** That is strict on
 purpose: a harness that will not say what its artifact depends on gets the only
 honest assumption, which is everything. The consequence is that *any* commit

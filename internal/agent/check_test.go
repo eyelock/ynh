@@ -46,7 +46,7 @@ func itoa(n int) string {
 }
 
 const blockedEnvelope = `{
-  "capabilities": "0.7.0",
+  "capabilities": "0.8.0",
   "harness": "demo",
   "verdict": "blocked",
   "summary": {"total": 1, "failed": 1, "blocking": 1},

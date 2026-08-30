@@ -234,3 +234,79 @@ func TestOldestArtifactDecides(t *testing.T) {
 			got.State, got.Reason)
 	}
 }
+
+// `observes` patterns must mean what they look like they mean.
+//
+// Go's filepath.Match treats `**` as an ordinary `*` — it matches inside one
+// path element and never descends. A harness declaring the obvious
+// `services/**` would get the directories one level down, whose mtimes say
+// nothing, leaving no usable inputs and a verdict of `unknown`. This was found
+// against a real harness before it shipped.
+func TestObservesPatterns(t *testing.T) {
+	setup := func(t *testing.T) (dir, artifact string) {
+		t.Helper()
+		dir = t.TempDir()
+		write(t, dir, "services/gateway/auth.go", "package gw", 3*time.Hour)
+		write(t, dir, "services/gateway/internal/deep.go", "package internal", 3*time.Hour)
+		write(t, dir, "services/registry/reg.go", "package reg", 3*time.Hour)
+		write(t, dir, "docs/readme.md", "# docs", 3*time.Hour)
+		artifact = write(t, dir, "out/result.json", "{}", 2*time.Hour)
+		return dir, artifact
+	}
+
+	// The pattern that would silently observe nothing before this fix.
+	t.Run("** descends", func(t *testing.T) {
+		dir, artifact := setup(t)
+		write(t, dir, "services/gateway/internal/deep.go", "changed", 1*time.Minute)
+		got := Evaluate(dir, []string{artifact}, []string{"services/**"})
+		if got.State != StateStale {
+			t.Fatalf("state = %q (%s), want stale: services/** must reach nested files",
+				got.State, got.Reason)
+		}
+	})
+
+	// A bare directory is the same subtree, so the three spellings agree.
+	for _, pat := range []string{"services", "services/*", "services/**"} {
+		t.Run("directory spelling "+pat, func(t *testing.T) {
+			dir, artifact := setup(t)
+			write(t, dir, "services/registry/reg.go", "changed", 1*time.Minute)
+			got := Evaluate(dir, []string{artifact}, []string{pat})
+			if got.State != StateStale {
+				t.Fatalf("%s: state = %q (%s), want stale", pat, got.State, got.Reason)
+			}
+		})
+	}
+
+	// A suffix after ** filters, and still descends.
+	t.Run("**/*.go filters and descends", func(t *testing.T) {
+		dir, artifact := setup(t)
+		write(t, dir, "services/gateway/internal/deep.go", "changed", 1*time.Minute)
+		got := Evaluate(dir, []string{artifact}, []string{"services/**/*.go"})
+		if got.State != StateStale {
+			t.Fatalf("state = %q (%s), want stale", got.State, got.Reason)
+		}
+	})
+
+	// And the filter genuinely excludes: a changed .md under a **/*.go
+	// pattern is not an observed input.
+	t.Run("**/*.go excludes other extensions", func(t *testing.T) {
+		dir, artifact := setup(t)
+		write(t, dir, "services/gateway/notes.md", "changed", 1*time.Minute)
+		got := Evaluate(dir, []string{artifact}, []string{"services/**/*.go"})
+		if got.State != StateFresh {
+			t.Fatalf("state = %q (%s), want fresh: a .md is not matched by **/*.go",
+				got.State, got.Reason)
+		}
+	})
+
+	// Scoping still holds — an edit outside the observed subtree is not an input.
+	t.Run("outside the subtree is not observed", func(t *testing.T) {
+		dir, artifact := setup(t)
+		write(t, dir, "docs/readme.md", "changed", 1*time.Minute)
+		got := Evaluate(dir, []string{artifact}, []string{"services/**"})
+		if got.State != StateFresh {
+			t.Fatalf("state = %q (%s), want fresh: docs/ is not under services/",
+				got.State, got.Reason)
+		}
+	})
+}

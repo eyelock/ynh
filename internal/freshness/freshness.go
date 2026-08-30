@@ -204,11 +204,7 @@ func resolveInputs(cwd string, artifacts, observes []string) ([]string, error) {
 	var candidates []string
 	if len(observes) > 0 {
 		for _, pat := range observes {
-			abs := pat
-			if !filepath.IsAbs(abs) {
-				abs = filepath.Join(cwd, pat)
-			}
-			matches, err := filepath.Glob(abs)
+			matches, err := expandObserved(cwd, pat)
 			if err != nil {
 				return nil, err
 			}
@@ -230,6 +226,100 @@ func resolveInputs(cwd string, artifacts, observes []string) ([]string, error) {
 		out = append(out, c)
 	}
 	sort.Strings(out)
+	return out, nil
+}
+
+// expandObserved resolves one `observes` pattern to the files it names.
+//
+// It is not `filepath.Glob`, and the difference is load-bearing. Go's Match
+// treats `**` as an ordinary `*`: it matches within one path element and never
+// descends. So `services/**` returns the *directories* one level down and
+// `services/**/*.go` silently misses everything deeper than one level — a
+// pattern that looks recursive, reports no error, and quietly observes the
+// wrong set. Worse for freshness specifically: directory matches carry mtimes
+// that say nothing useful, so a harness declaring the obvious pattern would
+// end up with no usable inputs at all and read as `unknown`.
+//
+// Two rules, both chosen so the obvious pattern does the obvious thing:
+//
+//   - `**` means "and everything beneath". A suffix after it filters the
+//     files found, so `services/**/*.go` is every .go file at any depth.
+//   - A pattern that resolves to a directory means that whole subtree. So
+//     `services`, `services/*` and `services/**` all observe the same files,
+//     rather than two of them observing nothing.
+func expandObserved(cwd, pat string) ([]string, error) {
+	abs := pat
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(cwd, pat)
+	}
+
+	if i := strings.Index(abs, "**"); i >= 0 {
+		root := strings.TrimRight(abs[:i], string(filepath.Separator))
+		if root == "" {
+			root = string(filepath.Separator)
+		}
+		suffix := strings.TrimLeft(abs[i+2:], string(filepath.Separator))
+		return walkFiles(root, suffix)
+	}
+
+	matches, err := filepath.Glob(abs)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, m := range matches {
+		info, statErr := os.Stat(m)
+		if statErr != nil {
+			continue
+		}
+		if !info.IsDir() {
+			out = append(out, m)
+			continue
+		}
+		nested, wErr := walkFiles(m, "")
+		if wErr != nil {
+			return nil, wErr
+		}
+		out = append(out, nested...)
+	}
+	return out, nil
+}
+
+// walkFiles lists every file under root, optionally keeping only those whose
+// path matches suffix. An unreadable subtree is skipped rather than failing
+// the whole comparison — a permissions problem in one directory should not
+// turn every sensor's verdict into `unknown`.
+func walkFiles(root, suffix string) ([]string, error) {
+	var out []string
+	err := filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if suffix == "" {
+			out = append(out, p)
+			return nil
+		}
+		// Match the suffix against the tail of the path as well as the base
+		// name, so both `**/*.go` and `**/testdata/*.json` behave.
+		rel, relErr := filepath.Rel(root, p)
+		if relErr != nil {
+			rel = filepath.Base(p)
+		}
+		if ok, _ := filepath.Match(suffix, rel); ok {
+			out = append(out, p)
+			return nil
+		}
+		if ok, _ := filepath.Match(suffix, filepath.Base(p)); ok {
+			out = append(out, p)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 

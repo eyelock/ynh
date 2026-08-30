@@ -88,15 +88,17 @@ func TestCheckConvergence_AllNonGatingIsNotEvidence(t *testing.T) {
 }
 
 // The "something gates this run" guard must count only what can actually
-// produce a blocked verdict. A files sensor reports and never gates whatever
-// its tolerance says, so counting its declared tolerance would let a harness
-// that gates on nothing pass the guard — a check that finds nothing is not a
-// check that found nothing wrong.
+// produce a blocked verdict. A files sensor that is fresh is StatusReported,
+// which never gates whatever its tolerance says, so counting its declared
+// tolerance would let a harness that gates on nothing pass the guard — a check
+// that finds nothing is not a check that found nothing wrong. (Such a sensor
+// can gate when its artifact is absent or stale, but that is a failure to
+// observe, not evidence the run was verified.)
 func TestCheckConvergence_BlockingFilesSensorIsNotEvidence(t *testing.T) {
 	e := env(gate.Result{Name: "coverage", Kind: "files", Tolerance: "blocking", Status: gate.StatusReported})
 	converged, reason, _ := checkConvergence(e, "", "", "", "", newNullTrajectory(), 1, true)
 	if converged {
-		t.Error("a files sensor cannot gate, so a harness declaring only one verifies nothing")
+		t.Error("a fresh files sensor does not gate, so a harness declaring only one verifies nothing")
 	}
 	if !strings.Contains(reason, "nothing gates") {
 		t.Errorf("reason = %q, want it to say nothing gates the run", reason)
@@ -338,7 +340,7 @@ func TestConvergence_FilesSensorCannotConverge(t *testing.T) {
 	// StatusReported is not StatusPass, which is the same rule Gating() uses.
 	r := gate.Result{Status: gate.StatusForKind("files", 0), Tolerance: "blocking"}
 	if r.Gating() {
-		t.Error("a files sensor must not gate either — it has no derivable verdict")
+		t.Error("a fresh files sensor must not gate — no verdict is derivable from its contents")
 	}
 }
 

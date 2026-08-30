@@ -207,6 +207,13 @@
           ],
           "default": "fingerprint",
           "description": "How the baseline forgives this sensor's failures. `fingerprint` (default) matches individual findings, so a fixed one stops being forgiven and a new one is flagged wherever it appears. `count` ratchets the total instead, for a sensor whose quantity is the finding \u2014 suppression directives above all. Fingerprints normalise line numbers and deduplicate, so a second identical finding in a file that already has one is invisible to the default; `count` is what sees it. Requires a command source."
+        },
+        "observes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "For files sensors: the paths this sensor's artifact depends on, used to decide whether it still describes the tree. Omitted means the whole git-tracked tree, which is strict \u2014 any commit then marks the artifact stale. Patterns are not filepath.Glob: `**` descends to any depth, and a pattern resolving to a directory means that directory's whole subtree, so `services`, `services/*` and `services/**` observe the same files. Ignored for command and focus sensors, which observe by running."
         }
       }
     },

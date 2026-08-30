@@ -323,9 +323,15 @@ func ValidateSensors(sensors map[string]Sensor, profileNames, focusNames map[str
 				issues = append(issues, fmt.Sprintf(
 					"%s reference.expect %q must be one of fail, pass", prefix, s.Reference.Expect))
 			}
-			// Only a command sensor produces a verdict, so only a command
-			// sensor can be calibrated against one. Same rule that stops a
-			// files sensor converging a run.
+			// Calibration compares an exit code against a declared
+			// expectation, and only a command source produces one.
+			//
+			// Not the same rule that stops a files sensor converging a run,
+			// though the two are easy to conflate. A files sensor does now
+			// produce a verdict — freshness — and it does gate on it. It
+			// still cannot be calibrated (no exit code) and still cannot
+			// converge (freshness says whether an artifact is current, never
+			// whether the work is done). Three separate limits, three reasons.
 			if k := s.Source.Kind(); k != "" && k != "command" {
 				issues = append(issues, fmt.Sprintf(
 					"%s reference requires a command source: no verdict about a %s sensor's output is derivable", prefix, k))
