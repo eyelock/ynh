@@ -43,11 +43,12 @@ ynd validate <dir>       # is this harness valid, and why not
 ynd preview <dir> -v <vendor>   # exactly what a vendor will receive
 ```
 
-**There is no per-command `--help`.** `ynh <command> --help` errors on every
-command, and on some it executes instead — `ynh prune --help` prunes, `ynh run
-<name> --help` launches a session. Never probe with it. `ynh help` and `ynd
-help` list the commands; note `ynh help` currently omits `migrate` and
-`quarantine`, which do exist.
+**`ynh <command> --help` describes that command and runs nothing**, so probe
+with it freely. `ynh help` and `ynd help` list every command.
+
+One exception: `ynh run` forwards unrecognised flags to the vendor CLI, so
+`ynh run <name> -- --help` sends `--help` onward instead of describing
+`ynh run`. The `--` separator is what changes the meaning.
 
 Prefer `ynd preview` over describing behaviour from memory. If a
 question needs the prose docs, point the user at
