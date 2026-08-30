@@ -93,10 +93,202 @@ Three things to notice:
 
 - **`typos` failed but did not gate** — it is `advisory`.
 - **`judge` is `deferred`.** A focus sensor needs an agent runtime ynh does not
-  own, so it never gates. A `files` sensor reports for the same reason: no
-  verdict is mechanically derivable from a file glob. Only command sensors gate.
+  own, so it never gates.
 - **The failing output is printed verbatim.** That output is the remediation an
   agent acts on, so it is not summarised away.
+
+A `files` sensor is the interesting case, and it gets its own section next: ynh
+still derives no verdict from what the artifact *says*, but it does decide
+whether the artifact is still worth believing.
+
+## A `files` sensor gates on freshness
+
+A `files` sensor reads a result something else produced — an e2e run, a coverage
+report, a scan. ynh cannot judge what that result says. It can judge whether it
+still describes the code in front of it, and that turns out to be the part that
+matters: an artifact from before your last change is not a weaker answer, it is
+an answer about different code.
+
+Use a separate harness so the counts above stay as they were:
+
+```bash
+cd /tmp/ynh-t20
+mkdir -p fresh-demo/.ynh-plugin
+cat > fresh-demo/.ynh-plugin/plugin.json <<'EOF'
+{
+  "name": "fresh-demo",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "sensors": {
+    "e2e": {
+      "category": "behaviour",
+      "source":   { "files": ["reports/e2e.json"] },
+      "observes": ["src/*"],
+      "output":   { "format": "json" }
+    }
+  }
+}
+EOF
+ynh install ./fresh-demo
+
+mkdir -p /tmp/ynh-t20/app/src /tmp/ynh-t20/app/reports
+cd /tmp/ynh-t20/app
+echo 'package main' > src/main.go
+```
+
+### A missing artifact fails
+
+Nothing has produced `reports/e2e.json` yet:
+
+```bash
+ynh check local/fresh-demo --cwd /tmp/ynh-t20/app
+echo "exit=$?"
+```
+
+```
+  ✗  e2e  absent  0ms
+
+e2e:
+no file matched the sensor's declared paths
+
+blocked: 1 of 1 sensor failed
+exit=1
+```
+
+This is the case worth dwelling on. Before freshness existed, this printed
+`ok: 0 passed` and exited 0 — a blocking sensor observing nothing, reporting
+green. A gate that passes because it is reading a file that is not there is
+worse than no gate, because it is trusted.
+
+### Producing the artifact makes it fresh
+
+```bash
+sleep 1
+echo '{"passed": 12, "failed": 0}' > reports/e2e.json
+ynh check local/fresh-demo --cwd /tmp/ynh-t20/app
+echo "exit=$?"
+```
+
+```
+  ·  e2e  reported  0ms
+
+ok: 0 passed
+exit=0
+```
+
+`reported`, not `pass`: ynh surfaced the artifact and formed no opinion about
+its contents. Twelve tests passed, or none did — ynh does not know and does not
+claim to. That is still the loop driver's job.
+
+### Changing an observed input makes it stale
+
+```bash
+sleep 1
+echo '// a behaviour change' >> src/main.go
+ynh check local/fresh-demo --cwd /tmp/ynh-t20/app
+echo "exit=$?"
+```
+
+```
+  ✗  e2e  stale  0ms
+
+e2e:
+main.go changed after e2e.json was written
+
+blocked: 1 of 1 sensor failed
+exit=1
+```
+
+The artifact is still valid — it is a true report about the code as it was one
+edit ago. It simply no longer describes this tree, so it may not stand in for
+one that does. Re-run the suite and the gate goes green again.
+
+### `observes` is what keeps this bearable
+
+`observes: ["src/*"]` says the report depends on `src/`, and nothing else. Edit
+something outside it:
+
+```bash
+sleep 1
+echo '# notes' > README.md
+ynh check local/fresh-demo --cwd /tmp/ynh-t20/app --only e2e
+echo "exit=$?"
+```
+
+```
+  ✗  e2e  stale  0ms
+
+e2e:
+main.go changed after e2e.json was written
+
+blocked: 1 of 1 sensor failed
+exit=1
+```
+
+Still stale — and the reason names `main.go`, not `README.md`. The sensor is
+carrying the earlier source edit, not the docs one. Prove it
+by refreshing the artifact and touching only the README:
+
+```bash
+sleep 1
+echo '{"passed": 12, "failed": 0}' > reports/e2e.json
+sleep 1
+echo '# more notes' >> README.md
+ynh check local/fresh-demo --cwd /tmp/ynh-t20/app
+echo "exit=$?"
+```
+
+```
+  ·  e2e  reported  0ms
+
+ok: 0 passed
+exit=0
+```
+
+A docs edit does not invalidate an e2e report, so the gate does not pretend it
+does. **Without `observes`, it would** — an undeclared sensor is compared
+against the whole tracked tree, and every commit would stale every artifact.
+That default is strict on purpose: a harness that will not say what its artifact
+depends on gets the only honest assumption, and the noise is what pushes you to
+declare the truth.
+
+### The four states
+
+| State | Meaning | Gate |
+|---|---|---|
+| `fresh` | describes the tree as it stands | passes, shown as `reported` |
+| `stale` | an observed input changed after it was written | **fails** |
+| `absent` | a declared file is not there | **fails** |
+| `unknown` | ynh could not tell | **fails** |
+
+`unknown` failing surprises people. It happens when there is no `observes` *and*
+the directory is not a git repository, so there is no input set to compare
+against. "No evidence either way" is not "nothing was wrong", and a gate that
+cannot see is not a gate that passed.
+
+Freshness respects `tolerance` exactly as an exit code does — set `advisory` or
+`report` and a stale artifact will be reported without gating.
+
+```bash
+ynh check local/fresh-demo --cwd /tmp/ynh-t20/app --format json \
+  | grep -E '"freshness"|"freshness_basis"'
+```
+
+```
+      "freshness": "fresh",
+      "freshness_basis": "mtime"
+```
+
+`freshness_basis` says what the answer rests on. Today ynh compares
+modification times, which are reliable on a working checkout and unreliable
+wherever they get rewritten wholesale — fresh clones, container builds, CI
+caches. Read it before trusting a freshness verdict from a machine that is not
+yours.
+
+```bash
+ynh uninstall local/fresh-demo
+cd /tmp/ynh-t20/work
+```
 
 ## The problem with inheriting a repository
 
@@ -371,8 +563,12 @@ rm -rf /tmp/ynh-t20
 - `ynh check` runs every declared sensor and returns one verdict.
 - `tolerance` (`blocking` / `advisory` / `report`) decides what gates, and maps
   the three enforcement loops onto sensors without ynh owning a scheduler.
-- Only command sensors gate; `files` reports and `focus` defers, because
-  neither has a verdict ynh can derive.
+- A `focus` sensor defers — it needs an agent runtime ynh does not own.
+- A `files` sensor never gates on what its artifact *says*, but does gate on
+  whether that artifact is still worth believing: `absent`, `stale` and
+  `unknown` all fail.
+- `observes` names what an artifact depends on. Omit it and the whole tracked
+  tree counts, which is strict on purpose.
 - A baseline forgives pre-existing failures so only new ones block, and shows
   only the new lines.
 - Baselines tighten deliberately, and never from CI.
