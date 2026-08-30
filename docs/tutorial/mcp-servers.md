@@ -1,4 +1,4 @@
-# Tutorial 11: MCP Servers
+# MCP Servers
 
 Declare MCP server dependencies in a harness and preview how each vendor configures them. MCP servers give agents access to tools like databases, APIs, and documentation.
 
@@ -9,7 +9,7 @@ Declare MCP server dependencies in a harness and preview how each vendor configu
 rm -rf /tmp/ynh-tutorial
 ```
 
-## T11.1: Add a stdio MCP server to a harness
+## Add a stdio MCP server to a harness
 
 Create a harness with an MCP server declaration:
 
@@ -39,7 +39,7 @@ You are a data analyst assistant with access to a SQLite database via MCP.
 EOF
 ```
 
-## T11.2: Preview for Claude
+## Preview for Claude
 
 ```bash
 ynd preview /tmp/ynh-tutorial/mcp-harness -v claude
@@ -63,7 +63,7 @@ Expected output includes `.claude/.mcp.json`:
 
 Claude uses `.claude/.mcp.json` with a `mcpServers` key — the server definition passes through directly.
 
-## T11.3: Preview for Cursor
+## Preview for Cursor
 
 ```bash
 ynd preview /tmp/ynh-tutorial/mcp-harness -v cursor
@@ -87,7 +87,7 @@ Expected output includes `.cursor/mcp.json`:
 
 Cursor uses the same JSON structure as Claude but places the file at `.cursor/mcp.json` instead of `.claude/.mcp.json`.
 
-## T11.4: Preview for Codex
+## Preview for Codex
 
 ```bash
 ynd preview /tmp/ynh-tutorial/mcp-harness -v codex
@@ -111,7 +111,7 @@ Expected output includes `.mcp.json` with JSON format (same structure as Claude,
 
 Codex uses the same JSON format as Claude with a `mcpServers` key, placed at the plugin root as `.mcp.json`.
 
-## T11.5: Add an HTTP MCP server
+## Add an HTTP MCP server
 
 Add a second server using HTTP transport:
 
@@ -122,6 +122,7 @@ cat > /tmp/ynh-tutorial/mcp-harness/.ynh-plugin/plugin.json << 'EOF'
   "name": "mcp-demo",
   "version": "0.1.0",
   "default_vendor": "claude",
+  "env_passthrough": ["DOCS_API_KEY"],
   "mcp_servers": {
     "sqlite": {
       "command": "npx",
@@ -141,13 +142,41 @@ cat > /tmp/ynh-tutorial/mcp-harness/.ynh-plugin/plugin.json << 'EOF'
 EOF
 ```
 
-Preview for Claude to see both servers:
+`${DOCS_API_KEY}` is a reference, not a value — the credential stays out of the
+manifest, and therefore out of the repository. It only resolves because the
+variable is named in `env_passthrough`.
+
+That allowlist is load-bearing, and two rules keep it from becoming a hole of
+its own.
+
+Drop `DOCS_API_KEY` from `env_passthrough` and the reference is refused rather
+than resolved, so a manifest cannot name an arbitrary variable in your
+environment and quietly copy it into a config file:
+
+```
+Error: mcp server "docs-api": headers.Authorization references ${DOCS_API_KEY}, which is not in env_passthrough
+```
+
+Keep it declared but leave it unset and that is an error too — an empty
+credential would fail somewhere far from its cause. Preview now and you get:
 
 ```bash
 ynd preview /tmp/ynh-tutorial/mcp-harness -v claude
 ```
 
-Expected `.claude/.mcp.json` now includes both servers:
+```
+Error: mcp server "docs-api": headers.Authorization references ${DOCS_API_KEY}, which is not set
+```
+
+So set it, then preview:
+
+```bash
+export DOCS_API_KEY=sk-demo-123
+ynd preview /tmp/ynh-tutorial/mcp-harness -v claude
+```
+
+Expected `.claude/.mcp.json` now includes both servers, with the reference
+resolved:
 
 ```json
 {
@@ -155,7 +184,7 @@ Expected `.claude/.mcp.json` now includes both servers:
     "docs-api": {
       "url": "https://docs.example.com/mcp",
       "headers": {
-        "Authorization": "Bearer ${DOCS_API_KEY}"
+        "Authorization": "Bearer sk-demo-123"
       }
     },
     "sqlite": {
@@ -183,7 +212,7 @@ Expected `.mcp.json` (at plugin root):
     "docs-api": {
       "url": "https://docs.example.com/mcp",
       "headers": {
-        "Authorization": "Bearer ${DOCS_API_KEY}"
+        "Authorization": "Bearer sk-demo-123"
       }
     },
     "sqlite": {
@@ -197,7 +226,11 @@ Expected `.mcp.json` (at plugin root):
 }
 ```
 
-## T11.6: Compare MCP config across vendors
+Note what that means: the assembled config holds the real credential, expanded.
+The manifest is safe to commit; the assembled output is not. It belongs in the
+run directory and in `.gitignore`, never in a harness you publish.
+
+## Compare MCP config across vendors
 
 ```bash
 ynd diff /tmp/ynh-tutorial/mcp-harness claude cursor codex
@@ -254,4 +287,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Tutorial 6: Profiles](tutorial/13-profiles.md) — configure environment-specific overrides with profiles.
+[Profiles](tutorial/profiles.md) — configure environment-specific overrides with profiles.

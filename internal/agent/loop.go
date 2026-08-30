@@ -378,7 +378,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	// ── Cancellable context + stop signals ────────────────────────────────────
 	// SIGINT/SIGTERM cancel the worker context so an in-flight Next() unblocks;
 	// the loop then exits with the last completed turn already checkpointed, so
-	// a later --resume continues from there. (TermQ sends an interrupt control
+	// a later --resume continues from there. (A structured consumer sends an interrupt control
 	// message first, then SIGTERM after a grace period.)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
