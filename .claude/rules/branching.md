@@ -100,6 +100,43 @@ git push --force-with-lease
 That replays only the upper branch's own commits. Do it before touching the
 upper PR, and repeat down the stack for each merge.
 
+#### Never `--delete-branch` a stacked parent
+
+Merging a parent with `gh pr merge --squash --delete-branch` retargets the child
+PR and then **closes** it, because its base branch no longer exists. It cannot
+be reopened once the base is gone.
+
+That is how **#208 became #216**: the PR was closed when its parent merged, and
+the work had to be re-raised under a new number.
+
+The order that works:
+
+```bash
+gh pr merge <parent> --squash            # no --delete-branch
+git fetch origin develop                 # child auto-retargets to develop
+git rebase --onto origin/develop <parent-tip> <child>
+git push --force-with-lease
+gh pr merge <child> --squash --delete-branch
+git push origin --delete <parent-branch>  # only now
+```
+
+Merge the parent, let the child retarget, rebase it, and delete the parent
+branch last. `--delete-branch` is safe only on the top of a stack.
+
+#### Assert the ahead-count after every `rebase --onto`
+
+`git rebase --onto <new-base> <old-base> <branch>` silently reduces a branch to
+plain `<new-base>` if the middle argument is wrong — passing the branch's own
+tip instead of its parent's, for example. **The rebase reports success and the
+branch's commits are gone.**
+
+```bash
+git rev-list --count origin/develop..HEAD   # must equal the commits you expect
+```
+
+One line, immediately after every `--onto`. Both traps cost real time on
+2026-08-29; the second is silent, which makes it the worse of the two.
+
 ### CI runs on stacked PRs
 
 `ci.yml` has no branch filter on `pull_request`, so a PR based on a feature
