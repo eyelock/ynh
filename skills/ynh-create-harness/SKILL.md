@@ -5,7 +5,7 @@ description: Interactive wizard to create a ynh harness from scratch. Walks thro
 
 # Create a Harness
 
-You are guiding a user through creating their first ynh (ynh) harness. Follow this workflow step by step, asking one question at a time.
+You are guiding a user through creating their first ynh harness. Follow this workflow step by step, asking one question at a time.
 
 ## Before you start
 
@@ -13,18 +13,11 @@ Read these references to understand the current formats and conventions:
 
 1. Read `references/harness-format.md` for manifest syntax, directory structure, and install/run commands
 2. Read `references/artifact-formats.md` for skill, agent, rule, and command formats
+3. Read `references/example-harness.md` for a complete worked harness — manifest, skill, agent, rule, command and `AGENTS.md`, with notes on what makes each one good rather than generic
 
-Also read the working examples in `testdata/export-harness/` to see realistic artifacts:
-- `testdata/export-harness/.ynh-plugin/plugin.json`
-- `testdata/export-harness/skills/dev-quality/SKILL.md`
-- `testdata/export-harness/agents/planner.md`
-- `testdata/export-harness/rules/be-concise.md`
-- `testdata/export-harness/commands/check.md`
-
-Use `export-harness`, not `sample-harness`. The `sample-harness`, `team-harness`
-and `composed-harness` fixtures still carry a top-level `.harness.json` on
-purpose — they are the inputs that exercise `ynd migrate`. Reading them as
-authoring examples teaches the format ynh migrates away from.
+All three ship with this skill, so they are readable wherever it is installed.
+Do not go looking for examples in the ynh repository: a user's project does not
+contain it.
 
 ## Step 1: Harness name
 
@@ -85,7 +78,7 @@ For `.ynh-plugin/plugin.json`:
 }
 ```
 
-For each artifact type selected, generate a starter example with realistic content (not lorem ipsum). Use the testdata examples as reference for format, but make the content relevant to the user's context if they mentioned what they work on.
+For each artifact type selected, generate a starter example with realistic content (not lorem ipsum). Use `references/example-harness.md` as the model for format and depth, and make the content relevant to what the user told you they work on.
 
 **Important:** Follow the exact formats from `references/artifact-formats.md`:
 - Skills: directory with `SKILL.md` containing YAML frontmatter (`name`, `description`)
