@@ -1,4 +1,4 @@
-# Tutorial 16: Structured Output
+# Structured Output
 
 Use `--format json` to get machine-readable output from ynh commands. Useful for scripts, CI pipelines, shell automation, and IDE integrations.
 
@@ -6,7 +6,7 @@ Use `--format json` to get machine-readable output from ynh commands. Useful for
 
 Make sure `ynh` is installed and on your PATH. See the [install instructions](tutorial/README.md) if you haven't set up yet.
 
-The `ynh paths` examples work with just ynh itself. The `ynh ls` examples need at least one harness installed — if you completed Tutorial 1, `my-harness` will be available.
+The `ynh paths` examples work with just ynh itself. The `ynh ls` examples need at least one harness installed — if you completed [First Harness](tutorial/first-harness.md), `my-harness` will be available.
 
 ## How structured output works
 
@@ -19,7 +19,7 @@ Every ynh command defaults to human-readable text. Commands that support structu
 
 The flag is **space-separated only** — `--format json`, not `--format=json`. This matches every other flag in ynh.
 
-## T16.1: Show resolved paths — text
+## Show resolved paths — text
 
 `ynh paths` reports every path root ynh uses for the current environment:
 
@@ -40,7 +40,7 @@ bin        /Users/<you>/.ynh/bin
 
 Seven rows, tab-aligned. These are the same values ynh uses internally — no guessing at `$YNH_HOME` or platform defaults.
 
-## T16.2: Show resolved paths — JSON
+## Show resolved paths — JSON
 
 ```bash
 ynh paths --format json
@@ -61,7 +61,7 @@ Expected:
 
 A single JSON object on stdout. All paths are absolute. Keys are `snake_case`. Output ends with a newline.
 
-## T16.3: Pipe to jq
+## Pipe to jq
 
 Extract a single path for use in a script:
 
@@ -82,7 +82,7 @@ ls "$(ynh paths --format json | jq -r '.harnesses')" 2>/dev/null | wc -l | tr -d
 
 Expected: the number of harnesses you have installed (possibly `0`).
 
-## T16.4: Explicit text format
+## Explicit text format
 
 `--format text` is the default and produces identical output to omitting the flag:
 
@@ -90,9 +90,9 @@ Expected: the number of harnesses you have installed (possibly `0`).
 ynh paths --format text
 ```
 
-Expected: same tabwriter output as T16.1.
+Expected: same tabwriter output as [Show resolved paths — text](#show-resolved-paths-text).
 
-## T16.5: Error handling — text mode
+## Error handling — text mode
 
 When `--format json` is **not** active, errors come back as plain text on stderr, prefixed with `Error:`:
 
@@ -116,7 +116,7 @@ Expected:
 Error: unknown flag: --nope
 ```
 
-## T16.6: Error handling — JSON error envelope
+## Error handling — JSON error envelope
 
 When `--format json` **is** active and an error occurs, ynh writes a structured error envelope to **stderr** (not stdout). Stdout is empty:
 
@@ -150,7 +150,7 @@ Expected:
 invalid_input
 ```
 
-## T16.7: Space-separated flags only
+## Space-separated flags only
 
 ynh flags are always space-separated. The `=` form is rejected:
 
@@ -165,7 +165,7 @@ Error: unknown flag: --format=json
 
 Always use `--format json` (with a space).
 
-## T16.8: List installed harnesses — JSON
+## List installed harnesses — JSON
 
 `ynh ls` also supports `--format json`. First, make sure a harness is installed:
 
@@ -246,7 +246,7 @@ Key points:
 - `includes` and `delegates_to` are always present, even when empty (`[]`).
 - `description` is omitted if the harness has none (not present as `""`).
 
-## T16.9: List harnesses — extract with jq
+## List harnesses — extract with jq
 
 Get just the names:
 
@@ -270,7 +270,7 @@ Expected:
 installed
 ```
 
-## T16.10: Empty list — JSON
+## Empty list — JSON
 
 With no harnesses installed, `harnesses` is an empty array — but the envelope (with `capabilities` and `ynh_version`) is still present:
 
@@ -295,7 +295,7 @@ Expected (truncated):
 ynh install /tmp/ynh-tutorial/my-harness
 ```
 
-## T16.11: Check for updates — `--check-updates`
+## Check for updates — `--check-updates`
 
 By default `ynh ls` and `ynh info` are **offline** — they read installed manifests and emit local provenance only. To learn whether an installed harness or include is behind upstream, opt in with `--check-updates`:
 
@@ -318,7 +318,7 @@ This is the "unknown" arm of a three-state contract — consumers must distingui
 
 > Note: `--check-updates` does network I/O. Probes run concurrently with a bounded fan-out and per-probe failures degrade silently — the command never errors on probe failure. Default calls (without the flag) stay fast and deterministic.
 
-## T16.12: YNH_HOME override
+## YNH_HOME override
 
 Paths reflect the active `YNH_HOME`, which is useful for testing or multi-environment setups:
 
@@ -341,7 +341,7 @@ Expected:
 
 All seven paths shift to the overridden root.
 
-## T16.13: Inspect install provenance
+## Inspect install provenance
 
 `ynh installed <name> --format json` exposes the recorded install provenance — useful when scripting "where did this harness come from?" without reading `.ynh-plugin/installed.json` directly.
 
@@ -365,7 +365,7 @@ Expected:
 
 The `installed` object mirrors the on-disk record byte-for-byte (including any `resolved[]` commit SHAs for includes/delegates). Unlike `ynh info`, this focuses purely on provenance — no manifest, no artifact counts.
 
-## T16.14: Validate output against the published schema
+## Validate output against the published schema
 
 Every `--format json` command has a published JSON Schema. Inspect a schema with `ynh schema <name>`:
 
@@ -419,6 +419,6 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Tutorial 12: Delegation](tutorial/04-delegation.md) — chain harnesses together as subagents.
+[Sensors](tutorial/sensors.md) — declare the observation surfaces a gate and a loop both consume.
 
 The `--format json` pattern established here will appear on additional commands as structured output is added. See [Structured CLI Output](cli-structured.md) for the full conventions.

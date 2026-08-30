@@ -1,4 +1,4 @@
-# Tutorial 1: Your First Harness
+# Your First Harness
 
 Create a harness from scratch, install it, and run it with Claude Code.
 
@@ -20,7 +20,7 @@ ynh init
 # (you can ignore the PATH suggestion — you already set this up during install)
 ```
 
-## T1.1: Create the harness structure
+## Create the harness structure
 
 A harness needs one file at minimum: `.ynh-plugin/plugin.json` (identity and config).
 
@@ -37,7 +37,7 @@ cat > /tmp/ynh-tutorial/my-harness/.ynh-plugin/plugin.json << 'EOF'
 EOF
 ```
 
-## T1.2: Add artifacts
+## Add artifacts
 
 ### Skill
 
@@ -99,7 +99,7 @@ When asked what you are, explain that you were created by the ynh tutorial.
 EOF
 ```
 
-## T1.3: Verify structure
+## Verify structure
 
 ```bash
 find /tmp/ynh-tutorial/my-harness -type f | sort
@@ -115,7 +115,7 @@ Expected:
 /tmp/ynh-tutorial/my-harness/skills/greet/SKILL.md
 ```
 
-## T1.4: Install from local path
+## Install from local path
 
 ```bash
 ynh install /tmp/ynh-tutorial/my-harness
@@ -131,7 +131,7 @@ Installed harness "my-harness"
 
 Local installs are pointer-form: the install record (keyed by the canonical id `local/my-harness`) lives in `~/.ynh`, but `Location` reports your source tree, since that's where edits and `ynh run` both land. The launcher keeps the short name because it's unambiguous.
 
-## T1.5: List installed harnesses
+## List installed harnesses
 
 ```bash
 ynh ls
@@ -147,7 +147,7 @@ The KIND column classifies the install: `local` (installed from a local path), `
 The ARTIFACTS column shows a compact count: skills (s), agents (a), rules (r), commands (c).
 The SOURCE column shows where the harness was installed from.
 
-## T1.5b: Inspect harness detail
+## Inspect harness detail
 
 Harness-targeting commands (`info`, `uninstall`, `run`, `update`) accept a **canonical id**: `local/<name>` for installs sourced from a local path, or `<host>/<org>/<repo>/<name>` for installs sourced from a remote registry. Bare names like `my-harness` are no longer accepted — the canonical id is the single identity form.
 
@@ -204,7 +204,7 @@ Expected:
 exec ynh run "local/my-harness" "$@"
 ```
 
-## T1.6: Run interactive
+## Run interactive
 
 ```bash
 my-harness
@@ -212,7 +212,7 @@ my-harness
 
 Opens an interactive Claude session. Try `/greet` — the skill should introduce itself.
 
-## T1.7: Run non-interactive
+## Run non-interactive
 
 ```bash
 my-harness "what are you?"
@@ -220,7 +220,7 @@ my-harness "what are you?"
 
 Should mention it was created by the ynh tutorial (from `instructions.md`).
 
-## T1.8: Run with vendor flags
+## Run with vendor flags
 
 ```bash
 my-harness --model opus -- "what are you? one sentence."
@@ -228,7 +228,7 @@ my-harness --model opus -- "what are you? one sentence."
 
 `--model opus` passes through to Claude. The prompt comes after `--`.
 
-## T1.8b: Run with per-invocation instructions
+## Run with per-invocation instructions
 
 `--instructions` injects text into the vendor's instructions pipeline for this session only — after the harness `instructions.md`, before the session starts. It doesn't modify the harness.
 
@@ -244,9 +244,9 @@ Combined with `--focus`:
 my-harness --focus code-review --instructions "PR #22 in eyelock/assistants"
 ```
 
-## T1.9: Inspect the assembled output
+## Inspect the assembled output
 
-> **Note:** The run directory is created by `ynh run`, which requires a vendor CLI. This step is only verifiable after running T1.6/T1.7/T1.8.
+> **Note:** The run directory is created by `ynh run`, which requires a vendor CLI. This step is only verifiable after running [Run interactive](#run-interactive), [Run non-interactive](#run-non-interactive) or [Run with vendor flags](#run-with-vendor-flags).
 
 ```bash
 ls -Ra ~/.ynh/run/local--my-harness/
@@ -266,7 +266,7 @@ CLAUDE.md
 
 `CLAUDE.md` (at the root) was generated from `instructions.md`. Artifacts are inside `.claude/` — the layout Claude expects for `--plugin-dir`.
 
-## T1.10: Uninstall
+## Uninstall
 
 ```bash
 ynh uninstall local/my-harness
@@ -289,4 +289,4 @@ The `remove` alias also works: `ynh remove local/my-harness`.
 
 ## Next
 
-[Tutorial 2: Vendors & Symlinks](tutorial/02-vendors-and-symlinks.md) — run the same harness with Codex and Cursor.
+[Vendors & Symlinks](tutorial/vendors-and-symlinks.md) — run the same harness with Codex and Cursor.
