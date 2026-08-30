@@ -279,7 +279,7 @@ func lintShellBlocks(path, content string) []lintIssue {
 		if inBlock && trimmed == "```" {
 			inBlock = false
 			if len(blockLines) > 0 {
-				script := strings.Join(blockLines, "\n")
+				script := shellScriptFromBlock(blockLines)
 				if !hasTemplatePlaceholders(script) {
 					if err := checkBashSyntax(script); err != nil {
 						issues = append(issues, lintIssue{
@@ -440,4 +440,50 @@ func lintHarnessJSONFile(path string) []lintIssue {
 	}
 
 	return issues
+}
+
+// shellScriptFromBlock extracts the checkable shell from a fenced block.
+//
+// A block whose lines are prefixed with "$ " is a *transcript*: the prefixed
+// lines are commands and everything else is their output. Piping the whole
+// thing to `bash -n` lints the output as if it were code, which is how
+// `docs/vendors.md` failed on a `ynh vendors` table containing
+// "(ollama · qwen3)" — an unbalanced parenthesis in a column of results, not a
+// syntax error in anything anyone would run.
+//
+// A block with no prompt is an ordinary script and is returned whole.
+//
+// Continuations are followed: a command ending in a backslash keeps consuming
+// lines until one does not, so a wrapped invocation is linted as the single
+// command it is rather than as two fragments.
+func shellScriptFromBlock(lines []string) string {
+	const prompt = "$ "
+	hasPrompt := false
+	for _, l := range lines {
+		if strings.HasPrefix(strings.TrimSpace(l), prompt) {
+			hasPrompt = true
+			break
+		}
+	}
+	if !hasPrompt {
+		return strings.Join(lines, "\n")
+	}
+
+	var cmds []string
+	continuing := false
+	for _, l := range lines {
+		t := strings.TrimSpace(l)
+		switch {
+		case strings.HasPrefix(t, prompt):
+			cmd := strings.TrimPrefix(t, prompt)
+			cmds = append(cmds, cmd)
+			continuing = strings.HasSuffix(cmd, "\\")
+		case continuing:
+			cmds = append(cmds, t)
+			continuing = strings.HasSuffix(t, "\\")
+		default:
+			// Output. Not shell, and not ours to check.
+		}
+	}
+	return strings.Join(cmds, "\n")
 }

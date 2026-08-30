@@ -345,7 +345,7 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 // Note what this deliberately does not do: it does not expand ${VAR}
 // references in MCP env values. Assembly for a local run resolves them
 // (see plugin.ExpandMCPEnv), because the config is about to be used by this
-// operator on this machine. An export is a distributable artefact, and
+// operator on this machine. An export is a distributable artifact, and
 // resolving there would bake whoever ran the export's credentials into a
 // bundle meant to be shared. References stay literal so the consumer resolves
 // them from their own environment.

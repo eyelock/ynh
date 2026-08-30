@@ -1,4 +1,4 @@
-# Tutorial 9: Docker Images
+# Docker Images
 
 Build self-contained Docker images with harnesses baked in. No bind-mounting `~/.ynh` — just mount your workspace and pass API keys.
 
@@ -14,7 +14,7 @@ ynh uninstall local/docker-demo 2>/dev/null
 docker version
 ```
 
-## T9.1: Pull the base image
+## Pull the base image
 
 The base image ships with all vendor CLIs pre-installed (Claude Code, Codex, Cursor):
 
@@ -31,7 +31,7 @@ docker run --rm ghcr.io/eyelock/ynh:latest version
 # Expected: ynh <version>
 ```
 
-## T9.2: Create and install a tutorial harness
+## Create and install a tutorial harness
 
 Create a harness to use throughout this tutorial:
 
@@ -87,7 +87,7 @@ Installed harness "docker-demo"
   Vendor:   claude
 ```
 
-## T9.3: Build a harness image
+## Build a harness image
 
 ```bash
 ynh image local/docker-demo --tag docker-demo:latest
@@ -109,7 +109,7 @@ docker images docker-demo
 # Expected: docker-demo   latest   <id>   <size>
 ```
 
-## T9.4: Run the harness image
+## Run the harness image
 
 The harness's instructions tell it to mention Docker when greeting, and the `be-concise` rule limits responses to 3 sentences. Try it:
 
@@ -122,7 +122,7 @@ docker run --rm \
 
 Expected: the response mentions Docker (from `instructions.md`) and stays brief (from `rules/be-concise`). This confirms the baked-in harness artifacts are active.
 
-## T9.5: Switch vendors at runtime
+## Switch vendors at runtime
 
 The image defaults to the harness's `default_vendor` (claude). Override with `YNH_VENDOR`:
 
@@ -143,7 +143,7 @@ docker run --rm \
   docker-demo:latest -v codex -- "greet me and describe your setup"
 ```
 
-Both do the same thing. `YNH_VENDOR` is more CI-friendly (see T9.10).
+Both do the same thing. `YNH_VENDOR` is more CI-friendly (see [CI/CD matrix example](#ci-cd-matrix-example)).
 
 **Note:** Codex requires a Git working tree. If `/workspace` is not a Git repo, add `--skip-git-repo-check`:
 
@@ -154,7 +154,7 @@ docker run --rm \
   docker-demo:latest -v codex --skip-git-repo-check -- "greet me and describe your setup"
 ```
 
-## T9.6: Pass vendor flags
+## Pass vendor flags
 
 Everything after the image name becomes arguments to `ynh run local/docker-demo`. Unrecognised flags pass through to the vendor CLI:
 
@@ -172,7 +172,7 @@ docker run --rm -v $(pwd):/workspace -e OPENAI_API_KEY \
   docker-demo:latest -v codex --model gpt-4.1 --full-auto -- "greet me and describe your setup"
 ```
 
-## T9.7: Inspect with --dry-run
+## Inspect with --dry-run
 
 Preview the generated Dockerfile without building:
 
@@ -205,7 +205,7 @@ LABEL dev.ynh.harness="docker-demo" \
       dev.ynh.assembled-by="<version>"
 ```
 
-## T9.8: Build from Git source
+## Build from Git source
 
 Build directly from a Git repo without installing the harness first:
 
@@ -229,7 +229,7 @@ docker run --rm --entrypoint sh tester:latest -c \
 #   /home/ynh/.ynh/run/local--tester/claude/.claude/skills/go-lang/assets/...
 ```
 
-## T9.9: Override entrypoint
+## Override entrypoint
 
 Access the full ynh/ynd CLI inside the harness image:
 
@@ -244,7 +244,7 @@ docker run --rm --entrypoint ynd docker-demo:latest version
 docker run --rm -it --entrypoint sh docker-demo:latest
 ```
 
-## T9.10: CI/CD matrix example
+## CI/CD matrix example
 
 Run the same harness across all vendors in a CI pipeline:
 
@@ -294,4 +294,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Tutorial 17: Namespacing & Migration](tutorial/18-namespacing-and-migration.md) — resolve name collisions across registries and migrate legacy installs.
+[Namespacing & Migration](tutorial/namespacing-and-migration.md) — resolve name collisions across registries and migrate legacy installs.

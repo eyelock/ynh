@@ -1,4 +1,4 @@
-# Tutorial 7: Registry & Discovery
+# Registry & Discovery
 
 Search for harnesses from curated registries and install them by name. A registry is just a Git repo with a `registry.json` index.
 
@@ -14,7 +14,7 @@ ynh sources remove codereview 2>/dev/null
 mkdir -p /tmp/ynh-tutorial
 ```
 
-## T7.1: Create a local registry
+## Create a local registry
 
 A registry is a Git repo containing `registry.json`:
 
@@ -61,7 +61,7 @@ EOF
 git init && git add . && git commit -m "init registry"
 ```
 
-## T7.2: Add the registry
+## Add the registry
 
 ```bash
 ynh registry add /tmp/ynh-tutorial/my-registry
@@ -72,7 +72,7 @@ Expected:
 Added registry: /tmp/ynh-tutorial/my-registry
 ```
 
-## T7.3: List registries
+## List registries
 
 ```bash
 ynh registry list
@@ -83,7 +83,7 @@ Expected:
   /tmp/ynh-tutorial/my-registry
 ```
 
-## T7.4: Search
+## Search
 
 Search matches against name, description, and keywords (case-insensitive):
 
@@ -134,7 +134,7 @@ ynh search --format json
 
 Expected: all three harnesses from `tutorial-registry` (david, planner, media-management) in the output.
 
-## T7.5: Install — by exact name
+## Install — by exact name
 
 ```bash
 ynh install david
@@ -161,7 +161,7 @@ ynh info github.com/eyelock/assistants/david --format json | jq -r '.path'
 
 The launcher script (`~/.ynh/bin/david`) keeps the short name while it remains unambiguous; if a second `david` is installed from a different source, the short launcher is removed and you invoke the harness via the canonical id with `ynh run`.
 
-## T7.6: Install — with registry qualifier
+## Install — with registry qualifier
 
 If you have multiple registries and names collide at search time, the `name@registry` form picks one:
 
@@ -171,13 +171,13 @@ ynh install planner@tutorial-registry
 
 After install, refer to the harness by its canonical id (`github.com/eyelock/assistants/planner`) for `info`, `uninstall`, etc. The `@` form is only used to disambiguate `install`.
 
-## T7.6b: Pin a registry entry to a ref or SHA
+## Pin a registry entry to a ref or SHA
 
 **The model in one line: `ref` is the primary identifier; `sha` is an optional integrity pin.**
 
 ynh follows the Claude Code marketplace model — identity is a git ref, optionally anchored to a commit SHA. There is no separate semver resolver. To track "version 1.0" you set `"ref": "v1.0"`, not a version field.
 
-The legacy `registry.json` format used in T7.1 has no per-entry pinning. Modern marketplaces use `.ynh-plugin/marketplace.json` with a `source` object that supports `ref` (branch, tag, or SHA) and `sha` (commit verification):
+The legacy `registry.json` format used in [Create a local registry](#create-a-local-registry) has no per-entry pinning. Modern marketplaces use `.ynh-plugin/marketplace.json` with a `source` object that supports `ref` (branch, tag, or SHA) and `sha` (commit verification):
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/pinned-registry/.ynh-plugin
@@ -240,7 +240,7 @@ Three legitimate combinations:
 
 **Tools that compose ynh harnesses (delegate sheets, dashboards, CI integrations) should default to whatever `ref` the user installed with — that's the user's stated tracking intent. Offer SHA-pinning as an opt-in choice, not the default.** See [`docs/marketplace.md` § Pinning: refs and SHAs](marketplace.md#pinning-refs-and-shas) for the full guidance.
 
-## T7.7: Install — direct URL still works
+## Install — direct URL still works
 
 ```bash
 ynh install github.com/eyelock/assistants --path ynh/tester
@@ -248,7 +248,7 @@ ynh install github.com/eyelock/assistants --path ynh/tester
 
 Git URLs (containing `/`) take precedence over registry search.
 
-## T7.8: Install — partial match suggests results
+## Install — partial match suggests results
 
 If the name doesn't match exactly but is similar to registry entries:
 
@@ -267,7 +267,7 @@ ynh install david
 
 (The bare-name form is accepted by `install` because it is a registry lookup. Other commands — `info`, `uninstall`, `run`, `update` — require the canonical id.)
 
-## T7.9: Install — no match error
+## Install — no match error
 
 ```bash
 ynh install nonexistent-thing
@@ -276,7 +276,7 @@ ynh install nonexistent-thing
 #     Did you mean a Git URL? Try: ynh install github.com/user/nonexistent-thing
 ```
 
-## T7.10: Update registries
+## Update registries
 
 ```bash
 ynh registry update
@@ -289,7 +289,7 @@ Expected:
 
 This fetches the latest `registry.json` from each configured registry.
 
-## T7.11: Remove a registry
+## Remove a registry
 
 ```bash
 ynh registry remove /tmp/ynh-tutorial/my-registry
@@ -297,7 +297,7 @@ ynh registry list
 # Expected: no registries
 ```
 
-## T7.12: Add a local source
+## Add a local source
 
 Local sources are directories of harnesses registered in config — no Git or internet required. When a source name matches a harness name, uninstalling the harness also removes the source entry.
 
@@ -320,7 +320,7 @@ Expected:
 Added source "codereview" (/tmp/ynh-tutorial/sources) — 1 harness(es) found
 ```
 
-## T7.13: List sources
+## List sources
 
 ```bash
 ynh sources list
@@ -332,7 +332,7 @@ NAME        PATH                       DESCRIPTION  HARNESSES
 codereview  /tmp/ynh-tutorial/sources  -            1
 ```
 
-## T7.14: Search includes source harnesses
+## Search includes source harnesses
 
 `ynh search` queries both registries and local sources in a single pass:
 
@@ -346,7 +346,7 @@ NAME        DESCRIPTION          REPO                                  FROM
 codereview  Code review harness  /tmp/ynh-tutorial/sources/codereview  codereview (source)
 ```
 
-## T7.15: Install from source
+## Install from source
 
 Install the harness by name — ynh resolves it from the configured source:
 
@@ -364,7 +364,7 @@ Installed harness "codereview"
 
 A local-source install gets the canonical id `local/codereview` — the source itself has no remote origin to derive a host-prefixed id from.
 
-## T7.16: Uninstall removes the source entry
+## Uninstall removes the source entry
 
 When a harness and its source share the same name, uninstalling the harness cleans up the source entry from config automatically:
 
@@ -441,4 +441,4 @@ ynh uninstall github.com/eyelock/assistants/tester 2>/dev/null
 
 ## Next
 
-[Tutorial 16: Docker Images](tutorial/09-docker-image.md) — build harness appliance images for CI/CD.
+[Docker Images](tutorial/docker-image.md) — build harness appliance images for CI/CD.

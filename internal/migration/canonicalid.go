@@ -35,7 +35,7 @@ const SchemaVersionPath = ".schema-version"
 
 // MigrationManifestPath is where the persisted manifest of the last
 // migration run lives. Idempotent: the file is overwritten on every
-// re-run, so consumers (TermQ) can read the same mapping any time.
+// re-run, so consumers can read the same mapping any time.
 const MigrationManifestPath = ".migration-manifest.json"
 
 // QuarantineDir is where unmigratable entries are moved when the user
@@ -100,7 +100,7 @@ type MigrateOpts struct {
 }
 
 // ManifestEntry records a single id-rewrite or move performed by the
-// migration. TermQ reads this to rewrite its persisted ids in one pass.
+// migration. A structured consumer reads this to rewrite its persisted ids in one pass.
 type ManifestEntry struct {
 	// OldID is the legacy identifier — for pointer files it's the bare
 	// name; for tree installs the namespaced "<ns>/<name>" or bare name.

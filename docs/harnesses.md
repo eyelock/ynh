@@ -356,7 +356,7 @@ Error: include "github.com/acme/tools" matches multiple entries:
 Use --path (remove) or --from-path (update) to disambiguate
 ```
 
-See [Tutorial 17: Include Editing](tutorial/17-include-editing.md) for a full walkthrough.
+See [Include Editing](tutorial/include-editing.md) for a full walkthrough.
 
 ## Examples
 

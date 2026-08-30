@@ -1,4 +1,4 @@
-# Tutorial 12: Developer Preview
+# Developer Preview
 
 Use `ynd preview` and `ynd diff` to inspect assembled harness output without installing. These tools let you iterate on harness design and verify vendor-specific behavior before shipping.
 
@@ -72,7 +72,7 @@ You are a DevOps assistant. Use the deployment skill for releases and query the 
 EOF
 ```
 
-## T12.1: Preview a harness for Claude
+## Preview a harness for Claude
 
 Preview shows the fully assembled vendor-native output as a tree with file contents:
 
@@ -106,7 +106,7 @@ Key things to verify:
 - `.claude/hooks/hooks.json` has hooks in Claude's three-level format
 - `.claude/.mcp.json` has the MCP server config
 
-## T12.2: Preview the same harness for Cursor
+## Preview the same harness for Cursor
 
 ```bash
 ynd preview /tmp/ynh-tutorial/preview-harness -v cursor
@@ -136,7 +136,7 @@ Note the differences from Claude:
 - MCP config goes to `.cursor/mcp.json` instead of `.claude/.mcp.json`
 - Artifacts are under `.cursor/` instead of `.claude/`
 
-## T12.3: Compare Claude vs Cursor output
+## Compare Claude vs Cursor output
 
 ```bash
 ynd diff /tmp/ynh-tutorial/preview-harness claude cursor
@@ -147,24 +147,34 @@ Expected output:
 ```
 === claude vs cursor ===
 Only in claude:
-  .claude-plugin/plugin.json
   .claude/.mcp.json
   .claude/hooks/hooks.json
-  .claude/rules/safety.md
-  .claude/skills/deploy/SKILL.md
-  CLAUDE.md
 Only in cursor:
-  .cursor-plugin/plugin.json
   .cursor/hooks.json
   .cursor/mcp.json
-  .cursor/rules/safety.md
-  .cursor/skills/deploy/SKILL.md
-  .cursorrules
+  hooks/hooks.json
+  mcp.json
+Same content, vendor-specific rendering:
+  .claude/rules/safety.md ↔ .cursor/rules/safety.mdc
+Identical:
+  .claude-plugin/plugin.json
+  .claude/skills/deploy/SKILL.md
+  CLAUDE.md
 ```
 
-The diff shows which files are vendor-specific and which content is shared. Artifacts like skills and rules may appear as identical content under different directory prefixes.
+Read the four groups as answers to different questions. **Identical** is the
+interesting one: the plugin manifest, the skill and the instructions file are
+byte-for-byte the same, so the vendors differ less than the directory names
+suggest. **Same content, vendor-specific rendering** pairs files that say the
+same thing under names each vendor requires — `safety.md` against `safety.mdc`.
+Only the first two groups are genuine divergence, and here it is confined to
+how hooks and MCP config are laid out.
 
-## T12.4: Preview a harness with hooks
+`ynd diff` normalises each vendor's prefixes before comparing — `.claude/`,
+`.claude-plugin/` and `CLAUDE.md` against `.cursor/`, `.cursor-plugin/` and
+`.cursorrules` — which is what lets the two file sets intersect at all.
+
+## Preview a harness with hooks
 
 Write the preview to a directory for closer inspection:
 
@@ -225,7 +235,7 @@ Expected:
 }
 ```
 
-## T12.5: Preview a harness with MCP servers
+## Preview a harness with MCP servers
 
 Inspect MCP config for each vendor:
 
@@ -288,4 +298,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Tutorial 11: Structured Output](tutorial/16-structured-output.md) — use `--format json` for scripts, CI, and tool integration.
+[Structured Output](tutorial/structured-output.md) — use `--format json` for scripts, CI, and tool integration.

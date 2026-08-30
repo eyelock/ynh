@@ -257,7 +257,7 @@ func printListJSON(w io.Writer, checkUpdates bool) error {
 		if loadErr != nil {
 			// Load failed; check if there's a broken pointer for error details.
 			// Surface broken pointer entries with kind "local-fork-broken" and
-			// a broken_reason so JSON consumers (e.g. TermQ) can route them to
+			// a broken_reason so JSON consumers (for example) can route them to
 			// a QUARANTINED group rather than displaying them as empty-field
 			// healthy harnesses.
 			//

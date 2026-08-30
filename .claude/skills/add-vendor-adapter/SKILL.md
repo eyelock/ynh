@@ -95,7 +95,7 @@ any point to cross-check completeness — `grep -rli cursor --include="*.go" --i
   demoting certain frontmatter fields).
 - [ ] `docs/getting-started.md`, `docs/harness-engineering.md`, `README.md`,
   `AGENTS.md` — mentions of the supported-vendor list.
-- [ ] `docs/tutorial/02-vendors-and-symlinks.md` and any other tutorial that
+- [ ] `docs/tutorial/vendors-and-symlinks.md` and any other tutorial that
   enumerates vendors by name.
 - [ ] `docs/tutorial/manual-test-plan.md` — add vendor-specific manual test
   steps.
