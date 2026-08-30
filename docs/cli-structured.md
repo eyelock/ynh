@@ -137,7 +137,7 @@ Each structured-output command documents its own field reference in `docs/refere
 
 ## Published JSON Schemas
 
-Every `--format json` command has a published JSON Schema embedded in the binary. The schemas are the machine-readable form of the conventions in this document — wire-protocol versioning, envelope shape, error envelope, additive-compat rules.
+Most `--format json` commands have a published JSON Schema embedded in the binary. Two do not yet: `ynh backend list` and `ynh sensors ls`, which emit structured output with no `cli/backend` or `cli/sensors` schema to validate it against. Adding a schema is additive and does not bump `CapabilitiesVersion`. The schemas are the machine-readable form of the conventions in this document — wire-protocol versioning, envelope shape, error envelope, additive-compat rules.
 
 - `ynh schema <name>` — print one embedded schema (`version`, `list`, `info`, `installed`, `fork`, `error`, etc.).
 - `ynh schema --all --format json` — manifest of every embedded schema, for tools that load them at startup.
