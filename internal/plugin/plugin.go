@@ -82,9 +82,24 @@ type Sensor struct {
 	// anything whose *quantity* is the finding, suppression directives above
 	// all: the gaming vector for a ratchet is suppression, not relocation, and
 	// an agent that adds `//nolint` beside an existing one must not pass.
-	Ratchet string       `json:"ratchet,omitempty"`
-	Source  SensorSource `json:"source"`
-	Output  SensorOutput `json:"output"`
+	Ratchet string `json:"ratchet,omitempty"`
+	// Observes names the paths a `files` sensor's artifact actually depends
+	// on, so ynh can tell whether that artifact still describes the tree.
+	//
+	// A files sensor reads a result some other process left behind. ynh cannot
+	// judge what it says, but it can judge whether it still applies — and an
+	// artifact produced against different code is an observation of something
+	// else, not a weaker observation of this one.
+	//
+	// Empty means the whole tracked tree, which is deliberately strict: a
+	// harness that will not say what its artifact depends on gets the only
+	// honest assumption, which is everything. Declaring the real inputs is one
+	// line and makes the sensor quiet.
+	//
+	// Ignored for command and focus sensors, which observe by running.
+	Observes []string     `json:"observes,omitempty"`
+	Source   SensorSource `json:"source"`
+	Output   SensorOutput `json:"output"`
 }
 
 // SensorReference is a fixture with a known answer, used by
@@ -308,17 +323,23 @@ func ValidateSensors(sensors map[string]Sensor, profileNames, focusNames map[str
 				issues = append(issues, fmt.Sprintf(
 					"%s reference.expect %q must be one of fail, pass", prefix, s.Reference.Expect))
 			}
-			// Only a command sensor produces a verdict, so only a command
-			// sensor can be calibrated against one. Same rule that stops a
-			// files sensor converging a run.
+			// Calibration compares an exit code against a declared
+			// expectation, and only a command source produces one.
+			//
+			// Not the same rule that stops a files sensor converging a run,
+			// though the two are easy to conflate. A files sensor does now
+			// produce a verdict — freshness — and it does gate on it. It
+			// still cannot be calibrated (no exit code) and still cannot
+			// converge (freshness says whether an artifact is current, never
+			// whether the work is done). Three separate limits, three reasons.
 			if k := s.Source.Kind(); k != "" && k != "command" {
 				issues = append(issues, fmt.Sprintf(
-					"%s reference requires a command source: no verdict is derivable from a %s sensor", prefix, k))
+					"%s reference requires a command source: no verdict about a %s sensor's output is derivable", prefix, k))
 			}
 		}
 		if s.Role == "convergence-verifier" && s.Source.Kind() == "files" {
 			issues = append(issues, fmt.Sprintf(
-				"%s role convergence-verifier requires a command source: no verdict is derivable from a file glob", prefix))
+				"%s role convergence-verifier requires a command source: a files sensor's freshness says whether its artifact is current, never whether the work is done", prefix))
 		}
 		if s.Tolerance != "" && !ValidSensorTolerances[s.Tolerance] {
 			issues = append(issues, fmt.Sprintf("%s tolerance %q must be one of blocking, advisory, report", prefix, s.Tolerance))

@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/cli/check.schema.json",
   "title": "ynh check --format json",
   "description": "Output of `ynh check --format json`. Runs every declared sensor and reports a gate verdict. Exit code 0 = pass, 1 = a blocking sensor failed, 2 = ynh could not run the check. Top-level oneOf accepts either the success payload or the cross-cutting error envelope.",
-  "x-capabilities": "0.7",
+  "x-capabilities": "0.8",
   "$defs": {
     "Check": {
       "type": "object",
@@ -137,7 +137,7 @@
             "deferred",
             "skipped"
           ],
-          "description": "pass/fail/known apply only to command sensors. known = failing, but every failure is recorded in the baseline, so it is pre-existing debt rather than a regression and does not gate. reported = a files sensor surfaced content with no verdict derivable. deferred = a focus sensor needs an agent runtime ynh does not own. skipped = filtered out by --only. Only fail can gate."
+          "description": "pass and known apply only to command sensors; fail applies to a command sensor that exited non-zero or a files sensor whose artifact is absent, stale or unverifiable. known = failing, but every failure is recorded in the baseline, so it is pre-existing debt rather than a regression and does not gate. reported = a files sensor surfaced content and was fresh; no verdict is derivable from the content itself, only from its freshness. deferred = a focus sensor needs an agent runtime ynh does not own. skipped = filtered out by --only. Only fail can gate."
         },
         "exit_code": {
           "type": "integer"
@@ -175,6 +175,23 @@
         "count_delta": {
           "type": "integer",
           "description": "For a count-ratchet sensor, how far the total has moved since the baseline: positive is new findings, negative is removed ones. Absent for fingerprint-ratcheted sensors."
+        },
+        "freshness": {
+          "type": "string",
+          "enum": [
+            "fresh",
+            "stale",
+            "absent",
+            "unknown"
+          ],
+          "description": "For files sensors: whether the artifact still describes the tree. ynh judges no files sensor's content \u2014 only whether that content is entitled to be believed. Absent, stale and unknown all fail the gate; unknown means ynh could not tell, which is not the same as nothing being wrong."
+        },
+        "freshness_basis": {
+          "type": "string",
+          "enum": [
+            "mtime"
+          ],
+          "description": "What the freshness conclusion rests on. Timestamps are weak wherever they are rewritten wholesale \u2014 fresh clones, container builds, CI caches \u2014 so a consumer grading across machines needs to know which basis produced the answer."
         }
       },
       "required": [

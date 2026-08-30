@@ -22,7 +22,7 @@ package gate
 const (
 	StatusPass     = "pass"     // command sensor exited 0
 	StatusFail     = "fail"     // command sensor exited non-zero
-	StatusReported = "reported" // files sensor: content surfaced, no verdict derivable
+	StatusReported = "reported" // files sensor: fresh, content surfaced, no verdict on it
 	StatusDeferred = "deferred" // focus sensor: needs an agent runtime ynh does not own
 	StatusSkipped  = "skipped"  // filtered out by --only
 	StatusKnown    = "known"    // failing, but every failure is in the baseline
@@ -94,15 +94,30 @@ type Result struct {
 	NewCount   int    `json:"new_count,omitempty"`
 	KnownCount int    `json:"known_count,omitempty"`
 	NewOutput  string `json:"new_output,omitempty"`
+	// Freshness is set for files sensors: whether the artifact still describes
+	// the tree. "fresh", "stale", "absent" or "unknown".
+	//
+	// ynh judges no files sensor's *content* — no verdict is derivable from
+	// arbitrary JSON. It judges only whether the content is entitled to be
+	// believed, which is decidable and was previously nobody's job.
+	Freshness string `json:"freshness,omitempty"`
+	// FreshnessBasis is what that conclusion rests on — "mtime" today. A
+	// consumer grading results across machines needs to tell a strong answer
+	// from a weak one, and timestamps are weak wherever they get rewritten
+	// wholesale: fresh clones, container builds, CI caches.
+	FreshnessBasis string `json:"freshness_basis,omitempty"`
 }
 
 // Gating reports whether this result is one the verdict may block on.
 //
-// It is deliberately not "did it fail". A files sensor has no derivable
-// verdict, a focus sensor needs a runtime ynh does not own, and a sensor
-// whose every failure is already in the baseline is recorded debt rather than
-// a regression. Only StatusFail is a live failure, and only a blocking
-// tolerance makes it gate.
+// It is deliberately not "did it fail". A focus sensor needs a runtime ynh
+// does not own, and a sensor whose every failure is already in the baseline is
+// recorded debt rather than a regression. Only StatusFail is a live failure,
+// and only a blocking tolerance makes it gate.
+//
+// A files sensor reaches StatusFail on freshness alone — its artifact is
+// missing, stale, or unverifiable. Never on content: what the artifact *says*
+// is still not ynh's to judge.
 func (r Result) Gating() bool {
 	return r.Status == StatusFail && r.Tolerance == "blocking"
 }
@@ -110,14 +125,16 @@ func (r Result) Gating() bool {
 // StatusForKind derives the status of a sensor that ran to completion, before
 // any baseline is applied.
 //
-// It exists so there is exactly one answer to "can this kind of sensor produce
-// a verdict". A files sensor surfaces content and no verdict is mechanically
-// derivable from a glob; a focus sensor needs an agent runtime ynh does not
-// own. Only a command sensor decides anything, and only by its exit code.
+// It exists so there is exactly one answer to "what does this kind of sensor
+// look like when nothing has gone wrong". A focus sensor needs an agent runtime
+// ynh does not own, so it defers. A files sensor surfaces content on which no
+// verdict is derivable, so it reports. A command sensor decides by exit code.
 //
-// `ynh check` layers baseline comparison on top of this for command sensors —
-// a failure already recorded is debt, not a regression — but the kinds that
-// cannot produce a verdict at all are settled here, once, for every caller.
+// `ynh check` layers more on top: baseline comparison for command sensors, and
+// freshness for files sensors — a files sensor whose artifact is absent, stale
+// or unverifiable reaches StatusFail from here. That is a judgement about
+// whether the content may be believed, never about the content itself, which
+// is why it is layered rather than settled here.
 func StatusForKind(kind string, exitCode int) string {
 	switch kind {
 	case "files":

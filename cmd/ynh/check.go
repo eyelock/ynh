@@ -13,6 +13,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/baseline"
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/freshness"
 	"github.com/eyelock/ynh/internal/gate"
 	"github.com/eyelock/ynh/internal/harness"
 )
@@ -329,10 +330,33 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 				env.Verdict = gate.VerdictBlocked
 			}
 		case "files":
-			// No verdict is mechanically derivable from a file glob, so a
-			// files sensor reports and never gates, whatever its tolerance.
-			res.Status = gate.StatusForKind("files", 0)
-			env.Summary.Reported++
+			// What the artifact *says* is still not ynh's to judge — no
+			// verdict is derivable from arbitrary JSON. But whether it is
+			// entitled to be believed is decidable, and was previously
+			// nobody's job: a sensor pointed at a missing file reported green.
+			//
+			// So content still only ever reports; freshness can gate.
+			paths := make([]string, 0, len(run.Output.Files))
+			for _, f := range run.Output.Files {
+				paths = append(paths, f.Path)
+			}
+			fr := freshness.Evaluate(cwd, paths, s.Observes)
+			res.Freshness = string(fr.State)
+			res.FreshnessBasis = string(fr.Basis)
+
+			if fr.State == freshness.StateFresh {
+				res.Status = gate.StatusForKind("files", 0)
+				env.Summary.Reported++
+				break
+			}
+
+			res.Status = gate.StatusFail
+			res.Note = fr.Reason
+			env.Summary.Failed++
+			if res.Tolerance == "blocking" {
+				env.Summary.Blocking++
+				env.Verdict = gate.VerdictBlocked
+			}
 		case "focus":
 			// Resolving a focus needs an agent runtime ynh does not own.
 			res.Status = gate.StatusForKind("focus", 0)
@@ -507,6 +531,10 @@ func writeCheckText(w io.Writer, env gate.Envelope) error {
 			detail = fmt.Sprintf("%d new, %d known", r.NewCount, r.KnownCount)
 		case r.Status == gate.StatusFail && r.NewCount > 0:
 			detail = fmt.Sprintf("%d new", r.NewCount)
+		case r.Status == gate.StatusFail && r.Freshness != "":
+			// A files sensor never fails on content, so "fail" alone tells the
+			// operator nothing about what to do. The state is the finding.
+			detail = r.Freshness
 		}
 		if r.Status == gate.StatusFail && r.Tolerance != "blocking" {
 			detail += " (" + r.Tolerance + ")"
@@ -531,6 +559,14 @@ func writeCheckText(w io.Writer, env gate.Envelope) error {
 			body = strings.TrimSpace(r.Stdout + "\n" + r.Stderr)
 		}
 		if body == "" {
+			// A files sensor failing on freshness produces no output at all —
+			// the note *is* the finding. Skipping it here would fail the gate
+			// without saying why, which is how gates get switched off.
+			if r.Note != "" {
+				if _, err := fmt.Fprintf(w, "\n%s:\n%s\n", r.Name, r.Note); err != nil {
+					return err
+				}
+			}
 			continue
 		}
 		header := r.Name
