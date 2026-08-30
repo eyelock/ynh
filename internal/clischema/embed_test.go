@@ -140,6 +140,26 @@ func TestInstalledGolden(t *testing.T) { validateGolden(t, "installed", "install
 
 func TestCheckGolden(t *testing.T) { validateGolden(t, "check", "check.json") }
 
+// Phase 3 bare-array commands that previously emitted structured output with
+// no schema to check it against — `docs/cli-structured.md` claimed universal
+// coverage while these two had none.
+func TestBackendGolden(t *testing.T) { validateGolden(t, "backend", "backend.json") }
+func TestSensorsGolden(t *testing.T) { validateGolden(t, "sensors", "sensors.json") }
+
+// `ynh sensors show` resolves one sensor and is a different shape from the
+// list. It advertises --format json in its own help, so it needs its own
+// schema — without it the universal-coverage claim in docs/cli-structured.md
+// is false, which an eval run caught after the first two schemas landed.
+func TestSensorsShowGolden(t *testing.T) {
+	validateGolden(t, "sensors-show", "sensors-show.json")
+}
+
+// migrate and quarantine also emit --format json. They were missed by the
+// first sweep because neither appeared in `ynh help` until recently, which is
+// the same drift TestEveryDispatchedCommandAppearsInUsage now guards.
+func TestMigrateGolden(t *testing.T)    { validateGolden(t, "migrate", "migrate.json") }
+func TestQuarantineGolden(t *testing.T) { validateGolden(t, "quarantine", "quarantine.json") }
+
 // TestRaw verifies the byte-getter used by `ynh schema <name>`.
 func TestRaw(t *testing.T) {
 	data, err := Raw("version")

@@ -1,0 +1,21 @@
+[
+  {
+    "name": "build",
+    "category": "maintainability",
+    "source_kind": "command",
+    "format": "text"
+  },
+  {
+    "name": "coverage-judge",
+    "role": "convergence-verifier",
+    "source_kind": "focus",
+    "format": "markdown",
+    "inline_focus": true
+  },
+  {
+    "name": "e2e-status",
+    "category": "behaviour",
+    "source_kind": "files",
+    "format": "json"
+  }
+]

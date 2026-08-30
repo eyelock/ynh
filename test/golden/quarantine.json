@@ -1,0 +1,12 @@
+[
+  {
+    "name": "broken",
+    "path": "/home/u/.ynh/quarantine/broken",
+    "original_path": "/home/u/.ynh/installed/broken",
+    "reason": "manifest missing required field 'name'"
+  },
+  {
+    "name": "orphan",
+    "path": "/home/u/.ynh/quarantine/orphan"
+  }
+]

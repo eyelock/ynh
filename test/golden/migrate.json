@@ -1,0 +1,21 @@
+{
+  "dry_run": false,
+  "schema_version": 3,
+  "migrated_at": "2026-08-30T16:50:34Z",
+  "entries": [
+    {
+      "old_id": "david",
+      "new_id": "github.com/eyelock/assistants/david",
+      "kind": "pointer",
+      "old_path": "/home/u/.ynh/installed/david",
+      "new_path": "/home/u/.ynh/installed/github.com/eyelock/assistants/david"
+    }
+  ],
+  "quarantined": [
+    {
+      "original_path": "/home/u/.ynh/installed/broken",
+      "quarantined": "/home/u/.ynh/quarantine/broken",
+      "reason": "manifest missing required field 'name'"
+    }
+  ]
+}
