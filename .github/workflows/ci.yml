@@ -37,6 +37,19 @@ jobs:
               - 'go.sum'
               - 'Makefile'
               - '.github/workflows/**'
+              # Inputs the Go tests read. Without these a PR that changes only
+              # a fixture, a schema or a golden skips Build, Lint and Test, and
+              # All Clear goes green having compiled nothing — the same failure
+              # the artifacts filter below was added to fix, one directory over.
+              #
+              # testdata/  — four packages read testdata/export-harness alone.
+              # test/      — e2e suites and the golden envelopes.
+              # docs/schema/ — embedded into the binary by docs/schema/embed.go
+              #              (//go:embed all:cli all:shared *.schema.json), and
+              #              internal/clischema validates the goldens against it.
+              - 'testdata/**'
+              - 'test/**'
+              - 'docs/schema/**'
             # The harness artifacts this repo ships and uses on itself. Before
             # this filter existed, a PR touching only skills/ or agents/ matched
             # no filter, skipped every job, and All Clear went green having run
