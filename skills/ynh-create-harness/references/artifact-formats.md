@@ -70,13 +70,21 @@ make format && make lint && make test
 
 ## Project instructions (AGENTS.md)
 
-Optional file at harness root. Most vendors read `AGENTS.md` natively. For Claude, ynh generates a `CLAUDE.md` with an `@AGENTS.md` import.
+Optional file at harness root. Write it once; ynh adapts it per vendor.
 
-| Vendor | Native support | ynh shim |
-|--------|---------------|----------|
-| Claude | No | `CLAUDE.md` with `@AGENTS.md` import |
-| Codex  | Yes | — |
-| Cursor | Yes | — |
-| Copilot | Yes, but not from inside a plugin dir | Projected into the project as `.github/instructions/ynh-harness.instructions.md` |
+**The two paths differ, and it matters if you go looking for the output.**
+`ynh run` / `ynd preview` assemble a session config; `ynd export` produces a
+redistributable plugin directory.
+
+| Vendor | `ynh run` / `ynd preview` | `ynd export` |
+|--------|---------------------------|--------------|
+| Claude | `CLAUDE.md`, instructions **inlined** — no `AGENTS.md` emitted | `AGENTS.md` + `CLAUDE.md` containing `@AGENTS.md` |
+| Codex  | `codex.md` | `AGENTS.md` |
+| Cursor | `.cursorrules` | `.cursorrules` + `AGENTS.md` |
+| Copilot | `AGENTS.md` in the staging dir, which `ynh run` projects into the project as `.github/instructions/ynh-harness.instructions.md` (a plugin's bundled `AGENTS.md` is not read) | `AGENTS.md` |
+
+The `@AGENTS.md` import is an export-path artifact only. If you preview a Claude
+harness and look for it, you will not find it — the instructions are already in
+`CLAUDE.md`.
 
 Last source wins. Harness's own `AGENTS.md` takes priority over included repos.

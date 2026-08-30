@@ -11,10 +11,12 @@ You are guiding a user through creating a team harness that delegates to persona
 
 Read these references to understand delegation and Git URL formats:
 
-1. Read `references/delegation.md` for `delegates_to` syntax, Git URL formats, auth, and vendor support
-2. Read `testdata/team-harness/` for the team harness shape — but note its
-   manifest is a legacy `.harness.json` kept to exercise `ynd migrate`. Author
-   the new harness as `.ynh-plugin/plugin.json`, the format below.
+1. Read `references/delegation.md` for `delegates_to` syntax, Git URL formats, auth, vendor support, and the team harness shape
+
+It ships with this skill, so it is readable wherever the skill is installed.
+Author the new harness as `.ynh-plugin/plugin.json`, the format below. The ynh
+repository is not present in a user's project — do not send them looking for
+fixtures in it.
 
 ## Step 1: Understand their current setup
 
