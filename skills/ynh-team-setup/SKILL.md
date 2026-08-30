@@ -12,7 +12,9 @@ You are guiding a user through creating a team harness that delegates to persona
 Read these references to understand delegation and Git URL formats:
 
 1. Read `references/delegation.md` for `delegates_to` syntax, Git URL formats, auth, and vendor support
-2. Read `testdata/team-harness/.harness.json` for the team harness structure
+2. Read `testdata/team-harness/` for the team harness shape — but note its
+   manifest is a legacy `.harness.json` kept to exercise `ynd migrate`. Author
+   the new harness as `.ynh-plugin/plugin.json`, the format below.
 
 ## Step 1: Understand their current setup
 
@@ -55,11 +57,11 @@ They might also want to pull from external repos via `includes`.
 
 Create the team harness directory.
 
-`.harness.json`:
+`.ynh-plugin/plugin.json`:
 
 ```json
 {
-  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "<team-name>",
   "version": "0.1.0",
   "description": "<team description>",
@@ -99,7 +101,7 @@ ynh install <personal-persona-git-url>
 david                       # personal session
 ```
 
-Explain the vendor standardization: setting `default_vendor` in `.harness.json` ensures everyone uses the same AI vendor, but individuals can override with `-v`.
+Explain the vendor standardization: setting `default_vendor` in `.ynh-plugin/plugin.json` ensures everyone uses the same AI vendor, but individuals can override with `-v`.
 
 ## Step 7: Auth considerations
 

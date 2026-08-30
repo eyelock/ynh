@@ -17,7 +17,7 @@ Evaluate ALL tutorials. This is a release gate — the verdict must be PASS befo
    - **Use only the Bash tool** for creating files outside the repo. Do NOT use Write/Edit tools for `/tmp/` files (they trigger permission prompts).
    - Execute each step that produces verifiable output
    - Compare actual output against the expected output documented in the tutorial
-   - Skip steps that require: network access (git clone from GitHub), vendor CLIs (claude, codex, cursor), or Docker
+   - Skip steps that require: network access (git clone from GitHub), vendor CLIs (claude, codex, cursor, copilot), or Docker
    - **Tear down the sandbox** with `rm -rf /tmp/ynh-eval-<slug>` after the tutorial passes
 3. Run the manual test plan (`docs/tutorial/manual-test-plan.md`) error-case section (all E-numbered cases)
 
@@ -76,11 +76,11 @@ Many tutorials do not require network access or vendor CLIs and must be run:
 - **MCP servers** (`mcp-servers.md`): Same pattern — define mcp_servers, validate, preview. Output is local assembly only.
 - **Profiles** (`profiles.md`): Create harness with profiles, run `ynd preview --profile <name>` — verify merged output. Fully local.
 - **Focus** (`focus.md`): Create harness with focus entries, run `ynd preview --focus <name>` — verify prompt + profile. Fully local.
-- **Project-local config** (`project-local-config.md`): Create a `.harness.json` in /tmp, run `ynd preview` from that directory. No network.
+- **Project-local config** (`project-local-config.md`): Create a `.ynh-plugin/plugin.json` in /tmp, run `ynd preview` from that directory. No network.
 - **Include editing** (`include-editing.md`): Use a local-path include (not a git URL) with `ynh include add <dir> ./local-path` — the add/remove/update commands work on the manifest directly without network when the harness is path-referenced (not installed). Skip the installed-harness pre-fetch steps which require network.
 - **Namespacing and migration** (`namespacing-and-migration.md`): Create harnesses with `.harness.json` format, run `ynd validate` and `ynh install` from /tmp — migration is fully local.
 
-Only skip a step if it literally shells out to `git clone`, launches `claude`/`codex`/`cursor`, or runs Docker. "This tutorial is about git/network/vendor" is NOT sufficient reason to skip the whole tutorial — skip only the specific steps that require those things.
+Only skip a step if it literally shells out to `git clone`, launches `claude`/`codex`/`cursor`/`copilot`, or runs Docker. "This tutorial is about git/network/vendor" is NOT sufficient reason to skip the whole tutorial — skip only the specific steps that require those things.
 
 ## Pass/Fail Criteria
 

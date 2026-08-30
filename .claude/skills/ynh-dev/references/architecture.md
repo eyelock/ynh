@@ -3,7 +3,7 @@
 ## Core flow
 
 ```
-.harness.json → resolve Git includes → assemble vendor config → launch vendor CLI
+.ynh-plugin/plugin.json → resolve Git includes → assemble vendor config → launch vendor CLI
 ```
 
 1. **Detect** harness format and load manifest (`internal/harness/`, `internal/plugin/`)
@@ -18,7 +18,7 @@ cmd/ynh/                  CLI entry point and command handlers
 internal/
   config/                 Global config (~/.ynh/) and path management
   harness/                Harness loading, format detection, name validation
-  plugin/                 Harness manifest types (.harness.json)
+  plugin/                 Harness manifest types (.ynh-plugin/plugin.json)
   resolver/               Git clone, cache, and content extraction
   assembler/              Build vendor config dir from resolved content
     delegates.go          Generate agent files for delegates_to
@@ -41,7 +41,7 @@ testdata/                 Test fixtures (sample-harness, monorepo, etc.)
 - **Git is the package manager** - no registry, content cached locally by URL+ref hash
 - **Vendor-adaptive launch** - Claude and Copilot use `syscall.Exec` (native `--plugin-dir`), Codex/Cursor use child process with signal forwarding (symlink-based install)
 - **Deterministic run dir** - `~/.ynh/run/<id-fsname>/` (keyed by canonical id) overwritten each run (no temp dir leaks; same-named installs don't clobber each other)
-- **Single manifest** - `.harness.json` for all config (identity, includes, hooks, MCP servers, profiles)
+- **Single manifest** - `.ynh-plugin/plugin.json` for all config (identity, includes, hooks, MCP servers, profiles). `.harness.json` is the legacy form; `ynd migrate` converts it and `DetectFormat` runs the migration chain transparently.
 
 ## Adapter interface
 
