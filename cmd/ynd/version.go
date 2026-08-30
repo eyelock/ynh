@@ -12,7 +12,7 @@ import (
 // cmdVersion prints the release version and, with --format json, a structured
 // envelope that also carries the wire-contract CapabilitiesVersion.
 //
-// Consumers like TermQ call `ynd version --format json` (or `ynh version
+// Structured consumers call `ynd version --format json` (or `ynh version
 // --format json`) to gate their feature surface on ynh's contract capability.
 func cmdVersion(args []string) error {
 	return cmdVersionTo(args, os.Stdout, os.Stderr)

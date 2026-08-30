@@ -71,7 +71,7 @@ func TestDocsLinksResolve(t *testing.T) {
 	for _, b := range broken {
 		t.Errorf("broken link: %s\n"+
 			"docsify resolves relative links from the docs root, not from the file. "+
-			"Write it as it would be reached from docs/ — e.g. tutorial/19-sensors.md, not 19-sensors.md or ../sensors.md.", b)
+			"Write it as it would be reached from docs/ — e.g. tutorial/sensors.md, not 19-sensors.md or ../sensors.md.", b)
 	}
 }
 

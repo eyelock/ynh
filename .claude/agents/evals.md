@@ -18,7 +18,7 @@ Evaluate ALL tutorials. This is a release gate — the verdict must be PASS befo
    YNH_REPO=$(git rev-parse --show-toplevel)
    "$YNH_REPO/bin/ynh" version && "$YNH_REPO/bin/ynd" version
    ```
-2. For EVERY tutorial in `docs/tutorial/` (01 through the highest-numbered tutorial, excluding README.md):
+2. For EVERY tutorial in `docs/tutorial/` (every `.md` except `README.md` and `manual-test-plan.md`):
    - **Isolate per tutorial** — see "Sandbox isolation" below. Failure to isolate pollutes the user's real `~/.ynh` and leaves dangling pointers; this is non-negotiable.
    - Use the binaries at `$YNH_REPO/bin/ynh` and `$YNH_REPO/bin/ynd` (see step 1).
      Never hardcode an absolute path under a particular user's home — the eval
@@ -28,19 +28,19 @@ Evaluate ALL tutorials. This is a release gate — the verdict must be PASS befo
    - Execute each step that produces verifiable output
    - Compare actual output against the expected output documented in the tutorial
    - Skip steps that require: network access (git clone from GitHub), vendor CLIs (claude, codex, cursor, copilot), or Docker
-   - **Tear down the sandbox** with `rm -rf /tmp/ynh-eval-T<N>` after the tutorial passes
+   - **Tear down the sandbox** with `rm -rf /tmp/ynh-eval-<slug>` after the tutorial passes
 3. Run the manual test plan (`docs/tutorial/manual-test-plan.md`) error-case section (all E-numbered cases)
 
 ## Sandbox isolation
 
-**Each Bash tool invocation runs in a fresh shell.** `export` statements do not survive between calls — anything you set in one Bash call is gone by the next. Relying on `export HOME=...; export YNH_HOME=...` at the top of a tutorial sequence has caused real damage: tutorial 19 installed a harness into the user's real `~/.ynh` and left a dangling pointer after cleanup, because the next Bash call no longer had the sandbox env.
+**Each Bash tool invocation runs in a fresh shell.** `export` statements do not survive between calls — anything you set in one Bash call is gone by the next. Relying on `export HOME=...; export YNH_HOME=...` at the top of a tutorial sequence has caused real damage: the sensors tutorial installed a harness into the user's real `~/.ynh` and left a dangling pointer after cleanup, because the next Bash call no longer had the sandbox env.
 
-**Use deterministic per-tutorial sandbox paths and prefix every `ynh`/`ynd` invocation inline.** The pattern:
+**Use deterministic per-tutorial sandbox paths, keyed on the tutorial's filename slug, and prefix every `ynh`/`ynd` invocation inline.** The pattern:
 
 1. **Once at tutorial start** (single Bash invocation):
 
    ```bash
-   SANDBOX=/tmp/ynh-eval-T<N>            # e.g. T19 for tutorial 19
+   SANDBOX=/tmp/ynh-eval-<slug>          # e.g. sensors for tutorial/sensors.md
    rm -rf "$SANDBOX"
    mkdir -p "$SANDBOX/.ynh"
    ```
@@ -48,7 +48,7 @@ Evaluate ALL tutorials. This is a release gate — the verdict must be PASS befo
 2. **Every subsequent Bash invocation** for that tutorial prefixes each command:
 
    ```bash
-   HOME=/tmp/ynh-eval-T<N> YNH_HOME=/tmp/ynh-eval-T<N>/.ynh \
+   HOME=/tmp/ynh-eval-<slug> YNH_HOME=/tmp/ynh-eval-<slug>/.ynh \
        "$(git rev-parse --show-toplevel)/bin/ynh" install /tmp/ynh-tutorial/sensor-harness
    ```
 
@@ -60,14 +60,14 @@ Evaluate ALL tutorials. This is a release gate — the verdict must be PASS befo
 3. **Once at tutorial end** (single Bash invocation):
 
    ```bash
-   rm -rf /tmp/ynh-eval-T<N>
+   rm -rf /tmp/ynh-eval-<slug>
    ```
 
 **Verify isolation after each tutorial.** Before tearing down, run:
 
 ```bash
-ls /tmp/ynh-eval-T<N>/.ynh/harnesses 2>/dev/null
-ls /tmp/ynh-eval-T<N>/.ynh/installed 2>/dev/null
+ls /tmp/ynh-eval-<slug>/.ynh/harnesses 2>/dev/null
+ls /tmp/ynh-eval-<slug>/.ynh/installed 2>/dev/null
 ```
 
 If a tutorial used `ynh install`, the installed entry must appear in the sandbox. If the sandbox is empty AND the tutorial called `ynh install`, isolation failed — the install landed in the real `~/.ynh`. Stop and report; do not continue evaluating other tutorials in that state.
@@ -85,13 +85,13 @@ ynh install /tmp/ynh-tutorial/sensor-harness   # ← real ~/.ynh gets polluted
 
 Many tutorials do not require network access or vendor CLIs and must be run:
 
-- **Hooks (T10)**: Create a harness with hooks defined in plugin.json, run `ynd validate`, `ynd preview -v claude -o /tmp/out` — verify hook config appears in output. No vendor CLI needed.
-- **MCP servers (T11)**: Same pattern — define mcp_servers, validate, preview. Output is local assembly only.
-- **Profiles (T13)**: Create harness with profiles, run `ynd preview --profile <name>` — verify merged output. Fully local.
-- **Focus (T14)**: Create harness with focus entries, run `ynd preview --focus <name>` — verify prompt + profile. Fully local.
-- **Project-local config (T15)**: Create a `.ynh-plugin/plugin.json` in /tmp, run `ynd preview` from that directory. No network.
-- **Include editing (T17)**: Use a local-path include (not a git URL) with `ynh include add <dir> ./local-path` — the add/remove/update commands work on the manifest directly without network when the harness is path-referenced (not installed). Skip the installed-harness pre-fetch steps which require network.
-- **Namespacing and migration (T18)**: Create harnesses with `.harness.json` format, run `ynd validate` and `ynh install` from /tmp — migration is fully local.
+- **Hooks** (`hooks.md`): Create a harness with hooks defined in plugin.json, run `ynd validate`, `ynd preview -v claude -o /tmp/out` — verify hook config appears in output. No vendor CLI needed.
+- **MCP servers** (`mcp-servers.md`): Same pattern — define mcp_servers, validate, preview. Output is local assembly only.
+- **Profiles** (`profiles.md`): Create harness with profiles, run `ynd preview --profile <name>` — verify merged output. Fully local.
+- **Focus** (`focus.md`): Create harness with focus entries, run `ynd preview --focus <name>` — verify prompt + profile. Fully local.
+- **Project-local config** (`project-local-config.md`): Create a `.ynh-plugin/plugin.json` in /tmp, run `ynd preview` from that directory. No network.
+- **Include editing** (`include-editing.md`): Use a local-path include (not a git URL) with `ynh include add <dir> ./local-path` — the add/remove/update commands work on the manifest directly without network when the harness is path-referenced (not installed). Skip the installed-harness pre-fetch steps which require network.
+- **Namespacing and migration** (`namespacing-and-migration.md`): Create harnesses with `.harness.json` format, run `ynd validate` and `ynh install` from /tmp — migration is fully local.
 
 Only skip a step if it literally shells out to `git clone`, launches `claude`/`codex`/`cursor`/`copilot`, or runs Docker. "This tutorial is about git/network/vendor" is NOT sufficient reason to skip the whole tutorial — skip only the specific steps that require those things.
 

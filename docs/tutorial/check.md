@@ -1,6 +1,6 @@
-# Tutorial 20: Gating with `ynh check`
+# Gating with `ynh check`
 
-[Tutorial 19](tutorial/19-sensors.md) declared sensors. This one runs them as a gate.
+[Sensors](tutorial/sensors.md) declared sensors. This one runs them as a gate.
 
 `ynh check` executes every declared sensor and returns a verdict. It owns the
 thinnest possible pass/fail policy — a command sensor passes when it exits 0 —
@@ -17,7 +17,7 @@ mkdir -p /tmp/ynh-t20/work && cd /tmp/ynh-t20
 export YNH_HOME=/tmp/ynh-t20/home
 ```
 
-## T20.1: Declare sensors with a tolerance
+## Declare sensors with a tolerance
 
 ```bash
 mkdir -p gate-demo/.ynh-plugin
@@ -44,7 +44,7 @@ ynh install ./gate-demo
 
 `tolerance` is optional and defaults to `blocking` — the safe default for a gate.
 
-## T20.2: A clean run
+## A clean run
 
 ```bash
 cd /tmp/ynh-t20/work
@@ -64,7 +64,7 @@ exit=0
 report — the filtered run is the edit-time path, and it has to cost nothing to
 read. They remain in `--format json`.
 
-## T20.3: A blocking failure gates
+## A blocking failure gates
 
 ```bash
 cat > issues.txt <<'EOF'
@@ -98,7 +98,7 @@ Three things to notice:
 - **The failing output is printed verbatim.** That output is the remediation an
   agent acts on, so it is not summarised away.
 
-## T20.4: The problem with inheriting a repository
+## The problem with inheriting a repository
 
 `lint` is failing on two issues that were there before you arrived. As it
 stands, the gate blocks every run until someone fixes them — so the first run
@@ -107,7 +107,7 @@ on any repository that is not already clean is unwinnable.
 A gate nobody can satisfy is a gate everybody disables. That is what a baseline
 is for.
 
-## T20.5: Record a baseline
+## Record a baseline
 
 ```bash
 ynh check local/gate-demo --update-baseline
@@ -134,7 +134,8 @@ exit=0
 ```
 
 `known` means failing, but only in ways the baseline already records — debt,
-not a regression. **Commit `.ynh/baseline/`**: the ratchet is a property of
+not a regression. **Commit `.ynh/baseline/`**: the
+[ratchet](harness-engineering.md#sensor-gate-ratchet-loop) is a property of
 the repository, not of one developer.
 
 It is one file per sensor:
@@ -164,7 +165,52 @@ different sensors never conflict; when one does, `ynh check` refuses to run
 against it rather than guessing, because deciding which failures a repository
 accepts is a human call.
 
-## T20.6: Only new failures gate
+## Read what the ratchet forgives
+
+A baseline that nobody can read is a list of hashes somebody agreed to ignore.
+`ynh baseline` says what is in it:
+
+```bash
+ynh baseline local/gate-demo
+```
+
+```
+Baseline for gate-demo
+
+  · build                    nothing recorded — no failures are forgiven
+  ● lint                     2 forgiven, accepted 2026-08-29T22:42:23Z
+
+2 sensors: 1 with recorded debt (2 findings forgiven), 1 with none
+
+Run with --explain to resolve the recorded fingerprints into the findings
+they forgive. That runs the sensors, so it is not the default.
+```
+
+The file stores fingerprints, not findings, so it can answer *how much* is
+forgiven and *when* that was accepted — but not *what*. `--explain` re-runs the
+sensors and matches their current output against the recorded hashes, which is
+the only way back to the lines themselves:
+
+```bash
+ynh baseline local/gate-demo --explain
+```
+
+```
+Baseline for gate-demo
+
+  · build                    nothing recorded — no failures are forgiven
+  ● lint                     2 forgiven, accepted 2026-08-29T22:42:23Z
+      src/legacy.go:12:5: exported func Old should have comment
+      src/util.go:8:2: unused variable tmp
+
+2 sensors: 1 with recorded debt (2 findings forgiven), 1 with none
+```
+
+Note `build`: **a sensor with nothing recorded forgives nothing.** An empty
+baseline is not a permissive one, and the distinction matters when reviewing
+what a repository has agreed to carry.
+
+## Only new failures gate
 
 Add one issue of your own to the two you inherited:
 
@@ -189,7 +235,7 @@ exit=1
 Only your issue is shown. Listing the two you did not introduce alongside the
 one you did is how a useful gate becomes an ignored one.
 
-## T20.7: Moving code is not a new failure
+## Moving code is not a new failure
 
 Insert lines above the existing issues so their reported positions shift:
 
@@ -214,7 +260,7 @@ absolute paths are made relative to the working directory. Without the first,
 inserting a line would report the whole file as new on your next run; without
 the second, a baseline recorded on a laptop would not match on a CI runner.
 
-## T20.8: Paying off debt tightens the ratchet
+## Paying off debt tightens the ratchet
 
 ```bash
 cat > issues.txt <<'EOF'
@@ -234,7 +280,7 @@ baseline: 1 recorded failure is now fixed — `ynh check --update-baseline` to l
 The baseline never narrows itself. It reports the slack and offers the command;
 tightening is a deliberate act.
 
-## T20.9: CI cannot write a baseline
+## CI cannot write a baseline
 
 ```bash
 CI=true ynh check local/gate-demo --update-baseline
@@ -258,7 +304,7 @@ ynh check local/gate-demo --only lint --no-baseline
 echo "exit=$?"          # 1 — the baseline is ignored
 ```
 
-## T20.10: Exit codes and structured output
+## Exit codes and structured output
 
 | Code | Meaning |
 |------|---------|
@@ -278,7 +324,21 @@ sensor `status`, `tolerance`, `new_count`/`known_count` and `new_output`. When a
 baseline is loaded, a top-level `baseline` object reports `known`, `fixed` and
 `stale`.
 
-## T20.11: Wire it into the edit loop
+One further field appears only if you ask for it. A sensor that declares
+[`version_command`](sensors.md#version-command-which-tool-produced-this) has its
+result annotated with `tool_version` — the first line that command printed. The
+sensors above declare none, so their results carry none: absent means *cannot
+tell*, not *unchanged*.
+
+It is worth declaring as soon as results are compared over time, because it
+turns a green run into a green run *of a known tool*. A linter that silently
+stopped examining anything still exits 0, and the version string moving is the
+only external evidence that the instrument changed rather than the code.
+[Shadow mode](tutorial/shadow-mode.md) depends on it directly: a sample split
+across a toolchain upgrade measures two different things, and this is the field
+that shows it.
+
+## Wire it into the edit loop
 
 A hook turns the gate into something that runs without being asked:
 
@@ -299,7 +359,7 @@ Vendor support differs: where a vendor fires `on_stop` once per session, or
 cannot block on it, the edit-time loop does not exist and the CI gate is the
 one that matters.
 
-## T20.12: Cleanup
+## Cleanup
 
 ```bash
 ynh uninstall local/gate-demo
@@ -317,3 +377,7 @@ rm -rf /tmp/ynh-t20
   only the new lines.
 - Baselines tighten deliberately, and never from CI.
 - Exit 1 (code failing) and exit 2 (gate broken) are different answers.
+
+## Next
+
+[The Agent Loop](tutorial/agent-loop.md) — prompt, act, re-observe — and halt on the gate's verdict.

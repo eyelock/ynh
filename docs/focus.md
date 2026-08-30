@@ -114,4 +114,4 @@ A sensor's `focus` source can be either a string reference to a top-level focus 
 - [Hooks](hooks.md) — lifecycle commands a profile can declare
 - [MCP Servers](mcp.md) — tool dependencies a profile can declare
 - [Sensors](sensors.md) — observation surfaces that can carry an inline focus
-- [Tutorial 7: Focus](tutorial/14-focus.md) — guided walkthrough
+- [Focus](tutorial/focus.md) — guided walkthrough

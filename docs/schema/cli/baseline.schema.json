@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/baseline.schema.json",
+  "title": "ynh baseline --format json",
+  "description": "Output of `ynh baseline <harness> --format json`. Reports what a harness's ratchet currently forgives. The baseline stores twelve-character fingerprints rather than findings, so without --explain this describes the shape of the debt; with --explain the sensors are run and the fingerprints resolved into the lines they forgive.",
+  "x-capabilities": "0.7",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["capabilities", "ynh_version", "harness", "summary", "sensors"],
+  "properties": {
+    "capabilities": { "type": "string" },
+    "ynh_version": { "type": "string" },
+    "harness": { "type": "string" },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "recorded", "unrecorded", "forgiven"],
+      "properties": {
+        "total": { "type": "integer" },
+        "recorded": { "type": "integer", "description": "Sensors with accepted debt." },
+        "unrecorded": { "type": "integer", "description": "Sensors forgiving nothing. A sensor absent from the baseline was passing when it was taken — different from one recording zero." },
+        "forgiven": { "type": "integer", "description": "Total distinct findings forgiven across all sensors." }
+      }
+    },
+    "sensors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "recorded"],
+        "properties": {
+          "name": { "type": "string" },
+          "kind": { "type": "string" },
+          "ratchet": { "type": "string", "enum": ["fingerprint", "count"] },
+          "recorded": { "type": "boolean" },
+          "recorded_at": { "type": "string", "description": "When this sensor's debt was accepted." },
+          "status": { "type": "string" },
+          "forgiven": { "type": "integer", "description": "Distinct findings accepted." },
+          "total": { "type": "integer", "description": "Raw count a count-ratchet sensor is measured against." },
+          "truncated": { "type": "boolean", "description": "Too many findings to store fingerprints, so only the count is ratcheted." },
+          "findings": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "The lines the recorded fingerprints forgive. Present only under --explain. A finding that no longer appears is omitted: it has been fixed and the baseline can be narrowed."
+          },
+          "note": { "type": "string" }
+        }
+      }
+    }
+  }
+}
