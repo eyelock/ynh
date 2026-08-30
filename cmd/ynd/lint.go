@@ -18,7 +18,15 @@ type lintIssue struct {
 }
 
 func cmdLint(args []string) error {
-	var root string
+	// Every positional is a root, not just the first.
+	//
+	// This used to keep `args[i]` only when `root == ""`, so every later path
+	// was parsed, discarded, and never linted — with no warning and exit 0.
+	// `ynd lint skills agents` checked 8 files when `skills` alone checked 8
+	// and `agents` alone checked 2. The user validated their agents, was told
+	// "no issues found", and the agents were never opened. A linter that
+	// silently declines to look is worse than one that refuses to run.
+	var roots []string
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -27,33 +35,50 @@ func cmdLint(args []string) error {
 				return fmt.Errorf("--harness requires a value")
 			}
 			i++
-			root = args[i]
+			roots = append(roots, args[i])
 		case "-h", "--help":
 			return errHelp
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return fmt.Errorf("unknown flag: %s", args[i])
 			}
-			if root == "" {
-				root = args[i]
-			}
+			roots = append(roots, args[i])
 		}
 	}
 
-	// Resolve source: --harness flag > YNH_HARNESS > positional > CWD
-	if root == "" {
-		root = resolveHarnessEnv()
-	}
-	if root == "" {
-		root = "."
+	// Resolve source: explicit paths > YNH_HARNESS > CWD
+	if len(roots) == 0 {
+		if env := resolveHarnessEnv(); env != "" {
+			roots = []string{env}
+		} else {
+			roots = []string{"."}
+		}
 	}
 
-	files, err := discoverAll(root,
-		[]string{".md", ".sh"},
-		[]string{plugin.PluginFile},
-	)
-	if err != nil {
-		return err
+	// Deduplicate while preserving order. Overlapping roots — `ynd lint . skills`
+	// — would otherwise report the same finding twice and inflate the counts,
+	// making the summary line disagree with the list above it.
+	seen := map[string]bool{}
+	var files []string
+	for _, root := range roots {
+		found, err := discoverAll(root,
+			[]string{".md", ".sh"},
+			[]string{plugin.PluginFile},
+		)
+		if err != nil {
+			return err
+		}
+		for _, f := range found {
+			abs, absErr := filepath.Abs(f)
+			if absErr != nil {
+				abs = f
+			}
+			if seen[abs] {
+				continue
+			}
+			seen[abs] = true
+			files = append(files, f)
+		}
 	}
 
 	if len(files) == 0 {

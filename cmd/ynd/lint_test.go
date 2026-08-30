@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -930,4 +931,67 @@ func TestLintMarkdown_StillCatchesRealErrors(t *testing.T) {
 	if issues := lintMarkdown(transcript); len(issues) != 0 {
 		t.Errorf("command output must not be linted as shell: %v", issues)
 	}
+}
+
+// Every positional path must be linted, not just the first.
+//
+// `ynd lint skills agents` used to check 8 files when `skills` alone checked 8
+// and `agents` alone checked 2: the second path was parsed, discarded, and
+// never opened — with no warning and exit 0. A user validating freshly
+// generated agents was told "no issues found" about files nothing had read.
+func TestLint_EveryPositionalPathIsLinted(t *testing.T) {
+	dir := t.TempDir()
+	// Clean in the first tree, broken in the second. If the second is skipped
+	// the command reports success, which is precisely the bug.
+	writeFile(t, filepath.Join(dir, "first", "a.md"), []byte("# fine\n"))
+	writeFile(t, filepath.Join(dir, "second", "b.md"), []byte("# trailing space   \n"))
+
+	if err := cmdLint([]string{filepath.Join(dir, "first")}); err != nil {
+		t.Fatalf("first tree alone should be clean: %v", err)
+	}
+	if err := cmdLint([]string{filepath.Join(dir, "second")}); err == nil {
+		t.Fatal("second tree alone should fail; the fixture is wrong")
+	}
+	if err := cmdLint([]string{filepath.Join(dir, "first"), filepath.Join(dir, "second")}); err == nil {
+		t.Error("both paths together reported success — the second path was never linted")
+	}
+}
+
+// Overlapping roots must not double-count. `ynd lint . skills` would otherwise
+// report every finding under skills/ twice and print a summary that disagrees
+// with the list above it.
+func TestLint_OverlappingRootsAreDeduplicated(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "skills")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(sub, "x.md"), []byte("# bad   \n"))
+
+	var once, twice bytes.Buffer
+	withStdout(t, &once, func() { _ = cmdLint([]string{dir}) })
+	withStdout(t, &twice, func() { _ = cmdLint([]string{dir, sub}) })
+
+	if once.String() != twice.String() {
+		t.Errorf("overlapping roots changed the report:\nonly root:\n%s\nroot + subdir:\n%s",
+			once.String(), twice.String())
+	}
+}
+
+// withStdout captures what f prints. cmdLint writes its report with fmt.Print,
+// so there is no writer to inject.
+func withStdout(t *testing.T, buf *bytes.Buffer, f func()) {
+	t.Helper()
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	done := make(chan struct{})
+	go func() { _, _ = buf.ReadFrom(r); close(done) }()
+	f()
+	_ = w.Close()
+	os.Stdout = orig
+	<-done
 }
