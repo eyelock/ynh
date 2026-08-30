@@ -116,12 +116,6 @@ depends on it.
 
 ## Outside this plan, still owed
 
-- **~24 `TermQ` references** in shipped source and tests, against the standing
-  rule that ynh artifacts never name it. Its own sweep — fixing two of twenty
-  inside an unrelated PR is worse than none.
-- **`fix/marketplace-clean-guard`** — `--clean` called `os.RemoveAll` on the `-o`
-  path with no guard. `cmd/ynd/clean.go` written; tests must follow
-  `.claude/rules/destructive-operations.md` before anything runs.
 - **`.claude/rules/branching.md` additions:** merging a stacked parent with
   `--delete-branch` irreversibly closes the child PR; always assert
   `git rev-list --count origin/develop..HEAD` after a `rebase --onto`.

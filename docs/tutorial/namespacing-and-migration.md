@@ -1,4 +1,4 @@
-# Tutorial 18: Namespacing & Migration
+# Namespacing & Migration
 
 Install same-named harnesses from different sources without collision using
 canonical ids, and migrate legacy `.harness.json` / `registry.json` files to
@@ -17,7 +17,7 @@ ynh uninstall github.com/acme/tools/david 2>/dev/null
 ynh uninstall local/david 2>/dev/null
 ```
 
-## T18.1: Canonical ids — the new identity model
+## Canonical ids — the new identity model
 
 Every installed harness has a **canonical id**: a host-prefixed identifier
 that uniquely names it across all sources. Two forms exist:
@@ -41,12 +41,12 @@ canonical ids differ:
 | `github.com/eyelock/assistants`     | `github.com/eyelock/assistants/david` |
 | `github.com/acme/tools`             | `github.com/acme/tools/david`         |
 
-## T18.2: Demo — two registries, two `david` harnesses
+## Demo — two registries, two `david` harnesses
 
 > **Network required for the install step.** The two demo registries below
 > are local file:// paths (so the registry index works offline), but they
 > both *point at* real `github.com` repos so each install resolves to a
-> distinct canonical id. If you are offline, read T18.3 to T18.5 as a
+> distinct canonical id. If you are offline, read [Search returns both entries](#search-returns-both-entries) through [Inspect by canonical id](#inspect-by-canonical-id) as a
 > walkthrough rather than running the commands.
 
 ```bash
@@ -102,7 +102,7 @@ ynh registry add /tmp/ynh-ns-tutorial/reg-b
 > between remote sources. Use distinct repos (real GitHub orgs are easiest)
 > when you need two same-named harnesses to coexist.
 
-## T18.3: Search returns both entries
+## Search returns both entries
 
 ```bash
 ynh search david
@@ -110,7 +110,7 @@ ynh search david
 
 Expected: two rows, one per registry. The `FROM` column distinguishes them.
 
-## T18.4: Disambiguate install with `@<registry>`
+## Disambiguate install with `@<registry>`
 
 A bare `ynh install david` is ambiguous — both registries match:
 
@@ -139,7 +139,7 @@ The canonical id is `github.com/eyelock/assistants/david`. The `@<registry>`
 syntax exists only for `ynh install` to resolve the registry lookup; once
 installed, you address the harness via its canonical id.
 
-## T18.5: Inspect by canonical id
+## Inspect by canonical id
 
 ```bash
 ynh ls --format json | jq -r '.harnesses[].id'
@@ -160,7 +160,7 @@ ynh info david 2>&1
 # Expected: Error: "david" is not a valid harness id. Use a canonical id ...
 ```
 
-## T18.6: Uninstall by canonical id
+## Uninstall by canonical id
 
 ```bash
 ynh uninstall github.com/eyelock/assistants/david
@@ -170,7 +170,7 @@ A short launcher (`~/.ynh/bin/david`) is created when the short name is
 unambiguous; if you install a second `david` from another source, the short
 launcher is removed and you invoke the harness with `ynh run <canonical-id>`.
 
-## T18.7: Migrate a legacy harness with `ynd migrate`
+## Migrate a legacy harness with `ynd migrate`
 
 Create a harness in the legacy 0.1 format:
 
@@ -213,7 +213,7 @@ Expected:
 migrator. Adding a new format migrator in future releases does not require a
 new command.
 
-## T18.8: Recursive migration
+## Recursive migration
 
 Create multiple legacy harnesses at once, then migrate the whole tree:
 
@@ -238,7 +238,7 @@ Migrated /tmp/ynh-ns-tutorial/bulk/h2
 Migrated 2 director(ies).
 ```
 
-## T18.9: Transparent migration on use
+## Transparent migration on use
 
 Legacy harnesses do not strictly require `ynd migrate`. ynh runs the migration
 chain automatically whenever a harness is loaded or installed, so an
@@ -259,7 +259,7 @@ directory is also migrated in place (the chain runs before the copy).
 `ynd migrate` is still useful when you want to convert a whole tree
 intentionally — for example when cleaning up a source repo before publishing.
 
-## T18.10: `ynh migrate` — upgrade `~/.ynh` schema
+## `ynh migrate` — upgrade `~/.ynh` schema
 
 `ynd migrate` is for harness *source trees*. The companion command
 `ynh migrate` upgrades the on-disk layout of `~/.ynh` itself (the home
@@ -279,7 +279,7 @@ When an upgrade is needed, the command rewrites the harness directory layout
 `config.json` in place. It is idempotent — re-running it on a current home
 does nothing.
 
-## T18.11: `ynh quarantine` — recover from broken installs
+## `ynh quarantine` — recover from broken installs
 
 If a harness install fails partway through, or a manifest is missing required
 fields, ynh moves the directory into a quarantine area instead of leaving a
@@ -340,10 +340,6 @@ rm -rf /tmp/ynh-ns-tutorial
   ynh upgrade.
 - `ynh quarantine list/restore/drop` manages harnesses set aside because
   their install was broken or their manifest was invalid.
-
-## Next
-
-[Tutorial 18: Sensors](tutorial/19-sensors.md) — declare observation surfaces a loop driver consumes.
 
 See [docs/namespacing.md](namespacing.md) for the full canonical-id
 reference and [docs/migration.md](migration.md) for a complete 0.1 → 0.2

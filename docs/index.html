@@ -15,6 +15,14 @@
     :root {
       --theme-color: #0066cc;
       --sidebar-width: 280px;
+
+      /* Diagram semantics. The inline SVGs reference these with a hex
+         fallback, so they render correctly even if this block is absent —
+         redefine them here to retheme every diagram at once. */
+      --ynh-owns: #1d5a66;
+      --ynh-external: #93372c;
+      --ynh-caution: #8f6714;
+      --ynh-good: #37704a;
     }
 
     .sidebar-nav > ul > li > p {
