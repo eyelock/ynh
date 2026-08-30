@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage e2e format lint check check-artifacts run docs help docker-build docker-push
+.PHONY: clean deps install build test test-coverage e2e format lint check check-artifacts scan-artifacts run docs help docker-build docker-push
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -69,6 +69,35 @@ lint: ## Lint code
 # uses on itself (.claude/). testdata/ is deliberately excluded: its fixtures are
 # malformed on purpose, so `ynd lint .` at the repo root can never be green.
 ARTIFACT_DIRS := skills agents rules .claude
+
+# NVIDIA SkillSpector — security scanner for agent skills. Pinned: an unpinned
+# git install would let an upstream push change what gates our merges, which is
+# the exact supply-chain risk the scanner exists to catch.
+SKILLSPECTOR ?= skillspector
+SKILLSPECTOR_VERSION := v2.11.0
+SKILLSPECTOR_BASELINE := .skillspector-baseline.yaml
+SARIF_DIR := .skillspector-sarif
+
+scan-artifacts: ## Security-scan the harness artifacts with SkillSpector
+	@command -v $(SKILLSPECTOR) >/dev/null 2>&1 || { \
+		echo "skillspector not found. Install with:"; \
+		echo "  pip install 'git+https://github.com/NVIDIA/SkillSpector.git@$(SKILLSPECTOR_VERSION)'"; \
+		exit 1; }
+	@rm -rf $(SARIF_DIR) && mkdir -p $(SARIF_DIR)
+	@rc=0; for d in $(ARTIFACT_DIRS); do \
+		echo "==> skillspector scan $$d"; \
+		$(SKILLSPECTOR) scan ./$$d --no-llm --baseline $(SKILLSPECTOR_BASELINE) \
+			-f sarif -o $(SARIF_DIR)/`echo $$d | tr -d .`.sarif || rc=1; \
+	done; \
+	if [ $$rc -ne 0 ]; then \
+		echo ""; \
+		echo "SkillSpector found un-baselined findings. For a readable report:"; \
+		echo "  $(SKILLSPECTOR) scan ./<dir> --no-llm --baseline $(SKILLSPECTOR_BASELINE)"; \
+		echo "Triage each one. Suppress only with a scoped path and a written reason."; \
+	else \
+		echo "Skill security scan clean."; \
+	fi; \
+	exit $$rc
 
 check-artifacts: build ## Validate and lint the harness artifacts this repo ships
 	@echo "==> ynd validate ."
