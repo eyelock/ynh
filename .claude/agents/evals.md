@@ -9,10 +9,20 @@ Evaluate ALL tutorials. This is a release gate — the verdict must be PASS befo
 
 ## Process
 
-1. Build and install the latest binaries: `make build && make install`
+1. Build the latest binaries: `make build`. They land in the repo's `bin/`.
+   Do **not** run `make install` for an eval — it copies into the real
+   `$HOME/.ynh/bin`, which is a write outside the repo that the eval does not
+   need. Resolve the repo once and use those binaries directly:
+
+   ```bash
+   YNH_REPO=$(git rev-parse --show-toplevel)
+   "$YNH_REPO/bin/ynh" version && "$YNH_REPO/bin/ynd" version
+   ```
 2. For EVERY tutorial in `docs/tutorial/` (every `.md` except `README.md` and `manual-test-plan.md`):
    - **Isolate per tutorial** — see "Sandbox isolation" below. Failure to isolate pollutes the user's real `~/.ynh` and leaves dangling pointers; this is non-negotiable.
-   - Use binaries at `/Users/david/.ynh/bin/ynh` and `/Users/david/.ynh/bin/ynd`
+   - Use the binaries at `$YNH_REPO/bin/ynh` and `$YNH_REPO/bin/ynd` (see step 1).
+     Never hardcode an absolute path under a particular user's home — the eval
+     must run for anyone who checks the repo out, and on CI.
    - **ALL file creation and commands MUST run in `/tmp/`** — never in the repo directory. The repo has real `skills/`, `agents/`, `rules/`, `commands/` directories; creating test files there pollutes the working tree. Use `cd /tmp` or absolute `/tmp/...` paths for all tutorial commands.
    - **Use only the Bash tool** for creating files outside the repo. Do NOT use Write/Edit tools for `/tmp/` files (they trigger permission prompts).
    - Execute each step that produces verifiable output
@@ -39,8 +49,11 @@ Evaluate ALL tutorials. This is a release gate — the verdict must be PASS befo
 
    ```bash
    HOME=/tmp/ynh-eval-<slug> YNH_HOME=/tmp/ynh-eval-<slug>/.ynh \
-       /Users/david/.ynh/bin/ynh install /tmp/ynh-tutorial/sensor-harness
+       "$(git rev-parse --show-toplevel)/bin/ynh" install /tmp/ynh-tutorial/sensor-harness
    ```
+
+   `git rev-parse` is re-run inline because, like `export`, a `YNH_REPO` set in
+   an earlier Bash call does not survive to the next one.
 
    The `VAR=val cmd` form sets the variable for that invocation only — no `export`, no reliance on shell state. Works identically across every fresh Bash shell.
 
