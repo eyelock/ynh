@@ -2,7 +2,7 @@
 
 ## What This Is
 
-ynh is a harness template manager for AI coding assistants (Claude Code, OpenAI Codex, Cursor). No runtime — resolves config, assembles vendor-specific layout, launches the vendor CLI.
+ynh is a harness template manager for AI coding assistants (Claude Code, OpenAI Codex, Cursor, GitHub Copilot). No runtime — resolves config, assembles vendor-specific layout, launches the vendor CLI.
 
 ## Two Binaries
 
@@ -68,7 +68,7 @@ Follows the [Agent Skills](https://agentskills.io) open standard. See `docs/skil
 | `.goreleaser.yml` | Release config (both binaries, brew tap) |
 | `.github/workflows/release.yml` | Tag-triggered release |
 | `.claude/plans/ynd-manual-test-plan.md` | Manual test script for all ynd features |
-| `docs/tutorial/` | Progressive tutorials (8 tutorials + manual test plan) |
+| `docs/tutorial/` | Progressive tutorials + manual test plan |
 | `docs/skills-standard.md` | Agent Skills spec, cross-platform compat, known issues |
 | `docs/ynd.md` | ynd command reference |
 

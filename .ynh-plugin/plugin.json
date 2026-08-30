@@ -2,7 +2,7 @@
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "ynh-guide",
   "version": "0.1.0",
-  "description": "AI harness management — your name, your AI",
+  "description": "AI harness management \u2014 your name, your AI",
   "author": {
     "name": "eyelock",
     "url": "https://github.com/eyelock"
@@ -25,7 +25,7 @@
         ],
         "on_stop": [
           {
-            "command": "ynh check local/ynh-guide --only fmt"
+            "command": "sh -c 'ynh sensors ls local/ynh-guide >/dev/null 2>&1 || { echo \"ynh-dev: run \\`ynh install .\\` to enable the fmt sensor on stop\" >&2; exit 0; }; ynh check local/ynh-guide --only fmt'"
           }
         ]
       },
@@ -38,7 +38,7 @@
   },
   "focuses": {
     "learn": {
-      "prompt": "Walk me through ynh as a first-time user, starting from the README.md. Introduce the core concepts — harnesses, vendors, includes, delegates — with a concrete example for each. When I'm ready, suggest I use /ynh-create-harness to build my own."
+      "prompt": "Walk me through ynh as a first-time user, starting from the README.md. Introduce the core concepts \u2014 harnesses, vendors, includes, delegates \u2014 with a concrete example for each. When I'm ready, suggest I use /ynh-create-harness to build my own."
     },
     "create": {
       "prompt": "Use the ynh-create-harness skill to help me build a new harness. Ask what I do, what languages and tools I use, and what standards my team follows. Scaffold it with ynd create harness and install it so I can try it immediately."
@@ -51,7 +51,7 @@
     },
     "contribute": {
       "profile": "ynh-dev",
-      "prompt": "I want to contribute to ynh. Start by reading .claude/CLAUDE.md and the rules under .claude/rules/. Ask what I want to change — a bug fix, a new feature, a doc update — then help me follow the branching rules in .claude/rules/branching.md and the pre-remote gates in .claude/rules/pre-remote.md."
+      "prompt": "I want to contribute to ynh. Start by reading .claude/CLAUDE.md and the rules under .claude/rules/. Ask what I want to change \u2014 a bug fix, a new feature, a doc update \u2014 then help me follow the branching rules in .claude/rules/branching.md and the pre-remote gates in .claude/rules/pre-remote.md."
     },
     "release": {
       "profile": "ynh-dev",

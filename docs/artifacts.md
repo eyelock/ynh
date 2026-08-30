@@ -129,13 +129,26 @@ If any step fails, fix the issue and re-run until all checks pass.
 
 ## Project Instructions
 
-A harness can include an `AGENTS.md` file with project-level instructions. Most vendors read `AGENTS.md` natively. For Claude, ynh generates a `CLAUDE.md` with an `@AGENTS.md` import.
+A harness can include an `AGENTS.md` file with project-level instructions.
 
-| Vendor | Native AGENTS.md support | ynh shim |
-|--------|--------------------------|----------|
-| Claude | No | `CLAUDE.md` with `@AGENTS.md` import |
-| Codex  | Yes | — |
-| Cursor | Yes | — |
+**The two paths differ, and the difference matters if you go looking for the
+file.** `ynd export` produces a redistributable plugin, so it emits `AGENTS.md`
+alongside a vendor instructions file that imports it. `ynh run` and
+`ynd preview` assemble a session, so they copy the instructions straight into
+the vendor's own file — there is no `AGENTS.md` to import, and no import.
+
+| Vendor | Reads `AGENTS.md` natively | `ynh run` / `ynd preview` | `ynd export` |
+|---|---|---|---|
+| Claude | No | instructions inlined into `CLAUDE.md` | `AGENTS.md` + `CLAUDE.md` containing `@AGENTS.md` |
+| Codex | Yes | `codex.md` | `AGENTS.md` |
+| Cursor | Yes | `.cursorrules` | `AGENTS.md` |
+| Copilot | Yes | `AGENTS.md` | `AGENTS.md` |
+
+Verified by running both commands per vendor, not read from the adapters.
+
+So a reader who follows the export description and then inspects a *previewed*
+harness will look for an import that is not there. Check which command produced
+the tree before concluding something is wrong.
 
 ```
 my-harness/
