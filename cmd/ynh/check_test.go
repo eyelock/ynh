@@ -43,6 +43,11 @@ const checkHarnessJSON = `{
       "source": {"files": ["nope/**/*.xml"]},
       "output": {"format": "junit-xml"}
     },
+    "softfiles": {
+      "tolerance": "advisory",
+      "source": {"files": ["nope/**/*.json"]},
+      "output": {"format": "json"}
+    },
     "judged": {
       "source": {"focus": "audit"},
       "output": {"format": "markdown"}
@@ -84,7 +89,11 @@ func runCheck(t *testing.T, args ...string) (gate.Envelope, string, error) {
 }
 
 func TestCheck_BlocksOnFailingBlockingSensor(t *testing.T) {
-	env, _, err := runCheck(t, "--format", "json")
+	// Scoped to the command sensors. The fixture's files sensor points at a
+	// glob matching nothing, which is now its own blocking failure — see
+	// TestCheck_FilesSensorGatesOnFreshness — and would otherwise make this
+	// test's count say something it does not mean.
+	env, _, err := runCheck(t, "--format", "json", "--only", "green,red,soft")
 	if !errors.Is(err, errCheckBlocked) {
 		t.Fatalf("want errCheckBlocked, got %v", err)
 	}
@@ -116,32 +125,78 @@ func TestCheck_PassesWhenOnlyGreen(t *testing.T) {
 	}
 }
 
-// Only command sensors can produce a verdict. Files and focus sensors must
-// report honestly rather than guessing a pass, and must never gate.
-func TestCheck_NonCommandSensorsNeverGate(t *testing.T) {
-	env, _, err := runCheck(t, "--format", "json", "--only", "files,judged")
+// A focus sensor needs an agent runtime ynh does not own, so it defers and
+// never gates whatever its tolerance.
+func TestCheck_FocusSensorNeverGates(t *testing.T) {
+	env, _, err := runCheck(t, "--format", "json", "--only", "judged")
 	if err != nil {
 		t.Fatalf("cmdCheck: %v", err)
 	}
 	if env.Verdict != "pass" {
 		t.Fatalf("verdict = %q, want pass", env.Verdict)
 	}
-	byName := map[string]gate.Result{}
-	for _, r := range env.Sensors {
-		byName[r.Name] = r
-	}
-	if got := byName["files"].Status; got != gate.StatusReported {
-		t.Errorf("files status = %q, want %q", got, gate.StatusReported)
-	}
-	if got := byName["judged"].Status; got != gate.StatusDeferred {
+	// By name, not by index: skipped sensors stay in the payload, so a
+	// positional lookup silently reads whichever one sorts last.
+	if got := sensorByName(t, env, "judged").Status; got != gate.StatusDeferred {
 		t.Errorf("judged status = %q, want %q", got, gate.StatusDeferred)
+	}
+}
+
+func sensorByName(t *testing.T, env gate.Envelope, name string) gate.Result {
+	t.Helper()
+	for _, s := range env.Sensors {
+		if s.Name == name {
+			return s
+		}
+	}
+	t.Fatalf("sensor %q not in payload", name)
+	return gate.Result{}
+}
+
+// A files sensor still derives no verdict from its content, but an artifact
+// that is missing is not content — it is the absence of an observation. This
+// used to report green, which is the bug the freshness check exists to close.
+func TestCheck_FilesSensorGatesOnFreshness(t *testing.T) {
+	env, _, err := runCheck(t, "--format", "json", "--only", "files")
+	if !errors.Is(err, errCheckBlocked) {
+		t.Fatalf("want errCheckBlocked, got %v", err)
+	}
+	if env.Verdict != "blocked" {
+		t.Fatalf("verdict = %q, want blocked — a declared artifact is missing", env.Verdict)
+	}
+
+	r := sensorByName(t, env, "files")
+	if r.Status != gate.StatusFail {
+		t.Errorf("status = %q, want %q", r.Status, gate.StatusFail)
+	}
+	if r.Freshness != "absent" {
+		t.Errorf("freshness = %q, want %q", r.Freshness, "absent")
+	}
+	if r.Note == "" {
+		t.Error("failed without a note; the operator is told nothing to act on")
+	}
+}
+
+// Freshness respects tolerance exactly as a command sensor's exit code does.
+// Without this, adopting the check would turn every advisory files sensor into
+// a hard gate.
+func TestCheck_AdvisoryFilesSensorDoesNotGate(t *testing.T) {
+	env, _, err := runCheck(t, "--format", "json", "--only", "softfiles")
+	if err != nil {
+		t.Fatalf("cmdCheck: %v — an advisory sensor must not gate", err)
+	}
+	if env.Verdict != "pass" {
+		t.Fatalf("verdict = %q, want pass", env.Verdict)
+	}
+	if env.Summary.Failed != 1 {
+		t.Fatalf("failed = %d, want 1 — it still reports the finding", env.Summary.Failed)
 	}
 }
 
 func TestCheck_OnlyFiltersAndMarksSkipped(t *testing.T) {
 	env, _, _ := runCheck(t, "--format", "json", "--only", "green")
-	if env.Summary.Skipped != 4 {
-		t.Fatalf("skipped = %d, want 4", env.Summary.Skipped)
+	if env.Summary.Skipped != 5 {
+		t.Fatalf("skipped = %d, want 5", env.Summary.Skipped)
 	}
 }
 

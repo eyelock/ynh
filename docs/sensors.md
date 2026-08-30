@@ -59,6 +59,7 @@ Sensors live under the top-level `sensors` key in `.ynh-plugin/plugin.json`. Eac
 | `category` | enum | No | Fowler bucket: `maintainability`, `architecture`, `behaviour`. Free metadata for loop-driver triage. |
 | `role` | enum | No | Role hint: `regular` (default), `convergence-verifier`, `stuck-recovery`. Pure metadata — ynh does not enforce semantics. Loop drivers filter sensors by role to discover which one is the loop's done-check or the recovery sensor. |
 | `tolerance` | enum | No | How `ynh check` treats a failure: `blocking` (default), `advisory`, `report`. See [Tolerance](#tolerance). |
+| `observes` | string[] | No | For `files` sensors: the paths the artifact depends on. Empty means the whole tracked tree. See [Freshness](#freshness-is-this-artifact-still-true). |
 | `source` | object | **Yes** | Strict one-of: `files` \| `command` \| `focus`. Discriminates the sensor type. |
 | `output` | object | **Yes** | Where the sensor's result lives and what shape it's in. |
 
@@ -78,6 +79,138 @@ A glob/path list of pre-existing artifacts to read (test reports, coverage files
 ```
 
 Use this when something else (a hook, a CI step, a human) already produces the artifact and the sensor just needs to surface it.
+
+Because the artifact is produced elsewhere, ynh checks that it still describes the tree before believing it — see [Freshness](#freshness-is-this-artifact-still-true) directly below. This is the one thing about a `files` sensor that can fail the gate.
+
+## Freshness — is this artifact still true?
+
+A `files` sensor reads a result some other process left behind. That creates a
+problem no other sensor kind has: **the artifact can be right about a tree that
+no longer exists.**
+
+ynh draws a hard line here, and it is worth stating plainly because it is the
+part people find confusing at first:
+
+- **What the artifact *says* is never ynh's business.** No verdict is derivable
+  from arbitrary JSON. If your e2e report says three tests failed, ynh does not
+  know that and does not care — that is the loop driver's job.
+- **Whether the artifact is *entitled to be believed* is entirely ynh's
+  business.** That is decidable, and before this existed it was nobody's job:
+  a sensor pointed at a file that did not exist reported green.
+
+So a `files` sensor still never gates on content. It now gates on freshness.
+
+### The four states
+
+| State | Meaning | Gate |
+|---|---|---|
+| `fresh` | The artifact describes the tree as it stands. | passes |
+| `stale` | Inputs changed after the artifact was written. It is a real observation of a tree that no longer exists. | **fails** |
+| `absent` | A declared file is not there at all. | **fails** |
+| `unknown` | ynh could not tell. | **fails** |
+
+`unknown` failing is the one that surprises people. It is deliberate: "no
+evidence either way" is not the same as "nothing was wrong", and a gate that
+cannot see is not a gate that passed.
+
+### Freshness is about change, not time
+
+A coverage report from three weeks ago, against code nobody has touched, is
+perfectly valid. One from five minutes ago, against code edited two minutes
+ago, is worthless. Elapsed time measures the wrong thing, so ynh does not use
+it. An artifact goes stale when its **inputs move**, and never otherwise.
+
+(Sensors that observe something *outside* the repository — a live service, a
+remote queue — genuinely do decay with time. Nothing here helps them. That is a
+separate axis and is not modelled yet.)
+
+### `observes` — what the artifact depends on
+
+Declare the paths the artifact actually depends on:
+
+```json
+"e2e-status": {
+  "category": "behaviour",
+  "source":   { "files": ["tests/e2e/last-run.json"] },
+  "observes": ["services/**", "tests/e2e/**"],
+  "output":   { "format": "json" }
+}
+```
+
+Now editing `README.md` leaves the sensor fresh, and editing
+`services/gateway/auth.go` makes it stale.
+
+**If you omit `observes`, the whole tracked tree counts.** That is strict on
+purpose: a harness that will not say what its artifact depends on gets the only
+honest assumption, which is everything. The consequence is that *any* commit
+stales *every* files sensor — which is noisy, and meant to be. The cure is
+one line of configuration, and the noise is what pushes you to write it.
+
+### What counts as an input
+
+The tree is **git-tracked files**. Four things are always excluded, because
+including them would make the check invalidate itself:
+
+| Excluded | Why |
+|---|---|
+| The sensor's own `files` paths | Producing the artifact would immediately stale it. |
+| `.ynh/` | The gate's own state. Recording a baseline would stale every artifact in the repo. |
+| Untracked and ignored files | Otherwise `make build` writing to `bin/` stales everything. |
+| `.git/` | Implied by taking the tree from git. |
+
+If there is no `observes` **and** the directory is not a git repository, ynh has
+no way to know the input set. That is `unknown`, and it fails.
+
+### How the comparison is made
+
+Today ynh compares modification times: the artifact is stale if any observed
+input is newer than the oldest file the sensor declares. The result records this
+as `"freshness_basis": "mtime"`.
+
+Be aware of what that basis is worth. Timestamps are reliable on a working
+checkout and unreliable anywhere they are rewritten wholesale — fresh clones,
+`git worktree add`, container builds, CI caches. A consumer grading results
+across machines should read `freshness_basis` and weigh the answer accordingly.
+
+### Reading it
+
+```console
+$ ynh check local/collective-dev --only e2e-status
+  ✗  e2e-status  absent  0ms
+
+e2e-status:
+no file matched the sensor's declared paths
+
+blocked: 1 of 1 sensor failed
+```
+
+In JSON, each files sensor carries `freshness` and `freshness_basis`:
+
+```json
+{
+  "name": "e2e-status",
+  "kind": "files",
+  "tolerance": "blocking",
+  "status": "fail",
+  "freshness": "stale",
+  "freshness_basis": "mtime",
+  "note": "auth.go changed after last-run.json was written"
+}
+```
+
+### Migrating an existing harness
+
+Nothing is required, and nothing breaks quietly:
+
+- A files sensor whose artifact exists and predates no input keeps passing.
+- One pointed at a missing file starts failing — that is the bug being fixed,
+  and it was reporting green before.
+- One in a non-git directory with no `observes` starts reporting `unknown` and
+  failing. Add `observes` to fix it.
+
+If a sensor should genuinely never gate, set `tolerance: advisory` or
+`tolerance: report`. Freshness respects tolerance exactly like a command
+sensor's exit code does.
 
 ### `command`
 

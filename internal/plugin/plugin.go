@@ -82,9 +82,24 @@ type Sensor struct {
 	// anything whose *quantity* is the finding, suppression directives above
 	// all: the gaming vector for a ratchet is suppression, not relocation, and
 	// an agent that adds `//nolint` beside an existing one must not pass.
-	Ratchet string       `json:"ratchet,omitempty"`
-	Source  SensorSource `json:"source"`
-	Output  SensorOutput `json:"output"`
+	Ratchet string `json:"ratchet,omitempty"`
+	// Observes names the paths a `files` sensor's artifact actually depends
+	// on, so ynh can tell whether that artifact still describes the tree.
+	//
+	// A files sensor reads a result some other process left behind. ynh cannot
+	// judge what it says, but it can judge whether it still applies — and an
+	// artifact produced against different code is an observation of something
+	// else, not a weaker observation of this one.
+	//
+	// Empty means the whole tracked tree, which is deliberately strict: a
+	// harness that will not say what its artifact depends on gets the only
+	// honest assumption, which is everything. Declaring the real inputs is one
+	// line and makes the sensor quiet.
+	//
+	// Ignored for command and focus sensors, which observe by running.
+	Observes []string     `json:"observes,omitempty"`
+	Source   SensorSource `json:"source"`
+	Output   SensorOutput `json:"output"`
 }
 
 // SensorReference is a fixture with a known answer, used by

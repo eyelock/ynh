@@ -94,15 +94,30 @@ type Result struct {
 	NewCount   int    `json:"new_count,omitempty"`
 	KnownCount int    `json:"known_count,omitempty"`
 	NewOutput  string `json:"new_output,omitempty"`
+	// Freshness is set for files sensors: whether the artifact still describes
+	// the tree. "fresh", "stale", "absent" or "unknown".
+	//
+	// ynh judges no files sensor's *content* — no verdict is derivable from
+	// arbitrary JSON. It judges only whether the content is entitled to be
+	// believed, which is decidable and was previously nobody's job.
+	Freshness string `json:"freshness,omitempty"`
+	// FreshnessBasis is what that conclusion rests on — "mtime" today. A
+	// consumer grading results across machines needs to tell a strong answer
+	// from a weak one, and timestamps are weak wherever they get rewritten
+	// wholesale: fresh clones, container builds, CI caches.
+	FreshnessBasis string `json:"freshness_basis,omitempty"`
 }
 
 // Gating reports whether this result is one the verdict may block on.
 //
-// It is deliberately not "did it fail". A files sensor has no derivable
-// verdict, a focus sensor needs a runtime ynh does not own, and a sensor
-// whose every failure is already in the baseline is recorded debt rather than
-// a regression. Only StatusFail is a live failure, and only a blocking
-// tolerance makes it gate.
+// It is deliberately not "did it fail". A focus sensor needs a runtime ynh
+// does not own, and a sensor whose every failure is already in the baseline is
+// recorded debt rather than a regression. Only StatusFail is a live failure,
+// and only a blocking tolerance makes it gate.
+//
+// A files sensor reaches StatusFail on freshness alone — its artifact is
+// missing, stale, or unverifiable. Never on content: what the artifact *says*
+// is still not ynh's to judge.
 func (r Result) Gating() bool {
 	return r.Status == StatusFail && r.Tolerance == "blocking"
 }

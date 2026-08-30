@@ -23,7 +23,7 @@ var Version = "dev"
 //
 // Consumers (for example) read this via `ynh version --format json` and gate
 // features on it with their own `minimumYNHCapabilities` constant.
-const CapabilitiesVersion = "0.7.0"
+const CapabilitiesVersion = "0.8.0"
 
 // SchemaVersion declares the on-disk format version of the YNH home
 // directory (~/.ynh). Distinct from CapabilitiesVersion: capabilities is

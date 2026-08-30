@@ -175,6 +175,23 @@
         "count_delta": {
           "type": "integer",
           "description": "For a count-ratchet sensor, how far the total has moved since the baseline: positive is new findings, negative is removed ones. Absent for fingerprint-ratcheted sensors."
+        },
+        "freshness": {
+          "type": "string",
+          "enum": [
+            "fresh",
+            "stale",
+            "absent",
+            "unknown"
+          ],
+          "description": "For files sensors: whether the artifact still describes the tree. ynh judges no files sensor's content \u2014 only whether that content is entitled to be believed. Absent, stale and unknown all fail the gate; unknown means ynh could not tell, which is not the same as nothing being wrong."
+        },
+        "freshness_basis": {
+          "type": "string",
+          "enum": [
+            "mtime"
+          ],
+          "description": "What the freshness conclusion rests on. Timestamps are weak wherever they are rewritten wholesale \u2014 fresh clones, container builds, CI caches \u2014 so a consumer grading across machines needs to know which basis produced the answer."
         }
       },
       "required": [
