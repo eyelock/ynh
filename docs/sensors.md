@@ -412,8 +412,11 @@ Four properties are load-bearing:
 - **Not mandatory.** Adding it to every sensor would break every existing
   harness.
 
-Only a **command** sensor can be calibrated: no verdict is derivable from a
-file glob or a focus, so there is nothing to compare against.
+Only a **command** sensor can be calibrated. Calibration compares an exit code
+against a declared expectation, and neither a files nor a focus source produces
+one. A files sensor's [freshness](#freshness-is-this-artifact-still-true)
+verdict is not a substitute: it says whether an artifact is current, not whether
+the sensor still detects what it claims to.
 
 Exit codes match `ynh check`: `0` everything behaved as declared, `1` a sensor
 did not, `2` ynh could not run the calibration. Shape:
@@ -425,16 +428,23 @@ A sensor with `role: convergence-verifier` tells the loop the run is finished,
 so it must be able to produce a verdict. **A `files` source cannot**, and
 `ynd validate` refuses the combination.
 
-No verdict is mechanically derivable from a glob. A files sensor declared as
-the verifier would end the run because a path exists — contents never read,
-`output.format` never consulted — and that path sits inside the agent's own
-write path, so the run could manufacture its own convergence by touching a
-file. The failure direction is the wrong way round too: a missing file fails
-loudly, while a stale or forged one passes silently.
+No verdict about a files sensor's **contents** is mechanically derivable. It
+now carries a [freshness](#freshness-is-this-artifact-still-true) verdict, but
+freshness answers "is this artifact still about the current tree", not "is the
+work done" — and convergence is a question about the work.
+
+A files sensor declared as the verifier would end the run because a path exists
+and is newer than its inputs. Contents never read, `output.format` never
+consulted. That path sits inside the agent's own write path, so the run could
+manufacture its own convergence by writing the file — and freshness does not
+close that door: an artifact the agent regenerated without doing the work reads
+as perfectly fresh. Freshness catches an observation that has gone out of date.
+It cannot catch one that was never made.
 
 The refusal is structural rather than a special case. Convergence is
-`status: pass`, a files sensor is always `status: reported`, and `reported` is
-not `pass` — the same rule that stops a files sensor gating `ynh check`.
+`status: pass`; a fresh files sensor is `status: reported`, and `reported` is
+not `pass`. Its failing states are worse still — converging on `absent` or
+`stale` would end a run on the strength of a missing or outdated file.
 
 Use a command source that exits non-zero until the work is done, or a focus
 source, which a loop driver resolves with an agent runtime.
@@ -686,11 +696,19 @@ loops are expressed without ynh owning a scheduler:
 | `advisory` | Failure is reported in full but does not gate | edit-time feedback |
 | `report` | Pure observation | scheduled analysis |
 
-Only **command** sensors can gate. A `files` sensor has no mechanically
-derivable verdict, so it reports (`status: reported`); a `focus` sensor needs
-an agent runtime ynh does not own, so it defers (`status: deferred`). Neither
-ever blocks, whatever tolerance is declared — a gate that guesses is worse
-than one that admits what it cannot judge.
+Tolerance means the same thing for every kind, but each kind reaches a failure
+differently.
+
+A **command** sensor gates on its exit code. A **files** sensor gates on
+[freshness](#freshness-is-this-artifact-still-true) — `absent`, `stale` and
+`unknown` fail, `fresh` reports (`status: reported`) — but never on what the
+artifact says, which ynh does not read. A **focus** sensor needs an agent
+runtime ynh does not own, so it defers (`status: deferred`) and never blocks
+whatever tolerance is declared.
+
+A gate that guesses is worse than one that admits what it cannot judge. Where
+ynh can decide — an exit code, a missing or outdated artifact — it does. Where
+it cannot, it says so rather than inventing an answer.
 
 Everything richer than this — thresholds, severity filters, convergence
 judgments — still belongs to a loop driver. `ynh check` answers "did the

@@ -37,7 +37,7 @@
         "required": ["name", "status"],
         "properties": {
           "name": { "type": "string" },
-          "kind": { "type": "string", "description": "command, files or focus. Only a command sensor can be calibrated — no verdict is derivable from the others." },
+          "kind": { "type": "string", "description": "command, files or focus. Only a command sensor can be calibrated: calibration compares an exit code against a declared expectation, and neither a files nor a focus source produces one." },
           "status": {
             "type": "string",
             "enum": ["calibrated", "failed", "uncalibrated", "error"],

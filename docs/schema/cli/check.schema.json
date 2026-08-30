@@ -137,7 +137,7 @@
             "deferred",
             "skipped"
           ],
-          "description": "pass/fail/known apply only to command sensors. known = failing, but every failure is recorded in the baseline, so it is pre-existing debt rather than a regression and does not gate. reported = a files sensor surfaced content with no verdict derivable. deferred = a focus sensor needs an agent runtime ynh does not own. skipped = filtered out by --only. Only fail can gate."
+          "description": "pass and known apply only to command sensors; fail applies to a command sensor that exited non-zero or a files sensor whose artifact is absent, stale or unverifiable. known = failing, but every failure is recorded in the baseline, so it is pre-existing debt rather than a regression and does not gate. reported = a files sensor surfaced content and was fresh; no verdict is derivable from the content itself, only from its freshness. deferred = a focus sensor needs an agent runtime ynh does not own. skipped = filtered out by --only. Only fail can gate."
         },
         "exit_code": {
           "type": "integer"

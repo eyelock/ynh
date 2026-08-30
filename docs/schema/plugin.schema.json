@@ -168,7 +168,7 @@
           ]
         },
         "role": {
-          "description": "Optional role hint for loop drivers. regular = run between turns; convergence-verifier = the loop's done-check; stuck-recovery = invoked when the stuckness watchdog fires. Pure metadata \u2014 ynh does not enforce semantics. `convergence-verifier` requires a command or focus source: no verdict is mechanically derivable from a file glob, so a files sensor would end the run because a path exists \u2014 with contents never read, and the path inside the agent's own write path.",
+          "description": "Optional role hint for loop drivers. regular = run between turns; convergence-verifier = the loop's done-check; stuck-recovery = invoked when the stuckness watchdog fires. Pure metadata \u2014 ynh does not enforce semantics. `convergence-verifier` requires a command or focus source: no verdict about a files sensor's contents is derivable, so a files sensor would end the run because a path exists and is newer than its inputs \u2014 with contents never read, and the path inside the agent's own write path, which the run could write itself.",
           "type": "string",
           "enum": [
             "regular",
@@ -177,7 +177,7 @@
           ]
         },
         "tolerance": {
-          "description": "How `ynh check` treats a failing result. blocking (default) gates the run; advisory reports the failure without gating; report is pure observation. Only command sensors can gate \u2014 files and focus sensors report regardless.",
+          "description": "How `ynh check` treats a failing result. blocking (default) gates the run; advisory reports the failure without gating; report is pure observation. A command sensor gates on its exit code and a files sensor on its freshness; a focus sensor never gates, because resolving one needs an agent runtime ynh does not own.",
           "type": "string",
           "enum": [
             "blocking",

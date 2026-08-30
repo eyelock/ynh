@@ -328,12 +328,12 @@ func ValidateSensors(sensors map[string]Sensor, profileNames, focusNames map[str
 			// files sensor converging a run.
 			if k := s.Source.Kind(); k != "" && k != "command" {
 				issues = append(issues, fmt.Sprintf(
-					"%s reference requires a command source: no verdict is derivable from a %s sensor", prefix, k))
+					"%s reference requires a command source: no verdict about a %s sensor's output is derivable", prefix, k))
 			}
 		}
 		if s.Role == "convergence-verifier" && s.Source.Kind() == "files" {
 			issues = append(issues, fmt.Sprintf(
-				"%s role convergence-verifier requires a command source: no verdict is derivable from a file glob", prefix))
+				"%s role convergence-verifier requires a command source: a files sensor's freshness says whether its artifact is current, never whether the work is done", prefix))
 		}
 		if s.Tolerance != "" && !ValidSensorTolerances[s.Tolerance] {
 			issues = append(issues, fmt.Sprintf("%s tolerance %q must be one of blocking, advisory, report", prefix, s.Tolerance))

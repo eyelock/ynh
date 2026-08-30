@@ -22,7 +22,7 @@ package gate
 const (
 	StatusPass     = "pass"     // command sensor exited 0
 	StatusFail     = "fail"     // command sensor exited non-zero
-	StatusReported = "reported" // files sensor: content surfaced, no verdict derivable
+	StatusReported = "reported" // files sensor: fresh, content surfaced, no verdict on it
 	StatusDeferred = "deferred" // focus sensor: needs an agent runtime ynh does not own
 	StatusSkipped  = "skipped"  // filtered out by --only
 	StatusKnown    = "known"    // failing, but every failure is in the baseline
@@ -125,14 +125,16 @@ func (r Result) Gating() bool {
 // StatusForKind derives the status of a sensor that ran to completion, before
 // any baseline is applied.
 //
-// It exists so there is exactly one answer to "can this kind of sensor produce
-// a verdict". A files sensor surfaces content and no verdict is mechanically
-// derivable from a glob; a focus sensor needs an agent runtime ynh does not
-// own. Only a command sensor decides anything, and only by its exit code.
+// It exists so there is exactly one answer to "what does this kind of sensor
+// look like when nothing has gone wrong". A focus sensor needs an agent runtime
+// ynh does not own, so it defers. A files sensor surfaces content on which no
+// verdict is derivable, so it reports. A command sensor decides by exit code.
 //
-// `ynh check` layers baseline comparison on top of this for command sensors —
-// a failure already recorded is debt, not a regression — but the kinds that
-// cannot produce a verdict at all are settled here, once, for every caller.
+// `ynh check` layers more on top: baseline comparison for command sensors, and
+// freshness for files sensors — a files sensor whose artifact is absent, stale
+// or unverifiable reaches StatusFail from here. That is a judgement about
+// whether the content may be believed, never about the content itself, which
+// is why it is layered rather than settled here.
 func StatusForKind(kind string, exitCode int) string {
 	switch kind {
 	case "files":
