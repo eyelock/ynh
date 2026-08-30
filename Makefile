@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage e2e format lint check run docs help docker-build docker-push
+.PHONY: clean deps install build test test-coverage e2e format lint check check-artifacts run docs help docker-build docker-push
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -65,6 +65,23 @@ format: ## Format code
 lint: ## Lint code
 	golangci-lint run ./...
 
+# The harness artifacts this repo ships (skills/ agents/ rules/) plus the one it
+# uses on itself (.claude/). testdata/ is deliberately excluded: its fixtures are
+# malformed on purpose, so `ynd lint .` at the repo root can never be green.
+ARTIFACT_DIRS := skills agents rules .claude
+
+check-artifacts: build ## Validate and lint the harness artifacts this repo ships
+	@echo "==> ynd validate ."
+	@$(BUILD_DIR)/$(BINARY_NAME_DEV) validate .
+	@# One invocation per directory: `ynd lint a b c` silently lints only `a`
+	@# and exits 0, which would report green over unchecked files. Remove the
+	@# loop once ynd lint accepts multiple paths.
+	@for d in $(ARTIFACT_DIRS); do \
+		echo "==> ynd lint $$d"; \
+		$(BUILD_DIR)/$(BINARY_NAME_DEV) lint $$d || exit 1; \
+	done
+	@echo "Harness artifacts OK."
+
 clean: ## Remove build artifacts
 	rm -rf $(BUILD_DIR)
 	$(GO) clean -cache -testcache
@@ -84,4 +101,4 @@ docker-push: ## Push base Docker image to GHCR
 	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
 	docker push $(DOCKER_IMAGE):latest
 
-check: deps format lint test build ## Run full CI pipeline
+check: deps format lint test build check-artifacts ## Run full CI pipeline

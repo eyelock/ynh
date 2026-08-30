@@ -116,7 +116,6 @@ depends on it.
 
 ## Outside this plan, still owed
 
-
 - **`.claude/rules/branching.md` additions:** merging a stacked parent with
   `--delete-branch` irreversibly closes the child PR; always assert
   `git rev-list --count origin/develop..HEAD` after a `rebase --onto`.

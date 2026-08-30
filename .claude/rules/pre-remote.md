@@ -6,6 +6,11 @@ Before ANY remote operation (`git push`, `gh pr create`, `gh pr merge`), ALL of 
 
 Run `make check`. It must pass with zero issues. If it fails, fix the issue and re-run until green.
 
+This includes `make check-artifacts`, which runs `ynd validate` and `ynd lint`
+over the harness artifacts this repo ships (`skills/`, `agents/`, `rules/`) and
+the one it uses on itself (`.claude/`). A change that touches only those
+directories still has to pass — CI gates them via the `artifacts` paths filter.
+
 ## Gate 2: Evals (behavioral changes only)
 
 If the changeset touches ANY of these, run `/evals` and it must PASS:
