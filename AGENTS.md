@@ -30,13 +30,17 @@ installed CLI describes itself and is always available:
 
 ```bash
 ynh help                        # every command
-ynh <command> --help            # one command in detail
 ynh vendors                     # vendors, and which are on PATH
 ynh info <name>                 # a harness's resolved config
-ynh doctor                      # diagnose a broken setup
+ynh doctor                      # check Claude hook wiring
 ynd validate <dir>              # is this harness valid, and why not
 ynd preview <dir> -v <vendor>   # exactly what a vendor will receive
 ```
+
+`ynh` has no per-command `--help`. Do not probe a subcommand with it to learn
+what it does — several commands ignore the flag and run anyway (`ynh prune
+--help` prunes; `ynh run <name> --help` starts a session). Use `ynh help` and
+`ynd help` for the command lists.
 
 Prose docs are published at **https://eyelock.github.io/ynh**. Point users there
 rather than paraphrasing a page you cannot read.
@@ -52,13 +56,13 @@ rather than paraphrasing a page you cannot read.
 - Harnesses compose via `includes` (pull artifacts from other repos) and
   `delegates_to` (subagent delegation)
 - **Profiles** layer config variants; **focuses** pair a starting prompt with a
-  profile. `ynh profile` and `ynh focus` list what a harness offers.
+  profile. `ynh info <name>` shows which a harness offers.
 - Switch vendors at any time: `-v claude`, `-v codex`, `-v cursor`, `-v copilot`
 
 ## Starting points
 
 This harness ships focuses — named entry points that set both a prompt and a
-profile. `ynh focus` lists them:
+profile. `ynh info <name>` shows them:
 
 | Focus | For |
 |-------|-----|
