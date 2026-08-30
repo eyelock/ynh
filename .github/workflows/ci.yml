@@ -50,6 +50,7 @@ jobs:
               - '**/plugin.json'
               - 'AGENTS.md'
               - '.skillspector-baseline.yaml'
+              - 'scripts/**'
               - 'Makefile'
               - '.github/workflows/**'
 
@@ -123,6 +124,10 @@ jobs:
           go-version-file: go.mod
       - name: Validate and lint harness artifacts
         run: make check-artifacts
+      # Asserts every vendor ynh reports is documented AND assembles the same
+      # artifact set. jq is preinstalled on ubuntu-latest runners.
+      - name: Check vendor parity
+        run: make check-vendor-parity
 
   skill-security:
     name: Skill Security

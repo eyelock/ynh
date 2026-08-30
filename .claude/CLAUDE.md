@@ -27,6 +27,7 @@ make test-coverage FILE=./cmd/ynd  # coverage for specific package
 make clean              # remove build artifacts and caches
 make clean && make build  # fresh build (use when binary seems stale)
 make check-artifacts    # ynd validate + ynd lint over skills/ agents/ rules/ .claude/
+make check-vendor-parity # every vendor documented + assembles the same artifacts (needs jq)
 make scan-artifacts     # SkillSpector security scan of the same dirs (needs Python)
 ```
 
