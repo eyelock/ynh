@@ -1,6 +1,6 @@
 # Getting Started
 
-> **Prefer a guided walkthrough?** Start with [Tutorial 1: First Harness](tutorial/01-first-harness.md).
+> **Prefer a guided walkthrough?** Start with [First Harness](tutorial/first-harness.md).
 
 ## Install
 
@@ -283,7 +283,7 @@ ynh resolves install arguments in this order:
 
 Plain word matches: single match installs directly; multiple matches errors with disambiguation guidance; no exact match searches descriptions and suggests similar results.
 
-See [Tutorial 12: Registry & Discovery](tutorial/07-registry-and-discovery.md) for a guided walkthrough.
+See [Registry & Discovery](tutorial/registry-and-discovery.md) for a guided walkthrough.
 
 ### Build From Source
 

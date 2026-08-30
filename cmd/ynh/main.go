@@ -101,6 +101,8 @@ func main() {
 		err = cmdSensors(os.Args[2:])
 	case "check":
 		err = cmdCheck(os.Args[2:], os.Stdout, os.Stderr)
+	case "baseline":
+		err = cmdBaseline(os.Args[2:], os.Stdout, os.Stderr)
 	case "agent":
 		err = cmdAgent(os.Args[2:])
 	case "image":
@@ -198,6 +200,7 @@ Commands:
   sensors show <harness> <name>  Resolve a sensor declaration (supports --format text|json)
   sensors run <harness> <name>   Run a sensor and emit a JSON result (loop drivers consume this)
   check <harness>              Run every declared sensor and gate on the result
+  baseline   Report what a harness's ratchet currently forgives
                                (exit 0 pass, 1 a blocking sensor failed, 2 could not run)
                                --update-baseline accepts current failures so only new ones gate
   agent run --task <text> [flags]  Run an autonomous agent loop session
@@ -1308,7 +1311,16 @@ func cmdRun(args []string) error {
 		}
 
 		// Generate vendor plugin manifest (after hooks/MCP so path pointers are accurate)
-		pj := &plugin.HarnessJSON{Name: p.Name, Version: "0.0.0", Description: p.Description}
+		// The real manifest, not a synthesized one. h.Version is populated and
+		// correct here; hardcoding "0.0.0" made this path disagree with
+		// `ynd export` and with what actually ships, for the same harness.
+		pj := &plugin.HarnessJSON{
+			Name:        p.Name,
+			Version:     p.Version,
+			Description: p.Description,
+			Author:      p.Author,
+			Keywords:    p.Keywords,
+		}
 		manifestFiles, mErr := adapter.GeneratePluginManifest(pj, runDir)
 		if mErr != nil {
 			return fmt.Errorf("writing plugin manifest: %w", mErr)

@@ -251,3 +251,8 @@ func TestAgentRunGolden(t *testing.T) { validateGolden(t, "agent-run", "agent-ru
 func TestCheckCalibrateGolden(t *testing.T) {
 	validateGolden(t, "check-calibrate", "check-calibrate.json")
 }
+
+// TestBaselineGolden validates the baseline read surface. The golden carries a
+// sensor forgiving nothing, one with resolved findings, and a count-ratchet
+// one — the three shapes a reader has to tell apart.
+func TestBaselineGolden(t *testing.T) { validateGolden(t, "baseline", "baseline.json") }

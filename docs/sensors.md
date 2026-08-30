@@ -151,6 +151,38 @@ If `channel` is omitted, `ynh sensors run` infers it from the source kind:
 | `command` | `stdout+exit` |
 | `focus` | `stdout` |
 
+### Reading the ratchet
+
+```
+$ ynh baseline local/demo
+  · build                    nothing recorded — no failures are forgiven
+  ● lint                     12 forgiven, accepted 2026-08-20T09:14:02Z
+
+2 sensors: 1 with recorded debt (12 findings forgiven), 1 with none
+```
+
+The baseline stores twelve-character fingerprints rather than findings, so the
+file answers *how much* is forgiven and *when* it was accepted, but not *what*.
+`--explain` runs the sensors and matches current output against the recorded
+hashes, which is the only way to turn a fingerprint back into the line it
+forgives:
+
+```
+$ ynh baseline local/demo --explain
+  ● lint                     12 forgiven, accepted 2026-08-20T09:14:02Z
+      internal/handler/route.go:41: error return value not checked
+      internal/handler/route.go:88: error return value not checked
+```
+
+That costs a sensor run, so it is opt-in rather than the default.
+
+A finding that no longer appears is omitted: it has been fixed, and the
+baseline can be narrowed. **A sensor with nothing recorded forgives nothing** —
+which is different from one recording zero, and the report says so rather than
+leaving a reader to infer it.
+
+Shape: [`docs/schema/cli/baseline.schema.json`](schema/cli/baseline.schema.json).
+
 ### `ratchet` — when the count is the finding
 
 ```json
@@ -425,7 +457,7 @@ The most common integration is a hook that produces an artifact a sensor declare
 
 The hook is the runtime mechanism that produces the data; the sensor is the declarative contract over reading it. Coupling is **by shared file path** — implicit, no schema link needed.
 
-> **Making the hook actually fire.** For an always-on sensor loop in a plain Claude session, the hooks must live in the project's `.claude/settings.json`, not just `.ynh-plugin/plugin.json` — and an `on_stop` sweep that feeds a verdict back to the agent has specific output and loop-guard requirements. See [Hooks §"Running hooks in a plain Claude session"](hooks.md#running-hooks-in-a-plain-claude-session) and [Hooks §"on_stop output semantics"](hooks.md#on_stop-output-semantics-claude).
+> **Making the hook actually fire.** For an always-on sensor loop in a plain Claude session, the hooks must live in the project's `.claude/settings.json`, not just `.ynh-plugin/plugin.json` — and an `on_stop` sweep that feeds a verdict back to the agent has specific output and loop-guard requirements. See [Hooks §"Running hooks in a plain Claude session"](hooks.md#running-hooks-in-a-plain-claude-session) and [Hooks §"on_stop output semantics"](hooks.md#on-stop-output-semantics-claude).
 
 ### Same script, different driver
 
@@ -505,7 +537,7 @@ ynh does **not** ship a loop driver. Orchestration policy — when to run sensor
 
 - [Hooks](hooks.md)
 - [Profiles](profiles.md)
-- [Focus](tutorial/14-focus.md)
+- [Focus](tutorial/focus.md)
 - [Harness engineering](harness-engineering.md)
 - [CLI structured output](cli-structured.md)
 
@@ -533,8 +565,9 @@ declared command succeed", nothing more.
 
 Sensors are also what [`ynh agent run`](agent.md) iterates against between
 turns. The loop does not apply its own policy: it runs `ynh check --format
-json` and takes its verdict, so the ratchet and the tolerance rules are the
-same ones a human gets at a terminal.
+json` and takes its verdict, so the
+[ratchet](harness-engineering.md#sensor-gate-ratchet-loop) and the tolerance
+rules are the same ones a human gets at a terminal.
 
 ### `version_command` — which tool produced this
 

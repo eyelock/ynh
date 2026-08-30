@@ -331,6 +331,12 @@ func (b *Baseline) OldestRecordedAt() string {
 	return oldest
 }
 
+// Entry returns a sensor's recorded baseline, for callers that need to report
+// what is forgiven rather than merely apply it.
+func (b *Baseline) Entry(harness, sensor string) (SensorBaseline, bool) {
+	return b.entry(harness, sensor)
+}
+
 func (b *Baseline) entry(harness, sensor string) (SensorBaseline, bool) {
 	if b == nil {
 		return SensorBaseline{}, false
