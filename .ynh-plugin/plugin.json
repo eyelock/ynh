@@ -38,7 +38,7 @@
   },
   "focuses": {
     "learn": {
-      "prompt": "Walk me through ynh as a first-time user, starting from the README.md. Introduce the core concepts \u2014 harnesses, vendors, includes, delegates \u2014 with a concrete example for each. When I'm ready, suggest I use /ynh-create-harness to build my own."
+      "prompt": "Introduce me to ynh as a first-time user. Do not read from memory: run `ynh help` and `ynh vendors` to ground what this version actually does, and hand anything deeper to the ynh-guide agent. Cover the core concepts one at a time \u2014 harnesses, vendors, includes, delegates, profiles, focuses, sensors \u2014 with a concrete example of each. The prose docs are at https://eyelock.github.io/ynh if I want more. When I am ready, suggest /ynh-create-harness to build my own, or /ynh-adopt if I already have a .claude folder or a CLAUDE.md."
     },
     "create": {
       "prompt": "Use the ynh-create-harness skill to help me build a new harness. Ask what I do, what languages and tools I use, and what standards my team follows. Scaffold it with ynd create harness and install it so I can try it immediately."
@@ -62,6 +62,7 @@
     "fmt": {
       "category": "maintainability",
       "tolerance": "blocking",
+      "version_command": "go version",
       "source": {
         "command": "sh -c 'out=$(gofmt -l cmd internal); if [ -n \"$out\" ]; then echo \"unformatted:\" >&2; echo \"$out\" >&2; echo \"fix with: make format\" >&2; exit 1; fi'"
       },
@@ -72,6 +73,7 @@
     "vet": {
       "category": "maintainability",
       "tolerance": "advisory",
+      "version_command": "go version",
       "source": {
         "command": "go vet ./..."
       },
@@ -82,6 +84,7 @@
     "check": {
       "category": "behaviour",
       "tolerance": "blocking",
+      "version_command": "go version",
       "source": {
         "command": "make check"
       },
