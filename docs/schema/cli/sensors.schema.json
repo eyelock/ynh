@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/sensors.schema.json",
+  "title": "ynh sensors ls --format json",
+  "description": "Output of `ynh sensors ls <harness> --format json`. Bare array summarising the sensors a harness declares — the discovery surface a loop driver reads before deciding what to run. Envelope retrofit deferred, matching the other Phase 3 commands. `ynh sensors show` resolves one sensor in full and is a different shape.",
+  "x-capabilities": "0.8",
+  "$defs": {
+    "SensorSummary": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string", "description": "The sensor's declared name, and the identifier `--only`, `ynh sensors show` and `ynh sensors run` take."},
+        "category": {"type": "string", "description": "Fowler bucket: maintainability, architecture or behaviour. Free metadata for loop-driver triage; ynh enforces no semantics."},
+        "role": {"type": "string", "description": "Role hint: regular, convergence-verifier or stuck-recovery. Absent means regular. A loop driver filters on this to find the run's done-check."},
+        "source_kind": {"type": "string", "enum": ["command", "files", "focus"], "description": "Which source variant is set. Decides what running the sensor means: execute a command, read artifacts, or resolve a focus the driver must hand to an agent runtime."},
+        "format": {"type": "string", "description": "Declared output format. Freeform by design — ynh does not parse sensor output, so this is a hint to the consumer rather than a contract ynh enforces."},
+        "inline_focus": {"type": "boolean", "description": "True when the sensor declares its focus inline rather than referencing a named one. Inline focuses are scoped to the sensor and do not appear in the harness's top-level focus list."}
+      },
+      "required": ["name", "source_kind", "format"],
+      "additionalProperties": false
+    }
+  },
+  "type": "array",
+  "items": {"$ref": "#/$defs/SensorSummary"}
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/backend.schema.json",
+  "title": "ynh backend list --format json",
+  "description": "Output of `ynh backend list --format json`. Bare array of configured local model backends. Envelope retrofit deferred, matching the other Phase 3 commands.",
+  "x-capabilities": "0.8",
+  "$defs": {
+    "Backend": {
+      "type": "object",
+      "properties": {
+        "backend": {"type": "string", "description": "The backend's name, as given to `ynh backend add`."},
+        "vendor": {"type": "string", "description": "Which vendor CLI this connection redirects. One backend may carry a connection per vendor."},
+        "type": {"type": "string", "description": "Backend protocol or flavour, when the vendor needs it to build a request."},
+        "base_url": {"type": "string", "description": "Where the vendor CLI is redirected to."},
+        "has_auth_token": {"type": "boolean", "description": "Whether an auth token is recorded. The token itself is never emitted — this says only that one exists, so a consumer can tell a configured backend from an unauthenticated one without the value leaking into logs or a trajectory."},
+        "models": {"type": "array", "items": {"type": "string"}, "description": "Models discovered on the backend. Discovery is best-effort: an unreachable backend yields an empty list rather than an error, so absence does not mean the backend is broken."}
+      },
+      "required": ["backend", "vendor", "base_url", "has_auth_token"],
+      "additionalProperties": false
+    }
+  },
+  "type": "array",
+  "items": {"$ref": "#/$defs/Backend"}
+}

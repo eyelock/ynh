@@ -1,0 +1,17 @@
+{
+  "name": "coverage-judge",
+  "category": "behaviour",
+  "role": "convergence-verifier",
+  "source": {
+    "focus": {
+      "name": "assess-coverage",
+      "profile": "strict",
+      "prompt": "Assess whether test coverage is adequate for the changed surface area.",
+      "inline": false
+    }
+  },
+  "output": {
+    "format": "markdown",
+    "channel": "stdout"
+  }
+}
