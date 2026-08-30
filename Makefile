@@ -105,13 +105,8 @@ check-vendor-parity: build ## Assert every vendor is documented and assembles th
 check-artifacts: build ## Validate and lint the harness artifacts this repo ships
 	@echo "==> ynd validate ."
 	@$(BUILD_DIR)/$(BINARY_NAME_DEV) validate .
-	@# One invocation per directory: `ynd lint a b c` silently lints only `a`
-	@# and exits 0, which would report green over unchecked files. Remove the
-	@# loop once ynd lint accepts multiple paths.
-	@for d in $(ARTIFACT_DIRS); do \
-		echo "==> ynd lint $$d"; \
-		$(BUILD_DIR)/$(BINARY_NAME_DEV) lint $$d || exit 1; \
-	done
+	@echo "==> ynd lint $(ARTIFACT_DIRS)"
+	@$(BUILD_DIR)/$(BINARY_NAME_DEV) lint $(ARTIFACT_DIRS)
 	@echo "Harness artifacts OK."
 
 clean: ## Remove build artifacts
