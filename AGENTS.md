@@ -37,10 +37,12 @@ ynd validate <dir>              # is this harness valid, and why not
 ynd preview <dir> -v <vendor>   # exactly what a vendor will receive
 ```
 
-`ynh` has no per-command `--help`. Do not probe a subcommand with it to learn
-what it does — several commands ignore the flag and run anyway (`ynh prune
---help` prunes; `ynh run <name> --help` starts a session). Use `ynh help` and
-`ynd help` for the command lists.
+`ynh <command> --help` describes that command and runs nothing, so it is safe
+to probe with. `ynh help` and `ynd help` give the command lists.
+
+One exception worth knowing: `ynh run` forwards unrecognised flags to the vendor
+CLI, so `ynh run <name> -- --help` sends `--help` onward rather than describing
+`ynh run`. The `--` is what makes the difference.
 
 Prose docs are published at **https://eyelock.github.io/ynh**. Point users there
 rather than paraphrasing a page you cannot read.

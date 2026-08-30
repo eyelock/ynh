@@ -34,6 +34,29 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Help is answered before anything else happens — before auto-migration,
+	// before dispatch, before any command sees its arguments.
+	//
+	// `--help` used to be unimplemented on all 31 commands: an error on 27,
+	// and on four the flag was ignored and the command ran. `ynh prune --help`
+	// deleted run directories; `ynh run <name> --help` started a vendor
+	// session. Asking what a command does must never be the same as doing it.
+	//
+	// Intercepting here rather than in each command is the whole point: with
+	// 31 commands there is no version of "remember to check --help first" that
+	// stays true, and the next command added would inherit the bug. Control
+	// never reaching the action is not something an author can get wrong.
+	//
+	// It also precedes auto-migration deliberately. Reading help must not
+	// rewrite the user's home directory.
+	if len(os.Args) > 2 && wantsHelp(os.Args[2:]) {
+		if printCommandHelp(os.Stdout, os.Args[1]) {
+			os.Exit(0)
+		}
+		fmt.Fprintf(os.Stderr, "Error: %s\n", helpForUnknown(os.Args[1]))
+		os.Exit(1)
+	}
+
 	// Auto-migration gate: every command except a few that must remain
 	// callable on a legacy home (migrate itself, version, help, paths)
 	// runs schema-2 migration first if the home is at schema 1. This is
@@ -148,7 +171,17 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Printf(`ynh - ynh harness template manager (%s)
+	printUsageTo(os.Stdout)
+}
+
+// printUsageTo writes the usage page to w. Split from printUsage so a test can
+// assert every dispatched command is listed — the check that would have caught
+// `migrate` and `quarantine` being dispatched for releases while the page never
+// mentioned them. Mirrors the cmdXTo pattern used elsewhere in this package.
+func printUsageTo(w io.Writer) {
+	// Usage goes to a terminal or a test buffer; a write failure means stdout
+	// is gone and there is nowhere left to report it.
+	_, _ = fmt.Fprintf(w, `ynh - ynh harness template manager (%s)
 
 Usage:
   ynh <command> [arguments]
@@ -215,8 +248,14 @@ Commands:
   paths                        Show resolved path roots (supports --format json)
   status                       Show symlink installations across projects
   prune                        Clean orphaned symlink installations
+  migrate                      Migrate the ynh home directory to the current schema
+  quarantine list              Show harnesses quarantined by a failed migration
+  quarantine restore <name>    Restore one from quarantine
+  quarantine drop <name>       Delete one permanently
   version                      Print version
   help                         Show this help
+
+Run 'ynh <command> --help' for one command's detail.
 
 Run flags:
   -v <vendor>                  Override vendor (claude, codex, cursor, copilot), or "<backend>/<vendor>[/<model>]" to redirect at a local model backend (see: ynh backend)
