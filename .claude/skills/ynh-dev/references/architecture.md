@@ -28,6 +28,7 @@ internal/
     claude.go             Claude Code adapter (exec with --plugin-dir)
     codex.go              OpenAI Codex adapter (child process + symlinks)
     cursor.go             Cursor Agent adapter (child process + symlinks)
+    copilot.go            GitHub Copilot CLI adapter (exec with --plugin-dir)
     symlinks.go           Shared symlink install/clean helpers
     process.go            Child process management with signal forwarding
 testdata/                 Test fixtures (sample-harness, monorepo, etc.)
@@ -38,7 +39,7 @@ testdata/                 Test fixtures (sample-harness, monorepo, etc.)
 - **No build system on content** - artifacts are standard-format files, never transformed
 - **Vendor is a deployment concern** - harnesses define what, adapters decide where/how
 - **Git is the package manager** - no registry, content cached locally by URL+ref hash
-- **Vendor-adaptive launch** - Claude uses `syscall.Exec` (native `--plugin-dir`), Codex/Cursor use child process with signal forwarding (symlink-based install)
+- **Vendor-adaptive launch** - Claude and Copilot use `syscall.Exec` (native `--plugin-dir`), Codex/Cursor use child process with signal forwarding (symlink-based install)
 - **Deterministic run dir** - `~/.ynh/run/<id-fsname>/` (keyed by canonical id) overwritten each run (no temp dir leaks; same-named installs don't clobber each other)
 - **Single manifest** - `.harness.json` for all config (identity, includes, hooks, MCP servers, profiles)
 
@@ -60,7 +61,7 @@ type Adapter interface {
 ```
 
 Two launch patterns:
-- **Claude** (`NeedsSymlinks() = false`): `syscall.Exec` with `--plugin-dir` for clean process replacement. No ynh process running.
+- **Claude, Copilot** (`NeedsSymlinks() = false`): `syscall.Exec` with `--plugin-dir` for clean process replacement. No ynh process running.
 - **Codex/Cursor** (`NeedsSymlinks() = true`): Child process via `os/exec.Command` with signal forwarding (`SIGINT`/`SIGTERM`). ynh stays alive for cleanup.
 
 New vendors: create one file in `internal/vendor/`, implement the interface, self-register via `init()`.

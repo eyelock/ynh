@@ -77,5 +77,6 @@ Optional file at harness root. Most vendors read `AGENTS.md` natively. For Claud
 | Claude | No | `CLAUDE.md` with `@AGENTS.md` import |
 | Codex  | Yes | — |
 | Cursor | Yes | — |
+| Copilot | Yes, but not from inside a plugin dir | Projected into the project as `.github/instructions/ynh-harness.instructions.md` |
 
 Last source wins. Harness's own `AGENTS.md` takes priority over included repos.

@@ -7,6 +7,23 @@ description: Maintain ynh vendor adapters against current vendor plugin specs. U
 
 Use this skill when updating ynh vendor adapters, verifying spec compliance, or researching vendor plugin format changes. This is the single source of truth for all vendor documentation links and format mappings.
 
+## Per-vendor references
+
+One file per vendor ynh supports, each with that vendor's plugin format,
+directory layout, hook events, MCP schema, CLI flags, and known ynh
+discrepancies. Read the one for the vendor you are working on before changing
+its adapter.
+
+| Vendor | Reference | Adapter |
+|--------|-----------|---------|
+| Claude Code | [`references/anthropic.md`](references/anthropic.md) | `internal/vendor/claude.go` |
+| OpenAI Codex | [`references/codex.md`](references/codex.md) | `internal/vendor/codex.go` |
+| Cursor | [`references/cursor.md`](references/cursor.md) | `internal/vendor/cursor.go` |
+| GitHub Copilot CLI | [`references/copilot.md`](references/copilot.md) | `internal/vendor/copilot.go` |
+
+`ynh vendors` is the authority on which vendors exist. If it lists one with no
+row here, that is the bug to fix first.
+
 ## Vendor Documentation Links
 
 ### Claude Code (Anthropic)

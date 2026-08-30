@@ -33,7 +33,7 @@ Ask where to create the harness directory. Suggest a sensible default like `~/ha
 
 ## Step 3: Default vendor
 
-Ask which AI vendor they want as the default. Run `ynh vendors` (or read the output of `internal/vendor/` adapters) to show what's available. Currently: claude, codex, cursor.
+Ask which AI vendor they want as the default. Run `ynh vendors` to show what's available — that command is the authority, not this page. Today it lists claude, codex, cursor, and copilot.
 
 Explain they can always override with `-v` at runtime.
 
