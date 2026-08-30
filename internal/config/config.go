@@ -11,7 +11,7 @@ import (
 // "dev" when building from a developer checkout.
 var Version = "dev"
 
-// CapabilitiesVersion declares the TermQ-facing wire-contract version of this
+// CapabilitiesVersion declares the consumer-facing wire-contract version of this
 // ynh build. Unlike Version it is a source constant, so developer builds
 // (`make install` from any branch) honestly report what the contract supports
 // without needing a release tag.
@@ -21,7 +21,7 @@ var Version = "dev"
 // code to adapt. Do NOT bump for internal refactors, bug fixes, or additive
 // fields older clients can ignore.
 //
-// Consumers (e.g. TermQ) read this via `ynh version --format json` and gate
+// Consumers (for example) read this via `ynh version --format json` and gate
 // features on it with their own `minimumYNHCapabilities` constant.
 const CapabilitiesVersion = "0.7.0"
 

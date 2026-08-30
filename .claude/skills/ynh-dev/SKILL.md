@@ -59,13 +59,15 @@ To find which tutorials cover a changed area:
 
 | Package / area | Tutorial |
 |---|---|
-| `cmd/ynh` (install, run, list, uninstall) | Tutorial 1, 2 |
-| `internal/resolver` (includes, Git sources) | Tutorial 3 |
-| `internal/assembler` (delegates) | Tutorial 4 |
-| `internal/exporter` | Tutorial 5 |
-| `internal/marketplace` | Tutorial 6 |
-| `internal/registry` | Tutorial 7 |
-| `cmd/ynd` (create, lint, validate, fmt, compress, inspect) | Tutorial 8 |
+| `cmd/ynh` (install, run, list, uninstall) | `first-harness`, `vendors-and-symlinks` |
+| `internal/resolver` (includes, Git sources) | `composition`, `include-editing` |
+| `internal/assembler` (delegates) | `delegation` |
+| `internal/exporter` | `export` |
+| `internal/marketplace` | `marketplace` |
+| `internal/registry` | `registry-and-discovery` |
+| `cmd/ynd` (create, lint, validate, fmt, compress, inspect) | `developer-tools` |
+| `internal/sensor`, `internal/baseline` | `sensors`, `check` |
+| `internal/agent` | `agent-loop`, `shadow-mode` |
 
 Run the relevant tutorial steps end-to-end before committing. Build first with `make build` so the binaries reflect your changes, then walk through the tutorial steps. The tutorials use `/tmp/ynh-tutorial/` as a scratch directory.
 

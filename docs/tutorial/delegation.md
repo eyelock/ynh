@@ -1,4 +1,4 @@
-# Tutorial 4: Delegation
+# Delegation
 
 Chain harnesses together. A parent harness can invoke other harnesses as subagents — each with their own instructions, rules, and skills.
 
@@ -12,7 +12,7 @@ ynh uninstall local/team-lead 2>/dev/null
 mkdir -p /tmp/ynh-tutorial
 ```
 
-## T4.1: Create a delegate harness
+## Create a delegate harness
 
 Delegates must be Git repos (local or remote). Create a specialist harness and turn it into a Git repo:
 
@@ -52,7 +52,7 @@ git -C /tmp/ynh-tutorial/specialist add .
 git -C /tmp/ynh-tutorial/specialist commit -m "init"
 ```
 
-## T4.2: Create a parent harness with delegates
+## Create a parent harness with delegates
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/team-lead
@@ -77,7 +77,7 @@ Use the specialist delegate for deep code analysis.
 EOF
 ```
 
-## T4.3: Install and verify
+## Install and verify
 
 ```bash
 ynh install /tmp/ynh-tutorial/team-lead
@@ -101,7 +101,7 @@ NAME       KIND   VENDOR  SOURCE                          ARTIFACTS  INCLUDES  D
 team-lead  local  claude  /tmp/ynh-tutorial/team-lead      ...        0         /tmp/ynh-tutorial/specialist, eyelock/assistants/ynh/researcher
 ```
 
-## T4.4: Inspect delegate agent files
+## Inspect delegate agent files
 
 Delegate repos are fetched at install time and cached locally. Agent files are generated at runtime from the cached repos. Run the harness to trigger assembly:
 
@@ -123,7 +123,7 @@ cat ~/.ynh/run/local--team-lead/.claude/agents/specialist.md
 
 Expected: frontmatter with name/description, then sections for Instructions, Rules, and Available Skills — all pulled from the specialist harness.
 
-## T4.5: Test delegation
+## Test delegation
 
 ```bash
 team-lead "delegate to the specialist agent and ask it to analyze this project's main.go"
@@ -154,4 +154,4 @@ ynh uninstall local/team-lead
 
 ## Next
 
-[Tutorial 13: Export](tutorial/05-export.md) — produce vendor-native distributable plugins.
+[Export](tutorial/export.md) — produce vendor-native distributable plugins.

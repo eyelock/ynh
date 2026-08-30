@@ -851,3 +851,83 @@ func TestLintShellBlocks_EmptyBlock(t *testing.T) {
 		t.Errorf("expected no issues for empty block, got %v", issues)
 	}
 }
+
+// A fenced block whose lines carry a "$ " prompt is a transcript: the prefixed
+// lines are commands, everything else is their output. Piping the whole thing
+// to `bash -n` lints the output as if it were code — which is how
+// docs/vendors.md failed on a `ynh vendors` table containing "(ollama · qwen3)".
+// The doc was right; the linter was wrong.
+func TestShellScriptFromBlock(t *testing.T) {
+	cases := []struct {
+		name  string
+		lines []string
+		want  string
+	}{
+		{
+			name:  "plain script is returned whole",
+			lines: []string{"set -e", "make build"},
+			want:  "set -e\nmake build",
+		},
+		{
+			name:  "transcript keeps commands, drops output",
+			lines: []string{"$ ynh vendors", "NAME   CLI", "claude claude", "(ollama · qwen3)"},
+			want:  "ynh vendors",
+		},
+		{
+			name:  "several commands interleaved with output",
+			lines: []string{"$ ynh ls", "nothing", "$ ynh install .", "installed"},
+			want:  "ynh ls\nynh install .",
+		},
+		{
+			// A wrapped invocation is one command, not two fragments, and
+			// linting half of it would be a false positive of its own.
+			name:  "continuation lines follow the command",
+			lines: []string{`$ docker run \`, `  -e A=1 \`, "  image", "some output"},
+			want:  "docker run \\\n-e A=1 \\\nimage",
+		},
+		{
+			name:  "empty block",
+			lines: nil,
+			want:  "",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := shellScriptFromBlock(c.lines); got != c.want {
+				t.Errorf("got %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// The fix must not disable the check. A genuinely broken command inside a
+// transcript is still a broken command.
+func TestLintMarkdown_StillCatchesRealErrors(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		t.Helper()
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+
+	broken := write("broken-transcript.md", "# D\n\n```bash\n$ if true; then\n$ echo nope\n```\n")
+	if len(lintMarkdown(broken)) == 0 {
+		t.Error("an unterminated `if` inside a transcript is still a syntax error")
+	}
+
+	plain := write("broken-plain.md", "# D\n\n```bash\nfor i in 1 2 3\necho $i\n```\n")
+	if len(lintMarkdown(plain)) == 0 {
+		t.Error("a plain script with a syntax error must still be caught")
+	}
+
+	// The real shape from docs/vendors.md: a table row where "(" follows a
+	// word, which bash rejects as an unexpected token. A bare "(x · y)" is a
+	// valid subshell and would not reproduce the bug.
+	transcript := write("legit.md", "# D\n\n```bash\n$ ynh vendors\nNAME  DISPLAY\nollama/claude/qwen3   Claude Code (ollama · qwen3)   claude\n```\n")
+	if issues := lintMarkdown(transcript); len(issues) != 0 {
+		t.Errorf("command output must not be linted as shell: %v", issues)
+	}
+}

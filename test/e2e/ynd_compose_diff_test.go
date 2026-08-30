@@ -46,7 +46,7 @@ func TestYnd_Compose_JSON(t *testing.T) {
 
 // TestYnd_Compose_Focuses asserts that `ynd compose --format json` includes
 // the focuses map in its output when the harness declares focuses, and that
-// the shape matches what TermQ's HarnessComposition decoder expects.
+// the shape matches what a structured consumer's HarnessComposition decoder expects.
 func TestYnd_Compose_Focuses(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {

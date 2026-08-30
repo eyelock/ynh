@@ -142,7 +142,7 @@ When no `-o` flag is given, preview prints a tree with file contents to stdout. 
 
 Preview supports the same source types as export: local directories with `.ynh-plugin/plugin.json` or bare `AGENTS.md` directories.
 
-See [Tutorial 8: Developer Preview](tutorial/12-developer-preview.md) for a guided walkthrough.
+See [Developer Preview](tutorial/developer-preview.md) for a guided walkthrough.
 
 ### diff
 
@@ -165,7 +165,7 @@ The diff output groups files into four categories:
 
 At least two vendors are required for comparison. If no vendors are specified, all registered vendors are compared.
 
-See [Tutorial 8: Developer Preview](tutorial/12-developer-preview.md) for a guided walkthrough.
+See [Developer Preview](tutorial/developer-preview.md) for a guided walkthrough.
 
 ### export
 
@@ -232,7 +232,7 @@ Key differences from runtime layout:
 - Copilot reuses Claude's `.claude-plugin/plugin.json` schema (Copilot's plugin loader reads the same format)
 - `--merged` produces one directory with all vendor manifests; Claude and Copilot share the same `.claude-plugin/` manifest path harmlessly (identical schema)
 
-See [Tutorial 10: Export](tutorial/05-export.md) for a guided walkthrough.
+See [Export](tutorial/export.md) for a guided walkthrough.
 
 ### marketplace build
 
@@ -306,7 +306,7 @@ dist/
 └── README.md
 ```
 
-See [Tutorial 11: Marketplace](tutorial/06-marketplace.md) for a guided walkthrough.
+See [Marketplace](tutorial/marketplace.md) for a guided walkthrough.
 
 ### validate-output
 

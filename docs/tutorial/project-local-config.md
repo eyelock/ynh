@@ -1,4 +1,4 @@
-# Tutorial 15: Project-Local Config
+# Project-Local Config
 
 Use a `.ynh-plugin/plugin.json` file in your project root for zero-install AI configuration. No `ynh install` needed — just drop the file and run.
 
@@ -11,7 +11,7 @@ rm -rf /tmp/ynh-tutorial
 mkdir -p /tmp/ynh-tutorial
 ```
 
-## T15.1: Create a project with .ynh-plugin/plugin.json
+## Create a project with .ynh-plugin/plugin.json
 
 Create a project directory with a `.ynh-plugin/plugin.json` file:
 
@@ -48,7 +48,7 @@ Key points:
 - No `ynh install` needed — ynh can discover and use this file directly
 - Rules, skills, agents, and commands sit alongside `.ynh-plugin/plugin.json` as usual
 
-## T15.2: Validate the project config
+## Validate the project config
 
 ```bash
 ynd validate /tmp/ynh-tutorial/my-project
@@ -59,7 +59,7 @@ Expected:
 /tmp/ynh-tutorial/my-project: valid
 ```
 
-## T15.3: Preview the assembled output
+## Preview the assembled output
 
 ```bash
 ynd preview /tmp/ynh-tutorial/my-project -v claude
@@ -70,7 +70,7 @@ Expected output includes:
 - `.claude/rules/standards.md` with the rule content
 - `.claude-plugin/plugin.json` with the project name
 
-## T15.4: Preview with --focus
+## Preview with --focus
 
 ```bash
 ynd preview /tmp/ynh-tutorial/my-project -v claude --focus review
@@ -94,7 +94,7 @@ rm -rf /tmp/ynh-tutorial
 
 ## Composition with focus
 
-The project-local config pattern works well with focus entries (Tutorial 7) for CI automation:
+The project-local config pattern works well with focus entries ([Focus](tutorial/focus.md)) for CI automation:
 
 ```json
 {
@@ -109,4 +109,4 @@ The project-local config pattern works well with focus entries (Tutorial 7) for 
 
 ## Next
 
-[Tutorial 9: Developer Tools](tutorial/08-developer-tools.md) — scaffold, lint, validate, format, compress, inspect with ynd.
+[Developer Tools](tutorial/developer-tools.md) — scaffold, lint, validate, format, compress, inspect with ynd.

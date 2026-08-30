@@ -1,4 +1,4 @@
-# Tutorial 5: Export
+# Export
 
 Produce vendor-native distributable plugins from harnesses. The exported output passes strict vendor validation and can be loaded directly by Claude Code, Cursor, or Codex.
 
@@ -11,7 +11,7 @@ rm -rf /tmp/ynh-tutorial
 mkdir -p /tmp/ynh-tutorial
 ```
 
-## T5.1: Create a harness to export
+## Create a harness to export
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/exportable/skills/review
@@ -61,7 +61,7 @@ cat > /tmp/ynh-tutorial/exportable/.ynh-plugin/plugin.json << 'EOF'
 EOF
 ```
 
-## T5.2: Export for all vendors
+## Export for all vendors
 
 ```bash
 ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/export-output
@@ -76,7 +76,7 @@ Exported for copilot → /tmp/ynh-tutorial/export-output/copilot (2 skills, 1 ag
 Exported for cursor → /tmp/ynh-tutorial/export-output/cursor (2 skills, 1 agents)
 ```
 
-## T5.3: Verify Claude export
+## Verify Claude export
 
 ```bash
 ls -Ra /tmp/ynh-tutorial/export-output/claude/
@@ -136,7 +136,7 @@ Return to your previous directory before continuing:
 cd -
 ```
 
-## T5.4: Verify Cursor export
+## Verify Cursor export
 
 ```bash
 ls -Ra /tmp/ynh-tutorial/export-output/cursor/
@@ -160,7 +160,7 @@ AGENTS.md                     # universal instructions
 
 Cursor gets both `.cursorrules` (Cursor-native) and `AGENTS.md` (universal). Without `-a`, you'd only see `agents/`, `AGENTS.md`, and `skills/`.
 
-## T5.5: Verify Codex export
+## Verify Codex export
 
 ```bash
 ls -Ra /tmp/ynh-tutorial/export-output/codex/
@@ -182,7 +182,7 @@ Key points:
 - Agents, rules, and commands are **excluded** (Codex doesn't support them in plugins)
 - `AGENTS.md` only (Codex natively consumes it)
 
-## T5.6: Export for specific vendors
+## Export for specific vendors
 
 ```bash
 ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/export-claude -v claude
@@ -190,7 +190,7 @@ ls /tmp/ynh-tutorial/export-claude/
 # Expected: only claude/ directory
 ```
 
-## T5.7: Export in merged mode
+## Export in merged mode
 
 Merged mode produces one directory with both Claude and Cursor manifests — useful for CI pipelines and marketplace-ready plugins:
 
@@ -221,7 +221,7 @@ CLAUDE.md
 
 One physical directory with both vendor manifests — serves Claude and Cursor from the same files.
 
-## T5.8: Export with --clean
+## Export with --clean
 
 ```bash
 # First export
@@ -240,7 +240,7 @@ ls /tmp/ynh-tutorial/clean-test/
 # Expected: claude/ only
 ```
 
-## T5.9: Export from a Git URL
+## Export from a Git URL
 
 ```bash
 ynd export github.com/eyelock/assistants --path ynh/david -o /tmp/ynh-tutorial/remote-export -v claude
@@ -248,7 +248,7 @@ ynd export github.com/eyelock/assistants --path ynh/david -o /tmp/ynh-tutorial/r
 
 Clones the repo, applies `--path` scoping, exports. Same as exporting a local directory.
 
-## T5.10: Export with no instructions
+## Export with no instructions
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/no-instructions
@@ -288,4 +288,4 @@ rm -rf /tmp/ynh-tutorial/no-inst-out
 
 ## Next
 
-[Tutorial 14: Marketplace](tutorial/06-marketplace.md) — generate marketplace indexes for distribution.
+[Marketplace](tutorial/marketplace.md) — generate marketplace indexes for team distribution.

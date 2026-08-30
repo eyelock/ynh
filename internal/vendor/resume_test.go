@@ -29,9 +29,9 @@ func TestClaudeProjectSlug(t *testing.T) {
 		dir  string
 		want string
 	}{
-		{"/Users/david/Storage/Workspace/eyelock/TermQ", "-Users-david-Storage-Workspace-eyelock-TermQ"},
+		{"/Users/david/Storage/Workspace/eyelock/a structured consumer", "-Users-david-Storage-Workspace-eyelock-a structured consumer"},
 		// "/." produces a double dash — verified against real store directories.
-		{"/Users/david/TermQ/.worktrees/feat/resume", "-Users-david-TermQ--worktrees-feat-resume"},
+		{"/Users/david/a structured consumer/.worktrees/feat/resume", "-Users-david-a structured consumer--worktrees-feat-resume"},
 		{"/tmp/a.b.c", "-tmp-a-b-c"},
 		// Case is preserved.
 		{"/Users/David/MyProject", "-Users-David-MyProject"},
