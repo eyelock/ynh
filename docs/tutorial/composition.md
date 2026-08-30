@@ -1,4 +1,4 @@
-# Tutorial 3: Composition
+# Composition
 
 Pull skills from Git repos into your harness using includes. Cherry-pick specific artifacts from your own repos, third-party skill libraries, or local paths.
 
@@ -12,7 +12,7 @@ ynh uninstall local/my-dev local/with-anthropic local/with-vercel local/full-sta
 mkdir -p /tmp/ynh-tutorial
 ```
 
-## T3.1: Own repo — pick skills from eyelock/assistants
+## Own repo — pick skills from eyelock/assistants
 
 The [eyelock/assistants](https://github.com/eyelock/assistants) repo is a skill library organized as plugins. It contains dev skills, language-specific skills, infrastructure skills, and more — all following the [Agent Skills](https://agentskills.io) standard.
 
@@ -78,7 +78,7 @@ ls ~/.ynh/run/local--my-dev/.claude/skills/
 # NOT: dev-review/ dev-backend/ dev-ui/ etc.
 ```
 
-## T3.2: Own repo — local checkout (no clone)
+## Own repo — local checkout (no clone)
 
 If you have the assistants repo checked out locally, you can use a local path instead of a Git URL. This is faster (no clone) and useful during development:
 
@@ -103,7 +103,7 @@ EOF
 
 Local paths start with `/` or `.` — ynh uses them directly without cloning.
 
-## T3.3: Third-party — Anthropic's official skills
+## Third-party — Anthropic's official skills
 
 Any GitHub repo that follows the [Agent Skills](https://agentskills.io) standard works with ynh. Community directories like [skills.sh](https://skills.sh) list thousands of them — but you can use any repo you find.
 
@@ -137,7 +137,7 @@ Verify it works:
 with-anthropic "what skills do you have?"
 ```
 
-## T3.4: Third-party — Vercel's skills
+## Third-party — Vercel's skills
 
 [vercel-labs/skills](https://github.com/vercel-labs/skills) has skills for Next.js and Vercel workflows:
 
@@ -169,7 +169,7 @@ Verify:
 with-vercel "what skills do you have?"
 ```
 
-## T3.5: Mixed sources — own + third-party
+## Mixed sources — own + third-party
 
 Combine skills from your own repos and third-party repos into one harness:
 
@@ -216,7 +216,7 @@ ls ~/.ynh/run/local--full-stack/.claude/skills/
 # Expected: dev-project/ dev-quality/ dev-review/ go-lang/ frontend-design/
 ```
 
-## T3.6: Local — embedded skills in the harness
+## Local — embedded skills in the harness
 
 A harness can have its own skills alongside remote includes:
 
@@ -272,7 +272,7 @@ mixed "what skills do you have?"
 ynh install /tmp/ynh-tutorial/mixed   # reinstall picks up changes
 ```
 
-## T3.7: Local — include from a local Git repo
+## Local — include from a local Git repo
 
 If you have a skill library checked out locally and it's a Git repo:
 
@@ -320,7 +320,7 @@ ls ~/.ynh/run/local--local-ref/.claude/skills/
 # Expected: fast-deploy/
 ```
 
-## T3.7b: Local — bundled subdirectory (no Git repo)
+## Local — bundled subdirectory (no Git repo)
 
 When a harness ships its own artifact bundle inside the harness root — no Git, no cache, no clone — use a `local` include instead of `git`. The bundled directory is copied along with the harness at install time, so `ynh install` and `ynh run` both resolve it from the install location.
 
@@ -364,9 +364,9 @@ Use `local` for artifact directories that travel with the harness source. Use `g
 
 > **Note on layout.** Relative `local` paths should stay inside the harness root so the bundle is copied along with the harness at install time. Sibling directories (e.g. `../shared`) work for `ynd preview` against a source tree but **won't survive `ynh install`** — the referenced dir isn't copied. Use an absolute path or fold the shared content into the harness if you need it after install.
 
-`local` pairs well with profiles — see [Tutorial 13 → Profile-level includes](tutorial/13-profiles.md#t139-profile-level-includes--bundle-extra-artifacts-per-profile).
+`local` pairs well with profiles — see [Profiles → Profile-level includes](tutorial/profiles.md#profile-level-includes-bundle-extra-artifacts-per-profile).
 
-## T3.8: Pin a version with ref
+## Pin a version with ref
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/pinned
@@ -406,7 +406,7 @@ The `ref` field supports:
 - Tags: `"ref": "v1.0.0"`
 - Commit SHAs: `"ref": "abc1234"`
 
-## T3.9: Update Git sources
+## Update Git sources
 
 After upstream repos change:
 
@@ -427,7 +427,7 @@ Checked 3 source(s) for harness "full-stack", 0 updated.
 
 If upstream has changed, you'll see `Updated.` instead.
 
-## T3.10: Install from a monorepo
+## Install from a monorepo
 
 The `eyelock/assistants` repo has pre-built harnesses under `ynh/`:
 
@@ -439,7 +439,7 @@ This installs the `david` harness, which already has includes configured to pull
 
 The `--path` flag scopes into a subdirectory of the repo, installing only what's at that path.
 
-## T3.11: Allow-list — deny a source
+## Allow-list — deny a source
 
 For security (especially in team environments), restrict which Git repos ynh can pull from.
 
@@ -480,7 +480,7 @@ full-stack "hello" 2>&1
 
 > **Note:** `ynh install` now fetches all includes at install time, so the allow-list is enforced during install as well as at run time. If an include is blocked by the allow-list, `ynh install` will fail with an error.
 
-## T3.12: Allow-list — allow a source
+## Allow-list — allow a source
 
 Add `anthropics` to the allow list:
 
@@ -541,4 +541,4 @@ ynh uninstall local/my-dev local/with-anthropic local/with-vercel local/full-sta
 
 ## Next
 
-[Tutorial 4: Hooks](tutorial/10-hooks.md) — declare vendor-agnostic lifecycle hooks.
+[Include Editing](tutorial/include-editing.md) — add, remove, and update includes from the CLI.

@@ -254,7 +254,16 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 	}
 
 	// Generate vendor plugin manifest (after hooks/MCP so path pointers are accurate)
-	pj := &plugin.HarnessJSON{Name: h.Name, Version: "0.0.0", Description: h.Description}
+	// The real manifest, not a synthesized one. h.Version is populated and
+	// correct here; hardcoding "0.0.0" made this path disagree with
+	// `ynd export` and with what actually ships, for the same harness.
+	pj := &plugin.HarnessJSON{
+		Name:        h.Name,
+		Version:     h.Version,
+		Description: h.Description,
+		Author:      h.Author,
+		Keywords:    h.Keywords,
+	}
 	manifestFiles, err := adapter.GeneratePluginManifest(pj, tmpDir)
 	if err != nil {
 		return "", fmt.Errorf("writing plugin manifest: %w", err)

@@ -535,7 +535,7 @@ func TestCmdListCheckUpdatesRequiresJSON(t *testing.T) {
 
 // Broken-pointer entries (source missing or plugin.json absent) must be emitted
 // as kind "local-fork-broken" with a non-empty broken_reason so JSON consumers
-// (e.g. TermQ) can route them to a QUARANTINED group instead of displaying
+// (for example) can route them to a QUARANTINED group instead of displaying
 // them as valid but empty-field harnesses.
 func TestCmdListJSON_BrokenPointerKind(t *testing.T) {
 	t.Run("source_path_missing", func(t *testing.T) {
@@ -686,10 +686,10 @@ func TestCmdList_ForkAndRegistryWithSameLeafNameAreDistinct(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
 
-	// Pointer-shaped local fork (local/termq-dev). Provenance carries
+	// Pointer-shaped local fork (local/demo-dev). Provenance carries
 	// forked_from so classifyKind returns "local-fork".
-	forkDir := filepath.Join(t.TempDir(), "termq-dev-fork")
-	writePluginTree(t, forkDir, "termq-dev", &plugin.InstalledJSON{
+	forkDir := filepath.Join(t.TempDir(), "demo-dev-fork")
+	writePluginTree(t, forkDir, "demo-dev", &plugin.InstalledJSON{
 		SourceType:  "local",
 		Source:      forkDir,
 		InstalledAt: "2026-05-01T00:00:00Z",
@@ -699,7 +699,7 @@ func TestCmdList_ForkAndRegistryWithSameLeafNameAreDistinct(t *testing.T) {
 		},
 	})
 	if err := harness.SavePointer(&harness.Pointer{
-		Name: "termq-dev",
+		Name: "demo-dev",
 		InstalledJSON: plugin.InstalledJSON{
 			SourceType:  "local",
 			Source:      forkDir,
@@ -715,8 +715,8 @@ func TestCmdList_ForkAndRegistryWithSameLeafNameAreDistinct(t *testing.T) {
 
 	// Tree-form registry install at the schema-2 path. The dir name is
 	// the id-fsname so ListAll classifies it as namespaced.
-	registryDir := filepath.Join(home, "harnesses", "github.com--eyelock--assistants--termq-dev")
-	writePluginTree(t, registryDir, "termq-dev", &plugin.InstalledJSON{
+	registryDir := filepath.Join(home, "harnesses", "github.com--eyelock--assistants--demo-dev")
+	writePluginTree(t, registryDir, "demo-dev", &plugin.InstalledJSON{
 		SourceType:  "registry",
 		Source:      "github.com/eyelock/assistants",
 		InstalledAt: "2026-05-02T00:00:00Z",
@@ -733,12 +733,12 @@ func TestCmdList_ForkAndRegistryWithSameLeafNameAreDistinct(t *testing.T) {
 
 	var rows []listEntry
 	for _, e := range env.Harnesses {
-		if e.Name == "termq-dev" {
+		if e.Name == "demo-dev" {
 			rows = append(rows, e)
 		}
 	}
 	if len(rows) != 2 {
-		t.Fatalf("expected 2 termq-dev rows, got %d; output: %s", len(rows), stdout.String())
+		t.Fatalf("expected 2 demo-dev rows, got %d; output: %s", len(rows), stdout.String())
 	}
 
 	idsByKind := map[string]string{}
@@ -750,11 +750,11 @@ func TestCmdList_ForkAndRegistryWithSameLeafNameAreDistinct(t *testing.T) {
 		}
 	}
 
-	if idsByKind["local-fork"] != "local/termq-dev" {
-		t.Errorf("local-fork id = %q, want local/termq-dev", idsByKind["local-fork"])
+	if idsByKind["local-fork"] != "local/demo-dev" {
+		t.Errorf("local-fork id = %q, want local/demo-dev", idsByKind["local-fork"])
 	}
-	if idsByKind["registry"] != "github.com/eyelock/assistants/termq-dev" {
-		t.Errorf("registry id = %q, want github.com/eyelock/assistants/termq-dev", idsByKind["registry"])
+	if idsByKind["registry"] != "github.com/eyelock/assistants/demo-dev" {
+		t.Errorf("registry id = %q, want github.com/eyelock/assistants/demo-dev", idsByKind["registry"])
 	}
 	if sourcesByKind["local-fork"] == sourcesByKind["registry"] {
 		t.Errorf("fork and registry rows share source %q; expected distinct sources", sourcesByKind["local-fork"])
@@ -768,8 +768,8 @@ func TestCmdList_TextFormat_ForkAndRegistry(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
 
-	forkDir := filepath.Join(t.TempDir(), "termq-dev-fork")
-	writePluginTree(t, forkDir, "termq-dev", &plugin.InstalledJSON{
+	forkDir := filepath.Join(t.TempDir(), "demo-dev-fork")
+	writePluginTree(t, forkDir, "demo-dev", &plugin.InstalledJSON{
 		SourceType:  "local",
 		Source:      forkDir,
 		InstalledAt: "2026-05-01T00:00:00Z",
@@ -779,7 +779,7 @@ func TestCmdList_TextFormat_ForkAndRegistry(t *testing.T) {
 		},
 	})
 	if err := harness.SavePointer(&harness.Pointer{
-		Name: "termq-dev",
+		Name: "demo-dev",
 		InstalledJSON: plugin.InstalledJSON{
 			SourceType:  "local",
 			Source:      forkDir,
@@ -793,8 +793,8 @@ func TestCmdList_TextFormat_ForkAndRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	registryDir := filepath.Join(home, "harnesses", "github.com--eyelock--assistants--termq-dev")
-	writePluginTree(t, registryDir, "termq-dev", &plugin.InstalledJSON{
+	registryDir := filepath.Join(home, "harnesses", "github.com--eyelock--assistants--demo-dev")
+	writePluginTree(t, registryDir, "demo-dev", &plugin.InstalledJSON{
 		SourceType:  "registry",
 		Source:      "github.com/eyelock/assistants",
 		InstalledAt: "2026-05-02T00:00:00Z",
@@ -807,23 +807,23 @@ func TestCmdList_TextFormat_ForkAndRegistry(t *testing.T) {
 	out := stdout.String()
 
 	// Rows now lead with the canonical id, not the bare name. Match on
-	// "termq-dev" anywhere in the line so both "local/termq-dev" (fork
-	// pointer) and "github.com/eyelock/assistants/termq-dev" (registry)
+	// "demo-dev" anywhere in the line so both "local/demo-dev" (fork
+	// pointer) and "github.com/eyelock/assistants/demo-dev" (registry)
 	// are picked up.
-	var termqLines []string
+	var demoLines []string
 	for _, line := range strings.Split(out, "\n") {
-		if strings.Contains(line, "termq-dev") {
-			termqLines = append(termqLines, line)
+		if strings.Contains(line, "demo-dev") {
+			demoLines = append(demoLines, line)
 		}
 	}
-	if len(termqLines) != 2 {
-		t.Fatalf("expected 2 termq-dev rows, got %d; output:\n%s", len(termqLines), out)
+	if len(demoLines) != 2 {
+		t.Fatalf("expected 2 demo-dev rows, got %d; output:\n%s", len(demoLines), out)
 	}
-	if termqLines[0] == termqLines[1] {
-		t.Errorf("fork and registry rows render identically:\n  %s\n  %s", termqLines[0], termqLines[1])
+	if demoLines[0] == demoLines[1] {
+		t.Errorf("fork and registry rows render identically:\n  %s\n  %s", demoLines[0], demoLines[1])
 	}
-	sawLocalFork := strings.Contains(termqLines[0], "local-fork") || strings.Contains(termqLines[1], "local-fork")
-	sawRegistry := strings.Contains(termqLines[0], "registry") || strings.Contains(termqLines[1], "registry")
+	sawLocalFork := strings.Contains(demoLines[0], "local-fork") || strings.Contains(demoLines[1], "local-fork")
+	sawRegistry := strings.Contains(demoLines[0], "registry") || strings.Contains(demoLines[1], "registry")
 	if !sawLocalFork {
 		t.Errorf("expected one row with KIND=local-fork; got:\n%s", out)
 	}

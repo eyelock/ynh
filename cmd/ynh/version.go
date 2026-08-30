@@ -12,7 +12,7 @@ import (
 // cmdVersion prints the release version and, with --format json, a structured
 // envelope that also carries the wire-contract CapabilitiesVersion.
 //
-// Consumers like TermQ call `ynh version --format json` to gate their feature
+// Structured consumers call `ynh version --format json` to gate their feature
 // surface on ynh's contract capability, decoupling the gate from the release
 // tag (dev builds report the same capability string as the release they
 // branched from).
@@ -57,7 +57,7 @@ func cmdVersionTo(args []string, stdout, stderr io.Writer) error {
 }
 
 // versionPayload is the JSON shape of `ynh version --format json`.
-// Keep field names stable — external consumers (TermQ) decode this.
+// Keep field names stable — external consumers decode this.
 type versionPayload struct {
 	Version      string `json:"version"`
 	Capabilities string `json:"capabilities"`

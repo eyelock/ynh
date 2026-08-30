@@ -1,4 +1,4 @@
-# Tutorial 8: Developer Tools
+# Developer Tools
 
 Use ynd to scaffold, lint, validate, format, compress, and inspect harness artifacts.
 
@@ -11,7 +11,7 @@ rm -rf /tmp/ynh-tutorial
 mkdir -p /tmp/ynh-tutorial && cd /tmp/ynh-tutorial
 ```
 
-## T8.1: Scaffold a harness
+## Scaffold a harness
 
 ```bash
 ynd create harness my-team
@@ -35,7 +35,7 @@ ynd create harness my-team    # expect: "already exists"
 ynd create harness ""         # expect: invalid name
 ```
 
-## T8.2: Scaffold artifacts
+## Scaffold artifacts
 
 ```bash
 cd my-team
@@ -55,7 +55,7 @@ cat rules/always-explain.md        # placeholder text
 cat commands/pre-commit.md         # heading + bash block
 ```
 
-## T8.3: Author content
+## Author content
 
 Replace scaffolded files with real content:
 
@@ -98,7 +98,7 @@ Report findings with severity levels and remediation steps.
 EOF
 ```
 
-## T8.4: Lint
+## Lint
 
 ```bash
 ynd lint
@@ -121,7 +121,7 @@ ynd lint skills/code-review/SKILL.md
 # Expected: "Checked 1 file(s) — no issues found."
 ```
 
-## T8.5: Validate
+## Validate
 
 ```bash
 ynd validate
@@ -137,7 +137,7 @@ ynd validate
 rmdir skills/orphan
 ```
 
-## T8.6: Format
+## Format
 
 ```bash
 printf '# Messy File   \n\nThis has trailing spaces.   \n\n\nMultiple blank lines above.\n' > rules/messy.md
@@ -151,7 +151,7 @@ ynd fmt
 # Expected: "Checked 6 file(s) — all formatted." (idempotent — no-op on second run)
 ```
 
-## T8.7: Compress
+## Compress
 
 Requires an LLM CLI on PATH (`claude`, `codex`, or `agent`). Uses LLM-powered SudoLang techniques to reduce prompt size while preserving semantics.
 
@@ -188,7 +188,7 @@ ynd compress --restore --pick 2 skills/code-review/SKILL.md
 # Expected: restores the older backup
 ```
 
-## T8.8: Inspect
+## Inspect
 
 Requires an LLM CLI on PATH (`claude`, `codex`, or `agent`). Interactive codebase walkthrough that generates skills and agents from project analysis.
 
@@ -242,4 +242,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Tutorial 10: Developer Preview](tutorial/12-developer-preview.md) — preview and diff assembled output across vendors.
+[Developer Preview](tutorial/developer-preview.md) — preview and diff assembled output across vendors.

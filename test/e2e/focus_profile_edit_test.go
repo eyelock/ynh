@@ -124,7 +124,7 @@ func TestProfile_LocalInstall_HookAndMCP(t *testing.T) {
 		t.Errorf("expected mcp server on profile, got %+v", srv)
 	}
 
-	// Profile-level mcp update is a key path TermQ drives.
+	// Profile-level mcp update is a key path a structured consumer drives.
 	s.mustRunYnh(t, "profile", "mcp", "update", "local/minimal", "thorough", "github",
 		"--arg", "--verbose")
 	mf = readExtendedManifest(t, sourceDir)
@@ -202,7 +202,7 @@ func TestMCP_HarnessLevel_LocalInstall(t *testing.T) {
 }
 
 // TestYndCompose_AcceptsCanonicalID exercises the ynd compose
-// canonical-id resolver added on this branch. TermQ drives
+// canonical-id resolver added on this branch. a structured consumer drives
 // `ynd compose <id>` using ids from `ynh ls --format json`; this test
 // pins that contract so the resolveSource change can't silently regress.
 //

@@ -144,23 +144,23 @@ func TestParseRunArgs(t *testing.T) {
 		},
 		{
 			name:        "session-name flag",
-			args:        []string{"my-harness", "--session-name", "termq-abc12345"},
+			args:        []string{"my-harness", "--session-name", "demo-abc12345"},
 			wantName:    "my-harness",
-			wantSession: "termq-abc12345",
+			wantSession: "demo-abc12345",
 		},
 		{
 			name:        "session-name with vendor and prompt",
-			args:        []string{"my-harness", "-v", "claude", "--session-name", "termq-abc12345", "--", "review this"},
+			args:        []string{"my-harness", "-v", "claude", "--session-name", "demo-abc12345", "--", "review this"},
 			wantName:    "my-harness",
 			wantVendor:  "claude",
-			wantSession: "termq-abc12345",
+			wantSession: "demo-abc12345",
 			wantPrompt:  "review this",
 		},
 		{
 			name:        "session-name value not confused as prompt",
-			args:        []string{"my-harness", "--session-name", "termq-abc12345"},
+			args:        []string{"my-harness", "--session-name", "demo-abc12345"},
 			wantName:    "my-harness",
-			wantSession: "termq-abc12345",
+			wantSession: "demo-abc12345",
 			wantPrompt:  "",
 		},
 	}
@@ -1549,7 +1549,7 @@ func TestCanonicalIDResolver_RejectsLegacyAtForm(t *testing.T) {
 }
 
 // ynh uninstall local/<name> must resolve schema-1 pointer-installed forks.
-// This is the canonical form TermQ emits; before the fix, the "local/" prefix
+// This is the canonical form a structured consumer emits; before the fix, the "local/" prefix
 // caused the pointer lookup to miss and the command returned "not installed".
 func TestCmdUninstall_PointerByCanonicalID(t *testing.T) {
 	home := t.TempDir()
@@ -1578,7 +1578,7 @@ func TestCmdUninstall_PointerByCanonicalID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Uninstall via canonical id — this is what TermQ passes.
+	// Uninstall via canonical id — this is what a structured consumer passes.
 	if err := cmdUninstall([]string{"local/my-fork"}); err != nil {
 		t.Fatalf("cmdUninstall local/my-fork failed: %v", err)
 	}
