@@ -18,10 +18,20 @@ The version is injected at build time via ldflags from `git describe --tags`. Th
 
 ## Release steps
 
-1. Run `make check` to verify everything builds and passes
-2. Tag the release: `git tag -a v<version> -m "Release v<version>"`
-3. Push the tag: `git push origin v<version>`
-4. GitHub Actions takes over: `.github/workflows/release.yml` runs goreleaser which cross-compiles, creates a GitHub release with binaries, and pushes the Homebrew formula to `eyelock/homebrew-tap`
+**Do not tag from `main` directly, and never merge `develop` → `main`.**
+`develop` and `main` diverged for six weeks once (#54 → v0.2.3) because a
+release landed on `main` without being back-merged. `.claude/rules/branching.md`
+is the authority; `/release` implements it step by step, and this agent should
+defer to that command rather than improvising a shorter path.
+
+1. Run `make check` and `/evals` — both must pass
+2. Cut `release/v<version>` **from `develop`**
+3. PR it into `main` and merge with a **true merge** (`gh pr merge --merge`), never a squash — a squash creates a commit the two branches do not share, which is exactly how they drift
+4. Tag from `main`: `git tag -a v<version> -m "Release v<version>"` and push
+5. GitHub Actions takes over: `.github/workflows/release.yml` runs goreleaser which cross-compiles, creates a GitHub release with binaries, and pushes the Homebrew formula to `eyelock/homebrew-tap`
+6. **Back-merge `release/v<version>` into `develop` via its own PR.** Mandatory, and before the release branch is deleted — any conflict resolved on the release branch exists only there until this lands
+7. Forward-port anything CI committed directly to `main` after the release
+8. Only then delete the release branch
 
 ## Release automation
 
@@ -34,6 +44,8 @@ The workflow requires a `RELEASE_TOKEN` secret with `Contents:Write` on both `ey
 
 ## What to verify after release
 
+- **The back-merge PR landed.** A release is not finished until `develop`
+  contains it; this is the check that would have caught #54
 - GitHub release page shows the new version with binaries
 - `brew tap eyelock/tap && brew install ynh` works (requires public repos)
 - `ynh version` shows the new version

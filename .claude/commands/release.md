@@ -14,14 +14,19 @@ Do not proceed with the release under any circumstances until evals pass.
 
 Run `make check` to verify format, lint, test, and build all pass. If any step fails, stop and report.
 
-### 3. Clean working tree
+### 3. Clean working tree, on `develop`
 
 Verify ALL of the following:
 - `git status` shows a clean working tree (no uncommitted changes)
-- Current branch is `main`
-- Local main is up to date with `origin/main` (`git pull origin main`)
+- Current branch is **`develop`** — a release is cut *from* develop, not from main
+- Local develop is up to date with `origin/develop` (`git pull origin develop`)
 
 If any condition fails, stop and tell the user what needs to be resolved.
+
+**Never tag from `main` directly, and never merge `develop` → `main`.**
+`develop` and `main` diverged for six weeks once (#54 → v0.2.3) because a
+release landed on `main` without being back-merged. `.claude/rules/branching.md`
+is the authority here; this command implements it.
 
 ## Version bump
 
@@ -38,18 +43,62 @@ Wait for explicit confirmation. Do not proceed on silence or ambiguity.
 
 ## Release
 
-1. Create and push the tag:
-   ```
-   git tag v<new-version>
-   git push origin v<new-version>
-   ```
-2. Monitor the release workflow:
-   ```
-   gh run watch --exit-status
-   ```
-3. Verify the release exists:
-   ```
-   gh release view v<new-version>
-   ```
+### 1. Cut the release branch from `develop`
 
-Report the release URL when complete.
+```bash
+git checkout develop && git pull origin develop
+git checkout -b release/v<new-version>
+git push -u origin release/v<new-version>
+```
+
+### 2. PR into `main`, and merge it as a TRUE merge
+
+```bash
+gh pr create --base main --head release/v<new-version> \
+  --title "release: v<new-version>"
+gh pr checks <number> --watch          # green before merging
+gh pr merge <number> --merge           # --merge, NOT --squash
+```
+
+**`--merge`, never `--squash`.** A squash creates a new commit `main` and
+`develop` do not share, which is what makes the two branches drift apart. Do
+not pass `--delete-branch` — the branch is still needed for step 4.
+
+### 3. Tag from `main`
+
+```bash
+git checkout main && git pull origin main
+git tag v<new-version>
+git push origin v<new-version>
+gh run watch --exit-status
+gh release view v<new-version>
+```
+
+### 4. Back-merge into `develop` — mandatory, before deleting anything
+
+This is the step whose absence caused #54. Any conflict resolved on the release
+branch exists only there until this lands.
+
+```bash
+gh pr create --base develop --head release/v<new-version> \
+  --title "chore: back-merge release/v<new-version> into develop"
+gh pr merge <number> --merge
+```
+
+### 5. Forward-port anything CI wrote to `main`
+
+The release workflow may commit generated files directly to `main`. Check and
+carry them to `develop` in the same PR or an immediate follow-up:
+
+```bash
+git log origin/main --oneline -5      # anything not from the release merge?
+```
+
+### 6. Only now, delete the release branch
+
+```bash
+git push origin --delete release/v<new-version>
+```
+
+Report the release URL when complete, and confirm explicitly that the
+back-merge PR landed. A release is not finished until `develop` contains it.
