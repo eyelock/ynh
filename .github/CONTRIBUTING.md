@@ -346,26 +346,37 @@ To add a new vendor, create a single file in `internal/vendor/` that implements 
 
 ```go
 type Adapter interface {
-    Name() string                                                         // vendor identifier
-    CLIName() string                                                      // CLI binary name (e.g. "claude", "agent")
-    ConfigDir() string                                                    // e.g. ".myvendor"
-    ArtifactDirs() map[string]string                                      // artifact type → directory name
-    InstructionsFile() string                                             // project instructions filename
-    NeedsSymlinks() bool                                                  // true if vendor needs symlink-based install
-    Install(stagingDir, projectDir string) ([]SymlinkEntry, error)        // install artifacts to project
-    Clean(entries []SymlinkEntry) error                                   // remove installed artifacts
-    LaunchInteractive(configPath string, extraArgs []string) error        // start interactive session
-    LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error
-    GenerateSystemPrompt(content []byte) map[string][]byte                // vendor-native instruction files
-    GenerateHookConfig(hooks) (map[string][]byte, error)                  // vendor-native hook config
-    GenerateMCPConfig(servers) (map[string][]byte, error)                 // vendor-native MCP config
-    GeneratePluginManifest(hj, outputDir) (map[string][]byte, error)      // vendor-native plugin manifest
-    ExportArtifactDirs() map[string]string                                // restricted dirs for export (nil = use ArtifactDirs)
-    SupportsExportDelegates() bool                                        // true if vendor supports delegates
-    MarketplaceManifestDir() string                                       // manifest dir for marketplace index
-    GenerateMarketplaceIndex(cfg, plugins) ([]byte, error)                // vendor-native marketplace index
+	Name() string
+	DisplayName() string
+	CLIName() string
+	ConfigDir() string
+	ArtifactDirs() map[string]string
+	InstructionsFile() string
+	NeedsSymlinks() bool
+	Install(stagingDir string, projectDir string) ([]SymlinkEntry, error)
+	Clean(entries []SymlinkEntry) error
+	LaunchInteractive(configPath string, extraArgs []string) error
+	LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error
+	LaunchWithInitialPrompt(configPath string, prompt string, extraArgs []string) error
+	SupportsResume() bool
+	ResolveLastSession(cwd string, notBefore time.Time) (string, error)
+	LaunchResume(configPath string, sessionID string, extraArgs []string) error
+	GenerateSystemPrompt(content []byte) map[string][]byte
+	ApplyRuntimeInstructions(runDir, text string) ([]string, error)
+	GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)
+	GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error)
+	GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error)
+	ExportArtifactDirs() map[string]string
+	SupportsExportDelegates() bool
+	MarketplaceManifestDir() string
+	GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error)
 }
 ```
+
+**24 methods.** Regenerated from `internal/vendor/adapter.go` — that
+declaration is the only authority. This copy has drifted before (it read 10,
+11 and 18 methods in three different places while the interface had 24), which
+hid the entire resume subsystem from anyone writing a new adapter.
 
 **Consumer-side narrow interfaces.** Packages that consume adapters define their own interfaces covering only the methods they need:
 

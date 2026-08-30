@@ -53,23 +53,39 @@ make test FILE=./internal/assembler
 
 ## Manual testing
 
-After code changes, verify against the relevant tutorial in `docs/tutorial/`. The full test matrix is in `docs/tutorial/manual-test-plan.md` (85 tests across 8 tutorials + edge cases).
+After code changes, verify against the relevant tutorial in `docs/tutorial/`.
+`docs/tutorial/manual-test-plan.md` adds edge cases the tutorials do not cover.
 
-To find which tutorials cover a changed area:
+Tutorial filenames are descriptive, not numbered — do not cite them by number.
 
 | Package / area | Tutorial |
 |---|---|
-| `cmd/ynh` (install, run, list, uninstall) | `first-harness`, `vendors-and-symlinks` |
-| `internal/resolver` (includes, Git sources) | `composition`, `include-editing` |
-| `internal/assembler` (delegates) | `delegation` |
-| `internal/exporter` | `export` |
-| `internal/marketplace` | `marketplace` |
-| `internal/registry` | `registry-and-discovery` |
-| `cmd/ynd` (create, lint, validate, fmt, compress, inspect) | `developer-tools` |
-| `internal/sensor`, `internal/baseline` | `sensors`, `check` |
-| `internal/agent` | `agent-loop`, `shadow-mode` |
+| `cmd/ynh` (install, run, ls, uninstall) | `first-harness.md` |
+| `internal/vendor`, `internal/symlink` | `vendors-and-symlinks.md` |
+| `internal/resolver` (includes, Git sources) | `composition.md` |
+| `internal/assembler` (delegates) | `delegation.md` |
+| `internal/exporter` | `export.md` |
+| `internal/marketplace` | `marketplace.md` |
+| `internal/registry`, `internal/sources` | `registry-and-discovery.md` |
+| `cmd/ynd` (create, lint, validate, fmt, compress) | `developer-tools.md` |
+| `cmd/ynd` (preview, compose, diff) | `developer-preview.md` |
+| Docker image build | `docker-image.md` |
+| Hooks | `hooks.md` |
+| MCP servers | `mcp-servers.md` |
+| Profiles | `profiles.md` |
+| Focus | `focus.md` |
+| Project-local config | `project-local-config.md` |
+| `internal/clischema`, `internal/jsonschema` | `structured-output.md` |
+| `ynh include` editing | `include-editing.md` |
+| `internal/namespace`, `internal/migration` | `namespacing-and-migration.md` |
+| `internal/plugin` (sensor declarations) | `sensors.md` |
+| `internal/gate`, `internal/baseline` | `check.md` |
+| `internal/agent` | `agent-loop.md` |
+| `internal/freshness`, shadow mode | `shadow-mode.md` |
 
-Run the relevant tutorial steps end-to-end before committing. Build first with `make build` so the binaries reflect your changes, then walk through the tutorial steps. The tutorials use `/tmp/ynh-tutorial/` as a scratch directory.
+Run the relevant tutorial steps end-to-end before committing. Build first with
+`make build` so the binaries reflect your changes. The tutorials use `/tmp/` as
+a scratch directory; the `evals` agent has the isolation rules.
 
 ## Common issues
 
