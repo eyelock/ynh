@@ -30,7 +30,7 @@ If the changeset affects assembled output (`internal/assembler/`, `internal/harn
 
 ## Gate 4: Capability-bump rule (structured output)
 
-If the changeset affects the JSON shape of any `--format json` response (envelope fields, payload fields, error envelope fields, enum members), apply the capability-bump rule in `CLAUDE.md`:
+If the changeset affects the JSON shape of any `--format json` response (envelope fields, payload fields, error envelope fields, enum members), apply the capability-bump rule in `.claude/CLAUDE.md`:
 
 - Removing/renaming a field, narrowing a type, tightening an enum, or making optional required → bump `config.CapabilitiesVersion`, update goldens, update `docs/schema/cli/` schema.
 - Adding an optional field, adding an enum member to an open-set enum, or relaxing a constraint → no bump required, but goldens/schema must still reflect the new shape.
