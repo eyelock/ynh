@@ -239,9 +239,13 @@ Inspect the sensors a harness declares.
   ynh sensors show <harness> <name> Resolve one sensor declaration
   ynh sensors run <harness> <name>  Run a sensor and emit a JSON result`,
 
-	"check": `ynh check <harness> [flags]
+	"check": `ynh check <harness-id|path> [flags]
 
 Run every declared sensor and gate on the result.
+
+Takes an installed id ("local/demo") or a path to a harness directory
+(".", "./my-harness", an absolute path). A path needs no prior install, which
+matters while you are still authoring the harness.
 
 Flags:
   --only a,b            Run only the named sensors
