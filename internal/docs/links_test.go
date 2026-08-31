@@ -60,6 +60,18 @@ func TestDocsLinksResolve(t *testing.T) {
 				strings.HasPrefix(target, "mailto:") {
 				continue
 			}
+			// A relative link to anything but a Markdown page 404s on
+			// the site whatever the file system says: docsify turns it
+			// into a route and looks for "<target>.md". Three schema
+			// links did exactly that while resolving fine on GitHub,
+			// so existence on disk is not the question to ask here.
+			if !strings.HasSuffix(target, ".md") {
+				broken = append(broken, rel+" -> "+target+
+					" (relative link to a non-Markdown file; docsify routes it and 404s"+
+					" — use the absolute https://github.com/... URL)")
+				continue
+			}
+
 			// The sidebar renders on every page, so its links are
 			// root-absolute and resolve from the docs root.
 			base := filepath.Dir(path)

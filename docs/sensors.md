@@ -371,7 +371,7 @@ baseline can be narrowed. **A sensor with nothing recorded forgives nothing** â€
 which is different from one recording zero, and the report says so rather than
 leaving a reader to infer it.
 
-Shape: [`docs/schema/cli/baseline.schema.json`](schema/cli/baseline.schema.json).
+Shape: [`docs/schema/cli/baseline.schema.json`](https://github.com/eyelock/ynh/blob/main/docs/schema/cli/baseline.schema.json).
 
 ### `ratchet` â€” when the count is the finding
 
@@ -477,7 +477,7 @@ the sensor still detects what it claims to.
 
 Exit codes match `ynh check`: `0` everything behaved as declared, `1` a sensor
 did not, `2` ynh could not run the calibration. Shape:
-[`docs/schema/cli/check-calibrate.schema.json`](schema/cli/check-calibrate.schema.json).
+[`docs/schema/cli/check-calibrate.schema.json`](https://github.com/eyelock/ynh/blob/main/docs/schema/cli/check-calibrate.schema.json).
 
 ### `convergence-verifier` needs a source that can decide
 

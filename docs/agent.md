@@ -263,7 +263,7 @@ right one until someone tries to reproduce the run and cannot.
 
 Both fields also appear on the trajectory's `session_start` event.
 
-Shape: [`docs/schema/cli/agent-run.schema.json`](schema/cli/agent-run.schema.json).
+Shape: [`docs/schema/cli/agent-run.schema.json`](https://github.com/eyelock/ynh/blob/main/docs/schema/cli/agent-run.schema.json).
 
 ## Trajectory
 
