@@ -514,15 +514,16 @@ not conflict with the project's own `CLAUDE.md`.
 |      |   RESOLVED — confirmed working, ynh's    |            |
 |      |   name+description frontmatter matches   |            |
 |      |   Cursor's requirements                   |            |
+| ---  | on_session_start event mapping: RESOLVED | Claude,    |
+|      |   (#199 - claude.go, codex.go, cursor.go | Codex,     |
+|      |    all map it; Copilot ships no hook     | Cursor     |
+|      |    config at all, so it maps nothing.    |            |
 | LOW  | Hook types beyond "command"              | Claude,    |
 |      |   (prompt, http, agent not mapped)       | Cursor     |
 | LOW  | Cursor CLI flags for non-interactive     | Cursor     |
 |      |   (needs research)                       |            |
 +------+------------------------------------------+------------+
 ```
-
-Note: `on_session_start` canonical event mapping (#199) is tracked as a separate
-in-flight PR, not listed above as a gap — see the stacked-PR plan for eyelock/ynh#199.
 
 ## Workflow
 
