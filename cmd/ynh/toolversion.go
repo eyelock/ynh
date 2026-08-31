@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -32,7 +33,7 @@ var toolVersions sync.Map
 // Failure is never a sensor failure. A missing tool, a non-zero exit, a
 // timeout — all yield an empty string, and the sensor result simply carries no
 // version. Provenance is worth having; it is not worth failing a gate for.
-func toolVersion(cmdline, cwd string) string {
+func toolVersion(cmdline, cwd, harnessDir string) string {
 	if strings.TrimSpace(cmdline) == "" {
 		return ""
 	}
@@ -46,6 +47,10 @@ func toolVersion(cmdline, cwd string) string {
 
 	cmd := exec.CommandContext(ctx, "sh", "-c", cmdline)
 	cmd.Dir = cwd
+	// Same reach as a sensor command: a version_command may invoke a script
+	// the harness ships, and without this it could only address the measured
+	// tree.
+	cmd.Env = append(os.Environ(), "YNH_HARNESS_DIR="+harnessDir)
 	// CommandContext kills the shell when the context expires, but Run blocks
 	// until the output pipes close — and a shell that forks rather than execs
 	// leaves its child holding them open. `sh -c "sleep 30"` therefore ran the

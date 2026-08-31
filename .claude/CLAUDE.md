@@ -144,3 +144,4 @@ Any change that bumps capabilities MUST also update goldens under `test/golden/<
 | `YNH_YES` | _(none)_ | ynd compress/inspect — fallback for `-y` flag |
 | `CI` | _(none)_ | ynd compress/inspect — lowest priority skip-confirm |
 | `YND_BACKUP_DIR` | `~/.ynd/backups` | ynd compress |
+| `YNH_HARNESS_DIR` | _(set by ynh)_ | exported to `command` sensors and `version_command`, so a harness can address a script it ships |

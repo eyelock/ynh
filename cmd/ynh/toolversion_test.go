@@ -8,7 +8,7 @@ import (
 )
 
 func TestToolVersion_ReadsFirstLine(t *testing.T) {
-	got := toolVersion(`printf 'golangci-lint has version 1.62.0\nbuilt with go1.25\n'`, t.TempDir())
+	got := toolVersion(`printf 'golangci-lint has version 1.62.0\nbuilt with go1.25\n'`, t.TempDir(), "")
 	if got != "golangci-lint has version 1.62.0" {
 		t.Errorf("got %q, want the first line only — the rest is banner", got)
 	}
@@ -27,7 +27,7 @@ func TestToolVersion_FailureIsNeverFatal(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := toolVersion(c.cmd, dir); got != "" {
+			if got := toolVersion(c.cmd, dir, ""); got != "" {
 				t.Errorf("got %q, want empty", got)
 			}
 		})
@@ -37,7 +37,7 @@ func TestToolVersion_FailureIsNeverFatal(t *testing.T) {
 // Some tools print their version to stdout and still exit non-zero. stdout is
 // worth reading either way.
 func TestToolVersion_NonZeroExitWithStdoutStillCounts(t *testing.T) {
-	if got := toolVersion(`printf 'mytool 2.1\n'; exit 1`, t.TempDir()); got != "mytool 2.1" {
+	if got := toolVersion(`printf 'mytool 2.1\n'; exit 1`, t.TempDir(), ""); got != "mytool 2.1" {
 		t.Errorf("got %q, want the version despite the non-zero exit", got)
 	}
 }
@@ -45,7 +45,7 @@ func TestToolVersion_NonZeroExitWithStdoutStillCounts(t *testing.T) {
 // java -version prints to stderr and exits 0. A clean exit is what makes
 // stderr trustworthy here; a failing one makes it a shell error message.
 func TestToolVersion_CleanExitOnStderrCounts(t *testing.T) {
-	if got := toolVersion(`printf 'openjdk 21.0.1\n' >&2`, t.TempDir()); got != "openjdk 21.0.1" {
+	if got := toolVersion(`printf 'openjdk 21.0.1\n' >&2`, t.TempDir(), ""); got != "openjdk 21.0.1" {
 		t.Errorf("got %q, want the stderr version from a clean exit", got)
 	}
 }
@@ -54,7 +54,7 @@ func TestToolVersion_CleanExitOnStderrCounts(t *testing.T) {
 // gate, and a gate that hangs is worse than one with no version recorded.
 func TestToolVersion_HangIsBoundedAndYieldsNothing(t *testing.T) {
 	done := make(chan string, 1)
-	go func() { done <- toolVersion("sleep 30", t.TempDir()) }()
+	go func() { done <- toolVersion("sleep 30", t.TempDir(), "") }()
 	select {
 	case got := <-done:
 		if got != "" {
@@ -68,7 +68,7 @@ func TestToolVersion_HangIsBoundedAndYieldsNothing(t *testing.T) {
 // A banner longer than the cap must be truncated rather than embedded whole in
 // every sensor result of every run.
 func TestToolVersion_Truncates(t *testing.T) {
-	got := toolVersion(`printf '%0.sx' $(seq 1 500); printf '\n'`, t.TempDir())
+	got := toolVersion(`printf '%0.sx' $(seq 1 500); printf '\n'`, t.TempDir(), "")
 	if len(got) > maxToolVersion {
 		t.Errorf("length %d exceeds cap %d", len(got), maxToolVersion)
 	}
@@ -84,8 +84,8 @@ func TestToolVersion_IsCached(t *testing.T) {
 	marker := dir + "/probe-count"
 	cmd := `printf 'x\n' >> ` + marker + `; printf 'v1.0\n'`
 
-	first := toolVersion(cmd, dir)
-	second := toolVersion(cmd, dir)
+	first := toolVersion(cmd, dir, "")
+	second := toolVersion(cmd, dir, "")
 	if first != "v1.0" || second != "v1.0" {
 		t.Fatalf("unexpected results: %q %q", first, second)
 	}
@@ -120,7 +120,7 @@ func TestToolVersion_BoundHoldsWhenAChildKeepsThePipesOpen(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		toolVersion("sleep 30 & sleep 30", t.TempDir())
+		toolVersion("sleep 30 & sleep 30", t.TempDir(), "")
 	}()
 	select {
 	case <-done:
