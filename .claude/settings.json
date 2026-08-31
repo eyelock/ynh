@@ -43,13 +43,18 @@
       "Bash(gh release list *)",
       "Bash(find *)",
       "Bash(ls *)",
-      "Bash(sed *)",
+      "Bash(sed -n *)",
       "Bash(wc *)"
     ],
     "ask": [
       "Bash(brew install *)",
       "Bash(gh pr create *)",
-      "Bash(gh release delete *)"
+      "Bash(gh release delete *)",
+      "Bash(find * -delete*)",
+      "Bash(find * -exec*)",
+      "Bash(find * -ok*)",
+      "Bash(find * -fls*)",
+      "Bash(find * -fprint*)"
     ]
   }
 }
