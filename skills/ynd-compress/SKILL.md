@@ -5,7 +5,14 @@ description: Workflow for compressing prompt and instruction files using LLM-pow
 
 # Compress Artifacts
 
-You are guiding a user through compressing their harness's prompt/instruction files to reduce token usage while preserving meaning.
+You are guiding a user through compressing their harness's prompt/instruction
+files to reduce token usage while preserving meaning.
+
+**This is a lossy transform, performed by an LLM, on the instructions that steer
+an agent.** Treat it with the caution that deserves. The failure is not a
+mangled file — `ynd lint` catches those — it is a file that still reads well and
+has quietly lost the specific detail that made it work: `run \`make check\``
+becoming "run the checks". Nothing downstream detects that.
 
 ## When to use
 
@@ -22,9 +29,16 @@ Help the user find files worth compressing. Good candidates are:
 
 Files that should NOT be compressed:
 
-- Reference documents (they're read on-demand, not loaded every session)
+- **Anything whose value is its specificity.** `rules/artifact-authoring.md`
+  asks artifacts to name actual files, commands and patterns rather than give
+  generic advice. Compression optimises for fewer tokens, and those two goals
+  pull against each other. Where they conflict, specificity wins — a shorter
+  skill that no longer says which command to run is worse than a long one.
 - Files that are already concise
-- Config files (`.ynh-plugin/plugin.json`)
+- Config files (`.ynh-plugin/plugin.json`) — not prose, and compression has
+  nothing to do with them
+- Reference documents, usually. They load only when the agent reads them, so
+  they cost nothing until used, and they are where the specific detail lives.
 
 ## Step 2: Review before compressing
 
@@ -52,14 +66,21 @@ ynd compress -y
 
 ## Step 4: Validate after compression
 
-Compression preserves YAML frontmatter structurally (it's never sent to the LLM), but always validate after:
+Frontmatter is stripped before the LLM sees it and reattached after, so `name`
+and `description` survive structurally. That is the only guarantee.
 
 ```bash
-ynd validate
-ynd lint
+git diff
+ynd validate <dir>
+ynd lint <dir>
 ```
 
-Both should pass. If they don't, restore from backup and report the issue.
+**Read the diff, not just the exit code.** Validation and lint prove the file is
+still well-formed; they cannot tell you it still means what it did. Look for
+commands, paths and flags that turned into descriptions of themselves.
+
+If the meaning moved, restore from backup rather than editing the compressed
+version — the original is the thing that worked.
 
 ## Step 5: Backup management
 
@@ -79,7 +100,12 @@ ynd compress --restore --pick 3 skills/code-review/SKILL.md
 
 ## Tips
 
-- Compression quality varies by LLM. Claude tends to produce tighter output than Codex.
-- Run `ynd compress -v claude` to force a specific vendor if auto-detect picks the wrong one.
+- Quality varies by model and by file. Judge it per file from the diff rather
+  than assuming any vendor is better — run `ynd compress -v <vendor>` to force
+  one if auto-detect picks a CLI you did not intend.
 - Small files (under ~200 chars) rarely benefit from compression — the overhead of the LLM call isn't worth it.
-- Re-compressing an already-compressed file rarely helps and can degrade quality. Check the reduction percentage — under 5% means stop.
+- Re-compressing an already-compressed file rarely helps and can degrade
+  quality. Check the reduction percentage — under 5% means stop.
+- Delegate to the `ynd-artifact-reviewer` agent afterwards for anything
+  important. It checks the criterion compression is most likely to have cost:
+  whether the artifact still references actual files, commands and patterns.

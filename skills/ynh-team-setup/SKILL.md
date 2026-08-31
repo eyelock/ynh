@@ -74,6 +74,18 @@ Create the team harness directory.
 }
 ```
 
+You can also add delegates from the CLI instead of editing the manifest, which
+is easier once the harness exists:
+
+```bash
+ynh delegate add <harness> github.com/user/harness --ref v1.2.0
+```
+
+`--ref` pins to a tag, branch or commit and `--path` selects a subdirectory in a
+monorepo. **Pin third-party delegates.** A delegate is a harness whose
+instructions run inside your agent, so tracking a branch means whoever can push
+to that repo changes how your assistant behaves on the next run.
+
 **Git URL format for delegates_to** - see `references/delegation.md` for the three formats:
 - Shorthand: `github.com/user/harness` (expands to SSH)
 - Full SSH: `git@github.com:user/harness.git`
