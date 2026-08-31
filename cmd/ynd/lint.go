@@ -242,6 +242,8 @@ func lintSkillFrontmatter(path, content string) []lintIssue {
 		issues = append(issues, lintIssue{File: path, Line: 1, Message: "frontmatter missing required field 'description'"})
 	}
 
+	issues = append(issues, lintDemotingFrontmatter(path, content)...)
+
 	return issues
 }
 
