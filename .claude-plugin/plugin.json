@@ -1,9 +1,15 @@
 {
-  "name": "ynh",
+  "name": "ynh-guide",
   "version": "0.1.0",
-  "description": "ynh harness template manager - development plugin with skills and agents for contributing",
+  "description": "Adopt, build, compose, gate and troubleshoot AI harnesses. Eight skills and three agents, useful whether or not ynh is installed.",
   "author": {
-    "name": "eyelock"
+    "name": "eyelock",
+    "url": "https://github.com/eyelock"
   },
-  "keywords": ["ynh", "harness", "development"]
+  "keywords": [
+    "harness",
+    "ai",
+    "skills",
+    "agents"
+  ]
 }

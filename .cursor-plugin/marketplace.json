@@ -1,0 +1,21 @@
+{
+  "name": "ynh",
+  "owner": {
+    "name": "eyelock"
+  },
+  "metadata": {
+    "description": "Skills and agents for adopting, building and operating AI harnesses."
+  },
+  "plugins": [
+    {
+      "name": "ynh-guide",
+      "source": ".",
+      "description": "Adopt, build, compose, gate and troubleshoot AI harnesses. Eight skills and three agents, useful whether or not ynh is installed."
+    },
+    {
+      "name": "ynh-dev",
+      "source": "./.claude",
+      "description": "Contribute to ynh itself: architecture, vendor adapters, ynd commands, capability bumps, evals and the release procedure."
+    }
+  ]
+}

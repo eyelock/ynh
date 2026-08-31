@@ -2,6 +2,95 @@
 
 ynh can generate vendor-native marketplace indexes from collections of harnesses and plugins. This page covers how each vendor's marketplace system works, the state of cross-vendor distribution, and how ynh bridges the differences.
 
+## ynh's own marketplace
+
+**This repository is itself a plugin marketplace.** Add it in any of the four
+vendors and install the skills without ynh on the machine — which matters
+because the skills teach ynh, and requiring ynh to get them is a chicken-and-egg
+problem for anyone evaluating it.
+
+Two plugins, and neither is a copy of anything:
+
+| Plugin | Directory | Contents |
+|---|---|---|
+| `ynh-guide` | the repository root | 8 skills, 3 agents, 1 rule, 1 command |
+| `ynh-dev` | `.claude/` | 5 skills, 3 agents, 4 rules, 3 commands |
+
+Both directories already had the plugin layout — `skills/`, `agents/`,
+`rules/`, `commands/`. They each carry a vendor manifest, and the marketplace
+indexes point at them in place:
+
+```
+.claude-plugin/plugin.json           ynh-guide      (repo root)
+.cursor-plugin/plugin.json           ynh-guide
+.claude/.claude-plugin/plugin.json   ynh-dev
+.claude/.cursor-plugin/plugin.json   ynh-dev
+
+.claude-plugin/marketplace.json      Claude Code
+.cursor-plugin/marketplace.json      Cursor
+.agents/plugins/marketplace.json     Codex
+.github/plugin/marketplace.json      Copilot
+```
+
+### Committed, not generated
+
+`ynd marketplace build` produces a **standalone** marketplace: plugins copied
+into `./plugins/<name>/` with a generated README, ready to push as its own
+repository. That is the right tool for publishing a marketplace of harnesses you
+do not own.
+
+It is the wrong tool here. It would duplicate every skill in the repository into
+`plugins/`, and CI would have to build and commit the result on every change —
+about 60 generated files mirroring content one directory up. It would also mean
+ynh's own distribution depended on ynh being installed to produce it, which is
+the chicken-and-egg this exists to remove.
+
+So the four indexes are committed and hand-maintained, and
+`make check-marketplace` asserts they still agree with the plugin manifests.
+Hand-maintained means drift; a check is cheap and a commit is churn.
+
+### Four indexes, three formats
+
+The vendors do not share one file, and two of them do not share a shape:
+
+| | Claude · Copilot | Cursor | Codex |
+|---|---|---|---|
+| description | top-level `description` | `metadata.description` | — |
+| display | `owner` | `owner` | `interface.displayName` |
+| plugin source | `"."` (relative) | `"."` (relative) | `{"source":"local","path":"."}` |
+| per-plugin version | yes | no | no |
+| install policy | — | — | `policy.installation` |
+
+Shapes follow `.claude/skills/vendor-adapters/references/` — the hand-tested
+per-vendor references, which are the authority when they and this page disagree.
+
+`make check-marketplace` asserts the Cursor and Codex shapes specifically,
+because the obvious tidy-up is to collapse all four into one file, and three of
+them would then be wrong.
+
+**Known gap:** `ynd marketplace build` currently emits Claude's shape for Cursor
+(ynh#301). That is why these are written by hand rather than generated even into
+a temp directory and copied.
+
+### Installing it
+
+| Vendor | Install |
+|---|---|
+| Claude Code | `/plugin marketplace add eyelock/ynh`, then `/plugin install ynh-guide` |
+| Cursor | add the marketplace, then `/add-plugin` |
+| Codex | add the marketplace repo; both entries carry an `AVAILABLE` install policy |
+| Copilot | `copilot plugin install`, `/plugin install`, or `enabledPlugins` in `settings.json` |
+
+### Or with ynh
+
+```bash
+ynh install github.com/eyelock/ynh          # ynh-guide
+ynh run ynh-guide --profile ynh-dev         # adds the developer set
+```
+
+Same artifacts, one install, plus profiles and focuses that the native plugin
+formats have no equivalent for.
+
 ## The Landscape
 
 AI coding assistants are converging on a plugin/marketplace model for distributing skills, agents, and configuration. All four vendors ynh supports have marketplace systems, though they differ significantly in maturity, openness, and format.

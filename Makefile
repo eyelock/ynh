@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage e2e format lint check check-artifacts check-vendor-parity scan-artifacts run docs help docker-build docker-push
+.PHONY: clean deps install build test test-coverage e2e format lint check check-artifacts check-vendor-parity check-marketplace scan-artifacts run docs help docker-build docker-push
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -98,6 +98,12 @@ scan-artifacts: ## Security-scan the harness artifacts with SkillSpector
 		echo "Skill security scan clean."; \
 	fi; \
 	exit $$rc
+
+# The marketplace indexes are committed rather than generated — this repo IS a
+# plugin marketplace, installable without ynh. Committed means hand-maintained,
+# so this asserts they still agree with the plugin manifests.
+check-marketplace: ## Assert the committed marketplace indexes match the plugin manifests
+	@./scripts/marketplace-consistency.sh
 
 check-vendor-parity: build ## Assert every vendor is documented and assembles the same artifacts
 	@./scripts/vendor-parity.sh
