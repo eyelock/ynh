@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -310,9 +311,24 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			}
 
 			raw := run.Output.Stdout + "\n" + run.Output.Stderr
-			current := baseline.Fingerprints(raw, cwd)
+			// Compiled once per sensor, not per line. A pattern that does not
+			// compile is reported by validation; here it means no filter.
+			matcher, _ := s.OutputMatcher()
+			current := baseline.Fingerprints(raw, cwd, matcher)
+
+			// A failing sensor that printed something, whose match selected
+			// none of it, is misconfigured: either the pattern is wrong or the
+			// tool changed its output. Recording that silently would write an
+			// empty baseline and report the sensor as having no findings to
+			// forgive, which is the failure this whole mechanism exists to
+			// avoid. Say so instead.
+			if matcher != nil && len(current) == 0 && baseline.CountLines(raw, nil) > 0 {
+				res.Note = fmt.Sprintf("output.match %q selected none of the %d lines this sensor printed; "+
+					"the pattern or the tool's output has changed",
+					s.Output.Match, baseline.CountLines(raw, nil))
+			}
 			if updateBaseline {
-				recording.Set(p.Name, name, baseline.Record(gate.StatusFail, raw, cwd))
+				recording.Set(p.Name, name, baseline.Record(gate.StatusFail, raw, cwd, matcher))
 			}
 
 			// A count-ratchet sensor is measured on how many findings it
@@ -323,7 +339,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			// exactly the thing it exists to catch.
 			var cmp baseline.Comparison
 			if s.EffectiveRatchet() == "count" {
-				cmp = base.CompareTotals(p.Name, name, baseline.CountLines(raw))
+				cmp = base.CompareTotals(p.Name, name, baseline.CountLines(raw, matcher))
 				res.CountDelta = cmp.CountDelta
 			} else {
 				cmp = base.Compare(p.Name, name, current, len(current))
@@ -357,7 +373,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			res.Status = gate.StatusFail
 			env.Summary.Failed++
 			if base != nil {
-				res.NewOutput = selectLines(raw, cwd, cmp.New)
+				res.NewOutput = selectLines(raw, cwd, cmp.New, matcher)
 				if cmp.Approximate {
 					res.Note = "baseline is count-based for this sensor; new-failure detection is approximate"
 				}
@@ -499,7 +515,7 @@ func checkExecErr(err error) error {
 // selectLines returns only those output lines whose fingerprint is in want.
 // Showing an author the twelve issues they did not introduce alongside the one
 // they did is how a useful gate becomes an ignored one.
-func selectLines(raw, root string, want []string) string {
+func selectLines(raw, root string, want []string, match *regexp.Regexp) string {
 	if len(want) == 0 {
 		return ""
 	}
@@ -512,7 +528,7 @@ func selectLines(raw, root string, want []string) string {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		fps := baseline.Fingerprints(line, root)
+		fps := baseline.Fingerprints(line, root, match)
 		if len(fps) == 1 && wanted[fps[0]] {
 			keep = append(keep, strings.TrimSpace(line))
 		}

@@ -284,6 +284,48 @@ When the loop driver runs a focus-sourced sensor via `ynh sensors run`, ynh retu
 | `format` | string | **Yes** | Freeform format identifier. Pass-through to the loop driver. |
 | `channel` | string | No | Where the result emerges. Defaults are inferred from `source`. |
 | `path` | string | No | Relevant when `channel=file`. |
+| `match` | string | No | Regular expression selecting which lines are findings. |
+
+### `match`: which lines are findings
+
+**ynh treats every non-blank line a sensor prints as a finding, unless you say otherwise.**
+
+That is fine for a sensor you write yourself, which prints one line per finding and nothing else. It is wrong for a sensor wrapping a real tool, because the tool's decoration gets recorded as accepted debt: headers, source context, caret markers and summary counts.
+
+The consequence is worse than untidy. Take golangci-lint:
+
+```
+main.go:10:2: Error return value is not checked (errcheck)
+util.go:20:2: Error return value is not checked (errcheck)
+api.go:30:2: Error return value is not checked (errcheck)
+
+3 issues:
+* errcheck: 3
+```
+
+Fix one finding and the last two lines become `2 issues:` and `* errcheck: 2`. Those are strings the baseline has never seen, so **a correct repair is reported as two new findings and the gate turns red.** The tree got better and ynh said it got worse.
+
+`match` fixes that by naming what a finding looks like:
+
+```json
+"output": {
+  "format": "text",
+  "match": "^[^ ]+\\.go:[0-9]+:[0-9]+:"
+}
+```
+
+Now only those three lines are fingerprinted. Fixing one removes one, and nothing new appears.
+
+**It applies to both ratchets.** The fingerprint ratchet and the count ratchet (`ratchet: "count"`) use the same filter, so a count-based sensor is not measuring a tool's summary either.
+
+A few things worth knowing:
+
+- **Omitting it changes nothing.** Every existing sensor behaves exactly as before, so this is safe to adopt one sensor at a time.
+- **ynh does not interpret the pattern beyond matching lines with it.** It stays out of the business of knowing any tool's output format, which is the same reason `format` is freeform.
+- **A pattern that does not compile is a validation error**, not a silent no-op. Silently selecting nothing would record the sensor's whole output as accepted debt on the next `--update-baseline`.
+- **If a failing sensor's `match` selects none of its output**, `ynh check` says so in the sensor's note rather than recording an empty baseline. That means the pattern is wrong, or the tool changed its output.
+
+`format` does **not** do this job. It is a label passed through to the loop driver; nothing in ynh parses output based on it. If you want ynh to know which lines matter, that is `match`.
 
 ### Why `format` is freeform
 

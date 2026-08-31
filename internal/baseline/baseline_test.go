@@ -15,8 +15,8 @@ func TestFingerprints_StableAcrossLineMoves(t *testing.T) {
 	before := "internal/foo.go:12:5: exported func Bar should have comment"
 	after := "internal/foo.go:47:5: exported func Bar should have comment"
 
-	a := Fingerprints(before, "")
-	b := Fingerprints(after, "")
+	a := Fingerprints(before, "", nil)
+	b := Fingerprints(after, "", nil)
 	if len(a) != 1 || len(b) != 1 {
 		t.Fatalf("want 1 fingerprint each, got %d and %d", len(a), len(b))
 	}
@@ -27,8 +27,8 @@ func TestFingerprints_StableAcrossLineMoves(t *testing.T) {
 
 // A genuinely different message on the same line must not be forgiven.
 func TestFingerprints_DistinguishesMessages(t *testing.T) {
-	a := Fingerprints("foo.go:1: unused variable x", "")
-	b := Fingerprints("foo.go:1: unused variable y", "")
+	a := Fingerprints("foo.go:1: unused variable x", "", nil)
+	b := Fingerprints("foo.go:1: unused variable y", "", nil)
 	if a[0] == b[0] {
 		t.Error("different messages produced the same fingerprint")
 	}
@@ -37,16 +37,16 @@ func TestFingerprints_DistinguishesMessages(t *testing.T) {
 // A baseline recorded on one machine has to match on another, so absolute
 // paths are made relative to the repository root before hashing.
 func TestFingerprints_RootRelative(t *testing.T) {
-	a := Fingerprints("/home/alice/repo/foo.go:1: bad", "/home/alice/repo")
-	b := Fingerprints("/build/ci/repo/foo.go:1: bad", "/build/ci/repo")
+	a := Fingerprints("/home/alice/repo/foo.go:1: bad", "/home/alice/repo", nil)
+	b := Fingerprints("/build/ci/repo/foo.go:1: bad", "/build/ci/repo", nil)
 	if a[0] != b[0] {
 		t.Error("same issue fingerprinted differently under different checkout paths")
 	}
 }
 
 func TestFingerprints_IgnoresBlankLinesAndOrder(t *testing.T) {
-	a := Fingerprints("one\n\n  \ntwo\n", "")
-	b := Fingerprints("two\none", "")
+	a := Fingerprints("one\n\n  \ntwo\n", "", nil)
+	b := Fingerprints("two\none", "", nil)
 	if len(a) != 2 {
 		t.Fatalf("want 2 fingerprints, got %d", len(a))
 	}
@@ -59,7 +59,7 @@ func TestFingerprints_IgnoresBlankLinesAndOrder(t *testing.T) {
 
 func TestCompare_NoBaselineMeansEverythingIsNew(t *testing.T) {
 	var b *Baseline
-	cur := Fingerprints("a\nb", "")
+	cur := Fingerprints("a\nb", "", nil)
 	c := b.Compare("h", "lint", cur, len(cur))
 	if len(c.New) != 2 || c.Known != 0 || c.Fixed != 0 {
 		t.Errorf("nil baseline: got new=%d known=%d fixed=%d, want 2/0/0", len(c.New), c.Known, c.Fixed)
@@ -67,8 +67,8 @@ func TestCompare_NoBaselineMeansEverythingIsNew(t *testing.T) {
 }
 
 func TestCompare_PreExistingFailuresAreForgiven(t *testing.T) {
-	b := newBL("h", "lint", Record("fail", "old one\nold two", ""))
-	c := cmpOf(b, "lint", Fingerprints("old one\nold two", ""))
+	b := newBL("h", "lint", Record("fail", "old one\nold two", "", nil))
+	c := cmpOf(b, "lint", Fingerprints("old one\nold two", "", nil))
 	newFPs, known, fixed := c.New, c.Known, c.Fixed
 	if len(newFPs) != 0 {
 		t.Errorf("unchanged failures must not block, got %d new", len(newFPs))
@@ -79,8 +79,8 @@ func TestCompare_PreExistingFailuresAreForgiven(t *testing.T) {
 }
 
 func TestCompare_OnlyNewFailuresBlock(t *testing.T) {
-	b := newBL("h", "lint", Record("fail", "old one\nold two", ""))
-	c := cmpOf(b, "lint", Fingerprints("old one\nold two\nbrand new", ""))
+	b := newBL("h", "lint", Record("fail", "old one\nold two", "", nil))
+	c := cmpOf(b, "lint", Fingerprints("old one\nold two\nbrand new", "", nil))
 	newFPs, known := c.New, c.Known
 	if len(newFPs) != 1 {
 		t.Fatalf("want exactly 1 new fingerprint, got %d", len(newFPs))
@@ -93,8 +93,8 @@ func TestCompare_OnlyNewFailuresBlock(t *testing.T) {
 // Debt paid off is what lets the ratchet tighten; the caller needs to know
 // it happened so it can offer to narrow the baseline.
 func TestCompare_ReportsFixedDebt(t *testing.T) {
-	b := newBL("h", "lint", Record("fail", "old one\nold two\nold three", ""))
-	c := cmpOf(b, "lint", Fingerprints("old one", ""))
+	b := newBL("h", "lint", Record("fail", "old one\nold two\nold three", "", nil))
+	c := cmpOf(b, "lint", Fingerprints("old one", "", nil))
 	known, fixed := c.Known, c.Fixed
 	if known != 1 || fixed != 2 {
 		t.Errorf("got known=%d fixed=%d, want 1/2", known, fixed)
@@ -105,7 +105,7 @@ func TestCompare_ReportsFixedDebt(t *testing.T) {
 // failure it now reports is a regression and must block.
 func TestCompare_UnknownSensorIsAllNew(t *testing.T) {
 	b := &Baseline{Harnesses: map[string]HarnessBaseline{}}
-	c := cmpOf(b, "lint", Fingerprints("boom", ""))
+	c := cmpOf(b, "lint", Fingerprints("boom", "", nil))
 	newFPs, known := c.New, c.Known
 	if len(newFPs) != 1 || known != 0 {
 		t.Errorf("got new=%d known=%d, want 1/0", len(newFPs), known)
@@ -118,7 +118,7 @@ func TestLoadSave_RoundTrip(t *testing.T) {
 		t.Fatalf("missing baseline: got (%v, %v), want (nil, nil)", b, err)
 	}
 
-	want := newBL("h", "lint", Record("fail", "one\ntwo", ""))
+	want := newBL("h", "lint", Record("fail", "one\ntwo", "", nil))
 	if err := Save(root, want); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -185,13 +185,13 @@ func cmpOf(b *Baseline, sensor string, current []string) Comparison {
 // sensor name meant checking harness B erased harness A's forgiven debt.
 func TestCompare_HarnessesAreIsolated(t *testing.T) {
 	b := &Baseline{}
-	b.Set("harness-a", "lint", Record("fail", "a-issue", ""))
-	b.Set("harness-b", "lint", Record("fail", "b-issue", ""))
+	b.Set("harness-a", "lint", Record("fail", "a-issue", "", nil))
+	b.Set("harness-b", "lint", Record("fail", "b-issue", "", nil))
 
-	if c := b.Compare("harness-a", "lint", Fingerprints("a-issue", ""), 1); len(c.New) != 0 {
+	if c := b.Compare("harness-a", "lint", Fingerprints("a-issue", "", nil), 1); len(c.New) != 0 {
 		t.Errorf("harness-a should forgive its own issue, got %d new", len(c.New))
 	}
-	if c := b.Compare("harness-b", "lint", Fingerprints("a-issue", ""), 1); len(c.New) != 1 {
+	if c := b.Compare("harness-b", "lint", Fingerprints("a-issue", "", nil), 1); len(c.New) != 1 {
 		t.Errorf("harness-b must not forgive harness-a's issue, got %d new", len(c.New))
 	}
 }
@@ -205,7 +205,7 @@ func TestCompare_TruncatedRatchetsOnCountOnly(t *testing.T) {
 	for i := 0; i < maxFingerprints+50; i++ {
 		big = append(big, []byte("issue "+itoa(i)+"\n")...)
 	}
-	rec := Record("fail", string(big), "")
+	rec := Record("fail", string(big), "", nil)
 	if len(rec.Fingerprints) != 0 {
 		t.Fatalf("a truncated sensor must keep no arbitrary subset, kept %d", len(rec.Fingerprints))
 	}
@@ -231,7 +231,7 @@ func TestCompare_TruncatedRatchetsOnCountOnly(t *testing.T) {
 // A sensor that fails with no output produces no fingerprints. Gating
 // forgiveness on a non-zero known count made it impossible to ever baseline.
 func TestHas_SilentFailureCanBeBaselined(t *testing.T) {
-	b := newBL("h", "quiet", Record("fail", "", ""))
+	b := newBL("h", "quiet", Record("fail", "", "", nil))
 	if !b.Has("h", "quiet") {
 		t.Fatal("a silently failing sensor must still record an entry")
 	}
@@ -243,7 +243,7 @@ func TestHas_SilentFailureCanBeBaselined(t *testing.T) {
 }
 
 func TestRecordedCount_ReportsDebtForClearedSensor(t *testing.T) {
-	b := newBL("h", "lint", Record("fail", "one\ntwo\nthree", ""))
+	b := newBL("h", "lint", Record("fail", "one\ntwo\nthree", "", nil))
 	if got := b.RecordedCount("h", "lint"); got != 3 {
 		t.Errorf("RecordedCount = %d, want 3", got)
 	}
@@ -259,8 +259,8 @@ func TestRecordedCount_ReportsDebtForClearedSensor(t *testing.T) {
 func TestSave_OneFilePerSensor(t *testing.T) {
 	root := t.TempDir()
 	b := &Baseline{}
-	b.Set("h", "lint", Record("fail", "a\nb", ""))
-	b.Set("h", "vet", Record("fail", "c", ""))
+	b.Set("h", "lint", Record("fail", "a\nb", "", nil))
+	b.Set("h", "vet", Record("fail", "c", "", nil))
 	if err := Save(root, b); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -277,8 +277,8 @@ func TestSave_OneFilePerSensor(t *testing.T) {
 func TestSave_UntouchedSensorIsByteIdentical(t *testing.T) {
 	root := t.TempDir()
 	b := &Baseline{}
-	b.Set("h", "lint", Record("fail", "a", ""))
-	b.Set("h", "vet", Record("fail", "c", ""))
+	b.Set("h", "lint", Record("fail", "a", "", nil))
+	b.Set("h", "vet", Record("fail", "c", "", nil))
 	if err := Save(root, b); err != nil {
 		t.Fatal(err)
 	}
@@ -295,8 +295,8 @@ func TestSave_UntouchedSensorIsByteIdentical(t *testing.T) {
 	// failing sensor, not only the changed one. A Set that refreshed the
 	// timestamp unconditionally would rewrite every file on every run, and
 	// turn an unrelated branch's no-op into a merge conflict.
-	reloaded.Set("h", "lint", Record("fail", "a\nb", "")) // findings changed
-	reloaded.Set("h", "vet", Record("fail", "c", ""))     // findings identical
+	reloaded.Set("h", "lint", Record("fail", "a\nb", "", nil)) // findings changed
+	reloaded.Set("h", "vet", Record("fail", "c", "", nil))     // findings identical
 	if err := Save(root, reloaded); err != nil {
 		t.Fatal(err)
 	}
@@ -375,8 +375,8 @@ func TestLoad_RejectsLegacySingleFile(t *testing.T) {
 func TestSave_PrunesClearedSensors(t *testing.T) {
 	root := t.TempDir()
 	b := &Baseline{}
-	b.Set("h", "lint", Record("fail", "a", ""))
-	b.Set("h", "vet", Record("fail", "c", ""))
+	b.Set("h", "lint", Record("fail", "a", "", nil))
+	b.Set("h", "vet", Record("fail", "c", "", nil))
 	if err := Save(root, b); err != nil {
 		t.Fatal(err)
 	}
@@ -421,7 +421,7 @@ func TestOldestRecordedAt(t *testing.T) {
 func TestFingerprint_MovesOnlyWhenForgivenessMoves(t *testing.T) {
 	root := t.TempDir()
 	b := &Baseline{}
-	b.Set("h", "lint", Record("fail", "a\nb", ""))
+	b.Set("h", "lint", Record("fail", "a\nb", "", nil))
 	if err := Save(root, b); err != nil {
 		t.Fatal(err)
 	}
@@ -439,7 +439,7 @@ func TestFingerprint_MovesOnlyWhenForgivenessMoves(t *testing.T) {
 		t.Errorf("an unchanged baseline must fingerprint the same: %q vs %q (%v)", first, again, fErr)
 	}
 
-	b.Set("h", "lint", Record("fail", "a\nb\nc", ""))
+	b.Set("h", "lint", Record("fail", "a\nb\nc", "", nil))
 	if err := Save(root, b); err != nil {
 		t.Fatal(err)
 	}
@@ -474,16 +474,16 @@ func TestFingerprint_EmptyIsStable(t *testing.T) {
 func TestSet_KeepsTimestampWhenFailuresUnchanged(t *testing.T) {
 	const then = "2026-01-02T03:04:05Z"
 	b := &Baseline{}
-	rec := Record("fail", "a\nb", "")
+	rec := Record("fail", "a\nb", "", nil)
 	rec.RecordedAt = then
 	b.Set("h", "lint", rec)
 
-	b.Set("h", "lint", Record("fail", "a\nb", "")) // same failures, no timestamp
+	b.Set("h", "lint", Record("fail", "a\nb", "", nil)) // same failures, no timestamp
 	if got := b.Harnesses["h"].Sensors["lint"].RecordedAt; got != then {
 		t.Errorf("re-recording identical failures moved the timestamp: %q, want %q", got, then)
 	}
 
-	b.Set("h", "lint", Record("fail", "a\nb\nc", "")) // a new failure accepted
+	b.Set("h", "lint", Record("fail", "a\nb\nc", "", nil)) // a new failure accepted
 	if got := b.Harnesses["h"].Sensors["lint"].RecordedAt; got == then {
 		t.Error("accepting a new failure is a new acceptance and must be timestamped as one")
 	}
@@ -493,10 +493,10 @@ func TestCountLines_CountsDuplicatesSeparately(t *testing.T) {
 	// The whole point: two identical findings count twice. Fingerprints
 	// deduplicate them into one.
 	out := "a.go:12: nolint\na.go:99: nolint\n\n  \nb.go:1: nolint\n"
-	if got := CountLines(out); got != 3 {
+	if got := CountLines(out, nil); got != 3 {
 		t.Errorf("CountLines = %d, want 3 (blank and whitespace lines ignored)", got)
 	}
-	if got := len(Fingerprints(out, "")); got != 2 {
+	if got := len(Fingerprints(out, "", nil)); got != 2 {
 		t.Errorf("Fingerprints = %d, want 2 — this is the gap CountLines closes", got)
 	}
 }
@@ -544,7 +544,7 @@ func TestCompareTotals(t *testing.T) {
 // Record must capture the raw total, not only the distinct count, or a
 // count-ratchet sensor has nothing to measure against.
 func TestRecord_CapturesTheRawTotal(t *testing.T) {
-	sb := Record("fail", "a.go:12: nolint\na.go:99: nolint\n", "")
+	sb := Record("fail", "a.go:12: nolint\na.go:99: nolint\n", "", nil)
 	if sb.Total != 2 {
 		t.Errorf("Total = %d, want 2", sb.Total)
 	}

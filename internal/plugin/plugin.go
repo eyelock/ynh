@@ -278,6 +278,36 @@ type SensorOutput struct {
 	Format  string `json:"format"`
 	Channel string `json:"channel,omitempty"`
 	Path    string `json:"path,omitempty"`
+	// Match selects which of a sensor's output lines are findings.
+	//
+	// Without it every non-blank line is treated as a finding, so a sensor
+	// wrapping a real tool records that tool's decoration as accepted debt:
+	// headers, source context, caret markers and summary counts. Fix one real
+	// finding and `7 issues:` becomes `6 issues:`, a line the baseline has
+	// never seen, and the gate reports a correct repair as a new finding
+	// (#338).
+	//
+	// A regular expression, matched against each line. ynh does not interpret
+	// it beyond that, which keeps it out of the business of knowing any tool's
+	// output format. Empty means every line counts, which stays the default so
+	// existing sensors are unaffected.
+	Match string `json:"match,omitempty"`
+}
+
+// OutputMatcher compiles the sensor's line filter. A nil result means every
+// non-blank line is a finding.
+//
+// Compile once per sensor and pass the result down: compiling per line is
+// wasted work on output that can run to thousands of lines.
+func (s Sensor) OutputMatcher() (*regexp.Regexp, error) {
+	if s.Output.Match == "" {
+		return nil, nil
+	}
+	re, err := regexp.Compile(s.Output.Match)
+	if err != nil {
+		return nil, fmt.Errorf("output.match %q: %w", s.Output.Match, err)
+	}
+	return re, nil
 }
 
 // ValidSensorCategories lists the Fowler buckets a sensor's category may use.
@@ -387,6 +417,12 @@ func ValidateSensors(sensors map[string]Sensor, profileNames, focusNames map[str
 		}
 		if s.Output.Format == "" {
 			issues = append(issues, fmt.Sprintf("%s output.format must not be empty", prefix))
+		}
+		// A match that does not compile would silently select nothing, which
+		// turns the sensor's whole output into accepted debt on the next
+		// baseline write. Caught here instead.
+		if _, err := s.OutputMatcher(); err != nil {
+			issues = append(issues, fmt.Sprintf("%s %v", prefix, err))
 		}
 	}
 	return issues

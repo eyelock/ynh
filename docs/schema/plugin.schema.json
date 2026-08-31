@@ -294,7 +294,12 @@
       "additionalProperties": false,
       "properties": {
         "format": {
-          "description": "Freeform format identifier \u2014 pass-through to loop driver. Conventional names: json, junit-xml, lcov-summary, sarif, markdown, text, ndjson.",
+          "description": "Freeform format identifier \u2014 pass-through to loop driver. Conventional names: json, junit-xml, lcov-summary, sarif, markdown, text, ndjson. ynh does not parse output based on this: to select which lines are findings, use match.",
+          "type": "string",
+          "minLength": 1
+        },
+        "match": {
+          "description": "Regular expression selecting which output lines are findings. Without it every non-blank line counts, so a sensor wrapping a real tool records that tool's headers, source context and summary counts as accepted debt \u2014 and fixing one finding turns \"7 issues:\" into \"6 issues:\", a line the baseline has never seen, so a correct repair reports as a new finding. Applies to both ratchets. Example for golangci-lint: \"^[^ ]+\\\\.go:[0-9]+:[0-9]+:\".",
           "type": "string",
           "minLength": 1
         },

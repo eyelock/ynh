@@ -177,7 +177,7 @@ func TestSensorHash_SeesProgressWithinAFailingSensor(t *testing.T) {
 		Name: "lint", Kind: "command", Status: gate.StatusFail,
 		Stderr: "a.go:1: one\n",
 	})
-	if SensorHash(before) == SensorHash(after) {
+	if SensorHash(before, nil) == SensorHash(after, nil) {
 		t.Error("fixing findings while the sensor still fails must change the hash")
 	}
 }
@@ -186,7 +186,7 @@ func TestSensorHash_SeesProgressWithinAFailingSensor(t *testing.T) {
 func TestSensorHash_IgnoresPositionDrift(t *testing.T) {
 	a := env(gate.Result{Name: "lint", Kind: "command", Status: gate.StatusFail, Stderr: "a.go:1:2: one\n"})
 	b := env(gate.Result{Name: "lint", Kind: "command", Status: gate.StatusFail, Stderr: "a.go:99:2: one\n"})
-	if SensorHash(a) != SensorHash(b) {
+	if SensorHash(a, nil) != SensorHash(b, nil) {
 		t.Error("a finding moving down the file is not progress")
 	}
 }
@@ -203,7 +203,7 @@ func TestSensorHash_TracksNewFailuresWhenBaselined(t *testing.T) {
 		Name: "lint", Kind: "command", Status: gate.StatusFail,
 		Stdout: "old-b.go:7: different debt", NewOutput: "mine.go:9: real",
 	})
-	if SensorHash(a) != SensorHash(b) {
+	if SensorHash(a, nil) != SensorHash(b, nil) {
 		t.Error("baselined findings churning is not progress the watchdog should credit")
 	}
 }
@@ -263,7 +263,7 @@ func TestRunLoop_GateErrorIsNotAgentFailure(t *testing.T) {
 func TestRunLoop_BaselineEditedMidRunIsTamper(t *testing.T) {
 	work := t.TempDir()
 	b := &baseline.Baseline{}
-	b.Set("demo", "lint", baseline.Record("fail", "old.go:1: debt", ""))
+	b.Set("demo", "lint", baseline.Record("fail", "old.go:1: debt", "", nil))
 	if err := baseline.Save(work, b); err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +272,7 @@ func TestRunLoop_BaselineEditedMidRunIsTamper(t *testing.T) {
 	// amnesty so the failure it just introduced would be forgiven.
 	mb := &mockBackend{name: "mock", turns: []Turn{{Content: "work"}, {Content: "more"}}}
 	mb.onTurn = func(int) {
-		b.Set("demo", "lint", baseline.Record("fail", "old.go:1: debt\nmine.go:2: mine", ""))
+		b.Set("demo", "lint", baseline.Record("fail", "old.go:1: debt\nmine.go:2: mine", "", nil))
 		if err := baseline.Save(work, b); err != nil {
 			t.Fatal(err)
 		}
@@ -301,7 +301,7 @@ func TestRunLoop_BaselineEditedMidRunIsTamper(t *testing.T) {
 func TestRunLoop_UntouchedBaselineIsNotTamper(t *testing.T) {
 	work := t.TempDir()
 	b := &baseline.Baseline{}
-	b.Set("demo", "lint", baseline.Record("fail", "old.go:1: debt", ""))
+	b.Set("demo", "lint", baseline.Record("fail", "old.go:1: debt", "", nil))
 	if err := baseline.Save(work, b); err != nil {
 		t.Fatal(err)
 	}
