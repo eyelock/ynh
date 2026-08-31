@@ -1,8 +1,9 @@
 # `internal/agent` and `internal/baseline`
 
 The two largest subsystems, and the two that had no reference. `internal/agent`
-is ~7,000 lines across 15 files with 22 test files; `internal/baseline` is one
-file that decides whether a gate is usable on a real repository.
+is several thousand lines across fifteen files, with roughly as many test files
+again; `internal/baseline` is one file that decides whether a gate is usable on
+a real repository.
 
 They are documented together because they are the same loop seen from two ends:
 the agent iterates until sensors pass, and the baseline decides what "pass"
