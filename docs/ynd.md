@@ -25,6 +25,12 @@ ynd create rule be-nice        # rules/be-nice.md
 ynd create command deploy      # commands/deploy.md
 ```
 
+Every command takes `--help` for its own flags and behaviour:
+
+```bash
+ynd export --help      # this command's flags, not the whole page
+```
+
 ### lint
 
 Lint markdown, shell blocks, and config files for common issues.
