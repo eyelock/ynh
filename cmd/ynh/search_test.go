@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/clischema"
 	"github.com/eyelock/ynh/internal/config"
 )
 
@@ -259,5 +260,106 @@ func TestCmdSearch_MatchesDescription(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "myharness") {
 		t.Error("should match by description")
+	}
+}
+
+// The schema documents `id` as a display identifier and `repo` as the field to
+// install with. That distinction only matters for local-source results, whose
+// id is `local/<name>` and is rejected by `ynh install`. Nothing asserted the
+// shape of those three fields together, which is why the schema was able to
+// describe `id` as installable for a year (#337).
+func TestCmdSearch_LocalResultInstallFields(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("YNH_HOME", "")
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+
+	srcDir := filepath.Join(home, "sources")
+	writeSourceHarness(t, filepath.Join(srcDir, "alice"), "alice")
+
+	cfg := &config.Config{
+		DefaultVendor: "claude",
+		Sources:       []config.Source{{Name: "dev", Path: srcDir}},
+	}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := cmdSearchTo([]string{"alice", "--format", "json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("cmdSearchTo: %v", err)
+	}
+	var results []searchResultEntry
+	if err := json.Unmarshal(stdout.Bytes(), &results); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	r := results[0]
+
+	// id identifies, it does not install.
+	if r.ID != "local/alice" {
+		t.Errorf("id = %q, want %q", r.ID, "local/alice")
+	}
+
+	// repo is the whole answer for a local result: a complete path to the
+	// harness directory, with no path component to join on.
+	if r.Repo == "" {
+		t.Fatal("repo is empty; a local result carries no other installable value")
+	}
+	if !filepath.IsAbs(r.Repo) {
+		t.Errorf("repo = %q, want an absolute filesystem path", r.Repo)
+	}
+	if _, err := os.Stat(filepath.Join(r.Repo, ".ynh-plugin", "plugin.json")); err != nil {
+		t.Errorf("repo %q does not point at a harness directory: %v", r.Repo, err)
+	}
+
+	// path must be absent, not empty-but-present. A consumer joining
+	// repo + "/" + path would build a directory that has never existed, which
+	// is the failure #337 records against a real consumer.
+	if r.Path != "" {
+		t.Errorf("path = %q, want absent for a local-source result", r.Path)
+	}
+	if bytes.Contains(stdout.Bytes(), []byte(`"path"`)) {
+		t.Errorf("path should be omitted from the payload entirely, got: %s", stdout.String())
+	}
+}
+
+// And the payload must still satisfy its published schema, including the two
+// fields that previously had no description at all.
+func TestCmdSearch_LocalResultMatchesSchema(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("YNH_HOME", "")
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatal(err)
+	}
+	srcDir := filepath.Join(home, "sources")
+	writeSourceHarness(t, filepath.Join(srcDir, "alice"), "alice")
+	cfg := &config.Config{
+		DefaultVendor: "claude",
+		Sources:       []config.Source{{Name: "dev", Path: srcDir}},
+	}
+	if err := cfg.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := cmdSearchTo([]string{"alice", "--format", "json"}, &stdout, &stderr); err != nil {
+		t.Fatalf("cmdSearchTo: %v", err)
+	}
+	var v any
+	if err := json.Unmarshal(stdout.Bytes(), &v); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := clischema.Get("search")
+	if err != nil {
+		t.Fatalf("Get search schema: %v", err)
+	}
+	if err := schema.Validate(v); err != nil {
+		t.Errorf("local search result does not validate: %v\n%s", err, stdout.String())
 	}
 }
