@@ -91,6 +91,12 @@ jobs:
           go-version-file: go.mod
       - run: make test
 
+      # A direct import marked `// indirect` — the state this repo was in on
+      # 2026-08-31 — is invisible to build, test and lint alike. This is the
+      # only check that sees it.
+      - name: go.mod is tidy
+        run: go mod tidy -diff
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

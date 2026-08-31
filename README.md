@@ -83,8 +83,8 @@ Full docs at **[eyelock.github.io/ynh](https://eyelock.github.io/ynh)**:
 - **[Artifacts Guide](https://eyelock.github.io/ynh/#/artifacts)** — Skills, agents, rules, commands
 - **[CLI Reference](https://eyelock.github.io/ynh/#/reference)** — Full command reference for ynh and ynd
 - **[Agent Skills Standard](https://eyelock.github.io/ynh/#/skills-standard)** — Cross-platform spec, discovery paths, catalog budget
-- **[Vendor Support](https://eyelock.github.io/ynh/#/vendors)** — Claude, Codex, Cursor capabilities
+- **[Vendor Support](https://eyelock.github.io/ynh/#/vendors)** — Claude, Codex, Cursor and Copilot capabilities
 
 ## License
 
-MIT
+[MIT](LICENSE)
