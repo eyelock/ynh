@@ -3,7 +3,8 @@
 Copilot CLI ships weekly and GitHub's own docs warn that "commands, flags, and
 available models change often." Verify every flag against `copilot help` before
 trusting it. Findings below marked **CONFIRMED** were hand-tested against
-v1.0.75; treat the rest as documentation claims.
+v1.0.75, except the agent- and skill-discovery section, which was tested
+against v1.0.80. Treat the rest as documentation claims.
 
 ## Documentation URLs
 
@@ -64,6 +65,90 @@ under `.copilot/` (matching what `--plugin-dir` is given), while `ynd export`
 flattens them to the export root. A fixed manifest path was correct for one
 caller and silently broken for the other. `copilotRunDirLayout(outputDir)`
 detects the caller by testing for `outputDir/.copilot`.
+
+## Native discovery: agents and skills
+
+Tested against **v1.0.80** with `copilot --agent <name>`, which resolves the
+name before contacting the model and lists what it found — a free, deterministic
+probe:
+
+```console
+$ copilot --agent __probe__ -p x --allow-all-tools
+No such agent: __probe__, available: native, plainmd
+```
+
+### Agents
+
+**CONFIRMED: project agents live in `.github/agents/`.** A file there is
+discovered with no configuration:
+
+```console
+$ (empty project)                        available:
+$ .github/agents/native.agent.md          available: native
+```
+
+**CONFIRMED: both `.agent.md` and plain `.md` are accepted there.** GitHub's
+docs describe agents as *"defined by a Markdown file with an `.agent.md`
+extension"*; `.md` also works, so the extension is not the discriminator.
+
+```console
+$ + .github/agents/plainmd.md             available: native, plainmd
+```
+
+**CONFIRMED: a plugin-bundled `agents/<name>.md` IS loaded via `--plugin-dir`,
+and is namespaced by the plugin.** This is the one that matters for ynh, and the
+namespacing is easy to miss:
+
+```console
+$ copilot --agent __probe__ --plugin-dir ./canary-plugin
+No such agent: __probe__, available: ynh-canary:probe-agent
+```
+
+The agent is `<plugin-name>:<agent-name>`, taken from the plugin manifest's
+`name`. **A user of a ynh-exported Copilot plugin selects
+`ynh-guide:code-review`, not `code-review`.** Both `.md` and `.agent.md` work
+inside a plugin.
+
+This is the opposite of the `AGENTS.md` and `.mcp.json` findings below, where
+bundled files are *not* read — so "bundled in a plugin" is not one rule in
+Copilot, it is per artifact type.
+
+Personal agents in `~/.copilot/agents/` and home-wins-on-collision are
+documented by GitHub but **not tested here**; they would require writing to the
+tester's home directory.
+
+### Skills
+
+**CONFIRMED from the CLI itself** — `copilot skill --help` on v1.0.80 lists the
+discovery order, which is stronger evidence than the web docs and is pinned to a
+version:
+
+```
+Project   .github/skills/, .agents/skills/, or .claude/skills/
+Personal  ~/.copilot/skills/ or ~/.agents/skills/
+Plugin    Installed plugins that bundle skills
+Custom    Directories added with `copilot skill add <directory>`
+```
+
+**CONFIRMED: `.github/skills/<name>/SKILL.md` is discovered** — it appears in
+`copilot skill list` under "Project skills".
+
+**UNRESOLVED: a plugin skill loaded via `--plugin-dir` does not appear in
+`copilot skill list`.** Note the wording above is "**Installed** plugins", and
+`copilot plugin install` accepts only a marketplace, `owner/repo` or a URL —
+there is no local-directory install. So this may be `skill list` not consulting
+a session's `--plugin-dir` rather than the skill failing to load. Deciding it
+needs a live session, which `copilot plugins list` says outright:
+
+> Custom agents and session-scoped hooks are not yet covered — both require a
+> live session and will be added in a follow-up.
+
+### What could not be probed for free
+
+`copilot plugins` (plural) reports "The plugins command is not available" on
+this install, so its richer inspection was unavailable. Everything above was
+established without a single model call, using `--agent`'s resolution error and
+the CLI's own help.
 
 ## Hook Config Paths
 
