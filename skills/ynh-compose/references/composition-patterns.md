@@ -30,22 +30,20 @@ was run against a real harness rather than read off a schema.
 `ynh include add` covers `git`, `--ref` and `--path`. For `pick` and `local`,
 edit the manifest.
 
-### The local-include trap
+### The local-include boundary
 
-A local include may not traverse above the harness directory:
+A local include may not traverse above the harness directory, and `ynd validate`
+enforces it:
 
 ```console
-$ ynd validate app
-app: valid
-$ ynd compose app
-Error: resolving includes: local include: path "../shared" must not traverse
-above its base directory
+$ ynd validate app          # includes: [ { "local": "../shared" } ]
+Error: validation failed
 ```
 
-Note that **`ynd validate` passes it**. The check happens at resolve time, so a
-manifest can validate and then fail at `compose`, `preview` and `run`. Keep
-included directories inside the harness — copy or symlink a sibling in rather
-than pointing up.
+The reason is that a harness must be self-contained to be installable: an
+include pointing at a sibling directory resolves on the author's machine and
+nowhere else. Copy or symlink the shared content inside the harness rather than
+pointing up.
 
 ### What an include brings
 
@@ -185,6 +183,12 @@ ynd diff <harness> claude cursor        # what differs between two vendors
 vendor see". Reach for `compose` when an artifact appears you did not expect,
 and `preview` when something you declared is missing.
 
-**Known gap:** artifacts from a `local` include come back with a blank SOURCE in
-`compose`, and the include shows no path. Git includes attribute correctly, so a
-blank source means a local include supplied it.
+Both kinds of include attribute, so an artifact you did not expect can be traced
+to whichever include supplied it:
+
+```console
+$ ynd compose app --format text
+Artifacts (1 total):
+  TYPE   NAME    SOURCE
+  skill  commit  vendor-shared
+```

@@ -58,9 +58,9 @@ Three things worth saying as you do it:
   Git only, so write it by hand.
 
 **A local include may not traverse above the harness directory.** `"../shared"`
-is rejected at resolve time — and, today, `ynd validate` does not catch it, so
-you find out at `ynd compose` or `ynd preview`. Keep included directories inside
-the harness.
+is rejected — `ynd validate` catches it at authoring time, so you do not
+discover it at `ynd preview` or on a user's machine. Keep included directories
+inside the harness; copy or symlink a sibling in rather than pointing up.
 
 ## Step 3 — `profiles` — one harness, several ways of working
 
@@ -144,9 +144,8 @@ Focuses:
 That answers "where did this artifact come from", which is the question
 composition creates.
 
-**Known gap:** artifacts from a *local* include come back with a blank SOURCE,
-and the include itself shows no path. Git includes attribute correctly. If a
-source is blank, it came from a local include.
+Local and Git includes both attribute, so a skill that appears from nowhere can
+be traced to the include that supplied it.
 
 Then confirm what a vendor actually receives:
 
