@@ -336,3 +336,70 @@ func TestRawRejectsTraversal(t *testing.T) {
 		}
 	}
 }
+
+// Schema validation cannot catch a semantically inverted fixture: `repo` and
+// `path` are both optional strings, so swapping their values validates
+// cleanly. The search golden shipped for some time with the filesystem path in
+// `path` and `repo` empty, the exact inverse of what the command emits and of
+// the field descriptions in the same repository (#342).
+//
+// A golden is the most copyable artifact in the schema directory. Correct
+// prose beside a wrong worked example loses to the example, which is how a
+// consumer came to join onto the wrong field.
+func TestSearchGoldenMatchesEmittedShape(t *testing.T) {
+	path := findGolden(t, "search.json")
+	if path == "" {
+		t.Fatal("test/golden/search.json is missing; this test cannot pass by skipping")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read golden: %v", err)
+	}
+	var results []map[string]any
+	if err := json.Unmarshal(data, &results); err != nil {
+		t.Fatalf("parse golden: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("golden is empty; it asserts nothing")
+	}
+
+	var sawSource, sawRegistry bool
+	for i, r := range results {
+		from, _ := r["from"].(map[string]any)
+		origin, _ := from["type"].(string)
+		repo, _ := r["repo"].(string)
+		_, hasPath := r["path"]
+
+		switch origin {
+		case "source":
+			sawSource = true
+			// cmd/ynh/search.go sets Repo to the harness directory and never
+			// sets Path. A local result's repo is the whole answer.
+			if repo == "" {
+				t.Errorf("entry %d (source): repo is empty, but a local result carries "+
+					"its harness directory there and has nothing else to install with", i)
+			}
+			if hasPath {
+				t.Errorf("entry %d (source): path is present, but the command never sets it "+
+					"for a local result; a consumer joining repo and path builds a "+
+					"directory that has never existed", i)
+			}
+		case "registry":
+			sawRegistry = true
+			if repo == "" {
+				t.Errorf("entry %d (registry): repo is empty", i)
+			}
+		default:
+			t.Errorf("entry %d: unknown from.type %q", i, origin)
+		}
+	}
+
+	// Both origins must appear, or the fixture stops covering the case where
+	// they differ, which is the only case that matters here.
+	if !sawSource {
+		t.Error("golden has no local-source entry; the inversion it guards against is unrepresented")
+	}
+	if !sawRegistry {
+		t.Error("golden has no registry entry; the two origins cannot be compared")
+	}
+}
