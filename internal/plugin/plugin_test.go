@@ -495,7 +495,12 @@ func TestLoadHarnessJSON_TestdataRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(entries) == 0 {
-		t.Skip("no testdata .harness.json files found")
+		// Not a skip. These fixtures are checked in, and zero matches means
+		// they have been deleted, which is the failure this test exists to
+		// catch. `ynd migrate` run from the repo root did exactly that, and
+		// the suite stayed green because this skipped (#350).
+		t.Fatal("no legacy testdata fixtures found under testdata/*/.harness.json; " +
+			"they are committed, so their absence is a defect rather than a reason to skip")
 	}
 	for _, path := range entries {
 		dir := filepath.Dir(path)
