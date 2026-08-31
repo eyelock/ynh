@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/focus.schema.json",
+  "title": "ynh focus ls --format json",
+  "description": "Output of `ynh focus ls <harness> --format json`. Bare array of the focuses a harness declares. Envelope retrofit deferred, matching the other Phase 3 commands.",
+  "x-capabilities": "0.8",
+  "$defs": {
+    "Focus": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string", "description": "The focus's name, and the value `ynh run --focus` and `ynh agent run --focus` take."},
+        "profile": {"type": "string", "description": "The profile this focus applies, when it names one. Absent means none — and a focus carrying a profile is not interchangeable with one that does not, because selecting it also selects an overlay."},
+        "prompt": {"type": "string", "description": "The focus's prompt in full, not a summary. A loop driver choosing a focus needs the text it will actually send; truncating here would force every consumer to call something else to get it. The text output abbreviates instead."}
+      },
+      "required": ["name", "prompt"],
+      "additionalProperties": false
+    }
+  },
+  "type": "array",
+  "items": {"$ref": "#/$defs/Focus"}
+}

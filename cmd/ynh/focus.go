@@ -15,9 +15,11 @@ func cmdFocus(args []string) error {
 
 func cmdFocusTo(args []string, stdout io.Writer) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: ynh focus <add|remove|update>")
+		return fmt.Errorf("usage: ynh focus <ls|add|remove|update>")
 	}
 	switch args[0] {
+	case "ls", "list":
+		return cmdFocusLs(args[1:], stdout)
 	case "add":
 		return cmdFocusAdd(args[1:], stdout)
 	case "remove":
@@ -25,7 +27,7 @@ func cmdFocusTo(args []string, stdout io.Writer) error {
 	case "update":
 		return cmdFocusUpdate(args[1:], stdout)
 	default:
-		return fmt.Errorf("unknown focus subcommand: %s\nUsage: ynh focus <add|remove|update>", args[0])
+		return fmt.Errorf("unknown focus subcommand: %s\nUsage: ynh focus <ls|add|remove|update>", args[0])
 	}
 }
 
