@@ -1,0 +1,74 @@
+# Closing a defect leaves the prose that documented it wrong, and nothing
+# notices.
+#
+# Six times in one cycle a fix landed and the documentation *of that defect*
+# became false: a skill warning "there is no per-command --help" after #260
+# added it, three places calling a fixed Cursor generator a known gap, an
+# agent steering users to `ynh info` after `ynh profile ls` existed. Every one
+# was caught by a person happening to read a merge. None by a gate (#316).
+#
+# "Remember to grep when you close something" is not a workable control: the
+# person best placed to do it is the one least likely to think of it. One of
+# the six was text written two hours earlier by the same person who had just
+# written about the pattern.
+#
+# So this is a NOTIFICATION, not a gate. It comments the hits on the issue and
+# leaves the judgement to a human, because a historical citation like
+# "(ynh#251, fixed in #261)" is correct as written and must not fail anyone's
+# build. A measured sweep of the tree found 7 references to 4 issues, of which
+# exactly one was a stale claim, so the false-positive rate here is the point:
+# most hits are legitimate and a gate would train people to ignore it.
+
+name: Stale claim check
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Find references to the closed issue
+        id: scan
+        run: |
+          set -euo pipefail
+          hits=$(scripts/stale-claim-refs.sh "${{ github.event.issue.number }}")
+
+          if [ -z "$hits" ]; then
+            echo "no references to #${{ github.event.issue.number }} in the tracked tree"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          {
+            echo 'body<<STALE_EOF'
+            echo "This issue is referenced in the tracked artifact tree:"
+            echo
+            echo '```'
+            echo "$hits" | cut -c1-300
+            echo '```'
+            echo
+            echo "Now that it is closed, check whether those claims are still true."
+            echo "A historical citation (\"fixed in #261\") is correct as written and needs"
+            echo "no change; text still describing the defect as present does not."
+            echo
+            echo "_Posted by the stale-claim check. It notifies rather than gates, because"
+            echo "most references are legitimate. Scan: scripts/stale-claim-refs.sh_"
+            echo STALE_EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Comment on the issue
+        if: steps.scan.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUMBER: ${{ github.event.issue.number }}
+          BODY: ${{ steps.scan.outputs.body }}
+        run: gh issue comment "$NUMBER" --body "$BODY"
