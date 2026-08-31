@@ -276,7 +276,13 @@ func TestEveryDispatchedCommandAppearsInUsage(t *testing.T) {
 		}
 		// Match the command at the start of a usage line, so "install" is not
 		// satisfied by the word appearing inside another command's blurb.
-		re := regexp.MustCompile(`(?m)^  ` + regexp.QuoteMeta(name) + `\b`)
+		//
+		// Two or more spaces: commands are indented under an intent heading
+		// ("Getting a harness", "Gating"), and the exact depth is presentation.
+		// What must hold is that the name begins a line rather than appearing
+		// mid-sentence — anchoring to a fixed indent would make this fail on a
+		// reformat while missing the drift it exists to catch.
+		re := regexp.MustCompile(`(?m)^ {2,}` + regexp.QuoteMeta(name) + `\b`)
 		if !re.MatchString(usage) {
 			t.Errorf("command %q is dispatched but never listed in `ynh help`", name)
 		}

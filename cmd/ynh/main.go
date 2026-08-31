@@ -187,75 +187,53 @@ Usage:
   ynh <command> [arguments]
 
 Commands:
-  init                       Show ynh home path and setup instructions
-  install <source> [--path <subdir>] [--ref <ref>]  Install a harness from Git URL or local path
-  uninstall <name>           Remove an installed harness and its launcher
-  update <name>              Refresh cached Git repos for a harness
-  run <name> [flags] [prompt]  Launch a harness session
-  ls                           List installed harnesses (supports --format json)
-  info <name>                  Show detailed harness information (supports --format json)
-  installed <name>             Show recorded install provenance (supports --format json)
-  schema <name>                Print the embedded JSON schema for a CLI command
-  schema --all --format json   Print every embedded schema as one manifest
-  vendors                      List supported vendor adapters (supports --format json)
-  search <term>                Search registries and sources (supports --format json)
-  sources add <path>           Add a local harness source directory
-  sources list                 Show configured sources (supports --format json)
-  sources remove <name>        Remove a source
-  fork <name> [--to <path>]    Fork an installed harness to a local directory
-  delegate add <harness> <url>     Add a Git delegate to a harness
-  delegate remove <harness> <url>  Remove a Git delegate from a harness
-  delegate update <harness> <url>  Update a Git delegate's options
-  include add <harness> <url>  Add a Git include to a harness
-  include remove <harness> <url>  Remove a Git include from a harness
-  include update <harness> <url>  Update a Git include's options
-  focus add <harness> <name> <prompt> [--profile <name>]   Add a named focus
-  focus remove <harness> <name>                             Remove a named focus
-  focus update <harness> <name> [--prompt] [--profile] [--clear-profile]  Update a focus
-  profile add <harness> <name>                              Add a named profile
-  profile remove <harness> <name>                           Remove a named profile
-  profile hook add <harness> <profile> <event> <command>    Add a hook to a profile
-  profile hook remove <harness> <profile> <event> <index>   Remove a profile hook by index
-  profile mcp add <harness> <profile> <name> [flags]        Add an MCP server to a profile
-  profile mcp remove <harness> <profile> <name>             Remove a profile MCP server
-  profile mcp update <harness> <profile> <name> [flags]     Update a profile MCP server
-  profile include add <harness> <profile> <url> [flags]     Add a Git include to a profile
-  profile include remove <harness> <profile> <url>          Remove a profile include
-  profile include update <harness> <profile> <url> [flags]  Update a profile include
-  hook add <harness> <event> <command> [--matcher <pattern>] Add a top-level hook
-  hook remove <harness> <event> <index>                     Remove a top-level hook by index
-  hook export <harness> --target <settings|local> [--dry-run]  Write a harness's hooks into a Claude settings file
-  doctor                       Check Claude hook wiring in the current project
-  mcp add <harness> <name> [flags]                          Add a top-level MCP server
-  mcp remove <harness> <name>                               Remove a top-level MCP server
-  mcp update <harness> <name> [flags]                       Update a top-level MCP server
-  sensors ls <harness>         List declared sensors (supports --format json)
-  sensors show <harness> <name>  Resolve a sensor declaration (supports --format text|json)
-  sensors run <harness> <name>   Run a sensor and emit a JSON result (loop drivers consume this)
-  check <harness>              Run every declared sensor and gate on the result
-  baseline   Report what a harness's ratchet currently forgives
-                               (exit 0 pass, 1 a blocking sensor failed, 2 could not run)
-                               --update-baseline accepts current failures so only new ones gate
-  agent run --task <text> [flags]  Run an autonomous agent loop session
-  registry add <url>           Add a harness registry
-  registry list                Show configured registries (supports --format json)
-  registry remove <url>        Remove a registry
-  registry update              Refresh all cached registries
-  backend add <name> <vendor> --base-url <url> [--auth-token <token>] [--type <type>]  Add a local model backend
-  backend list                 Show configured backends (supports --format json)
-  backend remove <name> [<vendor>]  Remove a backend, or one vendor's connection within it
-  image <name> [flags]         Build a Docker image with a harness baked in
-  paths                        Show resolved path roots (supports --format json)
-  status                       Show symlink installations across projects
-  prune                        Clean orphaned symlink installations
-  migrate                      Migrate the ynh home directory to the current schema
-  quarantine list              Show harnesses quarantined by a failed migration
-  quarantine restore <name>    Restore one from quarantine
-  quarantine drop <name>       Delete one permanently
-  version                      Print version
-  help                         Show this help
 
-Run 'ynh <command> --help' for one command's detail.
+  Getting a harness
+    install <source> [--path <subdir>] [--ref <ref>]  Install from a Git URL or local path
+    uninstall <name>                       Remove an installed harness and its launcher
+    update <name>                          Refresh a harness's cached Git repos
+    fork <name> [--to <path>]              Copy an installed harness somewhere you can edit
+    search <term>                          Search registries and sources
+    registry <add|list|remove|update>      Manage harness registries
+    sources <add|list|remove>              Manage local harness source directories
+
+  Using one
+    run <name> [flags] [prompt]            Launch a harness session
+    agent run --task <text> [flags]        Run an autonomous agent loop
+    ls                                     List installed harnesses
+    info <name>                            Show a harness's resolved configuration
+    installed <name>                       Show where a harness was installed from
+    vendors                                List vendor adapters, and which CLIs are on PATH
+
+  Authoring one
+    focus <ls|add|remove|update>           Named prompts, each optionally applying a profile
+    profile <ls|add|remove|hook|mcp|include>  Named configuration overlays
+    hook <add|remove|export>               Commands the vendor runs at lifecycle events
+    mcp <add|remove|update>                MCP servers the harness declares
+    include <add|remove|update>            Artifacts pulled in from Git or a local path
+    delegate <add|remove|update>           Harnesses this one hands off to
+    sensors <ls|show|run>                  Observation surfaces a loop driver consumes
+
+  Gating
+    check <harness-id|path>                Run every declared sensor and gate on the result
+    baseline <harness>                     Report what the ratchet currently forgives
+
+  Operating
+    init                                   Show the ynh home path and setup instructions
+    status                                 Show symlink installations across projects
+    paths                                  Show resolved path roots
+    doctor                                 Check Claude hook wiring in this project
+    prune                                  Clean orphaned symlinks and stale run dirs
+    image <name> [flags]                   Build a Docker image with a harness baked in
+    backend <add|list|remove>              Local model backends a vendor CLI can target
+    migrate                                Migrate the ynh home to the current schema
+    quarantine <list|restore|drop>         Harnesses a failed migration set aside
+    schema <name> | --all                  Print a published JSON schema
+    version                                Print version
+    help                                   Show this help
+
+Run 'ynh <command> --help' for one command's detail, and 'ynh schema --all'
+for the published JSON shape of every command that emits structured output.
 
 Run flags:
   -v <vendor>                  Override vendor (claude, codex, cursor, copilot), or "<backend>/<vendor>[/<model>]" to redirect at a local model backend (see: ynh backend)
