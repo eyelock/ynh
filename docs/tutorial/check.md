@@ -1,6 +1,6 @@
 # Gating with `ynh check`
 
-[Sensors](sensors.md) declared sensors. This one runs them as a gate.
+[Sensors](tutorial/sensors.md) declared sensors. This one runs them as a gate.
 
 `ynh check` executes every declared sensor and returns a verdict. It owns the
 thinnest possible pass/fail policy — a command sensor passes when it exits 0 —
@@ -327,7 +327,7 @@ exit=0
 
 `known` means failing, but only in ways the baseline already records — debt,
 not a regression. **Commit `.ynh/baseline/`**: the
-[ratchet](../harness-engineering.md#sensor-gate-ratchet-loop) is a property of
+[ratchet](harness-engineering.md#sensor-gate-ratchet-loop) is a property of
 the repository, not of one developer.
 
 It is one file per sensor:
@@ -517,7 +517,7 @@ baseline is loaded, a top-level `baseline` object reports `known`, `fixed` and
 `stale`.
 
 One further field appears only if you ask for it. A sensor that declares
-[`version_command`](../sensors.md#version-command-which-tool-produced-this) has its
+[`version_command`](sensors.md#version-command-which-tool-produced-this) has its
 result annotated with `tool_version` — the first line that command printed. The
 sensors above declare none, so their results carry none: absent means *cannot
 tell*, not *unchanged*.
@@ -526,7 +526,7 @@ It is worth declaring as soon as results are compared over time, because it
 turns a green run into a green run *of a known tool*. A linter that silently
 stopped examining anything still exits 0, and the version string moving is the
 only external evidence that the instrument changed rather than the code.
-[Shadow mode](shadow-mode.md) depends on it directly: a sample split
+[Shadow mode](tutorial/shadow-mode.md) depends on it directly: a sample split
 across a toolchain upgrade measures two different things, and this is the field
 that shows it.
 
@@ -576,4 +576,4 @@ rm -rf /tmp/ynh-t20
 
 ## Next
 
-[The Agent Loop](agent-loop.md) — prompt, act, re-observe — and halt on the gate's verdict.
+[The Agent Loop](tutorial/agent-loop.md) — prompt, act, re-observe — and halt on the gate's verdict.

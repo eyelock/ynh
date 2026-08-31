@@ -5,9 +5,9 @@ halts on convergence or on a budget. This tutorial builds a harness with one
 sensor, runs the loop against it, and reads what came out.
 
 **Prerequisites.** A configured vendor CLI (this tutorial uses `claude`). No
-other credentials are needed. The loop consumes [`ynh check`](check.md), so
+other credentials are needed. The loop consumes [`ynh check`](tutorial/check.md), so
 read that tutorial first — everything about tolerance and the
-[ratchet](../harness-engineering.md#sensor-gate-ratchet-loop) applies here unchanged.
+[ratchet](harness-engineering.md#sensor-gate-ratchet-loop) applies here unchanged.
 
 ## A harness with one sensor and a focus
 
@@ -156,7 +156,7 @@ ynh agent run --harness local/demo --focus tidy --worktree /path/to/scratch
 
 `--worktree` runs the loop with its working directory set elsewhere — typically
 a `git worktree` created for the purpose. The harness stays where it is; only
-the tree being modified moves. This is the basis of [shadow mode](shadow-mode.md),
+the tree being modified moves. This is the basis of [shadow mode](tutorial/shadow-mode.md),
 where the loop runs against a historical commit and must not touch your
 checkout.
 
@@ -227,7 +227,7 @@ basis of what a real one from your harness contains.
 Note what the trajectory is *not*: evidence. It is the agent narrating its own
 work. Useful for debugging your harness, worthless for verifying a change — for
 that, see [the run result](#the-run-result), and
-[what actually reduces review time](../factory-pattern.md#what-actually-reduces-review-time).
+[what actually reduces review time](factory-pattern.md#what-actually-reduces-review-time).
 
 ## The run result
 
@@ -348,7 +348,7 @@ fails rather than proceeding if that sandbox is unavailable. A containment
 control that cannot be applied is an error, not a warning.
 
 For unattended use, this is a prerequisite rather than a refinement. See
-[Where ynh stops](../factory-pattern.md#where-ynh-stops).
+[Where ynh stops](factory-pattern.md#where-ynh-stops).
 
 Environment variables reaching the worker are declared too, via
 `env_passthrough`. Empty means none — a worker inheriting the whole environment
@@ -370,4 +370,4 @@ holds every credential the operator holds, which is not a default anyone chose.
 
 ## Next
 
-[Shadow Mode](shadow-mode.md) — measure the loop against your own git history before trusting it.
+[Shadow Mode](tutorial/shadow-mode.md) — measure the loop against your own git history before trusting it.

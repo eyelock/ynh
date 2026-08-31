@@ -21,17 +21,12 @@ import (
 // The rule now: identity is the slug, order lives only in docs/_sidebar.md,
 // and deep links use heading anchors. These tests hold that line.
 
-// The link shapes below follow docs/index.html setting relativePath: true.
-// _sidebar.md renders on every page so its links are root-absolute
-// (/tutorial/foo.md); everything else resolves from its own directory, so
-// tutorial/README.md and each tutorial's "## Next" link name a bare sibling
-// (foo.md).
 var (
 	numberedFile   = regexp.MustCompile(`^\d+[-_]`)
 	tutorialNumber = regexp.MustCompile(`Tutorial \d+|\bT\d+\.\d+`)
-	sidebarEntry   = regexp.MustCompile(`^\s+\* \[\d+\. (.+?)\]\(/tutorial/(.+?)\.md\)`)
-	readmeEntry    = regexp.MustCompile(`^\| \[(.+?)\]\((.+?)\.md\) \|`)
-	nextEntry      = regexp.MustCompile(`(?m)^## Next\n\n\[([^\]]+)\]\(([a-z0-9-]+)\.md\)`)
+	sidebarEntry   = regexp.MustCompile(`^\s+\* \[\d+\. (.+?)\]\(tutorial/(.+?)\.md\)`)
+	readmeEntry    = regexp.MustCompile(`^\| \[(.+?)\]\(tutorial/(.+?)\.md\) \|`)
+	nextEntry      = regexp.MustCompile(`(?m)^## Next\n\n\[([^\]]+)\]\(tutorial/([a-z0-9-]+)\.md\)`)
 	firstHeading   = regexp.MustCompile(`(?m)^# (.+?)\s*$`)
 )
 

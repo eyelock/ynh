@@ -4,9 +4,9 @@ Use `--format json` to get machine-readable output from ynh commands. Useful for
 
 ## Prerequisites
 
-Make sure `ynh` is installed and on your PATH. See the [install instructions](README.md) if you haven't set up yet.
+Make sure `ynh` is installed and on your PATH. See the [install instructions](tutorial/README.md) if you haven't set up yet.
 
-The `ynh paths` examples work with just ynh itself. The `ynh ls` examples need at least one harness installed — if you completed [First Harness](first-harness.md), `my-harness` will be available.
+The `ynh paths` examples work with just ynh itself. The `ynh ls` examples need at least one harness installed — if you completed [First Harness](tutorial/first-harness.md), `my-harness` will be available.
 
 ## How structured output works
 
@@ -391,7 +391,7 @@ ynh schema --all --format json | jq '.schemas | keys'
 
 Expected: an array of every embedded schema name (`"cli/list"`, `"cli/info"`, `"shared/harness"`, etc.).
 
-See [Published JSON Schemas](../schema-cli.md) for the full contract — capability versioning, envelope shape, error vocabulary, and the workflow for adding a new schema.
+See [Published JSON Schemas](schema-cli.md) for the full contract — capability versioning, envelope shape, error vocabulary, and the workflow for adding a new schema.
 
 ## Clean up
 
@@ -419,6 +419,6 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Sensors](sensors.md) — declare the observation surfaces a gate and a loop both consume.
+[Sensors](tutorial/sensors.md) — declare the observation surfaces a gate and a loop both consume.
 
-The `--format json` pattern established here will appear on additional commands as structured output is added. See [Structured CLI Output](../cli-structured.md) for the full conventions.
+The `--format json` pattern established here will appear on additional commands as structured output is added. See [Structured CLI Output](cli-structured.md) for the full conventions.

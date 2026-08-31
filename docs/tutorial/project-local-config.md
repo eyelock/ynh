@@ -94,7 +94,7 @@ rm -rf /tmp/ynh-tutorial
 
 ## Composition with focus
 
-The project-local config pattern works well with focus entries ([Focus](focus.md)) for CI automation:
+The project-local config pattern works well with focus entries ([Focus](tutorial/focus.md)) for CI automation:
 
 ```json
 {
@@ -109,4 +109,4 @@ The project-local config pattern works well with focus entries ([Focus](focus.md
 
 ## Next
 
-[Developer Tools](developer-tools.md) — scaffold, lint, validate, format, compress, inspect with ynd.
+[Developer Tools](tutorial/developer-tools.md) — scaffold, lint, validate, format, compress, inspect with ynd.

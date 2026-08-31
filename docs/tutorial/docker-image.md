@@ -294,4 +294,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Namespacing & Migration](namespacing-and-migration.md) — resolve name collisions across registries and migrate legacy installs.
+[Namespacing & Migration](tutorial/namespacing-and-migration.md) — resolve name collisions across registries and migrate legacy installs.

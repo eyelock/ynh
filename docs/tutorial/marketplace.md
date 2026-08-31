@@ -221,7 +221,7 @@ two ways, and `ynd marketplace build` now emits each vendor's own shape:
 
 `source` is the same in both — `./plugins/<name>`, where `build` puts each
 plugin. Codex and Copilot differ again; see
-[Marketplace](../marketplace.md) for the full comparison.
+[Marketplace](marketplace.md) for the full comparison.
 
 ## Test with Claude Code
 
@@ -290,4 +290,4 @@ rm -rf /tmp/ynh-tutorial/marketplace-*
 
 ## Next
 
-[Registry & Discovery](registry-and-discovery.md) — search and install harnesses from curated registries.
+[Registry & Discovery](tutorial/registry-and-discovery.md) — search and install harnesses from curated registries.

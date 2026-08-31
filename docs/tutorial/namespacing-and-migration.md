@@ -341,6 +341,6 @@ rm -rf /tmp/ynh-ns-tutorial
 - `ynh quarantine list/restore/drop` manages harnesses set aside because
   their install was broken or their manifest was invalid.
 
-See [docs/namespacing.md](../namespacing.md) for the full canonical-id
-reference and [docs/migration.md](../migration.md) for a complete 0.1 → 0.2
+See [docs/namespacing.md](namespacing.md) for the full canonical-id
+reference and [docs/migration.md](migration.md) for a complete 0.1 → 0.2
 migration guide.

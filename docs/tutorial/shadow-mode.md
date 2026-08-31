@@ -7,13 +7,13 @@ is a task with a graded answer attached.
 Shadow mode runs the loop against the commit *before* a known fix, never merges
 anything, and compares what came out to what a human actually did. The output is
 a yield number — the `y` in the [break-even
-equation](../factory-pattern.md#the-economics-as-a-method).
+equation](factory-pattern.md#the-economics-as-a-method).
 
 This is built from `ynh`, `git` and a shell loop. Nothing else. If it starts
 needing a bespoke tool, that is a finding about ynh worth reporting rather than
 routing around.
 
-**Prerequisites.** [The Agent Loop](agent-loop.md), a repository with
+**Prerequisites.** [The Agent Loop](tutorial/agent-loop.md), a repository with
 history, and a harness whose sensors cover the class of fix you are sampling.
 
 The rig, end to end — one historical fix yields one graded attempt, and the
@@ -155,7 +155,7 @@ ynh check local/<pinned-harness> --format json > /tmp/shadow/before.json
 ```
 
 This is the "before" half of the [reproducible
-negative](../factory-pattern.md#what-actually-reduces-review-time). Without it you
+negative](factory-pattern.md#what-actually-reduces-review-time). Without it you
 cannot tell a fix from a change.
 
 If the gate already passes at the base commit, discard the candidate. Your
@@ -181,7 +181,7 @@ its work in the worktree as uncommitted changes.
 Record the exit code with the result. A run that ended at `10` (turn cap) is a
 different observation from one that ended at `0`, and lumping them together
 hides the shape of the failure. See the [exit code
-table](agent-loop.md#exit-codes).
+table](tutorial/agent-loop.md#exit-codes).
 
 ## Compare
 
@@ -271,7 +271,7 @@ git worktree remove --force /tmp/shadow/<name>
 
 That loop is the whole rig. What it produces is a defensible `y`, its confidence
 interval, and a pile of graded patches. Compare `y` against the `y* = r/h` you
-[measured](../factory-pattern.md#the-economics-as-a-method) and you have an
+[measured](factory-pattern.md#the-economics-as-a-method) and you have an
 evidence-based answer to whether the factory is worth running — before anything
 is merged and before anyone's time is committed.
 
@@ -294,4 +294,4 @@ than as a project.
 
 ## Next
 
-[Delegation](delegation.md) — chain harnesses together as subagents.
+[Delegation](tutorial/delegation.md) — chain harnesses together as subagents.

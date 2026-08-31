@@ -7,6 +7,7 @@
     "keywords": ["example", "demo"],
     "repo": "https://github.com/eyelock/demo",
     "version": "1.0.0",
+    "install": "github.com/eyelock/demo/demo",
     "from": {"type": "registry", "name": "default"}
   },
   {
@@ -15,6 +16,7 @@
     "description": "A harness discovered under a configured local source",
     "repo": "/Users/example/projects/local-demo",
     "version": "0.1.0",
+    "install": "/Users/example/projects/local-demo",
     "from": {"type": "source", "name": "local-sources"}
   }
 ]

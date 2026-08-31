@@ -11,20 +11,15 @@ import (
 // linkRE matches Markdown links that are not absolute URLs or bare anchors.
 var linkRE = regexp.MustCompile(`\]\((?:\./)?([^)#\s]+)`)
 
-// TestDocsLinksResolve checks every relative link in docs/ against the
-// directory of the file containing it, which is how both readers resolve them.
+// TestDocsLinksResolve checks every relative link in docs/ against the docs
+// root, which is how docsify resolves them.
 //
-// docs/index.html sets `relativePath: true`, so docsify resolves a relative
-// link from the containing file exactly as GitHub does when the same Markdown
-// is browsed in the repository. Before that, docsify resolved from the docs
-// root instead, and the two readers disagreed: "tutorial/sensors.md" worked on
-// the site and 404d on GitHub, which is how 287 broken links accumulated
-// unnoticed across 23 files.
-//
-// docs/_sidebar.md is the exception. It renders on every page, so a relative
-// link there would resolve against whichever page is open. Its links are
-// root-absolute ("/sensors.md"), which docsify resolves from the docs root
-// regardless of relativePath.
+// docs/index.html does not set `relativePath`, so docsify resolves relative
+// links from the docs root regardless of which file they appear in. A link
+// written as a sibling path ("19-sensors.md") or with a parent prefix
+// ("../hooks.md") therefore 404s on the published site while looking correct
+// in a local editor and in GitHub's Markdown preview — which is why fifteen of
+// them accumulated unnoticed.
 func TestDocsLinksResolve(t *testing.T) {
 	root := docsRoot(t)
 	if root == "" {
@@ -60,17 +55,7 @@ func TestDocsLinksResolve(t *testing.T) {
 				strings.HasPrefix(target, "mailto:") {
 				continue
 			}
-			// The sidebar renders on every page, so its links are
-			// root-absolute and resolve from the docs root.
-			base := filepath.Dir(path)
-			if info.Name() == "_sidebar.md" {
-				if !strings.HasPrefix(target, "/") {
-					broken = append(broken, rel+" -> "+target+" (sidebar links must be root-absolute)")
-					continue
-				}
-				base = root
-			}
-			if _, statErr := os.Stat(filepath.Join(base, strings.TrimPrefix(target, "/"))); statErr != nil {
+			if _, statErr := os.Stat(filepath.Join(root, target)); statErr != nil {
 				broken = append(broken, rel+" -> "+target)
 			}
 		}
@@ -85,10 +70,8 @@ func TestDocsLinksResolve(t *testing.T) {
 	}
 	for _, b := range broken {
 		t.Errorf("broken link: %s\n"+
-			"docs/index.html sets relativePath: true, so links resolve from the file "+
-			"that contains them, matching GitHub. Write it as a sibling or with ../ — "+
-			"e.g. check.md or ../sensors.md from docs/tutorial/, not tutorial/check.md. "+
-			"docs/_sidebar.md is the exception: its links are root-absolute, e.g. /sensors.md.", b)
+			"docsify resolves relative links from the docs root, not from the file. "+
+			"Write it as it would be reached from docs/ — e.g. tutorial/sensors.md, not 19-sensors.md or ../sensors.md.", b)
 	}
 }
 

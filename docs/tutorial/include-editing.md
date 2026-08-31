@@ -490,4 +490,4 @@ rm -rf /tmp/ynh-tutorial-includes
 
 ## Next
 
-[Hooks](hooks.md) — declare vendor-agnostic lifecycle hooks.
+[Hooks](tutorial/hooks.md) — declare vendor-agnostic lifecycle hooks.

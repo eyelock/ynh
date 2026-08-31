@@ -4,7 +4,7 @@ Run the same harness with different AI coding assistants. Understand how ynh ada
 
 ## Setup
 
-Make sure `ynh` and `ynd` are installed and on your PATH. See the [install instructions](README.md) if you haven't set up yet.
+Make sure `ynh` and `ynd` are installed and on your PATH. See the [install instructions](tutorial/README.md) if you haven't set up yet.
 
 ```bash
 # Clean up from any previous run
@@ -255,4 +255,4 @@ ls ~/.ynh/bin/ynh ~/.ynh/bin/ynd
 
 ## Next
 
-[Composition](composition.md) — pull skills from Git repos with pick, path, and ref.
+[Composition](tutorial/composition.md) — pull skills from Git repos with pick, path, and ref.

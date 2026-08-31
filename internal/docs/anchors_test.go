@@ -139,17 +139,7 @@ func TestDocsAnchorsResolve(t *testing.T) {
 			if target == "" {
 				target = rel // same-page link
 			}
-			// Links resolve from the file that contains them
-			// (docsify relativePath: true, matching GitHub), except
-			// in the sidebar, whose links are root-absolute because it
-			// renders on every page.
-			var key string
-			if filepath.Base(rel) == "_sidebar.md" {
-				key = filepath.Clean(strings.TrimPrefix(target, "/"))
-			} else {
-				key = filepath.Clean(filepath.Join(filepath.Dir(rel), target))
-			}
-			known, ok := anchors[key]
+			known, ok := anchors[filepath.Clean(target)]
 			if !ok {
 				continue // path breakage is TestDocsLinksResolve's to report
 			}
