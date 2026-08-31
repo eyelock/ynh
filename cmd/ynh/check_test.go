@@ -43,6 +43,11 @@ const checkHarnessJSON = `{
       "source": {"files": ["nope/**/*.xml"]},
       "output": {"format": "junit-xml"}
     },
+    "gone": {
+      "tolerance": "blocking",
+      "source": {"command": "./definitely-not-here-xyz.sh"},
+      "output": {"format": "text"}
+    },
     "softfiles": {
       "tolerance": "advisory",
       "source": {"files": ["nope/**/*.json"]},
@@ -195,8 +200,8 @@ func TestCheck_AdvisoryFilesSensorDoesNotGate(t *testing.T) {
 
 func TestCheck_OnlyFiltersAndMarksSkipped(t *testing.T) {
 	env, _, _ := runCheck(t, "--format", "json", "--only", "green")
-	if env.Summary.Skipped != 5 {
-		t.Fatalf("skipped = %d, want 5", env.Summary.Skipped)
+	if env.Summary.Skipped != 6 {
+		t.Fatalf("skipped = %d, want 6", env.Summary.Skipped)
 	}
 }
 
@@ -213,7 +218,9 @@ func TestCheck_UnknownSensorIsExecError(t *testing.T) {
 // Failing output is the remediation the agent acts on, so it has to reach
 // the operator verbatim rather than being summarised away.
 func TestCheck_TextIncludesFailureOutput(t *testing.T) {
-	_, out, err := runCheck(t)
+	// Scoped past "gone", whose command cannot run: that is an exec error by
+	// design and would mask the failure-output behaviour under test.
+	_, out, err := runCheck(t, "--only", "green,red,soft,judged,files")
 	if !errors.Is(err, errCheckBlocked) {
 		t.Fatalf("want errCheckBlocked, got %v", err)
 	}
@@ -845,5 +852,37 @@ func TestCheck_CountRatchetAllowsFewer(t *testing.T) {
 	}
 	if err := cmdCheck([]string{"local/supless", "--cwd", work}, io.Discard, io.Discard); err != nil {
 		t.Errorf("removing every suppression must pass: %v", err)
+	}
+}
+
+// A sensor whose command cannot run is a broken gate, not a finding.
+//
+// Sensors execute through `/bin/sh -c`, so a missing command is not a spawn
+// error Go can see — it arrives as the shell's own 127 and used to look exactly
+// like an ordinary failure. That gave the wrong exit code (1, "your code is
+// failing", instead of 2, "the gate is broken") and, far worse, let
+// --update-baseline record "No such file or directory" as accepted debt,
+// forgiving the sensor's own absence permanently.
+func TestCheck_UnrunnableSensorIsAnExecError(t *testing.T) {
+	_, _, err := runCheck(t, "--format", "json", "--only", "gone")
+	if !errors.Is(err, errCheckExec) {
+		t.Fatalf("want errCheckExec (exit 2), got %v", err)
+	}
+	if errors.Is(err, errCheckBlocked) {
+		t.Error("a sensor that cannot run must not read as a blocked gate")
+	}
+}
+
+// And it must never reach the baseline, even when the operator explicitly asks
+// to record one. A ratchet that forgives a missing command is a gate that can
+// never fail again.
+func TestCheck_UnrunnableSensorIsNeverBaselined(t *testing.T) {
+	dir := t.TempDir()
+	_, _, err := runCheck(t, "--only", "gone", "--update-baseline", "--cwd", dir)
+	if !errors.Is(err, errCheckExec) {
+		t.Fatalf("--update-baseline should refuse, got %v", err)
+	}
+	if entries, _ := os.ReadDir(filepath.Join(dir, ".ynh", "baseline")); len(entries) > 0 {
+		t.Errorf("a baseline was written over an unrunnable sensor: %v", entries)
 	}
 }
