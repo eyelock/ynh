@@ -1,12 +1,25 @@
 name: E2E
 
-# E2E suite runs only at release-promotion boundaries. Feature work
-# targeting `develop` stays fast (CI only). See
+# E2E gates release promotion, and reports on every merge to `develop`.
+#
+# Feature work targeting `develop` still stays fast: this does not run on
+# pull requests, so no PR waits on a 15-minute suite. See
 # .claude/plans/e2e-test-suite.md for the full trigger model.
 #
+# The post-merge trigger closes a real gap. Running only at release
+# boundaries meant the suite could go weeks without executing — on
+# 2026-08-30 nine PRs merged to `develop`, including one that changed what
+# `ynh check` treats as a failure, and e2e ran on none of them. A regression
+# was then found at release time against a batch of changes rather than
+# against the commit that caused it. Running post-merge keeps PRs fast and
+# restores attribution to a single merge.
+#
 # Tag-push (v*) triggers go through release.yml's `e2e` job, which
-# blocks `goreleaser`. This workflow handles PR-to-main and ad-hoc runs.
+# blocks `goreleaser`. This workflow handles push-to-develop, PR-to-main and
+# ad-hoc runs.
 on:
+  push:
+    branches: [develop]
   pull_request:
     branches: [main]
   workflow_dispatch:

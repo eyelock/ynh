@@ -55,7 +55,15 @@ func TestYnd_Export_Clean(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mustRunYnd(t, "export", "--harness", harness, "-o", out, "--clean")
+	// -y is required. `--clean` gained a confirmation prompt after a mutation
+	// run deleted a developer's home directory on 2026-08-29, and the prompt
+	// returns its refusing answer on EOF — so without consent this exits 1 with
+	// "--clean declined". That is the guard working, not a regression.
+	//
+	// The target stays under t.TempDir(): refuseToClean is a pure predicate and
+	// only paths inside the test's own temp directory ever reach the code that
+	// deletes. See .claude/rules/destructive-operations.md.
+	mustRunYnd(t, "export", "--harness", harness, "-o", out, "--clean", "-y")
 
 	if _, err := os.Stat(stale); !os.IsNotExist(err) {
 		t.Errorf("--clean should have removed pre-existing file, err=%v", err)
