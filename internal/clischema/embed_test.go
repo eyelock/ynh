@@ -282,3 +282,57 @@ func TestCheckCalibrateGolden(t *testing.T) {
 // sensor forgiving nothing, one with resolved findings, and a count-ratchet
 // one — the three shapes a reader has to tell apart.
 func TestBaselineGolden(t *testing.T) { validateGolden(t, "baseline", "baseline.json") }
+
+// Every name `ynh schema --all` advertises must be fetchable by
+// `ynh schema <name>`.
+//
+// The two disagreed. AllRaw walks the whole embedded tree while Raw hardcoded a
+// "cli/" prefix, so the binary listed `plugin`, `marketplace` and `harness` —
+// the author-facing schemas at the tree root — and then answered "unknown
+// schema" for each. Adding agent/trajectory made it worse by one. A listing
+// that names something unfetchable is worse than not listing it.
+func TestEveryAdvertisedSchemaIsFetchable(t *testing.T) {
+	all, err := AllRaw()
+	if err != nil {
+		t.Fatalf("AllRaw: %v", err)
+	}
+	if len(all) == 0 {
+		t.Fatal("AllRaw returned nothing")
+	}
+	for name := range all {
+		if _, err := Raw(name); err != nil {
+			t.Errorf("`ynh schema --all` lists %q but `ynh schema %s` cannot fetch it: %v",
+				name, name, err)
+		}
+	}
+}
+
+// Raw resolves a name containing "/" as a path into the embedded FS, so it is
+// worth pinning that a traversal-shaped name cannot reach outside it.
+//
+// embed.FS already refuses unclean and rooted paths, and the blast radius is
+// bounded anyway — the FS holds only compiled-in schema bytes, not the real
+// filesystem. This exists so that neither property is quietly given up by a
+// later change to Raw.
+func TestRawRejectsTraversal(t *testing.T) {
+	for _, name := range []string{
+		"../../etc/passwd",
+		"cli/../../go.mod",
+		"../embed",
+		"/etc/passwd",
+		"cli/../cli/version",
+		"./cli/version",
+	} {
+		if _, err := Raw(name); err == nil {
+			t.Errorf("Raw(%q) should not resolve", name)
+		}
+	}
+
+	// The legitimate forms still work, so the guard is not simply refusing
+	// everything with a slash in it.
+	for _, name := range []string{"version", "cli/version", "agent/trajectory", "plugin"} {
+		if _, err := Raw(name); err != nil {
+			t.Errorf("Raw(%q) should resolve: %v", name, err)
+		}
+	}
+}

@@ -19,7 +19,13 @@ package schema
 import "embed"
 
 // FS holds every schema, rooted at this directory: "cli/<command>.schema.json",
-// "shared/<name>.schema.json", and the author-facing schemas at the root.
+// "shared/<name>.schema.json", "agent/<name>.schema.json", and the author-facing
+// schemas at the root.
 //
-//go:embed all:cli all:shared *.schema.json
+// agent/ is the trajectory stream rather than a command response, so
+// internal/clischema does not compile it — that package filters to cli/ and
+// shared/. It is embedded here so a test can validate it against what the
+// emitter really produces, and so its $id URL resolves on the published site.
+//
+//go:embed all:cli all:shared all:agent *.schema.json
 var FS embed.FS

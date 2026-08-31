@@ -145,4 +145,24 @@ Every `--format json` command has a published JSON Schema embedded in the binary
 
 See [Published JSON Schemas](schema-cli.md) for the contract details — capability-bump rule, validator subset, consumer boundary, and the workflow for adding a new schema.
 
+### The agent trajectory
+
+`ynh agent run --emit-jsonl` writes a stream rather than a response, so it is
+published separately as
+[`agent/trajectory.schema.json`](https://eyelock.github.io/ynh/schema/agent/trajectory.schema.json).
+
+Each **line** is a complete JSON object; the file as a whole is not JSON.
+Validate line by line. The schema is a discriminated union on `type`, covering
+all 18 event kinds — one schema rather than one per event, because a consumer
+reads whatever arrives next and a directory of files would make it choose the
+schema before knowing the type.
+
+It is not listed by `ynh schema --all`, which describes command responses. It is
+embedded in the binary all the same, and validated in CI against events emitted
+through the real writer — so a wire field renamed in Go fails the build rather
+than silently diverging from the published contract.
+
+Unknown event types must be tolerated, for the same reason as unknown enum
+members above: kinds are added additively.
+
 **Error envelope evolution.** The current emission is `{"error": {"code": "...", "message": "..."}}` (the `code` values listed above are the closed enum). Additive fields `category` (coarse routing class), `retryable` (bool), and `hint` (human guidance) are reserved and may appear on a future capabilities bump — consumers must tolerate either shape today.
