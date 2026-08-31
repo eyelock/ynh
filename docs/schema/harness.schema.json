@@ -1,8 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://eyelock.github.io/ynh/schema/harness.schema.json",
-  "title": "YNH Harness",
-  "description": "Harness manifest for ynh — vendor-neutral AI coding assistant configuration",
+  "title": "YNH Harness (0.1, superseded)",
+  "description": "Harness manifest for ynh 0.1, at .harness.json. Superseded by plugin.schema.json (0.2+, at .ynh-plugin/plugin.json). Validate new manifests against that. Published so existing 0.1 manifests' $schema URLs keep resolving; ynh rewrites them to the 0.2 schema on migration.",
+  "deprecated": true,
   "type": "object",
   "required": ["name", "version"],
   "additionalProperties": false,
