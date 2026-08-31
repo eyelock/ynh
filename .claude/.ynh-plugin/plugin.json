@@ -13,5 +13,20 @@
     "contributing",
     "vendor-adapters"
   ],
-  "default_vendor": "claude"
+  "default_vendor": "claude",
+  "reads": {
+    "skills/vendor-adapters": [
+      "skills/vendor-adapters/references/anthropic.md",
+      "skills/vendor-adapters/references/codex.md",
+      "skills/vendor-adapters/references/copilot.md",
+      "skills/vendor-adapters/references/cursor.md"
+    ],
+    "skills/ynh-dev": [
+      "skills/ynh-dev/references/agent-and-baseline.md",
+      "skills/ynh-dev/references/architecture.md",
+      "skills/ynh-dev/references/building.md",
+      "skills/ynh-dev/references/coding-standards.md",
+      "skills/ynh-dev/references/skill-authoring.md"
+    ]
+  }
 }

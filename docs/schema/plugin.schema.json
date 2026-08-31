@@ -141,6 +141,15 @@
         }
       }
     },
+    "reads": {
+      "description": "Paths each artifact instructs an agent to open, relative to the harness root. Keys are artifact paths (skills/<name>, agents/<name>.md); values must resolve inside a shipping artifact directory. Declaring nothing is fine; what is declared is checked by ynd lint.",
+      "type": "object",
+      "propertyNames": { "pattern": "^(skills|agents|rules|commands)/" },
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string", "minLength": 1 }
+      }
+    },
     "sensors": {
       "description": "Named observation surfaces declared by the harness. ynh declares; loop drivers run them. Each sensor is a role declaration over existing primitives \u2014 no new artifact type.",
       "type": "object",

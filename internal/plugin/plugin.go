@@ -36,7 +36,18 @@ type HarnessJSON struct {
 	Profiles       map[string]Profile `json:"profiles,omitempty"`
 	Focuses        map[string]Focus   `json:"focuses,omitempty"`
 	Sensors        map[string]Sensor  `json:"sensors,omitempty"`
-	InstalledFrom  *ProvenanceMeta    `json:"installed_from,omitempty"`
+	// Reads declares, per artifact, the harness-root-relative paths that
+	// artifact tells an agent to open. Keys are artifact paths
+	// ("skills/<name>", "agents/<name>.md"); values are the paths read.
+	//
+	// It exists because nothing else can tell the two cases apart. A skill
+	// body mentions paths constantly for good reasons, and a path that
+	// resolves in the authoring repo but not in what ships is
+	// indistinguishable from one that resolves in both. Three shipped
+	// defects came from that gap, so the author states the intent and
+	// `ynd lint` checks it.
+	Reads         map[string][]string `json:"reads,omitempty"`
+	InstalledFrom *ProvenanceMeta     `json:"installed_from,omitempty"`
 }
 
 // Sensor declares an observation surface — a feedforward signal a loop

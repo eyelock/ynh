@@ -35,6 +35,41 @@ ynd lint path/to/harness       # specific directory
 ynd lint --harness ./my-harness  # explicit harness flag
 ```
 
+#### Declared reads
+
+An artifact that tells an agent to open a file can name one that never ships.
+It works for the author, whose checkout has the file, and breaks for everyone
+who installs the harness. That shipped three times (#249, #256, #276): an agent
+reading `docs/`, two skills reading `testdata/`, and a focus prompt reading a
+`README.md`.
+
+Nothing in the text separates those from the many paths an artifact names
+legitimately, so the manifest states the intent and `ynd lint` checks it:
+
+```json
+"reads": {
+  "skills/ynh-adopt": ["skills/ynh-adopt/references/what-moves-where.md"]
+}
+```
+
+Keys are artifact paths, values are paths relative to the harness root. A
+declared read must resolve **inside a shipping artifact directory**:
+`skills/`, `agents/`, `rules/` or `commands/`. Existing in your repository is
+not enough, and is exactly the trap: every one of the three defects named a
+path that was present at the time.
+
+```
+skills/ynh-adopt reads "docs/tutorial/first-harness.md", but that is not inside
+a shipping artifact directory (skills/, agents/, rules/, commands/), so it will
+not exist once installed
+```
+
+Lint also reports a key naming an artifact the harness does not have, so a
+renamed skill cannot leave a declaration silently covering nothing.
+
+Declaring nothing is not an error. A harness with no `reads` is not checked,
+so adoption is incremental.
+
 ### validate
 
 Validate harness structure: required files, frontmatter fields, directory layout,
