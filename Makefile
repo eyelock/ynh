@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage e2e format lint check check-artifacts check-vendor-parity check-marketplace marketplace scan-artifacts run docs help docker-build docker-push
+.PHONY: clean deps install build test test-coverage e2e format lint check check-artifacts check-vendor-parity check-marketplace scan-artifacts run docs help docker-build docker-push
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -99,22 +99,11 @@ scan-artifacts: ## Security-scan the harness artifacts with SkillSpector
 	fi; \
 	exit $$rc
 
-MARKETPLACE_DIR := dist/marketplace
-
-marketplace: build ## Build the native marketplace (two plugins, four vendor indexes) into dist/
-	@$(BUILD_DIR)/$(BINARY_NAME_DEV) marketplace build marketplace.json -o $(MARKETPLACE_DIR)
-	@echo "Marketplace built. Publish $(MARKETPLACE_DIR) to the marketplace repo."
-
-# Builds into a temp dir and throws it away. The point is that `marketplace.json`
-# still resolves and both plugins still assemble — a skill added to either
-# harness with a broken reference fails here rather than after publishing.
-check-marketplace: build ## Assert the native marketplace still builds
-	@tmp=$$(mktemp -d) && \
-		$(BUILD_DIR)/$(BINARY_NAME_DEV) marketplace build marketplace.json -o $$tmp >/dev/null && \
-		n=$$(grep -c '"name"' $$tmp/.claude-plugin/marketplace.json) && \
-		rm -rf $$tmp && \
-		if [ "$$n" -lt 3 ]; then echo "marketplace: expected 2 plugins + owner, got $$n names"; exit 1; fi
-	@echo "Marketplace OK (2 plugins, 4 vendor indexes)."
+# The marketplace indexes are committed rather than generated — this repo IS a
+# plugin marketplace, installable without ynh. Committed means hand-maintained,
+# so this asserts they still agree with the plugin manifests.
+check-marketplace: ## Assert the committed marketplace indexes match the plugin manifests
+	@./scripts/marketplace-consistency.sh
 
 check-vendor-parity: build ## Assert every vendor is documented and assembles the same artifacts
 	@./scripts/vendor-parity.sh

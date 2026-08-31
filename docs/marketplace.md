@@ -4,70 +4,91 @@ ynh can generate vendor-native marketplace indexes from collections of harnesses
 
 ## ynh's own marketplace
 
-ynh publishes its skills and agents as a native marketplace so they can be
-installed **without ynh on the machine**. That matters because the skills teach
-ynh: requiring ynh to get them is a chicken-and-egg problem for anyone
-evaluating it.
+**This repository is itself a plugin marketplace.** Add it in any of the four
+vendors and install the skills without ynh on the machine — which matters
+because the skills teach ynh, and requiring ynh to get them is a chicken-and-egg
+problem for anyone evaluating it.
 
-Two plugins, built from one config:
+Two plugins, and neither is a copy of anything:
 
-| Plugin | For | Contents |
+| Plugin | Directory | Contents |
 |---|---|---|
-| `ynh-guide` | using ynh, or just the skills | 8 skills, 3 agents, 1 rule, 1 command |
-| `ynh-dev` | contributing to ynh | 5 skills, 3 agents, 4 rules, 3 commands |
+| `ynh-guide` | the repository root | 8 skills, 3 agents, 1 rule, 1 command |
+| `ynh-dev` | `.claude/` | 5 skills, 3 agents, 4 rules, 3 commands |
 
-### Building it
-
-`marketplace.json` at the repo root is the source of truth. It lists two
-harnesses: the repository root (`ynh-guide`) and `.claude/` (`ynh-dev`), which
-carries its own `.ynh-plugin/plugin.json` so it is a harness in its own right
-rather than only a profile include.
-
-```bash
-make marketplace          # → dist/marketplace (gitignored)
-make check-marketplace    # asserts it still builds; runs in CI
-```
-
-The build emits a self-contained, git-initialised directory: four vendor
-marketplace indexes, both plugins materialised with vendor-native manifests, and
-a README.
+Both directories already had the plugin layout — `skills/`, `agents/`,
+`rules/`, `commands/`. They each carry a vendor manifest, and the marketplace
+indexes point at them in place:
 
 ```
+.claude-plugin/plugin.json           ynh-guide      (repo root)
+.cursor-plugin/plugin.json           ynh-guide
+.claude/.claude-plugin/plugin.json   ynh-dev
+.claude/.cursor-plugin/plugin.json   ynh-dev
+
 .claude-plugin/marketplace.json      Claude Code
 .cursor-plugin/marketplace.json      Cursor
 .agents/plugins/marketplace.json     Codex
 .github/plugin/marketplace.json      Copilot
-plugins/ynh-guide/…                  .claude-plugin/, .codex-plugin/, .cursor-plugin/
-plugins/ynh-dev/…
 ```
 
-**Do not build with `-o .`** — the output includes a `README.md` at its root and
-would overwrite the repository's own.
+### Committed, not generated
+
+`ynd marketplace build` produces a **standalone** marketplace: plugins copied
+into `./plugins/<name>/` with a generated README, ready to push as its own
+repository. That is the right tool for publishing a marketplace of harnesses you
+do not own.
+
+It is the wrong tool here. It would duplicate every skill in the repository into
+`plugins/`, and CI would have to build and commit the result on every change —
+about 60 generated files mirroring content one directory up. It would also mean
+ynh's own distribution depended on ynh being installed to produce it, which is
+the chicken-and-egg this exists to remove.
+
+So the four indexes are committed and hand-maintained, and
+`make check-marketplace` asserts they still agree with the plugin manifests.
+Hand-maintained means drift; a check is cheap and a commit is churn.
+
+### Four indexes, three formats
+
+The vendors do not share one file, and two of them do not share a shape:
+
+| | Claude · Copilot | Cursor | Codex |
+|---|---|---|---|
+| description | top-level `description` | `metadata.description` | — |
+| display | `owner` | `owner` | `interface.displayName` |
+| plugin source | `"."` (relative) | `"."` (relative) | `{"source":"local","path":"."}` |
+| per-plugin version | yes | no | no |
+| install policy | — | — | `policy.installation` |
+
+Shapes follow `.claude/skills/vendor-adapters/references/` — the hand-tested
+per-vendor references, which are the authority when they and this page disagree.
+
+`make check-marketplace` asserts the Cursor and Codex shapes specifically,
+because the obvious tidy-up is to collapse all four into one file, and three of
+them would then be wrong.
+
+**Known gap:** `ynd marketplace build` currently emits Claude's shape for Cursor
+(ynh#301). That is why these are written by hand rather than generated even into
+a temp directory and copied.
 
 ### Installing it
 
-Once published, each vendor consumes it natively. `<marketplace>` is the
-published Git repository.
-
 | Vendor | Install |
 |---|---|
-| Claude Code | `/plugin marketplace add <marketplace>` then `/plugin install ynh-guide` |
-| Cursor | add the marketplace, then install from the plugin list |
-| Codex | add the marketplace repo; entries carry an `AVAILABLE` install policy |
-| Copilot | `copilot --plugin-dir <path-to>/plugins/ynh-guide` |
+| Claude Code | `/plugin marketplace add eyelock/ynh`, then `/plugin install ynh-guide` |
+| Cursor | add the marketplace, then `/add-plugin` |
+| Codex | add the marketplace repo; both entries carry an `AVAILABLE` install policy |
+| Copilot | `copilot plugin install`, `/plugin install`, or `enabledPlugins` in `settings.json` |
 
-Copilot has no marketplace *install* command yet — the index is generated
-best-effort, and `--plugin-dir` against the materialised plugin is the working
-path today. See the Copilot section below.
-
-### With ynh instead
+### Or with ynh
 
 ```bash
 ynh install github.com/eyelock/ynh          # ynh-guide
 ynh run ynh-guide --profile ynh-dev         # adds the developer set
 ```
 
-Same artifacts, one install, with profiles and focuses that the native plugin
+Same artifacts, one install, plus profiles and focuses that the native plugin
 formats have no equivalent for.
 
 ## The Landscape

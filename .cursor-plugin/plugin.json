@@ -1,8 +1,15 @@
 {
-  "name": "ynh",
-  "description": "User skills for ynh: create harnesses, inspect projects, compress artifacts, validate, and set up team delegation.",
+  "name": "ynh-guide",
   "version": "0.1.0",
+  "description": "Adopt, build, compose, gate and troubleshoot AI harnesses. Eight skills and three agents, useful whether or not ynh is installed.",
   "author": {
-    "name": "eyelock"
-  }
+    "name": "eyelock",
+    "url": "https://github.com/eyelock"
+  },
+  "keywords": [
+    "harness",
+    "ai",
+    "skills",
+    "agents"
+  ]
 }

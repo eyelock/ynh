@@ -61,7 +61,7 @@ jobs:
               - '.claude/**'
               - '.ynh-plugin/**'
               - '**/plugin.json'
-              - 'marketplace.json'
+              - '**/marketplace.json'
               - 'AGENTS.md'
               - '.skillspector-baseline.yaml'
               - 'scripts/**'

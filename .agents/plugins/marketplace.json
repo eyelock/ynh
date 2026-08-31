@@ -1,0 +1,28 @@
+{
+  "name": "ynh",
+  "interface": {
+    "displayName": "ynh"
+  },
+  "plugins": [
+    {
+      "name": "ynh-guide",
+      "source": {
+        "source": "local",
+        "path": "."
+      },
+      "policy": {
+        "installation": "AVAILABLE"
+      }
+    },
+    {
+      "name": "ynh-dev",
+      "source": {
+        "source": "local",
+        "path": "./.claude"
+      },
+      "policy": {
+        "installation": "AVAILABLE"
+      }
+    }
+  ]
+}
