@@ -41,8 +41,8 @@ the set only ever grows.
 
 ## Step 2 — Know which responses are enveloped
 
-**Only 9 of 21 golden responses carry `capabilities`.** Most commands return a
-bare array or object with no envelope at all:
+**Most golden responses do not carry `capabilities` at all.** Many commands return a
+bare array or object with no envelope:
 
 ```console
 $ ynh version --format json
@@ -55,15 +55,12 @@ $ ynh paths --format json
 { "home": "...", "config": "..." }   ← bare object, no version
 ```
 
-Enveloped (9): `agent-run`, `baseline`, `check`, `check-calibrate`, `fork`,
-`info`, `installed`, `list`, `version`.
+Enveloped: `agent-run`, `baseline`, `check`, `check-calibrate`, `fork`, `info`,
+`installed`, `list`, `version`.
 
-Not enveloped (12): `backend`, `error`, `migrate`, `paths`, `quarantine`,
-`registry`, `search`, `sensors`, `sensors-show`, `sources`, `status`,
-`vendors`.
-
-Check rather than trust that list — it moves. #271 published five new schemas
-and goldens, all of them bare, taking the split from 9-of-16 to 9-of-21:
+**Derive the split rather than trusting a written list — it moves.** #271 added
+five bare goldens and #302 added two more, so any number written here is wrong
+within a fortnight:
 
 ```bash
 for f in test/golden/*.json; do
