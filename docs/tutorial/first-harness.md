@@ -4,7 +4,7 @@ Create a harness from scratch, install it, and run it with Claude Code.
 
 ## Setup
 
-Make sure `ynh` and `ynd` are installed and on your PATH. See the [install instructions](tutorial/README.md) if you haven't set up yet.
+Make sure `ynh` and `ynd` are installed and on your PATH. See the [install instructions](README.md) if you haven't set up yet.
 
 Prepare the tutorial workspace:
 
@@ -289,4 +289,4 @@ The `remove` alias also works: `ynh remove local/my-harness`.
 
 ## Next
 
-[Vendors & Symlinks](tutorial/vendors-and-symlinks.md) — run the same harness with Codex and Cursor.
+[Vendors & Symlinks](vendors-and-symlinks.md) — run the same harness with Codex and Cursor.

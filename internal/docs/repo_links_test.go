@@ -149,6 +149,11 @@ func TestRepoMarkdownLinksResolve(t *testing.T) {
 // docsify, because the two disagree about the fragment. There is no single
 // correct relative form, so the link has to be absolute — which is what
 // _sidebar.md already does for the same file.
+//
+// The test asks where a link *resolves*, not how it is spelled. A "../" prefix
+// is ordinary since docs/index.html set relativePath: true — ../sensors.md from
+// docs/tutorial/ is the correct way to reach docs/sensors.md, and is what both
+// docsify and GitHub now follow. What stays banned is landing outside docs/.
 func TestDocsDoNotEscapeTheDocsRoot(t *testing.T) {
 	docs := docsRoot(t)
 	if docs == "" {
@@ -168,13 +173,33 @@ func TestDocsDoNotEscapeTheDocsRoot(t *testing.T) {
 		rel, _ := filepath.Rel(docs, path)
 		for _, m := range mdInline.FindAllStringSubmatch(string(data), -1) {
 			target := m[1]
-			if strings.HasPrefix(target, "http") || !strings.HasPrefix(target, "../") {
+			if strings.HasPrefix(target, "http") || strings.HasPrefix(target, "mailto:") {
 				continue
 			}
-			t.Errorf("%s links outside the docs root: %s\n"+
+			clean := strings.TrimPrefix(strings.SplitN(target, "#", 2)[0], "/")
+			if clean == "" {
+				continue
+			}
+			// Resolve as the readers do, then ask whether it left docs/.
+			base := filepath.Dir(path)
+			if info.Name() == "_sidebar.md" || strings.HasPrefix(target, "/") {
+				base = docs
+			}
+			resolved, resErr := filepath.Abs(filepath.Join(base, clean))
+			if resErr != nil {
+				continue
+			}
+			absDocs, absErr := filepath.Abs(docs)
+			if absErr != nil {
+				continue
+			}
+			if resolved == absDocs || strings.HasPrefix(resolved, absDocs+string(filepath.Separator)) {
+				continue
+			}
+			t.Errorf("%s links outside the docs root: %s (resolves to %s)\n"+
 				"docsify and GitHub slugify headings differently, so no relative form is correct "+
 				"in both. Use the absolute https://github.com/... URL, as docs/_sidebar.md does.",
-				rel, target)
+				rel, target, resolved)
 		}
 		return nil
 	})

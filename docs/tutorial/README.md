@@ -8,47 +8,47 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 
 | Tutorial | What you'll learn |
 |---|---|
-| [First Harness](tutorial/first-harness.md) | Create, install, and run a harness with all artifact types |
-| [Vendors & Symlinks](tutorial/vendors-and-symlinks.md) | Switch between Claude/Codex/Cursor, manage symlinks |
-| [Composition](tutorial/composition.md) | Pull skills from Git repos with pick, path, and ref |
-| [Include Editing](tutorial/include-editing.md) | Add, remove, and update includes from the CLI — no manual JSON editing |
-| [Hooks](tutorial/hooks.md) | Declare vendor-agnostic lifecycle hooks |
-| [MCP Servers](tutorial/mcp-servers.md) | Declare MCP server dependencies per harness |
-| [Profiles](tutorial/profiles.md) | Environment-specific overrides with profiles |
-| [Focus](tutorial/focus.md) | Bind a prompt and profile for repeatable, non-interactive runs |
-| [Project-Local Config](tutorial/project-local-config.md) | Zero-install `.ynh-plugin/plugin.json` in your project root |
+| [First Harness](first-harness.md) | Create, install, and run a harness with all artifact types |
+| [Vendors & Symlinks](vendors-and-symlinks.md) | Switch between Claude/Codex/Cursor, manage symlinks |
+| [Composition](composition.md) | Pull skills from Git repos with pick, path, and ref |
+| [Include Editing](include-editing.md) | Add, remove, and update includes from the CLI — no manual JSON editing |
+| [Hooks](hooks.md) | Declare vendor-agnostic lifecycle hooks |
+| [MCP Servers](mcp-servers.md) | Declare MCP server dependencies per harness |
+| [Profiles](profiles.md) | Environment-specific overrides with profiles |
+| [Focus](focus.md) | Bind a prompt and profile for repeatable, non-interactive runs |
+| [Project-Local Config](project-local-config.md) | Zero-install `.ynh-plugin/plugin.json` in your project root |
 
 ### Refine
 
 | Tutorial | What you'll learn |
 |---|---|
-| [Developer Tools](tutorial/developer-tools.md) | Scaffold, lint, validate, format, compress, inspect with ynd |
-| [Developer Preview](tutorial/developer-preview.md) | Preview and diff assembled output across vendors |
+| [Developer Tools](developer-tools.md) | Scaffold, lint, validate, format, compress, inspect with ynd |
+| [Developer Preview](developer-preview.md) | Preview and diff assembled output across vendors |
 
 ### Automate
 
 | Tutorial | What you'll learn |
 |---|---|
-| [Structured Output](tutorial/structured-output.md) | Use `--format json` for scripts, CI, and tool integration |
-| [Sensors](tutorial/sensors.md) | Declare observation surfaces a loop driver consumes |
-| [Gating with `ynh check`](tutorial/check.md) | Run sensors as a gate, and baseline pre-existing failures |
-| [The Agent Loop](tutorial/agent-loop.md) | Run the loop with budgets, convergence, trajectories, and exit codes |
-| [Shadow Mode](tutorial/shadow-mode.md) | Measure the loop against your own git history before trusting it |
+| [Structured Output](structured-output.md) | Use `--format json` for scripts, CI, and tool integration |
+| [Sensors](sensors.md) | Declare observation surfaces a loop driver consumes |
+| [Gating with `ynh check`](check.md) | Run sensors as a gate, and baseline pre-existing failures |
+| [The Agent Loop](agent-loop.md) | Run the loop with budgets, convergence, trajectories, and exit codes |
+| [Shadow Mode](shadow-mode.md) | Measure the loop against your own git history before trusting it |
 
 ### Share & Scale
 
 | Tutorial | What you'll learn |
 |---|---|
-| [Delegation](tutorial/delegation.md) | Chain harnesses together as subagents |
-| [Export](tutorial/export.md) | Produce vendor-native distributable plugins |
-| [Marketplace](tutorial/marketplace.md) | Generate marketplace indexes for team distribution |
-| [Registry & Discovery](tutorial/registry-and-discovery.md) | Search and install harnesses from curated registries |
-| [Docker Images](tutorial/docker-image.md) | Build harness appliance images for CI/CD |
-| [Namespacing & Migration](tutorial/namespacing-and-migration.md) | Resolve name collisions across registries and migrate legacy installs |
+| [Delegation](delegation.md) | Chain harnesses together as subagents |
+| [Export](export.md) | Produce vendor-native distributable plugins |
+| [Marketplace](marketplace.md) | Generate marketplace indexes for team distribution |
+| [Registry & Discovery](registry-and-discovery.md) | Search and install harnesses from curated registries |
+| [Docker Images](docker-image.md) | Build harness appliance images for CI/CD |
+| [Namespacing & Migration](namespacing-and-migration.md) | Resolve name collisions across registries and migrate legacy installs |
 
 ## Manual Test Plan
 
-The [Manual Test Plan](tutorial/manual-test-plan.md) covers every feature across both binaries. Use it to verify a release or validate your development build.
+The [Manual Test Plan](manual-test-plan.md) covers every feature across both binaries. Use it to verify a release or validate your development build.
 
 ## Install
 
@@ -98,4 +98,4 @@ You also need at least one AI coding assistant CLI installed:
 | OpenAI Codex | `codex` | `npm install -g @openai/codex` |
 | Cursor | `agent` | Bundled with [Cursor](https://cursor.com) |
 
-Claude Code is used in most tutorial examples. Codex and Cursor are needed for [Vendors & Symlinks](tutorial/vendors-and-symlinks.md) and [Export](tutorial/export.md).
+Claude Code is used in most tutorial examples. Codex and Cursor are needed for [Vendors & Symlinks](vendors-and-symlinks.md) and [Export](export.md).

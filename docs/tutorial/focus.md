@@ -1,6 +1,6 @@
 # Focus
 
-Define named focus entries that combine a profile with a prompt for repeatable, non-interactive AI execution. Focus entries are the bridge between harness configuration and CI automation. They can also serve as the source of an agent-driven [sensor](sensors.md#focus) — referenced by name or inlined inside the sensor.
+Define named focus entries that combine a profile with a prompt for repeatable, non-interactive AI execution. Focus entries are the bridge between harness configuration and CI automation. They can also serve as the source of an agent-driven [sensor](../sensors.md#focus) — referenced by name or inlined inside the sensor.
 
 ## Prerequisites
 
@@ -184,7 +184,7 @@ ynh focus update /tmp/ynh-tutorial/focus-harness security --clear-profile
 ynh focus remove /tmp/ynh-tutorial/focus-harness security
 ```
 
-`--profile` and `--clear-profile` are mutually exclusive on `update`. Adding a focus that references a profile name not defined in the manifest is rejected with an error. Removing a profile referenced by any focus is also rejected (the focus has to be updated or removed first) — see [Profiles §"Edit profiles from the command line"](tutorial/profiles.md#edit-profiles-from-the-command-line).
+`--profile` and `--clear-profile` are mutually exclusive on `update`. Adding a focus that references a profile name not defined in the manifest is rejected with an error. Removing a profile referenced by any focus is also rejected (the focus has to be updated or removed first) — see [Profiles §"Edit profiles from the command line"](profiles.md#edit-profiles-from-the-command-line).
 
 The first positional argument is either a filesystem path (as above, while authoring) or a canonical id (`local/focus-demo`, `github.com/<org>/<repo>/<name>`) once the harness is installed.
 
@@ -208,4 +208,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Project-Local Config](tutorial/project-local-config.md) — use `.ynh-plugin/plugin.json` in your project root for zero-install configuration.
+[Project-Local Config](project-local-config.md) — use `.ynh-plugin/plugin.json` in your project root for zero-install configuration.
