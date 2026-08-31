@@ -17,9 +17,11 @@ func cmdProfile(args []string) error {
 
 func cmdProfileTo(args []string, stdout io.Writer) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: ynh profile <add|remove|hook|mcp|include>")
+		return fmt.Errorf("usage: ynh profile <ls|add|remove|hook|mcp|include>")
 	}
 	switch args[0] {
+	case "ls", "list":
+		return cmdProfileLs(args[1:], stdout)
 	case "add":
 		return cmdProfileAdd(args[1:], stdout)
 	case "remove":
@@ -31,7 +33,7 @@ func cmdProfileTo(args []string, stdout io.Writer) error {
 	case "include":
 		return cmdProfileInclude(args[1:], stdout)
 	default:
-		return fmt.Errorf("unknown profile subcommand: %s\nUsage: ynh profile <add|remove|hook|mcp|include>", args[0])
+		return fmt.Errorf("unknown profile subcommand: %s\nUsage: ynh profile <ls|add|remove|hook|mcp|include>", args[0])
 	}
 }
 

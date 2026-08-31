@@ -191,20 +191,20 @@ Flags:
 
 Manage a harness's Git includes.`,
 
-	"focus": `ynh focus <add|remove|update> [args]
+	"focus": `ynh focus <ls|add|remove|update> [args]
 
-Edit a harness's named focuses. There is no list verb — use
-"ynh info <name>" to see the focuses a harness declares.
+Inspect and edit a harness's named focuses.
 
+  ynh focus ls <harness> [--format text|json]              List declared focuses
   ynh focus add <harness> <name> <prompt> [--profile <name>]
   ynh focus remove <harness> <name>
   ynh focus update <harness> <name> [--prompt <text>] [--profile <name>] [--clear-profile]`,
 
-	"profile": `ynh profile <add|remove|hook|mcp|include> [args]
+	"profile": `ynh profile <ls|add|remove|hook|mcp|include> [args]
 
-Edit a harness's named profiles. There is no list verb — use
-"ynh info <name>" to see the profiles a harness declares.
+Inspect and edit a harness's named profiles.
 
+  ynh profile ls <harness> [--format text|json]             List declared profiles
   ynh profile add <harness> <name>
   ynh profile remove <harness> <name>
   ynh profile hook <add|remove> <harness> <profile> ...

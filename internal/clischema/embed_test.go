@@ -160,6 +160,12 @@ func TestSensorsShowGolden(t *testing.T) {
 func TestMigrateGolden(t *testing.T)    { validateGolden(t, "migrate", "migrate.json") }
 func TestQuarantineGolden(t *testing.T) { validateGolden(t, "quarantine", "quarantine.json") }
 
+// The list verbs added for #283. `ynh focus` and `ynh profile` were editor-only
+// while `ynh sensors ls` had a list verb, so these were the odd ones out in
+// their own command family.
+func TestFocusGolden(t *testing.T)   { validateGolden(t, "focus", "focus.json") }
+func TestProfileGolden(t *testing.T) { validateGolden(t, "profile", "profile.json") }
+
 // TestRaw verifies the byte-getter used by `ynh schema <name>`.
 func TestRaw(t *testing.T) {
 	data, err := Raw("version")
