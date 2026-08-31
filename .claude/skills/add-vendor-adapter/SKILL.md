@@ -73,11 +73,14 @@ any point to cross-check completeness — `grep -rli cursor --include="*.go" --i
   `policy.installation`).
 
   Do **not** copy Claude's implementation and rename it. `Cursor` did exactly
-  that and has shipped the wrong shape ever since (ynh#301): its documented
+  that, and shipped the wrong shape until ynh#301 was fixed: Cursor's documented
   format nests `description` under `metadata`, carries no per-plugin `version`,
-  and uses a bare `"plugin-name"` source. Write it from
-  `references/<vendor>.md`, which is hand-tested, and check the result against
-  that file rather than against another adapter.
+  and uses a bare `"plugin-name"` source, none of which the copied
+  implementation had. Nothing caught it, because it compiled and produced valid
+  JSON — it was just the wrong vendor's JSON.
+
+  Write it from `references/<vendor>.md`, which is hand-tested, and check the
+  result against that file rather than against another adapter.
 
   Note `codexMarketplaceJSON` in `marketplace.go` is a **test** unmarshalling
   helper, not the generator — do not add a sibling struct there expecting it to
