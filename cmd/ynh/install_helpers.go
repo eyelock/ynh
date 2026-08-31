@@ -29,6 +29,12 @@ func isLocalPath(source string) bool {
 // exists but AGENTS.md or instructions.md does, a minimal plugin.json is
 // synthesized so the install flow works unchanged.
 func loadOrSynthesizeHarness(dir string) (*harness.Harness, error) {
+	// Before anything else, so absence is reported as absence rather than
+	// falling through to the manifest message below.
+	if err := checkSourceDir(dir); err != nil {
+		return nil, err
+	}
+
 	if _, err := migration.FormatChain().Run(dir); err != nil {
 		return nil, fmt.Errorf("migrating harness format: %w", err)
 	}
@@ -69,6 +75,32 @@ func verifyResolvedSHA(repoDir, wantSHA string) error {
 	got := strings.TrimSpace(string(out))
 	if !strings.HasPrefix(got, wantSHA) {
 		return fmt.Errorf("sha mismatch: registry entry declared %s but fetched commit is %s", wantSHA, got)
+	}
+	return nil
+}
+
+// checkSourceDir reports why a path cannot be a harness source, distinguishing
+// "not there" from "there but not a harness".
+//
+// Both were reported as "has no harness manifest or AGENTS.md", which asserts
+// the second, so a caller who mistyped a path went looking for a missing
+// manifest instead of a missing directory. That cost real diagnosis time when
+// a downstream tool built a path that had never existed and the error read as
+// "your harness is malformed" (#334).
+//
+// `--path` already got this right, which is what made the inconsistency
+// visible: it stats the joined directory and says plainly that it is not
+// found.
+func checkSourceDir(dir string) error {
+	fi, err := os.Stat(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("directory %q not found", dir)
+		}
+		return fmt.Errorf("reading %q: %w", dir, err)
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("%q is not a directory", dir)
 	}
 	return nil
 }
