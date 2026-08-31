@@ -38,3 +38,6 @@ Thumbs.db
 
 # SkillSpector scan output
 .skillspector-sarif/
+
+# Built marketplace output — regenerate with `make marketplace`
+dist/

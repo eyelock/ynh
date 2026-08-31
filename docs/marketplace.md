@@ -2,6 +2,74 @@
 
 ynh can generate vendor-native marketplace indexes from collections of harnesses and plugins. This page covers how each vendor's marketplace system works, the state of cross-vendor distribution, and how ynh bridges the differences.
 
+## ynh's own marketplace
+
+ynh publishes its skills and agents as a native marketplace so they can be
+installed **without ynh on the machine**. That matters because the skills teach
+ynh: requiring ynh to get them is a chicken-and-egg problem for anyone
+evaluating it.
+
+Two plugins, built from one config:
+
+| Plugin | For | Contents |
+|---|---|---|
+| `ynh-guide` | using ynh, or just the skills | 8 skills, 3 agents, 1 rule, 1 command |
+| `ynh-dev` | contributing to ynh | 5 skills, 3 agents, 4 rules, 3 commands |
+
+### Building it
+
+`marketplace.json` at the repo root is the source of truth. It lists two
+harnesses: the repository root (`ynh-guide`) and `.claude/` (`ynh-dev`), which
+carries its own `.ynh-plugin/plugin.json` so it is a harness in its own right
+rather than only a profile include.
+
+```bash
+make marketplace          # → dist/marketplace (gitignored)
+make check-marketplace    # asserts it still builds; runs in CI
+```
+
+The build emits a self-contained, git-initialised directory: four vendor
+marketplace indexes, both plugins materialised with vendor-native manifests, and
+a README.
+
+```
+.claude-plugin/marketplace.json      Claude Code
+.cursor-plugin/marketplace.json      Cursor
+.agents/plugins/marketplace.json     Codex
+.github/plugin/marketplace.json      Copilot
+plugins/ynh-guide/…                  .claude-plugin/, .codex-plugin/, .cursor-plugin/
+plugins/ynh-dev/…
+```
+
+**Do not build with `-o .`** — the output includes a `README.md` at its root and
+would overwrite the repository's own.
+
+### Installing it
+
+Once published, each vendor consumes it natively. `<marketplace>` is the
+published Git repository.
+
+| Vendor | Install |
+|---|---|
+| Claude Code | `/plugin marketplace add <marketplace>` then `/plugin install ynh-guide` |
+| Cursor | add the marketplace, then install from the plugin list |
+| Codex | add the marketplace repo; entries carry an `AVAILABLE` install policy |
+| Copilot | `copilot --plugin-dir <path-to>/plugins/ynh-guide` |
+
+Copilot has no marketplace *install* command yet — the index is generated
+best-effort, and `--plugin-dir` against the materialised plugin is the working
+path today. See the Copilot section below.
+
+### With ynh instead
+
+```bash
+ynh install github.com/eyelock/ynh          # ynh-guide
+ynh run ynh-guide --profile ynh-dev         # adds the developer set
+```
+
+Same artifacts, one install, with profiles and focuses that the native plugin
+formats have no equivalent for.
+
 ## The Landscape
 
 AI coding assistants are converging on a plugin/marketplace model for distributing skills, agents, and configuration. All four vendors ynh supports have marketplace systems, though they differ significantly in maturity, openness, and format.

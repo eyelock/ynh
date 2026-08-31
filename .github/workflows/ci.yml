@@ -61,6 +61,7 @@ jobs:
               - '.claude/**'
               - '.ynh-plugin/**'
               - '**/plugin.json'
+              - 'marketplace.json'
               - 'AGENTS.md'
               - '.skillspector-baseline.yaml'
               - 'scripts/**'
@@ -141,6 +142,10 @@ jobs:
       # artifact set. jq is preinstalled on ubuntu-latest runners.
       - name: Check vendor parity
         run: make check-vendor-parity
+      # The marketplace is how someone installs these skills without ynh. If it
+      # stops building, that path breaks silently — nothing else exercises it.
+      - name: Check native marketplace builds
+        run: make check-marketplace
 
   skill-security:
     name: Skill Security
