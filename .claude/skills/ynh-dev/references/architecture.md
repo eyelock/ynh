@@ -54,6 +54,9 @@ testdata/                 Test fixtures (export-harness, monorepo, etc.)
 stages above are the original flow; everything from `agent/` down was added
 later and is invisible in that diagram.
 
+`agent/`, `baseline/`, `gate/` and `freshness/` are the loop that runs between
+agent turns; they have their own reference in `agent-and-baseline.md`.
+
 ## Key design decisions
 
 - **No build system on content** - artifacts are standard-format files, never transformed
