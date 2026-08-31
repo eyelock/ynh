@@ -72,13 +72,14 @@ rather than paraphrasing a page you cannot read.
 - Harnesses compose via `includes` (pull artifacts from other repos) and
   `delegates_to` (subagent delegation)
 - **Profiles** layer config variants; **focuses** pair a starting prompt with a
-  profile. `ynh info <name>` shows which a harness offers.
+  profile. `ynh profile ls <name>` and `ynh focus ls <name>` list them.
 - Switch vendors at any time: `-v claude`, `-v codex`, `-v cursor`, `-v copilot`
 
 ## Starting points
 
 This harness ships focuses — named entry points that set a prompt and, where it
-matters, a profile. `ynh info <name>` shows them; `ynh run <name> --focus <f>`
+matters, a profile. `ynh focus ls <name>` lists them, `ynh info <name>` shows
+them alongside the rest of the resolved config, and `ynh run <name> --focus <f>`
 launches one.
 
 | Focus | For |
