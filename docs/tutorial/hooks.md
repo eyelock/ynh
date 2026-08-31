@@ -237,7 +237,7 @@ ynh profile hook remove /tmp/ynh-tutorial/hook-harness <profile> after_tool 0
 
 The first positional argument accepts either a filesystem path (during authoring) or a canonical harness id (`local/<name>`, `github.com/<org>/<repo>/<name>`) once installed.
 
-`<event>` is validated against the canonical set (`before_tool`, `after_tool`, `before_prompt`, `on_stop`, `on_session_start`). `<index>` is zero-based; removing the last entry for an event drops the event key entirely. See [hooks.md §"CLI Editing"](hooks.md#cli-editing) and [reference.md](reference.md) for the full flag matrix.
+`<event>` is validated against the canonical set (`before_tool`, `after_tool`, `before_prompt`, `on_stop`, `on_session_start`). `<index>` is zero-based; removing the last entry for an event drops the event key entirely. See [hooks.md §"CLI Editing"](../hooks.md#cli-editing) and [reference.md](../reference.md) for the full flag matrix.
 
 ## Clean up
 
@@ -254,8 +254,8 @@ rm -rf /tmp/ynh-tutorial
 - `ynd diff` compares the assembled output across vendors side by side
 - Hooks can be edited from the CLI with `ynh hook add/remove` (top-level) and `ynh profile hook add/remove` (profile-level) — the same surface a GUI consumer drives
 
-Hooks often pair with sensors — a hook produces an artifact mid-session that a sensor declares a contract over. See [Sensors](tutorial/sensors.md).
+Hooks often pair with sensors — a hook produces an artifact mid-session that a sensor declares a contract over. See [Sensors](sensors.md).
 
 ## Next
 
-[MCP Servers](tutorial/mcp-servers.md) — declare tool dependencies that vendors load automatically.
+[MCP Servers](mcp-servers.md) — declare tool dependencies that vendors load automatically.

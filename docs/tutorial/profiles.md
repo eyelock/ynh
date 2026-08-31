@@ -305,7 +305,7 @@ ynh profile remove /tmp/ynh-tutorial/profile-harness staging
 
 The first positional argument is either a filesystem path (as above, while you are authoring) or a canonical harness id (`local/profile-demo`, `github.com/<org>/<repo>/<name>`) once the harness is installed.
 
-See [reference.md](reference.md) for the full set of `ynh profile` flags and [profiles.md §"CLI Editing"](profiles.md#cli-editing) for the surrounding surface.
+See [reference.md](../reference.md) for the full set of `ynh profile` flags and [profiles.md §"CLI Editing"](../profiles.md#cli-editing) for the surrounding surface.
 
 ## Clean up
 
@@ -329,4 +329,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Focus](tutorial/focus.md) — bind a prompt and profile for repeatable, non-interactive runs.
+[Focus](focus.md) — bind a prompt and profile for repeatable, non-interactive runs.

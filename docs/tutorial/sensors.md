@@ -2,7 +2,7 @@
 
 Declare observation surfaces that a loop driver — CI, an orchestrator, a custom tool — runs between agent turns. ynh declares; the loop driver runs.
 
-This tutorial walks through every sensor source variant, the validation rules, and the discovery surface a loop driver consumes. It does **not** demonstrate a working loop driver — that is out of scope for ynh. See [Sensors reference](sensors.md) for the full schema and consumer guide.
+This tutorial walks through every sensor source variant, the validation rules, and the discovery surface a loop driver consumes. It does **not** demonstrate a working loop driver — that is out of scope for ynh. See [Sensors reference](../sensors.md) for the full schema and consumer guide.
 
 ## Prerequisites
 
@@ -43,7 +43,7 @@ Because the artifact is produced elsewhere, `ynh check` will refuse to believe
 it once it stops describing the tree — a missing or stale `coverage/lcov.info`
 fails the gate rather than reporting green. Declare `observes` to say what the
 artifact depends on. See [a `files` sensor gates on
-freshness](tutorial/check.md#a-files-sensor-gates-on-freshness).
+freshness](check.md#a-files-sensor-gates-on-freshness).
 
 ## A `command` sensor
 
@@ -251,7 +251,7 @@ ynd validate /tmp/ynh-tutorial/sensor-harness
 
 The hook produces the file mid-session; the sensor consumes it between iterations. Coupling is by shared file path — implicit, no schema link needed.
 
-> **For the hook to actually fire in a plain Claude session**, declare it in the project's `.claude/settings.json` (Claude-native event names, project-relative paths) — not only in `plugin.json`, whose hooks don't auto-activate under `ynh run`. An `on_stop` sweep that feeds its verdict back to the agent must also route output to stderr + `exit 2` and guard against the `stop_hook_active` loop. See [Hooks §"Running hooks in a plain Claude session"](hooks.md#running-hooks-in-a-plain-claude-session) and [§"on_stop output semantics"](hooks.md#on-stop-output-semantics-claude).
+> **For the hook to actually fire in a plain Claude session**, declare it in the project's `.claude/settings.json` (Claude-native event names, project-relative paths) — not only in `plugin.json`, whose hooks don't auto-activate under `ynh run`. An `on_stop` sweep that feeds its verdict back to the agent must also route output to stderr + `exit 2` and guard against the `stop_hook_active` loop. See [Hooks §"Running hooks in a plain Claude session"](../hooks.md#running-hooks-in-a-plain-claude-session) and [§"on_stop output semantics"](../hooks.md#on-stop-output-semantics-claude).
 
 ## Install round-trip preserves sensors
 
@@ -277,7 +277,7 @@ rm -rf /tmp/ynh-tutorial
 
 A loop driver wraps an agent runtime (Claude Code, Codex, etc.) and runs sensors between turns. Discovery is `ynh sensors ls --format json`; resolution is `ynh sensors show --format json`; execution is `ynh sensors run`. ynh emits raw signal — exit codes, output, file contents — and the loop driver turns that into pass/fail policy and feedback for the next turn.
 
-ynh runs the declared set as a gate itself — see [Gating with `ynh check`](tutorial/check.md) — but owns no iteration: when to re-prompt an agent, what counts as convergence, and when to stop remain the loop driver's. See [Sensors reference §"Consuming sensors"](sensors.md#consuming-sensors-for-loop-driver-authors) for the consumer pattern, and [harness engineering](harness-engineering.md) for the architectural framing.
+ynh runs the declared set as a gate itself — see [Gating with `ynh check`](check.md) — but owns no iteration: when to re-prompt an agent, what counts as convergence, and when to stop remain the loop driver's. See [Sensors reference §"Consuming sensors"](../sensors.md#consuming-sensors-for-loop-driver-authors) for the consumer pattern, and [harness engineering](../harness-engineering.md) for the architectural framing.
 
 ## What you learned
 
@@ -287,8 +287,8 @@ ynh runs the declared set as a gate itself — see [Gating with `ynh check`](tut
 - The discovery surface (`ls`, `show`) is the contract loop drivers consume.
 - Hooks and sensors are complementary — push vs pull, in-session vs between-turn.
 
-Hooks often pair with sensors — see [Hooks](tutorial/hooks.md).
+Hooks often pair with sensors — see [Hooks](hooks.md).
 
 ## Next
 
-[Gating with `ynh check`](tutorial/check.md) — run the sensors as a gate, and baseline pre-existing failures.
+[Gating with `ynh check`](check.md) — run the sensors as a gate, and baseline pre-existing failures.

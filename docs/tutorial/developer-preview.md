@@ -298,4 +298,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Structured Output](tutorial/structured-output.md) — use `--format json` for scripts, CI, and tool integration.
+[Structured Output](structured-output.md) — use `--format json` for scripts, CI, and tool integration.

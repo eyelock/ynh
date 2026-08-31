@@ -107,6 +107,14 @@
       name: 'ynh',
       repo: 'https://github.com/eyelock/ynh',
       loadSidebar: true,
+      // Resolve relative links from the containing file, matching how
+      // GitHub resolves them when the same Markdown is browsed in the
+      // repository. Without this, docsify resolves from the docs root,
+      // so a link could be correct on the site or on GitHub but never
+      // both. Sidebar links are root-absolute (/foo.md) because the
+      // sidebar renders on every page and would otherwise resolve
+      // against whichever page is currently open.
+      relativePath: true,
       alias: {
         '/tutorial/_sidebar.md': '/_sidebar.md'
       },

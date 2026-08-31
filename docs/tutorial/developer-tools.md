@@ -242,4 +242,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Developer Preview](tutorial/developer-preview.md) — preview and diff assembled output across vendors.
+[Developer Preview](developer-preview.md) — preview and diff assembled output across vendors.

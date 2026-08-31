@@ -364,7 +364,7 @@ Use `local` for artifact directories that travel with the harness source. Use `g
 
 > **Note on layout.** Relative `local` paths should stay inside the harness root so the bundle is copied along with the harness at install time. Sibling directories (e.g. `../shared`) work for `ynd preview` against a source tree but **won't survive `ynh install`** — the referenced dir isn't copied. Use an absolute path or fold the shared content into the harness if you need it after install.
 
-`local` pairs well with profiles — see [Profiles → Profile-level includes](tutorial/profiles.md#profile-level-includes-bundle-extra-artifacts-per-profile).
+`local` pairs well with profiles — see [Profiles → Profile-level includes](profiles.md#profile-level-includes-bundle-extra-artifacts-per-profile).
 
 ## Pin a version with ref
 
@@ -541,4 +541,4 @@ ynh uninstall local/my-dev local/with-anthropic local/with-vercel local/full-sta
 
 ## Next
 
-[Include Editing](tutorial/include-editing.md) — add, remove, and update includes from the CLI.
+[Include Editing](include-editing.md) — add, remove, and update includes from the CLI.

@@ -238,7 +238,7 @@ Three legitimate combinations:
 | `"v1.0"` | `"abc123…"` | Fetches `v1.0`, verifies HEAD matches the SHA. Recommended for published releases. |
 | `"abc123…"` (full SHA) | _empty_ | Pins to an exact commit. Never drifts. |
 
-**Tools that compose ynh harnesses (delegate sheets, dashboards, CI integrations) should default to whatever `ref` the user installed with — that's the user's stated tracking intent. Offer SHA-pinning as an opt-in choice, not the default.** See [`docs/marketplace.md` § Pinning: refs and SHAs](marketplace.md#pinning-refs-and-shas) for the full guidance.
+**Tools that compose ynh harnesses (delegate sheets, dashboards, CI integrations) should default to whatever `ref` the user installed with — that's the user's stated tracking intent. Offer SHA-pinning as an opt-in choice, not the default.** See [`docs/marketplace.md` § Pinning: refs and SHAs](../marketplace.md#pinning-refs-and-shas) for the full guidance.
 
 ## Install — direct URL still works
 
@@ -441,4 +441,4 @@ ynh uninstall github.com/eyelock/assistants/tester 2>/dev/null
 
 ## Next
 
-[Docker Images](tutorial/docker-image.md) — build harness appliance images for CI/CD.
+[Docker Images](docker-image.md) — build harness appliance images for CI/CD.
