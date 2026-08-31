@@ -12,7 +12,9 @@
   {
     "id": "local/local-demo",
     "name": "local-demo",
-    "path": "/Users/example/projects/local-demo",
+    "description": "A harness discovered under a configured local source",
+    "repo": "/Users/example/projects/local-demo",
+    "version": "0.1.0",
     "from": {"type": "source", "name": "local-sources"}
   }
 ]
