@@ -33,6 +33,8 @@ Ask where to create the harness directory. Suggest a sensible default like `~/ha
 
 Ask which AI vendor they want as the default. Run `ynh vendors` to show what's available — that command is the authority, not this page. Today it lists claude, codex, cursor, and copilot.
 
+`ynh vendors` answers "is this CLI installed", not "what does this vendor support". Those differ, and the difference only bites when the harness is *distributed* — see the artifact-support table in `references/artifact-formats.md`. Ask whether they intend to publish this harness as a native plugin; if so, raise it now rather than at export.
+
 Explain they can always override with `-v` at runtime.
 
 ## Step 4: Starter artifacts
@@ -45,6 +47,12 @@ Ask which artifact types they want scaffolded. Offer these options:
 - **Commands** - Reusable actions (e.g., "run CI checks")
 
 They can pick any combination, or start with none and add later.
+
+**If they plan to publish this as a native plugin, say what each vendor carries
+before they choose.** Every vendor receives all four types through `ynh run`,
+but `ynd export` drops what a vendor's plugin format cannot hold: Codex takes
+skills only, and Copilot takes no rules or commands. `references/artifact-formats.md`
+has the table. Load-bearing content belongs in skills, which every vendor carries.
 
 ## Step 5: Generate the harness
 

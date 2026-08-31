@@ -115,6 +115,15 @@ For implementation questions:
 **"What vendors are supported?"** → `ynh vendors`, in either context. It reports
 the adapters actually compiled into the running binary; no document can.
 
+**"My vendor isn't listed — can I add one?"** → not from a harness. A vendor
+adapter is Go code in the ynh repository (`internal/vendor/`), implementing an
+interface and self-registering, so adding one is a contribution rather than
+configuration. Say that plainly rather than implying a config option exists.
+What a user *can* do meanwhile: author the harness as normal and run it under a
+supported vendor, since artifacts are vendor-neutral files — the adapter only
+decides where they land. If they want to pursue it, the ynh repository has an
+`add-vendor-adapter` skill that carries the full checklist.
+
 **"How does delegation work?"** → with the repo, `docs/harnesses.md`
 (`delegates_to`). Without it, `ynh help` plus `ynh info <name>`, which shows
 resolved delegates.

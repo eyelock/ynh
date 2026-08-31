@@ -68,6 +68,50 @@ make format && make lint && make test
 ```
 ```
 
+## Which artifact types survive which vendor
+
+**Every vendor receives all four types when you `ynh run`.** The difference
+appears when you *distribute* — `ynd export`, or publishing to a marketplace —
+because the vendors' plugin formats differ in what they can carry.
+
+| | Claude | Cursor | Codex | Copilot |
+|---|---|---|---|---|
+| skills | yes | yes | yes | yes |
+| agents | yes | yes | **no** | yes |
+| rules | yes | yes, renamed `.mdc` | **no** | **no** |
+| commands | yes | yes | **no** | **no** |
+| manifest | `.claude-plugin/` | `.cursor-plugin/` | `.codex-plugin/` | `.claude-plugin/` |
+
+Measured with `ynd export` against a harness carrying all four, not read off a
+table. Two details that surprise people:
+
+- **Cursor renames rules** from `.md` to `.mdc` and adds frontmatter — the same
+  content, a different file, which is what Cursor reads.
+- **Copilot uses Claude's manifest directory**, `.claude-plugin/plugin.json`. A
+  documented compatibility path, not a mistake.
+
+### What this means when authoring
+
+`ynd export` tells you what it dropped:
+
+```console
+$ ynd export . -v codex -o ./dist
+Exported for codex → ./dist/codex (8 skills, 0 agents)
+  warning: codex: skipping 3 agents, 1 rules, and 1 commands (not supported)
+```
+
+So nothing is lost silently. But it is worth knowing **before** you author, not
+after:
+
+- If the harness is only ever run through `ynh`, use whatever artifact types
+  suit the work. All four reach every vendor.
+- If you intend to publish it as a native plugin, put the load-bearing content
+  in **skills** — the only type every vendor carries. An agent's instructions
+  can usually live in a skill; a rule's often belongs in `AGENTS.md`, which
+  every vendor receives.
+- `ynh vendors` answers "is this CLI installed", **not** "what does this vendor
+  support". This table is the second question.
+
 ## Project instructions (AGENTS.md)
 
 Optional file at harness root. Write it once; ynh adapts it per vendor.
