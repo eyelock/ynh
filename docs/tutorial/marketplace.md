@@ -119,6 +119,7 @@ Expected (`.git/` excluded from listing — it's auto-created by the build):
 .agents/plugins/marketplace.json
 .claude-plugin/marketplace.json
 .cursor-plugin/marketplace.json
+.github/plugin/marketplace.json
 plugins/formatter/.claude-plugin/plugin.json
 plugins/formatter/.codex-plugin/plugin.json
 plugins/formatter/.cursor-plugin/plugin.json
@@ -186,7 +187,41 @@ Expected (formatted):
 cat /tmp/ynh-tutorial/marketplace-out/.cursor-plugin/marketplace.json
 ```
 
-Same structure but in `.cursor-plugin/`. Both point to the same `./plugins/` relative paths.
+**Not the same structure.** Cursor's documented format differs from Claude's in
+two ways, and `ynd marketplace build` now emits each vendor's own shape:
+
+```json
+{
+  "name": "tutorial-marketplace",
+  "owner": {
+    "name": "tutorial"
+  },
+  "metadata": {
+    "description": "Sample marketplace for the ynh tutorial"
+  },
+  "plugins": [
+    {
+      "name": "formatter",
+      "source": "./plugins/formatter",
+      "description": "Auto-format code on save"
+    },
+    {
+      "name": "reviewer",
+      "source": "./plugins/reviewer",
+      "description": "Code review with dev-quality and dev-review skills"
+    }
+  ]
+}
+```
+
+| | Claude | Cursor |
+|---|---|---|
+| description | top-level `description` | nested `metadata.description` |
+| plugin version | `"version": "1.0.0"` | absent |
+
+`source` is the same in both — `./plugins/<name>`, where `build` puts each
+plugin. Codex and Copilot differ again; see
+[Marketplace](marketplace.md) for the full comparison.
 
 ## Test with Claude Code
 
