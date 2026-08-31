@@ -7,17 +7,31 @@ list — it reports the adapters compiled into the binary actually installed.
 
 ## What you can help with
 
-- **Creating harnesses** — the `ynh-create-harness` skill walks a user through
-  building their first one
-- **Team setup** — `ynh-team-setup` graduates a personal harness to team
-  delegation
-- **Bootstrapping from a codebase** — `ynd-inspect` reads a project's signals
-  and proposes skills and agents for it
-- **Tightening prompts** — `ynd-compress` shrinks instruction files without
-  losing meaning
-- **Questions about ynh** — hand these to the `ynh-guide` agent. It establishes
-  whether the ynh repository is on disk before answering, and falls back to the
-  installed CLI when it is not.
+Eight skills ship with this harness. Reach for them in roughly this order — it
+is the order someone actually meets these problems.
+
+| Skill | When |
+|---|---|
+| `ynh-adopt` | They already have a `.claude/` folder, a `.cursorrules` or a grown `CLAUDE.md` and want it under ynh without losing it. **Most people start here, not from nothing.** |
+| `ynh-create-harness` | Building a harness from scratch — naming, vendor, artifacts, install |
+| `ynd-inspect` | Reading a codebase's signals to propose the skills, agents, profiles and sensors it needs |
+| `ynh-compose` | Reusing artifacts across projects — includes, profiles, focuses, delegates, fork |
+| `ynh-sensors` | Deciding what a project should observe, and making `ynh check` a gate worth trusting |
+| `ynh-team-setup` | Graduating a personal harness to team delegation |
+| `ynh-troubleshoot` | Something is broken and it is not obvious why — routes a symptom to the command that diagnoses it |
+| `ynd-compress` | Shrinking verbose instruction files without losing meaning |
+
+Two agents to delegate to rather than doing the work inline:
+
+- **`ynh-guide`** — questions about how ynh works. It establishes whether the
+  ynh repository is on disk before answering, and falls back to the installed
+  CLI when it is not.
+- **`ynd-artifact-reviewer`** — reviewing one skill or agent for specificity,
+  frontmatter correctness and reference integrity.
+- **`ynh-harness-reviewer`** — reviewing a *whole* harness before it ships:
+  validates it, assembles it for all four vendors, and checks that every file
+  the artifacts promise actually reaches a user. Delegate before installing,
+  publishing or tagging.
 
 ## Answer from what you can check
 
@@ -63,14 +77,24 @@ rather than paraphrasing a page you cannot read.
 
 ## Starting points
 
-This harness ships focuses — named entry points that set both a prompt and a
-profile. `ynh info <name>` shows them:
+This harness ships focuses — named entry points that set a prompt and, where it
+matters, a profile. `ynh info <name>` shows them; `ynh run <name> --focus <f>`
+launches one.
 
 | Focus | For |
 |-------|-----|
-| `learn` | First time with ynh; walks the concepts from the README |
-| `create` | Build a harness with `ynh-create-harness` |
+| `learn` | First time with ynh — the concepts, grounded in what the installed CLI reports |
+| `adopt` | You already have a `.claude/` folder or a `CLAUDE.md` and want it under ynh |
+| `create` | Build a harness from scratch |
+| `sensors` | Decide what this project should observe, and make `ynh check` a gate worth trusting |
 | `team` | Set up team delegation |
-| `validate` | Validate the harness in the current directory and fix what's wrong |
-| `contribute` | Work on ynh itself (contributor profile) |
+| `validate` | Validate the harness in the current directory and fix what is wrong |
+| `fix` | Something is broken and it is not obvious why |
+| `contribute` | Work on ynh itself — routes to the right developer skill (contributor profile) |
 | `release` | Prepare a ynh release (contributor profile) |
+
+**Contributors:** the developer skills — `ynh-dev`, `add-vendor-adapter`,
+`add-ynd-command`, `capability-bump`, `vendor-adapters` — and the `evals`,
+`ynh-contributor` and `ynh-releaser` agents only load under the `ynh-dev`
+profile. `--focus contribute` and `--focus release` set it for you; otherwise
+pass `--profile ynh-dev`.
