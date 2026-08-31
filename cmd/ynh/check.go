@@ -441,8 +441,20 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			_, wErr := fmt.Fprintln(stdout, string(data))
 			return wErr
 		}
+		// Absolute, not relative. `.ynh/baseline` is true from any directory,
+		// so a baseline written into the wrong tree read identically to one
+		// written into the right one. That is not hypothetical: this project's
+		// own test suite was silently corrupted by it once — see the note at
+		// the top of runCheck in check_test.go — and it later caught an agent,
+		// which recorded a scratch harness's baseline into the repository and
+		// reported the tree unchanged. Saying where converts a silent side
+		// effect into an obvious one.
+		recordedAt := filepath.Join(baseline.Dir, baseline.SubDir)
+		if abs, absErr := filepath.Abs(filepath.Join(cwd, recordedAt)); absErr == nil {
+			recordedAt = abs
+		}
 		if _, wErr := fmt.Fprintf(stdout, "\nbaseline recorded under %s — commit it\n",
-			filepath.Join(baseline.Dir, baseline.SubDir)); wErr != nil {
+			recordedAt); wErr != nil {
 			return wErr
 		}
 		return nil
