@@ -56,16 +56,32 @@ any point to cross-check completeness — `grep -rli cursor --include="*.go" --i
 - [ ] `internal/exporter/exporter.go` — add the vendor's export layout
   (skills/agents/rules/commands directory names may differ from runtime
   `ArtifactDirs()` — see Codex's `.agents/skills/` vs runtime `.codex/`).
-- [ ] `internal/exporter/manifest.go` — vendor-native plugin manifest
-  generation if the export format differs from `GeneratePluginManifest`.
+- [ ] `GeneratePluginManifest` in `internal/vendor/<vendor>.go` — the
+  vendor-native plugin manifest. There is **no** `internal/exporter/manifest.go`;
+  the exporter calls the adapter (`exporter.go:190` and `:330`), and so does
+  marketplace generation (`marketplace.go:305`). One implementation serves both.
 
 ### Marketplace
 
 - [ ] `internal/marketplace/marketplace.go` — add the vendor to the default
-  vendor list (search for `[]string{"claude", "cursor", "codex"}`) and add a
-  vendor-specific marketplace index struct if its `marketplace.json` schema
-  differs from the existing ones (see `codexMarketplaceJSON` for a
-  vendor-specific example).
+  vendor list in `Build` (search for `[]string{"claude", "cursor", "codex",
+  "copilot"}`).
+- [ ] `GenerateMarketplaceIndex` in `internal/vendor/<vendor>.go` — the index
+  content itself, called from `internal/marketplace/index.go:41`. Each adapter
+  declares its own anonymous structs; `Codex` is the worked example of a schema
+  that genuinely differs (`interface.displayName`, `source{source,path}`,
+  `policy.installation`).
+
+  Do **not** copy Claude's implementation and rename it. `Cursor` did exactly
+  that and has shipped the wrong shape ever since (ynh#301): its documented
+  format nests `description` under `metadata`, carries no per-plugin `version`,
+  and uses a bare `"plugin-name"` source. Write it from
+  `references/<vendor>.md`, which is hand-tested, and check the result against
+  that file rather than against another adapter.
+
+  Note `codexMarketplaceJSON` in `marketplace.go` is a **test** unmarshalling
+  helper, not the generator — do not add a sibling struct there expecting it to
+  produce output.
 
 ### `ynh agent run` backend (if the CLI supports scriptable turn-by-turn sessions)
 
