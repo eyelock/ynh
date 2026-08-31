@@ -56,10 +56,30 @@ func Names() []string {
 	return out
 }
 
-// Raw returns the unparsed schema JSON bytes for the named CLI schema. Used
-// by `ynh schema <name>`.
+// Raw returns the unparsed schema JSON bytes for a named schema. Used by
+// `ynh schema <name>`.
+//
+// A bare name is a CLI response schema — `version`, `check` — which is the
+// common case and stays unqualified. A name carrying a family prefix is taken
+// as a path, so `agent/trajectory` resolves.
+//
+// The prefix form exists because `AllRaw` walks the whole tree and therefore
+// advertises names this could not fetch: `ynh schema --all` listed
+// `agent/trajectory` while `ynh schema agent/trajectory` answered "unknown
+// schema". A listing that names something unfetchable is worse than not listing
+// it.
 func Raw(name string) ([]byte, error) {
-	return schemaFS.ReadFile("cli/" + name + ".schema.json")
+	if strings.Contains(name, "/") {
+		return schemaFS.ReadFile(name + ".schema.json")
+	}
+	if data, err := schemaFS.ReadFile("cli/" + name + ".schema.json"); err == nil {
+		return data, nil
+	}
+	// The author-facing schemas — plugin, marketplace, harness — sit at the
+	// tree root. `AllRaw` has always listed them and this has never fetched
+	// them, so `ynh schema plugin` answered "unknown schema" for a schema the
+	// same binary was advertising.
+	return schemaFS.ReadFile(name + ".schema.json")
 }
 
 // RawAuthored returns the unparsed bytes for an author-facing schema — the

@@ -1,0 +1,751 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/agent/trajectory.schema.json",
+  "title": "ynh agent run \u2014 trajectory event",
+  "description": "One line of the NDJSON trajectory emitted by `ynh agent run --emit-jsonl`. Each line is a complete JSON object; the file as a whole is not JSON. Validate line by line against this schema.\n\nThis is a discriminated union on `type`, rather than one schema per event, because a consumer reads a stream of heterogeneous events and must validate whatever arrives next. A directory of per-event files would make the consumer choose the schema first, which is the job the discriminator already does.\n\nUnknown event types must be tolerated: new kinds are added additively and, per docs/cli-structured.md, consumers must not fail on members they do not know.",
+  "x-capabilities": "0.8",
+  "$defs": {
+    "Timestamp": {
+      "type": "string",
+      "description": "RFC 3339 UTC, when the event was emitted. No `format` keyword: ynh's compiler is a subset validator that rejects it, and the compiled CLI schemas describe timestamps the same way."
+    },
+    "Turn": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The loop turn this event belongs to. Absent or 0 for events emitted outside a turn \u2014 session setup, planning, and the final teardown. Omitted rather than sent as 0 because the encoder drops the zero value."
+    },
+    "BudgetLimits": {
+      "description": "The ceilings this run was given. Absent when none were set.",
+      "type": "object",
+      "properties": {
+        "max_turns": {
+          "type": "integer"
+        },
+        "max_tokens": {
+          "type": "integer"
+        },
+        "max_wall_ms": {
+          "type": "integer",
+          "description": "Wall-clock ceiling in milliseconds."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "BudgetSource": {
+      "description": "Where each budget came from \u2014 a flag, the harness manifest, or a built-in default. Recorded so a run's limits can be explained after the fact rather than merely observed.",
+      "type": "object",
+      "properties": {
+        "turns": {
+          "type": "string"
+        },
+        "tokens": {
+          "type": "string"
+        },
+        "wall": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    {
+      "title": "session_start",
+      "description": "Opens every trajectory. Carries the provenance a run must be reproducible from.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "session_start"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string"
+            },
+            "harness": {
+              "type": "string"
+            },
+            "backend": {
+              "type": "string"
+            },
+            "task": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "ynh_version": {
+              "type": "string"
+            },
+            "harness_version": {
+              "type": "string"
+            },
+            "harness_sha": {
+              "type": "string",
+              "description": "The commit the harness was installed from. With image_digest, this is what pins a run to one toolchain."
+            },
+            "image_digest": {
+              "type": "string",
+              "description": "The container image the run executed in, when sandboxed."
+            },
+            "base_commit": {
+              "type": "string",
+              "description": "The commit the working tree started at."
+            },
+            "budgets": {
+              "$ref": "#/$defs/BudgetLimits"
+            },
+            "budget_sources": {
+              "$ref": "#/$defs/BudgetSource"
+            }
+          },
+          "required": [
+            "session_id",
+            "harness",
+            "backend",
+            "task"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "timestamp",
+        "type",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "session_resumed",
+      "description": "A previous session was continued rather than started fresh. The restored counts say how much of the budget was already spent before this process began \u2014 without them a resumed run looks like it used less than it did.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "session_resumed"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "session_id": {
+              "type": "string"
+            },
+            "backend": {
+              "type": "string"
+            },
+            "resumed_at_turn": {
+              "type": "integer"
+            },
+            "restored_turns": {
+              "type": "integer"
+            },
+            "restored_tokens": {
+              "type": "integer"
+            },
+            "pending_approval": {
+              "type": "string",
+              "description": "An approval the previous session was waiting on when it stopped."
+            }
+          },
+          "required": [
+            "session_id",
+            "backend",
+            "resumed_at_turn",
+            "restored_turns",
+            "restored_tokens"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "timestamp",
+        "type",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "plan",
+      "description": "The planning phase began. No payload \u2014 the plan text arrives as the assistant_message that follows.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "plan"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        }
+      },
+      "required": [
+        "timestamp",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "plan_revised",
+      "description": "The plan was revised after feedback.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "plan_revised"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "iteration": {
+              "type": "integer"
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "iteration",
+            "notes"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "timestamp",
+        "type",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "plan_approval_required",
+      "description": "The loop is waiting for a human to approve the plan. The full plan text is carried here so an approver does not have to reconstruct it from earlier lines.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "plan_approval_required"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "plan": {
+              "type": "string"
+            },
+            "iteration": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "plan",
+            "iteration"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "timestamp",
+        "type",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "turn_start",
+      "description": "A loop turn began. No payload; `turn` carries the number.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "turn_start"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        }
+      },
+      "required": [
+        "timestamp",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "assistant_message",
+      "description": "The model's reply for this turn, verbatim.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "assistant_message"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        },
+        "data": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "timestamp",
+        "type",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "sensor_run",
+      "description": "A sensor is about to run. The payload is the sensor's name.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "sensor_run"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        },
+        "data": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "timestamp",
+        "type",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "sensor_result",
+      "description": "What a sensor observed. Mirrors the per-sensor shape of `ynh check --format json`.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "sensor_result"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "role": {
+              "type": "string"
+            },
+            "exit_code": {
+              "type": "integer"
+            },
+            "duration_ms": {
+              "type": "integer"
+            },
+            "tolerance": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "tool_version": {
+              "type": "string",
+              "description": "What the sensor's declared version_command printed. Absent means cannot tell, not stable \u2014 a corpus graded over weeks needs to distinguish a change in findings from a change in the tool."
+            },
+            "known_count": {
+              "type": "integer"
+            },
+            "new_count": {
+              "type": "integer"
+            },
+            "passed": {
+              "type": "boolean"
+            },
+            "summary": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "duration_ms",
+            "passed"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "timestamp",
+        "type",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "feedback_sent",
+      "description": "The text fed back to the model for the next turn. The payload is that text.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "feedback_sent"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        },
+        "data": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "timestamp",
+        "type",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "worker_env",
+      "description": "Which environment variables reached the worker. `declared` is what the harness asked for and `missing` what was absent, so a run that behaved oddly because a variable was not set can be diagnosed from the trajectory alone.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "worker_env"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "passed": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "declared": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "missing": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "passed"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "timestamp",
+        "type",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "turn_approval_required",
+      "description": "The loop is waiting for a human before continuing. `synthesized_feedback` is what would be sent on approval.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "turn_approval_required"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "synthesized_feedback": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "synthesized_feedback"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "timestamp",
+        "type",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "stuck_detected",
+      "description": "The stuckness watchdog fired.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "stuck_detected"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string"
+            },
+            "turn_count": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "reason",
+            "turn_count"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "timestamp",
+        "type",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "tamper_detected",
+      "description": "Something the run was gated on changed underneath it. Recorded with before and after so the change is reviewable rather than merely flagged.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "tamper_detected"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "what": {
+              "type": "string"
+            },
+            "before": {
+              "type": "string"
+            },
+            "after": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "what",
+            "before",
+            "after"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "timestamp",
+        "type",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "budget_snapshot",
+      "description": "Consumption so far. Emitted as the run proceeds so a trajectory truncated by a crash still shows what had been spent.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "budget_snapshot"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "turns": {
+              "type": "integer"
+            },
+            "tokens": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "turns",
+            "tokens"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "timestamp",
+        "type",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "budget_exceeded",
+      "description": "A ceiling was reached and the run stopped.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "budget_exceeded"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "budget": {
+              "type": "string",
+              "description": "Which ceiling: turns, tokens or wall."
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "budget",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "timestamp",
+        "type",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "converged",
+      "description": "The convergence sensor reported the work done. No payload.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "converged"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        }
+      },
+      "required": [
+        "timestamp",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "session_end",
+      "description": "Closes every trajectory, including a failed one.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "session_end"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "exit_code": {
+              "type": "integer"
+            },
+            "reason": {
+              "type": "string",
+              "description": "Why the run ended. Carries stable prefixes consumers pattern-match on \u2014 for example `plan rejected by user: <notes>`. These are wire conventions rather than schema-enforceable structure; treat an unrecognised prefix as opaque text."
+            },
+            "total_turns": {
+              "type": "integer"
+            },
+            "total_tokens": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "exit_code"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "timestamp",
+        "type",
+        "data"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}
