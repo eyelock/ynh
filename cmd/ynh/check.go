@@ -17,6 +17,9 @@ import (
 	"github.com/eyelock/ynh/internal/freshness"
 	"github.com/eyelock/ynh/internal/gate"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/migration"
+	"github.com/eyelock/ynh/internal/namespace"
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 func cmdCheck(args []string, stdout, stderr io.Writer) error {
@@ -95,10 +98,20 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 
 	if harnessName == "" {
 		return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
-			"usage: ynh check <harness-name> [--only a,b] [--cwd dir] [--format text|json]"))
+			"usage: ynh check <harness-id|path> [--only a,b] [--cwd dir] [--format text|json]"))
 	}
 
-	p, err := harness.LoadQualified(harnessName)
+	// A path or an installed id, deciding which by the same classifier every
+	// other command uses.
+	//
+	// The rejection message has always named `./<path>` as an accepted form —
+	// `harness.BadRefError` even documents itself as "exported so cmd/ynh
+	// callers that pre-classify refs can emit the same hint". `check` never
+	// did the pre-classifying, so it advertised a form it then refused, and the
+	// only way to check a harness was to install it first. That is a real
+	// barrier while you are still authoring one, which is exactly when you most
+	// want to run the gate.
+	p, err := loadHarnessRef(harnessName)
 	if err != nil {
 		return checkExecErr(cliError(stderr, structured, errCodeNotFound, err.Error()))
 	}
@@ -663,4 +676,38 @@ func plural(n int, word string) string {
 		return word
 	}
 	return word + "s"
+}
+
+// loadHarnessRef resolves either a canonical id or a filesystem path.
+//
+// Paths go through the same migration chain `ynh run` uses, so a harness still
+// carrying a legacy manifest can be checked without being installed first.
+func loadHarnessRef(ref string) (*harness.Harness, error) {
+	if namespace.Classify(ref) != namespace.RefPath {
+		return harness.LoadQualified(ref)
+	}
+
+	dir := ref
+	if strings.HasPrefix(dir, "~/") {
+		if home, hErr := os.UserHomeDir(); hErr == nil {
+			dir = filepath.Join(home, dir[2:])
+		}
+	}
+	abs, absErr := filepath.Abs(dir)
+	if absErr != nil {
+		return nil, fmt.Errorf("resolving harness path %q: %w", ref, absErr)
+	}
+	if _, statErr := os.Stat(abs); statErr != nil {
+		return nil, fmt.Errorf("no harness at %s: %w", abs, statErr)
+	}
+	if _, mErr := migration.FormatChain().Run(abs); mErr != nil {
+		return nil, fmt.Errorf("migrating harness at %s: %w", abs, mErr)
+	}
+	if !plugin.IsPluginDir(abs) {
+		return nil, fmt.Errorf(
+			"no harness at %s: expected %s. Run `ynd create harness <name>` to make one, "+
+				"or pass an installed id — `ynh ls` lists them",
+			abs, plugin.PluginFile)
+	}
+	return harness.LoadDir(abs)
 }

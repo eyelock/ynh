@@ -886,3 +886,83 @@ func TestCheck_UnrunnableSensorIsNeverBaselined(t *testing.T) {
 		t.Errorf("a baseline was written over an unrunnable sensor: %v", entries)
 	}
 }
+
+// `ynh check` accepts a filesystem path, which its own rejection message has
+// always advertised.
+//
+// Before this, every path form was refused — including the `./<path>` the error
+// text names — so a harness had to be installed before it could be checked.
+// That is a real barrier while you are still authoring one, which is exactly
+// when you most want to run the gate.
+func TestCheck_AcceptsAPath(t *testing.T) {
+	dir := t.TempDir()
+	writeHarnessAt(t, dir, "pathcheck")
+
+	for _, form := range []string{".", "./", "./.", dir} {
+		t.Run(form, func(t *testing.T) {
+			t.Chdir(dir)
+			var stdout bytes.Buffer
+			t.Setenv("YNH_HOME", t.TempDir())
+			if err := cmdCheck([]string{form, "--cwd", dir}, &stdout, io.Discard); err != nil {
+				t.Fatalf("cmdCheck(%q): %v", form, err)
+			}
+			if !strings.Contains(stdout.String(), "green") {
+				t.Errorf("%q did not run the harness's sensor:\n%s", form, stdout.String())
+			}
+		})
+	}
+}
+
+// A path with no harness must say so plainly, and must not fall back to the
+// canonical-id message — telling someone their directory "is not a valid
+// harness id" is the wrong diagnosis entirely.
+func TestCheck_PathWithNoHarness(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	dir := t.TempDir()
+	var stderr bytes.Buffer
+	err := cmdCheck([]string{dir}, io.Discard, &stderr)
+	if err == nil {
+		t.Fatal("a directory with no harness should fail")
+	}
+	msg := err.Error() + stderr.String()
+	if !strings.Contains(msg, "no harness at") {
+		t.Errorf("wrong diagnosis for a pathless harness: %s", msg)
+	}
+	if strings.Contains(msg, "not a valid harness id") {
+		t.Error("fell back to the canonical-id message for a path")
+	}
+}
+
+// An unresolvable id still gets the id message, so the fix does not swallow
+// the case the message was written for.
+func TestCheck_UnknownIdStillReportsIdError(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	var stderr bytes.Buffer
+	err := cmdCheck([]string{"nosuch"}, io.Discard, &stderr)
+	if err == nil {
+		t.Fatal("an unknown ref should fail")
+	}
+	if msg := err.Error() + stderr.String(); !strings.Contains(msg, "not a valid harness id") {
+		t.Errorf("expected the canonical-id hint: %s", msg)
+	}
+}
+
+// writeHarnessAt drops a minimal valid harness with one always-green sensor.
+func writeHarnessAt(t *testing.T, dir, name string) {
+	t.Helper()
+	pluginDir := filepath.Join(dir, ".ynh-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{
+  "name": "` + name + `",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "sensors": {
+    "green": {"source": {"command": "true"}, "output": {"format": "text"}}
+  }
+}`
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
