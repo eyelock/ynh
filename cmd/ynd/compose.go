@@ -71,7 +71,12 @@ type composeArtifact struct {
 }
 
 type composeInclude struct {
-	Git      string   `json:"git"`
+	Git string `json:"git"`
+	// Local is the path form of an include. It was absent from the composed
+	// view entirely, so a locally-included harness listed as `{"git": ""}` with
+	// no indication of where it came from — in the one command whose job is
+	// answering "where did this come from".
+	Local    string   `json:"local,omitempty"`
 	Ref      string   `json:"ref,omitempty"`
 	Path     string   `json:"path,omitempty"`
 	Pick     []string `json:"pick,omitempty"`
@@ -256,9 +261,17 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 
 	// Collect artifacts from resolved includes
 	for idx, r := range resolved {
-		incSource := resolver.ShortGitURL(h.Includes[idx].Git)
-		if h.Includes[idx].Path != "" {
-			incSource += "/" + h.Includes[idx].Path
+		// A local include has no Git URL, and ShortGitURL("") is "", so every
+		// artifact from one arrived unattributed. `local` is the low-friction
+		// adoption path the shipped ynh-adopt skill teaches, which makes this
+		// the attribution a new adopter hits first.
+		inc := h.Includes[idx]
+		incSource := resolver.ShortGitURL(inc.Git)
+		if inc.Git == "" && inc.Local != "" {
+			incSource = inc.Local
+		}
+		if inc.Path != "" {
+			incSource += "/" + inc.Path
 		}
 
 		// Scan the resolved base path for artifacts
@@ -322,6 +335,7 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 	for idx, inc := range h.Includes {
 		ci := composeInclude{
 			Git:      inc.Git,
+			Local:    inc.Local,
 			Ref:      inc.Ref,
 			Path:     inc.Path,
 			Resolved: idx < len(resolved),
@@ -409,10 +423,11 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 		}
 		for _, inc := range p.Includes {
 			cp.Includes = append(cp.Includes, composeInclude{
-				Git:  inc.Git,
-				Ref:  inc.Ref,
-				Path: inc.Path,
-				Pick: inc.Pick,
+				Git:   inc.Git,
+				Local: inc.Local,
+				Ref:   inc.Ref,
+				Path:  inc.Path,
+				Pick:  inc.Pick,
 			})
 		}
 		profiles[name] = cp
@@ -514,7 +529,13 @@ func printComposeText(w io.Writer, out composeOutput) error {
 	if len(out.Includes) > 0 {
 		_, _ = fmt.Fprintf(w, "\nIncludes (%d):\n", len(out.Includes))
 		for _, inc := range out.Includes {
-			line := "  " + inc.Git
+			// A local include has no Git URL; without this the line was two
+			// spaces and a status.
+			origin := inc.Git
+			if origin == "" {
+				origin = inc.Local
+			}
+			line := "  " + origin
 			if inc.Path != "" {
 				line += "  path=" + inc.Path
 			}
