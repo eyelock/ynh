@@ -56,6 +56,7 @@ from it.)
 | **`ynh check` gates and I cannot see why** | `ynh check <name> --format json` | See the section below — this has its own routing. |
 | **After an upgrade, a harness vanished** | `ynh quarantine list` | A failed auto-migration quarantines rather than deletes. `quarantine restore` brings it back. |
 | **Manifest is the old format** | `ynd migrate <dir>` | Converts `.harness.json` to `.ynh-plugin/plugin.json` as a reviewable diff. |
+| **My agents/rules/commands vanished after publishing** | re-read the `ynd export` output | Not a bug and not silent — the vendors' plugin formats differ, and export warns about what it dropped. Codex carries skills only; Copilot carries no rules or commands. All four types still work through `ynh run`. |
 
 ## When `ynh check` gates
 
