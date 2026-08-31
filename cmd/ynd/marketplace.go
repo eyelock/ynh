@@ -28,10 +28,11 @@ func cmdMarketplace(args []string) error {
 
 func cmdMarketplaceBuild(args []string) error {
 	var (
-		outputDir  string
-		vendors    string
-		clean      bool
-		configFile string
+		outputDir   string
+		vendors     string
+		clean       bool
+		skipConfirm bool
+		configFile  string
 	)
 
 	i := 0
@@ -51,6 +52,8 @@ func cmdMarketplaceBuild(args []string) error {
 			vendors = args[i]
 		case "--clean":
 			clean = true
+		case "-y", "--yes":
+			skipConfirm = true
 		case "-h", "--help":
 			return errHelp
 		default:
@@ -100,7 +103,7 @@ func cmdMarketplaceBuild(args []string) error {
 
 	// Handle --clean
 	if clean {
-		if err := cleanOutputDir(outputDir, skipConfirmEnv()); err != nil {
+		if err := cleanOutputDir(outputDir, skipConfirm || skipConfirmEnv()); err != nil {
 			return err
 		}
 	}

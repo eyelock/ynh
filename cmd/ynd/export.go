@@ -24,6 +24,7 @@ func cmdExport(args []string) error {
 		profileName string
 		focusName   string
 		clean       bool
+		skipConfirm bool
 		merged      bool
 		source      string
 	)
@@ -64,6 +65,8 @@ func cmdExport(args []string) error {
 			focusName = args[i]
 		case "--clean":
 			clean = true
+		case "-y", "--yes":
+			skipConfirm = true
 		case "--merged":
 			merged = true
 		case "--harness":
@@ -128,7 +131,7 @@ func cmdExport(args []string) error {
 
 	// Handle --clean
 	if clean {
-		if err := cleanOutputDir(outputDir, skipConfirmEnv()); err != nil {
+		if err := cleanOutputDir(outputDir, skipConfirm || skipConfirmEnv()); err != nil {
 			return err
 		}
 	}
