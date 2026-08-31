@@ -46,8 +46,8 @@ func TestSensorHash_Deterministic(t *testing.T) {
 		gate.Result{Name: "build", Status: gate.StatusPass},
 		gate.Result{Name: "test", Kind: "command", Tolerance: "blocking", Status: gate.StatusFail},
 	)
-	first := SensorHash(e)
-	if second := SensorHash(e); first != second {
+	first := SensorHash(e, nil)
+	if second := SensorHash(e, nil); first != second {
 		t.Errorf("SensorHash should be deterministic: %q then %q", first, second)
 	}
 }
@@ -55,7 +55,7 @@ func TestSensorHash_Deterministic(t *testing.T) {
 func TestSensorHash_DifferentOnChange(t *testing.T) {
 	before := env(gate.Result{Name: "build", Kind: "command", Status: gate.StatusPass})
 	after := env(gate.Result{Name: "build", Kind: "command", Status: gate.StatusFail})
-	if SensorHash(before) == SensorHash(after) {
+	if SensorHash(before, nil) == SensorHash(after, nil) {
 		t.Error("a sensor changing status should produce a different hash")
 	}
 }
@@ -68,13 +68,13 @@ func TestSensorHash_IgnoresSkipped(t *testing.T) {
 		gate.Result{Name: "slow", Kind: "command", Status: gate.StatusSkipped},
 	)
 	without := env(gate.Result{Name: "build", Kind: "command", Status: gate.StatusPass})
-	if SensorHash(with) != SensorHash(without) {
+	if SensorHash(with, nil) != SensorHash(without, nil) {
 		t.Error("a skipped sensor did not run and must not affect the hash")
 	}
 }
 
 func TestSensorHash_NilEnvelope(t *testing.T) {
-	if SensorHash(nil) == "" {
+	if SensorHash(nil, nil) == "" {
 		t.Error("SensorHash of a nil envelope should still return a string")
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -131,6 +132,22 @@ type RunOptions struct {
 // converge. It is populated by a deferred finaliser so the twenty-odd exit
 // points do not each have to remember to fill it in — one of them forgetting
 // would produce a plausible-looking result that quietly lied.
+// sensorMatchers compiles each sensor's output.match once. A pattern that
+// does not compile is treated as absent here: validation reports it, and the
+// loop should not stop because of it.
+func sensorMatchers(h *harness.Harness) map[string]*regexp.Regexp {
+	if h == nil {
+		return nil
+	}
+	out := make(map[string]*regexp.Regexp, len(h.Sensors))
+	for name, s := range h.Sensors {
+		if re, err := s.OutputMatcher(); err == nil && re != nil {
+			out[name] = re
+		}
+	}
+	return out
+}
+
 func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	result = &RunResult{
 		Capabilities: config.CapabilitiesVersion,
@@ -921,7 +938,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			return result, nil
 		} else {
 			// ── Stuckness watchdog ─────────────────────────────────────────────
-			sensorHash := SensorHash(checkEnv)
+			sensorHash := SensorHash(checkEnv, sensorMatchers(harnessObj))
 			if reason := watchdog.RecordTurn(turn.Content, sensorHash); reason != "" {
 				_ = traj.Emit(KindStuckDetected, turnN, StuckDetectedData{Reason: reason, TurnCount: budget.Turns()})
 				_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitStuck, Reason: reason})

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/baseline"
@@ -134,7 +135,11 @@ func defaultRunSensor(ynhPath, harnessName, sensorName, cwd, overlayJSON string)
 // Output is fingerprinted rather than hashed raw so that file positions
 // shifting (a line inserted above an existing finding) does not read as
 // progress. The same normalisation the baseline uses.
-func SensorHash(env *gate.Envelope) string {
+// matchers maps sensor name to its compiled output.match, nil where none is
+// declared. Passed in because the envelope carries results, not declarations,
+// and a hash over a tool's decoration would read a changed summary line as
+// progress (#338).
+func SensorHash(env *gate.Envelope, matchers map[string]*regexp.Regexp) string {
 	if env == nil {
 		return contentHash("")
 	}
@@ -148,7 +153,7 @@ func SensorHash(env *gate.Envelope) string {
 		if out == "" {
 			out = r.Stdout + "\n" + r.Stderr
 		}
-		for _, fp := range baseline.Fingerprints(out, "") {
+		for _, fp := range baseline.Fingerprints(out, "", matchers[r.Name]) {
 			sb.WriteString(fp)
 			sb.WriteByte(',')
 		}

@@ -157,10 +157,11 @@ func explainForgiven(p *harness.Harness, name string, s plugin.Sensor, cwd strin
 		recorded[fp] = true
 	}
 	raw := run.Output.Stdout + "\n" + run.Output.Stderr
+	matcher, _ := s.OutputMatcher()
 	var out []string
 	seen := map[string]bool{}
 	for _, line := range splitLines(raw) {
-		for _, fp := range baseline.Fingerprints(line, cwd) {
+		for _, fp := range baseline.Fingerprints(line, cwd, matcher) {
 			if recorded[fp] && !seen[fp] {
 				seen[fp] = true
 				out = append(out, line)

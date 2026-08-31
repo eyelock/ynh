@@ -163,11 +163,18 @@ var lineNumbers = regexp.MustCompile(`:\d+(:\d+)?`)
 // hashes. Blank lines are dropped, absolute paths under root are made
 // relative so a baseline recorded on one machine matches on another, and
 // line/column positions are collapsed.
-func Fingerprints(output, root string) []string {
+func Fingerprints(output, root string, match *regexp.Regexp) []string {
 	seen := map[string]bool{}
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
+			continue
+		}
+		// A sensor that declares output.match records only its findings.
+		// Without it, a tool's headers and summary counts become accepted
+		// debt, and fixing a real finding changes the summary into a line the
+		// baseline has never seen (#338).
+		if match != nil && !match.MatchString(line) {
 			continue
 		}
 		if root != "" {
@@ -188,9 +195,9 @@ func Fingerprints(output, root string) []string {
 
 // Record builds a SensorBaseline from raw output. RecordedAt is left empty;
 // Set fills it, so an unchanged entry keeps the timestamp it already had.
-func Record(status, output, root string) SensorBaseline {
-	fps := Fingerprints(output, root)
-	sb := SensorBaseline{Status: status, Count: len(fps), Total: CountLines(output)}
+func Record(status, output, root string, match *regexp.Regexp) SensorBaseline {
+	fps := Fingerprints(output, root, match)
+	sb := SensorBaseline{Status: status, Count: len(fps), Total: CountLines(output, match)}
 	if len(fps) > maxFingerprints {
 		// Store none rather than an arbitrary subset — see Truncated.
 		sb.Truncated = true
@@ -203,12 +210,21 @@ func Record(status, output, root string) SensorBaseline {
 // CountLines counts every non-empty line, without normalising or
 // deduplicating. Two identical findings count twice — which is the whole point
 // for a sensor whose quantity is the finding.
-func CountLines(output string) int {
+func CountLines(output string, match *regexp.Regexp) int {
 	n := 0
 	for _, line := range strings.Split(output, "\n") {
-		if strings.TrimSpace(line) != "" {
-			n++
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
 		}
+		// The count ratchet must honour the same filter as the fingerprint
+		// ratchet. It is the escape hatch for duplicate findings, and if it
+		// counted decoration too there would be no ratchet left that ignores
+		// a tool's summary lines (#338).
+		if match != nil && !match.MatchString(line) {
+			continue
+		}
+		n++
 	}
 	return n
 }
