@@ -16,6 +16,25 @@ routing around.
 **Prerequisites.** [The Agent Loop](agent-loop.md), a repository with
 history, and a harness whose sensors cover the class of fix you are sampling.
 
+**Not every sensor has a corpus, and the good ones often have none.** A sensor
+wrapping a check that already gates CI cannot have failing states in history
+after that check landed: the gate refused them. Squash merging removes the rest,
+because a branch's failing intermediate commits collapse into one passing commit
+and never reach the trunk. Between them, a well-run repository erases exactly the
+commits this technique needs.
+
+So a corpus lives in two places, and it is worth picking the sensor before
+writing any tooling:
+
+| Where | Why it survived |
+|---|---|
+| Commits **before** the gate landed | Nothing was stopping them yet |
+| Sensors that see **more** than CI does | Advisory sensors, or ones stricter than the gate, never blocked a merge |
+
+The second is usually the richer seam. A sensor declared `advisory` or `report`
+has been observing without blocking for its whole life, so its failing states are
+all still there.
+
 The rig, end to end — one historical fix yields one graded attempt, and the
 answer is withheld from the agent that has to reproduce it:
 
@@ -82,8 +101,16 @@ answer is withheld from the agent that has to reproduce it:
 Find closed fixes:
 
 ```bash
-git log --oneline --grep='^fix' -15
+git log --format='%H %s' | grep -E '^[0-9a-f]+ fix(\([^)]*\))?!?: ' | head -15
 ```
+
+**Not `git log --grep='^fix'`.** `--grep` matches per line, so `^fix` also matches
+a line starting with "fix" anywhere in the commit *body*, and pulls in `docs:`,
+`test:` and `feat:` commits whose bodies mention fixing something. On this
+repository's own history that is 119 matches against 94 real ones, a 26%
+inflation. A corpus counted that way is padded with commits that were never
+fixes, and the padding survives right up until triage throws them out, which is
+after you have decided the sample is large enough.
 
 ```
 8382382 fix(uninstall): preserve bare-name resources claimed by another install (#173)
@@ -158,9 +185,25 @@ This is the "before" half of the [reproducible
 negative](../factory-pattern.md#what-actually-reduces-review-time). Without it you
 cannot tell a fix from a change.
 
-If the gate already passes at the base commit, discard the candidate. Your
-sensors do not detect this class of bug, and no result the agent produces will
-mean anything.
+If the gate already passes at the base commit, discard the candidate: without a
+failing "before" state, no result the agent produces will mean anything.
+
+**Discarding is right. The obvious explanation for it usually is not.** There are
+two reasons a base commit passes, and they call for opposite responses:
+
+| | What it means | What to do |
+|---|---|---|
+| **The sensor cannot see this class of bug** | A real gap in your harness | Fix or add a sensor, then re-sample |
+| **The failing state was never allowed to land** | The sensor works; CI blocked it, and squash merging erased the intermediate commits | Nothing is wrong. Sample a different sensor |
+
+Telling them apart takes one question: **was this check gating CI when that
+commit landed?** If it was, the second explanation is the default, and no amount
+of sensor work will produce a corpus from that period.
+
+The tell is a whole run discarding every candidate. A harness genuinely blind to
+a class of bug usually catches *something* nearby; a gated check yields exactly
+zero, because zero is what the gate was for. Reading that as "our sensors detect
+nothing" is the wrong conclusion, and it is the one the numbers invite.
 
 ## Run the loop against the base state
 
@@ -282,6 +325,9 @@ than as a project.
 ## Summary
 
 - Shadow mode measures yield against fixes whose answer is already in history.
+- **Pick the sensor before the sample.** A check that gates CI has no failing
+  states in history after it landed, and squash merging removes the rest. An
+  empty corpus is usually that, not blind sensors.
 - Reconstruct the task from what was known *then*; the fix message leaks the
   answer.
 - Pin one harness across the whole sample. The historical harness is usually not
