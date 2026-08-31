@@ -67,6 +67,30 @@
       "prompt": "Validate the harness in the current working directory with ynd validate. If issues are found, walk through each one and help me fix it. If it's valid, run ynd preview so I can see the assembled vendor output."
     }
   },
+  "reads": {
+    "skills/ynd-inspect": [
+      "skills/ynd-inspect/references/beyond-artifacts.md",
+      "skills/ynd-inspect/references/inspect-workflow.md"
+    ],
+    "skills/ynh-adopt": [
+      "skills/ynh-adopt/references/what-moves-where.md"
+    ],
+    "skills/ynh-compose": [
+      "skills/ynh-compose/references/composition-patterns.md"
+    ],
+    "skills/ynh-create-harness": [
+      "skills/ynh-create-harness/references/artifact-formats.md",
+      "skills/ynh-create-harness/references/example-harness.md",
+      "skills/ynh-create-harness/references/harness-format.md"
+    ],
+    "skills/ynh-sensors": [
+      "skills/ynh-sensors/references/calibration.md",
+      "skills/ynh-sensors/references/starter-sets.md"
+    ],
+    "skills/ynh-team-setup": [
+      "skills/ynh-team-setup/references/delegation.md"
+    ]
+  },
   "sensors": {
     "harness-valid": {
       "category": "maintainability",

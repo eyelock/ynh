@@ -650,7 +650,8 @@ func lintHarnessJSON(path string) []lintIssue {
 	if err != nil {
 		return []lintIssue{{File: path, Message: fmt.Sprintf("cannot read: %v", err)}}
 	}
-	return schemaIssues(path, data, compiledPluginSchema)
+	issues := schemaIssues(path, data, compiledPluginSchema)
+	return append(issues, lintDeclaredReads(path)...)
 }
 
 // lintRegistryMarketplace validates a .ynh-plugin/marketplace.json registry index
