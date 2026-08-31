@@ -2,7 +2,14 @@
 
 Verification checklist for ynh and ynd. Each test references a tutorial step or is an edge case tested here.
 
-Run all 15 tutorials in sequence to cover the happy path. This file adds edge cases and error handling tests that tutorials don't cover, plus a reference table for tracking.
+Run every tutorial in `docs/tutorial/` in sequence to cover the happy path. This file adds
+edge cases and error-handling tests the tutorials do not cover, plus a reference table for
+tracking.
+
+The count is deliberately not written down. It has been wrong twice — it read 15 when there
+were 20, and still read 15 when there were 22 — because a number in prose does not move when
+a tutorial is added. Every tutorial should have a section below; a missing one is a gap to
+close, not a number to correct.
 
 ---
 
@@ -223,6 +230,130 @@ Requires Docker installed and running.
 | YNH_HOME override | [Check for updates — `--check-updates`](tutorial/structured-output.md#check-for-updates-check-updates) |
 | Inspect install provenance | [Inspect install provenance](tutorial/structured-output.md#inspect-install-provenance) |
 | Validate output against the published schema | [Validate output against the published schema](tutorial/structured-output.md#validate-output-against-the-published-schema) |
+
+### Focus
+
+| Test | Tutorial step |
+|---|---|
+| Create a harness with focus entries | [Create a harness with focus entries](tutorial/focus.md#create-a-harness-with-focus-entries) |
+| Validate focus entries | [Validate focus entries](tutorial/focus.md#validate-focus-entries) |
+| Preview with --focus review | [Preview with --focus review](tutorial/focus.md#preview-with-focus-review) |
+| Focus and profile are mutually exclusive | [Focus and profile are mutually exclusive](tutorial/focus.md#focus-and-profile-are-mutually-exclusive) |
+| Unknown focus is an error | [Unknown focus is an error](tutorial/focus.md#unknown-focus-is-an-error) |
+| Use YNH_FOCUS env var | [Use YNH_FOCUS env var](tutorial/focus.md#use-ynh-focus-env-var) |
+| Install and view focus in ynh info | [Install and view focus in ynh info](tutorial/focus.md#install-and-view-focus-in-ynh-info) |
+| Edit focuses from the command line | [Edit focuses from the command line](tutorial/focus.md#edit-focuses-from-the-command-line) |
+| Clean up | [Clean up](tutorial/focus.md#clean-up) |
+| What You Learned | [What You Learned](tutorial/focus.md#what-you-learned) |
+
+### Project-Local Config
+
+| Test | Tutorial step |
+|---|---|
+| Create a project with .ynh-plugin/plugin.json | [Create a project with .ynh-plugin/plugin.json](tutorial/project-local-config.md#create-a-project-with-ynh-plugin-plugin-json) |
+| Validate the project config | [Validate the project config](tutorial/project-local-config.md#validate-the-project-config) |
+| Preview the assembled output | [Preview the assembled output](tutorial/project-local-config.md#preview-the-assembled-output) |
+| Preview with --focus | [Preview with --focus](tutorial/project-local-config.md#preview-with-focus) |
+| Clean up | [Clean up](tutorial/project-local-config.md#clean-up) |
+| What You Learned | [What You Learned](tutorial/project-local-config.md#what-you-learned) |
+| Composition with focus | [Composition with focus](tutorial/project-local-config.md#composition-with-focus) |
+
+### Include Editing
+
+| Test | Tutorial step |
+|---|---|
+| Add an include | [Add an include](tutorial/include-editing.md#add-an-include) |
+| Add with flags | [Add with flags](tutorial/include-editing.md#add-with-flags) |
+| Duplicate add → error | [Duplicate add → error](tutorial/include-editing.md#duplicate-add-error) |
+| Replace an existing include | [Replace an existing include](tutorial/include-editing.md#replace-an-existing-include) |
+| Update an include | [Update an include](tutorial/include-editing.md#update-an-include) |
+| Update a path value | [Update a path value](tutorial/include-editing.md#update-a-path-value) |
+| Remove an include | [Remove an include](tutorial/include-editing.md#remove-an-include) |
+| Disambiguating a monorepo | [Disambiguating a monorepo](tutorial/include-editing.md#disambiguating-a-monorepo) |
+| Installed harnesses — name-based targeting (network required) | [Installed harnesses — name-based targeting (network required)](tutorial/include-editing.md#installed-harnesses-name-based-targeting-network-required) |
+| Path resolution — id vs path | [Path resolution — id vs path](tutorial/include-editing.md#path-resolution-id-vs-path) |
+| Clean up | [Clean up](tutorial/include-editing.md#clean-up) |
+
+### Namespacing & Migration
+
+| Test | Tutorial step |
+|---|---|
+| Canonical ids — the new identity model | [Canonical ids — the new identity model](tutorial/namespacing-and-migration.md#canonical-ids-the-new-identity-model) |
+| Demo — two registries, two `david` harnesses | [Demo — two registries, two `david` harnesses](tutorial/namespacing-and-migration.md#demo-two-registries-two-david-harnesses) |
+| Search returns both entries | [Search returns both entries](tutorial/namespacing-and-migration.md#search-returns-both-entries) |
+| Disambiguate install with `@<registry>` | [Disambiguate install with `@<registry>`](tutorial/namespacing-and-migration.md#disambiguate-install-with) |
+| Inspect by canonical id | [Inspect by canonical id](tutorial/namespacing-and-migration.md#inspect-by-canonical-id) |
+| Uninstall by canonical id | [Uninstall by canonical id](tutorial/namespacing-and-migration.md#uninstall-by-canonical-id) |
+| Migrate a legacy harness with `ynd migrate` | [Migrate a legacy harness with `ynd migrate`](tutorial/namespacing-and-migration.md#migrate-a-legacy-harness-with-ynd-migrate) |
+| Recursive migration | [Recursive migration](tutorial/namespacing-and-migration.md#recursive-migration) |
+| Transparent migration on use | [Transparent migration on use](tutorial/namespacing-and-migration.md#transparent-migration-on-use) |
+| `ynh migrate` — upgrade `~/.ynh` schema | [`ynh migrate` — upgrade `~/.ynh` schema](tutorial/namespacing-and-migration.md#ynh-migrate-upgrade-ynh-schema) |
+| `ynh quarantine` — recover from broken installs | [`ynh quarantine` — recover from broken installs](tutorial/namespacing-and-migration.md#ynh-quarantine-recover-from-broken-installs) |
+| Clean up | [Clean up](tutorial/namespacing-and-migration.md#clean-up) |
+| What You Learned | [What You Learned](tutorial/namespacing-and-migration.md#what-you-learned) |
+
+### Sensors
+
+| Test | Tutorial step |
+|---|---|
+| A `files` sensor | [A `files` sensor](tutorial/sensors.md#a-files-sensor) |
+| A `command` sensor | [A `command` sensor](tutorial/sensors.md#a-command-sensor) |
+| A `focus`-referencing sensor | [A `focus`-referencing sensor](tutorial/sensors.md#a-focus-referencing-sensor) |
+| An inline-focus sensor | [An inline-focus sensor](tutorial/sensors.md#an-inline-focus-sensor) |
+| Discovery — `ynh sensors ls/show` | [Discovery — `ynh sensors ls/show`](tutorial/sensors.md#discovery-ynh-sensors-ls-show) |
+| Validation — every rule produces a clear error | [Validation — every rule produces a clear error](tutorial/sensors.md#validation-every-rule-produces-a-clear-error) |
+| Hook–sensor pairing | [Hook–sensor pairing](tutorial/sensors.md#hook-sensor-pairing) |
+| Install round-trip preserves sensors | [Install round-trip preserves sensors](tutorial/sensors.md#install-round-trip-preserves-sensors) |
+| What a loop driver does with this | [What a loop driver does with this](tutorial/sensors.md#what-a-loop-driver-does-with-this) |
+
+### Check & Baseline
+
+| Test | Tutorial step |
+|---|---|
+| Declare sensors with a tolerance | [Declare sensors with a tolerance](tutorial/check.md#declare-sensors-with-a-tolerance) |
+| A clean run | [A clean run](tutorial/check.md#a-clean-run) |
+| A blocking failure gates | [A blocking failure gates](tutorial/check.md#a-blocking-failure-gates) |
+| A `files` sensor gates on freshness | [A `files` sensor gates on freshness](tutorial/check.md#a-files-sensor-gates-on-freshness) |
+| The problem with inheriting a repository | [The problem with inheriting a repository](tutorial/check.md#the-problem-with-inheriting-a-repository) |
+| Record a baseline | [Record a baseline](tutorial/check.md#record-a-baseline) |
+| Read what the ratchet forgives | [Read what the ratchet forgives](tutorial/check.md#read-what-the-ratchet-forgives) |
+| Only new failures gate | [Only new failures gate](tutorial/check.md#only-new-failures-gate) |
+| Moving code is not a new failure | [Moving code is not a new failure](tutorial/check.md#moving-code-is-not-a-new-failure) |
+| Paying off debt tightens the ratchet | [Paying off debt tightens the ratchet](tutorial/check.md#paying-off-debt-tightens-the-ratchet) |
+| CI cannot write a baseline | [CI cannot write a baseline](tutorial/check.md#ci-cannot-write-a-baseline) |
+| Exit codes and structured output | [Exit codes and structured output](tutorial/check.md#exit-codes-and-structured-output) |
+| Wire it into the edit loop | [Wire it into the edit loop](tutorial/check.md#wire-it-into-the-edit-loop) |
+
+### Agent Loop
+
+| Test | Tutorial step |
+|---|---|
+| A harness with one sensor and a focus | [A harness with one sensor and a focus](tutorial/agent-loop.md#a-harness-with-one-sensor-and-a-focus) |
+| Run the loop | [Run the loop](tutorial/agent-loop.md#run-the-loop) |
+| Budgets, and where the defaults come from | [Budgets, and where the defaults come from](tutorial/agent-loop.md#budgets-and-where-the-defaults-come-from) |
+| Convergence | [Convergence](tutorial/agent-loop.md#convergence) |
+| Running against a scratch checkout | [Running against a scratch checkout](tutorial/agent-loop.md#running-against-a-scratch-checkout) |
+| Reading a trajectory | [Reading a trajectory](tutorial/agent-loop.md#reading-a-trajectory) |
+| The run result | [The run result](tutorial/agent-loop.md#the-run-result) |
+| Exit codes | [Exit codes](tutorial/agent-loop.md#exit-codes) |
+| Resuming | [Resuming](tutorial/agent-loop.md#resuming) |
+| The controls a run does not have | [The controls a run does not have](tutorial/agent-loop.md#the-controls-a-run-does-not-have) |
+| Summary | [Summary](tutorial/agent-loop.md#summary) |
+
+### Shadow Mode
+
+| Test | Tutorial step |
+|---|---|
+| Select candidates | [Select candidates](tutorial/shadow-mode.md#select-candidates) |
+| Build the base state | [Build the base state](tutorial/shadow-mode.md#build-the-base-state) |
+| Pin the harness, do not inherit it | [Pin the harness, do not inherit it](tutorial/shadow-mode.md#pin-the-harness-do-not-inherit-it) |
+| Capture the finding as it stood | [Capture the finding as it stood](tutorial/shadow-mode.md#capture-the-finding-as-it-stood) |
+| Run the loop against the base state | [Run the loop against the base state](tutorial/shadow-mode.md#run-the-loop-against-the-base-state) |
+| Compare | [Compare](tutorial/shadow-mode.md#compare) |
+| Grade blind | [Grade blind](tutorial/shadow-mode.md#grade-blind) |
+| Read the result honestly | [Read the result honestly](tutorial/shadow-mode.md#read-the-result-honestly) |
+| Aggregate | [Aggregate](tutorial/shadow-mode.md#aggregate) |
+| Summary | [Summary](tutorial/shadow-mode.md#summary) |
 
 ---
 
