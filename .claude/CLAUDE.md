@@ -67,8 +67,8 @@ Follows the [Agent Skills](https://agentskills.io) open standard. See `docs/skil
 | `.github/CONTRIBUTING.md` | Architecture, code patterns, vendor adapters, test matrix |
 | `.goreleaser.yml` | Release config (both binaries, brew tap) |
 | `.github/workflows/release.yml` | Tag-triggered release |
-| `.claude/plans/ynd-manual-test-plan.md` | Manual test script for all ynd features |
-| `docs/tutorial/` | Progressive tutorials + manual test plan |
+| `docs/tutorial/` | Progressive tutorials, run in sequence for the happy path |
+| `docs/tutorial/manual-test-plan.md` | Manual verification for `ynh` and `ynd`: edge cases the tutorials do not cover |
 | `docs/skills-standard.md` | Agent Skills spec, cross-platform compat, known issues |
 | `docs/ynd.md` | ynd command reference |
 
