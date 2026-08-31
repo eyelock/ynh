@@ -37,10 +37,6 @@ change it.
 If `ynh doctor` is clean and the problem persists, the fault is in the harness
 content rather than the installation, so go to the symptom table.
 
-(If its output covers only Claude hook wiring, you are on a build from before
-`doctor` was widened — go straight to the symptom table, which needs nothing
-from it.)
-
 ## Symptom → command
 
 | Symptom | Run this first | Why |

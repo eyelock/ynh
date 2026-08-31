@@ -112,10 +112,10 @@ ynh hook export <harness> --target settings --dry-run   # preview, write nothing
 Then confirm the wiring:
 
 ```bash
-ynh doctor   # checks .claude/settings.json + settings.local.json for the silent-failure traps below
+ynh doctor   # among its checks: .claude/settings.json + settings.local.json for the traps below
 ```
 
-`ynh doctor` flags canonical names that leaked into a settings file (where Claude ignores them), cwd-relative hook commands, and a project with no settings file at all (hooks declared but not wired).
+`ynh doctor`'s hook-wiring check flags canonical names that leaked into a settings file (where Claude ignores them), cwd-relative hook commands, and a project with no settings file at all (hooks declared but not wired).
 
 If you hand-author the settings file instead, three rules:
 

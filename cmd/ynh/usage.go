@@ -65,7 +65,7 @@ Commands:
     init                                   Show the ynh home path and setup instructions
     status                                 Show symlink installations across projects
     paths                                  Show resolved path roots
-    doctor                                 Check Claude hook wiring in this project
+    doctor                                 Diagnose a broken setup: vendors, harnesses, symlinks, PATH
     prune                                  Clean orphaned symlinks and stale run dirs
     image <name> [flags]                   Build a Docker image with a harness baked in
     backend <add|list|remove>              Local model backends a vendor CLI can target

@@ -46,7 +46,7 @@ installed CLI describes itself and is always available:
 ynh help                        # every command
 ynh vendors                     # vendors, and which are on PATH
 ynh info <name>                 # a harness's resolved config
-ynh doctor                      # check Claude hook wiring
+ynh doctor                      # diagnose the setup and report what is wrong
 ynd validate <dir>              # is this harness valid, and why not
 ynd preview <dir> -v <vendor>   # exactly what a vendor will receive
 ```

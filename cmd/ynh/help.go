@@ -219,13 +219,26 @@ Manage a harness's top-level hooks.
   ynh hook remove <harness> <event> <index>
   ynh hook export <harness> --target <settings|local> [--dry-run]`,
 
-	"doctor": `ynh doctor
+	"doctor": `ynh doctor [--format <text|json>]
 
-Check Claude hook wiring in the current project.
+Diagnose an ynh setup and report what is wrong.
 
-This checks one thing: whether Claude's settings.json hook configuration is
-correctly wired. It is not a general setup diagnostic — for those, see
-"ynd validate", "ynd preview", "ynh info", "ynh status" and "ynh paths".`,
+Six checks, ordered by how often each bites:
+
+  vendors      a harness defaults to a vendor whose CLI is not on PATH
+  harnesses    something listed as installed will not load
+  symlinks     a recorded installation whose links or project are gone
+  launcher     the bin directory is not on PATH, so nothing is runnable
+  quarantine   harnesses set aside by a failed migration
+  hooks        Claude settings.json hook wiring
+
+doctor is read-only. It never repairs, because a diagnostic that changes
+things is one people hesitate to run. Every finding carries the command that
+fixes it instead.
+
+Exit status is 0 even when findings exist: a user running this because
+something is already broken should not have the tool fail on them too. To
+gate on the result, read summary.errors from --format json.`,
 
 	"mcp": `ynh mcp <add|remove|update> <harness> <name> [flags]
 
