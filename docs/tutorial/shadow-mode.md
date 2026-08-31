@@ -125,14 +125,14 @@ the wrong move, and the repository will usually tell you so:
 ```bash
 cd /tmp/shadow/base
 ynh install ./
-ynh check local/ynh-guide --only fmt --format json
+ynh check local/ynh-guide --only harness-valid --format json
 ```
 
 ```json
 {
     "error": {
         "code": "not_found",
-        "message": "sensor \"fmt\" not declared in harness \"ynh-guide\""
+        "message": "sensor \"harness-valid\" not declared in harness \"ynh-guide\""
     }
 }
 ```
