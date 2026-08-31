@@ -76,8 +76,9 @@ Propose one only where someone genuinely works differently. *An unused profile
 is a maintenance cost with no reader* — do not create one per environment
 because environments exist.
 
-There is no `ynh profile ls`. Use `ynh info <name>`, which prints the resolved
-profiles, focuses and sensors.
+`ynh profile ls <harness>` lists what a harness declares, with hook, MCP,
+include and env counts per profile. `ynh info <name>` shows the same alongside
+everything else the harness resolves to.
 
 ## Step 4 — `focuses` — a named way in
 
