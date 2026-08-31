@@ -25,7 +25,7 @@
         ],
         "on_stop": [
           {
-            "command": "sh -c 'ynh sensors ls local/ynh-guide >/dev/null 2>&1 || { echo \"ynh-dev: run \\`ynh install .\\` to enable the fmt sensor on stop\" >&2; exit 0; }; ynh check local/ynh-guide --only fmt'"
+            "command": "sh -c 'ynh sensors ls local/ynh-guide >/dev/null 2>&1 || { echo \"ynh-dev: run \\`ynh install .\\` to enable the harness check on stop\" >&2; exit 0; }; ynh check local/ynh-guide --only harness-valid'"
           }
         ]
       },
@@ -59,34 +59,16 @@
     }
   },
   "sensors": {
-    "fmt": {
+    "harness-valid": {
       "category": "maintainability",
       "tolerance": "blocking",
-      "version_command": "go version",
-      "source": {
-        "command": "sh -c 'out=$(gofmt -l cmd internal); if [ -n \"$out\" ]; then echo \"unformatted:\" >&2; echo \"$out\" >&2; echo \"fix with: make format\" >&2; exit 1; fi'"
+      "version_command": "ynd version",
+      "reference": {
+        "path": "tools/sensors/fixtures/harness-invalid",
+        "expect": "fail"
       },
-      "output": {
-        "format": "text"
-      }
-    },
-    "vet": {
-      "category": "maintainability",
-      "tolerance": "advisory",
-      "version_command": "go version",
       "source": {
-        "command": "go vet ./..."
-      },
-      "output": {
-        "format": "text"
-      }
-    },
-    "check": {
-      "category": "behaviour",
-      "tolerance": "blocking",
-      "version_command": "go version",
-      "source": {
-        "command": "make check"
+        "command": "ynd validate ."
       },
       "output": {
         "format": "text"

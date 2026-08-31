@@ -1,0 +1,11 @@
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "harness-invalid-fixture",
+  "version": "0.1.0",
+  "sensors": {
+    "bad": {
+      "source": { "command": "true", "files": ["also-this"] },
+      "output": { "format": "text" }
+    }
+  }
+}
