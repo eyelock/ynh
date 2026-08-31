@@ -15,6 +15,7 @@ Read these before starting work:
 - `references/coding-standards.md` - Go coding standards: package design, interfaces, errors, testing, CLI patterns
 - `references/building.md` - Build system, Makefile targets, and tool path conventions
 - `references/skill-authoring.md` - Required reading (https://agentskills.io/) before creating or modifying skills
+- `references/agent-and-baseline.md` - The agent loop and the baseline ratchet: convergence, stuckness, budgets, checkpoints, trajectory redaction, and why the gate forgives what it does
 
 ## Quick checks
 
