@@ -16,6 +16,7 @@
         "repo": {"type": "string", "description": "Where the harness comes from, and the field to install with. For from.type=source this is a complete filesystem path to the harness directory, installable on its own. For from.type=registry this is the remote repository, and path may name a subdirectory inside it."},
         "path": {"type": "string", "description": "Subdirectory of repo holding the harness, for a registry repository containing several. Absent for local-source results, whose repo is already the harness directory. Pass it to ynh install as --path."},
         "version": {"type": "string"},
+        "install": {"type": "string", "description": "The complete first argument to `ynh install`, so a consumer needs no branching. For from.type=source this is repo, the harness directory. For from.type=registry this is id, the scheme-less canonical ref: the installer synthesises the clone URL from its first three segments, so a value carrying https:// would be cloned verbatim instead. That form also needs no registry lookup, so it works on a machine with different registries configured."},
         "from": {
           "type": "object",
           "properties": {
