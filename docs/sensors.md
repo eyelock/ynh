@@ -238,6 +238,46 @@ A shell command. The loop driver runs it with the cwd of its choosing and captur
 }
 ```
 
+#### The working directory is the tree under test
+
+**The cwd is the repository your sensor is being asked to measure.** It is not
+the harness, and it is not wherever the script happens to live. A sensor that
+works out its own root instead of using the cwd measures the wrong tree, and
+does so silently:
+
+```sh
+# Wrong in a sensor. Analyses the repository the *script* lives in,
+# whatever tree ynh points it at.
+REPO_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+```
+
+This matters most when adopting a check that already exists. `$0`-relative
+rooting is the *more* robust choice for CI, because it works no matter where
+`make` is invoked, so it is the ordinary way these scripts get written. The
+bug appears only once the script becomes a sensor, which is why a check being
+adopted needs this warning and a sensor written from scratch usually does not.
+
+The failure is silent because the script still succeeds. It reports on its own
+repository, passes, and never touches the tree it was handed.
+
+**Proving a sensor honours the cwd takes one command.** Point it at an empty
+directory and watch what it says:
+
+```sh
+mkdir /tmp/empty && git -C /tmp/empty init -q
+ynh check <harness> --only <sensor> --cwd /tmp/empty
+```
+
+A sensor that reads the cwd has nothing to measure and says so. A sensor that
+found its own root reports a healthy result about a repository nobody asked
+about, which is the tell.
+
+Anything the sensor resolves at run time resolves against that tree, including
+a command that starts with `$(git rev-parse --show-toplevel)`. That form looks
+like it pins the script to your harness and does the opposite: it runs the copy
+belonging to whichever tree is under test, and fails with exit 127 on any
+commit that predates the script.
+
 Use this for build/lint/test/typecheck — anything where running a command IS the observation. Same script can be hooked at `after_tool` for in-session enforcement *and* declared as a sensor for between-turn observation; the two are not redundant.
 
 ### `focus`
@@ -468,6 +508,15 @@ Four properties are load-bearing:
   gate is proven to observe is itself a number worth reading.
 - **Not mandatory.** Adding it to every sensor would break every existing
   harness.
+
+**An uncalibrated sensor is not yet a sensor.** A fixture is the only thing
+that proves a sensor still observes anything, and it is what catches the
+working-directory mistake above. A script that found its own root, pointed at
+a fixture that must fail, analyses the clean parent repository instead,
+returns pass, and calibration reports the mismatch. Without a fixture there is
+nothing to notice: the sensor sits declared and trusted, gating on a tree
+nobody asked it to look at. That failure is undetectable by any other means,
+which is the argument for fixtures on the sensors you actually rely on.
 
 Only a **command** sensor can be calibrated. Calibration compares an exit code
 against a declared expectation, and neither a files nor a focus source produces

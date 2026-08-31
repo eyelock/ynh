@@ -60,6 +60,31 @@ sensor; it just has not been declared.
 
 Ask: *what do you already run before you'd call a change ready?*
 
+**Before adopting a script, check it reads the working directory.** The cwd is
+the tree the sensor is being asked to measure. A script that works out its own
+root instead measures the repository it lives in, forever, and passes while
+doing it:
+
+```sh
+# Wrong in a sensor, and the ordinary way CI scripts are written.
+REPO_ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+```
+
+Prove it in one command: point the sensor at an empty repository. One that
+honours the cwd has nothing to measure. One that found its own root reports a
+healthy result about a repository nobody asked about.
+
+```bash
+mkdir /tmp/empty && git -C /tmp/empty init -q
+ynh check local/<name> --only <sensor> --cwd /tmp/empty
+```
+
+This only bites on adoption. `$0`-relative rooting is the better choice for
+CI, so scripts worth adopting are the ones most likely to have it. See
+[the working-directory contract](https://github.com/eyelock/ynh/blob/main/docs/sensors.md)
+for why, including what it means for a command that begins with
+`$(git rev-parse --show-toplevel)`.
+
 ## Step 2 — Propose a set across all three categories
 
 This is where most people stop too early. Left alone, they declare three
@@ -175,6 +200,13 @@ ynh check <harness> --calibrate
 
 Every blocking sensor should have one, with `expect: fail` — a fixture designed
 to trip it. A sensor that passes that fixture has stopped observing.
+
+**An uncalibrated sensor is not yet a sensor.** The fixture is also what catches
+the working-directory mistake from Step 1: a script that found its own root
+analyses the clean parent repository instead of the fixture, returns pass where
+`fail` was expected, and calibration says so. Without a fixture nothing notices,
+and the sensor sits declared and trusted while observing a tree nobody asked it
+to look at.
 
 The fixture must live **outside the agent's write path**. A reference an agent
 can edit calibrates nothing.
