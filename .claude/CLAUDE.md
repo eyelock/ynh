@@ -72,6 +72,20 @@ Follows the [Agent Skills](https://agentskills.io) open standard. See `docs/skil
 | `docs/skills-standard.md` | Agent Skills spec, cross-platform compat, known issues |
 | `docs/ynd.md` | ynd command reference |
 
+## Local notes and plans
+
+Planning documents, review write-ups and session scratch material go in
+`.claude/plans/`, which is gitignored. **Do not commit them**, and do not leave
+them loose at `.claude/` root — that directory is the harness this repo uses on
+itself, and everything in it is an artifact.
+
+Anything worth keeping from a review becomes a GitHub issue, not a file. A
+findings document in the repo goes stale the moment someone fixes half of it,
+and nothing tells you which half.
+
+Note that `ynd lint` currently walks gitignored paths (#290), so local notes
+under `.claude/plans/` are still linted by `make check` until that is fixed.
+
 ## Verify Before Push
 
 **NEVER push to remote without full local verification first.** The workflow is always:
