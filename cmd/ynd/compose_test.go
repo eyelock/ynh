@@ -677,3 +677,63 @@ func TestCompose_Sensors(t *testing.T) {
 		t.Errorf("inline-judge focus = %+v", inline)
 	}
 }
+
+// `ynd compose` exists to answer "where did this artifact come from". For a
+// local include it answered nothing: the artifact's source and the include's
+// identity both came back empty, because attribution read only the Git URL and
+// `composeInclude` had no field for the local path at all.
+//
+// `local` is the low-friction adoption path the shipped ynh-adopt skill
+// teaches, so this is the attribution a new adopter hits first.
+func TestCompose_AttributesLocalInclude(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(`{
+  "name": "app",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "includes": [{"local": "shared"}]
+}`))
+	writeFile(t, filepath.Join(dir, "skills", "deploy", "SKILL.md"),
+		[]byte("---\nname: deploy\ndescription: Deploy it\n---\n\nBody.\n"))
+	writeFile(t, filepath.Join(dir, "shared", "skills", "commit", "SKILL.md"),
+		[]byte("---\nname: commit\ndescription: Commit it\n---\n\nBody.\n"))
+
+	var stdout bytes.Buffer
+	withStdout(t, &stdout, func() {
+		if err := cmdCompose([]string{dir, "--format", "json"}); err != nil {
+			t.Fatalf("cmdCompose: %v", err)
+		}
+	})
+
+	var out struct {
+		Includes []struct {
+			Git   string `json:"git"`
+			Local string `json:"local"`
+		} `json:"includes"`
+		Artifacts struct {
+			Skills []struct {
+				Name   string `json:"name"`
+				Source string `json:"source"`
+			} `json:"skills"`
+		} `json:"artifacts"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatalf("decoding compose output: %v\n%s", err, stdout.String())
+	}
+
+	if len(out.Includes) != 1 || out.Includes[0].Local != "shared" {
+		t.Errorf("include lost its local path: %+v", out.Includes)
+	}
+	var found bool
+	for _, s := range out.Artifacts.Skills {
+		if s.Name == "commit" {
+			found = true
+			if s.Source != "shared" {
+				t.Errorf("commit attributed to %q, want %q", s.Source, "shared")
+			}
+		}
+	}
+	if !found {
+		t.Errorf("the included skill is missing: %+v", out.Artifacts.Skills)
+	}
+}

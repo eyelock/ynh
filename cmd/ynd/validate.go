@@ -9,6 +9,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/marketplace"
 	"github.com/eyelock/ynh/internal/migration"
+	"github.com/eyelock/ynh/internal/pathutil"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
@@ -228,6 +229,7 @@ func validateHarness(dir string) error {
 			issues = append(issues, validateHarnessProfiles(hj)...)
 			issues = append(issues, validateHarnessFocus(hj)...)
 			issues = append(issues, validateHarnessSensors(hj)...)
+			issues = append(issues, validateHarnessIncludes(hj)...)
 			issues = append(issues, validateMCPEnvDeclarations(data)...)
 		}
 	}
@@ -704,6 +706,63 @@ func validateMCPEnvDeclarations(data []byte) []string {
 			}
 		}
 		issues = append(issues, plugin.UndeclaredMCPEnvRefs(flat, allowed)...)
+	}
+	return issues
+}
+
+// validateHarnessIncludes applies the traversal rule the resolver enforces at
+// assembly time.
+//
+// A `local` include may not point above the harness directory. The resolver
+// refuses one; the validator did not — so a manifest passed `ynd validate` and
+// then failed at `ynd compose` and `ynd preview`:
+//
+//	$ ynd validate app
+//	app: valid
+//	$ ynd compose app
+//	Error: resolving includes: local include: path "../shared" must not traverse
+//	       above its base directory
+//
+// `ynd validate` is what the harness tells authors to run and what
+// `make check-artifacts` gates on, so a rule it does not know moves the error
+// from authoring time to run time — the failure mode validate exists to
+// prevent.
+//
+// It reuses pathutil.CheckSubpath rather than restating the rule. Two copies of
+// a traversal check drift, and the resolver's copy is the one actually guarding
+// the filesystem; this one must agree with it by construction, not by care.
+//
+// `path` is checked for both include forms, because the resolver applies the
+// same rule to it whether the source is git or local.
+func validateHarnessIncludes(hj map[string]any) []string {
+	var issues []string
+
+	raw, ok := hj["includes"]
+	if !ok {
+		return issues
+	}
+	list, ok := raw.([]any)
+	if !ok {
+		issues = append(issues, "'includes' must be an array")
+		return issues
+	}
+
+	for i, entry := range list {
+		obj, ok := entry.(map[string]any)
+		if !ok {
+			issues = append(issues, fmt.Sprintf("includes[%d] must be an object", i))
+			continue
+		}
+		if local, ok := obj["local"].(string); ok && local != "" {
+			if err := pathutil.CheckSubpath(local); err != nil {
+				issues = append(issues, fmt.Sprintf("includes[%d].local: %v", i, err))
+			}
+		}
+		if sub, ok := obj["path"].(string); ok && sub != "" {
+			if err := pathutil.CheckSubpath(sub); err != nil {
+				issues = append(issues, fmt.Sprintf("includes[%d].path: %v", i, err))
+			}
+		}
 	}
 	return issues
 }

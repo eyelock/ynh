@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1292,4 +1293,82 @@ func writeValidateHarness(t *testing.T, manifest string) string {
 		t.Fatal(err)
 	}
 	return dir
+}
+
+// The validator must enforce the traversal rule the resolver enforces.
+//
+// A `local` include may not point above the harness directory. The resolver
+// refused one at assembly time; the validator did not — so a manifest passed
+// `ynd validate` and then failed at `ynd compose` and `ynd preview`. Since
+// validate is what authors are told to run and what `make check-artifacts`
+// gates on, that moved the error from authoring time to run time, which is the
+// failure mode validate exists to prevent.
+func TestValidateHarnessIncludes(t *testing.T) {
+	cases := []struct {
+		name      string
+		includes  string
+		wantIssue bool
+	}{
+		{"local escaping upward", `[{"local": "../shared"}]`, true},
+		{"local escaping further", `[{"local": "../../x"}]`, true},
+		{"local absolute", `[{"local": "/etc"}]`, true},
+		{"local subdirectory", `[{"local": "shared"}]`, false},
+		{"local nested subdirectory", `[{"local": "vendor/shared"}]`, false},
+		{"path escaping upward", `[{"git": "https://x/y", "path": "../out"}]`, true},
+		{"path subdirectory", `[{"git": "https://x/y", "path": "skills"}]`, false},
+		{"git only", `[{"git": "https://x/y"}]`, false},
+		{"no includes", ``, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			src := `{"name":"h","version":"0.1.0"`
+			if c.includes != "" {
+				src += `,"includes":` + c.includes
+			}
+			src += `}`
+			var hj map[string]any
+			if err := json.Unmarshal([]byte(src), &hj); err != nil {
+				t.Fatalf("fixture is not valid JSON: %v", err)
+			}
+			issues := validateHarnessIncludes(hj)
+			if c.wantIssue && len(issues) == 0 {
+				t.Errorf("expected an issue for %s, got none", c.includes)
+			}
+			if !c.wantIssue && len(issues) > 0 {
+				t.Errorf("unexpected issues for %s: %v", c.includes, issues)
+			}
+		})
+	}
+}
+
+// And the check must actually be wired into validateHarness.
+//
+// A unit test on validateHarnessIncludes alone would still pass if the call
+// site were deleted — which is exactly the state this issue reported, a rule
+// that existed in the resolver and was never consulted by the validator.
+func TestValidateHarness_RejectsTraversingLocalInclude(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(`{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "app",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "includes": [{"local": "../shared"}]
+}`))
+	if err := validateHarness(dir); err == nil {
+		t.Error("a local include traversing above the harness should fail validation")
+	}
+
+	// And the legal form still passes, so the check is not simply refusing all
+	// local includes.
+	writeFile(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(`{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "app",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "includes": [{"local": "shared"}]
+}`))
+	if err := validateHarness(dir); err != nil {
+		t.Errorf("a local include inside the harness should validate: %v", err)
+	}
 }
