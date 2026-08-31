@@ -65,7 +65,7 @@ func cmdSensors(args []string) error {
 func cmdSensorsTo(args []string, stdout, stderr io.Writer) error {
 	if len(args) < 1 {
 		return cliError(stderr, false, errCodeInvalidInput,
-			"usage: ynh sensors <ls|show> [args]")
+			"usage: ynh sensors <ls|show|run> [args]")
 	}
 	switch args[0] {
 	case "ls", "list":
