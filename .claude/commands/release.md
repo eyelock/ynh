@@ -61,6 +61,25 @@ Wait for a clear yes. Do not proceed on silence or ambiguity.
 
 ```bash
 git checkout -b release/vX.Y.Z develop
+```
+
+### Stamp the harness version
+
+The harness manifests and marketplace indexes carry their own version, and it
+is what a marketplace browser sees. It sat at `0.1.0` across eight files while
+the product reached `v0.6.0`, because each was hand-maintained and nothing
+compared them — a plugin that looked abandoned.
+
+```bash
+make stamp-version VERSION=X.Y.Z
+git commit -am "chore: stamp harness manifests at vX.Y.Z"
+```
+
+`make check-marketplace` fails if the eight disagree, so a forgotten stamp is
+caught by CI rather than by whoever installs the release. Run it on the release
+branch, before the PR, so `main` and the tag carry the right number.
+
+```bash
 git push -u origin release/vX.Y.Z
 gh pr create --base main --head release/vX.Y.Z \
   --title "release: vX.Y.Z" --body "<summary of what is in this release>"

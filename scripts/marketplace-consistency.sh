@@ -66,6 +66,14 @@ for idx in .claude-plugin/marketplace.json \
 	fi
 done
 
+echo "==> harness versions agree"
+# Names were checked here from the start; versions were not, and all eight
+# manifests sat at 0.1.0 while the product reached v0.6.0. Nothing compared
+# them, so nothing noticed.
+if ! ./scripts/stamp-harness-version.sh --check; then
+	fail=1
+fi
+
 echo "==> plugin manifests match what the indexes claim"
 check_plugin "."       "ynh-guide" claude
 check_plugin "."       "ynh-guide" cursor

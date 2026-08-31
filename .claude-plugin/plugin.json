@@ -1,6 +1,6 @@
 {
   "name": "ynh-guide",
-  "version": "0.1.0",
+  "version": "0.6.0",
   "description": "Adopt, build, compose, gate and troubleshoot AI harnesses. Eight skills and three agents, useful whether or not ynh is installed.",
   "author": {
     "name": "eyelock",

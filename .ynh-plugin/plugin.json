@@ -1,7 +1,7 @@
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "ynh-guide",
-  "version": "0.1.0",
+  "version": "0.6.0",
   "description": "AI harness management \u2014 your name, your AI",
   "author": {
     "name": "eyelock",

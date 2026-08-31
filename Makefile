@@ -108,6 +108,9 @@ check-marketplace: ## Assert the committed marketplace indexes match the plugin 
 check-vendor-parity: build ## Assert every vendor is documented and assembles the same artifacts
 	@./scripts/vendor-parity.sh
 
+stamp-version: ## Stamp the harness version into every manifest (VERSION=X.Y.Z, or the latest tag)
+	@./scripts/stamp-harness-version.sh $(VERSION)
+
 check-artifacts: build ## Validate and lint the harness artifacts this repo ships
 	@echo "==> ynd validate ."
 	@$(BUILD_DIR)/$(BINARY_NAME_DEV) validate .
