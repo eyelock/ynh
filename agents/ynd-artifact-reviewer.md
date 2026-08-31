@@ -24,12 +24,15 @@ can check what an artifact *says* but not what it *does*.
   is what the vendor routes on, so it must say **what this does and when to
   reach for it** — not merely what it is.
 
-**Flag `compatibility`, `license` or `metadata` as a defect, even though the
+**`compatibility`, `license` and `metadata` are a defect, even though the
 Agent Skills spec allows them.** Claude Code's plugin loader demotes a skill
 carrying them: roughly ten tokens, namespaced differently, excluded from the
 agent's active context. The skill appears to load and does nothing. ynh
 harnesses are loaded as plugins, so this applies to all of them. See
 `docs/skills-standard.md` if the repository is present.
+
+`ynd lint` now reports these directly, so run it rather than reading for them
+by eye. Spend your attention on what lint cannot decide.
 
 ### Specificity
 
