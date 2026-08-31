@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/doctor.schema.json",
+  "title": "ynh doctor --format json",
+  "description": "Output of `ynh doctor --format json`. A read-only diagnosis of an ynh setup: vendor CLIs, installed harnesses, project symlinks, the launcher directory, quarantine and Claude hook wiring. doctor never repairs, so every finding carries the command that does. Exit status is 0 even when findings exist; a caller wanting a gate reads summary.errors.",
+  "x-capabilities": "0.8",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["capabilities", "ynh_version", "summary", "checks"],
+  "properties": {
+    "capabilities": {
+      "type": "string",
+      "description": "Wire-protocol version. See CLAUDE.md capability-bump rule."
+    },
+    "ynh_version": {
+      "type": "string",
+      "description": "Binary release version or dev-build identifier."
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checks", "errors", "warnings"],
+      "properties": {
+        "checks": { "type": "integer", "minimum": 0, "description": "Number of checks run." },
+        "errors": { "type": "integer", "minimum": 0, "description": "Findings with severity error, across all checks." },
+        "warnings": { "type": "integer", "minimum": 0, "description": "Findings with severity warn, across all checks." }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "description": "One entry per diagnostic area, ordered by how often each bites.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "title", "status", "findings"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Stable identifier for the check. Open set: consumers must tolerate unknown members, per docs/cli-structured.md."
+          },
+          "title": { "type": "string", "description": "Human-readable heading used by the text renderer." },
+          "status": {
+            "type": "string",
+            "enum": ["ok", "info", "warn", "error"],
+            "description": "The most severe finding in this check, or ok when it found nothing."
+          },
+          "findings": {
+            "type": "array",
+            "description": "Empty when the check ran and found nothing. Never null.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["severity", "message"],
+              "properties": {
+                "severity": {
+                  "type": "string",
+                  "enum": ["ok", "info", "warn", "error"],
+                  "description": "error is broken now; warn will bite under some condition; info is context with no action."
+                },
+                "subject": {
+                  "type": "string",
+                  "description": "What the finding is about: a file, harness id, vendor name or path. Absent when the finding concerns the whole check."
+                },
+                "message": { "type": "string", "description": "What is wrong." },
+                "remedy": {
+                  "type": "string",
+                  "description": "The command or action that fixes it. Absent when there is nothing to run."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

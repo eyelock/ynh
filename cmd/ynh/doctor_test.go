@@ -20,8 +20,9 @@ func writeSettings(t *testing.T, name, body string) {
 
 func TestCmdDoctor_NoSettingsNudges(t *testing.T) {
 	t.Chdir(t.TempDir())
+	fakeHome(t)
 	var buf bytes.Buffer
-	if err := cmdDoctorTo(nil, &buf); err != nil {
+	if err := cmdDoctorTo(nil, &buf, &buf); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
@@ -32,25 +33,30 @@ func TestCmdDoctor_NoSettingsNudges(t *testing.T) {
 
 func TestCmdDoctor_CleanSettings(t *testing.T) {
 	t.Chdir(t.TempDir())
+	fakeHome(t)
 	writeSettings(t, "settings.json", `{
 		"hooks": {"PostToolUse": [{"matcher":"Edit","hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/x.sh"}]}]}
 	}`)
 	var buf bytes.Buffer
-	if err := cmdDoctorTo(nil, &buf); err != nil {
+	if err := cmdDoctorTo(nil, &buf, &buf); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(buf.String(), "ok") {
-		t.Errorf("expected clean result, got: %s", buf.String())
+	// Assert on the hooks check specifically. "ok" now appears in five other
+	// sections, so searching the whole page would pass even if hook wiring
+	// were broken.
+	if c := checkHooks(); c.Status != sevOK {
+		t.Errorf("expected clean hook wiring, got %q: %s", c.Status, findingsOf(c))
 	}
 }
 
 func TestCmdDoctor_CanonicalNameLeak(t *testing.T) {
 	t.Chdir(t.TempDir())
+	fakeHome(t)
 	writeSettings(t, "settings.json", `{
 		"hooks": {"after_tool": [{"matcher":"Edit","hooks":[{"type":"command","command":"$CLAUDE_PROJECT_DIR/x.sh"}]}]}
 	}`)
 	var buf bytes.Buffer
-	if err := cmdDoctorTo(nil, &buf); err != nil {
+	if err := cmdDoctorTo(nil, &buf, &buf); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
@@ -61,11 +67,12 @@ func TestCmdDoctor_CanonicalNameLeak(t *testing.T) {
 
 func TestCmdDoctor_RelativeCommand(t *testing.T) {
 	t.Chdir(t.TempDir())
+	fakeHome(t)
 	writeSettings(t, "settings.json", `{
 		"hooks": {"PreToolUse": [{"matcher":"Bash","hooks":[{"type":"command","command":"./tools/guard.sh"}]}]}
 	}`)
 	var buf bytes.Buffer
-	if err := cmdDoctorTo(nil, &buf); err != nil {
+	if err := cmdDoctorTo(nil, &buf, &buf); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
@@ -76,11 +83,12 @@ func TestCmdDoctor_RelativeCommand(t *testing.T) {
 
 func TestCmdDoctor_InspectsLocalFile(t *testing.T) {
 	t.Chdir(t.TempDir())
+	fakeHome(t)
 	writeSettings(t, "settings.local.json", `{
 		"hooks": {"on_stop": [{"hooks":[{"type":"command","command":"sweep.sh"}]}]}
 	}`)
 	var buf bytes.Buffer
-	if err := cmdDoctorTo(nil, &buf); err != nil {
+	if err := cmdDoctorTo(nil, &buf, &buf); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(buf.String(), "settings.local.json") {
@@ -90,9 +98,10 @@ func TestCmdDoctor_InspectsLocalFile(t *testing.T) {
 
 func TestCmdDoctor_InvalidJSON(t *testing.T) {
 	t.Chdir(t.TempDir())
+	fakeHome(t)
 	writeSettings(t, "settings.json", `{ not json`)
 	var buf bytes.Buffer
-	if err := cmdDoctorTo(nil, &buf); err != nil {
+	if err := cmdDoctorTo(nil, &buf, &buf); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(buf.String(), "not valid JSON") {

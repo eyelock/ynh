@@ -90,7 +90,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh paths` | `--format <text\|json>` |
 | `ynh status` | |
 | `ynh prune` | |
-| `ynh doctor` | check Claude hook wiring in `.claude/settings.json` / `settings.local.json` for the current project |
+| `ynh doctor` | diagnose the setup: vendor availability, installed-harness integrity, symlink health, launcher on PATH, quarantine, and Claude hook wiring. Read-only; every finding carries the command that fixes it |
 
 ## ynd Commands
 
@@ -122,6 +122,7 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 | `ynh profile ls <harness>` | Array of profile summaries: `name` plus counts of `hooks`, `mcp_servers`, `includes`, `env_passthrough` — `ynh info` resolves one in full |
 | `ynh sensors show <harness> <name>` | Resolved sensor object with inline-focus expansion |
 | `ynh sensors run <harness> <name>` | Sensor run result: `kind`, `exit_code`, `duration_ms`, `output` (raw signal — no `passed` field; pass/fail is loop-driver policy) |
+| `ynh doctor` | Setup diagnosis: `summary` (`checks`, `errors`, `warnings`) and `checks[]`, each with `name`, `title`, `status` and `findings[]` (`severity`, `subject`, `message`, `remedy`). Exit status is 0 regardless; gate on `summary.errors` |
 | `ynh agent run` | Run result: `exit_code`, `reason`, `converged`, `budgets`/`budget_sources`/`consumed` with `bound_by`, `convergence`, `sensors[]`, `changed_files` — see [Agent](agent.md#run-result) |
 | `ynh baseline <harness>` | What the ratchet forgives: per-sensor `recorded`, `recorded_at`, `forgiven`, and under `--explain` the `findings` themselves — see [Sensors](sensors.md#reading-the-ratchet) |
 | `ynh check <harness> --calibrate` | Calibration result: `verdict` (`calibrated`\|`broken`), per-sensor `status` (`calibrated`\|`failed`\|`uncalibrated`\|`error`) with `expected`/`observed` — see [Sensors](sensors.md#reference-proving-a-sensor-still-observes) |

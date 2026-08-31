@@ -37,7 +37,7 @@ ynh info <name>          # a specific harness's resolved config
 ynh installed <name>     # recorded install provenance
 ynh paths                # where ynh keeps things
 ynh status               # current state
-ynh doctor               # check Claude hook wiring (Claude only)
+ynh doctor               # diagnose the setup: vendors, harnesses, symlinks, PATH
 ynh schema <name>        # embedded JSON schema for a command
 ynd validate <dir>       # is this harness valid, and why not
 ynd preview <dir> -v <vendor>   # exactly what a vendor will receive
@@ -129,8 +129,9 @@ decides where they land. If they want to pursue it, the ynh repository has an
 resolved delegates.
 
 **"Why isn't my harness loading?"** → `ynd validate <dir>` first, then
-`ynh doctor` (Claude hook wiring only). If it validates but the vendor ignores it, `ynd preview <dir> -v
-<vendor>` shows exactly what that vendor receives.
+`ynh doctor`, which checks vendor availability, installed-harness integrity,
+symlinks, PATH and hook wiring. If it validates but the vendor ignores it,
+`ynd preview <dir> -v <vendor>` shows exactly what that vendor receives.
 
 **"What's actually in my harness?"** → `ynh info <name>` for resolved config,
 `ynd preview` for assembled output. These beat reading the manifest, because
