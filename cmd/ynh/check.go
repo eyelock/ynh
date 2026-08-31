@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -213,6 +214,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 	}
 
 	var totalKnown, totalFixed int
+	var brokenSensors []string
 	for _, name := range names {
 		s := p.Sensors[name]
 		_, overlaid := overlay[name]
@@ -252,6 +254,28 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 
 		switch s.Source.Kind() {
 		case "command":
+			// A command that never ran is a broken gate, not a finding.
+			//
+			// Sensors run through `/bin/sh -c`, so a missing or non-executable
+			// command is not a spawn error — it arrives as the shell's own 127
+			// or 126 and looks exactly like an ordinary failure. Two things go
+			// wrong if it is treated as one: the run reports "blocked" (exit 1)
+			// when the truth is that ynh could not observe (exit 2), and
+			// --update-baseline records "No such file or directory" as accepted
+			// debt, forgiving the sensor's own absence for good.
+			if gate.CommandDidNotRun(run.ExitCode) {
+				brokenSensors = append(brokenSensors, fmt.Sprintf(
+					"%s: command did not run (exit %d) — not found or not executable: %s",
+					name, run.ExitCode, s.Source.Command))
+				res.Status = gate.StatusFail
+				res.Note = "the sensor's command did not run; this is a broken gate, not a finding, " +
+					"and it is deliberately not recorded in the baseline"
+				env.Summary.Failed++
+				env.Verdict = gate.VerdictBlocked
+				env.Sensors = append(env.Sensors, res)
+				continue
+			}
+
 			if run.ExitCode == 0 {
 				res.Status = gate.StatusPass
 				env.Summary.Passed++
@@ -373,6 +397,17 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			Fixed:      totalFixed,
 			Stale:      totalFixed > 0,
 		}
+	}
+
+	// A baseline recorded while a sensor cannot run would forgive that sensor's
+	// own absence, permanently. Refuse rather than write a ratchet that
+	// enshrines a broken gate.
+	if len(brokenSensors) > 0 {
+		return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
+			"cannot proceed — "+strconv.Itoa(len(brokenSensors))+
+				" sensor(s) could not run:\n  "+strings.Join(brokenSensors, "\n  ")+
+				"\nFix the command or remove the sensor. This is exit 2 (the gate is broken), "+
+				"not exit 1 (your code is failing)."))
 	}
 
 	if updateBaseline {

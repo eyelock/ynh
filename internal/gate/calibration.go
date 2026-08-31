@@ -72,3 +72,35 @@ func CalibrationOutcome(exitCode int) string {
 	}
 	return "fail"
 }
+
+// Shell exit codes that mean the command never ran.
+//
+// Sensors execute through `/bin/sh -c`, and the shell itself always starts —
+// so a missing or non-executable command is not a spawn error Go can see. It
+// arrives as the shell's own status, and POSIX reserves two values for it.
+const (
+	// ExitCommandNotFound is sh's status when the command does not exist.
+	ExitCommandNotFound = 127
+	// ExitNotExecutable is sh's status when it exists but cannot be run —
+	// a missing execute bit, or a bad interpreter line.
+	ExitNotExecutable = 126
+)
+
+// CommandDidNotRun reports whether an exit code means the sensor's command was
+// never executed, as opposed to executed and returning a failure.
+//
+// The distinction is the whole point of calibration. A reference declaring
+// `expect: "fail"` is asking "does this sensor still detect the defect in the
+// fixture?" — and any non-zero status answers yes, including 127. So a sensor
+// whose script has been deleted, renamed or had its execute bit stripped
+// reports as successfully calibrated: the single worst false positive available
+// in a feature whose entire purpose is catching sensors that have stopped
+// observing.
+//
+// It is not a theoretical hole. `ynh check` reaches the same code, so a sensor
+// that cannot run looks like an ordinary failure — and `--update-baseline`
+// would then record "command not found" as accepted debt and forgive it
+// permanently.
+func CommandDidNotRun(exitCode int) bool {
+	return exitCode == ExitCommandNotFound || exitCode == ExitNotExecutable
+}

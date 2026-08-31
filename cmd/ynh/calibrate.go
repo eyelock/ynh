@@ -87,6 +87,21 @@ func runCalibration(p *harness.Harness, wanted map[string]bool, stdout, stderr i
 		}
 
 		res.ExitCode = run.ExitCode
+
+		// A command that never ran is not a wrong answer, it is no answer.
+		// Without this the sensor's own absence satisfies `expect: "fail"`,
+		// and a deleted script reports as calibrated.
+		if gate.CommandDidNotRun(run.ExitCode) {
+			res.Status = gate.CalibError
+			res.Note = fmt.Sprintf(
+				"the sensor's command did not run (exit %d) — it was not found or is not executable, "+
+					"so this proves nothing about whether it still observes", run.ExitCode)
+			env.Summary.Errored++
+			env.Verdict = gate.VerdictBroken
+			env.Sensors = append(env.Sensors, res)
+			continue
+		}
+
 		res.Observed = gate.CalibrationOutcome(run.ExitCode)
 		if res.Observed == res.Expected {
 			res.Status = gate.CalibCalibrated
