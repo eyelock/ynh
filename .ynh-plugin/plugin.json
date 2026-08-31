@@ -37,25 +37,34 @@
     }
   },
   "focuses": {
-    "learn": {
-      "prompt": "Introduce me to ynh as a first-time user. Do not read from memory: run `ynh help` and `ynh vendors` to ground what this version actually does, and hand anything deeper to the ynh-guide agent. Cover the core concepts one at a time \u2014 harnesses, vendors, includes, delegates, profiles, focuses, sensors \u2014 with a concrete example of each. The prose docs are at https://eyelock.github.io/ynh if I want more. When I am ready, suggest /ynh-create-harness to build my own, or /ynh-adopt if I already have a .claude folder or a CLAUDE.md."
+    "adopt": {
+      "prompt": "I already have AI assistant config in this project \u2014 a .claude folder, a .cursorrules, a CLAUDE.md, or some mix. Use the ynh-adopt skill to bring it under ynh without losing any of it. Inventory what is here before proposing anything, and show me the assembled output at the end so I can see my own artifacts came through."
+    },
+    "contribute": {
+      "profile": "ynh-dev",
+      "prompt": "I want to contribute to ynh. Read .claude/CLAUDE.md and the rules under .claude/rules/ first \u2014 branching, pre-remote gates and destructive-operations all bind. Ask what I want to change, then point me at the right skill: ynh-dev for the build and test loop, add-vendor-adapter for a new vendor, add-ynd-command for a new ynd command, capability-bump for anything that changes a --format json shape, and vendor-adapters for maintaining an existing adapter against a moving spec."
     },
     "create": {
       "prompt": "Use the ynh-create-harness skill to help me build a new harness. Ask what I do, what languages and tools I use, and what standards my team follows. Scaffold it with ynd create harness and install it so I can try it immediately."
+    },
+    "fix": {
+      "prompt": "Something about my ynh setup is not working. Use the ynh-troubleshoot skill: run the diagnostics rather than describing them, tell me which layer the fault is in \u2014 manifest, composition, what the vendor received, or the vendor itself \u2014 and change one thing at a time, re-running the command that showed the problem."
+    },
+    "learn": {
+      "prompt": "Introduce me to ynh as a first-time user. Do not read from memory: run `ynh help` and `ynh vendors` to ground what this version actually does, and hand anything deeper to the ynh-guide agent. Cover the core concepts one at a time \u2014 harnesses, vendors, includes, delegates, profiles, focuses, sensors \u2014 with a concrete example of each. The prose docs are at https://eyelock.github.io/ynh if I want more. When I am ready, suggest /ynh-create-harness to build my own, or /ynh-adopt if I already have a .claude folder or a CLAUDE.md."
+    },
+    "release": {
+      "profile": "ynh-dev",
+      "prompt": "Walk me through preparing a ynh release. Confirm we are on develop, run /evals to gate the release, update the changelog, then create a release PR per .claude/rules/branching.md. The full sequence is documented in .claude/commands/release.md."
+    },
+    "sensors": {
+      "prompt": "Use the ynh-sensors skill to work out what this project should observe and turn it into a gate I trust. Start from what the project already runs \u2014 the Makefile, the package scripts, the CI workflow \u2014 rather than inventing sensors. Cover all three categories, not just linting. Nothing goes blocking on the first pass."
     },
     "team": {
       "prompt": "Use the ynh-team-setup skill to set up a team harness. We'll build a parent harness that delegates to personal team members' harnesses. Explain delegation as we go."
     },
     "validate": {
       "prompt": "Validate the harness in the current working directory with ynd validate. If issues are found, walk through each one and help me fix it. If it's valid, run ynd preview so I can see the assembled vendor output."
-    },
-    "contribute": {
-      "profile": "ynh-dev",
-      "prompt": "I want to contribute to ynh. Start by reading .claude/CLAUDE.md and the rules under .claude/rules/. Ask what I want to change \u2014 a bug fix, a new feature, a doc update \u2014 then help me follow the branching rules in .claude/rules/branching.md and the pre-remote gates in .claude/rules/pre-remote.md."
-    },
-    "release": {
-      "profile": "ynh-dev",
-      "prompt": "Walk me through preparing a ynh release. Confirm we are on develop, run /evals to gate the release, update the changelog, then create a release PR per .claude/rules/branching.md. The full sequence is documented in .claude/commands/release.md."
     }
   },
   "sensors": {
