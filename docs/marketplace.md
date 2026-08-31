@@ -68,9 +68,11 @@ per-vendor references, which are the authority when they and this page disagree.
 because the obvious tidy-up is to collapse all four into one file, and three of
 them would then be wrong.
 
-**Known gap:** `ynd marketplace build` currently emits Claude's shape for Cursor
-(ynh#301). That is why these are written by hand rather than generated even into
-a temp directory and copied.
+`ynd marketplace build` produces each of these shapes correctly (ynh#301 fixed
+that for Cursor), so the committed files and the generator agree. They stay
+hand-written because the generator builds a *standalone* marketplace with
+plugins copied into `./plugins/`, which is the wrong layout for a repository
+that is already the plugin — not because it gets the shapes wrong.
 
 ### Installing it
 

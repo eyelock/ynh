@@ -82,8 +82,9 @@ check_plugin ".claude" "ynh-dev"   cursor
 
 # Cursor's index is a different shape from Claude's — metadata.description
 # rather than a top-level description, and no per-plugin version. ynh's own
-# generator does not yet honour that (ynh#301), which is why these are written
-# by hand; assert the distinction survives someone "tidying" them together.
+# generator honours that since ynh#301; this asserts the committed files keep
+# the distinction, because the obvious tidy-up is to collapse all four into one
+# and three would then be wrong.
 echo "==> Cursor keeps its own documented shape"
 if python3 -c "
 import json,sys
