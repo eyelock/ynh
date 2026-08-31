@@ -155,10 +155,13 @@ needs one rather than assuming it does not — the gap is real, not a decision.
 Add the command to `printUsage()` in `cmd/ynd/main.go`, in both the command
 list and the examples block if it takes non-obvious arguments.
 
-**Known gap:** `ynd <command> --help` prints the *global* usage page rather than
-the command's own section, so your help text is only discoverable by reading the
-whole page. `ynh` gained real per-command help in #260; `ynd` has not. Do not
-work around it per-command — if you fix it, fix it centrally the way `ynh` did.
+Then add an entry to `commandHelp` in `cmd/ynd/help.go`, keyed by the command
+name, opening with a line that names the command. Two tests fail if you skip
+it: `TestEveryDispatchedCommandHasHelp` and
+`TestEveryDispatchedCommandAppearsInUsage`.
+
+Do not handle `-h`/`--help` inside your command. `main` intercepts it before
+dispatch, which is why asking for documentation cannot run an action.
 
 ## 9. Tests
 

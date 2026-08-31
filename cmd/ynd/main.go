@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/eyelock/ynh/internal/config"
@@ -15,6 +16,15 @@ func main() {
 	if len(os.Args) < 2 {
 		printUsage()
 		os.Exit(1)
+	}
+
+	// Per-command help is intercepted once, here, before dispatch. Doing it
+	// inside each command would leave thirteen opportunities to forget, and
+	// the next command added would start life without it (#321).
+	if len(os.Args) > 2 && wantsHelp(os.Args[2:]) {
+		if printCommandHelp(os.Stdout, os.Args[1]) {
+			return
+		}
 	}
 
 	var err error
@@ -64,7 +74,15 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Printf(`ynd - ynh developer tools (%s)
+	printUsageTo(os.Stdout)
+}
+
+// printUsageTo writes the usage page to w. Split from printUsage so a test can
+// assert every dispatched command is listed, mirroring cmd/ynh.
+func printUsageTo(w io.Writer) {
+	// Usage goes to a terminal or a test buffer; a write failure means stdout
+	// is gone and there is nowhere left to report it.
+	_, _ = fmt.Fprintf(w, `ynd - ynh developer tools (%s)
 
 Usage:
   ynd <command> [arguments]
@@ -86,6 +104,8 @@ Commands:
                              Validate JSON on stdin against the named CLI schema
   version                    Print version
   help                       Show this help
+
+Run 'ynd <command> --help' for one command's detail.
 
 Create types:
   skill <name>               Create skills/<name>/SKILL.md
