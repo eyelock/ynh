@@ -914,15 +914,20 @@ func TestCmdListJSON_ErrorPathSchema(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(home, "harnesses"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// "--format json --bogus", not "--format bogus".
+	//
+	// structured mode is detected by the presence of "--format json", so
+	// "--format bogus" never reaches the cliError path this test exists to
+	// check. The test skipped itself on that, every run, and so validated the
+	// error envelope exactly never. A test that opts out when the thing it
+	// tests does not happen reports success for having observed nothing.
 	var stdout, stderr bytes.Buffer
-	err := cmdListTo([]string{"--format", "bogus"}, &stdout, &stderr)
+	err := cmdListTo([]string{"--format", "json", "--bogus"}, &stdout, &stderr)
 	if err == nil {
-		t.Fatal("expected error from invalid --format")
+		t.Fatal("expected an error from an unknown flag")
 	}
 	if !errors.Is(err, errStructuredReported) {
-		// The cliError path requires structured=true (detected by --format json).
-		// "--format bogus" doesn't trigger structured mode, so the error is unstructured.
-		t.Skipf("invalid format did not trigger structured error (cliError path); got %v", err)
+		t.Fatalf("error was not reported through the structured path: %v", err)
 	}
 	var v any
 	if err := json.Unmarshal(stderr.Bytes(), &v); err != nil {
