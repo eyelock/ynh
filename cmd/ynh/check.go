@@ -245,7 +245,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			Kind:        s.Source.Kind(),
 			Category:    s.Category,
 			Tolerance:   s.EffectiveTolerance(),
-			ToolVersion: toolVersion(s.VersionCommand, cwd),
+			ToolVersion: toolVersion(s.VersionCommand, cwd, p.Dir),
 		}
 
 		if len(wanted) > 0 && !wanted[name] {

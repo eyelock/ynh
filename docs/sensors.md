@@ -278,6 +278,26 @@ like it pins the script to your harness and does the opposite: it runs the copy
 belonging to whichever tree is under test, and fails with exit 127 on any
 commit that predates the script.
 
+**To run a script the harness ships, use `$YNH_HARNESS_DIR`.** It is set for
+every `command` sensor and every `version_command`, and holds the harness's own
+directory:
+
+```json
+"source": { "command": "\"$YNH_HARNESS_DIR/tools/lint.sh\"" }
+```
+
+The working directory is unchanged: the script still runs in, and measures, the
+tree under test. Only the path to the script is pinned. That is what makes
+historical replay work, where today's sensor is run against an older tree that
+never contained it.
+
+This mirrors `reference.path`, which has always resolved against the harness.
+Commands simply had no equivalent until now, which is why the toplevel form
+above looked like the only option.
+
+Quote it. A harness path can contain spaces, and an unquoted expansion would
+split on them.
+
 Use this for build/lint/test/typecheck — anything where running a command IS the observation. Same script can be hooked at `after_tool` for in-session enforcement *and* declared as a sensor for between-turn observation; the two are not redundant.
 
 ### `focus`
