@@ -104,3 +104,20 @@ const (
 func CommandDidNotRun(exitCode int) bool {
 	return exitCode == ExitCommandNotFound || exitCode == ExitNotExecutable
 }
+
+// ExitObservationUnavailable marks a sensor that ran but could not obtain the
+// observation it exists to make: the GitHub status it selects is absent, the
+// check run has not concluded, or the API could not be reached.
+//
+// It is separate from a failing sensor for the reason CommandDidNotRun is.
+// "The scanner says this commit is bad" and "no scanner has reported on this
+// commit" are different facts, and only the first is a finding about the code.
+// Collapsing them would let a renamed status, a revoked token or an unreachable
+// network read as either a clean bill of health or a defect, and both are lies.
+const ExitObservationUnavailable = -2
+
+// ObservationUnavailable reports whether an exit code means the sensor could
+// not see, as opposed to seeing something bad.
+func ObservationUnavailable(exitCode int) bool {
+	return exitCode == ExitObservationUnavailable
+}

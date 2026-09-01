@@ -177,9 +177,84 @@ var ValidSensorRoles = map[string]bool{
 // SensorSource is a strict one-of: files, command, or focus. Exactly one
 // must be set. Discriminated by structure, not labels.
 type SensorSource struct {
-	Files   []string  `json:"files,omitempty"`
-	Command string    `json:"command,omitempty"`
-	Focus   *FocusRef `json:"focus,omitempty"`
+	Files        []string            `json:"files,omitempty"`
+	Command      string              `json:"command,omitempty"`
+	Focus        *FocusRef           `json:"focus,omitempty"`
+	GitHubStatus *GitHubStatusSource `json:"github_status,omitempty"`
+	GitHubCheck  *GitHubCheckSource  `json:"github_check,omitempty"`
+}
+
+// GitHubStatusSource observes a commit status: the older Status API, which is
+// what most external services still post to (coverage bots, security scanners,
+// deploy pipelines).
+//
+// It exists because these verdicts are not derivable locally. A command sensor
+// can run your linter; it cannot know what a third-party scanner concluded
+// about this commit on infrastructure you do not control.
+type GitHubStatusSource struct {
+	// Context is the status context to select, e.g. "security/snyk".
+	// Required — a sensor that observes "whatever statuses exist" reports on a
+	// set that changes underneath it, which is not an observation.
+	Context string `json:"context"`
+
+	// Require is the state that counts as passing. Default "success".
+	Require string `json:"require,omitempty"`
+
+	// Repo is "owner/name". Default: inferred from the origin remote of the
+	// directory under test, so a sensor stays portable across forks.
+	Repo string `json:"repo,omitempty"`
+
+	// Ref is the commit to ask about. Default "HEAD", resolved in the
+	// directory under test, which is what makes this work under --cwd.
+	Ref string `json:"ref,omitempty"`
+
+	// OnMissing is the verdict when the context is absent or still pending.
+	// One of "broken", "fail", "pass". Default "broken".
+	OnMissing string `json:"on_missing,omitempty"`
+}
+
+// GitHubCheckSource observes a check run: the Checks API, which is what a
+// GitHub App posts (CodeQL, Dependabot, and anything built on Actions).
+//
+// Kept separate from GitHubStatusSource deliberately. The two APIs disagree
+// about vocabulary — a status has a state, a check run has a status and a
+// separate conclusion — and collapsing them into one shape would mean guessing
+// which the author meant.
+type GitHubCheckSource struct {
+	// Name is the check run name, e.g. "CodeQL". Required, for the same
+	// reason Context is.
+	Name string `json:"name"`
+
+	// App filters by the GitHub App slug that posted the run, e.g. "github-actions".
+	// Optional. Use it when two apps post runs of the same name.
+	App string `json:"app,omitempty"`
+
+	// Require is the conclusion that counts as passing. Default "success".
+	Require string `json:"require,omitempty"`
+
+	Repo      string `json:"repo,omitempty"`
+	Ref       string `json:"ref,omitempty"`
+	OnMissing string `json:"on_missing,omitempty"`
+}
+
+// ValidGitHubStatusStates are the states the Status API can report.
+var ValidGitHubStatusStates = map[string]bool{
+	"success": true, "pending": true, "failure": true, "error": true,
+}
+
+// ValidGitHubCheckConclusions are the conclusions the Checks API can report.
+// A run that has not concluded has no conclusion at all, which is why
+// "pending" is not a member here and is handled by OnMissing instead.
+var ValidGitHubCheckConclusions = map[string]bool{
+	"success": true, "failure": true, "neutral": true, "cancelled": true,
+	"timed_out": true, "action_required": true, "stale": true, "skipped": true,
+}
+
+// ValidSensorOnMissing are the verdicts available when the observation is
+// absent. "broken" is the default on purpose: a sensor that cannot see is not
+// a sensor that passed.
+var ValidSensorOnMissing = map[string]bool{
+	"broken": true, "fail": true, "pass": true,
 }
 
 // Kind reports which source variant is set. Returns "" if none or
@@ -199,13 +274,21 @@ func (s SensorSource) Kind() string {
 		count++
 		kind = "focus"
 	}
+	if s.GitHubStatus != nil {
+		count++
+		kind = "github_status"
+	}
+	if s.GitHubCheck != nil {
+		count++
+		kind = "github_check"
+	}
 	if count != 1 {
 		return ""
 	}
 	return kind
 }
 
-// UnmarshalJSON enforces that exactly one of files, command, focus is set.
+// UnmarshalJSON enforces that exactly one source variant is set.
 func (s *SensorSource) UnmarshalJSON(data []byte) error {
 	type alias SensorSource
 	var raw alias
@@ -216,7 +299,7 @@ func (s *SensorSource) UnmarshalJSON(data []byte) error {
 	}
 	*s = SensorSource(raw)
 	if s.Kind() == "" {
-		return fmt.Errorf("source must have exactly one of files, command, focus")
+		return fmt.Errorf("source must have exactly one of files, command, focus, github_status, github_check")
 	}
 	return nil
 }
@@ -386,9 +469,27 @@ func ValidateSensors(sensors map[string]Sensor, profileNames, focusNames map[str
 			issues = append(issues, fmt.Sprintf("%s tolerance %q must be one of blocking, advisory, report", prefix, s.Tolerance))
 		}
 		if s.Source.Kind() == "" {
-			issues = append(issues, fmt.Sprintf("%s source must have exactly one of files, command, focus", prefix))
+			issues = append(issues, fmt.Sprintf("%s source must have exactly one of files, command, focus, github_status, github_check", prefix))
 		} else {
 			switch s.Source.Kind() {
+			case "github_status":
+				g := s.Source.GitHubStatus
+				if g.Context == "" {
+					issues = append(issues, fmt.Sprintf("%s source.github_status.context is required: a sensor that selects no particular status observes a set that changes underneath it", prefix))
+				}
+				if g.Require != "" && !ValidGitHubStatusStates[g.Require] {
+					issues = append(issues, fmt.Sprintf("%s source.github_status.require %q must be one of success, pending, failure, error", prefix, g.Require))
+				}
+				issues = append(issues, validateGitHubCommon(prefix+" source.github_status", g.Repo, g.OnMissing)...)
+			case "github_check":
+				g := s.Source.GitHubCheck
+				if g.Name == "" {
+					issues = append(issues, fmt.Sprintf("%s source.github_check.name is required: a sensor that selects no particular check run observes a set that changes underneath it", prefix))
+				}
+				if g.Require != "" && !ValidGitHubCheckConclusions[g.Require] {
+					issues = append(issues, fmt.Sprintf("%s source.github_check.require %q must be a check conclusion (success, failure, neutral, cancelled, timed_out, action_required, stale, skipped). A run that has not finished has no conclusion — use on_missing for that case", prefix, g.Require))
+				}
+				issues = append(issues, validateGitHubCommon(prefix+" source.github_check", g.Repo, g.OnMissing)...)
 			case "files":
 				if len(s.Source.Files) == 0 {
 					issues = append(issues, fmt.Sprintf("%s source.files must be a non-empty array", prefix))
@@ -960,4 +1061,21 @@ func ExpandMCPEnv(servers map[string]MCPServer, allowed []string, lookup func(st
 		out[name] = s
 	}
 	return out, nil
+}
+
+// validateGitHubCommon checks the fields both GitHub sensor sources share.
+func validateGitHubCommon(prefix, repo, onMissing string) []string {
+	var issues []string
+	if repo != "" {
+		// "owner/name", nothing else. A bare name or a URL both silently
+		// address the wrong repository, which a sensor must never do.
+		parts := strings.Split(repo, "/")
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			issues = append(issues, fmt.Sprintf("%s.repo %q must be \"owner/name\"", prefix, repo))
+		}
+	}
+	if onMissing != "" && !ValidSensorOnMissing[onMissing] {
+		issues = append(issues, fmt.Sprintf("%s.on_missing %q must be one of broken, fail, pass", prefix, onMissing))
+	}
+	return issues
 }
