@@ -48,6 +48,30 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+# Checksums protect against corruption in transit. They do not protect against
+# a compromised pipeline, which produces perfectly valid checksums for tampered
+# binaries. Signing the checksum file makes the pipeline itself attestable.
+#
+# Keyless: the signature is bound to the workflow identity via OIDC and logged
+# in Rekor, so there is no private key to store or rotate. Requires
+# id-token: write on the releasing job.
+signs:
+  - cmd: cosign
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--output-certificate=${certificate}"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    output: true
+
+# An SBOM per archive, so a consumer can answer "does this release contain X"
+# without unpacking and guessing.
+sboms:
+  - artifacts: archive
+
 changelog:
   sort: asc
   filters:

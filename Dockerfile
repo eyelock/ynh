@@ -37,11 +37,24 @@ RUN --mount=type=cache,target=/root/.npm \
     npm install -g --include=optional "@openai/codex@${CODEX_VERSION}"
 
 # Stage 2c: Cursor Agent CLI (parallel)
-FROM alpine AS cursor-cli
+FROM alpine:3.23.5@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40 AS cursor-cli
 RUN apk add --no-cache curl bash
-# NOTE: curl|bash with no checksum verification — Cursor does not publish
-# checksums. Pin by auditing the install script if reproducibility is critical.
-RUN curl https://cursor.com/install -fsS | bash && \
+
+# Cursor publishes no checksum or signature for its installer, so the script
+# itself is pinned by digest instead: fetched to disk, verified, and only then
+# executed. Previously it was piped straight to bash, so a change at
+# cursor.com or its CDN would have run silently in the image.
+#
+# This trades a maintenance cost for that: when Cursor edits the installer the
+# build fails with a digest mismatch, and the value below has to be updated
+# deliberately after reading the diff. That is the point. A build that keeps
+# working through an unreviewed change to a remote script is the thing being
+# fixed.
+ARG CURSOR_INSTALL_SHA256=f145a23a600d42c79bdf6a4cd36b77decb7b68359f4f0b86f60be3c84deea96c
+RUN curl -fsS https://cursor.com/install -o /tmp/cursor-install.sh && \
+    echo "${CURSOR_INSTALL_SHA256}  /tmp/cursor-install.sh" | sha256sum -c - && \
+    bash /tmp/cursor-install.sh && \
+    rm -f /tmp/cursor-install.sh && \
     cp -L /root/.local/bin/agent /usr/local/bin/agent && \
     chmod 755 /usr/local/bin/agent
 
