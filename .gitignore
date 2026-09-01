@@ -3,6 +3,10 @@ bin/
 /ynh
 /ynd
 
+# goreleaser output. `goreleaser release --snapshot` writes ~200MB of archives
+# and cross-compiled binaries here; only CI publishes from it.
+dist/
+
 # Go
 *.exe
 *.exe~
