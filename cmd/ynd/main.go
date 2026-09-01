@@ -100,7 +100,7 @@ Commands:
   diff <source> [vendors]    Compare assembled output across vendors
   marketplace build          Build a vendor-native marketplace from marketplace.json
   migrate <path>             Convert .harness.json → .ynh-plugin/plugin.json in-place
-  validate-output --schema <name> [< file.json]
+  validate-output --schema <name|path> [< file.json]
                              Validate JSON on stdin against the named CLI schema
   version                    Print version
   help                       Show this help
