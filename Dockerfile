@@ -40,23 +40,37 @@ RUN --mount=type=cache,target=/root/.npm \
 FROM alpine:3.23.5@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40 AS cursor-cli
 RUN apk add --no-cache curl bash
 
-# Cursor publishes no checksum or signature for its installer, so the script
-# itself is pinned by digest instead: fetched to disk, verified, and only then
-# executed. Previously it was piped straight to bash, so a change at
-# cursor.com or its CDN would have run silently in the image.
+# The installer at cursor.com/install is regenerated per release: it embeds
+# the version and a direct artifact URL, and its content changed within an
+# hour during this work. Pinning the installer by digest was tried and
+# abandoned: a tripwire that fires hourly is one people disable, which is
+# worse than none, because it trains everyone to bump it without reading the
+# diff.
 #
-# This trades a maintenance cost for that: when Cursor edits the installer the
-# build fails with a digest mismatch, and the value below has to be updated
-# deliberately after reading the diff. That is the point. A build that keeps
-# working through an unreviewed change to a remote script is the thing being
-# fixed.
-ARG CURSOR_INSTALL_SHA256=f145a23a600d42c79bdf6a4cd36b77decb7b68359f4f0b86f60be3c84deea96c
-RUN curl -fsS https://cursor.com/install -o /tmp/cursor-install.sh && \
-    echo "${CURSOR_INSTALL_SHA256}  /tmp/cursor-install.sh" | sha256sum -c - && \
-    bash /tmp/cursor-install.sh && \
-    rm -f /tmp/cursor-install.sh && \
-    cp -L /root/.local/bin/agent /usr/local/bin/agent && \
-    chmod 755 /usr/local/bin/agent
+# So the installer is bypassed entirely and the versioned artifact it points
+# at is fetched directly. That is reproducible, and the digest of a given
+# version is stable, unlike the script that installs it.
+#
+# To upgrade: read cursor.com/install for the current version, then take the
+# two digests from
+#   https://downloads.cursor.com/lab/<version>/linux/{x64,arm64}/agent-cli-package.tar.gz
+ARG CURSOR_VERSION=2026.08.31-4057e58
+ARG CURSOR_SHA256_X64=7e306db5750219a99c00ed517fe8b235d3c54e4ca5f77e2ff160cc97ce707798
+ARG CURSOR_SHA256_ARM64=cf5db6b5047b3280d8a49471cfd41beb1d5e475774177df5df2851857ab6514a
+RUN set -eu; \
+    case "$(uname -m)" in \
+      x86_64|amd64)  CURSOR_ARCH=x64;   CURSOR_SHA="${CURSOR_SHA256_X64}"   ;; \
+      arm64|aarch64) CURSOR_ARCH=arm64; CURSOR_SHA="${CURSOR_SHA256_ARM64}" ;; \
+      *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /tmp/agent.tar.gz \
+      "https://downloads.cursor.com/lab/${CURSOR_VERSION}/linux/${CURSOR_ARCH}/agent-cli-package.tar.gz"; \
+    echo "${CURSOR_SHA}  /tmp/agent.tar.gz" | sha256sum -c -; \
+    mkdir -p /tmp/agent; \
+    tar xzf /tmp/agent.tar.gz -C /tmp/agent; \
+    cp /tmp/agent/dist-package/cursor-agent /usr/local/bin/agent; \
+    chmod 755 /usr/local/bin/agent; \
+    rm -rf /tmp/agent /tmp/agent.tar.gz
 
 # Stage 3: Runtime — assemble everything
 FROM node:22-alpine
