@@ -404,7 +404,16 @@ func LsRemote(gitURL, ref string) (string, error) {
 // can stub network behaviour without shelling out to git.
 var LsRemoteFunc = func(gitURL, ref string) (string, error) {
 	fullURL := NormalizeGitURL(gitURL)
-	args := []string{"ls-remote", "--exit-code", fullURL}
+	// A ref beginning with "-" is read by git as an option, not a ref:
+	// "--upload-pack=..." would run a command of the caller's choosing.
+	// NormalizeGitURL already forces a scheme on the URL, closing the same
+	// hole for that argument; the ref had no equivalent guard.
+	if strings.HasPrefix(ref, "-") {
+		return "", fmt.Errorf("git ref %q may not begin with %q", ref, "-")
+	}
+	args := []string{"ls-remote", "--exit-code"}
+	// Everything after this is positional, whatever it looks like.
+	args = append(args, "--end-of-options", fullURL)
 	if ref != "" {
 		args = append(args, ref)
 	} else {
