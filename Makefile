@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage e2e format lint check check-artifacts check-vendor-parity check-marketplace scan-artifacts run docs help docker-build docker-push
+.PHONY: clean deps install build test test-coverage e2e format lint check check-artifacts check-vendor-parity check-marketplace scan-artifacts run docs help docker-build docker-push vulncheck
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -76,7 +76,25 @@ ARTIFACT_DIRS := skills agents rules .claude
 SKILLSPECTOR ?= skillspector
 SKILLSPECTOR_VERSION := v2.11.0
 SKILLSPECTOR_BASELINE := .skillspector-baseline.yaml
+
+# govulncheck. Pinned so a toolchain-side change cannot silently alter what
+# gates a merge, the same reasoning as the SkillSpector pin above.
+GOVULNCHECK_VERSION := v1.7.0
 SARIF_DIR := .skillspector-sarif
+
+vulncheck: ## Scan the Go code and its dependencies for known vulnerabilities
+	@# Deliberately NOT part of `make check`, for the same reason as
+	@# scan-artifacts but a different cause: govulncheck queries a live
+	@# vulnerability database, so an unchanged tree can pass today and fail
+	@# tomorrow. A non-deterministic step does not belong in the check people
+	@# run before pushing. It gates every PR and runs nightly instead, in
+	@# .github/workflows/vulncheck.yml.
+	@#
+	@# govulncheck reports against the toolchain that builds the code, so the
+	@# `toolchain` directive in go.mod is what actually fixes a standard-library
+	@# advisory; this target is what notices one. Symbol-level, so it reports
+	@# only vulnerabilities the code genuinely reaches.
+	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 scan-artifacts: ## Security-scan the harness artifacts with SkillSpector
 	@command -v $(SKILLSPECTOR) >/dev/null 2>&1 || { \
