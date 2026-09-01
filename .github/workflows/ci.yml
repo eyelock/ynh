@@ -223,14 +223,18 @@ jobs:
       # this job exists for is still caught.
       - name: Fail only on an invalid config
         run: |
-          set -euo pipefail
-          if goreleaser check 2>&1 | tee /tmp/grcheck.txt | grep -q 'configuration is valid'; then
-            echo "Config is valid. Deprecations reported above are tracked separately."
-          else
-            echo "::error::.goreleaser.yml is not valid"
-            cat /tmp/grcheck.txt
-            exit 1
+          # Deliberately no pipefail around the check: goreleaser exits 2 for a
+          # deprecation as well as for an invalid config, and letting that exit
+          # status decide would fail on both, which is the distinction this
+          # step exists to draw.
+          goreleaser check >/tmp/grcheck.txt 2>&1 || true
+          cat /tmp/grcheck.txt
+          if grep -q 'configuration is valid' /tmp/grcheck.txt; then
+            echo "Config is valid. Deprecations above are tracked separately."
+            exit 0
           fi
+          echo "::error::.goreleaser.yml is not valid"
+          exit 1
 
       # The image is built nowhere else, so the base-image digest and the
       # installer checksum were unverified until somebody built it by hand.
