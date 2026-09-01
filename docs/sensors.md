@@ -320,6 +320,60 @@ so a loop driver can act on it.
 
 Use this for build/lint/test/typecheck — anything where running a command IS the observation. Same script can be hooked at `after_tool` for in-session enforcement *and* declared as a sensor for between-turn observation; the two are not redundant.
 
+## Sensors from an include
+
+A sensor set can be published as an ordinary harness and adopted like any
+other: installed, pinned to a ref, updated.
+
+```json
+{
+  "name": "my-service",
+  "includes": [{ "git": "github.com/myorg/sensors-go", "ref": "v1.2.0" }],
+  "sensor_overrides": { "go-vet": { "tolerance": "advisory" } }
+}
+```
+
+`ynh check` then runs `go-vet` as though it were declared locally.
+
+Before this, sensors travelled nowhere. `includes` carried skills, agents,
+rules and commands, and a sensor could only be shared by copying JSON out of a
+document, which is why the starter sets are prose and why they drifted.
+
+### What a consumer may change
+
+**`tolerance` and `ratchet`. Nothing else.**
+
+Nobody adopts a set that fails their repository on day one, so softening
+`blocking` to `advisory` is the difference between usable and not. Rewriting
+the `command`, the `reference` or `output.match` would turn an included sensor
+into an inherited template, and its author would no longer know what their
+sensor observes anywhere it is used. It would also break calibration: a
+`reference` fixture proves something about the command the author shipped,
+which holds only while the consumer cannot change that command.
+
+So an included sensor's **observation** belongs to whoever published it, and
+its **severity** belongs to whoever adopted it. Anything more than that is a
+fork, and forking a set is a reasonable thing to do.
+
+### Three refusals
+
+| Situation | Why it is refused rather than resolved |
+|---|---|
+| Two sources declare the same sensor name | No resolution order is guessable by a reader, and silently preferring one means the gate observes something other than what the manifest appears to say |
+| An override names a sensor nothing declares | The sensor was probably renamed upstream. A silent no-op means the softening quietly stopped applying and the gate began blocking for reasons nobody changed |
+| An override names one of your own sensors | Edit it directly. An override that shadows a local declaration is a second place to look for the same answer |
+
+### Git includes resolve from the cache
+
+Reading an included set never reaches the network. A gate that fetches in
+order to discover what it is gating on fails when GitHub is slow, and the
+sensors it could not fetch would silently not run, which is the worst outcome
+available. A cache miss is an error naming the fix (`ynh update`), not a fetch.
+
+An include that declares no manifest contributes no sensors and is not an
+error: shipping artifacts by directory layout is a legitimate thing for an
+include to do.
+
 ### `github_status` and `github_check`
 
 Two sensors that observe a verdict reached somewhere else. A `command` sensor
@@ -685,7 +739,8 @@ source, which a loop driver resolves with an agent runtime.
 `ynd validate` checks:
 
 - Each sensor name is non-empty.
-- `source` has exactly one of `files`, `command`, `focus`.
+- `source` has exactly one of `files`, `command`, `focus`, `github_status`,
+  `github_check`.
 - `source.files` is a non-empty array of non-empty strings.
 - `source.command` is a non-empty string.
 - `source.focus` (string form) references a defined top-level `focus.<name>`.
@@ -698,7 +753,7 @@ source, which a loop driver resolves with an agent runtime.
 Errors are prefixed with the sensor name:
 
 ```
-sensor "coverage": source must have exactly one of files, command, focus
+sensor "coverage": source must have exactly one of files, command, focus, github_status, github_check
 sensor "security-scan": source.focus references undefined focus "infer-vulns"
 ```
 

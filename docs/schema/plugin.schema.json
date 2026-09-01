@@ -161,6 +161,31 @@
       "additionalProperties": {
         "$ref": "#/$defs/sensor"
       }
+    },
+    "sensor_overrides": {
+      "description": "Tune sensors obtained from includes. Tolerance and ratchet only: an included sensor's observation belongs to whoever published it, its severity to whoever adopted it. Naming a sensor no include declares is an error, not a silent no-op.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "tolerance": {
+            "type": "string",
+            "enum": [
+              "blocking",
+              "advisory",
+              "report"
+            ]
+          },
+          "ratchet": {
+            "type": "string",
+            "enum": [
+              "fingerprint",
+              "count"
+            ]
+          }
+        }
+      }
     }
   },
   "$defs": {

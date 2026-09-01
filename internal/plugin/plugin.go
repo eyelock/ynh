@@ -36,6 +36,11 @@ type HarnessJSON struct {
 	Profiles       map[string]Profile `json:"profiles,omitempty"`
 	Focuses        map[string]Focus   `json:"focuses,omitempty"`
 	Sensors        map[string]Sensor  `json:"sensors,omitempty"`
+
+	// SensorOverrides tunes sensors obtained from includes. Tolerance and
+	// ratchet only: an included sensor's observation belongs to whoever
+	// published it, its severity belongs to whoever adopted it.
+	SensorOverrides map[string]SensorOverride `json:"sensor_overrides,omitempty"`
 	// Reads declares, per artifact, the harness-root-relative paths that
 	// artifact tells an agent to open. Keys are artifact paths
 	// ("skills/<name>", "agents/<name>.md"); values are the paths read.
@@ -248,6 +253,13 @@ var ValidGitHubStatusStates = map[string]bool{
 var ValidGitHubCheckConclusions = map[string]bool{
 	"success": true, "failure": true, "neutral": true, "cancelled": true,
 	"timed_out": true, "action_required": true, "stale": true, "skipped": true,
+}
+
+// SensorOverride is what a consumer may change about a sensor that came from
+// an include. Deliberately narrow — see resolver.MergeIncludedSensors.
+type SensorOverride struct {
+	Tolerance string `json:"tolerance,omitempty"`
+	Ratchet   string `json:"ratchet,omitempty"`
 }
 
 // ValidSensorOnMissing are the verdicts available when the observation is
