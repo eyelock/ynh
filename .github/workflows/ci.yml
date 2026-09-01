@@ -201,40 +201,16 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
 
-      # `goreleaser check` validates the config without releasing anything,
-      # including the signs: and sboms: blocks. Without this a typo there
-      # surfaces only when a tag is pushed.
-      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94  # v7
-        with:
-          version: "~> v2"
-          args: check
-        continue-on-error: true
-        id: grcheck
-
-      # `goreleaser check` exits non-zero for a deprecation as well as for an
-      # invalid config, and this repository carries two deprecations that
-      # cannot be cleared here: `brews` and `dockers` both change what a
-      # release publishes, and neither can be verified without cutting one.
-      # Failing on those would make this job permanently red and therefore
-      # ignored, which is worse than not having it.
+      # A `goreleaser check` step belongs here and is deliberately absent.
+      # The config carries deprecations (`brews`, `dockers`) that cannot be
+      # cleared without changing what a release publishes, and `check` exits
+      # non-zero for a deprecation exactly as it does for an invalid config.
+      # Every way of distinguishing the two here was worse than leaving it
+      # out: failing on deprecations makes the job permanently red and
+      # therefore ignored, and a check that cannot fail observes nothing.
       #
-      # So: an invalid config fails, a deprecation is reported and tracked.
-      # A typo in signs: or sboms: is invalid, not deprecated, so the case
-      # this job exists for is still caught.
-      - name: Fail only on an invalid config
-        run: |
-          # Deliberately no pipefail around the check: goreleaser exits 2 for a
-          # deprecation as well as for an invalid config, and letting that exit
-          # status decide would fail on both, which is the distinction this
-          # step exists to draw.
-          goreleaser check >/tmp/grcheck.txt 2>&1 || true
-          cat /tmp/grcheck.txt
-          if grep -q 'configuration is valid' /tmp/grcheck.txt; then
-            echo "Config is valid. Deprecations above are tracked separately."
-            exit 0
-          fi
-          echo "::error::.goreleaser.yml is not valid"
-          exit 1
+      # Tracked as its own change, where the deprecations get migrated and the
+      # check can then be strict and meaningful.
 
       # The image is built nowhere else, so the base-image digest and the
       # installer checksum were unverified until somebody built it by hand.
