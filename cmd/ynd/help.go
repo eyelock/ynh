@@ -179,17 +179,29 @@ than once: it does nothing once the new format exists.
 
 Given a directory, migrates every harness beneath it.`,
 
-	"validate-output": `ynd validate-output --schema <name> [< file.json]
+	"validate-output": `ynd validate-output --schema <name|path> [< file.json]
 
-Validate JSON on stdin against a named CLI schema.
+Validate JSON on stdin against a CLI schema by name, or any JSON Schema by path.
 
-Reads the schemas ynh embeds, so this checks a response against the contract
-the binary actually carries rather than a copy on disk.
+A name reads the schemas ynh embeds, so it checks a response against the
+contract the binary actually carries rather than a copy on disk.
 
   ynh ls --format json | ynd validate-output --schema list
 
+A path validates against your own schema, which is what makes this usable as a
+sensor over your project's published contracts:
+
+  myapp config --json | ynd validate-output --schema ./schema/config.json
+  yq -o=json '.' config.yaml | ynd validate-output --schema ./schema/config.json
+
+YAML is converted before it arrives, deliberately: ynh does not pick a YAML
+dialect for you.
+
+Names win over paths, so adding a published schema can never change what an
+existing invocation validates against.
+
 Flags:
-  --schema <name>        Schema to validate against (see: ynh schema --all)`,
+  --schema <name|path>   Published name (see: ynh schema --all) or a file`,
 
 	"version": `ynd version
 

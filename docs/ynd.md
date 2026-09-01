@@ -356,6 +356,10 @@ Validate a captured JSON response on stdin against a published CLI schema. Exits
 ```bash
 ynh ls --format json | ynd validate-output --schema list
 ynh version --format json | ynd validate-output --schema version
+
+# --schema also takes a path, so a project can gate its own contracts
+myapp config --json           | ynd validate-output --schema ./schema/config.json
+yq -o=json '.' config.yaml    | ynd validate-output --schema ./schema/config.json
 ```
 
 | Flag | Description |

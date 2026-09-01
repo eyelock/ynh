@@ -1,7 +1,15 @@
-// `ynd validate-output --schema <name>` reads a JSON document from stdin
-// and validates it against the named published CLI schema. Lets harness
-// authors and downstream consumers verify captured ynh responses against
-// the contract without running their own schema loader.
+// `ynd validate-output --schema <name|path>` reads a JSON document from stdin
+// and validates it against a published CLI schema by name, or against any
+// JSON Schema file by path. Lets harness authors and downstream consumers
+// verify captured responses against a contract without running their own
+// schema loader.
+//
+// The path form exists so a project can gate its own published schemas the
+// way ynh gates its own: pipe a command's JSON into this, declare it as a
+// sensor, and drift between a schema and the thing it describes fails the
+// gate instead of being noticed months later. YAML is deliberately not
+// handled here — `yq -o=json` converts before anything reaches a validator,
+// which keeps ynh out of the business of choosing a YAML dialect.
 package main
 
 import (
@@ -9,8 +17,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/eyelock/ynh/internal/clischema"
+	"github.com/eyelock/ynh/internal/jsonschema"
 )
 
 func cmdValidateOutput(args []string) error {
@@ -36,12 +46,12 @@ func cmdValidateOutputTo(args []string, stdin io.Reader, stdout, stderr io.Write
 		i++
 	}
 	if schemaName == "" {
-		return fmt.Errorf("usage: ynd validate-output --schema <name> < some.json")
+		return fmt.Errorf("usage: ynd validate-output --schema <name|path> < some.json")
 	}
 
-	schema, err := clischema.Get(schemaName)
+	schema, err := resolveSchema(schemaName)
 	if err != nil {
-		return fmt.Errorf("schema %q: %w", schemaName, err)
+		return err
 	}
 
 	data, err := io.ReadAll(stdin)
@@ -58,4 +68,51 @@ func cmdValidateOutputTo(args []string, stdin io.Reader, stdout, stderr io.Write
 	}
 	_, _ = fmt.Fprintln(stdout, "ok")
 	return nil
+}
+
+// resolveSchema accepts a published schema name or a path to a JSON Schema
+// file.
+//
+// Names win over paths. A published name is a fixed, documented set, so
+// resolving it first means adding a schema to ynh can never change what an
+// existing invocation validates against — whereas letting a file called
+// "check" in the working directory shadow the published "check" schema would
+// do exactly that, silently.
+func resolveSchema(nameOrPath string) (*jsonschema.Schema, error) {
+	if s, err := clischema.Get(nameOrPath); err == nil {
+		return s, nil
+	}
+	if _, statErr := os.Stat(nameOrPath); statErr != nil {
+		// Neither, so say so in terms of both, naming what is available. A
+		// bare typo and a wrong path fail identically otherwise.
+		return nil, fmt.Errorf(
+			"schema %q: not a published schema name and not a readable file\n"+
+				"published names: %s", nameOrPath, strings.Join(clischema.Names(), ", "))
+	}
+	data, err := os.ReadFile(nameOrPath)
+	if err != nil {
+		return nil, fmt.Errorf("schema file %q: %w", nameOrPath, err)
+	}
+	// Registered under the path so a schema without an $id still resolves,
+	// and compiled through the same validator ynh uses on its own schemas
+	// rather than a second implementation with different behaviour.
+	c := jsonschema.NewCompiler()
+	if err := c.Add(nameOrPath, data); err != nil {
+		return nil, fmt.Errorf("schema file %q: %w", nameOrPath, err)
+	}
+	// Add keys by $id when the document has one, so compile under that and
+	// fall back to the path. A schema with an $id is the common case for a
+	// published contract, which is exactly what this form is for.
+	key := nameOrPath
+	var probe struct {
+		ID string `json:"$id"`
+	}
+	if json.Unmarshal(data, &probe) == nil && probe.ID != "" {
+		key = probe.ID
+	}
+	sch, err := c.Compile(key)
+	if err != nil {
+		return nil, fmt.Errorf("schema file %q: %w", nameOrPath, err)
+	}
+	return sch, nil
 }
