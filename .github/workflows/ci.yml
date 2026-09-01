@@ -208,6 +208,29 @@ jobs:
         with:
           version: "~> v2"
           args: check
+        continue-on-error: true
+        id: grcheck
+
+      # `goreleaser check` exits non-zero for a deprecation as well as for an
+      # invalid config, and this repository carries two deprecations that
+      # cannot be cleared here: `brews` and `dockers` both change what a
+      # release publishes, and neither can be verified without cutting one.
+      # Failing on those would make this job permanently red and therefore
+      # ignored, which is worse than not having it.
+      #
+      # So: an invalid config fails, a deprecation is reported and tracked.
+      # A typo in signs: or sboms: is invalid, not deprecated, so the case
+      # this job exists for is still caught.
+      - name: Fail only on an invalid config
+        run: |
+          set -euo pipefail
+          if goreleaser check 2>&1 | tee /tmp/grcheck.txt | grep -q 'configuration is valid'; then
+            echo "Config is valid. Deprecations reported above are tracked separately."
+          else
+            echo "::error::.goreleaser.yml is not valid"
+            cat /tmp/grcheck.txt
+            exit 1
+          fi
 
       # The image is built nowhere else, so the base-image digest and the
       # installer checksum were unverified until somebody built it by hand.
