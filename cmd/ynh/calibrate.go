@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/gate"
@@ -88,6 +89,30 @@ func runCalibration(p *harness.Harness, wanted map[string]bool, stdout, stderr i
 
 		res.ExitCode = run.ExitCode
 
+		// Calibration ran in the fixture; `ynh check` runs in the tree being
+		// measured. If the command resolves to a different program from those
+		// two roots, this calibration is real and does not transfer, and
+		// nothing downstream would have said so (#363).
+		//
+		// Probed against an empty directory rather than a real tree: any
+		// command that resolves differently there is one whose resolution
+		// depends on where it runs, which is the property in question.
+		if s.Source.Kind() == "command" {
+			probeDir, tmpErr := os.MkdirTemp("", "ynh-portability-*")
+			if tmpErr == nil {
+				inFixture := resolveCommandProgram(s.Source.Command, fixture, p.Dir)
+				elsewhere := resolveCommandProgram(s.Source.Command, probeDir, p.Dir)
+				_ = os.RemoveAll(probeDir)
+
+				portable := inFixture != "" && inFixture == elsewhere
+				res.PortableCommand = &portable
+				if !portable {
+					env.Summary.NonPortable++
+					res.Note = strings.TrimSpace(res.Note + " " + nonPortableNote)
+				}
+			}
+		}
+
 		// A command that never ran is not a wrong answer, it is no answer.
 		// Without this the sensor's own absence satisfies `expect: "fail"`,
 		// and a deleted script reports as calibrated.
@@ -145,6 +170,12 @@ func printCalibrationText(w io.Writer, env gate.CalibrationEnvelope) {
 	for _, r := range env.Sensors {
 		switch r.Status {
 		case gate.CalibCalibrated:
+			// A calibration that cannot transfer is not a tick. Marking it
+			// otherwise is the silence this exists to break.
+			if r.PortableCommand != nil && !*r.PortableCommand {
+				_, _ = fmt.Fprintf(w, "  ~ %-24s calibrated, but not against what check will run\n", r.Name)
+				break
+			}
 			_, _ = fmt.Fprintf(w, "  ✓ %-24s calibrated (%s → %s)\n", r.Name, r.Reference, r.Observed)
 		case gate.CalibFailed:
 			_, _ = fmt.Fprintf(w, "  ✗ %-24s FAILED   expected %s, observed %s — %s\n",
@@ -158,9 +189,22 @@ func printCalibrationText(w io.Writer, env gate.CalibrationEnvelope) {
 	s := env.Summary
 	_, _ = fmt.Fprintf(w, "\n%d sensors: %d calibrated, %d failed, %d errored, %d uncalibrated\n",
 		s.Total, s.Calibrated, s.Failed, s.Errored, s.Uncalibrated)
+	if s.NonPortable > 0 {
+		_, _ = fmt.Fprintf(w,
+			"\n%d sensor(s) were calibrated against a different program than `ynh check` will run.\n"+
+				"Their command resolves relative to the working directory, so calibration used the\nfixture's copy and the gate will use the copy in the tree under test. Pin a script\nthe harness ships with $YNH_HARNESS_DIR.\n",
+			s.NonPortable)
+	}
 	if s.Uncalibrated > 0 {
 		_, _ = fmt.Fprintf(w,
 			"\n%d sensor(s) declare no reference. An uncalibrated sensor is not a failing one,\nbut nothing proves it still observes.\n",
 			s.Uncalibrated)
 	}
 }
+
+// nonPortableNote explains a calibration that cannot transfer, and names the
+// fix rather than only the problem.
+const nonPortableNote = "this command resolves relative to the working directory, " +
+	"so it was calibrated against the fixture's copy and `ynh check` will run " +
+	"the copy belonging to the tree under test; use $YNH_HARNESS_DIR to pin a " +
+	"script the harness ships"
