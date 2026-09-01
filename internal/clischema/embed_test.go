@@ -43,6 +43,7 @@ func TestSingleSchemaTree(t *testing.T) {
 	canonical := filepath.Join(root, "docs", "schema")
 
 	var strays []string
+	var fixtureSchemas []string
 	walkErr := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil // unreadable trees are not this test's business
@@ -60,6 +61,18 @@ func TestSingleSchemaTree(t *testing.T) {
 		if strings.HasPrefix(path, canonical+string(filepath.Separator)) {
 			return nil
 		}
+		// A sensor calibration fixture is the one legitimate wrong copy: it
+		// exists precisely to be invalid, so a sensor that has stopped
+		// reading the real schemas fails against it. It is never loaded as a
+		// contract, and tools/sensors/fixtures/README.md says not to fix it.
+		//
+		// It still must not be a *copy* of a canonical schema, which is the
+		// drift this test exists to prevent, so that is asserted below rather
+		// than waved through.
+		if strings.Contains(path, filepath.Join("tools", "sensors", "fixtures")+string(filepath.Separator)) {
+			fixtureSchemas = append(fixtureSchemas, path)
+			return nil
+		}
 		rel, _ := filepath.Rel(root, path)
 		strays = append(strays, rel)
 		return nil
@@ -72,6 +85,27 @@ func TestSingleSchemaTree(t *testing.T) {
 		t.Errorf("schema outside docs/schema: %s\n"+
 			"Every schema lives once, at docs/schema, embedded by docs/schema/embed.go. "+
 			"A second copy is how the published and enforced schemas silently diverged.", rel)
+	}
+
+	// A fixture that has become byte-identical to a real schema has stopped
+	// being a fixture: the sensor it calibrates would pass against it, and the
+	// calibration would prove nothing while reporting success.
+	for _, path := range fixtureSchemas {
+		fixture, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		twin := filepath.Join(canonical, "cli", filepath.Base(path))
+		real, err := os.ReadFile(twin)
+		if err != nil {
+			continue
+		}
+		if string(fixture) == string(real) {
+			rel, _ := filepath.Rel(root, path)
+			t.Errorf("calibration fixture %s is identical to the real schema\n"+
+				"A fixture must be deliberately wrong; an identical copy makes its "+
+				"sensor pass and the calibration prove nothing.", rel)
+		}
 	}
 }
 

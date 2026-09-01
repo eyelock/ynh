@@ -16,7 +16,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/clischema"
@@ -93,10 +95,22 @@ func resolveSchema(nameOrPath string) (*jsonschema.Schema, error) {
 	if err != nil {
 		return nil, fmt.Errorf("schema file %q: %w", nameOrPath, err)
 	}
-	// Registered under the path so a schema without an $id still resolves,
-	// and compiled through the same validator ynh uses on its own schemas
-	// rather than a second implementation with different behaviour.
+	// Compiled through the same validator ynh uses on its own schemas rather
+	// than a second implementation with different behaviour.
 	c := jsonschema.NewCompiler()
+
+	// A published schema set cross-references itself: ynh's own
+	// docs/schema/cli/list.schema.json points at ../shared/harness.schema.json.
+	// Registering only the named file leaves those refs unresolvable, so
+	// register the whole set first. The embedded loader walks its tree for
+	// exactly this reason.
+	//
+	// The set is taken to be the tree rooted at the parent of the schema's
+	// own directory, which is what cli/ + shared/ beside each other requires.
+	// Registering more than is needed costs nothing; registering less makes a
+	// cross-referencing schema fail to compile at all.
+	registerSiblingSchemas(c, nameOrPath)
+
 	if err := c.Add(nameOrPath, data); err != nil {
 		return nil, fmt.Errorf("schema file %q: %w", nameOrPath, err)
 	}
@@ -115,4 +129,36 @@ func resolveSchema(nameOrPath string) (*jsonschema.Schema, error) {
 		return nil, fmt.Errorf("schema file %q: %w", nameOrPath, err)
 	}
 	return sch, nil
+}
+
+// registerSiblingSchemas adds every *.schema.json in the schema set alongside
+// the one requested, so internal $refs resolve.
+//
+// Failures are deliberately ignored: a malformed neighbour must not stop the
+// schema the caller actually asked for from compiling, and if the ref it needed
+// was in that neighbour, compilation reports the unresolved ref itself, which
+// is the more useful error.
+func registerSiblingSchemas(c *jsonschema.Compiler, schemaPath string) {
+	root := filepath.Dir(filepath.Dir(schemaPath))
+	if root == "" || root == "." {
+		root = filepath.Dir(schemaPath)
+	}
+	const maxSiblings = 500
+	seen := 0
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || seen >= maxSiblings {
+			return nil //nolint:nilerr // a neighbour we cannot read is not this caller's problem
+		}
+		if !strings.HasSuffix(path, ".schema.json") || path == schemaPath {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil
+		}
+		if addErr := c.Add(path, data); addErr == nil {
+			seen++
+		}
+		return nil
+	})
 }

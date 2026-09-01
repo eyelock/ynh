@@ -15,6 +15,7 @@ stops proving anything.
 | Fixture | Sensor | Why it fails |
 |---|---|---|
 | `harness-invalid/` | `harness-valid` | a sensor source setting both `command` and `files`, which the schema forbids as a strict one-of |
+| `schema-drift/` | `schema-conformance` | a `version.schema.json` requiring a field `ynh version` does not emit, so a sensor that still reads the on-disk schemas must fail here |
 
 ## Why there is only one
 

@@ -106,6 +106,21 @@
       "output": {
         "format": "text"
       }
+    },
+    "schema-conformance": {
+      "category": "behaviour",
+      "tolerance": "blocking",
+      "version_command": "ynd version",
+      "reference": {
+        "path": "tools/sensors/fixtures/schema-drift",
+        "expect": "fail"
+      },
+      "source": {
+        "command": "\"$YNH_HARNESS_DIR/tools/sensors/schema-conformance.sh\""
+      },
+      "output": {
+        "format": "text"
+      }
     }
   }
 }
