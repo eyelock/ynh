@@ -97,11 +97,18 @@ func cmdCompress(args []string) error {
 	totalOriginal := 0
 	totalCompressed := 0
 	compressed := 0
+	// Every `continue` below reports to stderr and moves on, which is right for
+	// a per-file loop. What was wrong is that the function then returned nil
+	// regardless, so a run that failed to write every file, or one where the
+	// operator declined every file, exited 0 with no summary.
+	skipped := 0
+	failed := 0
 
 	for _, f := range opts.files {
 		original, err := os.ReadFile(f)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", f, err)
+			failed++
 			continue
 		}
 
@@ -114,6 +121,7 @@ func cmdCompress(args []string) error {
 		result, err := compressWithLLM(opts.vendor, string(original))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "  %s: compression failed: %v\n", f, err)
+			failed++
 			continue
 		}
 
@@ -128,6 +136,7 @@ func cmdCompress(args []string) error {
 			action := promptAction("Apply? [y/N] ", "n", "y")
 			if action != "y" {
 				fmt.Println("Skipped.")
+				skipped++
 				continue
 			}
 		}
@@ -135,11 +144,13 @@ func cmdCompress(args []string) error {
 		// Back up the original before overwriting
 		if backupErr := backupFile(f, original); backupErr != nil {
 			fmt.Fprintf(os.Stderr, "  %s: backup failed: %v\n", f, backupErr)
+			failed++
 			continue
 		}
 
 		if err := os.WriteFile(f, []byte(result), 0o644); err != nil {
 			fmt.Fprintf(os.Stderr, "  %s: write error: %v\n", f, err)
+			failed++
 			continue
 		}
 
@@ -157,6 +168,15 @@ func cmdCompress(args []string) error {
 	if compressed > 0 {
 		totalReduction := reductionPct(totalOriginal, totalCompressed)
 		fmt.Printf("\n%d file(s) compressed, avg %d%% reduction.\n", compressed, totalReduction)
+	}
+
+	// A failure to read, compress or write is a failure of the command even
+	// when other files succeeded, so it outranks a decline.
+	if failed > 0 {
+		return fmt.Errorf("%d of %d file(s) could not be compressed", failed, len(opts.files))
+	}
+	if compressed == 0 && skipped > 0 {
+		return declined("Nothing was compressed: all %d file(s) were skipped.", skipped)
 	}
 
 	return nil

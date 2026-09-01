@@ -78,8 +78,7 @@ func cmdInspect(args []string) error {
 		action := promptAction("Does this look right? [c]ontinue / [r]efine / [q]uit: ", "c", "r", "q")
 		switch action {
 		case "q":
-			fmt.Println("Stopped.")
-			return nil
+			return declined("Stopped. Nothing was generated.")
 		case "r":
 			refinement := promptInput("What should I adjust? ")
 			refined, refErr := refineAnalysis(vendor, overview, refinement)
@@ -135,8 +134,7 @@ func cmdInspect(args []string) error {
 		action := promptAction("Generate these? [y]es all / [w]alk through each / [s]kip: ", "s", "y", "w")
 		switch action {
 		case "s":
-			fmt.Println("Skipped.")
-			return nil
+			return declined("Skipped. Nothing was generated.")
 		case "y":
 			return generateAllProposals(vendor, overview, proposals, root, outputDir)
 		case "w":

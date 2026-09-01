@@ -169,7 +169,7 @@ Flags:
 
 --clean carries the same hard refusals as ynd export --clean.`,
 
-	"migrate": `ynd migrate <path>
+	"migrate": `ynd migrate [--dry-run] [-y] <path>
 
 Convert .harness.json to .ynh-plugin/plugin.json in place.
 
@@ -177,7 +177,15 @@ Extracts install-time provenance into .ynh-plugin/installed.json, writes
 plugin.json without that field, and removes .harness.json. Safe to run more
 than once: it does nothing once the new format exists.
 
-Given a directory, migrates every harness beneath it.`,
+Given a directory, migrates every harness beneath it.
+
+Options:
+  --dry-run    List what would be migrated and change nothing.
+  -y, --yes    Skip the confirmation. Also honoured via YNH_YES or CI.
+
+This command deletes .harness.json, so it lists what it will touch and asks
+first. The prompt refuses on EOF, so a piped or scripted run without -y
+declines and exits non-zero rather than migrating unattended.`,
 
 	"validate-output": `ynd validate-output --schema <name|path> [< file.json]
 

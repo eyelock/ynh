@@ -330,24 +330,14 @@ so manual invocation is rarely needed except for source trees.
 
 | Flag | Description |
 |------|-------------|
+| `--dry-run` | List what would be migrated and change nothing. |
+| `-y, --yes` | Skip the confirmation. Also honoured via `YNH_YES` or `CI`. |
 | `-h, --help` | Show help |
 
-**Output structure:**
-
-```
-dist/
-├── plugins/
-│   └── <name>/
-│       ├── .claude-plugin/plugin.json
-│       ├── .cursor-plugin/plugin.json
-│       ├── skills/
-│       └── ...
-├── .claude-plugin/marketplace.json
-├── .cursor-plugin/marketplace.json
-└── README.md
-```
-
-See [Marketplace](tutorial/marketplace.md) for a guided walkthrough.
+This command deletes `.harness.json`, so it lists what it will touch and asks
+first. The prompt refuses on EOF, so a piped or scripted run without `-y`
+declines and exits non-zero rather than migrating unattended. See
+[Exit codes](#exit-codes).
 
 ### validate-output
 
@@ -385,6 +375,28 @@ Schemas are embedded in the binary — `ynh schema <name>` and `ynh schema --all
 | `--restore` | compress | Restore a file from its latest backup. |
 | `--list-backups` | compress | Show backup history for a file. |
 | `--pick <N>` | compress | With `--restore`, pick a specific backup by number from the list. |
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | The command did what it was asked. A no-op counts: `--dry-run`, or a tree with nothing to migrate, is a success. |
+| `1` | A failure, or an operation the operator declined. |
+| `2` | A usage error. |
+
+A declined operation exits non-zero. `ynd migrate`, `ynd compress` and
+`ynd inspect` ask before they change anything, and a refusal means the work did
+not happen, so reporting success would be wrong. Declines print a plain
+sentence to stderr (`Aborted. Nothing was migrated.`) without the `Error:`
+prefix a failure carries, so the two read differently even though both exit 1.
+
+This matters most when nobody is watching. Confirmation prompts return their
+refusing answer on EOF, so a piped or scripted call without `-y` declines by
+default. Pass `-y`, or set `YNH_YES` or `CI`, when you mean it to proceed.
+
+A refusal to overwrite an existing artifact is not a decline and not a failure:
+`ynd inspect` skips artifacts that already exist and keeps going, so re-running
+it over a project that is already partly built still exits 0.
 
 ## Examples
 

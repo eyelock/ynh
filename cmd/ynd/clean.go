@@ -60,7 +60,7 @@ func cleanOutputDir(dir string, skipConfirm bool) error {
 		// rather than a terminal. A prompt labelled [y/N] that returns y on EOF
 		// is a lie to the operator.
 		if promptAction("Delete it? [y/N] ", "n", "y") != "y" {
-			return fmt.Errorf("--clean declined")
+			return declined("--clean declined. %s was not deleted.", abs)
 		}
 	}
 

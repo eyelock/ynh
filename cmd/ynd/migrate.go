@@ -88,8 +88,7 @@ func cmdMigrate(args []string) error {
 		// promptAction returns choices[0] on EOF, so the refusing answer is
 		// first: a piped stdin must not mean yes.
 		if promptAction("\nMigrate these directories? [y/N] ", "n", "y") != "y" {
-			fmt.Println("Aborted.")
-			return nil
+			return declined("Aborted. Nothing was migrated.")
 		}
 	}
 

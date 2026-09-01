@@ -12,6 +12,34 @@ import (
 // errHelp is returned by arg parsers when -h/--help is passed.
 var errHelp = errors.New("help requested")
 
+// errDeclined marks an operation the operator refused, or one that ended with
+// nothing done because every item was skipped.
+//
+// It is not a failure, so main prints it without the "Error:" prefix. It must
+// still exit non-zero. `ynd migrate` used to print "Aborted." and exit 0, so a
+// caller could not tell a completed migration from a refused one, and since
+// promptAction returns its refusing answer on EOF, every piped invocation took
+// the refusing branch and reported success for doing nothing.
+//
+// Exit 1, per docs/cli-structured.md: 1 for user and runtime errors, 2 for
+// usage errors. Declining is a user outcome, not a usage mistake.
+var errDeclined = errors.New("declined")
+
+// declinedError carries the sentence shown to the operator while still
+// matching errDeclined under errors.Is.
+type declinedError struct{ msg string }
+
+func (e *declinedError) Error() string { return e.msg }
+
+func (e *declinedError) Is(target error) bool { return target == errDeclined }
+
+// declined reports that the operator was asked and said no, or that a run
+// finished having written nothing. The message is shown as-is, so write it as
+// a sentence addressed to the operator.
+func declined(format string, a ...any) error {
+	return &declinedError{msg: fmt.Sprintf(format, a...)}
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		printUsage()
@@ -65,9 +93,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	if errors.Is(err, errHelp) {
+	switch {
+	case errors.Is(err, errHelp):
 		printUsage()
-	} else if err != nil {
+	case errors.Is(err, errDeclined):
+		// No "Error:" prefix: nothing went wrong, the operator said no. The
+		// non-zero status is what tells a script the work did not happen.
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	case err != nil:
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
