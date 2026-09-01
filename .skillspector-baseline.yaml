@@ -85,3 +85,42 @@ rules:
   - id: "TM1"
     path: "*rules/branching.md"
     reason: "Matches `git push` in the documented Gitflow workflow. Branching instructions for contributors, not tool parameter manipulation."
+
+  # ---------------------------------------------------------------------------
+  # Added 2026-09-01, when the gate was fixed to read the SARIF instead of
+  # trusting skillspector's exit code. `skillspector scan` exits 0 whatever it
+  # finds, so every finding below had been active and unreported since the scan
+  # was introduced. Each is triaged individually; none is new content.
+  # ---------------------------------------------------------------------------
+
+  # --- AS3 · Agent Snooping / Skill Enumeration ---------------------------
+  # Same root cause as the AS3 entries above. The earlier globs were scoped to
+  # SKILL.md only, so the reference pages that carry the same material were
+  # never covered.
+
+  - id: "AS3"
+    path: "*ynh-adopt/SKILL.md"
+    reason: "ynh-adopt moves an existing .claude/skills and .claude/agents layout into a harness. Naming the directories it adopts is the entire skill."
+
+  - id: "AS3"
+    path: "*ynh-adopt/references/what-moves-where.md"
+    reason: "Shows the before and after layout of an adoption, so it must list skill and agent paths. Reference tables, not enumeration at run time."
+
+  - id: "AS3"
+    path: "*ynh-create-harness/references/example-harness.md"
+    reason: "Worked example of a harness layout; cites skills/db-migration/SKILL.md as the illustrative path. Companion to the ynh-create-harness/SKILL.md entry above, which was scoped too narrowly to cover its own references."
+
+  # --- AR2 · Anti-Refusal Statement ---------------------------------------
+  - id: "AR2"
+    path: "*vendor-adapters/references/copilot.md"
+    reason: "Matches CONFIRMED used as emphasis in a hand-tested research note ('CONFIRMED: hooks silently no-op in an untrusted folder'). Same emphasis-in-findings pattern as the vendor-adapters/SKILL.md entry above."
+
+  # --- EA2 · Excessive Agency / Autonomous Decision Making ----------------
+  - id: "EA2"
+    path: "*vendor-adapters/references/copilot.md"
+    reason: "Matches a reference list of Copilot CLI's own auto-approve flags (--yolo, --allow-all-tools, --allow-all-paths). Documenting that a vendor offers these is how the adapter knows to avoid them; the skill grants no autonomy itself."
+
+  # --- RP1 · Unpinned MCP server reference --------------------------------
+  - id: "RP1"
+    path: "*ynh-sensors/references/starter-sets.md"
+    reason: "Misfire on two counts. These are sensor commands (npx prettier --check, npx eslint, npx tsc --noEmit), not MCP server references. And pinning them would be wrong: npx in a project that lists the tool in devDependencies resolves to that project's own pinned copy, whereas npx tool@version bypasses it and fetches from the registry. The starter set deliberately defers to the consuming project's lockfile."

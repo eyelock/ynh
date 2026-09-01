@@ -84,24 +84,15 @@ scan-artifacts: ## Security-scan the harness artifacts with SkillSpector
 		echo "  pip install 'git+https://github.com/NVIDIA/SkillSpector.git@$(SKILLSPECTOR_VERSION)'"; \
 		exit 1; }
 	@rm -rf $(SARIF_DIR) && mkdir -p $(SARIF_DIR)
-	@rc=0; for d in $(ARTIFACT_DIRS); do \
+	@for d in $(ARTIFACT_DIRS); do \
 		echo "==> skillspector scan $$d"; \
 		$(SKILLSPECTOR) scan ./$$d --no-llm --baseline $(SKILLSPECTOR_BASELINE) \
-			-f sarif -o $(SARIF_DIR)/`echo $$d | tr -d .`.sarif || rc=1; \
-	done; \
-	if [ $$rc -ne 0 ]; then \
-		echo ""; \
-		echo "SkillSpector found un-baselined findings. For a readable report:"; \
-		echo "  $(SKILLSPECTOR) scan ./<dir> --no-llm --baseline $(SKILLSPECTOR_BASELINE)"; \
-		echo "Triage each one. Suppress only with a scoped path and a written reason."; \
-	else \
-		echo "Skill security scan clean."; \
-	fi; \
-	exit $$rc
+			-f sarif -o $(SARIF_DIR)/`echo $$d | tr -d .`.sarif || exit 1; \
+	done
+	@# `skillspector scan` exits 0 whatever it finds, so the verdict comes from
+	@# the SARIF rather than the exit code. See the script header.
+	@scripts/skillspector-findings.sh $(SARIF_DIR)
 
-# The marketplace indexes are committed rather than generated — this repo IS a
-# plugin marketplace, installable without ynh. Committed means hand-maintained,
-# so this asserts they still agree with the plugin manifests.
 check-marketplace: ## Assert the committed marketplace indexes match the plugin manifests
 	@./scripts/marketplace-consistency.sh
 
