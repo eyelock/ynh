@@ -80,10 +80,28 @@ ynh check local/<name> --only <sensor> --cwd /tmp/empty
 ```
 
 This only bites on adoption. `$0`-relative rooting is the better choice for
-CI, so scripts worth adopting are the ones most likely to have it. See
-[the working-directory contract](https://github.com/eyelock/ynh/blob/main/docs/sensors.md)
-for why, including what it means for a command that begins with
-`$(git rev-parse --show-toplevel)`.
+CI, so scripts worth adopting are the ones most likely to have it.
+
+**To run a script the harness ships, use `$YNH_HARNESS_DIR`.** Quote it, since a
+harness path can contain spaces:
+
+```json
+"source": { "command": "\"$YNH_HARNESS_DIR/tools/lint.sh\"" }
+```
+
+The working directory is unchanged, so the script still measures the tree under
+test. Only the path to the script is pinned. Use this whenever the sensor must
+outlive the tree it inspects, which is what makes historical replay work.
+
+**Do not reach for `$(git rev-parse --show-toplevel)` instead.** It resolves in
+the working directory, so it runs whichever copy the measured tree holds, and
+exits 127 on any commit predating the script. It also resolves differently under
+`--calibrate`, which runs from the fixture: a sensor can calibrate green against
+the harness's copy and then gate on the tree's copy, which may pass
+unconditionally. `$YNH_HARNESS_DIR` resolves to the same script in both modes.
+
+See [the working-directory contract](https://github.com/eyelock/ynh/blob/main/docs/sensors.md)
+for the full account.
 
 ## Step 2 — Propose a set across all three categories
 
