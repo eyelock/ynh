@@ -612,7 +612,8 @@ func validateHarnessSensors(hj map[string]any) []string {
 			continue
 		}
 		count := 0
-		if _, has := src["files"]; has {
+		_, hasFiles := src["files"]
+		if hasFiles {
 			count++
 		}
 		if _, has := src["command"]; has {
@@ -626,20 +627,8 @@ func validateHarnessSensors(hj map[string]any) []string {
 		if hasCheck {
 			count++
 		}
-		if hasStatus || hasCheck {
-			// Calibration asks "does this sensor still detect the defect in
-			// the fixture?" A GitHub sensor's answer comes from a server and
-			// is about a commit, so pointing it at a fixture directory asks
-			// about whichever repository and commit that directory resolves
-			// to — usually the harness's own. That is not a weaker proof, it
-			// is a different question with a confident-looking answer.
-			if _, hasRef := entry["reference"]; hasRef {
-				issues = append(issues, fmt.Sprintf(
-					"%s a github sensor cannot declare a reference: calibration runs from the fixture directory, "+
-						"so it would ask about that directory's repository and commit rather than the one under test", prefix))
-			}
-		}
-		if focus, has := src["focus"]; has {
+		focus, hasFocus := src["focus"]
+		if hasFocus {
 			count++
 			switch fv := focus.(type) {
 			case string:
@@ -655,6 +644,32 @@ func validateHarnessSensors(hj map[string]any) []string {
 				if profile, _ := fv["profile"].(string); profile != "" && !profileNames[profile] {
 					issues = append(issues, fmt.Sprintf("%s source.focus references unknown profile %q", prefix, profile))
 				}
+			}
+		}
+		// Calibration asks one question: does this sensor still trip on a
+		// fixture built to trip it? Only a command sensor answers it, because
+		// only a command sensor's verdict is an exit code about the tree it
+		// was pointed at.
+		//
+		// plugin.ValidateSensors has always held this rule and has no
+		// production caller, so nothing enforced it here. The result was not
+		// inert: --calibrate ran such a sensor anyway and reported "the sensor
+		// passed a fixture built to trip it — it is no longer observing",
+		// failing the run with a false accusation about a healthy sensor.
+		if _, hasRef := entry["reference"]; hasRef {
+			switch {
+			case hasStatus || hasCheck:
+				issues = append(issues, fmt.Sprintf(
+					"%s a github sensor cannot declare a reference: calibration runs from the fixture directory, "+
+						"so it would ask about that directory's repository and commit rather than the one under test", prefix))
+			case hasFiles:
+				issues = append(issues, fmt.Sprintf(
+					"%s a files sensor cannot declare a reference: its verdict is whether the artifact is fresh, "+
+						"not whether it trips on a fixture, so calibration would report a healthy sensor as no longer observing", prefix))
+			case hasFocus:
+				issues = append(issues, fmt.Sprintf(
+					"%s a focus sensor cannot declare a reference: no verdict about an agent's output is derivable "+
+						"from a fixture, so calibration would report a healthy sensor as no longer observing", prefix))
 			}
 		}
 		if count != 1 {

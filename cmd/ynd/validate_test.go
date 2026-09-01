@@ -1372,3 +1372,68 @@ func TestValidateHarness_RejectsTraversingLocalInclude(t *testing.T) {
 		t.Errorf("a local include inside the harness should validate: %v", err)
 	}
 }
+
+// Only a command sensor's verdict is an exit code about the tree it was
+// pointed at, so only a command sensor can answer the question calibration
+// asks. plugin.ValidateSensors has always held this rule and has no
+// production caller, so nothing enforced it here — and --calibrate did not
+// skip such a sensor. It ran it and reported "the sensor passed a fixture
+// built to trip it — it is no longer observing", failing the run with a false
+// accusation about a healthy sensor.
+func TestValidateHarnessSensors_ReferenceRequiresCommand(t *testing.T) {
+	ref := map[string]any{"path": "fixture", "expect": "fail"}
+	out := map[string]any{"format": "text"}
+
+	rejected := map[string]map[string]any{
+		"files-with-ref":  {"files": []any{"a.json"}},
+		"focus-with-ref":  {"focus": map[string]any{"prompt": "p"}},
+		"status-with-ref": {"github_status": map[string]any{"context": "c"}},
+		"check-with-ref":  {"github_check": map[string]any{"name": "n"}},
+	}
+	for name, src := range rejected {
+		t.Run(name, func(t *testing.T) {
+			issues := validateHarnessSensors(map[string]any{
+				"sensors": map[string]any{
+					"s": map[string]any{"source": src, "output": out, "reference": ref},
+				},
+			})
+			var found bool
+			for _, i := range issues {
+				if strings.Contains(i, "cannot declare a reference") {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("expected a reference refusal, got: %v", issues)
+			}
+		})
+	}
+
+	t.Run("command-with-ref is the one that is allowed", func(t *testing.T) {
+		issues := validateHarnessSensors(map[string]any{
+			"sensors": map[string]any{
+				"s": map[string]any{
+					"source": map[string]any{"command": "true"}, "output": out, "reference": ref,
+				},
+			},
+		})
+		for _, i := range issues {
+			if strings.Contains(i, "cannot declare a reference") {
+				t.Errorf("a command sensor must keep its fixture: %v", issues)
+			}
+		}
+	})
+
+	t.Run("no reference is never refused", func(t *testing.T) {
+		for name, src := range rejected {
+			issues := validateHarnessSensors(map[string]any{
+				"sensors": map[string]any{"s": map[string]any{"source": src, "output": out}},
+			})
+			for _, i := range issues {
+				if strings.Contains(i, "cannot declare a reference") {
+					t.Errorf("%s without a reference must be accepted: %v", name, issues)
+				}
+			}
+		}
+	})
+}
