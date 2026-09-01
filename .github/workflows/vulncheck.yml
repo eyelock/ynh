@@ -1,0 +1,49 @@
+# Nothing in this repository scanned the Go code it ships for known
+# vulnerabilities.
+#
+# That is a conspicuous gap next to the rest of the supply-chain posture here:
+# 32 SHA-pinned actions, a pinned base image digest, a pinned Cursor artifact
+# with per-arch checksums, cosign keyless signing, an SBOM, and a scanner
+# (SkillSpector) for the harness artifacts. The Go binaries the project
+# actually distributes had no scan at all. On 2026-09-01 a release-readiness
+# sweep found four standard-library advisories that the code genuinely reaches
+# (GO-2026-6218, GO-2026-6090, GO-2026-5972, GO-2026-5026), all fixed in
+# go1.26.6, against a tree that was otherwise green on every gate.
+#
+# This lives in its own workflow rather than as a job in ci.yml for one reason:
+# the schedule. Every job in ci.yml is gated behind a paths filter, and a
+# standard-library advisory is published against code that has not changed. A
+# scan wired to "did someone touch Go?" reports green on a repo whose shipped
+# binary has a known CVE, which is the failure mode this file exists to close.
+# Running it on a timer means a new advisory is caught without anyone pushing.
+#
+# It gates: govulncheck is symbol-level, so it reports only vulnerabilities the
+# code actually reaches, and that precision is what makes failing the build
+# reasonable rather than noisy. The fix for a standard-library finding is the
+# `toolchain` directive in go.mod, which is what setup-go resolves here.
+
+name: Vulnerability Scan
+
+on:
+  push:
+    branches: [main, develop, 'hotfix/*']
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # 07:00 UTC daily.
+    - cron: '0 7 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+        with:
+          go-version-file: go.mod
+      - name: govulncheck
+        run: make vulncheck

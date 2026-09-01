@@ -125,7 +125,7 @@ func cmdCompress(args []string) error {
 			fmt.Printf("\n--- Original (%d chars) ---\n%s\n", origLen, string(original))
 			fmt.Printf("--- Compressed (%d chars, %d%% reduction) ---\n%s\n", compLen, reduction, result)
 
-			action := promptAction("Apply? [y/N] ", "y", "n")
+			action := promptAction("Apply? [y/N] ", "n", "y")
 			if action != "y" {
 				fmt.Println("Skipped.")
 				continue

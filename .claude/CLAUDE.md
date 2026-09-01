@@ -29,6 +29,7 @@ make clean && make build  # fresh build (use when binary seems stale)
 make check-artifacts    # ynd validate + ynd lint over skills/ agents/ rules/ .claude/
 make check-vendor-parity # every vendor documented + assembles the same artifacts (needs jq)
 make scan-artifacts     # SkillSpector security scan of the same dirs (needs Python)
+make vulncheck          # govulncheck over the Go code (needs network)
 ```
 
 `scan-artifacts` is deliberately NOT part of `make check` — it needs SkillSpector
@@ -42,6 +43,18 @@ pip install 'git+https://github.com/NVIDIA/SkillSpector.git@v2.11.0'
 Findings are triaged by hand into `.skillspector-baseline.yaml`. Every suppression
 needs a scoped `path:` and a written `reason:` — never a bare rule id, which would
 silence the whole rule family repo-wide.
+
+`skillspector scan` exits 0 whatever it finds, so the verdict comes from the
+SARIF rather than the exit code (`scripts/skillspector-findings.sh`). An absent
+or empty SARIF directory fails too: a scan that produced nothing must not read
+as a scan that found nothing.
+
+`make vulncheck` is also outside `make check`, for a different reason: it
+queries a live vulnerability database, so an unchanged tree can pass today and
+fail tomorrow, and a non-deterministic step does not belong in the check people
+run before pushing. `.github/workflows/vulncheck.yml` gates every PR and runs
+nightly. A standard-library advisory is fixed by the `toolchain` directive in
+`go.mod`, not by a dependency bump.
 
 **Do not use:** `go build ./...`, `go test ./...`, `golangci-lint run` directly. They miss flags, ldflags, or tool paths that the Makefile provides.
 

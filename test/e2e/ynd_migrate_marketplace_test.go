@@ -25,7 +25,14 @@ func TestYnd_Migrate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mustRunYnd(t, "migrate", filepath.Dir(dir))
+	// -y explicitly. `ynd migrate` asks before it deletes, and promptAction
+	// returns its refusing default on a pipe, so without this the command
+	// declines and the test asserts against a tree nothing touched. It passed
+	// in CI only because GitHub Actions exports CI=true, which migrate honours
+	// as a skip-confirm; the same test failed for anyone running `make e2e`
+	// locally. A test whose result depends on an ambient variable it never
+	// sets is not testing the thing it names.
+	mustRunYnd(t, "migrate", "-y", filepath.Dir(dir))
 
 	if _, err := os.Stat(filepath.Join(dir, ".harness.json")); !os.IsNotExist(err) {
 		t.Errorf(".harness.json should be removed after migrate, err=%v", err)

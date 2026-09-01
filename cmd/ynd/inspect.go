@@ -132,7 +132,7 @@ func cmdInspect(args []string) error {
 	fmt.Println()
 
 	if !skipConfirm {
-		action := promptAction("Generate these? [y]es all / [w]alk through each / [s]kip: ", "y", "w", "s")
+		action := promptAction("Generate these? [y]es all / [w]alk through each / [s]kip: ", "s", "y", "w")
 		switch action {
 		case "s":
 			fmt.Println("Skipped.")
