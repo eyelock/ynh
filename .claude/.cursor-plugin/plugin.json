@@ -1,6 +1,6 @@
 {
   "name": "ynh-dev",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Contribute to ynh itself: architecture, vendor adapters, ynd commands, capability bumps, evals and the release procedure.",
   "author": {
     "name": "eyelock",

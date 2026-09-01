@@ -1,7 +1,7 @@
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "ynh-dev",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Developer harness for contributing to ynh \u2014 architecture, vendor adapters, ynd commands, capability bumps, evals and the release procedure",
   "author": {
     "name": "eyelock",
