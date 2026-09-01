@@ -144,10 +144,15 @@
     "reads": {
       "description": "Paths each artifact instructs an agent to open, relative to the harness root. Keys are artifact paths (skills/<name>, agents/<name>.md); values must resolve inside a shipping artifact directory. Declaring nothing is fine; what is declared is checked by ynd lint.",
       "type": "object",
-      "propertyNames": { "pattern": "^(skills|agents|rules|commands)/" },
+      "propertyNames": {
+        "pattern": "^(skills|agents|rules|commands)/"
+      },
       "additionalProperties": {
         "type": "array",
-        "items": { "type": "string", "minLength": 1 }
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "sensors": {
@@ -227,7 +232,7 @@
       }
     },
     "sensor_source": {
-      "description": "Strict one-of: files | command | focus. The set field discriminates the sensor type.",
+      "description": "Strict one-of: files | command | focus | github_status | github_check. The set field discriminates the sensor type.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -266,6 +271,105 @@
               }
             }
           ]
+        },
+        "github_status": {
+          "description": "A GitHub commit status (Status API), as posted by most external services. Observes a verdict that is not derivable locally.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "context"
+          ],
+          "properties": {
+            "context": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Status context to select, e.g. \"security/snyk\"."
+            },
+            "require": {
+              "type": "string",
+              "enum": [
+                "success",
+                "pending",
+                "failure",
+                "error"
+              ],
+              "description": "State that counts as passing. Default \"success\"."
+            },
+            "repo": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Repository as \"owner/name\". Default: inferred from the directory under test, so the sensor stays portable across forks. A bare name or a URL both silently address the wrong repository.",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"
+            },
+            "ref": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Commit to ask about. Default \"HEAD\", resolved in the directory under test, which is what makes this work under --cwd."
+            },
+            "on_missing": {
+              "type": "string",
+              "enum": [
+                "broken",
+                "fail",
+                "pass"
+              ],
+              "description": "Verdict when the observation is absent or has not concluded. Default \"broken\": a sensor that cannot see is not a sensor that passed."
+            }
+          }
+        },
+        "github_check": {
+          "description": "A GitHub check run (Checks API), as posted by a GitHub App such as CodeQL.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Check run name, e.g. \"CodeQL\"."
+            },
+            "app": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Optional GitHub App slug filter, for when two apps post runs of the same name."
+            },
+            "require": {
+              "type": "string",
+              "enum": [
+                "success",
+                "failure",
+                "neutral",
+                "cancelled",
+                "timed_out",
+                "action_required",
+                "stale",
+                "skipped"
+              ],
+              "description": "Conclusion that counts as passing. Default \"success\". A run that has not finished has no conclusion; use on_missing for that."
+            },
+            "repo": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Repository as \"owner/name\". Default: inferred from the directory under test, so the sensor stays portable across forks. A bare name or a URL both silently address the wrong repository.",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"
+            },
+            "ref": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Commit to ask about. Default \"HEAD\", resolved in the directory under test, which is what makes this work under --cwd."
+            },
+            "on_missing": {
+              "type": "string",
+              "enum": [
+                "broken",
+                "fail",
+                "pass"
+              ],
+              "description": "Verdict when the observation is absent or has not concluded. Default \"broken\": a sensor that cannot see is not a sensor that passed."
+            }
+          }
         }
       },
       "oneOf": [
@@ -282,6 +386,16 @@
         {
           "required": [
             "focus"
+          ]
+        },
+        {
+          "required": [
+            "github_status"
+          ]
+        },
+        {
+          "required": [
+            "github_check"
           ]
         }
       ]

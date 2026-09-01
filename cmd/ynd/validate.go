@@ -618,6 +618,27 @@ func validateHarnessSensors(hj map[string]any) []string {
 		if _, has := src["command"]; has {
 			count++
 		}
+		_, hasStatus := src["github_status"]
+		_, hasCheck := src["github_check"]
+		if hasStatus {
+			count++
+		}
+		if hasCheck {
+			count++
+		}
+		if hasStatus || hasCheck {
+			// Calibration asks "does this sensor still detect the defect in
+			// the fixture?" A GitHub sensor's answer comes from a server and
+			// is about a commit, so pointing it at a fixture directory asks
+			// about whichever repository and commit that directory resolves
+			// to — usually the harness's own. That is not a weaker proof, it
+			// is a different question with a confident-looking answer.
+			if _, hasRef := entry["reference"]; hasRef {
+				issues = append(issues, fmt.Sprintf(
+					"%s a github sensor cannot declare a reference: calibration runs from the fixture directory, "+
+						"so it would ask about that directory's repository and commit rather than the one under test", prefix))
+			}
+		}
 		if focus, has := src["focus"]; has {
 			count++
 			switch fv := focus.(type) {
@@ -637,7 +658,7 @@ func validateHarnessSensors(hj map[string]any) []string {
 			}
 		}
 		if count != 1 {
-			issues = append(issues, fmt.Sprintf("%s source must have exactly one of files, command, focus", prefix))
+			issues = append(issues, fmt.Sprintf("%s source must have exactly one of files, command, focus, github_status, github_check", prefix))
 		}
 	}
 

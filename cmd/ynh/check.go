@@ -267,7 +267,11 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 		res.Note = run.Output.Note
 
 		switch s.Source.Kind() {
-		case "command":
+		// GitHub sensors share this path because their semantics are the
+		// command semantics: exit 0 passes, non-zero is a finding, and the
+		// observation-unavailable guard above keeps "no verdict exists" out
+		// of both the verdict and the baseline.
+		case "command", "github_status", "github_check":
 			// A command that never ran is a broken gate, not a finding.
 			//
 			// Sensors run through `/bin/sh -c`, so a missing or non-executable
@@ -277,6 +281,25 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			// when the truth is that ynh could not observe (exit 2), and
 			// --update-baseline records "No such file or directory" as accepted
 			// debt, forgiving the sensor's own absence for good.
+			// A GitHub sensor that could not see reaches the same conclusion
+			// by a different road: no command failed, but there is no
+			// observation either, and a gate must not pass on absent evidence.
+			if gate.ObservationUnavailable(run.ExitCode) {
+				detail := strings.TrimSpace(run.Output.Stdout)
+				if detail == "" {
+					detail = "no detail reported"
+				}
+				brokenSensors = append(brokenSensors, fmt.Sprintf(
+					"%s: could not observe — %s", name, firstLine(detail)))
+				res.Status = gate.StatusFail
+				res.Note = "the sensor could not obtain its observation; this is a broken gate, " +
+					"not a finding, and it is deliberately not recorded in the baseline"
+				env.Summary.Failed++
+				env.Verdict = gate.VerdictBlocked
+				env.Sensors = append(env.Sensors, res)
+				continue
+			}
+
 			if gate.CommandDidNotRun(run.ExitCode) {
 				brokenSensors = append(brokenSensors, fmt.Sprintf(
 					"%s: command did not run (exit %d) — not found or not executable: %s",
@@ -435,7 +458,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 		return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
 			"cannot proceed — "+strconv.Itoa(len(brokenSensors))+
 				" sensor(s) could not run:\n  "+strings.Join(brokenSensors, "\n  ")+
-				"\nFix the command or remove the sensor. This is exit 2 (the gate is broken), "+
+				"\nFix the sensor or remove it. This is exit 2 (the gate is broken), "+
 				"not exit 1 (your code is failing)."))
 	}
 

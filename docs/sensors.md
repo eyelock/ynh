@@ -300,6 +300,91 @@ split on them.
 
 Use this for build/lint/test/typecheck — anything where running a command IS the observation. Same script can be hooked at `after_tool` for in-session enforcement *and* declared as a sensor for between-turn observation; the two are not redundant.
 
+### `github_status` and `github_check`
+
+Two sensors that observe a verdict reached somewhere else. A `command` sensor
+can run your linter; it cannot know what a scanner running on infrastructure
+you do not control concluded about this commit. That is the whole reason these
+exist, and it is also the boundary: **if a local script can answer the
+question, use `command`.** A CVE audit you can run yourself is a command
+sensor, not a GitHub one.
+
+They are separate sensor types because the two GitHub APIs disagree about
+vocabulary. A commit status has a `state`; a check run has a `status` and a
+separate `conclusion`. Collapsing them into one declaration would mean guessing
+which the author meant.
+
+```json
+"snyk": {
+  "category": "behaviour",
+  "tolerance": "blocking",
+  "source": { "github_status": { "context": "security/snyk", "require": "success" } },
+  "output": { "format": "text", "channel": "stdout+exit" }
+},
+"codeql": {
+  "category": "behaviour",
+  "tolerance": "blocking",
+  "source": { "github_check": { "name": "CodeQL", "app": "github", "require": "success" } },
+  "output": { "format": "text", "channel": "stdout+exit" }
+}
+```
+
+| Field | `github_status` | `github_check` |
+|---|---|---|
+| selector | `context`, required | `name`, required, plus optional `app` slug |
+| `require` | `success` (default), `pending`, `failure`, `error` | a check conclusion: `success` (default), `failure`, `neutral`, `cancelled`, `timed_out`, `action_required`, `stale`, `skipped` |
+| `repo` | `owner/name`. Default: inferred from the directory under test | same |
+| `ref` | commit to ask about. Default `HEAD`, resolved in the directory under test | same |
+| `on_missing` | `broken` (default), `fail`, `pass` | same |
+
+The selector is required on purpose. A sensor that observes "whatever statuses
+happen to exist" reports on a set that changes underneath it, which is not an
+observation.
+
+`repo` and `ref` default to the directory under test, which is what makes these
+work under `--cwd`: point the gate at an older tree and it asks about that
+tree's commit, in that tree's repository.
+
+#### Absent is not passing, and pending is not failing
+
+Three outcomes, not two:
+
+| Situation | Result |
+|---|---|
+| The required state or conclusion is present | pass |
+| A different state or conclusion is present | fail, exit 1 |
+| No such status or check run, or it has not concluded | **broken, exit 2** |
+
+The third is the one that matters. A status can be renamed, an app can be
+uninstalled, a token can be revoked, and in every case there is no verdict to
+read. Passing there would mean a deleted scanner silently stops gating, and
+failing there would mean the gate races the scanner it is reading. So the
+default is `broken`: the gate says it could not see, which is the same rule
+freshness applies to `unknown` and `ynh check` applies to a command that could
+not run.
+
+`on_missing` overrides it per sensor. Prefer `pass` only for a sensor that is
+genuinely optional, and know what you are buying.
+
+#### What these cost
+
+Worth stating plainly, because both are real.
+
+**They reach the network from inside a gate.** These sensors shell out to
+`gh`, which must be on `PATH` and authenticated. A blocking GitHub sensor can
+therefore fail because GitHub is slow or unreachable. That surfaces as exit 2
+with a message naming the failure, not as a verdict about your code, but it is
+still a gate that depends on someone else's uptime.
+
+**They cannot be calibrated.** `reference` is rejected on these sensors, and
+`ynd validate` says so. Calibration runs a sensor from its fixture directory,
+so a GitHub sensor pointed at a fixture would ask about whichever repository
+and commit that directory resolves to, usually the harness's own. That is not
+a weaker proof; it is a confident answer to a different question. So the
+guarantee available to a `command` sensor is not available here, and a GitHub
+sensor should be read as an observation you trust rather than one you have
+proven.
+
 ### `focus`
 
 An agent-driven sensor. The string form references an existing top-level `focus` entry by name; the object form inlines a focus.

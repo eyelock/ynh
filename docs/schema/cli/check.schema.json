@@ -106,7 +106,9 @@
           "enum": [
             "files",
             "command",
-            "focus"
+            "focus",
+            "github_status",
+            "github_check"
           ],
           "description": "Source variant of the sensor declaration."
         },

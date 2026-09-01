@@ -512,6 +512,22 @@ func runSensor(p *harness.Harness, name string, s plugin.Sensor, cwd string, inc
 			}
 		}
 
+	case "github_status":
+		if r.Output.Channel == "" {
+			r.Output.Channel = "stdout+exit"
+		}
+		code, out := observeGitHubStatus(cwd, s.Source.GitHubStatus)
+		r.ExitCode = code
+		r.Output.Stdout = out
+
+	case "github_check":
+		if r.Output.Channel == "" {
+			r.Output.Channel = "stdout+exit"
+		}
+		code, out := observeGitHubCheck(cwd, s.Source.GitHubCheck)
+		r.ExitCode = code
+		r.Output.Stdout = out
+
 	case "files":
 		if r.Output.Channel == "" {
 			r.Output.Channel = "files"
