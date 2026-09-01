@@ -117,6 +117,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return checkExecErr(cliError(stderr, structured, errCodeNotFound, err.Error()))
 	}
+	warnIfTrustChanged(stderr, harnessName, p)
 	if cwd == "" {
 		cwd, _ = os.Getwd()
 	}

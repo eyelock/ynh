@@ -274,6 +274,35 @@ Exit codes:
   1  a blocking sensor failed
   2  the gate could not run`,
 
+	"trust": `ynh trust <ls|show|accept> [harness]
+
+Show what a harness will execute, and record that you have read it.
+
+A sensor's command is handed to /bin/sh -c with your whole environment. That is
+the feature: a sensor runs the project's own tools. But a harness is installed
+from a Git URL into ~/.ynh/harnesses/ and its sensors run against a tree
+somewhere else, so the code that executes is nowhere near the directory you are
+looking at.
+
+  ynh trust                      State of every installed harness
+  ynh trust show <harness>       Every command it will run, with provenance
+  ynh trust accept <harness>     Record that you have read them
+
+States:
+
+  unreviewed   Never accepted. Also the state of a harness installed before
+               this command existed.
+  accepted     The commands match what you accepted.
+  changed      The commands differ from what you accepted.
+
+This reports; it does not block. Nothing refuses to run because a harness is
+unreviewed. The record earns its place by pinning the exact command set you
+read, so that "changed" can be reported when an update alters it.
+
+The record lives in $YNH_HOME/trust.json, deliberately outside the harness
+directory: a harness carrying its own trust record would be authorising
+itself.`,
+
 	"baseline": `ynh baseline <harness> [flags]
 
 Report what a harness's ratchet currently forgives.
