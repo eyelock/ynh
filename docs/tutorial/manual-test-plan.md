@@ -740,7 +740,7 @@ Re-run S1 with a focus-source sensor and verify `ynh sensors run` returns the re
 
 ### S3: Validation rejects two-source declaration
 
-`source` with both `command` and `files` set must error: `sensor "X": source must have exactly one of files, command, focus`.
+`source` with both `command` and `files` set must error: `sensor "X": source must have exactly one of files, command, focus, github_status, github_check`.
 
 ---
 

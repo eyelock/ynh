@@ -217,7 +217,7 @@ Expected error (the schema-level violation and the cross-field violation each em
 
 ```
 sensors/broken/source: 'oneOf' failed, subschemas 0, 1 matched
-sensor "broken": source must have exactly one of files, command, focus
+sensor "broken": source must have exactly one of files, command, focus, github_status, github_check
 ```
 
 ## Hook–sensor pairing
@@ -282,7 +282,8 @@ ynh runs the declared set as a gate itself — see [Gating with `ynh check`](che
 ## What you learned
 
 - A sensor is a role declaration over existing primitives — no new artifact type.
-- Three source variants: `files`, `command`, `focus` (string ref or inline).
+- Five source variants: `files`, `command`, `focus` (string ref or inline),
+  `github_status` and `github_check`.
 - Inline focuses are scoped to the sensor that declares them.
 - The discovery surface (`ls`, `show`) is the contract loop drivers consume.
 - Hooks and sensors are complementary — push vs pull, in-session vs between-turn.

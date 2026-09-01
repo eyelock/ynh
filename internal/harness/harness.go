@@ -116,21 +116,22 @@ type Harness struct {
 	// the source manifest declared. Without them a *Harness cannot reproduce
 	// its own plugin.json, and every path that assembles from one — `ynh run`
 	// and `ynd preview` — silently ships less than `ynd export` does.
-	Author         *plugin.AuthorInfo
-	Keywords       []string
-	DefaultVendor  string
-	Namespace      string // e.g. "eyelock/assistants"; empty for local/unqualified installs
-	Dir            string // absolute path to the harness directory — the base for relative local includes
-	Includes       []Include
-	DelegatesTo    []Delegate
-	Hooks          map[string][]plugin.HookEntry
-	MCPServers     map[string]plugin.MCPServer
-	EnvPassthrough []string
-	Agent          *plugin.AgentConfig
-	Profiles       map[string]plugin.Profile
-	Focuses        map[string]plugin.Focus
-	Sensors        map[string]plugin.Sensor
-	InstalledFrom  *Provenance
+	Author          *plugin.AuthorInfo
+	Keywords        []string
+	DefaultVendor   string
+	Namespace       string // e.g. "eyelock/assistants"; empty for local/unqualified installs
+	Dir             string // absolute path to the harness directory — the base for relative local includes
+	Includes        []Include
+	DelegatesTo     []Delegate
+	Hooks           map[string][]plugin.HookEntry
+	MCPServers      map[string]plugin.MCPServer
+	EnvPassthrough  []string
+	Agent           *plugin.AgentConfig
+	Profiles        map[string]plugin.Profile
+	Focuses         map[string]plugin.Focus
+	Sensors         map[string]plugin.Sensor
+	SensorOverrides map[string]plugin.SensorOverride
+	InstalledFrom   *Provenance
 }
 
 // ListEntry is one installed harness with its namespace.
@@ -536,6 +537,9 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	if len(hj.Sensors) > 0 {
 		p.Sensors = hj.Sensors
 	}
+	if len(hj.SensorOverrides) > 0 {
+		p.SensorOverrides = hj.SensorOverrides
+	}
 
 	// Provenance: use the supplied/loaded record; fall back to InstalledFrom
 	// in manifest (legacy) is handled by the caller path that left ins nil.
@@ -736,6 +740,9 @@ func LoadFile(path string) (*Harness, error) {
 	}
 	if len(hj.Sensors) > 0 {
 		p.Sensors = hj.Sensors
+	}
+	if len(hj.SensorOverrides) > 0 {
+		p.SensorOverrides = hj.SensorOverrides
 	}
 
 	return p, nil
