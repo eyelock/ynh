@@ -84,19 +84,55 @@ func TestMatch_CountLinesHonoursTheFilter(t *testing.T) {
 	}
 }
 
+// Its own fixture, because the shared one cannot show this.
+//
+// In lintBefore/lintAfter the summary keeps the same number of lines across the
+// repair; only their text changes. That moves the fingerprints, which is what
+// TestMatch_RepairDoesNotRegisterAsNewFindings proves, but it leaves the raw
+// line count moving by exactly the number of findings removed. The test below
+// used to run against that fixture, find the two deltas equal, and skip itself
+// on "the fixture no longer demonstrates the point" -- so the count ratchet's
+// justification went unproven in every run.
+//
+// A count ratchet is misled when the decoration changes in LENGTH. golangci-lint
+// prints one summary line per linter that reported, so repairing the last
+// finding of a linter removes its summary line as well.
+const lintBeforeTwoLinters = `main.go:10:2: Error return value is not checked (errcheck)
+util.go:20:2: Error return value is not checked (errcheck)
+api.go:30:2: Error return value is not checked (errcheck)
+main.go:12:5: printf: non-constant format string (govet)
+
+4 issues:
+* errcheck: 3
+* govet: 1
+`
+
+const lintAfterTwoLinters = `main.go:10:2: Error return value is not checked (errcheck)
+util.go:20:2: Error return value is not checked (errcheck)
+api.go:30:2: Error return value is not checked (errcheck)
+
+3 issues:
+* errcheck: 3
+`
+
 // A count ratchet without a filter moves for the wrong reason: the summary
 // lines change too, so the total shifts by more than the findings did.
 func TestMatch_UnfilteredCountMovesForTheWrongReason(t *testing.T) {
-	deltaFiltered := CountLines(lintBefore, findingLine) - CountLines(lintAfter, findingLine)
-	deltaRaw := CountLines(lintBefore, nil) - CountLines(lintAfter, nil)
+	deltaFiltered := CountLines(lintBeforeTwoLinters, findingLine) - CountLines(lintAfterTwoLinters, findingLine)
+	deltaRaw := CountLines(lintBeforeTwoLinters, nil) - CountLines(lintAfterTwoLinters, nil)
 
 	if deltaFiltered != 1 {
 		t.Fatalf("the fixture should remove exactly one finding, removed %d", deltaFiltered)
 	}
-	if deltaRaw == deltaFiltered {
-		t.Skip("this tool's decoration happens not to change; fixture no longer demonstrates the point")
+	// Assert, do not skip. If a change to CountLines ever makes these equal,
+	// the filter has stopped earning its place and that is a result worth
+	// failing on, not stepping around.
+	if deltaRaw <= deltaFiltered {
+		t.Fatalf("unfiltered delta %d should exceed the %d finding(s) actually repaired; "+
+			"without a filter the count ratchet would credit the repair with removing "+
+			"the summary line too", deltaRaw, deltaFiltered)
 	}
-	t.Logf("one finding removed: filtered delta %d, unfiltered delta %d", deltaFiltered, deltaRaw)
+	t.Logf("one finding repaired: filtered delta %d, unfiltered delta %d", deltaFiltered, deltaRaw)
 }
 
 // Record threads the matcher into both Count and Total, so a recorded baseline
