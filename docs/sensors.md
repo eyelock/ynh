@@ -298,6 +298,26 @@ above looked like the only option.
 Quote it. A harness path can contain spaces, and an unquoted expansion would
 split on them.
 
+**Calibration checks that this actually holds.** `--calibrate` runs a sensor in
+its reference fixture, while `ynh check` runs it in the tree being measured. A
+command that resolves relative to the working directory therefore proves
+something about the fixture's copy and nothing about the copy the gate will
+run. Calibration reports that rather than a tick:
+
+```
+  ~ lint            calibrated, but not against what check will run
+
+1 sensor(s) were calibrated against a different program than `ynh check` will run.
+```
+
+It is reported, not refused. A sensor invoking the project's own `make lint`
+wants exactly that resolution, and forbidding the shape would break it. What
+was wrong was the silence: both the calibration and the gate reported green
+while running different programs.
+
+`--format json` carries `portable_command` per sensor and `summary.non_portable`,
+so a loop driver can act on it.
+
 Use this for build/lint/test/typecheck — anything where running a command IS the observation. Same script can be hooked at `after_tool` for in-session enforcement *and* declared as a sensor for between-turn observation; the two are not redundant.
 
 ### `github_status` and `github_check`

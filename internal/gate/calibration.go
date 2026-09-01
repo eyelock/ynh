@@ -46,6 +46,11 @@ type CalibrationSummary struct {
 	Failed       int `json:"failed"`
 	Uncalibrated int `json:"uncalibrated"`
 	Errored      int `json:"errored"`
+	// NonPortable counts sensors whose calibration cannot transfer to the
+	// tree being checked. Counted separately because it is neither a pass
+	// nor a failure: the calibration succeeded and proves nothing about
+	// what `ynh check` will run.
+	NonPortable int `json:"non_portable,omitempty"`
 }
 
 // CalibrationResult is one sensor's calibration outcome.
@@ -62,6 +67,22 @@ type CalibrationResult struct {
 	Observed string `json:"observed,omitempty"`
 	ExitCode int    `json:"exit_code,omitempty"`
 	Note     string `json:"note,omitempty"`
+	// PortableCommand reports whether the command resolves to the same
+	// program from the reference fixture as from anywhere else.
+	//
+	// Calibration runs in the fixture; `ynh check` runs in the tree being
+	// measured. For a command whose resolution depends on the working
+	// directory, those are different roots, so the two can execute different
+	// programs while reporting on the same sensor. A blocking sensor could
+	// report calibrated and then gate green on a script it never calibrated,
+	// with nothing in either output hinting that two programs were involved
+	// (#363).
+	//
+	// False means the calibration is real but does not transfer. It is
+	// reported rather than prevented: a sensor invoking the project's own
+	// tooling wants exactly that resolution, so the shape cannot be
+	// forbidden.
+	PortableCommand *bool `json:"portable_command,omitempty"`
 }
 
 // CalibrationOutcome converts an exit code to the vocabulary a reference

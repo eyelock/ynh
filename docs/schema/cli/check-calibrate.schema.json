@@ -26,7 +26,8 @@
         "calibrated": { "type": "integer" },
         "failed": { "type": "integer" },
         "uncalibrated": { "type": "integer" },
-        "errored": { "type": "integer" }
+        "errored": { "type": "integer" },
+        "non_portable": { "type": "integer", "description": "Sensors whose calibration cannot transfer to the tree being checked, because their command resolves relative to the working directory. Neither a pass nor a failure: the calibration succeeded and proves nothing about what `ynh check` will run." }
       }
     },
     "sensors": {
@@ -47,7 +48,8 @@
           "expected": { "type": "string", "enum": ["fail", "pass"] },
           "observed": { "type": "string", "enum": ["fail", "pass"], "description": "Absent when the reference could not be run." },
           "exit_code": { "type": "integer" },
-          "note": { "type": "string", "description": "Why, in plain language, when the status is failed or error." }
+          "note": { "type": "string", "description": "Why, in plain language, when the status is failed or error." },
+          "portable_command": { "type": "boolean", "description": "Whether the command resolves to the same program from the reference fixture as from anywhere else. False means the calibration is real but does not transfer: calibration ran in the fixture and `ynh check` runs in the measured tree, so a cwd-relative command executes a different program in each. Absent for sensors that are not command-sourced." }
         }
       }
     }

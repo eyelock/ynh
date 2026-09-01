@@ -195,3 +195,76 @@ func TestCalibrate_RejectsMeaninglessFlags(t *testing.T) {
 		}
 	}
 }
+
+// End to end: the scenario from #363. Two blocking sensors calibrated against
+// the same fixture, one pinned to the harness and one resolving relative to
+// the working directory. Both satisfy `expect: "fail"`. Only one of them is
+// calibrated against the program `ynh check` will actually run.
+func TestCalibrate_FlagsANonPortableCommand(t *testing.T) {
+	root := t.TempDir()
+	harnessDir := filepath.Join(root, "harness")
+	tree := filepath.Join(root, "tree")
+
+	write := func(p, body string, mode os.FileMode) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(harnessDir, "tools", "x.sh"), "#!/bin/sh\nexit 1\n", 0o755)
+	write(filepath.Join(harnessDir, "fixtures", "failing", "tools", "y.sh"), "#!/bin/sh\nexit 1\n", 0o755)
+	// The tree under test holds a different y.sh that passes.
+	write(filepath.Join(tree, "tools", "y.sh"), "#!/bin/sh\nexit 0\n", 0o755)
+	write(filepath.Join(harnessDir, ".ynh-plugin", "plugin.json"), `{
+  "name":"c363","version":"1.0.0","description":"d",
+  "sensors":{
+    "pinned":{"category":"maintainability","tolerance":"blocking",
+      "source":{"command":"\"$YNH_HARNESS_DIR/tools/x.sh\""},"output":{"format":"text"},
+      "reference":{"path":"fixtures/failing","expect":"fail"}},
+    "cwdrel":{"category":"maintainability","tolerance":"blocking",
+      "source":{"command":"./tools/y.sh"},"output":{"format":"text"},
+      "reference":{"path":"fixtures/failing","expect":"fail"}}}}`, 0o644)
+
+	t.Setenv("YNH_HOME", filepath.Join(root, "home"))
+	t.Chdir(tree)
+
+	var out, errBuf bytes.Buffer
+	if err := cmdCheck([]string{harnessDir, "--calibrate", "--format", "json"}, &out, &errBuf); err != nil {
+		t.Fatalf("calibrate: %v (%s)", err, errBuf.String())
+	}
+	var env gate.CalibrationEnvelope
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, out.String())
+	}
+
+	byName := map[string]gate.CalibrationResult{}
+	for _, r := range env.Sensors {
+		byName[r.Name] = r
+	}
+
+	// Both calibrate: that is the point. The difference is whether the
+	// calibration transfers.
+	for _, n := range []string{"pinned", "cwdrel"} {
+		if byName[n].Status != gate.CalibCalibrated {
+			t.Errorf("%s: status = %q, want calibrated", n, byName[n].Status)
+		}
+		if byName[n].PortableCommand == nil {
+			t.Fatalf("%s: portability was not evaluated", n)
+		}
+	}
+	if !*byName["pinned"].PortableCommand {
+		t.Error("a $YNH_HARNESS_DIR command resolves identically everywhere and must be portable")
+	}
+	if *byName["cwdrel"].PortableCommand {
+		t.Error("a cwd-relative command resolves to the tree's copy and must not be reported as portable")
+	}
+	if env.Summary.NonPortable != 1 {
+		t.Errorf("summary.non_portable = %d, want 1", env.Summary.NonPortable)
+	}
+	if !strings.Contains(byName["cwdrel"].Note, "YNH_HARNESS_DIR") {
+		t.Errorf("the note should name the fix, got %q", byName["cwdrel"].Note)
+	}
+}
