@@ -25,6 +25,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
       artifacts: ${{ steps.filter.outputs.artifacts }}
+      packaging: ${{ steps.filter.outputs.packaging }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d  # v4
@@ -54,6 +55,14 @@ jobs:
             # this filter existed, a PR touching only skills/ or agents/ matched
             # no filter, skipped every job, and All Clear went green having run
             # nothing — a change to the product's own harness was ungated.
+            # The release and packaging config. release.yml does not run on
+            # pull requests and no job builds the image, so a broken
+            # .goreleaser.yml or Dockerfile was discovered at tag time, on
+            # the one run where failure is most expensive.
+            packaging:
+              - '.goreleaser.yml'
+              - 'Dockerfile'
+              - '.github/workflows/release.yml'
             artifacts:
               - 'skills/**'
               - 'agents/**'
@@ -184,10 +193,31 @@ jobs:
           sarif_file: .skillspector-sarif
           category: skillspector
 
+  packaging:
+    name: Packaging Config
+    needs: changes
+    if: needs.changes.outputs.packaging == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+
+      # `goreleaser check` validates the config without releasing anything,
+      # including the signs: and sboms: blocks. Without this a typo there
+      # surfaces only when a tag is pushed.
+      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94  # v7
+        with:
+          version: "~> v2"
+          args: check
+
+      # The image is built nowhere else, so the base-image digest and the
+      # installer checksum were unverified until somebody built it by hand.
+      - name: Build the container image
+        run: docker build --tag ynh:ci-check .
+
   all-clear:
     name: All Clear
     runs-on: ubuntu-latest
-    needs: [changes, build, test, lint, format, artifacts, skill-security]
+    needs: [changes, build, test, lint, format, artifacts, skill-security, packaging]
     if: always()
     steps:
       - name: Check results
