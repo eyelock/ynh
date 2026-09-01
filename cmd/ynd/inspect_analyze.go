@@ -184,7 +184,7 @@ Output ONLY the complete updated file content, nothing else.`,
 	fmt.Println(updated)
 	fmt.Println("--- End ---")
 
-	applyAction := promptAction("    [a]pply / [s]kip: ", "a", "s")
+	applyAction := promptAction("    [a]pply / [s]kip: ", "s", "a")
 	if applyAction == "a" {
 		if writeErr := os.WriteFile(path, []byte(updated), 0o644); writeErr != nil {
 			return writeErr
@@ -293,7 +293,7 @@ func walkthroughProposals(vendor, overview, proposalText, root, outputDir string
 
 	for _, p := range proposals {
 		fmt.Printf("\n  %s\n", p.Line)
-		action := promptAction("  [g]enerate / [s]kip / [q]uit: ", "g", "s", "q")
+		action := promptAction("  [g]enerate / [s]kip / [q]uit: ", "s", "g", "q")
 
 		switch action {
 		case "q":
@@ -313,7 +313,7 @@ func walkthroughProposals(vendor, overview, proposalText, root, outputDir string
 			fmt.Println(content)
 			fmt.Println()
 
-			writeAction := promptAction("  [w]rite / [s]kip: ", "w", "s")
+			writeAction := promptAction("  [w]rite / [s]kip: ", "s", "w")
 			if writeAction == "w" {
 				if writeErr := writeArtifact(content, p, outputDir); writeErr != nil {
 					fmt.Fprintf(os.Stderr, "  Write failed: %v\n", writeErr)
