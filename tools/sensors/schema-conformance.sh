@@ -26,7 +26,7 @@ checked=0
 
 # Commands that emit a documented shape with no arguments. Others need a
 # harness or an id, so they are left to the tutorials and the golden files.
-for pair in "ls:list" "vendors:vendors" "paths:paths" "version:version"; do
+for pair in "ls:list" "vendors:vendors" "paths:paths" "version:version" "trust:trust"; do
 	cmd="${pair%%:*}"
 	sch="${pair##*:}"
 	schema="$SCHEMA_DIR/$sch.schema.json"

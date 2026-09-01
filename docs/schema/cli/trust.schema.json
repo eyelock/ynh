@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/trust.schema.json",
+  "title": "ynh trust --format json",
+  "description": "Output of `ynh trust --format json`. Bare array, one entry per installed harness, same shape as `ynh trust show`. Envelope retrofit deferred, matching the other Phase 3 commands.",
+  "x-capabilities": "0.8",
+  "$defs": {
+    "Executable": {
+      "type": "object",
+      "properties": {
+        "sensor": {
+          "type": "string",
+          "description": "The declaring sensor's name."
+        },
+        "field": {
+          "type": "string",
+          "enum": [
+            "command",
+            "version_command"
+          ],
+          "description": "Which declaration this string came from. Both reach /bin/sh -c; version_command is easy to overlook precisely because it looks like metadata."
+        },
+        "value": {
+          "type": "string",
+          "description": "The string as declared, unexpanded. What the shell finally runs may differ: a substitution such as $(git rev-parse --show-toplevel) resolves against the measured tree at run time, so a harness can execute a script it does not itself ship."
+        }
+      },
+      "required": [
+        "sensor",
+        "field",
+        "value"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "harness": {
+        "type": "string",
+        "description": "Canonical harness id."
+      },
+      "source": {
+        "type": "string",
+        "description": "Where the harness was installed from, copied from provenance. Absent for a local-path install."
+      },
+      "source_type": {
+        "type": "string",
+        "description": "Provenance kind, e.g. git or local."
+      },
+      "ref": {
+        "type": "string",
+        "description": "Branch or tag tracked at install time."
+      },
+      "sha": {
+        "type": "string",
+        "description": "Commit resolved at install time. The answer to 'which version of these commands am I looking at'."
+      },
+      "digest": {
+        "type": "string",
+        "description": "Fingerprint of the current command set, covering sensor name, field and value for every executable string. Comparing it against accepted_digest is how a changed command is noticed."
+      },
+      "executables": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Executable"
+        },
+        "description": "Sorted, so the digest does not depend on Go's randomised map order."
+      },
+      "state": {
+        "type": "string",
+        "enum": [
+          "unreviewed",
+          "accepted",
+          "changed",
+          "no-commands"
+        ],
+        "description": "unreviewed: never accepted, which is also every install predating this command. accepted: matches what was accepted. changed: differs from what was accepted. no-commands: the harness executes nothing, so there is nothing to review. Open set per docs/cli-structured.md; tolerate unknown members."
+      },
+      "accepted_digest": {
+        "type": "string",
+        "description": "The digest recorded at acceptance. Present only when a record exists."
+      },
+      "accepted_at": {
+        "type": "string",
+        "description": "RFC3339 timestamp of acceptance."
+      },
+      "undeclared_env": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Names of environment variables these commands inherit that the harness never declared in env_passthrough. Names only, never values: a report meant to prevent a leak must not become one. Reported rather than removed, because scrubbing would break any sensor relying on inherited configuration, gh reading GH_TOKEN among them."
+      }
+    },
+    "required": [
+      "harness",
+      "digest",
+      "executables",
+      "state"
+    ],
+    "additionalProperties": false
+  }
+}

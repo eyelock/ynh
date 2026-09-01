@@ -60,6 +60,7 @@ Commands:
   Gating
     check <harness-id|path>                Run every declared sensor and gate on the result
     baseline <harness>                     Report what the ratchet currently forgives
+    trust <ls|show|accept>                 What a harness will execute, and whether it changed
 
   Operating
     init                                   Show the ynh home path and setup instructions

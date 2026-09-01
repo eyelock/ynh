@@ -320,6 +320,61 @@ so a loop driver can act on it.
 
 Use this for build/lint/test/typecheck — anything where running a command IS the observation. Same script can be hooked at `after_tool` for in-session enforcement *and* declared as a sensor for between-turn observation; the two are not redundant.
 
+## What a command sensor can reach
+
+A `command` sensor is handed to `/bin/sh -c` with the operator's whole
+environment, in the tree being measured. That is the feature. A sensor exists to
+run the project's own build, linter and tests, and it cannot do that through a
+narrower door.
+
+The part worth knowing is where the executing code lives. A harness is installed
+from a Git URL into `~/.ynh/harnesses/`, and its sensors then run against a tree
+somewhere else. Running `make check` on a repository at least puts the Makefile
+in front of you; `ynh check` does not, and an update can change what a sensor
+runs without changing anything in the directory you are working in.
+
+`ynh trust` closes that gap:
+
+```bash
+ynh trust                    # state of every installed harness
+ynh trust show <harness>     # every command it will run, with provenance
+ynh trust accept <harness>   # record that you have read them
+```
+
+`ynh trust show` prints each `command` and `version_command`, the source and
+commit the harness was installed from, and the environment variables those
+commands inherit that the harness never declared in `env_passthrough`.
+
+| State | Meaning |
+|-------|---------|
+| `unreviewed` | Never accepted. Also every install predating this command. |
+| `accepted` | The commands match what you accepted. |
+| `changed` | The commands differ from what you accepted. |
+| `no-commands` | The harness executes nothing. Most harnesses. |
+
+**This reports; it does not block.** Nothing refuses to run because a harness is
+unreviewed, and `ynh check` warns only on `changed`, never on `unreviewed`: a
+warning that appears on almost every run is one nobody reads.
+
+The record lives in `$YNH_HOME/trust.json`, deliberately outside the harness
+directory. A harness carrying its own trust record would be authorising itself.
+
+### Two things it does not do yet
+
+**It does not restrict the environment.** The manifest already has
+`env_passthrough`, whose contract says a process inheriting the operator's whole
+environment "holds every credential the operator holds, which is not a default
+anyone chose", but that contract names MCP expansion and agent workers, and
+sensors were never wired to it. `ynh trust show` reports the gap rather than
+closing it, because scrubbing would break any sensor relying on inherited
+configuration, `gh` reading `GH_TOKEN` among them. Measure the breakage first.
+
+**It does not follow the command into the tree.** A sensor declared as
+`"$(git rev-parse --show-toplevel)/tools/sensors/lint.sh"` resolves against the
+measured tree at run time, so a reviewed harness can execute a script it does
+not ship and that `ynh trust` cannot show you. `ynh check --calibrate` reports
+this separately as a portability finding.
+
 ## Sensors from an include
 
 A sensor set can be published as an ordinary harness and adopted like any

@@ -100,6 +100,8 @@ func main() {
 		err = cmdMCP(os.Args[2:])
 	case "sensors":
 		err = cmdSensors(os.Args[2:])
+	case "trust":
+		err = cmdTrust(os.Args[2:])
 	case "check":
 		err = cmdCheck(os.Args[2:], os.Stdout, os.Stderr)
 	case "baseline":
