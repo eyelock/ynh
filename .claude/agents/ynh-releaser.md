@@ -78,5 +78,14 @@ The workflow requires a `RELEASE_TOKEN` secret with `Contents:Write` on both `ey
 - `ynh version` shows the new version
 - `ynh vendors` lists all adapters
 - A fresh `ynh install` + `ynh run` cycle works end-to-end
-- **`git rev-list --count develop..main` is 0.** If it is not, the back-merge
-  did not land and `develop` is already drifting — the exact state #54 describes
+- **`git merge-base --is-ancestor "vX.Y.Z^{}^2" develop`** succeeds. That is the
+  release branch tip (the tag's commit, second parent) being reachable from
+  `develop`, which is the question "did the back-merge land?" and the exact state
+  #54 describes. Immediately after the back-merge, `git diff --quiet develop main`
+  should also hold, though it stops holding once anything else merges to
+  `develop`.
+
+  Do not use `git rev-list --count develop..main` and expect 0. It cannot be:
+  the back-merge branches from `release/vX.Y.Z`, so `main`'s own merge commit is
+  never carried across and the count is 1 after a correct release. See
+  `.claude/commands/release.md` § Verify.
