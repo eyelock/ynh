@@ -9,13 +9,13 @@
       "name": "ynh-guide",
       "source": ".",
       "description": "Adopt, build, compose, gate and troubleshoot AI harnesses. Eight skills and three agents, useful whether or not ynh is installed.",
-      "version": "0.6.0"
+      "version": "0.7.0"
     },
     {
       "name": "ynh-dev",
       "source": "./.claude",
       "description": "Contribute to ynh itself: architecture, vendor adapters, ynd commands, capability bumps, evals and the release procedure.",
-      "version": "0.6.0"
+      "version": "0.7.0"
     }
   ]
 }
