@@ -2,7 +2,14 @@
 
 Verification checklist for ynh and ynd. Each test references a tutorial step or is an edge case tested here.
 
-Run all 15 tutorials in sequence to cover the happy path. This file adds edge cases and error handling tests that tutorials don't cover, plus a reference table for tracking.
+Run every tutorial in `docs/tutorial/` in sequence to cover the happy path. This file adds
+edge cases and error-handling tests the tutorials do not cover, plus a reference table for
+tracking.
+
+The count is deliberately not written down. It has been wrong twice — it read 15 when there
+were 20, and still read 15 when there were 22 — because a number in prose does not move when
+a tutorial is added. Every tutorial should have a section below; a missing one is a gap to
+close, not a number to correct.
 
 ---
 
@@ -27,202 +34,326 @@ Re-run `make install` after any code change you want to test.
 
 ## Test Reference
 
-### Tutorial 1: First Harness
+### First Harness
 
-| ID | Test | Tutorial step |
-|---|---|---|
-| T1.1 | Create harness structure | [T1.1](tutorial/01-first-harness.md#t11-create-the-harness-structure) |
-| T1.2 | Add all artifact types | [T1.2](tutorial/01-first-harness.md#t12-add-artifacts) |
-| T1.3 | Verify structure | [T1.3](tutorial/01-first-harness.md#t13-verify-structure) |
-| T1.4 | Install from local path | [T1.4](tutorial/01-first-harness.md#t14-install-from-local-path) |
-| T1.5 | List installed harnesses | [T1.5](tutorial/01-first-harness.md#t15-list-installed-harnesses) |
-| T1.5b | Inspect harness detail | [T1.5b](tutorial/01-first-harness.md#t15b-inspect-harness-detail) |
-| T1.6 | Run interactive | [T1.6](tutorial/01-first-harness.md#t16-run-interactive) |
-| T1.7 | Run non-interactive | [T1.7](tutorial/01-first-harness.md#t17-run-non-interactive) |
-| T1.8 | Run with vendor flags | [T1.8](tutorial/01-first-harness.md#t18-run-with-vendor-flags) |
-| T1.8b | Run with --instructions | [T1.8b](tutorial/01-first-harness.md#t18b-run-with-per-invocation-instructions) |
-| T1.9 | Inspect assembled output | [T1.9](tutorial/01-first-harness.md#t19-inspect-the-assembled-output) |
-| T1.10 | Uninstall | [T1.10](tutorial/01-first-harness.md#t110-uninstall) |
+| Test | Tutorial step |
+|---|---|
+| Create harness structure | [Create the harness structure](first-harness.md#create-the-harness-structure) |
+| Add all artifact types | [Add artifacts](first-harness.md#add-artifacts) |
+| Verify structure | [Verify structure](first-harness.md#verify-structure) |
+| Install from local path | [Install from local path](first-harness.md#install-from-local-path) |
+| List installed harnesses | [List installed harnesses](first-harness.md#list-installed-harnesses) |
+| Inspect harness detail | [Inspect harness detail](first-harness.md#inspect-harness-detail) |
+| Run interactive | [Run interactive](first-harness.md#run-interactive) |
+| Run non-interactive | [Run non-interactive](first-harness.md#run-non-interactive) |
+| Run with vendor flags | [Run with vendor flags](first-harness.md#run-with-vendor-flags) |
+| Run with --instructions | [Run with per-invocation instructions](first-harness.md#run-with-per-invocation-instructions) |
+| Inspect assembled output | [Inspect the assembled output](first-harness.md#inspect-the-assembled-output) |
+| Uninstall | [Uninstall](first-harness.md#uninstall) |
 
-### Tutorial 2: Vendors & Symlinks
+### Vendors & Symlinks
 
-| ID | Test | Tutorial step |
-|---|---|---|
-| T2.1 | Create and install test harness | [T2.1](tutorial/02-vendors-and-symlinks.md#t21-create-and-install-a-test-harness) |
-| T2.2 | List available vendors | [T2.2](tutorial/02-vendors-and-symlinks.md#t22-list-available-vendors) |
-| T2.3 | Switch vendors | [T2.3](tutorial/02-vendors-and-symlinks.md#t23-switch-vendors) |
-| T2.4 | Automatic symlink prompt | [T2.4](tutorial/02-vendors-and-symlinks.md#t24-how-symlinks-work) |
-| T2.5 | Explicit install and clean | [T2.5](tutorial/02-vendors-and-symlinks.md#t25-explicit-install-and-clean) |
-| T2.6 | Claude no-symlinks | [T2.6](tutorial/02-vendors-and-symlinks.md#t26-claude-doesnt-need-symlinks) |
-| T2.7 | Prune orphans | [T2.7](tutorial/02-vendors-and-symlinks.md#t27-prune-orphaned-installations) |
+| Test | Tutorial step |
+|---|---|
+| Create and install test harness | [Create and install a test harness](vendors-and-symlinks.md#create-and-install-a-test-harness) |
+| List available vendors | [List available vendors](vendors-and-symlinks.md#list-available-vendors) |
+| Switch vendors | [Switch vendors](vendors-and-symlinks.md#switch-vendors) |
+| Automatic symlink prompt | [Symlinks — automatic prompt](vendors-and-symlinks.md#symlinks-automatic-prompt) |
+| Explicit install and clean | [Symlinks — explicit install and clean](vendors-and-symlinks.md#symlinks-explicit-install-and-clean) |
+| Claude no-symlinks | [Symlinks — Claude doesn't need them](vendors-and-symlinks.md#symlinks-claude-doesn-t-need-them) |
+| Prune orphans | [Prune orphaned installations](vendors-and-symlinks.md#prune-orphaned-installations) |
 
-### Tutorial 3: Composition
+### Composition
 
-| ID | Test | Tutorial step |
-|---|---|---|
-| T3.1 | Pick skills from own repo | [T3.1](tutorial/03-composition.md#t31-source-1-your-own-skill-library-eyelockassistants) |
-| T3.2 | Local checkout include | [T3.2](tutorial/03-composition.md#t32-using-the-local-checkout) |
-| T3.3 | Anthropic third-party skills | [T3.3](tutorial/03-composition.md#t33-anthropics-official-skills) |
-| T3.4 | Vercel third-party skills | [T3.4](tutorial/03-composition.md#t34-vercels-skills) |
-| T3.5 | Mix own + third-party | [T3.5](tutorial/03-composition.md#t35-mixing-your-own-skills-with-third-party) |
-| T3.6 | Embedded local skills | [T3.6](tutorial/03-composition.md#t36-embedded-skills-in-the-harness) |
-| T3.7 | Local Git repo include | [T3.7](tutorial/03-composition.md#t37-include-skills-from-a-local-git-repo) |
-| T3.8 | Pin with ref | [T3.8](tutorial/03-composition.md#t38-pin-a-version-with-ref) |
-| T3.9 | Update Git sources | [T3.9](tutorial/03-composition.md#t39-update-git-sources) |
-| T3.10 | Install from monorepo | [T3.10](tutorial/03-composition.md#t310-install-a-harness-directly-from-a-monorepo) |
-| T3.11 | Allow-list deny | [T3.11](tutorial/03-composition.md#t311-test-deny-a-source) |
-| T3.12 | Allow-list allow | [T3.12](tutorial/03-composition.md#t312-test-allow-a-source) |
+| Test | Tutorial step |
+|---|---|
+| Pick skills from own repo | [Own repo — pick skills from eyelock/assistants](composition.md#own-repo-pick-skills-from-eyelock-assistants) |
+| Local checkout include | [Own repo — local checkout (no clone)](composition.md#own-repo-local-checkout-no-clone) |
+| Anthropic third-party skills | [Third-party — Anthropic's official skills](composition.md#third-party-anthropic-s-official-skills) |
+| Vercel third-party skills | [Third-party — Vercel's skills](composition.md#third-party-vercel-s-skills) |
+| Mix own + third-party | [Mixed sources — own + third-party](composition.md#mixed-sources-own-third-party) |
+| Embedded local skills | [Local — embedded skills in the harness](composition.md#local-embedded-skills-in-the-harness) |
+| Local Git repo include | [Local — include from a local Git repo](composition.md#local-include-from-a-local-git-repo) |
+| Pin with ref | [Pin a version with ref](composition.md#pin-a-version-with-ref) |
+| Update Git sources | [Update Git sources](composition.md#update-git-sources) |
+| Install from monorepo | [Install from a monorepo](composition.md#install-from-a-monorepo) |
+| Allow-list deny | [Allow-list — deny a source](composition.md#allow-list-deny-a-source) |
+| Allow-list allow | [Allow-list — allow a source](composition.md#allow-list-allow-a-source) |
 
-### Tutorial 4: Delegation
+### Delegation
 
-| ID | Test | Tutorial step |
-|---|---|---|
-| T4.1 | Create delegate harness | [T4.1](tutorial/04-delegation.md#t41-create-a-delegate-harness) |
-| T4.2 | Create parent with delegates | [T4.2](tutorial/04-delegation.md#t42-create-a-parent-harness-with-delegates) |
-| T4.3 | Install and verify | [T4.3](tutorial/04-delegation.md#t43-install-and-verify) |
-| T4.4 | Inspect delegate agents | [T4.4](tutorial/04-delegation.md#t44-inspect-delegate-agent-files) |
-| T4.5 | Test delegation | [T4.5](tutorial/04-delegation.md#t45-test-delegation) |
+| Test | Tutorial step |
+|---|---|
+| Create delegate harness | [Create a delegate harness](delegation.md#create-a-delegate-harness) |
+| Create parent with delegates | [Create a parent harness with delegates](delegation.md#create-a-parent-harness-with-delegates) |
+| Install and verify | [Install and verify](delegation.md#install-and-verify) |
+| Inspect delegate agents | [Inspect delegate agent files](delegation.md#inspect-delegate-agent-files) |
+| Test delegation | [Test delegation](delegation.md#test-delegation) |
 
-### Tutorial 5: Export
+### Export
 
-| ID | Test | Tutorial step |
-|---|---|---|
-| T5.1 | Create export harness | [T5.1](tutorial/05-export.md#t51-create-a-harness-to-export) |
-| T5.2 | Export all vendors | [T5.2](tutorial/05-export.md#t52-export-for-all-vendors) |
-| T5.3 | Verify Claude export | [T5.3](tutorial/05-export.md#t53-verify-claude-export) |
-| T5.4 | Verify Cursor export | [T5.4](tutorial/05-export.md#t54-verify-cursor-export) |
-| T5.5 | Verify Codex export | [T5.5](tutorial/05-export.md#t55-verify-codex-export) |
-| T5.6 | Export specific vendor | [T5.6](tutorial/05-export.md#t56-export-for-specific-vendors) |
-| T5.7 | Export merged mode | [T5.7](tutorial/05-export.md#t57-export-in-merged-mode) |
-| T5.8 | Export --clean | [T5.8](tutorial/05-export.md#t58-export-with---clean) |
-| T5.9 | Export from Git URL | [T5.9](tutorial/05-export.md#t59-export-from-a-git-url) |
-| T5.10 | Export no instructions | [T5.10](tutorial/05-export.md#t510-export-with-no-instructions) |
+| Test | Tutorial step |
+|---|---|
+| Create export harness | [Create a harness to export](export.md#create-a-harness-to-export) |
+| Export all vendors | [Export for all vendors](export.md#export-for-all-vendors) |
+| Verify Claude export | [Verify Claude export](export.md#verify-claude-export) |
+| Verify Cursor export | [Verify Cursor export](export.md#verify-cursor-export) |
+| Verify Codex export | [Verify Codex export](export.md#verify-codex-export) |
+| Export specific vendor | [Export for specific vendors](export.md#export-for-specific-vendors) |
+| Export merged mode | [Export in merged mode](export.md#export-in-merged-mode) |
+| Export --clean | [Export with --clean](export.md#export-with-clean) |
+| Export from Git URL | [Export from a Git URL](export.md#export-from-a-git-url) |
+| Export no instructions | [Export with no instructions](export.md#export-with-no-instructions) |
 
-### Tutorial 6: Marketplace
+### Marketplace
 
-| ID | Test | Tutorial step |
-|---|---|---|
-| T6.1 | Set up source material | [T6.1](tutorial/06-marketplace.md#t61-set-up-source-material) |
-| T6.2 | Create marketplace config | [T6.2](tutorial/06-marketplace.md#t62-create-the-marketplace-config) |
-| T6.3 | Build marketplace | [T6.3](tutorial/06-marketplace.md#t63-build-the-marketplace) |
-| T6.4 | Verify output | [T6.4](tutorial/06-marketplace.md#t64-verify-the-output) |
-| T6.5 | Test with Claude Code | [T6.5](tutorial/06-marketplace.md#t65-test-with-claude-code) |
-| T6.6 | Build --clean | [T6.6](tutorial/06-marketplace.md#t66-build-with---clean) |
-| T6.7 | Build specific vendors | [T6.7](tutorial/06-marketplace.md#t67-build-for-specific-vendors) |
+| Test | Tutorial step |
+|---|---|
+| Set up source material | [Set up source material](marketplace.md#set-up-source-material) |
+| Create marketplace config | [Create the marketplace config](marketplace.md#create-the-marketplace-config) |
+| Build marketplace | [Build the marketplace](marketplace.md#build-the-marketplace) |
+| Verify output | [Verify the output](marketplace.md#verify-the-output) |
+| Test with Claude Code | [Test with Claude Code](marketplace.md#test-with-claude-code) |
+| Build --clean | [Build with --clean](marketplace.md#build-with-clean) |
+| Build specific vendors | [Build for specific vendors](marketplace.md#build-for-specific-vendors) |
 
-### Tutorial 7: Registry & Discovery
+### Registry & Discovery
 
-| ID | Test | Tutorial step |
-|---|---|---|
-| T7.1 | Create local registry | [T7.1](tutorial/07-registry-and-discovery.md#t71-create-a-local-registry) |
-| T7.2 | Add registry | [T7.2](tutorial/07-registry-and-discovery.md#t72-add-the-registry) |
-| T7.3 | List registries | [T7.3](tutorial/07-registry-and-discovery.md#t73-list-registries) |
-| T7.4 | Search | [T7.4](tutorial/07-registry-and-discovery.md#t74-search) |
-| T7.5 | Install by exact name | [T7.5](tutorial/07-registry-and-discovery.md#t75-by-exact-name) |
-| T7.6 | Install with qualifier | [T7.6](tutorial/07-registry-and-discovery.md#t76-with-registry-qualifier) |
-| T7.7 | Direct URL precedence | [T7.7](tutorial/07-registry-and-discovery.md#t77-direct-url-still-works) |
-| T7.8 | Partial match | [T7.8](tutorial/07-registry-and-discovery.md#t78-partial-match-suggests-results) |
-| T7.9 | No match error | [T7.9](tutorial/07-registry-and-discovery.md#t79-no-match-error) |
-| T7.10 | Update registries | [T7.10](tutorial/07-registry-and-discovery.md#t710-update-registries) |
-| T7.11 | Remove registry | [T7.11](tutorial/07-registry-and-discovery.md#t711-remove-a-registry) |
-| T7.12 | Add local source | [T7.12](tutorial/07-registry-and-discovery.md#t712-add-a-local-source) |
-| T7.13 | List sources | [T7.13](tutorial/07-registry-and-discovery.md#t713-list-sources) |
-| T7.14 | Search includes source harnesses | [T7.14](tutorial/07-registry-and-discovery.md#t714-search-includes-source-harnesses) |
-| T7.15 | Install from source | [T7.15](tutorial/07-registry-and-discovery.md#t715-install-from-source) |
-| T7.16 | Uninstall removes source entry | [T7.16](tutorial/07-registry-and-discovery.md#t716-uninstall-removes-the-source-entry) |
+| Test | Tutorial step |
+|---|---|
+| Create local registry | [Create a local registry](registry-and-discovery.md#create-a-local-registry) |
+| Add registry | [Add the registry](registry-and-discovery.md#add-the-registry) |
+| List registries | [List registries](registry-and-discovery.md#list-registries) |
+| Search | [Search](registry-and-discovery.md#search) |
+| Install by exact name | [Install — by exact name](registry-and-discovery.md#install-by-exact-name) |
+| Install with qualifier | [Install — with registry qualifier](registry-and-discovery.md#install-with-registry-qualifier) |
+| Direct URL precedence | [Install — direct URL still works](registry-and-discovery.md#install-direct-url-still-works) |
+| Partial match | [Install — partial match suggests results](registry-and-discovery.md#install-partial-match-suggests-results) |
+| No match error | [Install — no match error](registry-and-discovery.md#install-no-match-error) |
+| Update registries | [Update registries](registry-and-discovery.md#update-registries) |
+| Remove registry | [Remove a registry](registry-and-discovery.md#remove-a-registry) |
+| Add local source | [Add a local source](registry-and-discovery.md#add-a-local-source) |
+| List sources | [List sources](registry-and-discovery.md#list-sources) |
+| Search includes source harnesses | [Search includes source harnesses](registry-and-discovery.md#search-includes-source-harnesses) |
+| Install from source | [Install from source](registry-and-discovery.md#install-from-source) |
+| Uninstall removes source entry | [Uninstall removes the source entry](registry-and-discovery.md#uninstall-removes-the-source-entry) |
 
-### Tutorial 8: Developer Tools
+### Developer Tools
 
-| ID | Test | Tutorial step |
-|---|---|---|
-| T8.1 | Scaffold harness | [T8.1](tutorial/08-developer-tools.md#t81-scaffold-a-harness) |
-| T8.2 | Scaffold artifacts | [T8.2](tutorial/08-developer-tools.md#t82-scaffold-artifacts) |
-| T8.3 | Author content | [T8.3](tutorial/08-developer-tools.md#t83-author-content) |
-| T8.4 | Lint | [T8.4](tutorial/08-developer-tools.md#t84-lint) |
-| T8.5 | Validate | [T8.5](tutorial/08-developer-tools.md#t85-validate) |
-| T8.6 | Format | [T8.6](tutorial/08-developer-tools.md#t86-format) |
-| T8.7 | Compress | [T8.7](tutorial/08-developer-tools.md#t87-compress) |
-| T8.8 | Inspect | [T8.8](tutorial/08-developer-tools.md#t88-inspect) |
+| Test | Tutorial step |
+|---|---|
+| Scaffold harness | [Scaffold a harness](developer-tools.md#scaffold-a-harness) |
+| Scaffold artifacts | [Scaffold artifacts](developer-tools.md#scaffold-artifacts) |
+| Author content | [Author content](developer-tools.md#author-content) |
+| Lint | [Lint](developer-tools.md#lint) |
+| Validate | [Validate](developer-tools.md#validate) |
+| Format | [Format](developer-tools.md#format) |
+| Compress | [Compress](developer-tools.md#compress) |
+| Inspect | [Inspect](developer-tools.md#inspect) |
 
-### Tutorial 9: Docker Images
+### Docker Images
 
 Requires Docker installed and running.
 
-| ID | Test | Tutorial step |
-|---|---|---|
-| T9.1 | Pull or build base image | [T9.1](tutorial/09-docker-image.md#t91-pull-the-base-image) |
-| T9.2 | Create and install tutorial harness | [T9.2](tutorial/09-docker-image.md#t92-create-and-install-a-tutorial-harness) |
-| T9.3 | Build a harness image | [T9.3](tutorial/09-docker-image.md#t93-build-a-harness-image) |
-| T9.4 | Run the harness image | [T9.4](tutorial/09-docker-image.md#t94-run-a-harness-image) |
-| T9.5 | Switch vendors at runtime | [T9.5](tutorial/09-docker-image.md#t95-switch-vendors-at-runtime) |
-| T9.6 | Pass vendor flags | [T9.6](tutorial/09-docker-image.md#t96-pass-vendor-flags) |
-| T9.7 | Inspect with --dry-run | [T9.7](tutorial/09-docker-image.md#t97-inspect-with---dry-run) |
-| T9.8 | Build from Git source | [T9.8](tutorial/09-docker-image.md#t98-build-from-git-source) |
-| T9.9 | Override entrypoint | [T9.9](tutorial/09-docker-image.md#t99-override-entrypoint) |
-| T9.10 | CI/CD matrix example | [T9.10](tutorial/09-docker-image.md#t910-cicd-matrix-example) |
+| Test | Tutorial step |
+|---|---|
+| Pull or build base image | [Pull the base image](docker-image.md#pull-the-base-image) |
+| Create and install tutorial harness | [Create and install a tutorial harness](docker-image.md#create-and-install-a-tutorial-harness) |
+| Build a harness image | [Build a harness image](docker-image.md#build-a-harness-image) |
+| Run the harness image | [Run the harness image](docker-image.md#run-the-harness-image) |
+| Switch vendors at runtime | [Switch vendors at runtime](docker-image.md#switch-vendors-at-runtime) |
+| Pass vendor flags | [Pass vendor flags](docker-image.md#pass-vendor-flags) |
+| Inspect with --dry-run | [Inspect with --dry-run](docker-image.md#inspect-with-dry-run) |
+| Build from Git source | [Build from Git source](docker-image.md#build-from-git-source) |
+| Override entrypoint | [Override entrypoint](docker-image.md#override-entrypoint) |
+| CI/CD matrix example | [CI/CD matrix example](docker-image.md#ci-cd-matrix-example) |
 
-### Tutorial 10: Hooks
+### Hooks
 
-| ID | Test | Tutorial step |
-|---|---|---|
-| T10.1 | Add hooks to .ynh-plugin/plugin.json | [T10.1](tutorial/10-hooks.md#t101-add-hooks-to-a-harness) |
-| T10.2 | Preview for Claude — verify hooks.json | [T10.2](tutorial/10-hooks.md#t102-preview-for-claude) |
-| T10.3 | Preview for Cursor — verify hooks.json | [T10.3](tutorial/10-hooks.md#t103-preview-for-cursor) |
-| T10.4 | Preview for Codex — verify hooks.json | [T10.4](tutorial/10-hooks.md#t104-preview-for-codex) |
-| T10.5 | Write a blocking hook script | [T10.5](tutorial/10-hooks.md#t105-write-a-blocking-hook-example) |
-| T10.6 | Diff hook config across vendors | [T10.6](tutorial/10-hooks.md#t106-compare-hook-config-across-vendors) |
+| Test | Tutorial step |
+|---|---|
+| Add hooks to .ynh-plugin/plugin.json | [Add hooks to a harness](hooks.md#add-hooks-to-a-harness) |
+| Preview for Claude — verify hooks.json | [Preview for Claude](hooks.md#preview-for-claude) |
+| Preview for Cursor — verify hooks.json | [Preview for Cursor](hooks.md#preview-for-cursor) |
+| Preview for Codex — verify hooks.json | [Preview for Codex](hooks.md#preview-for-codex) |
+| Write a blocking hook script | [Write a blocking hook example](hooks.md#write-a-blocking-hook-example) |
+| Diff hook config across vendors | [Compare hook config across vendors](hooks.md#compare-hook-config-across-vendors) |
 
-### Tutorial 11: MCP Servers
+### MCP Servers
 
-| ID | Test | Tutorial step |
-|---|---|---|
-| T11.1 | Add stdio MCP server to harness | [T11.1](tutorial/11-mcp-servers.md#t111-add-a-stdio-mcp-server-to-a-harness) |
-| T11.2 | Preview for Claude — verify .claude/.mcp.json | [T11.2](tutorial/11-mcp-servers.md#t112-preview-for-claude) |
-| T11.3 | Preview for Cursor — verify .cursor/mcp.json | [T11.3](tutorial/11-mcp-servers.md#t113-preview-for-cursor) |
-| T11.4 | Preview for Codex — verify JSON | [T11.4](tutorial/11-mcp-servers.md#t114-preview-for-codex) |
-| T11.5 | Add HTTP MCP server — verify URL | [T11.5](tutorial/11-mcp-servers.md#t115-add-an-http-mcp-server) |
-| T11.6 | Diff MCP config across vendors | [T11.6](tutorial/11-mcp-servers.md#t116-compare-mcp-config-across-vendors) |
+| Test | Tutorial step |
+|---|---|
+| Add stdio MCP server to harness | [Add a stdio MCP server to a harness](mcp-servers.md#add-a-stdio-mcp-server-to-a-harness) |
+| Preview for Claude — verify .claude/.mcp.json | [Preview for Claude](mcp-servers.md#preview-for-claude) |
+| Preview for Cursor — verify .cursor/mcp.json | [Preview for Cursor](mcp-servers.md#preview-for-cursor) |
+| Preview for Codex — verify JSON | [Preview for Codex](mcp-servers.md#preview-for-codex) |
+| Add HTTP MCP server — verify URL | [Add an HTTP MCP server](mcp-servers.md#add-an-http-mcp-server) |
+| Diff MCP config across vendors | [Compare MCP config across vendors](mcp-servers.md#compare-mcp-config-across-vendors) |
 
-### Tutorial 12: Developer Preview
+### Developer Preview
 
-| ID | Test | Tutorial step |
-|---|---|---|
-| T12.1 | Preview harness for Claude | [T12.1](tutorial/12-developer-preview.md#t121-preview-a-harness-for-claude) |
-| T12.2 | Preview harness for Cursor | [T12.2](tutorial/12-developer-preview.md#t122-preview-the-same-harness-for-cursor) |
-| T12.3 | Diff Claude vs Cursor | [T12.3](tutorial/12-developer-preview.md#t123-compare-claude-vs-cursor-output) |
-| T12.4 | Preview with hooks — inspect config | [T12.4](tutorial/12-developer-preview.md#t124-preview-a-harness-with-hooks) |
-| T12.5 | Preview with MCP — inspect per vendor | [T12.5](tutorial/12-developer-preview.md#t125-preview-a-harness-with-mcp-servers) |
+| Test | Tutorial step |
+|---|---|
+| Preview harness for Claude | [Preview a harness for Claude](developer-preview.md#preview-a-harness-for-claude) |
+| Preview harness for Cursor | [Preview the same harness for Cursor](developer-preview.md#preview-the-same-harness-for-cursor) |
+| Diff Claude vs Cursor | [Compare Claude vs Cursor output](developer-preview.md#compare-claude-vs-cursor-output) |
+| Preview with hooks — inspect config | [Preview a harness with hooks](developer-preview.md#preview-a-harness-with-hooks) |
+| Preview with MCP — inspect per vendor | [Preview a harness with MCP servers](developer-preview.md#preview-a-harness-with-mcp-servers) |
 
-### Tutorial 13: Profiles
+### Profiles
 
-| ID | Test | Tutorial step |
-|---|---|---|
-| T13.1 | Add profiles to the plugin manifest | [T13.1](tutorial/13-profiles.md#t131-add-profiles-to-the-plugin-manifest) |
-| T13.2 | Validate profiles | [T13.2](tutorial/13-profiles.md#t132-validate-profiles) |
-| T13.3 | Preview with --profile ci | [T13.3](tutorial/13-profiles.md#t133-preview-with---profile-ci) |
-| T13.4 | Run with --profile ci | [T13.4](tutorial/13-profiles.md#t134-run-with---profile-ci) |
-| T13.5 | Try --profile nonexistent | [T13.5](tutorial/13-profiles.md#t135-try---profile-nonexistent) |
-| T13.6 | Use YNH_PROFILE env var | [T13.6](tutorial/13-profiles.md#t136-use-ynh_profile-env-var) |
-| T13.7 | Flag wins over env var | [T13.7](tutorial/13-profiles.md#t137-both-flag-and-env-var--flag-wins) |
-| T13.8 | Diff with --profile | [T13.8](tutorial/13-profiles.md#t138-use-ynd-diff---profile-ci) |
+| Test | Tutorial step |
+|---|---|
+| Add profiles to the plugin manifest | [Add profiles to the plugin manifest](profiles.md#add-profiles-to-the-plugin-manifest) |
+| Validate profiles | [Validate profiles](profiles.md#validate-profiles) |
+| Preview with --profile ci | [Preview with --profile ci](profiles.md#preview-with-profile-ci) |
+| Run with --profile ci | [Run with --profile ci](profiles.md#run-with-profile-ci) |
+| Try --profile nonexistent | [Try --profile nonexistent](profiles.md#try-profile-nonexistent) |
+| Use YNH_PROFILE env var | [Edit profiles from the command line](profiles.md#edit-profiles-from-the-command-line) |
+| Flag wins over env var | [Both flag and env var — flag wins](profiles.md#both-flag-and-env-var-flag-wins) |
+| Diff with --profile | [Use ynd diff --profile ci](profiles.md#use-ynd-diff-profile-ci) |
 
-### Tutorial 16: Structured Output
+### Structured Output
 
-| ID | Test | Tutorial step |
-|---|---|---|
-| T16.1 | Show resolved paths — text | [T16.1](tutorial/16-structured-output.md#t161-show-resolved-paths--text) |
-| T16.2 | Show resolved paths — JSON | [T16.2](tutorial/16-structured-output.md#t162-show-resolved-paths--json) |
-| T16.3 | Pipe to jq | [T16.3](tutorial/16-structured-output.md#t163-pipe-to-jq) |
-| T16.4 | Explicit text format | [T16.4](tutorial/16-structured-output.md#t164-explicit-text-format) |
-| T16.5 | Error handling — text mode | [T16.5](tutorial/16-structured-output.md#t165-error-handling--text-mode) |
-| T16.6 | Error handling — JSON error envelope | [T16.6](tutorial/16-structured-output.md#t166-error-handling--json-error-envelope) |
-| T16.7 | Space-separated flags only | [T16.7](tutorial/16-structured-output.md#t167-space-separated-flags-only) |
-| T16.8 | List harnesses — JSON | [T16.8](tutorial/16-structured-output.md#t168-list-installed-harnesses--json) |
-| T16.9 | List harnesses — jq extraction | [T16.9](tutorial/16-structured-output.md#t169-list-harnesses--extract-with-jq) |
-| T16.10 | Empty list — JSON | [T16.10](tutorial/16-structured-output.md#t1610-empty-list--json) |
-| T16.11 | YNH_HOME override | [T16.11](tutorial/16-structured-output.md#t1611-ynh_home-override) |
-| T16.13 | Inspect install provenance | [T16.13](tutorial/16-structured-output.md#t1613-inspect-install-provenance) |
-| T16.14 | Validate output against the published schema | [T16.14](tutorial/16-structured-output.md#t1614-validate-output-against-the-published-schema) |
+| Test | Tutorial step |
+|---|---|
+| Show resolved paths — text | [Show resolved paths — text](structured-output.md#show-resolved-paths-text) |
+| Show resolved paths — JSON | [Show resolved paths — JSON](structured-output.md#show-resolved-paths-json) |
+| Pipe to jq | [Pipe to jq](structured-output.md#pipe-to-jq) |
+| Explicit text format | [Explicit text format](structured-output.md#explicit-text-format) |
+| Error handling — text mode | [Error handling — text mode](structured-output.md#error-handling-text-mode) |
+| Error handling — JSON error envelope | [Error handling — JSON error envelope](structured-output.md#error-handling-json-error-envelope) |
+| Space-separated flags only | [Space-separated flags only](structured-output.md#space-separated-flags-only) |
+| List harnesses — JSON | [List installed harnesses — JSON](structured-output.md#list-installed-harnesses-json) |
+| List harnesses — jq extraction | [List harnesses — extract with jq](structured-output.md#list-harnesses-extract-with-jq) |
+| Empty list — JSON | [Empty list — JSON](structured-output.md#empty-list-json) |
+| YNH_HOME override | [Check for updates — `--check-updates`](structured-output.md#check-for-updates-check-updates) |
+| Inspect install provenance | [Inspect install provenance](structured-output.md#inspect-install-provenance) |
+| Validate output against the published schema | [Validate output against the published schema](structured-output.md#validate-output-against-the-published-schema) |
+
+### Focus
+
+| Test | Tutorial step |
+|---|---|
+| Create a harness with focus entries | [Create a harness with focus entries](focus.md#create-a-harness-with-focus-entries) |
+| Validate focus entries | [Validate focus entries](focus.md#validate-focus-entries) |
+| Preview with --focus review | [Preview with --focus review](focus.md#preview-with-focus-review) |
+| Focus and profile are mutually exclusive | [Focus and profile are mutually exclusive](focus.md#focus-and-profile-are-mutually-exclusive) |
+| Unknown focus is an error | [Unknown focus is an error](focus.md#unknown-focus-is-an-error) |
+| Use YNH_FOCUS env var | [Use YNH_FOCUS env var](focus.md#use-ynh-focus-env-var) |
+| Install and view focus in ynh info | [Install and view focus in ynh info](focus.md#install-and-view-focus-in-ynh-info) |
+| Edit focuses from the command line | [Edit focuses from the command line](focus.md#edit-focuses-from-the-command-line) |
+| Clean up | [Clean up](focus.md#clean-up) |
+| What You Learned | [What You Learned](focus.md#what-you-learned) |
+
+### Project-Local Config
+
+| Test | Tutorial step |
+|---|---|
+| Create a project with .ynh-plugin/plugin.json | [Create a project with .ynh-plugin/plugin.json](project-local-config.md#create-a-project-with-ynh-plugin-plugin-json) |
+| Validate the project config | [Validate the project config](project-local-config.md#validate-the-project-config) |
+| Preview the assembled output | [Preview the assembled output](project-local-config.md#preview-the-assembled-output) |
+| Preview with --focus | [Preview with --focus](project-local-config.md#preview-with-focus) |
+| Clean up | [Clean up](project-local-config.md#clean-up) |
+| What You Learned | [What You Learned](project-local-config.md#what-you-learned) |
+| Composition with focus | [Composition with focus](project-local-config.md#composition-with-focus) |
+
+### Include Editing
+
+| Test | Tutorial step |
+|---|---|
+| Add an include | [Add an include](include-editing.md#add-an-include) |
+| Add with flags | [Add with flags](include-editing.md#add-with-flags) |
+| Duplicate add → error | [Duplicate add → error](include-editing.md#duplicate-add-error) |
+| Replace an existing include | [Replace an existing include](include-editing.md#replace-an-existing-include) |
+| Update an include | [Update an include](include-editing.md#update-an-include) |
+| Update a path value | [Update a path value](include-editing.md#update-a-path-value) |
+| Remove an include | [Remove an include](include-editing.md#remove-an-include) |
+| Disambiguating a monorepo | [Disambiguating a monorepo](include-editing.md#disambiguating-a-monorepo) |
+| Installed harnesses — name-based targeting (network required) | [Installed harnesses — name-based targeting (network required)](include-editing.md#installed-harnesses-name-based-targeting-network-required) |
+| Path resolution — id vs path | [Path resolution — id vs path](include-editing.md#path-resolution-id-vs-path) |
+| Clean up | [Clean up](include-editing.md#clean-up) |
+
+### Namespacing & Migration
+
+| Test | Tutorial step |
+|---|---|
+| Canonical ids — the new identity model | [Canonical ids — the new identity model](namespacing-and-migration.md#canonical-ids-the-new-identity-model) |
+| Demo — two registries, two `david` harnesses | [Demo — two registries, two `david` harnesses](namespacing-and-migration.md#demo-two-registries-two-david-harnesses) |
+| Search returns both entries | [Search returns both entries](namespacing-and-migration.md#search-returns-both-entries) |
+| Disambiguate install with `@<registry>` | [Disambiguate install with `@<registry>`](namespacing-and-migration.md#disambiguate-install-with) |
+| Inspect by canonical id | [Inspect by canonical id](namespacing-and-migration.md#inspect-by-canonical-id) |
+| Uninstall by canonical id | [Uninstall by canonical id](namespacing-and-migration.md#uninstall-by-canonical-id) |
+| Migrate a legacy harness with `ynd migrate` | [Migrate a legacy harness with `ynd migrate`](namespacing-and-migration.md#migrate-a-legacy-harness-with-ynd-migrate) |
+| Recursive migration | [Recursive migration](namespacing-and-migration.md#recursive-migration) |
+| Transparent migration on use | [Transparent migration on use](namespacing-and-migration.md#transparent-migration-on-use) |
+| `ynh migrate` — upgrade `~/.ynh` schema | [`ynh migrate` — upgrade `~/.ynh` schema](namespacing-and-migration.md#ynh-migrate-upgrade-ynh-schema) |
+| `ynh quarantine` — recover from broken installs | [`ynh quarantine` — recover from broken installs](namespacing-and-migration.md#ynh-quarantine-recover-from-broken-installs) |
+| Clean up | [Clean up](namespacing-and-migration.md#clean-up) |
+| What You Learned | [What You Learned](namespacing-and-migration.md#what-you-learned) |
+
+### Sensors
+
+| Test | Tutorial step |
+|---|---|
+| A `files` sensor | [A `files` sensor](sensors.md#a-files-sensor) |
+| A `command` sensor | [A `command` sensor](sensors.md#a-command-sensor) |
+| A `focus`-referencing sensor | [A `focus`-referencing sensor](sensors.md#a-focus-referencing-sensor) |
+| An inline-focus sensor | [An inline-focus sensor](sensors.md#an-inline-focus-sensor) |
+| Discovery — `ynh sensors ls/show` | [Discovery — `ynh sensors ls/show`](sensors.md#discovery-ynh-sensors-ls-show) |
+| Validation — every rule produces a clear error | [Validation — every rule produces a clear error](sensors.md#validation-every-rule-produces-a-clear-error) |
+| Hook–sensor pairing | [Hook–sensor pairing](sensors.md#hook-sensor-pairing) |
+| Install round-trip preserves sensors | [Install round-trip preserves sensors](sensors.md#install-round-trip-preserves-sensors) |
+| What a loop driver does with this | [What a loop driver does with this](sensors.md#what-a-loop-driver-does-with-this) |
+
+### Check & Baseline
+
+| Test | Tutorial step |
+|---|---|
+| Declare sensors with a tolerance | [Declare sensors with a tolerance](check.md#declare-sensors-with-a-tolerance) |
+| A clean run | [A clean run](check.md#a-clean-run) |
+| A blocking failure gates | [A blocking failure gates](check.md#a-blocking-failure-gates) |
+| A `files` sensor gates on freshness | [A `files` sensor gates on freshness](check.md#a-files-sensor-gates-on-freshness) |
+| The problem with inheriting a repository | [The problem with inheriting a repository](check.md#the-problem-with-inheriting-a-repository) |
+| Record a baseline | [Record a baseline](check.md#record-a-baseline) |
+| Read what the ratchet forgives | [Read what the ratchet forgives](check.md#read-what-the-ratchet-forgives) |
+| Only new failures gate | [Only new failures gate](check.md#only-new-failures-gate) |
+| Moving code is not a new failure | [Moving code is not a new failure](check.md#moving-code-is-not-a-new-failure) |
+| Paying off debt tightens the ratchet | [Paying off debt tightens the ratchet](check.md#paying-off-debt-tightens-the-ratchet) |
+| CI cannot write a baseline | [CI cannot write a baseline](check.md#ci-cannot-write-a-baseline) |
+| Exit codes and structured output | [Exit codes and structured output](check.md#exit-codes-and-structured-output) |
+| Wire it into the edit loop | [Wire it into the edit loop](check.md#wire-it-into-the-edit-loop) |
+
+### Agent Loop
+
+| Test | Tutorial step |
+|---|---|
+| A harness with one sensor and a focus | [A harness with one sensor and a focus](agent-loop.md#a-harness-with-one-sensor-and-a-focus) |
+| Run the loop | [Run the loop](agent-loop.md#run-the-loop) |
+| Budgets, and where the defaults come from | [Budgets, and where the defaults come from](agent-loop.md#budgets-and-where-the-defaults-come-from) |
+| Convergence | [Convergence](agent-loop.md#convergence) |
+| Running against a scratch checkout | [Running against a scratch checkout](agent-loop.md#running-against-a-scratch-checkout) |
+| Reading a trajectory | [Reading a trajectory](agent-loop.md#reading-a-trajectory) |
+| The run result | [The run result](agent-loop.md#the-run-result) |
+| Exit codes | [Exit codes](agent-loop.md#exit-codes) |
+| Resuming | [Resuming](agent-loop.md#resuming) |
+| The controls a run does not have | [The controls a run does not have](agent-loop.md#the-controls-a-run-does-not-have) |
+| Summary | [Summary](agent-loop.md#summary) |
+
+### Shadow Mode
+
+| Test | Tutorial step |
+|---|---|
+| Select candidates | [Select candidates](shadow-mode.md#select-candidates) |
+| Build the base state | [Build the base state](shadow-mode.md#build-the-base-state) |
+| Pin the harness, do not inherit it | [Pin the harness, do not inherit it](shadow-mode.md#pin-the-harness-do-not-inherit-it) |
+| Capture the finding as it stood | [Capture the finding as it stood](shadow-mode.md#capture-the-finding-as-it-stood) |
+| Run the loop against the base state | [Run the loop against the base state](shadow-mode.md#run-the-loop-against-the-base-state) |
+| Compare | [Compare](shadow-mode.md#compare) |
+| Grade blind | [Grade blind](shadow-mode.md#grade-blind) |
+| Read the result honestly | [Read the result honestly](shadow-mode.md#read-the-result-honestly) |
+| Aggregate | [Aggregate](shadow-mode.md#aggregate) |
+| Summary | [Summary](shadow-mode.md#summary) |
 
 ---
 
@@ -451,7 +582,7 @@ rm -rf /tmp/ynh-bad-focus
 
 ### E23: Fork uninstall via canonical id
 
-`ynh fork` registers a pointer-shaped install. `ynh uninstall local/<name>` must resolve the schema-1 pointer and remove the registration cleanly — this is the form TermQ and other JSON consumers pass back.
+`ynh fork` registers a pointer-shaped install. `ynh uninstall local/<name>` must resolve the schema-1 pointer and remove the registration cleanly — this is the form JSON consumers pass back.
 
 ```bash
 # Create a minimal harness to fork from
@@ -460,10 +591,14 @@ cat > /tmp/ynh-fork-src/.ynh-plugin/plugin.json << 'EOF'
 {"name":"fork-src","version":"1.0.0","default_vendor":"claude"}
 EOF
 
-# Fork it to a local directory
-ynh fork /tmp/ynh-fork-src --to /tmp/ynh-fork-copy --name fork-copy
-# Expected: Forked "fork-src" → "fork-copy"
-#           Path: /tmp/ynh-fork-copy
+# Install it, then fork by canonical id. `ynh fork` takes an installed
+# harness, not a source directory — see `ynh fork <harness-name>` in
+# docs/reference.md. Forking a path has never been supported.
+ynh install /tmp/ynh-fork-src
+ynh fork local/fork-src --to /tmp/ynh-fork-copy --name fork-copy
+# Expected: Forked harness "fork-src" as "fork-copy" to /tmp/ynh-fork-copy
+#             Source:  /tmp/ynh-fork-src (local)
+#             Version: 1.0.0
 
 # Verify it appears in ls
 ynh ls --format json | jq -r '.harnesses[] | select(.name=="fork-copy") | .id'
@@ -488,10 +623,15 @@ A fork (`local/<name>`) and a registry install (`<host>/…/<name>`) that share 
 ```bash
 export YNH_HOME=$(mktemp -d)
 
-# Simulate a registry install (schema-2 tree)
+# Simulate a registry install (schema-2 tree). installed.json is not optional:
+# a tree without it is a broken entry, and auto-migration aborts on one rather
+# than guessing where it came from.
 mkdir -p "$YNH_HOME/harnesses/github.com--eyelock--assistants--shared/.ynh-plugin"
 cat > "$YNH_HOME/harnesses/github.com--eyelock--assistants--shared/.ynh-plugin/plugin.json" << 'EOF'
 {"name":"shared","version":"1.0.0","default_vendor":"claude"}
+EOF
+cat > "$YNH_HOME/harnesses/github.com--eyelock--assistants--shared/.ynh-plugin/installed.json" << 'EOF'
+{"source_type":"registry","source":"github.com/eyelock/assistants","namespace":"github.com/eyelock/assistants","registry_name":"shared","installed_at":"2026-01-01T00:00:00Z"}
 EOF
 
 # Register a fork with the same leaf name
@@ -600,7 +740,7 @@ Re-run S1 with a focus-source sensor and verify `ynh sensors run` returns the re
 
 ### S3: Validation rejects two-source declaration
 
-`source` with both `command` and `files` set must error: `sensor "X": source must have exactly one of files, command, focus`.
+`source` with both `command` and `files` set must error: `sensor "X": source must have exactly one of files, command, focus, github_status, github_check`.
 
 ---
 
@@ -608,22 +748,22 @@ Re-run S1 with a focus-source sensor and verify `ynh sensors run` returns the re
 
 | Section | Tests |
 |---------|-------|
-| Tutorial 1: First Harness | 11 |
-| Tutorial 2: Vendors & Symlinks | 7 |
-| Tutorial 3: Composition | 12 |
-| Tutorial 4: Delegation | 5 |
-| Tutorial 5: Export | 10 |
-| Tutorial 6: Marketplace | 7 |
-| Tutorial 7: Registry & Discovery | 11 |
-| Tutorial 8: Developer Tools | 8 |
-| Tutorial 9: Docker Images | 10 |
-| Tutorial 10: Hooks | 6 |
-| Tutorial 11: MCP Servers | 6 |
-| Tutorial 12: Developer Preview | 5 |
-| Tutorial 13: Profiles | 8 |
-| Tutorial 14: Focus | 7 |
-| Tutorial 15: Project-Local Config | 4 |
-| Tutorial 16: Structured Output | 11 |
+| First Harness | 11 |
+| Vendors & Symlinks | 7 |
+| Composition | 12 |
+| Delegation | 5 |
+| Export | 10 |
+| Marketplace | 7 |
+| Registry & Discovery | 11 |
+| Developer Tools | 8 |
+| Docker Images | 10 |
+| Hooks | 6 |
+| MCP Servers | 6 |
+| Developer Preview | 5 |
+| Profiles | 8 |
+| Focus | 7 |
+| Project-Local Config | 4 |
+| Structured Output | 11 |
 | Sensors | 3 |
 | Edge Cases | 26 |
 | **Total** | **154** |

@@ -2,12 +2,12 @@
 
 ## What This Is
 
-ynh is a harness template manager for AI coding assistants (Claude Code, OpenAI Codex, Cursor). No runtime — resolves config, assembles vendor-specific layout, launches the vendor CLI.
+ynh is a harness template manager for AI coding assistants (Claude Code, OpenAI Codex, Cursor, GitHub Copilot). No runtime — resolves config, assembles vendor-specific layout, launches the vendor CLI.
 
 ## Two Binaries
 
-- **`ynh`** (`cmd/ynh/`) — Harness manager: init, install, uninstall, update, run, ls, info, vendors, search, registry, image, status, prune, hook, doctor
-- **`ynd`** (`cmd/ynd/`) — Developer tools: create, lint, validate, fmt, compress, inspect
+- **`ynh`** (`cmd/ynh/`) — Harness manager: init, install, uninstall, update, run, ls, info, installed, schema, vendors, sources, paths, status, search, registry, backend, delegate, fork, include, focus, profile, hook, doctor, mcp, sensors, check, agent, image, prune, migrate, quarantine
+- **`ynd`** (`cmd/ynd/`) — Developer tools: create, lint, validate, fmt, compress, inspect, export, compose, preview, diff, marketplace, migrate, validate-output
 
 Both built by `make build`, released together via goreleaser (single `v*` tag).
 
@@ -16,7 +16,7 @@ Both built by `make build`, released together via goreleaser (single `v*` tag).
 **Always use Make targets, not raw `go`/`golangci-lint` commands.** The Makefile wraps them with correct flags (race detection, coverage, ldflags, version injection).
 
 ```bash
-make check              # full CI: deps, format, lint, test, build
+make check              # full CI: deps, format, lint, test, build, check-artifacts
 make build              # build both binaries to bin/
 make test               # all tests with race detection and coverage
 make test FILE=./cmd/ynd  # test specific package
@@ -26,7 +26,35 @@ make test-coverage          # tests with coverage profile + per-function report
 make test-coverage FILE=./cmd/ynd  # coverage for specific package
 make clean              # remove build artifacts and caches
 make clean && make build  # fresh build (use when binary seems stale)
+make check-artifacts    # ynd validate + ynd lint over skills/ agents/ rules/ .claude/
+make check-vendor-parity # every vendor documented + assembles the same artifacts (needs jq)
+make scan-artifacts     # SkillSpector security scan of the same dirs (needs Python)
+make vulncheck          # govulncheck over the Go code (needs network)
 ```
+
+`scan-artifacts` is deliberately NOT part of `make check` — it needs SkillSpector
+installed from Python, and a missing optional tool should not fail a contributor's
+build. CI runs it on every change to the harness artifacts. Install it with:
+
+```bash
+pip install 'git+https://github.com/NVIDIA/SkillSpector.git@v2.11.0'
+```
+
+Findings are triaged by hand into `.skillspector-baseline.yaml`. Every suppression
+needs a scoped `path:` and a written `reason:` — never a bare rule id, which would
+silence the whole rule family repo-wide.
+
+`skillspector scan` exits 0 whatever it finds, so the verdict comes from the
+SARIF rather than the exit code (`scripts/skillspector-findings.sh`). An absent
+or empty SARIF directory fails too: a scan that produced nothing must not read
+as a scan that found nothing.
+
+`make vulncheck` is also outside `make check`, for a different reason: it
+queries a live vulnerability database, so an unchanged tree can pass today and
+fail tomorrow, and a non-deterministic step does not belong in the check people
+run before pushing. `.github/workflows/vulncheck.yml` gates every PR and runs
+nightly. A standard-library advisory is fixed by the `toolchain` directive in
+`go.mod`, not by a dependency bump.
 
 **Do not use:** `go build ./...`, `go test ./...`, `golangci-lint run` directly. They miss flags, ldflags, or tool paths that the Makefile provides.
 
@@ -52,10 +80,24 @@ Follows the [Agent Skills](https://agentskills.io) open standard. See `docs/skil
 | `.github/CONTRIBUTING.md` | Architecture, code patterns, vendor adapters, test matrix |
 | `.goreleaser.yml` | Release config (both binaries, brew tap) |
 | `.github/workflows/release.yml` | Tag-triggered release |
-| `.claude/plans/ynd-manual-test-plan.md` | Manual test script for all ynd features |
-| `docs/tutorial/` | Progressive tutorials (8 tutorials + manual test plan) |
+| `docs/tutorial/` | Progressive tutorials, run in sequence for the happy path |
+| `docs/tutorial/manual-test-plan.md` | Manual verification for `ynh` and `ynd`: edge cases the tutorials do not cover |
 | `docs/skills-standard.md` | Agent Skills spec, cross-platform compat, known issues |
 | `docs/ynd.md` | ynd command reference |
+
+## Local notes and plans
+
+Planning documents, review write-ups and session scratch material go in
+`.claude/plans/`, which is gitignored. **Do not commit them**, and do not leave
+them loose at `.claude/` root — that directory is the harness this repo uses on
+itself, and everything in it is an artifact.
+
+Anything worth keeping from a review becomes a GitHub issue, not a file. A
+findings document in the repo goes stale the moment someone fixes half of it,
+and nothing tells you which half.
+
+Note that `ynd lint` currently walks gitignored paths (#290), so local notes
+under `.claude/plans/` are still linted by `make check` until that is fixed.
 
 ## Verify Before Push
 
@@ -72,7 +114,12 @@ This applies to everything — code, docs, tutorials. Pushing a fix that hasn't 
 
 ## Code Conventions
 
-- Go 1.25+, standard library only (zero external dependencies)
+- Go 1.25+, standard library by default. Two direct dependencies, both
+  deliberate: `santhosh-tekuri/jsonschema/v6` (JSON Schema draft 2020-12 is
+  not in the standard library and hand-rolling a validator for the published
+  schemas would be worse) and `golang.org/x/text`. **Do not add a third
+  without a reason of that weight** — no frameworks, no CLI libraries, no
+  assertion packages. `go mod tidy -diff` is enforced in CI.
 - Errors returned, not panicked. Wrap: `fmt.Errorf("context: %w", err)`
 - Standard `testing` package, `t.TempDir()`, `t.Setenv()` for isolation
 - errcheck is strict — all returned errors must be checked
@@ -110,3 +157,4 @@ Any change that bumps capabilities MUST also update goldens under `test/golden/<
 | `YNH_YES` | _(none)_ | ynd compress/inspect — fallback for `-y` flag |
 | `CI` | _(none)_ | ynd compress/inspect — lowest priority skip-confirm |
 | `YND_BACKUP_DIR` | `~/.ynd/backups` | ynd compress |
+| `YNH_HARNESS_DIR` | _(set by ynh)_ | exported to `command` sensors and `version_command`, so a harness can address a script it ships |

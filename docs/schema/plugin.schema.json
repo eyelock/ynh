@@ -2,9 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "title": "YNH Plugin",
-  "description": "Harness plugin manifest for ynh 0.2+ — lives at .ynh-plugin/plugin.json. Install-time provenance lives in a separate .ynh-plugin/installed.json file written by ynh install.",
+  "description": "Harness plugin manifest for ynh 0.2+ \u2014 lives at .ynh-plugin/plugin.json. Install-time provenance lives in a separate .ynh-plugin/installed.json file written by ynh install.",
   "type": "object",
-  "required": ["$schema", "name", "version"],
+  "required": [
+    "$schema",
+    "name",
+    "version"
+  ],
   "additionalProperties": false,
   "properties": {
     "$schema": {
@@ -15,28 +19,81 @@
       "type": "string",
       "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
     },
-    "version": { "type": "string" },
-    "description": { "type": "string" },
+    "version": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
     "author": {
       "type": "object",
       "properties": {
-        "name": { "type": "string" },
-        "email": { "type": "string" },
-        "url": { "type": "string" }
+        "name": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
       }
     },
     "keywords": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "default_vendor": {
       "type": "string",
-      "enum": ["claude", "cursor", "codex"]
+      "enum": [
+        "claude",
+        "cursor",
+        "codex"
+      ]
     },
-    "includes": { "$ref": "#/$defs/includes" },
-    "delegates_to": { "$ref": "#/$defs/delegates" },
-    "hooks": { "$ref": "#/$defs/hooks" },
-    "mcp_servers": { "$ref": "#/$defs/mcp_servers" },
+    "includes": {
+      "$ref": "#/$defs/includes"
+    },
+    "delegates_to": {
+      "$ref": "#/$defs/delegates"
+    },
+    "hooks": {
+      "$ref": "#/$defs/hooks"
+    },
+    "agent": {
+      "description": "Harness-level defaults for `ynh agent run`. Flags win over these; these win over the built-in defaults. Setting them here means a harness carries its own spend envelope rather than every caller passing flags.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_turns": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Cap on act-phase turns."
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Cap on total tokens."
+        },
+        "max_wall": {
+          "type": "string",
+          "description": "Wall-clock cap as a Go duration, e.g. \"45m\"."
+        }
+      }
+    },
+    "env_passthrough": {
+      "description": "Environment variables this harness may see. Governs two things deliberately: which ${VAR} references its MCP declarations may resolve, and which variables reach an agent worker's process. Absent or empty means none \u2014 a worker inheriting the operator's whole environment holds every credential the operator holds. A reference to a variable outside this list, or to one that is unset, is an error rather than an empty value.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+      }
+    },
+    "mcp_servers": {
+      "$ref": "#/$defs/mcp_servers"
+    },
     "profiles": {
       "description": "Named configuration variants. Merge semantics: mcp_servers are deep-merged (profile keys win), hooks use per-event replace (profile event replaces default, absent events inherited), includes are appended to the base harness's includes when the profile is active. Set a server to null to remove it.",
       "type": "object",
@@ -44,9 +101,23 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "hooks": { "$ref": "#/$defs/hooks" },
-          "mcp_servers": { "$ref": "#/$defs/profile_mcp_servers" },
-          "includes": { "$ref": "#/$defs/includes" }
+          "hooks": {
+            "$ref": "#/$defs/hooks"
+          },
+          "mcp_servers": {
+            "$ref": "#/$defs/profile_mcp_servers"
+          },
+          "includes": {
+            "$ref": "#/$defs/includes"
+          },
+          "env_passthrough": {
+            "description": "Replaces the harness-level env_passthrough when this profile is selected. Replacement rather than union: a profile that exists to restrict what an agent can see has to be able to, and a union could only ever widen.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            }
+          }
         }
       }
     },
@@ -55,79 +126,319 @@
       "type": "object",
       "additionalProperties": {
         "type": "object",
-        "required": ["prompt"],
+        "required": [
+          "prompt"
+        ],
         "additionalProperties": false,
         "properties": {
-          "profile": { "type": "string" },
-          "prompt": { "type": "string", "minLength": 1 }
+          "profile": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "reads": {
+      "description": "Paths each artifact instructs an agent to open, relative to the harness root. Keys are artifact paths (skills/<name>, agents/<name>.md); values must resolve inside a shipping artifact directory. Declaring nothing is fine; what is declared is checked by ynd lint.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^(skills|agents|rules|commands)/"
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },
     "sensors": {
-      "description": "Named observation surfaces declared by the harness. ynh declares; loop drivers run them. Each sensor is a role declaration over existing primitives — no new artifact type.",
+      "description": "Named observation surfaces declared by the harness. ynh declares; loop drivers run them. Each sensor is a role declaration over existing primitives \u2014 no new artifact type.",
       "type": "object",
-      "additionalProperties": { "$ref": "#/$defs/sensor" }
+      "additionalProperties": {
+        "$ref": "#/$defs/sensor"
+      }
+    },
+    "sensor_overrides": {
+      "description": "Tune sensors obtained from includes. Tolerance and ratchet only: an included sensor's observation belongs to whoever published it, its severity to whoever adopted it. Naming a sensor no include declares is an error, not a silent no-op.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "tolerance": {
+            "type": "string",
+            "enum": [
+              "blocking",
+              "advisory",
+              "report"
+            ]
+          },
+          "ratchet": {
+            "type": "string",
+            "enum": [
+              "fingerprint",
+              "count"
+            ]
+          }
+        }
+      }
     }
   },
   "$defs": {
     "sensor": {
       "type": "object",
-      "required": ["source", "output"],
+      "required": [
+        "source",
+        "output"
+      ],
       "additionalProperties": false,
       "properties": {
         "category": {
-          "description": "Fowler bucket — free metadata for loop-driver triage.",
+          "description": "Fowler bucket \u2014 free metadata for loop-driver triage.",
           "type": "string",
-          "enum": ["maintainability", "architecture", "behaviour"]
+          "enum": [
+            "maintainability",
+            "architecture",
+            "behaviour"
+          ]
         },
         "role": {
-          "description": "Optional role hint for loop drivers. regular = run between turns; convergence-verifier = the loop's done-check; stuck-recovery = invoked when the stuckness watchdog fires. Pure metadata — ynh does not enforce semantics.",
+          "description": "Optional role hint for loop drivers. regular = run between turns; convergence-verifier = the loop's done-check; stuck-recovery = invoked when the stuckness watchdog fires. Pure metadata \u2014 ynh does not enforce semantics. `convergence-verifier` requires a command or focus source: no verdict about a files sensor's contents is derivable, so a files sensor would end the run because a path exists and is newer than its inputs \u2014 with contents never read, and the path inside the agent's own write path, which the run could write itself.",
           "type": "string",
-          "enum": ["regular", "convergence-verifier", "stuck-recovery"]
+          "enum": [
+            "regular",
+            "convergence-verifier",
+            "stuck-recovery"
+          ]
         },
-        "source": { "$ref": "#/$defs/sensor_source" },
-        "output": { "$ref": "#/$defs/sensor_output" }
+        "tolerance": {
+          "description": "How `ynh check` treats a failing result. blocking (default) gates the run; advisory reports the failure without gating; report is pure observation. A command sensor gates on its exit code and a files sensor on its freshness; a focus sensor never gates, because resolving one needs an agent runtime ynh does not own.",
+          "type": "string",
+          "enum": [
+            "blocking",
+            "advisory",
+            "report"
+          ],
+          "default": "blocking"
+        },
+        "source": {
+          "$ref": "#/$defs/sensor_source"
+        },
+        "output": {
+          "$ref": "#/$defs/sensor_output"
+        },
+        "version_command": {
+          "type": "string",
+          "description": "Optional shell command that prints the version of the tool this sensor runs, e.g. \"golangci-lint --version\". Recorded on the result so a corpus graded across weeks can tell a genuine change in findings from the linter changing underneath it. Declared rather than inferred: guessing `<first token> --version` is wrong for a wrapper like `make lint`, and hangs on commands that do not support it. Failure to run it is never a sensor failure \u2014 the version is simply absent."
+        },
+        "reference": {
+          "$ref": "#/$defs/sensor_reference"
+        },
+        "ratchet": {
+          "type": "string",
+          "enum": [
+            "fingerprint",
+            "count"
+          ],
+          "default": "fingerprint",
+          "description": "How the baseline forgives this sensor's failures. `fingerprint` (default) matches individual findings, so a fixed one stops being forgiven and a new one is flagged wherever it appears. `count` ratchets the total instead, for a sensor whose quantity is the finding \u2014 suppression directives above all. Fingerprints normalise line numbers and deduplicate, so a second identical finding in a file that already has one is invisible to the default; `count` is what sees it. Requires a command source."
+        },
+        "observes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "For files sensors: the paths this sensor's artifact depends on, used to decide whether it still describes the tree. Omitted means the whole git-tracked tree, which is strict \u2014 any commit then marks the artifact stale. Patterns are not filepath.Glob: `**` descends to any depth, and a pattern resolving to a directory means that directory's whole subtree, so `services`, `services/*` and `services/**` observe the same files. Ignored for command and focus sensors, which observe by running."
+        }
       }
     },
     "sensor_source": {
-      "description": "Strict one-of: files | command | focus. The set field discriminates the sensor type.",
+      "description": "Strict one-of: files | command | focus | github_status | github_check. The set field discriminates the sensor type.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "files": {
           "type": "array",
           "minItems": 1,
-          "items": { "type": "string", "minLength": 1 }
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         },
-        "command": { "type": "string", "minLength": 1 },
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
         "focus": {
           "oneOf": [
-            { "type": "string", "minLength": 1 },
+            {
+              "type": "string",
+              "minLength": 1
+            },
             {
               "type": "object",
-              "required": ["prompt"],
+              "required": [
+                "prompt"
+              ],
               "additionalProperties": false,
               "properties": {
-                "profile": { "type": "string" },
-                "prompt": { "type": "string", "minLength": 1 }
+                "profile": {
+                  "type": "string"
+                },
+                "prompt": {
+                  "type": "string",
+                  "minLength": 1
+                }
               }
             }
           ]
+        },
+        "github_status": {
+          "description": "A GitHub commit status (Status API), as posted by most external services. Observes a verdict that is not derivable locally.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "context"
+          ],
+          "properties": {
+            "context": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Status context to select, e.g. \"security/snyk\"."
+            },
+            "require": {
+              "type": "string",
+              "enum": [
+                "success",
+                "pending",
+                "failure",
+                "error"
+              ],
+              "description": "State that counts as passing. Default \"success\"."
+            },
+            "repo": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Repository as \"owner/name\". Default: inferred from the directory under test, so the sensor stays portable across forks. A bare name or a URL both silently address the wrong repository.",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"
+            },
+            "ref": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Commit to ask about. Default \"HEAD\", resolved in the directory under test, which is what makes this work under --cwd."
+            },
+            "on_missing": {
+              "type": "string",
+              "enum": [
+                "broken",
+                "fail",
+                "pass"
+              ],
+              "description": "Verdict when the observation is absent or has not concluded. Default \"broken\": a sensor that cannot see is not a sensor that passed."
+            }
+          }
+        },
+        "github_check": {
+          "description": "A GitHub check run (Checks API), as posted by a GitHub App such as CodeQL.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Check run name, e.g. \"CodeQL\"."
+            },
+            "app": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Optional GitHub App slug filter, for when two apps post runs of the same name."
+            },
+            "require": {
+              "type": "string",
+              "enum": [
+                "success",
+                "failure",
+                "neutral",
+                "cancelled",
+                "timed_out",
+                "action_required",
+                "stale",
+                "skipped"
+              ],
+              "description": "Conclusion that counts as passing. Default \"success\". A run that has not finished has no conclusion; use on_missing for that."
+            },
+            "repo": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Repository as \"owner/name\". Default: inferred from the directory under test, so the sensor stays portable across forks. A bare name or a URL both silently address the wrong repository.",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"
+            },
+            "ref": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Commit to ask about. Default \"HEAD\", resolved in the directory under test, which is what makes this work under --cwd."
+            },
+            "on_missing": {
+              "type": "string",
+              "enum": [
+                "broken",
+                "fail",
+                "pass"
+              ],
+              "description": "Verdict when the observation is absent or has not concluded. Default \"broken\": a sensor that cannot see is not a sensor that passed."
+            }
+          }
         }
       },
       "oneOf": [
-        { "required": ["files"] },
-        { "required": ["command"] },
-        { "required": ["focus"] }
+        {
+          "required": [
+            "files"
+          ]
+        },
+        {
+          "required": [
+            "command"
+          ]
+        },
+        {
+          "required": [
+            "focus"
+          ]
+        },
+        {
+          "required": [
+            "github_status"
+          ]
+        },
+        {
+          "required": [
+            "github_check"
+          ]
+        }
       ]
     },
     "sensor_output": {
       "type": "object",
-      "required": ["format"],
+      "required": [
+        "format"
+      ],
       "additionalProperties": false,
       "properties": {
         "format": {
-          "description": "Freeform format identifier — pass-through to loop driver. Conventional names: json, junit-xml, lcov-summary, sarif, markdown, text, ndjson.",
+          "description": "Freeform format identifier \u2014 pass-through to loop driver. Conventional names: json, junit-xml, lcov-summary, sarif, markdown, text, ndjson. ynh does not parse output based on this: to select which lines are findings, use match.",
+          "type": "string",
+          "minLength": 1
+        },
+        "match": {
+          "description": "Regular expression selecting which output lines are findings. Without it every non-blank line counts, so a sensor wrapping a real tool records that tool's headers, source context and summary counts as accepted debt \u2014 and fixing one finding turns \"7 issues:\" into \"6 issues:\", a line the baseline has never seen, so a correct repair reports as a new finding. Applies to both ratchets. Example for golangci-lint: \"^[^ ]+\\\\.go:[0-9]+:[0-9]+:\".",
           "type": "string",
           "minLength": 1
         },
@@ -136,23 +447,38 @@
           "type": "string",
           "minLength": 1
         },
-        "path": { "type": "string" }
+        "path": {
+          "type": "string"
+        }
       }
     },
     "hooks": {
       "type": "object",
       "propertyNames": {
-        "enum": ["before_tool", "after_tool", "before_prompt", "on_stop", "on_session_start"]
+        "enum": [
+          "before_tool",
+          "after_tool",
+          "before_prompt",
+          "on_stop",
+          "on_session_start"
+        ]
       },
       "additionalProperties": {
         "type": "array",
         "items": {
           "type": "object",
-          "required": ["command"],
+          "required": [
+            "command"
+          ],
           "additionalProperties": false,
           "properties": {
-            "command": { "type": "string", "minLength": 1 },
-            "matcher": { "type": "string" }
+            "command": {
+              "type": "string",
+              "minLength": 1
+            },
+            "matcher": {
+              "type": "string"
+            }
           }
         }
       }
@@ -163,15 +489,42 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "command": { "type": "string" },
-          "args": { "type": "array", "items": { "type": "string" } },
-          "env": { "type": "object", "additionalProperties": { "type": "string" } },
-          "url": { "type": "string" },
-          "headers": { "type": "object", "additionalProperties": { "type": "string" } }
+          "command": {
+            "type": "string"
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "url": {
+            "type": "string"
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
         },
         "oneOf": [
-          { "required": ["command"] },
-          { "required": ["url"] }
+          {
+            "required": [
+              "command"
+            ]
+          },
+          {
+            "required": [
+              "url"
+            ]
+          }
         ]
       }
     },
@@ -180,20 +533,49 @@
       "type": "object",
       "additionalProperties": {
         "oneOf": [
-          { "type": "null" },
+          {
+            "type": "null"
+          },
           {
             "type": "object",
             "additionalProperties": false,
             "properties": {
-              "command": { "type": "string" },
-              "args": { "type": "array", "items": { "type": "string" } },
-              "env": { "type": "object", "additionalProperties": { "type": "string" } },
-              "url": { "type": "string" },
-              "headers": { "type": "object", "additionalProperties": { "type": "string" } }
+              "command": {
+                "type": "string"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "env": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "url": {
+                "type": "string"
+              },
+              "headers": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
             },
             "oneOf": [
-              { "required": ["command"] },
-              { "required": ["url"] }
+              {
+                "required": [
+                  "command"
+                ]
+              },
+              {
+                "required": [
+                  "url"
+                ]
+              }
             ]
           }
         ]
@@ -219,7 +601,6 @@
           },
           "path": {
             "type": "string",
-            "pattern": "^(?!\\.\\./|\\.\\.($))[^/]",
             "description": "Subdirectory within the resolved source. Must be relative and must not traverse above the source root."
           },
           "pick": {
@@ -232,8 +613,16 @@
           }
         },
         "oneOf": [
-          { "required": ["git"] },
-          { "required": ["local"] }
+          {
+            "required": [
+              "git"
+            ]
+          },
+          {
+            "required": [
+              "local"
+            ]
+          }
         ]
       }
     },
@@ -241,12 +630,43 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["git"],
+        "required": [
+          "git"
+        ],
         "additionalProperties": false,
         "properties": {
-          "git": { "type": "string" },
-          "ref": { "type": "string" },
-          "path": { "type": "string", "pattern": "^(?!\\.\\./|\\.\\.($))[^/]" }
+          "git": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "sensor_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "expect"
+      ],
+      "description": "A fixture with a known answer, run by `ynh check --calibrate` to prove the sensor still observes. Nothing else verifies that a sensor still detects what it claims to: a command that quietly stops examining anything exits 0 and the gate reports green.",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Fixture directory, relative to the harness. Must live outside the agent's write path \u2014 a reference an agent can edit calibrates nothing."
+        },
+        "expect": {
+          "type": "string",
+          "enum": [
+            "fail",
+            "pass"
+          ],
+          "description": "The result the fixture must produce. `fail` is the case that matters: a sensor that passes a fixture designed to trip it has stopped observing. `pass` catches the opposite failure, a sensor that fires on clean input."
         }
       }
     }

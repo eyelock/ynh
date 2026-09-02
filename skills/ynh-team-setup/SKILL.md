@@ -11,8 +11,12 @@ You are guiding a user through creating a team harness that delegates to persona
 
 Read these references to understand delegation and Git URL formats:
 
-1. Read `references/delegation.md` for `delegates_to` syntax, Git URL formats, auth, and vendor support
-2. Read `testdata/team-harness/.harness.json` for the team harness structure
+1. Read `references/delegation.md` for `delegates_to` syntax, Git URL formats, auth, vendor support, and the team harness shape
+
+It ships with this skill, so it is readable wherever the skill is installed.
+Author the new harness as `.ynh-plugin/plugin.json`, the format below. The ynh
+repository is not present in a user's project — do not send them looking for
+fixtures in it.
 
 ## Step 1: Understand their current setup
 
@@ -55,11 +59,11 @@ They might also want to pull from external repos via `includes`.
 
 Create the team harness directory.
 
-`.harness.json`:
+`.ynh-plugin/plugin.json`:
 
 ```json
 {
-  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "<team-name>",
   "version": "0.1.0",
   "description": "<team description>",
@@ -69,6 +73,18 @@ Create the team harness directory.
   ]
 }
 ```
+
+You can also add delegates from the CLI instead of editing the manifest, which
+is easier once the harness exists:
+
+```bash
+ynh delegate add <harness> github.com/user/harness --ref v1.2.0
+```
+
+`--ref` pins to a tag, branch or commit and `--path` selects a subdirectory in a
+monorepo. **Pin third-party delegates.** A delegate is a harness whose
+instructions run inside your agent, so tracking a branch means whoever can push
+to that repo changes how your assistant behaves on the next run.
 
 **Git URL format for delegates_to** - see `references/delegation.md` for the three formats:
 - Shorthand: `github.com/user/harness` (expands to SSH)
@@ -99,7 +115,7 @@ ynh install <personal-persona-git-url>
 david                       # personal session
 ```
 
-Explain the vendor standardization: setting `default_vendor` in `.harness.json` ensures everyone uses the same AI vendor, but individuals can override with `-v`.
+Explain the vendor standardization: setting `default_vendor` in `.ynh-plugin/plugin.json` ensures everyone uses the same AI vendor, but individuals can override with `-v`.
 
 ## Step 7: Auth considerations
 

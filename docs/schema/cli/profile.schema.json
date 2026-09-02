@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/profile.schema.json",
+  "title": "ynh profile ls --format json",
+  "description": "Output of `ynh profile ls <harness> --format json`. Bare array of the profiles a harness declares, summarised by what each one touches. Counts rather than contents: this answers \"which profiles exist and what do they affect\", while `ynh info` resolves one in full. Envelope retrofit deferred, matching the other Phase 3 commands.",
+  "x-capabilities": "0.8",
+  "$defs": {
+    "Profile": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string", "description": "The profile's name, and the value `--profile` takes."},
+        "hooks": {"type": "integer", "description": "Total hook entries across every event the profile declares. Profile hooks replace the harness's per event rather than merging, so a non-zero count means those events are overridden entirely."},
+        "mcp_servers": {"type": "integer", "description": "MCP servers the profile declares. These deep-merge with the harness's, and a null entry removes an inherited server — so this count is servers mentioned, not necessarily servers added."},
+        "includes": {"type": "integer", "description": "Git or local includes the profile adds on top of the harness's."},
+        "env_passthrough": {"type": "integer", "description": "Environment variables the profile passes through. This replaces the harness-level list rather than extending it, so zero means the profile passes nothing, not that it inherits."}
+      },
+      "required": ["name", "hooks", "mcp_servers", "includes", "env_passthrough"],
+      "additionalProperties": false
+    }
+  },
+  "type": "array",
+  "items": {"$ref": "#/$defs/Profile"}
+}

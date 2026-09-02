@@ -1,10 +1,15 @@
 Before ANY remote operation (`git push`, `gh pr create`, `gh pr merge`), ALL of the following gates must pass. No exceptions. If blocked, stop and ask the user for help.
 
-**PR target:** feature and fix branches always PR into `develop`, not `main`. Only `develop` and `hotfix/*` may target `main`.
+**PR target:** feature and fix branches always PR into `develop`, not `main`. Only `develop` and `hotfix/*` may target `main`. A PR in a [stack](branching.md#stacked-prs) targets the branch below it; only the bottom of the stack targets `develop`.
 
 ## Gate 1: make check
 
 Run `make check`. It must pass with zero issues. If it fails, fix the issue and re-run until green.
+
+This includes `make check-artifacts`, which runs `ynd validate` and `ynd lint`
+over the harness artifacts this repo ships (`skills/`, `agents/`, `rules/`) and
+the one it uses on itself (`.claude/`). A change that touches only those
+directories still has to pass — CI gates them via the `artifacts` paths filter.
 
 ## Gate 2: Evals (behavioral changes only)
 
@@ -25,7 +30,7 @@ If the changeset affects assembled output (`internal/assembler/`, `internal/harn
 
 ## Gate 4: Capability-bump rule (structured output)
 
-If the changeset affects the JSON shape of any `--format json` response (envelope fields, payload fields, error envelope fields, enum members), apply the capability-bump rule in `CLAUDE.md`:
+If the changeset affects the JSON shape of any `--format json` response (envelope fields, payload fields, error envelope fields, enum members), apply the capability-bump rule in `.claude/CLAUDE.md`:
 
 - Removing/renaming a field, narrowing a type, tightening an enum, or making optional required → bump `config.CapabilitiesVersion`, update goldens, update `docs/schema/cli/` schema.
 - Adding an optional field, adding an enum member to an open-set enum, or relaxing a constraint → no bump required, but goldens/schema must still reflect the new shape.
@@ -35,6 +40,8 @@ If unsure whether a change qualifies, treat it as a bump.
 ## Gate 5: CI after push
 
 After pushing and creating a PR, run `gh pr checks <number> --watch` and wait for CI to pass before merging. If CI is still running, tell the user and wait. Never merge without green CI.
+
+This applies to stacked PRs too — `ci.yml` runs on every pull request regardless of base branch, so there is no such thing as an ungated PR here. If `gh pr checks` reports "no checks reported", that is a problem to fix, not a gate to skip.
 
 ## What to do when blocked
 

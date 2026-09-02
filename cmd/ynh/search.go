@@ -65,10 +65,12 @@ func cmdSearchTo(args []string, stdout, stderr io.Writer) error {
 
 // searchResultEntry is a unified result from both registries and local sources.
 type searchResultEntry struct {
-	// ID is the canonical, host-prefixed harness id this entry would
-	// install as — "<host>/<org>/<repo>/<name>" for registry results,
-	// "local/<name>" for local-source results. Lets consumers preview the
-	// post-install id without a round-trip to ls.
+	// ID is the canonical harness id: "<host>/<org>/<repo>/<name>" for
+	// registry results, "local/<name>" for local-source ones. It identifies
+	// and deduplicates; it is not universally installable, because
+	// "local/<name>" is rejected by install, which wants a filesystem path.
+	// Use Install for that. Lets consumers preview the post-install id
+	// without a round-trip to ls.
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	// Namespace is the URL-derived "<org>/<repo>" for registry results.
@@ -81,6 +83,20 @@ type searchResultEntry struct {
 	Path        string     `json:"path,omitempty"`
 	Version     string     `json:"version,omitempty"`
 	From        searchFrom `json:"from"`
+	// Install is the complete first argument to `ynh install`, so a consumer
+	// does not have to derive one by branching on From.Type and joining
+	// strings. The first consumer to try that built <repo>/<name> for a local
+	// result, a directory that has never existed (#337).
+	//
+	// For a local source it is Repo, the harness directory. For a registry
+	// result it is ID, which is the scheme-less canonical ref the installer's
+	// canonical-id rule expects: it synthesises the clone URL from the first
+	// three segments itself, so a value carrying "https://" would never reach
+	// that rule and would be cloned verbatim instead.
+	//
+	// That form also avoids a registry lookup at install time, so it keeps
+	// working on a machine with different registries configured.
+	Install string `json:"install,omitempty"`
 }
 
 type searchFrom struct {
@@ -99,25 +115,7 @@ func unifiedSearch(cfg *config.Config, query string) ([]searchResultEntry, error
 			return nil, fmt.Errorf("fetching registries: %w", err)
 		}
 		for _, r := range registry.Search(regs, query) {
-			id := namespace.CanonicalID(r.Entry.Repo, r.Entry.Name)
-			ns, _ := namespace.SplitID(id)
-			// "local" sentinel maps to empty namespace, matching the
-			// schema-1 promise that local installs emit no namespace key.
-			if ns == "local" {
-				ns = ""
-			}
-			entry := searchResultEntry{
-				ID:          id,
-				Name:        r.Entry.Name,
-				Namespace:   ns,
-				Description: r.Entry.Description,
-				Keywords:    r.Entry.Keywords,
-				Repo:        r.Entry.Repo,
-				Path:        r.Entry.Path,
-				Version:     r.Entry.Version,
-				From:        searchFrom{Type: "registry", Name: r.RegistryName},
-			}
-			results = append(results, entry)
+			results = append(results, registryResultEntry(r))
 		}
 	}
 
@@ -137,6 +135,7 @@ func unifiedSearch(cfg *config.Config, query string) ([]searchResultEntry, error
 					Repo:        h.Path,
 					Version:     h.Version,
 					From:        searchFrom{Type: "source", Name: s.Name},
+					Install:     h.Path,
 				}
 				if len(h.Keywords) > 0 {
 					entry.Keywords = h.Keywords
@@ -201,4 +200,36 @@ func printSearchJSON(w io.Writer, results []searchResultEntry) error {
 	}
 	_, err = fmt.Fprintln(w, string(data))
 	return err
+}
+
+// registryResultEntry builds one search result from a registry match.
+//
+// Extracted so the Install derivation is reachable by a test without a
+// network fetch. It was not: mutating it to the originally-proposed
+// repo + "/" + name passed every test, because the only registry coverage
+// read a static golden and never ran this code.
+func registryResultEntry(r registry.SearchResult) searchResultEntry {
+	id := namespace.CanonicalID(r.Entry.Repo, r.Entry.Name)
+	ns, _ := namespace.SplitID(id)
+	// "local" sentinel maps to empty namespace, matching the schema-1
+	// promise that local installs emit no namespace key.
+	if ns == "local" {
+		ns = ""
+	}
+	return searchResultEntry{
+		ID:          id,
+		Name:        r.Entry.Name,
+		Namespace:   ns,
+		Description: r.Entry.Description,
+		Keywords:    r.Entry.Keywords,
+		Repo:        r.Entry.Repo,
+		Path:        r.Entry.Path,
+		Version:     r.Entry.Version,
+		From:        searchFrom{Type: "registry", Name: r.RegistryName},
+		// The canonical ref, not repo + "/" + name. Repo carries a scheme,
+		// and the installer's canonical-id rule builds the clone URL from
+		// the first three segments itself, so a value starting "https://"
+		// never reaches it and would be cloned verbatim.
+		Install: id,
+	}
 }

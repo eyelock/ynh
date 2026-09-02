@@ -1,0 +1,16 @@
+[
+  {
+    "name": "coverage",
+    "hooks": 1,
+    "mcp_servers": 0,
+    "includes": 0,
+    "env_passthrough": 0
+  },
+  {
+    "name": "strict",
+    "hooks": 2,
+    "mcp_servers": 1,
+    "includes": 1,
+    "env_passthrough": 3
+  }
+]

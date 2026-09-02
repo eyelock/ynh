@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -332,11 +333,16 @@ func TestCmdCompress_ReadError(t *testing.T) {
 		return "Short.", nil
 	})
 
-	// File that doesn't exist
+	// File that doesn't exist. The per-file loop still reports to stderr and
+	// carries on, which is right for a batch, but the command must not then
+	// exit 0: asking it to compress a file and getting success for having
+	// compressed nothing is indistinguishable from the work being done.
 	err := cmdCompress([]string{"-v", "claude", "-y", "/nonexistent/file.md"})
-	// Should not return error, just print to stderr and continue
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		t.Fatal("compressing a nonexistent file reported success")
+	}
+	if errors.Is(err, errDeclined) {
+		t.Errorf("an unreadable file is a failure, not a decline: %v", err)
 	}
 }
 
@@ -351,9 +357,12 @@ func TestCmdCompress_LLMFails(t *testing.T) {
 	writeFile(t, srcFile, []byte("Content to compress.\n"))
 
 	err := cmdCompress([]string{"-v", "claude", "-y", srcFile})
-	// Should not return error, just print failure per-file
-	if err != nil {
-		t.Fatal(err)
+	// Reported per file, but the run as a whole failed and says so.
+	if err == nil {
+		t.Fatal("every file failed to compress, yet the command reported success")
+	}
+	if errors.Is(err, errDeclined) {
+		t.Errorf("an LLM failure is a failure, not a decline: %v", err)
 	}
 
 	// File should be unchanged
@@ -433,9 +442,15 @@ func TestCmdCompress_InteractiveSkip(t *testing.T) {
 	srcFile := filepath.Join(dir, "test.md")
 	writeFile(t, srcFile, []byte("Verbose content.\n"))
 
+	// The operator declined the only file, so nothing was compressed. That is
+	// a decline rather than a failure, and it is still non-zero: a caller has
+	// to be able to tell "compressed" from "asked, and told no".
 	err := cmdCompress([]string{"-v", "claude", srcFile})
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		t.Fatal("declining every file reported success")
+	}
+	if !errors.Is(err, errDeclined) {
+		t.Errorf("want a decline, got %v", err)
 	}
 
 	data, _ := os.ReadFile(srcFile)

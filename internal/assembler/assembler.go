@@ -134,6 +134,30 @@ func CopyPicked(repoBase string, picked string, targetBaseDir string, artifactDi
 		return fmt.Errorf("unknown artifact type %q in pick: %s", artifactType, picked)
 	}
 
+	// parts[1] lands in the copy destination below, so a pick containing ".."
+	// or an absolute path writes outside the target tree. Confirmed, not
+	// theorised: with a deep source (a cached repo) and a shallow destination
+	// (`ynd export -o ./out`), the two climbs are asymmetric and the write
+	// escapes. It is only self-cancelling when both trees sit at equal depth.
+	//
+	// Guarded here, at the sink, because every ingestion route reaches it:
+	// marketplace install, fork, compose, export and a hand-edited manifest.
+	// harness.ValidatePicks is a stronger allowlist but runs only in
+	// `ynh include`, so it does not cover a manifest that arrives any other
+	// way. This mirrors the inline guard already on sensor Reference.Path.
+	// Both halves are checked, because they feed different sinks and a pick
+	// can be safe in one and not the other. `picked` builds the source under
+	// repoBase; `parts[1]` builds the destination under targetBase/targetDir.
+	// "skills/../outside" cleans to a local path, so checking only `picked`
+	// misses it, while its parts[1] of "../outside" climbs out of the
+	// artifact directory.
+	for _, seg := range []string{filepath.FromSlash(picked), filepath.FromSlash(parts[1])} {
+		if !filepath.IsLocal(seg) {
+			return fmt.Errorf("pick %q must stay inside the harness and inside its "+
+				"artifact directory: no %q segments, no leading separator", picked, "..")
+		}
+	}
+
 	src := filepath.Join(repoBase, picked)
 
 	info, err := os.Stat(src)

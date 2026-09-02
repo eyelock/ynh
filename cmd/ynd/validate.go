@@ -9,6 +9,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/marketplace"
 	"github.com/eyelock/ynh/internal/migration"
+	"github.com/eyelock/ynh/internal/pathutil"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
@@ -228,6 +229,8 @@ func validateHarness(dir string) error {
 			issues = append(issues, validateHarnessProfiles(hj)...)
 			issues = append(issues, validateHarnessFocus(hj)...)
 			issues = append(issues, validateHarnessSensors(hj)...)
+			issues = append(issues, validateHarnessIncludes(hj)...)
+			issues = append(issues, validateMCPEnvDeclarations(data)...)
 		}
 	}
 
@@ -593,6 +596,9 @@ func validateHarnessSensors(hj map[string]any) []string {
 		if role, ok := entry["role"].(string); ok && role != "" && !plugin.ValidSensorRoles[role] {
 			issues = append(issues, fmt.Sprintf("%s role %q must be one of regular, convergence-verifier, stuck-recovery", prefix, role))
 		}
+		if tol, ok := entry["tolerance"].(string); ok && tol != "" && !plugin.ValidSensorTolerances[tol] {
+			issues = append(issues, fmt.Sprintf("%s tolerance %q must be one of blocking, advisory, report", prefix, tol))
+		}
 		if out, ok := entry["output"].(map[string]any); ok {
 			if format, _ := out["format"].(string); format == "" {
 				issues = append(issues, fmt.Sprintf("%s output.format must not be empty", prefix))
@@ -606,13 +612,23 @@ func validateHarnessSensors(hj map[string]any) []string {
 			continue
 		}
 		count := 0
-		if _, has := src["files"]; has {
+		_, hasFiles := src["files"]
+		if hasFiles {
 			count++
 		}
 		if _, has := src["command"]; has {
 			count++
 		}
-		if focus, has := src["focus"]; has {
+		_, hasStatus := src["github_status"]
+		_, hasCheck := src["github_check"]
+		if hasStatus {
+			count++
+		}
+		if hasCheck {
+			count++
+		}
+		focus, hasFocus := src["focus"]
+		if hasFocus {
 			count++
 			switch fv := focus.(type) {
 			case string:
@@ -630,8 +646,34 @@ func validateHarnessSensors(hj map[string]any) []string {
 				}
 			}
 		}
+		// Calibration asks one question: does this sensor still trip on a
+		// fixture built to trip it? Only a command sensor answers it, because
+		// only a command sensor's verdict is an exit code about the tree it
+		// was pointed at.
+		//
+		// plugin.ValidateSensors has always held this rule and has no
+		// production caller, so nothing enforced it here. The result was not
+		// inert: --calibrate ran such a sensor anyway and reported "the sensor
+		// passed a fixture built to trip it — it is no longer observing",
+		// failing the run with a false accusation about a healthy sensor.
+		if _, hasRef := entry["reference"]; hasRef {
+			switch {
+			case hasStatus || hasCheck:
+				issues = append(issues, fmt.Sprintf(
+					"%s a github sensor cannot declare a reference: calibration runs from the fixture directory, "+
+						"so it would ask about that directory's repository and commit rather than the one under test", prefix))
+			case hasFiles:
+				issues = append(issues, fmt.Sprintf(
+					"%s a files sensor cannot declare a reference: its verdict is whether the artifact is fresh, "+
+						"not whether it trips on a fixture, so calibration would report a healthy sensor as no longer observing", prefix))
+			case hasFocus:
+				issues = append(issues, fmt.Sprintf(
+					"%s a focus sensor cannot declare a reference: no verdict about an agent's output is derivable "+
+						"from a fixture, so calibration would report a healthy sensor as no longer observing", prefix))
+			}
+		}
 		if count != 1 {
-			issues = append(issues, fmt.Sprintf("%s source must have exactly one of files, command, focus", prefix))
+			issues = append(issues, fmt.Sprintf("%s source must have exactly one of files, command, focus, github_status, github_check", prefix))
 		}
 	}
 
@@ -644,7 +686,8 @@ func lintHarnessJSON(path string) []lintIssue {
 	if err != nil {
 		return []lintIssue{{File: path, Message: fmt.Sprintf("cannot read: %v", err)}}
 	}
-	return schemaIssues(path, data, compiledPluginSchema)
+	issues := schemaIssues(path, data, compiledPluginSchema)
+	return append(issues, lintDeclaredReads(path)...)
 }
 
 // lintRegistryMarketplace validates a .ynh-plugin/marketplace.json registry index
@@ -663,4 +706,100 @@ func lintMarketplaceConfig(path string) []lintIssue {
 		return []lintIssue{{File: path, Message: err.Error()}}
 	}
 	return nil
+}
+
+// validateMCPEnvDeclarations catches an MCP ${VAR} reference the harness never
+// declared in env_passthrough — a defect that used to surface only at
+// assembly, and worst under automation, where an unattended `ynh agent run`
+// does its setup and dies on a config error CI could have caught.
+//
+// It decodes to the typed manifest and calls plugin.UndeclaredMCPEnvRefs, the
+// same rule ExpandMCPEnv enforces, rather than re-walking the raw map. Two
+// implementations of one rule is how they drift.
+//
+// The check is deliberately silent when a harness declares no env_passthrough
+// at all: such a harness may be authored purely for distribution, where
+// `ynd export` leaves ${VAR} literal for the consumer's own CLI and strips
+// env_passthrough from the artifact entirely. Erroring there would redden a
+// harness that works today, and demand an allowlist that never reaches the
+// thing it ships. A harness that declares an allowlist and misses an entry is
+// the realistic mistake.
+func validateMCPEnvDeclarations(data []byte) []string {
+	var hj plugin.HarnessJSON
+	if err := json.Unmarshal(data, &hj); err != nil {
+		return nil // malformed JSON is already reported by the caller
+	}
+	issues := plugin.UndeclaredMCPEnvRefs(hj.MCPServers, hj.EnvPassthrough)
+	for _, prof := range hj.Profiles {
+		allowed := hj.EnvPassthrough
+		if prof.EnvPassthrough != nil {
+			allowed = prof.EnvPassthrough
+		}
+		// A profile's servers are pointers; flatten so one rule covers both.
+		flat := make(map[string]plugin.MCPServer, len(prof.MCPServers))
+		for n, srv := range prof.MCPServers {
+			if srv != nil {
+				flat[n] = *srv
+			}
+		}
+		issues = append(issues, plugin.UndeclaredMCPEnvRefs(flat, allowed)...)
+	}
+	return issues
+}
+
+// validateHarnessIncludes applies the traversal rule the resolver enforces at
+// assembly time.
+//
+// A `local` include may not point above the harness directory. The resolver
+// refuses one; the validator did not — so a manifest passed `ynd validate` and
+// then failed at `ynd compose` and `ynd preview`:
+//
+//	$ ynd validate app
+//	app: valid
+//	$ ynd compose app
+//	Error: resolving includes: local include: path "../shared" must not traverse
+//	       above its base directory
+//
+// `ynd validate` is what the harness tells authors to run and what
+// `make check-artifacts` gates on, so a rule it does not know moves the error
+// from authoring time to run time — the failure mode validate exists to
+// prevent.
+//
+// It reuses pathutil.CheckSubpath rather than restating the rule. Two copies of
+// a traversal check drift, and the resolver's copy is the one actually guarding
+// the filesystem; this one must agree with it by construction, not by care.
+//
+// `path` is checked for both include forms, because the resolver applies the
+// same rule to it whether the source is git or local.
+func validateHarnessIncludes(hj map[string]any) []string {
+	var issues []string
+
+	raw, ok := hj["includes"]
+	if !ok {
+		return issues
+	}
+	list, ok := raw.([]any)
+	if !ok {
+		issues = append(issues, "'includes' must be an array")
+		return issues
+	}
+
+	for i, entry := range list {
+		obj, ok := entry.(map[string]any)
+		if !ok {
+			issues = append(issues, fmt.Sprintf("includes[%d] must be an object", i))
+			continue
+		}
+		if local, ok := obj["local"].(string); ok && local != "" {
+			if err := pathutil.CheckSubpath(local); err != nil {
+				issues = append(issues, fmt.Sprintf("includes[%d].local: %v", i, err))
+			}
+		}
+		if sub, ok := obj["path"].(string); ok && sub != "" {
+			if err := pathutil.CheckSubpath(sub); err != nil {
+				issues = append(issues, fmt.Sprintf("includes[%d].path: %v", i, err))
+			}
+		}
+	}
+	return issues
 }

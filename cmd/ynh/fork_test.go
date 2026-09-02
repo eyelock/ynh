@@ -73,12 +73,17 @@ func TestCmdFork_DefaultDestination(t *testing.T) {
 	t.Setenv("YNH_HOME", home)
 	installForkTestHarness(t, home, "demo", nil)
 
-	// Override cwd to a temp dir so the default --to lands predictably
+	// Override cwd to a temp dir so the default --to lands predictably.
+	//
+	// t.Chdir, not os.Chdir with a hand-written cleanup. The cleanup here used
+	// to restore "/" rather than the directory the test started in, and tests
+	// in a package share one process: every test that ran afterwards saw the
+	// filesystem root as its working directory. TestSearchGoldenInstallValues
+	// then could not resolve ../../test/golden/search.json and skipped itself,
+	// silently, in every full run. It passed when run alone, which is why
+	// nobody saw it. Ordering made this arbitrary rather than harmless.
 	cwd := t.TempDir()
-	if err := os.Chdir(cwd); err != nil {
-		t.Skip("cannot chdir in test environment")
-	}
-	t.Cleanup(func() { _ = os.Chdir("/") })
+	t.Chdir(cwd)
 
 	var stdout bytes.Buffer
 	if err := cmdForkTo([]string{"local/demo"}, &stdout, io.Discard); err != nil {

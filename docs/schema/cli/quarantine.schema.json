@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/quarantine.schema.json",
+  "title": "ynh quarantine list --format json",
+  "description": "Output of `ynh quarantine list --format json`. Bare array of entries a failed migration set aside rather than deleting. An empty array is the normal, healthy state. Envelope retrofit deferred, matching the other Phase 3 commands.",
+  "x-capabilities": "0.8",
+  "$defs": {
+    "QuarantinedEntry": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string", "description": "Basename of the quarantined entry, and the key `ynh quarantine restore <name>` and `... drop <name>` take."},
+        "path": {"type": "string", "description": "Absolute path inside the quarantine directory."},
+        "original_path": {"type": "string", "description": "Where the entry lived before it was set aside. Read from the migration manifest, so it may be absent for an entry quarantined without one."},
+        "reason": {"type": "string", "description": "The migration error that caused it. Absent when no manifest recorded one."}
+      },
+      "required": ["name", "path"],
+      "additionalProperties": false
+    }
+  },
+  "type": "array",
+  "items": {"$ref": "#/$defs/QuarantinedEntry"}
+}

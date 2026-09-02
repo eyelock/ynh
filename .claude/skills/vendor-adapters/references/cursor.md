@@ -100,8 +100,8 @@ Full supported event list confirmed via docs: `sessionStart`, `sessionEnd`,
 `afterMCPExecution`, `beforeReadFile`, `afterFileEdit`, `beforeSubmitPrompt`,
 `preCompact`, `stop`, `afterAgentResponse`, `afterAgentThought` (plus Tab hooks
 `beforeTabFileRead`/`afterTabFileEdit` and app-lifecycle `workspaceOpen`, not
-currently mapped by ynh). ynh's canonical map only covers 4 events today; see #199
-for `on_session_start`.
+currently mapped by ynh). ynh's canonical map covers five events:
+`before_tool`, `after_tool`, `before_prompt`, `on_stop` and `on_session_start`.
 
 ## MCP Format
 

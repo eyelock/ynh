@@ -65,7 +65,7 @@ func cmdSensors(args []string) error {
 func cmdSensorsTo(args []string, stdout, stderr io.Writer) error {
 	if len(args) < 1 {
 		return cliError(stderr, false, errCodeInvalidInput,
-			"usage: ynh sensors <ls|show> [args]")
+			"usage: ynh sensors <ls|show|run> [args]")
 	}
 	switch args[0] {
 	case "ls", "list":
@@ -479,6 +479,23 @@ func runSensor(p *harness.Harness, name string, s plugin.Sensor, cwd string, inc
 		var stdoutBuf, stderrBuf bytes.Buffer
 		cmd := exec.Command("/bin/sh", "-c", s.Source.Command)
 		cmd.Dir = cwd
+		// The command runs in the tree being measured, which is what a sensor
+		// is for. That leaves a harness no way to address a script it ships
+		// itself: "./tools/sensors/lint.sh" resolves against the measured
+		// tree, so it runs whichever copy that tree happens to hold, and
+		// exits 127 on any commit predating the script. That breaks
+		// historical replay, where the whole point is to run today's sensor
+		// against yesterday's code.
+		//
+		// reference.path already resolves against the harness
+		// (calibrate.go joins it to p.Dir). This gives commands the same
+		// reach without changing where they run:
+		//
+		//   "command": "$YNH_HARNESS_DIR/tools/sensors/lint.sh"
+		//
+		// Additive. A command that does not mention it behaves exactly as
+		// before.
+		cmd.Env = append(os.Environ(), "YNH_HARNESS_DIR="+p.Dir)
 		cmd.Stdout = &stdoutBuf
 		cmd.Stderr = &stderrBuf
 		runErr := cmd.Run()
@@ -494,6 +511,22 @@ func runSensor(p *harness.Harness, name string, s plugin.Sensor, cwd string, inc
 				r.Output.Stderr = runErr.Error()
 			}
 		}
+
+	case "github_status":
+		if r.Output.Channel == "" {
+			r.Output.Channel = "stdout+exit"
+		}
+		code, out := observeGitHubStatus(cwd, s.Source.GitHubStatus)
+		r.ExitCode = code
+		r.Output.Stdout = out
+
+	case "github_check":
+		if r.Output.Channel == "" {
+			r.Output.Channel = "stdout+exit"
+		}
+		code, out := observeGitHubCheck(cwd, s.Source.GitHubCheck)
+		r.ExitCode = code
+		r.Output.Stdout = out
 
 	case "files":
 		if r.Output.Channel == "" {

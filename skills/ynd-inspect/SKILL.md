@@ -12,13 +12,14 @@ You are guiding a user through using `ynd inspect` to analyze their codebase and
 Read these references to understand what inspect does and the artifact formats it generates:
 
 - `references/inspect-workflow.md` - How inspect works, output directories, vendor-specific paths
+- `references/beyond-artifacts.md` - Turning the same signals into profiles, focuses and sensors, which inspect does not propose
 
 ## Step 1: Check prerequisites
 
 Confirm the user has:
 
 1. `ynd` built and on PATH (or they know the path to the binary)
-2. An LLM CLI installed (`claude`, `codex`, or `cursor`)
+2. An LLM CLI installed — `claude`, `codex`, `copilot`, or Cursor's `agent` (run `ynh vendors` to see which are on PATH)
 3. A project directory with recognizable files (go.mod, package.json, Makefile, etc.)
 
 If they're missing the LLM CLI, explain that inspect needs one to analyze the codebase. Point them to installation docs.
@@ -81,6 +82,28 @@ ynd lint .claude/skills/ .claude/agents/
 
 Check that frontmatter is correct and the content is specific to their project.
 
-## Step 8: Iterate
+## Step 8: Go beyond skills and agents
+
+**`ynd inspect` proposes skills and agents only.** That answers what the
+assistant can *do*, not how the harness is configured or what the project should
+*observe*. The same signals inspect just found imply the rest.
+
+Read `references/beyond-artifacts.md` and work through it with them:
+
+- **Focuses** first — cheapest and highest value. What did they do three times
+  last week? That is a focus. `ynh focus add <harness> <name> "<prompt>"`.
+- **Profiles** only where they genuinely work differently. Do not invent one per
+  environment because environments exist; an unused profile is a cost with no
+  reader.
+- **Sensors** last, because they change what gates a merge. The strongest move
+  is that **whatever CI already runs is a sensor waiting to be declared** — a
+  command the team already trusts. Open the CI workflow and read the steps.
+
+Hand off to the `ynh-sensors` skill for the sensor work itself: the vocabulary
+is a closed enum, a dirty repo needs a baseline, `files` sensors need
+`observes`, and blocking sensors need calibrating. Nothing should be `blocking`
+on the first pass.
+
+## Step 9: Iterate
 
 Explain that inspect is meant to be run periodically as the project evolves. New dependencies, new test frameworks, or new CI pipelines will produce different suggestions. They can re-run and update existing artifacts.

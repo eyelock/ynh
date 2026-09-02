@@ -1,0 +1,126 @@
+# SkillSpector suppression baseline
+#
+# Every entry below is a false positive with the same root cause: ynh is a
+# harness manager, so its skills and references are *about* agent tooling —
+# config directories, skill layouts, install commands, hook events. A scanner
+# looking for agents that manipulate agent tooling lights up on the subject
+# matter itself.
+#
+# Deliberately `rules` (glob) rather than `fingerprints` (exact hash).
+# Fingerprints bind to the scanner version and the complete source text, so
+# they fail closed on every SkillSpector upgrade and every reword — CI would
+# break on unrelated edits. Rules survive drift and carry a reviewable reason.
+#
+# Every rule is scoped with `path:`. A bare `id:` would suppress its rule
+# family repo-wide, including findings we would want to see. If you add a
+# rule here, scope it and say why in `reason:`.
+#
+# Regenerate nothing automatically. Triage each new finding by hand.
+
+version: 2
+
+rules:
+  # --- AS3 · Agent Snooping / Skill Enumeration ---------------------------
+  # Fires on instructions to read or list other skills' files. That is what a
+  # harness manager does: ynd compress rewrites skill files, ynh-create-harness
+  # scaffolds them, add-vendor-adapter walks them to build an adapter. Scoped
+  # per file so a skill that starts reading skills for no reason still fires.
+
+  - id: "AS3"
+    path: "*ynd-compress/SKILL.md"
+    reason: "ynd compress operates ON skill and prompt files by design — reading them is the feature, not reconnaissance."
+
+  - id: "AS3"
+    path: "*ynh-create-harness/SKILL.md"
+    reason: "Scaffolds skills/ and agents/ for a new harness; must enumerate the layout it is creating."
+
+  - id: "AS3"
+    path: "*add-vendor-adapter/SKILL.md"
+    reason: "Walks existing adapters and their skill layouts as the reference for a new vendor adapter."
+
+  - id: "AS3"
+    path: "*ynh-dev/references/skill-authoring.md"
+    reason: "Authoring guide: documents the SKILL.md layout so contributors write valid artifacts."
+
+  # --- AS1 · Agent Snooping / Agent Config Directory Access ---------------
+  - id: "AS1"
+    path: "*vendor-adapters/references/codex.md"
+    reason: "Vendor reference documenting where Codex stores its own config (~/.codex/config.toml). An adapter author cannot target a vendor without knowing its config path; this is documentation, not access."
+
+  # --- SC2 · Supply Chain / External Script Fetching ----------------------
+  - id: "SC2"
+    path: "*vendor-adapters/references/cursor.md"
+    reason: "Quotes Cursor's official documented installer (curl https://cursor.com/install | bash) as a reference fact about the vendor. The skill neither runs it nor tells anyone to."
+
+  # --- AR2 · Anti-Refusal Statement ---------------------------------------
+  - id: "AR2"
+    path: "*vendor-adapters/SKILL.md"
+    reason: "Matches the word CRITICAL used as emphasis in hand-tested research notes ('CRITICAL, hand-tested finding: hooks silently no-op'). Emphasis in findings, not an instruction to override refusals."
+
+  # --- EA2 · Excessive Agency / Autonomous Decision Making ----------------
+  - id: "EA2"
+    path: "*vendor-adapters/SKILL.md"
+    reason: "Matches adapter design rules stated imperatively ('never shell out to copilot init', 'write .mcp.json directly'). These constrain what ynh's Go code does; they grant no agent autonomy."
+
+  # --- RA2 · Rogue Agent / Session Persistence ----------------------------
+  - id: "RA2"
+    path: "*vendor-adapters/SKILL.md"
+    reason: "Documents vendor session and MCP config behaviour (copilot mcp add writes user-level config) so the adapter can avoid depending on it."
+
+  - id: "RA2"
+    path: "*agents/evals.md"
+    reason: "Matches the per-tutorial sandbox setup (SANDBOX=/tmp/ynh-eval-T<N>). The sandbox exists to CONTAIN the eval run, not to persist across sessions."
+
+  # --- TM1 · Tool Misuse / Tool Parameter Abuse ---------------------------
+  # Scoped to two files on purpose. `rm -rf` in an agent instruction is a real
+  # risk class and this repo has the scar to prove it — see
+  # .claude/rules/destructive-operations.md. These two occurrences are bounded
+  # to a /tmp sandbox path the agent itself created. An unscoped rm -rf in any
+  # other file must still fail the scan.
+
+  - id: "TM1"
+    path: "*agents/evals.md"
+    reason: "rm -rf is bounded to /tmp/ynh-eval-T<N>, a sandbox the eval agent creates and tears down. Scoped to this file only — see .claude/rules/destructive-operations.md for why a blanket rm -rf suppression is not acceptable here."
+
+  - id: "TM1"
+    path: "*rules/branching.md"
+    reason: "Matches `git push` in the documented Gitflow workflow. Branching instructions for contributors, not tool parameter manipulation."
+
+  # ---------------------------------------------------------------------------
+  # Added 2026-09-01, when the gate was fixed to read the SARIF instead of
+  # trusting skillspector's exit code. `skillspector scan` exits 0 whatever it
+  # finds, so every finding below had been active and unreported since the scan
+  # was introduced. Each is triaged individually; none is new content.
+  # ---------------------------------------------------------------------------
+
+  # --- AS3 · Agent Snooping / Skill Enumeration ---------------------------
+  # Same root cause as the AS3 entries above. The earlier globs were scoped to
+  # SKILL.md only, so the reference pages that carry the same material were
+  # never covered.
+
+  - id: "AS3"
+    path: "*ynh-adopt/SKILL.md"
+    reason: "ynh-adopt moves an existing .claude/skills and .claude/agents layout into a harness. Naming the directories it adopts is the entire skill."
+
+  - id: "AS3"
+    path: "*ynh-adopt/references/what-moves-where.md"
+    reason: "Shows the before and after layout of an adoption, so it must list skill and agent paths. Reference tables, not enumeration at run time."
+
+  - id: "AS3"
+    path: "*ynh-create-harness/references/example-harness.md"
+    reason: "Worked example of a harness layout; cites skills/db-migration/SKILL.md as the illustrative path. Companion to the ynh-create-harness/SKILL.md entry above, which was scoped too narrowly to cover its own references."
+
+  # --- AR2 · Anti-Refusal Statement ---------------------------------------
+  - id: "AR2"
+    path: "*vendor-adapters/references/copilot.md"
+    reason: "Matches CONFIRMED used as emphasis in a hand-tested research note ('CONFIRMED: hooks silently no-op in an untrusted folder'). Same emphasis-in-findings pattern as the vendor-adapters/SKILL.md entry above."
+
+  # --- EA2 · Excessive Agency / Autonomous Decision Making ----------------
+  - id: "EA2"
+    path: "*vendor-adapters/references/copilot.md"
+    reason: "Matches a reference list of Copilot CLI's own auto-approve flags (--yolo, --allow-all-tools, --allow-all-paths). Documenting that a vendor offers these is how the adapter knows to avoid them; the skill grants no autonomy itself."
+
+  # --- RP1 · Unpinned MCP server reference --------------------------------
+  - id: "RP1"
+    path: "*ynh-sensors/references/starter-sets.md"
+    reason: "Misfire on two counts. These are sensor commands (npx prettier --check, npx eslint, npx tsc --noEmit), not MCP server references. And pinning them would be wrong: npx in a project that lists the tool in devDependencies resolves to that project's own pinned copy, whereas npx tool@version bypasses it and fetches from the registry. The starter set deliberately defers to the consuming project's lockfile."

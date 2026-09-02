@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/migrate.schema.json",
+  "title": "ynh migrate --format json",
+  "description": "Output of `ynh migrate --format json`. What a schema migration of the ynh home did, or would do under --dry-run. Most commands migrate automatically on first use, so this reports work that usually happens invisibly. Envelope retrofit deferred, matching the other Phase 3 commands.",
+  "x-capabilities": "0.8",
+  "$defs": {
+    "MigratedEntry": {
+      "type": "object",
+      "description": "One id that moved. Recorded old and new so a migration can be explained after the fact, not merely counted.",
+      "properties": {
+        "old_id": {"type": "string", "description": "The legacy identifier — a bare name for pointer files, a bare or namespaced name for tree installs."},
+        "new_id": {"type": "string", "description": "The canonical host-prefixed id: \"host/org/repo/name\" or \"local/name\"."},
+        "kind": {"type": "string", "enum": ["pointer", "install_tree_flat", "install_tree_ns"], "description": "Which legacy layout this entry came from."},
+        "old_path": {"type": "string"},
+        "new_path": {"type": "string"}
+      },
+      "required": ["old_id", "new_id", "kind", "old_path", "new_path"],
+      "additionalProperties": false
+    },
+    "QuarantinedEntry": {
+      "type": "object",
+      "description": "A path migration could not handle. It is moved aside rather than deleted or left in place — see `ynh quarantine`, which lists and recovers these.",
+      "properties": {
+        "original_path": {"type": "string"},
+        "quarantined": {"type": "string", "description": "Where it was moved to."},
+        "reason": {"type": "string", "description": "Why migration refused it."}
+      },
+      "required": ["original_path", "quarantined", "reason"],
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "properties": {
+    "dry_run": {"type": "boolean", "description": "True when nothing was written. The rest of the payload then describes what would have happened."},
+    "schema_version": {"type": "integer", "description": "The schema version the home is at after this run."},
+    "migrated_at": {"type": "string", "description": "RFC 3339 UTC timestamp."},
+    "entries": {"type": ["array", "null"], "items": {"$ref": "#/$defs/MigratedEntry"}, "description": "Null when nothing needed migrating — distinct from an empty array only by JSON encoding, so treat both as \"none\"."},
+    "quarantined": {"type": ["array", "null"], "items": {"$ref": "#/$defs/QuarantinedEntry"}, "description": "Null when nothing was quarantined. A non-empty list means the migration completed but left entries behind that need a human."}
+  },
+  "required": ["dry_run", "schema_version", "migrated_at", "entries", "quarantined"],
+  "additionalProperties": false
+}

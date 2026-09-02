@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/gate"
 )
 
 // budgetSnapshotsFromTrajectory extracts decoded BudgetSnapshotData
@@ -41,11 +43,9 @@ func TestRunLoop_BudgetSnapshotPerActTurn(t *testing.T) {
 		},
 	}
 	// Failing sensor keeps the loop going for 3 turns.
-	original := runSensorFn
-	defer func() { runSensorFn = original }()
-	runSensorFn = func(ynh, harnessName, sensorName, cwd, overlayJSON string) (*SensorResult, error) {
-		return &SensorResult{Name: sensorName, Kind: "command", ExitCode: 1}, nil
-	}
+	stubCheck(t, func(_ int, name string) gate.Result {
+		return gate.Result{Name: name, Kind: "command", Tolerance: "blocking", Status: gate.StatusFail, ExitCode: 1}
+	})
 
 	var traj bytes.Buffer
 	opts := baseOpts(mb, &traj, &bytes.Buffer{}, strings.NewReader(""))
@@ -54,7 +54,7 @@ func TestRunLoop_BudgetSnapshotPerActTurn(t *testing.T) {
 	opts.MaxTurns = 3
 	opts.testSensorNames = []string{"build"}
 
-	_ = RunLoop(opts)
+	_, _ = RunLoop(opts)
 
 	snaps := budgetSnapshotsFromTrajectory(t, &traj)
 	if len(snaps) != 3 {
@@ -86,7 +86,7 @@ func TestRunLoop_BudgetSnapshotInPlanPhase(t *testing.T) {
 	var traj bytes.Buffer
 	opts := planOpts(mb, &traj, strings.NewReader(`{"action":"approve_plan"}`+"\n"))
 
-	if err := RunLoop(opts); err != nil {
+	if _, err := RunLoop(opts); err != nil {
 		t.Fatalf("RunLoop: %v", err)
 	}
 
@@ -113,11 +113,9 @@ func TestRunLoop_BudgetSnapshotMatchesSessionEnd(t *testing.T) {
 			{Content: "turn 2", Usage: Usage{InputTokens: 200, OutputTokens: 75}},
 		},
 	}
-	original := runSensorFn
-	defer func() { runSensorFn = original }()
-	runSensorFn = func(ynh, harnessName, sensorName, cwd, overlayJSON string) (*SensorResult, error) {
-		return &SensorResult{Name: sensorName, Kind: "command", ExitCode: 1}, nil
-	}
+	stubCheck(t, func(_ int, name string) gate.Result {
+		return gate.Result{Name: name, Kind: "command", Tolerance: "blocking", Status: gate.StatusFail, ExitCode: 1}
+	})
 
 	var traj bytes.Buffer
 	opts := baseOpts(mb, &traj, &bytes.Buffer{}, strings.NewReader(""))
@@ -126,7 +124,7 @@ func TestRunLoop_BudgetSnapshotMatchesSessionEnd(t *testing.T) {
 	opts.MaxTurns = 2
 	opts.testSensorNames = []string{"build"}
 
-	_ = RunLoop(opts)
+	_, _ = RunLoop(opts)
 
 	snaps := budgetSnapshotsFromTrajectory(t, &traj)
 	if len(snaps) == 0 {

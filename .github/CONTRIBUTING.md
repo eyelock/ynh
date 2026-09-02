@@ -29,7 +29,7 @@ ynh is a packaging and distribution tool. It has no runtime component - the AI v
 ### Package Structure
 
 ```
-cmd/ynh/                  CLI entry point: harness template manager (init, install, uninstall, update, run, ls, info, vendors, search, registry, image, status, prune)
+cmd/ynh/                  CLI entry point: harness template manager (init, install, uninstall, update, run, ls, info, installed, schema, vendors, sources, paths, status, search, registry, backend, delegate, fork, include, focus, profile, hook, doctor, mcp, sensors, check, agent, image, prune, migrate, quarantine)
 cmd/ynd/                  CLI entry point: developer tools (create, lint, validate, fmt, compress, export, marketplace, inspect, preview, diff)
 internal/
   config/                 Global config (~/.ynh/) and path management
@@ -143,7 +143,7 @@ The single classifier `harness.IsLocalSource(ins *plugin.InstalledJSON)` discrim
 
 `~/.ynh/.schema-version` records the on-disk format version. Absent file means **schema 1** (legacy / pre-migration). Content `2` means canonical-id layout. Content `3` means pointer-form local installs (see above).
 
-The `ynh ls` and `ynh info` JSON envelopes carry `schema_version` as a **dynamic** field (read from disk via `migration.ReadSchemaVersion(home)`, not the static `config.SchemaVersion` constant). Consumers like TermQ gate their behaviour on this — never on `capabilities`, which is a separate wire-contract version.
+The `ynh ls` and `ynh info` JSON envelopes carry `schema_version` as a **dynamic** field (read from disk via `migration.ReadSchemaVersion(home)`, not the static `config.SchemaVersion` constant). Consumers like a structured consumer gate their behaviour on this — never on `capabilities`, which is a separate wire-contract version.
 
 **When bumping the schema version:** add a new migration step in `internal/migration/` (one file per schema version — see `local_install_collapse.go` for the schema-3 example), make it write the literal new version at the end of its work (not `CurrentSchemaVersion` — that constant moves), bump `migration.CurrentSchemaVersion`, chain it into `autoMigrate` and `cmdMigrateTo` so a home at any older schema migrates through every step in order, and write tests for both the legacy → new round-trip and idempotent re-runs. The auto-migration gate runs on first invocation against a stale home; do not accept stale-home reads anywhere else.
 
@@ -229,7 +229,7 @@ make e2e
 
 **What the suite locks:**
 
-- Every documented entry point on `ynh` and `ynd` (install, update, fork, delegate, include, run, vendors, sources, paths, status, prune, info, ls, image, search, registry; create, lint, validate, fmt, preview, export, compose, diff, migrate, marketplace, inspect)
+- Every documented entry point on `ynh` and `ynd` (init, install, uninstall, update, run, ls, info, installed, schema, vendors, sources, paths, status, search, registry, backend, delegate, fork, include, focus, profile, hook, doctor, mcp, sensors, check, agent, image, prune, migrate, quarantine; create, lint, validate, fmt, compress, inspect, export, compose, preview, diff, marketplace, migrate, validate-output)
 - All three vendor adapters (Claude, Codex, Cursor) end-to-end: instructions files, hooks (with matchers + per-vendor event remapping), MCP servers (command + URL forms, env passthrough)
 - Profile + focus resolution (hook replace + inherit, MCP deep-merge, mutex/unknown errors)
 - Schema/security guards (path traversal, --ref + local, fork update, duplicate sources)
@@ -259,7 +259,7 @@ See `.claude/plans/e2e-test-suite.md` for the architecture and coverage matrix.
 
 ### Testing Unreleased ynh Against Downstream Tooling
 
-Downstream consumers (e.g. TermQ) gate on `ynh`'s wire-contract version, exposed as `capabilities` in `ynh version --format json`. Unlike `version` (release tag, injected via ldflags), `capabilities` is a source constant in `internal/config/config.go` — `make install` produces a developer build that honestly reports whatever contract the current branch implements.
+Downstream consumers (for example) gate on `ynh`'s wire-contract version, exposed as `capabilities` in `ynh version --format json`. Unlike `version` (release tag, injected via ldflags), `capabilities` is a source constant in `internal/config/config.go` — `make install` produces a developer build that honestly reports whatever contract the current branch implements.
 
 To test a branch against downstream tooling without cutting a release:
 
@@ -346,26 +346,37 @@ To add a new vendor, create a single file in `internal/vendor/` that implements 
 
 ```go
 type Adapter interface {
-    Name() string                                                         // vendor identifier
-    CLIName() string                                                      // CLI binary name (e.g. "claude", "agent")
-    ConfigDir() string                                                    // e.g. ".myvendor"
-    ArtifactDirs() map[string]string                                      // artifact type → directory name
-    InstructionsFile() string                                             // project instructions filename
-    NeedsSymlinks() bool                                                  // true if vendor needs symlink-based install
-    Install(stagingDir, projectDir string) ([]SymlinkEntry, error)        // install artifacts to project
-    Clean(entries []SymlinkEntry) error                                   // remove installed artifacts
-    LaunchInteractive(configPath string, extraArgs []string) error        // start interactive session
-    LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error
-    GenerateSystemPrompt(content []byte) map[string][]byte                // vendor-native instruction files
-    GenerateHookConfig(hooks) (map[string][]byte, error)                  // vendor-native hook config
-    GenerateMCPConfig(servers) (map[string][]byte, error)                 // vendor-native MCP config
-    GeneratePluginManifest(hj, outputDir) (map[string][]byte, error)      // vendor-native plugin manifest
-    ExportArtifactDirs() map[string]string                                // restricted dirs for export (nil = use ArtifactDirs)
-    SupportsExportDelegates() bool                                        // true if vendor supports delegates
-    MarketplaceManifestDir() string                                       // manifest dir for marketplace index
-    GenerateMarketplaceIndex(cfg, plugins) ([]byte, error)                // vendor-native marketplace index
+	Name() string
+	DisplayName() string
+	CLIName() string
+	ConfigDir() string
+	ArtifactDirs() map[string]string
+	InstructionsFile() string
+	NeedsSymlinks() bool
+	Install(stagingDir string, projectDir string) ([]SymlinkEntry, error)
+	Clean(entries []SymlinkEntry) error
+	LaunchInteractive(configPath string, extraArgs []string) error
+	LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error
+	LaunchWithInitialPrompt(configPath string, prompt string, extraArgs []string) error
+	SupportsResume() bool
+	ResolveLastSession(cwd string, notBefore time.Time) (string, error)
+	LaunchResume(configPath string, sessionID string, extraArgs []string) error
+	GenerateSystemPrompt(content []byte) map[string][]byte
+	ApplyRuntimeInstructions(runDir, text string) ([]string, error)
+	GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)
+	GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error)
+	GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error)
+	ExportArtifactDirs() map[string]string
+	SupportsExportDelegates() bool
+	MarketplaceManifestDir() string
+	GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error)
 }
 ```
+
+**24 methods.** Regenerated from `internal/vendor/adapter.go` — that
+declaration is the only authority. This copy has drifted before (it read 10,
+11 and 18 methods in three different places while the interface had 24), which
+hid the entire resume subsystem from anyone writing a new adapter.
 
 **Consumer-side narrow interfaces.** Packages that consume adapters define their own interfaces covering only the methods they need:
 
@@ -513,7 +524,7 @@ Test fixtures in `testdata/` simulate real-world sources:
 }
 ```
 
-`name` and `version` are required for installed harnesses. For project-local manifests (loaded via `--harness-file` or auto-discovered in cwd), they are optional. See the JSON schema at `docs/schema/harness.schema.json` for the full specification. See [Hooks](docs/hooks.md), [MCP Servers](docs/mcp.md), [Profiles](docs/profiles.md), and the focus tutorial (`docs/tutorial/14-focus.md`) for details.
+`name` and `version` are required for installed harnesses. For project-local manifests (loaded via `--harness-file` or auto-discovered in cwd), they are optional. See the JSON schema at `docs/schema/harness.schema.json` for the full specification. See [Hooks](../docs/hooks.md), [MCP Servers](../docs/mcp.md), [Profiles](../docs/profiles.md), and the focus tutorial (`docs/tutorial/focus.md`) for details.
 
 ### Delegates: remote-only
 

@@ -1,0 +1,11 @@
+[
+  {
+    "name": "code-review",
+    "profile": "strict",
+    "prompt": "Review the diff against main. Report correctness bugs first, then anything that would surprise the next reader."
+  },
+  {
+    "name": "release-prep",
+    "prompt": "Walk git log since the last tag, group commits by type, and draft a CHANGELOG entry."
+  }
+]

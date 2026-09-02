@@ -21,7 +21,7 @@ ynh defines five canonical hook events. Each vendor translates these to its nati
 | `before_tool` | Runs before a tool/command is invoked. Can block execution. |
 | `after_tool` | Runs after a tool/command completes. Can reject the result. |
 | `before_prompt` | Runs before a user prompt is submitted to the model. |
-| `on_stop` | Runs when the agent finishes responding. On Claude Code this fires at the **end of every turn**, not once at session end — see [on_stop output semantics](#on_stop-output-semantics-claude). |
+| `on_stop` | Runs when the agent finishes responding. On Claude Code this fires at the **end of every turn**, not once at session end — see [on_stop output semantics](#on-stop-output-semantics-claude). |
 | `on_session_start` | Runs when a session/agent starts. Codex supports filtering on `source` (`startup`\|`resume`) via the hook entry's existing `matcher` field. |
 
 ## Manifest Format
@@ -112,10 +112,10 @@ ynh hook export <harness> --target settings --dry-run   # preview, write nothing
 Then confirm the wiring:
 
 ```bash
-ynh doctor   # checks .claude/settings.json + settings.local.json for the silent-failure traps below
+ynh doctor   # among its checks: .claude/settings.json + settings.local.json for the traps below
 ```
 
-`ynh doctor` flags canonical names that leaked into a settings file (where Claude ignores them), cwd-relative hook commands, and a project with no settings file at all (hooks declared but not wired).
+`ynh doctor`'s hook-wiring check flags canonical names that leaked into a settings file (where Claude ignores them), cwd-relative hook commands, and a project with no settings file at all (hooks declared but not wired).
 
 If you hand-author the settings file instead, three rules:
 
@@ -138,7 +138,7 @@ Example `.claude/settings.json` (what `hook export` produces):
 }
 ```
 
-The `Stop` entry above needs the loop-guard and output-routing discipline described in [on_stop output semantics](#on_stop-output-semantics-claude).
+The `Stop` entry above needs the loop-guard and output-routing discipline described in [on_stop output semantics](#on-stop-output-semantics-claude).
 
 ### Claude Code Format
 
@@ -254,9 +254,13 @@ Cursor's `stop` and Codex's `Stop` route output and guard against loops differen
 
 ## Root-Harness-Only Rule
 
-Hooks declared in **included harnesses** (via `includes`) are dropped during assembly. Only the root harness's hooks are used. This prevents composed harnesses from silently injecting lifecycle behavior that the harness author didn't explicitly declare.
+Only the root harness's hooks are used. An included harness contributes `skills/`, `agents/`, `rules/` and `commands/` — files — and nothing else.
 
-If an included harness needs hooks, copy its hook declarations into the root harness's `.ynh-plugin/plugin.json`.
+Nothing is *dropped*: `resolveWith` iterates includes flat, with no recursion, and returns file paths. **It never opens an included harness's `plugin.json`,** so a hook declared there is never read in the first place. Root-only is a property of the resolver, not a filter applied afterwards.
+
+That is deliberate. A hook is command execution on every lifecycle event, so an include that could contribute one would turn inert composed content into an execution surface the root author never declared.
+
+If an included harness needs hooks, copy its hook declarations into the root harness's `.ynh-plugin/plugin.json`. Merging that copy at authoring time — generated, labelled blocks with drift detection — is the agreed direction rather than resolving includes at run time.
 
 ## Portable Hook Script Advice
 
@@ -304,7 +308,7 @@ See [reference.md](reference.md) for the complete flag matrix and [profiles.md](
 
 ## See Also
 
-- [Tutorial 4: Hooks](tutorial/10-hooks.md) — step-by-step walkthrough
+- [Hooks](tutorial/hooks.md) — step-by-step walkthrough
 - [Sensors](sensors.md) — observation surfaces a loop driver consumes
 - [Harness Engineering](harness-engineering.md) — how hooks bridge guides to sensors
 - [Vendor Support](vendors.md) — vendor capabilities and differences

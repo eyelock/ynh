@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/fixtures/schema-drift/version.schema.json",
+  "title": "Deliberately wrong version schema (calibration fixture)",
+  "description": "Requires a field ynh version does not emit, so a working schema-conformance sensor must fail here. Do not fix this file.",
+  "type": "object",
+  "required": ["a_field_ynh_version_does_not_emit"],
+  "properties": {
+    "a_field_ynh_version_does_not_emit": { "type": "string" }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "ynh-dev",
+  "version": "0.7.0",
+  "description": "Developer harness for contributing to ynh \u2014 architecture, vendor adapters, ynd commands, capability bumps, evals and the release procedure",
+  "author": {
+    "name": "eyelock",
+    "url": "https://github.com/eyelock"
+  },
+  "keywords": [
+    "ynh",
+    "development",
+    "contributing",
+    "vendor-adapters"
+  ],
+  "default_vendor": "claude",
+  "reads": {
+    "skills/vendor-adapters": [
+      "skills/vendor-adapters/references/anthropic.md",
+      "skills/vendor-adapters/references/codex.md",
+      "skills/vendor-adapters/references/copilot.md",
+      "skills/vendor-adapters/references/cursor.md"
+    ],
+    "skills/ynh-dev": [
+      "skills/ynh-dev/references/agent-and-baseline.md",
+      "skills/ynh-dev/references/architecture.md",
+      "skills/ynh-dev/references/building.md",
+      "skills/ynh-dev/references/coding-standards.md",
+      "skills/ynh-dev/references/skill-authoring.md"
+    ]
+  }
+}

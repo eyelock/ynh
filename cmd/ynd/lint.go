@@ -18,7 +18,15 @@ type lintIssue struct {
 }
 
 func cmdLint(args []string) error {
-	var root string
+	// Every positional is a root, not just the first.
+	//
+	// This used to keep `args[i]` only when `root == ""`, so every later path
+	// was parsed, discarded, and never linted — with no warning and exit 0.
+	// `ynd lint skills agents` checked 8 files when `skills` alone checked 8
+	// and `agents` alone checked 2. The user validated their agents, was told
+	// "no issues found", and the agents were never opened. A linter that
+	// silently declines to look is worse than one that refuses to run.
+	var roots []string
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -27,33 +35,50 @@ func cmdLint(args []string) error {
 				return fmt.Errorf("--harness requires a value")
 			}
 			i++
-			root = args[i]
+			roots = append(roots, args[i])
 		case "-h", "--help":
 			return errHelp
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return fmt.Errorf("unknown flag: %s", args[i])
 			}
-			if root == "" {
-				root = args[i]
-			}
+			roots = append(roots, args[i])
 		}
 	}
 
-	// Resolve source: --harness flag > YNH_HARNESS > positional > CWD
-	if root == "" {
-		root = resolveHarnessEnv()
-	}
-	if root == "" {
-		root = "."
+	// Resolve source: explicit paths > YNH_HARNESS > CWD
+	if len(roots) == 0 {
+		if env := resolveHarnessEnv(); env != "" {
+			roots = []string{env}
+		} else {
+			roots = []string{"."}
+		}
 	}
 
-	files, err := discoverAll(root,
-		[]string{".md", ".sh"},
-		[]string{plugin.PluginFile},
-	)
-	if err != nil {
-		return err
+	// Deduplicate while preserving order. Overlapping roots — `ynd lint . skills`
+	// — would otherwise report the same finding twice and inflate the counts,
+	// making the summary line disagree with the list above it.
+	seen := map[string]bool{}
+	var files []string
+	for _, root := range roots {
+		found, err := discoverAll(root,
+			[]string{".md", ".sh"},
+			[]string{plugin.PluginFile},
+		)
+		if err != nil {
+			return err
+		}
+		for _, f := range found {
+			abs, absErr := filepath.Abs(f)
+			if absErr != nil {
+				abs = f
+			}
+			if seen[abs] {
+				continue
+			}
+			seen[abs] = true
+			files = append(files, f)
+		}
 	}
 
 	if len(files) == 0 {
@@ -71,6 +96,7 @@ func cmdLint(args []string) error {
 			issues = append(issues, lintShell(f)...)
 		case filepath.Base(f) == plugin.PluginFile:
 			issues = append(issues, lintHarnessJSONFile(f)...)
+			issues = append(issues, lintDeclaredReads(f)...)
 		}
 	}
 
@@ -216,6 +242,8 @@ func lintSkillFrontmatter(path, content string) []lintIssue {
 		issues = append(issues, lintIssue{File: path, Line: 1, Message: "frontmatter missing required field 'description'"})
 	}
 
+	issues = append(issues, lintDemotingFrontmatter(path, content)...)
+
 	return issues
 }
 
@@ -279,7 +307,7 @@ func lintShellBlocks(path, content string) []lintIssue {
 		if inBlock && trimmed == "```" {
 			inBlock = false
 			if len(blockLines) > 0 {
-				script := strings.Join(blockLines, "\n")
+				script := shellScriptFromBlock(blockLines)
 				if !hasTemplatePlaceholders(script) {
 					if err := checkBashSyntax(script); err != nil {
 						issues = append(issues, lintIssue{
@@ -440,4 +468,50 @@ func lintHarnessJSONFile(path string) []lintIssue {
 	}
 
 	return issues
+}
+
+// shellScriptFromBlock extracts the checkable shell from a fenced block.
+//
+// A block whose lines are prefixed with "$ " is a *transcript*: the prefixed
+// lines are commands and everything else is their output. Piping the whole
+// thing to `bash -n` lints the output as if it were code, which is how
+// `docs/vendors.md` failed on a `ynh vendors` table containing
+// "(ollama · qwen3)" — an unbalanced parenthesis in a column of results, not a
+// syntax error in anything anyone would run.
+//
+// A block with no prompt is an ordinary script and is returned whole.
+//
+// Continuations are followed: a command ending in a backslash keeps consuming
+// lines until one does not, so a wrapped invocation is linted as the single
+// command it is rather than as two fragments.
+func shellScriptFromBlock(lines []string) string {
+	const prompt = "$ "
+	hasPrompt := false
+	for _, l := range lines {
+		if strings.HasPrefix(strings.TrimSpace(l), prompt) {
+			hasPrompt = true
+			break
+		}
+	}
+	if !hasPrompt {
+		return strings.Join(lines, "\n")
+	}
+
+	var cmds []string
+	continuing := false
+	for _, l := range lines {
+		t := strings.TrimSpace(l)
+		switch {
+		case strings.HasPrefix(t, prompt):
+			cmd := strings.TrimPrefix(t, prompt)
+			cmds = append(cmds, cmd)
+			continuing = strings.HasSuffix(cmd, "\\")
+		case continuing:
+			cmds = append(cmds, t)
+			continuing = strings.HasSuffix(t, "\\")
+		default:
+			// Output. Not shell, and not ours to check.
+		}
+	}
+	return strings.Join(cmds, "\n")
 }

@@ -1,8 +1,8 @@
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "ynh-guide",
-  "version": "0.1.0",
-  "description": "AI harness management — your name, your AI",
+  "version": "0.7.0",
+  "description": "AI harness management \u2014 your name, your AI",
   "author": {
     "name": "eyelock",
     "url": "https://github.com/eyelock"
@@ -22,6 +22,11 @@
             "matcher": "Bash",
             "command": "sh -c 'case \"$YNH_TOOL_INPUT\" in *\"git push\"*|*\"gh pr create\"*|*\"gh pr merge\"*) echo \"Reminder: .claude/rules/pre-remote.md requires make check + /evals before remote operations\" >&2 ;; esac; exit 0'"
           }
+        ],
+        "on_stop": [
+          {
+            "command": "sh -c 'ynh sensors ls local/ynh-guide >/dev/null 2>&1 || { echo \"ynh-dev: run \\`ynh install .\\` to enable the harness check on stop\" >&2; exit 0; }; ynh check local/ynh-guide --only harness-valid'"
+          }
         ]
       },
       "includes": [
@@ -32,25 +37,90 @@
     }
   },
   "focuses": {
-    "learn": {
-      "prompt": "Walk me through ynh as a first-time user, starting from the README.md. Introduce the core concepts — harnesses, vendors, includes, delegates — with a concrete example for each. When I'm ready, suggest I use /ynh-create-harness to build my own."
+    "adopt": {
+      "prompt": "I already have AI assistant config in this project \u2014 a .claude folder, a .cursorrules, a CLAUDE.md, or some mix. Use the ynh-adopt skill to bring it under ynh without losing any of it. Inventory what is here before proposing anything, and show me the assembled output at the end so I can see my own artifacts came through."
+    },
+    "contribute": {
+      "profile": "ynh-dev",
+      "prompt": "I want to contribute to ynh. Read .claude/CLAUDE.md and the rules under .claude/rules/ first \u2014 branching, pre-remote gates and destructive-operations all bind. Ask what I want to change, then point me at the right skill: ynh-dev for the build and test loop, add-vendor-adapter for a new vendor, add-ynd-command for a new ynd command, capability-bump for anything that changes a --format json shape, and vendor-adapters for maintaining an existing adapter against a moving spec."
     },
     "create": {
       "prompt": "Use the ynh-create-harness skill to help me build a new harness. Ask what I do, what languages and tools I use, and what standards my team follows. Scaffold it with ynd create harness and install it so I can try it immediately."
+    },
+    "fix": {
+      "prompt": "Something about my ynh setup is not working. Use the ynh-troubleshoot skill: run the diagnostics rather than describing them, tell me which layer the fault is in \u2014 manifest, composition, what the vendor received, or the vendor itself \u2014 and change one thing at a time, re-running the command that showed the problem."
+    },
+    "learn": {
+      "prompt": "Introduce me to ynh as a first-time user. Do not read from memory: run `ynh help` and `ynh vendors` to ground what this version actually does, and hand anything deeper to the ynh-guide agent. Cover the core concepts one at a time \u2014 harnesses, vendors, includes, delegates, profiles, focuses, sensors \u2014 with a concrete example of each. The prose docs are at https://eyelock.github.io/ynh if I want more. When I am ready, suggest /ynh-create-harness to build my own, or /ynh-adopt if I already have a .claude folder or a CLAUDE.md."
+    },
+    "release": {
+      "profile": "ynh-dev",
+      "prompt": "Walk me through preparing a ynh release. Confirm we are on develop, run /evals to gate the release, update the changelog, then create a release PR per .claude/rules/branching.md. The full sequence is documented in .claude/commands/release.md."
+    },
+    "sensors": {
+      "prompt": "Use the ynh-sensors skill to work out what this project should observe and turn it into a gate I trust. Start from what the project already runs \u2014 the Makefile, the package scripts, the CI workflow \u2014 rather than inventing sensors. Cover all three categories, not just linting. Nothing goes blocking on the first pass."
     },
     "team": {
       "prompt": "Use the ynh-team-setup skill to set up a team harness. We'll build a parent harness that delegates to personal team members' harnesses. Explain delegation as we go."
     },
     "validate": {
       "prompt": "Validate the harness in the current working directory with ynd validate. If issues are found, walk through each one and help me fix it. If it's valid, run ynd preview so I can see the assembled vendor output."
+    }
+  },
+  "reads": {
+    "skills/ynd-inspect": [
+      "skills/ynd-inspect/references/beyond-artifacts.md",
+      "skills/ynd-inspect/references/inspect-workflow.md"
+    ],
+    "skills/ynh-adopt": [
+      "skills/ynh-adopt/references/what-moves-where.md"
+    ],
+    "skills/ynh-compose": [
+      "skills/ynh-compose/references/composition-patterns.md"
+    ],
+    "skills/ynh-create-harness": [
+      "skills/ynh-create-harness/references/artifact-formats.md",
+      "skills/ynh-create-harness/references/example-harness.md",
+      "skills/ynh-create-harness/references/harness-format.md"
+    ],
+    "skills/ynh-sensors": [
+      "skills/ynh-sensors/references/calibration.md",
+      "skills/ynh-sensors/references/starter-sets.md"
+    ],
+    "skills/ynh-team-setup": [
+      "skills/ynh-team-setup/references/delegation.md"
+    ]
+  },
+  "sensors": {
+    "harness-valid": {
+      "category": "maintainability",
+      "tolerance": "blocking",
+      "version_command": "ynd version",
+      "reference": {
+        "path": "tools/sensors/fixtures/harness-invalid",
+        "expect": "fail"
+      },
+      "source": {
+        "command": "ynd validate ."
+      },
+      "output": {
+        "format": "text"
+      }
     },
-    "contribute": {
-      "profile": "ynh-dev",
-      "prompt": "I want to contribute to ynh. Start by reading .claude/CLAUDE.md and the rules under .claude/rules/. Ask what I want to change — a bug fix, a new feature, a doc update — then help me follow the branching rules in .claude/rules/branching.md and the pre-remote gates in .claude/rules/pre-remote.md."
-    },
-    "release": {
-      "profile": "ynh-dev",
-      "prompt": "Walk me through preparing a ynh release. Confirm we are on develop, run /evals to gate the release, update the changelog, then create a release PR per .claude/rules/branching.md. The full sequence is documented in .claude/commands/release.md."
+    "schema-conformance": {
+      "category": "behaviour",
+      "tolerance": "blocking",
+      "version_command": "ynd version",
+      "reference": {
+        "path": "tools/sensors/fixtures/schema-drift",
+        "expect": "fail"
+      },
+      "source": {
+        "command": "\"$YNH_HARNESS_DIR/tools/sensors/schema-conformance.sh\""
+      },
+      "output": {
+        "format": "text"
+      }
     }
   }
 }

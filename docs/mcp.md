@@ -190,6 +190,68 @@ See [reference.md](reference.md) for the complete flag matrix and [profiles.md](
 
 ## See Also
 
-- [Tutorial 5: MCP Servers](tutorial/11-mcp-servers.md) — step-by-step walkthrough
+- [MCP Servers](tutorial/mcp-servers.md) — step-by-step walkthrough
 - [Hooks](hooks.md) — lifecycle hooks that bridge guides to sensors
 - [Vendor Support](vendors.md) — vendor capabilities and differences
+
+## Credentials — `${VAR}` and `env_passthrough`
+
+An MCP server usually needs a token. Writing it literally in `plugin.json`
+means committing it, so `env` values and `headers` support `${VAR}`
+references resolved from the environment at assembly time:
+
+```json
+{
+  "env_passthrough": ["GITHUB_TOKEN"],
+  "mcp_servers": {
+    "github": {
+      "command": "gh-mcp",
+      "env": { "TOKEN": "${GITHUB_TOKEN}" }
+    }
+  }
+}
+```
+
+`env_passthrough` is the allowlist, and it governs two things deliberately:
+which variables a `${VAR}` reference may resolve, and which variables reach an
+agent worker's process under [`ynh agent run`](agent.md). One declaration, one
+place to review.
+
+Two rules keep the mechanism from becoming a hole of its own:
+
+- **A reference to a variable outside the allowlist is an error.** Otherwise any
+  manifest — including one pulled in from another repository — could name any
+  variable in your environment and copy it into a config file.
+- **A reference to an allowed but unset variable is an error**, not an empty
+  string. An empty credential fails somewhere far from its cause, and a control
+  that silently degrades is the failure this exists to avoid.
+
+Bare `$VAR` is not expanded. It collides with ordinary shell and path content,
+and a credential mechanism should not depend on guessing intent.
+
+### Profiles can narrow it
+
+A profile replaces the list rather than extending it, so a restrictive posture
+can actually restrict:
+
+```json
+"profiles": {
+  "untrusted": { "env_passthrough": [] }
+}
+```
+
+Under that profile the example above fails to assemble, which is the intended
+outcome: the server cannot run without a credential the profile has withheld.
+
+### Export never expands
+
+`ynd export` leaves `${VAR}` references literal. Assembly for a local run
+resolves them because the config is about to be used by this operator on this
+machine; an export is a distributable artifact, and resolving there would bake
+whoever ran the export's credentials into a bundle meant to be shared.
+
+### What this is not
+
+ynh **declares** the scope. The process boundary that makes the declaration
+meaningful is the container's — see
+[ynh does not own containment](harness-engineering.md).

@@ -1,0 +1,47 @@
+{
+  "capabilities": "0.8.0",
+  "ynh_version": "0.3.1",
+  "harness": "local/demo",
+  "verdict": "broken",
+  "summary": {
+    "total": 4,
+    "calibrated": 1,
+    "failed": 1,
+    "uncalibrated": 1,
+    "errored": 1
+  },
+  "sensors": [
+    {
+      "name": "build",
+      "kind": "command",
+      "status": "calibrated",
+      "reference": "testdata/calibration/build",
+      "expected": "fail",
+      "observed": "fail",
+      "exit_code": 2
+    },
+    {
+      "name": "coverage",
+      "kind": "command",
+      "status": "error",
+      "reference": "testdata/calibration/coverage",
+      "expected": "fail",
+      "note": "reference fixture not found at /Users/dev/src/demo/testdata/calibration/coverage"
+    },
+    {
+      "name": "lint",
+      "kind": "command",
+      "status": "failed",
+      "reference": "testdata/calibration/lint",
+      "expected": "fail",
+      "observed": "pass",
+      "exit_code": 0,
+      "note": "the sensor passed a fixture built to trip it — it is no longer observing"
+    },
+    {
+      "name": "todo-scan",
+      "kind": "files",
+      "status": "uncalibrated"
+    }
+  ]
+}

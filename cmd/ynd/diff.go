@@ -124,8 +124,9 @@ func cmdDiff(args []string) error {
 
 	// Assemble each vendor into a temp dir
 	type vendorResult struct {
-		name string
-		dir  string
+		name    string
+		dir     string
+		adapter vendor.Adapter
 	}
 	var results []vendorResult
 	defer func() {
@@ -139,7 +140,11 @@ func cmdDiff(args []string) error {
 		if err != nil {
 			return fmt.Errorf("assembling for %s: %w", v, err)
 		}
-		results = append(results, vendorResult{name: v, dir: tmpDir})
+		ad, adErr := vendor.Get(v)
+		if adErr != nil {
+			return fmt.Errorf("resolving vendor %s: %w", v, adErr)
+		}
+		results = append(results, vendorResult{name: v, dir: tmpDir, adapter: ad})
 	}
 
 	// Compare each pair
@@ -159,47 +164,56 @@ func cmdDiff(args []string) error {
 				return fmt.Errorf("listing files for %s: %w", b.name, err)
 			}
 
-			setA := make(map[string]bool, len(filesA))
+			// Compare on canonical paths. Every vendor writes its own
+			// prefixes, so the raw sets never intersected and the content
+			// comparison below was unreachable — a diff that could not diff.
+			setA := make(map[string]string, len(filesA))
 			for _, f := range filesA {
-				setA[f] = true
+				setA[canonicalKey(canonicalPath(a.adapter, f))] = f
 			}
-			setB := make(map[string]bool, len(filesB))
+			setB := make(map[string]string, len(filesB))
 			for _, f := range filesB {
-				setB[f] = true
+				setB[canonicalKey(canonicalPath(b.adapter, f))] = f
 			}
 
-			// Only in A
 			var onlyA []string
 			for _, f := range filesA {
-				if !setB[f] {
+				if _, ok := setB[canonicalKey(canonicalPath(a.adapter, f))]; !ok {
 					onlyA = append(onlyA, f)
 				}
 			}
-
-			// Only in B
 			var onlyB []string
 			for _, f := range filesB {
-				if !setA[f] {
+				if _, ok := setA[canonicalKey(canonicalPath(b.adapter, f))]; !ok {
 					onlyB = append(onlyB, f)
 				}
 			}
 
-			// In both — check content
-			var different []string
-			var same []string
+			var different, same, rendered []string
 			for _, f := range filesA {
-				if setB[f] {
-					dataA, errA := os.ReadFile(filepath.Join(a.dir, f))
-					dataB, errB := os.ReadFile(filepath.Join(b.dir, f))
-					if errA != nil || errB != nil {
-						different = append(different, f)
-						continue
-					}
-					if string(dataA) != string(dataB) {
-						different = append(different, f)
-					} else {
-						same = append(same, f)
-					}
+				key := canonicalKey(canonicalPath(a.adapter, f))
+				fb, ok := setB[key]
+				if !ok {
+					continue
+				}
+				// Cursor renders rules as .mdc where the others use .md. That
+				// is the same content in the form each vendor requires, not a
+				// divergence — its own category, so it does not bury the real
+				// differences.
+				if renderedDifferently(canonicalPath(a.adapter, f), canonicalPath(b.adapter, fb)) {
+					rendered = append(rendered, f+" ↔ "+fb)
+					continue
+				}
+				dataA, errA := os.ReadFile(filepath.Join(a.dir, f))
+				dataB, errB := os.ReadFile(filepath.Join(b.dir, fb))
+				if errA != nil || errB != nil {
+					different = append(different, f)
+					continue
+				}
+				if string(dataA) != string(dataB) {
+					different = append(different, f)
+				} else {
+					same = append(same, f)
 				}
 			}
 
@@ -220,6 +234,13 @@ func cmdDiff(args []string) error {
 			if len(different) > 0 {
 				fmt.Println("Different content:")
 				for _, f := range different {
+					fmt.Printf("  %s\n", f)
+				}
+			}
+
+			if len(rendered) > 0 {
+				fmt.Println("Same content, vendor-specific rendering:")
+				for _, f := range rendered {
 					fmt.Printf("  %s\n", f)
 				}
 			}

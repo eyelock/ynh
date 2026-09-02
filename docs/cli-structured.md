@@ -100,10 +100,10 @@ Not every command envelopes its result. The rule is:
 
 | Shape | When | Commands |
 |---|---|---|
-| **Envelope** (`capabilities` + `ynh_version` + payload) | Harness-centric reads where consumers gate on the wire contract before acting on the payload | `ynh ls`, `ynh info`, `ynh fork` |
+| **Envelope** (`capabilities` + `ynh_version` + payload) | Harness-centric reads where consumers gate on the wire contract before acting on the payload | `ynh ls`, `ynh info`, `ynh fork`, `ynh doctor` |
 | **Bare value** (object or array, no envelope) | Config introspection and operation results — no per-call wire-contract gating needed; consumers call `ynh version --format json` once at startup | `ynh version`, `ynh paths`, `ynh vendors`, `ynh search`, `ynh sources list`, `ynh registry list`, `ynh sensors ls`, `ynh sensors show`, `ynh sensors run` |
 
-`ynh version --format json` is the canonical wire-contract probe. Consumers that need to gate on `capabilities` should call it once at startup rather than parse the envelope from every response. The envelope on harness reads is a convenience for tools whose entire job revolves around enumerating and acting on installed harnesses (TermQ-style consumers).
+`ynh version --format json` is the canonical wire-contract probe. Consumers that need to gate on `capabilities` should call it once at startup rather than parse the envelope from every response. The envelope on harness reads is a convenience for tools whose entire job revolves around enumerating and acting on installed harnesses (the kind whose entire job is that enumeration).
 
 This convention is additive-compat: bare-value commands may grow new top-level fields, and envelope commands may grow new envelope-level fields, without bumping the major contract version. New commands choose whichever shape fits — the table above lists the rule, not a closed set.
 
@@ -123,7 +123,7 @@ Both `ynh version --format json` and `ynd version --format json` emit:
 
 `capabilities` is a source constant (`internal/config.CapabilitiesVersion`), so developer builds report the contract they actually support — not whatever tag the repo was last released at. Bumped when consumer-visible contracts change; additive fields older clients can ignore do **not** bump it.
 
-Downstream tooling (e.g. TermQ) reads `capabilities` and refuses to run against an older ynh than it requires.
+Downstream tooling (for example) reads `capabilities` and refuses to run against an older ynh than it requires.
 
 ## Scope
 
@@ -144,5 +144,25 @@ Every `--format json` command has a published JSON Schema embedded in the binary
 - `ynd validate-output --schema <name>` — validate a captured response against the schema; exits non-zero on a divergence.
 
 See [Published JSON Schemas](schema-cli.md) for the contract details — capability-bump rule, validator subset, consumer boundary, and the workflow for adding a new schema.
+
+### The agent trajectory
+
+`ynh agent run --emit-jsonl` writes a stream rather than a response, so it is
+published separately as
+[`agent/trajectory.schema.json`](https://eyelock.github.io/ynh/schema/agent/trajectory.schema.json).
+
+Each **line** is a complete JSON object; the file as a whole is not JSON.
+Validate line by line. The schema is a discriminated union on `type`, covering
+all 18 event kinds — one schema rather than one per event, because a consumer
+reads whatever arrives next and a directory of files would make it choose the
+schema before knowing the type.
+
+It is not listed by `ynh schema --all`, which describes command responses. It is
+embedded in the binary all the same, and validated in CI against events emitted
+through the real writer — so a wire field renamed in Go fails the build rather
+than silently diverging from the published contract.
+
+Unknown event types must be tolerated, for the same reason as unknown enum
+members above: kinds are added additively.
 
 **Error envelope evolution.** The current emission is `{"error": {"code": "...", "message": "..."}}` (the `code` values listed above are the closed enum). Additive fields `category` (coarse routing class), `retryable` (bool), and `hint` (human guidance) are reserved and may appear on a future capabilities bump — consumers must tolerate either shape today.

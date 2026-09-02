@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage e2e format lint check run docs help docker-build docker-push
+.PHONY: clean deps install build test test-coverage e2e format lint check check-artifacts check-vendor-parity check-marketplace scan-artifacts run docs help docker-build docker-push vulncheck
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -65,6 +65,68 @@ format: ## Format code
 lint: ## Lint code
 	golangci-lint run ./...
 
+# The harness artifacts this repo ships (skills/ agents/ rules/) plus the one it
+# uses on itself (.claude/). testdata/ is deliberately excluded: its fixtures are
+# malformed on purpose, so `ynd lint .` at the repo root can never be green.
+ARTIFACT_DIRS := skills agents rules .claude
+
+# NVIDIA SkillSpector — security scanner for agent skills. Pinned: an unpinned
+# git install would let an upstream push change what gates our merges, which is
+# the exact supply-chain risk the scanner exists to catch.
+SKILLSPECTOR ?= skillspector
+SKILLSPECTOR_VERSION := v2.11.0
+SKILLSPECTOR_BASELINE := .skillspector-baseline.yaml
+
+# govulncheck. Pinned so a toolchain-side change cannot silently alter what
+# gates a merge, the same reasoning as the SkillSpector pin above.
+GOVULNCHECK_VERSION := v1.7.0
+SARIF_DIR := .skillspector-sarif
+
+vulncheck: ## Scan the Go code and its dependencies for known vulnerabilities
+	@# Deliberately NOT part of `make check`, for the same reason as
+	@# scan-artifacts but a different cause: govulncheck queries a live
+	@# vulnerability database, so an unchanged tree can pass today and fail
+	@# tomorrow. A non-deterministic step does not belong in the check people
+	@# run before pushing. It gates every PR and runs nightly instead, in
+	@# .github/workflows/vulncheck.yml.
+	@#
+	@# govulncheck reports against the toolchain that builds the code, so the
+	@# `toolchain` directive in go.mod is what actually fixes a standard-library
+	@# advisory; this target is what notices one. Symbol-level, so it reports
+	@# only vulnerabilities the code genuinely reaches.
+	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
+
+scan-artifacts: ## Security-scan the harness artifacts with SkillSpector
+	@command -v $(SKILLSPECTOR) >/dev/null 2>&1 || { \
+		echo "skillspector not found. Install with:"; \
+		echo "  pip install 'git+https://github.com/NVIDIA/SkillSpector.git@$(SKILLSPECTOR_VERSION)'"; \
+		exit 1; }
+	@rm -rf $(SARIF_DIR) && mkdir -p $(SARIF_DIR)
+	@for d in $(ARTIFACT_DIRS); do \
+		echo "==> skillspector scan $$d"; \
+		$(SKILLSPECTOR) scan ./$$d --no-llm --baseline $(SKILLSPECTOR_BASELINE) \
+			-f sarif -o $(SARIF_DIR)/`echo $$d | tr -d .`.sarif || exit 1; \
+	done
+	@# `skillspector scan` exits 0 whatever it finds, so the verdict comes from
+	@# the SARIF rather than the exit code. See the script header.
+	@scripts/skillspector-findings.sh $(SARIF_DIR)
+
+check-marketplace: ## Assert the committed marketplace indexes match the plugin manifests
+	@./scripts/marketplace-consistency.sh
+
+check-vendor-parity: build ## Assert every vendor is documented and assembles the same artifacts
+	@./scripts/vendor-parity.sh
+
+stamp-version: ## Stamp the harness version into every manifest (VERSION=X.Y.Z, or the latest tag)
+	@./scripts/stamp-harness-version.sh $(VERSION)
+
+check-artifacts: build ## Validate and lint the harness artifacts this repo ships
+	@echo "==> ynd validate ."
+	@$(BUILD_DIR)/$(BINARY_NAME_DEV) validate .
+	@echo "==> ynd lint $(ARTIFACT_DIRS)"
+	@$(BUILD_DIR)/$(BINARY_NAME_DEV) lint $(ARTIFACT_DIRS)
+	@echo "Harness artifacts OK."
+
 clean: ## Remove build artifacts
 	rm -rf $(BUILD_DIR)
 	$(GO) clean -cache -testcache
@@ -84,4 +146,4 @@ docker-push: ## Push base Docker image to GHCR
 	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
 	docker push $(DOCKER_IMAGE):latest
 
-check: deps format lint test build ## Run full CI pipeline
+check: deps format lint test build check-artifacts ## Run full CI pipeline

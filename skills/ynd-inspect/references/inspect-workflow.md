@@ -31,8 +31,11 @@ Inspect searches for existing artifacts in both the project root and all vendor 
 
 - `skills/<name>/SKILL.md`
 - `agents/<name>.md`
-- `.claude/skills/`, `.cursor/skills/`, `.codex/skills/`
-- `.claude/agents/`, `.cursor/agents/`, `.codex/agents/`
+- `.claude/skills/`, `.cursor/skills/`, `.codex/skills/`, `.copilot/skills/`
+- `.claude/agents/`, `.cursor/agents/`, `.codex/agents/`, `.copilot/agents/`
+
+The vendor list is `supportedVendors` in `cmd/ynd/inspect.go`. If a vendor
+appears in `ynh vendors` but not in that slice, inspect will miss its artifacts.
 
 ## Flags
 

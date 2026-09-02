@@ -219,35 +219,52 @@ func (c *Cursor) SupportsExportDelegates() bool { return true }
 
 func (c *Cursor) MarketplaceManifestDir() string { return ".cursor-plugin" }
 
+// GenerateMarketplaceIndex writes Cursor's own index shape.
+//
+// This was a byte-for-byte copy of Claude's, which is how Cursor came to emit
+// Claude's format. Two things differ, per `references/cursor.md:127` and the
+// committed `.cursor-plugin/marketplace.json` that
+// `scripts/marketplace-consistency.sh` already gates on:
+//
+//   - `description` nests under `metadata`, rather than sitting at the top level
+//   - plugins carry no `version`
+//
+// The `source` field deliberately keeps `./plugins/<name>` rather than the bare
+// `"plugin-name"` the reference shows. That is not a third divergence: the
+// reference's example describes a marketplace whose plugins sit at its root —
+// like this repository's own committed index, which uses "." and "./.claude" —
+// while `ynd marketplace build` copies each plugin into `./plugins/<name>`.
+// The source has to say where the plugin actually is.
 func (c *Cursor) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error) {
 	type indexPlugin struct {
 		Name        string `json:"name"`
-		Description string `json:"description,omitempty"`
-		Version     string `json:"version,omitempty"`
 		Source      string `json:"source"`
+		Description string `json:"description,omitempty"`
 	}
 	type indexOwner struct {
 		Name  string `json:"name"`
 		Email string `json:"email,omitempty"`
 	}
+	type indexMetadata struct {
+		Description string `json:"description,omitempty"`
+	}
 	type indexJSON struct {
-		Name        string        `json:"name"`
-		Owner       indexOwner    `json:"owner"`
-		Description string        `json:"description,omitempty"`
-		Plugins     []indexPlugin `json:"plugins"`
+		Name     string        `json:"name"`
+		Owner    indexOwner    `json:"owner"`
+		Metadata indexMetadata `json:"metadata"`
+		Plugins  []indexPlugin `json:"plugins"`
 	}
 
 	idx := indexJSON{
-		Name:        cfg.Name,
-		Owner:       indexOwner{Name: cfg.OwnerName, Email: cfg.OwnerEmail},
-		Description: cfg.Description,
+		Name:     cfg.Name,
+		Owner:    indexOwner{Name: cfg.OwnerName, Email: cfg.OwnerEmail},
+		Metadata: indexMetadata{Description: cfg.Description},
 	}
 	for _, p := range plugins {
 		idx.Plugins = append(idx.Plugins, indexPlugin{
 			Name:        p.Name,
-			Description: p.Description,
-			Version:     p.Version,
 			Source:      "./plugins/" + p.Name,
+			Description: p.Description,
 		})
 	}
 

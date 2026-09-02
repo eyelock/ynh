@@ -1,0 +1,16 @@
+[
+  {
+    "backend": "local-llama",
+    "vendor": "claude",
+    "type": "openai-compatible",
+    "base_url": "http://localhost:11434/v1",
+    "has_auth_token": true,
+    "models": ["llama3.1:70b", "qwen2.5-coder:32b"]
+  },
+  {
+    "backend": "local-llama",
+    "vendor": "codex",
+    "base_url": "http://localhost:11434/v1",
+    "has_auth_token": false
+  }
+]

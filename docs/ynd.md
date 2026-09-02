@@ -25,6 +25,12 @@ ynd create rule be-nice        # rules/be-nice.md
 ynd create command deploy      # commands/deploy.md
 ```
 
+Every command takes `--help` for its own flags and behaviour:
+
+```bash
+ynd export --help      # this command's flags, not the whole page
+```
+
 ### lint
 
 Lint markdown, shell blocks, and config files for common issues.
@@ -35,11 +41,68 @@ ynd lint path/to/harness       # specific directory
 ynd lint --harness ./my-harness  # explicit harness flag
 ```
 
+#### Declared reads
+
+An artifact that tells an agent to open a file can name one that never ships.
+It works for the author, whose checkout has the file, and breaks for everyone
+who installs the harness. That shipped three times (#249, #256, #276): an agent
+reading `docs/`, two skills reading `testdata/`, and a focus prompt reading a
+`README.md`.
+
+Nothing in the text separates those from the many paths an artifact names
+legitimately, so the manifest states the intent and `ynd lint` checks it:
+
+```json
+"reads": {
+  "skills/ynh-adopt": ["skills/ynh-adopt/references/what-moves-where.md"]
+}
+```
+
+Keys are artifact paths, values are paths relative to the harness root. A
+declared read must resolve **inside a shipping artifact directory**:
+`skills/`, `agents/`, `rules/` or `commands/`. Existing in your repository is
+not enough, and is exactly the trap: every one of the three defects named a
+path that was present at the time.
+
+```
+skills/ynh-adopt reads "docs/tutorial/first-harness.md", but that is not inside
+a shipping artifact directory (skills/, agents/, rules/, commands/), so it will
+not exist once installed
+```
+
+Lint also reports a key naming an artifact the harness does not have, so a
+renamed skill cannot leave a declaration silently covering nothing.
+
+Declaring nothing is not an error. A harness with no `reads` is not checked,
+so adoption is incremental.
+
 ### validate
 
 Validate harness structure: required files, frontmatter fields, directory layout,
 and JSON Schema conformance (`plugin.json` against `plugin.schema.json`;
-`.ynh-plugin/marketplace.json` against `marketplace.schema.json`).
+`.ynh-plugin/marketplace.json` against `marketplace.schema.json`), plus the
+cross-field rules assembly enforces that a schema cannot express.
+
+One of those is worth naming. An MCP `env`/`headers` value referencing
+`${VAR}` that the harness does not list in `env_passthrough` **cannot
+assemble** — `ynd preview`, `ynh run` and `ynh agent run` all reject it. It
+used to pass `validate` and `lint` and fail only at run time, which is worst
+under automation: an unattended agent run does its setup and dies on a config
+error a pre-flight check could have caught.
+
+`validate` checks **declaration only**, never whether the variable is set. An
+unset variable is legitimately a run-time condition — a developer without the
+credential still needs validation to pass; an undeclared one never is.
+
+The check is **silent when a harness declares no `env_passthrough` at all**.
+Such a harness may be authored purely for distribution: `ynd export`
+deliberately leaves `${VAR}` literal so the exporter's credentials are not
+baked into a shared bundle, and strips `env_passthrough` from the artifact
+entirely — it is a local-assembly allowlist that never reaches the consumer,
+whose own CLI resolves the variable. Flagging that would redden a harness that
+works, and demand an allowlist with no effect on the thing it ships. A harness
+that declares an allowlist and misses an entry is the realistic mistake, and
+that is what this catches.
 
 When given a directory, validates all harnesses found within it and also checks
 for a `.ynh-plugin/marketplace.json` at the root of that directory.
@@ -120,7 +183,7 @@ When no `-o` flag is given, preview prints a tree with file contents to stdout. 
 
 Preview supports the same source types as export: local directories with `.ynh-plugin/plugin.json` or bare `AGENTS.md` directories.
 
-See [Tutorial 8: Developer Preview](tutorial/12-developer-preview.md) for a guided walkthrough.
+See [Developer Preview](tutorial/developer-preview.md) for a guided walkthrough.
 
 ### diff
 
@@ -143,7 +206,7 @@ The diff output groups files into four categories:
 
 At least two vendors are required for comparison. If no vendors are specified, all registered vendors are compared.
 
-See [Tutorial 8: Developer Preview](tutorial/12-developer-preview.md) for a guided walkthrough.
+See [Developer Preview](tutorial/developer-preview.md) for a guided walkthrough.
 
 ### export
 
@@ -210,7 +273,7 @@ Key differences from runtime layout:
 - Copilot reuses Claude's `.claude-plugin/plugin.json` schema (Copilot's plugin loader reads the same format)
 - `--merged` produces one directory with all vendor manifests; Claude and Copilot share the same `.claude-plugin/` manifest path harmlessly (identical schema)
 
-See [Tutorial 10: Export](tutorial/05-export.md) for a guided walkthrough.
+See [Export](tutorial/export.md) for a guided walkthrough.
 
 ### marketplace build
 
@@ -267,24 +330,14 @@ so manual invocation is rarely needed except for source trees.
 
 | Flag | Description |
 |------|-------------|
+| `--dry-run` | List what would be migrated and change nothing. |
+| `-y, --yes` | Skip the confirmation. Also honoured via `YNH_YES` or `CI`. |
 | `-h, --help` | Show help |
 
-**Output structure:**
-
-```
-dist/
-├── plugins/
-│   └── <name>/
-│       ├── .claude-plugin/plugin.json
-│       ├── .cursor-plugin/plugin.json
-│       ├── skills/
-│       └── ...
-├── .claude-plugin/marketplace.json
-├── .cursor-plugin/marketplace.json
-└── README.md
-```
-
-See [Tutorial 11: Marketplace](tutorial/06-marketplace.md) for a guided walkthrough.
+This command deletes `.harness.json`, so it lists what it will touch and asks
+first. The prompt refuses on EOF, so a piped or scripted run without `-y`
+declines and exits non-zero rather than migrating unattended. See
+[Exit codes](#exit-codes).
 
 ### validate-output
 
@@ -293,6 +346,10 @@ Validate a captured JSON response on stdin against a published CLI schema. Exits
 ```bash
 ynh ls --format json | ynd validate-output --schema list
 ynh version --format json | ynd validate-output --schema version
+
+# --schema also takes a path, so a project can gate its own contracts
+myapp config --json           | ynd validate-output --schema ./schema/config.json
+yq -o=json '.' config.yaml    | ynd validate-output --schema ./schema/config.json
 ```
 
 | Flag | Description |
@@ -318,6 +375,28 @@ Schemas are embedded in the binary — `ynh schema <name>` and `ynh schema --all
 | `--restore` | compress | Restore a file from its latest backup. |
 | `--list-backups` | compress | Show backup history for a file. |
 | `--pick <N>` | compress | With `--restore`, pick a specific backup by number from the list. |
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | The command did what it was asked. A no-op counts: `--dry-run`, or a tree with nothing to migrate, is a success. |
+| `1` | A failure, or an operation the operator declined. |
+| `2` | A usage error. |
+
+A declined operation exits non-zero. `ynd migrate`, `ynd compress` and
+`ynd inspect` ask before they change anything, and a refusal means the work did
+not happen, so reporting success would be wrong. Declines print a plain
+sentence to stderr (`Aborted. Nothing was migrated.`) without the `Error:`
+prefix a failure carries, so the two read differently even though both exit 1.
+
+This matters most when nobody is watching. Confirmation prompts return their
+refusing answer on EOF, so a piped or scripted call without `-y` declines by
+default. Pass `-y`, or set `YNH_YES` or `CI`, when you mean it to proceed.
+
+A refusal to overwrite an existing artifact is not a decline and not a failure:
+`ynd inspect` skips artifacts that already exist and keeps going, so re-running
+it over a project that is already partly built still exits 0.
 
 ## Examples
 

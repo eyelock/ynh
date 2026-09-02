@@ -1,0 +1,153 @@
+// Package gate defines the wire contract of `ynh check` — the verdict, the
+// per-sensor results, and the baseline summary that go with them.
+//
+// It lives in its own package because two things need the same shape: the
+// command that produces it (cmd/ynh) and the agent loop that consumes it
+// (internal/agent). The loop shelling out to `ynh check` and re-declaring the
+// JSON itself would leave two definitions of one contract free to drift, and
+// a consumer silently ignoring a field the producer renamed is exactly the
+// class of failure a versioned envelope exists to prevent.
+//
+// The shape is pinned by docs/schema/cli/check.schema.json and
+// test/golden/check.json. Changing it is subject to the capability-bump rule.
+package gate
+
+// Sensor statuses reported by `ynh check`.
+//
+// ynh deliberately owns only the thinnest possible pass/fail policy: a
+// command sensor passes when it exits 0. Anything richer — thresholds,
+// severity filters, convergence judgments — still belongs to a loop driver.
+// Sensors whose result cannot be reduced to pass/fail mechanically say so
+// rather than guessing, and never gate.
+const (
+	StatusPass     = "pass"     // command sensor exited 0
+	StatusFail     = "fail"     // command sensor exited non-zero
+	StatusReported = "reported" // files sensor: fresh, content surfaced, no verdict on it
+	StatusDeferred = "deferred" // focus sensor: needs an agent runtime ynh does not own
+	StatusSkipped  = "skipped"  // filtered out by --only
+	StatusKnown    = "known"    // failing, but every failure is in the baseline
+)
+
+// Verdicts. Only VerdictBlocked exits non-zero.
+const (
+	VerdictPass    = "pass"
+	VerdictBlocked = "blocked"
+)
+
+// Envelope is the `ynh check --format json` payload.
+type Envelope struct {
+	Capabilities string        `json:"capabilities"`
+	YnhVersion   string        `json:"ynh_version"`
+	Harness      string        `json:"harness"`
+	Verdict      string        `json:"verdict"` // pass | blocked
+	Summary      Summary       `json:"summary"`
+	Sensors      []Result      `json:"sensors"`
+	Baseline     *BaselineInfo `json:"baseline,omitempty"`
+}
+
+// BaselineInfo tells a consumer whether a ratchet is in play and whether it
+// could be tightened. Absent when no baseline has been recorded.
+type BaselineInfo struct {
+	RecordedAt string `json:"recorded_at"`
+	Known      int    `json:"known"` // pre-existing failures forgiven this run
+	Fixed      int    `json:"fixed"` // baseline entries no longer failing
+	Stale      bool   `json:"stale"` // true when Fixed > 0: the baseline can be narrowed
+}
+
+// Summary is the per-run tally, one counter per status plus the blocking
+// count that produced the verdict.
+type Summary struct {
+	Total    int `json:"total"`
+	Passed   int `json:"passed"`
+	Failed   int `json:"failed"`
+	Blocking int `json:"blocking"` // failures that caused a block
+	Reported int `json:"reported"`
+	Deferred int `json:"deferred"`
+	Skipped  int `json:"skipped"`
+	Known    int `json:"known"` // sensors failing only in ways the baseline records
+}
+
+// Result is one sensor's outcome.
+type Result struct {
+	Name      string `json:"name"`
+	Kind      string `json:"kind"`
+	Category  string `json:"category,omitempty"`
+	Tolerance string `json:"tolerance"`
+	Status    string `json:"status"`
+	// ToolVersion is what the sensor's declared version_command printed.
+	// Empty when none was declared or the probe failed — a corpus graded over
+	// weeks needs to tell a change in findings from a change in the tool, and
+	// an absent version says "cannot tell" rather than implying stability.
+	ToolVersion string `json:"tool_version,omitempty"`
+	// CountDelta is how far a count-ratchet sensor has moved since the
+	// baseline: positive is new findings, negative is removed ones. Saying how
+	// much worse is more useful than saying only that it is worse.
+	CountDelta int    `json:"count_delta,omitempty"`
+	ExitCode   int    `json:"exit_code"`
+	DurationMS int64  `json:"duration_ms"`
+	Stdout     string `json:"stdout,omitempty"`
+	Stderr     string `json:"stderr,omitempty"`
+	Note       string `json:"note,omitempty"`
+	// NewCount and KnownCount are set for failing command sensors when a
+	// baseline exists. NewOutput carries only the lines not in the baseline —
+	// the ones the author is actually being asked to fix.
+	NewCount   int    `json:"new_count,omitempty"`
+	KnownCount int    `json:"known_count,omitempty"`
+	NewOutput  string `json:"new_output,omitempty"`
+	// Freshness is set for files sensors: whether the artifact still describes
+	// the tree. "fresh", "stale", "absent" or "unknown".
+	//
+	// ynh judges no files sensor's *content* — no verdict is derivable from
+	// arbitrary JSON. It judges only whether the content is entitled to be
+	// believed, which is decidable and was previously nobody's job.
+	Freshness string `json:"freshness,omitempty"`
+	// FreshnessBasis is what that conclusion rests on — "mtime" today. A
+	// consumer grading results across machines needs to tell a strong answer
+	// from a weak one, and timestamps are weak wherever they get rewritten
+	// wholesale: fresh clones, container builds, CI caches.
+	FreshnessBasis string `json:"freshness_basis,omitempty"`
+}
+
+// Gating reports whether this result is one the verdict may block on.
+//
+// It is deliberately not "did it fail". A focus sensor needs a runtime ynh
+// does not own, and a sensor whose every failure is already in the baseline is
+// recorded debt rather than a regression. Only StatusFail is a live failure,
+// and only a blocking tolerance makes it gate.
+//
+// A files sensor reaches StatusFail on freshness alone — its artifact is
+// missing, stale, or unverifiable. Never on content: what the artifact *says*
+// is still not ynh's to judge.
+func (r Result) Gating() bool {
+	return r.Status == StatusFail && r.Tolerance == "blocking"
+}
+
+// StatusForKind derives the status of a sensor that ran to completion, before
+// any baseline is applied.
+//
+// It exists so there is exactly one answer to "what does this kind of sensor
+// look like when nothing has gone wrong". A focus sensor needs an agent runtime
+// ynh does not own, so it defers. A files sensor surfaces content on which no
+// verdict is derivable, so it reports. A command sensor decides by exit code.
+//
+// `ynh check` layers more on top: baseline comparison for command sensors, and
+// freshness for files sensors — a files sensor whose artifact is absent, stale
+// or unverifiable reaches StatusFail from here. That is a judgement about
+// whether the content may be believed, never about the content itself, which
+// is why it is layered rather than settled here.
+func StatusForKind(kind string, exitCode int) string {
+	switch kind {
+	case "files":
+		return StatusReported
+	case "focus":
+		return StatusDeferred
+	default:
+		if exitCode == 0 {
+			return StatusPass
+		}
+		return StatusFail
+	}
+}
+
+// Ran reports whether the sensor was actually executed this run.
+func (r Result) Ran() bool { return r.Status != StatusSkipped }

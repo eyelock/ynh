@@ -189,6 +189,8 @@ Claude Code's plugin skill loader does not correctly handle some Agent Skills 1.
 
 **Workaround:** Do not use `compatibility`, `license`, or `metadata` frontmatter fields in skills distributed as ynh harnesses (which use the plugin format). Stick to `name`, `description`, and Claude Code extension fields.
 
+`ynd lint` enforces this: a skill carrying any of the three is reported with the consequence, because the failure has no visible symptom otherwise. Only top-level keys count, so `metadata:` nesting a `license:` under it is one finding, not two.
+
 **Impact on ynh:** Since ynh harnesses are loaded as Claude Code plugins via `--plugin-dir`, this affects all ynh-distributed skills. The `ynd create skill` and `ynd inspect` commands already generate skills with only `name` and `description`, so scaffolded skills are safe. If you add spec-standard optional fields manually, they may cause the skill to be demoted.
 
 | Field | Spec Status | Safe in Plugins? |

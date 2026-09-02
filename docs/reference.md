@@ -50,9 +50,11 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh include add <harness> <url>` | `--path`, `--pick`, `--ref`, `--replace` |
 | `ynh include remove <harness> <url>` | `--path` |
 | `ynh include update <harness> <url>` | `--from-path`, `--path`, `--pick`, `--ref` |
+| `ynh focus ls <harness>` | `--format <text\|json>` |
 | `ynh focus add <harness> <name> <prompt>` | `--profile <name>` |
 | `ynh focus remove <harness> <name>` | |
 | `ynh focus update <harness> <name>` | `--prompt`, `--profile`, `--clear-profile` |
+| `ynh profile ls <harness>` | `--format <text\|json>` |
 | `ynh profile add <harness> <name>` | |
 | `ynh profile remove <harness> <name>` | (refuses if any focus references it) |
 | `ynh profile hook add <harness> <profile> <event> <command>` | `--matcher` |
@@ -72,6 +74,9 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh sensors ls <harness>` | `--format <text\|json>` |
 | `ynh sensors show <harness> <name>` | `--format <text\|json>` |
 | `ynh sensors run <harness> <name>` | `--cwd <dir>`, `--no-content` |
+| `ynh check <harness-id\|path>` | `--only <a,b>`, `--cwd <dir>`, `--update-baseline`, `--no-baseline`, `--sensor-overlay <json>`, `--format <text\|json>` |
+| `ynh trust [ls\|show\|accept] [harness]` | `--format <text\|json>` |
+| `ynh agent run` | `--harness`, `--task`, `--focus`, `--profile`, `--backend`, `--model`, `--convergence-sensor`, `--sensor-overlay`, `--worktree`, `--sandbox`, `--auto-commit`, `--interactive`, `--no-plan`, `--max-turns`, `--max-tokens`, `--max-wall`, `--max-plan-iterations`, `--emit-jsonl`, `--resume` — see [Agent Loop](agent.md) |
 | `ynh sources add <path>` | `--name`, `--description` |
 | `ynh sources list` | `--format <text\|json>` |
 | `ynh sources remove <name>` | |
@@ -82,11 +87,11 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh backend add <name> <vendor>` | `--base-url` (required), `--auth-token`, `--type`, `--env KEY=VALUE` (repeatable) |
 | `ynh backend list` | `--format <text\|json>` |
 | `ynh backend remove <name> [<vendor>]` | |
-| `ynh image <subcommand>` | |
+| `ynh image <name>` | `--tag`, `--base`, `--from`, `--path`, `--entrypoint <run\|agent>`, `--dry-run` |
 | `ynh paths` | `--format <text\|json>` |
 | `ynh status` | |
 | `ynh prune` | |
-| `ynh doctor` | check Claude hook wiring in `.claude/settings.json` / `settings.local.json` for the current project |
+| `ynh doctor` | diagnose the setup: vendor availability, installed-harness integrity, symlink health, launcher on PATH, quarantine, and Claude hook wiring. Read-only; every finding carries the command that fixes it |
 
 ## ynd Commands
 
@@ -114,8 +119,16 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 |---------|-------------------|
 | `ynd compose` | Composed harness: `name`, `version`, `description`, `default_vendor`, `artifacts` (with source), `includes`, `delegates_to`, `hooks`, `mcp_servers`, `profiles` (object keyed by name — see breaking change note below), `focuses`, `sensors`, `counts` |
 | `ynh sensors ls <harness>` | Array of sensor summaries: `name`, `category`, `role`, `source_kind`, `format`, `inline_focus` (bool) — see [Sensors](sensors.md) |
+| `ynh focus ls <harness>` | Array of focus summaries: `name`, `profile` (when set), `prompt` in full — the text view abbreviates, JSON does not |
+| `ynh profile ls <harness>` | Array of profile summaries: `name` plus counts of `hooks`, `mcp_servers`, `includes`, `env_passthrough` — `ynh info` resolves one in full |
 | `ynh sensors show <harness> <name>` | Resolved sensor object with inline-focus expansion |
 | `ynh sensors run <harness> <name>` | Sensor run result: `kind`, `exit_code`, `duration_ms`, `output` (raw signal — no `passed` field; pass/fail is loop-driver policy) |
+| `ynh trust` | Array of harness trust states: `harness`, `source`, `sha`, `digest`, `executables`, `state`, `undeclared_env`. `ynh trust show <harness>` returns one object of the same shape. Reports what a harness will execute; it does not block. See [Sensors](sensors.md) |
+| `ynh doctor` | Setup diagnosis: `summary` (`checks`, `errors`, `warnings`) and `checks[]`, each with `name`, `title`, `status` and `findings[]` (`severity`, `subject`, `message`, `remedy`). Exit status is 0 regardless; gate on `summary.errors` |
+| `ynh agent run` | Run result: `exit_code`, `reason`, `converged`, `budgets`/`budget_sources`/`consumed` with `bound_by`, `convergence`, `sensors[]`, `changed_files` — see [Agent](agent.md#run-result) |
+| `ynh baseline <harness>` | What the ratchet forgives: per-sensor `recorded`, `recorded_at`, `forgiven`, and under `--explain` the `findings` themselves — see [Sensors](sensors.md#reading-the-ratchet) |
+| `ynh check <harness> --calibrate` | Calibration result: `verdict` (`calibrated`\|`broken`), per-sensor `status` (`calibrated`\|`failed`\|`uncalibrated`\|`error`) with `expected`/`observed` — see [Sensors](sensors.md#reference-proving-a-sensor-still-observes) |
+| `ynh check <harness>` | Gate result: `verdict` (`pass`\|`blocked`), `summary` counts, `sensors[]` with `status`, `tolerance`, `new_count`/`known_count`, and `baseline` when a ratchet is in play — see [Sensors](sensors.md#tolerance) |
 | `ynh fork <name>` | Envelope (`capabilities`, `ynh_version`, `name`, `path`, `installed_from`) — see [ynh fork output](#ynh-fork-output) below |
 | `ynh info <name>` | Envelope (`capabilities`, `ynh_version`, `harness`) wrapping a single harness object — see [Envelope and harness fields](#envelope-and-harness-fields) below |
 | `ynh installed <name>` | Envelope (`capabilities`, `ynh_version`, `id`, `installed`) where `installed` mirrors the on-disk `.ynh-plugin/installed.json` (including `resolved[]` commit SHAs). Schema: `cli/installed.schema.json` |
@@ -124,7 +137,7 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 | `ynh paths` | `home`, `config`, `harnesses`, `symlinks`, `cache`, `run`, `bin` — all absolute paths resolved for the current `$YNH_HOME` |
 | `ynh search [query]` | Array of result objects: `name`, `description`, `keywords`, `repo`, `path`, `vendors`, `version`, `from` (`type`, `name`) |
 | `ynh vendors` | Array of vendor objects: `name`, `display_name`, `cli`, `config_dir`, `available` (bool), `supports_initial_prompt` (bool). Plus one row per configured local model backend (see [Local Model Backends](vendors.md#local-model-backends)) — `name` becomes the `<backend>/<vendor>` or, when models were discoverable, `<backend>/<vendor>/<model>` spec `-v` accepts |
-| `ynh version` / `ynd version` | `version` (release), `capabilities` (wire-contract). See [Wire-contract capability](cli-structured.md#wire-contract-capability-version---format-json). |
+| `ynh version` / `ynd version` | `version` (release), `capabilities` (wire-contract). See [Wire-contract capability](cli-structured.md#wire-contract-capability-version-format-json). |
 | `ynh sources list` | Array of source objects: `name`, `path`, `description`, `harnesses` (discovery count) |
 | `ynh backend list` | Array of objects: `backend`, `vendor`, `type`, `base_url`, `has_auth_token` (bool), `models` (array, present when live-discoverable) |
 
@@ -213,7 +226,7 @@ What gets probed:
 
 > Note: `--check-updates` performs network calls. Failures degrade silently — fields are simply omitted, the command does not error. Default `info` and `ls` calls (without the flag) remain offline, fast, and deterministic. Probes run concurrently (bounded fan-out) so a multi-include harness does not serialize the network.
 
-Three-state rendering on the consumer side (TermQ and similar):
+Three-state rendering on the consumer side:
 
 - Field omitted ⇒ **unknown** (probe failed, not requested, or no upstream)
 - Field present and equal to `*_installed` ⇒ **up-to-date**

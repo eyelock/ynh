@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/eyelock/ynh/internal/gate"
 )
 
 // mockBackend is a test WorkerBackend that returns scripted turns.
@@ -32,6 +34,10 @@ type mockBackend struct {
 	interruptAtCall int       // writes {"action":"interrupt"} to interruptWriter
 	interruptWriter io.Writer // sink wired to the loop's control stdin
 	sigtermAtCall   int       // raises SIGTERM at the process
+
+	// onTurn runs as the worker produces turn N, for tests that need the
+	// worktree to change while a turn is in flight.
+	onTurn func(call int)
 }
 
 func (m *mockBackend) Name() string { return m.name }
@@ -61,6 +67,10 @@ func (s *mockSession) Next() (Turn, error) {
 	pos := mb.pos
 	mb.pos++
 	call := pos + 1 // 1-indexed Next() call number
+
+	if mb.onTurn != nil {
+		mb.onTurn(call)
+	}
 
 	if mb.interruptAtCall == call && mb.interruptWriter != nil {
 		_, _ = mb.interruptWriter.Write([]byte(`{"action":"interrupt"}` + "\n"))
@@ -109,7 +119,7 @@ func TestRunLoop_ConvergesWhenNoSensors(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	opts := baseOpts(mb, &stdout, &stderr, strings.NewReader(""))
 
-	err := RunLoop(opts)
+	_, err := RunLoop(opts)
 	if err != nil {
 		t.Fatalf("expected convergence, got: %v", err)
 	}
@@ -118,11 +128,9 @@ func TestRunLoop_ConvergesWhenNoSensors(t *testing.T) {
 func TestRunLoop_TurnCapExceeded(t *testing.T) {
 	// Worker keeps responding, sensors always fail → no convergence.
 	// MaxTurns=1 should stop after the first act turn is recorded.
-	original := runSensorFn
-	defer func() { runSensorFn = original }()
-	runSensorFn = func(ynh, harnessName, sensorName, cwd, overlayJSON string) (*SensorResult, error) {
-		return &SensorResult{Name: sensorName, Kind: "command", ExitCode: 1}, nil
-	}
+	stubCheck(t, func(_ int, name string) gate.Result {
+		return gate.Result{Name: name, Kind: "command", Tolerance: "blocking", Status: gate.StatusFail, ExitCode: 1}
+	})
 
 	mb := &mockBackend{
 		name: "mock",
@@ -136,7 +144,7 @@ func TestRunLoop_TurnCapExceeded(t *testing.T) {
 	opts.MaxTurns = 1
 	opts.testSensorNames = []string{"build"}
 
-	err := RunLoop(opts)
+	_, err := RunLoop(opts)
 	var exitErr *ExitError
 	if err == nil {
 		t.Fatal("expected ExitError, got nil")
@@ -149,9 +157,6 @@ func TestRunLoop_TurnCapExceeded(t *testing.T) {
 func TestRunLoop_WorkerEOFBeforeConvergence(t *testing.T) {
 	// Worker exits after one turn but sensors (if any) didn't all pass.
 	// With sensors mocked to fail, worker EOF is a worker error.
-	original := runSensorFn
-	defer func() { runSensorFn = original }()
-
 	mb := &mockBackend{
 		name:  "mock",
 		turns: []Turn{{Content: "partial work"}},
@@ -160,7 +165,7 @@ func TestRunLoop_WorkerEOFBeforeConvergence(t *testing.T) {
 	opts := baseOpts(mb, &stdout, &stderr, strings.NewReader(""))
 
 	// Worker returns EOF after 1 turn; since there are no sensors, loop converges.
-	err := RunLoop(opts)
+	_, err := RunLoop(opts)
 	if err != nil {
 		t.Fatalf("no sensors → should converge on first turn, got: %v", err)
 	}
@@ -168,18 +173,13 @@ func TestRunLoop_WorkerEOFBeforeConvergence(t *testing.T) {
 
 func TestRunLoop_SensorFailureSendsFeedback(t *testing.T) {
 	// Sensor fails on turn 1, passes on turn 2. Loop should converge on turn 2.
-	original := runSensorFn
-	defer func() { runSensorFn = original }()
-
-	callCount := 0
-	runSensorFn = func(ynh, harnessName, sensorName, cwd, overlayJSON string) (*SensorResult, error) {
-		callCount++
-		exitCode := 1
-		if callCount > 1 {
-			exitCode = 0 // pass on second sensor run
+	stubCheck(t, func(call int, name string) gate.Result {
+		r := gate.Result{Name: name, Kind: "command", Tolerance: "blocking", Status: gate.StatusPass}
+		if call == 1 {
+			r.Status, r.ExitCode = gate.StatusFail, 1
 		}
-		return &SensorResult{Name: sensorName, Kind: "command", ExitCode: exitCode}, nil
-	}
+		return r
+	})
 
 	mb := &mockBackend{
 		name: "mock",
@@ -192,7 +192,7 @@ func TestRunLoop_SensorFailureSendsFeedback(t *testing.T) {
 	opts := baseOpts(mb, &stdout, &stderr, strings.NewReader(""))
 	opts.testSensorNames = []string{"build"} // inject sensor without real harness
 
-	err := RunLoop(opts)
+	_, err := RunLoop(opts)
 	if err != nil {
 		t.Fatalf("expected convergence after retry, got: %v", err)
 	}
@@ -212,7 +212,7 @@ func TestRunLoop_TrajectoryContainsSessionStart(t *testing.T) {
 	opts.EmitJSONL = "-"
 	opts.Stdout = &traj
 
-	if err := RunLoop(opts); err != nil {
+	if _, err := RunLoop(opts); err != nil {
 		t.Fatalf("RunLoop: %v", err)
 	}
 
@@ -240,7 +240,7 @@ func TestRunLoop_TrajectoryEndsWithSessionEnd(t *testing.T) {
 	opts.EmitJSONL = "-"
 	opts.Stdout = &traj
 
-	if err := RunLoop(opts); err != nil {
+	if _, err := RunLoop(opts); err != nil {
 		t.Fatalf("RunLoop: %v", err)
 	}
 
@@ -265,7 +265,7 @@ func TestRunLoop_TaskRequired(t *testing.T) {
 	// Should not crash — missing task is detected by the CLI layer.
 	// But if somehow called with empty task, the loop will send "" as first message.
 	// This test verifies no panic occurs.
-	err := RunLoop(opts)
+	_, err := RunLoop(opts)
 	// With no turns and empty task, worker returns EOF immediately.
 	// That's a worker error since convergence wasn't reached.
 	if err == nil {
@@ -290,20 +290,23 @@ func TestSelectBackend(t *testing.T) {
 }
 
 func TestSynthesizeFeedback(t *testing.T) {
-	results := []*SensorResult{
-		{Name: "build", Kind: "command", ExitCode: 0, DurationMS: 800},
-		{Name: "test", Kind: "command", ExitCode: 1, DurationMS: 2100,
-			Output: SensorRunOutput{Stdout: "FAIL: TestFoo"}},
-	}
-	fb := synthesizeFeedback(results)
+	fb := synthesizeFeedback(env(
+		gate.Result{Name: "build", Kind: "command", Tolerance: "blocking",
+			Status: gate.StatusPass, DurationMS: 800},
+		gate.Result{Name: "test", Kind: "command", Tolerance: "blocking",
+			Status: gate.StatusFail, ExitCode: 1, DurationMS: 2100, Stdout: "FAIL: TestFoo"},
+	))
 	if !strings.Contains(fb, "<sensor-results>") {
 		t.Error("feedback should contain <sensor-results>")
 	}
-	if !strings.Contains(fb, `status="failed"`) {
+	if !strings.Contains(fb, `status="fail"`) {
 		t.Error("feedback should mark test as failed")
 	}
-	if !strings.Contains(fb, `status="passed"`) {
+	if !strings.Contains(fb, `status="pass"`) {
 		t.Error("feedback should mark build as passed")
+	}
+	if !strings.Contains(fb, "FAIL: TestFoo") {
+		t.Error("feedback should carry the failing output the worker must act on")
 	}
 }
 

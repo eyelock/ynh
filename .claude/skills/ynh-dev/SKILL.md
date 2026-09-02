@@ -15,6 +15,7 @@ Read these before starting work:
 - `references/coding-standards.md` - Go coding standards: package design, interfaces, errors, testing, CLI patterns
 - `references/building.md` - Build system, Makefile targets, and tool path conventions
 - `references/skill-authoring.md` - Required reading (https://agentskills.io/) before creating or modifying skills
+- `references/agent-and-baseline.md` - The agent loop and the baseline ratchet: convergence, stuckness, budgets, checkpoints, trajectory redaction, and why the gate forgives what it does
 
 ## Quick checks
 
@@ -53,21 +54,39 @@ make test FILE=./internal/assembler
 
 ## Manual testing
 
-After code changes, verify against the relevant tutorial in `docs/tutorial/`. The full test matrix is in `docs/tutorial/manual-test-plan.md` (85 tests across 8 tutorials + edge cases).
+After code changes, verify against the relevant tutorial in `docs/tutorial/`.
+`docs/tutorial/manual-test-plan.md` adds edge cases the tutorials do not cover.
 
-To find which tutorials cover a changed area:
+Tutorial filenames are descriptive, not numbered — do not cite them by number.
 
 | Package / area | Tutorial |
 |---|---|
-| `cmd/ynh` (install, run, list, uninstall) | Tutorial 1, 2 |
-| `internal/resolver` (includes, Git sources) | Tutorial 3 |
-| `internal/assembler` (delegates) | Tutorial 4 |
-| `internal/exporter` | Tutorial 5 |
-| `internal/marketplace` | Tutorial 6 |
-| `internal/registry` | Tutorial 7 |
-| `cmd/ynd` (create, lint, validate, fmt, compress, inspect) | Tutorial 8 |
+| `cmd/ynh` (install, run, ls, uninstall) | `first-harness.md` |
+| `internal/vendor`, `internal/symlink` | `vendors-and-symlinks.md` |
+| `internal/resolver` (includes, Git sources) | `composition.md` |
+| `internal/assembler` (delegates) | `delegation.md` |
+| `internal/exporter` | `export.md` |
+| `internal/marketplace` | `marketplace.md` |
+| `internal/registry`, `internal/sources` | `registry-and-discovery.md` |
+| `cmd/ynd` (create, lint, validate, fmt, compress) | `developer-tools.md` |
+| `cmd/ynd` (preview, compose, diff) | `developer-preview.md` |
+| Docker image build | `docker-image.md` |
+| Hooks | `hooks.md` |
+| MCP servers | `mcp-servers.md` |
+| Profiles | `profiles.md` |
+| Focus | `focus.md` |
+| Project-local config | `project-local-config.md` |
+| `internal/clischema`, `internal/jsonschema` | `structured-output.md` |
+| `ynh include` editing | `include-editing.md` |
+| `internal/namespace`, `internal/migration` | `namespacing-and-migration.md` |
+| `internal/plugin` (sensor declarations) | `sensors.md` |
+| `internal/gate`, `internal/baseline` | `check.md` |
+| `internal/agent` | `agent-loop.md` |
+| `internal/freshness`, shadow mode | `shadow-mode.md` |
 
-Run the relevant tutorial steps end-to-end before committing. Build first with `make build` so the binaries reflect your changes, then walk through the tutorial steps. The tutorials use `/tmp/ynh-tutorial/` as a scratch directory.
+Run the relevant tutorial steps end-to-end before committing. Build first with
+`make build` so the binaries reflect your changes. The tutorials use `/tmp/` as
+a scratch directory; the `evals` agent has the isolation rules.
 
 ## Common issues
 

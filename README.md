@@ -63,7 +63,7 @@ Add skills, agents, rules, and commands to the harness directory. Pull from Git 
 
 The term "harness" was formalized by [Martin Fowler](https://martinfowler.com/articles/harness-engineering.html) and adopted by [OpenAI](https://openai.com/index/harness-engineering/) and [Anthropic](https://www.anthropic.com/engineering/harness-design-long-running-apps). A harness is everything in an AI coding agent except the model itself — the skills, rules, context, and constraints that shape its behavior.
 
-ynh manages the **guide layer** of that harness: the proactive steering that happens *before* the agent acts. One harness definition, assembled for Claude, Codex, or Cursor. Read more in [Harness Engineering](https://eyelock.github.io/ynh/#/harness-engineering).
+ynh manages the **guide layer** of that harness: the proactive steering that happens *before* the agent acts. One harness definition, assembled for Claude, Codex, Cursor or Copilot. Read more in [Harness Engineering](https://eyelock.github.io/ynh/#/harness-engineering).
 
 ## What you can do
 
@@ -83,8 +83,8 @@ Full docs at **[eyelock.github.io/ynh](https://eyelock.github.io/ynh)**:
 - **[Artifacts Guide](https://eyelock.github.io/ynh/#/artifacts)** — Skills, agents, rules, commands
 - **[CLI Reference](https://eyelock.github.io/ynh/#/reference)** — Full command reference for ynh and ynd
 - **[Agent Skills Standard](https://eyelock.github.io/ynh/#/skills-standard)** — Cross-platform spec, discovery paths, catalog budget
-- **[Vendor Support](https://eyelock.github.io/ynh/#/vendors)** — Claude, Codex, Cursor capabilities
+- **[Vendor Support](https://eyelock.github.io/ynh/#/vendors)** — Claude, Codex, Cursor and Copilot capabilities
 
 ## License
 
-MIT
+[MIT](LICENSE)

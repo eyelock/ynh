@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -850,4 +851,147 @@ func TestLintShellBlocks_EmptyBlock(t *testing.T) {
 	if len(issues) != 0 {
 		t.Errorf("expected no issues for empty block, got %v", issues)
 	}
+}
+
+// A fenced block whose lines carry a "$ " prompt is a transcript: the prefixed
+// lines are commands, everything else is their output. Piping the whole thing
+// to `bash -n` lints the output as if it were code — which is how
+// docs/vendors.md failed on a `ynh vendors` table containing "(ollama · qwen3)".
+// The doc was right; the linter was wrong.
+func TestShellScriptFromBlock(t *testing.T) {
+	cases := []struct {
+		name  string
+		lines []string
+		want  string
+	}{
+		{
+			name:  "plain script is returned whole",
+			lines: []string{"set -e", "make build"},
+			want:  "set -e\nmake build",
+		},
+		{
+			name:  "transcript keeps commands, drops output",
+			lines: []string{"$ ynh vendors", "NAME   CLI", "claude claude", "(ollama · qwen3)"},
+			want:  "ynh vendors",
+		},
+		{
+			name:  "several commands interleaved with output",
+			lines: []string{"$ ynh ls", "nothing", "$ ynh install .", "installed"},
+			want:  "ynh ls\nynh install .",
+		},
+		{
+			// A wrapped invocation is one command, not two fragments, and
+			// linting half of it would be a false positive of its own.
+			name:  "continuation lines follow the command",
+			lines: []string{`$ docker run \`, `  -e A=1 \`, "  image", "some output"},
+			want:  "docker run \\\n-e A=1 \\\nimage",
+		},
+		{
+			name:  "empty block",
+			lines: nil,
+			want:  "",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := shellScriptFromBlock(c.lines); got != c.want {
+				t.Errorf("got %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// The fix must not disable the check. A genuinely broken command inside a
+// transcript is still a broken command.
+func TestLintMarkdown_StillCatchesRealErrors(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		t.Helper()
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+
+	broken := write("broken-transcript.md", "# D\n\n```bash\n$ if true; then\n$ echo nope\n```\n")
+	if len(lintMarkdown(broken)) == 0 {
+		t.Error("an unterminated `if` inside a transcript is still a syntax error")
+	}
+
+	plain := write("broken-plain.md", "# D\n\n```bash\nfor i in 1 2 3\necho $i\n```\n")
+	if len(lintMarkdown(plain)) == 0 {
+		t.Error("a plain script with a syntax error must still be caught")
+	}
+
+	// The real shape from docs/vendors.md: a table row where "(" follows a
+	// word, which bash rejects as an unexpected token. A bare "(x · y)" is a
+	// valid subshell and would not reproduce the bug.
+	transcript := write("legit.md", "# D\n\n```bash\n$ ynh vendors\nNAME  DISPLAY\nollama/claude/qwen3   Claude Code (ollama · qwen3)   claude\n```\n")
+	if issues := lintMarkdown(transcript); len(issues) != 0 {
+		t.Errorf("command output must not be linted as shell: %v", issues)
+	}
+}
+
+// Every positional path must be linted, not just the first.
+//
+// `ynd lint skills agents` used to check 8 files when `skills` alone checked 8
+// and `agents` alone checked 2: the second path was parsed, discarded, and
+// never opened — with no warning and exit 0. A user validating freshly
+// generated agents was told "no issues found" about files nothing had read.
+func TestLint_EveryPositionalPathIsLinted(t *testing.T) {
+	dir := t.TempDir()
+	// Clean in the first tree, broken in the second. If the second is skipped
+	// the command reports success, which is precisely the bug.
+	writeFile(t, filepath.Join(dir, "first", "a.md"), []byte("# fine\n"))
+	writeFile(t, filepath.Join(dir, "second", "b.md"), []byte("# trailing space   \n"))
+
+	if err := cmdLint([]string{filepath.Join(dir, "first")}); err != nil {
+		t.Fatalf("first tree alone should be clean: %v", err)
+	}
+	if err := cmdLint([]string{filepath.Join(dir, "second")}); err == nil {
+		t.Fatal("second tree alone should fail; the fixture is wrong")
+	}
+	if err := cmdLint([]string{filepath.Join(dir, "first"), filepath.Join(dir, "second")}); err == nil {
+		t.Error("both paths together reported success — the second path was never linted")
+	}
+}
+
+// Overlapping roots must not double-count. `ynd lint . skills` would otherwise
+// report every finding under skills/ twice and print a summary that disagrees
+// with the list above it.
+func TestLint_OverlappingRootsAreDeduplicated(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "skills")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(sub, "x.md"), []byte("# bad   \n"))
+
+	var once, twice bytes.Buffer
+	withStdout(t, &once, func() { _ = cmdLint([]string{dir}) })
+	withStdout(t, &twice, func() { _ = cmdLint([]string{dir, sub}) })
+
+	if once.String() != twice.String() {
+		t.Errorf("overlapping roots changed the report:\nonly root:\n%s\nroot + subdir:\n%s",
+			once.String(), twice.String())
+	}
+}
+
+// withStdout captures what f prints. cmdLint writes its report with fmt.Print,
+// so there is no writer to inject.
+func withStdout(t *testing.T, buf *bytes.Buffer, f func()) {
+	t.Helper()
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	done := make(chan struct{})
+	go func() { _, _ = buf.ReadFrom(r); close(done) }()
+	f()
+	_ = w.Close()
+	os.Stdout = orig
+	<-done
 }

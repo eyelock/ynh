@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -706,9 +707,12 @@ func TestCmdInspect_Quit(t *testing.T) {
 	t.Chdir(dir)
 	writeFile(t, filepath.Join(dir, "go.mod"), []byte("module test\n"))
 
+	// Nothing was generated, so this exits non-zero. The operator chose that,
+	// so it is a decline rather than a failure, but a caller still has to be
+	// able to tell it apart from a run that did the work.
 	err := cmdInspect([]string{"-v", "claude"})
-	if err != nil {
-		t.Fatal(err)
+	if !errors.Is(err, errDeclined) {
+		t.Fatalf("want a decline, got %v", err)
 	}
 }
 
@@ -913,9 +917,12 @@ func TestCmdInspect_WalkthroughQuit(t *testing.T) {
 	t.Chdir(dir)
 	writeFile(t, filepath.Join(dir, "go.mod"), []byte("module test\n"))
 
+	// Nothing was generated, so this exits non-zero. The operator chose that,
+	// so it is a decline rather than a failure, but a caller still has to be
+	// able to tell it apart from a run that did the work.
 	err := cmdInspect([]string{"-v", "claude"})
-	if err != nil {
-		t.Fatal(err)
+	if !errors.Is(err, errDeclined) {
+		t.Fatalf("want a decline, got %v", err)
 	}
 }
 
@@ -968,9 +975,12 @@ func TestCmdInspect_WalkthroughSkipAfterGenerate(t *testing.T) {
 	t.Chdir(dir)
 	writeFile(t, filepath.Join(dir, "go.mod"), []byte("module test\n"))
 
+	// Nothing was generated, so this exits non-zero. The operator chose that,
+	// so it is a decline rather than a failure, but a caller still has to be
+	// able to tell it apart from a run that did the work.
 	err := cmdInspect([]string{"-v", "claude"})
-	if err != nil {
-		t.Fatal(err)
+	if !errors.Is(err, errDeclined) {
+		t.Fatalf("want a decline, got %v", err)
 	}
 
 	// Should NOT have been written since we skipped
@@ -1023,9 +1033,13 @@ func TestCmdInspect_WalkthroughLLMError(t *testing.T) {
 	t.Chdir(dir)
 	writeFile(t, filepath.Join(dir, "go.mod"), []byte("module test\n"))
 
+	// The LLM failed, so this is a failure of the run and not a decline.
 	err := cmdInspect([]string{"-v", "claude"})
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		t.Fatal("every generation failed, yet the command reported success")
+	}
+	if errors.Is(err, errDeclined) {
+		t.Errorf("an LLM failure is not a decline: %v", err)
 	}
 }
 
@@ -1255,9 +1269,12 @@ func TestCmdInspect_SkipProposals(t *testing.T) {
 	t.Chdir(dir)
 	writeFile(t, filepath.Join(dir, "go.mod"), []byte("module test\n"))
 
+	// Nothing was generated, so this exits non-zero. The operator chose that,
+	// so it is a decline rather than a failure, but a caller still has to be
+	// able to tell it apart from a run that did the work.
 	err := cmdInspect([]string{"-v", "claude"})
-	if err != nil {
-		t.Fatal(err)
+	if !errors.Is(err, errDeclined) {
+		t.Fatalf("want a decline, got %v", err)
 	}
 }
 
@@ -1556,10 +1573,14 @@ func TestGenerateAllProposals_LLMError(t *testing.T) {
 	dir := t.TempDir()
 	proposals := "1. **Skill: `test-skill`** — Test.\n"
 
-	// Should not return error, just print failure per-proposal
+	// Every proposal failed to generate. Reported per proposal, but the run
+	// as a whole failed and must say so rather than printing nothing at all.
 	err := generateAllProposals("claude", "overview", proposals, dir, dir)
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		t.Fatal("every generation failed, yet generateAllProposals reported success")
+	}
+	if errors.Is(err, errDeclined) {
+		t.Errorf("an LLM failure is not a decline: %v", err)
 	}
 }
 

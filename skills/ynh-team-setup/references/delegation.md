@@ -2,12 +2,30 @@
 
 ## delegates_to syntax
 
-```yaml
-delegates_to:
-  - git: github.com/user/harness           # shorthand (expands to SSH)
-    ref: main                               # optional - tag, branch, commit
-    path: harnesses/team-ops                 # optional - monorepo subdirectory
-  - git: git@github.com:co/private.git     # SSH for private repos
+The manifest is `.ynh-plugin/plugin.json` — **JSON**. There is no YAML form.
+
+```json
+{
+  "delegates_to": [
+    {
+      "git": "github.com/user/harness",
+      "ref": "main",
+      "path": "harnesses/team-ops"
+    },
+    { "git": "git@github.com:co/private.git" }
+  ]
+}
+```
+
+`ref` and `path` are optional: a tag, branch or commit, and a subdirectory for a
+monorepo holding several harnesses.
+
+There is a CLI for this, so the manifest rarely needs hand-editing:
+
+```bash
+ynh delegate add <harness> github.com/user/harness --ref v1.2.0
+ynh delegate update <harness> github.com/user/harness --ref v1.3.0
+ynh delegate remove <harness> github.com/user/harness
 ```
 
 At runtime, ynh resolves each delegate harness, reads its manifest and artifacts, and generates a vendor-native agent file (e.g., `.claude/agents/<name>.md`) so the AI vendor can invoke it as a subagent.
@@ -37,6 +55,10 @@ ynh delegates to the local `git` binary. If `git clone <url>` works on the machi
 | Claude | `claude` | `.claude` | `CLAUDE.md` |
 | Codex | `codex` | `.codex` | `codex.md` |
 | Cursor | `agent` | `.cursor` | `.cursorrules` |
+| Copilot | `copilot` | `.copilot` | `AGENTS.md` |
+
+Run `ynh vendors` for the live list — it reflects the adapters actually
+compiled in, which this table cannot.
 
 Setting `default_vendor` in the team harness standardizes the vendor across the team. Individual members can override with `-v` at runtime.
 

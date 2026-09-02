@@ -109,20 +109,29 @@ func IsPinnedRef(ref string) bool {
 }
 
 type Harness struct {
-	Name          string
-	Version       string
-	Description   string
-	DefaultVendor string
-	Namespace     string // e.g. "eyelock/assistants"; empty for local/unqualified installs
-	Dir           string // absolute path to the harness directory — the base for relative local includes
-	Includes      []Include
-	DelegatesTo   []Delegate
-	Hooks         map[string][]plugin.HookEntry
-	MCPServers    map[string]plugin.MCPServer
-	Profiles      map[string]plugin.Profile
-	Focuses       map[string]plugin.Focus
-	Sensors       map[string]plugin.Sensor
-	InstalledFrom *Provenance
+	Name        string
+	Version     string
+	Description string
+	// Author and Keywords exist so an assembled vendor manifest can carry what
+	// the source manifest declared. Without them a *Harness cannot reproduce
+	// its own plugin.json, and every path that assembles from one — `ynh run`
+	// and `ynd preview` — silently ships less than `ynd export` does.
+	Author          *plugin.AuthorInfo
+	Keywords        []string
+	DefaultVendor   string
+	Namespace       string // e.g. "eyelock/assistants"; empty for local/unqualified installs
+	Dir             string // absolute path to the harness directory — the base for relative local includes
+	Includes        []Include
+	DelegatesTo     []Delegate
+	Hooks           map[string][]plugin.HookEntry
+	MCPServers      map[string]plugin.MCPServer
+	EnvPassthrough  []string
+	Agent           *plugin.AgentConfig
+	Profiles        map[string]plugin.Profile
+	Focuses         map[string]plugin.Focus
+	Sensors         map[string]plugin.Sensor
+	SensorOverrides map[string]plugin.SensorOverride
+	InstalledFrom   *Provenance
 }
 
 // ListEntry is one installed harness with its namespace.
@@ -444,7 +453,8 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 		return nil, fmt.Errorf("invalid harness name %q: must match %s", hj.Name, validName.String())
 	}
 
-	p := &Harness{Name: hj.Name, Version: hj.Version, Description: hj.Description}
+	p := &Harness{Name: hj.Name, Version: hj.Version, Description: hj.Description,
+		Author: hj.Author, Keywords: hj.Keywords}
 	p.DefaultVendor = hj.DefaultVendor
 	p.Namespace = inferNamespace(dir)
 	if abs, err := filepath.Abs(dir); err == nil {
@@ -507,6 +517,17 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	} else if fallback, err := plugin.LoadMCPJSON(dir); err == nil && len(fallback) > 0 {
 		p.MCPServers = fallback
 	}
+	// env_passthrough and agent are not MCP settings and must not be
+	// conditional on MCP servers existing. They were loaded inside that branch,
+	// so a harness declaring env_passthrough or agent budgets but no MCP server
+	// silently lost both: the worker allowlist had nothing to admit, and
+	// manifest budget defaults were ignored in favour of the built-in ones.
+	if len(hj.EnvPassthrough) > 0 {
+		p.EnvPassthrough = hj.EnvPassthrough
+	}
+	if hj.Agent != nil {
+		p.Agent = hj.Agent
+	}
 	if len(hj.Profiles) > 0 {
 		p.Profiles = hj.Profiles
 	}
@@ -515,6 +536,9 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	}
 	if len(hj.Sensors) > 0 {
 		p.Sensors = hj.Sensors
+	}
+	if len(hj.SensorOverrides) > 0 {
+		p.SensorOverrides = hj.SensorOverrides
 	}
 
 	// Provenance: use the supplied/loaded record; fall back to InstalledFrom
@@ -599,6 +623,13 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 		resolved.Hooks = merged
 	}
 
+	// Replace the env allowlist rather than union it. A profile that exists to
+	// restrict what an agent can see has to be able to; a union could only ever
+	// widen, which is the wrong direction for a containment declaration.
+	if profile.EnvPassthrough != nil {
+		resolved.EnvPassthrough = profile.EnvPassthrough
+	}
+
 	// Merge MCP servers: deep merge, nil removes inherited
 	if profile.MCPServers != nil {
 		merged := make(map[string]plugin.MCPServer)
@@ -673,7 +704,8 @@ func LoadFile(path string) (*Harness, error) {
 		return nil, err
 	}
 
-	p := &Harness{Name: hj.Name, Version: hj.Version, Description: hj.Description}
+	p := &Harness{Name: hj.Name, Version: hj.Version, Description: hj.Description,
+		Author: hj.Author, Keywords: hj.Keywords}
 	p.DefaultVendor = hj.DefaultVendor
 
 	for _, inc := range hj.Includes {
@@ -693,6 +725,13 @@ func LoadFile(path string) (*Harness, error) {
 	if len(hj.MCPServers) > 0 {
 		p.MCPServers = hj.MCPServers
 	}
+	// See above: neither of these is an MCP setting.
+	if len(hj.EnvPassthrough) > 0 {
+		p.EnvPassthrough = hj.EnvPassthrough
+	}
+	if hj.Agent != nil {
+		p.Agent = hj.Agent
+	}
 	if len(hj.Profiles) > 0 {
 		p.Profiles = hj.Profiles
 	}
@@ -701,6 +740,9 @@ func LoadFile(path string) (*Harness, error) {
 	}
 	if len(hj.Sensors) > 0 {
 		p.Sensors = hj.Sensors
+	}
+	if len(hj.SensorOverrides) > 0 {
+		p.SensorOverrides = hj.SensorOverrides
 	}
 
 	return p, nil

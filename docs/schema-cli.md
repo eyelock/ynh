@@ -1,6 +1,6 @@
 # Published JSON Schemas for ynh CLI Output
 
-Every `ynh` command that supports `--format json` has a published JSON Schema. Consumers — TermQ, IDE integrations, scripts — can validate responses, codegen types, or branch on the schema at runtime.
+Every `ynh` command that supports `--format json` has a published JSON Schema. Consumers — editor integrations, scripts, anything reading the JSON — can validate responses, codegen types, or branch on the schema at runtime.
 
 This document is the contract: the schemas live in `docs/schema/cli/` and `docs/schema/shared/`, and a mirror under `internal/clischema/schema/` is embedded into the `ynh` and `ynd` binaries. A parity test fails CI if the two trees drift.
 
@@ -26,7 +26,7 @@ ynh ls --format json | ynd validate-output --schema list
 
 ## Capability versioning
 
-Every structured response carries a `capabilities` field — `config.CapabilitiesVersion`, currently `0.6.0`. Schemas carry the same value as an `x-capabilities` annotation.
+Every structured response carries a `capabilities` field — `config.CapabilitiesVersion`, currently `0.8.0`. Each schema carries an `x-capabilities` annotation recording the version at which *that* schema last changed shape, so a schema untouched since 0.6 still reads `0.6`.
 
 **Capability bumps:**
 - Removing a field; renaming a field; changing a field's type
@@ -106,7 +106,7 @@ live ynh <command> --format json  →  internal/jsonschema validator  →  PASS
 
 Any drift between Go emission and the schema fails CI. Schemas are the published contract.
 
-**Runtime validation in consumers is the consumer's choice and the consumer's dependency.** YNH does not ship a runtime validator library; the in-tree `internal/jsonschema` is consumer-internal. Consumers (TermQ MCP server, IDE plugins, codegen tools) pick their own validator at their own layer.
+**Runtime validation in consumers is the consumer's choice and the consumer's dependency.** YNH does not ship a runtime validator library; the in-tree `internal/jsonschema` is consumer-internal. Consumers (an MCP server, an IDE plugin, a codegen tool) pick their own validator at their own layer.
 
 ## Validator subset
 

@@ -298,3 +298,46 @@ func TestCmdPreviewSkillsOnly(t *testing.T) {
 
 	assertExists(t, filepath.Join(outputDir, ".claude", "skills", "simple", "SKILL.md"))
 }
+
+// `ynd preview` exists to show what will be assembled, and `ynh run` assembles
+// the real thing. Both synthesized a manifest with a hardcoded "0.0.0" and no
+// author or keywords, so the same harness produced two different plugin.json
+// files depending on which command ran — and the live launch path shipped the
+// lossy one.
+func TestPreview_ManifestMatchesTheSource(t *testing.T) {
+	src := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(src, ".ynh-plugin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const manifest = `{
+      "name": "fidelity", "version": "2.3.4", "default_vendor": "claude",
+      "description": "carries its own identity",
+      "author": {"name": "A Person", "url": "https://example.com"},
+      "keywords": ["one", "two", "three"]
+    }`
+	if err := os.WriteFile(filepath.Join(src, ".ynh-plugin", "plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	if err := cmdPreview([]string{src, "-v", "claude", "-o", out}); err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(out, ".claude-plugin", "plugin.json"))
+	if err != nil {
+		t.Fatalf("reading assembled manifest: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["version"] != "2.3.4" {
+		t.Errorf("version = %v, want 2.3.4 — a synthesized 0.0.0 disagrees with what ships", got["version"])
+	}
+	if got["author"] == nil {
+		t.Error("author dropped: a *Harness that cannot carry it cannot reproduce its own manifest")
+	}
+	if kw, _ := got["keywords"].([]any); len(kw) != 3 {
+		t.Errorf("keywords = %v, want 3", got["keywords"])
+	}
+}

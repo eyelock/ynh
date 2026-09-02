@@ -284,11 +284,11 @@ func TestListAll_ForkAndRegistryInstallSameLeafName(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
 
-	// Pointer-shaped fork: local/termq-dev
-	forkDir := filepath.Join(t.TempDir(), "termq-dev")
-	writeForkTree(t, forkDir, "termq-dev")
+	// Pointer-shaped fork: local/demo-dev
+	forkDir := filepath.Join(t.TempDir(), "demo-dev")
+	writeForkTree(t, forkDir, "demo-dev")
 	if err := SavePointer(&Pointer{
-		Name: "termq-dev",
+		Name: "demo-dev",
 		InstalledJSON: plugin.InstalledJSON{
 			SourceType:  "local",
 			Source:      forkDir,
@@ -298,10 +298,10 @@ func TestListAll_ForkAndRegistryInstallSameLeafName(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Schema-2 registry install: github.com/eyelock/assistants/termq-dev
-	// Dir name is the id-fsname: github.com--eyelock--assistants--termq-dev
-	registryDir := filepath.Join(home, "harnesses", "github.com--eyelock--assistants--termq-dev")
-	writeForkTree(t, registryDir, "termq-dev")
+	// Schema-2 registry install: github.com/eyelock/assistants/demo-dev
+	// Dir name is the id-fsname: github.com--eyelock--assistants--demo-dev
+	registryDir := filepath.Join(home, "harnesses", "github.com--eyelock--assistants--demo-dev")
+	writeForkTree(t, registryDir, "demo-dev")
 
 	entries, err := ListAll()
 	if err != nil {
@@ -319,11 +319,11 @@ func TestListAll_ForkAndRegistryInstallSameLeafName(t *testing.T) {
 		ids[id] = e.Dir
 	}
 
-	if _, ok := ids["local/termq-dev"]; !ok {
-		t.Errorf("ListAll missing local/termq-dev; got %+v", ids)
+	if _, ok := ids["local/demo-dev"]; !ok {
+		t.Errorf("ListAll missing local/demo-dev; got %+v", ids)
 	}
-	if _, ok := ids["github.com/eyelock/assistants/termq-dev"]; !ok {
-		t.Errorf("ListAll missing github.com/eyelock/assistants/termq-dev; got %+v", ids)
+	if _, ok := ids["github.com/eyelock/assistants/demo-dev"]; !ok {
+		t.Errorf("ListAll missing github.com/eyelock/assistants/demo-dev; got %+v", ids)
 	}
 	if len(entries) != 2 {
 		t.Errorf("expected 2 entries, got %d: %+v", len(entries), entries)

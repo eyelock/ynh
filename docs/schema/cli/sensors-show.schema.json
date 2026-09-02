@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/sensors-show.schema.json",
+  "title": "ynh sensors show --format json",
+  "description": "Output of `ynh sensors show <harness> <name> --format json`. One sensor resolved into a self-contained payload: a named focus reference is expanded from the harness's top-level focus map, so a consumer never has to look one up separately. Distinct from `cli/sensors`, which summarises the whole declared set. Envelope retrofit deferred, matching the other Phase 3 commands.",
+  "x-capabilities": "0.8",
+  "$defs": {
+    "Focus": {
+      "type": "object",
+      "description": "A focus, expanded. `inline` says where it came from: true when the sensor declared it in place, false when it was resolved from the harness's focus map. The prompt is present either way, which is the point of resolving.",
+      "properties": {
+        "name": {"type": "string", "description": "The focus's name. Absent for an inline focus, which has none."},
+        "profile": {"type": "string", "description": "Profile the focus applies, when it names one."},
+        "prompt": {"type": "string"},
+        "inline": {"type": "boolean", "description": "True when declared inside the sensor rather than referenced by name. Inline focuses are scoped to their sensor and do not appear in the harness's top-level focus list."}
+      },
+      "required": ["prompt", "inline"],
+      "additionalProperties": false
+    },
+    "Source": {
+      "type": "object",
+      "description": "Strict one-of: exactly one of files, command or focus is set. Which one decides what running the sensor means — execute, read artifacts, or hand a prompt to an agent runtime ynh does not own.",
+      "properties": {
+        "files": {"type": "array", "items": {"type": "string"}},
+        "command": {"type": "string"},
+        "focus": {"$ref": "#/$defs/Focus"}
+      },
+      "additionalProperties": false
+    },
+    "Output": {
+      "type": "object",
+      "properties": {
+        "format": {"type": "string", "description": "Declared output format. Freeform by design — ynh does not parse sensor output, so this is a hint to the consumer, not a contract ynh enforces."},
+        "channel": {"type": "string", "description": "Where the result appears. Inferred from the source kind when not declared: stdout+exit for a command, files for a files source, stdout for a focus."},
+        "path": {"type": "string", "description": "Where the result is written, when the sensor declares one."}
+      },
+      "required": ["format"],
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "properties": {
+    "name": {"type": "string"},
+    "category": {"type": "string", "description": "Fowler bucket: maintainability, architecture or behaviour. Free metadata for loop-driver triage."},
+    "role": {"type": "string", "description": "Role hint: regular, convergence-verifier or stuck-recovery. Absent means regular."},
+    "source": {"$ref": "#/$defs/Source"},
+    "output": {"$ref": "#/$defs/Output"}
+  },
+  "required": ["name", "source", "output"],
+  "additionalProperties": false
+}

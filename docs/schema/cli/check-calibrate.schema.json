@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/check-calibrate.schema.json",
+  "title": "ynh check --calibrate --format json",
+  "description": "Output of `ynh check --calibrate --format json`. Runs each sensor against its declared reference fixture and reports whether it still observes what it claims to. A separate mode from `ynh check`: a gate that calibrates on every invocation is a gate people disable. Exit code 0 = every sensor with a reference behaved as declared, 1 = at least one did not, 2 = ynh could not run the calibration.",
+  "x-capabilities": "0.7",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["capabilities", "ynh_version", "harness", "verdict", "summary", "sensors"],
+  "properties": {
+    "capabilities": { "type": "string", "description": "Wire-protocol version. See CLAUDE.md capability-bump rule." },
+    "ynh_version": { "type": "string" },
+    "harness": { "type": "string" },
+    "verdict": {
+      "type": "string",
+      "enum": ["calibrated", "broken"],
+      "description": "broken when any sensor failed calibration or could not be calibrated at all. Uncalibrated sensors alone never make a run broken — a gap is not a failure."
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "calibrated", "failed", "uncalibrated", "errored"],
+      "description": "Counts per outcome. uncalibrated is reported rather than hidden: how much of a gate is proven to observe is itself a useful number.",
+      "properties": {
+        "total": { "type": "integer" },
+        "calibrated": { "type": "integer" },
+        "failed": { "type": "integer" },
+        "uncalibrated": { "type": "integer" },
+        "errored": { "type": "integer" },
+        "non_portable": { "type": "integer", "description": "Sensors whose calibration cannot transfer to the tree being checked, because their command resolves relative to the working directory. Neither a pass nor a failure: the calibration succeeded and proves nothing about what `ynh check` will run." }
+      }
+    },
+    "sensors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status"],
+        "properties": {
+          "name": { "type": "string" },
+          "kind": { "type": "string", "description": "command, files or focus. Only a command sensor can be calibrated: calibration compares an exit code against a declared expectation, and neither a files nor a focus source produces one." },
+          "status": {
+            "type": "string",
+            "enum": ["calibrated", "failed", "uncalibrated", "error"],
+            "description": "calibrated: the reference produced the declared result. failed: it produced the wrong one — for an `expect: fail` fixture, the sensor did not flag something it was built to flag. uncalibrated: no reference declared; a gap, not a failure. error: the reference could not be run, which needs a different remedy from a wrong answer."
+          },
+          "reference": { "type": "string", "description": "Fixture path, relative to the harness. Absent when none is declared." },
+          "expected": { "type": "string", "enum": ["fail", "pass"] },
+          "observed": { "type": "string", "enum": ["fail", "pass"], "description": "Absent when the reference could not be run." },
+          "exit_code": { "type": "integer" },
+          "note": { "type": "string", "description": "Why, in plain language, when the status is failed or error." },
+          "portable_command": { "type": "boolean", "description": "Whether the command resolves to the same program from the reference fixture as from anywhere else. False means the calibration is real but does not transfer: calibration ran in the fixture and `ynh check` runs in the measured tree, so a cwd-relative command executes a different program in each. Absent for sensors that are not command-sourced." }
+        }
+      }
+    }
+  }
+}

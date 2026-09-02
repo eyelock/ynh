@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -184,7 +185,7 @@ Output ONLY the complete updated file content, nothing else.`,
 	fmt.Println(updated)
 	fmt.Println("--- End ---")
 
-	applyAction := promptAction("    [a]pply / [s]kip: ", "a", "s")
+	applyAction := promptAction("    [a]pply / [s]kip: ", "s", "a")
 	if applyAction == "a" {
 		if writeErr := os.WriteFile(path, []byte(updated), 0o644); writeErr != nil {
 			return writeErr
@@ -261,17 +262,24 @@ func generateAllProposals(vendor, overview, proposalText, root, outputDir string
 	}
 
 	generated := 0
+	failed := 0
 	for _, p := range proposals {
 		fmt.Printf("  Generating %s: %s\n", p.Type, p.Name)
 		content, err := generateSingleArtifact(vendor, overview, p.Line, root)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "    Failed: %v\n", err)
+			failed++
 			continue
 		}
 
 		content = ensureFrontmatter(content, p)
 		if err := writeArtifact(content, p, outputDir); err != nil {
+			if errors.Is(err, errArtifactExists) {
+				fmt.Fprintf(os.Stderr, "    Skipped: %v\n", err)
+				continue
+			}
 			fmt.Fprintf(os.Stderr, "    Write failed: %v\n", err)
+			failed++
 			continue
 		}
 		generated++
@@ -280,8 +288,30 @@ func generateAllProposals(vendor, overview, proposalText, root, outputDir string
 	if generated > 0 {
 		fmt.Printf("\nGenerated %d artifact(s).\n", generated)
 	}
+	// Previously this returned nil whatever happened, so a run in which every
+	// generation failed reported success and printed nothing at all.
+	if failed > 0 {
+		return fmt.Errorf("%d of %d artifact(s) could not be generated", failed, len(proposals))
+	}
 	return nil
 }
+
+// errArtifactExists marks writeArtifact's refusal to overwrite an artifact
+// that is already there.
+//
+// That refusal is a safety behaviour, not a failure of the run. Re-running
+// `ynd inspect` over a project that already holds some of the proposed
+// artifacts is the ordinary case, and it must not colour the exit code, or
+// every second run of inspect would report failure.
+var errArtifactExists = errors.New("artifact already exists")
+
+type artifactExistsError struct{ path string }
+
+func (e *artifactExistsError) Error() string {
+	return e.path + " already exists, use the update flow instead"
+}
+
+func (e *artifactExistsError) Is(target error) bool { return target == errArtifactExists }
 
 // walkthroughProposals walks through each proposal one by one.
 func walkthroughProposals(vendor, overview, proposalText, root, outputDir string) error {
@@ -291,13 +321,20 @@ func walkthroughProposals(vendor, overview, proposalText, root, outputDir string
 		return nil
 	}
 
+	written := 0
+	failed := 0
 	for _, p := range proposals {
 		fmt.Printf("\n  %s\n", p.Line)
-		action := promptAction("  [g]enerate / [s]kip / [q]uit: ", "g", "s", "q")
+		action := promptAction("  [g]enerate / [s]kip / [q]uit: ", "s", "g", "q")
 
 		switch action {
 		case "q":
-			fmt.Println("Stopped.")
+			// Quitting after writing something is a completed partial run, not
+			// a refusal. Quitting having written nothing is a refusal.
+			if written == 0 {
+				return declined("Stopped. Nothing was written.")
+			}
+			fmt.Printf("\nStopped. %d artifact(s) written.\n", written)
 			return nil
 		case "s":
 			continue
@@ -305,6 +342,7 @@ func walkthroughProposals(vendor, overview, proposalText, root, outputDir string
 			content, err := generateSingleArtifact(vendor, overview, p.Line, root)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "  Generation failed: %v\n", err)
+				failed++
 				continue
 			}
 
@@ -313,15 +351,29 @@ func walkthroughProposals(vendor, overview, proposalText, root, outputDir string
 			fmt.Println(content)
 			fmt.Println()
 
-			writeAction := promptAction("  [w]rite / [s]kip: ", "w", "s")
+			writeAction := promptAction("  [w]rite / [s]kip: ", "s", "w")
 			if writeAction == "w" {
 				if writeErr := writeArtifact(content, p, outputDir); writeErr != nil {
+					if errors.Is(writeErr, errArtifactExists) {
+						fmt.Fprintf(os.Stderr, "  Skipped: %v\n", writeErr)
+						continue
+					}
 					fmt.Fprintf(os.Stderr, "  Write failed: %v\n", writeErr)
+					failed++
+					continue
 				}
+				written++
 			}
 		}
 	}
 
+	if failed > 0 {
+		return fmt.Errorf("%d artifact(s) could not be generated or written", failed)
+	}
+	if written == 0 {
+		return declined("Nothing was written: every proposal was skipped.")
+	}
+	fmt.Printf("\n%d artifact(s) written.\n", written)
 	return nil
 }
 
@@ -515,7 +567,7 @@ func writeArtifact(content string, p proposal, root string) error {
 	}
 
 	if _, err := os.Stat(path); err == nil {
-		return fmt.Errorf("%s already exists — use update flow instead", path)
+		return &artifactExistsError{path: path}
 	}
 
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {

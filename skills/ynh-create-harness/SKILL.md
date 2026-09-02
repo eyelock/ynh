@@ -5,7 +5,7 @@ description: Interactive wizard to create a ynh harness from scratch. Walks thro
 
 # Create a Harness
 
-You are guiding a user through creating their first ynh (ynh) harness. Follow this workflow step by step, asking one question at a time.
+You are guiding a user through creating their first ynh harness. Follow this workflow step by step, asking one question at a time.
 
 ## Before you start
 
@@ -13,13 +13,11 @@ Read these references to understand the current formats and conventions:
 
 1. Read `references/harness-format.md` for manifest syntax, directory structure, and install/run commands
 2. Read `references/artifact-formats.md` for skill, agent, rule, and command formats
+3. Read `references/example-harness.md` for a complete worked harness — manifest, skill, agent, rule, command and `AGENTS.md`, with notes on what makes each one good rather than generic
 
-Also read the working examples in `testdata/sample-harness/` to see realistic artifacts:
-- `testdata/sample-harness/.harness.json`
-- `testdata/sample-harness/skills/hello/SKILL.md`
-- `testdata/sample-harness/agents/code-reviewer.md`
-- `testdata/sample-harness/rules/be-concise.md`
-- `testdata/sample-harness/commands/check.md`
+All three ship with this skill, so they are readable wherever it is installed.
+Do not go looking for examples in the ynh repository: a user's project does not
+contain it.
 
 ## Step 1: Harness name
 
@@ -33,7 +31,9 @@ Ask where to create the harness directory. Suggest a sensible default like `~/ha
 
 ## Step 3: Default vendor
 
-Ask which AI vendor they want as the default. Run `ynh vendors` (or read the output of `internal/vendor/` adapters) to show what's available. Currently: claude, codex, cursor.
+Ask which AI vendor they want as the default. Run `ynh vendors` to show what's available — that command is the authority, not this page. Today it lists claude, codex, cursor, and copilot.
+
+`ynh vendors` answers "is this CLI installed", not "what does this vendor support". Those differ, and the difference only bites when the harness is *distributed* — see the artifact-support table in `references/artifact-formats.md`. Ask whether they intend to publish this harness as a native plugin; if so, raise it now rather than at export.
 
 Explain they can always override with `-v` at runtime.
 
@@ -48,13 +48,20 @@ Ask which artifact types they want scaffolded. Offer these options:
 
 They can pick any combination, or start with none and add later.
 
+**If they plan to publish this as a native plugin, say what each vendor carries
+before they choose.** Every vendor receives all four types through `ynh run`,
+but `ynd export` drops what a vendor's plugin format cannot hold: Codex takes
+skills only, and Copilot takes no rules or commands. `references/artifact-formats.md`
+has the table. Load-bearing content belongs in skills, which every vendor carries.
+
 ## Step 5: Generate the harness
 
 Create the directory structure based on their choices:
 
 ```
 <output-dir>/
-├── .harness.json
+├── .ynh-plugin/
+│   └── plugin.json
 ├── AGENTS.md            (optional - read natively by most vendors; ynh shims Claude via @-import)
 ├── skills/              (if selected)
 │   └── <example>/
@@ -67,11 +74,11 @@ Create the directory structure based on their choices:
     └── <example>.md
 ```
 
-For `.harness.json`:
+For `.ynh-plugin/plugin.json`:
 
 ```json
 {
-  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "<their-name>",
   "version": "0.1.0",
   "description": "<their description>",
@@ -79,7 +86,7 @@ For `.harness.json`:
 }
 ```
 
-For each artifact type selected, generate a starter example with realistic content (not lorem ipsum). Use the testdata examples as reference for format, but make the content relevant to the user's context if they mentioned what they work on.
+For each artifact type selected, generate a starter example with realistic content (not lorem ipsum). Use `references/example-harness.md` as the model for format and depth, and make the content relevant to what the user told you they work on.
 
 **Important:** Follow the exact formats from `references/artifact-formats.md`:
 - Skills: directory with `SKILL.md` containing YAML frontmatter (`name`, `description`)
@@ -114,6 +121,6 @@ If `ynh` isn't on their PATH, remind them about the build step (`make build`) an
 
 After the harness is working, mention:
 
-1. **Add external skills** - They can pull skills from any Git repo by adding `includes` to `.harness.json`. See `references/harness-format.md` for the syntax.
+1. **Add external skills** - They can pull skills from any Git repo by adding `includes` to `.ynh-plugin/plugin.json`. See `references/harness-format.md` for the syntax.
 2. **Team setup** - When ready, they can use `/ynh-team-setup` to create a team harness with delegation.
 3. **Private repos** - If they need private Git repos, SSH URLs (`git@github.com:...`) are recommended. ynh delegates to the local `git` binary - if `git clone` works, ynh works.

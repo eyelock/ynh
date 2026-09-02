@@ -1,0 +1,968 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/eyelock/ynh/internal/baseline"
+	"github.com/eyelock/ynh/internal/gate"
+)
+
+const checkHarnessJSON = `{
+  "name": "ch",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "focuses": {
+    "audit": {"prompt": "audit the diff"}
+  },
+  "sensors": {
+    "green": {
+      "category": "maintainability",
+      "source": {"command": "exit 0"},
+      "output": {"format": "text"}
+    },
+    "red": {
+      "category": "behaviour",
+      "source": {"command": "echo boom >&2; exit 3"},
+      "output": {"format": "text"}
+    },
+    "soft": {
+      "tolerance": "advisory",
+      "source": {"command": "exit 1"},
+      "output": {"format": "text"}
+    },
+    "files": {
+      "source": {"files": ["nope/**/*.xml"]},
+      "output": {"format": "junit-xml"}
+    },
+    "gone": {
+      "tolerance": "blocking",
+      "source": {"command": "./definitely-not-here-xyz.sh"},
+      "output": {"format": "text"}
+    },
+    "softfiles": {
+      "tolerance": "advisory",
+      "source": {"files": ["nope/**/*.json"]},
+      "output": {"format": "json"}
+    },
+    "judged": {
+      "source": {"focus": "audit"},
+      "output": {"format": "markdown"}
+    }
+  }
+}`
+
+func runCheck(t *testing.T, args ...string) (gate.Envelope, string, error) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	t.Setenv("CI", "")
+	t.Setenv("YNH_AGENT_SESSION", "")
+
+	installListTestHarness(t, home, "ch", checkHarnessJSON)
+
+	// Always run against a scratch directory. Without --cwd, cmdCheck falls
+	// back to os.Getwd() — the package directory — so the suite would read
+	// the repository's own .ynh/baseline.json, and one --update-baseline
+	// would leave a file behind that silently changed every later result.
+	// It did: a stray entry turned an advisory failure into "known" and the
+	// suite passed or failed depending on what had run before.
+	if !slices.Contains(args, "--cwd") {
+		args = append(args, "--cwd", t.TempDir())
+	}
+
+	var stdout bytes.Buffer
+	err := cmdCheck(append([]string{"local/ch"}, args...), &stdout, io.Discard)
+
+	var env gate.Envelope
+	// An execution error reports on stderr and writes no payload, so only
+	// decode when there is one.
+	if strings.Contains(strings.Join(args, " "), "json") && stdout.Len() > 0 {
+		if uErr := json.Unmarshal(stdout.Bytes(), &env); uErr != nil {
+			t.Fatalf("decoding check output: %v\n%s", uErr, stdout.String())
+		}
+	}
+	return env, stdout.String(), err
+}
+
+func TestCheck_BlocksOnFailingBlockingSensor(t *testing.T) {
+	// Scoped to the command sensors. The fixture's files sensor points at a
+	// glob matching nothing, which is now its own blocking failure — see
+	// TestCheck_FilesSensorGatesOnFreshness — and would otherwise make this
+	// test's count say something it does not mean.
+	env, _, err := runCheck(t, "--format", "json", "--only", "green,red,soft")
+	if !errors.Is(err, errCheckBlocked) {
+		t.Fatalf("want errCheckBlocked, got %v", err)
+	}
+	if env.Verdict != "blocked" {
+		t.Fatalf("verdict = %q, want blocked", env.Verdict)
+	}
+	if env.Summary.Blocking != 1 {
+		t.Fatalf("blocking = %d, want 1 (only \"red\" blocks)", env.Summary.Blocking)
+	}
+}
+
+func TestCheck_AdvisoryFailureDoesNotBlock(t *testing.T) {
+	env, _, _ := runCheck(t, "--format", "json", "--only", "soft")
+	if env.Verdict != "pass" {
+		t.Fatalf("verdict = %q, want pass — advisory failures must not gate", env.Verdict)
+	}
+	if env.Summary.Failed != 1 {
+		t.Fatalf("failed = %d, want 1", env.Summary.Failed)
+	}
+}
+
+func TestCheck_PassesWhenOnlyGreen(t *testing.T) {
+	env, _, err := runCheck(t, "--format", "json", "--only", "green")
+	if err != nil {
+		t.Fatalf("cmdCheck: %v", err)
+	}
+	if env.Verdict != "pass" || env.Summary.Passed != 1 {
+		t.Fatalf("verdict=%q passed=%d, want pass/1", env.Verdict, env.Summary.Passed)
+	}
+}
+
+// A focus sensor needs an agent runtime ynh does not own, so it defers and
+// never gates whatever its tolerance.
+func TestCheck_FocusSensorNeverGates(t *testing.T) {
+	env, _, err := runCheck(t, "--format", "json", "--only", "judged")
+	if err != nil {
+		t.Fatalf("cmdCheck: %v", err)
+	}
+	if env.Verdict != "pass" {
+		t.Fatalf("verdict = %q, want pass", env.Verdict)
+	}
+	// By name, not by index: skipped sensors stay in the payload, so a
+	// positional lookup silently reads whichever one sorts last.
+	if got := sensorByName(t, env, "judged").Status; got != gate.StatusDeferred {
+		t.Errorf("judged status = %q, want %q", got, gate.StatusDeferred)
+	}
+}
+
+func sensorByName(t *testing.T, env gate.Envelope, name string) gate.Result {
+	t.Helper()
+	for _, s := range env.Sensors {
+		if s.Name == name {
+			return s
+		}
+	}
+	t.Fatalf("sensor %q not in payload", name)
+	return gate.Result{}
+}
+
+// A files sensor still derives no verdict from its content, but an artifact
+// that is missing is not content — it is the absence of an observation. This
+// used to report green, which is the bug the freshness check exists to close.
+func TestCheck_FilesSensorGatesOnFreshness(t *testing.T) {
+	env, _, err := runCheck(t, "--format", "json", "--only", "files")
+	if !errors.Is(err, errCheckBlocked) {
+		t.Fatalf("want errCheckBlocked, got %v", err)
+	}
+	if env.Verdict != "blocked" {
+		t.Fatalf("verdict = %q, want blocked — a declared artifact is missing", env.Verdict)
+	}
+
+	r := sensorByName(t, env, "files")
+	if r.Status != gate.StatusFail {
+		t.Errorf("status = %q, want %q", r.Status, gate.StatusFail)
+	}
+	if r.Freshness != "absent" {
+		t.Errorf("freshness = %q, want %q", r.Freshness, "absent")
+	}
+	if r.Note == "" {
+		t.Error("failed without a note; the operator is told nothing to act on")
+	}
+}
+
+// Freshness respects tolerance exactly as a command sensor's exit code does.
+// Without this, adopting the check would turn every advisory files sensor into
+// a hard gate.
+func TestCheck_AdvisoryFilesSensorDoesNotGate(t *testing.T) {
+	env, _, err := runCheck(t, "--format", "json", "--only", "softfiles")
+	if err != nil {
+		t.Fatalf("cmdCheck: %v — an advisory sensor must not gate", err)
+	}
+	if env.Verdict != "pass" {
+		t.Fatalf("verdict = %q, want pass", env.Verdict)
+	}
+	if env.Summary.Failed != 1 {
+		t.Fatalf("failed = %d, want 1 — it still reports the finding", env.Summary.Failed)
+	}
+}
+
+func TestCheck_OnlyFiltersAndMarksSkipped(t *testing.T) {
+	env, _, _ := runCheck(t, "--format", "json", "--only", "green")
+	if env.Summary.Skipped != 6 {
+		t.Fatalf("skipped = %d, want 6", env.Summary.Skipped)
+	}
+}
+
+func TestCheck_UnknownSensorIsExecError(t *testing.T) {
+	_, _, err := runCheck(t, "--format", "json", "--only", "nosuch")
+	if !errors.Is(err, errCheckExec) {
+		t.Fatalf("want errCheckExec (exit 2), got %v", err)
+	}
+	if errors.Is(err, errCheckBlocked) {
+		t.Fatal("a missing sensor must not read as a blocked gate")
+	}
+}
+
+// Failing output is the remediation the agent acts on, so it has to reach
+// the operator verbatim rather than being summarised away.
+func TestCheck_TextIncludesFailureOutput(t *testing.T) {
+	// Scoped past "gone", whose command cannot run: that is an exec error by
+	// design and would mask the failure-output behaviour under test.
+	_, out, err := runCheck(t, "--only", "green,red,soft,judged,files")
+	if !errors.Is(err, errCheckBlocked) {
+		t.Fatalf("want errCheckBlocked, got %v", err)
+	}
+	if !strings.Contains(out, "boom") {
+		t.Errorf("failing sensor output missing from report:\n%s", out)
+	}
+	if !strings.Contains(out, "blocked:") {
+		t.Errorf("verdict line missing:\n%s", out)
+	}
+}
+
+func TestCheck_RequiresHarnessName(t *testing.T) {
+	err := cmdCheck(nil, io.Discard, io.Discard)
+	if !errors.Is(err, errCheckExec) {
+		t.Fatalf("want errCheckExec, got %v", err)
+	}
+}
+
+// --- baseline ---
+
+const baselineHarnessJSON = `{
+  "name": "bl",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "sensors": {
+    "lint": {
+      "tolerance": "blocking",
+      "source": {"command": "cat issues.txt >&2; exit 1"},
+      "output": {"format": "text"}
+    },
+    "quiet": {
+      "tolerance": "blocking",
+      "source": {"command": "exit 1"},
+      "output": {"format": "text"}
+    }
+  }
+}`
+
+// runBaselineCheck runs cmdCheck with cwd pointed at a scratch work dir whose
+// issues.txt is the sensor's output, so a test can move the failure surface
+// around the way a real edit would.
+func runBaselineCheck(t *testing.T, home, work string, args ...string) (gate.Envelope, string, error) {
+	t.Helper()
+	t.Setenv("YNH_HOME", home)
+	// Neutralise the guards that read the ambient environment, so a test
+	// asserts the behaviour it names rather than the behaviour of the machine
+	// it runs on. Without this every --update-baseline test passes locally and
+	// fails in CI — where CI is set and the guard correctly refuses — which is
+	// the one place nobody was looking until stacked PRs started running CI.
+	//
+	// A test whose subject *is* the ambient environment uses
+	// runBaselineCheckInEnv instead: this helper runs after the caller's own
+	// t.Setenv and would undo it.
+	t.Setenv("CI", "")
+	t.Setenv("YNH_AGENT_SESSION", "")
+	return runBaselineCheckInEnv(t, home, work, args...)
+}
+
+// runBaselineCheckInEnv is runBaselineCheck without the environment
+// neutralisation, for the guard tests that need the ambient environment they
+// set to survive.
+func runBaselineCheckInEnv(t *testing.T, home, work string, args ...string) (gate.Envelope, string, error) {
+	t.Helper()
+	t.Setenv("YNH_HOME", home)
+	var stdout bytes.Buffer
+	full := append([]string{"local/bl", "--cwd", work, "--format", "json"}, args...)
+	err := cmdCheck(full, &stdout, io.Discard)
+	var env gate.Envelope
+	if stdout.Len() > 0 {
+		if uErr := json.Unmarshal(stdout.Bytes(), &env); uErr != nil {
+			t.Fatalf("decoding: %v\n%s", uErr, stdout.String())
+		}
+	}
+	return env, stdout.String(), err
+}
+
+// sensorNamed finds a result by name. Indexing is fragile: results are sorted
+// and --only leaves filtered sensors in the payload as skipped.
+func sensorNamed(t *testing.T, env gate.Envelope, name string) gate.Result {
+	t.Helper()
+	for _, r := range env.Sensors {
+		if r.Name == name {
+			return r
+		}
+	}
+	t.Fatalf("sensor %q not in result", name)
+	return gate.Result{}
+}
+
+func setupBaselineRepo(t *testing.T, issues string) (home, work string) {
+	t.Helper()
+	home = t.TempDir()
+	work = t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "bl", baselineHarnessJSON)
+	writeIssues(t, work, issues)
+	return home, work
+}
+
+func writeIssues(t *testing.T, work, issues string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(work, "issues.txt"), []byte(issues), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+const preExisting = `src/legacy.go:12:5: exported func Old should have comment
+src/util.go:8:2: unused variable tmp
+`
+
+// The trap this feature exists to remove: without a baseline, inheriting a
+// repo that already fails means turn one is unwinnable.
+func TestCheck_WithoutBaselineDirtyRepoBlocks(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	env, _, err := runBaselineCheck(t, home, work)
+	if !errors.Is(err, errCheckBlocked) {
+		t.Fatalf("want blocked, got %v", err)
+	}
+	if got := sensorNamed(t, env, "lint").NewCount; got != 2 {
+		t.Errorf("lint new_count = %d, want 2", got)
+	}
+}
+
+func TestCheck_BaselineForgivesPreExistingFailures(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatalf("--update-baseline: %v", err)
+	}
+	env, _, err := runBaselineCheck(t, home, work)
+	if err != nil {
+		t.Fatalf("want pass after baseline, got %v", err)
+	}
+	if env.Verdict != "pass" {
+		t.Errorf("verdict = %q, want pass", env.Verdict)
+	}
+	if got := sensorNamed(t, env, "lint").Status; got != gate.StatusKnown {
+		t.Errorf("lint status = %q, want known", got)
+	}
+	if env.Summary.Known != 2 {
+		t.Errorf("known = %d, want 2 (lint and quiet both baselined)", env.Summary.Known)
+	}
+}
+
+// The load-bearing case: a new issue must still block, and the report must
+// show only it — not the debt the author did not introduce.
+func TestCheck_NewFailureBlocksAndIsolated(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatal(err)
+	}
+	writeIssues(t, work, preExisting+"src/feature.go:3:1: exported func New should have comment\n")
+
+	env, _, err := runBaselineCheck(t, home, work)
+	if !errors.Is(err, errCheckBlocked) {
+		t.Fatalf("a new failure must block, got %v", err)
+	}
+	r := sensorNamed(t, env, "lint")
+	if r.NewCount != 1 || r.KnownCount != 2 {
+		t.Errorf("new=%d known=%d, want 1/2", r.NewCount, r.KnownCount)
+	}
+	if !strings.Contains(r.NewOutput, "feature.go") {
+		t.Errorf("new output missing the new issue: %q", r.NewOutput)
+	}
+	if strings.Contains(r.NewOutput, "legacy.go") {
+		t.Errorf("new output leaked pre-existing debt, which is what makes a gate ignorable: %q", r.NewOutput)
+	}
+}
+
+// Without position normalisation this is the bug that would make baselines
+// useless in practice: inserting lines above an issue would report the whole
+// file as new on every edit.
+func TestCheck_LineNumberDriftIsNotANewFailure(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatal(err)
+	}
+	writeIssues(t, work, `src/legacy.go:112:5: exported func Old should have comment
+src/util.go:88:2: unused variable tmp
+`)
+	env, _, err := runBaselineCheck(t, home, work)
+	if err != nil {
+		t.Fatalf("moved line numbers must not block, got %v", err)
+	}
+	if got := sensorNamed(t, env, "lint").Status; got != gate.StatusKnown {
+		t.Errorf("lint status = %q, want known", got)
+	}
+}
+
+func TestCheck_ReportsFixedDebtSoRatchetCanTighten(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatal(err)
+	}
+	writeIssues(t, work, "src/legacy.go:12:5: exported func Old should have comment\n")
+
+	env, _, err := runBaselineCheck(t, home, work)
+	if err != nil {
+		t.Fatalf("want pass, got %v", err)
+	}
+	if env.Baseline == nil || env.Baseline.Fixed != 1 || !env.Baseline.Stale {
+		t.Errorf("baseline info = %+v, want fixed=1 stale=true", env.Baseline)
+	}
+}
+
+// A gate that rewrites its own reference point from a feature branch forgives
+// whatever that branch introduced.
+func TestCheck_UpdateBaselineRefusedInCI(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	t.Setenv("YNH_AGENT_SESSION", "")
+	t.Setenv("CI", "true")
+	_, _, err := runBaselineCheckInEnv(t, home, work, "--update-baseline")
+	if !errors.Is(err, errCheckExec) {
+		t.Fatalf("want errCheckExec, got %v", err)
+	}
+}
+
+func TestCheck_NoBaselineFlagShowsUnratchetedTruth(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatal(err)
+	}
+	env, _, err := runBaselineCheck(t, home, work, "--no-baseline")
+	if !errors.Is(err, errCheckBlocked) {
+		t.Fatalf("--no-baseline must ignore the ratchet, got %v", err)
+	}
+	if env.Baseline != nil {
+		t.Errorf("baseline info should be absent with --no-baseline, got %+v", env.Baseline)
+	}
+}
+
+// --- regressions ---
+
+// --update-baseline used to write a freshly built map, so any sensor filtered
+// out by --only lost its recorded debt. Silent, and unrecoverable without git.
+func TestCheck_UpdateBaselineWithOnlyPreservesOtherSensors(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-record only a sensor that is not "lint".
+	if _, _, err := runBaselineCheck(t, home, work, "--only", "quiet", "--update-baseline"); err != nil {
+		t.Fatalf("scoped update: %v", err)
+	}
+
+	// lint's forgiveness must survive.
+	env, _, err := runBaselineCheck(t, home, work, "--only", "lint")
+	if err != nil {
+		t.Fatalf("lint should still be forgiven after a scoped update, got %v", err)
+	}
+	if got := sensorNamed(t, env, "lint").Status; got != gate.StatusKnown {
+		t.Errorf("lint status = %q, want known — its baseline entry was erased", got)
+	}
+}
+
+// A sensor that fails with no output produces no fingerprints, so forgiveness
+// keyed on a non-zero known count could never apply to it.
+func TestCheck_SilentFailureCanBeBaselined(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatal(err)
+	}
+	env, _, err := runBaselineCheck(t, home, work, "--only", "quiet")
+	if err != nil {
+		t.Fatalf("a baselined silent failure must not gate, got %v", err)
+	}
+	if got := sensorNamed(t, env, "quiet").Status; got != gate.StatusKnown {
+		t.Errorf("quiet status = %q, want known", got)
+	}
+	if env.Baseline != nil && env.Baseline.Stale {
+		t.Error("nothing changed, so the baseline must not report fixed debt")
+	}
+}
+
+// A sensor going fully green is the clearest signal the ratchet can tighten,
+// but that path returns before Compare, so its debt was never counted.
+func TestCheck_GreenSensorReportsClearedDebt(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatal(err)
+	}
+	writeIssues(t, work, "") // lint now passes entirely
+
+	env, _, err := runBaselineCheck(t, home, work, "--only", "lint")
+	if err != nil {
+		t.Fatalf("want pass, got %v", err)
+	}
+	if env.Baseline == nil || !env.Baseline.Stale || env.Baseline.Fixed != 2 {
+		t.Errorf("baseline = %+v, want fixed=2 stale=true", env.Baseline)
+	}
+}
+
+// An empty stdout leaves a structured consumer unable to tell success from a
+// crash.
+func TestCheck_UpdateBaselineEmitsJSON(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	_, out, err := runBaselineCheck(t, home, work, "--update-baseline")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(out) == "" {
+		t.Fatal("--update-baseline --format json wrote nothing to stdout")
+	}
+	var env gate.Envelope
+	if uErr := json.Unmarshal([]byte(out), &env); uErr != nil {
+		t.Fatalf("output is not valid JSON: %v\n%s", uErr, out)
+	}
+	if env.Verdict != "pass" {
+		t.Errorf("verdict = %q, want pass", env.Verdict)
+	}
+}
+
+// The CI guard alone protected the wrong process: an agent runs in a worktree
+// where CI is unset, so an agent that could not converge could grant itself
+// blanket amnesty and then converge.
+func TestCheck_UpdateBaselineRefusedInsideAgentSession(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	t.Setenv("CI", "")
+	t.Setenv("YNH_AGENT_SESSION", "sess-123")
+	_, _, err := runBaselineCheckInEnv(t, home, work, "--update-baseline")
+	if !errors.Is(err, errCheckExec) {
+		t.Fatalf("want refusal, got %v", err)
+	}
+}
+
+// Blocking is the safety property; recording is the measurement. An agent
+// reaching for --update-baseline when it cannot converge is a direct signal of
+// how often the loop tries to buy past the gate rather than satisfy it.
+func TestCheck_BaselineWriteAttemptIsRecorded(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	sessionDir := t.TempDir()
+	t.Setenv("CI", "")
+	t.Setenv("YNH_AGENT_SESSION", "sess-abc")
+	t.Setenv("YNH_AGENT_SESSION_DIR", sessionDir)
+
+	if _, _, err := runBaselineCheckInEnv(t, home, work, "--update-baseline"); err == nil {
+		t.Fatal("expected the write to be refused")
+	}
+
+	data, err := os.ReadFile(filepath.Join(sessionDir, "gate-write-attempts.jsonl"))
+	if err != nil {
+		t.Fatalf("attempt not recorded: %v", err)
+	}
+	if !strings.Contains(string(data), "sess-abc") {
+		t.Errorf("record does not identify the session: %s", data)
+	}
+}
+
+// A refusal must not depend on a writable session directory — failing the
+// check because a measurement could not be written is the wrong trade.
+func TestCheck_RefusalWorksWithoutASessionDir(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	t.Setenv("CI", "")
+	t.Setenv("YNH_AGENT_SESSION", "sess-nodir")
+	if _, _, err := runBaselineCheckInEnv(t, home, work, "--update-baseline"); err == nil {
+		t.Fatal("expected refusal even with no session dir set")
+	}
+}
+
+// A human on their own machine is the intended caller and must not be blocked.
+func TestCheck_UpdateBaselineAllowedForAHuman(t *testing.T) {
+	home, work := setupBaselineRepo(t, preExisting)
+	t.Setenv("YNH_AGENT_SESSION", "")
+	t.Setenv("CI", "")
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatalf("a human recording a baseline must be allowed: %v", err)
+	}
+}
+
+// The agent loop substitutes a faster command for the same declared sensor on
+// its inner turns. That substitution has to go through the gate, not around
+// it — a loop that ran `ynh sensors run` directly to get an overlay would be
+// applying its own policy again, which is the split B1 closed.
+func TestCheck_SensorOverlayReplacesTheCommand(t *testing.T) {
+	env, _, err := runCheck(t, "--only", "red", "--format", "json",
+		"--sensor-overlay", `{"red":{"source":{"command":"exit 0"}}}`)
+	if err != nil {
+		t.Fatalf("overlay made red pass, so the gate should not block: %v", err)
+	}
+	if env.Verdict != gate.VerdictPass {
+		t.Errorf("verdict = %q, want pass once the overlay replaced the failing command", env.Verdict)
+	}
+	for _, s := range env.Sensors {
+		if s.Name == "red" && s.Status != gate.StatusPass {
+			t.Errorf("red status = %q, want pass — the overlay did not take effect", s.Status)
+		}
+	}
+}
+
+// An overlay naming a sensor the harness does not declare is a typo. Ignoring
+// it silently would leave the caller believing it had substituted a command
+// while being gated on the original.
+func TestCheck_SensorOverlayForUnknownSensorIsAnError(t *testing.T) {
+	_, _, err := runCheck(t, "--format", "json",
+		"--sensor-overlay", `{"rde":{"source":{"command":"exit 0"}}}`)
+	if !errors.Is(err, errCheckExec) {
+		t.Fatalf("want exec error for an overlay naming no declared sensor, got %v", err)
+	}
+}
+
+func TestCheck_SensorOverlayRejectsInvalidJSON(t *testing.T) {
+	_, _, err := runCheck(t, "--format", "json", "--sensor-overlay", `{`)
+	if !errors.Is(err, errCheckExec) {
+		t.Fatalf("want exec error for malformed overlay JSON, got %v", err)
+	}
+}
+
+// A baseline records what a declared sensor produces. Writing one while a
+// substitute command runs would file the proxy's output under the real
+// sensor's name, and every later run would compare the real command against
+// fingerprints it never produced.
+func TestCheck_UpdateBaselineRejectsAnOverlay(t *testing.T) {
+	_, _, err := runCheck(t, "--update-baseline",
+		"--sensor-overlay", `{"red":{"source":{"command":"exit 0"}}}`)
+	if !errors.Is(err, errCheckExec) {
+		t.Fatalf("recording a baseline from a substitute command must be refused, got %v", err)
+	}
+}
+
+// A substitute command passing says nothing about what the declared one
+// records. Reporting its debt as fixed would invite the operator to narrow the
+// ratchet — erasing real findings on the strength of a proxy.
+func TestCheck_OverlayDoesNotClaimDebtIsFixed(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	// --update-baseline refuses when either of these is set, so a test that
+	// drives cmdCheck directly must say which environment it means. Without
+	// it this passes on a laptop and fails in CI.
+	t.Setenv("CI", "")
+	t.Setenv("YNH_AGENT_SESSION", "")
+	installListTestHarness(t, home, "ch", checkHarnessJSON)
+	cwd := t.TempDir()
+
+	var rec bytes.Buffer
+	if err := cmdCheck([]string{"local/ch", "--only", "red", "--cwd", cwd, "--update-baseline"},
+		&rec, io.Discard); err != nil {
+		t.Fatalf("recording baseline: %v", err)
+	}
+
+	var out bytes.Buffer
+	err := cmdCheck([]string{"local/ch", "--only", "red", "--cwd", cwd, "--format", "json",
+		"--sensor-overlay", `{"red":{"source":{"command":"exit 0"}}}`}, &out, io.Discard)
+	if err != nil {
+		t.Fatalf("overlay made red pass: %v", err)
+	}
+	var env gate.Envelope
+	if uErr := json.Unmarshal(out.Bytes(), &env); uErr != nil {
+		t.Fatalf("decoding: %v", uErr)
+	}
+	if env.Baseline == nil {
+		t.Fatal("a baseline was recorded, so the envelope should report one")
+	}
+	if env.Baseline.Stale || env.Baseline.Fixed != 0 {
+		t.Errorf("a proxy command passing is not evidence the recorded debt is fixed: fixed=%d stale=%v",
+			env.Baseline.Fixed, env.Baseline.Stale)
+	}
+}
+
+// The baseline was loaded twice and the second error swallowed, so
+// `--no-baseline --update-baseline` against an unreadable file started from an
+// empty map — and saving an empty map prunes every entry the load could not
+// see. Silent data loss across other sensors and other harnesses.
+func TestCheck_UnreadableBaselineIsFatalEvenWithNoBaseline(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	// --update-baseline refuses when either is set; this test is about the
+	// baseline being unreadable, not about the environment.
+	t.Setenv("CI", "")
+	t.Setenv("YNH_AGENT_SESSION", "")
+	installListTestHarness(t, home, "ch", checkHarnessJSON)
+	cwd := t.TempDir()
+
+	// Record real debt for a sensor this run will not look at.
+	var rec bytes.Buffer
+	if err := cmdCheck([]string{"local/ch", "--only", "soft", "--cwd", cwd, "--update-baseline"},
+		&rec, io.Discard); err != nil {
+		t.Fatalf("recording baseline: %v", err)
+	}
+	// Then corrupt a different sensor's file, as a merge would.
+	conflicted := filepath.Join(baseline.Root(cwd), "ch", "red.json")
+	if err := os.MkdirAll(filepath.Dir(conflicted), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(conflicted,
+		[]byte("<<<<<<< HEAD\n{}\n=======\n{}\n>>>>>>> other\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := cmdCheck([]string{"local/ch", "--only", "green", "--cwd", cwd,
+		"--no-baseline", "--update-baseline"}, &bytes.Buffer{}, io.Discard)
+	if !errors.Is(err, errCheckExec) {
+		t.Fatalf("an unreadable baseline must be fatal, got %v", err)
+	}
+	if _, sErr := os.Stat(baseline.Path(cwd, "ch", "soft")); sErr != nil {
+		t.Errorf("the untouched sensor's recorded debt was destroyed: %v", sErr)
+	}
+}
+
+// A corpus graded across weeks cannot defend a yield number without knowing
+// which tool produced each result: a change in findings and a change in the
+// linter are otherwise the same observation.
+func TestCheck_RecordsDeclaredToolVersion(t *testing.T) {
+	const harnessJSON = `{
+      "name": "tv", "version": "0.1.0", "default_vendor": "claude",
+      "sensors": {
+        "versioned":   {"source": {"command": "exit 0"}, "output": {"format": "text"},
+                        "version_command": "printf 'demolint 4.2.0\\n'"},
+        "unversioned": {"source": {"command": "exit 0"}, "output": {"format": "text"}},
+        "broken":      {"source": {"command": "exit 0"}, "output": {"format": "text"},
+                        "version_command": "definitely-not-a-real-binary-xyz --version"}
+      }
+    }`
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	t.Setenv("CI", "")
+	t.Setenv("YNH_AGENT_SESSION", "")
+	installListTestHarness(t, home, "tv", harnessJSON)
+
+	var out bytes.Buffer
+	if err := cmdCheck([]string{"local/tv", "--cwd", t.TempDir(), "--format", "json"},
+		&out, io.Discard); err != nil {
+		t.Fatalf("all sensors pass, so the gate should not block: %v", err)
+	}
+	var env gate.Envelope
+	if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+
+	got := map[string]string{}
+	for _, s := range env.Sensors {
+		got[s.Name] = s.ToolVersion
+	}
+	if got["versioned"] != "demolint 4.2.0" {
+		t.Errorf("versioned tool_version = %q, want %q", got["versioned"], "demolint 4.2.0")
+	}
+	// Absent says "cannot tell", which is honest. A placeholder would imply
+	// stability nobody verified.
+	if got["unversioned"] != "" {
+		t.Errorf("a sensor declaring no version_command must carry none, got %q", got["unversioned"])
+	}
+	// A broken probe must not fail the sensor, and must not record the
+	// shell's error message as if it were a version.
+	if got["broken"] != "" {
+		t.Errorf("a failed probe must record nothing, got %q", got["broken"])
+	}
+}
+
+// The gaming vector for a ratchet is suppression, not relocation.
+//
+// A second identical suppression in a file that already has one changes
+// neither the fingerprint set (line numbers are normalised to :N) nor the
+// distinct-line count. Under the default ratchet it is invisible. This asserts
+// both halves: count catches it, fingerprint does not — which is why the mode
+// exists rather than the default being changed.
+func TestCheck_CountRatchetCatchesADuplicateSuppression(t *testing.T) {
+	const manifest = `{
+      "name": "%s", "version": "0.1.0", "default_vendor": "claude",
+      "sensors": {"suppressions": {
+        "tolerance": "blocking"%s,
+        "source": {"command": "grep -rn nolint . || true; test -z \"$(grep -rn nolint .)\""},
+        "output": {"format": "text"}
+      }}
+    }`
+	run := func(t *testing.T, name, ratchetField string) string {
+		t.Helper()
+		home := t.TempDir()
+		t.Setenv("YNH_HOME", home)
+		t.Setenv("CI", "")
+		t.Setenv("YNH_AGENT_SESSION", "")
+		installListTestHarness(t, home, name, fmt.Sprintf(manifest, name, ratchetField))
+
+		work := t.TempDir()
+		one := "package a\n\n//nolint:errcheck\nfunc A() {}\n"
+		if err := os.WriteFile(filepath.Join(work, "a.go"), []byte(one), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		// Accept the existing suppression as debt.
+		if err := cmdCheck([]string{"local/" + name, "--cwd", work, "--update-baseline"},
+			io.Discard, io.Discard); err != nil {
+			t.Fatalf("recording the baseline: %v", err)
+		}
+		// An agent adds a second, identical suppression.
+		two := one + "\n//nolint:errcheck\nfunc B() {}\n"
+		if err := os.WriteFile(filepath.Join(work, "a.go"), []byte(two), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		var out bytes.Buffer
+		_ = cmdCheck([]string{"local/" + name, "--cwd", work, "--format", "json"}, &out, io.Discard)
+		var env gate.Envelope
+		if err := json.Unmarshal(out.Bytes(), &env); err != nil {
+			t.Fatalf("decoding: %v\n%s", err, out.String())
+		}
+		return env.Verdict
+	}
+
+	if v := run(t, "supcount", `, "ratchet": "count"`); v != gate.VerdictBlocked {
+		t.Errorf("count ratchet: verdict = %q, want blocked — a new suppression must not pass", v)
+	}
+	if v := run(t, "supfp", ""); v != gate.VerdictPass {
+		t.Errorf("fingerprint ratchet: verdict = %q, want pass — this is the gap being closed, "+
+			"and if it now blocks, the default changed and every existing harness is affected", v)
+	}
+}
+
+// Removing suppressions is progress, not a regression.
+func TestCheck_CountRatchetAllowsFewer(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	t.Setenv("CI", "")
+	t.Setenv("YNH_AGENT_SESSION", "")
+	installListTestHarness(t, home, "supless", `{
+      "name": "supless", "version": "0.1.0", "default_vendor": "claude",
+      "sensors": {"suppressions": {
+        "tolerance": "blocking", "ratchet": "count",
+        "source": {"command": "grep -rn nolint . || true; test -z \"$(grep -rn nolint .)\""},
+        "output": {"format": "text"}
+      }}
+    }`)
+	work := t.TempDir()
+	both := "package a\n\n//nolint:errcheck\nfunc A() {}\n\n//nolint:errcheck\nfunc B() {}\n"
+	if err := os.WriteFile(filepath.Join(work, "a.go"), []byte(both), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdCheck([]string{"local/supless", "--cwd", work, "--update-baseline"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("recording: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(work, "a.go"), []byte("package a\n\nfunc A() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdCheck([]string{"local/supless", "--cwd", work}, io.Discard, io.Discard); err != nil {
+		t.Errorf("removing every suppression must pass: %v", err)
+	}
+}
+
+// A sensor whose command cannot run is a broken gate, not a finding.
+//
+// Sensors execute through `/bin/sh -c`, so a missing command is not a spawn
+// error Go can see — it arrives as the shell's own 127 and used to look exactly
+// like an ordinary failure. That gave the wrong exit code (1, "your code is
+// failing", instead of 2, "the gate is broken") and, far worse, let
+// --update-baseline record "No such file or directory" as accepted debt,
+// forgiving the sensor's own absence permanently.
+func TestCheck_UnrunnableSensorIsAnExecError(t *testing.T) {
+	_, _, err := runCheck(t, "--format", "json", "--only", "gone")
+	if !errors.Is(err, errCheckExec) {
+		t.Fatalf("want errCheckExec (exit 2), got %v", err)
+	}
+	if errors.Is(err, errCheckBlocked) {
+		t.Error("a sensor that cannot run must not read as a blocked gate")
+	}
+}
+
+// And it must never reach the baseline, even when the operator explicitly asks
+// to record one. A ratchet that forgives a missing command is a gate that can
+// never fail again.
+func TestCheck_UnrunnableSensorIsNeverBaselined(t *testing.T) {
+	dir := t.TempDir()
+	_, _, err := runCheck(t, "--only", "gone", "--update-baseline", "--cwd", dir)
+	if !errors.Is(err, errCheckExec) {
+		t.Fatalf("--update-baseline should refuse, got %v", err)
+	}
+	if entries, _ := os.ReadDir(filepath.Join(dir, ".ynh", "baseline")); len(entries) > 0 {
+		t.Errorf("a baseline was written over an unrunnable sensor: %v", entries)
+	}
+}
+
+// `ynh check` accepts a filesystem path, which its own rejection message has
+// always advertised.
+//
+// Before this, every path form was refused — including the `./<path>` the error
+// text names — so a harness had to be installed before it could be checked.
+// That is a real barrier while you are still authoring one, which is exactly
+// when you most want to run the gate.
+func TestCheck_AcceptsAPath(t *testing.T) {
+	dir := t.TempDir()
+	writeHarnessAt(t, dir, "pathcheck")
+
+	for _, form := range []string{".", "./", "./.", dir} {
+		t.Run(form, func(t *testing.T) {
+			t.Chdir(dir)
+			var stdout bytes.Buffer
+			t.Setenv("YNH_HOME", t.TempDir())
+			if err := cmdCheck([]string{form, "--cwd", dir}, &stdout, io.Discard); err != nil {
+				t.Fatalf("cmdCheck(%q): %v", form, err)
+			}
+			if !strings.Contains(stdout.String(), "green") {
+				t.Errorf("%q did not run the harness's sensor:\n%s", form, stdout.String())
+			}
+		})
+	}
+}
+
+// A path with no harness must say so plainly, and must not fall back to the
+// canonical-id message — telling someone their directory "is not a valid
+// harness id" is the wrong diagnosis entirely.
+func TestCheck_PathWithNoHarness(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	dir := t.TempDir()
+	var stderr bytes.Buffer
+	err := cmdCheck([]string{dir}, io.Discard, &stderr)
+	if err == nil {
+		t.Fatal("a directory with no harness should fail")
+	}
+	msg := err.Error() + stderr.String()
+	if !strings.Contains(msg, "no harness at") {
+		t.Errorf("wrong diagnosis for a pathless harness: %s", msg)
+	}
+	if strings.Contains(msg, "not a valid harness id") {
+		t.Error("fell back to the canonical-id message for a path")
+	}
+}
+
+// An unresolvable id still gets the id message, so the fix does not swallow
+// the case the message was written for.
+func TestCheck_UnknownIdStillReportsIdError(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	var stderr bytes.Buffer
+	err := cmdCheck([]string{"nosuch"}, io.Discard, &stderr)
+	if err == nil {
+		t.Fatal("an unknown ref should fail")
+	}
+	if msg := err.Error() + stderr.String(); !strings.Contains(msg, "not a valid harness id") {
+		t.Errorf("expected the canonical-id hint: %s", msg)
+	}
+}
+
+// writeHarnessAt drops a minimal valid harness with one always-green sensor.
+func writeHarnessAt(t *testing.T, dir, name string) {
+	t.Helper()
+	pluginDir := filepath.Join(dir, ".ynh-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{
+  "name": "` + name + `",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "sensors": {
+    "green": {"source": {"command": "true"}, "output": {"format": "text"}}
+  }
+}`
+	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}

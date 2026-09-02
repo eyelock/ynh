@@ -25,13 +25,13 @@ david/
 
 ## Harness Manifest (`.ynh-plugin/plugin.json`)
 
-All harness configuration lives in a single `.ynh-plugin/plugin.json` file. Add `"$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json"` for editor autocompletion and validation.
+All harness configuration lives in a single `.ynh-plugin/plugin.json` file. Add `"$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json"` for editor autocompletion and validation.
 
 ### Annotated Example
 
 ```json
 {
-  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "david",
   "version": "0.1.0",
   "description": "David's personal coding harness",
@@ -248,7 +248,7 @@ When a profile is selected, its fields are **merged** with the top-level values:
 
 ```json
 {
-  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "ops-team",
   "version": "1.0.0",
   "default_vendor": "claude",
@@ -356,7 +356,7 @@ Error: include "github.com/acme/tools" matches multiple entries:
 Use --path (remove) or --from-path (update) to disambiguate
 ```
 
-See [Tutorial 17: Include Editing](tutorial/17-include-editing.md) for a full walkthrough.
+See [Include Editing](tutorial/include-editing.md) for a full walkthrough.
 
 ## Examples
 
@@ -365,7 +365,7 @@ See [Tutorial 17: Include Editing](tutorial/17-include-editing.md) for a full wa
 `.ynh-plugin/plugin.json`:
 ```json
 {
-  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "scratch",
   "version": "0.1.0",
   "default_vendor": "claude"
@@ -379,7 +379,7 @@ Just a named launcher. Useful as a starting point.
 `.ynh-plugin/plugin.json`:
 ```json
 {
-  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "david",
   "version": "0.1.0",
   "description": "David's coding harness",
@@ -398,7 +398,7 @@ Just a named launcher. Useful as a starting point.
 `.ynh-plugin/plugin.json`:
 ```json
 {
-  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "team-dev",
   "version": "1.0.0",
   "default_vendor": "claude",
@@ -420,7 +420,7 @@ Just a named launcher. Useful as a starting point.
 `.ynh-plugin/plugin.json`:
 ```json
 {
-  "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "full-stack",
   "version": "1.0.0",
   "default_vendor": "claude",

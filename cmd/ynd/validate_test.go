@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -1193,4 +1195,245 @@ func TestValidateHarnessSensors_Issues(t *testing.T) {
 			t.Errorf("missing expected issue %q in %v", want, issues)
 		}
 	}
+}
+
+// The defect: a manifest referencing ${VAR} it never declared passed validate
+// and lint, then failed at assembly. Worst under automation — an unattended
+// `ynh agent run` does its setup and dies on a config error CI could have
+// caught.
+func TestValidate_CatchesUndeclaredMCPEnvRef(t *testing.T) {
+	dir := writeValidateHarness(t, `{
+      "$schema": "https://ynh.sh/schema/plugin.schema.json",
+      "name": "a", "version": "0.1.0", "default_vendor": "claude",
+      "env_passthrough": ["KNOWN"],
+      "mcp_servers": {"docs": {"url": "https://x", "headers": {"Authorization": "Bearer ${MISSING}"}}}
+    }`)
+	if err := validateHarness(dir); err == nil {
+		t.Fatal("an undeclared ${VAR} must fail validation when an allowlist exists")
+	}
+	// validateHarness prints detail and returns only a count, so assert the
+	// message on the rule itself — a report that says "1 issue" without
+	// naming the variable is not actionable.
+	data, err := os.ReadFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	issues := validateMCPEnvDeclarations(data)
+	if len(issues) != 1 {
+		t.Fatalf("got %v", issues)
+	}
+	if !strings.Contains(issues[0], "${MISSING}") || !strings.Contains(issues[0], "env_passthrough") {
+		t.Errorf("the issue must name the variable and the field, got: %s", issues[0])
+	}
+}
+
+// The counter-example that shaped the design. `ynd export` deliberately leaves
+// ${VAR} literal — resolving there would bake the exporter's credentials into
+// a shared bundle — and strips env_passthrough from the artifact entirely. A
+// harness authored purely for distribution therefore works today, and must not
+// be reddened for an allowlist that never reaches what it ships.
+func TestValidate_DistributionOnlyHarnessIsNotFlagged(t *testing.T) {
+	dir := writeValidateHarness(t, `{
+      "$schema": "https://ynh.sh/schema/plugin.schema.json",
+      "name": "c", "version": "0.1.0", "default_vendor": "claude",
+      "mcp_servers": {"docs": {"url": "https://x", "headers": {"Authorization": "Bearer ${DOCS_API_KEY}"}}}
+    }`)
+	if err := validateHarness(dir); err != nil {
+		t.Fatalf("a harness declaring no env_passthrough may be distribution-only: %v", err)
+	}
+}
+
+// A complete allowlist must pass, or the check is just noise.
+func TestValidate_CompleteAllowlistPasses(t *testing.T) {
+	dir := writeValidateHarness(t, `{
+      "$schema": "https://ynh.sh/schema/plugin.schema.json",
+      "name": "b", "version": "0.1.0", "default_vendor": "claude",
+      "env_passthrough": ["TOKEN"],
+      "mcp_servers": {"docs": {"url": "https://x", "headers": {"Authorization": "Bearer ${TOKEN}"}}}
+    }`)
+	if err := validateHarness(dir); err != nil {
+		t.Fatalf("a complete allowlist must validate: %v", err)
+	}
+}
+
+// A profile may replace the allowlist, so its servers are checked against the
+// one actually in force for it.
+func TestValidate_ProfileAllowlistIsHonoured(t *testing.T) {
+	dir := writeValidateHarness(t, `{
+      "$schema": "https://ynh.sh/schema/plugin.schema.json",
+      "name": "d", "version": "0.1.0", "default_vendor": "claude",
+      "env_passthrough": ["ROOT_TOKEN"],
+      "profiles": {"ci": {
+        "env_passthrough": ["CI_TOKEN"],
+        "mcp_servers": {"docs": {"url": "https://x", "headers": {"Authorization": "Bearer ${ROOT_TOKEN}"}}}
+      }}
+    }`)
+	if err := validateHarness(dir); err == nil {
+		t.Fatal("a profile that replaces the allowlist no longer permits the root's variables")
+	}
+	data, err := os.ReadFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	issues := validateMCPEnvDeclarations(data)
+	if len(issues) != 1 || !strings.Contains(issues[0], "${ROOT_TOKEN}") {
+		t.Errorf("got %v", issues)
+	}
+}
+
+// writeValidateHarness writes a manifest into a temp harness dir.
+func writeValidateHarness(t *testing.T, manifest string) string {
+	t.Helper()
+	dir := t.TempDir()
+	pd := filepath.Join(dir, ".ynh-plugin")
+	if err := os.MkdirAll(pd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pd, "plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// The validator must enforce the traversal rule the resolver enforces.
+//
+// A `local` include may not point above the harness directory. The resolver
+// refused one at assembly time; the validator did not — so a manifest passed
+// `ynd validate` and then failed at `ynd compose` and `ynd preview`. Since
+// validate is what authors are told to run and what `make check-artifacts`
+// gates on, that moved the error from authoring time to run time, which is the
+// failure mode validate exists to prevent.
+func TestValidateHarnessIncludes(t *testing.T) {
+	cases := []struct {
+		name      string
+		includes  string
+		wantIssue bool
+	}{
+		{"local escaping upward", `[{"local": "../shared"}]`, true},
+		{"local escaping further", `[{"local": "../../x"}]`, true},
+		{"local absolute", `[{"local": "/etc"}]`, true},
+		{"local subdirectory", `[{"local": "shared"}]`, false},
+		{"local nested subdirectory", `[{"local": "vendor/shared"}]`, false},
+		{"path escaping upward", `[{"git": "https://x/y", "path": "../out"}]`, true},
+		{"path subdirectory", `[{"git": "https://x/y", "path": "skills"}]`, false},
+		{"git only", `[{"git": "https://x/y"}]`, false},
+		{"no includes", ``, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			src := `{"name":"h","version":"0.1.0"`
+			if c.includes != "" {
+				src += `,"includes":` + c.includes
+			}
+			src += `}`
+			var hj map[string]any
+			if err := json.Unmarshal([]byte(src), &hj); err != nil {
+				t.Fatalf("fixture is not valid JSON: %v", err)
+			}
+			issues := validateHarnessIncludes(hj)
+			if c.wantIssue && len(issues) == 0 {
+				t.Errorf("expected an issue for %s, got none", c.includes)
+			}
+			if !c.wantIssue && len(issues) > 0 {
+				t.Errorf("unexpected issues for %s: %v", c.includes, issues)
+			}
+		})
+	}
+}
+
+// And the check must actually be wired into validateHarness.
+//
+// A unit test on validateHarnessIncludes alone would still pass if the call
+// site were deleted — which is exactly the state this issue reported, a rule
+// that existed in the resolver and was never consulted by the validator.
+func TestValidateHarness_RejectsTraversingLocalInclude(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(`{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "app",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "includes": [{"local": "../shared"}]
+}`))
+	if err := validateHarness(dir); err == nil {
+		t.Error("a local include traversing above the harness should fail validation")
+	}
+
+	// And the legal form still passes, so the check is not simply refusing all
+	// local includes.
+	writeFile(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(`{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "app",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "includes": [{"local": "shared"}]
+}`))
+	if err := validateHarness(dir); err != nil {
+		t.Errorf("a local include inside the harness should validate: %v", err)
+	}
+}
+
+// Only a command sensor's verdict is an exit code about the tree it was
+// pointed at, so only a command sensor can answer the question calibration
+// asks. plugin.ValidateSensors has always held this rule and has no
+// production caller, so nothing enforced it here — and --calibrate did not
+// skip such a sensor. It ran it and reported "the sensor passed a fixture
+// built to trip it — it is no longer observing", failing the run with a false
+// accusation about a healthy sensor.
+func TestValidateHarnessSensors_ReferenceRequiresCommand(t *testing.T) {
+	ref := map[string]any{"path": "fixture", "expect": "fail"}
+	out := map[string]any{"format": "text"}
+
+	rejected := map[string]map[string]any{
+		"files-with-ref":  {"files": []any{"a.json"}},
+		"focus-with-ref":  {"focus": map[string]any{"prompt": "p"}},
+		"status-with-ref": {"github_status": map[string]any{"context": "c"}},
+		"check-with-ref":  {"github_check": map[string]any{"name": "n"}},
+	}
+	for name, src := range rejected {
+		t.Run(name, func(t *testing.T) {
+			issues := validateHarnessSensors(map[string]any{
+				"sensors": map[string]any{
+					"s": map[string]any{"source": src, "output": out, "reference": ref},
+				},
+			})
+			var found bool
+			for _, i := range issues {
+				if strings.Contains(i, "cannot declare a reference") {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("expected a reference refusal, got: %v", issues)
+			}
+		})
+	}
+
+	t.Run("command-with-ref is the one that is allowed", func(t *testing.T) {
+		issues := validateHarnessSensors(map[string]any{
+			"sensors": map[string]any{
+				"s": map[string]any{
+					"source": map[string]any{"command": "true"}, "output": out, "reference": ref,
+				},
+			},
+		})
+		for _, i := range issues {
+			if strings.Contains(i, "cannot declare a reference") {
+				t.Errorf("a command sensor must keep its fixture: %v", issues)
+			}
+		}
+	})
+
+	t.Run("no reference is never refused", func(t *testing.T) {
+		for name, src := range rejected {
+			issues := validateHarnessSensors(map[string]any{
+				"sensors": map[string]any{"s": map[string]any{"source": src, "output": out}},
+			})
+			for _, i := range issues {
+				if strings.Contains(i, "cannot declare a reference") {
+					t.Errorf("%s without a reference must be accepted: %v", name, issues)
+				}
+			}
+		}
+	})
 }
