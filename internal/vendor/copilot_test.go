@@ -23,6 +23,7 @@ func TestBuildCopilotArgs_Basic(t *testing.T) {
 	pluginDir := filepath.Join(configPath, ".copilot")
 	expected := []string{
 		"copilot",
+		"--no-auto-update",
 		"--plugin-dir", pluginDir,
 		"--add-dir", configPath,
 		"--model", "gpt-5.4",
@@ -46,8 +47,33 @@ func TestBuildCopilotArgs_InitialPrompt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if args[1] != "-i" || args[2] != "do the thing" {
-		t.Errorf("expected -i flag with prompt right after binary name, got %v", args)
+	if args[2] != "-i" || args[3] != "do the thing" {
+		t.Errorf("expected -i flag with prompt right after --no-auto-update, got %v", args)
+	}
+}
+
+// TestBuildCopilotArgs_NoAutoUpdate guards against a confirmed regression:
+// Copilot's auto-update-on-launch silently drops the initial prompt (and any
+// other launch args) when it swaps its own binary mid-startup. See the
+// buildCopilotArgs doc comment.
+func TestBuildCopilotArgs_NoAutoUpdate(t *testing.T) {
+	configPath := t.TempDir()
+	t.Chdir(t.TempDir())
+
+	args, err := buildCopilotArgs(configPath, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	found := false
+	for _, a := range args {
+		if a == "--no-auto-update" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected --no-auto-update in args, got %v", args)
 	}
 }
 

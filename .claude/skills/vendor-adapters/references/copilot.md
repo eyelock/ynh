@@ -313,9 +313,27 @@ model of authoritative harness-authored instructions.
 `copilot-plugins`, `awesome-copilot`. Install via `copilot plugin install`,
 `/plugin install`, or declarative `enabledPlugins` in `settings.json`.
 
+## Auto-Update Drops Launch Args
+
+**CONFIRMED (v1.0.80 -> v1.0.83, 2026-09-14):** Copilot checks for an update on
+every launch. When one is available it downloads and swaps its own binary,
+then tears down the foreground session it just started — visible in
+`~/.copilot/logs/process-*.log` as "Successfully updated binary" immediately
+followed by "Unregistering foreground session". Whatever the original
+invocation carried, including an `-i` initial prompt, is lost with that
+session; the CLI comes back up as a fresh, idle interactive session.
+
+Since `launchCopilot` replaces the ynh process via `syscall.Exec`, there is no
+process left to retry after such a mid-launch restart. `buildCopilotArgs`
+always passes `--no-auto-update` to prevent the update from happening during
+an `ynh run` launch at all. Users still get updates via their own `copilot
+update` / the CLI's normal update flow outside of an ynh-launched session.
+
 ## Key CLI Details
 
 - Binary: `copilot`
+- Auto-update: **disabled by ynh** via `--no-auto-update` on every launch —
+  see "Auto-Update Drops Launch Args" above
 - Config dir: **no single project dotfolder** — spread across `.github/*`
   subpaths plus root files. User home is `~/.copilot/` (override: `COPILOT_HOME`)
 - Plugin loading: `--plugin-dir <directory>` (repeatable), same pattern as Claude
