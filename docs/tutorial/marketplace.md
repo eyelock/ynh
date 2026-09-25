@@ -327,6 +327,51 @@ ynd marketplace build -o /tmp/ynh-tutorial/marketplace-claude -v claude
 # Plugins still get .claude-plugin/plugin.json only
 ```
 
+## Build as Agent Plugins
+
+`--format agent-plugin` builds each `harness` entry as one portable
+[Agent Plugins](https://agent-plugins.org) package, the format Codex, Copilot,
+VS Code and Cursor load directly. The indexes are written for every vendor
+as before; the clients that load the format detect it from each package's
+root manifest, and Claude Code finds its own manifest inside:
+
+```bash
+cd /tmp/ynh-tutorial/marketplace-src
+ynd marketplace build -o /tmp/ynh-tutorial/marketplace-portable --format agent-plugin
+find /tmp/ynh-tutorial/marketplace-portable -not -path '*/.git/*' -type f | LC_ALL=C sort
+```
+
+Expected (`.git/` excluded; `LC_ALL=C` pins the order):
+```
+/tmp/ynh-tutorial/marketplace-portable/.agents/plugins/marketplace.json
+/tmp/ynh-tutorial/marketplace-portable/.claude-plugin/marketplace.json
+/tmp/ynh-tutorial/marketplace-portable/.cursor-plugin/marketplace.json
+/tmp/ynh-tutorial/marketplace-portable/.github/plugin/marketplace.json
+/tmp/ynh-tutorial/marketplace-portable/.ynd-marketplace
+/tmp/ynh-tutorial/marketplace-portable/README.md
+/tmp/ynh-tutorial/marketplace-portable/plugins/formatter/.claude-plugin/plugin.json
+/tmp/ynh-tutorial/marketplace-portable/plugins/formatter/.codex-plugin/plugin.json
+/tmp/ynh-tutorial/marketplace-portable/plugins/formatter/.cursor-plugin/plugin.json
+/tmp/ynh-tutorial/marketplace-portable/plugins/formatter/skills/auto-format/SKILL.md
+/tmp/ynh-tutorial/marketplace-portable/plugins/reviewer/.claude-plugin/plugin.json
+/tmp/ynh-tutorial/marketplace-portable/plugins/reviewer/AGENTS.md
+/tmp/ynh-tutorial/marketplace-portable/plugins/reviewer/CLAUDE.md
+/tmp/ynh-tutorial/marketplace-portable/plugins/reviewer/plugin.json
+/tmp/ynh-tutorial/marketplace-portable/plugins/reviewer/skills/dev-quality/SKILL.md
+/tmp/ynh-tutorial/marketplace-portable/plugins/reviewer/skills/dev-review/SKILL.md
+```
+
+The `reviewer` harness became a package: `plugin.json` and `skills/` are the
+portable core, `.claude-plugin/plugin.json` and `CLAUDE.md` are Claude Code's
+compatibility layer. The `formatter` entry is a Claude Code plugin, not an
+Agent Plugin, so it is copied as-is with vendor manifests generated, exactly
+as in the vendor-format build.
+
+```bash
+ynd validate /tmp/ynh-tutorial/marketplace-portable/plugins/reviewer
+# Expected: /tmp/ynh-tutorial/marketplace-portable/plugins/reviewer: valid (Agent Plugin 1.0.0)
+```
+
 ## Clean up
 
 ```bash
@@ -342,6 +387,7 @@ rm -rf /tmp/ynh-tutorial
 - Harnesses' remote includes are resolved and flattened during marketplace build
 - Pick filtering carries through from harness metadata to the marketplace output
 - Codex is included: each plugin gets a `.codex-plugin/plugin.json` that points only at its skills
+- `--format agent-plugin` builds each harness entry as one portable Agent Plugins package, with every vendor's index still written
 
 ## Next
 

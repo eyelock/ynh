@@ -174,6 +174,10 @@ Build a vendor-native marketplace from marketplace.json.
 Flags:
   -o, --output <dir>     Destination directory
   -v, --vendor <vendor>  Target vendor (falls back to $YNH_VENDOR)
+  --format <name>        vendor (default): each harness entry as a merged
+                         vendor tree; agent-plugin: each harness entry as one
+                         portable Agent Plugins package. Indexes are written
+                         for every selected vendor either way
   --clean                Remove the output directory first
   -y, --yes              Skip the confirmation prompt (also $YNH_YES, or CI)
 

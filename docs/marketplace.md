@@ -414,8 +414,8 @@ ynh's `marketplace.json` is a build config — it describes *what* to include in
 
 ### Entry Types
 
-- **`plugin`** — a self-contained plugin directory (already has `.claude-plugin/plugin.json`). Copied as-is with missing vendor manifests generated.
-- **`harness`**: a ynh harness (has `.agents/harness/plugin.json` with includes). Fully exported: remote includes resolved, pick filtering applied, delegates generated, every vendor's manifest written.
+- **`plugin`**: a self-contained plugin directory, either a Claude Code plugin (`.claude-plugin/plugin.json`) or an [Agent Plugins](https://agent-plugins.org) package (root `plugin.json` with the spec's `$schema`). Copied as-is with missing vendor manifests generated. An Agent Plugins package gets only Claude Code's compatibility manifest: the clients that load the format detect it from the root manifest, and a second manifest of their own would make the package ambiguous.
+- **`harness`**: a ynh harness (has `.agents/harness/plugin.json` with includes), or an Agent Plugins package ynh [derives a harness from](harnesses.md#installing-an-agent-plugin). Fully exported: remote includes resolved, pick filtering applied, delegates generated, every vendor's manifest written.
 
 ### Output Structure
 
@@ -438,6 +438,35 @@ dist/
 └── README.md                          # auto-generated
 ```
 
+### Agent Plugins Output
+
+`--format agent-plugin` builds each `harness` entry as one portable
+[Agent Plugins](https://agent-plugins.org) package instead of a merged
+vendor tree, the same package `ynd export --format agent-plugin` writes.
+Every selected vendor's index is still written, because every vendor's
+marketplace points at plugin directories and the ones that load the format
+(Codex, Copilot, VS Code, Cursor) detect it from the root manifest. Claude
+Code, which does not, finds its compatibility manifest inside the package.
+A harness name outside the spec's rule is normalised, and the directory and
+every index use the normalised name.
+
+```
+dist/
+├── plugins/
+│   └── reviewer/
+│       ├── plugin.json                  # portable manifest
+│       ├── skills/...                   # portable
+│       ├── mcp.json                     # portable, when the harness declares servers
+│       ├── com.github.copilot/agents/   # Copilot's namespace
+│       ├── .claude-plugin/plugin.json   # Claude Code compatibility
+│       ├── agents/  CLAUDE.md  AGENTS.md
+│       └── ...
+├── .agents/plugins/marketplace.json     # Codex index
+├── .claude-plugin/marketplace.json      # Claude Code index
+├── .cursor-plugin/marketplace.json      # Cursor index
+└── .github/plugin/marketplace.json      # Copilot index
+```
+
 ### CLI Usage
 
 ```bash
@@ -446,6 +475,9 @@ ynd marketplace build
 
 # Custom config, output, and vendor targeting
 ynd marketplace build config/marketplace.json -o ./dist -v claude,cursor
+
+# Each harness entry as a portable Agent Plugins package
+ynd marketplace build --format agent-plugin
 
 # Clean rebuild
 ynd marketplace build --clean
@@ -541,6 +573,7 @@ For the architectural rationale and contributor-facing rules, see [`.github/CONT
 | Marketplace index | .claude-plugin/marketplace.json | .cursor-plugin/marketplace.json | .agents/plugins/marketplace.json | .github/plugin/marketplace.json (best-effort) |
 | Delegates | Yes (subagent) | Yes (subagent) | No | Yes (subagent) |
 | Merged export | Yes | Yes | Yes | Yes — shares Claude's `.claude-plugin/plugin.json` path, harmlessly (identical schema) |
+| Agent Plugins package | Compatibility layer at the root (does not load the format) | Portable core only (no published namespace) | Portable core + `extensions.com.openai` hooks | Portable core + `com.github.copilot/` |
 
 ## References
 
