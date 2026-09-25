@@ -1387,7 +1387,12 @@ func assembleHarness(h *harness.Harness, backendName string) (string, error) {
 
 	// Generate vendor-native MCP config.
 	if len(h.MCPServers) > 0 {
-		servers, expErr := plugin.ExpandMCPEnv(h.MCPServers, h.EnvPassthrough, os.LookupEnv)
+		dataDir := harness.PluginDataDir(h)
+		if mkdirErr := os.MkdirAll(dataDir, 0o755); mkdirErr != nil {
+			_ = os.RemoveAll(dir)
+			return "", mkdirErr
+		}
+		servers, expErr := harness.AssembleMCPServers(h, dataDir, os.LookupEnv)
 		if expErr != nil {
 			_ = os.RemoveAll(dir)
 			return "", expErr

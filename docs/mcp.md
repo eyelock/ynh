@@ -210,6 +210,28 @@ MCP server declarations in **included harnesses** (via `includes`) are dropped d
 
 If an included harness requires an MCP server, add the server declaration to the root harness's `.agents/harness/plugin.json`.
 
+## Plugin Placeholders
+
+The Agent Plugins specification reserves two placeholders for a stdio
+server's `args`, `env` values and `cwd`: `${PLUGIN_ROOT}`, the package's own
+directory, and `${PLUGIN_DATA}`, a writable directory the client keeps for
+that plugin across updates. A `command` or `cwd` beginning with `./` is
+relative to the package. ynh does what the specification asks of a client
+whenever it assembles a run (`ynh run`, `ynd preview`, `ynh agent run`):
+
+- both placeholders are replaced, in one pass, with the harness directory and
+  `~/.ynh/plugin-data/<id>/`, which `ynh run` creates before launching;
+- a `./` command or working directory is made absolute against the harness
+  directory, since the vendor CLI that launches the server has no idea where
+  the package is;
+- for a harness [installed from an Agent Plugin](harnesses.md#installing-an-agent-plugin),
+  `PLUGIN_ROOT` and `PLUGIN_DATA` are also supplied in each stdio server's
+  `env`, last, so a configured entry cannot override them.
+
+The two names are never credentials: `env_passthrough` neither admits nor
+refuses them, and `ynd validate` does not report them as undeclared. A ynh
+harness that uses them assembles and exports the same way.
+
 ## The Portable Format
 
 The [Agent Plugins](https://agent-plugins.org) specification defines a portable `mcp.json` (`$schema`, `mcpServers`, and a mandatory `type` per server) that Codex, Copilot, Cursor and others load directly. ynh's transport names are that specification's, so a harness declaration carries over without translation; the remaining differences (the `$schema` line, `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` placeholders, one-token `command` values) are the export's job. `ynd validate` checks a directory holding a root `plugin.json` with the Agent Plugins schema against that specification.

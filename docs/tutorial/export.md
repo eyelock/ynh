@@ -297,6 +297,36 @@ Exported Agent Plugin → /tmp/ynh-tutorial/agent-plugin-cursor (2 skills, 0 age
   warning: 1 agents not portable: no selected vendor (cursor) carries them in an Agent Plugin
 ```
 
+### Install the package back
+
+The package is also a harness source. `ynh install` reads it as an Agent
+Plugin, derives the harness in memory, and never writes into the directory:
+
+```bash
+ynh install /tmp/ynh-tutorial/agent-plugin
+```
+
+Expected:
+```
+Fetching 1 include(s) and 0 delegate(s)...
+  Local  com.github.copilot
+Installed harness "exportable"
+  Location: /tmp/ynh-tutorial/agent-plugin
+  Launcher: /Users/<you>/.ynh/bin/exportable
+```
+
+The Copilot namespace directory became a local include, which is how its
+agent reaches the assembled harness with source attribution. The install
+record says what the source was:
+
+```bash
+ynh installed local/exportable
+# Expected: a record with "source_type": "local" and "format": "agent-plugin"
+ls -a /tmp/ynh-tutorial/agent-plugin
+# Expected: no .agents or .ynh-plugin directory; the package is as exported
+ynh uninstall local/exportable
+```
+
 ## Export with --clean
 
 ```bash
@@ -369,6 +399,7 @@ rm -rf /tmp/ynh-tutorial
   - Codex: `.codex-plugin/plugin.json` + `skills/` (agents, rules, commands excluded)
 - `--merged` produces a single dir with every selected vendor's manifest (marketplace-ready)
 - `--format agent-plugin` produces one portable Agent Plugins package; `-v` picks which clients' namespaces and compatibility files join the portable core, and whatever cannot travel is warned about
+- An Agent Plugins package is itself a harness source: `ynh install` derives the harness at load time and never writes into the package
 - Remote includes are resolved and flattened into the export
 - Pick filtering carries through to the export
 - `AGENTS.md` is the universal instruction format (read by Codex, Cursor, Copilot, etc.)

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/agentplugin"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
@@ -15,6 +16,12 @@ import (
 func loadManifest(dir string) (*plugin.HarnessJSON, error) {
 	if _, err := migration.FormatChain().Run(dir); err != nil {
 		return nil, err
+	}
+	// A derived harness has no manifest file, and writing one into the
+	// package would turn it into something other than the Agent Plugin it
+	// is. Editing belongs to the package's own author.
+	if !plugin.IsPluginDir(dir) && agentplugin.IsPluginRoot(dir) {
+		return nil, fmt.Errorf("%s is an Agent Plugins package: ynh derives its harness at load time and does not write into it; edit its plugin.json and mcp.json directly", dir)
 	}
 	return plugin.LoadPluginJSON(dir)
 }
@@ -58,7 +65,7 @@ func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
 			}
 		}
 		treeDir := InstalledDirByID(ref)
-		if f, _ := DetectFormat(treeDir); f == "plugin" {
+		if f, _ := DetectFormat(treeDir); f == "plugin" || f == agentplugin.Format {
 			return treeDir, true, nil
 		}
 		return "", false, fmt.Errorf("harness %q: %w", ref, ErrNotFound)

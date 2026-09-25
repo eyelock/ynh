@@ -217,3 +217,22 @@ func TestDiscover_PopulatesAllFields(t *testing.T) {
 		t.Errorf("Keywords = %v", h.Keywords)
 	}
 }
+
+func TestDiscover_AgentPlugin(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "portable")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"portable","version":"3.0.0","description":"An Agent Plugin","keywords":["k"]}`
+	if err := os.WriteFile(filepath.Join(dir, "plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	found, err := Discover(root, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(found) != 1 || found[0].Name != "portable" || found[0].Version != "3.0.0" || found[0].Description != "An Agent Plugin" {
+		t.Errorf("found = %+v", found)
+	}
+}

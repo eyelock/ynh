@@ -223,6 +223,11 @@ func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Ha
 	}
 
 	result.Warnings = append(result.Warnings, uncarriedWarnings(p, content, carried, hooksCarried, vendors)...)
+	for _, ns := range p.ImportedExtensions {
+		if _, generated := extensions[ns]; !generated {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("extensions.%s from the imported package is not carried: ynh generates every extension it emits", ns))
+		}
+	}
 
 	// The conformance check: our own package must load under the rules we
 	// hold everyone else to.
