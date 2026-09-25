@@ -263,6 +263,20 @@ func (c *Codex) ExportArtifactDirs() map[string]string {
 
 func (c *Codex) SupportsExportDelegates() bool { return false }
 
+// AgentPluginLayout: Codex loads the format natively and keeps its own
+// settings under extensions.com.openai (developers.openai.com/plugins/build/plugins).
+// Its hooks pointer replaces the default hooks/hooks.json discovery, so the
+// Codex hook file lives in the namespace directory and is named in the
+// manifest; that keeps it apart from a Claude Code hook file at the root.
+func (c *Codex) AgentPluginLayout() AgentPluginLayout {
+	return AgentPluginLayout{
+		LoadsFormat:    true,
+		Namespace:      "com.openai",
+		Hooks:          "com.openai/hooks/hooks.json",
+		HooksExtension: true,
+	}
+}
+
 func (c *Codex) MarketplaceManifestDir() string { return filepath.Join(".agents", "plugins") }
 
 func (c *Codex) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error) {

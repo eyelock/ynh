@@ -236,6 +236,7 @@ ynd export ./my-harness                          # all vendors → ./dist/my-har
 ynd export ./my-harness -v claude,cursor          # specific vendors only
 ynd export ./my-harness -o ./out                  # custom output directory
 ynd export ./my-harness --merged                  # single dir with dual manifests
+ynd export ./my-harness --format agent-plugin     # one portable Agent Plugins package
 ynd export ./my-harness --clean                   # remove output dir before export
 ynd export ./my-harness --profile strict          # export with a specific profile applied
 ynd export ./my-harness --focus review            # export with a focus applied (mutex with --profile)
@@ -251,6 +252,7 @@ ynd export github.com/user/repo --path harnesses/david  # from a monorepo
 | `--path <subdir>` | Subdirectory within source (for monorepos). Must be a relative path with no `..` traversal. |
 | `--profile <name>` | Profile to apply during assembly |
 | `--merged` | Single output dir with all vendor manifests (for CI/marketplace use) |
+| `--format <name>` | `vendor` (default) writes each vendor's own plugin layout; `agent-plugin` writes one portable [Agent Plugins](https://agent-plugins.org) package. Not combinable with `--merged` |
 | `--clean` | Remove entire output dir before export |
 
 **Output structure** (per-vendor mode):
@@ -291,6 +293,51 @@ Key differences from runtime layout:
 - Copilot is limited to skills and agents — rules and commands are excluded with warnings
 - Copilot reuses Claude's `.claude-plugin/plugin.json` schema (Copilot's plugin loader reads the same format)
 - `--merged` produces one directory with all vendor manifests; Claude and Copilot share the same `.claude-plugin/` manifest path harmlessly (identical schema)
+
+**Output structure** (`--format agent-plugin`):
+
+Agent Plugins is the portable package format Codex, Copilot, VS Code and
+Cursor load directly. Its portable core is small: a root `plugin.json`,
+skills, and a typed `mcp.json`. Everything else is client-specific and
+travels only inside a namespace the client has published. `-v` therefore
+means something different here: it does not pick output trees, it picks
+which clients' namespaces and compatibility files join the one portable
+tree. The default is every vendor.
+
+```
+dist/my-harness/
+├── plugin.json                  # portable manifest ($schema, name, version, ...)
+├── skills/<name>/SKILL.md       # portable
+├── mcp.json                     # portable, every server carries its transport type
+├── AGENTS.md                    # ynh's instructions; not a portable component
+├── com.github.copilot/          # -v copilot: agents/ (and delegates)
+├── com.openai/hooks/hooks.json  # -v codex: hooks, pointed to from extensions.com.openai
+├── .claude-plugin/plugin.json   # -v claude: Claude Code has not adopted the format,
+├── .mcp.json                    #   so it gets its own manifest, MCP file, hooks/hooks.json,
+├── hooks/hooks.json             #   agents/, rules/, commands/ and CLAUDE.md at the root,
+├── agents/ rules/ commands/     #   which the spec calls a compatibility package
+└── CLAUDE.md
+```
+
+What the format cannot carry is reported, not silently dropped:
+
+- Agents, rules, commands, delegates and hooks reach only the selected
+  vendors that load them from this package (Copilot's namespace, Codex's hooks
+  pointer, Claude Code's compatibility layer). Cursor has published no
+  namespace, so with `-v cursor` alone they are warned about and left out.
+- An MCP server the format cannot express is left out of `mcp.json` with the
+  reason: a `command` that is a shell string rather than one executable token,
+  an absolute or bare-relative command path, a plain `http` URL to a
+  non-loopback host. Claude Code's `.mcp.json` still carries every server.
+- A `${VAR}` reference in `env` or `headers` is kept literal, as every export
+  is, but Agent Plugins clients expand only `${PLUGIN_ROOT}` and
+  `${PLUGIN_DATA}`, so the server receives the text as written. The export
+  says so per server. Cursor expands neither placeholder.
+- A harness name outside the spec's rule (lowercase, digits, `-` and `.`) is
+  normalised and the change reported: `My_Harness` becomes `my-harness`.
+
+The package is validated against the specification before the command
+returns; `ynd validate <dir>` runs the same check on demand.
 
 See [Export](tutorial/export.md) for a guided walkthrough.
 
