@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/agentplugin"
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
@@ -240,7 +241,10 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 
 	// Generate MCP config
 	if len(h.MCPServers) > 0 {
-		servers, expErr := plugin.ExpandMCPEnv(h.MCPServers, h.EnvPassthrough, os.LookupEnv)
+		// Same client-side resolution as ynh run, against the same data
+		// directory, so the preview shows what a run would write. Preview
+		// does not create the directory: it launches nothing.
+		servers, expErr := harness.AssembleMCPServers(h, harness.PluginDataDir(h), os.LookupEnv)
 		if expErr != nil {
 			return "", expErr
 		}
@@ -296,7 +300,7 @@ func writeGeneratedFiles(baseDir string, files map[string][]byte) error {
 // If tempDir is non-empty, the caller must clean it up.
 func loadHarnessForPreview(dir string) (*harness.Harness, string, error) {
 	switch harness.DetectFormat(dir) {
-	case "plugin":
+	case "plugin", agentplugin.Format:
 		h, err := harness.LoadDir(dir)
 		return h, "", err
 	case "legacy":

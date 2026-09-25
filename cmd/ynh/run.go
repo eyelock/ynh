@@ -80,7 +80,7 @@ func cmdRun(args []string) error {
 		if _, err := migration.FormatChain().Run(cwd); err != nil {
 			return fmt.Errorf("migrating harness in cwd: %w", err)
 		}
-		if !plugin.IsPluginDir(cwd) {
+		if !harness.IsHarnessDir(cwd) {
 			return fmt.Errorf("usage: ynh run <harness-name> [-v vendor] [--focus name] [--harness-file path] [-- prompt]")
 		}
 		p, err = harness.LoadDir(cwd)
@@ -251,7 +251,16 @@ func cmdRun(args []string) error {
 
 		// Generate vendor-native MCP config files
 		if len(p.MCPServers) > 0 {
-			servers, expErr := plugin.ExpandMCPEnv(p.MCPServers, p.EnvPassthrough, os.LookupEnv)
+			// ynh is the client here in the Agent Plugins sense: it resolves
+			// the plugin's placeholders and ./ paths against where the package
+			// really is, and gives the package a data directory that outlives
+			// this run. The vendor CLI that launches the server sees only
+			// absolute paths.
+			dataDir := harness.PluginDataDir(p)
+			if err := os.MkdirAll(dataDir, 0o755); err != nil {
+				return fmt.Errorf("creating plugin data dir: %w", err)
+			}
+			servers, expErr := harness.AssembleMCPServers(p, dataDir, os.LookupEnv)
 			if expErr != nil {
 				return expErr
 			}

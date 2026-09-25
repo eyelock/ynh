@@ -204,6 +204,11 @@ func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Ha
 	}
 
 	result.Warnings = append(result.Warnings, uncarriedWarnings(p, content, carried, hooksCarried, vendors)...)
+	for _, ns := range p.ImportedExtensions {
+		if _, generated := extensions[ns]; !generated {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("extensions.%s from the imported package is not carried: ynh generates every extension it emits", ns))
+		}
+	}
 	if rootHooks && !hooksCarriedByNamespace(adapters) {
 		result.Warnings = append(result.Warnings, "hooks/hooks.json is a compatibility file for Claude Code; Codex discovers the same path by default and its commands are anchored for Claude, so include codex in -v to give Codex its own hooks")
 	}

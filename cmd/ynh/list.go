@@ -91,6 +91,9 @@ type listInstalledFrom struct {
 	RegistryName string          `json:"registry_name,omitempty"`
 	InstalledAt  string          `json:"installed_at"`
 	ForkedFrom   *listForkedFrom `json:"forked_from,omitempty"`
+	// Format is "agent-plugin" when the installed content is an Agent
+	// Plugins package that ynh derives a harness from at load time.
+	Format string `json:"format,omitempty"`
 }
 
 // listForkedFrom is the JSON shape of installed_from.forked_from — the
@@ -418,6 +421,7 @@ func buildListEntry(p *harness.Harness) listEntry {
 			Path:         p.InstalledFrom.Path,
 			RegistryName: p.InstalledFrom.RegistryName,
 			InstalledAt:  p.InstalledFrom.InstalledAt,
+			Format:       p.InstalledFrom.Format,
 		}
 		if p.InstalledFrom.ForkedFrom != nil {
 			ff := p.InstalledFrom.ForkedFrom

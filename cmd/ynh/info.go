@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/agentplugin"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/migration"
@@ -166,6 +167,9 @@ func printInfoText(w io.Writer, name string) error {
 	} else {
 		for _, inc := range p.Includes {
 			line := "  " + inc.Git
+			if inc.IsLocal() {
+				line = "  local=" + inc.Local
+			}
 			if inc.Path != "" {
 				line += "  path=" + inc.Path
 			}
@@ -313,9 +317,14 @@ func printInfoJSON(stdout, stderr io.Writer, name string, checkUpdates bool) err
 	}
 
 	// Migration chain has run (harness.LoadQualified was called above), so the manifest
-	// is always at the new path.
-	manifestPath := filepath.Join(p.Dir, plugin.PluginDir, plugin.PluginFile)
-	raw, err := os.ReadFile(manifestPath)
+	// is always at the new path. A harness derived from an Agent Plugins
+	// package has no file to read; its manifest is the one the loader built.
+	var raw []byte
+	if p.Format == agentplugin.Format {
+		raw, err = json.Marshal(p.Manifest)
+	} else {
+		raw, err = os.ReadFile(filepath.Join(p.Dir, plugin.PluginDir, plugin.PluginFile))
+	}
 	if err != nil {
 		return cliError(stderr, true, errCodeIOError,
 			fmt.Sprintf("reading manifest: %v", err))

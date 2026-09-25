@@ -106,6 +106,7 @@
         "path": {"type": "string"},
         "registry_name": {"type": "string"},
         "installed_at": {"type": "string", "description": "ISO 8601 UTC timestamp."},
+        "format": {"type": "string", "description": "Present when the installed content is not a ynh harness but a package ynh derives one from at load time: \"agent-plugin\" for an Agent Plugins package (https://agent-plugins.org). Open set; consumers tolerate unknown values."},
         "forked_from": {"$ref": "#/$defs/ForkedFrom"}
       },
       "required": ["source_type", "source", "installed_at"],

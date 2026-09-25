@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/harness"
-	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 )
 
@@ -217,7 +216,7 @@ func cmdDelegateUpdate(args []string, stdout io.Writer) error {
 // basePath already includes it, so we only check basePath itself and never
 // auto-resolve.
 func validateDelegateTarget(basePath, gitURL, givenPath string) (string, error) {
-	if plugin.IsPluginDir(basePath) {
+	if harness.IsHarnessDir(basePath) {
 		return "", nil
 	}
 	if givenPath != "" {
@@ -232,7 +231,7 @@ func validateDelegateTarget(basePath, gitURL, givenPath string) (string, error) 
 		if !e.IsDir() {
 			continue
 		}
-		if plugin.IsPluginDir(filepath.Join(basePath, e.Name())) {
+		if harness.IsHarnessDir(filepath.Join(basePath, e.Name())) {
 			found = append(found, e.Name())
 		}
 	}

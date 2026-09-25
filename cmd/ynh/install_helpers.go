@@ -39,7 +39,9 @@ func loadOrSynthesizeHarness(dir string) (*harness.Harness, error) {
 		return nil, fmt.Errorf("migrating harness format: %w", err)
 	}
 
-	if plugin.IsPluginDir(dir) {
+	// A ynh harness, or an Agent Plugins package, which LoadDir derives a
+	// harness from in memory: the package is never written to.
+	if harness.IsHarnessDir(dir) {
 		return harness.LoadDir(dir)
 	}
 

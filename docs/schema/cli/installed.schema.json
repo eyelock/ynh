@@ -31,6 +31,7 @@
         "namespace": {"type": "string"},
         "registry_name": {"type": "string"},
         "installed_at": {"type": "string"},
+        "format": {"type": "string", "description": "Present when the installed content is not a ynh harness but a package ynh derives one from at load time: \"agent-plugin\" for an Agent Plugins package (https://agent-plugins.org). Open set; consumers tolerate unknown values."},
         "forked_from": {
           "$ref": "https://eyelock.github.io/ynh/schema/shared/harness.schema.json#/$defs/ForkedFrom"
         },
