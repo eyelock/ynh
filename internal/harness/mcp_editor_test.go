@@ -179,7 +179,7 @@ func TestUpdateMCP_SetsBothCommandAndURL(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := UpdateMCP(dir, "s", MCPUpdateOptions{URL: ptr("https://y")})
-	if err == nil || !strings.Contains(err.Error(), "cannot have both") {
+	if err == nil || !strings.Contains(err.Error(), "not both") {
 		t.Errorf("want both-set error, got %v", err)
 	}
 }

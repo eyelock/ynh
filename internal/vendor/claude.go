@@ -367,14 +367,53 @@ func (c *Claude) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []
 	return data, nil
 }
 
+// claudeMCPServer is Claude Code's .mcp.json entry. Type is Claude's own
+// spelling: "http" for Streamable HTTP, "sse" for the legacy transport, and
+// absent for stdio, which is what an entry without a type has always meant
+// there. Claude Code rejects a url entry that carries no type
+// (code.claude.com/docs/en/mcp), so the remote case is the one that matters.
+type claudeMCPServer struct {
+	Type    string            `json:"type,omitempty"`
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
+	Cwd     string            `json:"cwd,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
+// claudeMCPServers maps the canonical servers to Claude Code's .mcp.json
+// shape. Codex reads the same shape (developers.openai.com/codex/mcp), so
+// its adapter shares this.
+func claudeMCPServers(servers map[string]plugin.MCPServer) map[string]claudeMCPServer {
+	out := make(map[string]claudeMCPServer, len(servers))
+	for name, s := range servers {
+		cs := claudeMCPServer{
+			Command: s.Command,
+			Args:    s.Args,
+			Env:     s.Env,
+			Cwd:     s.Cwd,
+			URL:     s.URL,
+			Headers: s.Headers,
+		}
+		switch s.Transport() {
+		case plugin.MCPTypeStreamableHTTP:
+			cs.Type = "http"
+		case plugin.MCPTypeSSE:
+			cs.Type = "sse"
+		}
+		out[name] = cs
+	}
+	return out
+}
+
 func (c *Claude) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
 	if len(servers) == 0 {
 		return nil, nil
 	}
 
-	// Claude uses .mcp.json with "mcpServers" key — direct passthrough
 	config := map[string]any{
-		"mcpServers": servers,
+		"mcpServers": claudeMCPServers(servers),
 	}
 
 	data, err := json.MarshalIndent(config, "", "  ")

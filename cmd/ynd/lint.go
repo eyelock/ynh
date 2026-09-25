@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/agentplugin"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
@@ -95,7 +96,7 @@ func cmdLint(args []string) error {
 		case strings.HasSuffix(f, ".sh"):
 			issues = append(issues, lintShell(f)...)
 		case filepath.Base(f) == plugin.PluginFile:
-			issues = append(issues, lintHarnessJSONFile(f)...)
+			issues = append(issues, lintPluginJSONFile(f)...)
 			issues = append(issues, lintDeclaredReads(f)...)
 		}
 	}
@@ -388,6 +389,21 @@ func lintShell(path string) []lintIssue {
 	}
 
 	return issues
+}
+
+// lintPluginJSONFile routes a plugin.json to the rules for the format its
+// $schema declares. An Agent Plugins manifest is a closed document with its
+// own name rule and no version requirement; ynh's structural rules would
+// flag a conforming one.
+func lintPluginJSONFile(path string) []lintIssue {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return []lintIssue{{File: path, Message: fmt.Sprintf("read error: %v", err)}}
+	}
+	if agentplugin.IsManifest(data) {
+		return lintAgentPluginManifest(path, data)
+	}
+	return lintHarnessJSONFile(path)
 }
 
 func lintHarnessJSONFile(path string) []lintIssue {

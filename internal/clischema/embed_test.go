@@ -73,6 +73,14 @@ func TestSingleSchemaTree(t *testing.T) {
 			fixtureSchemas = append(fixtureSchemas, path)
 			return nil
 		}
+		// The Agent Plugins schemas are not ynh's: their $id is
+		// agent-plugins.org, the specification forbids fetching them at load
+		// time, and the copy under internal/agentplugin/schema is a verbatim
+		// vendoring of a published release. This rule is about ynh's own
+		// schemas having one copy, and that one has none here.
+		if strings.Contains(path, filepath.Join("internal", "agentplugin", "schema")+string(filepath.Separator)) {
+			return nil
+		}
 		rel, _ := filepath.Rel(root, path)
 		strays = append(strays, rel)
 		return nil

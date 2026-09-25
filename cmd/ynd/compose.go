@@ -95,9 +95,11 @@ type composeHook struct {
 }
 
 type composeMCP struct {
+	Type    string            `json:"type"`
 	Command string            `json:"command,omitempty"`
 	Args    []string          `json:"args,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
+	Cwd     string            `json:"cwd,omitempty"`
 	URL     string            `json:"url,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
 }
@@ -379,9 +381,11 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 		servers := make(map[string]composeMCP)
 		for name, srv := range h.MCPServers {
 			servers[name] = composeMCP{
+				Type:    srv.Transport(),
 				Command: srv.Command,
 				Args:    srv.Args,
 				Env:     srv.Env,
+				Cwd:     srv.Cwd,
 				URL:     srv.URL,
 				Headers: srv.Headers,
 			}
@@ -413,9 +417,11 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 					continue
 				}
 				cp.MCPServers[sName] = &composeMCP{
+					Type:    srv.Transport(),
 					Command: srv.Command,
 					Args:    srv.Args,
 					Env:     srv.Env,
+					Cwd:     srv.Cwd,
 					URL:     srv.URL,
 					Headers: srv.Headers,
 				}

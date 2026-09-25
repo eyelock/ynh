@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/agentplugin"
 	"github.com/eyelock/ynh/internal/marketplace"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/pathutil"
@@ -54,9 +55,17 @@ func cmdValidate(args []string) error {
 		return validateFile(root)
 	}
 
+	// An Agent Plugin (https://agent-plugins.org) is a different package
+	// format that shares the plugin.json filename. Its root is what the
+	// $schema identifier says it is, and the check that applies is the
+	// specification's, not ynh's.
+	if agentplugin.IsPluginRoot(root) && !plugin.IsPluginDir(root) {
+		return validateAgentPlugin(root)
+	}
+
 	// Directory: find harness roots and validate them
-	harnesses := findHarnessRoots(root)
-	if len(harnesses) == 0 {
+	harnesses, agentPlugins := findHarnessRoots(root)
+	if len(harnesses) == 0 && len(agentPlugins) == 0 {
 		// Maybe we're inside a harness directory
 		if isHarnessRoot(root) {
 			return validateHarness(root)
@@ -74,6 +83,11 @@ func cmdValidate(args []string) error {
 	hasError := false
 	for _, p := range harnesses {
 		if err := validateHarness(p); err != nil {
+			hasError = true
+		}
+	}
+	for _, p := range agentPlugins {
+		if err := validateAgentPlugin(p); err != nil {
 			hasError = true
 		}
 	}
@@ -112,7 +126,7 @@ func validateFile(path string) error {
 
 	switch {
 	case base == plugin.PluginFile:
-		issues = lintHarnessJSON(path)
+		issues = lintPluginJSON(path)
 	case base == "marketplace.json":
 		// Registry index (inside .ynh-plugin/) validates against the schema.
 		// Build config (anywhere else) validates via LoadConfig programmatic checks.
@@ -166,8 +180,10 @@ func isLegacyHarnessRoot(dir string) bool {
 	return err == nil
 }
 
-func findHarnessRoots(root string) []string {
-	var roots []string
+// findHarnessRoots walks root for ynh harnesses and Agent Plugins. Either
+// kind of root ends the descent: a package's contents are its own to
+// validate, and a skill inside it is not a second harness.
+func findHarnessRoots(root string) (harnesses, agentPlugins []string) {
 	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -179,12 +195,62 @@ func findHarnessRoots(root string) []string {
 			return filepath.SkipDir
 		}
 		if isHarnessRoot(path) {
-			roots = append(roots, path)
+			harnesses = append(harnesses, path)
+			return filepath.SkipDir
+		}
+		if agentplugin.IsPluginRoot(path) {
+			agentPlugins = append(agentPlugins, path)
 			return filepath.SkipDir
 		}
 		return nil
 	})
-	return roots
+	return harnesses, agentPlugins
+}
+
+// validateAgentPlugin runs the Agent Plugins conformance check over dir and
+// prints its findings in the same shape as validateHarness. Every finding
+// fails validation, fatal or not: a client would only report the non-fatal
+// ones, but an author about to publish wants both fixed.
+func validateAgentPlugin(dir string) error {
+	rel, _ := filepath.Rel(".", dir)
+	if rel == "" {
+		rel = dir
+	}
+	issues := agentplugin.Validate(dir)
+	if len(issues) > 0 {
+		fmt.Printf("%s: INVALID (Agent Plugin)\n", rel)
+		for _, issue := range issues {
+			fmt.Printf("  - %s\n", issue)
+		}
+		return fmt.Errorf("agent plugin %q has %d issue(s)", rel, len(issues))
+	}
+	fmt.Printf("%s: valid (Agent Plugin %s)\n", rel, agentplugin.Version)
+	return nil
+}
+
+// lintPluginJSON validates a file named plugin.json against whichever
+// schema its $schema names: the Agent Plugins manifest schema, or ynh's.
+func lintPluginJSON(path string) []lintIssue {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return []lintIssue{{File: path, Message: fmt.Sprintf("cannot read: %v", err)}}
+	}
+	if agentplugin.IsManifest(data) {
+		return lintAgentPluginManifest(path, data)
+	}
+	return lintHarnessJSON(path)
+}
+
+func lintAgentPluginManifest(path string, data []byte) []lintIssue {
+	_, diags, err := agentplugin.ParseManifest(data)
+	var issues []lintIssue
+	for _, d := range diags {
+		issues = append(issues, lintIssue{File: path, Message: d.Message})
+	}
+	if err != nil {
+		issues = append(issues, lintIssue{File: path, Message: err.Error()})
+	}
+	return issues
 }
 
 func validateHarness(dir string) error {

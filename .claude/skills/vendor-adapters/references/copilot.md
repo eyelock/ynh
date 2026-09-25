@@ -268,7 +268,8 @@ mid-session. `~/.copilot/mcp-config.json` is user scope, lower precedence.
 ```
 
 - **`type` is required**: `local` for stdio, `http` or `sse` for remote.
-  Translate `command present → local`, `url present → http`.
+  The adapter maps the canonical transport: `stdio → local`,
+  `streamable-http → http`, `sse → sse`.
 - Set `tools` explicitly to `["*"]`. It defaults that way via `copilot mcp add`,
   but that was never verified for a hand-written file.
 - SSE is flagged legacy/deprecated by GitHub's own docs.
