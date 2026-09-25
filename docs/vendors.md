@@ -213,6 +213,25 @@ Key differences between runtime and export:
 
 See [ynd export](ynd.md#export) for full command reference.
 
+## Agent Plugins Export
+
+`ynd export --format agent-plugin` writes one package in the
+[Agent Plugins](https://agent-plugins.org) open format instead of a tree per
+vendor. The portable core (root `plugin.json`, `skills/`, `mcp.json`) is the
+same whichever vendors are selected; `-v` chooses which clients' own files
+join it, each where that client documents reading them:
+
+| | Loads the format | What `-v` adds to the package |
+|---|---|---|
+| Codex | yes | `com.openai/hooks/hooks.json`, named under `extensions.com.openai` |
+| Copilot / VS Code | yes | `com.github.copilot/agents/` (same subset as the vendor export) |
+| Cursor | yes, core only | nothing: Cursor has published no extension namespace, and does not expand `${PLUGIN_ROOT}` or `${PLUGIN_DATA}` |
+| Claude Code | no | `.claude-plugin/plugin.json`, `mcp/claude.json` and `hooks/claude.json` (named by that manifest, as in its own plugin export), `agents/`, `rules/`, `commands/`, `CLAUDE.md` at the root: a compatibility package, as the spec's migration guide describes |
+
+Anything the selected vendors cannot receive is reported as a warning rather
+than dropped in silence. See [ynd export](ynd.md#export) for the rules the
+portable `mcp.json` applies to each server.
+
 ## Vendor Spec Tracking
 
 Vendor plugin formats evolve frequently. The `vendor-adapters` skill (`.claude/skills/vendor-adapters/`) maintains current documentation links, format mappings, and known discrepancies for each vendor. Consult it when updating adapters or verifying spec compliance.

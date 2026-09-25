@@ -10,6 +10,7 @@ import (
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // stubExporter lets each generator be driven independently, including into
@@ -36,6 +37,7 @@ func (s stubExporter) GenerateHookConfig(map[string][]plugin.HookEntry) (map[str
 func (s stubExporter) GenerateMCPConfig(map[string]plugin.MCPServer) (map[string][]byte, error) {
 	return s.mcp, s.mcpErr
 }
+func (s stubExporter) AgentPluginLayout() vendor.AgentPluginLayout { return vendor.AgentPluginLayout{} }
 
 func TestWriteGeneratedFiles_CreatesNestedParents(t *testing.T) {
 	out := t.TempDir()

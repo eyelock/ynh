@@ -457,4 +457,6 @@ func TestAssembleWithAgentsMD(t *testing.T) {
 }
 
 // Ensure the vendor package is imported for side effects
+func (m *mockAdapter) AgentPluginLayout() vendor.AgentPluginLayout { return vendor.AgentPluginLayout{} }
+
 var _ vendor.Adapter = &mockAdapter{}
