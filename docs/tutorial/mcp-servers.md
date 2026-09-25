@@ -266,6 +266,7 @@ resolved:
 {
   "mcpServers": {
     "docs-api": {
+      "type": "http",
       "url": "https://docs.example.com/mcp",
       "headers": {
         "Authorization": "Bearer sk-demo-123"
@@ -294,6 +295,7 @@ Expected `.mcp.json` (at plugin root):
 {
   "mcpServers": {
     "docs-api": {
+      "type": "http",
       "url": "https://docs.example.com/mcp",
       "headers": {
         "Authorization": "Bearer sk-demo-123"

@@ -166,6 +166,9 @@ func TestCmdComposeJSONBasic(t *testing.T) {
 	if srv.Command != "node" {
 		t.Errorf("mcp command = %q, want node", srv.Command)
 	}
+	if srv.Type != "stdio" {
+		t.Errorf("mcp type = %q, want the effective transport stdio", srv.Type)
+	}
 
 	// Profiles
 	if len(got.Profiles) != 1 {

@@ -390,9 +390,15 @@ func copilotMCPDocument(servers map[string]plugin.MCPServer) ([]byte, error) {
 			Headers: s.Headers,
 			Tools:   []string{"*"},
 		}
-		if s.Command != "" {
+		// Copilot's vocabulary: "local" for stdio, "http" for Streamable
+		// HTTP, "sse" for the legacy transport (see the vendor-adapters
+		// skill, references/copilot.md).
+		switch s.Transport() {
+		case plugin.MCPTypeStdio:
 			cs.Type = "local"
-		} else {
+		case plugin.MCPTypeSSE:
+			cs.Type = "sse"
+		default:
 			cs.Type = "http"
 		}
 		out[name] = cs

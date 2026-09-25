@@ -320,15 +320,18 @@ Verified by writing `.mcp.json` and `.github/mcp.json` by hand and confirming
 }
 ```
 
-Key differences from ynh's existing `GenerateMCPConfig` output for
-Claude/Cursor (which just marshals `plugin.MCPServer` with no `type` field,
-inferring stdio-vs-remote from whether `command` or `url` is set):
+How this relates to the canonical model: `plugin.MCPServer` carries the
+Agent Plugins transport vocabulary (`stdio`, `streamable-http`, `sse`), with
+`Transport()` inferring `stdio` from `command` and `streamable-http` from
+`url` when `type` is not declared. Every adapter maps that to its own
+spelling rather than passing the struct through:
 
 - Copilot's schema **requires an explicit `"type"` field**: `"local"` for
-  stdio, `"http"` or `"sse"` for remote. The Copilot adapter's
-  `GenerateMCPConfig` must add this field — translate `command present →
-  "local"`, `url present → "http"` (default) unless the harness's own MCP
-  server declaration specifies SSE.
+  stdio, `"http"` for Streamable HTTP, `"sse"` for the legacy transport.
+- Claude Code and Codex share one `.mcp.json` shape: `"http"` or `"sse"` on a
+  remote entry, no type on a stdio entry (Claude Code rejects a `url` entry
+  without a type, so this is load-bearing).
+- Cursor's `mcp.json` defines no transport key; the adapter drops it.
 - `tools` defaults to `["*"]` if omitted when set via `copilot mcp add`, but
   wasn't tested for omission entirely from a hand-written file — include it
   explicitly (`["*"]`) to be safe rather than assuming a default applies to

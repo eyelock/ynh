@@ -337,11 +337,36 @@ func cursorMCPDocument(servers map[string]plugin.MCPServer) ([]byte, error) {
 	if len(servers) == 0 {
 		return nil, nil
 	}
-	data, err := json.MarshalIndent(map[string]any{"mcpServers": servers}, "", "  ")
+	// Cursor's mcp.json has no transport field: a command is stdio and a
+	// url is auto-detected (cursor.com/docs/mcp), so the canonical type is
+	// dropped rather than passed through as a key Cursor does not define.
+	out := make(map[string]cursorMCPServer, len(servers))
+	for name, s := range servers {
+		out[name] = cursorMCPServer{
+			Command: s.Command,
+			Args:    s.Args,
+			Env:     s.Env,
+			Cwd:     s.Cwd,
+			URL:     s.URL,
+			Headers: s.Headers,
+		}
+	}
+	data, err := json.MarshalIndent(map[string]any{"mcpServers": out}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshalling MCP config: %w", err)
 	}
 	return append(data, '\n'), nil
+}
+
+// cursorMCPServer is Cursor's mcp.json entry: the canonical fields minus
+// the transport, which Cursor infers.
+type cursorMCPServer struct {
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
+	Cwd     string            `json:"cwd,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 // TransformArtifact rewrites Cursor rule files to the .mdc format Cursor

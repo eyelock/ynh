@@ -197,6 +197,18 @@ func cmdProfileMCPAdd(args []string, stdout io.Writer) error {
 	var positional []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--type":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--type requires a value")
+			}
+			i++
+			opts.Type = args[i]
+		case "--cwd":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--cwd requires a value")
+			}
+			i++
+			opts.Cwd = args[i]
 		case "--command":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--command requires a value")
@@ -251,7 +263,7 @@ func cmdProfileMCPAdd(args []string, stdout io.Writer) error {
 		}
 	}
 	if len(positional) != 3 {
-		return fmt.Errorf("usage: ynh profile mcp add <harness> <profile> <name> [--command <cmd> | --url <url> | --null] [--arg <v>...] [--env K=V...] [--header K=V...]")
+		return fmt.Errorf("usage: ynh profile mcp add <harness> <profile> <name> [--command <cmd> | --url <url> | --null] [--type <stdio|streamable-http|sse>] [--arg <v>...] [--env K=V...] [--cwd <dir>] [--header K=V...]")
 	}
 	harnessRef, profileName, serverName := positional[0], positional[1], positional[2]
 
@@ -295,6 +307,20 @@ func cmdProfileMCPUpdate(args []string, stdout io.Writer) error {
 	var positional []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--type":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--type requires a value")
+			}
+			i++
+			v := args[i]
+			opts.Type = &v
+		case "--cwd":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--cwd requires a value")
+			}
+			i++
+			v := args[i]
+			opts.Cwd = &v
 		case "--command":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--command requires a value")
@@ -358,7 +384,7 @@ func cmdProfileMCPUpdate(args []string, stdout io.Writer) error {
 		}
 	}
 	if len(positional) != 3 {
-		return fmt.Errorf("usage: ynh profile mcp update <harness> <profile> <name> [--command <cmd>] [--url <url>] [--arg <v>...] [--env K=V...] [--header K=V...] [--clear-args|--clear-env|--clear-headers]")
+		return fmt.Errorf("usage: ynh profile mcp update <harness> <profile> <name> [--command <cmd>] [--url <url>] [--type <t>] [--arg <v>...] [--env K=V...] [--cwd <dir>] [--header K=V...] [--clear-args|--clear-env|--clear-headers]")
 	}
 	harnessRef, profileName, serverName := positional[0], positional[1], positional[2]
 
