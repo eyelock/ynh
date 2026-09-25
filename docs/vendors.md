@@ -203,7 +203,7 @@ Key differences between runtime and export:
 - **Export** places artifacts at the plugin root (e.g., `skills/`) — the standard distributable layout
 - Claude export writes `AGENTS.md` for instructions, not `CLAUDE.md` (which would conflict with the installing project's own)
 - Codex export is limited to skills — agents, rules, commands, and delegates are excluded with warnings
-- Codex is excluded from merged export mode (different marketplace format)
+- Codex takes part in merged export and marketplace builds; its index is written separately at `.agents/plugins/marketplace.json` because its shape differs
 - Copilot export is limited to skills and agents — rules and commands are excluded with warnings
 - Copilot uses Claude's plugin manifest format (`.claude-plugin/plugin.json`), since Copilot's own plugin loader reads the same schema
 
