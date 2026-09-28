@@ -316,6 +316,62 @@ ynd validate /tmp/ynh-tutorial/marketplace-portable/plugins/reviewer
 # Expected: /tmp/ynh-tutorial/marketplace-portable/plugins/reviewer: valid (Agent Plugin 1.0.0)
 ```
 
+### Test with GitHub Copilot
+
+Copilot CLI registers a local marketplace directory and loads Agent Plugins
+from it natively. Unlike the Claude Code test above, no `git init` is needed
+(the build already did it, and Copilot does not require it). These commands
+change your Copilot configuration; the last two undo it.
+
+```bash
+copilot plugin marketplace add /tmp/ynh-tutorial/marketplace-portable
+copilot plugin marketplace browse tutorial-marketplace
+```
+
+Expected:
+```
+Marketplace "tutorial-marketplace" added successfully.
+Plugins in "tutorial-marketplace":
+  • formatter - Auto-format code on save
+  • reviewer - Code review with dev-quality and dev-review skills
+
+Install with: copilot plugin install <plugin-name>@tutorial-marketplace
+```
+
+```bash
+copilot plugin install reviewer@tutorial-marketplace
+```
+
+Expected output begins:
+```
+Plugin "reviewer" installed successfully. Installed 2 skills.
+```
+
+Copilot loads the package live from `/tmp/ynh-tutorial/marketplace-portable/plugins/reviewer` rather than copying it, so an edit to the built output takes effect on its next session.
+
+Both skills the harness pulled in from its remote include are now Copilot
+skills:
+
+```bash
+copilot skill list
+```
+
+Expected output includes a `Plugin skills:` section naming both (the project
+and built-in sections vary by machine):
+```
+Plugin skills:
+  dev-quality - ...
+  dev-review - ...
+```
+
+Undo the registration:
+
+```bash
+copilot plugin uninstall reviewer
+copilot plugin marketplace remove tutorial-marketplace
+# Expected: Marketplace "tutorial-marketplace" removed successfully.
+```
+
 ## Clean up
 
 ```bash
@@ -332,6 +388,7 @@ rm -rf /tmp/ynh-tutorial/marketplace-*
 - Pick filtering carries through from harness metadata to the marketplace output
 - Codex gets its own index at `.agents/plugins/marketplace.json`, in its own `source`/`policy` shape
 - `--format agent-plugin` builds each harness entry as one portable Agent Plugins package, with every vendor's index still written
+- Copilot CLI registers the built directory as a marketplace and installs a package from it with its skills, which is the end-to-end proof that a real client reads what ynh wrote
 
 ## Next
 
