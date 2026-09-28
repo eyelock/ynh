@@ -368,6 +368,48 @@ Quote any `--header` or `--env` value that contains a space: unquoted, `Bearer x
 
 The first positional argument accepts either a filesystem path (during authoring) or a canonical harness id (`local/<name>`, `github.com/<org>/<repo>/<name>`) once installed.
 
+## Declare the transport
+
+A server's transport is normally implied: `command` means stdio and `url`
+means Streamable HTTP. The one case the fields cannot express is a remote
+server on the deprecated HTTP+SSE transport, so `--type` exists for it. The
+names are the [Agent Plugins](https://agent-plugins.org) vocabulary
+(`stdio`, `streamable-http`, `sse`), and each vendor gets its own spelling:
+
+```bash
+ynh mcp add /tmp/ynh-tutorial/mcp-harness legacy --url https://legacy.example.com/sse --type sse
+ynd preview /tmp/ynh-tutorial/mcp-harness -v claude
+```
+
+Expected `.claude/.mcp.json` now carries Claude Code's spelling on every
+remote server, and none on the stdio ones:
+```json
+    "docs-api": {
+      "type": "http",
+      "url": "https://docs.example.com/mcp",
+      ...
+    },
+    "legacy": {
+      "type": "sse",
+      "url": "https://legacy.example.com/sse"
+    },
+```
+
+Claude Code rejects a `url` entry with no `type`, so the `http` is not
+cosmetic. Copilot's file says `local`, `http` and `sse` for the same three
+servers; Cursor's has no transport field at all.
+
+A type that disagrees with the fields is refused rather than written:
+
+```bash
+ynh mcp add /tmp/ynh-tutorial/mcp-harness broken --command x --type sse
+```
+
+Expected:
+```
+Error: mcp_servers.broken: type sse requires url
+```
+
 ## Clean up
 
 ```bash
@@ -383,6 +425,7 @@ rm -rf /tmp/ynh-tutorial
 - An export writes each vendor's plugin MCP file instead: Claude's `mcp/claude.json` (named by its manifest), Codex's `.mcp.json`, Cursor's root `mcp.json`, Copilot's `.github/mcp.json`. No two share a path, so a merged package carries all four
 - `ynd preview` and `ynd diff` let you verify MCP config without installing
 - MCP servers can be edited from the CLI with `ynh mcp add/update/remove` (top-level) and `ynh profile mcp add/update/remove` (profile-level), with `--null` available on profile-level to suppress an inherited entry
+- The transport is inferred from `command` or `url`; `--type sse` declares the one case that cannot be, and each vendor's config carries its own spelling
 
 ## Next
 
