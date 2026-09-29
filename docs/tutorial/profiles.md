@@ -20,8 +20,8 @@ Create a harness with a `ci` profile that adds stricter rules and a lint hook:
 mkdir -p /tmp/ynh-tutorial/profile-harness/skills/deploy
 mkdir -p /tmp/ynh-tutorial/profile-harness/rules
 
-mkdir -p /tmp/ynh-tutorial/profile-harness/.ynh-plugin
-cat > /tmp/ynh-tutorial/profile-harness/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/profile-harness/.agents/harness
+cat > /tmp/ynh-tutorial/profile-harness/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "profile-demo",
@@ -80,7 +80,7 @@ EOF
 ```
 
 Key points:
-- `profiles` is a top-level field in `.ynh-plugin/plugin.json`
+- `profiles` is a top-level field in `.agents/harness/plugin.json`
 - Each profile can contain `hooks` and `mcp_servers`
 - Profiles declare only what they change — absent fields inherit from top-level defaults
 - MCP servers are deep-merged (profile keys win on collision); hooks use per-event replace
@@ -231,7 +231,7 @@ EOF
 Add a profile that pulls it in:
 
 ```bash
-cat > /tmp/ynh-tutorial/profile-harness/.ynh-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/profile-harness/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "profile-demo",
@@ -276,7 +276,7 @@ Paths in `local` are relative to the harness root (or absolute). The `pick` fiel
 
 ## Edit profiles from the command line
 
-Profiles can be authored by hand-editing `.ynh-plugin/plugin.json` — that is what every step above did. They can also be edited from the command line, which is what an interactive consumer does. The CLI mirrors `ynh include` and routes through the same resolver, so edits land in the source tree for pointer-form local installs.
+Profiles can be authored by hand-editing `.agents/harness/plugin.json` — that is what every step above did. They can also be edited from the command line, which is what an interactive consumer does. The CLI mirrors `ynh include` and routes through the same resolver, so edits land in the source tree for pointer-form local installs.
 
 ```bash
 # Add a new profile (empty) and a hook inside it
@@ -316,7 +316,7 @@ rm -rf /tmp/ynh-tutorial
 
 ## What You Learned
 
-- Profiles are declared in `.ynh-plugin/plugin.json` under `profiles` as named config objects
+- Profiles are declared in `.agents/harness/plugin.json` under `profiles` as named config objects
 - Each profile can override `hooks`, `mcp_servers`, and add `includes`
 - Profiles use merge semantics: MCP servers are deep-merged (profile keys win), hooks use per-event replace (absent events inherited), includes are appended (profile cannot remove a base include)
 - Set an MCP server to `null` in a profile to remove an inherited server

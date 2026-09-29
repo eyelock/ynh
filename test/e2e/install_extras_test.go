@@ -12,7 +12,7 @@ import (
 
 // TestInstall_MigratesLegacyHarnessJson covers the migration path: a source
 // directory containing only the legacy `.harness.json` (pre-1.0 layout) must
-// be transparently migrated to `.ynh-plugin/plugin.json` during install.
+// be transparently migrated to `.agents/harness/plugin.json` during install.
 //
 // Lifts coverage of internal/migration which is otherwise only exercised
 // by unit tests.
@@ -36,7 +36,7 @@ func TestInstall_MigratesLegacyHarnessJson(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(srcDir, ".harness.json")); !os.IsNotExist(err) {
 		t.Errorf("legacy .harness.json should have been removed in source tree, err=%v", err)
 	}
-	assertFileExists(t, filepath.Join(srcDir, ".ynh-plugin", "plugin.json"))
+	assertFileExists(t, filepath.Join(srcDir, ".agents/harness", "plugin.json"))
 
 	// And ynh ls should see it under its declared name.
 	out, _ := s.mustRunYnh(t, "ls", "--format", "json")
@@ -69,7 +69,7 @@ func TestInstall_BareAgentsMd(t *testing.T) {
 
 	// Schema 3: synthesised plugin.json lands in the user's source tree
 	// (which IS the install), no copy under HarnessesDir.
-	assertFileExists(t, filepath.Join(srcDir, ".ynh-plugin", "plugin.json"))
+	assertFileExists(t, filepath.Join(srcDir, ".agents/harness", "plugin.json"))
 	assertFileExists(t, filepath.Join(srcDir, "AGENTS.md"))
 
 	out, _ := s.mustRunYnh(t, "ls", "--format", "json")
@@ -118,22 +118,22 @@ func TestInstall_ReinstallReplaces(t *testing.T) {
 
 	// First install — minimal harness.
 	srcA := filepath.Join(t.TempDir(), "first")
-	if err := os.MkdirAll(filepath.Join(srcA, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(srcA, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	pluginA := `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"twin","version":"0.1.0","description":"first"}`
-	if err := os.WriteFile(filepath.Join(srcA, ".ynh-plugin", "plugin.json"), []byte(pluginA), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(srcA, ".agents/harness", "plugin.json"), []byte(pluginA), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	s.mustRunYnh(t, "install", srcA)
 
 	// Second install — same name, different description, different source dir.
 	srcB := filepath.Join(t.TempDir(), "second")
-	if err := os.MkdirAll(filepath.Join(srcB, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(srcB, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	pluginB := `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"twin","version":"0.2.0","description":"second"}`
-	if err := os.WriteFile(filepath.Join(srcB, ".ynh-plugin", "plugin.json"), []byte(pluginB), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(srcB, ".agents/harness", "plugin.json"), []byte(pluginB), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	s.mustRunYnh(t, "install", srcB)

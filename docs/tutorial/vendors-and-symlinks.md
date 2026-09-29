@@ -19,8 +19,8 @@ mkdir -p /tmp/ynh-tutorial
 ```bash
 mkdir -p /tmp/ynh-tutorial/my-harness/skills/ping
 
-mkdir -p /tmp/ynh-tutorial/my-harness/.ynh-plugin
-cat > /tmp/ynh-tutorial/my-harness/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/my-harness/.agents/harness
+cat > /tmp/ynh-tutorial/my-harness/.agents/harness/plugin.json << 'EOF'
 {
   "name": "my-harness",
   "version": "0.1.0",
@@ -60,7 +60,7 @@ cursor   Cursor              agent    .cursor     true
 
 ynh picks the vendor in this order:
 1. CLI flag `-v` (highest priority)
-2. Harness's `default_vendor` in `.ynh-plugin/plugin.json`
+2. Harness's `default_vendor` in `.agents/harness/plugin.json`
 3. Global `~/.ynh/config.json` default (fallback: "claude")
 
 ## Switch vendors

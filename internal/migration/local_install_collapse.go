@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 // MigrateToSchema3 migrates a YNH home from schema 2 to schema 3.
@@ -130,10 +132,10 @@ func collapseLocalInstalls(home string, opts MigrateOpts, m *Manifest) error {
 		// manifest at the top — MigrateToSchema2 should have flattened
 		// these, but if a home was hand-edited or partially migrated, leave
 		// them alone for the schema-1→2 migration to handle.
-		if _, err := os.Stat(filepath.Join(copyDir, ".ynh-plugin", "plugin.json")); err != nil {
+		if !plugin.IsPluginDir(copyDir) {
 			continue
 		}
-		insPath := filepath.Join(copyDir, ".ynh-plugin", "installed.json")
+		insPath := plugin.InstalledPath(copyDir)
 		insData, err := os.ReadFile(insPath)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -156,8 +158,7 @@ func collapseLocalInstalls(home string, opts MigrateOpts, m *Manifest) error {
 		if ins.Path != "" {
 			loadDir = filepath.Join(ins.Source, ins.Path)
 		}
-		manifestPath := filepath.Join(loadDir, ".ynh-plugin", "plugin.json")
-		if _, err := os.Stat(manifestPath); err != nil {
+		if !plugin.IsPluginDir(loadDir) {
 			return quarantineOrAbort(copyDir,
 				fmt.Errorf("source path missing or has no manifest: %s", loadDir),
 				opts, m)
@@ -235,7 +236,7 @@ func absorbPointerProvenance(home string, opts MigrateOpts, m *Manifest) error {
 		if ptr.Path != "" {
 			loadDir = filepath.Join(ptr.Source, ptr.Path)
 		}
-		diskInsPath := filepath.Join(loadDir, ".ynh-plugin", "installed.json")
+		diskInsPath := plugin.InstalledPath(loadDir)
 		diskData, err := os.ReadFile(diskInsPath)
 		if err != nil {
 			// Nothing to absorb. The pointer is already canonical (legacy

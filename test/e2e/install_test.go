@@ -197,11 +197,11 @@ func TestInstall_InvalidSchema_Rejected(t *testing.T) {
 	s := newSandbox(t)
 
 	dir := filepath.Join(t.TempDir(), "invalid-schema")
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	body := `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"invalid","version":"0.1.0","this_field_does_not_exist":true}`
-	if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -216,7 +216,7 @@ func TestInstall_InvalidSchema_Rejected(t *testing.T) {
 
 func readInstalledJSON(t *testing.T, harnessDir string) installedJSONShape {
 	t.Helper()
-	path := filepath.Join(harnessDir, ".ynh-plugin", "installed.json")
+	path := manifestFile(harnessDir, "installed.json")
 	body, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("reading installed.json: %v", err)

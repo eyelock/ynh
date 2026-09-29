@@ -70,7 +70,7 @@ func TestRun_Cursor_InstallClean(t *testing.T) {
 func newSyntheticSkillHarness(t *testing.T, name string) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), name)
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(dir, "skills", "hello"), 0o755); err != nil {
@@ -83,7 +83,7 @@ func newSyntheticSkillHarness(t *testing.T, name string) string {
   "default_vendor": "claude"
 }
 `
-	if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(plugin), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(plugin), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	skill := "---\nname: hello\ndescription: A trivial skill for E2E symlink-layout tests.\n---\n\n# hello\n"

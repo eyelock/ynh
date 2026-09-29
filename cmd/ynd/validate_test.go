@@ -16,7 +16,7 @@ func TestValidateHarness_Valid(t *testing.T) {
 	mkdirAll(t, filepath.Join(hr, "skills", "hello"))
 	mkdirAll(t, filepath.Join(hr, "agents"))
 
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"test-harness","version":"0.1.0"}`))
 	writeFile(t, filepath.Join(hr, "skills", "hello", "SKILL.md"),
 		[]byte("---\nname: hello\ndescription: Say hello\n---\n\nHello skill.\n"))
@@ -47,7 +47,7 @@ func TestValidateHarness_MissingSkillMD(t *testing.T) {
 
 	hr := filepath.Join(dir, "bad-harness")
 	mkdirAll(t, filepath.Join(hr, "skills", "empty-skill"))
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad-harness","version":"0.1.0"}`))
 
 	err := validateHarness(hr)
@@ -63,7 +63,7 @@ func TestValidateHarness_SkillNameMismatch(t *testing.T) {
 	hr := filepath.Join(dir, "test-harness")
 	mkdirAll(t, filepath.Join(hr, "skills", "hello"))
 
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"test-harness","version":"0.1.0"}`))
 	writeFile(t, filepath.Join(hr, "skills", "hello", "SKILL.md"),
 		[]byte("---\nname: wrong-name\ndescription: Say hello\n---\n"))
@@ -81,7 +81,7 @@ func TestValidateHarness_AgentMissingTools(t *testing.T) {
 	hr := filepath.Join(dir, "test-harness")
 	mkdirAll(t, filepath.Join(hr, "agents"))
 
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"test-harness","version":"0.1.0"}`))
 	writeFile(t, filepath.Join(hr, "agents", "reviewer.md"),
 		[]byte("---\nname: reviewer\ndescription: Reviews code\n---\n"))
@@ -97,7 +97,7 @@ func TestFindHarnessRoots(t *testing.T) {
 
 	for _, name := range []string{"p1", "p2"} {
 		mkdirAll(t, filepath.Join(dir, name))
-		writeFile(t, filepath.Join(dir, name, ".ynh-plugin", "plugin.json"),
+		writeFile(t, filepath.Join(dir, name, ".agents/harness", "plugin.json"),
 			[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"`+name+`","version":"0.1.0"}`))
 	}
 
@@ -111,7 +111,7 @@ func TestFindHarnessRoots(t *testing.T) {
 
 func TestFindHarnessRoots_SelfIsHarness(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(dir, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"self","version":"0.1.0"}`))
 
 	roots := findHarnessRoots(dir)
@@ -122,7 +122,7 @@ func TestFindHarnessRoots_SelfIsHarness(t *testing.T) {
 
 func TestIsHarnessRoot(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(dir, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"test","version":"0.1.0"}`))
 
 	if !isHarnessRoot(dir) {
@@ -140,7 +140,7 @@ func TestCmdValidate_Dir(t *testing.T) {
 	t.Chdir(dir)
 
 	hr := filepath.Join(dir, "my-harness")
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"my-harness","version":"0.1.0"}`))
 
 	err := cmdValidate([]string{dir})
@@ -163,7 +163,7 @@ func TestCmdValidate_InsideHarness(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	writeFile(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(dir, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"self","version":"0.1.0"}`))
 
 	err := cmdValidate(nil)
@@ -174,7 +174,7 @@ func TestCmdValidate_InsideHarness(t *testing.T) {
 
 func TestCmdValidate_SingleFile_PluginJSON(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".ynh-plugin", "plugin.json")
+	path := filepath.Join(dir, ".agents/harness", "plugin.json")
 	writeFile(t, path, []byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"test","version":"0.1.0"}`))
 
 	err := cmdValidate([]string{path})
@@ -242,7 +242,7 @@ func TestValidateMarketplaceConfig_InvalidRemoteSource(t *testing.T) {
 
 func TestCmdValidate_SingleFile_WithIssues(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".ynh-plugin", "plugin.json")
+	path := filepath.Join(dir, ".agents/harness", "plugin.json")
 	writeFile(t, path, []byte(`{}`))
 
 	err := cmdValidate([]string{path})
@@ -253,7 +253,7 @@ func TestCmdValidate_SingleFile_WithIssues(t *testing.T) {
 
 func TestCmdValidate_HarnessFlag(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(dir, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"flag-test","version":"0.1.0"}`))
 
 	err := cmdValidate([]string{"--harness", dir})
@@ -264,7 +264,7 @@ func TestCmdValidate_HarnessFlag(t *testing.T) {
 
 func TestCmdValidate_HarnessEnvVar(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(dir, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"env-test","version":"0.1.0"}`))
 
 	t.Setenv("YNH_HARNESS", dir)
@@ -277,7 +277,7 @@ func TestCmdValidate_HarnessEnvVar(t *testing.T) {
 
 func TestCmdValidate_HarnessFlagOverridesEnv(t *testing.T) {
 	goodDir := t.TempDir()
-	writeFile(t, filepath.Join(goodDir, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(goodDir, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"good","version":"0.1.0"}`))
 
 	t.Setenv("YNH_HARNESS", "/nonexistent/path")
@@ -311,7 +311,7 @@ func TestCmdValidate_MultipleHarnesses(t *testing.T) {
 
 	for _, name := range []string{"good", "bad"} {
 		hr := filepath.Join(dir, name)
-		writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+		writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 			[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"`+name+`","version":"0.1.0"}`))
 	}
 
@@ -326,7 +326,7 @@ func TestCmdValidate_MultipleHarnesses(t *testing.T) {
 
 func TestValidateFile_PluginJSON_Valid(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".ynh-plugin", "plugin.json")
+	path := filepath.Join(dir, ".agents/harness", "plugin.json")
 	writeFile(t, path, []byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"test","version":"0.1.0"}`))
 
 	err := validateFile(path)
@@ -337,7 +337,7 @@ func TestValidateFile_PluginJSON_Valid(t *testing.T) {
 
 func TestValidateFile_PluginJSON_Invalid(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".ynh-plugin", "plugin.json")
+	path := filepath.Join(dir, ".agents/harness", "plugin.json")
 	writeFile(t, path, []byte(`{}`))
 
 	err := validateFile(path)
@@ -388,7 +388,7 @@ func TestValidateHarness_InvalidHarnessJSON(t *testing.T) {
 
 	hr := filepath.Join(dir, "bad")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"), []byte(`{not json}`))
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"), []byte(`{not json}`))
 
 	err := validateHarness(hr)
 	if err == nil {
@@ -402,7 +402,7 @@ func TestValidateHarness_NonMarkdownInArtifactDir(t *testing.T) {
 
 	hr := filepath.Join(dir, "bad")
 	mkdirAll(t, filepath.Join(hr, "agents"))
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0"}`))
 	writeFile(t, filepath.Join(hr, "agents", "stray.txt"), []byte("not markdown"))
 
@@ -418,7 +418,7 @@ func TestValidateHarness_AgentMissingFrontmatter(t *testing.T) {
 
 	hr := filepath.Join(dir, "bad")
 	mkdirAll(t, filepath.Join(hr, "agents"))
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0"}`))
 	writeFile(t, filepath.Join(hr, "agents", "reviewer.md"), []byte("Just text.\n"))
 
@@ -434,7 +434,7 @@ func TestValidateHarness_AgentNameMismatch(t *testing.T) {
 
 	hr := filepath.Join(dir, "bad")
 	mkdirAll(t, filepath.Join(hr, "agents"))
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0"}`))
 	writeFile(t, filepath.Join(hr, "agents", "reviewer.md"),
 		[]byte("---\nname: wrong\ndescription: Reviews code\ntools: Read\n---\n"))
@@ -451,7 +451,7 @@ func TestValidateHarness_AgentMissingDescription(t *testing.T) {
 
 	hr := filepath.Join(dir, "bad")
 	mkdirAll(t, filepath.Join(hr, "agents"))
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0"}`))
 	writeFile(t, filepath.Join(hr, "agents", "reviewer.md"),
 		[]byte("---\nname: reviewer\ntools: Read\n---\n"))
@@ -468,7 +468,7 @@ func TestValidateHarness_AgentWithDescriptionButNoTools(t *testing.T) {
 
 	hr := filepath.Join(dir, "bad")
 	mkdirAll(t, filepath.Join(hr, "agents"))
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0"}`))
 	writeFile(t, filepath.Join(hr, "agents", "reviewer.md"),
 		[]byte("---\nname: reviewer\ndescription: Reviews\n---\n"))
@@ -485,7 +485,7 @@ func TestValidateHarness_SkillMissingFrontmatter(t *testing.T) {
 
 	hr := filepath.Join(dir, "bad")
 	mkdirAll(t, filepath.Join(hr, "skills", "hello"))
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0"}`))
 	writeFile(t, filepath.Join(hr, "skills", "hello", "SKILL.md"), []byte("No frontmatter.\n"))
 
@@ -501,7 +501,7 @@ func TestValidateHarness_SkillMissingName(t *testing.T) {
 
 	hr := filepath.Join(dir, "bad")
 	mkdirAll(t, filepath.Join(hr, "skills", "hello"))
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0"}`))
 	writeFile(t, filepath.Join(hr, "skills", "hello", "SKILL.md"),
 		[]byte("---\ndescription: A skill\n---\n"))
@@ -518,7 +518,7 @@ func TestValidateHarness_SkillMissingDescription(t *testing.T) {
 
 	hr := filepath.Join(dir, "bad")
 	mkdirAll(t, filepath.Join(hr, "skills", "hello"))
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0"}`))
 	writeFile(t, filepath.Join(hr, "skills", "hello", "SKILL.md"),
 		[]byte("---\nname: hello\n---\n"))
@@ -535,7 +535,7 @@ func TestValidateHarness_PluginJSONMissingName(t *testing.T) {
 
 	hr := filepath.Join(dir, "bad")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"version":"0.1.0"}`))
 
 	err := validateHarness(hr)
@@ -550,7 +550,7 @@ func TestValidateHarness_PluginJSONMissingVersion(t *testing.T) {
 
 	hr := filepath.Join(dir, "bad")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"name":"bad"}`))
 
 	err := validateHarness(hr)
@@ -565,7 +565,7 @@ func TestValidateHarness_NonMarkdownInRules(t *testing.T) {
 
 	hr := filepath.Join(dir, "bad")
 	mkdirAll(t, filepath.Join(hr, "rules"))
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0"}`))
 	writeFile(t, filepath.Join(hr, "rules", "stray.txt"), []byte("not markdown"))
 
@@ -581,7 +581,7 @@ func TestValidateHarness_NonMarkdownInCommands(t *testing.T) {
 
 	hr := filepath.Join(dir, "bad")
 	mkdirAll(t, filepath.Join(hr, "commands"))
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0"}`))
 	writeFile(t, filepath.Join(hr, "commands", "stray.py"), []byte("not markdown"))
 
@@ -597,7 +597,7 @@ func TestValidateHarness_ConflictingInstructions(t *testing.T) {
 
 	hr := filepath.Join(dir, "conflict")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"conflict","version":"0.1.0"}`))
 	writeFile(t, filepath.Join(hr, "instructions.md"), []byte("one thing"))
 	writeFile(t, filepath.Join(hr, "AGENTS.md"), []byte("another thing"))
@@ -617,7 +617,7 @@ func TestValidateHarness_IdenticalInstructionsOK(t *testing.T) {
 
 	hr := filepath.Join(dir, "ok")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"ok","version":"0.1.0"}`))
 	writeFile(t, filepath.Join(hr, "instructions.md"), []byte("same content"))
 	writeFile(t, filepath.Join(hr, "AGENTS.md"), []byte("same content"))
@@ -633,7 +633,7 @@ func TestValidateHarness_HooksValid(t *testing.T) {
 
 	hr := filepath.Join(dir, "hooks-valid")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"hooks-valid","version":"0.1.0","hooks":{"before_tool":[{"command":"echo hi"}]}}`))
 
 	if err := validateHarness(hr); err != nil {
@@ -647,7 +647,7 @@ func TestValidateHarness_HooksUnknownEvent(t *testing.T) {
 
 	hr := filepath.Join(dir, "hooks-bad-event")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"hooks-bad-event","version":"0.1.0","hooks":{"unknown_event":[{"command":"echo hi"}]}}`))
 
 	err := validateHarness(hr)
@@ -686,7 +686,7 @@ func TestValidateHarness_HooksEmptyCommand(t *testing.T) {
 
 	hr := filepath.Join(dir, "hooks-empty-cmd")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"hooks-empty-cmd","version":"0.1.0","hooks":{"before_tool":[{"command":""}]}}`))
 
 	err := validateHarness(hr)
@@ -701,7 +701,7 @@ func TestValidateHarness_MCPServersValid(t *testing.T) {
 
 	hr := filepath.Join(dir, "mcp-valid")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"mcp-valid","version":"0.1.0","mcp_servers":{"github":{"command":"npx","args":["-y","server"]}}}`))
 
 	if err := validateHarness(hr); err != nil {
@@ -715,7 +715,7 @@ func TestValidateHarness_MCPServersURLOnly(t *testing.T) {
 
 	hr := filepath.Join(dir, "mcp-url")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"mcp-url","version":"0.1.0","mcp_servers":{"api":{"url":"https://api.example.com/mcp"}}}`))
 
 	if err := validateHarness(hr); err != nil {
@@ -729,7 +729,7 @@ func TestValidateHarness_MCPServersNeitherCommandNorURL(t *testing.T) {
 
 	hr := filepath.Join(dir, "mcp-neither")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"mcp-neither","version":"0.1.0","mcp_servers":{"bad":{}}}`))
 
 	err := validateHarness(hr)
@@ -744,7 +744,7 @@ func TestValidateHarness_MCPServersBothCommandAndURL(t *testing.T) {
 
 	hr := filepath.Join(dir, "mcp-both")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"mcp-both","version":"0.1.0","mcp_servers":{"bad":{"command":"npx","url":"https://example.com"}}}`))
 
 	err := validateHarness(hr)
@@ -759,7 +759,7 @@ func TestValidateHarness_MCPServersNotObject(t *testing.T) {
 
 	hr := filepath.Join(dir, "mcp-bad-type")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"mcp-bad-type","version":"0.1.0","mcp_servers":"not-an-object"}`))
 
 	err := validateHarness(hr)
@@ -774,7 +774,7 @@ func TestValidateHarness_ProfilesValid(t *testing.T) {
 
 	hr := filepath.Join(dir, "prof-valid")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"prof-valid","version":"0.1.0","profiles":{"ci":{"hooks":{"before_tool":[{"command":"echo ci"}]}}}}`))
 
 	if err := validateHarness(hr); err != nil {
@@ -788,7 +788,7 @@ func TestValidateHarness_ProfilesInvalidHookEvent(t *testing.T) {
 
 	hr := filepath.Join(dir, "prof-bad")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"prof-bad","version":"0.1.0","profiles":{"ci":{"hooks":{"bad_event":[{"command":"echo"}]}}}}`))
 
 	err := validateHarness(hr)
@@ -803,7 +803,7 @@ func TestValidateHarness_ProfilesMCPServerInvalid(t *testing.T) {
 
 	hr := filepath.Join(dir, "prof-mcp-bad")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"prof-mcp-bad","version":"0.1.0","profiles":{"ci":{"mcp_servers":{"bad":{}}}}}`))
 
 	err := validateHarness(hr)
@@ -818,7 +818,7 @@ func TestValidateHarness_ProfileNullMCPServerValid(t *testing.T) {
 
 	hr := filepath.Join(dir, "null-mcp")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"null-mcp","version":"0.1.0","mcp_servers":{"pg":{"command":"pg-mcp"}},"profiles":{"ci":{"mcp_servers":{"pg":null}}}}`))
 
 	if err := validateHarness(hr); err != nil {
@@ -832,7 +832,7 @@ func TestValidateHarness_FocusValid(t *testing.T) {
 
 	hr := filepath.Join(dir, "focus-valid")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-valid","version":"0.1.0","profiles":{"ci":{}},"focuses":{"review":{"profile":"ci","prompt":"Review code"}}}`))
 
 	if err := validateHarness(hr); err != nil {
@@ -846,7 +846,7 @@ func TestValidateHarness_FocusMissingPrompt(t *testing.T) {
 
 	hr := filepath.Join(dir, "focus-no-prompt")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-no-prompt","version":"0.1.0","focuses":{"review":{"profile":"ci"}}}`))
 
 	err := validateHarness(hr)
@@ -861,7 +861,7 @@ func TestValidateHarness_FocusUnknownProfile(t *testing.T) {
 
 	hr := filepath.Join(dir, "focus-bad-profile")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-bad-profile","version":"0.1.0","focuses":{"review":{"profile":"nonexistent","prompt":"Review code"}}}`))
 
 	err := validateHarness(hr)
@@ -876,7 +876,7 @@ func TestValidateHarness_FocusNoProfile(t *testing.T) {
 
 	hr := filepath.Join(dir, "focus-no-profile")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"focus-no-profile","version":"0.1.0","focuses":{"docs":{"prompt":"Generate docs"}}}`))
 
 	if err := validateHarness(hr); err != nil {
@@ -890,7 +890,7 @@ func TestValidateHarness_AgentsMDOnly(t *testing.T) {
 
 	hr := filepath.Join(dir, "agents-only")
 	mkdirAll(t, hr)
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"agents-only","version":"0.1.0"}`))
 	writeFile(t, filepath.Join(hr, "AGENTS.md"), []byte("just agents"))
 
@@ -1044,7 +1044,7 @@ func TestSchemaMarketplace_MissingSchemaField(t *testing.T) {
 
 func TestValidateFile_RegistryMarketplace_Valid(t *testing.T) {
 	dir := t.TempDir()
-	pluginDir := filepath.Join(dir, ".ynh-plugin")
+	pluginDir := filepath.Join(dir, ".agents/harness")
 	path := filepath.Join(pluginDir, "marketplace.json")
 	writeFile(t, path, []byte(`{
 		"$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
@@ -1059,7 +1059,7 @@ func TestValidateFile_RegistryMarketplace_Valid(t *testing.T) {
 
 func TestValidateFile_RegistryMarketplace_OldEntries(t *testing.T) {
 	dir := t.TempDir()
-	pluginDir := filepath.Join(dir, ".ynh-plugin")
+	pluginDir := filepath.Join(dir, ".agents/harness")
 	path := filepath.Join(pluginDir, "marketplace.json")
 	writeFile(t, path, []byte(`{
 		"name": "test-registry",
@@ -1075,10 +1075,10 @@ func TestValidateDir_ValidatesRootMarketplace(t *testing.T) {
 	dir := t.TempDir()
 	// Create a valid harness sub-directory
 	hr := filepath.Join(dir, "my-harness")
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"my-harness","version":"0.1.0"}`))
 	// Create an invalid root marketplace.json (missing $schema)
-	writeFile(t, filepath.Join(dir, ".ynh-plugin", "marketplace.json"),
+	writeFile(t, filepath.Join(dir, ".agents/harness", "marketplace.json"),
 		[]byte(`{"name":"my-registry","owner":{"name":"me"},"harnesses":[{"name":"t","source":"./t"}]}`))
 
 	if err := cmdValidate([]string{dir}); err == nil {
@@ -1090,10 +1090,10 @@ func TestValidateDir_ValidRootMarketplace(t *testing.T) {
 	dir := t.TempDir()
 	// Create a valid harness sub-directory
 	hr := filepath.Join(dir, "my-harness")
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"my-harness","version":"0.1.0"}`))
 	// Create a valid root marketplace.json
-	writeFile(t, filepath.Join(dir, ".ynh-plugin", "marketplace.json"),
+	writeFile(t, filepath.Join(dir, ".agents/harness", "marketplace.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/marketplace.schema.json","name":"my-registry","owner":{"name":"me"},"harnesses":[{"name":"t","source":"./t"}]}`))
 
 	if err := cmdValidate([]string{dir}); err != nil {
@@ -1105,7 +1105,7 @@ func TestValidateDir_NoRootMarketplace(t *testing.T) {
 	dir := t.TempDir()
 	// Directory with harness but no root marketplace.json — should still pass
 	hr := filepath.Join(dir, "my-harness")
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"),
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"my-harness","version":"0.1.0"}`))
 
 	if err := cmdValidate([]string{dir}); err != nil {
@@ -1214,7 +1214,7 @@ func TestValidate_CatchesUndeclaredMCPEnvRef(t *testing.T) {
 	// validateHarness prints detail and returns only a count, so assert the
 	// message on the rule itself — a report that says "1 issue" without
 	// naming the variable is not actionable.
-	data, err := os.ReadFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"))
+	data, err := os.ReadFile(filepath.Join(dir, ".agents/harness", "plugin.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1271,7 +1271,7 @@ func TestValidate_ProfileAllowlistIsHonoured(t *testing.T) {
 	if err := validateHarness(dir); err == nil {
 		t.Fatal("a profile that replaces the allowlist no longer permits the root's variables")
 	}
-	data, err := os.ReadFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"))
+	data, err := os.ReadFile(filepath.Join(dir, ".agents/harness", "plugin.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1285,7 +1285,7 @@ func TestValidate_ProfileAllowlistIsHonoured(t *testing.T) {
 func writeValidateHarness(t *testing.T, manifest string) string {
 	t.Helper()
 	dir := t.TempDir()
-	pd := filepath.Join(dir, ".ynh-plugin")
+	pd := filepath.Join(dir, ".agents/harness")
 	if err := os.MkdirAll(pd, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1348,7 +1348,7 @@ func TestValidateHarnessIncludes(t *testing.T) {
 // that existed in the resolver and was never consulted by the validator.
 func TestValidateHarness_RejectsTraversingLocalInclude(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(`{
+	writeFile(t, filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(`{
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "app",
   "version": "0.1.0",
@@ -1361,7 +1361,7 @@ func TestValidateHarness_RejectsTraversingLocalInclude(t *testing.T) {
 
 	// And the legal form still passes, so the check is not simply refusing all
 	// local includes.
-	writeFile(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(`{
+	writeFile(t, filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(`{
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "app",
   "version": "0.1.0",

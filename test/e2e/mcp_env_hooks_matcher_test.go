@@ -17,7 +17,7 @@ func TestMcp_EnvPassthrough(t *testing.T) {
 	s := newSandbox(t)
 	name := "mcp-env"
 	dir := filepath.Join(t.TempDir(), name)
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	body := fmt.Sprintf(`{
@@ -32,7 +32,7 @@ func TestMcp_EnvPassthrough(t *testing.T) {
   }
 }
 `, name)
-	if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	s.mustRunYnh(t, "install", dir)
@@ -62,7 +62,7 @@ func TestHooks_Matcher(t *testing.T) {
 	s := newSandbox(t)
 	name := "hooks-matcher"
 	dir := filepath.Join(t.TempDir(), name)
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	body := fmt.Sprintf(`{
@@ -74,7 +74,7 @@ func TestHooks_Matcher(t *testing.T) {
   }
 }
 `, name)
-	if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	s.mustRunYnh(t, "install", dir)

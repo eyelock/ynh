@@ -85,7 +85,7 @@ func Fetch(src config.RegistrySource) (Registry, error) {
 }
 
 // LoadFromDir parses a registry from a local directory.
-// Runs the migration chain first (registry.json → .ynh-plugin/marketplace.json),
+// Runs the migration chain first (registry.json → .agents/harness/marketplace.json),
 // then reads marketplace.json. Callers never see the old format.
 func LoadFromDir(dir string) (Registry, error) {
 	if _, err := migration.FormatChain().Run(dir); err != nil {

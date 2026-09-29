@@ -62,7 +62,7 @@ Validate harness structure and artifacts.
 
 Checks required files, frontmatter fields, directory layout, and JSON Schema
 conformance: plugin.json against plugin.schema.json, and any
-.ynh-plugin/marketplace.json against marketplace.schema.json.
+.agents/harness/marketplace.json against marketplace.schema.json.
 
 Flags:
   --harness <source>     Harness to resolve against (falls back to $YNH_HARNESS)`,
@@ -171,9 +171,9 @@ Flags:
 
 	"migrate": `ynd migrate [--dry-run] [-y] <path>
 
-Convert .harness.json to .ynh-plugin/plugin.json in place.
+Convert .harness.json to .agents/harness/plugin.json in place.
 
-Extracts install-time provenance into .ynh-plugin/installed.json, writes
+Extracts install-time provenance into .agents/harness/installed.json, writes
 plugin.json without that field, and removes .harness.json. Safe to run more
 than once: it does nothing once the new format exists.
 

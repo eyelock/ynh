@@ -24,12 +24,12 @@ func TestYnd_Lint_OK_AndIssues(t *testing.T) {
 
 	t.Run("missing required field is flagged", func(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), "lint-bad")
-		if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		// version field missing.
 		bad := `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"lint-bad"}`
-		if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(bad), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(bad), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		out, errOut, err := runYnd(t, "lint", "--harness", dir)
@@ -56,11 +56,11 @@ func TestYnd_Validate_OK_AndError(t *testing.T) {
 
 	t.Run("malformed plugin.json fails", func(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), "validate-bad")
-		if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		// Garbage JSON.
-		if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"),
+		if err := os.WriteFile(filepath.Join(dir, ".agents/harness", "plugin.json"),
 			[]byte(`{ this is not json }`), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -76,11 +76,11 @@ func TestYnd_Validate_OK_AndError(t *testing.T) {
 // no LLM, no stdin.
 func TestYnd_Fmt_NormalizesMarkdown(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "fmt-target")
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	plugin := `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"fmt-target","version":"0.1.0"}`
-	if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(plugin), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(plugin), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// Markdown file with no trailing newline — fmt should add one.

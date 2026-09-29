@@ -2,7 +2,7 @@
 
 Hooks are shell commands that vendors execute at specific lifecycle events during an agent session. They bridge the **guide layer** (what ynh manages) to the **sensor layer** (linters, tests, validators) by declaring *when* a command should run, without embedding the tool itself.
 
-A harness declares hooks in `.ynh-plugin/plugin.json` at the top level. At assembly time, ynh translates them into the vendor-native config format. The hook scripts themselves live outside the harness — they are regular shell commands or scripts on the host machine.
+A harness declares hooks in `.agents/harness/plugin.json` at the top level. At assembly time, ynh translates them into the vendor-native config format. The hook scripts themselves live outside the harness — they are regular shell commands or scripts on the host machine.
 
 > **Note:** Hooks can vary by [profile](harnesses.md#profiles). When a profile is selected, its `hooks` field replaces the top-level hooks entirely.
 
@@ -26,7 +26,7 @@ ynh defines five canonical hook events. Each vendor translates these to its nati
 
 ## Manifest Format
 
-Hooks are declared under the top-level `hooks` key in `.ynh-plugin/plugin.json`. Each event maps to an array of hook entries:
+Hooks are declared under the top-level `hooks` key in `.agents/harness/plugin.json`. Each event maps to an array of hook entries:
 
 ```json
 {
@@ -86,7 +86,7 @@ Each vendor uses different event names and config file formats. **GitHub Copilot
 
 Claude Code's `--plugin-dir` flag (used by `ynh run` for Claude) only auto-activates **skills and commands** from plugins. Hooks and MCP servers in `--plugin-dir` plugins are **not activated** at runtime — they require the plugin to be formally installed via `/plugin install`. See [Claude Code plugin docs](https://code.claude.com/docs/en/plugins).
 
-This means hooks and MCP servers defined in `.ynh-plugin/plugin.json` are correctly **assembled and exported** by ynh, but are **not active during `ynh run` sessions** with Claude. They work correctly with Codex and Cursor (which use symlink-based installation into the project directory).
+This means hooks and MCP servers defined in `.agents/harness/plugin.json` are correctly **assembled and exported** by ynh, but are **not active during `ynh run` sessions** with Claude. They work correctly with Codex and Cursor (which use symlink-based installation into the project directory).
 
 Hooks and MCP servers in exported plugins (`ynd export`) work as expected when the plugin is installed via Claude Code's `/plugin install` command.
 
@@ -99,7 +99,7 @@ Because `--plugin-dir` hooks don't auto-activate, the way to make hooks — and 
 | `ynh run` (staging dir + `--plugin-dir`) | assembled `.claude/hooks/hooks.json` | only after `/plugin install` (Claude limitation); Codex/Cursor activate via symlink |
 | Plain `claude` in the project | project `.claude/settings.json` | every session, automatically |
 
-For an always-on, sensor-driven repo, declare the hooks once in `.ynh-plugin/plugin.json` (canonical names) and let ynh write them into the settings file:
+For an always-on, sensor-driven repo, declare the hooks once in `.agents/harness/plugin.json` (canonical names) and let ynh write them into the settings file:
 
 ```bash
 ynh hook export <harness> --target settings   # → .claude/settings.json (committed, team-wide)
@@ -119,7 +119,7 @@ ynh doctor   # among its checks: .claude/settings.json + settings.local.json for
 
 If you hand-author the settings file instead, three rules:
 
-1. **Use Claude-native event names and the nested shape** — `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop`, each `{ "matcher": …, "hooks": [ { "type": "command", "command": … } ] }`. The canonical names (`before_tool`, `on_stop`, …) are valid **only** in `.ynh-plugin/plugin.json`; Claude silently ignores them in `settings.json`. Don't copy the `plugin.json` shape into `settings.json`.
+1. **Use Claude-native event names and the nested shape** — `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop`, each `{ "matcher": …, "hooks": [ { "type": "command", "command": … } ] }`. The canonical names (`before_tool`, `on_stop`, …) are valid **only** in `.agents/harness/plugin.json`; Claude silently ignores them in `settings.json`. Don't copy the `plugin.json` shape into `settings.json`.
 2. **Anchor command paths to `$CLAUDE_PROJECT_DIR`** — `$CLAUDE_PROJECT_DIR/tools/hooks/foo.sh`. Claude runs each hook via `/bin/sh` in the **agent's current working directory**, not the project root, so a relative path like `./tools/hooks/foo.sh` silently breaks the moment the agent does `cd` into a subdirectory — and a *blocking* guard hook then fails open (stops guarding) without erroring. `$CLAUDE_PROJECT_DIR` is cwd-independent; it's also more portable than an absolute path, since `settings.json` is checked in and shared across machines.
 3. **Keep the canonical declarations in `plugin.json` too** if you also use `ynh run` or `ynd export` — they activate there via `/plugin install`, Codex, or Cursor.
 
@@ -260,7 +260,7 @@ Nothing is *dropped*: `resolveWith` iterates includes flat, with no recursion, a
 
 That is deliberate. A hook is command execution on every lifecycle event, so an include that could contribute one would turn inert composed content into an execution surface the root author never declared.
 
-If an included harness needs hooks, copy its hook declarations into the root harness's `.ynh-plugin/plugin.json`. Merging that copy at authoring time — generated, labelled blocks with drift detection — is the agreed direction rather than resolving includes at run time.
+If an included harness needs hooks, copy its hook declarations into the root harness's `.agents/harness/plugin.json`. Merging that copy at authoring time — generated, labelled blocks with drift detection — is the agreed direction rather than resolving includes at run time.
 
 ## Portable Hook Script Advice
 

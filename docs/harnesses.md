@@ -2,15 +2,28 @@
 
 A harness is a portable template that assembles the guide layer of a coding harness — skills, rules, agents, commands, and instructions — for any supported vendor. See [Harness Engineering](harness-engineering.md) for the broader context.
 
-A harness is defined by a `.ynh-plugin/plugin.json` manifest and artifact directories.
+A harness is defined by a `.agents/harness/plugin.json` manifest and artifact directories.
 
-> **Migration note:** Legacy format (`.claude-plugin/plugin.json` + `metadata.json`) is no longer supported. Consolidate into `.ynh-plugin/plugin.json`.
+`.agents/` is the cross-vendor configuration directory that Codex and the
+[Agent Skills](skills-standard.md) standard already use, so the harness
+manifest sits beside `.agents/skills/` and `.agents/plugins/` rather than
+claiming another dot-directory at the project root.
+
+> **Still on `.ynh-plugin/`?** That was the manifest directory before it
+> moved under `.agents/`. ynh reads `.agents/harness/` first and falls back to
+> `.ynh-plugin/`, so an existing harness keeps working with no migration
+> step. Edits made through `ynh include`, `ynh hook` and the other editing
+> commands land in whichever directory the manifest already lives in. To move,
+> `git mv .ynh-plugin .agents/harness`. If both exist, `.agents/harness` wins
+> and `ynd validate` reports the shadowed copy.
+
+> **Migration note:** Legacy format (`.claude-plugin/plugin.json` + `metadata.json`) is no longer supported. Consolidate into `.agents/harness/plugin.json`.
 
 ## Directory Structure
 
 ```
 david/
-├── .ynh-plugin/plugin.json              # required - name, version, vendor, includes, hooks, etc.
+├── .agents/harness/plugin.json              # required - name, version, vendor, includes, hooks, etc.
 ├── AGENTS.md                 # optional - project-level instructions (read natively by most vendors; ynh shims Claude via @-import)
 ├── skills/                   # optional - embedded skills
 │   └── review/
@@ -23,9 +36,9 @@ david/
     └── check.md
 ```
 
-## Harness Manifest (`.ynh-plugin/plugin.json`)
+## Harness Manifest (`.agents/harness/plugin.json`)
 
-All harness configuration lives in a single `.ynh-plugin/plugin.json` file. Add `"$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json"` for editor autocompletion and validation.
+All harness configuration lives in a single `.agents/harness/plugin.json` file. Add `"$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json"` for editor autocompletion and validation.
 
 ### Annotated Example
 
@@ -196,7 +209,7 @@ When running as `david`, you can ask it to delegate a task to `team-dev`. The de
 
 At runtime, ynh generates a vendor-native agent file for each delegate containing:
 
-- **Description** from the delegate's `.ynh-plugin/plugin.json` (helps the AI route to the right delegate)
+- **Description** from the delegate's `.agents/harness/plugin.json` (helps the AI route to the right delegate)
 - **Instructions** from the delegate's `AGENTS.md` (gives the delegate its identity)
 - **Rules** inlined from the delegate's `rules/` directory
 - **Skills** listed from the delegate's `skills/` directory
@@ -231,7 +244,7 @@ Profiles let a single harness carry multiple configurations — e.g. a `strict` 
 |----------|--------|---------|
 | 1 (highest) | `--profile` flag | `david --profile strict` |
 | 2 | `YNH_PROFILE` env var | `export YNH_PROFILE=strict` |
-| 3 (lowest) | Top-level config | Fields in `.ynh-plugin/plugin.json` root |
+| 3 (lowest) | Top-level config | Fields in `.agents/harness/plugin.json` root |
 
 When a profile is selected, its fields are **merged** with the top-level values:
 
@@ -343,7 +356,7 @@ Only the flags you supply are changed; others are left unchanged. `--from-path` 
 
 ### Pick validation
 
-When `--pick` is supplied, `ynh include add` and `ynh include update` validate that every named artifact exists in the fetched source before writing the `.ynh-plugin/plugin.json`. An error lists both the unknown names and what's available.
+When `--pick` is supplied, `ynh include add` and `ynh include update` validate that every named artifact exists in the fetched source before writing the `.agents/harness/plugin.json`. An error lists both the unknown names and what's available.
 
 ### Disambiguation rules
 
@@ -362,7 +375,7 @@ See [Include Editing](tutorial/include-editing.md) for a full walkthrough.
 
 ### Minimal
 
-`.ynh-plugin/plugin.json`:
+`.agents/harness/plugin.json`:
 ```json
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
@@ -376,7 +389,7 @@ Just a named launcher. Useful as a starting point.
 
 ### Harness with external skills
 
-`.ynh-plugin/plugin.json`:
+`.agents/harness/plugin.json`:
 ```json
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
@@ -395,7 +408,7 @@ Just a named launcher. Useful as a starting point.
 
 ### Team with private repos
 
-`.ynh-plugin/plugin.json`:
+`.agents/harness/plugin.json`:
 ```json
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
@@ -417,7 +430,7 @@ Just a named launcher. Useful as a starting point.
 
 ### Multi-source composition
 
-`.ynh-plugin/plugin.json`:
+`.agents/harness/plugin.json`:
 ```json
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",

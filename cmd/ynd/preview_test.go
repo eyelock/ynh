@@ -306,7 +306,7 @@ func TestCmdPreviewSkillsOnly(t *testing.T) {
 // lossy one.
 func TestPreview_ManifestMatchesTheSource(t *testing.T) {
 	src := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(src, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(src, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	const manifest = `{
@@ -315,7 +315,7 @@ func TestPreview_ManifestMatchesTheSource(t *testing.T) {
       "author": {"name": "A Person", "url": "https://example.com"},
       "keywords": ["one", "two", "three"]
     }`
-	if err := os.WriteFile(filepath.Join(src, ".ynh-plugin", "plugin.json"), []byte(manifest), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(src, ".agents/harness", "plugin.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	out := t.TempDir()

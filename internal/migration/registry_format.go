@@ -10,16 +10,16 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
-// RegistryFormatMigrator converts registry.json → .ynh-plugin/marketplace.json.
+// RegistryFormatMigrator converts registry.json → .agents/harness/marketplace.json.
 // Safe to run multiple times — Applies returns false once the new format exists.
 type RegistryFormatMigrator struct{}
 
 func (RegistryFormatMigrator) Description() string {
-	return "registry format: registry.json → .ynh-plugin/marketplace.json"
+	return "registry format: registry.json → .agents/harness/marketplace.json"
 }
 
 func (RegistryFormatMigrator) Applies(dir string) bool {
-	if _, err := os.Stat(filepath.Join(dir, plugin.PluginDir, plugin.MarketplaceFile)); err == nil {
+	if plugin.IsRegistryDir(dir) {
 		return false
 	}
 	_, err := readYnhRegistry(dir)

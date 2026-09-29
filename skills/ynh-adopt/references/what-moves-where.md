@@ -16,7 +16,8 @@ a schema.
 | `.cursor/rules/*.mdc` | `rules/<name>.md` | ynh writes `.mdc` back out for Cursor |
 | `.github/copilot-instructions.md` | merge into `AGENTS.md` | |
 | `AGENTS.md` | stays `AGENTS.md` | already correct |
-| `.harness.json` | `.ynh-plugin/plugin.json` | `ynd migrate .` |
+| `.harness.json` | `.agents/harness/plugin.json` | `ynd migrate .` |
+| `.ynh-plugin/` | `.agents/harness/` | `git mv`; still read as a fallback, so nothing breaks until you do |
 | `.claude/settings.json` | **stays put** | vendor config, not a harness artifact |
 | `.mcp.json` | manifest `mcp_servers` | a decision, not a move |
 
@@ -67,7 +68,7 @@ Verified: a project with `.claude/skills/deploy/SKILL.md` and
 Nothing is copied, nothing is moved, history is untouched.
 
 **There is no CLI for this.** `ynh include add` manages Git includes only, so
-the `local` include is hand-written into `.ynh-plugin/plugin.json`.
+the `local` include is hand-written into `.agents/harness/plugin.json`.
 
 When it is right:
 

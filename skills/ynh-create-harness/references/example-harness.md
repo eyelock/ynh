@@ -11,7 +11,7 @@ a real project, actionable steps, no generic filler.
 
 ```
 acme-api/
-├── .ynh-plugin/
+├── .agents/harness/
 │   └── plugin.json
 ├── AGENTS.md                    # optional project instructions
 ├── skills/
@@ -24,7 +24,7 @@ acme-api/
     └── check.md
 ```
 
-## `.ynh-plugin/plugin.json`
+## `.agents/harness/plugin.json`
 
 ```json
 {

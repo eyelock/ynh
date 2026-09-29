@@ -652,7 +652,7 @@ func installSharedBareNameFixtures(t *testing.T) string {
 
 	// Pointer install: local/foo → source tree with a valid manifest.
 	srcDir := t.TempDir()
-	pluginDir := filepath.Join(srcDir, ".ynh-plugin")
+	pluginDir := filepath.Join(srcDir, ".agents/harness")
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -673,7 +673,7 @@ func installSharedBareNameFixtures(t *testing.T) string {
 
 	// Tree install: github.com/org/repo/foo at the schema-2 id-keyed path.
 	treeDir := harness.InstalledDirByID("github.com/org/repo/foo")
-	treePluginDir := filepath.Join(treeDir, ".ynh-plugin")
+	treePluginDir := filepath.Join(treeDir, ".agents/harness")
 	if err := os.MkdirAll(treePluginDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1328,10 +1328,10 @@ func TestCmdInstall_RefFlag_RejectedForLocalPath(t *testing.T) {
 	t.Setenv("YNH_HOME", "")
 
 	src := filepath.Join(dir, "src")
-	if err := os.MkdirAll(filepath.Join(src, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(src, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(src, ".ynh-plugin", "plugin.json"), []byte(`{"name":"x","version":"0.0.1"}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(src, ".agents/harness", "plugin.json"), []byte(`{"name":"x","version":"0.0.1"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1387,10 +1387,10 @@ func TestCmdInstall_LocalRelativePath_PersistsAbsolute(t *testing.T) {
 	t.Setenv("YNH_HOME", "")
 
 	src := filepath.Join(dir, "rel-src")
-	if err := os.MkdirAll(filepath.Join(src, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(src, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(src, ".ynh-plugin", "plugin.json"),
+	if err := os.WriteFile(filepath.Join(src, ".agents/harness", "plugin.json"),
 		[]byte(`{"name":"relx","version":"0.0.1"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1557,7 +1557,7 @@ func TestCmdUninstall_PointerByCanonicalID(t *testing.T) {
 
 	// Create a source directory with a valid harness manifest.
 	srcDir := t.TempDir()
-	pluginDir := filepath.Join(srcDir, ".ynh-plugin")
+	pluginDir := filepath.Join(srcDir, ".agents/harness")
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1595,7 +1595,7 @@ func TestCmdUninstall_PointerByBareName(t *testing.T) {
 	t.Setenv("YNH_HOME", home)
 
 	srcDir := t.TempDir()
-	pluginDir := filepath.Join(srcDir, ".ynh-plugin")
+	pluginDir := filepath.Join(srcDir, ".agents/harness")
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

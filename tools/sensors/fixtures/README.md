@@ -2,7 +2,7 @@
 
 Each directory here is a **deliberately broken** input that one sensor must
 report a failure on. `ynh check --calibrate` runs the sensor against the
-fixture and compares the outcome to the `expect` in `.ynh-plugin/plugin.json`.
+fixture and compares the outcome to the `expect` in `.agents/harness/plugin.json`.
 
 They exist because nothing else proves a sensor still detects anything. A
 sensor is a command plus an expectation about its exit code; if the command

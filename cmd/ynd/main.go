@@ -133,7 +133,7 @@ Commands:
   preview <source>           Show assembled vendor output without installing
   diff <source> [vendors]    Compare assembled output across vendors
   marketplace build          Build a vendor-native marketplace from marketplace.json
-  migrate <path>             Convert .harness.json → .ynh-plugin/plugin.json in-place
+  migrate <path>             Convert .harness.json → .agents/harness/plugin.json in-place
   validate-output --schema <name|path> [< file.json]
                              Validate JSON on stdin against the named CLI schema
   version                    Print version

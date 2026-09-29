@@ -18,7 +18,7 @@ ynh is a packaging and distribution tool. It has no runtime component - the AI v
 ### Core Flow
 
 ```
-.ynh-plugin/plugin.json → resolve Git includes → assemble vendor config → launch vendor CLI
+.agents/harness/plugin.json → resolve Git includes → assemble vendor config → launch vendor CLI
 ```
 
 1. **Detect** the harness format and load its manifest (`internal/harness/`, `internal/plugin/`)
@@ -35,7 +35,7 @@ internal/
   config/                 Global config (~/.ynh/) and path management
   harness/                Harness loading, name validation, namespaced storage
   migration/              Format migration filter chain (see Migration Chain below)
-  plugin/                 Harness manifest types (.ynh-plugin/plugin.json, marketplace.json)
+  plugin/                 Harness manifest types (.agents/harness/plugin.json, marketplace.json)
   resolver/               Git clone, cache, and content extraction
   assembler/              Build vendor config dir from resolved content
   exporter/               Produce vendor-native plugin dirs from harness definitions
@@ -68,7 +68,7 @@ docs/                     User guide (GitHub Pages)
 
 **Vendor-adaptive launch.** Each vendor gets the strategy that matches its capabilities. Claude supports `--plugin-dir`, so ynh does a clean `exec` with no running process. Codex and Cursor lack native plugin loading, so ynh installs symlinks and manages a child process with signal forwarding. This pragmatic split avoids forcing a lowest-common-denominator approach.
 
-**Single manifest.** Harnesses use a single `plugin.json` inside `.ynh-plugin/` as their manifest — all config (identity, includes, hooks, MCP servers, profiles) lives in one place.
+**Single manifest.** Harnesses use a single `plugin.json` inside `.agents/harness/` as their manifest — all config (identity, includes, hooks, MCP servers, profiles) lives in one place. The directory was `.ynh-plugin/` before it moved under `.agents/`; that location is still read, second to `.agents/harness/`, and a manifest found there is edited in place. Nothing creates `.ynh-plugin/` any more. The lookup order lives in `internal/plugin` (`PluginDir`, `LegacyPluginDir`) and every reader and writer goes through its path helpers (`PluginPath`, `InstalledPath`, `MarketplacePath`, `HarnessRoot`) rather than joining the directory name by hand.
 
 **Migration via filter chain.** All backward compatibility lives in `internal/migration/`. Each migration is one struct implementing `Migrator` — its own `Applies` conditions and `Run` transform. Loaders call the chain once before reading; they never branch on old formats themselves. Removing support for a legacy format means deleting that one file and unregistering the struct. No other code changes.
 
@@ -131,13 +131,13 @@ An installed harness lives on disk in one of two shapes. The shape is chosen at 
 | Topology | `source_type` | Created by | On-disk shape | Reads & writes go to |
 |---|---|---|---|---|
 | **Pointer-form** | `local`, `source` | `ynh install /path`, `ynh install <name>` (sources: entry), `ynh fork` | A single pointer file at `~/.ynh/installed/<id-fsname>.json` carrying both the registration (id, name) and the full provenance (ref, sha, path, namespace, registry_name, forked_from, resolved). No content is copied. | The user's source tree at `installed.json.source`. |
-| **Tree-form** | `git`, `registry` | `ynh install <git-url>`, `ynh install <name>` (registry) | Content copy at `~/.ynh/harnesses/<id-fsname>/` plus a sibling `.ynh-plugin/installed.json` with the provenance. | The copy under HarnessesDir. |
+| **Tree-form** | `git`, `registry` | `ynh install <git-url>`, `ynh install <name>` (registry) | Content copy at `~/.ynh/harnesses/<id-fsname>/` plus a sibling `.agents/harness/installed.json` with the provenance. | The copy under HarnessesDir. |
 
 The single classifier `harness.IsLocalSource(ins *plugin.InstalledJSON)` discriminates the two — every code path that needs to choose "consult the user's source tree" vs "consult the install copy" routes through it. See `internal/harness/topology.go`.
 
 **Why two topologies, not one:** remote installs need a local copy (we can't run `ynh run` if the network is down); local installs already have a local copy (the user's working tree), and any second copy is just drift waiting to happen. The split keeps remote installs self-contained while keeping local installs honest about where the canonical source is.
 
-**Why no `installed.json` in the user's source tree:** for pointer-form installs, the provenance record is ynh-owned state — it has no business being in the user's git repository. The pointer file is the home for that data. Prior schemas left a `.ynh-plugin/installed.json` in the source tree; the schema-3 migration absorbs and removes it.
+**Why no `installed.json` in the user's source tree:** for pointer-form installs, the provenance record is ynh-owned state — it has no business being in the user's git repository. The pointer file is the home for that data. Prior schemas left a `.agents/harness/installed.json` in the source tree; the schema-3 migration absorbs and removes it.
 
 ### Schema version contract
 
@@ -310,7 +310,7 @@ The exporter reuses `assembler.CopyPicked`, `CopyAllArtifacts`, `CopyFile`, and 
 
 ### Registry
 
-The registry system (`internal/registry/`) enables harness discovery from Git-hosted indexes. A registry is a Git repo with a `.ynh-plugin/marketplace.json` at its root. Registries are configured in `~/.ynh/config.json` and fetched/cached via `resolver.EnsureRepo`.
+The registry system (`internal/registry/`) enables harness discovery from Git-hosted indexes. A registry is a Git repo with a `.agents/harness/marketplace.json` at its root. Registries are configured in `~/.ynh/config.json` and fetched/cached via `resolver.EnsureRepo`.
 
 The install command uses a 6-rule disambiguation chain: local path → SSH URL → HTTPS URL → `name@org/repo` → Git shorthand → plain name registry search. See `cmd/ynh/install_resolve.go`.
 
@@ -481,7 +481,7 @@ Test fixtures in `testdata/` simulate real-world sources:
 
 ## Configuration
 
-### Harness Manifest (`.ynh-plugin/plugin.json`)
+### Harness Manifest (`.agents/harness/plugin.json`)
 
 ```json
 {
@@ -546,9 +546,9 @@ Profiles use merge semantics when applied — see `ResolveProfile()` in `interna
 
 When `ynh run` is invoked, the harness source is resolved in this order:
 
-1. **Positional canonical id**: `ynh run local/my-harness` (or `ynh run github.com/org/repo/name`) → `harness.LoadQualified` classifies the ref via `namespace.Classify`, then `LoadByID` reads the schema-2 install at `~/.ynh/harnesses/<idfsname>/.ynh-plugin/plugin.json` (or the pointer file at `~/.ynh/installed/<idfsname>.json` for forks). Bare names (`ynh run my-harness`) are rejected with `BadRefError`.
+1. **Positional canonical id**: `ynh run local/my-harness` (or `ynh run github.com/org/repo/name`) → `harness.LoadQualified` classifies the ref via `namespace.Classify`, then `LoadByID` reads the schema-2 install at `~/.ynh/harnesses/<idfsname>/.agents/harness/plugin.json` (or the pointer file at `~/.ynh/installed/<idfsname>.json` for forks). Bare names (`ynh run my-harness`) are rejected with `BadRefError`.
 2. **`--harness-file`**: `ynh run --harness-file path/.harness.json` → loads a legacy single-file manifest directly from the given path. Path-based, no canonical-id classification.
-3. **Auto-discovery**: bare `ynh run` → migrates the current working directory if needed, then loads `.ynh-plugin/plugin.json` from cwd.
+3. **Auto-discovery**: bare `ynh run` → migrates the current working directory if needed, then loads `.agents/harness/plugin.json` from cwd.
 
 For `--harness-file` and auto-discovery, the harness is assembled into `~/.ynh/run/_inline-<hash>/` (hash of the source directory for stable run dirs). For positional refs, the run-dir is the canonical id's fs name (`local/foo` → `~/.ynh/run/local--foo/`) — keeping `~/.ynh/run/` paths flat while giving same-named installs with distinct canonical ids distinct run dirs. While a bare name is unambiguous (one install claims it), run also maintains a legacy alias symlink (`run/<name>` → `<idfsname>`) so project symlinks planted before the id-keyed re-key keep resolving; when several installs claim the name the alias is removed and dangling project symlinks are re-planted on the next run (see `symlinkIntact`).
 
@@ -556,27 +556,27 @@ For `--harness-file` and auto-discovery, the harness is assembled into `~/.ynh/r
 
 A harness has two locations in its life:
 
-1. **Source** — git-tracked in the harness's repo. Author-managed. The author writes `.ynh-plugin/plugin.json` containing `name`, `version`, `includes`, `delegates_to`, `default_vendor`, hooks, MCP servers, profiles, focuses.
-2. **Installed copy** — at `~/.ynh/harnesses/<idfsname>/` where `<idfsname>` is the canonical id with `/` → `--` (e.g. `github.com--eyelock--assistants--planner`). Created by `ynh install`. Local-only, not git-tracked. Contains the copied source plus a separate `.ynh-plugin/installed.json` file written by ynh.
+1. **Source** — git-tracked in the harness's repo. Author-managed. The author writes `.agents/harness/plugin.json` containing `name`, `version`, `includes`, `delegates_to`, `default_vendor`, hooks, MCP servers, profiles, focuses.
+2. **Installed copy** — at `~/.ynh/harnesses/<idfsname>/` where `<idfsname>` is the canonical id with `/` → `--` (e.g. `github.com--eyelock--assistants--planner`). Created by `ynh install`. Local-only, not git-tracked. Contains the copied source plus a separate `.agents/harness/installed.json` file written by ynh.
 
 There are two install layouts on disk, chosen by command:
 
-- **Tree-shaped** (`~/.ynh/harnesses/<idfsname>/`) — created by `ynh install` for git and registry sources. The harness lives as a copy under `harnesses/`, with `.ynh-plugin/installed.json` recording provenance in-tree (including the canonical `id` field).
-- **Pointer-shaped** (`~/.ynh/installed/<idfsname>.json`) — created by `ynh fork`. The harness lives at a user-chosen path; the pointer file in `installed/` registers it under the YNH layer using the same id-keyed transliteration. No copy under `harnesses/` is made. Edits to the source tree are live to `ynh run`. The pointer file holds registration metadata (`id`, `name`, source path, timestamp); provenance still lives in the source tree's `.ynh-plugin/installed.json`. `harness.LoadByID(id)` checks pointers before tree directories.
+- **Tree-shaped** (`~/.ynh/harnesses/<idfsname>/`) — created by `ynh install` for git and registry sources. The harness lives as a copy under `harnesses/`, with `.agents/harness/installed.json` recording provenance in-tree (including the canonical `id` field).
+- **Pointer-shaped** (`~/.ynh/installed/<idfsname>.json`) — created by `ynh fork`. The harness lives at a user-chosen path; the pointer file in `installed/` registers it under the YNH layer using the same id-keyed transliteration. No copy under `harnesses/` is made. Edits to the source tree are live to `ynh run`. The pointer file holds registration metadata (`id`, `name`, source path, timestamp); provenance still lives in the source tree's `.agents/harness/installed.json`. `harness.LoadByID(id)` checks pointers before tree directories.
 
 Both layouts are id-keyed under schema 2. The schema-1 layouts (`harnesses/<name>/` flat, `harnesses/<ns--repo>/<name>/` two-level, `installed/<name>.json` name-keyed) are converted in place by the migration in `internal/migration/canonicalid.go`. See § Harness Identity above for the full classification + on-disk encoding rules.
 
 During install:
-- `ynh install` copies the entire harness directory (including the `.ynh-plugin/` directory) to `~/.ynh/harnesses/<idfsname>/`. The id is derived from the recorded source URL plus the harness name via `namespace.CanonicalID(sourceURL, name)`.
+- `ynh install` copies the entire harness directory (including the `.agents/harness/` directory) to `~/.ynh/harnesses/<idfsname>/`. The id is derived from the recorded source URL plus the harness name via `namespace.CanonicalID(sourceURL, name)`.
 - For canonical-id install sources (`ynh install github.com/eyelock/assistants/researcher`), `cmdInstall` synthesizes the clone URL from the first three segments and uses `sources.Discover` to find a manifest matching the trailing segment within the cloned repo.
-- If the source uses the legacy `.harness.json` single-file format, the migration chain converts it to `.ynh-plugin/plugin.json` in place during install.
-- ynh writes `~/.ynh/harnesses/<idfsname>/.ynh-plugin/installed.json` recording install provenance — separate from the author-controlled `plugin.json`. This records where the harness was installed from (source type, URL/path, timestamp), and a `resolved[]` slice of per-include/per-delegate SHAs captured at fetch time.
+- If the source uses the legacy `.harness.json` single-file format, the migration chain converts it to `.agents/harness/plugin.json` in place during install.
+- ynh writes `~/.ynh/harnesses/<idfsname>/.agents/harness/installed.json` recording install provenance — separate from the author-controlled `plugin.json`. This records where the harness was installed from (source type, URL/path, timestamp), and a `resolved[]` slice of per-include/per-delegate SHAs captured at fetch time.
 - ynh then pre-fetches all `includes` and `delegates_to` Git repos into `~/.ynh/cache/`. This ensures `ynh run` works offline and validates all Git refs at install time. If any fetch fails, the install fails with a clear error.
 - ynh stamps `~/.ynh/.schema-version` to the current schema version after a successful install, so subsequent commands skip the auto-migrate gate cleanly.
-- The source `.ynh-plugin/plugin.json` is never modified.
+- The source `.agents/harness/plugin.json` is never modified.
 
 At runtime:
-- `ynh run` reads the installed copy at `~/.ynh/harnesses/<idfsname>/.ynh-plugin/plugin.json` to resolve includes, delegates, and vendor settings. Run-dir naming uses the canonical id's fs name (`run/<idfsname>/`), so same-named installs with distinct canonical ids can't clobber each other's assembled layouts or live sessions.
+- `ynh run` reads the installed copy at `~/.ynh/harnesses/<idfsname>/.agents/harness/plugin.json` to resolve includes, delegates, and vendor settings. Run-dir naming uses the canonical id's fs name (`run/<idfsname>/`), so same-named installs with distinct canonical ids can't clobber each other's assembled layouts or live sessions.
 - Cached repos are used as-is without hitting the network. If a cache entry is missing (e.g. manually cleared), ynh falls back to a network fetch with a warning.
 - Launchers at `~/.ynh/bin/<name>` invoke `ynh run "<canonical-id>" "$@"` — the schema-2 resolver rejects bare names, so the embedded ref must be the canonical id.
 
@@ -632,7 +632,7 @@ Possible `source_type` values: `"local"`, `"git"`, `"registry"`. Registry instal
 ├── symlinks.json             # Symlink transaction log (install/clean tracking)
 ├── harnesses/                # Installed harnesses (tree-shaped: git, registry)
 │   ├── github.com--eyelock--assistants--david/   # canonical-id-keyed (id with / → --)
-│   │   ├── .ynh-plugin/
+│   │   ├── .agents/harness/
 │   │   │   ├── plugin.json   # Author manifest (copied from source)
 │   │   │   └── installed.json  # Install provenance (id, source URL, SHA, timestamp)
 │   │   ├── skills/

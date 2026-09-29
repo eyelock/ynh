@@ -12,8 +12,8 @@ read that tutorial first — everything about tolerance and the
 ## A harness with one sensor and a focus
 
 ```bash
-mkdir -p /tmp/loop-demo/.ynh-plugin && cd /tmp/loop-demo
-cat > .ynh-plugin/plugin.json <<'EOF'
+mkdir -p /tmp/loop-demo/.agents/harness && cd /tmp/loop-demo
+cat > .agents/harness/plugin.json <<'EOF'
 {
   "name": "demo",
   "version": "0.1.0",

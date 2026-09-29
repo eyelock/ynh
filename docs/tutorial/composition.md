@@ -21,8 +21,8 @@ Create a harness that cherry-picks specific skills from it:
 ```bash
 mkdir -p /tmp/ynh-tutorial/my-dev
 
-mkdir -p /tmp/ynh-tutorial/my-dev/.ynh-plugin
-cat > /tmp/ynh-tutorial/my-dev/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/my-dev/.agents/harness
+cat > /tmp/ynh-tutorial/my-dev/.agents/harness/plugin.json << 'EOF'
 {
   "name": "my-dev",
   "version": "0.1.0",
@@ -83,8 +83,8 @@ ls ~/.ynh/run/local--my-dev/.claude/skills/
 If you have the assistants repo checked out locally, you can use a local path instead of a Git URL. This is faster (no clone) and useful during development:
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/my-dev/.ynh-plugin
-cat > /tmp/ynh-tutorial/my-dev/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/my-dev/.agents/harness
+cat > /tmp/ynh-tutorial/my-dev/.agents/harness/plugin.json << 'EOF'
 {
   "name": "my-dev",
   "version": "0.1.0",
@@ -112,8 +112,8 @@ Any GitHub repo that follows the [Agent Skills](https://agentskills.io) standard
 ```bash
 mkdir -p /tmp/ynh-tutorial/with-anthropic
 
-mkdir -p /tmp/ynh-tutorial/with-anthropic/.ynh-plugin
-cat > /tmp/ynh-tutorial/with-anthropic/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/with-anthropic/.agents/harness
+cat > /tmp/ynh-tutorial/with-anthropic/.agents/harness/plugin.json << 'EOF'
 {
   "name": "with-anthropic",
   "version": "0.1.0",
@@ -144,8 +144,8 @@ with-anthropic "what skills do you have?"
 ```bash
 mkdir -p /tmp/ynh-tutorial/with-vercel
 
-mkdir -p /tmp/ynh-tutorial/with-vercel/.ynh-plugin
-cat > /tmp/ynh-tutorial/with-vercel/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/with-vercel/.agents/harness
+cat > /tmp/ynh-tutorial/with-vercel/.agents/harness/plugin.json << 'EOF'
 {
   "name": "with-vercel",
   "version": "0.1.0",
@@ -176,8 +176,8 @@ Combine skills from your own repos and third-party repos into one harness:
 ```bash
 mkdir -p /tmp/ynh-tutorial/full-stack
 
-mkdir -p /tmp/ynh-tutorial/full-stack/.ynh-plugin
-cat > /tmp/ynh-tutorial/full-stack/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/full-stack/.agents/harness
+cat > /tmp/ynh-tutorial/full-stack/.agents/harness/plugin.json << 'EOF'
 {
   "name": "full-stack",
   "version": "0.1.0",
@@ -233,8 +233,8 @@ This skill lives directly in the harness directory.
 It is not pulled from Git. It exists nowhere else.
 EOF
 
-mkdir -p /tmp/ynh-tutorial/mixed/.ynh-plugin
-cat > /tmp/ynh-tutorial/mixed/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/mixed/.agents/harness
+cat > /tmp/ynh-tutorial/mixed/.agents/harness/plugin.json << 'EOF'
 {
   "name": "mixed",
   "version": "0.1.0",
@@ -292,8 +292,8 @@ git -C /tmp/ynh-tutorial/local-lib commit -m "init"
 
 # Reference it in a harness
 mkdir -p /tmp/ynh-tutorial/local-ref
-mkdir -p /tmp/ynh-tutorial/local-ref/.ynh-plugin
-cat > /tmp/ynh-tutorial/local-ref/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/local-ref/.agents/harness
+cat > /tmp/ynh-tutorial/local-ref/.agents/harness/plugin.json << 'EOF'
 {
   "name": "local-ref",
   "version": "0.1.0",
@@ -325,7 +325,7 @@ ls ~/.ynh/run/local--local-ref/.claude/skills/
 When a harness ships its own artifact bundle inside the harness root — no Git, no cache, no clone — use a `local` include instead of `git`. The bundled directory is copied along with the harness at install time, so `ynh install` and `ynh run` both resolve it from the install location.
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/with-bundled/.ynh-plugin
+mkdir -p /tmp/ynh-tutorial/with-bundled/.agents/harness
 mkdir -p /tmp/ynh-tutorial/with-bundled/extras/skills/team-standards
 
 cat > /tmp/ynh-tutorial/with-bundled/extras/skills/team-standards/SKILL.md << 'EOF'
@@ -336,7 +336,7 @@ description: Team coding standards and review checklist.
 Apply our team's code review checklist to the diff.
 EOF
 
-cat > /tmp/ynh-tutorial/with-bundled/.ynh-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/with-bundled/.agents/harness/plugin.json << 'EOF'
 {
   "name": "with-bundled",
   "version": "0.1.0",
@@ -371,8 +371,8 @@ Use `local` for artifact directories that travel with the harness source. Use `g
 ```bash
 mkdir -p /tmp/ynh-tutorial/pinned
 
-mkdir -p /tmp/ynh-tutorial/pinned/.ynh-plugin
-cat > /tmp/ynh-tutorial/pinned/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/pinned/.agents/harness
+cat > /tmp/ynh-tutorial/pinned/.agents/harness/plugin.json << 'EOF'
 {
   "name": "pinned",
   "version": "0.1.0",

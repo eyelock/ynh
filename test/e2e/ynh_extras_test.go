@@ -44,7 +44,7 @@ func TestInfo_WithIncludes(t *testing.T) {
 	}
 
 	harness := filepath.Join(t.TempDir(), "with-include")
-	if err := os.MkdirAll(filepath.Join(harness, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(harness, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	manifest := fmt.Sprintf(`{
@@ -54,7 +54,7 @@ func TestInfo_WithIncludes(t *testing.T) {
   "includes": [{"local": %q}]
 }
 `, filepath.Dir(filepath.Dir(upstream)))
-	if err := os.WriteFile(filepath.Join(harness, ".ynh-plugin", "plugin.json"), []byte(manifest), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(harness, ".agents/harness", "plugin.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	s.mustRunYnh(t, "install", harness)
@@ -77,11 +77,11 @@ func TestInstall_ReservedNameYnh(t *testing.T) {
 	s := newSandbox(t)
 
 	harness := filepath.Join(t.TempDir(), "ynh-named")
-	if err := os.MkdirAll(filepath.Join(harness, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(harness, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	plugin := `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"ynh","version":"0.1.0"}`
-	if err := os.WriteFile(filepath.Join(harness, ".ynh-plugin", "plugin.json"), []byte(plugin), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(harness, ".agents/harness", "plugin.json"), []byte(plugin), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -107,7 +107,7 @@ func TestInstall_GitWithRefAndPath(t *testing.T) {
 	// Build a local git upstream with a harness in subdir/harness-a/.
 	upstream := filepath.Join(t.TempDir(), "upstream")
 	harnessSub := filepath.Join("subdir", "harness-a")
-	dir := filepath.Join(upstream, harnessSub, ".ynh-plugin")
+	dir := filepath.Join(upstream, harnessSub, ".agents/harness")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +135,7 @@ func TestInstall_GitWithRefAndPath(t *testing.T) {
 	// Installed at ~/.ynh/harnesses/harness-a/, with installed.json carrying
 	// the resolved SHA and the --path subdir.
 	installDir := filepath.Join(s.home, "harnesses", "local--harness-a")
-	assertFileExists(t, filepath.Join(installDir, ".ynh-plugin", "plugin.json"))
+	assertFileExists(t, filepath.Join(installDir, ".agents/harness", "plugin.json"))
 
 	got := readInstalledJSON(t, installDir)
 	assertEqual(t, "source_type", got.SourceType, "git")

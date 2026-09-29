@@ -73,16 +73,16 @@ Installed harnesses live at `~/.ynh/harnesses/<org>--<repo>/<name>/`:
 ~/.ynh/harnesses/
   eyelock--assistants/
     david/
-      .ynh-plugin/
+      .agents/harness/
         plugin.json
         installed.json
       skills/
     researcher/
-      .ynh-plugin/
+      .agents/harness/
         plugin.json
   myorg--tools/
     formatter/
-      .ynh-plugin/
+      .agents/harness/
         plugin.json
 ```
 

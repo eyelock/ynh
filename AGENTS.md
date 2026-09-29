@@ -63,7 +63,7 @@ rather than paraphrasing a page you cannot read.
 
 ## Key concepts
 
-- A **harness** is a directory with `.ynh-plugin/plugin.json` plus `skills/`,
+- A **harness** is a directory with `.agents/harness/plugin.json` plus `skills/`,
   `agents/`, `rules/`, `commands/`. (`.harness.json` is the legacy form; `ynd
   migrate` converts it, and validation does so transparently.)
 - `ynh install` copies a harness (local or Git) into `~/.ynh/harnesses/` and

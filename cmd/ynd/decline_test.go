@@ -59,7 +59,7 @@ func TestMigrateDeclinedExitsNonZero(t *testing.T) {
 		if _, statErr := os.Stat(filepath.Join(harness, ".harness.json")); statErr != nil {
 			t.Errorf("declined migrate removed the legacy file anyway: %v", statErr)
 		}
-		if _, statErr := os.Stat(filepath.Join(harness, ".ynh-plugin", "plugin.json")); statErr == nil {
+		if _, statErr := os.Stat(filepath.Join(harness, ".agents/harness", "plugin.json")); statErr == nil {
 			t.Error("declined migrate wrote the new layout anyway")
 		}
 	})
@@ -75,7 +75,7 @@ func TestMigrateDeclinedExitsNonZero(t *testing.T) {
 		if err := cmdMigrate([]string{root}); err != nil {
 			t.Fatalf("consented migrate failed: %v", err)
 		}
-		if _, statErr := os.Stat(filepath.Join(harness, ".ynh-plugin", "plugin.json")); statErr != nil {
+		if _, statErr := os.Stat(filepath.Join(harness, ".agents/harness", "plugin.json")); statErr != nil {
 			t.Errorf("consented migrate did not write the new layout: %v", statErr)
 		}
 	})

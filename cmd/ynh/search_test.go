@@ -314,7 +314,7 @@ func TestCmdSearch_LocalResultInstallFields(t *testing.T) {
 	if !filepath.IsAbs(r.Repo) {
 		t.Errorf("repo = %q, want an absolute filesystem path", r.Repo)
 	}
-	if _, err := os.Stat(filepath.Join(r.Repo, ".ynh-plugin", "plugin.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(r.Repo, ".agents/harness", "plugin.json")); err != nil {
 		t.Errorf("repo %q does not point at a harness directory: %v", r.Repo, err)
 	}
 

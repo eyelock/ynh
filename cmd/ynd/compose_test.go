@@ -687,7 +687,7 @@ func TestCompose_Sensors(t *testing.T) {
 // teaches, so this is the attribution a new adopter hits first.
 func TestCompose_AttributesLocalInclude(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(`{
+	writeFile(t, filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(`{
   "name": "app",
   "version": "0.1.0",
   "default_vendor": "claude",

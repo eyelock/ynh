@@ -19,8 +19,8 @@ Create a harness with profiles and focus entries that reference them:
 ```bash
 mkdir -p /tmp/ynh-tutorial/focus-harness/skills/deploy
 
-mkdir -p /tmp/ynh-tutorial/focus-harness/.ynh-plugin
-cat > /tmp/ynh-tutorial/focus-harness/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/focus-harness/.agents/harness
+cat > /tmp/ynh-tutorial/focus-harness/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "focus-demo",
@@ -208,4 +208,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Project-Local Config](project-local-config.md) — use `.ynh-plugin/plugin.json` in your project root for zero-install configuration.
+[Project-Local Config](project-local-config.md) — use `.agents/harness/plugin.json` in your project root for zero-install configuration.

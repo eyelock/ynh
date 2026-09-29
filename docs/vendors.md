@@ -44,7 +44,7 @@ Installations are tracked in `~/.ynh/symlinks.json`. Use `ynh status` to see all
 
 ## Choosing a Vendor
 
-**Per-harness** (in `.ynh-plugin/plugin.json`):
+**Per-harness** (in `.agents/harness/plugin.json`):
 
 ```json
 {

@@ -68,7 +68,7 @@ jobs:
               - 'agents/**'
               - 'rules/**'
               - '.claude/**'
-              - '.ynh-plugin/**'
+              - '.agents/harness/**'
               - '**/plugin.json'
               - '**/marketplace.json'
               - 'AGENTS.md'

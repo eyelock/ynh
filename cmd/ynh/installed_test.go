@@ -20,8 +20,8 @@ func TestCmdInstalled_JSONSchemaRoundTrip(t *testing.T) {
 		"version": "0.1.0",
 		"default_vendor": "claude"
 	}`)
-	// Write a .ynh-plugin/installed.json so LoadInstalledRecord finds it.
-	insDir := filepath.Join(home, "harnesses", "local--rt", ".ynh-plugin")
+	// Write a .agents/harness/installed.json so LoadInstalledRecord finds it.
+	insDir := filepath.Join(home, "harnesses", "local--rt", ".agents/harness")
 	if err := os.MkdirAll(insDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

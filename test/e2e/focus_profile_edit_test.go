@@ -48,7 +48,7 @@ type manifestProfile struct {
 
 func readExtendedManifest(t *testing.T, harnessDir string) extendedManifest {
 	t.Helper()
-	body, err := os.ReadFile(filepath.Join(harnessDir, ".ynh-plugin", "plugin.json"))
+	body, err := os.ReadFile(manifestFile(harnessDir, "plugin.json"))
 	if err != nil {
 		t.Fatalf("reading plugin.json: %v", err)
 	}

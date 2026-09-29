@@ -67,7 +67,7 @@ func TestLoadOrSynthesizeHarness_RejectsAFile(t *testing.T) {
 // migration chain, so a mistake here would break every local install.
 func TestLoadOrSynthesizeHarness_AcceptsARealHarness(t *testing.T) {
 	dir := t.TempDir()
-	pluginDir := filepath.Join(dir, ".ynh-plugin")
+	pluginDir := filepath.Join(dir, ".agents/harness")
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

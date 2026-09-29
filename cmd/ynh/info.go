@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -312,9 +311,9 @@ func printInfoJSON(stdout, stderr io.Writer, name string, checkUpdates bool) err
 		return cliError(stderr, true, code, err.Error())
 	}
 
-	// Migration chain has run (harness.LoadQualified was called above), so the manifest
-	// is always at the new path.
-	manifestPath := filepath.Join(p.Dir, plugin.PluginDir, plugin.PluginFile)
+	// Migration chain has run (harness.LoadQualified was called above), so the
+	// manifest is a plugin.json in one of the manifest directories.
+	manifestPath := plugin.PluginPath(p.Dir)
 	raw, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return cliError(stderr, true, errCodeIOError,

@@ -950,7 +950,7 @@ func TestCheck_UnknownIdStillReportsIdError(t *testing.T) {
 // writeHarnessAt drops a minimal valid harness with one always-green sensor.
 func writeHarnessAt(t *testing.T, dir, name string) {
 	t.Helper()
-	pluginDir := filepath.Join(dir, ".ynh-plugin")
+	pluginDir := filepath.Join(dir, ".agents/harness")
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

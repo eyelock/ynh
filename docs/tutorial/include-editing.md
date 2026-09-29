@@ -17,8 +17,8 @@ Start with a bare harness and add a Git include to it:
 ```bash
 mkdir -p /tmp/ynh-tutorial-includes/my-harness
 
-mkdir -p /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin
-cat > /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial-includes/my-harness/.agents/harness
+cat > /tmp/ynh-tutorial-includes/my-harness/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
@@ -35,10 +35,10 @@ Expected:
 Added include "github.com/anthropics/skills"
 ```
 
-The include is written to `.ynh-plugin/plugin.json` immediately:
+The include is written to `.agents/harness/plugin.json` immediately:
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
+cat /tmp/ynh-tutorial-includes/my-harness/.agents/harness/plugin.json
 ```
 
 Expected:
@@ -73,7 +73,7 @@ Added include "github.com/eyelock/assistants" (path: "skills/dev")
 ```
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
+cat /tmp/ynh-tutorial-includes/my-harness/.agents/harness/plugin.json
 ```
 
 Expected:
@@ -138,7 +138,7 @@ Replaced include "github.com/anthropics/skills"
 ```
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
+cat /tmp/ynh-tutorial-includes/my-harness/.agents/harness/plugin.json
 ```
 
 Expected:
@@ -187,7 +187,7 @@ Updated include "github.com/eyelock/assistants"
 The path and pick are unchanged:
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
+cat /tmp/ynh-tutorial-includes/my-harness/.agents/harness/plugin.json
 ```
 
 Expected:
@@ -232,7 +232,7 @@ Updated include "github.com/eyelock/assistants"
 ```
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
+cat /tmp/ynh-tutorial-includes/my-harness/.agents/harness/plugin.json
 ```
 
 Expected:
@@ -274,7 +274,7 @@ Removed include "github.com/anthropics/skills"
 ```
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
+cat /tmp/ynh-tutorial-includes/my-harness/.agents/harness/plugin.json
 ```
 
 Expected:
@@ -305,8 +305,8 @@ A harness can include the same repo at two different paths. When a URL matches m
 Set up two includes from the same repo at different paths:
 
 ```bash
-mkdir -p /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin
-cat > /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial-includes/my-harness/.agents/harness
+cat > /tmp/ynh-tutorial-includes/my-harness/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-harness",
@@ -378,7 +378,7 @@ Updated include "github.com/eyelock/assistants"
 Only the `skills/dev` include is changed; `skills/tech` is untouched:
 
 ```bash
-cat /tmp/ynh-tutorial-includes/my-harness/.ynh-plugin/plugin.json
+cat /tmp/ynh-tutorial-includes/my-harness/.agents/harness/plugin.json
 ```
 
 Expected:
@@ -411,8 +411,8 @@ For installed harnesses, use the harness name instead of a path:
 ```bash
 # Install a harness first
 mkdir -p /tmp/ynh-tutorial-includes/base
-mkdir -p /tmp/ynh-tutorial-includes/base/.ynh-plugin
-cat > /tmp/ynh-tutorial-includes/base/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial-includes/base/.agents/harness
+cat > /tmp/ynh-tutorial-includes/base/.agents/harness/plugin.json << 'EOF'
 {
   "name": "base",
   "version": "0.1.0",
@@ -438,9 +438,9 @@ When targeting an installed harness by name, ynh pre-fetches the new include imm
 ynh info local/base
 ```
 
-The installed harness's `.ynh-plugin/plugin.json` at `~/.ynh/harnesses/local--base/.ynh-plugin/plugin.json` now contains the added include.
+The installed harness's `.agents/harness/plugin.json` at `~/.ynh/harnesses/local--base/.agents/harness/plugin.json` now contains the added include.
 
-`ynh include`'s `<harness>` argument follows the same rule as every other ref-accepting command: a canonical id (`local/<name>` or `<host>/<org>/<repo>/<name>`) for an installed harness, or an explicit filesystem path (`./<dir>`, `/abs/<dir>`) for a directory containing a `.ynh-plugin/plugin.json`. Bare names are rejected with a hint.
+`ynh include`'s `<harness>` argument follows the same rule as every other ref-accepting command: a canonical id (`local/<name>` or `<host>/<org>/<repo>/<name>`) for an installed harness, or an explicit filesystem path (`./<dir>`, `/abs/<dir>`) for a directory containing a `.agents/harness/plugin.json`. Bare names are rejected with a hint.
 
 ```bash
 # Clean up
@@ -456,7 +456,7 @@ The `<harness>` argument is classified lexically:
 - Anything else (bare names, `name@org/repo`) → rejected with a hint
 
 ```bash
-# Filesystem path (must contain .ynh-plugin/plugin.json)
+# Filesystem path (must contain .agents/harness/plugin.json)
 ynh include add ./my-harness github.com/acme/tools
 ynh include add /tmp/ynh-tutorial-includes/my-harness github.com/acme/tools
 
@@ -486,7 +486,7 @@ rm -rf /tmp/ynh-tutorial-includes
 - `--pick` values must use the canonical `type/name` form (`skills/<name>`, `agents/<name>.md`, `rules/<name>.md`, `commands/<name>.md`); validated against the fetched repo before the manifest is touched
 - If a bare basename or mistyped pick resolves to existing canonical entries, the error leads with a "Did you mean …?" hint (`--pick foo` → `did you mean skills/foo or agents/foo.md?`); otherwise the full available list is shown
 - The `type/` prefix disambiguates a skill and a flat artifact that share a basename — both can be picked independently
-- Mutations never happen if validation fails — the `.ynh-plugin/plugin.json` is only written after all checks pass
+- Mutations never happen if validation fails — the `.agents/harness/plugin.json` is only written after all checks pass
 
 ## Next
 

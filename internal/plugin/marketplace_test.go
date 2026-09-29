@@ -74,7 +74,7 @@ func TestLoadSaveMarketplaceJSON_RoundTrip(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	// File should be at .ynh-plugin/marketplace.json
+	// File should be at .agents/harness/marketplace.json
 	if _, err := os.Stat(filepath.Join(dir, PluginDir, MarketplaceFile)); err != nil {
 		t.Fatalf("marketplace.json not found: %v", err)
 	}

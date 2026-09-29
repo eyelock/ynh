@@ -194,7 +194,7 @@ ynd migrate /tmp/ynh-ns-tutorial/legacy
 Expected:
 ```
 Migrated /tmp/ynh-ns-tutorial/legacy
-  harness format: .harness.json → .ynh-plugin/plugin.json
+  harness format: .harness.json → .agents/harness/plugin.json
 Migrated 1 director(ies).
 ```
 
@@ -206,7 +206,7 @@ find /tmp/ynh-ns-tutorial/legacy -type f | sort
 
 Expected:
 ```
-/tmp/ynh-ns-tutorial/legacy/.ynh-plugin/plugin.json
+/tmp/ynh-ns-tutorial/legacy/.agents/harness/plugin.json
 ```
 
 `ynd migrate` runs the migration filter chain — it handles any registered
@@ -232,9 +232,9 @@ ynd migrate /tmp/ynh-ns-tutorial/bulk
 Expected:
 ```
 Migrated /tmp/ynh-ns-tutorial/bulk/h1
-  harness format: .harness.json → .ynh-plugin/plugin.json
+  harness format: .harness.json → .agents/harness/plugin.json
 Migrated /tmp/ynh-ns-tutorial/bulk/h2
-  harness format: .harness.json → .ynh-plugin/plugin.json
+  harness format: .harness.json → .agents/harness/plugin.json
 Migrated 2 director(ies).
 ```
 
@@ -334,8 +334,8 @@ rm -rf /tmp/ynh-ns-tutorial
   the short name is unambiguous; otherwise invoke the harness via
   `ynh run <canonical-id>`.
 - `ynd migrate` converts harness-source directories from 0.1 to 0.2 format
-  (`.harness.json` → `.ynh-plugin/plugin.json`, `registry.json` →
-  `.ynh-plugin/marketplace.json`).
+  (`.harness.json` → `.agents/harness/plugin.json`, `registry.json` →
+  `.agents/harness/marketplace.json`).
 - `ynh migrate` upgrades the `~/.ynh` home directory schema after a major
   ynh upgrade.
 - `ynh quarantine list/restore/drop` manages harnesses set aside because

@@ -10,7 +10,8 @@ import (
 // MarketplaceFile is the registry index filename inside PluginDir.
 const MarketplaceFile = "marketplace.json"
 
-// MarketplaceJSON is the root structure of .ynh-plugin/marketplace.json.
+// MarketplaceJSON is the root structure of a registry's marketplace.json,
+// held in the manifest directory (see PluginDir).
 type MarketplaceJSON struct {
 	Schema    string           `json:"$schema,omitempty"`
 	Name      string           `json:"name"`
@@ -74,9 +75,17 @@ type RemoteSource struct {
 	SHA  string `json:"sha,omitempty"`
 }
 
-// LoadMarketplaceJSON reads and parses .ynh-plugin/marketplace.json from dir.
+// IsRegistryDir returns true if the directory contains a marketplace.json
+// registry index in either manifest directory.
+func IsRegistryDir(dir string) bool {
+	_, ok := findManifest(dir, MarketplaceFile)
+	return ok
+}
+
+// LoadMarketplaceJSON reads and parses marketplace.json from dir's manifest
+// directory, canonical location first.
 func LoadMarketplaceJSON(dir string) (*MarketplaceJSON, error) {
-	data, err := os.ReadFile(filepath.Join(dir, PluginDir, MarketplaceFile))
+	data, err := os.ReadFile(MarketplacePath(dir))
 	if err != nil {
 		return nil, fmt.Errorf("reading marketplace.json: %w", err)
 	}
@@ -89,10 +98,12 @@ func LoadMarketplaceJSON(dir string) (*MarketplaceJSON, error) {
 	return &mj, nil
 }
 
-// SaveMarketplaceJSON writes mj to .ynh-plugin/marketplace.json in dir.
+// SaveMarketplaceJSON writes mj to marketplace.json in dir: in place if one
+// exists, otherwise at the canonical location.
 func SaveMarketplaceJSON(dir string, mj *MarketplaceJSON) error {
-	if err := os.MkdirAll(filepath.Join(dir, PluginDir), 0o755); err != nil {
-		return fmt.Errorf("creating .ynh-plugin dir: %w", err)
+	path := writePath(dir, MarketplaceFile)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("creating manifest dir: %w", err)
 	}
 
 	data, err := json.MarshalIndent(mj, "", "  ")
@@ -101,7 +112,7 @@ func SaveMarketplaceJSON(dir string, mj *MarketplaceJSON) error {
 	}
 	data = append(data, '\n')
 
-	if err := os.WriteFile(filepath.Join(dir, PluginDir, MarketplaceFile), data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("writing marketplace.json: %w", err)
 	}
 

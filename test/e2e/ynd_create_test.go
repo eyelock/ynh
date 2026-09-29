@@ -69,7 +69,7 @@ func TestYnd_Create_Harness(t *testing.T) {
 		"--description", "Test harness", "--vendor", "claude")
 
 	// `ynd create harness` makes a subdirectory named after the harness.
-	body, err := os.ReadFile(filepath.Join(dir, "my-harness", ".ynh-plugin", "plugin.json"))
+	body, err := os.ReadFile(filepath.Join(dir, "my-harness", ".agents/harness", "plugin.json"))
 	if err != nil {
 		t.Fatalf("expected plugin.json: %v", err)
 	}

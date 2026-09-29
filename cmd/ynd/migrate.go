@@ -116,7 +116,7 @@ func cmdMigrate(args []string) error {
 }
 
 // findMigratableDirs walks root and returns every directory where at least
-// one migrator in chain applies. The walker never enters .ynh-plugin/ subdirs
+// one migrator in chain applies. The walker never enters a manifest directory
 // (migrator targets are the parent harness/registry dir).
 func findMigratableDirs(root string, chain migration.Chain) []string {
 	var dirs []string
@@ -127,7 +127,7 @@ func findMigratableDirs(root string, chain migration.Chain) []string {
 		if !d.IsDir() {
 			return nil
 		}
-		if d.Name() == plugin.PluginDir || skipDuringMigrate[d.Name()] {
+		if d.Name() == plugin.AgentsDir || d.Name() == plugin.LegacyPluginDir || skipDuringMigrate[d.Name()] {
 			return filepath.SkipDir
 		}
 		for _, m := range chain {

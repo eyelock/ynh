@@ -255,7 +255,7 @@ func cmdInstall(args []string) error {
 		}
 	}
 
-	// Write install provenance to .ynh-plugin/installed.json (separate from plugin.json)
+	// Write install provenance to .agents/harness/installed.json (separate from plugin.json)
 	// For canonical-id installs (e.g. `ynh install github.com/org/repo/name`),
 	// resolved.gitURL holds the synthesized clone URL — record THAT as the
 	// provenance source, not the canonical id, so re-cloning works.
@@ -281,7 +281,7 @@ func cmdInstall(args []string) error {
 	// local directory. Two sources to check:
 	//  - Schema-3+: an existing pointer at this canonical id (ynh fork
 	//    writes forked_from onto the pointer, nothing into the source tree).
-	//  - Pre-schema-3: a leftover <srcDir>/.ynh-plugin/installed.json
+	//  - Pre-schema-3: a leftover <srcDir>/.agents/harness/installed.json
 	//    written by an older ynh fork — the schema-3 migration absorbs
 	//    these but a freshly-built source tree may still have one.
 	var forkedFrom *plugin.ForkedFromJSON

@@ -28,7 +28,7 @@ func cmdUpdate(args []string) error {
 
 	if p.InstalledFrom != nil && p.InstalledFrom.ForkedFrom != nil {
 		return fmt.Errorf("harness %q is a fork — ynh update cannot pull upstream changes for a fork\n"+
-			"  To update includes within the fork, edit .ynh-plugin/plugin.json directly\n"+
+			"  To update includes within the fork, edit .agents/harness/plugin.json directly\n"+
 			"  To incorporate upstream changes, fork again from the re-installed original", name)
 	}
 
@@ -171,7 +171,7 @@ func cmdUpdate(args []string) error {
 	//
 	// LoadInstalledRecord / SaveInstalledRecord are topology-aware (see
 	// internal/harness/topology.go): pointer-form installs route to the
-	// pointer file, tree-form to <p.Dir>/.ynh-plugin/installed.json.
+	// pointer file, tree-form to <p.Dir>/.agents/harness/installed.json.
 	if ins, loadErr := harness.LoadInstalledRecord(name, p); loadErr == nil && ins != nil {
 		ins.Resolved = resolvedSources
 		if hasHarnessSource && harnessSHA != "" {

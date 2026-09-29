@@ -12,7 +12,7 @@ Without harness-level MCP declarations, each developer must manually configure M
 
 ## Manifest Format
 
-MCP servers are declared under the top-level `mcp_servers` key in `.ynh-plugin/plugin.json`. Each key is the server name, and the value defines either a stdio server (with `command` + `args`) or an HTTP server (with `url`).
+MCP servers are declared under the top-level `mcp_servers` key in `.agents/harness/plugin.json`. Each key is the server name, and the value defines either a stdio server (with `command` + `args`) or an HTTP server (with `url`).
 
 ### Stdio Server
 
@@ -157,7 +157,7 @@ Copilot requires an explicit `"type"` field per server (`"local"` for a `command
 
 MCP server declarations in **included harnesses** (via `includes`) are dropped during assembly. Only the root harness's MCP servers are configured. This prevents composed harnesses from silently adding tool dependencies.
 
-If an included harness requires an MCP server, add the server declaration to the root harness's `.ynh-plugin/plugin.json`.
+If an included harness requires an MCP server, add the server declaration to the root harness's `.agents/harness/plugin.json`.
 
 ## Future
 
