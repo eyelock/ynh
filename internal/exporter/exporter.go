@@ -90,11 +90,9 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 		}
 	}
 
-	// harness.LoadDir above ran the migration chain, so the manifest is at the new path.
-	hj, err := plugin.LoadPluginJSON(opts.SourceDir)
-	if err != nil {
-		return nil, fmt.Errorf("loading plugin.json: %w", err)
-	}
+	// The manifest the loader read, or derived when the source is an Agent
+	// Plugins package that has no .ynh-plugin/plugin.json to read.
+	hj := p.Manifest
 
 	// Check remote sources for all delegates
 	if opts.Config != nil {

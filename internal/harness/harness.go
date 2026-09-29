@@ -9,10 +9,12 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/agentplugin"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // validName matches safe harness names: alphanumeric, hyphens, underscores, dots.
@@ -84,6 +86,7 @@ type Provenance struct {
 	RegistryName string
 	InstalledAt  string
 	ForkedFrom   *ForkedFrom
+	Format       string
 }
 
 // ForkedFrom records the upstream that a local harness was forked from.
@@ -132,6 +135,22 @@ type Harness struct {
 	Sensors         map[string]plugin.Sensor
 	SensorOverrides map[string]plugin.SensorOverride
 	InstalledFrom   *Provenance
+
+	// Manifest is the manifest this harness was loaded from: the parsed
+	// .ynh-plugin/plugin.json, or the one derived in memory from an Agent
+	// Plugins package. Export and info read it rather than the file, so a
+	// derived harness has one to give.
+	Manifest *plugin.HarnessJSON
+	// Format is agentplugin.Format when the harness was derived from an
+	// Agent Plugins package at load time, and "" for a ynh harness.
+	Format string
+	// ImportedExtensions names the client namespaces a derived harness's
+	// package carried under extensions. ynh does not interpret them and
+	// re-export does not reproduce them.
+	ImportedExtensions []string
+	// Diagnostics is what a derived harness's loader skipped or ignored,
+	// for the command that installs it to report.
+	Diagnostics []string
 }
 
 // ListEntry is one installed harness with its namespace.
@@ -156,10 +175,69 @@ func DetectFormat(dir string) string {
 	if plugin.IsPluginDir(dir) {
 		return "plugin"
 	}
+	if agentplugin.IsPluginRoot(dir) {
+		return agentplugin.Format
+	}
 	if plugin.IsLegacyPluginDir(dir) {
 		return "legacy"
 	}
 	return ""
+}
+
+// IsHarnessDir reports whether dir is something LoadDir can load: a ynh
+// harness, or an Agent Plugins package that LoadDir derives one from.
+func IsHarnessDir(dir string) bool {
+	return plugin.IsPluginDir(dir) || agentplugin.IsPluginRoot(dir)
+}
+
+// PluginDataDir is the client-managed, persistent, writable directory the
+// Agent Plugins specification (§9.1) requires for a plugin's stdio servers,
+// keyed by the harness's canonical id so it survives updates and is not
+// shared between harnesses. It is not created here; the caller that is
+// about to launch something creates it.
+func PluginDataDir(p *Harness) string {
+	id := "local/" + p.Name
+	if p.Namespace != "" {
+		id = p.Namespace + "/" + p.Name
+	}
+	return filepath.Join(config.HomeDir(), "plugin-data", namespace.IDToFSName(id))
+}
+
+// AssembleMCPServers returns the servers as a vendor config should carry
+// them for this harness, resolved the way the Agent Plugins specification
+// asks of a client: ${PLUGIN_ROOT} and ${PLUGIN_DATA} expanded against the
+// harness directory and dataDir, plugin-relative ./ paths made absolute,
+// and, for a harness derived from an Agent Plugin, PLUGIN_ROOT and
+// PLUGIN_DATA supplied in each stdio server's env.
+//
+// Credential references (${VAR} resolved through env_passthrough) apply to
+// a ynh harness only. An Agent Plugin has no allowlist and the specification
+// says a client expands nothing but the two placeholders, so for a derived
+// harness any other reference reaches the server literally, as the package
+// author was told at export time.
+func AssembleMCPServers(p *Harness, dataDir string, lookup func(string) (string, bool)) (map[string]plugin.MCPServer, error) {
+	derived := p.Format == agentplugin.Format
+	servers := plugin.ExpandPluginPlaceholders(p.MCPServers, p.Dir, dataDir, derived)
+	if derived {
+		return servers, nil
+	}
+	return plugin.ExpandMCPEnv(servers, p.EnvPassthrough, lookup)
+}
+
+// artifactNamespaces lists the client namespace directories that hold
+// artifacts in ynh's layout, as the vendor adapters declare them.
+func artifactNamespaces() []string {
+	var dirs []string
+	for _, name := range vendor.Available() {
+		a, err := vendor.Get(name)
+		if err != nil {
+			continue
+		}
+		if d := a.AgentPluginLayout().ArtifactDir; d != "" && d != "." {
+			dirs = append(dirs, d)
+		}
+	}
+	return dirs
 }
 
 // ErrNotFound is returned when a harness is not installed.
@@ -428,10 +506,21 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 		return nil, fmt.Errorf("migrating harness manifest: %w", err)
 	}
 
-	if plugin.IsLegacyPluginDir(dir) && !plugin.IsPluginDir(dir) {
+	// An Agent Plugins package is derived in memory, every time, and the
+	// package is never written to: it stays a clean Agent Plugin whether it
+	// sits in the user's own tree (pointer-form) or in ynh's copy.
+	var derived *agentplugin.Derivation
+	if !plugin.IsPluginDir(dir) && agentplugin.IsPluginRoot(dir) {
+		var err error
+		if derived, err = agentplugin.DeriveHarness(dir, artifactNamespaces()); err != nil {
+			return nil, fmt.Errorf("loading Agent Plugin: %w", err)
+		}
+	}
+
+	if derived == nil && plugin.IsLegacyPluginDir(dir) && !plugin.IsPluginDir(dir) {
 		return nil, fmt.Errorf("legacy .claude-plugin format is not supported; migrate to .ynh-plugin/plugin.json")
 	}
-	if !plugin.IsPluginDir(dir) {
+	if derived == nil && !plugin.IsPluginDir(dir) {
 		return nil, fmt.Errorf("no harness manifest found in %s", dir)
 	}
 
@@ -444,9 +533,14 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 		}
 	}
 
-	hj, err := plugin.LoadPluginJSON(dir)
-	if err != nil {
-		return nil, err
+	var hj *plugin.HarnessJSON
+	if derived != nil {
+		hj = derived.Manifest
+	} else {
+		var err error
+		if hj, err = plugin.LoadPluginJSON(dir); err != nil {
+			return nil, err
+		}
 	}
 
 	if !validName.MatchString(hj.Name) {
@@ -454,7 +548,14 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	}
 
 	p := &Harness{Name: hj.Name, Version: hj.Version, Description: hj.Description,
-		Author: hj.Author, Keywords: hj.Keywords}
+		Author: hj.Author, Keywords: hj.Keywords, Manifest: hj}
+	if derived != nil {
+		p.Format = agentplugin.Format
+		p.ImportedExtensions = derived.Extensions
+		for _, d := range derived.Diagnostics {
+			p.Diagnostics = append(p.Diagnostics, d.String())
+		}
+	}
 	p.DefaultVendor = hj.DefaultVendor
 	p.Namespace = inferNamespace(dir)
 	if abs, err := filepath.Abs(dir); err == nil {
@@ -553,6 +654,7 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 			Namespace:    ins.Namespace,
 			RegistryName: ins.RegistryName,
 			InstalledAt:  ins.InstalledAt,
+			Format:       ins.Format,
 		}
 		if ins.ForkedFrom != nil {
 			ff := ins.ForkedFrom
@@ -705,7 +807,7 @@ func LoadFile(path string) (*Harness, error) {
 	}
 
 	p := &Harness{Name: hj.Name, Version: hj.Version, Description: hj.Description,
-		Author: hj.Author, Keywords: hj.Keywords}
+		Author: hj.Author, Keywords: hj.Keywords, Manifest: hj}
 	p.DefaultVendor = hj.DefaultVendor
 
 	for _, inc := range hj.Includes {

@@ -320,3 +320,36 @@ func TestAgentPlugin_PickedIncludesSplitAcrossPasses(t *testing.T) {
 		t.Errorf("counts = %d skills %d agents", r.Skills, r.Agents)
 	}
 }
+
+// A package ynh exported loads back as a harness and exports again to the
+// same portable core. What cannot round-trip is named: the imported
+// extension data ynh does not interpret.
+func TestAgentPlugin_RoundTrip(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	src := writePortableSource(t, portableManifest)
+	first, _ := exportPortable(t, src)
+
+	again, r := exportPortable(t, first)
+	for _, rel := range []string{"plugin.json", "mcp.json", "skills/hello/SKILL.md", "AGENTS.md", "com.github.copilot/agents/checker.md"} {
+		a, err := os.ReadFile(filepath.Join(first, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := os.ReadFile(filepath.Join(again, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatalf("%s missing from re-export: %v", rel, err)
+		}
+		if rel == "plugin.json" {
+			continue // extensions differ, asserted below
+		}
+		if string(a) != string(b) {
+			t.Errorf("%s changed across the round trip:\n%s\nvs\n%s", rel, a, b)
+		}
+	}
+	if !hasWarning(r, "extensions.com.openai from the imported package is not carried") {
+		t.Errorf("warnings = %v", r.Warnings)
+	}
+	if issues := agentplugin.Validate(again); len(issues) != 0 {
+		t.Errorf("re-export does not conform: %v", issues)
+	}
+}

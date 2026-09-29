@@ -756,7 +756,7 @@ func loadHarnessRef(ref string) (*harness.Harness, error) {
 	if _, mErr := migration.FormatChain().Run(abs); mErr != nil {
 		return nil, fmt.Errorf("migrating harness at %s: %w", abs, mErr)
 	}
-	if !plugin.IsPluginDir(abs) {
+	if !harness.IsHarnessDir(abs) {
 		return nil, fmt.Errorf(
 			"no harness at %s: expected %s. Run `ynd create harness <name>` to make one, "+
 				"or pass an installed id — `ynh ls` lists them",

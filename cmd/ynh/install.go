@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/eyelock/ynh/internal/agentplugin"
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
@@ -165,6 +166,11 @@ func cmdInstall(args []string) error {
 					rootMatches = true
 				}
 			}
+			if !rootMatches && agentplugin.IsPluginRoot(srcDir) {
+				if m, _, perr := agentplugin.ReadManifest(srcDir); perr == nil && m.Name == resolved.nameHint {
+					rootMatches = true
+				}
+			}
 			if !rootMatches {
 				return fmt.Errorf(
 					"no harness named %q found in %s; the canonical id ends in %q but the cloned repo has no matching manifest. "+
@@ -189,6 +195,11 @@ func cmdInstall(args []string) error {
 	p, err := loadOrSynthesizeHarness(srcDir)
 	if err != nil {
 		return err
+	}
+	// A derived harness reports what its package's loader had to skip or
+	// ignore, once, here, rather than on every later load.
+	for _, d := range p.Diagnostics {
+		fmt.Printf("  note: %s\n", d)
 	}
 
 	// Reserved name: "ynh" can be installed but gets no launcher script
@@ -304,6 +315,7 @@ func cmdInstall(args []string) error {
 		RegistryName: resolved.registryName,
 		InstalledAt:  time.Now().UTC().Format(time.RFC3339),
 		ForkedFrom:   forkedFrom,
+		Format:       p.Format,
 	}
 
 	// Pre-fetch includes and delegates so ynh run works offline.
