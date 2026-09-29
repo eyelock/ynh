@@ -784,9 +784,11 @@ func RemoveProfileHook(dir, profileName, event string, index int) error {
 // profile-level variant adds a Null flag (see ProfileMCPAddOptions);
 // harness-level entries can't be null — there's nothing to inherit from.
 type MCPAddOptions struct {
+	Type    string
 	Command string
 	Args    []string
 	Env     map[string]string
+	Cwd     string
 	URL     string
 	Headers map[string]string
 }
@@ -796,11 +798,13 @@ type MCPAddOptions struct {
 // semantics are identical — pointer fields and Set* booleans disambiguate
 // "not provided" from "empty" in both scopes.
 type MCPUpdateOptions struct {
+	Type       *string
 	Command    *string
 	Args       []string
 	SetArgs    bool
 	Env        map[string]string
 	SetEnv     bool
+	Cwd        *string
 	URL        *string
 	Headers    map[string]string
 	SetHeaders bool
@@ -810,9 +814,11 @@ type MCPUpdateOptions struct {
 // Null flag to MCPAddOptions for explicitly suppressing an inherited
 // harness-level server during merge.
 type ProfileMCPAddOptions struct {
+	Type    string
 	Command string
 	Args    []string
 	Env     map[string]string
+	Cwd     string
 	URL     string
 	Headers map[string]string
 	Null    bool
@@ -839,13 +845,19 @@ func AddMCP(dir, serverName string, opts MCPAddOptions) error {
 	if hj.MCPServers == nil {
 		hj.MCPServers = make(map[string]plugin.MCPServer)
 	}
-	hj.MCPServers[serverName] = plugin.MCPServer{
+	srv := plugin.MCPServer{
+		Type:    opts.Type,
 		Command: opts.Command,
 		Args:    opts.Args,
 		Env:     opts.Env,
+		Cwd:     opts.Cwd,
 		URL:     opts.URL,
 		Headers: opts.Headers,
 	}
+	if issues := plugin.ValidateMCPServers(map[string]plugin.MCPServer{serverName: srv}); len(issues) > 0 {
+		return fmt.Errorf("%s", strings.Join(issues, "; "))
+	}
+	hj.MCPServers[serverName] = srv
 	return plugin.SavePluginJSON(dir, hj)
 }
 
@@ -867,7 +879,7 @@ func RemoveMCP(dir, serverName string) error {
 
 // UpdateMCP mutates fields on an existing top-level MCP server.
 func UpdateMCP(dir, serverName string, opts MCPUpdateOptions) error {
-	if opts.Command == nil && !opts.SetArgs && !opts.SetEnv && opts.URL == nil && !opts.SetHeaders {
+	if opts.Type == nil && opts.Command == nil && !opts.SetArgs && !opts.SetEnv && opts.Cwd == nil && opts.URL == nil && !opts.SetHeaders {
 		return fmt.Errorf("ynh mcp update: at least one flag must be specified")
 	}
 	hj, err := loadManifest(dir)
@@ -878,6 +890,9 @@ func UpdateMCP(dir, serverName string, opts MCPUpdateOptions) error {
 	if !exists {
 		return fmt.Errorf("mcp server %q not found in harness %q", serverName, hj.Name)
 	}
+	if opts.Type != nil {
+		srv.Type = *opts.Type
+	}
 	if opts.Command != nil {
 		srv.Command = *opts.Command
 	}
@@ -887,17 +902,17 @@ func UpdateMCP(dir, serverName string, opts MCPUpdateOptions) error {
 	if opts.SetEnv {
 		srv.Env = opts.Env
 	}
+	if opts.Cwd != nil {
+		srv.Cwd = *opts.Cwd
+	}
 	if opts.URL != nil {
 		srv.URL = *opts.URL
 	}
 	if opts.SetHeaders {
 		srv.Headers = opts.Headers
 	}
-	if srv.Command == "" && srv.URL == "" {
-		return fmt.Errorf("mcp server %q must have either command or url after update", serverName)
-	}
-	if srv.Command != "" && srv.URL != "" {
-		return fmt.Errorf("mcp server %q cannot have both command and url after update", serverName)
+	if issues := plugin.ValidateMCPServers(map[string]plugin.MCPServer{serverName: srv}); len(issues) > 0 {
+		return fmt.Errorf("after update: %s", strings.Join(issues, "; "))
 	}
 	hj.MCPServers[serverName] = srv
 	return plugin.SavePluginJSON(dir, hj)
@@ -938,13 +953,19 @@ func AddProfileMCP(dir, profileName, serverName string, opts ProfileMCPAddOption
 	if opts.Null {
 		p.MCPServers[serverName] = nil
 	} else {
-		p.MCPServers[serverName] = &plugin.MCPServer{
+		srv := plugin.MCPServer{
+			Type:    opts.Type,
 			Command: opts.Command,
 			Args:    opts.Args,
 			Env:     opts.Env,
+			Cwd:     opts.Cwd,
 			URL:     opts.URL,
 			Headers: opts.Headers,
 		}
+		if issues := plugin.ValidateMCPServers(map[string]plugin.MCPServer{serverName: srv}); len(issues) > 0 {
+			return fmt.Errorf("%s", strings.Join(issues, "; "))
+		}
+		p.MCPServers[serverName] = &srv
 	}
 	hj.Profiles[profileName] = p
 	return plugin.SavePluginJSON(dir, hj)
@@ -976,7 +997,7 @@ func RemoveProfileMCP(dir, profileName, serverName string) error {
 // UpdateProfileMCP mutates fields on an existing MCP server in a profile.
 // Null entries cannot be updated — remove and re-add instead.
 func UpdateProfileMCP(dir, profileName, serverName string, opts MCPUpdateOptions) error {
-	if opts.Command == nil && !opts.SetArgs && !opts.SetEnv && opts.URL == nil && !opts.SetHeaders {
+	if opts.Type == nil && opts.Command == nil && !opts.SetArgs && !opts.SetEnv && opts.Cwd == nil && opts.URL == nil && !opts.SetHeaders {
 		return fmt.Errorf("ynh profile mcp update: at least one flag must be specified")
 	}
 	hj, err := loadManifest(dir)
@@ -994,6 +1015,9 @@ func UpdateProfileMCP(dir, profileName, serverName string, opts MCPUpdateOptions
 	if srv == nil {
 		return fmt.Errorf("mcp server %q in profile %q is a null entry; remove it and add a new one to replace", serverName, profileName)
 	}
+	if opts.Type != nil {
+		srv.Type = *opts.Type
+	}
 	if opts.Command != nil {
 		srv.Command = *opts.Command
 	}
@@ -1003,17 +1027,17 @@ func UpdateProfileMCP(dir, profileName, serverName string, opts MCPUpdateOptions
 	if opts.SetEnv {
 		srv.Env = opts.Env
 	}
+	if opts.Cwd != nil {
+		srv.Cwd = *opts.Cwd
+	}
 	if opts.URL != nil {
 		srv.URL = *opts.URL
 	}
 	if opts.SetHeaders {
 		srv.Headers = opts.Headers
 	}
-	if srv.Command == "" && srv.URL == "" {
-		return fmt.Errorf("mcp server %q must have either command or url after update", serverName)
-	}
-	if srv.Command != "" && srv.URL != "" {
-		return fmt.Errorf("mcp server %q cannot have both command and url after update", serverName)
+	if issues := plugin.ValidateMCPServers(map[string]plugin.MCPServer{serverName: *srv}); len(issues) > 0 {
+		return fmt.Errorf("after update: %s", strings.Join(issues, "; "))
 	}
 	p.MCPServers[serverName] = srv
 	hj.Profiles[profileName] = p

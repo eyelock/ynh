@@ -64,6 +64,11 @@ Checks required files, frontmatter fields, directory layout, and JSON Schema
 conformance: plugin.json against plugin.schema.json, and any
 .ynh-plugin/marketplace.json against marketplace.schema.json.
 
+A directory whose root plugin.json declares the Agent Plugins schema
+(https://agent-plugins.org) is checked against that specification instead:
+manifest, skills/ discovery and mcp.json, with the spec's own failure
+boundaries.
+
 Flags:
   --harness <source>     Harness to resolve against (falls back to $YNH_HARNESS)`,
 

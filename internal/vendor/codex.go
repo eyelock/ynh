@@ -319,10 +319,11 @@ func (c *Codex) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[stri
 		return nil, nil
 	}
 
-	// Codex plugin format uses .mcp.json at plugin root (JSON, same as Claude).
-	// See https://developers.openai.com/codex/plugins/build
+	// Codex plugin format uses .mcp.json at plugin root, the same shape as
+	// Claude Code including "type": "http" for a remote server.
+	// See https://developers.openai.com/codex/mcp
 	config := map[string]any{
-		"mcpServers": servers,
+		"mcpServers": claudeMCPServers(servers),
 	}
 
 	data, err := json.MarshalIndent(config, "", "  ")

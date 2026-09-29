@@ -103,7 +103,7 @@ func TestFindHarnessRoots(t *testing.T) {
 
 	mkdirAll(t, filepath.Join(dir, "not-a-harness"))
 
-	roots := findHarnessRoots(dir)
+	roots, _ := findHarnessRoots(dir)
 	if len(roots) != 2 {
 		t.Errorf("found %d harness roots, want 2", len(roots))
 	}
@@ -114,7 +114,7 @@ func TestFindHarnessRoots_SelfIsHarness(t *testing.T) {
 	writeFile(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"),
 		[]byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"self","version":"0.1.0"}`))
 
-	roots := findHarnessRoots(dir)
+	roots, _ := findHarnessRoots(dir)
 	if len(roots) != 1 {
 		t.Errorf("found %d harness roots, want 1", len(roots))
 	}

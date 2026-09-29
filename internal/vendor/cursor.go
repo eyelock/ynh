@@ -287,8 +287,23 @@ func (c *Cursor) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[str
 	// (cursor.com/docs/reference/plugins). Both are the same content; there's
 	// no "is this a plugin export" flag threaded through Adapter, so both are
 	// always emitted — the unused one is simply inert in the other context.
+	//
+	// Cursor's mcp.json has no transport field: a command is stdio and a
+	// url is auto-detected (cursor.com/docs/mcp), so the canonical type is
+	// dropped rather than passed through as a key Cursor does not define.
+	out := make(map[string]cursorMCPServer, len(servers))
+	for name, s := range servers {
+		out[name] = cursorMCPServer{
+			Command: s.Command,
+			Args:    s.Args,
+			Env:     s.Env,
+			Cwd:     s.Cwd,
+			URL:     s.URL,
+			Headers: s.Headers,
+		}
+	}
 	config := map[string]any{
-		"mcpServers": servers,
+		"mcpServers": out,
 	}
 
 	data, err := json.MarshalIndent(config, "", "  ")
@@ -301,6 +316,17 @@ func (c *Cursor) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[str
 		filepath.Join(".cursor", "mcp.json"): data,
 		"mcp.json":                           data,
 	}, nil
+}
+
+// cursorMCPServer is Cursor's mcp.json entry: the canonical fields minus
+// the transport, which Cursor infers.
+type cursorMCPServer struct {
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
+	Cwd     string            `json:"cwd,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 // TransformArtifact rewrites Cursor rule files to the .mdc format Cursor

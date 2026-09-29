@@ -59,18 +59,18 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh profile remove <harness> <name>` | (refuses if any focus references it) |
 | `ynh profile hook add <harness> <profile> <event> <command>` | `--matcher` |
 | `ynh profile hook remove <harness> <profile> <event> <index>` | |
-| `ynh profile mcp add <harness> <profile> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header`, `--null` |
+| `ynh profile mcp add <harness> <profile> <name>` | `--command`, `--url`, `--type`, `--arg`, `--env`, `--cwd`, `--header`, `--null` |
 | `ynh profile mcp remove <harness> <profile> <name>` | |
-| `ynh profile mcp update <harness> <profile> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header`, `--clear-args`, `--clear-env`, `--clear-headers` |
+| `ynh profile mcp update <harness> <profile> <name>` | `--command`, `--url`, `--type`, `--arg`, `--env`, `--cwd`, `--header`, `--clear-args`, `--clear-env`, `--clear-headers` |
 | `ynh profile include add <harness> <profile> <url>` | `--path`, `--ref`, `--replace` |
 | `ynh profile include remove <harness> <profile> <url>` | `--path` |
 | `ynh profile include update <harness> <profile> <url>` | `--from-path`, `--path`, `--ref` |
 | `ynh hook add <harness> <event> <command>` | `--matcher` — top-level harness hook |
 | `ynh hook remove <harness> <event> <index>` | top-level harness hook |
 | `ynh hook export <harness>` | `--target <settings\|local>` (required), `-v <vendor>` (claude), `--dry-run` — write a harness's hooks into a Claude settings file ([why](hooks.md#running-hooks-in-a-plain-claude-session)) |
-| `ynh mcp add <harness> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header` — top-level harness MCP server (no `--null`; harness-level entries cannot be null) |
+| `ynh mcp add <harness> <name>` | `--command`, `--url`, `--type`, `--arg`, `--env`, `--cwd`, `--header`, top-level harness MCP server (no `--null`; harness-level entries cannot be null) |
 | `ynh mcp remove <harness> <name>` | top-level harness MCP server |
-| `ynh mcp update <harness> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header`, `--clear-args`, `--clear-env`, `--clear-headers` |
+| `ynh mcp update <harness> <name>` | `--command`, `--url`, `--type`, `--arg`, `--env`, `--cwd`, `--header`, `--clear-args`, `--clear-env`, `--clear-headers` |
 | `ynh sensors ls <harness>` | `--format <text\|json>` |
 | `ynh sensors show <harness> <name>` | `--format <text\|json>` |
 | `ynh sensors run <harness> <name>` | `--cwd <dir>`, `--no-content` |

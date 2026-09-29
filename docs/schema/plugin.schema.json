@@ -13,7 +13,8 @@
   "properties": {
     "$schema": {
       "type": "string",
-      "pattern": "/plugin\\.schema\\.json$"
+      "pattern": "^https://(eyelock\\.github\\.io/ynh|ynh\\.sh)/schema/plugin\\.schema\\.json$",
+      "description": "The ynh manifest schema. The Agent Plugins manifest (https://agent-plugins.org) shares this filename; its $schema is a different URL and it is a different document."
     },
     "name": {
       "type": "string",
@@ -50,7 +51,8 @@
       "enum": [
         "claude",
         "cursor",
-        "codex"
+        "codex",
+        "copilot"
       ]
     },
     "includes": {
@@ -489,6 +491,15 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "stdio",
+              "streamable-http",
+              "sse"
+            ],
+            "description": "Transport, in the Agent Plugins vocabulary. Optional: command implies stdio, url implies streamable-http."
+          },
           "command": {
             "type": "string"
           },
@@ -503,6 +514,9 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "cwd": {
+            "type": "string"
           },
           "url": {
             "type": "string"
@@ -540,6 +554,15 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "stdio",
+                  "streamable-http",
+                  "sse"
+                ],
+                "description": "Transport, in the Agent Plugins vocabulary. Optional: command implies stdio, url implies streamable-http."
+              },
               "command": {
                 "type": "string"
               },
@@ -554,6 +577,9 @@
                 "additionalProperties": {
                   "type": "string"
                 }
+              },
+              "cwd": {
+                "type": "string"
               },
               "url": {
                 "type": "string"
