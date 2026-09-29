@@ -259,6 +259,19 @@ converted by `ynd migrate`.
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 ```
 
+### Agent Plugins (agent-plugins.org)
+
+The portable package format Codex, Copilot, VS Code and Cursor load directly;
+Claude Code does not. Each adapter declares its place in such a package
+through `AgentPluginLayout()` in `internal/vendor/`: whether the client loads
+the format, its reverse-domain namespace, where its artifacts, hooks and MCP
+config go, and whether the manifest needs a hooks pointer. `ynd export
+--format agent-plugin` and `ynd marketplace build --format agent-plugin`
+read those declarations; `internal/agentplugin` holds the spec's reader and
+validator. Adding a vendor means declaring its layout there, and nothing
+else. Verified sources: the specification and the four vendors' plugin
+docs, 2026-09-25.
+
 ### GitHub Copilot CLI Mapping
 
 Copilot CLI wasn't part of the original three-vendor comparison; it's kept as
