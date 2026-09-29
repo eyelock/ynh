@@ -175,6 +175,52 @@ type Adapter interface {
 	// GenerateMarketplaceIndex produces vendor-native marketplace index content.
 	// Returns nil if the vendor has no marketplace system.
 	GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error)
+
+	// AgentPluginLayout describes where this vendor's client-specific
+	// components sit inside a portable Agent Plugins package
+	// (https://agent-plugins.org, §8). The portable core, skills/ and
+	// mcp.json, is the same for every vendor and is not described here.
+	AgentPluginLayout() AgentPluginLayout
+}
+
+// AgentPluginLayout is a vendor's answer to "what do you read from an Agent
+// Plugins package beyond the portable core, and where". The specification
+// leaves agents, rules, commands and hooks to each client, under a
+// reverse-domain namespace the client documents. A client that has not
+// adopted the format at all is reached through its own legacy manifest and
+// layout at the plugin root instead, which the specification's migration
+// guide calls a compatibility package.
+//
+// Every path is relative to the plugin root, slash-separated.
+type AgentPluginLayout struct {
+	// LoadsFormat is false for a client that does not read root plugin.json
+	// as an Agent Plugins manifest. Such a client gets its own
+	// GeneratePluginManifest output and GenerateSystemPrompt files at the
+	// root, alongside the portable ones.
+	LoadsFormat bool
+
+	// Namespace is the reverse-domain identifier the client has published
+	// for its extension data and directory, or "" when it has none.
+	Namespace string
+
+	// ArtifactDir is where the vendor's non-portable artifacts (agents,
+	// rules, commands, per ExportArtifactDirs) and delegate agents go: "."
+	// for the plugin root, the namespace directory, or "" when the client
+	// cannot receive them from this package at all.
+	ArtifactDir string
+
+	// Hooks is the file GenerateHookConfig's output is written to, or ""
+	// when the client does not load hooks from this package.
+	Hooks string
+
+	// HooksExtension, when true, records the Hooks path under
+	// extensions.<Namespace>.hooks in the portable manifest, for a client
+	// whose manifest pointer replaces its default hook discovery.
+	HooksExtension bool
+
+	// MCP is the file GenerateMCPConfig's output is written to, or "" when
+	// the client reads the portable mcp.json.
+	MCP string
 }
 
 // MarketplaceIndexConfig holds marketplace identity for index generation.

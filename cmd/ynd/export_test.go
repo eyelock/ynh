@@ -241,3 +241,35 @@ func assertExists(t *testing.T, path string) {
 		t.Errorf("expected to exist: %s", path)
 	}
 }
+
+func TestCmdExportFormatAgentPlugin(t *testing.T) {
+	outputDir := filepath.Join(t.TempDir(), "pkg")
+	if err := cmdExport([]string{testdataExportDir(), "-o", outputDir, "--format", "agent-plugin", "-v", "claude,copilot"}); err != nil {
+		t.Fatalf("cmdExport failed: %v", err)
+	}
+	for _, rel := range []string{"plugin.json", "skills/dev-project/SKILL.md", ".claude-plugin/plugin.json", "com.github.copilot/agents/planner.md", "agents/planner.md"} {
+		if _, err := os.Stat(filepath.Join(outputDir, filepath.FromSlash(rel))); err != nil {
+			t.Errorf("expected %s: %v", rel, err)
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(outputDir, "plugin.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"`) || !strings.Contains(string(data), `"name": "export-test"`) {
+		t.Errorf("plugin.json = %s", data)
+	}
+}
+
+func TestCmdExportFormatFlagErrors(t *testing.T) {
+	out := t.TempDir()
+	if err := cmdExport([]string{testdataExportDir(), "-o", out, "--format", "agent-plugin", "--merged"}); err == nil || !strings.Contains(err.Error(), "different layouts") {
+		t.Errorf("merged+agent-plugin: err = %v", err)
+	}
+	if err := cmdExport([]string{testdataExportDir(), "-o", out, "--format", "zip"}); err == nil || !strings.Contains(err.Error(), `unknown --format "zip"`) {
+		t.Errorf("unknown format: err = %v", err)
+	}
+	if err := cmdExport([]string{testdataExportDir(), "-o", out, "--format"}); err == nil || !strings.Contains(err.Error(), "requires a value") {
+		t.Errorf("missing value: err = %v", err)
+	}
+}

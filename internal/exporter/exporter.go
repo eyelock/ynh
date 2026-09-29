@@ -31,6 +31,8 @@ type VendorExporter interface {
 	GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)
 	// GenerateMCPConfig translates MCP servers to vendor-native config.
 	GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error)
+	// AgentPluginLayout describes the vendor's place in a portable Agent Plugins package.
+	AgentPluginLayout() vendor.AgentPluginLayout
 }
 
 // ExportMode controls the output layout.
@@ -41,6 +43,9 @@ const (
 	ModePerVendor ExportMode = iota
 	// ModeMerged creates a single dir with dual manifests (for marketplace builds)
 	ModeMerged
+	// ModeAgentPlugin creates one portable Agent Plugins package
+	// (https://agent-plugins.org) with the selected vendors' namespaces.
+	ModeAgentPlugin
 )
 
 // ExportOptions configures an export operation.
@@ -126,8 +131,11 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 		vendors = vendor.Available()
 	}
 
-	if opts.Mode == ModeMerged {
+	switch opts.Mode {
+	case ModeMerged:
 		return exportMerged(opts, hj, p, content, instructionsPath, vendors)
+	case ModeAgentPlugin:
+		return exportAgentPlugin(opts, hj, p, content, instructionsPath, vendors)
 	}
 	return exportPerVendor(opts, hj, p, content, instructionsPath, vendors)
 }
