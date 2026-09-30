@@ -107,6 +107,31 @@ that is what this catches.
 When given a directory, validates all harnesses found within it and also checks
 for a `.ynh-plugin/marketplace.json` at the root of that directory.
 
+A harness report never stops at "valid". It lists what was checked, so a pass is
+something you can read rather than take on trust:
+
+```text
+.: valid
+  checked:
+    manifest     .ynh-plugin/plugin.json against https://eyelock.github.io/ynh/schema/plugin.schema.json
+    includes     https://github.com/eyelock/assistants path skills/dev pick skills/dev-review
+                 https://github.com/eyelock/ynm pick skills/ynm-memory
+    mcp_servers  ynm runs `ynm serve`
+    hooks        on_session_start runs `ynm hook session-start`
+    profiles     quick
+    focuses      none
+    sensors      none
+    delegates_to none
+    skills       none
+    agents       none
+    rules        none
+    commands     none
+    instructions none
+```
+
+Each part the harness does not have reads `none`. An `INVALID` harness prints its issues
+first and then the same list.
+
 ```bash
 ynd validate                   # current directory (harnesses + root marketplace.json)
 ynd validate path/to/harness   # specific harness

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/marketplace"
@@ -323,16 +324,174 @@ func validateHarness(dir string) error {
 		}
 	}
 
+	checked := describeHarnessChecks(dir, manifestPath, data)
 	if len(issues) > 0 {
 		fmt.Printf("%s: INVALID\n", rel)
 		for _, issue := range issues {
 			fmt.Printf("  - %s\n", issue)
 		}
+		printChecked(checked)
 		return fmt.Errorf("harness %q has %d issue(s)", rel, len(issues))
 	}
 
 	fmt.Printf("%s: valid\n", rel)
+	printChecked(checked)
 	return nil
+}
+
+// printChecked lists what validation looked at, so "valid" is never a claim the reader has to
+// take on trust.
+func printChecked(lines []string) {
+	if len(lines) == 0 {
+		return
+	}
+	fmt.Println("  checked:")
+	for _, l := range lines {
+		fmt.Printf("    %s\n", l)
+	}
+}
+
+// describeHarnessChecks names each part of the harness validateHarness checks, with what it
+// found there. Parts the harness does not have are listed as "none" so the reader sees they
+// were looked at.
+func describeHarnessChecks(dir, manifestPath string, data []byte) []string {
+	var out []string
+	row := func(label, value string) { out = append(out, fmt.Sprintf("%-12s %s", label, value)) }
+	if manifestPath == "" || data == nil {
+		row("manifest", "missing")
+		return out
+	}
+	var hj map[string]any
+	if err := json.Unmarshal(data, &hj); err != nil {
+		row("manifest", manifestPath+" (not valid JSON)")
+		return out
+	}
+	schema, _ := hj["$schema"].(string)
+	if schema == "" {
+		schema = "no $schema"
+	}
+	row("manifest", fmt.Sprintf("%s against %s", manifestPath, schema))
+
+	var incs []string
+	if list, ok := hj["includes"].([]any); ok {
+		for _, raw := range list {
+			m, _ := raw.(map[string]any)
+			src, _ := m["git"].(string)
+			if src == "" {
+				src, _ = m["local"].(string)
+			}
+			detail := src
+			if path, _ := m["path"].(string); path != "" {
+				detail += " path " + path
+			}
+			if picks, ok := m["pick"].([]any); ok && len(picks) > 0 {
+				var ps []string
+				for _, p := range picks {
+					if s, ok := p.(string); ok {
+						ps = append(ps, s)
+					}
+				}
+				detail += " pick " + strings.Join(ps, ", ")
+			}
+			incs = append(incs, detail)
+		}
+	}
+	row("includes", listOrNone(incs))
+
+	var servers []string
+	if ms, ok := hj["mcp_servers"].(map[string]any); ok {
+		for _, name := range checkKeys(ms) {
+			m, _ := ms[name].(map[string]any)
+			cmd, _ := m["command"].(string)
+			if args, ok := m["args"].([]any); ok {
+				for _, a := range args {
+					if s, ok := a.(string); ok {
+						cmd += " " + s
+					}
+				}
+			}
+			if url, _ := m["url"].(string); url != "" {
+				cmd = url
+			}
+			servers = append(servers, fmt.Sprintf("%s runs `%s`", name, strings.TrimSpace(cmd)))
+		}
+	}
+	row("mcp_servers", listOrNone(servers))
+
+	var hooks []string
+	if hs, ok := hj["hooks"].(map[string]any); ok {
+		for _, event := range checkKeys(hs) {
+			entries, _ := hs[event].([]any)
+			for _, e := range entries {
+				m, _ := e.(map[string]any)
+				c, _ := m["command"].(string)
+				hooks = append(hooks, fmt.Sprintf("%s runs `%s`", event, c))
+			}
+		}
+	}
+	row("hooks", listOrNone(hooks))
+
+	for _, key := range []string{"profiles", "focuses", "sensors", "delegates_to"} {
+		var names []string
+		switch v := hj[key].(type) {
+		case map[string]any:
+			names = checkKeys(v)
+		case []any:
+			for _, x := range v {
+				if m, ok := x.(map[string]any); ok {
+					if s, _ := m["git"].(string); s != "" {
+						names = append(names, s)
+					}
+				}
+			}
+		}
+		row(key, listOrNone(names))
+	}
+
+	for _, sub := range []string{"skills", "agents", "rules", "commands"} {
+		var names []string
+		if entries, err := os.ReadDir(filepath.Join(dir, sub)); err == nil {
+			for _, e := range entries {
+				n := e.Name()
+				if sub != "skills" {
+					if e.IsDir() || !strings.HasSuffix(n, ".md") {
+						continue
+					}
+					n = strings.TrimSuffix(n, ".md")
+				} else if !e.IsDir() {
+					continue
+				}
+				names = append(names, n)
+			}
+		}
+		row(sub, listOrNone(names))
+	}
+
+	var instr []string
+	for _, f := range []string{"instructions.md", "AGENTS.md"} {
+		if fileExists(filepath.Join(dir, f)) {
+			instr = append(instr, f)
+		}
+	}
+	row("instructions", listOrNone(instr))
+	return out
+}
+
+func listOrNone(items []string) string {
+	if len(items) == 0 {
+		return "none"
+	}
+	// One item per line, aligned under the first, so long lists stay readable.
+	return strings.Join(items, "\n"+strings.Repeat(" ", 17))
+}
+
+func checkKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func fileExists(path string) bool {
