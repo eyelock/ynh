@@ -88,6 +88,20 @@ type codexOutputEvent struct {
 	Usage     *codexUsage `json:"usage,omitempty"`
 	SessionID string      `json:"session_id,omitempty"`
 	ThreadID  string      `json:"thread_id,omitempty"`
+	// Error carries the failure on a "turn.failed" event, as
+	// {"message": "..."}. Held raw so an unexpected shape cannot drop the event.
+	Error json.RawMessage `json:"error,omitempty"`
+}
+
+// codexErrorMessage returns the message of a turn.failed event's error.
+func codexErrorMessage(raw json.RawMessage) string {
+	var e struct {
+		Message string `json:"message"`
+	}
+	if len(raw) == 0 || json.Unmarshal(raw, &e) != nil {
+		return ""
+	}
+	return e.Message
 }
 
 type codexMsg struct {
@@ -166,8 +180,18 @@ func (s *codexSession) Next() (Turn, error) {
 				}
 			}
 
+		case "turn.failed":
+			// codex could not complete the turn (it could not reach or
+			// authenticate with its model, for one). The failure is the
+			// worker's, not agent output.
+			return Turn{}, &WorkerError{
+				Backend: "codex",
+				Message: firstNonBlank(codexErrorMessage(ev.Error), "turn failed"),
+			}
+
 		case "result":
 			if ev.Usage != nil {
+				turn.UsageReported = true
 				turn.Usage.InputTokens += ev.Usage.InputTokens
 				turn.Usage.OutputTokens += ev.Usage.OutputTokens
 			}

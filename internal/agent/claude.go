@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // ClaudeBackend implements WorkerBackend for Claude Code CLI.
@@ -154,11 +155,71 @@ type claudeUserInner struct {
 // stream-json output event shapes.
 // Unknown fields are silently ignored for graceful degradation on protocol
 // changes — we use json.Decoder's default behaviour (skip unknown keys).
+//
+// Error and Result are held raw: decoding a field of an unexpected type would
+// fail the whole event, and a dropped result event loses the end of the turn.
 type claudeOutputEvent struct {
 	Type    string           `json:"type"`
 	Message *claudeOutputMsg `json:"message,omitempty"`
 	IsError bool             `json:"is_error,omitempty"`
 	Usage   *claudeUsage     `json:"usage,omitempty"`
+	// Error is set on an assistant event claude synthesised from an API
+	// failure rather than received from the model, e.g. "authentication_failed".
+	Error json.RawMessage `json:"error,omitempty"`
+	// Result is the result event's summary text; on an error result it is the
+	// failure message.
+	Result json.RawMessage `json:"result,omitempty"`
+}
+
+// claudeAuthError is the error code claude puts on the assistant event it
+// synthesises when it has no usable credentials.
+const claudeAuthError = "authentication_failed"
+
+// claudeAuthMarkers are the texts claude answers with when it has no usable
+// credentials. They are a fallback for a claude that does not mark the turn as
+// an error in its structured output; the structured signal is preferred.
+var claudeAuthMarkers = []string{"Not logged in", "Invalid API key"}
+
+// rawString returns raw as a string when it is a JSON string, else "".
+func rawString(raw json.RawMessage) string {
+	var s string
+	if len(raw) == 0 || json.Unmarshal(raw, &s) != nil {
+		return ""
+	}
+	return s
+}
+
+// hasClaudeAuthMarker reports whether text opens with one of claude's
+// not-authenticated answers.
+func hasClaudeAuthMarker(text string) bool {
+	text = strings.TrimSpace(text)
+	for _, m := range claudeAuthMarkers {
+		if strings.HasPrefix(text, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// claudeTurnError classifies a completed claude turn. It returns a
+// *WorkerError when claude reported the turn as failed: an error result, or an
+// assistant message claude synthesised from an API failure. As a fallback for
+// a claude that marks neither, an unmetered turn whose text is one of claude's
+// not-authenticated answers is an authentication failure too.
+func claudeTurnError(ev claudeOutputEvent, apiError string, turn Turn) error {
+	result := rawString(ev.Result)
+	if ev.IsError || apiError != "" {
+		msg := firstNonBlank(result, turn.Content, apiError, "turn failed")
+		return &WorkerError{
+			Backend: "claude",
+			Message: msg,
+			Auth:    apiError == claudeAuthError || hasClaudeAuthMarker(msg),
+		}
+	}
+	if turn.Usage == (Usage{}) && hasClaudeAuthMarker(turn.Content) {
+		return &WorkerError{Backend: "claude", Message: strings.TrimSpace(turn.Content), Auth: true}
+	}
+	return nil
 }
 
 type claudeOutputMsg struct {
@@ -201,6 +262,7 @@ func (s *claudeSession) Send(msg string) error {
 func (s *claudeSession) Next() (Turn, error) {
 	var turn Turn
 	var contentBuf bytes.Buffer
+	var apiError string
 
 	for s.scanner.Scan() {
 		line := s.scanner.Bytes()
@@ -216,6 +278,9 @@ func (s *claudeSession) Next() (Turn, error) {
 
 		switch ev.Type {
 		case "assistant":
+			if e := rawString(ev.Error); e != "" {
+				apiError = e
+			}
 			if ev.Message != nil {
 				for _, block := range ev.Message.Content {
 					if block.Type == "text" {
@@ -223,6 +288,7 @@ func (s *claudeSession) Next() (Turn, error) {
 					}
 				}
 				if ev.Message.Usage != nil {
+					turn.UsageReported = true
 					turn.Usage.InputTokens += ev.Message.Usage.InputTokens
 					turn.Usage.OutputTokens += ev.Message.Usage.OutputTokens
 					turn.Usage.CacheTokens += ev.Message.Usage.CacheTokens
@@ -232,11 +298,15 @@ func (s *claudeSession) Next() (Turn, error) {
 		case "result":
 			// result signals end of this turn.
 			if ev.Usage != nil {
+				turn.UsageReported = true
 				turn.Usage.InputTokens += ev.Usage.InputTokens
 				turn.Usage.OutputTokens += ev.Usage.OutputTokens
 				turn.Usage.CacheTokens += ev.Usage.CacheTokens
 			}
 			turn.Content = contentBuf.String()
+			if err := claudeTurnError(ev, apiError, turn); err != nil {
+				return Turn{}, err
+			}
 			return turn, nil
 
 			// All other types (system, tool_use, tool_result, stream_event, etc.)
