@@ -43,11 +43,11 @@ type imageTemplateData struct {
 // the id-keyed run dirs (run/local--<name>/<vendor>), so the entrypoint's
 // "ynh run local/<name>" resolves them directly. The entrypoint must be a
 // canonical id — LoadQualified hard-rejects bare names.
+//
+// The copies use --chown by user name and no --link: BuildKit cannot resolve a user name for a
+// --link copy on some Docker versions ("invalid user index: -1" on 27.4), and a numeric id would be
+// wrong for custom bases, whose uid is configurable.
 var imageDockerfileTmpl = template.Must(template.New("Dockerfile").Parse(`FROM {{.Base}}
-
-# COPY --chown by user name, without --link: BuildKit cannot resolve a name for a --link copy on
-# some Docker versions ("invalid user index: -1" on 27.4), and the base's uid is configurable, so
-# a numeric id would be wrong for custom bases.
 
 # Pre-assembled vendor layouts (all four, ready to use)
 COPY --chown=ynh:ynh vendors/claude/ /home/ynh/.ynh/run/local--{{.Name}}/claude/
@@ -58,8 +58,7 @@ COPY --chown=ynh:ynh vendors/copilot/ /home/ynh/.ynh/run/local--{{.Name}}/copilo
 # Harness source (metadata for ynh run)
 COPY --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--{{.Name}}/
 
-# The layout above is already in the current schema: stamp it, or ynh would take the image's
-# fresh home for an old one and try to migrate it.
+# Schema version of the layout above, so ynh does not try to migrate it
 COPY --chown=ynh:ynh home/ /home/ynh/.ynh/
 
 # Default vendor (override: docker run -e YNH_VENDOR=codex)

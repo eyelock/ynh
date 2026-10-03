@@ -185,26 +185,30 @@ Expected output (Dockerfile printed to stdout):
 ```dockerfile
 FROM ghcr.io/eyelock/ynh:latest
 
-# Pre-assembled vendor layouts (all three, ready to use)
+# Pre-assembled vendor layouts (all four, ready to use)
 COPY --chown=ynh:ynh vendors/claude/ /home/ynh/.ynh/run/local--docker-demo/claude/
 COPY --chown=ynh:ynh vendors/codex/ /home/ynh/.ynh/run/local--docker-demo/codex/
 COPY --chown=ynh:ynh vendors/cursor/ /home/ynh/.ynh/run/local--docker-demo/cursor/
+COPY --chown=ynh:ynh vendors/copilot/ /home/ynh/.ynh/run/local--docker-demo/copilot/
 
 # Harness source (metadata for ynh run)
 COPY --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--docker-demo/
 
-# The layout above is already in the current schema: stamp it
+# Schema version of the layout above, so ynh does not try to migrate it
 COPY --chown=ynh:ynh home/ /home/ynh/.ynh/
 
 # Default vendor (override: docker run -e YNH_VENDOR=codex)
 ENV YNH_VENDOR=claude
 
-# Baked entrypoint — just pass the prompt as CMD
+# Interactive vendor session. Pass the prompt as CMD.
 ENTRYPOINT ["tini", "-s", "--", "ynh", "run", "local/docker-demo"]
 CMD []
 
 LABEL dev.ynh.harness="docker-demo" \
       dev.ynh.harness.default-vendor="claude" \
+      dev.ynh.harness.version="0.1.0" \
+      dev.ynh.harness.sha="" \
+      dev.ynh.entrypoint="run" \
       dev.ynh.assembled-by="<version>"
 ```
 
