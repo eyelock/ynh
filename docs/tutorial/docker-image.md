@@ -186,12 +186,15 @@ Expected output (Dockerfile printed to stdout):
 FROM ghcr.io/eyelock/ynh:latest
 
 # Pre-assembled vendor layouts (all three, ready to use)
-COPY --link --chown=ynh:ynh vendors/claude/ /home/ynh/.ynh/run/local--docker-demo/claude/
-COPY --link --chown=ynh:ynh vendors/codex/ /home/ynh/.ynh/run/local--docker-demo/codex/
-COPY --link --chown=ynh:ynh vendors/cursor/ /home/ynh/.ynh/run/local--docker-demo/cursor/
+COPY --chown=ynh:ynh vendors/claude/ /home/ynh/.ynh/run/local--docker-demo/claude/
+COPY --chown=ynh:ynh vendors/codex/ /home/ynh/.ynh/run/local--docker-demo/codex/
+COPY --chown=ynh:ynh vendors/cursor/ /home/ynh/.ynh/run/local--docker-demo/cursor/
 
 # Harness source (metadata for ynh run)
-COPY --link --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--docker-demo/
+COPY --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--docker-demo/
+
+# The layout above is already in the current schema: stamp it
+COPY --chown=ynh:ynh home/ /home/ynh/.ynh/
 
 # Default vendor (override: docker run -e YNH_VENDOR=codex)
 ENV YNH_VENDOR=claude

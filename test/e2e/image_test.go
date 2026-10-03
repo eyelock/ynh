@@ -20,9 +20,10 @@ func TestImage_DryRun(t *testing.T) {
 
 	for _, want := range []string{
 		"FROM ghcr.io/eyelock/ynh:latest",
-		"COPY --link --chown=ynh:ynh vendors/claude/",
-		"COPY --link --chown=ynh:ynh vendors/codex/",
-		"COPY --link --chown=ynh:ynh vendors/cursor/",
+		"COPY --chown=ynh:ynh home/ /home/ynh/.ynh/",
+		"COPY --chown=ynh:ynh vendors/claude/",
+		"COPY --chown=ynh:ynh vendors/codex/",
+		"COPY --chown=ynh:ynh vendors/cursor/",
 		"ENV YNH_VENDOR=claude",
 		`dev.ynh.harness="imaged"`,
 		`ENTRYPOINT ["tini", "-s", "--", "ynh", "run", "local/imaged"]`,
