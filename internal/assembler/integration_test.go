@@ -386,7 +386,7 @@ func assertFileContains(t *testing.T, path string, substr string) {
 // Harness layout under the test dir:
 //
 //	harness/
-//	  .ynh-plugin/plugin.json   (with profiles.ynh-dev.includes = [{local: "dev-extras"}])
+//	  .agents/harness/plugin.json   (with profiles.ynh-dev.includes = [{local: "dev-extras"}])
 //	  skills/base-skill/SKILL.md
 //	  dev-extras/
 //	    skills/dev-skill/SKILL.md

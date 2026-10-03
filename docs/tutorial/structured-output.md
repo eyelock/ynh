@@ -173,8 +173,8 @@ Always use `--format json` (with a space).
 rm -rf /tmp/ynh-tutorial
 mkdir -p /tmp/ynh-tutorial/my-harness/skills/greet
 
-mkdir -p /tmp/ynh-tutorial/my-harness/.ynh-plugin
-cat > /tmp/ynh-tutorial/my-harness/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/my-harness/.agents/harness
+cat > /tmp/ynh-tutorial/my-harness/.agents/harness/plugin.json << 'EOF'
 {
   "name": "my-harness",
   "version": "0.1.0",
@@ -343,7 +343,7 @@ All seven paths shift to the overridden root.
 
 ## Inspect install provenance
 
-`ynh installed <name> --format json` exposes the recorded install provenance — useful when scripting "where did this harness come from?" without reading `.ynh-plugin/installed.json` directly.
+`ynh installed <name> --format json` exposes the recorded install provenance — useful when scripting "where did this harness come from?" without reading `.agents/harness/installed.json` directly.
 
 ```bash
 ynh installed local/my-harness --format json

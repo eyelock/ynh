@@ -35,7 +35,7 @@ Files that should NOT be compressed:
   pull against each other. Where they conflict, specificity wins — a shorter
   skill that no longer says which command to run is worse than a long one.
 - Files that are already concise
-- Config files (`.ynh-plugin/plugin.json`) — not prose, and compression has
+- Config files (`.agents/harness/plugin.json`) — not prose, and compression has
   nothing to do with them
 - Reference documents, usually. They load only when the agent reads them, so
   they cost nothing until used, and they are where the specific detail lives.

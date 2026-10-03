@@ -89,7 +89,7 @@ Many tutorials do not require network access or vendor CLIs and must be run:
 - **MCP servers** (`mcp-servers.md`): Same pattern — define mcp_servers, validate, preview. Output is local assembly only.
 - **Profiles** (`profiles.md`): Create harness with profiles, run `ynd preview --profile <name>` — verify merged output. Fully local.
 - **Focus** (`focus.md`): Create harness with focus entries, run `ynd preview --focus <name>` — verify prompt + profile. Fully local.
-- **Project-local config** (`project-local-config.md`): Create a `.ynh-plugin/plugin.json` in /tmp, run `ynd preview` from that directory. No network.
+- **Project-local config** (`project-local-config.md`): Create a `.agents/harness/plugin.json` in /tmp, run `ynd preview` from that directory. Also creates a `.ynh-plugin/plugin.json` project to prove the fallback location still reads. No network.
 - **Include editing** (`include-editing.md`): Use a local-path include (not a git URL) with `ynh include add <dir> ./local-path` — the add/remove/update commands work on the manifest directly without network when the harness is path-referenced (not installed). Skip the installed-harness pre-fetch steps which require network.
 - **Namespacing and migration** (`namespacing-and-migration.md`): Create harnesses with `.harness.json` format, run `ynd validate` and `ynh install` from /tmp — migration is fully local.
 

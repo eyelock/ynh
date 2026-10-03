@@ -471,7 +471,7 @@ func TestCmdLint_IssueWithoutLineNumber(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
-	writeFile(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(`{}`))
+	writeFile(t, filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(`{}`))
 
 	err := cmdLint(nil)
 	if err == nil {

@@ -4,7 +4,7 @@
 
 ```
 my-harness/
-├── .ynh-plugin/
+├── .agents/harness/
 │   └── plugin.json     # required - name, version, vendor, includes, delegates
 ├── AGENTS.md              # optional - read natively by most vendors; ynh shims Claude via @-import
 ├── skills/
@@ -18,7 +18,7 @@ my-harness/
     └── <name>.md
 ```
 
-## .ynh-plugin/plugin.json
+## .agents/harness/plugin.json
 
 ```json
 {

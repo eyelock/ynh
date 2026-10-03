@@ -109,7 +109,7 @@ Best when they want it across repos or across a team. Costs a `git mv` and the
 history follows.
 
 **There is no CLI for adding a `local` include** — `ynh include add` handles Git
-includes only. Edit `.ynh-plugin/plugin.json` by hand for strategy A.
+includes only. Edit `.agents/harness/plugin.json` by hand for strategy A.
 
 ## Step 4 — Legacy manifest
 
@@ -120,7 +120,7 @@ ynd migrate .
 ```
 
 That runs the whole migration chain and converts it to
-`.ynh-plugin/plugin.json` in place. `ynd validate` also migrates transparently,
+`.agents/harness/plugin.json` in place. `ynd validate` also migrates transparently,
 so a harness can appear to work while still carrying the old file — run
 `migrate` explicitly so the change is a reviewable diff rather than a surprise.
 

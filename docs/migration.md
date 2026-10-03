@@ -1,9 +1,39 @@
+# Migration
+
+## Manifest directory: `.ynh-plugin/` → `.agents/harness/`
+
+The harness manifest directory moved from `.ynh-plugin/` to
+`.agents/harness/`, beside the `.agents/skills/` and `.agents/plugins/`
+directories other tools already read. Everything that lived in
+`.ynh-plugin/` lives in `.agents/harness/` now: `plugin.json`,
+`installed.json` and a registry's `marketplace.json`.
+
+This one is not a migrator, and nothing moves on its own:
+
+- ynh reads `.agents/harness/` first and falls back to `.ynh-plugin/`. A
+  harness or registry that has not moved keeps working, and a read never
+  writes anything back.
+- Editing commands (`ynh include`, `ynh hook`, `ynh profile`, `ynh focus`,
+  `ynh mcp`, `ynh delegate`) rewrite the manifest where it already is.
+- New manifests (`ynd create harness`, a synthesized manifest for a bare
+  `AGENTS.md` directory, the `.harness.json` migrator below) are written to
+  `.agents/harness/`.
+- If both directories exist, `.agents/harness/` wins. `ynd validate` reports
+  the shadowed `.ynh-plugin/` copy so it cannot be edited by mistake.
+
+To move a harness onto the documented layout:
+
+```bash
+git mv .ynh-plugin .agents/harness
+ynd validate .
+```
+
 # Migrating from 0.1 to 0.2
 
 ynh 0.2 is a breaking release that changes three things:
 
-1. **Manifest format** — `.harness.json` → `.ynh-plugin/plugin.json`
-2. **Registry format** — `registry.json` → `.ynh-plugin/marketplace.json`
+1. **Manifest format** — `.harness.json` → `.agents/harness/plugin.json`
+2. **Registry format** — `registry.json` → `.agents/harness/marketplace.json`
 3. **Storage layout** — flat `~/.ynh/harnesses/<name>/` → namespaced `~/.ynh/harnesses/<org>--<repo>/<name>/`
 
 Most migration is transparent. This doc describes what happens automatically,
@@ -20,8 +50,8 @@ Three migrators:
 
 | Migrator | Triggered by | Converts |
 |---|---|---|
-| `harness_format` | Any harness load or install | `.harness.json` → `.ynh-plugin/plugin.json` + `.ynh-plugin/installed.json` |
-| `registry_format` | Any registry fetch | `registry.json` → `.ynh-plugin/marketplace.json` |
+| `harness_format` | Any harness load or install | `.harness.json` → `.agents/harness/plugin.json` + `.agents/harness/installed.json` |
+| `registry_format` | Any registry fetch | `registry.json` → `.agents/harness/marketplace.json` |
 | `harness_storage` | Explicit (install, relocate) | Flat `~/.ynh/harnesses/<name>/` → namespaced `<org>--<repo>/<name>/` |
 
 Format migrations run transparently. Storage relocation is triggered
@@ -46,12 +76,12 @@ Idempotent: safe to run twice. No-op if the target already uses the new format.
 
 | Before | After |
 |---|---|
-| `my-harness/.harness.json` | `my-harness/.ynh-plugin/plugin.json` |
-| `installed_from` field inside manifest | separate `.ynh-plugin/installed.json` |
+| `my-harness/.harness.json` | `my-harness/.agents/harness/plugin.json` |
+| `installed_from` field inside manifest | separate `.agents/harness/installed.json` |
 
 The `installed_from` field no longer lives in the author-controlled manifest.
-It moves to `.ynh-plugin/installed.json`, written by `ynh install` at install
-time. Authors never write `installed.json`; add `.ynh-plugin/installed.json`
+It moves to `.agents/harness/installed.json`, written by `ynh install` at install
+time. Authors never write `installed.json`; add `.agents/harness/installed.json`
 to `.gitignore` if you install your own harness locally for testing.
 
 ## For registry maintainers
@@ -65,7 +95,7 @@ ynd migrate .
 
 ### What changes
 
-| Before (`registry.json`) | After (`.ynh-plugin/marketplace.json`) |
+| Before (`registry.json`) | After (`.agents/harness/marketplace.json`) |
 |---|---|
 | `entries: [...]` | `harnesses: [...]` |
 | Entry fields: `name`, `repo`, `path`, `keywords`, `version` | Entry fields: `name`, `source`, `keywords`, `version`, `description`, `author`, `category`, `tags` |

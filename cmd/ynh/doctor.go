@@ -180,7 +180,7 @@ func checkHooks() doctorCheck {
 		c.Findings = append(c.Findings, doctorFinding{
 			Severity: sevInfo,
 			Message: "no .claude/settings.json in this project; hooks declared in " +
-				".ynh-plugin/plugin.json do not auto-activate in a plain Claude session",
+				".agents/harness/plugin.json do not auto-activate in a plain Claude session",
 			Remedy: "ynh hook export <harness> --target settings",
 		})
 	}
@@ -221,7 +221,7 @@ func checkClaudeSettings(path string) (present bool, findings []doctorFinding) {
 				Severity: sevWarn,
 				Subject:  path,
 				Message: fmt.Sprintf("event %q is an ynh canonical name; Claude only recognises %q here, "+
-					"and canonical names belong in .ynh-plugin/plugin.json", event, native),
+					"and canonical names belong in .agents/harness/plugin.json", event, native),
 				Remedy: "ynh hook export <harness> --target settings",
 			})
 		}

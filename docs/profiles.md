@@ -1,6 +1,6 @@
 # Profiles
 
-Profiles are named configuration variants that allow the same harness to serve different execution contexts — CI, developer, security audit — with different hooks, MCP servers, and additional artifact sources. A single `.ynh-plugin/plugin.json` carries one set of top-level defaults plus any number of profiles that can be selected at run time.
+Profiles are named configuration variants that allow the same harness to serve different execution contexts — CI, developer, security audit — with different hooks, MCP servers, and additional artifact sources. A single `.agents/harness/plugin.json` carries one set of top-level defaults plus any number of profiles that can be selected at run time.
 
 ## Why Profiles Matter
 
@@ -8,7 +8,7 @@ A harness that works well for interactive development may need different control
 
 ## Manifest Format
 
-Profiles live under the `profiles` key in `.ynh-plugin/plugin.json`. Each profile name maps to an object containing any of `hooks`, `mcp_servers`, and `includes`:
+Profiles live under the `profiles` key in `.agents/harness/plugin.json`. Each profile name maps to an object containing any of `hooks`, `mcp_servers`, and `includes`:
 
 ```json
 {
@@ -101,7 +101,7 @@ When both the flag and the environment variable are set, the flag wins. When nei
 
 ## Missing Profile Behavior
 
-Selecting a profile that does not exist in `.ynh-plugin/plugin.json` is a hard error:
+Selecting a profile that does not exist in `.agents/harness/plugin.json` is a hard error:
 
 ```
 Error: profile "staging" not defined in harness manifest

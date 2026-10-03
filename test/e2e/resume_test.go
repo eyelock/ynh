@@ -84,7 +84,7 @@ func newResumeEnv(t *testing.T) *resumeEnv {
 
 	// Minimal local harness — no network, no fixtures.
 	harnessDir := filepath.Join(root, "harness")
-	pluginDir := filepath.Join(harnessDir, ".ynh-plugin")
+	pluginDir := filepath.Join(harnessDir, ".agents/harness")
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatalf("creating harness: %v", err)
 	}

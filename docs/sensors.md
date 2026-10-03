@@ -12,7 +12,7 @@ Without sensors, a loop driver has to be hand-coded against a specific harness: 
 
 ## Schema
 
-Sensors live under the top-level `sensors` key in `.ynh-plugin/plugin.json`. Each sensor name maps to a declaration:
+Sensors live under the top-level `sensors` key in `.agents/harness/plugin.json`. Each sensor name maps to a declaration:
 
 ```json
 {
@@ -941,7 +941,7 @@ The most common integration is a hook that produces an artifact a sensor declare
 
 The hook is the runtime mechanism that produces the data; the sensor is the declarative contract over reading it. Coupling is **by shared file path** — implicit, no schema link needed.
 
-> **Making the hook actually fire.** For an always-on sensor loop in a plain Claude session, the hooks must live in the project's `.claude/settings.json`, not just `.ynh-plugin/plugin.json` — and an `on_stop` sweep that feeds a verdict back to the agent has specific output and loop-guard requirements. See [Hooks §"Running hooks in a plain Claude session"](hooks.md#running-hooks-in-a-plain-claude-session) and [Hooks §"on_stop output semantics"](hooks.md#on-stop-output-semantics-claude).
+> **Making the hook actually fire.** For an always-on sensor loop in a plain Claude session, the hooks must live in the project's `.claude/settings.json`, not just `.agents/harness/plugin.json` — and an `on_stop` sweep that feeds a verdict back to the agent has specific output and loop-guard requirements. See [Hooks §"Running hooks in a plain Claude session"](hooks.md#running-hooks-in-a-plain-claude-session) and [Hooks §"on_stop output semantics"](hooks.md#on-stop-output-semantics-claude).
 
 ### Same script, different driver
 

@@ -131,7 +131,7 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 | `ynh check <harness>` | Gate result: `verdict` (`pass`\|`blocked`), `summary` counts, `sensors[]` with `status`, `tolerance`, `new_count`/`known_count`, and `baseline` when a ratchet is in play — see [Sensors](sensors.md#tolerance) |
 | `ynh fork <name>` | Envelope (`capabilities`, `ynh_version`, `name`, `path`, `installed_from`) — see [ynh fork output](#ynh-fork-output) below |
 | `ynh info <name>` | Envelope (`capabilities`, `ynh_version`, `harness`) wrapping a single harness object — see [Envelope and harness fields](#envelope-and-harness-fields) below |
-| `ynh installed <name>` | Envelope (`capabilities`, `ynh_version`, `id`, `installed`) where `installed` mirrors the on-disk `.ynh-plugin/installed.json` (including `resolved[]` commit SHAs). Schema: `cli/installed.schema.json` |
+| `ynh installed <name>` | Envelope (`capabilities`, `ynh_version`, `id`, `installed`) where `installed` mirrors the on-disk `.agents/harness/installed.json` (including `resolved[]` commit SHAs). Schema: `cli/installed.schema.json` |
 | `ynh ls` | Envelope (`capabilities`, `ynh_version`, `harnesses`) wrapping an array of harness objects — same shape as `ynh info`, plus `artifacts`, minus `manifest` |
 | `ynh schema <name>` | The raw JSON schema for the named CLI command (e.g. `version`, `list`, `info`, `installed`, `error`). With `--all --format json`: a manifest `{capabilities, ynh_version, schemas: {...}}`. See [Published JSON Schemas](schema-cli.md). |
 | `ynh paths` | `home`, `config`, `harnesses`, `symlinks`, `cache`, `run`, `bin` — all absolute paths resolved for the current `$YNH_HOME` |
@@ -187,7 +187,7 @@ Empty case is `"profiles": {}` (empty object), no longer `"profiles": []`. This 
 }
 ```
 
-`ynh info` returns `"harness": { … }` (singular) instead of `"harnesses"`, with the same per-harness fields plus `manifest` (the raw `.ynh-plugin/plugin.json` body).
+`ynh info` returns `"harness": { … }` (singular) instead of `"harnesses"`, with the same per-harness fields plus `manifest` (the raw `.agents/harness/plugin.json` body).
 
 Per-harness fields:
 
@@ -211,7 +211,7 @@ Per-harness fields:
 | `artifacts` | (`ynh ls` only) Counts: `skills`, `agents`, `rules`, `commands` |
 | `includes` | Array of include objects: `git`, `ref_installed`, `ref_available`, `is_pinned`, optional `path`, `pick` |
 | `delegates_to` | Array of delegate objects: `git`, `ref_installed`, `ref_available`, `is_pinned`, optional `path` |
-| `manifest` | (`ynh info` only) Raw `.ynh-plugin/plugin.json` body, JSON-compacted |
+| `manifest` | (`ynh info` only) Raw `.agents/harness/plugin.json` body, JSON-compacted |
 
 #### `--check-updates` flag
 
@@ -267,7 +267,7 @@ The `is_pinned` rule is the same on harnesses and includes:
 
 `ynh fork` refuses to register if a flat install of the same name already exists (either a pointer or a tree at `~/.ynh/harnesses/<name>/`). Namespaced installs of the same name are unaffected — they remain accessible via `name@org/repo`. Uninstall the conflicting flat install first if you want the fork to take that name.
 
-**`--name <new>`** registers the fork under a different name without uninstalling the source — the common case where a user wants to keep the upstream installed and fork a copy alongside it. The fork tree's `.ynh-plugin/plugin.json` is rewritten so its `name` field matches the registration; upstream identity survives in `installed_from.forked_from`. The new name is validated against the same regex as harness names (`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`). If `--to` is omitted, the default destination uses the new name (`<cwd>/<new>`).
+**`--name <new>`** registers the fork under a different name without uninstalling the source — the common case where a user wants to keep the upstream installed and fork a copy alongside it. The fork tree's `.agents/harness/plugin.json` is rewritten so its `name` field matches the registration; upstream identity survives in `installed_from.forked_from`. The new name is validated against the same regex as harness names (`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`). If `--to` is omitted, the default destination uses the new name (`<cwd>/<new>`).
 
 `ynh uninstall <name>` for a fork removes the pointer file (and launcher, run dir, sources entry) but leaves the source tree on disk — the user owns it. To delete the tree as well, remove the directory after uninstalling.
 

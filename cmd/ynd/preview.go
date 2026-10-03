@@ -300,7 +300,7 @@ func loadHarnessForPreview(dir string) (*harness.Harness, string, error) {
 		h, err := harness.LoadDir(dir)
 		return h, "", err
 	case "legacy":
-		return nil, "", fmt.Errorf("legacy format detected in %q. Migrate to .ynh-plugin/plugin.json", dir)
+		return nil, "", fmt.Errorf("legacy format detected in %q. Migrate to .agents/harness/plugin.json", dir)
 	}
 
 	// No manifest: synthesize from AGENTS.md / instructions.md if present

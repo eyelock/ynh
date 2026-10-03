@@ -19,7 +19,7 @@ func TestProfile_HookInheritsBaseEvent(t *testing.T) {
 	s := newSandbox(t)
 
 	dir := filepath.Join(t.TempDir(), "hook-inherit")
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	body := `{
@@ -39,7 +39,7 @@ func TestProfile_HookInheritsBaseEvent(t *testing.T) {
   }
 }
 `
-	if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	s.mustRunYnh(t, "install", dir)
@@ -74,7 +74,7 @@ func TestProfile_McpDeepMerge(t *testing.T) {
 	s := newSandbox(t)
 
 	dir := filepath.Join(t.TempDir(), "mcp-merge")
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	body := `{
@@ -93,7 +93,7 @@ func TestProfile_McpDeepMerge(t *testing.T) {
   }
 }
 `
-	if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	s.mustRunYnh(t, "install", dir)
@@ -124,7 +124,7 @@ func TestMcp_HttpUrl(t *testing.T) {
 	s := newSandbox(t)
 	name := "mcp-http"
 	dir := filepath.Join(t.TempDir(), name)
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	body := fmt.Sprintf(`{
@@ -136,7 +136,7 @@ func TestMcp_HttpUrl(t *testing.T) {
   }
 }
 `, name)
-	if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	s.mustRunYnh(t, "install", dir)

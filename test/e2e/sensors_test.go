@@ -74,11 +74,11 @@ type sensorRunShape struct {
 func writeSensorHarness(t *testing.T, manifest string) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "sensor-harness")
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(
-		filepath.Join(dir, ".ynh-plugin", "plugin.json"),
+		filepath.Join(dir, ".agents/harness", "plugin.json"),
 		[]byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -470,11 +470,11 @@ func TestSensors_ProfileFocusRoundTrip(t *testing.T) {
 	const harnessName = "sensor-profile-focus"
 
 	src := filepath.Join(t.TempDir(), harnessName)
-	if err := os.MkdirAll(filepath.Join(src, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(src, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	manifest := fmt.Sprintf(sensorsProfileFocusHarnessTmpl, harnessName)
-	if err := os.WriteFile(filepath.Join(src, ".ynh-plugin", "plugin.json"), []byte(manifest), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(src, ".agents/harness", "plugin.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

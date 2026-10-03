@@ -15,11 +15,11 @@ import (
 func writeFmtHarness(t *testing.T, name, body string) (dir, mdPath string) {
 	t.Helper()
 	dir = filepath.Join(t.TempDir(), name)
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	plug := `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"` + name + `","version":"0.1.0"}`
-	if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(plug), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(plug), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	mdPath = filepath.Join(dir, "AGENTS.md")

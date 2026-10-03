@@ -410,7 +410,7 @@ func LoadByID(id string) (*Harness, error) {
 // transparently, so callers never need to handle legacy formats themselves.
 //
 // Tree-form installs (see topology.go) store their provenance in
-// <dir>/.ynh-plugin/installed.json; LoadDir reads it from there.
+// <dir>/.agents/harness/installed.json; LoadDir reads it from there.
 // Pointer-form installs carry their provenance on the pointer file and
 // must use loadDirWithProvenance to supply it explicitly — otherwise the
 // source tree would need a redundant installed.json.
@@ -420,7 +420,7 @@ func LoadDir(dir string) (*Harness, error) {
 
 // loadDirWithProvenance is the implementation of LoadDir with an explicit
 // provenance record. When ins is nil it is read from
-// <contentDir>/.ynh-plugin/installed.json (tree-form behaviour). When ins
+// <contentDir>/.agents/harness/installed.json (tree-form behaviour). When ins
 // is supplied (pointer-form) the contentDir need not carry installed.json.
 func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harness, error) {
 	dir := contentDir
@@ -429,7 +429,7 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	}
 
 	if plugin.IsLegacyPluginDir(dir) && !plugin.IsPluginDir(dir) {
-		return nil, fmt.Errorf("legacy .claude-plugin format is not supported; migrate to .ynh-plugin/plugin.json")
+		return nil, fmt.Errorf("legacy .claude-plugin format is not supported; migrate to .agents/harness/plugin.json")
 	}
 	if !plugin.IsPluginDir(dir) {
 		return nil, fmt.Errorf("no harness manifest found in %s", dir)

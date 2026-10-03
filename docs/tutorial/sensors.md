@@ -10,7 +10,7 @@ This tutorial walks through every sensor source variant, the validation rules, a
 rm -rf /tmp/ynh-tutorial
 ynh uninstall local/sensor-demo 2>/dev/null
 
-mkdir -p /tmp/ynh-tutorial/sensor-harness/.ynh-plugin
+mkdir -p /tmp/ynh-tutorial/sensor-harness/.agents/harness
 ```
 
 ## A `files` sensor
@@ -18,7 +18,7 @@ mkdir -p /tmp/ynh-tutorial/sensor-harness/.ynh-plugin
 The simplest sensor reads pre-existing artifacts. Create a harness that declares a coverage sensor:
 
 ```bash
-cat > /tmp/ynh-tutorial/sensor-harness/.ynh-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/sensor-harness/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "sensor-demo",
@@ -50,7 +50,7 @@ freshness](check.md#a-files-sensor-gates-on-freshness).
 Add a sensor that runs a shell command. Edit the manifest:
 
 ```bash
-cat > /tmp/ynh-tutorial/sensor-harness/.ynh-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/sensor-harness/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "sensor-demo",
@@ -79,7 +79,7 @@ ynd validate /tmp/ynh-tutorial/sensor-harness
 Sensors can reuse a top-level focus. Add a focus and reference it:
 
 ```bash
-cat > /tmp/ynh-tutorial/sensor-harness/.ynh-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/sensor-harness/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "sensor-demo",
@@ -112,7 +112,7 @@ ynd validate /tmp/ynh-tutorial/sensor-harness
 Sometimes a focus exists only to drive one sensor. Inline it directly:
 
 ```bash
-cat > /tmp/ynh-tutorial/sensor-harness/.ynh-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/sensor-harness/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "sensor-demo",
@@ -196,7 +196,7 @@ The string focus reference (`"focus": "audit-vulns"`) is expanded inline so the 
 Demonstrate one validation rule. Set two source fields:
 
 ```bash
-cat > /tmp/ynh-tutorial/sensor-harness/.ynh-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/sensor-harness/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "sensor-demo",
@@ -225,7 +225,7 @@ sensor "broken": source must have exactly one of files, command, focus, github_s
 The most common production pattern: a hook produces an artifact, a sensor declares its contract over that artifact. Re-link the harness to the previous sensors plus a hook:
 
 ```bash
-cat > /tmp/ynh-tutorial/sensor-harness/.ynh-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/sensor-harness/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "sensor-demo",

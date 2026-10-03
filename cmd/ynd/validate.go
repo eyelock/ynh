@@ -64,11 +64,11 @@ func cmdValidate(args []string) error {
 		}
 		// Check for legacy format
 		if isLegacyHarnessRoot(root) {
-			fmt.Println("Legacy format detected. Migrate .claude-plugin/plugin.json and metadata.json to .ynh-plugin/plugin.json.")
+			fmt.Println("Legacy format detected. Migrate .claude-plugin/plugin.json and metadata.json to .agents/harness/plugin.json.")
 			return fmt.Errorf("validation failed")
 		}
 		fmt.Println("No harness directories found.")
-		fmt.Println("A harness requires .ynh-plugin/plugin.json (or legacy .harness.json).")
+		fmt.Println("A harness requires .agents/harness/plugin.json (or .ynh-plugin/plugin.json, or legacy .harness.json).")
 		return nil
 	}
 
@@ -79,7 +79,7 @@ func cmdValidate(args []string) error {
 		}
 	}
 
-	// Also validate a marketplace.json in the root's .ynh-plugin/ directory, if present.
+	// Also validate a marketplace.json in the root's manifest directory, if present.
 	if err := validateRootMarketplace(root); err != nil {
 		hasError = true
 	}
@@ -90,12 +90,13 @@ func cmdValidate(args []string) error {
 	return nil
 }
 
-// validateRootMarketplace validates .ynh-plugin/marketplace.json in dir if it exists.
+// validateRootMarketplace validates the registry marketplace.json in dir's
+// manifest directory if it exists.
 func validateRootMarketplace(dir string) error {
-	path := filepath.Join(dir, plugin.PluginDir, plugin.MarketplaceFile)
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	if !plugin.IsRegistryDir(dir) {
 		return nil
 	}
+	path := plugin.MarketplacePath(dir)
 	issues := lintRegistryMarketplace(path)
 	for _, issue := range issues {
 		fmt.Printf("%s: %s\n", issue.File, issue.Message)
@@ -115,9 +116,10 @@ func validateFile(path string) error {
 	case base == plugin.PluginFile:
 		issues = lintHarnessJSON(path)
 	case base == "marketplace.json":
-		// Registry index (inside .ynh-plugin/) validates against the schema.
-		// Build config (anywhere else) validates via LoadConfig programmatic checks.
-		if filepath.Base(filepath.Dir(path)) == plugin.PluginDir {
+		// Registry index (inside a manifest directory) validates against the
+		// schema. Build config (anywhere else) validates via LoadConfig
+		// programmatic checks.
+		if plugin.InManifestDir(path) {
 			issues = lintRegistryMarketplace(path)
 		} else {
 			issues = lintMarketplaceConfig(path)
@@ -155,9 +157,8 @@ func isHarnessRoot(dir string) bool {
 // (or empty if no harness manifest exists).
 func harnessManifestPath(dir string) string {
 	_, _ = migration.FormatChain().Run(dir)
-	pluginPath := filepath.Join(dir, plugin.PluginDir, plugin.PluginFile)
-	if _, err := os.Stat(pluginPath); err == nil {
-		return pluginPath
+	if plugin.IsPluginDir(dir) {
+		return plugin.PluginPath(dir)
 	}
 	return ""
 }
@@ -176,7 +177,7 @@ func findHarnessRoots(root string) []string {
 		if !d.IsDir() {
 			return nil
 		}
-		if d.Name() == plugin.PluginDir {
+		if d.Name() == plugin.AgentsDir || d.Name() == plugin.LegacyPluginDir {
 			return filepath.SkipDir
 		}
 		if isHarnessRoot(path) {
@@ -198,17 +199,20 @@ func validateHarness(dir string) error {
 
 	// Check for legacy format
 	if isLegacyHarnessRoot(dir) && !isHarnessRoot(dir) {
-		issues = append(issues, "legacy format detected: migrate .claude-plugin/plugin.json and metadata.json to .ynh-plugin/plugin.json")
+		issues = append(issues, "legacy format detected: migrate .claude-plugin/plugin.json and metadata.json to .agents/harness/plugin.json")
+	}
+	if plugin.ShadowedLegacyManifest(dir) {
+		issues = append(issues, "both .agents/harness/plugin.json and .ynh-plugin/plugin.json exist; .agents/harness wins and the .ynh-plugin copy is ignored, so remove it")
 	}
 
 	// Migration chain runs inside harnessManifestPath so manifestPath is
 	// always the new format (or empty if no harness manifest exists).
 	manifestPath := harnessManifestPath(dir)
-	const manifestLabel = ".ynh-plugin/plugin.json"
+	const manifestLabel = ".agents/harness/plugin.json"
 	var data []byte
 	var err error
 	if manifestPath == "" {
-		issues = append(issues, "missing .ynh-plugin/plugin.json")
+		issues = append(issues, "missing .agents/harness/plugin.json")
 	} else {
 		data, err = os.ReadFile(manifestPath)
 		if err != nil {
@@ -849,7 +853,7 @@ func lintHarnessJSON(path string) []lintIssue {
 	return append(issues, lintDeclaredReads(path)...)
 }
 
-// lintRegistryMarketplace validates a .ynh-plugin/marketplace.json registry index
+// lintRegistryMarketplace validates a registry marketplace.json index
 // against marketplace.schema.json.
 func lintRegistryMarketplace(path string) []lintIssue {
 	data, err := os.ReadFile(path)

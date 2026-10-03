@@ -38,7 +38,7 @@ func harnessWithDelegates(t *testing.T) string {
 		t.Fatalf("copying fixture: %v", err)
 	}
 
-	manifest := filepath.Join(dst, ".ynh-plugin", "plugin.json")
+	manifest := filepath.Join(dst, ".agents/harness", "plugin.json")
 	raw, err := os.ReadFile(manifest)
 	if err != nil {
 		t.Fatal(err)

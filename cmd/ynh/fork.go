@@ -168,7 +168,7 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 	// (e.g. a tree-form install of "registry" type). Strip it: the fork's
 	// provenance lives on the pointer file from schema 3 onward, not in
 	// the user's source tree. Tolerate absence.
-	if err := os.Remove(filepath.Join(absDestDir, plugin.PluginDir, plugin.InstalledFile)); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(plugin.InstalledPath(absDestDir)); err != nil && !os.IsNotExist(err) {
 		_ = os.RemoveAll(absDestDir)
 		return cliError(stderr, structured, errCodeIOError,
 			fmt.Sprintf("stripping inherited installed.json: %v", err))
@@ -200,7 +200,7 @@ func cmdForkTo(args []string, stdout, stderr io.Writer) error {
 	// Register the fork via a pointer file. The pointer carries the full
 	// provenance record — source_type, source path, installed_at,
 	// forked_from — so the user's source tree stays free of ynh metadata.
-	// (Pre-schema-3 ynh fork wrote a .ynh-plugin/installed.json into the
+	// (Pre-schema-3 ynh fork wrote a .agents/harness/installed.json into the
 	// source tree; the schema-3 migration absorbs any leftover ones.)
 	ins := plugin.InstalledJSON{
 		SourceType:  "local",

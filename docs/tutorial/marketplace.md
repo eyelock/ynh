@@ -40,13 +40,13 @@ configured formatter (prettier, gofmt, black, etc.).
 EOF
 ```
 
-### Harness (has .ynh-plugin/plugin.json with includes)
+### Harness (has .agents/harness/plugin.json with includes)
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer
 
-mkdir -p /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/.ynh-plugin
-cat > /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/.agents/harness
+cat > /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/.agents/harness/plugin.json << 'EOF'
 {
   "name": "reviewer",
   "version": "1.0.0",
@@ -92,7 +92,7 @@ EOF
 
 Two entry types:
 - **`plugin`** — already a valid plugin directory. Copied as-is, missing vendor manifests generated.
-- **`harness`** — has `.ynh-plugin/plugin.json` with includes. Fully exported (includes resolved, pick applied, delegates generated).
+- **`harness`** — has `.agents/harness/plugin.json` with includes. Fully exported (includes resolved, pick applied, delegates generated).
 
 ## Build the marketplace
 

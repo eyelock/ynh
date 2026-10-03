@@ -1,6 +1,6 @@
 # Project-Local Config
 
-Use a `.ynh-plugin/plugin.json` file in your project root for zero-install AI configuration. No `ynh install` needed — just drop the file and run.
+Use a `.agents/harness/plugin.json` file in your project root for zero-install AI configuration. No `ynh install` needed — just drop the file and run.
 
 ## Prerequisites
 
@@ -11,15 +11,15 @@ rm -rf /tmp/ynh-tutorial
 mkdir -p /tmp/ynh-tutorial
 ```
 
-## Create a project with .ynh-plugin/plugin.json
+## Create a project with .agents/harness/plugin.json
 
-Create a project directory with a `.ynh-plugin/plugin.json` file:
+Create a project directory with a `.agents/harness/plugin.json` file:
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/my-project/rules
 
-mkdir -p /tmp/ynh-tutorial/my-project/.ynh-plugin
-cat > /tmp/ynh-tutorial/my-project/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/my-project/.agents/harness
+cat > /tmp/ynh-tutorial/my-project/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "my-project",
@@ -44,9 +44,9 @@ EOF
 ```
 
 Key points:
-- `.ynh-plugin/plugin.json` in the project root — same format as an installed harness
+- `.agents/harness/plugin.json` in the project root — same format as an installed harness
 - No `ynh install` needed — ynh can discover and use this file directly
-- Rules, skills, agents, and commands sit alongside `.ynh-plugin/plugin.json` as usual
+- Rules, skills, agents, and commands sit alongside `.agents/harness/plugin.json` as usual
 
 ## Validate the project config
 
@@ -78,6 +78,56 @@ ynd preview /tmp/ynh-tutorial/my-project -v claude --focus review
 
 Expected: same as base preview — the `review` focus has no profile, so it uses the default configuration. The focus prompt is used by `ynh run`, not by `ynd preview`.
 
+## Still on `.ynh-plugin`? It keeps working
+
+Before the manifest directory moved under `.agents/`, it was `.ynh-plugin/`.
+ynh reads `.agents/harness/` first and falls back to `.ynh-plugin/`, so a
+project that has not moved needs no change and no migration step:
+
+```bash
+mkdir -p /tmp/ynh-tutorial/old-layout/rules
+
+mkdir -p /tmp/ynh-tutorial/old-layout/.ynh-plugin
+cat > /tmp/ynh-tutorial/old-layout/.ynh-plugin/plugin.json << 'EOF'
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "old-layout",
+  "version": "0.1.0",
+  "default_vendor": "claude"
+}
+EOF
+
+cat > /tmp/ynh-tutorial/old-layout/rules/standards.md << 'EOF'
+Follow the team coding standards.
+EOF
+
+ynd validate /tmp/ynh-tutorial/old-layout
+ynd preview /tmp/ynh-tutorial/old-layout -v claude
+```
+
+Expected: `validate` reports `valid` and `preview` lists
+`.claude/rules/standards.md`, exactly as for the `.agents/harness` project
+above. Nothing is written back: reading a `.ynh-plugin` harness never
+creates `.agents/`.
+
+```bash
+ls -a /tmp/ynh-tutorial/old-layout
+```
+
+Expected: `.ynh-plugin` is still there and there is no `.agents`.
+
+To move a project onto the documented layout, move the directory and commit:
+
+```bash
+mkdir -p /tmp/ynh-tutorial/old-layout/.agents
+mv /tmp/ynh-tutorial/old-layout/.ynh-plugin /tmp/ynh-tutorial/old-layout/.agents/harness
+ynd validate /tmp/ynh-tutorial/old-layout
+```
+
+Expected: `valid`. In a git repository use `git mv` so history follows the
+file. If both directories exist, `.agents/harness` wins and `ynd validate`
+reports the shadowed `.ynh-plugin` copy so it cannot be edited by mistake.
+
 ## Clean up
 
 ```bash
@@ -86,10 +136,11 @@ rm -rf /tmp/ynh-tutorial
 
 ## What You Learned
 
-- `.ynh-plugin/plugin.json` in a project root provides zero-install AI configuration
-- `ynd validate`, `ynd preview`, and `ynd diff` work with project directories containing `.ynh-plugin/plugin.json`
-- `ynh run` auto-discovers `.ynh-plugin/plugin.json` in the current working directory
-- `ynh run --harness-file <path>` points to a specific `.ynh-plugin/plugin.json` file
+- `.agents/harness/plugin.json` in a project root provides zero-install AI configuration
+- A project still on `.ynh-plugin/plugin.json` keeps working unchanged: ynh reads `.agents/harness/` first and falls back to `.ynh-plugin/`
+- `ynd validate`, `ynd preview`, and `ynd diff` work with project directories containing `.agents/harness/plugin.json`
+- `ynh run` auto-discovers `.agents/harness/plugin.json` in the current working directory
+- `ynh run --harness-file <path>` points to a specific manifest file by path
 - The file format is identical to installed harnesses — same hooks, MCP servers, profiles, and focus entries
 
 ## Composition with focus

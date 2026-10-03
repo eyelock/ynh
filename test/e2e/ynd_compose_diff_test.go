@@ -49,7 +49,7 @@ func TestYnd_Compose_JSON(t *testing.T) {
 // the shape matches what a structured consumer's HarnessComposition decoder expects.
 func TestYnd_Compose_Focuses(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	manifest := `{
@@ -63,7 +63,7 @@ func TestYnd_Compose_Focuses(t *testing.T) {
     "code-review":    {"prompt": "Review this code for correctness."}
   }
 }`
-	if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(manifest), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

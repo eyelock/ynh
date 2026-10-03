@@ -177,13 +177,13 @@ After install, refer to the harness by its canonical id (`github.com/eyelock/ass
 
 ynh follows the Claude Code marketplace model — identity is a git ref, optionally anchored to a commit SHA. There is no separate semver resolver. To track "version 1.0" you set `"ref": "v1.0"`, not a version field.
 
-The legacy `registry.json` format used in [Create a local registry](#create-a-local-registry) has no per-entry pinning. Modern marketplaces use `.ynh-plugin/marketplace.json` with a `source` object that supports `ref` (branch, tag, or SHA) and `sha` (commit verification):
+The legacy `registry.json` format used in [Create a local registry](#create-a-local-registry) has no per-entry pinning. Modern marketplaces use `.agents/harness/marketplace.json` with a `source` object that supports `ref` (branch, tag, or SHA) and `sha` (commit verification):
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/pinned-registry/.ynh-plugin
+mkdir -p /tmp/ynh-tutorial/pinned-registry/.agents/harness
 cd /tmp/ynh-tutorial/pinned-registry
 
-cat > .ynh-plugin/marketplace.json << 'EOF'
+cat > .agents/harness/marketplace.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
   "name": "pinned-registry",
@@ -302,8 +302,8 @@ ynh registry list
 Local sources are directories of harnesses registered in config — no Git or internet required. When a source name matches a harness name, uninstalling the harness also removes the source entry.
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/sources/codereview/.ynh-plugin
-cat > /tmp/ynh-tutorial/sources/codereview/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/sources/codereview/.agents/harness
+cat > /tmp/ynh-tutorial/sources/codereview/.agents/harness/plugin.json << 'EOF'
 {
   "name": "codereview",
   "version": "0.1.0",

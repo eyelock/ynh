@@ -1,7 +1,7 @@
 // `ynh installed <name>` surfaces the recorded install provenance for a
 // harness — what file was installed from where, at what time, and (for
 // forks) the upstream provenance. The on-disk shape lives at
-// ~/.ynh/harnesses/<id-fsname>/.ynh-plugin/installed.json (for tree-form
+// ~/.ynh/harnesses/<id-fsname>/.agents/harness/installed.json (for tree-form
 // installs) or at the pointer file (for local/source installs); this
 // command unifies the read so consumers don't have to know the topology.
 //
@@ -26,7 +26,7 @@ type installedEnvelope struct {
 	Capabilities string `json:"capabilities"`
 	YnhVersion   string `json:"ynh_version"`
 	ID           string `json:"id"`
-	// Installed is the same shape as the on-disk .ynh-plugin/installed.json,
+	// Installed is the same shape as the on-disk .agents/harness/installed.json,
 	// so a consumer can compare the live CLI response against the file it
 	// also reads directly. The field uses json.RawMessage to pass the
 	// internal/plugin.InstalledJSON marshalled bytes through unmodified.

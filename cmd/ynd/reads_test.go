@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 // writeReadsHarness builds a harness whose shape mirrors a real one: a skill
@@ -15,7 +17,7 @@ func writeReadsHarness(t *testing.T, reads map[string][]string) string {
 	t.Helper()
 	root := t.TempDir()
 	for _, d := range []string{
-		".ynh-plugin",
+		".agents/harness",
 		"skills/demo/references",
 		"agents",
 		"docs/tutorial",     // exists here, never ships
@@ -45,7 +47,7 @@ func writeReadsHarness(t *testing.T, reads map[string][]string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(root, ".ynh-plugin", "plugin.json")
+	path := filepath.Join(root, ".agents/harness", "plugin.json")
 	if err := os.WriteFile(path, b, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +83,7 @@ func TestDeclaredReads_CatchesTheHistoricalDefects(t *testing.T) {
 			}
 			// The path really does exist in the tree — the check must not be
 			// passing merely because the file is missing.
-			if _, err := os.Stat(filepath.Join(filepath.Dir(filepath.Dir(p)), tc.read)); err != nil {
+			if _, err := os.Stat(filepath.Join(plugin.HarnessRoot(p), tc.read)); err != nil {
 				t.Fatalf("fixture is vacuous: %s does not exist, so the "+
 					"check would fire for the wrong reason: %v", tc.read, err)
 			}

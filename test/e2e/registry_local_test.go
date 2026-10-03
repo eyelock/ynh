@@ -153,18 +153,18 @@ type registryEntry struct {
 func buildLocalRegistry(t *testing.T, regName string, entries []registryEntry) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "registry")
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	var harnessJSON strings.Builder
 	for i, e := range entries {
 		hdir := filepath.Join(dir, e.name)
-		if err := os.MkdirAll(filepath.Join(hdir, ".ynh-plugin"), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(hdir, ".agents/harness"), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		body := fmt.Sprintf(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":%q,"version":"0.1.0","description":%q}`, e.name, e.desc)
-		if err := os.WriteFile(filepath.Join(hdir, ".ynh-plugin", "plugin.json"), []byte(body), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(hdir, ".agents/harness", "plugin.json"), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		if i > 0 {
@@ -174,7 +174,7 @@ func buildLocalRegistry(t *testing.T, regName string, entries []registryEntry) s
 	}
 
 	mp := fmt.Sprintf(`{"name":%q,"owner":{"name":"e2e","email":"e2e@example.invalid"},"harnesses":[%s]}`, regName, harnessJSON.String())
-	if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "marketplace.json"), []byte(mp), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agents/harness", "marketplace.json"), []byte(mp), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

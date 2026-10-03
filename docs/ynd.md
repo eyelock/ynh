@@ -18,7 +18,7 @@ brew tap eyelock/tap && brew install ynh
 Scaffold a new artifact or full harness.
 
 ```bash
-ynd create harness my-team     # full harness directory structure (.ynh-plugin/plugin.json + artifacts)
+ynd create harness my-team     # full harness directory structure (.agents/harness/plugin.json + artifacts)
 ynd create skill commit        # skills/commit/SKILL.md
 ynd create agent reviewer      # agents/reviewer.md
 ynd create rule be-nice        # rules/be-nice.md
@@ -80,7 +80,7 @@ so adoption is incremental.
 
 Validate harness structure: required files, frontmatter fields, directory layout,
 and JSON Schema conformance (`plugin.json` against `plugin.schema.json`;
-`.ynh-plugin/marketplace.json` against `marketplace.schema.json`), plus the
+`.agents/harness/marketplace.json` against `marketplace.schema.json`), plus the
 cross-field rules assembly enforces that a schema cannot express.
 
 One of those is worth naming. An MCP `env`/`headers` value referencing
@@ -105,7 +105,7 @@ that declares an allowlist and misses an entry is the realistic mistake, and
 that is what this catches.
 
 When given a directory, validates all harnesses found within it and also checks
-for a `.ynh-plugin/marketplace.json` at the root of that directory.
+for a `.agents/harness/marketplace.json` at the root of that directory.
 
 A harness report never stops at "valid". It lists what was checked, so a pass is
 something you can read rather than take on trust:
@@ -206,7 +206,7 @@ ynd preview --harness ./my-harness          # explicit harness flag
 
 When no `-o` flag is given, preview prints a tree with file contents to stdout. With `-o`, it writes the full assembled output to the specified directory.
 
-Preview supports the same source types as export: local directories with `.ynh-plugin/plugin.json` or bare `AGENTS.md` directories.
+Preview supports the same source types as export: local directories with `.agents/harness/plugin.json` or bare `AGENTS.md` directories.
 
 See [Developer Preview](tutorial/developer-preview.md) for a guided walkthrough.
 

@@ -112,12 +112,12 @@ func commitToUpstream(t *testing.T, fileURL, relPath, content string) {
 }
 
 // newLocalFloatingHarness writes a harness directory containing a
-// .ynh-plugin/plugin.json with one floating include pointing at the
+// .agents/harness/plugin.json with one floating include pointing at the
 // given upstream URL. Returns the harness path suitable for `ynh install`.
 func newLocalFloatingHarness(t *testing.T, name, upstreamURL string) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), name)
-	pluginDir := filepath.Join(dir, ".ynh-plugin")
+	pluginDir := filepath.Join(dir, ".agents/harness")
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

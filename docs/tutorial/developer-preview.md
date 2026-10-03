@@ -39,8 +39,8 @@ Never deploy to production without running the test suite first.
 Always create a rollback plan before deploying.
 EOF
 
-mkdir -p /tmp/ynh-tutorial/preview-harness/.ynh-plugin
-cat > /tmp/ynh-tutorial/preview-harness/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/preview-harness/.agents/harness
+cat > /tmp/ynh-tutorial/preview-harness/.agents/harness/plugin.json << 'EOF'
 {
   "name": "preview-demo",
   "version": "0.1.0",

@@ -77,8 +77,7 @@ func loadMinimalHarness(dir string) (DiscoveredHarness, bool) {
 		return DiscoveredHarness{}, false
 	}
 
-	manifestPath := filepath.Join(dir, plugin.PluginDir, plugin.PluginFile)
-	data, err := os.ReadFile(manifestPath)
+	data, err := os.ReadFile(plugin.PluginPath(dir))
 	if err != nil {
 		return DiscoveredHarness{}, false
 	}

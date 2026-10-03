@@ -37,7 +37,7 @@ func (c Chain) Run(dir string) ([]string, error) {
 // DefaultChain returns the full migration chain including storage relocation.
 //
 // Order matters: HarnessFormatMigrator must run before HarnessStorageMigrator
-// so that .ynh-plugin/installed.json exists when namespace inference runs.
+// so that .agents/harness/installed.json exists when namespace inference runs.
 func DefaultChain() Chain {
 	return Chain{
 		HarnessFormatMigrator{},

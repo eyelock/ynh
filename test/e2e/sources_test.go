@@ -27,11 +27,11 @@ func TestSources_AddListRemove(t *testing.T) {
 	// Build a directory with one discoverable harness in it.
 	srcRoot := filepath.Join(t.TempDir(), "my-sources")
 	harnessDir := filepath.Join(srcRoot, "demo")
-	if err := os.MkdirAll(filepath.Join(harnessDir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(harnessDir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	plugin := `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"demo","version":"0.1.0"}`
-	if err := os.WriteFile(filepath.Join(harnessDir, ".ynh-plugin", "plugin.json"), []byte(plugin), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(harnessDir, ".agents/harness", "plugin.json"), []byte(plugin), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

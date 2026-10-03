@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 // lintDeclaredReads checks the manifest's `reads` map: every path an artifact
@@ -43,8 +44,11 @@ func lintDeclaredReads(manifestPath string) []lintIssue {
 		return nil
 	}
 
-	// The harness root is the directory holding .ynh-plugin/.
-	root := filepath.Dir(filepath.Dir(manifestPath))
+	// The harness root is the directory holding the manifest directory.
+	root := plugin.HarnessRoot(manifestPath)
+	if root == "" {
+		return nil // a plugin.json outside a manifest directory is not ours to check
+	}
 
 	var issues []lintIssue
 	for _, artifact := range sortedKeys(m.Reads) {

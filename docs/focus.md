@@ -10,7 +10,7 @@ A focus is the unit of automation. CI pipelines, schedulers, and loop drivers ca
 
 ## Manifest Format
 
-Focuses live under the `focuses` key in `.ynh-plugin/plugin.json`. Each focus name maps to an object with a required `prompt` and an optional `profile`:
+Focuses live under the `focuses` key in `.agents/harness/plugin.json`. Each focus name maps to an object with a required `prompt` and an optional `profile`:
 
 ```json
 {

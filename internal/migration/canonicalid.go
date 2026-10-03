@@ -584,7 +584,7 @@ func migrateOneInstall(installDir, harnessesDir, oldID, kind string, opts Migrat
 }
 
 // loadHarnessName reads the harness name from the install manifest.
-// Prefers the canonical .ynh-plugin/plugin.json layout (what `ynh install`
+// Prefers the canonical .agents/harness/plugin.json layout (what `ynh install`
 // and `ynd create harness` write today); falls back to the legacy
 // .harness.json single-file layout for installs from older binaries that
 // the format migrator hasn't touched yet.

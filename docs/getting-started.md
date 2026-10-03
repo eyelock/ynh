@@ -35,9 +35,9 @@ This gives you an AI session with skills that teach you ynh — including `/ynh-
 
 ## Create a Harness
 
-A harness is a directory with a `.ynh-plugin/plugin.json` and your artifacts:
+A harness is a directory with a `.agents/harness/plugin.json` and your artifacts:
 
-`.ynh-plugin/plugin.json`:
+`.agents/harness/plugin.json`:
 ```json
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
@@ -51,7 +51,7 @@ Add whatever you need - skills, agents, rules, commands:
 
 ```
 david/
-├── .ynh-plugin/plugin.json
+├── .agents/harness/plugin.json
 ├── skills/greet/SKILL.md
 ├── agents/reviewer.md
 └── rules/concise.md
@@ -82,7 +82,7 @@ Or set a global default in `~/.ynh/config.json`:
 
 Point your harness at any Git repo. Skills are used as-is - no wrapping, no build step:
 
-`.ynh-plugin/plugin.json`:
+`.agents/harness/plugin.json`:
 ```json
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",

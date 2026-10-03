@@ -24,7 +24,7 @@ import (
 // provenance record by embedding plugin.InstalledJSON. This keeps the
 // authored source tree free of ynh-owned metadata: source_type, source,
 // resolved SHAs, and forked_from all live in the pointer file rather
-// than in <source>/.ynh-plugin/installed.json. Tree-form installs (see
+// than in <source>/.agents/harness/installed.json. Tree-form installs (see
 // topology.go) continue to keep their installed.json next to their
 // content; pointer-form installs do not.
 //
@@ -199,7 +199,7 @@ var ErrPointerSourceMissing = errors.New("pointer source path missing")
 // The pointer's embedded plugin.InstalledJSON is the authoritative
 // provenance record (schema 3+). For legacy pointers (pre-schema-3,
 // carrying only source_type/source/installed_at), the rest of the
-// provenance still lives at <source>/.ynh-plugin/installed.json; we
+// provenance still lives at <source>/.agents/harness/installed.json; we
 // merge it in so reads work before the schema-3 migration has run.
 // After migration, the pointer carries the full record and the source
 // tree is free of ynh metadata.

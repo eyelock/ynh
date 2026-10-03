@@ -577,7 +577,7 @@ func TestCmdListJSON_BrokenPointerKind(t *testing.T) {
 		home := t.TempDir()
 		t.Setenv("YNH_HOME", home)
 
-		// Source dir exists but has no .ynh-plugin/plugin.json.
+		// Source dir exists but has no .agents/harness/plugin.json.
 		srcDir := t.TempDir()
 		if err := harness.SavePointer(&harness.Pointer{
 			Name: "hollow",

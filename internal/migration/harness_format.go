@@ -18,21 +18,20 @@ const legacySchemaSuffix = "/harness.schema.json"
 // whatever the manifest declared so self-hosted schema repos keep working.
 const pluginSchemaSuffix = "/plugin.schema.json"
 
-// HarnessFormatMigrator converts .harness.json → .ynh-plugin/plugin.json.
+// HarnessFormatMigrator converts .harness.json → .agents/harness/plugin.json.
 //
-// It extracts installed_from into .ynh-plugin/installed.json, writes
+// It extracts installed_from into .agents/harness/installed.json, writes
 // plugin.json without that field, then removes .harness.json.
 // Safe to run multiple times — Applies returns false once the new format exists.
 type HarnessFormatMigrator struct{}
 
 func (HarnessFormatMigrator) Description() string {
-	return "harness format: .harness.json → .ynh-plugin/plugin.json"
+	return "harness format: .harness.json → .agents/harness/plugin.json"
 }
 
 func (HarnessFormatMigrator) Applies(dir string) bool {
 	_, oldErr := os.Stat(filepath.Join(dir, plugin.HarnessFile))
-	_, newErr := os.Stat(filepath.Join(dir, plugin.PluginDir, plugin.PluginFile))
-	return oldErr == nil && newErr != nil
+	return oldErr == nil && !plugin.IsPluginDir(dir)
 }
 
 func (HarnessFormatMigrator) Run(dir string) error {

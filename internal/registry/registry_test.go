@@ -87,7 +87,7 @@ func TestLoadFromDirCarriesEntryRef(t *testing.T) {
     }
   ]
 }`
-	pluginDir := filepath.Join(dir, ".ynh-plugin")
+	pluginDir := filepath.Join(dir, ".agents/harness")
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

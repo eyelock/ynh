@@ -20,8 +20,8 @@ export YNH_HOME=/tmp/ynh-t20/home
 ## Declare sensors with a tolerance
 
 ```bash
-mkdir -p gate-demo/.ynh-plugin
-cat > gate-demo/.ynh-plugin/plugin.json <<'EOF'
+mkdir -p gate-demo/.agents/harness
+cat > gate-demo/.agents/harness/plugin.json <<'EOF'
 {
   "name": "gate-demo",
   "version": "0.1.0",
@@ -113,8 +113,8 @@ Use a separate harness so the counts above stay as they were:
 
 ```bash
 cd /tmp/ynh-t20
-mkdir -p fresh-demo/.ynh-plugin
-cat > fresh-demo/.ynh-plugin/plugin.json <<'EOF'
+mkdir -p fresh-demo/.agents/harness
+cat > fresh-demo/.agents/harness/plugin.json <<'EOF'
 {
   "name": "fresh-demo",
   "version": "0.1.0",
