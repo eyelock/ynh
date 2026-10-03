@@ -541,7 +541,9 @@ Or inline:
 
 Inline focuses are scoped to the sensor that declares them — they do **not** appear in `ynh info` Focus list, and they are not selectable via `--focus` or `YNH_FOCUS`. Use a string reference when the same focus is invoked both standalone and as a sensor; use inline when the focus exists only to drive this sensor.
 
-When the loop driver runs a focus-sourced sensor via `ynh sensors run`, ynh returns the resolved focus declaration; the loop driver invokes the agent runtime itself. ynh owns no agent-invocation surface.
+`ynh sensors run` does not invoke an agent for a focus-sourced sensor. It returns the resolved focus declaration, and a loop driver that wants a verdict invokes its own agent runtime with it.
+
+[`ynh agent run`](agent.md), ynh's built-in loop driver, does invoke an agent runtime, but only for the worker turns that do the task. It does not resolve focus-sourced sensors either. Its gate is `ynh check`, which reports a focus sensor as `deferred`, and a focus sensor never gates convergence there. To have a focus sensor judged, use your own loop driver.
 
 ## Output contract
 
@@ -787,7 +789,9 @@ not `pass`. Its failing states are worse still — converging on `absent` or
 `stale` would end a run on the strength of a missing or outdated file.
 
 Use a command source that exits non-zero until the work is done, or a focus
-source, which a loop driver resolves with an agent runtime.
+source, which a loop driver resolves with an agent runtime. `ynh agent run`
+does not resolve focus sources, so a focus verifier can never report `pass`
+there and the run cannot converge. With `ynh agent run`, use a command source.
 
 ## Validation
 
@@ -965,7 +969,7 @@ verifier=$(ynh sensors ls my-harness --format json |
            jq -r '.[] | select(.role == "convergence-verifier") | .name')
 ```
 
-ynh does **not** ship a loop driver. Orchestration policy — when to run sensors, how to weight them, when the loop is done — belongs to the layer above ynh. See `docs/harness-engineering.md` for the architectural framing.
+ynh ships one loop driver, [`ynh agent run`](agent.md). It runs `ynh check` between turns and feeds the results back to the agent. This section is for authors writing their own driver, for example to resolve focus-sourced sensors, which `ynh agent run` reports as `deferred`. A custom driver owns its orchestration policy: when to run sensors, how to weight them, and when the loop is done. See `docs/harness-engineering.md` for the architectural framing.
 
 ## Examples
 
