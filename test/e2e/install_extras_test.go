@@ -10,36 +10,67 @@ import (
 	"testing"
 )
 
-// TestInstall_MigratesLegacyHarnessJson covers the migration path: a source
-// directory containing only the legacy `.harness.json` (pre-1.0 layout) must
-// be transparently migrated to `.agents/harness/plugin.json` during install.
-//
-// Lifts coverage of internal/migration which is otherwise only exercised
-// by unit tests.
-func TestInstall_MigratesLegacyHarnessJson(t *testing.T) {
+// TestReadCommands_RefuseLegacyHarnessJson covers #406: a source tree whose
+// only manifest is the legacy `.harness.json` is refused by every read
+// command, with the fix, and left byte-identical. Only `ynd migrate` converts
+// it, after which the same commands succeed.
+func TestReadCommands_RefuseLegacyHarnessJson(t *testing.T) {
 	s := newSandbox(t)
 
 	srcDir := filepath.Join(t.TempDir(), "legacy")
-	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(srcDir, "skills", "hello"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	legacy := `{"$schema":"https://eyelock.github.io/ynh/schema/harness.schema.json","name":"legacy","version":"0.1.0"}`
+	legacy := `{"$schema":"https://eyelock.github.io/ynh/schema/harness.schema.json","name":"legacy","version":"0.1.0","default_vendor":"claude"}`
 	if err := os.WriteFile(filepath.Join(srcDir, ".harness.json"), []byte(legacy), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	skill := "---\nname: hello\ndescription: Say hello.\n---\n\nSay hello.\n"
+	if err := os.WriteFile(filepath.Join(srcDir, "skills", "hello", "SKILL.md"), []byte(skill), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before := treeListing(t, srcDir)
+	want := srcDir + " uses the legacy .harness.json manifest, which ynh no longer reads; convert it with: ynd migrate " + srcDir
 
-	s.mustRunYnh(t, "install", srcDir)
+	outDir := filepath.Join(t.TempDir(), "out")
+	reads := []struct {
+		name string
+		run  func() (string, string, error)
+	}{
+		{"ynd validate", func() (string, string, error) { return runYnd(t, "validate", srcDir) }},
+		{"ynd preview", func() (string, string, error) { return runYnd(t, "preview", "-v", "claude", "--harness", srcDir) }},
+		{"ynd export", func() (string, string, error) { return runYnd(t, "export", "-o", outDir, srcDir) }},
+		{"ynh install", func() (string, string, error) { return s.runYnh(t, "install", srcDir) }},
+	}
+	for _, r := range reads {
+		out, errOut, err := r.run()
+		if err == nil {
+			t.Errorf("%s must fail on a legacy tree\nstdout:\n%s", r.name, out)
+		}
+		if !strings.Contains(out+errOut, want) {
+			t.Errorf("%s should name the fix %q\nstdout:\n%s\nstderr:\n%s", r.name, want, out, errOut)
+		}
+		if got := treeListing(t, srcDir); got != before {
+			t.Fatalf("%s changed the source tree\nbefore:\n%s\nafter:\n%s", r.name, before, got)
+		}
+	}
 
-	// Schema 3: install runs the format migration against the user's
-	// source tree (no copy dir under HarnessesDir). The legacy file must
-	// be gone in srcDir, the new layout must be present there.
+	out, _ := mustRunYnd(t, "migrate", "--dry-run", srcDir)
+	if !strings.Contains(out, srcDir) || treeListing(t, srcDir) != before {
+		t.Fatalf("migrate --dry-run should list %s and change nothing:\n%s", srcDir, out)
+	}
+	mustRunYnd(t, "migrate", "-y", srcDir)
 	if _, err := os.Stat(filepath.Join(srcDir, ".harness.json")); !os.IsNotExist(err) {
-		t.Errorf("legacy .harness.json should have been removed in source tree, err=%v", err)
+		t.Errorf(".harness.json should be gone after ynd migrate, err=%v", err)
 	}
 	assertFileExists(t, filepath.Join(srcDir, ".agents/harness", "plugin.json"))
 
-	// And ynh ls should see it under its declared name.
-	out, _ := s.mustRunYnh(t, "ls", "--format", "json")
+	mustRunYnd(t, "validate", srcDir)
+	mustRunYnd(t, "preview", "-v", "claude", "--harness", srcDir)
+	mustRunYnd(t, "export", "-o", outDir, srcDir)
+	s.mustRunYnh(t, "install", srcDir)
+
+	out, _ = s.mustRunYnh(t, "ls", "--format", "json")
 	var got envelopeLs
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("parsing ls JSON: %v\n%s", err, out)
@@ -47,6 +78,34 @@ func TestInstall_MigratesLegacyHarnessJson(t *testing.T) {
 	if len(got.Harnesses) != 1 || got.Harnesses[0].Name != "legacy" {
 		t.Fatalf("expected one harness named 'legacy', got %+v", got.Harnesses)
 	}
+}
+
+// treeListing returns every path under root with its contents, so two calls
+// compare equal only if nothing in the tree was added, removed or changed.
+func treeListing(t *testing.T, root string) string {
+	t.Helper()
+	var b strings.Builder
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(root, path)
+		b.WriteString(rel)
+		if !d.IsDir() {
+			data, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return readErr
+			}
+			b.WriteString(" = ")
+			b.Write(data)
+		}
+		b.WriteString("\n")
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b.String()
 }
 
 // TestInstall_BareAgentsMd asserts that a directory containing only an

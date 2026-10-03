@@ -1,8 +1,8 @@
 # Namespacing & Migration
 
 Install same-named harnesses from different sources without collision using
-canonical ids, and migrate legacy `.harness.json` / `registry.json` files to
-the 0.2 format.
+canonical ids, and convert legacy `.harness.json` / `registry.json` files to
+the 0.2 format with `ynd migrate`, the only command that reads them.
 
 ## Prerequisites
 
@@ -51,18 +51,22 @@ canonical ids differ:
 
 ```bash
 # Registry A — points at github.com/eyelock/assistants
-mkdir -p /tmp/ynh-ns-tutorial/reg-a
-cat > /tmp/ynh-ns-tutorial/reg-a/registry.json << 'EOF'
+mkdir -p /tmp/ynh-ns-tutorial/reg-a/.agents/harness
+cat > /tmp/ynh-ns-tutorial/reg-a/.agents/harness/marketplace.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
   "name": "eyelock-registry",
-  "entries": [
+  "owner": {"name": "eyelock-registry"},
+  "harnesses": [
     {
       "name": "david",
       "description": "Eyelock's development harness",
-      "repo": "github.com/eyelock/assistants",
-      "path": "ynh/david",
-      "vendors": ["claude"],
-      "version": "0.1.0"
+      "version": "0.1.0",
+      "source": {
+        "type": "github",
+        "repo": "github.com/eyelock/assistants",
+        "path": "ynh/david"
+      }
     }
   ]
 }
@@ -73,18 +77,22 @@ EOF
 # (For this tutorial we re-use eyelock/assistants. The point is that the
 # canonical id is derived from the source repo, not the registry that listed
 # it.)
-mkdir -p /tmp/ynh-ns-tutorial/reg-b
-cat > /tmp/ynh-ns-tutorial/reg-b/registry.json << 'EOF'
+mkdir -p /tmp/ynh-ns-tutorial/reg-b/.agents/harness
+cat > /tmp/ynh-ns-tutorial/reg-b/.agents/harness/marketplace.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
   "name": "acme-registry",
-  "entries": [
+  "owner": {"name": "acme-registry"},
+  "harnesses": [
     {
       "name": "david",
       "description": "A different David harness",
-      "repo": "github.com/eyelock/assistants",
-      "path": "ynh/david",
-      "vendors": ["claude"],
-      "version": "0.1.0"
+      "version": "0.1.0",
+      "source": {
+        "type": "github",
+        "repo": "github.com/eyelock/assistants",
+        "path": "ynh/david"
+      }
     }
   ]
 }
@@ -185,7 +193,40 @@ cat > /tmp/ynh-ns-tutorial/legacy/.harness.json << 'EOF'
 EOF
 ```
 
-Migrate it in place. `ynd migrate` deletes `.harness.json`, so it lists what it
+ynh no longer reads `.harness.json`. A command that reads a harness refuses
+this tree, names the fix, and leaves the tree exactly as it was:
+
+```bash
+ynd validate /tmp/ynh-ns-tutorial/legacy
+```
+
+Expected: the harness is reported `INVALID` (exit 1) with this issue:
+```
+  - /tmp/ynh-ns-tutorial/legacy uses the legacy .harness.json manifest, which ynh no longer reads; convert it with: ynd migrate /tmp/ynh-ns-tutorial/legacy
+```
+
+`ynd preview`, `ynd export`, `ynh install` and `ynh run` refuse it the same
+way:
+
+```bash
+ynh install /tmp/ynh-ns-tutorial/legacy
+```
+
+Expected (exit 1):
+```
+Error: /tmp/ynh-ns-tutorial/legacy uses the legacy .harness.json manifest, which ynh no longer reads; convert it with: ynd migrate /tmp/ynh-ns-tutorial/legacy
+```
+
+```bash
+find /tmp/ynh-ns-tutorial/legacy -type f | sort
+```
+
+Expected, unchanged:
+```
+/tmp/ynh-ns-tutorial/legacy/.harness.json
+```
+
+Convert it with `ynd migrate`. It deletes `.harness.json`, so it lists what it
 will touch and asks first; pass `-y` to skip the prompt (also implied by
 `$YNH_YES` or CI). Without it, a scripted run declines and exits non-zero. Use
 `--dry-run` to list what would be migrated and change nothing.
@@ -198,6 +239,7 @@ Expected:
 ```
 1 director(ies) would be migrated under /tmp/ynh-ns-tutorial/legacy:
   /tmp/ynh-ns-tutorial/legacy
+    harness format: .harness.json → .agents/harness/plugin.json
 Migrated /tmp/ynh-ns-tutorial/legacy
   harness format: .harness.json → .agents/harness/plugin.json
 Migrated 1 director(ies).
@@ -214,7 +256,22 @@ Expected:
 /tmp/ynh-ns-tutorial/legacy/.agents/harness/plugin.json
 ```
 
-`ynd migrate` runs the migration filter chain — it handles any registered
+The harness now validates and loads, so the install that was refused
+succeeds. The converted `plugin.json` also gains the `$schema` a 0.1 manifest
+could leave out:
+
+```bash
+ynd validate /tmp/ynh-ns-tutorial/legacy
+ynh install /tmp/ynh-ns-tutorial/legacy
+```
+
+```
+Installed harness "legacy-demo"
+  Location: /tmp/ynh-ns-tutorial/legacy
+  Launcher: /Users/<you>/.ynh/bin/legacy-demo
+```
+
+`ynd migrate` runs the migration filter chain, so it handles any registered
 migrator. Adding a new format migrator in future releases does not require a
 new command.
 
@@ -238,7 +295,9 @@ Expected:
 ```
 2 director(ies) would be migrated under /tmp/ynh-ns-tutorial/bulk:
   /tmp/ynh-ns-tutorial/bulk/h1
+    harness format: .harness.json → .agents/harness/plugin.json
   /tmp/ynh-ns-tutorial/bulk/h2
+    harness format: .harness.json → .agents/harness/plugin.json
 Migrated /tmp/ynh-ns-tutorial/bulk/h1
   harness format: .harness.json → .agents/harness/plugin.json
 Migrated /tmp/ynh-ns-tutorial/bulk/h2
@@ -248,31 +307,19 @@ Migrated 2 director(ies).
 
 ## Transparent migration on use
 
-Legacy harnesses do not strictly require `ynd migrate`. ynh runs the migration
-chain automatically whenever a harness is loaded or installed, so an
-unmigrated 0.1 harness still works:
+There is none any more. Earlier releases converted a legacy tree silently
+whenever a command read it, so `ynd validate` or `ynh install` left a working
+copy with a deleted `.harness.json` and a new `.agents/harness/` nobody asked
+for. Now only `ynd migrate`, which asks first, rewrites a tree you own.
 
-```bash
-mkdir -p /tmp/ynh-ns-tutorial/transparent
-cat > /tmp/ynh-ns-tutorial/transparent/.harness.json << 'EOF'
-{"name":"transparent","version":"0.1.0"}
-EOF
+A remote harness or registry still on a legacy manifest is refused too. ynh
+does not convert its cached copy, because the next fetch would undo it; the
+error says the manifest is the upstream's and asks its maintainer to run
+`ynd migrate` and publish the result.
 
-ynh install /tmp/ynh-ns-tutorial/transparent
-```
-
-```
-Installed harness "transparent"
-  Location: /tmp/ynh-ns-tutorial/transparent
-  Launcher: /Users/<you>/.ynh/bin/transparent
-```
-
-The install succeeds. A local install is a pointer to the source directory, so
-`Location` is that directory, and the chain migrates it in place to the 0.2
-format (`.agents/harness/plugin.json`) before the harness is registered.
-
-`ynd migrate` is still useful when you want to convert a whole tree
-intentionally — for example when cleaning up a source repo before publishing.
+The one exception is ynh's own install directory: a copy that a very old ynh
+installed under `~/.ynh/harnesses/` is converted the next time it is loaded,
+since nobody else's files change.
 
 ## `ynh migrate` — upgrade `~/.ynh` schema
 
@@ -304,7 +351,7 @@ broken install on disk. Inspect the quarantine:
 ynh quarantine list
 ```
 
-Expected (one row per quarantined entry, or an empty table):
+Expected: `No quarantined entries.` when nothing has been quarantined. Otherwise one row per entry:
 ```
 NAME                  ORIGINAL PATH                                 REASON
 broken-thing          /Users/<you>/.ynh/harnesses/broken-thing      plugin manifest has no name
@@ -327,7 +374,6 @@ or delete it (`drop`).
 ```bash
 ynh uninstall github.com/eyelock/assistants/david 2>/dev/null
 ynh uninstall local/legacy-demo 2>/dev/null
-ynh uninstall local/transparent 2>/dev/null
 ynh uninstall local/h1 2>/dev/null
 ynh uninstall local/h2 2>/dev/null
 ynh registry remove /tmp/ynh-ns-tutorial/reg-a 2>/dev/null
@@ -348,9 +394,10 @@ rm -rf /tmp/ynh-ns-tutorial
 - Short launchers (`~/.ynh/bin/<name>`) are created opportunistically when
   the short name is unambiguous; otherwise invoke the harness via
   `ynh run <canonical-id>`.
-- `ynd migrate` converts harness-source directories from 0.1 to 0.2 format
-  (`.harness.json` → `.agents/harness/plugin.json`, `registry.json` →
-  `.agents/harness/marketplace.json`).
+- `ynd migrate` is the only command that converts a 0.1 harness-source
+  directory to the 0.2 format (`.harness.json` → `.agents/harness/plugin.json`,
+  `registry.json` → `.agents/harness/marketplace.json`). Every other command
+  refuses a legacy tree with that fix and leaves it untouched.
 - `ynh migrate` upgrades the `~/.ynh` home directory schema after a major
   ynh upgrade.
 - `ynh quarantine list/restore/drop` manages harnesses set aside because

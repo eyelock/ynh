@@ -242,7 +242,7 @@ func TestCmdSearch_MatchesDescription(t *testing.T) {
 		t.Fatal(err)
 	}
 	content := `{"name":"myharness","version":"0.1.0","description":"A golang development assistant"}`
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(content), 0o644); err != nil {
+	if err := writePluginJSONFile(dir, []byte(content)); err != nil {
 		t.Fatal(err)
 	}
 

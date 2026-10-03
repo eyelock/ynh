@@ -1,4 +1,5 @@
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "composed",
   "version": "0.1.0",
   "description": "Composed harness with embedded artifacts",

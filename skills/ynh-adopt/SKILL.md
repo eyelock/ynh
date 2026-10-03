@@ -120,9 +120,9 @@ ynd migrate .
 ```
 
 That runs the whole migration chain and converts it to
-`.agents/harness/plugin.json` in place. `ynd validate` also migrates transparently,
-so a harness can appear to work while still carrying the old file — run
-`migrate` explicitly so the change is a reviewable diff rather than a surprise.
+`.agents/harness/plugin.json` in place, as a reviewable diff. It is the only
+command that does: `ynd validate`, `ynh install` and the rest refuse a tree
+that still has only `.harness.json`, name this fix, and change nothing.
 
 ## Step 5 — Prove nothing was lost
 

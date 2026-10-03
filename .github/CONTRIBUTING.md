@@ -330,9 +330,11 @@ type Chain []Migrator
 func (c Chain) Run(dir string) ([]string, error)  // returns descriptions of applied migrations
 ```
 
-**Adding a migration:** create one file in `internal/migration/`, implement `Migrator`, add to `DefaultChain()`.
+**Adding a migration:** create one file in `internal/migration/`, implement `Migrator`, add it to `FormatChain()` and `MigrateChain()`.
 
-**Removing a migration:** delete the file and remove the struct from `DefaultChain()`. No other code changes — loaders never branch on old formats directly.
+**Removing a migration:** delete the file and remove the struct from the chains. No other code changes: loaders never branch on old formats directly.
+
+**Which trees a migrator may rewrite:** only `MigrateChain()`, run by `ynd migrate` behind its confirmation, rewrites a tree ynh did not install. `FormatChain()`, which every read command runs, rewrites only installs under `~/.ynh/harnesses/` (`insideHarnessesDir`). A format that has no read fallback (`.harness.json`, `registry.json`) makes `FormatChain()` return an error naming `ynd migrate <dir>` instead (#406). Keep each decision a pure predicate, per `.claude/rules/destructive-operations.md`.
 
 **Rule:** loaders (`internal/plugin`, `internal/registry`, `internal/harness`) call the migration chain before reading. They assume the new format. Legacy detection logic lives only in `Applies()` methods inside `internal/migration/`.
 
@@ -547,8 +549,8 @@ Profiles use merge semantics when applied — see `ResolveProfile()` in `interna
 When `ynh run` is invoked, the harness source is resolved in this order:
 
 1. **Positional canonical id**: `ynh run local/my-harness` (or `ynh run github.com/org/repo/name`) → `harness.LoadQualified` classifies the ref via `namespace.Classify`, then `LoadByID` reads the schema-2 install at `~/.ynh/harnesses/<idfsname>/.agents/harness/plugin.json` (or the pointer file at `~/.ynh/installed/<idfsname>.json` for forks). Bare names (`ynh run my-harness`) are rejected with `BadRefError`.
-2. **`--harness-file`**: `ynh run --harness-file path/.harness.json` → loads a legacy single-file manifest directly from the given path. Path-based, no canonical-id classification.
-3. **Auto-discovery**: bare `ynh run` → migrates the current working directory if needed, then loads `.agents/harness/plugin.json` from cwd.
+2. **`--harness-file`**: `ynh run --harness-file path/manifest.json` → loads a single-file manifest directly from the given path. Path-based, no canonical-id classification.
+3. **Auto-discovery**: bare `ynh run` → loads `.agents/harness/plugin.json` from cwd. A cwd whose only manifest is `.harness.json` is refused with the `ynd migrate` fix; cwd is never rewritten.
 
 For `--harness-file` and auto-discovery, the harness is assembled into `~/.ynh/run/_inline-<hash>/` (hash of the source directory for stable run dirs). For positional refs, the run-dir is the canonical id's fs name (`local/foo` → `~/.ynh/run/local--foo/`) — keeping `~/.ynh/run/` paths flat while giving same-named installs with distinct canonical ids distinct run dirs. While a bare name is unambiguous (one install claims it), run also maintains a legacy alias symlink (`run/<name>` → `<idfsname>`) so project symlinks planted before the id-keyed re-key keep resolving; when several installs claim the name the alias is removed and dangling project symlinks are re-planted on the next run (see `symlinkIntact`).
 
@@ -569,7 +571,7 @@ Both layouts are id-keyed under schema 2. The schema-1 layouts (`harnesses/<name
 During install:
 - `ynh install` copies the entire harness directory (including the `.agents/harness/` directory) to `~/.ynh/harnesses/<idfsname>/`. The id is derived from the recorded source URL plus the harness name via `namespace.CanonicalID(sourceURL, name)`.
 - For canonical-id install sources (`ynh install github.com/eyelock/assistants/researcher`), `cmdInstall` synthesizes the clone URL from the first three segments and uses `sources.Discover` to find a manifest matching the trailing segment within the cloned repo.
-- If the source uses the legacy `.harness.json` single-file format, the migration chain converts it to `.agents/harness/plugin.json` in place during install.
+- If the source uses the legacy `.harness.json` single-file format, install refuses it with an error naming `ynd migrate <dir>` and changes nothing. A remote source still on it gets the same refusal, pointing at its maintainer.
 - ynh writes `~/.ynh/harnesses/<idfsname>/.agents/harness/installed.json` recording install provenance — separate from the author-controlled `plugin.json`. This records where the harness was installed from (source type, URL/path, timestamp), and a `resolved[]` slice of per-include/per-delegate SHAs captured at fetch time.
 - ynh then pre-fetches all `includes` and `delegates_to` Git repos into `~/.ynh/cache/`. This ensures `ynh run` works offline and validates all Git refs at install time. If any fetch fails, the install fails with a clear error.
 - ynh stamps `~/.ynh/.schema-version` to the current schema version after a successful install, so subsequent commands skip the auto-migrate gate cleanly.

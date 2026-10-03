@@ -50,7 +50,7 @@ func cmdRun(args []string) error {
 		return fmt.Errorf("cannot use --focus and a trailing prompt together (focus includes a prompt)")
 	}
 
-	// Resolve harness source: name > --harness-file > .harness.json in cwd > error
+	// Resolve harness source: name > --harness-file > manifest in cwd > error
 	var p *harness.Harness
 	var harnessDir string // directory containing harness content (for local artifacts)
 	var err error
@@ -71,14 +71,14 @@ func cmdRun(args []string) error {
 		harnessDir = filepath.Dir(ra.HarnessFile)
 
 	default:
-		// Auto-discover a harness in cwd. The migration chain converts any
-		// legacy format transparently so we only need to load the new format.
+		// Auto-discover a harness in cwd. The format chain never rewrites
+		// cwd; it refuses a manifest ynh no longer reads, with the fix.
 		cwd, wdErr := os.Getwd()
 		if wdErr != nil {
 			return wdErr
 		}
 		if _, err := migration.FormatChain().Run(cwd); err != nil {
-			return fmt.Errorf("migrating harness in cwd: %w", err)
+			return err
 		}
 		if !plugin.IsPluginDir(cwd) {
 			return fmt.Errorf("usage: ynh run <harness-name> [-v vendor] [--focus name] [--harness-file path] [-- prompt]")

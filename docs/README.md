@@ -59,7 +59,7 @@ ynd export ./david                 # vendor-native plugins
 ynd marketplace build              # build a shareable marketplace
 ```
 
-**Git is the package manager.** No lock files. No build steps. Skills from [skills.sh](https://skills.sh), agents from your team repo, rules from a company monorepo - they all work as-is. Standard-format files, versioned with Git tags. Registries are just Git repos with a `registry.json`.
+**Git is the package manager.** No lock files. No build steps. Skills from [skills.sh](https://skills.sh), agents from your team repo, rules from a company monorepo - they all work as-is. Standard-format files, versioned with Git tags. Registries are just Git repos with a `.agents/harness/marketplace.json`.
 
 ## The 60-second version
 

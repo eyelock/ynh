@@ -286,7 +286,7 @@ Requires Docker installed and running.
 | Uninstall by canonical id | [Uninstall by canonical id](namespacing-and-migration.md#uninstall-by-canonical-id) |
 | Migrate a legacy harness with `ynd migrate` | [Migrate a legacy harness with `ynd migrate`](namespacing-and-migration.md#migrate-a-legacy-harness-with-ynd-migrate) |
 | Recursive migration | [Recursive migration](namespacing-and-migration.md#recursive-migration) |
-| Transparent migration on use | [Transparent migration on use](namespacing-and-migration.md#transparent-migration-on-use) |
+| Read commands refuse a legacy tree; only `ynd migrate` converts it | [Transparent migration on use (removed)](namespacing-and-migration.md#transparent-migration-on-use) |
 | `ynh migrate` — upgrade `~/.ynh` schema | [`ynh migrate` — upgrade `~/.ynh` schema](namespacing-and-migration.md#ynh-migrate-upgrade-ynh-schema) |
 | `ynh quarantine` — recover from broken installs | [`ynh quarantine` — recover from broken installs](namespacing-and-migration.md#ynh-quarantine-recover-from-broken-installs) |
 | Clean up | [Clean up](namespacing-and-migration.md#clean-up) |

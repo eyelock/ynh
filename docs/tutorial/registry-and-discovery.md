@@ -1,6 +1,6 @@
 # Registry & Discovery
 
-Search for harnesses from curated registries and install them by name. A registry is just a Git repo with a `registry.json` index.
+Search for harnesses from curated registries and install them by name. A registry is just a Git repo with a `.agents/harness/marketplace.json` index.
 
 ## Prerequisites
 
@@ -20,43 +20,51 @@ mkdir -p /tmp/ynh-tutorial
 
 ## Create a local registry
 
-A registry is a Git repo containing `registry.json`:
+A registry is a Git repo containing `.agents/harness/marketplace.json`:
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/my-registry
+mkdir -p /tmp/ynh-tutorial/my-registry/.agents/harness
 cd /tmp/ynh-tutorial/my-registry
 
-cat > registry.json << 'EOF'
+cat > .agents/harness/marketplace.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
   "name": "tutorial-registry",
-  "description": "Sample registry for the ynh tutorial",
-  "entries": [
+  "owner": {"name": "tutorial"},
+  "metadata": {"description": "Sample registry for the ynh tutorial"},
+  "harnesses": [
     {
       "name": "david",
       "description": "Full-stack development harness with Go expertise",
+      "version": "0.1.0",
       "keywords": ["go", "development", "full-stack", "testing"],
-      "repo": "github.com/eyelock/assistants",
-      "path": "ynh/david",
-      "vendors": ["claude", "codex", "cursor"],
-      "version": "0.1.0"
+      "source": {
+        "type": "github",
+        "repo": "github.com/eyelock/assistants",
+        "path": "ynh/david"
+      }
     },
     {
       "name": "planner",
       "description": "Project planning and architecture harness",
+      "version": "0.1.0",
       "keywords": ["planning", "architecture", "design"],
-      "repo": "github.com/eyelock/assistants",
-      "path": "ynh/planner",
-      "vendors": ["claude"],
-      "version": "0.1.0"
+      "source": {
+        "type": "github",
+        "repo": "github.com/eyelock/assistants",
+        "path": "ynh/planner"
+      }
     },
     {
       "name": "media-management",
       "description": "Music library processing and Apple Music import",
+      "version": "0.1.0",
       "keywords": ["media", "music", "mp3", "apple-music", "ffmpeg"],
-      "repo": "github.com/eyelock/assistants",
-      "path": "plugins/media-management",
-      "vendors": ["claude"],
-      "version": "0.1.0"
+      "source": {
+        "type": "github",
+        "repo": "github.com/eyelock/assistants",
+        "path": "plugins/media-management"
+      }
     }
   ]
 }
@@ -64,6 +72,12 @@ EOF
 
 git init && git add . && git commit -m "init registry"
 ```
+
+> **An older registry with a top-level `registry.json`** is no longer read.
+> `ynh registry add` accepts it, but search and install then fail with
+> `... uses the legacy registry.json, which ynh no longer reads`. If the
+> registry is yours, convert it with `ynd migrate <dir>` and commit the
+> result; if it is someone else's, ask its maintainer to.
 
 ## Add the registry
 
@@ -183,7 +197,7 @@ After install, refer to the harness by its canonical id (`github.com/eyelock/ass
 
 ynh follows the Claude Code marketplace model — identity is a git ref, optionally anchored to a commit SHA. There is no separate semver resolver. To track "version 1.0" you set `"ref": "v1.0"`, not a version field.
 
-The legacy `registry.json` format used in [Create a local registry](#create-a-local-registry) has no per-entry pinning. Modern marketplaces use `.agents/harness/marketplace.json` with a `source` object that supports `ref` (branch, tag, or SHA) and `sha` (commit verification):
+The entries in [Create a local registry](#create-a-local-registry) track the repo's default branch. An entry's `source` object also supports `ref` (branch, tag, or SHA) and `sha` (commit verification):
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/pinned-registry/.agents/harness
@@ -304,7 +318,7 @@ Expected:
   tutorial-registry (up to date, 3 entries)
 ```
 
-This fetches the latest `registry.json` from each configured registry.
+This fetches the latest `.agents/harness/marketplace.json` from each configured registry.
 
 ## Remove a registry
 
@@ -459,7 +473,7 @@ ynh uninstall github.com/eyelock/assistants/tester 2>/dev/null
 
 ## What you learned
 
-- A registry is a Git repo with `registry.json` listing available harnesses
+- A registry is a Git repo with `.agents/harness/marketplace.json` listing available harnesses
 - `ynh registry add/list/remove/update` manages registry sources
 - `ynh search [query]` queries both registries and local sources; omit the query to list all
 - `ynh install <name>` resolves from registries and local sources (exact match installs, multiple matches prompt)

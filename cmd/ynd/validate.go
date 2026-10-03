@@ -69,7 +69,7 @@ func cmdValidate(args []string) error {
 			return fmt.Errorf("validation failed")
 		}
 		fmt.Println("No harness directories found.")
-		fmt.Println("A harness requires .agents/harness/plugin.json (or the deprecated .ynh-plugin/plugin.json or .harness.json; ynd migrate moves both).")
+		fmt.Println("A harness requires .agents/harness/plugin.json (or the deprecated .ynh-plugin/plugin.json, which ynd migrate moves).")
 		return nil
 	}
 
@@ -94,6 +94,10 @@ func cmdValidate(args []string) error {
 // validateRootMarketplace validates the registry marketplace.json in dir's
 // manifest directory if it exists.
 func validateRootMarketplace(dir string) error {
+	if legacy := migration.LegacyRegistry(dir); legacy != nil {
+		fmt.Printf("%s: %v\n", dir, legacy)
+		return fmt.Errorf("validation failed")
+	}
 	if !plugin.IsRegistryDir(dir) {
 		return nil
 	}
@@ -146,18 +150,17 @@ func validateFile(path string) error {
 	return nil
 }
 
+// isHarnessRoot reports whether dir is a harness, including one whose only
+// manifest is the legacy .harness.json: validateHarness reports that as an
+// issue rather than skipping the tree as manifest-less. Read only: validate
+// never converts a tree (#406).
 func isHarnessRoot(dir string) bool {
-	// Run the migration chain first so a legacy .harness.json is converted
-	// transparently before we decide whether this dir is a harness root.
-	_, _ = migration.FormatChain().Run(dir)
-	return plugin.IsPluginDir(dir)
+	return plugin.IsPluginDir(dir) || migration.LegacyHarnessManifest(dir) != nil
 }
 
-// harnessManifestPath returns the path to the manifest file for dir,
-// after running the migration chain so the result is always the new format
-// (or empty if no harness manifest exists).
+// harnessManifestPath returns the path to dir's plugin.json, or "" if it has
+// none.
 func harnessManifestPath(dir string) string {
-	_, _ = migration.FormatChain().Run(dir)
 	if plugin.IsPluginDir(dir) {
 		return plugin.PluginPath(dir)
 	}
@@ -225,13 +228,13 @@ func validateHarness(dir string) error {
 	}
 	issues = append(issues, misplacedManifestIssues(dir)...)
 
-	// Migration chain runs inside harnessManifestPath so manifestPath is
-	// always the new format (or empty if no harness manifest exists).
 	manifestPath := harnessManifestPath(dir)
 	const manifestLabel = ".agents/harness/plugin.json"
 	var data []byte
 	var err error
-	if manifestPath == "" {
+	if legacy := migration.LegacyHarnessManifest(dir); legacy != nil {
+		issues = append(issues, legacy.Error())
+	} else if manifestPath == "" {
 		issues = append(issues, "missing .agents/harness/plugin.json")
 	} else {
 		data, err = os.ReadFile(manifestPath)
@@ -695,7 +698,7 @@ func validateProfileMCPServers(profile map[string]any) []string {
 	return issues
 }
 
-// validateHarnessFocus validates focus entries inside .harness.json.
+// validateHarnessFocus validates focus entries inside plugin.json.
 func validateHarnessFocus(hj map[string]any) []string {
 	var issues []string
 

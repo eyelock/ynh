@@ -244,10 +244,10 @@ Use `ynh status` to see all symlink installations and `ynh prune` to clean up or
 
 ### Discover and Install From Registries
 
-A registry is a Git repository containing a `registry.json` that indexes available harnesses. You can add registries to discover and install harnesses by name instead of URL.
+A registry is a Git repository containing a `.agents/harness/marketplace.json` that indexes available harnesses. You can add registries to discover and install harnesses by name instead of URL.
 
 ```bash
-# Add a registry (a Git repo with registry.json)
+# Add a registry (a Git repo with .agents/harness/marketplace.json)
 ynh registry add github.com/your-org/ynh-registry
 
 # Search across all registries

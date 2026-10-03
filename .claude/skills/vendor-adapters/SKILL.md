@@ -100,7 +100,7 @@ What ynh calls each concept vs what each vendor calls it and where it lives.
 
 ynh's source manifest is `.agents/harness/plugin.json`. The tables below shorten
 it to `plugin.json` to fit the column; `.harness.json` is the legacy form,
-converted by `ynd migrate`.
+converted only by `ynd migrate` and refused by every other command.
 
 ```
 +-------------------+----------------------------------+----------------------------------+----------------------------------+

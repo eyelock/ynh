@@ -277,16 +277,17 @@ func buildHarnessEntry(srcDir, outputDir string, vendors []string, cfg *config.C
 // buildPluginEntry copies a self-contained plugin directory as-is,
 // generating missing vendor manifests.
 func buildPluginEntry(srcDir, outputDir string, vendors []string) error {
+	// Refuse a manifest ynh no longer reads before copying, so the error
+	// names the source rather than the staging copy (#406).
+	if _, err := migration.FormatChain().Run(srcDir); err != nil {
+		return err
+	}
 	if err := assembler.CopyDir(srcDir, outputDir); err != nil {
 		return fmt.Errorf("copying plugin: %w", err)
 	}
 
-	// Load metadata for manifest generation — run migration chain first so any
-	// legacy .harness.json becomes the new plugin.json, then fall back to the
+	// Load metadata for manifest generation, falling back to the
 	// vendor-native .claude-plugin/plugin.json format for standalone plugins.
-	if _, err := migration.FormatChain().Run(outputDir); err != nil {
-		return fmt.Errorf("migrating source format: %w", err)
-	}
 	var hj *plugin.HarnessJSON
 	var err error
 	if plugin.IsPluginDir(outputDir) {
