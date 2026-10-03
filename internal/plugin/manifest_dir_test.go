@@ -3,6 +3,7 @@ package plugin
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -72,18 +73,178 @@ func TestLoadPluginJSON_CanonicalWinsOverLegacy(t *testing.T) {
 	if hj.Name != "canonical" {
 		t.Errorf("Name = %q, want canonical: .agents/harness must shadow .ynh-plugin", hj.Name)
 	}
-	if !ShadowedLegacyManifest(dir) {
-		t.Error("ShadowedLegacyManifest should report both copies present")
+	if got := MisplacedManifestFiles(dir); len(got) != 1 || got[0] != ".ynh-plugin/plugin.json" {
+		t.Errorf("MisplacedManifestFiles = %v, want the shadowed .ynh-plugin/plugin.json", got)
 	}
 }
 
-func TestShadowedLegacyManifest_FalseForOneCopy(t *testing.T) {
-	for _, md := range []string{PluginDir, LegacyPluginDir} {
-		dir := t.TempDir()
-		writeAt(t, dir, md, PluginFile, `{"name":"x","version":"1.0.0"}`)
-		if ShadowedLegacyManifest(dir) {
-			t.Errorf("%s alone must not count as shadowed", md)
-		}
+const (
+	manifestBody    = `{"name":"x","version":"1.0.0"}`
+	installedBody   = `{"source_type":"local","source":"/src","installed_at":"now"}`
+	marketplaceBody = `{"name":"reg","owner":{"name":"o"},"harnesses":[]}`
+)
+
+func TestManifestDir(t *testing.T) {
+	cases := []struct {
+		name   string
+		files  map[string]string // file -> manifest dir
+		want   string
+		wantOK bool
+	}{
+		{"canonical", map[string]string{PluginFile: PluginDir}, PluginDir, true},
+		{"legacy", map[string]string{PluginFile: LegacyPluginDir}, LegacyPluginDir, true},
+		{"siblings do not decide", map[string]string{InstalledFile: PluginDir, MarketplaceFile: PluginDir}, "", false},
+		{"legacy plugin, canonical sibling", map[string]string{PluginFile: LegacyPluginDir, InstalledFile: PluginDir}, LegacyPluginDir, true},
+		{"none", nil, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for f, md := range tc.files {
+				writeAt(t, dir, md, f, "{}")
+			}
+			got, ok := ManifestDir(dir)
+			if got != tc.want || ok != tc.wantOK {
+				t.Errorf("ManifestDir = (%q, %v), want (%q, %v)", got, ok, tc.want, tc.wantOK)
+			}
+		})
+	}
+}
+
+func TestMisplacedManifestFiles(t *testing.T) {
+	type file struct{ md, name string }
+	cases := []struct {
+		name  string
+		files []file
+		want  []string
+	}{
+		{"canonical only", []file{{PluginDir, PluginFile}, {PluginDir, InstalledFile}, {PluginDir, MarketplaceFile}}, nil},
+		{"legacy only", []file{{LegacyPluginDir, PluginFile}, {LegacyPluginDir, InstalledFile}, {LegacyPluginDir, MarketplaceFile}}, nil},
+		{"canonical plugin alone", []file{{PluginDir, PluginFile}}, nil},
+		{"legacy plugin alone", []file{{LegacyPluginDir, PluginFile}}, nil},
+		{"canonical plugin, legacy siblings",
+			[]file{{PluginDir, PluginFile}, {LegacyPluginDir, InstalledFile}, {LegacyPluginDir, MarketplaceFile}},
+			[]string{".ynh-plugin/installed.json", ".ynh-plugin/marketplace.json"}},
+		{"legacy plugin, canonical sibling",
+			[]file{{LegacyPluginDir, PluginFile}, {PluginDir, InstalledFile}},
+			[]string{".agents/harness/installed.json"}},
+		{"shadowed plugin and sibling",
+			[]file{{PluginDir, PluginFile}, {LegacyPluginDir, PluginFile}, {LegacyPluginDir, InstalledFile}},
+			[]string{".ynh-plugin/plugin.json", ".ynh-plugin/installed.json"}},
+		{"no plugin.json anywhere", []file{{PluginDir, InstalledFile}, {LegacyPluginDir, MarketplaceFile}}, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for _, f := range tc.files {
+				writeAt(t, dir, f.md, f.name, "{}")
+			}
+			got := MisplacedManifestFiles(dir)
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Errorf("MisplacedManifestFiles = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// A tree with plugin.json in .agents/harness reads every sibling from
+// .agents/harness too, never from .ynh-plugin.
+func TestMixedTree_SiblingsFollowPluginJSON(t *testing.T) {
+	dir := t.TempDir()
+	writeAt(t, dir, PluginDir, PluginFile, manifestBody)
+	writeAt(t, dir, LegacyPluginDir, MarketplaceFile, marketplaceBody)
+
+	if want := filepath.Join(dir, PluginDir, MarketplaceFile); MarketplacePath(dir) != want {
+		t.Errorf("MarketplacePath = %q, want %q beside plugin.json", MarketplacePath(dir), want)
+	}
+	if IsRegistryDir(dir) {
+		t.Error("IsRegistryDir must agree with LoadMarketplaceJSON and ignore an index split from plugin.json")
+	}
+
+	writeAt(t, dir, PluginDir, MarketplaceFile, `{"name":"canonical","owner":{"name":"o"},"harnesses":[]}`)
+	mj, err := LoadMarketplaceJSON(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mj.Name != "canonical" {
+		t.Errorf("Name = %q, want canonical", mj.Name)
+	}
+}
+
+// An install made before this change can have plugin.json in .agents/harness
+// and installed.json in .ynh-plugin. Its provenance must still load.
+func TestMixedTree_InstalledJSONFallback(t *testing.T) {
+	dir := t.TempDir()
+	writeAt(t, dir, PluginDir, PluginFile, manifestBody)
+	legacy := writeAt(t, dir, LegacyPluginDir, InstalledFile, installedBody)
+
+	if got := InstalledPath(dir); got != legacy {
+		t.Errorf("InstalledPath = %q, want the split %q", got, legacy)
+	}
+	ins, err := LoadInstalledJSON(dir)
+	if err != nil {
+		t.Fatalf("provenance lost: %v", err)
+	}
+	if ins.Source != "/src" {
+		t.Errorf("Source = %q, want /src", ins.Source)
+	}
+}
+
+// Rewriting provenance on a split tree puts it beside plugin.json and removes
+// the stale copy, so ynh never leaves a split behind.
+func TestSaveInstalledJSON_HealsSplitTree(t *testing.T) {
+	cases := []struct{ pluginIn, staleIn string }{
+		{PluginDir, LegacyPluginDir},
+		{LegacyPluginDir, PluginDir},
+	}
+	for _, tc := range cases {
+		t.Run(tc.pluginIn, func(t *testing.T) {
+			dir := t.TempDir()
+			writeAt(t, dir, tc.pluginIn, PluginFile, manifestBody)
+			stale := writeAt(t, dir, tc.staleIn, InstalledFile, installedBody)
+
+			if err := SaveInstalledJSON(dir, &InstalledJSON{SourceType: "local", Source: "/new", InstalledAt: "now"}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(filepath.Join(dir, tc.pluginIn, InstalledFile)); err != nil {
+				t.Errorf("installed.json not beside plugin.json: %v", err)
+			}
+			if _, err := os.Stat(stale); !os.IsNotExist(err) {
+				t.Errorf("stale %s should be gone: %v", stale, err)
+			}
+			if got := MisplacedManifestFiles(dir); got != nil {
+				t.Errorf("tree still split after save: %v", got)
+			}
+			ins, err := LoadInstalledJSON(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ins.Source != "/new" {
+				t.Errorf("Source = %q, want /new", ins.Source)
+			}
+		})
+	}
+}
+
+// A new sibling of a legacy plugin.json joins it, even when a stray copy of
+// that sibling sits in .agents/harness.
+func TestSaveMarketplaceJSON_FollowsPluginJSON(t *testing.T) {
+	dir := t.TempDir()
+	writeAt(t, dir, LegacyPluginDir, PluginFile, manifestBody)
+	writeAt(t, dir, PluginDir, MarketplaceFile, marketplaceBody)
+
+	if err := SaveMarketplaceJSON(dir, &MarketplaceJSON{Name: "new", Owner: &OwnerInfo{Name: "o"}}); err != nil {
+		t.Fatal(err)
+	}
+	mj, err := LoadMarketplaceJSON(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mj.Name != "new" {
+		t.Errorf("Name = %q, want new", mj.Name)
+	}
+	if MarketplacePath(dir) != filepath.Join(dir, LegacyPluginDir, MarketplaceFile) {
+		t.Errorf("MarketplacePath = %q, want beside the legacy plugin.json", MarketplacePath(dir))
 	}
 }
 

@@ -18,8 +18,14 @@ This one is not a migrator, and nothing moves on its own:
 - New manifests (`ynd create harness`, a synthesized manifest for a bare
   `AGENTS.md` directory, the `.harness.json` migrator below) are written to
   `.agents/harness/`.
-- If both directories exist, `.agents/harness/` wins. `ynd validate` reports
-  the shadowed `.ynh-plugin/` copy so it cannot be edited by mistake.
+- The directory that holds `plugin.json` is the harness's manifest
+  directory, and `installed.json` and `marketplace.json` are read from and
+  written to that same directory. A harness never reads half its manifest
+  from each.
+- If both directories hold a `plugin.json`, `.agents/harness/` wins.
+  `ynd validate` reports the shadowed `.ynh-plugin/` copy so it cannot be
+  edited by mistake, and any other manifest file split away from
+  `plugin.json`, naming each one.
 
 To move a harness onto the documented layout:
 

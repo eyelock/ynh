@@ -607,7 +607,7 @@ func TestMigrate_InstallTree_LegacyHarnessNameFallback(t *testing.T) {
 	harnessesDir := filepath.Join(home, "harnesses")
 	_ = os.MkdirAll(harnessesDir, 0o755)
 
-	// A dir that qualifies as IsLegacyPluginDir (.claude-plugin/plugin.json)
+	// A dir that qualifies as IsClaudePluginDir (.claude-plugin/plugin.json)
 	// but has NO .ynh-plugin/plugin.json, so loadHarnessName falls through
 	// to LoadHarnessJSON (.harness.json).
 	dir := filepath.Join(harnessesDir, "legacy")

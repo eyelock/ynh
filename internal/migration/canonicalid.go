@@ -460,7 +460,7 @@ func isLegacyNamespacedParent(dir string) bool {
 	if !strings.Contains(filepath.Base(dir), "--") {
 		return false
 	}
-	if plugin.IsPluginDir(dir) || plugin.IsLegacyPluginDir(dir) {
+	if plugin.IsPluginDir(dir) || plugin.IsClaudePluginDir(dir) {
 		return false
 	}
 	// Confirm it has at least one child dir with a plugin manifest.
@@ -473,7 +473,7 @@ func isLegacyNamespacedParent(dir string) bool {
 			continue
 		}
 		childPath := filepath.Join(dir, c.Name())
-		if plugin.IsPluginDir(childPath) || plugin.IsLegacyPluginDir(childPath) {
+		if plugin.IsPluginDir(childPath) || plugin.IsClaudePluginDir(childPath) {
 			return true
 		}
 	}
@@ -490,7 +490,7 @@ func migrateNamespacedParent(parent, harnessesDir string, opts MigrateOpts, m *M
 			continue
 		}
 		childPath := filepath.Join(parent, c.Name())
-		if !plugin.IsPluginDir(childPath) && !plugin.IsLegacyPluginDir(childPath) {
+		if !plugin.IsPluginDir(childPath) && !plugin.IsClaudePluginDir(childPath) {
 			continue
 		}
 		if err := migrateOneInstall(childPath, harnessesDir, c.Name(), "install_tree_ns", opts, m); err != nil {
@@ -508,7 +508,7 @@ func migrateNamespacedParent(parent, harnessesDir string, opts MigrateOpts, m *M
 }
 
 func migrateFlatOrSchema2Install(dir, harnessesDir string, opts MigrateOpts, m *Manifest) error {
-	if !plugin.IsPluginDir(dir) && !plugin.IsLegacyPluginDir(dir) {
+	if !plugin.IsPluginDir(dir) && !plugin.IsClaudePluginDir(dir) {
 		// Empty / unrelated dir — leave it alone.
 		return nil
 	}

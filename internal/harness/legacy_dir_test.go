@@ -108,3 +108,32 @@ func TestLegacyHarnessFile_MigratesToCanonicalDir(t *testing.T) {
 		t.Errorf("migration must not write to %s", plugin.LegacyPluginDir)
 	}
 }
+
+// An install whose plugin.json is in .agents/harness but whose installed.json
+// was left in .ynh-plugin still loads its provenance: a split tree must never
+// silently drop where a harness came from.
+func TestLoadDir_SplitTreeKeepsProvenance(t *testing.T) {
+	dir := t.TempDir()
+	canon := filepath.Join(dir, plugin.PluginDir)
+	legacy := filepath.Join(dir, plugin.LegacyPluginDir)
+	for _, d := range []string{canon, legacy} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(canon, plugin.PluginFile), []byte(`{"name":"split","version":"0.1.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ins := `{"source_type":"git","source":"github.com/example/split","installed_at":"2026-09-01T00:00:00Z"}`
+	if err := os.WriteFile(filepath.Join(legacy, plugin.InstalledFile), []byte(ins), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h, err := LoadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.InstalledFrom == nil || h.InstalledFrom.Source != "github.com/example/split" {
+		t.Errorf("InstalledFrom = %+v, want provenance from %s", h.InstalledFrom, plugin.LegacyPluginDir)
+	}
+}
