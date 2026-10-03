@@ -701,6 +701,35 @@ rm -rf /tmp/ynh-backend-edge "$YNH_HOME"
 unset YNH_HOME
 ```
 
+### E27: Uninstall several names at once
+
+`ynh uninstall` takes one or more names. Every name is resolved before anything
+is removed, so a typo in one name removes nothing (#398).
+
+```bash
+export YNH_HOME=$(mktemp -d)
+for n in a b c; do
+  mkdir -p /tmp/ynh-multi/$n/.agents/harness
+  printf '{"name":"%s","version":"0.1.0"}' $n > /tmp/ynh-multi/$n/.agents/harness/plugin.json
+  ynh install /tmp/ynh-multi/$n
+done
+
+ynh uninstall local/a local/typo; echo "exit=$?"
+# Expected: Error: harness "local/typo" is not installed
+#           Error: 1 of 2 harnesses could not be uninstalled, nothing was removed
+#           exit=1
+ynh ls
+# Expected: local/a, local/b and local/c all still listed
+
+ynh uninstall local/a local/b local/c; echo "exit=$?"
+# Expected: Uninstalled harness "a" / "b" / "c", exit=0
+ynh ls
+# Expected: no harnesses
+
+rm -rf /tmp/ynh-multi "$YNH_HOME"
+unset YNH_HOME
+```
+
 ---
 
 ## Sensors
