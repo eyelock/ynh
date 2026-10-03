@@ -56,12 +56,17 @@ checksum:
 # in Rekor, so there is no private key to store or rotate. Requires
 # id-token: write on the releasing job.
 signs:
+  # cosign v3 (installed by cosign-installer v4) writes one Sigstore bundle
+  # holding the signature and certificate; --output-certificate and
+  # --output-signature no longer apply. Verify with:
+  #   cosign verify-blob --bundle checksums.txt.sigstore.json \
+  #     --certificate-identity-regexp 'https://github.com/eyelock/ynh/' \
+  #     --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
   - cmd: cosign
-    certificate: "${artifact}.pem"
+    signature: "${artifact}.sigstore.json"
     args:
       - sign-blob
-      - "--output-certificate=${certificate}"
-      - "--output-signature=${signature}"
+      - "--bundle=${signature}"
       - "${artifact}"
       - "--yes"
     artifacts: checksum
