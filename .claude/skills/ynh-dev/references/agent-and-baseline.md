@@ -154,6 +154,15 @@ configuration stays out and must be declared by the harness.
 error naming the alternatives rather than silently downgrading. Silently running
 unsandboxed when sandboxing was asked for is the failure it prevents.
 
+`autoapprove.go` holds `--auto-approve` the same way. `validateAutoApprove`
+refuses a level a backend cannot honour exactly (codex and cursor have no
+edits-only mode), and `projectPermissionSetting` is a pure function over the
+working directory that refuses the run when the project sets its own permission
+mode. A vendor that refuses to start is classified by `exitedWorkerError` from
+its exit status and the stderr tail; claude's init event is checked for the
+permission mode it actually started in, because claude downgrades a disabled
+mode instead of failing.
+
 ---
 
 # `internal/baseline`

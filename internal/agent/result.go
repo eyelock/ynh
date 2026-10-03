@@ -37,6 +37,9 @@ type RunResult struct {
 	Worktree   string `json:"worktree,omitempty"`
 	Backend    string `json:"backend,omitempty"`
 	Model      string `json:"model,omitempty"`
+	// AutoApprove is the --auto-approve level the worker ran with. Absent
+	// means none.
+	AutoApprove string `json:"auto_approve,omitempty"`
 
 	Harness *RunHarness `json:"harness,omitempty"`
 

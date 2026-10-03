@@ -78,23 +78,7 @@ func (s *cursorSession) Next() (Turn, error) {
 	msg := s.pending
 	s.pending = ""
 
-	args := []string{
-		"agent",
-		"--print",
-		"--output-format", "stream-json",
-		"--trust",
-	}
-	if s.opts.WorktreeDir != "" {
-		args = append(args, "--workspace", s.opts.WorktreeDir)
-	}
-	if s.opts.Model != "" {
-		args = append(args, "--model", s.opts.Model)
-	}
-	if !s.firstTurn {
-		args = append(args, "--resume", s.chatID)
-	}
-	// Pass the user message as the final positional argument.
-	args = append(args, msg)
+	args := buildCursorArgs(s.opts, s.chatID, s.firstTurn, msg)
 	s.firstTurn = false
 
 	cmd := exec.Command(s.cursorBin, args...)
@@ -102,9 +86,8 @@ func (s *cursorSession) Next() (Turn, error) {
 		cmd.Dir = s.opts.WorktreeDir
 	}
 	cmd.Env = workerEnvFor(s.opts.Env)
-	if s.opts.Stderr != nil {
-		cmd.Stderr = s.opts.Stderr
-	}
+	tail := &stderrTail{}
+	cmd.Stderr = stderrSink(s.opts.Stderr, tail)
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -115,23 +98,44 @@ func (s *cursorSession) Next() (Turn, error) {
 	}
 
 	turn, parseErr := parseCursorOutput(stdoutPipe)
-
-	if waitErr := cmd.Wait(); waitErr != nil {
-		if parseErr == nil {
-			// Subprocess exit error takes priority only if we have no content.
-			if turn.Content == "" {
-				return Turn{}, fmt.Errorf("cursor exited: %w", waitErr)
-			}
-		}
-	}
+	waitErr := cmd.Wait()
 
 	if parseErr != nil && parseErr != io.EOF {
 		return Turn{}, parseErr
 	}
 	if turn.Content == "" {
-		return Turn{}, io.EOF
+		// No answer. A non-zero exit is cursor refusing or failing, and its
+		// stderr says why; a clean one is io.EOF.
+		return Turn{}, exitedWorkerError("cursor", waitErr, tail)
 	}
 	return turn, nil
+}
+
+// buildCursorArgs constructs the arguments for one cursor agent turn.
+func buildCursorArgs(opts StartOptions, chatID string, firstTurn bool, msg string) []string {
+	args := []string{
+		"agent",
+		"--print",
+		"--output-format", "stream-json",
+		"--trust",
+	}
+	if opts.WorktreeDir != "" {
+		args = append(args, "--workspace", opts.WorktreeDir)
+	}
+	if opts.Model != "" {
+		args = append(args, "--model", opts.Model)
+	}
+	// cursor has no edits-only mode, so validateAutoApprove admits only "all"
+	// here. --force allows commands "unless explicitly denied", so a deny list
+	// in the project's .cursor/cli.json still applies.
+	if opts.AutoApprove == AutoApproveAll {
+		args = append(args, "--force")
+	}
+	if !firstTurn {
+		args = append(args, "--resume", chatID)
+	}
+	// Pass the user message as the final positional argument.
+	return append(args, msg)
 }
 
 // Close is a no-op for Cursor — subprocesses are short-lived per-turn.

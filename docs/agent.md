@@ -36,6 +36,7 @@ ynh agent run --resume <session-dir> [flags]
 | `--worktree <dir>` | Directory the agent works in and sensors run against |
 | `--format <text\|json>` | `json` prints the run result as one object when the run ends |
 | `--sandbox <mode>` | Sandbox mode passed to the backend |
+| `--auto-approve <edits\|all>` | Approve the worker's file edits, or everything, without prompting. Off by default. See [Permissions](#permissions-and-auto-approve) |
 | `--auto-commit` | Commit after each converged turn |
 | `--interactive` | Pause for approval at turn boundaries |
 | `--no-plan` | Skip the plan phase and act immediately |
@@ -112,6 +113,51 @@ and how a profile narrows it.
 `codex` or `cursor` is an **error**, not a warning — a containment control that
 silently does not apply is worse than an absent one, because it gets relied
 upon. ynh does not provide isolation; it runs inside one you configured.
+
+## Permissions and `--auto-approve`
+
+By default ynh passes **no permission flag** to the worker. It gets whatever
+the vendor CLI and the project grant it, and nothing more. On a machine where
+the CLI denies edits, the loop runs to its cap with the agent reporting blocked
+writes.
+
+`--auto-approve` grants more, for one run:
+
+| Level | Approves | claude | codex | cursor |
+|---|---|---|---|---|
+| `edits` | file edits; commands still need approval | `--permission-mode acceptEdits` | error | error |
+| `all` | everything the worker asks to do | `--permission-mode bypassPermissions` | `--dangerously-bypass-approvals-and-sandbox` | `--force` |
+
+It exists for runs inside containment you own: a container, an egress policy,
+a diff gate, human review of what lands. Outside that, it hands an unattended
+agent your credentials.
+
+- **Levels are exact or refused.** codex and cursor have no mode that approves
+  edits while still withholding commands, so `edits` is an error on them rather
+  than something wider. Any other backend, or an unknown level, fails before
+  the run starts.
+- **An `edits` worker cannot run commands**, so it cannot run `go build` or
+  `go test` itself. The sensors run them between turns and feed the results
+  back, so `edits` suits simple lanes and `all` harder ones.
+- **The project's choice wins.** If the working directory sets its own
+  permission mode, the run is refused and the reason names the file and the
+  setting: `permissions.defaultMode` in `.claude/settings.json` or
+  `.claude/settings.local.json` for claude, a top-level `approval_policy` or
+  `sandbox_mode` in `.codex/config.toml` for codex. cursor has no project-level
+  mode: its `.cursor/cli.json` holds only allow and deny lists, which `--force`
+  still respects. User-level settings are not consulted.
+- **A vendor refusal is a worker error.** Claude Code refuses
+  `bypassPermissions` as root, and a managed setting can disable a mode. Either
+  way the run ends with exit 20 and the vendor's message. Claude does not fail
+  when a setting disables the mode, it starts in another one; the loop reads
+  the mode the session actually started in and stops if it is not the one
+  asked for. ynh's agent image runs as uid 1001, not root.
+- **Run-time only.** The harness manifest cannot set it, there is no
+  environment variable for it, and a resume does not restore it: pass it again
+  each time.
+
+The level is recorded as `auto_approve` on the trajectory's `session_start`
+(and `session_resumed`) event and in the run result. Absent means none.
 
 ## Convergence
 
@@ -197,7 +243,9 @@ anything omitted comes from the checkpoint.
 
 Some settings are not restored. Pass them again if the original run used them:
 `--backend`, `--model`, `--worktree`, `--max-wall`, `--sandbox`,
-`--auto-commit` and `--interactive`. Without `--backend` a resume drives
+`--auto-approve`, `--auto-commit` and `--interactive`. `--auto-approve` stays
+out deliberately, as `--sandbox` does: a grant to skip permission checks is
+made by the operator each time, not inherited from a file. Without `--backend` a resume drives
 `claude`, whatever backend the run started on.
 
 A run interrupted after planning picks up from the checkpoint's pending message
@@ -271,6 +319,13 @@ for one that reports none, zero is not a measurement. Without these checks the
 same message came back every turn and the run ended as stuck (13), pointing at
 the agent rather than its environment.
 
+A vendor CLI that refuses to start, or exits non-zero without answering, is a
+worker error too, and its stderr is the reason:
+
+```
+worker error: claude: --dangerously-skip-permissions cannot be used with root/sudo privileges for security reasons
+```
+
 ## Run result
 
 `--format json` prints one object when the run ends, on **every** path —
@@ -330,7 +385,7 @@ a run without parsing terminal output.
 
 | Event | Emitted when |
 |---|---|
-| `session_start` | Run begins — carries model, ynh version, harness version, base commit, and the resolved budgets with their sources |
+| `session_start` | Run begins. Carries model, ynh version, harness version, base commit, the `--auto-approve` level, and the resolved budgets with their sources |
 | `session_resumed` | Resumed run begins, before the first new turn |
 | `plan` / `plan_revised` | Plan produced or revised |
 | `plan_approval_required` | Plan phase is waiting for approval |

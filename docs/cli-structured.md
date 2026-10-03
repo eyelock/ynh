@@ -165,4 +165,10 @@ than silently diverging from the published contract.
 Unknown event types must be tolerated, for the same reason as unknown enum
 members above: kinds are added additively.
 
+Capabilities `0.9.0` added `auto_approve` (`edits` or `all`) to `session_start`,
+`session_resumed` and the `agent run` result, recording the `--auto-approve`
+level the worker ran with. Absent means none. An older ynh rejects
+`--auto-approve` as an unknown flag, so a consumer that passes it checks
+`capabilities` first.
+
 **Error envelope evolution.** The current emission is `{"error": {"code": "...", "message": "..."}}` (the `code` values listed above are the closed enum). Additive fields `category` (coarse routing class), `retryable` (bool), and `hint` (human guidance) are reserved and may appear on a future capabilities bump — consumers must tolerate either shape today.

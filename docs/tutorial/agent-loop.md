@@ -341,17 +341,24 @@ Error: no checkpoint found in "deadbeef": open deadbeef/checkpoint.json: no such
 
 `ynh agent run` starts a worker. It does not contain one.
 
-The worker inherits whatever permissions your vendor CLI grants it, and ynh
-passes no flag to widen them. On a machine where the CLI denies edits, the loop
-runs to its cap with the sensor failing identically every turn — the trajectory
-shows the agent reporting a blocked write, and the exit code is `10`, not `0`.
-Granting the write is the operator's job, done in the vendor CLI's own
-configuration.
+By default the worker gets whatever permissions your vendor CLI and the project
+grant it, and ynh passes no permission flag. On a machine where the CLI denies
+edits, the loop runs to its cap with the sensor failing identically every turn:
+the trajectory shows the agent reporting a blocked write, and the exit code is
+`10`, not `0`.
+
+`--auto-approve edits` (file edits only) or `--auto-approve all` (everything)
+grants more, for that one run. It is for runs inside containment you own: a
+container, an egress policy, a diff gate, a human reviewing what lands. Used
+outside that, it hands an unattended agent your credentials. If the project
+sets its own permission mode, the run is refused; if the vendor refuses the
+mode, the run ends as a worker error with the vendor's message. See
+[Permissions](../agent.md#permissions-and-auto-approve).
 
 That is the containment doctrine in practice: **ynh declares and executes; it
 does not isolate.** `--sandbox` hands the run to a sandbox you installed, and
-fails rather than proceeding if that sandbox is unavailable. A containment
-control that cannot be applied is an error, not a warning.
+fails rather than proceeding if that sandbox is unavailable. A control that
+cannot be applied is an error, not a warning.
 
 For unattended use, this is a prerequisite rather than a refinement. See
 [Where ynh stops](../factory-pattern.md#where-ynh-stops).
