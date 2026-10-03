@@ -76,10 +76,11 @@ type RemoteSource struct {
 }
 
 // IsRegistryDir returns true if the directory contains a marketplace.json
-// registry index in either manifest directory.
+// registry index where LoadMarketplaceJSON reads it: beside plugin.json when
+// there is one, otherwise in either manifest directory.
 func IsRegistryDir(dir string) bool {
-	_, ok := findManifest(dir, MarketplaceFile)
-	return ok
+	_, err := os.Stat(MarketplacePath(dir))
+	return err == nil
 }
 
 // LoadMarketplaceJSON reads and parses marketplace.json from dir's manifest
@@ -98,8 +99,9 @@ func LoadMarketplaceJSON(dir string) (*MarketplaceJSON, error) {
 	return &mj, nil
 }
 
-// SaveMarketplaceJSON writes mj to marketplace.json in dir: in place if one
-// exists, otherwise at the canonical location.
+// SaveMarketplaceJSON writes mj to marketplace.json in dir: beside
+// plugin.json when there is one, otherwise in place if one exists, otherwise
+// at the canonical location.
 func SaveMarketplaceJSON(dir string, mj *MarketplaceJSON) error {
 	path := writePath(dir, MarketplaceFile)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

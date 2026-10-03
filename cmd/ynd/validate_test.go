@@ -1478,3 +1478,72 @@ func TestValidateHarness_ReportsWhatWasChecked(t *testing.T) {
 		}
 	}
 }
+
+// A manifest split across .agents/harness and .ynh-plugin fails validation,
+// naming each file that sits away from plugin.json. Trees kept in one
+// directory are unaffected.
+func TestValidateHarness_SplitManifestDir(t *testing.T) {
+	const manifest = `{"$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json", "name": "h", "version": "0.1.0"}`
+	const installed = `{"source_type":"local","source":"/src","installed_at":"now"}`
+	cases := []struct {
+		name    string
+		files   map[string]string // relative path -> body
+		wantErr bool
+		want    []string
+	}{
+		{
+			name:  "canonical only",
+			files: map[string]string{".agents/harness/plugin.json": manifest, ".agents/harness/installed.json": installed},
+		},
+		{
+			name:  "legacy only",
+			files: map[string]string{".ynh-plugin/plugin.json": manifest, ".ynh-plugin/installed.json": installed},
+		},
+		{
+			name: "siblings split from plugin.json",
+			files: map[string]string{
+				".agents/harness/plugin.json":  manifest,
+				".ynh-plugin/installed.json":   installed,
+				".ynh-plugin/marketplace.json": `{"name":"reg","owner":{"name":"o"},"harnesses":[]}`,
+			},
+			wantErr: true,
+			want: []string{
+				".ynh-plugin/installed.json is split from .agents/harness/plugin.json; move it to .agents/harness/installed.json",
+				".ynh-plugin/marketplace.json is split from .agents/harness/plugin.json; move it to .agents/harness/marketplace.json",
+			},
+		},
+		{
+			name:    "shadowed plugin.json",
+			files:   map[string]string{".agents/harness/plugin.json": manifest, ".ynh-plugin/plugin.json": manifest},
+			wantErr: true,
+			want: []string{
+				"both .agents/harness/plugin.json and .ynh-plugin/plugin.json exist; .agents/harness wins and .ynh-plugin/plugin.json is ignored, so remove it",
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+			hr := filepath.Join(dir, "h")
+			for rel, body := range tc.files {
+				writeFile(t, filepath.Join(hr, filepath.FromSlash(rel)), []byte(body))
+			}
+			var buf bytes.Buffer
+			var err error
+			withStdout(t, &buf, func() { err = validateHarness(hr) })
+			out := buf.String()
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("validateHarness err = %v, wantErr %v\n%s", err, tc.wantErr, out)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(out, want) {
+					t.Errorf("output missing %q:\n%s", want, out)
+				}
+			}
+			if !tc.wantErr && strings.Contains(out, "split from") {
+				t.Errorf("a tree in one directory must not be reported as split:\n%s", out)
+			}
+		})
+	}
+}

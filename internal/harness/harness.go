@@ -156,7 +156,7 @@ func DetectFormat(dir string) string {
 	if plugin.IsPluginDir(dir) {
 		return "plugin"
 	}
-	if plugin.IsLegacyPluginDir(dir) {
+	if plugin.IsClaudePluginDir(dir) {
 		return "legacy"
 	}
 	return ""
@@ -428,7 +428,7 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 		return nil, fmt.Errorf("migrating harness manifest: %w", err)
 	}
 
-	if plugin.IsLegacyPluginDir(dir) && !plugin.IsPluginDir(dir) {
+	if plugin.IsClaudePluginDir(dir) && !plugin.IsPluginDir(dir) {
 		return nil, fmt.Errorf("legacy .claude-plugin format is not supported; migrate to .agents/harness/plugin.json")
 	}
 	if !plugin.IsPluginDir(dir) {

@@ -25,7 +25,7 @@ func TestIsHarnessDir_False(t *testing.T) {
 	}
 }
 
-func TestIsLegacyPluginDir(t *testing.T) {
+func TestIsClaudePluginDir(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0o755); err != nil {
 		t.Fatal(err)
@@ -34,8 +34,8 @@ func TestIsLegacyPluginDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !IsLegacyPluginDir(dir) {
-		t.Error("expected IsLegacyPluginDir to return true")
+	if !IsClaudePluginDir(dir) {
+		t.Error("expected IsClaudePluginDir to return true")
 	}
 }
 
