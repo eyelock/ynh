@@ -205,8 +205,8 @@ Expected: the harness is reported `INVALID` (exit 1) with this issue:
   - /tmp/ynh-ns-tutorial/legacy uses the legacy .harness.json manifest, which ynh no longer reads; convert it with: ynd migrate /tmp/ynh-ns-tutorial/legacy
 ```
 
-`ynd preview`, `ynd export`, `ynh install` and `ynh run` refuse it the same
-way:
+`ynd preview`, `ynd export` and `ynh install` refuse it the same way, and so
+does `ynh run` started from inside the directory:
 
 ```bash
 ynh install /tmp/ynh-ns-tutorial/legacy

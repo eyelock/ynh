@@ -525,8 +525,8 @@ echo '{"default_vendor":"claude","allowed_remote_sources":[]}' > ~/.ynh/config.j
 
 # Any harness with remote includes should fail at both install and run time
 # (install my-dev first if not already installed)
-my-dev "hello" 2>&1 | head -1
-# Expected: Error about remote source not allowed
+my-dev "hello" 2>&1 | grep Error
+# Expected: Error: resolving includes: include "github.com/eyelock/assistants": remote source ... is not in the allowed sources list (exit 1)
 
 mv ~/.ynh/config.json.bak ~/.ynh/config.json
 ```
