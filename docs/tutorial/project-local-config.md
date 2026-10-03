@@ -57,6 +57,20 @@ ynd validate /tmp/ynh-tutorial/my-project
 Expected:
 ```
 /tmp/ynh-tutorial/my-project: valid
+  checked:
+    manifest     /tmp/ynh-tutorial/my-project/.agents/harness/plugin.json against https://eyelock.github.io/ynh/schema/plugin.schema.json
+    includes     none
+    mcp_servers  none
+    hooks        before_tool runs `/usr/local/bin/lint.sh`
+    profiles     none
+    focuses      review
+    sensors      none
+    delegates_to none
+    skills       none
+    agents       none
+    rules        standards
+    commands     none
+    instructions none
 ```
 
 ## Preview the assembled output
@@ -105,7 +119,7 @@ ynd validate /tmp/ynh-tutorial/old-layout
 ynd preview /tmp/ynh-tutorial/old-layout -v claude
 ```
 
-Expected: `validate` reports `valid` and `preview` lists
+Expected: `validate` reports `valid` (its `manifest` line points at `.ynh-plugin/plugin.json`) and `preview` lists
 `.claude/rules/standards.md`, exactly as for the `.agents/harness` project
 above. Nothing is written back: reading a `.ynh-plugin` harness never
 creates `.agents/`.
@@ -124,7 +138,7 @@ mv /tmp/ynh-tutorial/old-layout/.ynh-plugin /tmp/ynh-tutorial/old-layout/.agents
 ynd validate /tmp/ynh-tutorial/old-layout
 ```
 
-Expected: `valid`. In a git repository use `git mv` so history follows the
+Expected: `valid`, with the `manifest` line now pointing at `.agents/harness/plugin.json`. In a git repository use `git mv` so history follows the
 file. If both directories exist, `.agents/harness` wins and `ynd validate`
 reports the shadowed `.ynh-plugin` copy so it cannot be edited by mistake.
 

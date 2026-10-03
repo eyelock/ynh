@@ -165,7 +165,7 @@ my-harness -v claude --clean
 
 ## Prune orphaned installations
 
-If a project directory is deleted while symlinks are still registered, `ynh prune` cleans up the stale entries. It also removes stale launcher scripts from `~/.ynh/bin/` when their harness no longer exists.
+If a project directory is deleted while symlinks are still registered, `ynh prune` cleans up the stale entries. It also removes stale launcher scripts from `~/.ynh/bin/` and stale run directories from `~/.ynh/run/` when their harness no longer exists.
 
 ### Prune orphaned symlinks
 
@@ -227,7 +227,12 @@ ynh prune
 Expected:
 ```
 Removed stale launcher: /Users/<you>/.ynh/bin/my-harness
+Removed stale run dir: /Users/<you>/.ynh/run/local--my-harness
+Removed stale run dir: /Users/<you>/.ynh/run/my-harness
 ```
+
+The assembled run directories under `~/.ynh/run/` belong to the harness too, so
+prune clears them along with the launcher.
 
 Verify the launcher was removed:
 
@@ -251,7 +256,7 @@ ls ~/.ynh/bin/ynh ~/.ynh/bin/ynd
 - ynh **automatically prompts** to install symlinks on first run in a project
 - `--install` and `--clean` manage symlinks explicitly without launching
 - `ynh status` shows all symlink installations across projects
-- `ynh prune` cleans orphaned symlink entries and stale launcher scripts
+- `ynh prune` cleans orphaned symlink entries, stale launcher scripts and stale run directories
 
 ## Next
 

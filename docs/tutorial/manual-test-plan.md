@@ -383,7 +383,7 @@ ynd --help         # Expected: same
 ### E3: Install with invalid --path
 
 ```bash
-mkdir -p /tmp/ynh-edge/repo
+mkdir -p /tmp/ynh-edge/repo/.agents/harness
 echo '{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"edge","version":"0.1.0"}' > /tmp/ynh-edge/repo/.agents/harness/plugin.json
 
 ynh install /tmp/ynh-edge/repo --path nonexistent/path
@@ -393,7 +393,7 @@ ynh install /tmp/ynh-edge/repo --path nonexistent/path
 ### E4: Install duplicate harness
 
 ```bash
-mkdir -p /tmp/ynh-edge/dup
+mkdir -p /tmp/ynh-edge/dup/.agents/harness
 echo '{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"dup","version":"0.1.0"}' > /tmp/ynh-edge/dup/.agents/harness/plugin.json
 
 ynh install /tmp/ynh-edge/dup
@@ -635,7 +635,7 @@ cat > "$YNH_HOME/harnesses/github.com--eyelock--assistants--shared/.agents/harne
 EOF
 
 # Register a fork with the same leaf name
-mkdir -p /tmp/ynh-fork-shared/.agents/harness
+mkdir -p /tmp/ynh-fork-shared/.agents/harness "$YNH_HOME/installed"
 cat > /tmp/ynh-fork-shared/.agents/harness/plugin.json << 'EOF'
 {"name":"shared","version":"2.0.0","default_vendor":"claude"}
 EOF
@@ -662,6 +662,7 @@ When a fork's source directory exists but has no `.agents/harness/plugin.json`, 
 # Register a pointer to a directory with no manifest
 mkdir -p /tmp/ynh-hollow-src   # exists but no .agents/harness/
 export YNH_HOME=$(mktemp -d)
+mkdir -p "$YNH_HOME/installed"
 cat > "$YNH_HOME/installed/hollow.json" << 'EOF'
 {"name":"hollow","source_type":"local","source":"/tmp/ynh-hollow-src","installed_at":"2026-01-01T00:00:00Z"}
 EOF

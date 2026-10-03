@@ -7,7 +7,14 @@ Pull skills from Git repos into your harness using includes. Cherry-pick specifi
 ```bash
 # Clean up from any previous run
 rm -rf /tmp/ynh-tutorial
-ynh uninstall local/my-dev local/with-anthropic local/with-vercel local/full-stack local/mixed local/local-ref local/pinned local/david 2>/dev/null
+ynh uninstall local/my-dev 2>/dev/null
+ynh uninstall local/with-anthropic 2>/dev/null
+ynh uninstall local/with-vercel 2>/dev/null
+ynh uninstall local/full-stack 2>/dev/null
+ynh uninstall local/mixed 2>/dev/null
+ynh uninstall local/local-ref 2>/dev/null
+ynh uninstall local/pinned 2>/dev/null
+ynh uninstall local/david 2>/dev/null
 
 mkdir -p /tmp/ynh-tutorial
 ```
@@ -522,7 +529,15 @@ mv ~/.ynh/config.json.bak ~/.ynh/config.json
 ## Clean up
 
 ```bash
-ynh uninstall local/my-dev local/with-anthropic local/with-vercel local/full-stack local/mixed local/local-ref local/pinned local/david local/with-bundled 2>/dev/null
+ynh uninstall local/my-dev 2>/dev/null
+ynh uninstall local/with-anthropic 2>/dev/null
+ynh uninstall local/with-vercel 2>/dev/null
+ynh uninstall local/full-stack 2>/dev/null
+ynh uninstall local/mixed 2>/dev/null
+ynh uninstall local/local-ref 2>/dev/null
+ynh uninstall local/pinned 2>/dev/null
+ynh uninstall local/david 2>/dev/null
+ynh uninstall local/with-bundled 2>/dev/null
 ```
 
 ## What you learned

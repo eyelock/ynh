@@ -7,7 +7,10 @@ Search for harnesses from curated registries and install them by name. A registr
 ```bash
 # Clean up from any previous run
 rm -rf /tmp/ynh-tutorial
-ynh uninstall github.com/eyelock/assistants/david github.com/eyelock/assistants/planner github.com/eyelock/assistants/tester local/codereview 2>/dev/null
+ynh uninstall github.com/eyelock/assistants/david 2>/dev/null
+ynh uninstall github.com/eyelock/assistants/planner 2>/dev/null
+ynh uninstall github.com/eyelock/assistants/tester 2>/dev/null
+ynh uninstall local/codereview 2>/dev/null
 ynh registry remove /tmp/ynh-tutorial/my-registry 2>/dev/null
 ynh sources remove codereview 2>/dev/null
 
@@ -155,7 +158,7 @@ Inspect and uninstall use the canonical id — bare names like `david` are no lo
 ynh ls --format json | jq -r '.harnesses[].id'
 # Expected: github.com/eyelock/assistants/david
 
-ynh info github.com/eyelock/assistants/david --format json | jq -r '.path'
+ynh info github.com/eyelock/assistants/david --format json | jq -r '.harness.path'
 # Expected: contains "github.com--eyelock--assistants--david"
 ```
 
@@ -357,12 +360,21 @@ ynh install codereview
 Expected:
 ```
 Installed harness "codereview"
-  Location: /Users/<you>/.ynh/harnesses/local--codereview
+  Location: /tmp/ynh-tutorial/sources/codereview
   Launcher: /Users/<you>/.ynh/bin/codereview
   Vendor:   claude
 ```
 
-A local-source install gets the canonical id `local/codereview` — the source itself has no remote origin to derive a host-prefixed id from.
+A local-source install is a pointer, not a copy: `Location` is the source directory itself, and nothing is written under `~/.ynh/harnesses/`. It gets the canonical id `local/codereview` — the source itself has no remote origin to derive a host-prefixed id from. `ynh ls` shows it with KIND `source`:
+
+```bash
+ynh ls
+```
+
+```
+ID                KIND    VENDOR  SOURCE                                ARTIFACTS  INCLUDES  DELEGATES TO
+local/codereview  source  claude  /tmp/ynh-tutorial/sources/codereview  0          0         0
+```
 
 ## Uninstall removes the source entry
 
@@ -375,6 +387,8 @@ ynh sources list
 
 Expected:
 ```
+Uninstalled harness "codereview"
+  Source tree left in place: /tmp/ynh-tutorial/sources/codereview
 No sources configured.
 Add one with: ynh sources add <path>
 ```
