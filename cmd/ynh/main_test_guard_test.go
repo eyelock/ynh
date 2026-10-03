@@ -17,7 +17,13 @@ import (
 // "known", and the suite's result started depending on what had run before it.
 //
 // Deleting the file would hide the next occurrence, so this reports instead.
+//
+// It also stops `ynh image` tests from asking a real docker about the base
+// image: the suite must not depend on what this machine has pulled.
 func TestMain(m *testing.M) {
+	dockerImageLabels = func(image string) ([]byte, error) {
+		return nil, fmt.Errorf("docker is not consulted in tests (%s)", image)
+	}
 	code := m.Run()
 	if _, err := os.Stat(baseline.Root(".")); err == nil {
 		fmt.Fprintf(os.Stderr,

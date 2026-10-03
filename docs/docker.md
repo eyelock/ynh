@@ -56,6 +56,14 @@ ynh image david --dry-run
 ynh image david --base my-registry.io/ynh:v2
 ```
 
+The image runs the base image's ynh, not the ynh that built it. When the base is
+already pulled locally, `ynh image` reads its `dev.ynh.version` label (falling back
+to `org.opencontainers.image.version`) and prints a warning to stderr if that ynh is
+older than the one building, including in a dry run. A developer build counts as
+newer than every release. The warning never stops the build or changes the
+Dockerfile; pass `--base <image>` to build on a newer ynh image. A base that is not
+pulled is not checked, so the check never pulls or runs anything.
+
 The harness image pre-assembles vendor layouts for all three vendors at build time. At runtime, `ynh run` detects the pre-assembled layout and skips assembly entirely.
 
 ### Running Harness Images

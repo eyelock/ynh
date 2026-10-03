@@ -330,6 +330,12 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 
+	// The image runs the base's ynh, not this one. Read from a local image's
+	// labels only, so this neither pulls nor runs anything, in a dry run too.
+	if w := baseVersionWarning(ia.base, config.Version); w != "" {
+		_, _ = fmt.Fprint(stderr, w)
+	}
+
 	if ia.dryRun {
 		_, _ = fmt.Fprint(stdout, dockerfile)
 		return nil
