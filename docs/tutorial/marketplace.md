@@ -120,6 +120,7 @@ Expected (`.git/` excluded from listing — it's auto-created by the build):
 .claude-plugin/marketplace.json
 .cursor-plugin/marketplace.json
 .github/plugin/marketplace.json
+.ynd-marketplace
 plugins/formatter/.claude-plugin/plugin.json
 plugins/formatter/.codex-plugin/plugin.json
 plugins/formatter/.cursor-plugin/plugin.json
@@ -134,6 +135,9 @@ plugins/reviewer/skills/dev-quality/SKILL.md
 plugins/reviewer/skills/dev-review/SKILL.md
 README.md
 ```
+
+`.ynd-marketplace` marks the directory as one ynd built. It is what lets a later
+`--clean` rebuild into it while keeping the `.git` history.
 
 ### Git repo
 
