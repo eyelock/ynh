@@ -96,3 +96,45 @@ func TestFormatChain_ExcludesStorage(t *testing.T) {
 		}
 	}
 }
+
+// Only MigrateChain, behind ynd migrate's confirmation, may rewrite a source
+// tree (#406). Every migrator in FormatChain is the zero value, which acts
+// only on installs under YNH_HOME/harnesses.
+func TestChains_SourceTreeScope(t *testing.T) {
+	for _, m := range FormatChain() {
+		switch v := m.(type) {
+		case ManifestDirMigrator:
+			if v.SourceTrees {
+				t.Error("FormatChain's ManifestDirMigrator may touch source trees")
+			}
+		case HarnessFormatMigrator:
+			if v.SourceTrees {
+				t.Error("FormatChain's HarnessFormatMigrator may touch source trees")
+			}
+		case RegistryFormatMigrator:
+			if v.SourceTrees {
+				t.Error("FormatChain's RegistryFormatMigrator may touch source trees")
+			}
+		default:
+			t.Errorf("unexpected migrator %T in FormatChain", m)
+		}
+	}
+	for _, m := range MigrateChain() {
+		switch v := m.(type) {
+		case ManifestDirMigrator:
+			if !v.SourceTrees {
+				t.Error("MigrateChain's ManifestDirMigrator must reach source trees")
+			}
+		case HarnessFormatMigrator:
+			if !v.SourceTrees {
+				t.Error("MigrateChain's HarnessFormatMigrator must reach source trees")
+			}
+		case RegistryFormatMigrator:
+			if !v.SourceTrees {
+				t.Error("MigrateChain's RegistryFormatMigrator must reach source trees")
+			}
+		default:
+			t.Errorf("unexpected migrator %T in MigrateChain", m)
+		}
+	}
+}

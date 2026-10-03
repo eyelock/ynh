@@ -42,8 +42,8 @@ cat > /tmp/ynh-tutorial/exportable/instructions.md << 'EOF'
 You are a code quality harness. Focus on correctness and security.
 EOF
 
-mkdir -p /tmp/ynh-tutorial/exportable/.ynh-plugin
-cat > /tmp/ynh-tutorial/exportable/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/exportable/.agents/harness
+cat > /tmp/ynh-tutorial/exportable/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "exportable",
@@ -85,7 +85,7 @@ ls -Ra /tmp/ynh-tutorial/export-output/claude/
 Expected:
 ```
 .claude-plugin/               # plugin manifest directory
-  plugin.json                 # generated from .ynh-plugin/plugin.json
+  plugin.json                 # generated from .agents/harness/plugin.json
 agents/
   checker.md                  # local agent
 skills/
@@ -234,11 +234,23 @@ ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/clean-test -v claud
 ls /tmp/ynh-tutorial/clean-test/
 # Expected: claude/ codex/ copilot/ cursor/
 
-# --clean removes entire output first
-ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/clean-test -v claude --clean
+# --clean removes entire output first. It asks before deleting; -y skips the prompt
+ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/clean-test -v claude --clean -y
+# Expected: Exported for claude → /tmp/ynh-tutorial/clean-test/claude (2 skills, 1 agents)
 ls /tmp/ynh-tutorial/clean-test/
 # Expected: claude/ only
 ```
+
+Without `-y`, `--clean` prompts first (`-y` is also implied by `$YNH_YES` or CI):
+
+```
+--clean will permanently delete /tmp/ynh-tutorial/clean-test and its 4 entries.
+Delete it? [y/N]
+```
+
+Answering anything but `y` leaves the directory alone and exits 1. `--clean` also
+refuses outright to delete the filesystem root, `$HOME`, the current directory,
+any ancestor of it, or a git working copy — and that refusal ignores `-y`.
 
 ## Export from a Git URL
 
@@ -252,8 +264,8 @@ Clones the repo, applies `--path` scoping, exports. Same as exporting a local di
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/no-instructions
-mkdir -p /tmp/ynh-tutorial/no-instructions/.ynh-plugin
-cat > /tmp/ynh-tutorial/no-instructions/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/no-instructions/.agents/harness
+cat > /tmp/ynh-tutorial/no-instructions/.agents/harness/plugin.json << 'EOF'
 {"$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json", "name": "no-instructions", "version": "0.1.0"}
 EOF
 
@@ -261,7 +273,7 @@ ynd export /tmp/ynh-tutorial/no-instructions -o /tmp/ynh-tutorial/no-inst-out -v
 # Expected: succeeds (no warning)
 
 ls -a /tmp/ynh-tutorial/no-inst-out/claude/
-# Expected: .claude-plugin/ only (generated from .ynh-plugin/plugin.json, no AGENTS.md)
+# Expected: .claude-plugin/ only (generated from .agents/harness/plugin.json, no AGENTS.md)
 ```
 
 ## Clean up

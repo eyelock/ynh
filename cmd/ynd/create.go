@@ -173,7 +173,7 @@ Project-level instructions that apply to every session with this harness.
 	}
 
 	fmt.Printf("Created harness %q:\n", name)
-	fmt.Printf("  %s/%s/%s\n", name, plugin.PluginDir, plugin.PluginFile)
+	fmt.Printf("  %s\n", filepath.ToSlash(filepath.Join(name, plugin.PluginDir, plugin.PluginFile)))
 	fmt.Printf("  %s/AGENTS.md\n", name)
 	fmt.Printf("  %s/skills/\n", name)
 	fmt.Printf("  %s/agents/\n", name)

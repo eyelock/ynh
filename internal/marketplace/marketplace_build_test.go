@@ -270,3 +270,140 @@ func TestMarketplaceBuild_EntryPathTraversalBlocked(t *testing.T) {
 		}
 	}
 }
+
+// requireGit skips a test that needs a git binary on PATH rather than failing
+// it, so a machine without git still runs the rest of the suite.
+func requireGit(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+}
+
+func gitLines(t *testing.T, dir string, args ...string) []string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return strings.Split(strings.TrimSpace(string(out)), "\n")
+}
+
+func buildOnce(t *testing.T, configPath, configDir, outputDir string) {
+	t.Helper()
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Build(cfg, BuildOptions{ConfigDir: configDir, OutputDir: outputDir}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+}
+
+// OwnsRepo is how --clean tells a build output from somebody's source tree. A
+// false positive would let --clean empty a real repository, so it needs both
+// the marker and ynd's root commit, and nothing short of that may pass.
+func TestOwnsRepo(t *testing.T) {
+	requireGit(t)
+
+	t.Run("a repo Build created is ours and carries the marker", func(t *testing.T) {
+		configPath, configDir := setupMarketplace(t)
+		out := t.TempDir()
+		buildOnce(t, configPath, configDir, out)
+		assertFileExists(t, filepath.Join(out, MarkerFile))
+		if !OwnsRepo(out) {
+			t.Error("OwnsRepo must recognise the repository Build just initialised")
+		}
+	})
+
+	t.Run("a plain git init is not ours", func(t *testing.T) {
+		dir := t.TempDir()
+		gitLines(t, dir, "init")
+		gitLines(t, dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--allow-empty", "-m", "theirs")
+		if OwnsRepo(dir) {
+			t.Error("a repository without the marker must never be ours")
+		}
+	})
+
+	t.Run("a forged marker in a foreign repo is not enough", func(t *testing.T) {
+		dir := t.TempDir()
+		gitLines(t, dir, "init")
+		gitLines(t, dir, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--allow-empty", "-m", "theirs")
+		if err := os.WriteFile(filepath.Join(dir, MarkerFile), []byte(markerContent), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if OwnsRepo(dir) {
+			t.Error("the marker alone must not claim a repository whose root commit is not ours")
+		}
+	})
+
+	t.Run("a marker without a repository is not ours", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, MarkerFile), []byte(markerContent), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if OwnsRepo(dir) {
+			t.Error("no .git, nothing to own")
+		}
+	})
+
+	t.Run("a .git file (worktree) is not ours even with the marker", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: /elsewhere"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, MarkerFile), []byte(markerContent), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if OwnsRepo(dir) {
+			t.Error("a worktree or submodule is somebody's source")
+		}
+	})
+}
+
+// Rebuilding into ynd's own repository commits on top of the previous build,
+// so the history survives, and an identical rebuild adds nothing.
+func TestMarketplaceBuild_RebuildIntoOwnRepoKeepsHistory(t *testing.T) {
+	requireGit(t)
+	configPath, configDir := setupMarketplace(t)
+	out := t.TempDir()
+
+	buildOnce(t, configPath, configDir, out)
+	if got := len(gitLines(t, out, "log", "--format=%s")); got != 1 {
+		t.Fatalf("after the first build: %d commits, want 1", got)
+	}
+
+	// Identical content: nothing to commit, and no failure from git saying so.
+	buildOnce(t, configPath, configDir, out)
+	if got := len(gitLines(t, out, "log", "--format=%s")); got != 1 {
+		t.Errorf("an identical rebuild must not add a commit, got %d", got)
+	}
+
+	// Changed content: a second commit, and the first is still there.
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := strings.Replace(string(raw), `"description": "Test marketplace"`, `"description": "Renamed"`, 1)
+	if changed == string(raw) {
+		t.Fatal("test fixture no longer contains the description this test edits")
+	}
+	if err := os.WriteFile(configPath, []byte(changed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	buildOnce(t, configPath, configDir, out)
+	subjects := gitLines(t, out, "log", "--format=%s")
+	if len(subjects) != 2 {
+		t.Fatalf("after a changed rebuild: %d commits, want 2:\n%s", len(subjects), strings.Join(subjects, "\n"))
+	}
+	for _, s := range subjects {
+		if s != commitMessage {
+			t.Errorf("commit subject %q, want %q", s, commitMessage)
+		}
+	}
+	if lines := gitLines(t, out, "status", "--porcelain"); len(lines) != 1 || lines[0] != "" {
+		t.Errorf("the working tree should be clean after a build, got %q", lines)
+	}
+}

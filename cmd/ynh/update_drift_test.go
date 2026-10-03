@@ -38,13 +38,13 @@ func TestCmdUpdate_UnpinnedInclude_AdvancesRefWhenCacheAlreadyFresh(t *testing.T
 
 	// Install the harness manually: plugin.json with unpinned include + installed.json at sha1.
 	installDir := harness.InstalledDirByID("local/driftharn")
-	if err := os.MkdirAll(filepath.Join(installDir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(installDir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	pluginJSON := fmt.Sprintf(`{"name":"driftharn","version":"0.1.0","default_vendor":"claude","includes":[{"git":%q}]}`, srcDir)
-	writeTestFile(t, filepath.Join(installDir, ".ynh-plugin", "plugin.json"), pluginJSON)
+	writeTestFile(t, filepath.Join(installDir, ".agents/harness", "plugin.json"), pluginJSON)
 	installedJSON := fmt.Sprintf(`{"source_type":"local","installed_at":"2024-01-01T00:00:00Z","resolved":[{"git":%q,"sha":%q}]}`, srcDir, sha1)
-	writeTestFile(t, filepath.Join(installDir, ".ynh-plugin", "installed.json"), installedJSON)
+	writeTestFile(t, filepath.Join(installDir, ".agents/harness", "installed.json"), installedJSON)
 
 	// Advance the remote to sha2.
 	writeTestFile(t, filepath.Join(srcDir, "SKILL.md"), "---\nname: skill\ndescription: v2\n---\n")
@@ -108,13 +108,13 @@ func TestCmdUpdate_UnpinnedInclude_CountsUpdateWhenCachePreceded(t *testing.T) {
 	}
 
 	installDir := harness.InstalledDirByID("local/countharn")
-	if err := os.MkdirAll(filepath.Join(installDir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(installDir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	pluginJSON := fmt.Sprintf(`{"name":"countharn","version":"0.1.0","default_vendor":"claude","includes":[{"git":%q}]}`, srcDir)
-	writeTestFile(t, filepath.Join(installDir, ".ynh-plugin", "plugin.json"), pluginJSON)
+	writeTestFile(t, filepath.Join(installDir, ".agents/harness", "plugin.json"), pluginJSON)
 	installedJSON := fmt.Sprintf(`{"source_type":"local","installed_at":"2024-01-01T00:00:00Z","resolved":[{"git":%q,"sha":%q}]}`, srcDir, sha1)
-	writeTestFile(t, filepath.Join(installDir, ".ynh-plugin", "installed.json"), installedJSON)
+	writeTestFile(t, filepath.Join(installDir, ".agents/harness", "installed.json"), installedJSON)
 
 	// Advance the remote and pre-warm the cache (cache ahead of installed.json).
 	writeTestFile(t, filepath.Join(srcDir, "file.txt"), "v2")

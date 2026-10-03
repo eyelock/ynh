@@ -11,10 +11,10 @@ import (
 
 // TestYnd_Migrate verifies `ynd migrate <dir>` runs the format migration
 // chain over a directory tree containing a legacy `.harness.json`,
-// converting it to the modern `.ynh-plugin/plugin.json` layout.
+// converting it to the modern `.agents/harness/plugin.json` layout.
 //
-// The CLI command exposes the same migration chain that `ynh install`
-// runs implicitly — locks the developer-facing entry point.
+// It is the only command that converts one: read commands refuse the tree
+// and name this command instead (#406).
 func TestYnd_Migrate(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "legacy-tree", "harness-1")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -37,7 +37,7 @@ func TestYnd_Migrate(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, ".harness.json")); !os.IsNotExist(err) {
 		t.Errorf(".harness.json should be removed after migrate, err=%v", err)
 	}
-	assertFileExists(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"))
+	assertFileExists(t, filepath.Join(dir, ".agents/harness", "plugin.json"))
 }
 
 // TestYnd_Marketplace_Build asserts `ynd marketplace build` reads a
@@ -48,11 +48,11 @@ func TestYnd_Marketplace_Build(t *testing.T) {
 
 	// One harness referenced by the marketplace config.
 	harness := filepath.Join(root, "harnesses", "demo")
-	if err := os.MkdirAll(filepath.Join(harness, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(harness, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	plugin := `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"demo","version":"0.1.0","description":"demo harness"}`
-	if err := os.WriteFile(filepath.Join(harness, ".ynh-plugin", "plugin.json"), []byte(plugin), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(harness, ".agents/harness", "plugin.json"), []byte(plugin), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

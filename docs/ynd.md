@@ -18,7 +18,7 @@ brew tap eyelock/tap && brew install ynh
 Scaffold a new artifact or full harness.
 
 ```bash
-ynd create harness my-team     # full harness directory structure (.ynh-plugin/plugin.json + artifacts)
+ynd create harness my-team     # full harness directory structure (.agents/harness/plugin.json + artifacts)
 ynd create skill commit        # skills/commit/SKILL.md
 ynd create agent reviewer      # agents/reviewer.md
 ynd create rule be-nice        # rules/be-nice.md
@@ -80,7 +80,7 @@ so adoption is incremental.
 
 Validate harness structure: required files, frontmatter fields, directory layout,
 and JSON Schema conformance (`plugin.json` against `plugin.schema.json`;
-`.ynh-plugin/marketplace.json` against `marketplace.schema.json`), plus the
+`.agents/harness/marketplace.json` against `marketplace.schema.json`), plus the
 cross-field rules assembly enforces that a schema cannot express.
 
 One of those is worth naming. An MCP `env`/`headers` value referencing
@@ -105,7 +105,32 @@ that declares an allowlist and misses an entry is the realistic mistake, and
 that is what this catches.
 
 When given a directory, validates all harnesses found within it and also checks
-for a `.ynh-plugin/marketplace.json` at the root of that directory.
+for a `.agents/harness/marketplace.json` at the root of that directory.
+
+A harness report never stops at "valid". It lists what was checked, so a pass is
+something you can read rather than take on trust:
+
+```text
+.: valid
+  checked:
+    manifest     .ynh-plugin/plugin.json against https://eyelock.github.io/ynh/schema/plugin.schema.json
+    includes     https://github.com/eyelock/assistants path skills/dev pick skills/dev-review
+                 https://github.com/eyelock/ynm pick skills/ynm-memory
+    mcp_servers  ynm runs `ynm serve`
+    hooks        on_session_start runs `ynm hook session-start`
+    profiles     quick
+    focuses      none
+    sensors      none
+    delegates_to none
+    skills       none
+    agents       none
+    rules        none
+    commands     none
+    instructions none
+```
+
+Each part the harness does not have reads `none`. An `INVALID` harness prints its issues
+first and then the same list.
 
 ```bash
 ynd validate                   # current directory (harnesses + root marketplace.json)
@@ -181,7 +206,7 @@ ynd preview --harness ./my-harness          # explicit harness flag
 
 When no `-o` flag is given, preview prints a tree with file contents to stdout. With `-o`, it writes the full assembled output to the specified directory.
 
-Preview supports the same source types as export: local directories with `.ynh-plugin/plugin.json` or bare `AGENTS.md` directories.
+Preview supports the same source types as export: local directories with `.agents/harness/plugin.json` or bare `AGENTS.md` directories.
 
 See [Developer Preview](tutorial/developer-preview.md) for a guided walkthrough.
 
@@ -284,14 +309,14 @@ ynd marketplace build                             # uses ./marketplace.json
 ynd marketplace build config/marketplace.json     # custom config path
 ynd marketplace build -o ./marketplace-dist       # custom output directory
 ynd marketplace build -v claude,cursor            # specific vendors
-ynd marketplace build --clean                     # remove output dir before build
+ynd marketplace build --clean                     # empty the output dir before building
 ```
 
 | Flag | Description |
 |------|-------------|
 | `-o, --output <dir>` | Output directory. Default: `./dist` |
 | `-v, --vendor <names>` | Comma-separated vendors. Default: `claude,cursor,codex,copilot` |
-| `--clean` | Remove output dir before building |
+| `--clean` | Empty the output dir before building. Refuses the filesystem root, your home, the current directory and any git working copy, except the repository a previous `ynd marketplace build` created in that directory: that one is emptied but keeps its `.git`, so the rebuild commits on top and the history survives. Asks before deleting a non-empty directory unless `-y`, `YNH_YES` or `CI` is set. |
 
 **Config format** (`marketplace.json`):
 
@@ -324,9 +349,12 @@ ynd migrate ./my-harness       # specific directory
 ynd migrate ./harnesses        # walk tree, migrate every match
 ```
 
-Idempotent — safe to run twice. No-op if the target already uses the new
-format. Called transparently by ynh on first access to a legacy harness,
-so manual invocation is rarely needed except for source trees.
+Idempotent: safe to run twice. No-op if the target already uses the new
+format. It is the only command that converts `.harness.json` and
+`registry.json`: every other `ynh` and `ynd` command refuses a tree that
+still uses them, names this command as the fix, and leaves the tree
+untouched. Installs ynh copied under `~/.ynh/harnesses/` are its own and are
+converted on load.
 
 | Flag | Description |
 |------|-------------|
@@ -367,7 +395,7 @@ Schemas are embedded in the binary — `ynh schema <name>` and `ynh schema --all
 | `-y, --yes` | compress, inspect | Skip confirmation prompts. Also honored via `YNH_YES` or `CI` env vars. |
 | `-o, --output <path>` | inspect, export, preview, marketplace | Output directory. Defaults vary by command. |
 | `--harness <dir>` | preview, diff, export, validate, lint, fmt | Harness source directory. Alternative to positional arg. Also honored via `YNH_HARNESS` env var. |
-| `--clean` | export, marketplace | Remove output directory before writing. |
+| `--clean` | export, marketplace | Remove output directory before writing. Never the filesystem root, your home, the current directory or a git working copy, unless `ynd marketplace build` created that repository itself, in which case it is emptied and its `.git` kept. |
 | `--merged` | export | Single output dir with dual vendor manifests. |
 | `--profile <name>` | preview, diff, export | Profile to apply during assembly. Also honored via `YNH_PROFILE`. |
 | `--focus <name>` | preview, diff, export | Focus to apply (resolves its bound profile). Mutually exclusive with `--profile`. Also honored via `YNH_FOCUS`. |

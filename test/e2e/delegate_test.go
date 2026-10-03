@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// pluginManifest mirrors the on-disk .ynh-plugin/plugin.json shape we
+// pluginManifest mirrors the on-disk .agents/harness/plugin.json shape we
 // need to read after editor mutations. Subset of internal/plugin.PluginJSON.
 type pluginManifest struct {
 	Name        string               `json:"name"`
@@ -263,7 +263,7 @@ func TestLocalInstall_PluginEditVisibleToInfo(t *testing.T) {
 	s.mustRunYnh(t, "install", sourceDir)
 
 	// Hand-edit the user's source tree to add a focus.
-	mfPath := filepath.Join(sourceDir, ".ynh-plugin", "plugin.json")
+	mfPath := manifestFile(sourceDir, "plugin.json")
 	body, err := os.ReadFile(mfPath)
 	if err != nil {
 		t.Fatalf("read manifest: %v", err)
@@ -290,7 +290,7 @@ func TestLocalInstall_PluginEditVisibleToInfo(t *testing.T) {
 
 func readManifest(t *testing.T, harnessDir string) pluginManifest {
 	t.Helper()
-	body, err := os.ReadFile(filepath.Join(harnessDir, ".ynh-plugin", "plugin.json"))
+	body, err := os.ReadFile(manifestFile(harnessDir, "plugin.json"))
 	if err != nil {
 		t.Fatalf("reading plugin.json: %v", err)
 	}

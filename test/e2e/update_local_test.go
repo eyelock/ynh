@@ -26,7 +26,7 @@ func TestUpdate_LocalIncludeSkipped(t *testing.T) {
 	}
 
 	harness := filepath.Join(t.TempDir(), "local-only")
-	if err := os.MkdirAll(filepath.Join(harness, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(harness, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	manifest := fmt.Sprintf(`{
@@ -36,7 +36,7 @@ func TestUpdate_LocalIncludeSkipped(t *testing.T) {
   "includes": [{"local": %q}]
 }
 `, filepath.Dir(filepath.Dir(upstream)))
-	if err := os.WriteFile(filepath.Join(harness, ".ynh-plugin", "plugin.json"), []byte(manifest), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(harness, ".agents/harness", "plugin.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	s.mustRunYnh(t, "install", harness)

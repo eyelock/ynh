@@ -33,7 +33,7 @@ Commands:
 
   Getting a harness
     install <source> [--path <subdir>] [--ref <ref>]  Install from a Git URL or local path
-    uninstall <name>                       Remove an installed harness and its launcher
+    uninstall <name>...                    Remove installed harnesses and their launchers
     update <name>                          Refresh a harness's cached Git repos
     fork <name> [--to <path>]              Copy an installed harness somewhere you can edit
     search <term>                          Search registries and sources

@@ -32,10 +32,10 @@ const profileTwoHooksHarness = `{
 // must surface in the composed JSON, not the base.
 func TestYnd_Compose_WithProfile(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "withp")
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"),
+	if err := os.WriteFile(filepath.Join(dir, ".agents/harness", "plugin.json"),
 		[]byte(profileTwoHooksHarness), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -56,10 +56,10 @@ func TestYnd_Compose_WithProfile(t *testing.T) {
 // appear in the rendered hooks file.
 func TestYnd_Preview_WithProfile(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "withp-preview")
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"),
+	if err := os.WriteFile(filepath.Join(dir, ".agents/harness", "plugin.json"),
 		[]byte(profileTwoHooksHarness), 0o644); err != nil {
 		t.Fatal(err)
 	}

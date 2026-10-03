@@ -81,10 +81,10 @@ read. Say plainly that you are answering from the CLI, not the docs.
 | Quick reference, overview | `README.md` |
 | Worked examples, in order | `docs/tutorial/` |
 
-Working examples: `testdata/export-harness/` is current format. Note that
-`testdata/sample-harness/`, `composed-harness/` and `team-harness/` carry a
-legacy top-level `.harness.json` because they exist to exercise `ynd migrate` —
-do not hold them up as authoring examples.
+Working examples: every harness under `testdata/` is in the current format,
+with its manifest at `.agents/harness/plugin.json`; `testdata/export-harness/`
+is the fullest. Tests that exercise `ynd migrate` build legacy `.harness.json`
+trees under a temporary directory rather than checking them in.
 
 For implementation questions:
 

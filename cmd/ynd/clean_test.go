@@ -2,9 +2,12 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/marketplace"
 )
 
 // ── The dangerous paths are tested against the PURE PREDICATE only. ──────────
@@ -210,5 +213,130 @@ func TestCleanOutputDir_AcceptedPromptDeletes(t *testing.T) {
 	}
 	if _, statErr := os.Stat(dir); !os.IsNotExist(statErr) {
 		t.Error("the dir should be gone after an explicit yes")
+	}
+}
+
+// ── A repository ynd itself created is the one git working copy --clean may ──
+// ── empty. Everything below still only hands dangerous paths to the predicate. ──
+
+// buildOwnMarketplace runs the real `ynd marketplace build` into a directory
+// under the test's temp dir, so the repository it returns is exactly what a
+// user would have after a first build: ynd's `.git`, ynd's marker, ynd's root
+// commit. Replicating that by hand would let the test drift from the tool.
+func buildOwnMarketplace(t *testing.T, tmp string) (configFile, outputDir string) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	configFile = setupMarketplaceTest(t)
+	outputDir = filepath.Join(tmp, "out")
+	if err := cmdMarketplace([]string{"build", configFile, "-o", outputDir}); err != nil {
+		t.Fatalf("first build: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, ".git")); err != nil {
+		t.Fatalf("the build should have initialised a repository: %v", err)
+	}
+	return configFile, outputDir
+}
+
+func TestRefuseToClean_AllowsTheRepositoryYndCreated(t *testing.T) {
+	_, out := buildOwnMarketplace(t, t.TempDir())
+	if reason := refuseToClean(out); reason != "" {
+		t.Errorf("ynd's own marketplace repository must be cleanable, refused with %q", reason)
+	}
+	if keep := keepOnClean(out); !keep[".git"] {
+		t.Errorf("cleaning ynd's own repository must keep .git, keep = %v", keep)
+	}
+}
+
+// The marker does not weaken the hard refusals: the root, $HOME, the current
+// directory and its ancestors are refused before git is even considered. HOME
+// is pointed at a temp dir and the cwd moved into one, so the real ones are
+// never passed anywhere.
+func TestRefuseToClean_HardRefusalsIgnoreTheMarker(t *testing.T) {
+	tmp := t.TempDir()
+	_, out := buildOwnMarketplace(t, tmp)
+
+	t.Run("home directory", func(t *testing.T) {
+		t.Setenv("HOME", out)
+		if reason := refuseToClean(out); !strings.Contains(reason, "home directory") {
+			t.Errorf("a home directory carrying the marker must still be refused, got %q", reason)
+		}
+	})
+	t.Run("current directory", func(t *testing.T) {
+		t.Chdir(out)
+		if reason := refuseToClean(out); !strings.Contains(reason, "current directory") {
+			t.Errorf("the current directory carrying the marker must still be refused, got %q", reason)
+		}
+	})
+	t.Run("ancestor of current directory", func(t *testing.T) {
+		t.Chdir(filepath.Join(out, "plugins"))
+		if reason := refuseToClean(out); !strings.Contains(reason, "inside it") {
+			t.Errorf("an ancestor of cwd carrying the marker must still be refused, got %q", reason)
+		}
+	})
+}
+
+// A real repository that happens to contain the marker is still refused: the
+// root commit has to be ynd's as well. Otherwise a stray file could unlock
+// --clean on somebody's source tree.
+func TestRefuseToClean_ForgedMarkerDoesNotUnlockAForeignRepo(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	dir := t.TempDir()
+	for _, args := range [][]string{
+		{"init"},
+		{"-c", "user.name=t", "-c", "user.email=t@t", "commit", "--allow-empty", "-m", "theirs"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", args[0], err, out)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, marketplace.MarkerFile), []byte("ynd marketplace 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reason := refuseToClean(dir)
+	if !strings.Contains(reason, "git working copy") || !strings.Contains(reason, "not created by ynd") {
+		t.Errorf("a foreign repo with a forged marker must be refused and say so, got %q", reason)
+	}
+	if keep := keepOnClean(dir); keep != nil {
+		t.Errorf("nothing about a foreign repo is ours to keep or delete, keep = %v", keep)
+	}
+}
+
+// The deleting path, on ynd's own repository, under the temp dir only: the
+// stale build goes, `.git` and the marker stay.
+func TestCleanOutputDir_EmptiesYndsOwnRepoButKeepsGit(t *testing.T) {
+	tmp := t.TempDir()
+	_, out := buildOwnMarketplace(t, tmp)
+	stale := filepath.Join(out, "stale.txt")
+	if err := os.WriteFile(stale, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cleanOutputDir(mustBeUnderTemp(t, tmp, out), true); err != nil {
+		t.Fatalf("cleanOutputDir on ynd's own repo: %v", err)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Error("the stale file should be gone")
+	}
+	if _, err := os.Stat(filepath.Join(out, "plugins")); !os.IsNotExist(err) {
+		t.Error("the previous build output should be gone")
+	}
+	if _, err := os.Stat(filepath.Join(out, ".git")); err != nil {
+		t.Error(".git must survive a clean of ynd's own repository")
+	}
+	if _, err := os.Stat(filepath.Join(out, marketplace.MarkerFile)); err != nil {
+		t.Error("the marker must survive, or the next build could not prove ownership")
+	}
+	entries, err := os.ReadDir(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("only .git and the marker should remain, got %d entries", len(entries))
 	}
 }

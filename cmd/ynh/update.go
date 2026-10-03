@@ -10,6 +10,7 @@ import (
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 )
@@ -28,7 +29,7 @@ func cmdUpdate(args []string) error {
 
 	if p.InstalledFrom != nil && p.InstalledFrom.ForkedFrom != nil {
 		return fmt.Errorf("harness %q is a fork — ynh update cannot pull upstream changes for a fork\n"+
-			"  To update includes within the fork, edit .ynh-plugin/plugin.json directly\n"+
+			"  To update includes within the fork, edit .agents/harness/plugin.json directly\n"+
 			"  To incorporate upstream changes, fork again from the re-installed original", name)
 	}
 
@@ -91,6 +92,10 @@ func cmdUpdate(args []string) error {
 				if _, statErr := os.Stat(newSrcDir); statErr == nil {
 					if err := assembler.CopyDir(newSrcDir, p.Dir); err != nil {
 						fmt.Fprintf(os.Stderr, "  Warning: copying refreshed harness: %v\n", err)
+					} else if err := migration.AdoptRefreshedManifest(newSrcDir, p.Dir); err != nil {
+						// An install already moved to .agents/harness must not keep
+						// serving its old plugin.json under the fresh one.
+						fmt.Fprintf(os.Stderr, "  Warning: %v\n", err)
 					}
 					// Reload after content refresh so include/delegate slices
 					// reflect any newly-added entries from upstream.
@@ -171,7 +176,7 @@ func cmdUpdate(args []string) error {
 	//
 	// LoadInstalledRecord / SaveInstalledRecord are topology-aware (see
 	// internal/harness/topology.go): pointer-form installs route to the
-	// pointer file, tree-form to <p.Dir>/.ynh-plugin/installed.json.
+	// pointer file, tree-form to <p.Dir>/.agents/harness/installed.json.
 	if ins, loadErr := harness.LoadInstalledRecord(name, p); loadErr == nil && ins != nil {
 		ins.Resolved = resolvedSources
 		if hasHarnessSource && harnessSHA != "" {

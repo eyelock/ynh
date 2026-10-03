@@ -24,8 +24,8 @@ func isLocalPath(source string) bool {
 	return false
 }
 
-// loadOrSynthesizeHarness loads a harness from a directory. The migration
-// chain runs first to convert any legacy format transparently. If no manifest
+// loadOrSynthesizeHarness loads a harness from a directory. The format chain
+// runs first and refuses a manifest ynh no longer reads. If no manifest
 // exists but AGENTS.md or instructions.md does, a minimal plugin.json is
 // synthesized so the install flow works unchanged.
 func loadOrSynthesizeHarness(dir string) (*harness.Harness, error) {
@@ -36,7 +36,7 @@ func loadOrSynthesizeHarness(dir string) (*harness.Harness, error) {
 	}
 
 	if _, err := migration.FormatChain().Run(dir); err != nil {
-		return nil, fmt.Errorf("migrating harness format: %w", err)
+		return nil, err
 	}
 
 	if plugin.IsPluginDir(dir) {

@@ -145,7 +145,34 @@ git push origin --delete backmerge/vX.Y.Z
 
 - `gh release view vX.Y.Z` shows binaries and checksums
 - `ynh version` reports the new version
-- `git rev-list --count develop..main` is 0 — if it is not, the back-merge did
-  not land and `develop` is already drifting
+- The back-merge landed:
+
+  ```bash
+  git merge-base --is-ancestor "vX.Y.Z^{}^2" develop && echo ok
+  ```
+
+  `vX.Y.Z^{}` is the commit the annotated tag points at, not the tag object;
+  plain `git rev-parse vX.Y.Z` gives you the tag object and will not compare
+  equal to anything you expect. `^2` is that merge's second parent, which is the
+  release branch tip. Asserting it is an ancestor of `develop` is exactly the
+  question "did the release branch's work get back?", and it stays true forever,
+  so it can be re-run months later.
+
+  Immediately after the back-merge, and only then, the trees should also match:
+
+  ```bash
+  git diff --quiet develop main && echo identical
+  ```
+
+  This one stops holding as soon as anything else merges to `develop`, which is
+  why it is the sanity check and not the assertion.
+
+  **This step used to read "`git rev-list --count develop..main` is 0".** That
+  can never be 0. The back-merge branches from `release/vX.Y.Z`, so it carries
+  the release branch's commits to `develop` but never `main`'s own merge commit,
+  which is therefore permanently reachable from `main` and not from `develop`.
+  The count was 1 after a correct v0.7.0 release. A check whose stated pass
+  condition its own procedure cannot produce teaches people to ignore it, and
+  this is the check standing between us and a repeat of #54.
 
 Report the release URL when done.

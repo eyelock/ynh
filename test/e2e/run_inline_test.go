@@ -10,18 +10,18 @@ import (
 )
 
 // TestRun_InlineHarness covers the documented `--harness-file <path>` mode:
-// run a harness directly from a single .harness.json file without installing
+// run a harness directly from a single manifest file without installing
 // it into ~/.ynh/harnesses/ first. Used by CI runners and ephemeral
 // environments where installing globally is undesirable.
 func TestRun_InlineHarness(t *testing.T) {
 	s := newSandbox(t)
 
-	// Author a single-file legacy harness manifest in a project directory.
+	// Author a single-file harness manifest in a project directory.
 	project := filepath.Join(t.TempDir(), "project")
 	if err := os.MkdirAll(project, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	harnessFile := filepath.Join(project, "ephemeral.harness.json")
+	harnessFile := filepath.Join(project, "ephemeral.json")
 	body := `{
   "$schema": "https://eyelock.github.io/ynh/schema/harness.schema.json",
   "name": "ephemeral",

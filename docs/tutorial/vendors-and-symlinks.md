@@ -19,8 +19,8 @@ mkdir -p /tmp/ynh-tutorial
 ```bash
 mkdir -p /tmp/ynh-tutorial/my-harness/skills/ping
 
-mkdir -p /tmp/ynh-tutorial/my-harness/.ynh-plugin
-cat > /tmp/ynh-tutorial/my-harness/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/my-harness/.agents/harness
+cat > /tmp/ynh-tutorial/my-harness/.agents/harness/plugin.json << 'EOF'
 {
   "name": "my-harness",
   "version": "0.1.0",
@@ -60,7 +60,7 @@ cursor   Cursor              agent    .cursor     true
 
 ynh picks the vendor in this order:
 1. CLI flag `-v` (highest priority)
-2. Harness's `default_vendor` in `.ynh-plugin/plugin.json`
+2. Harness's `default_vendor` in `.agents/harness/plugin.json`
 3. Global `~/.ynh/config.json` default (fallback: "claude")
 
 ## Switch vendors
@@ -165,7 +165,7 @@ my-harness -v claude --clean
 
 ## Prune orphaned installations
 
-If a project directory is deleted while symlinks are still registered, `ynh prune` cleans up the stale entries. It also removes stale launcher scripts from `~/.ynh/bin/` when their harness no longer exists.
+If a project directory is deleted while symlinks are still registered, `ynh prune` cleans up the stale entries. It also removes stale launcher scripts from `~/.ynh/bin/` and stale run directories from `~/.ynh/run/` when their harness no longer exists.
 
 ### Prune orphaned symlinks
 
@@ -227,7 +227,12 @@ ynh prune
 Expected:
 ```
 Removed stale launcher: /Users/<you>/.ynh/bin/my-harness
+Removed stale run dir: /Users/<you>/.ynh/run/local--my-harness
+Removed stale run dir: /Users/<you>/.ynh/run/my-harness
 ```
+
+The assembled run directories under `~/.ynh/run/` belong to the harness too, so
+prune clears them along with the launcher.
 
 Verify the launcher was removed:
 
@@ -251,7 +256,7 @@ ls ~/.ynh/bin/ynh ~/.ynh/bin/ynd
 - ynh **automatically prompts** to install symlinks on first run in a project
 - `--install` and `--clean` manage symlinks explicitly without launching
 - `ynh status` shows all symlink installations across projects
-- `ynh prune` cleans orphaned symlink entries and stale launcher scripts
+- `ynh prune` cleans orphaned symlink entries, stale launcher scripts and stale run directories
 
 ## Next
 

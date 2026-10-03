@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/migration"
 )
 
 func createTestRegistry(t *testing.T, name string, entries []Entry) string {
@@ -22,11 +25,34 @@ func createTestRegistry(t *testing.T, name string, entries []Entry) string {
 		t.Fatal(err)
 	}
 
+	// Written the way an older ynh did, then converted the way ynd migrate
+	// does: LoadFromDir reads only the converted marketplace.json.
 	if err := os.WriteFile(filepath.Join(dir, "registry.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := migration.MigrateChain().Run(dir); err != nil {
 		t.Fatal(err)
 	}
 
 	return dir
+}
+
+// A registry still on registry.json is refused with the fix, not converted.
+func TestLoadFromDir_LegacyRegistryRefused(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	dir := t.TempDir()
+	body := `{"name":"old","entries":[{"name":"h","repo":"github.com/acme/h"}]}`
+	if err := os.WriteFile(filepath.Join(dir, "registry.json"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadFromDir(dir)
+	if err == nil || !strings.Contains(err.Error(), "ynd migrate "+dir) {
+		t.Fatalf("LoadFromDir error = %v, want one naming ynd migrate %s", err, dir)
+	}
+	got, readErr := os.ReadFile(filepath.Join(dir, "registry.json"))
+	if readErr != nil || string(got) != body {
+		t.Errorf("registry.json changed: %q, %v", got, readErr)
+	}
 }
 
 func TestLoadFromDir(t *testing.T) {
@@ -87,7 +113,7 @@ func TestLoadFromDirCarriesEntryRef(t *testing.T) {
     }
   ]
 }`
-	pluginDir := filepath.Join(dir, ".ynh-plugin")
+	pluginDir := filepath.Join(dir, ".agents/harness")
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +155,7 @@ func TestLoadFromDirCarriesEntryRef(t *testing.T) {
 func TestLoadFromDirMissing(t *testing.T) {
 	_, err := LoadFromDir(t.TempDir())
 	if err == nil {
-		t.Fatal("expected error for missing registry.json")
+		t.Fatal("expected error for missing marketplace.json")
 	}
 }
 

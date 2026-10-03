@@ -10,7 +10,7 @@ This tutorial walks through every sensor source variant, the validation rules, a
 rm -rf /tmp/ynh-tutorial
 ynh uninstall local/sensor-demo 2>/dev/null
 
-mkdir -p /tmp/ynh-tutorial/sensor-harness/.ynh-plugin
+mkdir -p /tmp/ynh-tutorial/sensor-harness/.agents/harness
 ```
 
 ## A `files` sensor
@@ -18,7 +18,7 @@ mkdir -p /tmp/ynh-tutorial/sensor-harness/.ynh-plugin
 The simplest sensor reads pre-existing artifacts. Create a harness that declares a coverage sensor:
 
 ```bash
-cat > /tmp/ynh-tutorial/sensor-harness/.ynh-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/sensor-harness/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "sensor-demo",
@@ -37,7 +37,30 @@ EOF
 ynd validate /tmp/ynh-tutorial/sensor-harness
 ```
 
-Expected output: `valid`.
+Expected:
+
+```
+/tmp/ynh-tutorial/sensor-harness: valid
+  checked:
+    manifest     /tmp/ynh-tutorial/sensor-harness/.agents/harness/plugin.json against https://eyelock.github.io/ynh/schema/plugin.schema.json
+    includes     none
+    mcp_servers  none
+    hooks        none
+    profiles     none
+    focuses      none
+    sensors      coverage
+    delegates_to none
+    skills       none
+    agents       none
+    rules        none
+    commands     none
+    instructions none
+```
+
+The `checked:` list names every part `ynd validate` looked at, with `none` for a
+part the harness does not have. Each later `ynd validate` in this tutorial prints
+`/tmp/ynh-tutorial/sensor-harness: valid` and the same list, with the `sensors`
+row (and `focuses`, `hooks`) following the manifest.
 
 Because the artifact is produced elsewhere, `ynh check` will refuse to believe
 it once it stops describing the tree — a missing or stale `coverage/lcov.info`
@@ -50,7 +73,7 @@ freshness](check.md#a-files-sensor-gates-on-freshness).
 Add a sensor that runs a shell command. Edit the manifest:
 
 ```bash
-cat > /tmp/ynh-tutorial/sensor-harness/.ynh-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/sensor-harness/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "sensor-demo",
@@ -79,7 +102,7 @@ ynd validate /tmp/ynh-tutorial/sensor-harness
 Sensors can reuse a top-level focus. Add a focus and reference it:
 
 ```bash
-cat > /tmp/ynh-tutorial/sensor-harness/.ynh-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/sensor-harness/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "sensor-demo",
@@ -112,7 +135,7 @@ ynd validate /tmp/ynh-tutorial/sensor-harness
 Sometimes a focus exists only to drive one sensor. Inline it directly:
 
 ```bash
-cat > /tmp/ynh-tutorial/sensor-harness/.ynh-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/sensor-harness/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "sensor-demo",
@@ -166,13 +189,13 @@ Loop drivers discover what's declared via the CLI:
 ynh sensors ls local/sensor-demo
 ```
 
-Expected (trimmed):
+Expected:
 
 ```
-NAME              CATEGORY          SOURCE     FORMAT
-build             -                 command    text
-coverage-judge    -                 focus*     markdown
-security          behaviour         focus      markdown
+NAME            CATEGORY   SOURCE   FORMAT
+build           -          command  text
+coverage-judge  -          focus*   markdown
+security        behaviour  focus    markdown
 
 * = inline focus
 ```
@@ -196,7 +219,7 @@ The string focus reference (`"focus": "audit-vulns"`) is expanded inline so the 
 Demonstrate one validation rule. Set two source fields:
 
 ```bash
-cat > /tmp/ynh-tutorial/sensor-harness/.ynh-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/sensor-harness/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "sensor-demo",
@@ -213,11 +236,27 @@ EOF
 ynd validate /tmp/ynh-tutorial/sensor-harness
 ```
 
-Expected error (the schema-level violation and the cross-field violation each emit one line):
+Expected (the schema-level violation and the cross-field violation each emit one line), exit 1:
 
 ```
-sensors/broken/source: 'oneOf' failed, subschemas 0, 1 matched
-sensor "broken": source must have exactly one of files, command, focus, github_status, github_check
+/tmp/ynh-tutorial/sensor-harness: INVALID
+  - sensors/broken/source: 'oneOf' failed, subschemas 0, 1 matched
+  - sensor "broken": source must have exactly one of files, command, focus, github_status, github_check
+  checked:
+    manifest     /tmp/ynh-tutorial/sensor-harness/.agents/harness/plugin.json against https://eyelock.github.io/ynh/schema/plugin.schema.json
+    includes     none
+    mcp_servers  none
+    hooks        none
+    profiles     none
+    focuses      none
+    sensors      broken
+    delegates_to none
+    skills       none
+    agents       none
+    rules        none
+    commands     none
+    instructions none
+Error: validation failed
 ```
 
 ## Hook–sensor pairing
@@ -225,7 +264,7 @@ sensor "broken": source must have exactly one of files, command, focus, github_s
 The most common production pattern: a hook produces an artifact, a sensor declares its contract over that artifact. Re-link the harness to the previous sensors plus a hook:
 
 ```bash
-cat > /tmp/ynh-tutorial/sensor-harness/.ynh-plugin/plugin.json << 'EOF'
+cat > /tmp/ynh-tutorial/sensor-harness/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "sensor-demo",
@@ -277,7 +316,7 @@ rm -rf /tmp/ynh-tutorial
 
 A loop driver wraps an agent runtime (Claude Code, Codex, etc.) and runs sensors between turns. Discovery is `ynh sensors ls --format json`; resolution is `ynh sensors show --format json`; execution is `ynh sensors run`. ynh emits raw signal — exit codes, output, file contents — and the loop driver turns that into pass/fail policy and feedback for the next turn.
 
-ynh runs the declared set as a gate itself — see [Gating with `ynh check`](check.md) — but owns no iteration: when to re-prompt an agent, what counts as convergence, and when to stop remain the loop driver's. See [Sensors reference §"Consuming sensors"](../sensors.md#consuming-sensors-for-loop-driver-authors) for the consumer pattern, and [harness engineering](../harness-engineering.md) for the architectural framing.
+ynh runs the declared set as a gate itself. See [Gating with `ynh check`](check.md). ynh also ships a loop driver, [`ynh agent run`](../agent.md), which re-prompts an agent until the gate is green or a budget runs out. A driver of your own decides when to re-prompt, what counts as convergence, and when to stop. See [Sensors reference §"Consuming sensors"](../sensors.md#consuming-sensors-for-loop-driver-authors) for the consumer pattern, and [harness engineering](../harness-engineering.md) for the architectural framing.
 
 ## What you learned
 

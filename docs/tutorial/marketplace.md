@@ -40,13 +40,13 @@ configured formatter (prettier, gofmt, black, etc.).
 EOF
 ```
 
-### Harness (has .ynh-plugin/plugin.json with includes)
+### Harness (has .agents/harness/plugin.json with includes)
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer
 
-mkdir -p /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/.ynh-plugin
-cat > /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/.agents/harness
+cat > /tmp/ynh-tutorial/marketplace-src/harnesses/reviewer/.agents/harness/plugin.json << 'EOF'
 {
   "name": "reviewer",
   "version": "1.0.0",
@@ -92,7 +92,7 @@ EOF
 
 Two entry types:
 - **`plugin`** — already a valid plugin directory. Copied as-is, missing vendor manifests generated.
-- **`harness`** — has `.ynh-plugin/plugin.json` with includes. Fully exported (includes resolved, pick applied, delegates generated).
+- **`harness`** — has `.agents/harness/plugin.json` with includes. Fully exported (includes resolved, pick applied, delegates generated).
 
 ## Build the marketplace
 
@@ -120,6 +120,7 @@ Expected (`.git/` excluded from listing — it's auto-created by the build):
 .claude-plugin/marketplace.json
 .cursor-plugin/marketplace.json
 .github/plugin/marketplace.json
+.ynd-marketplace
 plugins/formatter/.claude-plugin/plugin.json
 plugins/formatter/.codex-plugin/plugin.json
 plugins/formatter/.cursor-plugin/plugin.json
@@ -134,6 +135,9 @@ plugins/reviewer/skills/dev-quality/SKILL.md
 plugins/reviewer/skills/dev-review/SKILL.md
 README.md
 ```
+
+`.ynd-marketplace` marks the directory as one ynd built. It is what lets a later
+`--clean` rebuild into it while keeping the `.git` history.
 
 ### Git repo
 
@@ -225,14 +229,9 @@ plugin. Codex and Copilot differ again; see
 
 ## Test with Claude Code
 
-Claude Code requires local marketplaces to be Git repos (relative source paths like `./plugins/formatter` only resolve within a Git working tree):
+Claude Code requires local marketplaces to be Git repos (relative source paths like `./plugins/formatter` only resolve within a Git working tree). There is nothing to do here: `ynd marketplace build` already made `marketplace-out` a Git repo with a commit (see [Git repo](#git-repo) above).
 
-```bash
-cd /tmp/ynh-tutorial/marketplace-out
-git init && git add . && git commit -m "init"
-```
-
-Now test in a Claude Code session:
+Test it in a Claude Code session:
 
 ```bash
 # Add the marketplace
@@ -249,16 +248,72 @@ Now test in a Claude Code session:
 # What skills do I have from the formatter and reviewer plugins?
 ```
 
-> **Note:** This is a Claude Code requirement, not a ynh limitation. When distributing via GitHub (the normal path), the repo is already a Git repo. The `git init` step is only needed for local testing.
+> **Note:** This is a Claude Code requirement, not a ynh limitation. When distributing via GitHub (the normal path), the repo is already a Git repo. Locally, the build's own `git init` and commit cover it.
 
 ## Build with --clean
 
 Run from the directory containing `marketplace.json`:
 
+`--clean` removes the output directory before rebuilding. Use it on a directory that
+holds stale output and is not a Git working copy — here, a scratch directory with a
+leftover file:
+
 ```bash
+mkdir -p /tmp/ynh-tutorial/marketplace-stale
+echo old > /tmp/ynh-tutorial/marketplace-stale/leftover.txt
 cd /tmp/ynh-tutorial/marketplace-src
-ynd marketplace build -o /tmp/ynh-tutorial/marketplace-out --clean
-# Removes output dir before rebuilding
+ynd marketplace build -o /tmp/ynh-tutorial/marketplace-stale --clean
+```
+
+It asks before deleting:
+
+```
+--clean will permanently delete /tmp/ynh-tutorial/marketplace-stale and its 1 entry.
+Delete it? [y/N]
+```
+
+Anything but `y` leaves the directory alone and exits 1. Pass `-y` (also implied by
+`$YNH_YES` or CI) to skip the prompt:
+
+```bash
+ynd marketplace build -o /tmp/ynh-tutorial/marketplace-stale --clean -y
+```
+
+```
+Marketplace built → /tmp/ynh-tutorial/marketplace-stale (2 plugins)
+```
+
+`--clean` refuses outright to delete the filesystem root, `$HOME`, the current
+directory, any ancestor of it, or a Git working copy, and `-y` does not override
+that. There is one exception: the repository `ynd marketplace build` created
+itself. The build output is initialised as a Git repo (see above) and marked with
+`.ynd-marketplace`, so `--clean` on `marketplace-out` empties it but keeps `.git`
+and `.ynd-marketplace`, rebuilds, and commits on top:
+
+```bash
+echo stale > /tmp/ynh-tutorial/marketplace-out/stale.txt
+ynd marketplace build -o /tmp/ynh-tutorial/marketplace-out --clean -y
+```
+
+```
+Marketplace built → /tmp/ynh-tutorial/marketplace-out (2 plugins)
+```
+
+`stale.txt` is gone and the history is intact. When the rebuilt content matches
+the last commit, as it does here, there is nothing new to commit, so `git log`
+still shows the one `ynd marketplace build` commit; change the config and rebuild
+and a second one appears on top.
+
+A Git repo that ynd did not create is still refused, `-y` or not:
+
+```bash
+mkdir -p /tmp/ynh-tutorial/marketplace-foreign
+git -C /tmp/ynh-tutorial/marketplace-foreign init -q
+ynd marketplace build -o /tmp/ynh-tutorial/marketplace-foreign --clean -y
+```
+
+```
+Error: --clean refuses to delete /tmp/ynh-tutorial/marketplace-foreign: it is a git working copy (not created by ynd)
 ```
 
 > **Important:** `ynd marketplace build` looks for `marketplace.json` in the current directory. Make sure you're in the directory that contains your marketplace config, not the output directory.

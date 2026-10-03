@@ -12,7 +12,7 @@ func writeHarness(t *testing.T, dir, name string) {
 		t.Fatal(err)
 	}
 	content := `{"name":"` + name + `","version":"0.1.0","description":"` + name + ` harness","default_vendor":"claude"}`
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(content), 0o644); err != nil {
+	if err := writePluginJSONFile(dir, []byte(content)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -60,7 +60,7 @@ func TestDiscover_ChildHarnesses(t *testing.T) {
 
 func TestDiscover_NestedDepth(t *testing.T) {
 	root := t.TempDir()
-	// Harness at depth 2: root/org/harness/.harness.json
+	// Harness at depth 2: root/org/harness/.agents/harness/plugin.json
 	writeHarness(t, filepath.Join(root, "org", "deep"), "deep")
 
 	results, err := Discover(root, 2)
@@ -131,7 +131,7 @@ func TestDiscover_InvalidJSON(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte("{invalid"), 0o644); err != nil {
+	if err := writePluginJSONFile(dir, []byte("{invalid")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -150,7 +150,7 @@ func TestDiscover_MissingName(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(`{"version":"0.1.0"}`), 0o644); err != nil {
+	if err := writePluginJSONFile(dir, []byte(`{"version":"0.1.0"}`)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -188,7 +188,7 @@ func TestDiscover_PopulatesAllFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	content := `{"name":"full","version":"1.2.3","description":"A full harness","default_vendor":"codex","keywords":["go","dev"]}`
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(content), 0o644); err != nil {
+	if err := writePluginJSONFile(dir, []byte(content)); err != nil {
 		t.Fatal(err)
 	}
 

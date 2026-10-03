@@ -20,7 +20,7 @@ type DiscoveredHarness struct {
 }
 
 // Discover walks root up to maxDepth levels looking for directories that
-// contain a .harness.json file. Returns one entry per discovered harness.
+// contain a harness manifest. Returns one entry per discovered harness.
 func Discover(root string, maxDepth int) ([]DiscoveredHarness, error) {
 	abs, err := filepath.Abs(root)
 	if err != nil {
@@ -70,15 +70,15 @@ func walkDiscover(dir string, remainingDepth int, results *[]DiscoveredHarness) 
 }
 
 // loadMinimalHarness reads just the identity fields from a harness manifest.
-// Migration chain runs first so any legacy format is converted before we read.
+// The format chain runs first; a tree whose manifest ynh no longer reads is
+// not discovered.
 // Uses a loose struct (no DisallowUnknownFields) so discovery tolerates newer fields.
 func loadMinimalHarness(dir string) (DiscoveredHarness, bool) {
 	if _, err := migration.FormatChain().Run(dir); err != nil {
 		return DiscoveredHarness{}, false
 	}
 
-	manifestPath := filepath.Join(dir, plugin.PluginDir, plugin.PluginFile)
-	data, err := os.ReadFile(manifestPath)
+	data, err := os.ReadFile(plugin.PluginPath(dir))
 	if err != nil {
 		return DiscoveredHarness{}, false
 	}

@@ -39,8 +39,8 @@ Create a harness to use throughout this tutorial:
 mkdir -p /tmp/ynh-tutorial/docker-harness/skills/greet
 mkdir -p /tmp/ynh-tutorial/docker-harness/rules
 
-mkdir -p /tmp/ynh-tutorial/docker-harness/.ynh-plugin
-cat > /tmp/ynh-tutorial/docker-harness/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/docker-harness/.agents/harness
+cat > /tmp/ynh-tutorial/docker-harness/.agents/harness/plugin.json << 'EOF'
 {
   "name": "docker-demo",
   "version": "0.1.0",
@@ -185,23 +185,30 @@ Expected output (Dockerfile printed to stdout):
 ```dockerfile
 FROM ghcr.io/eyelock/ynh:latest
 
-# Pre-assembled vendor layouts (all three, ready to use)
-COPY --link --chown=ynh:ynh vendors/claude/ /home/ynh/.ynh/run/local--docker-demo/claude/
-COPY --link --chown=ynh:ynh vendors/codex/ /home/ynh/.ynh/run/local--docker-demo/codex/
-COPY --link --chown=ynh:ynh vendors/cursor/ /home/ynh/.ynh/run/local--docker-demo/cursor/
+# Pre-assembled vendor layouts (all four, ready to use)
+COPY --chown=ynh:ynh vendors/claude/ /home/ynh/.ynh/run/local--docker-demo/claude/
+COPY --chown=ynh:ynh vendors/codex/ /home/ynh/.ynh/run/local--docker-demo/codex/
+COPY --chown=ynh:ynh vendors/cursor/ /home/ynh/.ynh/run/local--docker-demo/cursor/
+COPY --chown=ynh:ynh vendors/copilot/ /home/ynh/.ynh/run/local--docker-demo/copilot/
 
 # Harness source (metadata for ynh run)
-COPY --link --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--docker-demo/
+COPY --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--docker-demo/
+
+# Schema version of the layout above, so ynh does not try to migrate it
+COPY --chown=ynh:ynh home/ /home/ynh/.ynh/
 
 # Default vendor (override: docker run -e YNH_VENDOR=codex)
 ENV YNH_VENDOR=claude
 
-# Baked entrypoint — just pass the prompt as CMD
+# Interactive vendor session. Pass the prompt as CMD.
 ENTRYPOINT ["tini", "-s", "--", "ynh", "run", "local/docker-demo"]
 CMD []
 
 LABEL dev.ynh.harness="docker-demo" \
       dev.ynh.harness.default-vendor="claude" \
+      dev.ynh.harness.version="0.1.0" \
+      dev.ynh.harness.sha="" \
+      dev.ynh.entrypoint="run" \
       dev.ynh.assembled-by="<version>"
 ```
 

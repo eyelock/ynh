@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "title": "YNH Plugin",
-  "description": "Harness plugin manifest for ynh 0.2+ \u2014 lives at .ynh-plugin/plugin.json. Install-time provenance lives in a separate .ynh-plugin/installed.json file written by ynh install.",
+  "description": "Harness plugin manifest for ynh 0.2+. Lives at .agents/harness/plugin.json (.ynh-plugin/plugin.json, the location before 0.8, is deprecated: still read as a fallback until a later release, and moved by ynd migrate). Install-time provenance lives in a separate .agents/harness/installed.json file written by ynh install.",
   "type": "object",
   "required": [
     "$schema",

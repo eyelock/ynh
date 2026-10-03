@@ -1,9 +1,12 @@
-// Package migration provides a filter chain for transparent format migrations.
+// Package migration provides a filter chain for format migrations.
 //
 // Each migration is a single struct implementing Migrator. Loaders call
-// DefaultChain().Run(dir) before reading — they never branch on old formats.
+// FormatChain().Run(dir) before reading and never branch on old formats;
+// `ynd migrate` runs MigrateChain(), the only chain that rewrites a tree
+// ynh did not install.
+//
 // Removing support for a legacy format means deleting the migrator file and
-// unregistering the struct from DefaultChain. No other code changes.
+// unregistering the struct from the chains. No other code changes.
 package migration
 
 // Migrator is a single format migration step.
@@ -37,21 +40,42 @@ func (c Chain) Run(dir string) ([]string, error) {
 // DefaultChain returns the full migration chain including storage relocation.
 //
 // Order matters: HarnessFormatMigrator must run before HarnessStorageMigrator
-// so that .ynh-plugin/installed.json exists when namespace inference runs.
+// so that .agents/harness/installed.json exists when namespace inference runs.
+// ManifestDirMigrator runs first so every later step sees the canonical
+// manifest directory.
 func DefaultChain() Chain {
 	return Chain{
+		ManifestDirMigrator{},
 		HarnessFormatMigrator{},
 		RegistryFormatMigrator{},
 		HarnessStorageMigrator{},
 	}
 }
 
-// FormatChain returns the format-only migration chain (no storage relocation).
-// Use this when loading harnesses transparently — storage migration should be
-// triggered explicitly so callers holding paths are not surprised by relocation.
+// FormatChain returns the format-only migration chain (no storage relocation),
+// which every command runs before it loads a harness or registry.
+//
+// It rewrites only installs under config.HarnessesDir(), ynh's own copies.
+// Nothing outside them is ever written (#406): a .ynh-plugin/ tree is read
+// through the fallback with a deprecation warning, and a legacy .harness.json
+// or registry.json makes Run return an error naming `ynd migrate`, because
+// ynh no longer reads either format. See MigrateChain.
 func FormatChain() Chain {
 	return Chain{
+		ManifestDirMigrator{},
 		HarnessFormatMigrator{},
 		RegistryFormatMigrator{},
+	}
+}
+
+// MigrateChain is FormatChain for `ynd migrate`, the one caller acting on an
+// explicit request from a tree's owner, behind its confirmation. It is the
+// only chain that rewrites source trees: it renames .ynh-plugin/ to
+// .agents/harness/ and converts .harness.json and registry.json.
+func MigrateChain() Chain {
+	return Chain{
+		ManifestDirMigrator{SourceTrees: true},
+		HarnessFormatMigrator{SourceTrees: true},
+		RegistryFormatMigrator{SourceTrees: true},
 	}
 }

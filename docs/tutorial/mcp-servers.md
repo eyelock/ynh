@@ -16,8 +16,8 @@ Create a harness with an MCP server declaration:
 ```bash
 mkdir -p /tmp/ynh-tutorial/mcp-harness
 
-mkdir -p /tmp/ynh-tutorial/mcp-harness/.ynh-plugin
-cat > /tmp/ynh-tutorial/mcp-harness/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/mcp-harness/.agents/harness
+cat > /tmp/ynh-tutorial/mcp-harness/.agents/harness/plugin.json << 'EOF'
 {
   "name": "mcp-demo",
   "version": "0.1.0",
@@ -116,8 +116,8 @@ Codex uses the same JSON format as Claude with a `mcpServers` key, placed at the
 Add a second server using HTTP transport:
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/mcp-harness/.ynh-plugin
-cat > /tmp/ynh-tutorial/mcp-harness/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/mcp-harness/.agents/harness
+cat > /tmp/ynh-tutorial/mcp-harness/.agents/harness/plugin.json << 'EOF'
 {
   "name": "mcp-demo",
   "version": "0.1.0",
@@ -251,20 +251,32 @@ MCP servers can be authored from the CLI as well as in the manifest:
 ynh mcp add /tmp/ynh-tutorial/mcp-harness github \
     --command npx --arg -y --arg @modelcontextprotocol/server-github \
     --env GITHUB_TOKEN=ghp_xxx
+# Added mcp server "github"
 
 # HTTP transport
 ynh mcp add /tmp/ynh-tutorial/mcp-harness api \
-    --url https://mcp.example.com --header Authorization=Bearer xyz
+    --url https://mcp.example.com --header "Authorization=Bearer xyz"
+# Added mcp server "api"
 
 # Update an existing entry
 ynh mcp update /tmp/ynh-tutorial/mcp-harness github --env GITHUB_TOKEN=ghp_new
+# Updated mcp server "github"
 
 # Remove an entry
 ynh mcp remove /tmp/ynh-tutorial/mcp-harness api
+# Removed mcp server "api"
 
-# Profile-level overlay (with optional --null to suppress an inherited entry)
-ynh profile mcp add /tmp/ynh-tutorial/mcp-harness <profile> postgres --null
+# Profile-level overlay (with optional --null to suppress an inherited entry).
+# The harness has no profile yet, so add one first.
+ynh profile add /tmp/ynh-tutorial/mcp-harness ci
+# Added profile "ci"
+ynh profile mcp add /tmp/ynh-tutorial/mcp-harness ci postgres --null
+# Added mcp server "postgres" to profile "ci"
+ynh profile remove /tmp/ynh-tutorial/mcp-harness ci
+# Removed profile "ci"
 ```
+
+Quote any `--header` or `--env` value that contains a space: unquoted, `Bearer xyz` is two arguments and `ynh mcp add` prints its usage line instead.
 
 `--command` and `--url` are mutually exclusive; at least one is required at add time. `--null` is profile-only (harness-level entries cannot be null — see [mcp.md §"CLI Editing"](../mcp.md#cli-editing)).
 
@@ -278,7 +290,7 @@ rm -rf /tmp/ynh-tutorial
 
 ## What You Learned
 
-- MCP servers are declared in `.ynh-plugin/plugin.json` under `mcp_servers`
+- MCP servers are declared in `.agents/harness/plugin.json` under `mcp_servers`
 - Servers can use stdio transport (`command` + `args`) or HTTP transport (`url`)
 - All three vendors use JSON with a `mcpServers` key, but in different file locations
 - Claude places MCP config at `.claude/.mcp.json`, Cursor at `.cursor/mcp.json`, and Codex at `.mcp.json` (plugin root)

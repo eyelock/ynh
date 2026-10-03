@@ -98,7 +98,7 @@ func TestResolveEditTarget_PathNoHarness(t *testing.T) {
 
 	_, _, err := ResolveEditTarget(dir)
 	if err == nil {
-		t.Fatal("expected error for path without .harness.json")
+		t.Fatal("expected error for path without a manifest")
 	}
 	if !strings.Contains(err.Error(), "no harness manifest") {
 		t.Errorf("error should mention missing manifest, got: %v", err)

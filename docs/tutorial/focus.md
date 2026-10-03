@@ -19,13 +19,14 @@ Create a harness with profiles and focus entries that reference them:
 ```bash
 mkdir -p /tmp/ynh-tutorial/focus-harness/skills/deploy
 
-mkdir -p /tmp/ynh-tutorial/focus-harness/.ynh-plugin
-cat > /tmp/ynh-tutorial/focus-harness/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/focus-harness/.agents/harness
+cat > /tmp/ynh-tutorial/focus-harness/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "focus-demo",
   "version": "0.1.0",
   "default_vendor": "claude",
+  "env_passthrough": ["GITHUB_TOKEN"],
   "hooks": {
     "after_tool": [
       { "command": "/usr/local/bin/format-check.sh" }
@@ -76,11 +77,20 @@ Run the deployment pipeline for the target environment.
 EOF
 ```
 
+The `github` server reads its token from `${GITHUB_TOKEN}`. Preview refuses a
+reference to a variable that is not both listed in `env_passthrough` and set. If you have no token
+in your shell, give it a demo value (preview never sends it anywhere); a real one is kept:
+
+```bash
+export GITHUB_TOKEN="${GITHUB_TOKEN:-ghp-demo-token}"
+```
+
 Key points:
 - `focus` is a top-level field alongside `profiles`
 - Each focus has a `prompt` (required) and optional `profile`
 - The `review` focus activates the `ci` profile and sends a review prompt
 - The `docs` focus has no profile — it uses the base configuration
+- `env_passthrough` allowlists `GITHUB_TOKEN` for the MCP server's `${GITHUB_TOKEN}` reference
 - The `ci` profile uses `null` to remove the inherited `github` MCP server
 
 ## Validate focus entries
@@ -92,6 +102,21 @@ ynd validate /tmp/ynh-tutorial/focus-harness
 Expected:
 ```
 /tmp/ynh-tutorial/focus-harness: valid
+  checked:
+    manifest     /tmp/ynh-tutorial/focus-harness/.agents/harness/plugin.json against https://eyelock.github.io/ynh/schema/plugin.schema.json
+    includes     none
+    mcp_servers  github runs `npx -y @modelcontextprotocol/server-github`
+    hooks        after_tool runs `/usr/local/bin/format-check.sh`
+    profiles     ci
+    focuses      docs
+                 review
+    sensors      none
+    delegates_to none
+    skills       deploy
+    agents       none
+    rules        none
+    commands     none
+    instructions instructions.md
 ```
 
 The validator checks that each focus entry has a non-empty `prompt` and that any referenced profile exists.
@@ -208,4 +233,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Project-Local Config](project-local-config.md) — use `.ynh-plugin/plugin.json` in your project root for zero-install configuration.
+[Project-Local Config](project-local-config.md) — use `.agents/harness/plugin.json` in your project root for zero-install configuration.

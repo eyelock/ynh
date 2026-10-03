@@ -21,7 +21,7 @@ func TestRun_RejectsLocalPathTraversal(t *testing.T) {
 	s := newSandbox(t)
 
 	harness := filepath.Join(t.TempDir(), "evil")
-	if err := os.MkdirAll(filepath.Join(harness, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(harness, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	body := `{
@@ -31,7 +31,7 @@ func TestRun_RejectsLocalPathTraversal(t *testing.T) {
   "includes": [{"local": "../../../etc"}]
 }
 `
-	if err := os.WriteFile(filepath.Join(harness, ".ynh-plugin", "plugin.json"), []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(harness, ".agents/harness", "plugin.json"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	s.mustRunYnh(t, "install", harness)
@@ -74,7 +74,7 @@ func TestInstall_TransitiveAgentsMd(t *testing.T) {
 
 	// Harness has its own AGENTS.md plus the include.
 	harness := filepath.Join(t.TempDir(), "transitive")
-	if err := os.MkdirAll(filepath.Join(harness, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(harness, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	manifest := fmt.Sprintf(`{
@@ -84,7 +84,7 @@ func TestInstall_TransitiveAgentsMd(t *testing.T) {
   "includes": [{"local": %q}]
 }
 `, include)
-	if err := os.WriteFile(filepath.Join(harness, ".ynh-plugin", "plugin.json"), []byte(manifest), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(harness, ".agents/harness", "plugin.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(harness, "AGENTS.md"),

@@ -60,7 +60,7 @@ Create the directory structure based on their choices:
 
 ```
 <output-dir>/
-├── .ynh-plugin/
+├── .agents/harness/
 │   └── plugin.json
 ├── AGENTS.md            (optional - read natively by most vendors; ynh shims Claude via @-import)
 ├── skills/              (if selected)
@@ -74,7 +74,7 @@ Create the directory structure based on their choices:
     └── <example>.md
 ```
 
-For `.ynh-plugin/plugin.json`:
+For `.agents/harness/plugin.json`:
 
 ```json
 {
@@ -121,6 +121,6 @@ If `ynh` isn't on their PATH, remind them about the build step (`make build`) an
 
 After the harness is working, mention:
 
-1. **Add external skills** - They can pull skills from any Git repo by adding `includes` to `.ynh-plugin/plugin.json`. See `references/harness-format.md` for the syntax.
+1. **Add external skills** - They can pull skills from any Git repo by adding `includes` to `.agents/harness/plugin.json`. See `references/harness-format.md` for the syntax.
 2. **Team setup** - When ready, they can use `/ynh-team-setup` to create a team harness with delegation.
 3. **Private repos** - If they need private Git repos, SSH URLs (`git@github.com:...`) are recommended. ynh delegates to the local `git` binary - if `git clone` works, ynh works.

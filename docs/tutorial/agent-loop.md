@@ -12,8 +12,8 @@ read that tutorial first — everything about tolerance and the
 ## A harness with one sensor and a focus
 
 ```bash
-mkdir -p /tmp/loop-demo/.ynh-plugin && cd /tmp/loop-demo
-cat > .ynh-plugin/plugin.json <<'EOF'
+mkdir -p /tmp/loop-demo/.agents/harness && cd /tmp/loop-demo
+cat > .agents/harness/plugin.json <<'EOF'
 {
   "name": "demo",
   "version": "0.1.0",
@@ -302,7 +302,10 @@ run will hit it, and it is the operator's fault not the model's.
 
 ## Resuming
 
-A run writes `checkpoint.json` into its working directory on every turn:
+A run writes `checkpoint.json` beside its `--emit-jsonl` file on every turn.
+That folder is the session directory. Here it is `/tmp/loop-demo`, because
+`run.jsonl` was a relative path. A run with no `--emit-jsonl`, or with
+`--emit-jsonl -`, writes no checkpoint and cannot be resumed.
 
 ```json
 {
@@ -323,6 +326,9 @@ Resume by pointing at the directory that holds it:
 ```bash
 ynh agent run --resume /tmp/loop-demo
 ```
+
+Pass `--emit-jsonl run.jsonl` again to keep the trajectory in one file. Without
+it, the resumed events go to `trajectory.jsonl` in the same folder.
 
 The budget resumes where it stopped — it is not reset. A run interrupted at
 turn 20 of 25 gets five more turns, not twenty-five.

@@ -292,15 +292,19 @@ func writeGeneratedFiles(baseDir string, files map[string][]byte) error {
 
 // loadHarnessForPreview loads a harness without mutating the source directory.
 // If the source is a bare AGENTS.md directory, it copies to a temp dir first
-// and synthesizes harness.json there. Returns (harness, tempDir, error).
+// and synthesizes plugin.json there. Returns (harness, tempDir, error).
 // If tempDir is non-empty, the caller must clean it up.
 func loadHarnessForPreview(dir string) (*harness.Harness, string, error) {
-	switch harness.DetectFormat(dir) {
+	format, err := harness.DetectFormat(dir)
+	if err != nil {
+		return nil, "", err
+	}
+	switch format {
 	case "plugin":
 		h, err := harness.LoadDir(dir)
 		return h, "", err
 	case "legacy":
-		return nil, "", fmt.Errorf("legacy format detected in %q. Migrate to .ynh-plugin/plugin.json", dir)
+		return nil, "", fmt.Errorf("legacy format detected in %q. Migrate to .agents/harness/plugin.json", dir)
 	}
 
 	// No manifest: synthesize from AGENTS.md / instructions.md if present

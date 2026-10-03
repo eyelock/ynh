@@ -35,9 +35,9 @@ This gives you an AI session with skills that teach you ynh — including `/ynh-
 
 ## Create a Harness
 
-A harness is a directory with a `.ynh-plugin/plugin.json` and your artifacts:
+A harness is a directory with a `.agents/harness/plugin.json` and your artifacts:
 
-`.ynh-plugin/plugin.json`:
+`.agents/harness/plugin.json`:
 ```json
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
@@ -51,7 +51,7 @@ Add whatever you need - skills, agents, rules, commands:
 
 ```
 david/
-├── .ynh-plugin/plugin.json
+├── .agents/harness/plugin.json
 ├── skills/greet/SKILL.md
 ├── agents/reviewer.md
 └── rules/concise.md
@@ -82,7 +82,7 @@ Or set a global default in `~/.ynh/config.json`:
 
 Point your harness at any Git repo. Skills are used as-is - no wrapping, no build step:
 
-`.ynh-plugin/plugin.json`:
+`.agents/harness/plugin.json`:
 ```json
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
@@ -244,10 +244,10 @@ Use `ynh status` to see all symlink installations and `ynh prune` to clean up or
 
 ### Discover and Install From Registries
 
-A registry is a Git repository containing a `registry.json` that indexes available harnesses. You can add registries to discover and install harnesses by name instead of URL.
+A registry is a Git repository containing a `.agents/harness/marketplace.json` that indexes available harnesses. You can add registries to discover and install harnesses by name instead of URL.
 
 ```bash
-# Add a registry (a Git repo with registry.json)
+# Add a registry (a Git repo with .agents/harness/marketplace.json)
 ynh registry add github.com/your-org/ynh-registry
 
 # Search across all registries

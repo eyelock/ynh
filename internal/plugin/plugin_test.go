@@ -7,25 +7,7 @@ import (
 	"testing"
 )
 
-func TestIsHarnessDir_True(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(`{"name":"test","version":"0.1.0"}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if !IsHarnessDir(dir) {
-		t.Error("expected IsHarnessDir to return true")
-	}
-}
-
-func TestIsHarnessDir_False(t *testing.T) {
-	dir := t.TempDir()
-	if IsHarnessDir(dir) {
-		t.Error("expected IsHarnessDir to return false for empty dir")
-	}
-}
-
-func TestIsLegacyPluginDir(t *testing.T) {
+func TestIsClaudePluginDir(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0o755); err != nil {
 		t.Fatal(err)
@@ -34,8 +16,8 @@ func TestIsLegacyPluginDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !IsLegacyPluginDir(dir) {
-		t.Error("expected IsLegacyPluginDir to return true")
+	if !IsClaudePluginDir(dir) {
+		t.Error("expected IsClaudePluginDir to return true")
 	}
 }
 
@@ -201,56 +183,6 @@ func TestLoadHarnessJSON_WithSchema(t *testing.T) {
 	}
 	if hj.Schema != "https://eyelock.github.io/ynh/schema/harness.schema.json" {
 		t.Errorf("Schema = %q", hj.Schema)
-	}
-}
-
-func TestSaveHarnessJSON_RoundTrip(t *testing.T) {
-	dir := t.TempDir()
-
-	hj := &HarnessJSON{
-		Name:          "round-trip",
-		Version:       "1.0.0",
-		DefaultVendor: "claude",
-		Includes: []IncludeMeta{
-			{Git: "github.com/example/repo", Path: "skills/dev", Pick: []string{"review"}},
-		},
-		DelegatesTo: []DelegateMeta{
-			{Git: "github.com/example/team"},
-		},
-		InstalledFrom: &ProvenanceMeta{
-			SourceType:   "registry",
-			Source:       "github.com/example/repo",
-			RegistryName: "my-registry",
-			InstalledAt:  "2026-03-22T10:30:00Z",
-		},
-	}
-
-	if err := SaveHarnessJSON(dir, hj); err != nil {
-		t.Fatal(err)
-	}
-
-	loaded, err := LoadHarnessJSON(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if loaded.Name != "round-trip" {
-		t.Errorf("Name = %q", loaded.Name)
-	}
-	if len(loaded.Includes) != 1 {
-		t.Fatalf("Includes = %d, want 1", len(loaded.Includes))
-	}
-	if loaded.Includes[0].Path != "skills/dev" {
-		t.Errorf("Include.Path = %q", loaded.Includes[0].Path)
-	}
-	if len(loaded.DelegatesTo) != 1 {
-		t.Fatalf("DelegatesTo = %d, want 1", len(loaded.DelegatesTo))
-	}
-	if loaded.InstalledFrom == nil {
-		t.Fatal("InstalledFrom is nil after round-trip")
-	}
-	if loaded.InstalledFrom.RegistryName != "my-registry" {
-		t.Errorf("RegistryName = %q", loaded.InstalledFrom.RegistryName)
 	}
 }
 
@@ -488,26 +420,33 @@ func TestLoadHarnessJSON_WithFocus(t *testing.T) {
 	}
 }
 
-func TestLoadHarnessJSON_TestdataRoundTrip(t *testing.T) {
-	// Verify all testdata .harness.json files parse without error
-	entries, err := filepath.Glob("../../testdata/*/.harness.json")
+func TestLoadPluginJSON_TestdataRoundTrip(t *testing.T) {
+	// Every testdata harness is in the current format, so reading one never
+	// needs ynd migrate and running a command against it never changes the
+	// checkout (#406).
+	entries, err := filepath.Glob("../../testdata/*/.agents/harness/plugin.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(entries) == 0 {
 		// Not a skip. These fixtures are checked in, and zero matches means
 		// they have been deleted, which is the failure this test exists to
-		// catch. `ynd migrate` run from the repo root did exactly that, and
-		// the suite stayed green because this skipped (#350).
-		t.Fatal("no legacy testdata fixtures found under testdata/*/.harness.json; " +
+		// catch (#350).
+		t.Fatal("no testdata fixtures found under testdata/*/.agents/harness/plugin.json; " +
 			"they are committed, so their absence is a defect rather than a reason to skip")
 	}
 	for _, path := range entries {
-		dir := filepath.Dir(path)
-		_, err := LoadHarnessJSON(dir)
-		if err != nil {
-			t.Errorf("LoadHarnessJSON(%s) failed: %v", dir, err)
+		dir := filepath.Dir(filepath.Dir(filepath.Dir(path)))
+		if _, err := LoadPluginJSON(dir); err != nil {
+			t.Errorf("LoadPluginJSON(%s) failed: %v", dir, err)
 		}
+	}
+	legacy, err := filepath.Glob("../../testdata/*/" + HarnessFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(legacy) > 0 {
+		t.Errorf("legacy fixtures %v: build legacy trees under t.TempDir() in the test that needs one", legacy)
 	}
 }
 

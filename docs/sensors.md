@@ -12,7 +12,7 @@ Without sensors, a loop driver has to be hand-coded against a specific harness: 
 
 ## Schema
 
-Sensors live under the top-level `sensors` key in `.ynh-plugin/plugin.json`. Each sensor name maps to a declaration:
+Sensors live under the top-level `sensors` key in `.agents/harness/plugin.json`. Each sensor name maps to a declaration:
 
 ```json
 {
@@ -541,7 +541,9 @@ Or inline:
 
 Inline focuses are scoped to the sensor that declares them — they do **not** appear in `ynh info` Focus list, and they are not selectable via `--focus` or `YNH_FOCUS`. Use a string reference when the same focus is invoked both standalone and as a sensor; use inline when the focus exists only to drive this sensor.
 
-When the loop driver runs a focus-sourced sensor via `ynh sensors run`, ynh returns the resolved focus declaration; the loop driver invokes the agent runtime itself. ynh owns no agent-invocation surface.
+`ynh sensors run` does not invoke an agent for a focus-sourced sensor. It returns the resolved focus declaration, and a loop driver that wants a verdict invokes its own agent runtime with it.
+
+[`ynh agent run`](agent.md), ynh's built-in loop driver, does invoke an agent runtime, but only for the worker turns that do the task. It does not resolve focus-sourced sensors either. Its gate is `ynh check`, which reports a focus sensor as `deferred`, and a focus sensor never gates convergence there. To have a focus sensor judged, use your own loop driver.
 
 ## Output contract
 
@@ -787,7 +789,9 @@ not `pass`. Its failing states are worse still — converging on `absent` or
 `stale` would end a run on the strength of a missing or outdated file.
 
 Use a command source that exits non-zero until the work is done, or a focus
-source, which a loop driver resolves with an agent runtime.
+source, which a loop driver resolves with an agent runtime. `ynh agent run`
+does not resolve focus sources, so a focus verifier can never report `pass`
+there and the run cannot converge. With `ynh agent run`, use a command source.
 
 ## Validation
 
@@ -941,7 +945,7 @@ The most common integration is a hook that produces an artifact a sensor declare
 
 The hook is the runtime mechanism that produces the data; the sensor is the declarative contract over reading it. Coupling is **by shared file path** — implicit, no schema link needed.
 
-> **Making the hook actually fire.** For an always-on sensor loop in a plain Claude session, the hooks must live in the project's `.claude/settings.json`, not just `.ynh-plugin/plugin.json` — and an `on_stop` sweep that feeds a verdict back to the agent has specific output and loop-guard requirements. See [Hooks §"Running hooks in a plain Claude session"](hooks.md#running-hooks-in-a-plain-claude-session) and [Hooks §"on_stop output semantics"](hooks.md#on-stop-output-semantics-claude).
+> **Making the hook actually fire.** For an always-on sensor loop in a plain Claude session, the hooks must live in the project's `.claude/settings.json`, not just `.agents/harness/plugin.json` — and an `on_stop` sweep that feeds a verdict back to the agent has specific output and loop-guard requirements. See [Hooks §"Running hooks in a plain Claude session"](hooks.md#running-hooks-in-a-plain-claude-session) and [Hooks §"on_stop output semantics"](hooks.md#on-stop-output-semantics-claude).
 
 ### Same script, different driver
 
@@ -965,7 +969,7 @@ verifier=$(ynh sensors ls my-harness --format json |
            jq -r '.[] | select(.role == "convergence-verifier") | .name')
 ```
 
-ynh does **not** ship a loop driver. Orchestration policy — when to run sensors, how to weight them, when the loop is done — belongs to the layer above ynh. See `docs/harness-engineering.md` for the architectural framing.
+ynh ships one loop driver, [`ynh agent run`](agent.md). It runs `ynh check` between turns and feeds the results back to the agent. This section is for authors writing their own driver, for example to resolve focus-sourced sensors, which `ynh agent run` reports as `deferred`. A custom driver owns its orchestration policy: when to run sensors, how to weight them, and when the loop is done. See `docs/harness-engineering.md` for the architectural framing.
 
 ## Examples
 

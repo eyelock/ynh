@@ -44,7 +44,7 @@ ynh agent run --resume <session-dir> [flags]
 | `--max-wall <dur>` | Wall-clock cap, e.g. `30m` |
 | `--max-plan-iterations <n>` | Cap on plan revisions before acting |
 | `--emit-jsonl <path>` | Write the trajectory; `-` for stdout |
-| `--resume <dir>` | Continue a previous session from its directory |
+| `--resume <dir>` | Continue a previous session from its directory (the `--emit-jsonl` file's folder) |
 
 ### Budgets
 
@@ -156,23 +156,62 @@ Two detectors stop a loop that is not going anywhere:
 
 ## Resume
 
-Interrupting a run leaves a session directory containing a checkpoint and the
-trajectory. `--resume <dir>` continues it:
+A run can be resumed only if it wrote its trajectory to a file. The session
+directory is the folder that holds the `--emit-jsonl` file. A run with no
+`--emit-jsonl`, or with `--emit-jsonl -`, has no session directory, writes no
+checkpoint, and cannot be resumed.
 
 ```bash
-ynh agent run --resume ~/.ynh/agent/sessions/<id>
+mkdir -p runs/tidy
+ynh agent run --harness local/demo --task "..." --emit-jsonl runs/tidy/trajectory.jsonl
 ```
 
-The checkpoint records the run's identity — harness, profile, convergence
-sensor and budget caps — as well as its counters, so a resume restores the run
-it is actually resuming. Flags passed on the resume take precedence; anything
-omitted comes from the checkpoint.
+The folder must already exist. While the run goes, it holds:
+
+| File | Contents |
+|---|---|
+| the `--emit-jsonl` file | The trajectory |
+| `checkpoint.json` | Where the run got to, rewritten after every completed turn and at each phase boundary |
+| `gate-write-attempts.jsonl` | Only if the agent tried `ynh check --update-baseline` |
+
+The run result reports this folder as `session_dir`. At most one turn of work
+is lost: an interrupted turn is redone on resume.
+
+To continue, pass the folder to `--resume`:
+
+```bash
+ynh agent run --resume runs/tidy
+```
+
+On resume the trajectory is appended to `<dir>/trajectory.jsonl`. Name the
+file `trajectory.jsonl` in the first place, as above, or pass the same
+`--emit-jsonl` again. Otherwise the resumed events land in a second file.
+
+Give each run its own folder. Two runs that emit into the same folder write the
+same `checkpoint.json`, and the last one to write wins.
+
+The checkpoint records the run's identity (harness, profile, convergence sensor,
+and the turn and token caps) as well as its counters, so a resume restores
+the run it is actually resuming. Flags passed on the resume take precedence;
+anything omitted comes from the checkpoint.
+
+Some settings are not restored. Pass them again if the original run used them:
+`--backend`, `--model`, `--worktree`, `--max-wall`, `--sandbox`,
+`--auto-commit` and `--interactive`. Without `--backend` a resume drives
+`claude`, whatever backend the run started on.
+
+A run interrupted after planning picks up from the checkpoint's pending message
+and needs no task. A run interrupted during planning starts the plan again, and
+that needs the task: pass `--task` again, because the task is not read back from
+the checkpoint.
 
 Budgets carry across: consumption is restored alongside the caps, so resuming
-does not hand the run a fresh allowance.
+does not hand the run a fresh allowance. The wall-clock time already spent
+counts against `--max-wall`, but the cap itself comes from the flag, the
+harness or the default.
 
 If a checkpoint predates those fields and no `--harness` is given, the loop
-warns and continues, but cannot converge — it has no sensors to converge on.
+warns and continues, but cannot converge. It has no sensors to converge on.
 
 ## Exit codes
 
@@ -212,6 +251,25 @@ failed" from "this harness is broken and every run will hit it". The loop stops
 at the first occurrence rather than continuing against no signal — spending a
 whole budget on turns nothing could verify, and then reporting the exhaustion as
 the agent's failure, hides the real fault.
+
+Code 20 includes a worker that cannot authenticate with or reach its model.
+The run ends on the **first** turn, with the vendor's own message as the
+reason:
+
+```
+worker error: claude: Not logged in · Please run /login (authentication failed: does the harness env_passthrough pass the vendor's credentials?)
+```
+
+The usual cause is a harness whose `env_passthrough` does not list the
+vendor's API key, so the worker [never receives it](#what-the-agent-can-see).
+Each backend reads the failure from the vendor's structured output: an error
+`result` from Claude Code or Cursor, a `turn.failed` event from Codex. As a
+vendor-neutral safety net, a turn that answers without consuming a single
+token is also a worker error, because a model cannot respond without consuming
+tokens. That rule applies only when the backend reported usage for the turn:
+for one that reports none, zero is not a measurement. Without these checks the
+same message came back every turn and the run ended as stuck (13), pointing at
+the agent rather than its environment.
 
 ## Run result
 

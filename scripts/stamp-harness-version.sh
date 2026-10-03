@@ -27,12 +27,12 @@ cd "$(dirname "$0")/.."
 # it is a broken manifest whose whole purpose is to fail validation, and
 # stamping it would be editing a fixture to match the code it is meant to test.
 FILES=(
-	.ynh-plugin/plugin.json
+	.agents/harness/plugin.json
 	.claude-plugin/plugin.json
 	.cursor-plugin/plugin.json
 	.claude-plugin/marketplace.json
 	.github/plugin/marketplace.json
-	.claude/.ynh-plugin/plugin.json
+	.claude/.agents/harness/plugin.json
 	.claude/.claude-plugin/plugin.json
 	.claude/.cursor-plugin/plugin.json
 )

@@ -11,13 +11,13 @@ rm -rf /tmp/ynh-tutorial
 
 ## Add hooks to a harness
 
-Create a harness with hook declarations in `.ynh-plugin/plugin.json`:
+Create a harness with hook declarations in `.agents/harness/plugin.json`:
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/hook-harness/rules
 
-mkdir -p /tmp/ynh-tutorial/hook-harness/.ynh-plugin
-cat > /tmp/ynh-tutorial/hook-harness/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/hook-harness/.agents/harness
+cat > /tmp/ynh-tutorial/hook-harness/.agents/harness/plugin.json << 'EOF'
 {
   "name": "hook-demo",
   "version": "0.1.0",
@@ -61,7 +61,7 @@ Verify the structure:
 
 ```bash
 ls -aR /tmp/ynh-tutorial/hook-harness/ | grep -v '^\.\{1,2\}$\|^\.:'
-# Expected lines include: .ynh-plugin, instructions.md, rules, safety.md
+# Expected lines include: .agents, harness, instructions.md, rules, safety.md
 ```
 
 ## Preview for Claude
@@ -219,20 +219,29 @@ Expected output shows:
 - `.codex/hooks.json` is only in Codex
 - Shared files (like `CLAUDE.md`, `.cursorrules`, `codex.md`) may be listed as identical or different depending on instructions content
 
-The key difference: the same three hooks declared once in `.ynh-plugin/plugin.json` produce three structurally different config files, each native to the vendor.
+The key difference: the same three hooks declared once in `.agents/harness/plugin.json` produce three structurally different config files, each native to the vendor.
 
 ## Edit hooks from the command line
 
 Hooks can also be added and removed from the CLI — useful for scripted setup and for GUI consumers. The CLI distinguishes harness-level (default) hooks from profile-level overrides:
 
 ```bash
-# Top-level hooks
+# Top-level hooks. The new hook is appended after the existing Bash hook (index 0),
+# so it lands at index 1, and that is the one to remove.
 ynh hook add /tmp/ynh-tutorial/hook-harness before_tool "echo guard" --matcher Write
-ynh hook remove /tmp/ynh-tutorial/hook-harness before_tool 0
+# Added hook (event before_tool)
+ynh hook remove /tmp/ynh-tutorial/hook-harness before_tool 1
+# Removed hook 1 (event before_tool)
 
-# Profile-level hooks
-ynh profile hook add /tmp/ynh-tutorial/hook-harness <profile> after_tool "echo done"
-ynh profile hook remove /tmp/ynh-tutorial/hook-harness <profile> after_tool 0
+# Profile-level hooks. The harness has no profile yet, so add one first.
+ynh profile add /tmp/ynh-tutorial/hook-harness ci
+# Added profile "ci"
+ynh profile hook add /tmp/ynh-tutorial/hook-harness ci after_tool "echo done"
+# Added hook to profile "ci" (event after_tool)
+ynh profile hook remove /tmp/ynh-tutorial/hook-harness ci after_tool 0
+# Removed hook 0 from profile "ci" (event after_tool)
+ynh profile remove /tmp/ynh-tutorial/hook-harness ci
+# Removed profile "ci"
 ```
 
 The first positional argument accepts either a filesystem path (during authoring) or a canonical harness id (`local/<name>`, `github.com/<org>/<repo>/<name>`) once installed.
@@ -247,7 +256,7 @@ rm -rf /tmp/ynh-tutorial
 
 ## What You Learned
 
-- Hooks are declared in `.ynh-plugin/plugin.json` under `hooks` using canonical event names
+- Hooks are declared in `.agents/harness/plugin.json` under `hooks` using canonical event names
 - `ynd preview` shows the assembled vendor-native output without installing
 - Claude, Cursor, and Codex each use different event names and nesting structures
 - Hook scripts should exit with code 2 to block actions and include remediation instructions

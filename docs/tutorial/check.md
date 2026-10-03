@@ -20,8 +20,8 @@ export YNH_HOME=/tmp/ynh-t20/home
 ## Declare sensors with a tolerance
 
 ```bash
-mkdir -p gate-demo/.ynh-plugin
-cat > gate-demo/.ynh-plugin/plugin.json <<'EOF'
+mkdir -p gate-demo/.agents/harness
+cat > gate-demo/.agents/harness/plugin.json <<'EOF'
 {
   "name": "gate-demo",
   "version": "0.1.0",
@@ -113,8 +113,8 @@ Use a separate harness so the counts above stay as they were:
 
 ```bash
 cd /tmp/ynh-t20
-mkdir -p fresh-demo/.ynh-plugin
-cat > fresh-demo/.ynh-plugin/plugin.json <<'EOF'
+mkdir -p fresh-demo/.agents/harness
+cat > fresh-demo/.agents/harness/plugin.json <<'EOF'
 {
   "name": "fresh-demo",
   "version": "0.1.0",
@@ -307,7 +307,7 @@ echo "exit=$?"
 ```
 
 ```
-baseline recorded under .ynh/baseline — commit it
+baseline recorded under /tmp/ynh-t20/work/.ynh/baseline — commit it
 exit=0
 ```
 
@@ -370,9 +370,11 @@ ynh baseline local/gate-demo
 Baseline for gate-demo
 
   · build                    nothing recorded — no failures are forgiven
+  · judge                    nothing recorded — no failures are forgiven
   ● lint                     2 forgiven, accepted 2026-08-29T22:42:23Z
+  ● typos                    0 forgiven, accepted 2026-08-29T22:42:23Z
 
-2 sensors: 1 with recorded debt (2 findings forgiven), 1 with none
+4 sensors: 2 with recorded debt (2 findings forgiven), 2 with none
 
 Run with --explain to resolve the recorded fingerprints into the findings
 they forgive. That runs the sensors, so it is not the default.
@@ -391,11 +393,13 @@ ynh baseline local/gate-demo --explain
 Baseline for gate-demo
 
   · build                    nothing recorded — no failures are forgiven
+  · judge                    nothing recorded — no failures are forgiven
   ● lint                     2 forgiven, accepted 2026-08-29T22:42:23Z
       src/legacy.go:12:5: exported func Old should have comment
       src/util.go:8:2: unused variable tmp
+  ● typos                    0 forgiven, accepted 2026-08-29T22:42:23Z
 
-2 sensors: 1 with recorded debt (2 findings forgiven), 1 with none
+4 sensors: 2 with recorded debt (2 findings forgiven), 2 with none
 ```
 
 Note `build`: **a sensor with nothing recorded forgives nothing.** An empty

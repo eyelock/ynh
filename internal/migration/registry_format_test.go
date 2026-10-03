@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 // write a registry.json in a fresh temp dir and return the dir.
@@ -82,5 +84,43 @@ func TestRegistryMigrator_SkipsWhenAlreadyMigrated(t *testing.T) {
 	}
 	if (RegistryFormatMigrator{}).Applies(dir) {
 		t.Error("applied despite the new format already existing")
+	}
+}
+
+// The load-time migrator never converts a registry in a source tree; it
+// refuses with the fix and leaves registry.json as it was (#406). MigrateChain
+// converts it.
+func TestRegistryFormatMigrator_SourceTreeOnlyUnderMigrateChain(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	body := `{"name":"eyelock","entries":[{"name":"planner","repo":"github.com/eyelock/assistants"}]}`
+	dir := regDir(t, body)
+
+	mustBeUnderTemp(t, filepath.Dir(dir), dir)
+	_, err := FormatChain().Run(dir)
+	want := dir + " uses the legacy registry.json, which ynh no longer reads; convert it with: ynd migrate " + dir
+	if err == nil || err.Error() != want {
+		t.Fatalf("FormatChain().Run error = %v\nwant %s", err, want)
+	}
+	if got := readFile(t, filepath.Join(dir, "registry.json")); got != body {
+		t.Errorf("registry.json changed: %q", got)
+	}
+	if plugin.IsRegistryDir(dir) {
+		t.Error("FormatChain wrote a marketplace.json into a source tree")
+	}
+
+	applied, err := MigrateChain().Run(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(applied) != 1 || exists(filepath.Join(dir, "registry.json")) || !plugin.IsRegistryDir(dir) {
+		t.Errorf("MigrateChain did not convert the registry: applied %v", applied)
+	}
+}
+
+// A file that is not an ynh registry is neither converted nor refused.
+func TestLegacyRegistry_IgnoresForeignFiles(t *testing.T) {
+	dir := regDir(t, `{"registries":{"npm":"https://registry.npmjs.org"}}`)
+	if err := LegacyRegistry(dir); err != nil {
+		t.Errorf("refused a file that is not ynh's: %v", err)
 	}
 }

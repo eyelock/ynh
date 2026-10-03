@@ -2,7 +2,7 @@
 
 ## delegates_to syntax
 
-The manifest is `.ynh-plugin/plugin.json` — **JSON**. There is no YAML form.
+The manifest is `.agents/harness/plugin.json` — **JSON**. There is no YAML form.
 
 ```json
 {

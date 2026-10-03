@@ -39,8 +39,8 @@ Never deploy to production without running the test suite first.
 Always create a rollback plan before deploying.
 EOF
 
-mkdir -p /tmp/ynh-tutorial/preview-harness/.ynh-plugin
-cat > /tmp/ynh-tutorial/preview-harness/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/preview-harness/.agents/harness
+cat > /tmp/ynh-tutorial/preview-harness/.agents/harness/plugin.json << 'EOF'
 {
   "name": "preview-demo",
   "version": "0.1.0",
@@ -119,7 +119,7 @@ Expected output structure:
   agents/
   commands/
   rules/
-    safety.md
+    safety.mdc
   skills/
     deploy/
       SKILL.md
@@ -127,13 +127,17 @@ Expected output structure:
   mcp.json
 .cursor-plugin/
   plugin.json
+hooks/
+  hooks.json
 .cursorrules
+mcp.json
 ```
 
 Note the differences from Claude:
 - Instructions go to `.cursorrules` instead of `CLAUDE.md`
-- Hooks go to `.cursor/hooks.json` instead of `.claude/hooks/hooks.json`
-- MCP config goes to `.cursor/mcp.json` instead of `.claude/.mcp.json`
+- Rules are rendered as `.mdc` files (`.cursor/rules/safety.mdc`)
+- Hooks go to `.cursor/hooks.json` (and a root `hooks/hooks.json`) instead of `.claude/hooks/hooks.json`
+- MCP config goes to `.cursor/mcp.json` (and a root `mcp.json`) instead of `.claude/.mcp.json`
 - Artifacts are under `.cursor/` instead of `.claude/`
 
 ## Compare Claude vs Cursor output

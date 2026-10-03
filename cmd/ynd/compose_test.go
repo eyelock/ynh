@@ -50,7 +50,7 @@ func createComposeHarness(t *testing.T) string {
 		},
 	}
 	data, _ := json.MarshalIndent(hj, "", "  ")
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), data, 0o644); err != nil {
+	if err := writePluginJSONFile(dir, data); err != nil {
 		t.Fatal(err)
 	}
 
@@ -204,7 +204,7 @@ func TestCmdComposeJSONEmptyArrays(t *testing.T) {
 	dir := t.TempDir()
 
 	hj := `{"name": "bare", "version": "0.1.0", "default_vendor": "claude"}`
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
+	if err := writePluginJSONFile(dir, []byte(hj)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -273,8 +273,7 @@ func TestCmdComposeUnknownFlag(t *testing.T) {
 
 func TestCmdComposeInvalidFormat(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"),
-		[]byte(`{"name":"test","version":"0.1.0"}`), 0o644); err != nil {
+	if err := writePluginJSONFile(dir, []byte(`{"name":"test","version":"0.1.0"}`)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -289,8 +288,7 @@ func TestCmdComposeInvalidFormat(t *testing.T) {
 
 func TestCmdComposeNoDescription(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"),
-		[]byte(`{"name":"bare","version":"0.1.0","default_vendor":"claude"}`), 0o644); err != nil {
+	if err := writePluginJSONFile(dir, []byte(`{"name":"bare","version":"0.1.0","default_vendor":"claude"}`)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -316,7 +314,7 @@ func TestCmdComposeWithDelegates(t *testing.T) {
 		},
 	}
 	data, _ := json.MarshalIndent(hj, "", "  ")
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), data, 0o644); err != nil {
+	if err := writePluginJSONFile(dir, data); err != nil {
 		t.Fatal(err)
 	}
 
@@ -559,8 +557,7 @@ func TestCmdComposePickFilterWithLocalInclude(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(incDir, ".harness.json"),
-		[]byte(`{"name":"inc","version":"0.1.0","default_vendor":"claude"}`), 0o644); err != nil {
+	if err := writePluginJSONFile(incDir, []byte(`{"name":"inc","version":"0.1.0","default_vendor":"claude"}`)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -574,7 +571,7 @@ func TestCmdComposePickFilterWithLocalInclude(t *testing.T) {
 		},
 	}
 	data, _ := json.MarshalIndent(hj, "", "  ")
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), data, 0o644); err != nil {
+	if err := writePluginJSONFile(dir, data); err != nil {
 		t.Fatal(err)
 	}
 
@@ -610,7 +607,7 @@ func TestCmdComposeTextWithMCPURL(t *testing.T) {
 		},
 	}
 	data, _ := json.MarshalIndent(hj, "", "  ")
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), data, 0o644); err != nil {
+	if err := writePluginJSONFile(dir, data); err != nil {
 		t.Fatal(err)
 	}
 
@@ -651,7 +648,7 @@ func TestCompose_Sensors(t *testing.T) {
 		},
 	}
 	data, _ := json.MarshalIndent(hj, "", "  ")
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), data, 0o644); err != nil {
+	if err := writePluginJSONFile(dir, data); err != nil {
 		t.Fatal(err)
 	}
 
@@ -687,7 +684,7 @@ func TestCompose_Sensors(t *testing.T) {
 // teaches, so this is the attribution a new adopter hits first.
 func TestCompose_AttributesLocalInclude(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(`{
+	writeFile(t, filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(`{
   "name": "app",
   "version": "0.1.0",
   "default_vendor": "claude",

@@ -64,11 +64,11 @@ func TestVendorInstructions_Propagation(t *testing.T) {
 func newAgentsMdHarness(t *testing.T, name, agents string) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), name)
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	plugin := fmt.Sprintf(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":%q,"version":"0.1.0"}`, name)
-	if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(plugin), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(plugin), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte(agents), 0o644); err != nil {

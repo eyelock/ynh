@@ -473,7 +473,7 @@ func installTestHarness(t *testing.T, name string) string {
 		t.Fatal(err)
 	}
 	harnessJSON := fmt.Sprintf(`{"name":%q,"version":"0.1.0","default_vendor":"claude"}`, name)
-	if err := os.WriteFile(filepath.Join(flatDir, ".harness.json"), []byte(harnessJSON), 0o644); err != nil {
+	if err := writePluginJSONFile(flatDir, []byte(harnessJSON)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -482,7 +482,7 @@ func installTestHarness(t *testing.T, name string) string {
 	if err := os.MkdirAll(installDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(installDir, ".harness.json"), []byte(harnessJSON), 0o644); err != nil {
+	if err := writePluginJSONFile(installDir, []byte(harnessJSON)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -555,7 +555,7 @@ func TestCmdUninstall_NamespacedHarness(t *testing.T) {
 		t.Fatal(err)
 	}
 	harnessJSON := `{"name":"planner","version":"1.0.0","default_vendor":"claude"}`
-	if err := os.WriteFile(filepath.Join(nsDir, ".harness.json"), []byte(harnessJSON), 0o644); err != nil {
+	if err := writePluginJSONFile(nsDir, []byte(harnessJSON)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -652,7 +652,7 @@ func installSharedBareNameFixtures(t *testing.T) string {
 
 	// Pointer install: local/foo → source tree with a valid manifest.
 	srcDir := t.TempDir()
-	pluginDir := filepath.Join(srcDir, ".ynh-plugin")
+	pluginDir := filepath.Join(srcDir, ".agents/harness")
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -673,7 +673,7 @@ func installSharedBareNameFixtures(t *testing.T) string {
 
 	// Tree install: github.com/org/repo/foo at the schema-2 id-keyed path.
 	treeDir := harness.InstalledDirByID("github.com/org/repo/foo")
-	treePluginDir := filepath.Join(treeDir, ".ynh-plugin")
+	treePluginDir := filepath.Join(treeDir, ".agents/harness")
 	if err := os.MkdirAll(treePluginDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1083,8 +1083,7 @@ func TestFormatArtifactSummary(t *testing.T) {
 	if err := os.MkdirAll(harnessDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(harnessDir, ".harness.json"),
-		[]byte(`{"name":"artfmt","version":"0.1.0"}`), 0o644); err != nil {
+	if err := writePluginJSONFile(harnessDir, []byte(`{"name":"artfmt","version":"0.1.0"}`)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1173,8 +1172,7 @@ func TestCmdInstall_WritesProvenance(t *testing.T) {
 	if err := os.MkdirAll(srcDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, ".harness.json"),
-		[]byte(`{"name":"provtest","version":"0.1.0"}`), 0o644); err != nil {
+	if err := writePluginJSONFile(srcDir, []byte(`{"name":"provtest","version":"0.1.0"}`)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1253,8 +1251,7 @@ func TestCmdInstall_PathFlag(t *testing.T) {
 	if err := os.MkdirAll(aliceDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(aliceDir, ".harness.json"),
-		[]byte(`{"name":"alice","version":"0.1.0","description":"test harness"}`), 0o644); err != nil {
+	if err := writePluginJSONFile(aliceDir, []byte(`{"name":"alice","version":"0.1.0","description":"test harness"}`)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1274,8 +1271,8 @@ func TestCmdInstall_PathFlag(t *testing.T) {
 	if h.Name != "alice" {
 		t.Errorf("loaded harness name = %q, want alice", h.Name)
 	}
-	if harness.DetectFormat(aliceDir) != "plugin" {
-		t.Fatal("format migration did not run on source tree")
+	if f, err := harness.DetectFormat(aliceDir); err != nil || f != "plugin" {
+		t.Fatalf("DetectFormat(aliceDir) = %q, %v, want plugin", f, err)
 	}
 }
 
@@ -1328,10 +1325,10 @@ func TestCmdInstall_RefFlag_RejectedForLocalPath(t *testing.T) {
 	t.Setenv("YNH_HOME", "")
 
 	src := filepath.Join(dir, "src")
-	if err := os.MkdirAll(filepath.Join(src, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(src, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(src, ".ynh-plugin", "plugin.json"), []byte(`{"name":"x","version":"0.0.1"}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(src, ".agents/harness", "plugin.json"), []byte(`{"name":"x","version":"0.0.1"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1363,8 +1360,7 @@ func TestCmdInstall_SourceInsideHarnessesDir(t *testing.T) {
 	if err := os.MkdirAll(srcDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, ".harness.json"),
-		[]byte(`{"name":"already-there","version":"0.1.0"}`), 0o644); err != nil {
+	if err := writePluginJSONFile(srcDir, []byte(`{"name":"already-there","version":"0.1.0"}`)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1373,7 +1369,7 @@ func TestCmdInstall_SourceInsideHarnessesDir(t *testing.T) {
 	}
 
 	// Harness must still be loadable after install from already-installed location
-	if harness.DetectFormat(srcDir) == "" {
+	if f, _ := harness.DetectFormat(srcDir); f == "" {
 		t.Error("harness missing after install from already-installed location")
 	}
 }
@@ -1387,10 +1383,10 @@ func TestCmdInstall_LocalRelativePath_PersistsAbsolute(t *testing.T) {
 	t.Setenv("YNH_HOME", "")
 
 	src := filepath.Join(dir, "rel-src")
-	if err := os.MkdirAll(filepath.Join(src, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(src, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(src, ".ynh-plugin", "plugin.json"),
+	if err := os.WriteFile(filepath.Join(src, ".agents/harness", "plugin.json"),
 		[]byte(`{"name":"relx","version":"0.0.1"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1557,7 +1553,7 @@ func TestCmdUninstall_PointerByCanonicalID(t *testing.T) {
 
 	// Create a source directory with a valid harness manifest.
 	srcDir := t.TempDir()
-	pluginDir := filepath.Join(srcDir, ".ynh-plugin")
+	pluginDir := filepath.Join(srcDir, ".agents/harness")
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1595,7 +1591,7 @@ func TestCmdUninstall_PointerByBareName(t *testing.T) {
 	t.Setenv("YNH_HOME", home)
 
 	srcDir := t.TempDir()
-	pluginDir := filepath.Join(srcDir, ".ynh-plugin")
+	pluginDir := filepath.Join(srcDir, ".agents/harness")
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

@@ -16,7 +16,7 @@ import (
 //
 // Applies only when:
 //   - The directory's parent is HarnessesDir() directly (flat layout)
-//   - .ynh-plugin/plugin.json exists (HarnessFormatMigrator must have run first)
+//   - .agents/harness/plugin.json exists (HarnessFormatMigrator must have run first)
 //
 // If installed.json is missing or has no source, the harness is left in place
 // under a synthetic "local/unknown" namespace and a warning is printed.

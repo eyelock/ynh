@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/marketplace"
@@ -63,11 +65,11 @@ func cmdValidate(args []string) error {
 		}
 		// Check for legacy format
 		if isLegacyHarnessRoot(root) {
-			fmt.Println("Legacy format detected. Migrate .claude-plugin/plugin.json and metadata.json to .ynh-plugin/plugin.json.")
+			fmt.Println("Legacy format detected. Migrate .claude-plugin/plugin.json and metadata.json to .agents/harness/plugin.json.")
 			return fmt.Errorf("validation failed")
 		}
 		fmt.Println("No harness directories found.")
-		fmt.Println("A harness requires .ynh-plugin/plugin.json (or legacy .harness.json).")
+		fmt.Println("A harness requires .agents/harness/plugin.json (or the deprecated .ynh-plugin/plugin.json, which ynd migrate moves).")
 		return nil
 	}
 
@@ -78,7 +80,7 @@ func cmdValidate(args []string) error {
 		}
 	}
 
-	// Also validate a marketplace.json in the root's .ynh-plugin/ directory, if present.
+	// Also validate a marketplace.json in the root's manifest directory, if present.
 	if err := validateRootMarketplace(root); err != nil {
 		hasError = true
 	}
@@ -89,12 +91,17 @@ func cmdValidate(args []string) error {
 	return nil
 }
 
-// validateRootMarketplace validates .ynh-plugin/marketplace.json in dir if it exists.
+// validateRootMarketplace validates the registry marketplace.json in dir's
+// manifest directory if it exists.
 func validateRootMarketplace(dir string) error {
-	path := filepath.Join(dir, plugin.PluginDir, plugin.MarketplaceFile)
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	if legacy := migration.LegacyRegistry(dir); legacy != nil {
+		fmt.Printf("%s: %v\n", dir, legacy)
+		return fmt.Errorf("validation failed")
+	}
+	if !plugin.IsRegistryDir(dir) {
 		return nil
 	}
+	path := plugin.MarketplacePath(dir)
 	issues := lintRegistryMarketplace(path)
 	for _, issue := range issues {
 		fmt.Printf("%s: %s\n", issue.File, issue.Message)
@@ -114,9 +121,10 @@ func validateFile(path string) error {
 	case base == plugin.PluginFile:
 		issues = lintHarnessJSON(path)
 	case base == "marketplace.json":
-		// Registry index (inside .ynh-plugin/) validates against the schema.
-		// Build config (anywhere else) validates via LoadConfig programmatic checks.
-		if filepath.Base(filepath.Dir(path)) == plugin.PluginDir {
+		// Registry index (inside a manifest directory) validates against the
+		// schema. Build config (anywhere else) validates via LoadConfig
+		// programmatic checks.
+		if plugin.InManifestDir(path) {
 			issues = lintRegistryMarketplace(path)
 		} else {
 			issues = lintMarketplaceConfig(path)
@@ -142,21 +150,19 @@ func validateFile(path string) error {
 	return nil
 }
 
+// isHarnessRoot reports whether dir is a harness, including one whose only
+// manifest is the legacy .harness.json: validateHarness reports that as an
+// issue rather than skipping the tree as manifest-less. Read only: validate
+// never converts a tree (#406).
 func isHarnessRoot(dir string) bool {
-	// Run the migration chain first so a legacy .harness.json is converted
-	// transparently before we decide whether this dir is a harness root.
-	_, _ = migration.FormatChain().Run(dir)
-	return plugin.IsPluginDir(dir)
+	return plugin.IsPluginDir(dir) || migration.LegacyHarnessManifest(dir) != nil
 }
 
-// harnessManifestPath returns the path to the manifest file for dir,
-// after running the migration chain so the result is always the new format
-// (or empty if no harness manifest exists).
+// harnessManifestPath returns the path to dir's plugin.json, or "" if it has
+// none.
 func harnessManifestPath(dir string) string {
-	_, _ = migration.FormatChain().Run(dir)
-	pluginPath := filepath.Join(dir, plugin.PluginDir, plugin.PluginFile)
-	if _, err := os.Stat(pluginPath); err == nil {
-		return pluginPath
+	if plugin.IsPluginDir(dir) {
+		return plugin.PluginPath(dir)
 	}
 	return ""
 }
@@ -164,6 +170,27 @@ func harnessManifestPath(dir string) string {
 func isLegacyHarnessRoot(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, ".claude-plugin", "plugin.json"))
 	return err == nil
+}
+
+// misplacedManifestIssues reports each manifest file that sits outside the
+// directory holding plugin.json. A second plugin.json is shadowed and
+// ignored; any other file belongs beside the plugin.json that wins.
+func misplacedManifestIssues(dir string) []string {
+	md, ok := plugin.ManifestDir(dir)
+	if !ok {
+		return nil
+	}
+	var issues []string
+	for _, f := range plugin.MisplacedManifestFiles(dir) {
+		if path.Base(f) == plugin.PluginFile {
+			issues = append(issues, fmt.Sprintf("both %s/%s and %s exist; %s wins and %s is ignored, so remove it",
+				md, plugin.PluginFile, f, md, f))
+			continue
+		}
+		issues = append(issues, fmt.Sprintf("%s is split from %s/%s; move it to %s/%s",
+			f, md, plugin.PluginFile, md, path.Base(f)))
+	}
+	return issues
 }
 
 func findHarnessRoots(root string) []string {
@@ -175,7 +202,7 @@ func findHarnessRoots(root string) []string {
 		if !d.IsDir() {
 			return nil
 		}
-		if d.Name() == plugin.PluginDir {
+		if d.Name() == plugin.AgentsDir || d.Name() == plugin.LegacyPluginDir {
 			return filepath.SkipDir
 		}
 		if isHarnessRoot(path) {
@@ -197,17 +224,18 @@ func validateHarness(dir string) error {
 
 	// Check for legacy format
 	if isLegacyHarnessRoot(dir) && !isHarnessRoot(dir) {
-		issues = append(issues, "legacy format detected: migrate .claude-plugin/plugin.json and metadata.json to .ynh-plugin/plugin.json")
+		issues = append(issues, "legacy format detected: migrate .claude-plugin/plugin.json and metadata.json to .agents/harness/plugin.json")
 	}
+	issues = append(issues, misplacedManifestIssues(dir)...)
 
-	// Migration chain runs inside harnessManifestPath so manifestPath is
-	// always the new format (or empty if no harness manifest exists).
 	manifestPath := harnessManifestPath(dir)
-	const manifestLabel = ".ynh-plugin/plugin.json"
+	const manifestLabel = ".agents/harness/plugin.json"
 	var data []byte
 	var err error
-	if manifestPath == "" {
-		issues = append(issues, "missing .ynh-plugin/plugin.json")
+	if legacy := migration.LegacyHarnessManifest(dir); legacy != nil {
+		issues = append(issues, legacy.Error())
+	} else if manifestPath == "" {
+		issues = append(issues, "missing .agents/harness/plugin.json")
 	} else {
 		data, err = os.ReadFile(manifestPath)
 		if err != nil {
@@ -323,16 +351,174 @@ func validateHarness(dir string) error {
 		}
 	}
 
+	checked := describeHarnessChecks(dir, manifestPath, data)
 	if len(issues) > 0 {
 		fmt.Printf("%s: INVALID\n", rel)
 		for _, issue := range issues {
 			fmt.Printf("  - %s\n", issue)
 		}
+		printChecked(checked)
 		return fmt.Errorf("harness %q has %d issue(s)", rel, len(issues))
 	}
 
 	fmt.Printf("%s: valid\n", rel)
+	printChecked(checked)
 	return nil
+}
+
+// printChecked lists what validation looked at, so "valid" is never a claim the reader has to
+// take on trust.
+func printChecked(lines []string) {
+	if len(lines) == 0 {
+		return
+	}
+	fmt.Println("  checked:")
+	for _, l := range lines {
+		fmt.Printf("    %s\n", l)
+	}
+}
+
+// describeHarnessChecks names each part of the harness validateHarness checks, with what it
+// found there. Parts the harness does not have are listed as "none" so the reader sees they
+// were looked at.
+func describeHarnessChecks(dir, manifestPath string, data []byte) []string {
+	var out []string
+	row := func(label, value string) { out = append(out, fmt.Sprintf("%-12s %s", label, value)) }
+	if manifestPath == "" || data == nil {
+		row("manifest", "missing")
+		return out
+	}
+	var hj map[string]any
+	if err := json.Unmarshal(data, &hj); err != nil {
+		row("manifest", manifestPath+" (not valid JSON)")
+		return out
+	}
+	schema, _ := hj["$schema"].(string)
+	if schema == "" {
+		schema = "no $schema"
+	}
+	row("manifest", fmt.Sprintf("%s against %s", manifestPath, schema))
+
+	var incs []string
+	if list, ok := hj["includes"].([]any); ok {
+		for _, raw := range list {
+			m, _ := raw.(map[string]any)
+			src, _ := m["git"].(string)
+			if src == "" {
+				src, _ = m["local"].(string)
+			}
+			detail := src
+			if path, _ := m["path"].(string); path != "" {
+				detail += " path " + path
+			}
+			if picks, ok := m["pick"].([]any); ok && len(picks) > 0 {
+				var ps []string
+				for _, p := range picks {
+					if s, ok := p.(string); ok {
+						ps = append(ps, s)
+					}
+				}
+				detail += " pick " + strings.Join(ps, ", ")
+			}
+			incs = append(incs, detail)
+		}
+	}
+	row("includes", listOrNone(incs))
+
+	var servers []string
+	if ms, ok := hj["mcp_servers"].(map[string]any); ok {
+		for _, name := range checkKeys(ms) {
+			m, _ := ms[name].(map[string]any)
+			cmd, _ := m["command"].(string)
+			if args, ok := m["args"].([]any); ok {
+				for _, a := range args {
+					if s, ok := a.(string); ok {
+						cmd += " " + s
+					}
+				}
+			}
+			if url, _ := m["url"].(string); url != "" {
+				cmd = url
+			}
+			servers = append(servers, fmt.Sprintf("%s runs `%s`", name, strings.TrimSpace(cmd)))
+		}
+	}
+	row("mcp_servers", listOrNone(servers))
+
+	var hooks []string
+	if hs, ok := hj["hooks"].(map[string]any); ok {
+		for _, event := range checkKeys(hs) {
+			entries, _ := hs[event].([]any)
+			for _, e := range entries {
+				m, _ := e.(map[string]any)
+				c, _ := m["command"].(string)
+				hooks = append(hooks, fmt.Sprintf("%s runs `%s`", event, c))
+			}
+		}
+	}
+	row("hooks", listOrNone(hooks))
+
+	for _, key := range []string{"profiles", "focuses", "sensors", "delegates_to"} {
+		var names []string
+		switch v := hj[key].(type) {
+		case map[string]any:
+			names = checkKeys(v)
+		case []any:
+			for _, x := range v {
+				if m, ok := x.(map[string]any); ok {
+					if s, _ := m["git"].(string); s != "" {
+						names = append(names, s)
+					}
+				}
+			}
+		}
+		row(key, listOrNone(names))
+	}
+
+	for _, sub := range []string{"skills", "agents", "rules", "commands"} {
+		var names []string
+		if entries, err := os.ReadDir(filepath.Join(dir, sub)); err == nil {
+			for _, e := range entries {
+				n := e.Name()
+				if sub != "skills" {
+					if e.IsDir() || !strings.HasSuffix(n, ".md") {
+						continue
+					}
+					n = strings.TrimSuffix(n, ".md")
+				} else if !e.IsDir() {
+					continue
+				}
+				names = append(names, n)
+			}
+		}
+		row(sub, listOrNone(names))
+	}
+
+	var instr []string
+	for _, f := range []string{"instructions.md", "AGENTS.md"} {
+		if fileExists(filepath.Join(dir, f)) {
+			instr = append(instr, f)
+		}
+	}
+	row("instructions", listOrNone(instr))
+	return out
+}
+
+func listOrNone(items []string) string {
+	if len(items) == 0 {
+		return "none"
+	}
+	// One item per line, aligned under the first, so long lists stay readable.
+	return strings.Join(items, "\n"+strings.Repeat(" ", 17))
+}
+
+func checkKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func fileExists(path string) bool {
@@ -512,7 +698,7 @@ func validateProfileMCPServers(profile map[string]any) []string {
 	return issues
 }
 
-// validateHarnessFocus validates focus entries inside .harness.json.
+// validateHarnessFocus validates focus entries inside plugin.json.
 func validateHarnessFocus(hj map[string]any) []string {
 	var issues []string
 
@@ -690,7 +876,7 @@ func lintHarnessJSON(path string) []lintIssue {
 	return append(issues, lintDeclaredReads(path)...)
 }
 
-// lintRegistryMarketplace validates a .ynh-plugin/marketplace.json registry index
+// lintRegistryMarketplace validates a registry marketplace.json index
 // against marketplace.schema.json.
 func lintRegistryMarketplace(path string) []lintIssue {
 	data, err := os.ReadFile(path)

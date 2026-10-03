@@ -75,11 +75,11 @@ func TestYnd_Export_Clean(t *testing.T) {
 func TestYnd_Marketplace_VendorFilter(t *testing.T) {
 	root := t.TempDir()
 	harness := filepath.Join(root, "harnesses", "demo")
-	if err := os.MkdirAll(filepath.Join(harness, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(harness, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	plugin := `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"demo","version":"0.1.0"}`
-	if err := os.WriteFile(filepath.Join(harness, ".ynh-plugin", "plugin.json"), []byte(plugin), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(harness, ".agents/harness", "plugin.json"), []byte(plugin), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -108,10 +108,10 @@ func TestYnd_Marketplace_VendorFilter(t *testing.T) {
 // file-mode entry point of validate.
 func TestYnd_Validate_File(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "single")
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	pluginPath := filepath.Join(dir, ".ynh-plugin", "plugin.json")
+	pluginPath := filepath.Join(dir, ".agents/harness", "plugin.json")
 	good := `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"single","version":"0.1.0"}`
 	if err := os.WriteFile(pluginPath, []byte(good), 0o644); err != nil {
 		t.Fatal(err)
@@ -137,7 +137,7 @@ func TestYnd_Compose_HarnessWithDeps(t *testing.T) {
 	}
 
 	harness := filepath.Join(t.TempDir(), "with-deps")
-	if err := os.MkdirAll(filepath.Join(harness, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(harness, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	manifest := `{
@@ -147,7 +147,7 @@ func TestYnd_Compose_HarnessWithDeps(t *testing.T) {
   "includes": [{"local": "` + filepath.Dir(filepath.Dir(upstream)) + `"}]
 }
 `
-	if err := os.WriteFile(filepath.Join(harness, ".ynh-plugin", "plugin.json"), []byte(manifest), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(harness, ".agents/harness", "plugin.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

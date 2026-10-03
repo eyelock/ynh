@@ -63,7 +63,7 @@ func TestMcp_PerVendor(t *testing.T) {
 func newMcpHarness(t *testing.T, name string) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), name)
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agents/harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	body := fmt.Sprintf(`{
@@ -75,7 +75,7 @@ func newMcpHarness(t *testing.T, name string) string {
   }
 }
 `, name)
-	if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "plugin.json"), []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agents/harness", "plugin.json"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return dir

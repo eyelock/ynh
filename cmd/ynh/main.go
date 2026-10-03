@@ -4,6 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+
+	"github.com/eyelock/ynh/internal/migration"
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 func main() {
@@ -34,6 +37,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", helpForUnknown(os.Args[1]))
 		os.Exit(1)
 	}
+
+	// A manifest read from the deprecated .ynh-plugin/ directory is reported
+	// once per harness, on stderr so --format json output stays clean.
+	plugin.SetLegacyManifestDirNotice(migration.ManifestDirNotice(os.Stderr))
 
 	// Auto-migration gate: every command except a few that must remain
 	// callable on a legacy home (migrate itself, version, help, paths)

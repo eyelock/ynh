@@ -457,8 +457,18 @@ func projectCopilotMCPConfig(configPath, projectDir string) error {
 // (see package doc for why). initialPrompt, when non-empty, is passed via
 // -i/--interactive, which pre-loads it as the first user message of an
 // otherwise-interactive session (confirmed via `copilot help`).
+//
+// --no-auto-update is always passed: Copilot ships weekly and checks for an
+// update on every launch. CONFIRMED by hand-testing (v1.0.80 -> v1.0.83): when
+// an update is found, Copilot downloads it, swaps the binary, and tears down
+// the foreground session mid-launch ("Successfully updated binary" followed
+// immediately by "Unregistering foreground session" in ~/.copilot/logs) —
+// silently dropping whatever initialPrompt/extraArgs this invocation carried,
+// including -i. ynh's launch is a one-shot process replacement
+// (syscall.Exec), so there is no opportunity to retry after such a restart;
+// the update must simply not happen mid-launch.
 func buildCopilotArgs(configPath string, initialPrompt string, extraArgs []string) ([]string, error) {
-	args := []string{"copilot"}
+	args := []string{"copilot", "--no-auto-update"}
 
 	if initialPrompt != "" {
 		args = append(args, "-i", initialPrompt)

@@ -14,7 +14,7 @@ Read these references to understand delegation and Git URL formats:
 1. Read `references/delegation.md` for `delegates_to` syntax, Git URL formats, auth, vendor support, and the team harness shape
 
 It ships with this skill, so it is readable wherever the skill is installed.
-Author the new harness as `.ynh-plugin/plugin.json`, the format below. The ynh
+Author the new harness as `.agents/harness/plugin.json`, the format below. The ynh
 repository is not present in a user's project — do not send them looking for
 fixtures in it.
 
@@ -59,7 +59,7 @@ They might also want to pull from external repos via `includes`.
 
 Create the team harness directory.
 
-`.ynh-plugin/plugin.json`:
+`.agents/harness/plugin.json`:
 
 ```json
 {
@@ -115,7 +115,7 @@ ynh install <personal-persona-git-url>
 david                       # personal session
 ```
 
-Explain the vendor standardization: setting `default_vendor` in `.ynh-plugin/plugin.json` ensures everyone uses the same AI vendor, but individuals can override with `-v`.
+Explain the vendor standardization: setting `default_vendor` in `.agents/harness/plugin.json` ensures everyone uses the same AI vendor, but individuals can override with `-v`.
 
 ## Step 7: Auth considerations
 

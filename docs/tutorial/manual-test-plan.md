@@ -172,7 +172,7 @@ Requires Docker installed and running.
 
 | Test | Tutorial step |
 |---|---|
-| Add hooks to .ynh-plugin/plugin.json | [Add hooks to a harness](hooks.md#add-hooks-to-a-harness) |
+| Add hooks to .agents/harness/plugin.json | [Add hooks to a harness](hooks.md#add-hooks-to-a-harness) |
 | Preview for Claude — verify hooks.json | [Preview for Claude](hooks.md#preview-for-claude) |
 | Preview for Cursor — verify hooks.json | [Preview for Cursor](hooks.md#preview-for-cursor) |
 | Preview for Codex — verify hooks.json | [Preview for Codex](hooks.md#preview-for-codex) |
@@ -250,7 +250,7 @@ Requires Docker installed and running.
 
 | Test | Tutorial step |
 |---|---|
-| Create a project with .ynh-plugin/plugin.json | [Create a project with .ynh-plugin/plugin.json](project-local-config.md#create-a-project-with-ynh-plugin-plugin-json) |
+| Create a project with .agents/harness/plugin.json | [Create a project with .agents/harness/plugin.json](project-local-config.md#create-a-project-with-agents-harness-plugin-json) |
 | Validate the project config | [Validate the project config](project-local-config.md#validate-the-project-config) |
 | Preview the assembled output | [Preview the assembled output](project-local-config.md#preview-the-assembled-output) |
 | Preview with --focus | [Preview with --focus](project-local-config.md#preview-with-focus) |
@@ -286,7 +286,7 @@ Requires Docker installed and running.
 | Uninstall by canonical id | [Uninstall by canonical id](namespacing-and-migration.md#uninstall-by-canonical-id) |
 | Migrate a legacy harness with `ynd migrate` | [Migrate a legacy harness with `ynd migrate`](namespacing-and-migration.md#migrate-a-legacy-harness-with-ynd-migrate) |
 | Recursive migration | [Recursive migration](namespacing-and-migration.md#recursive-migration) |
-| Transparent migration on use | [Transparent migration on use](namespacing-and-migration.md#transparent-migration-on-use) |
+| Read commands refuse a legacy tree; only `ynd migrate` converts it | [Transparent migration on use (removed)](namespacing-and-migration.md#transparent-migration-on-use) |
 | `ynh migrate` — upgrade `~/.ynh` schema | [`ynh migrate` — upgrade `~/.ynh` schema](namespacing-and-migration.md#ynh-migrate-upgrade-ynh-schema) |
 | `ynh quarantine` — recover from broken installs | [`ynh quarantine` — recover from broken installs](namespacing-and-migration.md#ynh-quarantine-recover-from-broken-installs) |
 | Clean up | [Clean up](namespacing-and-migration.md#clean-up) |
@@ -383,8 +383,8 @@ ynd --help         # Expected: same
 ### E3: Install with invalid --path
 
 ```bash
-mkdir -p /tmp/ynh-edge/repo
-echo '{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"edge","version":"0.1.0"}' > /tmp/ynh-edge/repo/.ynh-plugin/plugin.json
+mkdir -p /tmp/ynh-edge/repo/.agents/harness
+echo '{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"edge","version":"0.1.0"}' > /tmp/ynh-edge/repo/.agents/harness/plugin.json
 
 ynh install /tmp/ynh-edge/repo --path nonexistent/path
 # Expected: Error: path "nonexistent/path" not found in source
@@ -393,8 +393,8 @@ ynh install /tmp/ynh-edge/repo --path nonexistent/path
 ### E4: Install duplicate harness
 
 ```bash
-mkdir -p /tmp/ynh-edge/dup
-echo '{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"dup","version":"0.1.0"}' > /tmp/ynh-edge/dup/.ynh-plugin/plugin.json
+mkdir -p /tmp/ynh-edge/dup/.agents/harness
+echo '{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"dup","version":"0.1.0"}' > /tmp/ynh-edge/dup/.agents/harness/plugin.json
 
 ynh install /tmp/ynh-edge/dup
 ynh install /tmp/ynh-edge/dup
@@ -495,9 +495,24 @@ cd /tmp
 ynd create harness broken-test
 mkdir -p broken-test/skills/orphan
 ynd validate broken-test
-# Expected:
+# Expected (exit 1):
 #   broken-test: INVALID
 #     - skills/orphan/ missing SKILL.md
+#     checked:
+#       manifest     broken-test/.agents/harness/plugin.json against https://eyelock.github.io/ynh/schema/plugin.schema.json
+#       includes     none
+#       mcp_servers  none
+#       hooks        none
+#       profiles     none
+#       focuses      none
+#       sensors      none
+#       delegates_to none
+#       skills       orphan
+#       agents       none
+#       rules        none
+#       commands     none
+#       instructions AGENTS.md
+#   Error: validation failed
 
 rm -rf broken-test
 ```
@@ -510,8 +525,8 @@ echo '{"default_vendor":"claude","allowed_remote_sources":[]}' > ~/.ynh/config.j
 
 # Any harness with remote includes should fail at both install and run time
 # (install my-dev first if not already installed)
-my-dev "hello" 2>&1 | head -1
-# Expected: Error about remote source not allowed
+my-dev "hello" 2>&1 | grep Error
+# Expected: Error: resolving includes: include "github.com/eyelock/assistants": remote source ... is not in the allowed sources list (exit 1)
 
 mv ~/.ynh/config.json.bak ~/.ynh/config.json
 ```
@@ -542,28 +557,44 @@ ynh info
 
 ### E19: Focus and profile mutual exclusivity
 
+E19 and E20 need a harness that defines a focus and a profile. Create one:
+
+```bash
+mkdir -p /tmp/some-harness/.agents/harness
+cat > /tmp/some-harness/.agents/harness/plugin.json << 'EOF'
+{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"some-harness","version":"0.1.0","profiles":{"ci":{}},"focuses":{"review":{"prompt":"Review the diff"}}}
+EOF
+```
+
 ```bash
 ynd preview /tmp/some-harness -v claude --focus review --profile ci
-# Expected: Error: cannot use --focus and --profile together
+# Expected (exit 1): Error: cannot use --focus and --profile together
 ```
 
 ### E20: Unknown focus name
 
 ```bash
 ynd preview /tmp/some-harness -v claude --focus nonexistent
-# Expected: Error: focus "nonexistent" not defined in harness
+# Expected (exit 1): Error: focus "nonexistent" not defined in harness
+
+rm -rf /tmp/some-harness
 ```
 
-### E21: Focus with missing prompt in .ynh-plugin/plugin.json
+### E21: Focus with missing prompt in .agents/harness/plugin.json
 
 ```bash
 mkdir -p /tmp/ynh-bad-focus
-mkdir -p /tmp/ynh-bad-focus/.ynh-plugin
-cat > /tmp/ynh-bad-focus/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-bad-focus/.agents/harness
+cat > /tmp/ynh-bad-focus/.agents/harness/plugin.json << 'EOF'
 {"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0","focuses":{"review":{"profile":"ci"}}}
 EOF
 ynd validate /tmp/ynh-bad-focus
-# Expected: INVALID with "focus.review: prompt must not be empty"
+# Expected (exit 1): "/tmp/ynh-bad-focus: INVALID", then three errors:
+#     - focuses/review: missing property 'prompt'
+#     - focus.review: prompt must not be empty
+#     - focus.review: references unknown profile "ci"
+#   then the "checked:" list (focuses: review, every other part: none)
+#   and "Error: validation failed"
 rm -rf /tmp/ynh-bad-focus
 ```
 
@@ -571,12 +602,15 @@ rm -rf /tmp/ynh-bad-focus
 
 ```bash
 mkdir -p /tmp/ynh-bad-focus
-mkdir -p /tmp/ynh-bad-focus/.ynh-plugin
-cat > /tmp/ynh-bad-focus/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-bad-focus/.agents/harness
+cat > /tmp/ynh-bad-focus/.agents/harness/plugin.json << 'EOF'
 {"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0","focuses":{"review":{"profile":"nonexistent","prompt":"Review code"}}}
 EOF
 ynd validate /tmp/ynh-bad-focus
-# Expected: INVALID with "focus.review: references unknown profile"
+# Expected (exit 1): "/tmp/ynh-bad-focus: INVALID", then:
+#     - focus.review: references unknown profile "nonexistent"
+#   then the "checked:" list (focuses: review, every other part: none)
+#   and "Error: validation failed"
 rm -rf /tmp/ynh-bad-focus
 ```
 
@@ -586,8 +620,8 @@ rm -rf /tmp/ynh-bad-focus
 
 ```bash
 # Create a minimal harness to fork from
-mkdir -p /tmp/ynh-fork-src/.ynh-plugin
-cat > /tmp/ynh-fork-src/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-fork-src/.agents/harness
+cat > /tmp/ynh-fork-src/.agents/harness/plugin.json << 'EOF'
 {"name":"fork-src","version":"1.0.0","default_vendor":"claude"}
 EOF
 
@@ -626,17 +660,17 @@ export YNH_HOME=$(mktemp -d)
 # Simulate a registry install (schema-2 tree). installed.json is not optional:
 # a tree without it is a broken entry, and auto-migration aborts on one rather
 # than guessing where it came from.
-mkdir -p "$YNH_HOME/harnesses/github.com--eyelock--assistants--shared/.ynh-plugin"
-cat > "$YNH_HOME/harnesses/github.com--eyelock--assistants--shared/.ynh-plugin/plugin.json" << 'EOF'
+mkdir -p "$YNH_HOME/harnesses/github.com--eyelock--assistants--shared/.agents/harness"
+cat > "$YNH_HOME/harnesses/github.com--eyelock--assistants--shared/.agents/harness/plugin.json" << 'EOF'
 {"name":"shared","version":"1.0.0","default_vendor":"claude"}
 EOF
-cat > "$YNH_HOME/harnesses/github.com--eyelock--assistants--shared/.ynh-plugin/installed.json" << 'EOF'
+cat > "$YNH_HOME/harnesses/github.com--eyelock--assistants--shared/.agents/harness/installed.json" << 'EOF'
 {"source_type":"registry","source":"github.com/eyelock/assistants","namespace":"github.com/eyelock/assistants","registry_name":"shared","installed_at":"2026-01-01T00:00:00Z"}
 EOF
 
 # Register a fork with the same leaf name
-mkdir -p /tmp/ynh-fork-shared/.ynh-plugin
-cat > /tmp/ynh-fork-shared/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-fork-shared/.agents/harness "$YNH_HOME/installed"
+cat > /tmp/ynh-fork-shared/.agents/harness/plugin.json << 'EOF'
 {"name":"shared","version":"2.0.0","default_vendor":"claude"}
 EOF
 cat > "$YNH_HOME/installed/shared.json" << 'EOF'
@@ -656,12 +690,13 @@ unset YNH_HOME
 
 ### E24: Broken fork appears as local-fork-broken in ls JSON
 
-When a fork's source directory exists but has no `.ynh-plugin/plugin.json`, `ynh ls --format json` must tag it as `kind: "local-fork-broken"` with a non-empty `broken_reason` rather than emitting an empty-field `local-fork` entry.
+When a fork's source directory exists but has no `.agents/harness/plugin.json`, `ynh ls --format json` must tag it as `kind: "local-fork-broken"` with a non-empty `broken_reason` rather than emitting an empty-field `local-fork` entry.
 
 ```bash
 # Register a pointer to a directory with no manifest
-mkdir -p /tmp/ynh-hollow-src   # exists but no .ynh-plugin/
+mkdir -p /tmp/ynh-hollow-src   # exists but no .agents/harness/
 export YNH_HOME=$(mktemp -d)
+mkdir -p "$YNH_HOME/installed"
 cat > "$YNH_HOME/installed/hollow.json" << 'EOF'
 {"name":"hollow","source_type":"local","source":"/tmp/ynh-hollow-src","installed_at":"2026-01-01T00:00:00Z"}
 EOF
@@ -680,8 +715,8 @@ unset YNH_HOME
 ### E26: Local model backend spec — unknown vendor, and vendors listing fallback
 
 ```bash
-mkdir -p /tmp/ynh-backend-edge/.ynh-plugin
-cat > /tmp/ynh-backend-edge/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-backend-edge/.agents/harness
+cat > /tmp/ynh-backend-edge/.agents/harness/plugin.json << 'EOF'
 {"name":"backend-edge","version":"0.1.0","default_vendor":"claude"}
 EOF
 export YNH_HOME=$(mktemp -d)
@@ -701,6 +736,35 @@ rm -rf /tmp/ynh-backend-edge "$YNH_HOME"
 unset YNH_HOME
 ```
 
+### E27: Uninstall several names at once
+
+`ynh uninstall` takes one or more names. Every name is resolved before anything
+is removed, so a typo in one name removes nothing (#398).
+
+```bash
+export YNH_HOME=$(mktemp -d)
+for n in a b c; do
+  mkdir -p /tmp/ynh-multi/$n/.agents/harness
+  printf '{"name":"%s","version":"0.1.0"}' $n > /tmp/ynh-multi/$n/.agents/harness/plugin.json
+  ynh install /tmp/ynh-multi/$n
+done
+
+ynh uninstall local/a local/typo; echo "exit=$?"
+# Expected: Error: harness "local/typo" is not installed
+#           Error: 1 of 2 harnesses could not be uninstalled, nothing was removed
+#           exit=1
+ynh ls
+# Expected: local/a, local/b and local/c all still listed
+
+ynh uninstall local/a local/b local/c; echo "exit=$?"
+# Expected: Uninstalled harness "a" / "b" / "c", exit=0
+ynh ls
+# Expected: no harnesses
+
+rm -rf /tmp/ynh-multi "$YNH_HOME"
+unset YNH_HOME
+```
+
 ---
 
 ## Sensors
@@ -708,8 +772,8 @@ unset YNH_HOME
 ### S1: Declare a command sensor and run it
 
 ```bash
-mkdir -p /tmp/ynh-sensors/.ynh-plugin
-cat > /tmp/ynh-sensors/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-sensors/.agents/harness
+cat > /tmp/ynh-sensors/.agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "sensor-test",
@@ -765,5 +829,5 @@ Re-run S1 with a focus-source sensor and verify `ynh sensors run` returns the re
 | Project-Local Config | 4 |
 | Structured Output | 11 |
 | Sensors | 3 |
-| Edge Cases | 26 |
-| **Total** | **154** |
+| Edge Cases | 27 |
+| **Total** | **158** |

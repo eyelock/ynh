@@ -84,12 +84,12 @@ func Fetch(src config.RegistrySource) (Registry, error) {
 	return reg, nil
 }
 
-// LoadFromDir parses a registry from a local directory.
-// Runs the migration chain first (registry.json → .ynh-plugin/marketplace.json),
-// then reads marketplace.json. Callers never see the old format.
+// LoadFromDir parses a registry from a local directory's marketplace.json.
+// The format chain runs first and refuses a legacy registry.json with the fix
+// (#406); it never converts one outside ynd migrate.
 func LoadFromDir(dir string) (Registry, error) {
 	if _, err := migration.FormatChain().Run(dir); err != nil {
-		return Registry{}, fmt.Errorf("migrating registry: %w", err)
+		return Registry{}, err
 	}
 
 	mj, err := plugin.LoadMarketplaceJSON(dir)

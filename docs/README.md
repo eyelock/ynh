@@ -59,7 +59,7 @@ ynd export ./david                 # vendor-native plugins
 ynd marketplace build              # build a shareable marketplace
 ```
 
-**Git is the package manager.** No lock files. No build steps. Skills from [skills.sh](https://skills.sh), agents from your team repo, rules from a company monorepo - they all work as-is. Standard-format files, versioned with Git tags. Registries are just Git repos with a `registry.json`.
+**Git is the package manager.** No lock files. No build steps. Skills from [skills.sh](https://skills.sh), agents from your team repo, rules from a company monorepo - they all work as-is. Standard-format files, versioned with Git tags. Registries are just Git repos with a `.agents/harness/marketplace.json`.
 
 ## The 60-second version
 
@@ -77,7 +77,7 @@ Inside the session, use `/ynh-create-harness` to build your own. Or do it manual
 ```bash
 # Create a harness
 mkdir david
-echo '{"name":"david","version":"0.1.0","default_vendor":"claude"}' > david/.ynh-plugin/plugin.json
+echo '{"name":"david","version":"0.1.0","default_vendor":"claude"}' > david/.agents/harness/plugin.json
 
 # Install it
 ynh install ./david

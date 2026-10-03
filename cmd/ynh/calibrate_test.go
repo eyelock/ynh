@@ -218,7 +218,7 @@ func TestCalibrate_FlagsANonPortableCommand(t *testing.T) {
 	write(filepath.Join(harnessDir, "fixtures", "failing", "tools", "y.sh"), "#!/bin/sh\nexit 1\n", 0o755)
 	// The tree under test holds a different y.sh that passes.
 	write(filepath.Join(tree, "tools", "y.sh"), "#!/bin/sh\nexit 0\n", 0o755)
-	write(filepath.Join(harnessDir, ".ynh-plugin", "plugin.json"), `{
+	write(filepath.Join(harnessDir, ".agents/harness", "plugin.json"), `{
   "name":"c363","version":"1.0.0","description":"d",
   "sensors":{
     "pinned":{"category":"maintainability","tolerance":"blocking",

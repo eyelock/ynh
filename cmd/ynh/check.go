@@ -754,7 +754,7 @@ func loadHarnessRef(ref string) (*harness.Harness, error) {
 		return nil, fmt.Errorf("no harness at %s: %w", abs, statErr)
 	}
 	if _, mErr := migration.FormatChain().Run(abs); mErr != nil {
-		return nil, fmt.Errorf("migrating harness at %s: %w", abs, mErr)
+		return nil, mErr
 	}
 	if !plugin.IsPluginDir(abs) {
 		return nil, fmt.Errorf(

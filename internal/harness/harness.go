@@ -145,21 +145,29 @@ type ListEntry struct {
 // running the migration chain. Returns "plugin" (new format present),
 // "legacy" (unsupported pre-0.1 .claude-plugin format), or "" (nothing).
 //
-// The migration chain converts any supported legacy format to the new
-// format before detection, so callers only ever see "plugin" or "" for
-// valid harnesses. Legacy detection is the one exception — it signals a
-// format that predates ynh and has no migration path.
-func DetectFormat(dir string) string {
+// The chain converts an install ynh owns; for any other tree whose manifest
+// is a format ynh no longer reads (.harness.json, registry.json) it returns
+// an error naming `ynd migrate`, which DetectFormat passes on rather than
+// reporting the tree as manifest-less. "legacy" signals a format that
+// predates ynh and has no migration path.
+func DetectFormat(dir string) (string, error) {
 	if _, err := migration.FormatChain().Run(dir); err != nil {
-		return ""
+		return "", err
 	}
 	if plugin.IsPluginDir(dir) {
-		return "plugin"
+		return "plugin", nil
 	}
-	if plugin.IsLegacyPluginDir(dir) {
-		return "legacy"
+	if plugin.IsClaudePluginDir(dir) {
+		return "legacy", nil
 	}
-	return ""
+	return "", nil
+}
+
+// isHarnessDir reports whether DetectFormat finds any manifest in dir. Used
+// when listing installs, where an unreadable entry is skipped.
+func isHarnessDir(dir string) bool {
+	f, err := DetectFormat(dir)
+	return err == nil && f != ""
 }
 
 // ErrNotFound is returned when a harness is not installed.
@@ -272,7 +280,7 @@ func ListAll() ([]ListEntry, error) {
 			// "github.com--eyelock--assistants--planner"). Detected by the
 			// presence of a manifest at the top level — distinguishes from
 			// schema-1 namespace directories which only contain children.
-			if DetectFormat(entryPath) != "" {
+			if isHarnessDir(entryPath) {
 				id := namespace.FSNameToID(entry.Name())
 				name := entry.Name()
 				if i := strings.LastIndex(id, "/"); i >= 0 {
@@ -310,7 +318,7 @@ func ListAll() ([]ListEntry, error) {
 					continue
 				}
 				childDir := filepath.Join(entryPath, child.Name())
-				if DetectFormat(childDir) != "" {
+				if isHarnessDir(childDir) {
 					results = append(results, ListEntry{
 						Name:      child.Name(),
 						Namespace: ns,
@@ -323,7 +331,7 @@ func ListAll() ([]ListEntry, error) {
 			if seen["local/"+entry.Name()] {
 				continue
 			}
-			if DetectFormat(entryPath) != "" {
+			if isHarnessDir(entryPath) {
 				results = append(results, ListEntry{
 					Name: entry.Name(),
 					Dir:  entryPath,
@@ -406,11 +414,13 @@ func LoadByID(id string) (*Harness, error) {
 	return nil, fmt.Errorf("harness %q: %w", id, ErrNotFound)
 }
 
-// LoadDir loads a harness from a directory. The migration chain runs
-// transparently, so callers never need to handle legacy formats themselves.
+// LoadDir loads a harness from a directory. The format chain runs first:
+// it converts an install ynh owns and refuses, with the `ynd migrate` fix,
+// any other tree whose manifest ynh no longer reads, so callers never handle
+// legacy formats themselves.
 //
 // Tree-form installs (see topology.go) store their provenance in
-// <dir>/.ynh-plugin/installed.json; LoadDir reads it from there.
+// <dir>/.agents/harness/installed.json; LoadDir reads it from there.
 // Pointer-form installs carry their provenance on the pointer file and
 // must use loadDirWithProvenance to supply it explicitly — otherwise the
 // source tree would need a redundant installed.json.
@@ -420,16 +430,16 @@ func LoadDir(dir string) (*Harness, error) {
 
 // loadDirWithProvenance is the implementation of LoadDir with an explicit
 // provenance record. When ins is nil it is read from
-// <contentDir>/.ynh-plugin/installed.json (tree-form behaviour). When ins
+// <contentDir>/.agents/harness/installed.json (tree-form behaviour). When ins
 // is supplied (pointer-form) the contentDir need not carry installed.json.
 func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harness, error) {
 	dir := contentDir
 	if _, err := migration.FormatChain().Run(dir); err != nil {
-		return nil, fmt.Errorf("migrating harness manifest: %w", err)
+		return nil, err
 	}
 
-	if plugin.IsLegacyPluginDir(dir) && !plugin.IsPluginDir(dir) {
-		return nil, fmt.Errorf("legacy .claude-plugin format is not supported; migrate to .ynh-plugin/plugin.json")
+	if plugin.IsClaudePluginDir(dir) && !plugin.IsPluginDir(dir) {
+		return nil, fmt.Errorf("legacy .claude-plugin format is not supported; migrate to .agents/harness/plugin.json")
 	}
 	if !plugin.IsPluginDir(dir) {
 		return nil, fmt.Errorf("no harness manifest found in %s", dir)
@@ -696,7 +706,8 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 	return &resolved, nil
 }
 
-// LoadFile loads a harness from a file path directly (e.g. .harness.json).
+// LoadFile loads a harness from a single manifest file given by path
+// (--harness-file), whatever it is named.
 // Unlike LoadDir, name is optional and the validName check is skipped.
 func LoadFile(path string) (*Harness, error) {
 	hj, err := plugin.LoadHarnessFile(path)

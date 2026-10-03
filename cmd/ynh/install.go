@@ -158,9 +158,13 @@ func cmdInstall(args []string) error {
 			// hint. If discovery didn't find anything and the root manifest
 			// (if any) doesn't match, error out with a clear hint instead
 			// of silently installing a different harness.
-			rootHarness, rerr := plugin.LoadHarnessJSON(srcDir)
-			rootMatches := rerr == nil && rootHarness != nil && rootHarness.Name == resolved.nameHint
-			if !rootMatches && plugin.IsPluginDir(srcDir) {
+			// A root manifest ynh no longer reads gets the fix, not a
+			// "no harness named" that hides it.
+			if err := migration.LegacyHarnessManifest(srcDir); err != nil {
+				return err
+			}
+			rootMatches := false
+			if plugin.IsPluginDir(srcDir) {
 				if hj, perr := plugin.LoadPluginJSON(srcDir); perr == nil && hj != nil && hj.Name == resolved.nameHint {
 					rootMatches = true
 				}
@@ -228,11 +232,6 @@ func cmdInstall(args []string) error {
 				return fmt.Errorf("cleaning stale install copy: %w", err)
 			}
 		}
-		// Run the format migration against the source tree so the
-		// include/delegate pre-fetch below sees the new plugin.json layout.
-		if _, err := migration.FormatChain().Run(srcDir); err != nil {
-			return fmt.Errorf("migrating source harness format: %w", err)
-		}
 	} else {
 		// If source == install dir, skip the clean+copy (already in place).
 		// Otherwise remove stale artifacts and copy fresh.
@@ -255,7 +254,7 @@ func cmdInstall(args []string) error {
 		}
 	}
 
-	// Write install provenance to .ynh-plugin/installed.json (separate from plugin.json)
+	// Write install provenance to .agents/harness/installed.json (separate from plugin.json)
 	// For canonical-id installs (e.g. `ynh install github.com/org/repo/name`),
 	// resolved.gitURL holds the synthesized clone URL — record THAT as the
 	// provenance source, not the canonical id, so re-cloning works.
@@ -281,7 +280,7 @@ func cmdInstall(args []string) error {
 	// local directory. Two sources to check:
 	//  - Schema-3+: an existing pointer at this canonical id (ynh fork
 	//    writes forked_from onto the pointer, nothing into the source tree).
-	//  - Pre-schema-3: a leftover <srcDir>/.ynh-plugin/installed.json
+	//  - Pre-schema-3: a leftover <srcDir>/.agents/harness/installed.json
 	//    written by an older ynh fork — the schema-3 migration absorbs
 	//    these but a freshly-built source tree may still have one.
 	var forkedFrom *plugin.ForkedFromJSON

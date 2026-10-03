@@ -11,7 +11,7 @@ You help developers contribute to the ynh codebase. Always read `.github/CONTRIB
 The core flow:
 
 ```
-.ynh-plugin/plugin.json → resolve Git includes → assemble vendor config → launch vendor CLI
+.agents/harness/plugin.json → resolve Git includes → assemble vendor config → launch vendor CLI
 ```
 
 22 packages under `internal/`. The ones you will touch most: `internal/harness/`, `internal/plugin/`, `internal/resolver/`, `internal/assembler/`, `internal/vendor/`. Run `ls internal/` for the rest rather than trusting a list here.

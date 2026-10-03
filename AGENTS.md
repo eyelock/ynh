@@ -63,9 +63,10 @@ rather than paraphrasing a page you cannot read.
 
 ## Key concepts
 
-- A **harness** is a directory with `.ynh-plugin/plugin.json` plus `skills/`,
-  `agents/`, `rules/`, `commands/`. (`.harness.json` is the legacy form; `ynd
-  migrate` converts it, and validation does so transparently.)
+- A **harness** is a directory with `.agents/harness/plugin.json` plus `skills/`,
+  `agents/`, `rules/`, `commands/`. (`.harness.json` is the legacy form. Only
+  `ynd migrate` converts it; every other command, `ynd validate` included,
+  refuses it and names that fix.)
 - `ynh install` copies a harness (local or Git) into `~/.ynh/harnesses/` and
   assembles it for the target vendor
 - `ynh run <name>` launches the vendor CLI with the assembled config

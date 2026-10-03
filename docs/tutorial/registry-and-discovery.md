@@ -1,14 +1,18 @@
 # Registry & Discovery
 
-Search for harnesses from curated registries and install them by name. A registry is just a Git repo with a `registry.json` index.
+Search for harnesses from curated registries and install them by name. A registry is just a Git repo with a `.agents/harness/marketplace.json` index.
 
 ## Prerequisites
 
 ```bash
 # Clean up from any previous run
 rm -rf /tmp/ynh-tutorial
-ynh uninstall github.com/eyelock/assistants/david github.com/eyelock/assistants/planner github.com/eyelock/assistants/tester local/codereview 2>/dev/null
+ynh uninstall github.com/eyelock/assistants/david 2>/dev/null
+ynh uninstall github.com/eyelock/assistants/planner 2>/dev/null
+ynh uninstall github.com/eyelock/assistants/tester 2>/dev/null
+ynh uninstall local/codereview 2>/dev/null
 ynh registry remove /tmp/ynh-tutorial/my-registry 2>/dev/null
+ynh registry remove /tmp/ynh-tutorial/pinned-registry 2>/dev/null
 ynh sources remove codereview 2>/dev/null
 
 mkdir -p /tmp/ynh-tutorial
@@ -16,43 +20,51 @@ mkdir -p /tmp/ynh-tutorial
 
 ## Create a local registry
 
-A registry is a Git repo containing `registry.json`:
+A registry is a Git repo containing `.agents/harness/marketplace.json`:
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/my-registry
+mkdir -p /tmp/ynh-tutorial/my-registry/.agents/harness
 cd /tmp/ynh-tutorial/my-registry
 
-cat > registry.json << 'EOF'
+cat > .agents/harness/marketplace.json << 'EOF'
 {
+  "$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
   "name": "tutorial-registry",
-  "description": "Sample registry for the ynh tutorial",
-  "entries": [
+  "owner": {"name": "tutorial"},
+  "metadata": {"description": "Sample registry for the ynh tutorial"},
+  "harnesses": [
     {
       "name": "david",
       "description": "Full-stack development harness with Go expertise",
+      "version": "0.1.0",
       "keywords": ["go", "development", "full-stack", "testing"],
-      "repo": "github.com/eyelock/assistants",
-      "path": "ynh/david",
-      "vendors": ["claude", "codex", "cursor"],
-      "version": "0.1.0"
+      "source": {
+        "type": "github",
+        "repo": "github.com/eyelock/assistants",
+        "path": "ynh/david"
+      }
     },
     {
       "name": "planner",
       "description": "Project planning and architecture harness",
+      "version": "0.1.0",
       "keywords": ["planning", "architecture", "design"],
-      "repo": "github.com/eyelock/assistants",
-      "path": "ynh/planner",
-      "vendors": ["claude"],
-      "version": "0.1.0"
+      "source": {
+        "type": "github",
+        "repo": "github.com/eyelock/assistants",
+        "path": "ynh/planner"
+      }
     },
     {
       "name": "media-management",
       "description": "Music library processing and Apple Music import",
+      "version": "0.1.0",
       "keywords": ["media", "music", "mp3", "apple-music", "ffmpeg"],
-      "repo": "github.com/eyelock/assistants",
-      "path": "plugins/media-management",
-      "vendors": ["claude"],
-      "version": "0.1.0"
+      "source": {
+        "type": "github",
+        "repo": "github.com/eyelock/assistants",
+        "path": "plugins/media-management"
+      }
     }
   ]
 }
@@ -60,6 +72,12 @@ EOF
 
 git init && git add . && git commit -m "init registry"
 ```
+
+> **An older registry with a top-level `registry.json`** is no longer read.
+> `ynh registry add` accepts it, but search and install then fail with
+> `... uses the legacy registry.json, which ynh no longer reads`. If the
+> registry is yours, convert it with `ynd migrate <dir>` and commit the
+> result; if it is someone else's, ask its maintainer to.
 
 ## Add the registry
 
@@ -149,13 +167,15 @@ Installed harness "david"
   Vendor:   claude
 ```
 
+Before that summary it prints `Fetching 4 include(s) and 0 delegate(s)...` and a `Fetched` line for each include. While `github.com/eyelock/assistants` still keeps its manifests in `.ynh-plugin/`, it also prints a deprecation warning naming the cached copy; that is a note for the repo's maintainer, and the install succeeds.
+
 Inspect and uninstall use the canonical id — bare names like `david` are no longer accepted:
 
 ```bash
 ynh ls --format json | jq -r '.harnesses[].id'
 # Expected: github.com/eyelock/assistants/david
 
-ynh info github.com/eyelock/assistants/david --format json | jq -r '.path'
+ynh info github.com/eyelock/assistants/david --format json | jq -r '.harness.path'
 # Expected: contains "github.com--eyelock--assistants--david"
 ```
 
@@ -177,13 +197,13 @@ After install, refer to the harness by its canonical id (`github.com/eyelock/ass
 
 ynh follows the Claude Code marketplace model — identity is a git ref, optionally anchored to a commit SHA. There is no separate semver resolver. To track "version 1.0" you set `"ref": "v1.0"`, not a version field.
 
-The legacy `registry.json` format used in [Create a local registry](#create-a-local-registry) has no per-entry pinning. Modern marketplaces use `.ynh-plugin/marketplace.json` with a `source` object that supports `ref` (branch, tag, or SHA) and `sha` (commit verification):
+The entries in [Create a local registry](#create-a-local-registry) track the repo's default branch. An entry's `source` object also supports `ref` (branch, tag, or SHA) and `sha` (commit verification):
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/pinned-registry/.ynh-plugin
+mkdir -p /tmp/ynh-tutorial/pinned-registry/.agents/harness
 cd /tmp/ynh-tutorial/pinned-registry
 
-cat > .ynh-plugin/marketplace.json << 'EOF'
+cat > .agents/harness/marketplace.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
   "name": "pinned-registry",
@@ -240,6 +260,17 @@ Three legitimate combinations:
 
 **Tools that compose ynh harnesses (delegate sheets, dashboards, CI integrations) should default to whatever `ref` the user installed with — that's the user's stated tracking intent. Offer SHA-pinning as an opt-in choice, not the default.** See [`docs/marketplace.md` § Pinning: refs and SHAs](../marketplace.md#pinning-refs-and-shas) for the full guidance.
 
+Remove the pinned registry before moving on, so `tutorial-registry` is again the only one configured for the rest of this tutorial:
+
+```bash
+ynh registry remove /tmp/ynh-tutorial/pinned-registry
+```
+
+Expected:
+```
+Removed registry: /tmp/ynh-tutorial/pinned-registry
+```
+
 ## Install — direct URL still works
 
 ```bash
@@ -287,7 +318,7 @@ Expected:
   tutorial-registry (up to date, 3 entries)
 ```
 
-This fetches the latest `registry.json` from each configured registry.
+This fetches the latest `.agents/harness/marketplace.json` from each configured registry.
 
 ## Remove a registry
 
@@ -302,8 +333,8 @@ ynh registry list
 Local sources are directories of harnesses registered in config — no Git or internet required. When a source name matches a harness name, uninstalling the harness also removes the source entry.
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/sources/codereview/.ynh-plugin
-cat > /tmp/ynh-tutorial/sources/codereview/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/sources/codereview/.agents/harness
+cat > /tmp/ynh-tutorial/sources/codereview/.agents/harness/plugin.json << 'EOF'
 {
   "name": "codereview",
   "version": "0.1.0",
@@ -357,12 +388,23 @@ ynh install codereview
 Expected:
 ```
 Installed harness "codereview"
-  Location: /Users/<you>/.ynh/harnesses/local--codereview
+  Location: /tmp/ynh-tutorial/sources/codereview
   Launcher: /Users/<you>/.ynh/bin/codereview
   Vendor:   claude
 ```
 
-A local-source install gets the canonical id `local/codereview` — the source itself has no remote origin to derive a host-prefixed id from.
+A local-source install is a pointer, not a copy: `Location` is the source directory itself, and nothing is written under `~/.ynh/harnesses/`. It gets the canonical id `local/codereview` — the source itself has no remote origin to derive a host-prefixed id from. `ynh ls` shows it with KIND `source`:
+
+```bash
+ynh ls
+```
+
+The `david`, `planner` and `tester` installs from earlier sections are still listed (KIND `registry` and `git`, with their includes spelled out, which makes the table wide). Trimmed to the header and the new row:
+
+```
+ID                                     KIND      VENDOR  SOURCE                                              ARTIFACTS  INCLUDES  ...
+local/codereview                       source    claude  /tmp/ynh-tutorial/sources/codereview                0          0         ...
+```
 
 ## Uninstall removes the source entry
 
@@ -375,6 +417,8 @@ ynh sources list
 
 Expected:
 ```
+Uninstalled harness "codereview"
+  Source tree left in place: /tmp/ynh-tutorial/sources/codereview
 No sources configured.
 Add one with: ynh sources add <path>
 ```
@@ -429,7 +473,7 @@ ynh uninstall github.com/eyelock/assistants/tester 2>/dev/null
 
 ## What you learned
 
-- A registry is a Git repo with `registry.json` listing available harnesses
+- A registry is a Git repo with `.agents/harness/marketplace.json` listing available harnesses
 - `ynh registry add/list/remove/update` manages registry sources
 - `ynh search [query]` queries both registries and local sources; omit the query to list all
 - `ynh install <name>` resolves from registries and local sources (exact match installs, multiple matches prompt)

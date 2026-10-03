@@ -19,8 +19,8 @@ Delegates must be Git repos (local or remote). Create a specialist harness and t
 ```bash
 mkdir -p /tmp/ynh-tutorial/specialist/skills/analyze
 
-mkdir -p /tmp/ynh-tutorial/specialist/.ynh-plugin
-cat > /tmp/ynh-tutorial/specialist/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/specialist/.agents/harness
+cat > /tmp/ynh-tutorial/specialist/.agents/harness/plugin.json << 'EOF'
 {
   "name": "specialist",
   "version": "0.1.0",
@@ -57,8 +57,8 @@ git -C /tmp/ynh-tutorial/specialist commit -m "init"
 ```bash
 mkdir -p /tmp/ynh-tutorial/team-lead
 
-mkdir -p /tmp/ynh-tutorial/team-lead/.ynh-plugin
-cat > /tmp/ynh-tutorial/team-lead/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-tutorial/team-lead/.agents/harness
+cat > /tmp/ynh-tutorial/team-lead/.agents/harness/plugin.json << 'EOF'
 {
   "name": "team-lead",
   "version": "0.1.0",
@@ -97,8 +97,8 @@ ynh ls
 
 Expected:
 ```
-NAME       KIND   VENDOR  SOURCE                          ARTIFACTS  INCLUDES  DELEGATES TO
-team-lead  local  claude  /tmp/ynh-tutorial/team-lead      ...        0         /tmp/ynh-tutorial/specialist, eyelock/assistants/ynh/researcher
+ID               KIND   VENDOR  SOURCE                       ARTIFACTS  INCLUDES  DELEGATES TO
+local/team-lead  local  claude  /tmp/ynh-tutorial/team-lead  0          0         /tmp/ynh-tutorial/specialist, eyelock/assistants/ynh/researcher
 ```
 
 ## Inspect delegate agent files
@@ -145,7 +145,7 @@ ynh uninstall local/team-lead
 
 ## What you learned
 
-- `delegates_to` in .ynh-plugin/plugin.json references other harnesses as subagents
+- `delegates_to` in .agents/harness/plugin.json references other harnesses as subagents
 - Delegates must be Git repos (local or remote)
 - ynh generates vendor-native agent files from delegate harnesses at runtime
 - Agent files inline the delegate's instructions, rules, and skill list

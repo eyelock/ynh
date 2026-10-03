@@ -152,7 +152,7 @@ the tree before concluding something is wrong.
 
 ```
 my-harness/
-├── .ynh-plugin/plugin.json
+├── .agents/harness/plugin.json
 └── AGENTS.md             <- read natively by Codex/Cursor; shimmed for Claude
 ```
 
@@ -181,14 +181,14 @@ Files in the harness's own directory:
 
 ```
 my-harness/
-├── .ynh-plugin/plugin.json
+├── .agents/harness/plugin.json
 ├── skills/review/SKILL.md     <- embedded
 └── rules/concise.md           <- embedded
 ```
 
 ### 2. External Git repos
 
-Referenced in `.ynh-plugin/plugin.json`:
+Referenced in `.agents/harness/plugin.json`:
 
 ```json
 {

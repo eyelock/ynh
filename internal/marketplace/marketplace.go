@@ -240,11 +240,22 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 		return fmt.Errorf("generating README: %w", err)
 	}
 
-	// Initialize as Git repo if needed — Claude Code requires a working tree
-	// for relative plugin source paths to resolve during /plugin install.
-	if !isGitRepo(opts.OutputDir) {
+	// Claude Code requires a working tree for relative plugin source paths to
+	// resolve during /plugin install, so the output is always a git repository.
+	// Three cases:
+	//
+	//   - Not a repo yet: initialise one, mark it as ours, commit the build.
+	//   - A repo ynd created earlier (the marker proves it): commit this build
+	//     on top, so a rebuild keeps the history rather than losing it.
+	//   - Somebody else's repo: leave their history alone, as before.
+	switch {
+	case !isGitRepo(opts.OutputDir):
 		if err := initGitRepo(opts.OutputDir); err != nil {
 			return fmt.Errorf("initializing git repo: %w", err)
+		}
+	case OwnsRepo(opts.OutputDir):
+		if err := commitBuild(opts.OutputDir); err != nil {
+			return fmt.Errorf("committing build: %w", err)
 		}
 	}
 
@@ -266,16 +277,17 @@ func buildHarnessEntry(srcDir, outputDir string, vendors []string, cfg *config.C
 // buildPluginEntry copies a self-contained plugin directory as-is,
 // generating missing vendor manifests.
 func buildPluginEntry(srcDir, outputDir string, vendors []string) error {
+	// Refuse a manifest ynh no longer reads before copying, so the error
+	// names the source rather than the staging copy (#406).
+	if _, err := migration.FormatChain().Run(srcDir); err != nil {
+		return err
+	}
 	if err := assembler.CopyDir(srcDir, outputDir); err != nil {
 		return fmt.Errorf("copying plugin: %w", err)
 	}
 
-	// Load metadata for manifest generation — run migration chain first so any
-	// legacy .harness.json becomes the new plugin.json, then fall back to the
+	// Load metadata for manifest generation, falling back to the
 	// vendor-native .claude-plugin/plugin.json format for standalone plugins.
-	if _, err := migration.FormatChain().Run(outputDir); err != nil {
-		return fmt.Errorf("migrating source format: %w", err)
-	}
 	var hj *plugin.HarnessJSON
 	var err error
 	if plugin.IsPluginDir(outputDir) {
@@ -284,7 +296,7 @@ func buildPluginEntry(srcDir, outputDir string, vendors []string) error {
 	if hj == nil {
 		pi, piErr := loadPluginManifest(outputDir)
 		if piErr != nil {
-			return fmt.Errorf("no .ynh-plugin/plugin.json or .claude-plugin/plugin.json found: %w", piErr)
+			return fmt.Errorf("no .agents/harness/plugin.json or .claude-plugin/plugin.json found: %w", piErr)
 		}
 		hj = &plugin.HarnessJSON{
 			Name:        pi.Name,
@@ -366,25 +378,92 @@ func resolveEntrySource(source, configDir string) (string, error) {
 	return result.Path, nil
 }
 
+// MarkerFile is written at the root of every repository ynd initialises for a
+// marketplace build, and committed with it. It is how ynd later tells its own
+// build output from somebody's source tree: `--clean` may empty a repository
+// that carries the marker and whose root commit is ours, and refuses every
+// other git working copy. An unrelated repository has no reason to contain it.
+const MarkerFile = ".ynd-marketplace"
+
+// markerContent names the tool and a format number, so the file explains
+// itself to anyone who finds it and can be told apart from a later revision.
+const markerContent = "ynd marketplace 1\n"
+
+// commitMessage is the subject of every commit ynd makes in a marketplace
+// repository. OwnsRepo checks the root commit against it.
+const commitMessage = "ynd marketplace build"
+
 // isGitRepo checks whether dir is the root of a Git repository.
 func isGitRepo(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, ".git"))
 	return err == nil
 }
 
-// initGitRepo initializes a new Git repo in dir and commits all content.
-// Uses -c flags for identity so it works in environments without a global git config (e.g. CI).
-func initGitRepo(dir string) error {
-	for _, args := range [][]string{
-		{"init"},
-		{"add", "."},
-		{"-c", "user.name=ynd", "-c", "user.email=ynd@localhost", "commit", "-m", "ynd marketplace build"},
-	} {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("git %s: %w\n%s", args[0], err, out)
+// OwnsRepo reports whether the git repository at dir was created by ynd. Both
+// proofs must hold: the marker file is present with the expected content, and
+// the repository's root commit is the one initGitRepo makes. A marker copied
+// into a real repository by hand does not make its history ours.
+//
+// It is read-only. `ynd --clean` consults it to decide whether a working copy
+// may be emptied, so it must never modify the directory it is asked about.
+func OwnsRepo(dir string) bool {
+	content, err := os.ReadFile(filepath.Join(dir, MarkerFile))
+	if err != nil || !strings.HasPrefix(string(content), "ynd marketplace") {
+		return false
+	}
+	if fi, err := os.Stat(filepath.Join(dir, ".git")); err != nil || !fi.IsDir() {
+		return false // a .git file is a worktree or submodule: never ours
+	}
+	cmd := exec.Command("git", "log", "--max-parents=0", "--format=%s", "HEAD")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	for _, subject := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if subject == commitMessage {
+			return true
 		}
+	}
+	return false
+}
+
+// initGitRepo initializes a new Git repo in dir, marks it as ynd's own, and
+// commits all content.
+func initGitRepo(dir string) error {
+	if err := runGit(dir, "init"); err != nil {
+		return err
+	}
+	return commitBuild(dir)
+}
+
+// commitBuild writes the marker and commits everything in dir, if anything
+// changed. Uses -c flags for identity so it works in environments without a
+// global git config (e.g. CI).
+func commitBuild(dir string) error {
+	if err := os.WriteFile(filepath.Join(dir, MarkerFile), []byte(markerContent), 0o644); err != nil {
+		return fmt.Errorf("writing %s: %w", MarkerFile, err)
+	}
+	if err := runGit(dir, "add", "-A"); err != nil {
+		return err
+	}
+	status := exec.Command("git", "status", "--porcelain")
+	status.Dir = dir
+	out, err := status.Output()
+	if err != nil {
+		return fmt.Errorf("git status: %w", err)
+	}
+	if len(strings.TrimSpace(string(out))) == 0 {
+		return nil // an identical rebuild has nothing to commit
+	}
+	return runGit(dir, "-c", "user.name=ynd", "-c", "user.email=ynd@localhost", "commit", "-m", commitMessage)
+}
+
+func runGit(dir string, args ...string) error {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git %s: %w\n%s", strings.Join(args, " "), err, out)
 	}
 	return nil
 }

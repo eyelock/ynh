@@ -51,7 +51,8 @@ content rather than the installation, so go to the symptom table.
 | **Symlinks look wrong (Codex/Cursor)** | `ynh status`, then `ynh prune` | `status` lists symlink installations across projects; `prune` clears orphaned ones. |
 | **`ynh check` gates and I cannot see why** | `ynh check <name> --format json` | See the section below — this has its own routing. |
 | **After an upgrade, a harness vanished** | `ynh quarantine list` | A failed auto-migration quarantines rather than deletes. `quarantine restore` brings it back. |
-| **Manifest is the old format** | `ynd migrate <dir>` | Converts `.harness.json` to `.ynh-plugin/plugin.json` as a reviewable diff. |
+| **"uses the legacy .harness.json manifest, which ynh no longer reads"** | `ynd migrate <dir>` | Converts `.harness.json` to `.agents/harness/plugin.json` as a reviewable diff. Every other command refuses the old format and changes nothing. For a cached remote harness, the fix is upstream's: ask its maintainer. |
+| **Manifest is still in `.ynh-plugin/`** | nothing | Still read, second to `.agents/harness/`. Move it with `git mv .ynh-plugin .agents/harness` when convenient; if both exist, `ynd validate` reports the shadowed copy. |
 | **My agents/rules/commands vanished after publishing** | re-read the `ynd export` output | Not a bug and not silent — the vendors' plugin formats differ, and export warns about what it dropped. Codex carries skills only; Copilot carries no rules or commands. All four types still work through `ynh run`. |
 
 ## When `ynh check` gates

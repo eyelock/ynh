@@ -46,7 +46,7 @@ Inside the session, use `/ynh-create-harness` to build your own. Or do it manual
 
 ```bash
 # Create a harness
-mkdir -p david/.ynh-plugin && cat > david/.ynh-plugin/plugin.json << 'EOF'
+mkdir -p david/.agents/harness && cat > david/.agents/harness/plugin.json << 'EOF'
 {"name":"david","version":"0.1.0","default_vendor":"claude"}
 EOF
 

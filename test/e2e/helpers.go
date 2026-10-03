@@ -23,6 +23,28 @@ import (
 	"testing"
 )
 
+// manifestDirs is the lookup order ynh uses for a harness's manifest
+// directory. The suite treats the binary as a black box and does not import
+// internal/plugin, so the order is mirrored here.
+var manifestDirs = []string{".agents/harness", ".ynh-plugin"}
+
+// manifestFile returns the path of file under the first manifest directory
+// of harnessDir that holds it, or the canonical path when none does.
+//
+// Fixtures in eyelock/assistants are pinned by SHA and still carry
+// .ynh-plugin, while everything this suite writes uses .agents/harness. A
+// read must accept both, exactly as ynh does; a test that hard-codes one
+// directory is asserting the fixture's layout, not the binary's behaviour.
+func manifestFile(harnessDir, file string) string {
+	for _, md := range manifestDirs {
+		p := filepath.Join(harnessDir, md, file)
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return filepath.Join(harnessDir, manifestDirs[0], file)
+}
+
 // AssistantsRepo is the upstream repository hosting the E2E fixtures.
 const AssistantsRepo = "https://github.com/eyelock/assistants.git"
 

@@ -24,7 +24,7 @@ import (
 //	Tree-form       ── for remote sources (git, registry). Content is
 //	                   copied to HarnessesDir()/<id-fsname>/ and the
 //	                   provenance lives next to it in
-//	                   .ynh-plugin/installed.json. The user does not
+//	                   .agents/harness/installed.json. The user does not
 //	                   maintain this tree; ynh update refreshes it from
 //	                   upstream.
 //
@@ -61,7 +61,7 @@ func localLoadDir(ins *plugin.InstalledJSON) string {
 // of topology:
 //   - pointer-form (local/source): from the pointer file at
 //     PointersDir/<id-fsname>.json
-//   - tree-form (git/registry): from <h.Dir>/.ynh-plugin/installed.json
+//   - tree-form (git/registry): from <h.Dir>/.agents/harness/installed.json
 //
 // canonID is the canonical id of h ("local/<name>" or
 // "<host>/<org>/<repo>/<name>"); callers usually already have it
