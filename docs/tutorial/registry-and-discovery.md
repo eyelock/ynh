@@ -12,6 +12,7 @@ ynh uninstall github.com/eyelock/assistants/planner 2>/dev/null
 ynh uninstall github.com/eyelock/assistants/tester 2>/dev/null
 ynh uninstall local/codereview 2>/dev/null
 ynh registry remove /tmp/ynh-tutorial/my-registry 2>/dev/null
+ynh registry remove /tmp/ynh-tutorial/pinned-registry 2>/dev/null
 ynh sources remove codereview 2>/dev/null
 
 mkdir -p /tmp/ynh-tutorial
@@ -152,6 +153,8 @@ Installed harness "david"
   Vendor:   claude
 ```
 
+Before that summary it prints `Fetching 4 include(s) and 0 delegate(s)...` and a `Fetched` line for each include. While `github.com/eyelock/assistants` still keeps its manifests in `.ynh-plugin/`, it also prints a deprecation warning naming the cached copy; that is a note for the repo's maintainer, and the install succeeds.
+
 Inspect and uninstall use the canonical id — bare names like `david` are no longer accepted:
 
 ```bash
@@ -242,6 +245,17 @@ Three legitimate combinations:
 | `"abc123…"` (full SHA) | _empty_ | Pins to an exact commit. Never drifts. |
 
 **Tools that compose ynh harnesses (delegate sheets, dashboards, CI integrations) should default to whatever `ref` the user installed with — that's the user's stated tracking intent. Offer SHA-pinning as an opt-in choice, not the default.** See [`docs/marketplace.md` § Pinning: refs and SHAs](../marketplace.md#pinning-refs-and-shas) for the full guidance.
+
+Remove the pinned registry before moving on, so `tutorial-registry` is again the only one configured for the rest of this tutorial:
+
+```bash
+ynh registry remove /tmp/ynh-tutorial/pinned-registry
+```
+
+Expected:
+```
+Removed registry: /tmp/ynh-tutorial/pinned-registry
+```
 
 ## Install — direct URL still works
 
@@ -371,9 +385,11 @@ A local-source install is a pointer, not a copy: `Location` is the source direct
 ynh ls
 ```
 
+The `david`, `planner` and `tester` installs from earlier sections are still listed (KIND `registry` and `git`, with their includes spelled out, which makes the table wide). Trimmed to the header and the new row:
+
 ```
-ID                KIND    VENDOR  SOURCE                                ARTIFACTS  INCLUDES  DELEGATES TO
-local/codereview  source  claude  /tmp/ynh-tutorial/sources/codereview  0          0         0
+ID                                     KIND      VENDOR  SOURCE                                              ARTIFACTS  INCLUDES  ...
+local/codereview                       source    claude  /tmp/ynh-tutorial/sources/codereview                0          0         ...
 ```
 
 ## Uninstall removes the source entry

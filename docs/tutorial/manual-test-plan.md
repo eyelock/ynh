@@ -495,9 +495,24 @@ cd /tmp
 ynd create harness broken-test
 mkdir -p broken-test/skills/orphan
 ynd validate broken-test
-# Expected:
+# Expected (exit 1):
 #   broken-test: INVALID
 #     - skills/orphan/ missing SKILL.md
+#     checked:
+#       manifest     broken-test/.agents/harness/plugin.json against https://eyelock.github.io/ynh/schema/plugin.schema.json
+#       includes     none
+#       mcp_servers  none
+#       hooks        none
+#       profiles     none
+#       focuses      none
+#       sensors      none
+#       delegates_to none
+#       skills       orphan
+#       agents       none
+#       rules        none
+#       commands     none
+#       instructions AGENTS.md
+#   Error: validation failed
 
 rm -rf broken-test
 ```
@@ -542,16 +557,27 @@ ynh info
 
 ### E19: Focus and profile mutual exclusivity
 
+E19 and E20 need a harness that defines a focus and a profile. Create one:
+
+```bash
+mkdir -p /tmp/some-harness/.agents/harness
+cat > /tmp/some-harness/.agents/harness/plugin.json << 'EOF'
+{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"some-harness","version":"0.1.0","profiles":{"ci":{}},"focuses":{"review":{"prompt":"Review the diff"}}}
+EOF
+```
+
 ```bash
 ynd preview /tmp/some-harness -v claude --focus review --profile ci
-# Expected: Error: cannot use --focus and --profile together
+# Expected (exit 1): Error: cannot use --focus and --profile together
 ```
 
 ### E20: Unknown focus name
 
 ```bash
 ynd preview /tmp/some-harness -v claude --focus nonexistent
-# Expected: Error: focus "nonexistent" not defined in harness
+# Expected (exit 1): Error: focus "nonexistent" not defined in harness
+
+rm -rf /tmp/some-harness
 ```
 
 ### E21: Focus with missing prompt in .agents/harness/plugin.json
@@ -563,7 +589,12 @@ cat > /tmp/ynh-bad-focus/.agents/harness/plugin.json << 'EOF'
 {"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0","focuses":{"review":{"profile":"ci"}}}
 EOF
 ynd validate /tmp/ynh-bad-focus
-# Expected: INVALID with "focus.review: prompt must not be empty"
+# Expected (exit 1): "/tmp/ynh-bad-focus: INVALID", then three errors:
+#     - focuses/review: missing property 'prompt'
+#     - focus.review: prompt must not be empty
+#     - focus.review: references unknown profile "ci"
+#   then the "checked:" list (focuses: review, every other part: none)
+#   and "Error: validation failed"
 rm -rf /tmp/ynh-bad-focus
 ```
 
@@ -576,7 +607,10 @@ cat > /tmp/ynh-bad-focus/.agents/harness/plugin.json << 'EOF'
 {"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0","focuses":{"review":{"profile":"nonexistent","prompt":"Review code"}}}
 EOF
 ynd validate /tmp/ynh-bad-focus
-# Expected: INVALID with "focus.review: references unknown profile"
+# Expected (exit 1): "/tmp/ynh-bad-focus: INVALID", then:
+#     - focus.review: references unknown profile "nonexistent"
+#   then the "checked:" list (focuses: review, every other part: none)
+#   and "Error: validation failed"
 rm -rf /tmp/ynh-bad-focus
 ```
 
@@ -795,5 +829,5 @@ Re-run S1 with a focus-source sensor and verify `ynh sensors run` returns the re
 | Project-Local Config | 4 |
 | Structured Output | 11 |
 | Sensors | 3 |
-| Edge Cases | 26 |
-| **Total** | **154** |
+| Edge Cases | 27 |
+| **Total** | **158** |
