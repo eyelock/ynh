@@ -148,7 +148,7 @@ ynh ls --format json | jq -r '.harnesses[].id'
 Expected: `github.com/eyelock/assistants/david`.
 
 ```bash
-ynh info github.com/eyelock/assistants/david --format json | jq -r '.path'
+ynh info github.com/eyelock/assistants/david --format json | jq -r '.harness.path'
 ```
 
 Expected: a path containing `github.com--eyelock--assistants--david`.
@@ -185,14 +185,19 @@ cat > /tmp/ynh-ns-tutorial/legacy/.harness.json << 'EOF'
 EOF
 ```
 
-Migrate it in place:
+Migrate it in place. `ynd migrate` deletes `.harness.json`, so it lists what it
+will touch and asks first; pass `-y` to skip the prompt (also implied by
+`$YNH_YES` or CI). Without it, a scripted run declines and exits non-zero. Use
+`--dry-run` to list what would be migrated and change nothing.
 
 ```bash
-ynd migrate /tmp/ynh-ns-tutorial/legacy
+ynd migrate -y /tmp/ynh-ns-tutorial/legacy
 ```
 
 Expected:
 ```
+1 director(ies) would be migrated under /tmp/ynh-ns-tutorial/legacy:
+  /tmp/ynh-ns-tutorial/legacy
 Migrated /tmp/ynh-ns-tutorial/legacy
   harness format: .harness.json → .agents/harness/plugin.json
 Migrated 1 director(ies).
@@ -226,11 +231,14 @@ cat > /tmp/ynh-ns-tutorial/bulk/h2/.harness.json << 'EOF'
 {"name":"h2","version":"0.1.0"}
 EOF
 
-ynd migrate /tmp/ynh-ns-tutorial/bulk
+ynd migrate -y /tmp/ynh-ns-tutorial/bulk
 ```
 
 Expected:
 ```
+2 director(ies) would be migrated under /tmp/ynh-ns-tutorial/bulk:
+  /tmp/ynh-ns-tutorial/bulk/h1
+  /tmp/ynh-ns-tutorial/bulk/h2
 Migrated /tmp/ynh-ns-tutorial/bulk/h1
   harness format: .harness.json → .agents/harness/plugin.json
 Migrated /tmp/ynh-ns-tutorial/bulk/h2
@@ -253,8 +261,15 @@ EOF
 ynh install /tmp/ynh-ns-tutorial/transparent
 ```
 
-The install succeeds and the installed copy uses the 0.2 format. The source
-directory is also migrated in place (the chain runs before the copy).
+```
+Installed harness "transparent"
+  Location: /tmp/ynh-ns-tutorial/transparent
+  Launcher: /Users/<you>/.ynh/bin/transparent
+```
+
+The install succeeds. A local install is a pointer to the source directory, so
+`Location` is that directory, and the chain migrates it in place to the 0.2
+format (`.agents/harness/plugin.json`) before the harness is registered.
 
 `ynd migrate` is still useful when you want to convert a whole tree
 intentionally — for example when cleaning up a source repo before publishing.
@@ -271,7 +286,7 @@ ynh migrate
 
 Expected on a current installation:
 ```
-ynh home is already at schema version 2 — nothing to migrate.
+ynh home is already at schema version 3 — nothing to migrate.
 ```
 
 When an upgrade is needed, the command rewrites the harness directory layout

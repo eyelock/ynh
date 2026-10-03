@@ -251,20 +251,26 @@ MCP servers can be authored from the CLI as well as in the manifest:
 ynh mcp add /tmp/ynh-tutorial/mcp-harness github \
     --command npx --arg -y --arg @modelcontextprotocol/server-github \
     --env GITHUB_TOKEN=ghp_xxx
+# Added mcp server "github"
 
 # HTTP transport
 ynh mcp add /tmp/ynh-tutorial/mcp-harness api \
-    --url https://mcp.example.com --header Authorization=Bearer xyz
+    --url https://mcp.example.com --header "Authorization=Bearer xyz"
+# Added mcp server "api"
 
 # Update an existing entry
 ynh mcp update /tmp/ynh-tutorial/mcp-harness github --env GITHUB_TOKEN=ghp_new
+# Updated mcp server "github"
 
 # Remove an entry
 ynh mcp remove /tmp/ynh-tutorial/mcp-harness api
+# Removed mcp server "api"
 
 # Profile-level overlay (with optional --null to suppress an inherited entry)
 ynh profile mcp add /tmp/ynh-tutorial/mcp-harness <profile> postgres --null
 ```
+
+Quote any `--header` or `--env` value that contains a space: unquoted, `Bearer xyz` is two arguments and `ynh mcp add` prints its usage line instead.
 
 `--command` and `--url` are mutually exclusive; at least one is required at add time. `--null` is profile-only (harness-level entries cannot be null — see [mcp.md §"CLI Editing"](../mcp.md#cli-editing)).
 

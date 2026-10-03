@@ -203,8 +203,8 @@ ynh ls --format json
 Expected (timestamps and paths will differ):
 ```json
 {
-  "capabilities": "0.6.0",
-  "schema_version": 2,
+  "capabilities": "0.8.0",
+  "schema_version": 3,
   "ynh_version": "<version>",
   "harnesses": [
     {
@@ -214,7 +214,7 @@ Expected (timestamps and paths will differ):
       "version_installed": "0.1.0",
       "description": "Tutorial harness",
       "default_vendor": "claude",
-      "path": "/Users/<you>/.ynh/harnesses/local--my-harness",
+      "path": "/tmp/ynh-tutorial/my-harness",
       "is_pinned": false,
       "installed_from": {
         "source_type": "local",
@@ -241,7 +241,7 @@ Key points:
 - `broken_reason` is present only when `kind` is `local-fork-broken`. It contains the load error string explaining what is wrong (e.g. `"no harness manifest found in <path>"` or a stat error when the source directory is gone). Consumers should surface broken entries distinctly — they are still registered in `~/.ynh` and can be removed with `ynh uninstall <id>`.
 - `version_installed` is the version recorded in the harness manifest. Pass `--check-updates` to add `version_available` (and `ref_available`) by querying the upstream.
 - `is_pinned` is `true` when the installed Git ref is a resolved SHA (matches `^[0-9a-f]{7,40}$`); `false` for tags, branches, or local-only installs.
-- `path` is the absolute path to the installed harness directory.
+- `path` is the absolute path to the harness directory. For a local install that is the source directory itself (a pointer install); for a remote install it is the copy under `~/.ynh/harnesses/`.
 - `artifacts` always includes all four counts (never omitted when zero).
 - `includes` and `delegates_to` are always present, even when empty (`[]`).
 - `description` is omitted if the harness has none (not present as `""`).
@@ -282,8 +282,8 @@ ynh ls --format json
 Expected (truncated):
 ```json
 {
-  "capabilities": "0.6.0",
-  "schema_version": 2,
+  "capabilities": "0.8.0",
+  "schema_version": 3,
   "ynh_version": "<version>",
   "harnesses": []
 }
@@ -352,7 +352,7 @@ ynh installed local/my-harness --format json
 Expected:
 ```json
 {
-  "capabilities": "0.6.0",
+  "capabilities": "0.8.0",
   "ynh_version": "0.3.x",
   "id": "local/my-harness",
   "installed": {

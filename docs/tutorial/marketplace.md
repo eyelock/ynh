@@ -255,10 +255,47 @@ Now test in a Claude Code session:
 
 Run from the directory containing `marketplace.json`:
 
+`--clean` removes the output directory before rebuilding. Use it on a directory that
+holds stale output and is not a Git working copy — here, a scratch directory with a
+leftover file:
+
 ```bash
+mkdir -p /tmp/ynh-tutorial/marketplace-stale
+echo old > /tmp/ynh-tutorial/marketplace-stale/leftover.txt
 cd /tmp/ynh-tutorial/marketplace-src
-ynd marketplace build -o /tmp/ynh-tutorial/marketplace-out --clean
-# Removes output dir before rebuilding
+ynd marketplace build -o /tmp/ynh-tutorial/marketplace-stale --clean
+```
+
+It asks before deleting:
+
+```
+--clean will permanently delete /tmp/ynh-tutorial/marketplace-stale and its 1 entry.
+Delete it? [y/N]
+```
+
+Anything but `y` leaves the directory alone and exits 1. Pass `-y` (also implied by
+`$YNH_YES` or CI) to skip the prompt:
+
+```bash
+ynd marketplace build -o /tmp/ynh-tutorial/marketplace-stale --clean -y
+```
+
+```
+Marketplace built → /tmp/ynh-tutorial/marketplace-stale (2 plugins)
+```
+
+`--clean` refuses outright to delete the filesystem root, `$HOME`, the current
+directory, any ancestor of it, or a Git working copy, and `-y` does not override
+that. The build output is itself initialised as a Git repo (see above), so
+`marketplace-out` — and the `git init` copy from the Claude Code section — is
+refused:
+
+```bash
+ynd marketplace build -o /tmp/ynh-tutorial/marketplace-out --clean -y
+```
+
+```
+Error: --clean refuses to delete /tmp/ynh-tutorial/marketplace-out: it is a git working copy
 ```
 
 > **Important:** `ynd marketplace build` looks for `marketplace.json` in the current directory. Make sure you're in the directory that contains your marketplace config, not the output directory.

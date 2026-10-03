@@ -234,11 +234,23 @@ ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/clean-test -v claud
 ls /tmp/ynh-tutorial/clean-test/
 # Expected: claude/ codex/ copilot/ cursor/
 
-# --clean removes entire output first
-ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/clean-test -v claude --clean
+# --clean removes entire output first. It asks before deleting; -y skips the prompt
+ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/clean-test -v claude --clean -y
+# Expected: Exported for claude → /tmp/ynh-tutorial/clean-test/claude (2 skills, 1 agents)
 ls /tmp/ynh-tutorial/clean-test/
 # Expected: claude/ only
 ```
+
+Without `-y`, `--clean` prompts first (`-y` is also implied by `$YNH_YES` or CI):
+
+```
+--clean will permanently delete /tmp/ynh-tutorial/clean-test and its 4 entries.
+Delete it? [y/N]
+```
+
+Answering anything but `y` leaves the directory alone and exits 1. `--clean` also
+refuses outright to delete the filesystem root, `$HOME`, the current directory,
+any ancestor of it, or a git working copy — and that refusal ignores `-y`.
 
 ## Export from a Git URL
 

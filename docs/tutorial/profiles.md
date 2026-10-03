@@ -95,6 +95,21 @@ ynd validate /tmp/ynh-tutorial/profile-harness
 Expected:
 ```
 /tmp/ynh-tutorial/profile-harness: valid
+  checked:
+    manifest     /tmp/ynh-tutorial/profile-harness/.agents/harness/plugin.json against https://eyelock.github.io/ynh/schema/plugin.schema.json
+    includes     none
+    mcp_servers  none
+    hooks        after_tool runs `/usr/local/bin/format-check.sh`
+    profiles     ci
+                 local
+    focuses      none
+    sensors      none
+    delegates_to none
+    skills       deploy
+    agents       none
+    rules        safety
+    commands     none
+    instructions instructions.md
 ```
 
 The validator checks that profile names are valid and profile contents use the correct schema.
