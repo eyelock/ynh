@@ -34,8 +34,16 @@ build: ## Build all binaries
 
 install: build ## Build and install binaries to ~/.ynh/bin
 	@mkdir -p $(INSTALL_DIR)
-	cp $(BUILD_DIR)/$(BINARY_NAME) $(INSTALL_DIR)/$(BINARY_NAME)
-	cp $(BUILD_DIR)/$(BINARY_NAME_DEV) $(INSTALL_DIR)/$(BINARY_NAME_DEV)
+	@# Copy to a temporary name, then rename over the old binary. Overwriting a
+	@# binary in place with cp keeps the same file, and on macOS the kernel's
+	@# cached code-signature check for that file can go stale: the next launch
+	@# is killed with SIGKILL (exit 137) and no message. A rename puts a new
+	@# file in place, and anything launching mid-install sees old or new, never
+	@# a partial copy.
+	cp $(BUILD_DIR)/$(BINARY_NAME) $(INSTALL_DIR)/.$(BINARY_NAME).new
+	mv -f $(INSTALL_DIR)/.$(BINARY_NAME).new $(INSTALL_DIR)/$(BINARY_NAME)
+	cp $(BUILD_DIR)/$(BINARY_NAME_DEV) $(INSTALL_DIR)/.$(BINARY_NAME_DEV).new
+	mv -f $(INSTALL_DIR)/.$(BINARY_NAME_DEV).new $(INSTALL_DIR)/$(BINARY_NAME_DEV)
 	@echo "Installed $(BINARY_NAME) and $(BINARY_NAME_DEV) to $(INSTALL_DIR)"
 	@command -v $(BINARY_NAME_DEV) >/dev/null 2>&1 || echo "Run: export PATH=\"$(INSTALL_DIR):\$$PATH\""
 
