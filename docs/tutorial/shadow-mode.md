@@ -163,6 +163,10 @@ ynh check local/ynh-guide --only harness-valid --format json
 }
 ```
 
+Both commands also print a warning on stderr that the base commit keeps its
+manifest in `.ynh-plugin/`, which is deprecated. It does not affect the result:
+an old commit is read as it is, and nothing is written back to it.
+
 At that commit the harness declared **no sensors at all** — they were added
 later. Had the base commit been three months further back, the sensors might
 have existed but with different commands.

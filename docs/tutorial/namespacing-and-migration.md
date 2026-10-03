@@ -351,7 +351,7 @@ broken install on disk. Inspect the quarantine:
 ynh quarantine list
 ```
 
-Expected (one row per quarantined entry, or an empty table):
+Expected: `No quarantined entries.` when nothing has been quarantined. Otherwise one row per entry:
 ```
 NAME                  ORIGINAL PATH                                 REASON
 broken-thing          /Users/<you>/.ynh/harnesses/broken-thing      plugin manifest has no name
