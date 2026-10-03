@@ -50,11 +50,18 @@ Examples:
   ynh install github.com/org/repo --ref v1.2.0
   ynh install david@my-registry`,
 
-	"uninstall": `ynh uninstall <name>
+	"uninstall": `ynh uninstall <name>...
 
-Remove an installed harness and its launcher.
+Remove one or more installed harnesses and their launchers.
 
-The source tree is left in place; only ynh's record and launcher are removed.`,
+Every name is checked before anything is removed: if any name is not
+installed, nothing is uninstalled and the command exits non-zero.
+
+The source tree is left in place; only ynh's record and launcher are removed.
+
+Examples:
+  ynh uninstall local/david
+  ynh uninstall local/david github.com/org/repo/planner`,
 
 	"update": `ynh update <name>
 
