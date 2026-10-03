@@ -309,14 +309,14 @@ ynd marketplace build                             # uses ./marketplace.json
 ynd marketplace build config/marketplace.json     # custom config path
 ynd marketplace build -o ./marketplace-dist       # custom output directory
 ynd marketplace build -v claude,cursor            # specific vendors
-ynd marketplace build --clean                     # remove output dir before build
+ynd marketplace build --clean                     # empty the output dir before building
 ```
 
 | Flag | Description |
 |------|-------------|
 | `-o, --output <dir>` | Output directory. Default: `./dist` |
 | `-v, --vendor <names>` | Comma-separated vendors. Default: `claude,cursor,codex,copilot` |
-| `--clean` | Remove output dir before building |
+| `--clean` | Empty the output dir before building. Refuses the filesystem root, your home, the current directory and any git working copy, except the repository a previous `ynd marketplace build` created in that directory: that one is emptied but keeps its `.git`, so the rebuild commits on top and the history survives. Asks before deleting a non-empty directory unless `-y`, `YNH_YES` or `CI` is set. |
 
 **Config format** (`marketplace.json`):
 
@@ -392,7 +392,7 @@ Schemas are embedded in the binary — `ynh schema <name>` and `ynh schema --all
 | `-y, --yes` | compress, inspect | Skip confirmation prompts. Also honored via `YNH_YES` or `CI` env vars. |
 | `-o, --output <path>` | inspect, export, preview, marketplace | Output directory. Defaults vary by command. |
 | `--harness <dir>` | preview, diff, export, validate, lint, fmt | Harness source directory. Alternative to positional arg. Also honored via `YNH_HARNESS` env var. |
-| `--clean` | export, marketplace | Remove output directory before writing. |
+| `--clean` | export, marketplace | Remove output directory before writing. Never the filesystem root, your home, the current directory or a git working copy, unless `ynd marketplace build` created that repository itself, in which case it is emptied and its `.git` kept. |
 | `--merged` | export | Single output dir with dual vendor manifests. |
 | `--profile <name>` | preview, diff, export | Profile to apply during assembly. Also honored via `YNH_PROFILE`. |
 | `--focus <name>` | preview, diff, export | Focus to apply (resolves its bound profile). Mutually exclusive with `--profile`. Also honored via `YNH_FOCUS`. |
