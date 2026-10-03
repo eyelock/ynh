@@ -10,6 +10,7 @@ import (
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 )
@@ -91,6 +92,10 @@ func cmdUpdate(args []string) error {
 				if _, statErr := os.Stat(newSrcDir); statErr == nil {
 					if err := assembler.CopyDir(newSrcDir, p.Dir); err != nil {
 						fmt.Fprintf(os.Stderr, "  Warning: copying refreshed harness: %v\n", err)
+					} else if err := migration.AdoptRefreshedManifest(newSrcDir, p.Dir); err != nil {
+						// An install already moved to .agents/harness must not keep
+						// serving its old plugin.json under the fresh one.
+						fmt.Fprintf(os.Stderr, "  Warning: %v\n", err)
 					}
 					// Reload after content refresh so include/delegate slices
 					// reflect any newly-added entries from upstream.

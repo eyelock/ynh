@@ -92,11 +92,12 @@ ynd preview /tmp/ynh-tutorial/my-project -v claude --focus review
 
 Expected: same as base preview — the `review` focus has no profile, so it uses the default configuration. The focus prompt is used by `ynh run`, not by `ynd preview`.
 
-## Still on `.ynh-plugin`? It keeps working
+## Still on `.ynh-plugin`? Migrate it
 
 Before the manifest directory moved under `.agents/`, it was `.ynh-plugin/`.
-ynh reads `.agents/harness/` first and falls back to `.ynh-plugin/`, so a
-project that has not moved needs no change and no migration step:
+That location is deprecated. ynh still reads it, second to
+`.agents/harness/`, so a project that has not moved keeps working for now,
+but every read warns and the fallback will be removed in a later release:
 
 ```bash
 mkdir -p /tmp/ynh-tutorial/old-layout/rules
@@ -121,8 +122,10 @@ ynd preview /tmp/ynh-tutorial/old-layout -v claude
 
 Expected: `validate` reports `valid` (its `manifest` line points at `.ynh-plugin/plugin.json`) and `preview` lists
 `.claude/rules/standards.md`, exactly as for the `.agents/harness` project
-above. Nothing is written back: reading a `.ynh-plugin` harness never
-creates `.agents/`.
+above. Each command also prints a warning on stderr that the harness keeps
+its manifest in `.ynh-plugin/`, ending `To fix: ynd migrate
+/tmp/ynh-tutorial/old-layout`. Nothing is written back: reading a
+`.ynh-plugin` harness never creates `.agents/`.
 
 ```bash
 ls -a /tmp/ynh-tutorial/old-layout
@@ -130,17 +133,22 @@ ls -a /tmp/ynh-tutorial/old-layout
 
 Expected: `.ynh-plugin` is still there and there is no `.agents`.
 
-To move a project onto the documented layout, move the directory and commit:
+To move a project onto the documented layout, run the fix the warning names:
 
 ```bash
-mkdir -p /tmp/ynh-tutorial/old-layout/.agents
-mv /tmp/ynh-tutorial/old-layout/.ynh-plugin /tmp/ynh-tutorial/old-layout/.agents/harness
+ynd migrate --dry-run /tmp/ynh-tutorial/old-layout
+ynd migrate -y /tmp/ynh-tutorial/old-layout
 ynd validate /tmp/ynh-tutorial/old-layout
 ```
 
-Expected: `valid`, with the `manifest` line now pointing at `.agents/harness/plugin.json`. In a git repository use `git mv` so history follows the
-file. If both directories exist, `.agents/harness` wins and `ynd validate`
-reports the shadowed `.ynh-plugin` copy so it cannot be edited by mistake.
+Expected: the dry run lists `/tmp/ynh-tutorial/old-layout` with
+`manifest dir: .ynh-plugin/ → .agents/harness/` and changes nothing. The
+second command moves it. `validate` then reports `valid` with no warning,
+and its `manifest` line points at `.agents/harness/plugin.json`. In a git
+repository, commit the result; git records the rename. If both
+directories exist, `ynd migrate` leaves the tree alone and says why,
+`.agents/harness` wins, and `ynd validate` reports the shadowed
+`.ynh-plugin` copy so it cannot be edited by mistake.
 
 ## Clean up
 
@@ -151,7 +159,7 @@ rm -rf /tmp/ynh-tutorial
 ## What You Learned
 
 - `.agents/harness/plugin.json` in a project root provides zero-install AI configuration
-- A project still on `.ynh-plugin/plugin.json` keeps working unchanged: ynh reads `.agents/harness/` first and falls back to `.ynh-plugin/`
+- A project still on `.ynh-plugin/plugin.json` keeps working for now, with a deprecation warning: ynh reads `.agents/harness/` first and falls back to `.ynh-plugin/`. `ynd migrate` moves it
 - `ynd validate`, `ynd preview`, and `ynd diff` work with project directories containing `.agents/harness/plugin.json`
 - `ynh run` auto-discovers `.agents/harness/plugin.json` in the current working directory
 - `ynh run --harness-file <path>` points to a specific manifest file by path

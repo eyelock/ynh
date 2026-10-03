@@ -7,6 +7,8 @@ import (
 	"os"
 
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/migration"
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 // errHelp is returned by arg parsers when -h/--help is passed.
@@ -53,6 +55,13 @@ func main() {
 		if printCommandHelp(os.Stdout, os.Args[1]) {
 			return
 		}
+	}
+
+	// A manifest read from the deprecated .ynh-plugin/ directory is reported
+	// once per harness, on stderr so --format json output stays clean. Not
+	// under migrate: that command is the fix, and reports the move itself.
+	if os.Args[1] != "migrate" {
+		plugin.SetLegacyManifestDirNotice(migration.ManifestDirNotice(os.Stderr))
 	}
 
 	var err error

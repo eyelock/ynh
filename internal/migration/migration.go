@@ -38,8 +38,11 @@ func (c Chain) Run(dir string) ([]string, error) {
 //
 // Order matters: HarnessFormatMigrator must run before HarnessStorageMigrator
 // so that .agents/harness/installed.json exists when namespace inference runs.
+// ManifestDirMigrator runs first so every later step sees the canonical
+// manifest directory.
 func DefaultChain() Chain {
 	return Chain{
+		ManifestDirMigrator{},
 		HarnessFormatMigrator{},
 		RegistryFormatMigrator{},
 		HarnessStorageMigrator{},
@@ -49,8 +52,22 @@ func DefaultChain() Chain {
 // FormatChain returns the format-only migration chain (no storage relocation).
 // Use this when loading harnesses transparently — storage migration should be
 // triggered explicitly so callers holding paths are not surprised by relocation.
+//
+// Its ManifestDirMigrator only moves trees ynh installed; see MigrateChain.
 func FormatChain() Chain {
 	return Chain{
+		ManifestDirMigrator{},
+		HarnessFormatMigrator{},
+		RegistryFormatMigrator{},
+	}
+}
+
+// MigrateChain is FormatChain for `ynd migrate`, the one caller acting on an
+// explicit request from a tree's owner. It also renames .ynh-plugin/ to
+// .agents/harness/ in source trees, which loading a harness never does.
+func MigrateChain() Chain {
+	return Chain{
+		ManifestDirMigrator{SourceTrees: true},
 		HarnessFormatMigrator{},
 		RegistryFormatMigrator{},
 	}

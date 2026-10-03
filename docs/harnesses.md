@@ -10,12 +10,11 @@ manifest sits beside `.agents/skills/` and `.agents/plugins/` rather than
 claiming another dot-directory at the project root.
 
 > **Still on `.ynh-plugin/`?** That was the manifest directory before it
-> moved under `.agents/`. ynh reads `.agents/harness/` first and falls back to
-> `.ynh-plugin/`, so an existing harness keeps working with no migration
-> step. Edits made through `ynh include`, `ynh hook` and the other editing
-> commands land in whichever directory the manifest already lives in. To move,
-> `git mv .ynh-plugin .agents/harness`. If both exist, `.agents/harness` wins
-> and `ynd validate` reports the shadowed copy.
+> moved under `.agents/`, and it is deprecated. ynh still reads it, second to
+> `.agents/harness/`, and warns on stderr when it does; the fallback will be
+> removed in a later release. Run `ynd migrate .` to move it. If both exist,
+> `.agents/harness` wins, `ynd migrate` leaves the tree alone, and
+> `ynd validate` reports the shadowed copy. See [migration](migration.md).
 
 > **Migration note:** Legacy format (`.claude-plugin/plugin.json` + `metadata.json`) is no longer supported. Consolidate into `.agents/harness/plugin.json`.
 

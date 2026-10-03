@@ -410,3 +410,80 @@ func TestPluginPath_MissingReportsCanonical(t *testing.T) {
 		t.Errorf("PluginPath on an empty dir = %q, want canonical %q so errors name the documented location", got, want)
 	}
 }
+
+// recordNotices installs a notice callback for the test and returns the
+// directories it was called with.
+func recordNotices(t *testing.T) *[]string {
+	t.Helper()
+	var got []string
+	SetLegacyManifestDirNotice(func(dir string) { got = append(got, dir) })
+	t.Cleanup(func() { SetLegacyManifestDirNotice(nil) })
+	return &got
+}
+
+// A legacy read is reported once per harness however many files are read,
+// and a canonical read is never reported.
+func TestLegacyManifestDirNotice_OncePerHarness(t *testing.T) {
+	got := recordNotices(t)
+
+	legacy := t.TempDir()
+	writeAt(t, legacy, LegacyPluginDir, PluginFile, `{"name":"x","version":"0.1.0"}`)
+	writeAt(t, legacy, LegacyPluginDir, InstalledFile, `{"source_type":"local","source":"/x","installed_at":"now"}`)
+	canonical := t.TempDir()
+	writeAt(t, canonical, PluginDir, PluginFile, `{"name":"y","version":"0.1.0"}`)
+
+	for i := 0; i < 3; i++ {
+		if _, err := LoadPluginJSON(legacy); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := LoadInstalledJSON(legacy); err != nil {
+			t.Fatal(err)
+		}
+		_ = IsPluginDir(legacy)
+		if _, err := LoadPluginJSON(canonical); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(*got) != 1 || (*got)[0] != legacy {
+		t.Errorf("notices = %v, want exactly [%s]", *got, legacy)
+	}
+}
+
+// A registry has no plugin.json, so its marketplace.json is found per file.
+// That lookup reports a legacy hit too.
+func TestLegacyManifestDirNotice_RegistryWithoutPluginJSON(t *testing.T) {
+	got := recordNotices(t)
+	dir := t.TempDir()
+	writeAt(t, dir, LegacyPluginDir, MarketplaceFile, `{}`)
+	if !IsRegistryDir(dir) {
+		t.Fatal("expected a registry dir")
+	}
+	if len(*got) != 1 {
+		t.Errorf("notices = %v, want one", *got)
+	}
+}
+
+// Split install: plugin.json is canonical but installed.json is only in the
+// legacy dir. The installed.json fallback is a legacy read and is reported.
+func TestLegacyManifestDirNotice_InstalledFallback(t *testing.T) {
+	got := recordNotices(t)
+	dir := t.TempDir()
+	writeAt(t, dir, PluginDir, PluginFile, `{"name":"x","version":"0.1.0"}`)
+	writeAt(t, dir, LegacyPluginDir, InstalledFile, `{"source_type":"local","source":"/x","installed_at":"now"}`)
+	if _, err := LoadInstalledJSON(dir); err != nil {
+		t.Fatal(err)
+	}
+	if len(*got) != 1 {
+		t.Errorf("notices = %v, want one", *got)
+	}
+}
+
+// Unset, nothing is called and nothing panics.
+func TestLegacyManifestDirNotice_UnsetIsSilent(t *testing.T) {
+	SetLegacyManifestDirNotice(nil)
+	dir := t.TempDir()
+	writeAt(t, dir, LegacyPluginDir, PluginFile, `{"name":"x","version":"0.1.0"}`)
+	if !IsPluginDir(dir) {
+		t.Fatal("legacy dir must still be read")
+	}
+}
