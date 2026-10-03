@@ -277,7 +277,7 @@ rm -rf /tmp/ynh-tutorial
 
 A loop driver wraps an agent runtime (Claude Code, Codex, etc.) and runs sensors between turns. Discovery is `ynh sensors ls --format json`; resolution is `ynh sensors show --format json`; execution is `ynh sensors run`. ynh emits raw signal — exit codes, output, file contents — and the loop driver turns that into pass/fail policy and feedback for the next turn.
 
-ynh runs the declared set as a gate itself — see [Gating with `ynh check`](check.md) — but owns no iteration: when to re-prompt an agent, what counts as convergence, and when to stop remain the loop driver's. See [Sensors reference §"Consuming sensors"](../sensors.md#consuming-sensors-for-loop-driver-authors) for the consumer pattern, and [harness engineering](../harness-engineering.md) for the architectural framing.
+ynh runs the declared set as a gate itself. See [Gating with `ynh check`](check.md). ynh also ships a loop driver, [`ynh agent run`](../agent.md), which re-prompts an agent until the gate is green or a budget runs out. A driver of your own decides when to re-prompt, what counts as convergence, and when to stop. See [Sensors reference §"Consuming sensors"](../sensors.md#consuming-sensors-for-loop-driver-authors) for the consumer pattern, and [harness engineering](../harness-engineering.md) for the architectural framing.
 
 ## What you learned
 

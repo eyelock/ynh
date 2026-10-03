@@ -341,8 +341,8 @@ func printSensorShowText(w io.Writer, entry sensorShowEntry) error {
 //     as pass or fail is loop-driver policy — per-team thresholds, severity
 //     filters, and convergence judgments belong above ynh, not inside it.
 //   - For focus-sourced sensors ynh resolves the focus declaration and
-//     returns it under output.focus. The loop driver invokes the agent
-//     runtime; ynh owns no agent-invocation surface.
+//     returns it under output.focus. ynh invokes no agent here; a loop
+//     driver that wants a verdict invokes its own agent runtime.
 type sensorRunResult struct {
 	Name       string          `json:"name"`
 	Kind       string          `json:"kind"` // files | command | focus
