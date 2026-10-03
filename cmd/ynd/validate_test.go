@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -1436,4 +1437,44 @@ func TestValidateHarnessSensors_ReferenceRequiresCommand(t *testing.T) {
 			}
 		}
 	})
+}
+
+// "valid" is never a bare claim: the report lists each part it checked and what it found,
+// with "none" for parts the harness does not have, so the reader can see they were looked at.
+func TestValidateHarness_ReportsWhatWasChecked(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	hr := filepath.Join(dir, "h")
+	mkdirAll(t, filepath.Join(hr, "skills", "hello"))
+	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"), []byte(`{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "h", "version": "0.1.0",
+  "includes": [{"git": "https://github.com/eyelock/ynm", "pick": ["skills/ynm-memory"]}],
+  "mcp_servers": {"ynm": {"command": "ynm", "args": ["serve"]}},
+  "hooks": {"on_stop": [{"command": "ynm hook stop"}]}
+}`))
+	writeFile(t, filepath.Join(hr, "skills", "hello", "SKILL.md"),
+		[]byte("---\nname: hello\ndescription: Say hello\n---\n\nHello.\n"))
+
+	var buf bytes.Buffer
+	withStdout(t, &buf, func() {
+		if err := validateHarness(hr); err != nil {
+			t.Fatalf("validateHarness: %v", err)
+		}
+	})
+	out := buf.String()
+	for _, want := range []string{
+		": valid",
+		"checked:",
+		"manifest     " + filepath.Join(hr, ".ynh-plugin", "plugin.json") + " against https://eyelock.github.io/ynh/schema/plugin.schema.json",
+		"includes     https://github.com/eyelock/ynm pick skills/ynm-memory",
+		"mcp_servers  ynm runs `ynm serve`",
+		"hooks        on_stop runs `ynm hook stop`",
+		"skills       hello",
+		"agents       none",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
 }

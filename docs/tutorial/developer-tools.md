@@ -125,7 +125,11 @@ ynd lint skills/code-review/SKILL.md
 
 ```bash
 ynd validate
-# Expected: ".: valid"
+# Expected: ".: valid", then a "checked:" list naming each part it looked at and what it
+# found there: the manifest and the schema it was checked against, includes, mcp_servers,
+# hooks, profiles, focuses, sensors, delegates_to, skills, agents, rules, commands and
+# instruction files. A part the harness does not have says "none", so you can see it was
+# still looked at. An INVALID harness prints its issues first, then the same list.
 ```
 
 Break something:
