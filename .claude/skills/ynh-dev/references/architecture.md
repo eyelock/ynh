@@ -40,7 +40,7 @@ internal/
   clischema/              Embedded CLI JSON schemas
   jsonschema/             Schema validation used by ynd validate-output
   namespace/              Canonical harness ids
-  migration/              Format migration chain (.harness.json -> plugin.json)
+  migration/              Format migration chains: FormatChain on load, MigrateChain for ynd migrate
   registry/               Harness registries
   marketplace/            Vendor-native marketplace indexes
   sources/                Local harness source directories
@@ -64,7 +64,7 @@ agent turns; they have their own reference in `agent-and-baseline.md`.
 - **Git is the package manager** - no registry, content cached locally by URL+ref hash
 - **Vendor-adaptive launch** - Claude and Copilot use `syscall.Exec` (native `--plugin-dir`), Codex/Cursor use child process with signal forwarding (symlink-based install)
 - **Deterministic run dir** - `~/.ynh/run/<id-fsname>/` (keyed by canonical id) overwritten each run (no temp dir leaks; same-named installs don't clobber each other)
-- **Single manifest** - `.agents/harness/plugin.json` for all config (identity, includes, hooks, MCP servers, profiles). `.harness.json` is the legacy form; `ynd migrate` converts it and `DetectFormat` runs the migration chain transparently. `.ynh-plugin/` is the pre-0.8 manifest directory: still read, second to `.agents/harness/`, never created.
+- **Single manifest** - `.agents/harness/plugin.json` for all config (identity, includes, hooks, MCP servers, profiles). `.harness.json` is the legacy form: only `ynd migrate` converts it, and every read command refuses a tree that still uses it with that fix, leaving the tree untouched (#406). `.ynh-plugin/` is the pre-0.8 manifest directory: still read, second to `.agents/harness/`, never created.
 
 ## Adapter interface
 

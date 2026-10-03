@@ -13,8 +13,8 @@ import (
 // chain over a directory tree containing a legacy `.harness.json`,
 // converting it to the modern `.agents/harness/plugin.json` layout.
 //
-// The CLI command exposes the same migration chain that `ynh install`
-// runs implicitly — locks the developer-facing entry point.
+// It is the only command that converts one: read commands refuse the tree
+// and name this command instead (#406).
 func TestYnd_Migrate(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "legacy-tree", "harness-1")
 	if err := os.MkdirAll(dir, 0o755); err != nil {

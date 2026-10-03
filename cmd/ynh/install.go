@@ -158,9 +158,13 @@ func cmdInstall(args []string) error {
 			// hint. If discovery didn't find anything and the root manifest
 			// (if any) doesn't match, error out with a clear hint instead
 			// of silently installing a different harness.
-			rootHarness, rerr := plugin.LoadHarnessJSON(srcDir)
-			rootMatches := rerr == nil && rootHarness != nil && rootHarness.Name == resolved.nameHint
-			if !rootMatches && plugin.IsPluginDir(srcDir) {
+			// A root manifest ynh no longer reads gets the fix, not a
+			// "no harness named" that hides it.
+			if err := migration.LegacyHarnessManifest(srcDir); err != nil {
+				return err
+			}
+			rootMatches := false
+			if plugin.IsPluginDir(srcDir) {
 				if hj, perr := plugin.LoadPluginJSON(srcDir); perr == nil && hj != nil && hj.Name == resolved.nameHint {
 					rootMatches = true
 				}
@@ -227,11 +231,6 @@ func cmdInstall(args []string) error {
 			if err := os.RemoveAll(installDir); err != nil {
 				return fmt.Errorf("cleaning stale install copy: %w", err)
 			}
-		}
-		// Run the format migration against the source tree so the
-		// include/delegate pre-fetch below sees the new plugin.json layout.
-		if _, err := migration.FormatChain().Run(srcDir); err != nil {
-			return fmt.Errorf("migrating source harness format: %w", err)
 		}
 	} else {
 		// If source == install dir, skip the clean+copy (already in place).

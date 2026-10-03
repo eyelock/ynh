@@ -108,10 +108,10 @@ func TestInstalledDirNS_UsesFSName(t *testing.T) {
 	}
 }
 
-func TestLoadFile_LoadsLegacyManifest(t *testing.T) {
+func TestLoadFile_LoadsSingleFileManifest(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".harness.json")
-	// Write a minimal legacy manifest (LoadHarnessFile reads a single file form).
+	path := filepath.Join(dir, "ephemeral.json")
+	// A single-file manifest, as --harness-file takes it.
 	hj := &plugin.HarnessJSON{
 		Name:          "legacy",
 		Version:       "0.1.0",

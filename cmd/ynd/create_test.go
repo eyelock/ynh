@@ -126,16 +126,16 @@ func TestCreateHarness(t *testing.T) {
 		}
 	}
 
-	// Verify .harness.json content
+	// Verify plugin.json content
 	data, err := os.ReadFile(filepath.Join(dir, "my-team/.agents/harness/plugin.json"))
 	if err != nil {
-		t.Fatalf("reading .harness.json: %v", err)
+		t.Fatalf("reading plugin.json: %v", err)
 	}
 	if !strings.Contains(string(data), `"name": "my-team"`) {
-		t.Error(".harness.json missing name")
+		t.Error("plugin.json missing name")
 	}
 	if !strings.Contains(string(data), `"version": "0.1.0"`) {
-		t.Error(".harness.json missing version")
+		t.Error("plugin.json missing version")
 	}
 }
 
@@ -200,7 +200,7 @@ func TestCreateHarness_VendorEnvVar(t *testing.T) {
 
 	data, err := os.ReadFile(filepath.Join(dir, "vendor-test/.agents/harness/plugin.json"))
 	if err != nil {
-		t.Fatalf("reading .harness.json: %v", err)
+		t.Fatalf("reading plugin.json: %v", err)
 	}
 	if !strings.Contains(string(data), `"default_vendor": "cursor"`) {
 		t.Errorf("expected default_vendor to be cursor, got: %s", data)
@@ -217,10 +217,10 @@ func TestCreateHarness_WithDescription(t *testing.T) {
 
 	data, err := os.ReadFile(filepath.Join(dir, "my-harness/.agents/harness/plugin.json"))
 	if err != nil {
-		t.Fatalf("reading .harness.json: %v", err)
+		t.Fatalf("reading plugin.json: %v", err)
 	}
 	if !strings.Contains(string(data), `"description": "My team harness"`) {
-		t.Errorf("expected description in .harness.json, got: %s", data)
+		t.Errorf("expected description in plugin.json, got: %s", data)
 	}
 }
 
@@ -234,10 +234,10 @@ func TestCreateHarness_WithVendor(t *testing.T) {
 
 	data, err := os.ReadFile(filepath.Join(dir, "my-harness/.agents/harness/plugin.json"))
 	if err != nil {
-		t.Fatalf("reading .harness.json: %v", err)
+		t.Fatalf("reading plugin.json: %v", err)
 	}
 	if !strings.Contains(string(data), `"default_vendor": "codex"`) {
-		t.Errorf("expected default_vendor=codex in .harness.json, got: %s", data)
+		t.Errorf("expected default_vendor=codex in plugin.json, got: %s", data)
 	}
 }
 
@@ -251,14 +251,14 @@ func TestCreateHarness_WithDescriptionAndVendor(t *testing.T) {
 
 	data, err := os.ReadFile(filepath.Join(dir, "my-harness/.agents/harness/plugin.json"))
 	if err != nil {
-		t.Fatalf("reading .harness.json: %v", err)
+		t.Fatalf("reading plugin.json: %v", err)
 	}
 	content := string(data)
 	if !strings.Contains(content, `"description": "My team harness"`) {
-		t.Errorf("expected description in .harness.json, got: %s", content)
+		t.Errorf("expected description in plugin.json, got: %s", content)
 	}
 	if !strings.Contains(content, `"default_vendor": "codex"`) {
-		t.Errorf("expected default_vendor=codex in .harness.json, got: %s", content)
+		t.Errorf("expected default_vendor=codex in plugin.json, got: %s", content)
 	}
 }
 
@@ -272,7 +272,7 @@ func TestCreateHarness_NoDescriptionOmitsField(t *testing.T) {
 
 	data, err := os.ReadFile(filepath.Join(dir, "my-harness/.agents/harness/plugin.json"))
 	if err != nil {
-		t.Fatalf("reading .harness.json: %v", err)
+		t.Fatalf("reading plugin.json: %v", err)
 	}
 	if strings.Contains(string(data), `"description"`) {
 		t.Errorf("empty description should be omitted, got: %s", data)
@@ -310,7 +310,7 @@ func TestCreateHarness_InsideHarness(t *testing.T) {
 	t.Chdir(dir)
 
 	// Make CWD look like a harness
-	writeFile(t, filepath.Join(dir, ".harness.json"), []byte(`{"name":"test","version":"0.1.0"}`))
+	writeFile(t, filepath.Join(dir, ".agents", "harness", "plugin.json"), []byte(`{"name":"test","version":"0.1.0"}`))
 
 	err := createHarness("nested", "", "")
 	if err == nil {

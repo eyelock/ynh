@@ -11,12 +11,34 @@ import (
 )
 
 func TestDetectFormat_Plugin(t *testing.T) {
-	// Migration chain converts legacy .harness.json transparently.
-	// DetectFormat always returns "plugin" for any supported format.
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "x")
-	if got := DetectFormat(dir); got != "plugin" {
-		t.Errorf("DetectFormat = %q, want %q", got, "plugin")
+	if got, err := DetectFormat(dir); err != nil || got != "plugin" {
+		t.Errorf("DetectFormat = %q, %v, want %q", got, err, "plugin")
+	}
+}
+
+// A source tree whose only manifest is .harness.json is refused with the fix
+// and left exactly as it was (#406).
+func TestDetectFormat_LegacyHarnessJSONRefused(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	dir := t.TempDir()
+	legacy := filepath.Join(dir, ".harness.json")
+	if err := os.WriteFile(legacy, []byte(`{"name":"x","version":"0.1.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := DetectFormat(dir)
+	if err == nil || !strings.Contains(err.Error(), "ynd migrate "+dir) {
+		t.Fatalf("DetectFormat = %q, %v; want an error naming ynd migrate %s", got, err, dir)
+	}
+	if _, statErr := os.Stat(legacy); statErr != nil {
+		t.Errorf(".harness.json must be left in place: %v", statErr)
+	}
+	if plugin.IsPluginDir(dir) {
+		t.Error("a read must not write plugin.json into the source tree")
+	}
+	if _, err := LoadDir(dir); err == nil || !strings.Contains(err.Error(), "ynd migrate") {
+		t.Errorf("LoadDir must refuse the legacy tree with the fix, got %v", err)
 	}
 }
 
@@ -29,15 +51,15 @@ func TestDetectFormat_Legacy(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.json"), []byte(`{"name":"x"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := DetectFormat(dir); got != "legacy" {
-		t.Errorf("DetectFormat = %q, want %q", got, "legacy")
+	if got, err := DetectFormat(dir); err != nil || got != "legacy" {
+		t.Errorf("DetectFormat = %q, %v, want %q", got, err, "legacy")
 	}
 }
 
 func TestDetectFormat_None(t *testing.T) {
 	dir := t.TempDir()
-	if got := DetectFormat(dir); got != "" {
-		t.Errorf("DetectFormat = %q, want empty", got)
+	if got, err := DetectFormat(dir); err != nil || got != "" {
+		t.Errorf("DetectFormat = %q, %v, want empty", got, err)
 	}
 }
 
@@ -56,7 +78,7 @@ func TestLoadDir_FullMetadata(t *testing.T) {
 			{"git": "github.com/company/monorepo", "path": "harnesses/team-ops"}
 		]
 	}`
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
+	if err := writePluginJSONFile(dir, []byte(hj)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -127,7 +149,7 @@ func TestLoadDir_InvalidName(t *testing.T) {
 	for _, name := range badNames {
 		dir := t.TempDir()
 		hj := fmt.Sprintf(`{"name":%q,"version":"0.1.0"}`, name)
-		if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
+		if err := writePluginJSONFile(dir, []byte(hj)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -196,7 +218,7 @@ func TestList(t *testing.T) {
 		t.Error("List missing 'beta'")
 	}
 	if found["no-manifest"] {
-		t.Error("List should not include dir without harness.json")
+		t.Error("List should not include dir without plugin.json")
 	}
 }
 
@@ -237,7 +259,7 @@ func TestLoadDir_WithProvenance(t *testing.T) {
 			"installed_at": "2026-03-22T10:30:00Z"
 		}
 	}`
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
+	if err := writePluginJSONFile(dir, []byte(hj)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -291,7 +313,7 @@ func TestLoadDir_BackfillsResolvedSHAs(t *testing.T) {
 			{"git": "github.com/org/del-floating", "path": "x"}
 		]
 	}`
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
+	if err := writePluginJSONFile(dir, []byte(hj)); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(dir, plugin.PluginDir), 0o755); err != nil {
@@ -347,7 +369,7 @@ func TestLoadDir_NoInstalledJSON_LeavesSHAsEmpty(t *testing.T) {
 		"default_vendor": "claude",
 		"includes": [{"git": "github.com/org/foo", "path": "x"}]
 	}`
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
+	if err := writePluginJSONFile(dir, []byte(hj)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -373,7 +395,7 @@ func TestLoadDir_RegistryProvenance(t *testing.T) {
 			"installed_at": "2026-03-22T10:30:00Z"
 		}
 	}`
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(hj), 0o644); err != nil {
+	if err := writePluginJSONFile(dir, []byte(hj)); err != nil {
 		t.Fatal(err)
 	}
 

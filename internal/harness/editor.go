@@ -14,7 +14,7 @@ import (
 // loadManifest runs the migration chain and loads the manifest from the new path.
 func loadManifest(dir string) (*plugin.HarnessJSON, error) {
 	if _, err := migration.FormatChain().Run(dir); err != nil {
-		return nil, fmt.Errorf("migrating harness manifest: %w", err)
+		return nil, err
 	}
 	return plugin.LoadPluginJSON(dir)
 }
@@ -39,7 +39,11 @@ func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
 		if absErr != nil {
 			return "", false, fmt.Errorf("resolving path %q: %w", ref, absErr)
 		}
-		if DetectFormat(abs) == "" {
+		f, ferr := DetectFormat(abs)
+		if ferr != nil {
+			return "", false, ferr
+		}
+		if f == "" {
 			return "", false, fmt.Errorf("no harness manifest found at %q", abs)
 		}
 		return abs, false, nil
@@ -54,7 +58,7 @@ func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
 			}
 		}
 		treeDir := InstalledDirByID(ref)
-		if DetectFormat(treeDir) == "plugin" {
+		if f, _ := DetectFormat(treeDir); f == "plugin" {
 			return treeDir, true, nil
 		}
 		return "", false, fmt.Errorf("harness %q: %w", ref, ErrNotFound)

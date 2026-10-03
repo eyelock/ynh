@@ -349,9 +349,12 @@ ynd migrate ./my-harness       # specific directory
 ynd migrate ./harnesses        # walk tree, migrate every match
 ```
 
-Idempotent — safe to run twice. No-op if the target already uses the new
-format. Called transparently by ynh on first access to a legacy harness,
-so manual invocation is rarely needed except for source trees.
+Idempotent: safe to run twice. No-op if the target already uses the new
+format. It is the only command that converts `.harness.json` and
+`registry.json`: every other `ynh` and `ynd` command refuses a tree that
+still uses them, names this command as the fix, and leaves the tree
+untouched. Installs ynh copied under `~/.ynh/harnesses/` are its own and are
+converted on load.
 
 | Flag | Description |
 |------|-------------|

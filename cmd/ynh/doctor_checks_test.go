@@ -284,7 +284,7 @@ func installHarnessWithVendor(t *testing.T, name, vendorName string) {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(body), 0o644); err != nil {
+		if err := writePluginJSONFile(dir, []byte(body)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -330,7 +330,7 @@ func TestDoctor_HarnessListedButBroken(t *testing.T) {
 	installHarnessWithVendor(t, "broken", "claude")
 
 	// Corrupt the manifest LoadByID reads, leaving the install listed.
-	bad := filepath.Join(harness.InstalledDirByID("local/broken"), ".harness.json")
+	bad := filepath.Join(harness.InstalledDirByID("local/broken"), ".agents", "harness", "plugin.json")
 	if err := os.WriteFile(bad, []byte("{ not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}

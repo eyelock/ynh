@@ -10,20 +10,44 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
-// RegistryFormatMigrator converts registry.json → .agents/harness/marketplace.json.
-// Safe to run multiple times — Applies returns false once the new format exists.
-type RegistryFormatMigrator struct{}
+// RegistryFormatMigrator converts registry.json to .agents/harness/marketplace.json.
+// Safe to run multiple times: Applies returns false once the new format exists.
+//
+// Gated like HarnessFormatMigrator: the zero value, in FormatChain, converts
+// only installs under config.HarnessesDir() and refuses everywhere else with
+// LegacyRegistry's error. SourceTrees is set only by MigrateChain.
+type RegistryFormatMigrator struct {
+	// SourceTrees allows the conversion outside config.HarnessesDir().
+	SourceTrees bool
+}
 
 func (RegistryFormatMigrator) Description() string {
 	return "registry format: registry.json → .agents/harness/marketplace.json"
 }
 
+// Applies reports whether dir holds a registry.json ynh wrote and no
+// marketplace.json, wherever dir is. See HarnessFormatMigrator.Applies.
 func (RegistryFormatMigrator) Applies(dir string) bool {
+	return hasLegacyRegistry(dir)
+}
+
+// hasLegacyRegistry is Applies as a pure predicate: it only reads.
+func hasLegacyRegistry(dir string) bool {
 	if plugin.IsRegistryDir(dir) {
 		return false
 	}
 	_, err := readYnhRegistry(dir)
 	return err == nil
+}
+
+// LegacyRegistry returns the error a read command gives for a directory
+// whose registry is still a registry.json ynh wrote, or nil when it is not.
+// See LegacyHarnessManifest.
+func LegacyRegistry(dir string) error {
+	if !hasLegacyRegistry(dir) {
+		return nil
+	}
+	return legacyManifestError(dir, "registry.json")
 }
 
 // readYnhRegistry reads dir/registry.json and returns it only if it is one
@@ -87,7 +111,16 @@ func readYnhRegistry(dir string) (*oldRegistry, error) {
 	return &old, nil
 }
 
-func (RegistryFormatMigrator) Run(dir string) error {
+func (m RegistryFormatMigrator) Run(dir string) error {
+	if plugin.IsRegistryDir(dir) {
+		return fmt.Errorf("not converting %s: it already has a marketplace.json", dir)
+	}
+	if !m.SourceTrees && !insideHarnessesDir(dir) {
+		if err := LegacyRegistry(dir); err != nil {
+			return err
+		}
+		return fmt.Errorf("not converting %s: no registry.json ynh wrote", dir)
+	}
 	// Re-read through the same predicate Applies used, so Run cannot delete a
 	// file that would not have qualified. The two must not be able to
 	// disagree.

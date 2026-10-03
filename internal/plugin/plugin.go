@@ -12,7 +12,7 @@ import (
 	"sync"
 )
 
-// HarnessJSON represents the .harness.json manifest — single source of truth.
+// HarnessJSON represents the plugin.json manifest: the single source of truth.
 type HarnessJSON struct {
 	Schema        string                 `json:"$schema,omitempty"`
 	Name          string                 `json:"name"`
@@ -702,7 +702,9 @@ type DelegateMeta struct {
 	Path string `json:"path,omitempty"`
 }
 
-// HarnessFile is the manifest filename used in harness directories.
+// HarnessFile is the legacy single-file harness manifest. ynh reads it only to
+// convert it: `ynd migrate` on a source tree, or loading an install an old
+// binary left under YNH_HOME/harnesses. Read commands refuse it (#406).
 const HarnessFile = ".harness.json"
 
 // AgentsDir is the cross-vendor configuration directory at a project root.
@@ -972,12 +974,6 @@ type ForkedFromJSON struct {
 	Version      string `json:"version,omitempty"`
 }
 
-// IsHarnessDir returns true if the directory contains a .harness.json manifest.
-func IsHarnessDir(dir string) bool {
-	_, err := os.Stat(filepath.Join(dir, HarnessFile))
-	return err == nil
-}
-
 // IsPluginDir returns true if the directory contains a plugin.json manifest
 // in either manifest directory.
 func IsPluginDir(dir string) bool {
@@ -1117,8 +1113,9 @@ func IsClaudePluginDir(dir string) bool {
 	return err == nil
 }
 
-// LoadHarnessJSON reads and parses harness.json from dir.
-// Unknown fields are rejected via DisallowUnknownFields.
+// LoadHarnessJSON reads and parses the legacy .harness.json from dir, for the
+// migrators that convert it. Unknown fields are rejected via
+// DisallowUnknownFields.
 func LoadHarnessJSON(dir string) (*HarnessJSON, error) {
 	data, err := os.ReadFile(filepath.Join(dir, HarnessFile))
 	if err != nil {
@@ -1139,8 +1136,9 @@ func LoadHarnessJSON(dir string) (*HarnessJSON, error) {
 	return &hj, nil
 }
 
-// LoadHarnessFile reads and parses a .harness.json from a file path directly.
-// Unlike LoadHarnessJSON, the name field is not required (for inline config).
+// LoadHarnessFile reads and parses a manifest from a file path directly, for
+// --harness-file. Unlike LoadHarnessJSON, the name field is not required
+// (for inline config).
 func LoadHarnessFile(path string) (*HarnessJSON, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -1155,21 +1153,6 @@ func LoadHarnessFile(path string) (*HarnessJSON, error) {
 	}
 
 	return &hj, nil
-}
-
-// SaveHarnessJSON writes a HarnessJSON manifest to dir/.harness.json.
-func SaveHarnessJSON(dir string, hj *HarnessJSON) error {
-	data, err := json.MarshalIndent(hj, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshaling .harness.json: %w", err)
-	}
-	data = append(data, '\n')
-
-	if err := os.WriteFile(filepath.Join(dir, HarnessFile), data, 0o644); err != nil {
-		return fmt.Errorf("writing .harness.json: %w", err)
-	}
-
-	return nil
 }
 
 // EnvPassthroughField is the manifest key declaring which environment

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 func TestExportMergedMode(t *testing.T) {
@@ -45,7 +47,7 @@ func TestExportMergedMode(t *testing.T) {
 func TestExportMergedWithHooks(t *testing.T) {
 	// Create a harness with hooks
 	srcDir := t.TempDir()
-	writeJSON(t, filepath.Join(srcDir, ".harness.json"), map[string]any{
+	writeJSON(t, filepath.Join(srcDir, plugin.PluginDir, plugin.PluginFile), map[string]any{
 		"name":    "hooks-merged",
 		"version": "0.1.0",
 		"hooks": map[string]any{
@@ -74,7 +76,7 @@ func TestExportMergedWithHooks(t *testing.T) {
 func TestExportMergedWithMCPServers(t *testing.T) {
 	// Create a harness with MCP servers
 	srcDir := t.TempDir()
-	writeJSON(t, filepath.Join(srcDir, ".harness.json"), map[string]any{
+	writeJSON(t, filepath.Join(srcDir, plugin.PluginDir, plugin.PluginFile), map[string]any{
 		"name":    "mcp-merged",
 		"version": "0.1.0",
 		"mcp_servers": map[string]any{

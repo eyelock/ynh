@@ -26,7 +26,7 @@ func installListTestHarness(t *testing.T, home, name, harnessJSON string) string
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(harnessJSON), 0o644); err != nil {
+	if err := writePluginJSONFile(dir, []byte(harnessJSON)); err != nil {
 		t.Fatal(err)
 	}
 	return id
@@ -337,7 +337,7 @@ func installListTestHarnessNS(t *testing.T, home, ns, name, harnessJSON string) 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(harnessJSON), 0o644); err != nil {
+	if err := writePluginJSONFile(dir, []byte(harnessJSON)); err != nil {
 		t.Fatal(err)
 	}
 	return id

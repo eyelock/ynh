@@ -116,11 +116,11 @@ func cmdExport(args []string) error {
 		}
 	}
 
-	// Determine output directory. Migration chain runs in harness.LoadDir below,
-	// so we convert any legacy source format transparently before reading.
+	// Determine output directory. The format chain never rewrites srcDir: it
+	// refuses a legacy manifest with the fix (#406).
 	if outputDir == "" {
 		if _, err := migration.FormatChain().Run(srcDir); err != nil {
-			return fmt.Errorf("migrating source format: %w", err)
+			return err
 		}
 		pj, err := plugin.LoadPluginJSON(srcDir)
 		if err != nil {

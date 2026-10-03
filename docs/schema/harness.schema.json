@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://eyelock.github.io/ynh/schema/harness.schema.json",
   "title": "YNH Harness (0.1, superseded)",
-  "description": "Harness manifest for ynh 0.1, at .harness.json. Superseded by plugin.schema.json (0.2+, at .agents/harness/plugin.json; .ynh-plugin/plugin.json before 0.8, now deprecated). Validate new manifests against that. Published so existing 0.1 manifests' $schema URLs keep resolving; ynh rewrites them to the 0.2 schema on migration.",
+  "description": "Harness manifest for ynh 0.1, at .harness.json. Superseded by plugin.schema.json (0.2+, at .agents/harness/plugin.json; .ynh-plugin/plugin.json before 0.8, now deprecated). Validate new manifests against that. Published so existing 0.1 manifests' $schema URLs keep resolving; ynd migrate, the only command that reads a .harness.json, rewrites them to the 0.2 schema.",
   "deprecated": true,
   "type": "object",
   "required": ["name", "version"],

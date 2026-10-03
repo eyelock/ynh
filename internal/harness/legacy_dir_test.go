@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
@@ -30,8 +31,8 @@ func TestLoadDir_LegacyPluginDirFallback(t *testing.T) {
 	dir := t.TempDir()
 	writeLegacyHarness(t, dir, "legacy")
 
-	if got := DetectFormat(dir); got != "plugin" {
-		t.Fatalf("DetectFormat = %q, want plugin", got)
+	if got, err := DetectFormat(dir); err != nil || got != "plugin" {
+		t.Fatalf("DetectFormat = %q, %v, want plugin", got, err)
 	}
 	h, err := LoadDir(dir)
 	if err != nil {
@@ -85,11 +86,15 @@ func TestResolveEditTarget_LegacyPluginDir(t *testing.T) {
 	}
 }
 
-// The .harness.json migrator writes the converted manifest to the canonical
-// directory, never to the legacy one, so a freshly migrated harness is
-// already in the documented layout.
-func TestLegacyHarnessFile_MigratesToCanonicalDir(t *testing.T) {
-	dir := t.TempDir()
+// An install from an old binary, still on .harness.json, is ynh's own copy
+// and converts on load. The migrator writes the converted manifest to the
+// canonical directory, never to the legacy one.
+func TestLegacyHarnessFile_InstallMigratesToCanonicalDir(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	dir := filepath.Join(config.HarnessesDir(), "local--old")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	body := `{"name":"old","version":"0.1.0"}`
 	if err := os.WriteFile(filepath.Join(dir, plugin.HarnessFile), []byte(body), 0o644); err != nil {
 		t.Fatal(err)

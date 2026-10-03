@@ -179,7 +179,9 @@ left alone and nothing in it is moved or merged.
 
 Converts .harness.json to .agents/harness/plugin.json: extracts install-time
 provenance into .agents/harness/installed.json, writes plugin.json without
-that field, and removes .harness.json.
+that field, and removes .harness.json. Converts a registry.json ynh wrote to
+.agents/harness/marketplace.json. This is the only command that converts
+either: every other command refuses a tree that still uses them.
 
 Safe to run more than once: it does nothing once the new layout exists.
 

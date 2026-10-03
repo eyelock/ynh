@@ -11,14 +11,14 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 )
 
-// writeSourceHarness creates a minimal .harness.json in dir.
+// writeSourceHarness creates a minimal plugin.json in dir.
 func writeSourceHarness(t *testing.T, dir, name string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	content := `{"name":"` + name + `","version":"0.1.0","description":"` + name + ` harness"}`
-	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(content), 0o644); err != nil {
+	if err := writePluginJSONFile(dir, []byte(content)); err != nil {
 		t.Fatal(err)
 	}
 }
