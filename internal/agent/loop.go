@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -682,13 +683,16 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 				return result, &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("sending plan request: %v", err)}
 			}
 			planTurn, err := sess.Next()
+			if err == nil {
+				err = unmeteredTurn(wb.Name(), planTurn)
+			}
 			if err == io.EOF {
 				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: "worker exited during plan phase"})
 				return result, &ExitError{Code: ExitWorkerError, Message: "worker exited during plan phase"}
 			}
 			if err != nil {
 				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
-				return result, &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("plan turn: %v", err)}
+				return result, workerTurnExit(err, fmt.Sprintf("plan turn: %v", err))
 			}
 			_ = traj.Emit(KindAssistantMessage, 0, planTurn.Content)
 			budget.RecordTokens(planTurn.Usage)
@@ -834,13 +838,18 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		if ctx.Err() != nil {
 			return result, interruptExit(turnN)
 		}
+		// A response the model did not write is not agent output. Fed back as
+		// if it were, it repeats every turn until the watchdog calls it stuck.
+		if err == nil {
+			err = unmeteredTurn(wb.Name(), turn)
+		}
 		if err == io.EOF {
 			_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitWorkerError, Reason: "worker exited unexpectedly"})
 			return result, &ExitError{Code: ExitWorkerError, Message: "worker exited before convergence"}
 		}
 		if err != nil {
 			_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
-			return result, &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("worker turn %d: %v", turnN, err)}
+			return result, workerTurnExit(err, fmt.Sprintf("worker turn %d: %v", turnN, err))
 		}
 		_ = traj.Emit(KindAssistantMessage, turnN, turn.Content)
 
@@ -1360,6 +1369,17 @@ func selectBackend(name string) (WorkerBackend, error) {
 	default:
 		return nil, fmt.Errorf("unknown backend %q (supported: claude, codex, cursor)", name)
 	}
+}
+
+// workerTurnExit is the exit for a turn the worker could not complete. A
+// *WorkerError is the vendor reporting its own failure, so its words are the
+// reason; any other error keeps the caller's description of where it happened.
+func workerTurnExit(err error, fallback string) *ExitError {
+	var we *WorkerError
+	if errors.As(err, &we) {
+		return &ExitError{Code: ExitWorkerError, Message: "worker error: " + we.Error()}
+	}
+	return &ExitError{Code: ExitWorkerError, Message: fallback}
 }
 
 // resolveYNHBinary returns the path to the ynh binary to use for sensor execution.
