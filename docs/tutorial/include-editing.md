@@ -422,8 +422,8 @@ EOF
 
 ynh install /tmp/ynh-tutorial-includes/base
 
-# Now edit it by name — ynh resolves to ~/.ynh/harnesses/base
-ynh include add base github.com/anthropics/skills
+# Now edit it by its canonical id; a bare "base" is rejected
+ynh include add local/base github.com/anthropics/skills
 ```
 
 Expected:
@@ -438,7 +438,7 @@ When targeting an installed harness by name, ynh pre-fetches the new include imm
 ynh info local/base
 ```
 
-The installed harness's `.agents/harness/plugin.json` at `~/.ynh/harnesses/local--base/.agents/harness/plugin.json` now contains the added include.
+A local-path install is a pointer to its source directory (`~/.ynh/installed/local--base.json`), so the edit lands in the source manifest, `/tmp/ynh-tutorial-includes/base/.agents/harness/plugin.json`, which now contains the added include.
 
 `ynh include`'s `<harness>` argument follows the same rule as every other ref-accepting command: a canonical id (`local/<name>` or `<host>/<org>/<repo>/<name>`) for an installed harness, or an explicit filesystem path (`./<dir>`, `/abs/<dir>`) for a directory containing a `.agents/harness/plugin.json`. Bare names are rejected with a hint.
 

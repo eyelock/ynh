@@ -421,7 +421,9 @@ After upstream repos change:
 ynh update local/full-stack
 ```
 
-Expected (one line per include — repos with multiple includes appear multiple times):
+Expected: a first line saying the harness is local at its source directory and
+only its remote includes and delegates are refreshed, then one pair per include
+(repos with multiple includes appear multiple times):
 ```
 Checking github.com/eyelock/assistants...
   Already up to date.
@@ -429,7 +431,7 @@ Checking github.com/eyelock/assistants...
   Already up to date.
 Checking github.com/anthropics/skills...
   Already up to date.
-Checked 3 source(s) for harness "full-stack", 0 updated.
+Checked 3 source(s) for harness "local/full-stack", 0 updated.
 ```
 
 If upstream has changed, you'll see `Updated.` instead.
