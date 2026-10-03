@@ -64,7 +64,7 @@
 
 ## Code Style
 
-- **Go 1.25+ idioms** — use modern stdlib features. No compatibility shims for older Go versions.
+- **Go 1.26+ idioms** — use modern stdlib features. No compatibility shims for older Go versions.
 - **Zero external dependencies** — standard library only. This is a deliberate design choice, not an accident.
 - **`goimports` + `gofmt`** — enforced via `make format`. No manual formatting.
 - **`errcheck` strict** — every returned error must be checked. No `_ = f.Close()` shortcuts.

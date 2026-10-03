@@ -190,7 +190,7 @@ The user-facing version of this guidance lives in [`docs/marketplace.md` § Pinn
 
 ## Technologies
 
-- **Go 1.25+** - single binary, no runtime dependencies
+- **Go 1.26+** - single binary, no runtime dependencies
 - **Git** - content resolution, caching, versioning
 - **JSON** - all configuration (harness manifests, global config)
 
