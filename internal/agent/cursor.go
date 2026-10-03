@@ -138,10 +138,14 @@ func (s *cursorSession) Next() (Turn, error) {
 func (s *cursorSession) Close() error { return nil }
 
 // cursor stream-json output shapes (same wire format as Claude Code).
+// IsError and Result mark a turn cursor itself reports as failed; Result is
+// held raw so a field of an unexpected type cannot drop the result event.
 type cursorOutputEvent struct {
 	Type    string           `json:"type"`
 	Message *cursorOutputMsg `json:"message,omitempty"`
 	Usage   *cursorUsage     `json:"usage,omitempty"`
+	IsError bool             `json:"is_error,omitempty"`
+	Result  json.RawMessage  `json:"result,omitempty"`
 }
 
 type cursorOutputMsg struct {
@@ -189,6 +193,7 @@ func parseCursorOutput(r io.Reader) (Turn, error) {
 					}
 				}
 				if ev.Message.Usage != nil {
+					turn.UsageReported = true
 					turn.Usage.InputTokens += ev.Message.Usage.InputTokens
 					turn.Usage.OutputTokens += ev.Message.Usage.OutputTokens
 					turn.Usage.CacheTokens += ev.Message.Usage.CacheTokens
@@ -197,11 +202,18 @@ func parseCursorOutput(r io.Reader) (Turn, error) {
 
 		case "result":
 			if ev.Usage != nil {
+				turn.UsageReported = true
 				turn.Usage.InputTokens += ev.Usage.InputTokens
 				turn.Usage.OutputTokens += ev.Usage.OutputTokens
 				turn.Usage.CacheTokens += ev.Usage.CacheTokens
 			}
 			turn.Content = contentBuf.String()
+			if ev.IsError {
+				return Turn{}, &WorkerError{
+					Backend: "cursor",
+					Message: firstNonBlank(rawString(ev.Result), turn.Content, "turn failed"),
+				}
+			}
 			return turn, nil
 		}
 	}

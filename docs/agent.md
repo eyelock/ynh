@@ -252,6 +252,25 @@ at the first occurrence rather than continuing against no signal — spending a
 whole budget on turns nothing could verify, and then reporting the exhaustion as
 the agent's failure, hides the real fault.
 
+Code 20 includes a worker that cannot authenticate with or reach its model.
+The run ends on the **first** turn, with the vendor's own message as the
+reason:
+
+```
+worker error: claude: Not logged in · Please run /login (authentication failed: does the harness env_passthrough pass the vendor's credentials?)
+```
+
+The usual cause is a harness whose `env_passthrough` does not list the
+vendor's API key, so the worker [never receives it](#what-the-agent-can-see).
+Each backend reads the failure from the vendor's structured output: an error
+`result` from Claude Code or Cursor, a `turn.failed` event from Codex. As a
+vendor-neutral safety net, a turn that answers without consuming a single
+token is also a worker error, because a model cannot respond without consuming
+tokens. That rule applies only when the backend reported usage for the turn:
+for one that reports none, zero is not a measurement. Without these checks the
+same message came back every turn and the run ended as stuck (13), pointing at
+the agent rather than its environment.
+
 ## Run result
 
 `--format json` prints one object when the run ends, on **every** path —
