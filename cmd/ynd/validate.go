@@ -69,7 +69,7 @@ func cmdValidate(args []string) error {
 			return fmt.Errorf("validation failed")
 		}
 		fmt.Println("No harness directories found.")
-		fmt.Println("A harness requires .agents/harness/plugin.json (or .ynh-plugin/plugin.json, or legacy .harness.json).")
+		fmt.Println("A harness requires .agents/harness/plugin.json (or the deprecated .ynh-plugin/plugin.json or .harness.json; ynd migrate moves both).")
 		return nil
 	}
 

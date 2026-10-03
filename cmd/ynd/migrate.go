@@ -66,9 +66,15 @@ func cmdMigrate(args []string) error {
 		return fmt.Errorf("refusing to migrate %s: %s", abs, reason)
 	}
 
-	chain := migration.FormatChain()
+	// MigrateChain, not FormatChain: this command is the owner asking, so it
+	// also moves .ynh-plugin/ to .agents/harness/ in source trees, which
+	// loading a harness never does.
+	chain := migration.MigrateChain()
 
-	dirs := findMigratableDirs(target, chain)
+	dirs, blocked := findMigratableDirs(target, chain)
+	for _, b := range blocked {
+		fmt.Printf("Left alone: %s\n  %s\n", b.dir, b.reason)
+	}
 	if len(dirs) == 0 {
 		fmt.Println("Nothing to migrate.")
 		return nil
@@ -79,6 +85,11 @@ func cmdMigrate(args []string) error {
 	fmt.Printf("%d director(ies) would be migrated under %s:\n", len(dirs), abs)
 	for _, d := range dirs {
 		fmt.Printf("  %s\n", d)
+		for _, m := range chain {
+			if m.Applies(d) {
+				fmt.Printf("    %s\n", m.Description())
+			}
+		}
 	}
 	if dryRun {
 		fmt.Println("\nDry run: nothing was changed.")
@@ -115,11 +126,19 @@ func cmdMigrate(args []string) error {
 	return nil
 }
 
+// blockedDir is a directory whose .ynh-plugin/ ynd migrate will not move, and
+// why.
+type blockedDir struct {
+	dir, reason string
+}
+
 // findMigratableDirs walks root and returns every directory where at least
-// one migrator in chain applies. The walker never enters a manifest directory
-// (migrator targets are the parent harness/registry dir).
-func findMigratableDirs(root string, chain migration.Chain) []string {
+// one migrator in chain applies, and every directory whose .ynh-plugin/ is
+// left alone (see migration.ManifestDirBlocked). The walker never enters a
+// manifest directory (migrator targets are the parent harness/registry dir).
+func findMigratableDirs(root string, chain migration.Chain) ([]string, []blockedDir) {
 	var dirs []string
+	var blocked []blockedDir
 	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -130,6 +149,9 @@ func findMigratableDirs(root string, chain migration.Chain) []string {
 		if d.Name() == plugin.AgentsDir || d.Name() == plugin.LegacyPluginDir || skipDuringMigrate[d.Name()] {
 			return filepath.SkipDir
 		}
+		if reason := migration.ManifestDirBlocked(path); reason != "" {
+			blocked = append(blocked, blockedDir{dir: path, reason: reason})
+		}
 		for _, m := range chain {
 			if m.Applies(path) {
 				dirs = append(dirs, path)
@@ -138,7 +160,7 @@ func findMigratableDirs(root string, chain migration.Chain) []string {
 		}
 		return nil
 	})
-	return dirs
+	return dirs, blocked
 }
 
 func printMigrateUsage() {
@@ -147,6 +169,10 @@ func printMigrateUsage() {
 Runs every registered format migrator against the target directory tree.
 Migrators decide whether they apply based on the directory contents,
 so the command works for any format transition handled by the chain.
+
+This includes moving a deprecated .ynh-plugin/ manifest directory to
+.agents/harness/. A tree where both exist, or where .ynh-plugin is a
+symlink or holds one, is listed as left alone and nothing in it is moved.
 
 Usage:
   ynd migrate [path]              Migrate all matching dirs under path (default: .)

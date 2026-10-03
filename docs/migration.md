@@ -8,11 +8,31 @@ directories other tools already read. Everything that lived in
 `.ynh-plugin/` lives in `.agents/harness/` now: `plugin.json`,
 `installed.json` and a registry's `marketplace.json`.
 
-This one is not a migrator, and nothing moves on its own:
+`.ynh-plugin/` is **deprecated**. It is still read, so nothing breaks today,
+but the fallback will be removed in a later release. Move your harnesses with
+`ynd migrate` before then.
 
 - ynh reads `.agents/harness/` first and falls back to `.ynh-plugin/`. A
-  harness or registry that has not moved keeps working, and a read never
-  writes anything back.
+  harness or registry that has not moved keeps working, and reading one in
+  your own tree never moves it: `ynh run`, `ynh check` and `ynd validate`
+  leave `.ynh-plugin/` where it is.
+- Every command that reads a manifest from `.ynh-plugin/` prints a
+  deprecation warning on stderr, once per harness, naming the
+  `ynd migrate` command that fixes it. Stdout, including `--format json`
+  output, is unaffected.
+- `ynd migrate <path>` renames `.ynh-plugin/` to `.agents/harness/` in every
+  harness and registry under `<path>`, after confirming. `--dry-run` lists
+  each move first. It is a single rename of the directory: nothing is copied
+  or merged, and `installed.json` moves with the rest.
+- `ynd migrate` leaves a tree alone, and says so, when `.ynh-plugin` is a
+  symlink or holds one, or when `.agents/harness/` already exists. Merging
+  two manifest directories means choosing between files, which is yours to
+  do.
+- Installs ynh copied under `~/.ynh/harnesses/` are ynh's own and are moved
+  the next time ynh loads them, provenance included. A harness installed from
+  a local path is not copied, so its source tree is yours to migrate. A
+  cached checkout of a remote harness is the maintainer's: the warning asks
+  them to run `ynd migrate` and publish the result.
 - Editing commands (`ynh include`, `ynh hook`, `ynh profile`, `ynh focus`,
   `ynh mcp`, `ynh delegate`) rewrite the manifest where it already is.
 - New manifests (`ynd create harness`, a synthesized manifest for a bare
@@ -30,9 +50,13 @@ This one is not a migrator, and nothing moves on its own:
 To move a harness onto the documented layout:
 
 ```bash
-git mv .ynh-plugin .agents/harness
+ynd migrate --dry-run .
+ynd migrate .
 ynd validate .
 ```
+
+Pass `.` explicitly: `ynd migrate` refuses a git working copy when no path
+is given. Commit the rename afterwards; git records it as a move.
 
 # Migrating from 0.1 to 0.2
 

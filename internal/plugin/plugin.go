@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // HarnessJSON represents the .harness.json manifest — single source of truth.
@@ -721,9 +722,11 @@ const AgentsDir = ".agents"
 const PluginDir = AgentsDir + "/harness"
 
 // LegacyPluginDir is the manifest directory used before PluginDir moved
-// under AgentsDir. It is still read, second to PluginDir, so a harness that
-// has not moved keeps working, and a manifest that already lives here is
-// edited in place. Nothing creates a new file here.
+// under AgentsDir. It is deprecated (#404): still read, second to PluginDir,
+// so a harness that has not moved keeps working, and a manifest that already
+// lives here is edited in place, but every read reports it through
+// SetLegacyManifestDirNotice and `ynd migrate` moves it. Nothing creates a
+// new file here.
 const LegacyPluginDir = ".ynh-plugin"
 
 // manifestDirs is the lookup order for the manifest directory.
@@ -745,10 +748,57 @@ func findManifest(dir, file string) (string, bool) {
 	for _, md := range manifestDirs {
 		p := filepath.Join(dir, md, file)
 		if _, err := os.Stat(p); err == nil {
+			if md == LegacyPluginDir {
+				noteLegacyManifestDir(dir)
+			}
 			return p, true
 		}
 	}
 	return "", false
+}
+
+// legacyNotice holds the callback set by SetLegacyManifestDirNotice and the
+// directories it has already been called for.
+var legacyNotice struct {
+	mu   sync.Mutex
+	fn   func(dir string)
+	seen map[string]bool
+}
+
+// SetLegacyManifestDirNotice sets the function called when a harness's
+// manifest is read from LegacyPluginDir, or clears it with nil. It is called
+// once per harness directory per process however many files are read, so a
+// command can print a deprecation warning without repeating it.
+//
+// The plugin package never prints. Commands set this in main and decide where
+// the warning goes; library callers and tests leave it unset.
+func SetLegacyManifestDirNotice(fn func(dir string)) {
+	legacyNotice.mu.Lock()
+	defer legacyNotice.mu.Unlock()
+	legacyNotice.fn = fn
+	legacyNotice.seen = map[string]bool{}
+}
+
+// noteLegacyManifestDir reports that dir's manifest was read from
+// LegacyPluginDir, the first time only.
+func noteLegacyManifestDir(dir string) {
+	legacyNotice.mu.Lock()
+	fn := legacyNotice.fn
+	if fn == nil {
+		legacyNotice.mu.Unlock()
+		return
+	}
+	key := filepath.Clean(dir)
+	if abs, err := filepath.Abs(dir); err == nil {
+		key = abs
+	}
+	if legacyNotice.seen[key] {
+		legacyNotice.mu.Unlock()
+		return
+	}
+	legacyNotice.seen[key] = true
+	legacyNotice.mu.Unlock()
+	fn(dir)
 }
 
 // ManifestDir returns the manifest directory of the harness at dir, as
@@ -758,9 +808,15 @@ func findManifest(dir, file string) (string, bool) {
 // Every sibling file (installed.json, marketplace.json) is read from and
 // written to this one directory, so a harness never has its manifest split
 // across the two.
+//
+// Resolving to LegacyPluginDir is reported through
+// SetLegacyManifestDirNotice.
 func ManifestDir(dir string) (string, bool) {
 	for _, md := range manifestDirs {
 		if _, err := os.Stat(filepath.Join(dir, md, PluginFile)); err == nil {
+			if md == LegacyPluginDir {
+				noteLegacyManifestDir(dir)
+			}
 			return md, true
 		}
 	}

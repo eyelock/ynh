@@ -171,11 +171,17 @@ Flags:
 
 	"migrate": `ynd migrate [--dry-run] [-y] <path>
 
-Convert .harness.json to .agents/harness/plugin.json in place.
+Move a harness to the current manifest layout in place.
 
-Extracts install-time provenance into .agents/harness/installed.json, writes
-plugin.json without that field, and removes .harness.json. Safe to run more
-than once: it does nothing once the new format exists.
+Renames a deprecated .ynh-plugin/ directory to .agents/harness/. A tree
+where both exist, or where .ynh-plugin is or holds a symlink, is listed as
+left alone and nothing in it is moved or merged.
+
+Converts .harness.json to .agents/harness/plugin.json: extracts install-time
+provenance into .agents/harness/installed.json, writes plugin.json without
+that field, and removes .harness.json.
+
+Safe to run more than once: it does nothing once the new layout exists.
 
 Given a directory, migrates every harness beneath it.
 

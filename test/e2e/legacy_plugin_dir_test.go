@@ -41,16 +41,32 @@ func writeLegacyLayoutHarness(t *testing.T, name string) string {
 	return dir
 }
 
+// assertDeprecationWarning checks that stderr carries the .ynh-plugin
+// deprecation warning for dir exactly once, and stdout none of it.
+func assertDeprecationWarning(t *testing.T, stdout, stderr, dir string) {
+	t.Helper()
+	if n := strings.Count(stderr, "keeps its manifest in .ynh-plugin/"); n != 1 {
+		t.Errorf("want one deprecation warning on stderr, got %d:\n%s", n, stderr)
+	}
+	if !strings.Contains(stderr, "ynd migrate "+dir) {
+		t.Errorf("the warning should name ynd migrate %s, got:\n%s", dir, stderr)
+	}
+	if strings.Contains(stdout, "deprecated") {
+		t.Errorf("the warning must not reach stdout, got:\n%s", stdout)
+	}
+}
+
 // TestLegacyPluginDir_YndStillReadsIt: the developer tools validate and
-// preview a harness that has not moved to .agents/harness, and leave its
-// layout alone.
+// preview a harness that has not moved to .agents/harness, warn that the
+// layout is deprecated, and leave it alone: reading never migrates.
 func TestLegacyPluginDir_YndStillReadsIt(t *testing.T) {
 	dir := writeLegacyLayoutHarness(t, "old-layout")
 
-	out, _ := mustRunYndInDir(t, dir, "validate", ".")
+	out, errOut := mustRunYndInDir(t, dir, "validate", dir)
 	if !strings.Contains(out, "valid") {
 		t.Errorf("validate should accept a .ynh-plugin harness, got:\n%s", out)
 	}
+	assertDeprecationWarning(t, out, errOut, dir)
 
 	out, _ = mustRunYndInDir(t, dir, "preview", "-v", "claude", ".")
 	if !strings.Contains(out, "always-test") {
@@ -65,22 +81,58 @@ func TestLegacyPluginDir_YndStillReadsIt(t *testing.T) {
 	}
 }
 
+// TestLegacyPluginDir_YndMigrateMovesIt: ynd migrate is the fix the warning
+// names. It lists the move, makes it, and afterwards validate is silent.
+func TestLegacyPluginDir_YndMigrateMovesIt(t *testing.T) {
+	dir := writeLegacyLayoutHarness(t, "old-layout")
+
+	out, _ := mustRunYndInDir(t, dir, "migrate", "--dry-run", dir)
+	if !strings.Contains(out, ".ynh-plugin/ → .agents/harness/") {
+		t.Errorf("dry run should list the move, got:\n%s", out)
+	}
+
+	out, errOut := mustRunYndInDir(t, dir, "migrate", "-y", dir)
+	if strings.Contains(errOut, "deprecated") {
+		t.Errorf("migrate must not warn about the tree it is migrating, got:\n%s", errOut)
+	}
+	assertFileExists(t, filepath.Join(dir, ".agents", "harness", "plugin.json"))
+	if _, err := os.Lstat(filepath.Join(dir, ".ynh-plugin")); !os.IsNotExist(err) {
+		t.Errorf(".ynh-plugin should be gone after migrate:\n%s", out)
+	}
+
+	out, errOut = mustRunYndInDir(t, dir, "validate", dir)
+	if !strings.Contains(out, "valid") || errOut != "" {
+		t.Errorf("validate after migrate should be clean and silent, stdout:\n%s\nstderr:\n%s", out, errOut)
+	}
+}
+
 // TestLegacyPluginDir_YnhInstallsAndListsIt: the harness manager installs a
-// .ynh-plugin harness from a local path and lists it like any other.
+// .ynh-plugin harness from a local path and lists it like any other. A local
+// install is a pointer to the user's tree, so ynh warns rather than moving it,
+// and the JSON on stdout stays parseable.
 func TestLegacyPluginDir_YnhInstallsAndListsIt(t *testing.T) {
 	s := newSandbox(t)
 	dir := writeLegacyLayoutHarness(t, "old-layout")
 
 	s.mustRunYnh(t, "install", dir)
 
-	out, _ := s.mustRunYnh(t, "ls")
+	out, errOut := s.mustRunYnh(t, "ls")
 	if !strings.Contains(out, "old-layout") {
 		t.Errorf("ls should show the installed legacy harness, got:\n%s", out)
 	}
+	assertDeprecationWarning(t, out, errOut, dir)
 
-	out, _ = s.mustRunYnh(t, "info", "local/old-layout", "--format", "json")
+	out, errOut = s.mustRunYnh(t, "info", "local/old-layout", "--format", "json")
 	if !strings.Contains(out, `"still on the old layout"`) {
 		t.Errorf("info should read the legacy manifest, got:\n%s", out)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(out), "{") {
+		t.Errorf("info --format json stdout must be JSON alone, got:\n%s", out)
+	}
+	assertDeprecationWarning(t, out, errOut, dir)
+
+	if _, err := os.Stat(filepath.Join(dir, ".ynh-plugin", "plugin.json")); err != nil {
+		t.Errorf("ynh must not move a user's source tree: %v", err)
 	}
 }
 
