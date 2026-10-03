@@ -342,7 +342,7 @@ Flags:
   --sensor-overlay <json>     Substitute sensor declarations
   --emit-jsonl <path>         Write the trajectory as NDJSON
   --auto-commit               Commit the result (opt-in; off by default)
-  --resume <id>               Continue a previous run
+  --resume <dir>              Continue a run from its --emit-jsonl folder
   --format text|json          Output format (default text)`,
 
 	"image": `ynh image <name> [flags]

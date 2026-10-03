@@ -302,7 +302,10 @@ run will hit it, and it is the operator's fault not the model's.
 
 ## Resuming
 
-A run writes `checkpoint.json` into its working directory on every turn:
+A run writes `checkpoint.json` beside its `--emit-jsonl` file on every turn.
+That folder is the session directory. Here it is `/tmp/loop-demo`, because
+`run.jsonl` was a relative path. A run with no `--emit-jsonl`, or with
+`--emit-jsonl -`, writes no checkpoint and cannot be resumed.
 
 ```json
 {
@@ -323,6 +326,9 @@ Resume by pointing at the directory that holds it:
 ```bash
 ynh agent run --resume /tmp/loop-demo
 ```
+
+Pass `--emit-jsonl run.jsonl` again to keep the trajectory in one file. Without
+it, the resumed events go to `trajectory.jsonl` in the same folder.
 
 The budget resumes where it stopped — it is not reset. A run interrupted at
 turn 20 of 25 gets five more turns, not twenty-five.
