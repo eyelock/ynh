@@ -192,6 +192,12 @@ unsandboxed. Credential scoping is **declared** in the manifest — which
 variables reach the agent — while the process boundary that makes the
 declaration meaningful is the container's.
 
+Permissions follow the same line. By default ynh passes no permission flag, so
+a worker gets what the vendor CLI and the project grant it. `ynh agent run
+--auto-approve edits|all` is for runs inside containment the operator owns; it
+widens what the worker may do without asking and contains nothing. A level a
+backend cannot honour exactly is refused, never widened or narrowed quietly.
+
 The reason to write it down is that the alternative is attractive and wrong.
 A harness manager that ships isolation has to be correct on every platform and
 every vendor simultaneously, and the failure mode is silent: a control that is

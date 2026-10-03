@@ -120,6 +120,10 @@ rules:
     path: "*vendor-adapters/references/copilot.md"
     reason: "Matches a reference list of Copilot CLI's own auto-approve flags (--yolo, --allow-all-tools, --allow-all-paths). Documenting that a vendor offers these is how the adapter knows to avoid them; the skill grants no autonomy itself."
 
+  - id: "EA2"
+    path: "*ynh-dev/references/agent-and-baseline.md"
+    reason: "Matches the contributor note on --auto-approve, which describes the guards around it: levels a backend cannot honour are refused, a project's own permission mode refuses the run, and a vendor that downgrades a mode is caught. It documents ynh's Go code for contributors; the skill grants no agent autonomy."
+
   # --- RP1 · Unpinned MCP server reference --------------------------------
   - id: "RP1"
     path: "*ynh-sensors/references/starter-sets.md"

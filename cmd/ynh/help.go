@@ -338,6 +338,11 @@ Flags:
   --no-plan                   Skip the planning phase
   --interactive               Stay in session
   --sandbox                   Run inside the harness's image
+  --auto-approve edits|all    Approve the worker's file edits, or everything,
+                              without prompting (off by default; claude,
+                              codex, cursor). Only for runs inside containment
+                              you own; refused if the project sets its own
+                              permission mode. Not restored on --resume.
   --convergence-sensor <name> Sensor that decides the run is done
   --sensor-overlay <json>     Substitute sensor declarations
   --emit-jsonl <path>         Write the trajectory as NDJSON

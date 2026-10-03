@@ -63,9 +63,8 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 		cmd.Dir = opts.WorktreeDir
 	}
 	cmd.Env = workerEnvFor(opts.Env)
-	if opts.Stderr != nil {
-		cmd.Stderr = opts.Stderr
-	}
+	tail := &stderrTail{}
+	cmd.Stderr = stderrSink(opts.Stderr, tail)
 
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
@@ -88,6 +87,8 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 		stdin:     stdinPipe,
 		scanner:   scanner,
 		sessionID: sessionID,
+		stderr:    tail,
+		wantMode:  claudePermissionMode(opts.AutoApprove),
 	}, nil
 }
 
@@ -127,6 +128,12 @@ func buildClaudeStreamArgs(opts StartOptions) []string {
 		args = append(args, "--model", opts.Model)
 	}
 
+	// No --auto-approve, no permission flag: the worker gets what claude and
+	// the project grant it, and nothing more.
+	if mode := claudePermissionMode(opts.AutoApprove); mode != "" {
+		args = append(args, "--permission-mode", mode)
+	}
+
 	return args
 }
 
@@ -136,6 +143,24 @@ type claudeSession struct {
 	stdin     io.WriteCloser
 	scanner   *bufio.Scanner
 	sessionID string
+	// stderr holds the tail of claude's stderr, for the reason a refusal gives.
+	stderr *stderrTail
+	// wantMode is the --permission-mode this session asked for, or "".
+	wantMode string
+	waited   bool
+	waitErr  error
+}
+
+// wait reaps the claude process once; later calls return the first result.
+func (s *claudeSession) wait() error {
+	if s.cmd == nil {
+		return nil
+	}
+	if !s.waited {
+		s.waitErr = s.cmd.Wait()
+		s.waited = true
+	}
+	return s.waitErr
 }
 
 // ResumeToken returns the claude session id driving this conversation.
@@ -160,9 +185,13 @@ type claudeUserInner struct {
 // fail the whole event, and a dropped result event loses the end of the turn.
 type claudeOutputEvent struct {
 	Type    string           `json:"type"`
+	Subtype string           `json:"subtype,omitempty"`
 	Message *claudeOutputMsg `json:"message,omitempty"`
-	IsError bool             `json:"is_error,omitempty"`
-	Usage   *claudeUsage     `json:"usage,omitempty"`
+	// PermissionMode is the mode the system init event reports the session
+	// actually runs in, which is not always the mode it was asked for.
+	PermissionMode string       `json:"permissionMode,omitempty"`
+	IsError        bool         `json:"is_error,omitempty"`
+	Usage          *claudeUsage `json:"usage,omitempty"`
 	// Error is set on an assistant event claude synthesised from an API
 	// failure rather than received from the model, e.g. "authentication_failed".
 	Error json.RawMessage `json:"error,omitempty"`
@@ -253,8 +282,15 @@ func (s *claudeSession) Send(msg string) error {
 		return err
 	}
 	data = append(data, '\n')
-	_, err = s.stdin.Write(data)
-	return err
+	if _, err := s.stdin.Write(data); err != nil {
+		// A write fails when claude has already exited, as it does when it
+		// refuses to start. How it exited is the useful error.
+		if exitErr := exitedWorkerError("claude", s.wait(), s.stderr); exitErr != io.EOF {
+			return exitErr
+		}
+		return err
+	}
+	return nil
 }
 
 // Next reads output events until the worker completes the current turn.
@@ -277,6 +313,16 @@ func (s *claudeSession) Next() (Turn, error) {
 		}
 
 		switch ev.Type {
+		case "system":
+			if err := claudeModeMismatch(ev, s.wantMode); err != nil {
+				// Stop it now: left running, it would work through the turn
+				// in a mode nobody chose.
+				if s.cmd != nil && s.cmd.Process != nil {
+					_ = s.cmd.Process.Kill()
+				}
+				return Turn{}, err
+			}
+
 		case "assistant":
 			if e := rawString(ev.Error); e != "" {
 				apiError = e
@@ -317,16 +363,40 @@ func (s *claudeSession) Next() (Turn, error) {
 	if err := s.scanner.Err(); err != nil {
 		return Turn{}, fmt.Errorf("reading claude output: %w", err)
 	}
-	return Turn{}, io.EOF
+	// stdout closed: claude has exited. A non-zero exit before any result is
+	// claude refusing to run, and its stderr says why.
+	return Turn{}, exitedWorkerError("claude", s.wait(), s.stderr)
+}
+
+// claudeModeMismatch reports a session that did not start in the permission
+// mode it asked for. Claude does not fail when a setting disables the mode: a
+// managed permissions.disableBypassPermissionsMode downgrades a
+// bypassPermissions session to another mode and carries on, so the grant the
+// operator made would silently not apply.
+func claudeModeMismatch(ev claudeOutputEvent, want string) error {
+	if want == "" || ev.Subtype != "init" || ev.PermissionMode == "" || ev.PermissionMode == want {
+		return nil
+	}
+	return &WorkerError{
+		Backend: "claude",
+		Message: fmt.Sprintf(
+			"asked for --permission-mode %s but the session started in %q; a managed or user setting "+
+				"(such as permissions.disableBypassPermissionsMode) overrides it, so --auto-approve does not apply",
+			want, ev.PermissionMode),
+	}
 }
 
 // Close terminates the claude subprocess cleanly.
 func (s *claudeSession) Close() error {
+	if s.waited {
+		// Next already reaped the process and reported how it ended.
+		return nil
+	}
 	// Closing stdin signals the subprocess to exit.
 	if err := s.stdin.Close(); err != nil {
 		_ = s.cmd.Process.Kill()
-		_ = s.cmd.Wait()
+		_ = s.wait()
 		return err
 	}
-	return s.cmd.Wait()
+	return s.wait()
 }

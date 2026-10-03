@@ -100,7 +100,10 @@ type SessionStartData struct {
 	// version and the commit the work started from, a trajectory records what
 	// happened but not what it happened to, and cannot be replayed or audited
 	// after the fact.
-	Model          string `json:"model,omitempty"`
+	Model string `json:"model,omitempty"`
+	// AutoApprove is the --auto-approve level the worker was granted, "edits"
+	// or "all". Absent means none: no permission flag was passed.
+	AutoApprove    string `json:"auto_approve,omitempty"`
 	YnhVersion     string `json:"ynh_version,omitempty"`
 	HarnessVersion string `json:"harness_version,omitempty"`
 	// HarnessSHA is the resolved commit the harness was installed from.
@@ -140,6 +143,10 @@ type SessionResumedData struct {
 	RestoredTurns   int    `json:"restored_turns"`
 	RestoredTokens  int64  `json:"restored_tokens"`
 	PendingApproval string `json:"pending_approval,omitempty"`
+	// AutoApprove is the --auto-approve level this resumed process was
+	// granted. It is not restored from the checkpoint, so it can differ from
+	// the level the session started with.
+	AutoApprove string `json:"auto_approve,omitempty"`
 }
 
 // SensorResultData is the payload for KindSensorResult events.
