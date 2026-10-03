@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -252,5 +253,98 @@ func TestCmdMarketplaceBuild_AbsentGlobalConfigStillWorks(t *testing.T) {
 	configFile := setupMarketplaceTest(t)
 	if err := cmdMarketplace([]string{"build", configFile, "-o", t.TempDir()}); err != nil {
 		t.Fatalf("an absent global config must not fail the build: %v", err)
+	}
+}
+
+// Issue #399: `build` always makes its output a git repository, and --clean
+// refused every git repository, so a rebuild with --clean into the same -o
+// could never work. Now --clean empties the repository ynd created, keeps its
+// .git, and the rebuild commits on top, so the build history survives.
+func TestCmdMarketplaceBuildClean_RebuildsIntoItsOwnRepo(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	configFile := setupMarketplaceTest(t)
+	outputDir := filepath.Join(t.TempDir(), "out")
+
+	if err := cmdMarketplace([]string{"build", configFile, "-o", outputDir}); err != nil {
+		t.Fatalf("first build: %v", err)
+	}
+	stale := filepath.Join(outputDir, "plugins", "stale-plugin", "README.md")
+	if err := os.MkdirAll(filepath.Dir(stale), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stale, []byte("left over from an earlier build"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Change the marketplace between builds so the second build has
+	// something to commit.
+	raw, err := os.ReadFile(configFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := strings.Replace(string(raw), `"description": "CLI test"`, `"description": "CLI test, rebuilt"`, 1)
+	if changed == string(raw) {
+		t.Fatal("fixture no longer has the description this test edits")
+	}
+	if err := os.WriteFile(configFile, []byte(changed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cmdMarketplace([]string{"build", configFile, "-o", outputDir, "--clean", "-y"}); err != nil {
+		t.Fatalf("rebuild with --clean -y into ynd's own repo: %v", err)
+	}
+
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Error("--clean should have removed the stale plugin from the previous build")
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, ".git")); err != nil {
+		t.Error(".git must survive: the repository is what Claude Code needs")
+	}
+	assertExists(t, filepath.Join(outputDir, ".claude-plugin", "marketplace.json"))
+
+	log := exec.Command("git", "log", "--format=%s")
+	log.Dir = outputDir
+	out, err := log.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git log: %v\n%s", err, out)
+	}
+	commits := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(commits) < 2 {
+		t.Errorf("the rebuild should commit on top of the first build, got %d commit(s):\n%s", len(commits), out)
+	}
+}
+
+// A repository the user made themselves is still refused, -y or not. The
+// output directory in this test is a git repo with no marker, exactly the
+// "typed the output path one directory too high" accident.
+func TestCmdMarketplaceBuildClean_StillRefusesAForeignRepo(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	configFile := setupMarketplaceTest(t)
+	outputDir := filepath.Join(t.TempDir(), "theirs")
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	init := exec.Command("git", "init")
+	init.Dir = outputDir
+	if out, err := init.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	source := filepath.Join(outputDir, "main.go")
+	if err := os.WriteFile(source, []byte("package main"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := cmdMarketplace([]string{"build", configFile, "-o", outputDir, "--clean", "-y"})
+	if err == nil {
+		t.Fatal("--clean -y emptied a git repository ynd did not create")
+	}
+	if !strings.Contains(err.Error(), "not created by ynd") {
+		t.Errorf("the refusal should say the repo is not ynd's, got %v", err)
+	}
+	if _, statErr := os.Stat(source); statErr != nil {
+		t.Error("the source file was deleted despite the refusal")
 	}
 }

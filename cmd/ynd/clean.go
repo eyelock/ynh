@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/marketplace"
 )
 
 // cleanOutputDir implements --clean for the commands that generate into a
@@ -24,6 +26,13 @@ import (
 //   - Anything else that exists and is non-empty asks first, unless the caller
 //     passed -y, YNH_YES, or is running in CI. That matches how `ynd compress`
 //     and `ynd inspect` already gate their destructive steps.
+//
+// One kind of git working copy is allowed through: the repository `ynd
+// marketplace build` itself initialises in its output directory, which it can
+// prove from the marker it wrote there. Cleaning that does not delete the
+// directory; it empties it and keeps `.git` (and the marker), so the rebuild
+// commits on top of the previous one and the history survives. Which entries
+// to keep is decided by keepOnClean, not here.
 func cleanOutputDir(dir string, skipConfirm bool) error {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
@@ -47,13 +56,26 @@ func cleanOutputDir(dir string, skipConfirm bool) error {
 	if err != nil {
 		return fmt.Errorf("reading --clean target %s: %w", abs, err)
 	}
-	if len(entries) == 0 {
+
+	keep := keepOnClean(abs)
+	var doomed []string
+	for _, e := range entries {
+		if !keep[e.Name()] {
+			doomed = append(doomed, e.Name())
+		}
+	}
+	if len(doomed) == 0 {
 		return nil // empty: removing and recreating it changes nothing
 	}
 
 	if !skipConfirm {
-		fmt.Printf("--clean will permanently delete %s and its %d %s.\n",
-			abs, len(entries), pluralWord(len(entries), "entry", "entries"))
+		if len(keep) == 0 {
+			fmt.Printf("--clean will permanently delete %s and its %d %s.\n",
+				abs, len(doomed), pluralWord(len(doomed), "entry", "entries"))
+		} else {
+			fmt.Printf("--clean will permanently delete %d %s from %s, keeping its git history.\n",
+				len(doomed), pluralWord(len(doomed), "entry", "entries"), abs)
+		}
 		// Choices are ordered so the *first* is the refusing one: promptAction
 		// returns choices[0] on empty input or EOF, so a prompt whose first
 		// choice was "y" would delete the directory whenever stdin is a pipe
@@ -64,10 +86,30 @@ func cleanOutputDir(dir string, skipConfirm bool) error {
 		}
 	}
 
-	if err := os.RemoveAll(abs); err != nil {
-		return fmt.Errorf("cleaning output dir: %w", err)
+	if len(keep) == 0 {
+		if err := os.RemoveAll(abs); err != nil {
+			return fmt.Errorf("cleaning output dir: %w", err)
+		}
+		return nil
+	}
+	for _, name := range doomed {
+		if err := os.RemoveAll(filepath.Join(abs, name)); err != nil {
+			return fmt.Errorf("cleaning output dir: %w", err)
+		}
 	}
 	return nil
+}
+
+// keepOnClean returns the entries of abs that --clean must leave in place, or
+// nil when the whole directory goes. A repository ynd created keeps its `.git`
+// and the marker that proves it is ynd's, so the next build commits on top of
+// the last one. Like refuseToClean it is a pure predicate: it reads, decides,
+// and touches nothing, so the function that deletes has no decisions to make.
+func keepOnClean(abs string) map[string]bool {
+	if !marketplace.OwnsRepo(abs) {
+		return nil
+	}
+	return map[string]bool{".git": true, marketplace.MarkerFile: true}
 }
 
 // refuseToClean returns why a path must never be deleted, or "" if it may be.
@@ -98,10 +140,16 @@ func refuseToClean(abs string) string {
 		}
 	}
 	// A .git means this is somebody's source, not a build output. It is the
-	// check that catches the realistic accident — an output path typed one
-	// directory too high.
+	// check that catches the realistic accident, an output path typed one
+	// directory too high. The one exception is a repository ynd itself
+	// initialised for a marketplace build, which it proves from the marker it
+	// wrote there (marketplace.OwnsRepo, read-only). Even then the directory is
+	// only emptied, never deleted; see keepOnClean.
 	if fi, err := os.Stat(filepath.Join(abs, ".git")); err == nil && (fi.IsDir() || fi.Mode().IsRegular()) {
-		return "it is a git working copy"
+		if marketplace.OwnsRepo(abs) {
+			return ""
+		}
+		return "it is a git working copy (not created by ynd)"
 	}
 	return ""
 }
