@@ -136,10 +136,9 @@ W=/tmp/shadow/base
 git worktree add --detach "$W" "$FIX^"
 ```
 
-```
-fix:    8382382 fix(uninstall): preserve bare-name resources claimed by another install (#173)
-parent: 1ca2a94 feat(hooks): wire sensors into plain Claude sessions (#172)
-```
+For `8382382` the base is its parent, `1ca2a94`, the #172 change that wired
+sensors into plain Claude sessions (`git log -1 --oneline "$FIX^"` prints its full
+subject).
 
 `$FIX^` is the parent — the tree as it stood with the bug present. A detached
 worktree keeps your own checkout untouched.

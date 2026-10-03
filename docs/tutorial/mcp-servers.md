@@ -266,8 +266,14 @@ ynh mcp update /tmp/ynh-tutorial/mcp-harness github --env GITHUB_TOKEN=ghp_new
 ynh mcp remove /tmp/ynh-tutorial/mcp-harness api
 # Removed mcp server "api"
 
-# Profile-level overlay (with optional --null to suppress an inherited entry)
-ynh profile mcp add /tmp/ynh-tutorial/mcp-harness <profile> postgres --null
+# Profile-level overlay (with optional --null to suppress an inherited entry).
+# The harness has no profile yet, so add one first.
+ynh profile add /tmp/ynh-tutorial/mcp-harness ci
+# Added profile "ci"
+ynh profile mcp add /tmp/ynh-tutorial/mcp-harness ci postgres --null
+# Added mcp server "postgres" to profile "ci"
+ynh profile remove /tmp/ynh-tutorial/mcp-harness ci
+# Removed profile "ci"
 ```
 
 Quote any `--header` or `--env` value that contains a space: unquoted, `Bearer xyz` is two arguments and `ynh mcp add` prints its usage line instead.

@@ -37,7 +37,30 @@ EOF
 ynd validate /tmp/ynh-tutorial/sensor-harness
 ```
 
-Expected output: `valid`.
+Expected:
+
+```
+/tmp/ynh-tutorial/sensor-harness: valid
+  checked:
+    manifest     /tmp/ynh-tutorial/sensor-harness/.agents/harness/plugin.json against https://eyelock.github.io/ynh/schema/plugin.schema.json
+    includes     none
+    mcp_servers  none
+    hooks        none
+    profiles     none
+    focuses      none
+    sensors      coverage
+    delegates_to none
+    skills       none
+    agents       none
+    rules        none
+    commands     none
+    instructions none
+```
+
+The `checked:` list names every part `ynd validate` looked at, with `none` for a
+part the harness does not have. Each later `ynd validate` in this tutorial prints
+`/tmp/ynh-tutorial/sensor-harness: valid` and the same list, with the `sensors`
+row (and `focuses`, `hooks`) following the manifest.
 
 Because the artifact is produced elsewhere, `ynh check` will refuse to believe
 it once it stops describing the tree — a missing or stale `coverage/lcov.info`
@@ -166,13 +189,13 @@ Loop drivers discover what's declared via the CLI:
 ynh sensors ls local/sensor-demo
 ```
 
-Expected (trimmed):
+Expected:
 
 ```
-NAME              CATEGORY          SOURCE     FORMAT
-build             -                 command    text
-coverage-judge    -                 focus*     markdown
-security          behaviour         focus      markdown
+NAME            CATEGORY   SOURCE   FORMAT
+build           -          command  text
+coverage-judge  -          focus*   markdown
+security        behaviour  focus    markdown
 
 * = inline focus
 ```
@@ -213,11 +236,27 @@ EOF
 ynd validate /tmp/ynh-tutorial/sensor-harness
 ```
 
-Expected error (the schema-level violation and the cross-field violation each emit one line):
+Expected (the schema-level violation and the cross-field violation each emit one line), exit 1:
 
 ```
-sensors/broken/source: 'oneOf' failed, subschemas 0, 1 matched
-sensor "broken": source must have exactly one of files, command, focus, github_status, github_check
+/tmp/ynh-tutorial/sensor-harness: INVALID
+  - sensors/broken/source: 'oneOf' failed, subschemas 0, 1 matched
+  - sensor "broken": source must have exactly one of files, command, focus, github_status, github_check
+  checked:
+    manifest     /tmp/ynh-tutorial/sensor-harness/.agents/harness/plugin.json against https://eyelock.github.io/ynh/schema/plugin.schema.json
+    includes     none
+    mcp_servers  none
+    hooks        none
+    profiles     none
+    focuses      none
+    sensors      broken
+    delegates_to none
+    skills       none
+    agents       none
+    rules        none
+    commands     none
+    instructions none
+Error: validation failed
 ```
 
 ## Hook–sensor pairing

@@ -229,14 +229,9 @@ plugin. Codex and Copilot differ again; see
 
 ## Test with Claude Code
 
-Claude Code requires local marketplaces to be Git repos (relative source paths like `./plugins/formatter` only resolve within a Git working tree):
+Claude Code requires local marketplaces to be Git repos (relative source paths like `./plugins/formatter` only resolve within a Git working tree). There is nothing to do here: `ynd marketplace build` already made `marketplace-out` a Git repo with a commit (see [Git repo](#git-repo) above).
 
-```bash
-cd /tmp/ynh-tutorial/marketplace-out
-git init && git add . && git commit -m "init"
-```
-
-Now test in a Claude Code session:
+Test it in a Claude Code session:
 
 ```bash
 # Add the marketplace
@@ -253,7 +248,7 @@ Now test in a Claude Code session:
 # What skills do I have from the formatter and reviewer plugins?
 ```
 
-> **Note:** This is a Claude Code requirement, not a ynh limitation. When distributing via GitHub (the normal path), the repo is already a Git repo. The `git init` step is only needed for local testing.
+> **Note:** This is a Claude Code requirement, not a ynh limitation. When distributing via GitHub (the normal path), the repo is already a Git repo. Locally, the build's own `git init` and commit cover it.
 
 ## Build with --clean
 
@@ -290,16 +285,35 @@ Marketplace built → /tmp/ynh-tutorial/marketplace-stale (2 plugins)
 
 `--clean` refuses outright to delete the filesystem root, `$HOME`, the current
 directory, any ancestor of it, or a Git working copy, and `-y` does not override
-that. The build output is itself initialised as a Git repo (see above), so
-`marketplace-out` — and the `git init` copy from the Claude Code section — is
-refused:
+that. There is one exception: the repository `ynd marketplace build` created
+itself. The build output is initialised as a Git repo (see above) and marked with
+`.ynd-marketplace`, so `--clean` on `marketplace-out` empties it but keeps `.git`
+and `.ynd-marketplace`, rebuilds, and commits on top:
 
 ```bash
+echo stale > /tmp/ynh-tutorial/marketplace-out/stale.txt
 ynd marketplace build -o /tmp/ynh-tutorial/marketplace-out --clean -y
 ```
 
 ```
-Error: --clean refuses to delete /tmp/ynh-tutorial/marketplace-out: it is a git working copy
+Marketplace built → /tmp/ynh-tutorial/marketplace-out (2 plugins)
+```
+
+`stale.txt` is gone and the history is intact. When the rebuilt content matches
+the last commit, as it does here, there is nothing new to commit, so `git log`
+still shows the one `ynd marketplace build` commit; change the config and rebuild
+and a second one appears on top.
+
+A Git repo that ynd did not create is still refused, `-y` or not:
+
+```bash
+mkdir -p /tmp/ynh-tutorial/marketplace-foreign
+git -C /tmp/ynh-tutorial/marketplace-foreign init -q
+ynd marketplace build -o /tmp/ynh-tutorial/marketplace-foreign --clean -y
+```
+
+```
+Error: --clean refuses to delete /tmp/ynh-tutorial/marketplace-foreign: it is a git working copy (not created by ynd)
 ```
 
 > **Important:** `ynd marketplace build` looks for `marketplace.json` in the current directory. Make sure you're in the directory that contains your marketplace config, not the output directory.

@@ -226,13 +226,22 @@ The key difference: the same three hooks declared once in `.agents/harness/plugi
 Hooks can also be added and removed from the CLI — useful for scripted setup and for GUI consumers. The CLI distinguishes harness-level (default) hooks from profile-level overrides:
 
 ```bash
-# Top-level hooks
+# Top-level hooks. The new hook is appended after the existing Bash hook (index 0),
+# so it lands at index 1, and that is the one to remove.
 ynh hook add /tmp/ynh-tutorial/hook-harness before_tool "echo guard" --matcher Write
-ynh hook remove /tmp/ynh-tutorial/hook-harness before_tool 0
+# Added hook (event before_tool)
+ynh hook remove /tmp/ynh-tutorial/hook-harness before_tool 1
+# Removed hook 1 (event before_tool)
 
-# Profile-level hooks
-ynh profile hook add /tmp/ynh-tutorial/hook-harness <profile> after_tool "echo done"
-ynh profile hook remove /tmp/ynh-tutorial/hook-harness <profile> after_tool 0
+# Profile-level hooks. The harness has no profile yet, so add one first.
+ynh profile add /tmp/ynh-tutorial/hook-harness ci
+# Added profile "ci"
+ynh profile hook add /tmp/ynh-tutorial/hook-harness ci after_tool "echo done"
+# Added hook to profile "ci" (event after_tool)
+ynh profile hook remove /tmp/ynh-tutorial/hook-harness ci after_tool 0
+# Removed hook 0 from profile "ci" (event after_tool)
+ynh profile remove /tmp/ynh-tutorial/hook-harness ci
+# Removed profile "ci"
 ```
 
 The first positional argument accepts either a filesystem path (during authoring) or a canonical harness id (`local/<name>`, `github.com/<org>/<repo>/<name>`) once installed.
