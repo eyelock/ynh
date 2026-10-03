@@ -12,6 +12,7 @@ import (
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
 )
@@ -42,16 +43,23 @@ type imageTemplateData struct {
 // the id-keyed run dirs (run/local--<name>/<vendor>), so the entrypoint's
 // "ynh run local/<name>" resolves them directly. The entrypoint must be a
 // canonical id — LoadQualified hard-rejects bare names.
+//
+// The copies use --chown by user name and no --link: BuildKit cannot resolve a user name for a
+// --link copy on some Docker versions ("invalid user index: -1" on 27.4), and a numeric id would be
+// wrong for custom bases, whose uid is configurable.
 var imageDockerfileTmpl = template.Must(template.New("Dockerfile").Parse(`FROM {{.Base}}
 
 # Pre-assembled vendor layouts (all four, ready to use)
-COPY --link --chown=ynh:ynh vendors/claude/ /home/ynh/.ynh/run/local--{{.Name}}/claude/
-COPY --link --chown=ynh:ynh vendors/codex/ /home/ynh/.ynh/run/local--{{.Name}}/codex/
-COPY --link --chown=ynh:ynh vendors/cursor/ /home/ynh/.ynh/run/local--{{.Name}}/cursor/
-COPY --link --chown=ynh:ynh vendors/copilot/ /home/ynh/.ynh/run/local--{{.Name}}/copilot/
+COPY --chown=ynh:ynh vendors/claude/ /home/ynh/.ynh/run/local--{{.Name}}/claude/
+COPY --chown=ynh:ynh vendors/codex/ /home/ynh/.ynh/run/local--{{.Name}}/codex/
+COPY --chown=ynh:ynh vendors/cursor/ /home/ynh/.ynh/run/local--{{.Name}}/cursor/
+COPY --chown=ynh:ynh vendors/copilot/ /home/ynh/.ynh/run/local--{{.Name}}/copilot/
 
 # Harness source (metadata for ynh run)
-COPY --link --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--{{.Name}}/
+COPY --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--{{.Name}}/
+
+# Schema version of the layout above, so ynh does not try to migrate it
+COPY --chown=ynh:ynh home/ /home/ynh/.ynh/
 
 # Default vendor (override: docker run -e YNH_VENDOR=codex)
 ENV YNH_VENDOR={{.DefaultVendor}}
@@ -292,6 +300,12 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 		if err := assembler.AssembleDelegates(vendorDir, adapter, p.DelegatesTo); err != nil {
 			return fmt.Errorf("assembling %s delegates: %w", adapter.Name(), err)
 		}
+	}
+
+	// Stamp the image's ynh home with the schema this ynh writes.
+	homeDir := filepath.Join(tmpDir, "home")
+	if err := migration.WriteSchemaVersion(homeDir, migration.CurrentSchemaVersion); err != nil {
+		return fmt.Errorf("stamping schema version: %w", err)
 	}
 
 	// Determine default vendor

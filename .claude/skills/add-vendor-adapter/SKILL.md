@@ -100,7 +100,7 @@ any point to cross-check completeness — `grep -rli cursor --include="*.go" --i
 
 ### Docker image support
 
-- [ ] `cmd/ynh/image.go` — add `COPY --link` line for the new vendor's staged
+- [ ] `cmd/ynh/image.go` — add `COPY --chown=ynh:ynh` line (no `--link`) for the new vendor's staged
   config, and confirm the default-vendor fallback logic still makes sense.
 
 ### Documentation
