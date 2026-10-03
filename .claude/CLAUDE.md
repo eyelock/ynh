@@ -114,7 +114,7 @@ This applies to everything — code, docs, tutorials. Pushing a fix that hasn't 
 
 ## Code Conventions
 
-- Go 1.25+, standard library by default. Two direct dependencies, both
+- Go 1.26+, standard library by default. Two direct dependencies, both
   deliberate: `santhosh-tekuri/jsonschema/v6` (JSON Schema draft 2020-12 is
   not in the standard library and hand-rolling a validator for the published
   schemas would be worse) and `golang.org/x/text`. **Do not add a third

@@ -1,4 +1,4 @@
-Use Go 1.25+ idioms. Prefer standard library over external dependencies. Zero external deps is a deliberate design choice.
+Use Go 1.26+ idioms. Prefer standard library over external dependencies. Zero external deps is a deliberate design choice.
 
 Return errors, don't panic. Wrap with context: `fmt.Errorf("doing thing: %w", err)`. Handle errors once — don't log AND return.
 
