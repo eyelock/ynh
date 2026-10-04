@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -338,5 +339,110 @@ func TestCleanOutputDir_EmptiesYndsOwnRepoButKeepsGit(t *testing.T) {
 	}
 	if len(entries) != 2 {
 		t.Errorf("only .git and the marker should remain, got %d entries", len(entries))
+	}
+}
+
+// ── Messages name the path as the user gave it (#466). ───────────────────────
+//
+// On macOS /tmp is a symlink to /private/tmp, so a message built from the
+// resolved path never matched what the user typed. The guards still decide on
+// the resolved path; only the text changes. Every path below, link and target
+// alike, is under the test's temp dir.
+
+// symlinkedDir makes tmp/<name> a symlink to a real directory tmp/<name>-target
+// holding one file, and returns the link and the target.
+func symlinkedDir(t *testing.T, tmp, name string) (link, target string) {
+	t.Helper()
+	target = filepath.Join(tmp, name+"-target")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target, "a.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link = filepath.Join(tmp, name)
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	return link, target
+}
+
+// assertNamesLink fails unless text names link and neither spelling of target.
+func assertNamesLink(t *testing.T, what, text, link, target string) {
+	t.Helper()
+	if !strings.Contains(text, link) {
+		t.Errorf("%s should name the path as given (%s), got:\n%s", what, link, text)
+	}
+	resolved, err := filepath.EvalSymlinks(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{target, resolved} {
+		if strings.Contains(text, p) {
+			t.Errorf("%s should not name the symlink-resolved path %s, got:\n%s", what, p, text)
+		}
+	}
+}
+
+func TestCleanOutputDir_PromptAndDeclineNameThePathAsGiven(t *testing.T) {
+	tmp := t.TempDir()
+	link, target := symlinkedDir(t, tmp, "dist")
+
+	restore := promptActionFunc
+	t.Cleanup(func() { promptActionFunc = restore })
+	promptActionFunc = func(_ string, choices ...string) string { return choices[0] }
+
+	var out bytes.Buffer
+	var err error
+	withStdout(t, &out, func() { err = cleanOutputDir(mustBeUnderTemp(t, tmp, link), false) })
+	if err == nil {
+		t.Fatal("a declined prompt must not delete anything")
+	}
+	assertNamesLink(t, "the --clean prompt", out.String(), link, target)
+	assertNamesLink(t, "the decline message", err.Error(), link, target)
+	if _, statErr := os.Stat(filepath.Join(target, "a.txt")); statErr != nil {
+		t.Error("contents were deleted despite the decline")
+	}
+}
+
+func TestCleanOutputDir_RefusalNamesThePathAsGiven(t *testing.T) {
+	tmp := t.TempDir()
+	link, target := symlinkedDir(t, tmp, "repo")
+	if err := os.MkdirAll(filepath.Join(target, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := cleanOutputDir(mustBeUnderTemp(t, tmp, link), true)
+	if err == nil {
+		t.Fatal("--clean deleted a git working copy reached through a symlink")
+	}
+	assertNamesLink(t, "the refusal", err.Error(), link, target)
+	if _, statErr := os.Stat(filepath.Join(target, "a.txt")); statErr != nil {
+		t.Error("the source tree was deleted despite the refusal")
+	}
+}
+
+// A symlink must not walk past the home refusal. HOME is faked to a directory
+// under the test's temp dir; the real home is never involved.
+func TestCleanOutputDir_SymlinkToHomeIsStillRefused(t *testing.T) {
+	tmp := t.TempDir()
+	link, fakeHome := symlinkedDir(t, tmp, "home")
+	t.Setenv("HOME", fakeHome)
+
+	resolved, err := filepath.EvalSymlinks(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reason := refuseToClean(resolved); !strings.Contains(reason, "home directory") {
+		t.Fatalf("refuseToClean(%q) must refuse the faked home, got %q", resolved, reason)
+	}
+
+	cleanErr := cleanOutputDir(mustBeUnderTemp(t, tmp, link), true)
+	if cleanErr == nil || !strings.Contains(cleanErr.Error(), "home directory") {
+		t.Fatalf("a symlink to $HOME must be refused, got %v", cleanErr)
+	}
+	assertNamesLink(t, "the refusal", cleanErr.Error(), link, fakeHome)
+	if _, statErr := os.Stat(filepath.Join(fakeHome, "a.txt")); statErr != nil {
+		t.Error("the faked home was touched despite the refusal")
 	}
 }
