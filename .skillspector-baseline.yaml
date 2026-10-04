@@ -69,7 +69,7 @@ rules:
 
   - id: "RA2"
     path: "*agents/evals.md"
-    reason: "Matches the per-tutorial sandbox setup (SANDBOX=/tmp/ynh-eval-T<N>). The sandbox exists to CONTAIN the eval run, not to persist across sessions."
+    reason: "Matches the per-tutorial sandbox (/tmp/ynh-eval-<slug>) and its run.sh, which carries the working directory and exports from one block of a tutorial to the next. The sandbox exists to CONTAIN the eval run and is torn down after each tutorial; nothing persists across sessions."
 
   # --- TM1 · Tool Misuse / Tool Parameter Abuse ---------------------------
   # Scoped to two files on purpose. `rm -rf` in an agent instruction is a real
@@ -80,7 +80,7 @@ rules:
 
   - id: "TM1"
     path: "*agents/evals.md"
-    reason: "rm -rf is bounded to /tmp/ynh-eval-T<N>, a sandbox the eval agent creates and tears down. Scoped to this file only — see .claude/rules/destructive-operations.md for why a blanket rm -rf suppression is not acceptable here."
+    reason: "rm -rf is bounded to /tmp/ynh-eval-<slug>, a sandbox the eval agent creates and tears down, and every other rm in a tutorial block goes through a guard that refuses any target outside it. Scoped to this file only: see .claude/rules/destructive-operations.md for why a blanket rm -rf suppression is not acceptable here."
 
   - id: "TM1"
     path: "*rules/branching.md"

@@ -65,6 +65,13 @@ ynh picks the vendor in this order:
 
 ## Switch vendors
 
+Run these from a directory of their own. Codex and Cursor read the harness through symlinks in the directory you launch from (see the next section), so launching them from your current directory would leave symlinks there:
+
+```bash
+mkdir -p /tmp/ynh-tutorial/switch
+cd /tmp/ynh-tutorial/switch
+```
+
 ```bash
 my-harness -v codex
 my-harness -v cursor
@@ -74,6 +81,17 @@ Each launches the same harness through a different vendor CLI. Artifacts are rea
 
 **Note:** Codex and Cursor require their CLIs installed separately. If missing, you'll see: `exec: "codex": executable file not found in $PATH`.
 
+Remove the symlinks either run created, then the directory, so they do not show up in `ynh status` below:
+
+```bash
+my-harness -v codex --clean
+my-harness -v cursor --clean
+cd /
+rm -rf /tmp/ynh-tutorial/switch
+```
+
+Each `--clean` prints `Cleaned <vendor> symlinks for harness "my-harness" in /tmp/ynh-tutorial/switch`, or `No <vendor> installation found for harness "my-harness" in /tmp/ynh-tutorial/switch` if you declined the symlinks. ynh offers them before it starts the vendor CLI, so a missing CLI does not stop them being created.
+
 ## Symlinks — automatic prompt
 
 When you run a harness with a symlink vendor (`-v codex` or `-v cursor`), ynh checks if symlinks are already installed in the current project directory. If not, it **automatically prompts** you:
@@ -81,7 +99,9 @@ When you run a harness with a symlink vendor (`-v codex` or `-v cursor`), ynh ch
 ```bash
 mkdir -p /tmp/ynh-tutorial/project
 cd /tmp/ynh-tutorial/project
+```
 
+```bash
 my-harness -v cursor
 ```
 

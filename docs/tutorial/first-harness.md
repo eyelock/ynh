@@ -287,6 +287,14 @@ ynh ls
 
 The `remove` alias also works: `ynh remove local/my-harness`.
 
+## Clean up
+
+Uninstalling leaves the source tree where it was. Remove the tutorial workspace:
+
+```bash
+rm -rf /tmp/ynh-tutorial
+```
+
 ## What you learned
 
 - A harness is a directory with `.agents/harness/plugin.json`

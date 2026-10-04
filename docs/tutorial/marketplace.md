@@ -330,7 +330,7 @@ ynd marketplace build -o /tmp/ynh-tutorial/marketplace-claude -v claude
 ## Clean up
 
 ```bash
-rm -rf /tmp/ynh-tutorial/marketplace-*
+rm -rf /tmp/ynh-tutorial
 ```
 
 ## What you learned
