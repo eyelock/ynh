@@ -440,6 +440,52 @@ resume. The effort is the one Claude Code says it applies at runtime, after
 flags, settings and environment, so it is reported but not set: ynh passes no
 effort to the worker.
 
+### The model
+
+Two fields keep what a run asked for apart from what ran:
+
+| Field | What it holds |
+|---|---|
+| `model` | The model the worker reported it ran on, in the backend's own words. An alias is resolved: `--model sonnet` on Claude Code reports `claude-sonnet-5-5`. Absent when the backend reported none. |
+| `model_requested` | What `--model` asked for, as given. Absent when no model was pinned and the backend chose its default. |
+
+`model` is never filled in from `model_requested`. A run on the backend's
+default has only `model`; a backend that reports nothing has only
+`model_requested`, or neither. Before this release `model` held what
+`--model` asked for, which was empty for every run on a default model and an
+alias for a pinned one. That value is now `model_requested`.
+
+What each backend reports:
+
+| Backend | `model` comes from |
+|---|---|
+| `claude` | The `system` `init` event, then each main-thread assistant message's `message.model` |
+| `codex` | Nothing: no `codex exec --json` event names the model, so `model` is absent |
+| `cursor` | The `system` `init` event, which gives a display name such as `Claude 4 Sonnet` |
+
+For `claude`, the init event names the model the session starts on, and every
+assistant message names the model that wrote it. These agree unless Claude
+Code switches model mid-run, as when a fallback model takes over; then the
+latest main-thread message wins, since it is what actually answered. A
+subagent's messages are ignored: it may run on a smaller model while the
+session's stays the run's. The model Claude Code names on an answer it wrote
+itself, such as "Not logged in", is `<synthetic>`, and is never reported.
+
+On `--resume`, `model` carries over from the checkpoint until the relaunched
+worker reports one, and is then that process's: when the model changes across
+a resume, the result names the latest. `--model` is not restored (see
+[Resume](#resume)), so `model_requested` is what the resume
+itself passed.
+
+The trajectory's `session_start` carries `model_requested`, which with the
+harness SHA and base commit reproduces the request. It cannot carry the model
+that ran: the header is written before the worker has said anything. A
+`worker_model` event records that instead, when each worker process first
+reports a model and again whenever it reports a different one.
+`session_start` still writes `model` too, as a copy of `model_requested`, so
+no field disappears from the header. It is deprecated and goes in a release
+that bumps the capabilities version; read `model_requested` instead.
+
 ### Pinning a run to a toolchain
 
 `harness.sha` is the resolved commit the harness was installed from. `version`
@@ -470,8 +516,9 @@ a run without parsing terminal output.
 
 | Event | Emitted when |
 |---|---|
-| `session_start` | Run begins. Carries model, ynh version, harness version, base commit, the `--auto-approve` level, and the resolved budgets with their sources |
-| `session_resumed` | Resumed run begins, before the first new turn |
+| `session_start` | Run begins. Carries the model requested (`model_requested`, and the deprecated `model` copy of it), ynh version, harness version, base commit, the `--auto-approve` level, and the resolved budgets with their sources |
+| `session_resumed` | Resumed run begins, before the first new turn. Carries this process's `--auto-approve` level and model requested |
+| `worker_model` | The worker reported the model it runs on: once per worker process, and again if it reports another |
 | `plan` / `plan_revised` | Plan produced or revised |
 | `plan_approval_required` | Plan phase is waiting for approval |
 | `turn_start` | Act-phase turn begins |

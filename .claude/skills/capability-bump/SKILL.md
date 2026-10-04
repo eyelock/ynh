@@ -90,6 +90,13 @@ A change that lands in fewer than these is incomplete:
 Plus, when relevant: `docs/schema/plugin.schema.json` if a manifest field
 changed, and `docs/schema-cli.md` if the contract narrative did.
 
+**Pending removals ride along.** A field kept only to avoid a bump is listed in
+`deprecatedUntilBump` (`internal/agent/deprecations_test.go`), and that test
+fails as soon as `CapabilitiesVersion` moves. A bump for any reason must remove
+each listed field (code, schema, goldens, docs) and its entry, or move the entry
+to the new version on purpose. When you deprecate a field to avoid a bump, add
+it there with its tracking issue.
+
 Schemas are embedded from `docs/schema/` by `internal/clischema`, so the
 published file and the one the binary validates against are the same tree. There
 is no second copy to forget.

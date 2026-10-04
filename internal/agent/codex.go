@@ -82,6 +82,9 @@ func buildCodexArgs(opts StartOptions, threadID string) []string {
 
 // codexOutputEvent is the part of a codex exec --json event ynh reads.
 // Unknown event and item types decode to their type alone and are skipped.
+// No exec event names the model the turn ran on, thread.started included, so
+// a codex turn reports none: passing --model asks for one, it does not
+// witness which ran.
 type codexOutputEvent struct {
 	Type string `json:"type"`
 	// ThreadID is on thread.started, the first event of every run, fresh or

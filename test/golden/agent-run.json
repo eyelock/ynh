@@ -8,7 +8,8 @@
   "session_dir": "/Users/dev/src/demo/runs/stuck",
   "worktree": "/Users/dev/src/demo",
   "backend": "claude",
-  "model": "claude-opus-5",
+  "model": "claude-opus-5-5",
+  "model_requested": "opus",
   "effort": "high",
   "harness": {
     "name": "local/demo",

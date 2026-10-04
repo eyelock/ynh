@@ -30,7 +30,7 @@ func TestTrajectorySchemaMatchesTheEmitter(t *testing.T) {
 	}{
 		{KindSessionStart, 0, SessionStartData{
 			SessionID: "s1", Harness: "local/h", Backend: "claude", Task: "do it",
-			Model: "opus", YnhVersion: "0.6.0", HarnessVersion: "0.6.0",
+			ModelRequested: "opus", Model: "opus", YnhVersion: "0.6.0", HarnessVersion: "0.6.0",
 			HarnessSHA: "abc123", ImageDigest: "sha256:deadbeef", BaseCommit: "def456",
 			Budgets:       &BudgetLimits{MaxTurns: 10, MaxTokens: 1000, MaxWallMS: 60000},
 			BudgetSources: &BudgetSource{Turns: "flag", Tokens: "manifest", Wall: "default"},
@@ -38,6 +38,7 @@ func TestTrajectorySchemaMatchesTheEmitter(t *testing.T) {
 		{KindSessionResumed, 3, SessionResumedData{
 			SessionID: "s1", Backend: "claude", ResumedAtTurn: 3,
 			RestoredTurns: 3, RestoredTokens: 900, PendingApproval: "plan",
+			AutoApprove: "edits", ModelRequested: "sonnet",
 		}},
 		{KindPlan, 0, nil},
 		{KindPlanRevised, 0, PlanRevisedData{Iteration: 2, Notes: "narrow it"}},
@@ -55,6 +56,7 @@ func TestTrajectorySchemaMatchesTheEmitter(t *testing.T) {
 		{KindWorkerEnv, 0, WorkerEnvData{
 			Passed: []string{"HOME"}, Declared: []string{"HOME", "TOKEN"}, Missing: []string{"TOKEN"},
 		}},
+		{KindWorkerModel, 1, WorkerModelData{Model: "claude-sonnet-5-5"}},
 		{KindTurnApprovalRequired, 1, TurnApprovalData{SynthesizedFeedback: "continue?"}},
 		{KindStuckDetected, 4, StuckDetectedData{Reason: "no progress", TurnCount: 3}},
 		{KindTamperDetected, 2, TamperData{What: "baseline", Before: "a", After: "b"}},
@@ -152,7 +154,7 @@ func allEventKinds() []EventKind {
 		KindSessionStart, KindSessionResumed, KindPlan, KindPlanRevised,
 		KindPlanApprovalRequired, KindTurnStart, KindAssistantMessage,
 		KindSensorRun, KindSensorResult, KindFeedbackSent, KindWorkerEnv,
-		KindTurnApprovalRequired, KindStuckDetected, KindTamperDetected,
+		KindWorkerModel, KindTurnApprovalRequired, KindStuckDetected, KindTamperDetected,
 		KindBudgetSnapshot, KindBudgetExceeded, KindConverged, KindSessionEnd,
 	}
 }

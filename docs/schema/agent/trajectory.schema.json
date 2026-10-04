@@ -53,7 +53,7 @@
   "oneOf": [
     {
       "title": "session_start",
-      "description": "Opens every trajectory. Carries the provenance a run must be reproducible from.",
+      "description": "Opens every trajectory. Carries the provenance a run must be reproducible from, including the model requested; the model that ran follows in `worker_model`.",
       "type": "object",
       "properties": {
         "timestamp": {
@@ -80,8 +80,13 @@
             "task": {
               "type": "string"
             },
+            "model_requested": {
+              "type": "string",
+              "description": "The model the run asked for with --model, as given (an alias such as `sonnet` stays an alias). With the harness SHA and base commit, this is what reproduces the request. Absent when none was pinned and the backend chose. What actually ran is recorded by the `worker_model` event, since the worker reports it only after this header is written."
+            },
             "model": {
-              "type": "string"
+              "type": "string",
+              "description": "Deprecated: same as model_requested; the model that ran is in worker_model. Will be removed in a release that bumps CapabilitiesVersion."
             },
             "auto_approve": {
               "type": "string",
@@ -169,6 +174,10 @@
               "type": "string",
               "enum": ["edits", "all"],
               "description": "The --auto-approve level this resumed process was granted. Not restored from the checkpoint, so it can differ from the level the session started with. Absent means none."
+            },
+            "model_requested": {
+              "type": "string",
+              "description": "The model this resumed process asked for with --model. Not restored from the checkpoint, so it can differ from the model the session started with. Absent when none was pinned."
             }
           },
           "required": [
@@ -490,6 +499,40 @@
           },
           "required": [
             "passed"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "timestamp",
+        "type",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "title": "worker_model",
+      "description": "The model the worker reported it runs on, in the backend's own words (an alias resolved to its id). Emitted the first time each worker process reports one and again if it reports a different one, so a fallback mid-run or a resume onto another model shows where it happened. Never inferred from the model requested: a backend that reports no model emits none.",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "type": {
+          "const": "worker_model"
+        },
+        "turn": {
+          "$ref": "#/$defs/Turn"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "model"
           ],
           "additionalProperties": false
         }

@@ -181,6 +181,9 @@ type claudeSession struct {
 	// effort is the reasoning effort claude reports it applies, once its
 	// get_settings answer arrives. Init does not carry it.
 	effort string
+	// model is the model claude reports running: the system init event's,
+	// then each main-thread API response's (see noteModel).
+	model string
 	// total_cost_usd is a running total for the process, not a per-turn
 	// figure: each result carries the total so far, and a resumed session
 	// may start from the total its transcript saved. costBase is the part of
@@ -228,9 +231,15 @@ type claudeOutputEvent struct {
 	Message *claudeOutputMsg `json:"message,omitempty"`
 	// PermissionMode is the mode the system init event reports the session
 	// actually runs in, which is not always the mode it was asked for.
-	PermissionMode string       `json:"permissionMode,omitempty"`
-	IsError        bool         `json:"is_error,omitempty"`
-	Usage          *claudeUsage `json:"usage,omitempty"`
+	PermissionMode string `json:"permissionMode,omitempty"`
+	// Model is the system init event's model: the one the session runs on,
+	// with an alias such as "sonnet" already resolved to its id.
+	Model string `json:"model,omitempty"`
+	// ParentToolUseID is set on an assistant event from a subagent, which
+	// may run on another model than the session's.
+	ParentToolUseID *string      `json:"parent_tool_use_id,omitempty"`
+	IsError         bool         `json:"is_error,omitempty"`
+	Usage           *claudeUsage `json:"usage,omitempty"`
 	// Error is set on an assistant event claude synthesised from an API
 	// failure rather than received from the model, e.g. "authentication_failed".
 	Error json.RawMessage `json:"error,omitempty"`
@@ -321,7 +330,10 @@ func claudeTurnError(ev claudeOutputEvent, apiError string, turn Turn) error {
 type claudeOutputMsg struct {
 	// ID is the API message id. Claude Code emits one assistant event per
 	// content block, each repeating that message's usage.
-	ID      string          `json:"id,omitempty"`
+	ID string `json:"id,omitempty"`
+	// Model is the model that wrote this message, or claudeSyntheticModel
+	// on a message claude made up itself.
+	Model   string          `json:"model,omitempty"`
 	Role    string          `json:"role"`
 	Content []claudeContent `json:"content"`
 	Usage   *claudeUsage    `json:"usage,omitempty"`
@@ -460,6 +472,9 @@ func (s *claudeSession) Next() (Turn, error) {
 			s.applyControlResponse(ev.Response)
 
 		case "system":
+			if ev.Subtype == "init" {
+				s.noteModel(ev.Model)
+			}
 			if err := claudeModeMismatch(ev, s.wantMode); err != nil {
 				// Stop it now: left running, it would work through the turn
 				// in a mode nobody chose.
@@ -474,6 +489,9 @@ func (s *claudeSession) Next() (Turn, error) {
 				apiError = e
 			}
 			if ev.Message != nil {
+				if ev.ParentToolUseID == nil || *ev.ParentToolUseID == "" {
+					s.noteModel(ev.Message.Model)
+				}
 				for _, block := range ev.Message.Content {
 					if block.Type == "text" {
 						contentBuf.WriteString(block.Text)
@@ -516,6 +534,7 @@ func (s *claudeSession) Next() (Turn, error) {
 			// Claude's usage record always carries cache_read_input_tokens.
 			turn.CacheReported = turn.UsageReported
 			turn.Effort = s.effort
+			turn.Model = s.model
 			s.recordCost(ev.TotalCostUSD, &turn)
 			return turn, nil
 
@@ -530,6 +549,24 @@ func (s *claudeSession) Next() (Turn, error) {
 	// stdout closed: claude has exited. A non-zero exit before any result is
 	// claude refusing to run, and its stderr says why.
 	return Turn{}, exitedWorkerError("claude", s.wait(), s.stderr)
+}
+
+// claudeSyntheticModel is the model claude names on an assistant message it
+// wrote itself rather than received from the API, such as its "Not logged in"
+// answer. No model ran, so it is never reported.
+const claudeSyntheticModel = "<synthetic>"
+
+// noteModel records a model claude reports. The init event names the model
+// the session starts on. A main-thread assistant message names the model
+// that wrote it, which is the session's unless claude switched mid-run (a
+// fallback model taking over, say), and then the message is the better
+// witness of what ran, so the latest one wins. Subagent messages are not
+// passed here: a subagent may run on a smaller model while the session's
+// model stays the run's.
+func (s *claudeSession) noteModel(model string) {
+	if model = strings.TrimSpace(model); model != "" && model != claudeSyntheticModel {
+		s.model = model
+	}
 }
 
 // addUsage returns the sum of two usage records.

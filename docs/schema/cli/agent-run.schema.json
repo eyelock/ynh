@@ -53,7 +53,12 @@
       "description": "Worker backend that drove the agent."
     },
     "model": {
-      "type": "string"
+      "type": "string",
+      "description": "The model the worker reported it ran on, as the backend states it, with an alias resolved to its id (Claude Code: `sonnet` becomes `claude-sonnet-5-5`). Absent when the backend reported none (Codex reports none); never filled in from `model_requested`. After a resume, the latest worker process's."
+    },
+    "model_requested": {
+      "type": "string",
+      "description": "The model this run asked for with --model, as given. Absent when none was pinned and the backend chose its default. Not restored by --resume, as --model is not."
     },
     "auto_approve": {
       "type": "string",

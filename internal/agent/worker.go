@@ -92,6 +92,10 @@ type Turn struct {
 	// the backend has said. Empty means the backend has not reported one,
 	// not that the worker runs without one.
 	Effort string
+	// Model is the model the worker reported running, in the backend's own
+	// words, once it has said. Empty means the backend has not reported one;
+	// it is never the model that was asked for.
+	Model string
 }
 
 // Usage tracks token consumption for a turn.

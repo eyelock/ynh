@@ -36,7 +36,15 @@ type RunResult struct {
 	SessionDir string `json:"session_dir,omitempty"`
 	Worktree   string `json:"worktree,omitempty"`
 	Backend    string `json:"backend,omitempty"`
-	Model      string `json:"model,omitempty"`
+	// Model is the model the worker reported running, as the backend states
+	// it (an alias resolved to its id). Absent when the backend reported
+	// none, which is never filled in from ModelRequested. After a resume it
+	// is the latest process's.
+	Model string `json:"model,omitempty"`
+	// ModelRequested is the model this process asked for with --model.
+	// Absent when none was pinned and the backend chose. A resume does not
+	// restore it, as it does not restore --model.
+	ModelRequested string `json:"model_requested,omitempty"`
 	// AutoApprove is the --auto-approve level the worker ran with. Absent
 	// means none.
 	AutoApprove string `json:"auto_approve,omitempty"`
