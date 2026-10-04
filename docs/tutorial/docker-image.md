@@ -7,8 +7,11 @@ Build self-contained Docker images with harnesses baked in. No bind-mounting `~/
 ```bash
 # Clean up from any previous run
 rm -rf /tmp/ynh-tutorial
-docker rmi docker-demo:latest 2>/dev/null
 ynh uninstall local/docker-demo 2>/dev/null
+```
+
+```bash
+docker rmi docker-demo:latest 2>/dev/null
 
 # Verify Docker is available
 docker version
@@ -281,12 +284,21 @@ steps:
 
 ## Cleanup
 
+Uninstall the harness and remove the tutorial workspace. Neither needs Docker:
+
 ```bash
-docker rmi docker-demo:latest 2>/dev/null
-docker rmi tester:latest 2>/dev/null
 ynh uninstall local/docker-demo 2>/dev/null
 rm -rf /tmp/ynh-tutorial
 ```
+
+The two images live in Docker's own storage, so only Docker can remove them:
+
+```bash
+docker rmi docker-demo:latest 2>/dev/null
+docker rmi tester:latest 2>/dev/null
+```
+
+`ynh image --from` also leaves its clone of `github.com/eyelock/assistants` in ynh's cache under `~/.ynh/cache/`, where later installs from that repository reuse it.
 
 ## What you learned
 

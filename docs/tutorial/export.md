@@ -290,11 +290,10 @@ ls -a /tmp/ynh-tutorial/no-inst-out/claude/
 
 ## Clean up
 
+Everything above, the two harnesses and every export, is under the tutorial workspace:
+
 ```bash
-rm -rf /tmp/ynh-tutorial/export-*
-rm -rf /tmp/ynh-tutorial/clean-test
-rm -rf /tmp/ynh-tutorial/remote-export
-rm -rf /tmp/ynh-tutorial/no-inst-out
+rm -rf /tmp/ynh-tutorial
 ```
 
 ## What you learned
