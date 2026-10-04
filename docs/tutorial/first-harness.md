@@ -32,10 +32,17 @@ cat > /tmp/ynh-tutorial/my-harness/.agents/harness/plugin.json << 'EOF'
   "name": "my-harness",
   "version": "0.1.0",
   "description": "My first ynh harness",
-  "default_vendor": "claude"
+  "default_vendor": "claude",
+  "focuses": {
+    "code-review": {
+      "prompt": "Review the staged changes for correctness and style"
+    }
+  }
 }
 EOF
 ```
+
+A focus is a named prompt you can launch with `--focus <name>` instead of typing it each time. You will use `code-review` [later in this tutorial](#run-with-per-invocation-instructions); [Focus](focus.md) covers focuses in full, including pairing one with a profile.
 
 ## Add artifacts
 
@@ -185,7 +192,7 @@ Profiles:
   (none)
 
 Focus:
-  (none)
+  code-review    (default)    "Review the staged changes for correctness and style"
 
 Sensors:
   (none)
@@ -238,11 +245,13 @@ my-harness --instructions "ticket: PROJ-42 — fix login timeout" -- "what's my 
 
 The agent should reference the ticket context in its response, even though it isn't in the harness `instructions.md`.
 
-Combined with `--focus`:
+Combined with `--focus`, using the `code-review` focus defined in `plugin.json`:
 
 ```bash
 my-harness --focus code-review --instructions "PR #22 in eyelock/assistants"
 ```
+
+The focus supplies the prompt, so none is needed after `--`; the instructions add the PR context for this one run.
 
 ## Inspect the assembled output
 

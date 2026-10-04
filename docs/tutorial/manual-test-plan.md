@@ -734,6 +734,7 @@ ynh vendors --format json | jq '.[] | select(.name=="ollama/claude")'
 # unreachable/unconfigured-type backend falls back to the bare "<backend>/<vendor>" row
 # instead of erroring the whole `ynh vendors` listing.
 
+cd /
 rm -rf /tmp/ynh-backend-edge "$YNH_HOME"
 unset YNH_HOME
 ```
