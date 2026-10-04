@@ -179,4 +179,18 @@ them by presence, not by version. Each is absent when the backend did not
 report it; a consumer must not read an absent `cost_usd` as zero. See
 [Agent](agent.md#cost-the-token-split-and-effort).
 
+`model` in the `agent run` result is the model the worker reported it ran on,
+and `model_requested` is what `--model` asked for. Earlier releases put the
+requested value in `model`, which was empty for a run on the backend's default
+and an alias for a pinned one; that value moved to `model_requested`, added
+without a capabilities bump because `model` still names the model, now
+completely. Each is absent when unknown, and `model` is never filled in from
+`model_requested`. In the trajectory, `session_start` and `session_resumed`
+carry `model_requested`, and a new `worker_model` event records the model that
+ran, since the header is written before the worker reports one.
+`session_start.model` is still written, as a deprecated copy of
+`model_requested`, until a release that bumps the capabilities version
+([#443](https://github.com/eyelock/ynh/issues/443)). See
+[Agent](agent.md#the-model).
+
 **Error envelope evolution.** The current emission is `{"error": {"code": "...", "message": "..."}}` (the `code` values listed above are the closed enum). Additive fields `category` (coarse routing class), `retryable` (bool), and `hint` (human guidance) are reserved and may appear on a future capabilities bump — consumers must tolerate either shape today.

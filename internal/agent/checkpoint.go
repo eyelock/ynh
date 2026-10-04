@@ -87,7 +87,10 @@ type Checkpoint struct {
 	MaxTokens int64 `json:"max_tokens,omitempty"`
 	// Effort is the reasoning effort the worker reported, so a resumed run
 	// still reports it before the relaunched worker has said again.
-	Effort    string `json:"effort,omitempty"`
+	Effort string `json:"effort,omitempty"`
+	// Model is the model the worker last reported, so a resumed run still
+	// reports it before the relaunched worker has said again.
+	Model     string `json:"model,omitempty"`
 	UpdatedAt string `json:"updated_at"`
 }
 

@@ -386,6 +386,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	if resuming {
 		budget.Resume(resumeCP.Budget)
 		result.Effort = resumeCP.Effort
+		result.Model = resumeCP.Model
 	} else {
 		budget.Start()
 	}
@@ -434,19 +435,21 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			RestoredTokens:  budget.Tokens(),
 			PendingApproval: resumeCP.PendingApproval,
 			AutoApprove:     opts.AutoApprove,
+			ModelRequested:  opts.Model,
 		}); emitErr != nil {
 			return result, fmt.Errorf("writing trajectory: %w", emitErr)
 		}
 	} else {
 		start := SessionStartData{
-			SessionID:   sessionID,
-			Harness:     harnessName,
-			Backend:     wb.Name(),
-			Task:        opts.Task,
-			Model:       opts.Model,
-			AutoApprove: opts.AutoApprove,
-			YnhVersion:  config.Version,
-			BaseCommit:  baseCommit(opts.WorktreeDir),
+			SessionID:      sessionID,
+			Harness:        harnessName,
+			Backend:        wb.Name(),
+			Task:           opts.Task,
+			ModelRequested: opts.Model,
+			Model:          opts.Model,
+			AutoApprove:    opts.AutoApprove,
+			YnhVersion:     config.Version,
+			BaseCommit:     baseCommit(opts.WorktreeDir),
 			Budgets: &BudgetLimits{
 				MaxTurns:  opts.MaxTurns,
 				MaxTokens: opts.MaxTokens,
@@ -469,7 +472,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	result.SessionID = sessionID
 	result.SessionDir = sessionDir
 	result.Backend = wb.Name()
-	result.Model = opts.Model
+	result.ModelRequested = opts.Model
 	result.AutoApprove = opts.AutoApprove
 	// opts.HarnessName, not harnessName: the latter is "(none)" for display in
 	// the trajectory when no harness was given, and a structured consumer
@@ -614,8 +617,24 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		cp.ResumeToken = sess.ResumeToken()
 		cp.Budget = budget.checkpoint(planIterations)
 		cp.Effort = result.Effort
+		cp.Model = result.Model
 		if err := writeCheckpoint(sessionDir, cp); err != nil {
 			_, _ = fmt.Fprintf(opts.Stderr, "checkpoint write failed: %v\n", err)
+		}
+	}
+	// noteModel takes the model a turn reports into the result, and records
+	// it in the trajectory the first time this process's worker reports it
+	// and whenever it reports another. A turn that reports none leaves the
+	// last one seen in place.
+	var workerModel string
+	noteModel := func(atTurn int, t Turn) {
+		if t.Model == "" {
+			return
+		}
+		result.Model = t.Model
+		if t.Model != workerModel {
+			workerModel = t.Model
+			_ = traj.Emit(KindWorkerModel, atTurn, WorkerModelData{Model: t.Model})
 		}
 	}
 	interruptExit := func(atTurn int) error {
@@ -720,6 +739,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			_ = traj.Emit(KindAssistantMessage, 0, planTurn.Content)
 			budget.RecordUsage(planTurn)
 			result.noteEffort(planTurn)
+			noteModel(0, planTurn)
 			_ = traj.Emit(KindBudgetSnapshot, 0, BudgetSnapshotData{
 				Turns:  budget.Turns(),
 				Tokens: budget.Tokens(),
@@ -880,6 +900,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		budget.RecordTurn()
 		budget.RecordUsage(turn)
 		result.noteEffort(turn)
+		noteModel(turnN, turn)
 		_ = traj.Emit(KindBudgetSnapshot, turnN, BudgetSnapshotData{
 			Turns:  budget.Turns(),
 			Tokens: budget.Tokens(),

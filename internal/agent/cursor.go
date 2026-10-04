@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strings"
 )
 
 // CursorBackend implements WorkerBackend for Cursor's headless agent CLI.
@@ -144,8 +145,14 @@ func (s *cursorSession) Close() error { return nil }
 // cursor stream-json output shapes (same wire format as Claude Code).
 // IsError and Result mark a turn cursor itself reports as failed; Result is
 // held raw so a field of an unexpected type cannot drop the result event.
+//
+// Model is on the system init event, the only one that names the model:
+// cursor's documented stream-json output gives a display name there, such as
+// "Claude 4 Sonnet", and neither assistant messages nor the result carry one.
 type cursorOutputEvent struct {
 	Type    string           `json:"type"`
+	Subtype string           `json:"subtype,omitempty"`
+	Model   string           `json:"model,omitempty"`
 	Message *cursorOutputMsg `json:"message,omitempty"`
 	Usage   *cursorUsage     `json:"usage,omitempty"`
 	IsError bool             `json:"is_error,omitempty"`
@@ -204,6 +211,12 @@ func parseCursorOutput(r io.Reader) (Turn, error) {
 		}
 
 		switch ev.Type {
+		case "system":
+			// One process per turn, so the model is this turn's process's.
+			if m := strings.TrimSpace(ev.Model); ev.Subtype == "init" && m != "" {
+				turn.Model = m
+			}
+
 		case "assistant":
 			if ev.Message != nil {
 				for _, block := range ev.Message.Content {
