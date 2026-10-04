@@ -34,10 +34,14 @@ import (
 // commits on top of the previous one and the history survives. Which entries
 // to keep is decided by keepOnClean, not here.
 func cleanOutputDir(dir string, skipConfirm bool) error {
-	abs, err := filepath.Abs(dir)
+	// shown is the path as the user gave it, made absolute: it is what every
+	// message names, so /tmp/x stays /tmp/x on macOS rather than turning into
+	// /private/tmp/x. abs is what the checks decide on and what is deleted.
+	shown, err := filepath.Abs(dir)
 	if err != nil {
 		return fmt.Errorf("resolving --clean target %q: %w", dir, err)
 	}
+	abs := shown
 	// Resolve symlinks so a link pointing at $HOME cannot walk past the checks
 	// below. A path that does not exist yet has nothing to resolve and nothing
 	// to delete, so failure here is not fatal.
@@ -46,7 +50,7 @@ func cleanOutputDir(dir string, skipConfirm bool) error {
 	}
 
 	if reason := refuseToClean(abs); reason != "" {
-		return fmt.Errorf("--clean refuses to delete %s: %s", abs, reason)
+		return fmt.Errorf("--clean refuses to delete %s: %s", shown, reason)
 	}
 
 	entries, err := os.ReadDir(abs)
@@ -54,7 +58,7 @@ func cleanOutputDir(dir string, skipConfirm bool) error {
 		return nil // nothing to clean
 	}
 	if err != nil {
-		return fmt.Errorf("reading --clean target %s: %w", abs, err)
+		return fmt.Errorf("reading --clean target %s: %w", shown, err)
 	}
 
 	keep := keepOnClean(abs)
@@ -71,10 +75,10 @@ func cleanOutputDir(dir string, skipConfirm bool) error {
 	if !skipConfirm {
 		if len(keep) == 0 {
 			fmt.Printf("--clean will permanently delete %s and its %d %s.\n",
-				abs, len(doomed), pluralWord(len(doomed), "entry", "entries"))
+				shown, len(doomed), pluralWord(len(doomed), "entry", "entries"))
 		} else {
 			fmt.Printf("--clean will permanently delete %d %s from %s, keeping its git history.\n",
-				len(doomed), pluralWord(len(doomed), "entry", "entries"), abs)
+				len(doomed), pluralWord(len(doomed), "entry", "entries"), shown)
 		}
 		// Choices are ordered so the *first* is the refusing one: promptAction
 		// returns choices[0] on empty input or EOF, so a prompt whose first
@@ -82,7 +86,7 @@ func cleanOutputDir(dir string, skipConfirm bool) error {
 		// rather than a terminal. A prompt labelled [y/N] that returns y on EOF
 		// is a lie to the operator.
 		if promptAction("Delete it? [y/N] ", "n", "y") != "y" {
-			return declined("--clean declined. %s was not deleted.", abs)
+			return declined("--clean declined. %s was not deleted.", shown)
 		}
 	}
 
