@@ -29,7 +29,7 @@ ynh agent run --resume <session-dir> [flags]
 | `--task "<text>"` | What the agent is being asked to do |
 | `--focus <name>` | Use a declared focus for the task and its profile |
 | `--profile <name>` | Apply a profile overlay |
-| `--backend <name>` | Vendor backend to drive (default: the harness's) |
+| `--backend <name>` | Backend to drive: `claude`, `codex` or `cursor` (default: `claude`; on `--resume`, the session's own) |
 | `--model <name>` | Model override passed to the backend |
 | `--convergence-sensor <name>` | Sensor consulted once all blocking sensors pass |
 | `--sensor-overlay <json>` | Per-run sensor overrides |
@@ -238,22 +238,35 @@ file `trajectory.jsonl` in the first place, as above, or pass the same
 Give each run its own folder. Two runs that emit into the same folder write the
 same `checkpoint.json`, and the last one to write wins.
 
-The checkpoint records the run's identity (harness, profile, convergence sensor,
-and the turn and token caps) as well as its counters, so a resume restores
-the run it is actually resuming. Flags passed on the resume take precedence;
-anything omitted comes from the checkpoint.
+The checkpoint records the run's identity (backend, task or focus, harness,
+profile, convergence sensor, and the turn and token caps) as well as its
+counters, so a resume restores the run it is actually resuming. For the
+harness, profile, convergence sensor and caps, flags passed on the resume take
+precedence and anything omitted comes from the checkpoint.
+
+The backend, task and focus cannot be changed on a resume, only repeated:
+
+- **Backend.** A resume drives the backend the run started on. The resume token
+  belongs to that backend (a codex thread id, a claude or cursor session id) and
+  means nothing to another, so `--backend` naming a different one is refused
+  with exit 21. A checkpoint that records no backend predates recording it and
+  resumes on `claude`.
+- **Task and focus.** Given neither `--task` nor `--focus`, a resume takes the
+  checkpoint's: its focus by name, so the focus's profile applies again, or else
+  its task. Given either, it must match what the session was started with, or
+  the resume is refused with exit 21. A conversation carrying on under a
+  different task is a new run, not a resume.
 
 Some settings are not restored. Pass them again if the original run used them:
-`--backend`, `--model`, `--worktree`, `--max-wall`, `--sandbox`,
-`--auto-approve`, `--auto-commit` and `--interactive`. `--auto-approve` stays
-out deliberately, as `--sandbox` does: a grant to skip permission checks is
-made by the operator each time, not inherited from a file. Without `--backend` a resume drives
-`claude`, whatever backend the run started on.
+`--model`, `--worktree`, `--max-wall`, `--sandbox`, `--auto-approve`,
+`--auto-commit` and `--interactive`. `--auto-approve` stays out deliberately, as
+`--sandbox` does: a grant to skip permission checks is made by the operator each
+time, not inherited from a file.
 
-A run interrupted after planning picks up from the checkpoint's pending message
-and needs no task. A run interrupted during planning starts the plan again, and
-that needs the task: pass `--task` again, because the task is not read back from
-the checkpoint.
+A run interrupted after planning picks up from the checkpoint's pending message.
+A run interrupted during planning starts the plan again from the checkpoint's
+task. If the checkpoint records no task, the resume is refused until `--task`
+supplies one.
 
 Budgets carry across: consumption is restored alongside the caps, so resuming
 does not hand the run a fresh allowance. The wall-clock time already spent

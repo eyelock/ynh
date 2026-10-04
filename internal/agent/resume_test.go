@@ -354,7 +354,7 @@ func TestRunLoop_ResumePastExceededBudgetExits(t *testing.T) {
 	// Hand-author a checkpoint whose budget already exceeds the cap.
 	if err := writeCheckpoint(dir, &Checkpoint{
 		SessionID:         "s",
-		Backend:           "mock",
+		Backend:           "claude",
 		Phase:             PhaseAct,
 		PlanFinalized:     true,
 		LastCompletedTurn: 5,

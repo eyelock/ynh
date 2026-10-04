@@ -55,7 +55,9 @@ type RunOptions struct {
 	// and the focus's bound profile (if any) is applied. Mirrors
 	// `ynh run --focus`. Mutually exclusive with Task and Profile.
 	Focus string
-	// Backend selects the worker backend ("claude" or "codex"). Defaults to "claude".
+	// Backend selects the worker backend ("claude", "codex" or "cursor").
+	// Defaults to "claude", or on a resume to the checkpoint's backend, which
+	// it may repeat but not change.
 	Backend string
 	// Sandbox is "srt" or "none". Defaults to "none".
 	Sandbox string
@@ -171,37 +173,6 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	if opts.Stdin == nil {
 		opts.Stdin = os.Stdin
 	}
-	backend, err := validateBackend(opts.Backend)
-	if err != nil {
-		return result, err
-	}
-	opts.Backend = backend
-	if err := validateSandbox(opts.Sandbox, opts.Backend); err != nil {
-		return result, err
-	}
-	if err := validateAutoApprove(opts.AutoApprove, opts.Backend); err != nil {
-		return result, err
-	}
-	if opts.WorktreeDir == "" {
-		var err error
-		opts.WorktreeDir, err = os.Getwd()
-		if err != nil {
-			return result, fmt.Errorf("resolving working directory: %w", err)
-		}
-	}
-	// The project's own permission choice wins over a run-time grant.
-	if err := checkProjectPermissions(opts.AutoApprove, opts.Backend, opts.WorktreeDir); err != nil {
-		return result, err
-	}
-
-	result.Worktree = opts.WorktreeDir
-	result.BaseCommit = baseCommit(opts.WorktreeDir)
-
-	ynh, err := resolveYNHBinary(opts.YNHBinary)
-	if err != nil {
-		return result, err
-	}
-
 	// ── Resume state ──────────────────────────────────────────────────────────
 	var resumeCP *Checkpoint
 	resuming := opts.Resume != ""
@@ -209,6 +180,9 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	// harness or it would not have been checkpointing sensor state — so a
 	// resume that cannot restore one must not be able to claim convergence.
 	verificationExpected := opts.HarnessName != "" || resuming
+	// taskGiven records whether this resume named its own task or focus, which
+	// must then be the session's (checked once a focus has resolved).
+	taskGiven := opts.Task != "" || opts.Focus != ""
 	if resuming {
 		var rerr error
 		resumeCP, rerr = readCheckpoint(opts.Resume)
@@ -238,6 +212,14 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		if opts.MaxTokens == 0 {
 			opts.MaxTokens = resumeCP.MaxTokens
 		}
+		// A run interrupted while planning re-runs the plan, which needs the
+		// task. A focus is restored by name so its bound profile applies again.
+		if !taskGiven {
+			opts.Focus = resumeCP.Focus
+			if opts.Focus == "" {
+				opts.Task = resumeCP.Task
+			}
+		}
 		verificationExpected = true
 		// A checkpoint written before these fields existed has none to restore.
 		// Warn rather than refuse: failing here would break resumes that are
@@ -249,6 +231,44 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 				"warning: this checkpoint records no harness, so no sensors will run. "+
 					"This run cannot converge — pass --harness <name> to resume with verification.")
 		}
+	}
+
+	// On a resume the backend comes from the checkpoint: the resume token is
+	// that backend's own and means nothing to another.
+	var backend string
+	if resuming {
+		backend, err = resumeBackend(opts.Backend, resumeCP.Backend)
+		if err != nil {
+			return result, &ExitError{Code: ExitResumeError, Message: err.Error()}
+		}
+	} else if backend, err = validateBackend(opts.Backend); err != nil {
+		return result, err
+	}
+	opts.Backend = backend
+	if err := validateSandbox(opts.Sandbox, opts.Backend); err != nil {
+		return result, err
+	}
+	if err := validateAutoApprove(opts.AutoApprove, opts.Backend); err != nil {
+		return result, err
+	}
+	if opts.WorktreeDir == "" {
+		var err error
+		opts.WorktreeDir, err = os.Getwd()
+		if err != nil {
+			return result, fmt.Errorf("resolving working directory: %w", err)
+		}
+	}
+	// The project's own permission choice wins over a run-time grant.
+	if err := checkProjectPermissions(opts.AutoApprove, opts.Backend, opts.WorktreeDir); err != nil {
+		return result, err
+	}
+
+	result.Worktree = opts.WorktreeDir
+	result.BaseCommit = baseCommit(opts.WorktreeDir)
+
+	ynh, err := resolveYNHBinary(opts.YNHBinary)
+	if err != nil {
+		return result, err
 	}
 
 	// ── Trajectory writer (append on resume, truncate on a fresh run) ─────────
@@ -320,6 +340,21 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		defer func() { _ = os.RemoveAll(configPath) }()
 	} else if opts.Focus != "" || opts.Profile != "" {
 		return result, fmt.Errorf("--focus and --profile require --harness")
+	}
+
+	if resuming {
+		if taskGiven {
+			if conflict := resumeTaskConflict(opts.Focus, opts.Task, resumeCP); conflict != "" {
+				return result, &ExitError{Code: ExitResumeError, Message: conflict}
+			}
+		}
+		// Only a run that reached the act phase resumes from a pending message;
+		// any other starts again from the task.
+		if resumeCP.Phase != PhaseAct && opts.Task == "" {
+			return result, &ExitError{Code: ExitResumeError, Message: fmt.Sprintf(
+				"checkpoint %q records no task, and a run interrupted before acting starts again from it: pass --task",
+				checkpointPath(opts.Resume))}
+		}
 	}
 
 	// ── Select backend ────────────────────────────────────────────────────────
@@ -586,8 +621,9 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	// refreshed from live state on every write.
 	cp := &Checkpoint{
 		SessionID:         sessionID,
-		Backend:           wb.Name(),
+		Backend:           opts.Backend,
 		Task:              opts.Task,
+		Focus:             opts.Focus,
 		HarnessName:       opts.HarnessName,
 		Profile:           opts.Profile,
 		ConvergenceSensor: opts.ConvergenceSensor,
@@ -606,9 +642,6 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		cp.LastCompletedTurn = resumeCP.LastCompletedTurn
 		cp.PendingMessage = resumeCP.PendingMessage
 		cp.PendingApproval = resumeCP.PendingApproval
-		if opts.Task == "" {
-			cp.Task = resumeCP.Task
-		}
 	}
 	saveCheckpoint := func() {
 		if sessionDir == "" {
@@ -1357,6 +1390,48 @@ func gitAutoCommit(dir string, turnN int) error {
 		return fmt.Errorf("git commit: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// resumeBackend picks the backend a resume drives: the checkpoint's, which a
+// --backend flag may repeat but not change. The resume token belongs to that
+// backend (a codex thread id, a claude or cursor session id) and is meaningless
+// to any other. A checkpoint without a backend predates recording it and was
+// claude's, the only backend then.
+func resumeBackend(flag, recorded string) (string, error) {
+	want, err := validateBackend(recorded)
+	if err != nil {
+		return "", fmt.Errorf("checkpoint records unknown backend %q", recorded)
+	}
+	if flag == "" {
+		return want, nil
+	}
+	got, err := validateBackend(flag)
+	if err != nil {
+		return "", err
+	}
+	if got != want {
+		return "", fmt.Errorf(
+			"this session was started on the %q backend, so it cannot resume on %q: its resume token is %s's; "+
+				"omit --backend or pass --backend %s", want, got, want, want)
+	}
+	return got, nil
+}
+
+// resumeTaskConflict reports why the focus and task a resume was given cannot
+// continue the checkpoint's session, or "" when they can. task is the resolved
+// task, a focus's prompt once the focus has loaded. A resumed conversation
+// carrying on with a different task is not a resume, so this refuses rather
+// than override.
+func resumeTaskConflict(focus, task string, cp *Checkpoint) string {
+	if cp.Focus != "" && focus != cp.Focus {
+		return fmt.Sprintf(
+			"this session ran focus %q; resume it with --focus %s or with neither --task nor --focus", cp.Focus, cp.Focus)
+	}
+	if cp.Task != "" && task != cp.Task {
+		return "the task given on this resume differs from the task this session was started with; " +
+			"resume without --task or --focus to continue it, or start a new run for the new task"
+	}
+	return ""
 }
 
 // validateBackend defaults the backend name and rejects unknown values

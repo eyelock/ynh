@@ -73,6 +73,10 @@ type Checkpoint struct {
 	PendingApproval   string           `json:"pending_approval,omitempty"`
 	Budget            CheckpointBudget `json:"budget"`
 	Task              string           `json:"task,omitempty"`
+	// Focus is the focus the run was started with, restored by name on a
+	// resume given neither --task nor --focus so its bound profile applies
+	// again. Task holds the focus's prompt as it was resolved.
+	Focus string `json:"focus,omitempty"`
 	// HarnessName, Profile and ConvergenceSensor are the run's identity.
 	// Without them a resume that omits --harness silently continues with no
 	// harness and therefore no sensors, which used to report converged.
