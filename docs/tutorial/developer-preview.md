@@ -106,6 +106,8 @@ Key things to verify:
 - `.claude/hooks/hooks.json` has hooks in Claude's three-level format
 - `.claude/.mcp.json` has the MCP server config
 
+These are session paths: `ynh run` loads `.claude/` as a plugin directory. An export is a plugin in its own right and lays hooks and MCP out differently, in `hooks/claude.json` and `mcp/claude.json` at its root, both named by `.claude-plugin/plugin.json` (see [MCP Servers: Config File Locations](../mcp.md#config-file-locations)).
+
 ## Preview the same harness for Cursor
 
 ```bash

@@ -260,9 +260,7 @@ func (c *Codex) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string)
 	if dirHasContent(filepath.Join(outputDir, "skills")) {
 		cpj.Skills = "./skills/"
 	}
-	if fileExists(filepath.Join(outputDir, ".mcp.json")) {
-		cpj.MCPServers = "./.mcp.json"
-	}
+	cpj.MCPServers = pluginFilePointer(outputDir, ".mcp.json")
 	cpj.Hooks = pluginHookPointer(outputDir, c.Name())
 
 	data, err := json.MarshalIndent(cpj, "", "  ")

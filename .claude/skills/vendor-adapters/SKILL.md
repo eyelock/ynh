@@ -230,8 +230,9 @@ converted only by `ynd migrate` and refused by every other command.
 | ynh               | Claude Code                      | Codex                            | Cursor                           |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Source:            |                                  |                                  |                                  |
-| plugin.json       | .claude/.mcp.json (plugin)       | .mcp.json (plugin root)          | .cursor/mcp.json (run assembly)  |
-|   mcp_servers: {} | .mcp.json (project root)         |                                  | mcp.json (export, plugin root)   |
+| plugin.json       | .claude/.mcp.json (run assembly) | .mcp.json (plugin root)          | .cursor/mcp.json (run assembly)  |
+|   mcp_servers: {} | mcp/claude.json (export, named   |                                  | mcp.json (export, plugin root)   |
+|                   |   by manifest mcpServers)        |                                  |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Format:           | JSON: {"mcpServers": {...}}      | JSON: {"mcpServers": {...}}      | JSON: {"mcpServers": {...}}      |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+

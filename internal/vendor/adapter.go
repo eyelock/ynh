@@ -257,11 +257,16 @@ func pluginHookFile(vendorName string) string {
 }
 
 // pluginHookPointer returns the manifest "hooks" value naming vendorName's
-// plugin hook file, or "" when outputDir does not carry one. A plugin loader
-// rejects a "hooks" path that does not exist, so the pointer is written only
-// for a file that is there.
+// plugin hook file, or "" when outputDir does not carry one.
 func pluginHookPointer(outputDir, vendorName string) string {
-	rel := pluginHookFile(vendorName)
+	return pluginFilePointer(outputDir, pluginHookFile(vendorName))
+}
+
+// pluginFilePointer returns the manifest value naming rel, a file relative to
+// the plugin root outputDir, in the "./"-prefixed form plugin loaders require,
+// or "" when the file is not there. A plugin loader rejects a component path
+// that does not exist, so a manifest names a file only when it is present.
+func pluginFilePointer(outputDir, rel string) string {
 	if !fileExists(filepath.Join(outputDir, rel)) {
 		return ""
 	}

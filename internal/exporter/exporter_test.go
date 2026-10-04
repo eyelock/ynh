@@ -257,8 +257,10 @@ func TestExportWithMCPServers(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	// Claude should have .claude/.mcp.json (plugin format)
-	assertFileExists(t, filepath.Join(outputDir, "claude", ".claude", ".mcp.json"))
+	// A Claude plugin reads mcp/claude.json, which its manifest names, and
+	// never .claude/.mcp.json, the session path (#481).
+	assertFileExists(t, filepath.Join(outputDir, "claude", "mcp", "claude.json"))
+	assertFileNotExists(t, filepath.Join(outputDir, "claude", ".claude"))
 
 	// Test Cursor export
 	outputDir2 := t.TempDir()

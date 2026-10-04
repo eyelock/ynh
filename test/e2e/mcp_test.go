@@ -88,3 +88,75 @@ func newMcpHarness(t *testing.T, name string) string {
 	}
 	return dir
 }
+
+// TestMcp_Export verifies that an exported plugin carries each vendor's MCP
+// file where its plugin reads it, that every manifest pointer names a file
+// that is there, and that no two vendors share a path in a merged package.
+// Claude's file is mcp/claude.json, named by its manifest, never the session
+// path .claude/.mcp.json (#481); Codex's manifest names .mcp.json in merged
+// mode too, because its manifest is written after the file (#482).
+func TestMcp_Export(t *testing.T) {
+	harness := newMcpHarness(t, "mcp-export")
+	type want struct {
+		manifest, file, pointer string
+	}
+	vendors := map[string]want{
+		"claude":  {".claude-plugin/plugin.json", "mcp/claude.json", "./mcp/claude.json"},
+		"codex":   {".codex-plugin/plugin.json", ".mcp.json", "./.mcp.json"},
+		"cursor":  {".cursor-plugin/plugin.json", "mcp.json", ""},
+		"copilot": {".claude-plugin/plugin.json", ".github/mcp.json", ""},
+	}
+	pointer := func(t *testing.T, path string) string {
+		t.Helper()
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("manifest: %v", err)
+		}
+		var m struct {
+			MCPServers string `json:"mcpServers"`
+		}
+		if err := json.Unmarshal(body, &m); err != nil {
+			t.Fatalf("manifest %s: %v", path, err)
+		}
+		return m.MCPServers
+	}
+	check := func(t *testing.T, root, v, wantPointer string) {
+		t.Helper()
+		w := vendors[v]
+		body, err := os.ReadFile(filepath.Join(root, w.file))
+		if err != nil {
+			t.Fatalf("%s MCP file: %v", v, err)
+		}
+		if !bytes.Contains(body, []byte("echoer")) {
+			t.Errorf("%s: %s missing server 'echoer':\n%s", v, w.file, body)
+		}
+		if got := pointer(t, filepath.Join(root, w.manifest)); got != wantPointer {
+			t.Errorf("%s: %s mcpServers = %q, want %q", v, w.manifest, got, wantPointer)
+		}
+		for _, p := range []string{".claude", ".cursor", ".copilot"} {
+			if _, err := os.Stat(filepath.Join(root, p)); !os.IsNotExist(err) {
+				t.Errorf("%s must not be in a plugin export, stat err = %v", p, err)
+			}
+		}
+	}
+
+	t.Run("per vendor", func(t *testing.T) {
+		out := filepath.Join(t.TempDir(), "out")
+		mustRunYnd(t, "export", harness, "-v", "claude,codex,cursor,copilot", "-o", out)
+		for v, w := range vendors {
+			check(t, filepath.Join(out, v), v, w.pointer)
+		}
+	})
+	t.Run("merged", func(t *testing.T) {
+		out := filepath.Join(t.TempDir(), "out")
+		mustRunYnd(t, "export", harness, "--merged", "-o", out)
+		for v, w := range vendors {
+			wantPointer := w.pointer
+			if v == "copilot" {
+				// Copilot shares Claude's manifest, which names Claude's file.
+				wantPointer = vendors["claude"].pointer
+			}
+			check(t, out, v, wantPointer)
+		}
+	})
+}

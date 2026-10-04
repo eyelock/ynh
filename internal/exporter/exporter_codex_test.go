@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -173,6 +174,61 @@ func TestExportMergedCodex(t *testing.T) {
 			}
 			// The shared tree still carries agents for the other vendors.
 			assertFileExists(t, filepath.Join(outputDir, "agents", "planner.md"))
+		})
+	}
+}
+
+// TestExportMergedCodexNote pins #488: a merged package keeps agents, rules
+// and commands in the shared tree for the other vendors, but Codex's manifest
+// points at ./skills/ only. The export says so in the same words as a
+// per-vendor Codex export, and only when Codex is selected and the harness
+// has something Codex does not load.
+func TestExportMergedCodexNote(t *testing.T) {
+	exportHarness := filepath.Join(testdataDir(), "export-harness")
+	perVendor, err := Export(ExportOptions{
+		SourceDir: exportHarness,
+		OutputDir: t.TempDir(),
+		Vendors:   []string{"codex"},
+		Mode:      ModePerVendor,
+	})
+	if err != nil {
+		t.Fatalf("per-vendor Export: %v", err)
+	}
+	wantCodex := perVendor[0].Warnings
+	if len(wantCodex) == 0 {
+		t.Fatal("per-vendor Codex export gave no note to compare against")
+	}
+
+	tests := []struct {
+		name    string
+		src     string
+		vendors []string
+		want    []string
+	}{
+		{name: "codex selected", src: exportHarness, vendors: []string{"claude", "codex", "cursor"}, want: wantCodex},
+		{name: "codex not selected", src: exportHarness, vendors: []string{"claude", "cursor"}},
+		{name: "skills only", src: writeMCPHarness(t), vendors: []string{"claude", "codex"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results, err := Export(ExportOptions{
+				SourceDir: tt.src,
+				OutputDir: filepath.Join(t.TempDir(), "merged"),
+				Vendors:   tt.vendors,
+				Mode:      ModeMerged,
+			})
+			if err != nil {
+				t.Fatalf("Export: %v", err)
+			}
+			var codex []string
+			for _, w := range results[0].Warnings {
+				if strings.HasPrefix(w, "codex: ") {
+					codex = append(codex, w)
+				}
+			}
+			if !slices.Equal(codex, tt.want) {
+				t.Errorf("codex notes = %q, want %q", codex, tt.want)
+			}
 		})
 	}
 }

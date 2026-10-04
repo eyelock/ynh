@@ -189,7 +189,7 @@ Requires Docker installed and running.
 | Preview for Claude — verify .claude/.mcp.json | [Preview for Claude](mcp-servers.md#preview-for-claude) |
 | Preview for Cursor — verify .cursor/mcp.json | [Preview for Cursor](mcp-servers.md#preview-for-cursor) |
 | Preview for Codex — verify JSON | [Preview for Codex](mcp-servers.md#preview-for-codex) |
-| Export for Cursor and Copilot, verify plugin MCP paths | [Export for Cursor and Copilot](mcp-servers.md#export-for-cursor-and-copilot) |
+| Export as a plugin, verify each vendor's plugin MCP path and manifest pointer, per-vendor and merged | [Export as a plugin](mcp-servers.md#export-as-a-plugin) |
 | Add HTTP MCP server — verify URL | [Add an HTTP MCP server](mcp-servers.md#add-an-http-mcp-server) |
 | Diff MCP config across vendors | [Compare MCP config across vendors](mcp-servers.md#compare-mcp-config-across-vendors) |
 
