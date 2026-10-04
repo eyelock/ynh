@@ -68,9 +68,11 @@ func TestExportMergedWithHooks(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	// Both hook configs should exist
+	// Each vendor's plugin hook file exists; Cursor's is hooks/hooks.json at
+	// the plugin root, never the project-only .cursor/hooks.json (#454).
 	assertFileExists(t, filepath.Join(outputDir, ".claude", "hooks", "hooks.json"))
-	assertFileExists(t, filepath.Join(outputDir, ".cursor", "hooks.json"))
+	assertFileExists(t, filepath.Join(outputDir, "hooks", "hooks.json"))
+	assertFileNotExists(t, filepath.Join(outputDir, ".cursor", "hooks.json"))
 }
 
 func TestExportMergedWithMCPServers(t *testing.T) {

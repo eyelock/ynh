@@ -35,10 +35,19 @@ plugin-root/
 
 ## Hook Config Paths
 
-- Plugin: `hooks/hooks.json` (inside plugin dir)
-- Project: `.cursor/settings.json` (committable)
-- Project-local: `.cursor/settings.local.json` (gitignored)
-- User: `~/.cursor/settings.json`
+CONFIRMED 2026-10-04 (cursor.com/docs/hooks, cursor.com/docs/reference/plugins):
+
+- Project: `.cursor/hooks.json` (a `hooks.json` anywhere else in the project is not loaded)
+- User: `~/.cursor/hooks.json`
+- Enterprise: `/Library/Application Support/Cursor/hooks.json` (macOS), `/etc/cursor/hooks.json` (Linux/WSL), `C:\ProgramData\Cursor\hooks.json` (Windows)
+- Plugin: `hooks/hooks.json` at the plugin root, or a path or inline object in the manifest's `hooks` field. A plugin's `.cursor/hooks.json` is not read.
+
+ynh writes each path only where Cursor reads it (#454):
+
+| ynh output | File | Generator |
+|------------|------|-----------|
+| `ynh run`, `ynd preview`, agent loop (project dir) | `.cursor/hooks.json` | `Cursor.GenerateHookConfig` |
+| `ynd export -v cursor`, `ynd marketplace build` (plugin) | `hooks/hooks.json` | `Cursor.GeneratePluginHookConfig`, picked by the exporter through its `PluginHookGenerator` interface |
 
 ## Hook Events (25 — same as Claude Code)
 
@@ -91,8 +100,8 @@ CONFIRMED (cursor.com/docs/hooks, cursor.com/docs/reference/plugins): both locat
 use the SAME flat/lowercase-camelCase format and event names — only the path differs.
 Project-level `.cursor/hooks.json` (also `.cursor/hooks.json` gitignored-local,
 `~/.cursor/hooks.json` user, and OS-specific enterprise paths) vs plugin-format
-`hooks/hooks.json` at plugin root. ynh's Cursor adapter (`Cursor.GenerateHookConfig`)
-now writes both paths with identical content.
+`hooks/hooks.json` at plugin root. ynh renders the same document for both and writes
+each to its own context only (see the table under Hook Config Paths).
 
 Full supported event list confirmed via docs: `sessionStart`, `sessionEnd`,
 `preToolUse`, `postToolUse`, `postToolUseFailure`, `subagentStart`, `subagentStop`,
@@ -178,7 +187,7 @@ from.
   (`internal/assembler/delegates.go`) already emits `name`+`description`.
 - Rules: YES (.cursor/rules/<name>.mdc) — FIXED: ynh now writes `.mdc` with frontmatter
 - Commands: YES (commands/<name>.md)
-- Hooks: YES — FIXED: ynh writes both `.cursor/hooks.json` (project) and `hooks/hooks.json` (plugin root), same format/event names in both
+- Hooks: YES. `.cursor/hooks.json` in the run assembly, `hooks/hooks.json` in an export, same format and event names; never both in one output (#454)
 - MCP: YES — FIXED: ynh writes both `.cursor/mcp.json` (project) and `mcp.json` (plugin root, no dot)
 - Marketplace: YES (.cursor-plugin/marketplace.json)
 - .agents/skills/: PARTIAL — Cursor reads `.agents/skills/` but NOT `.agents/rules/` or other subdirs

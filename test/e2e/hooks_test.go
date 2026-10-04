@@ -25,10 +25,13 @@ func TestHooks_PerVendor(t *testing.T) {
 	cases := []struct {
 		vendor   string
 		hookFile string // relative to runDir
+		absent   string // relative to runDir; a hook file the vendor never reads in a project
 	}{
 		{vendor: "claude", hookFile: filepath.Join(".claude", "hooks", "hooks.json")},
 		{vendor: "codex", hookFile: filepath.Join(".codex", "hooks.json")},
-		{vendor: "cursor", hookFile: filepath.Join(".cursor", "hooks.json")},
+		// hooks/hooks.json is the Cursor plugin path; a project session reads
+		// only .cursor/hooks.json, so the run assembly must not carry it (#454).
+		{vendor: "cursor", hookFile: filepath.Join(".cursor", "hooks.json"), absent: "hooks"},
 	}
 
 	for _, tc := range cases {
@@ -62,6 +65,11 @@ func TestHooks_PerVendor(t *testing.T) {
 			// vendor remap touches event names, not command bodies.
 			if !bytes.Contains(body, []byte("echo hooked")) {
 				t.Errorf("hook command not present in %s:\n%s", tc.hookFile, body)
+			}
+			if tc.absent != "" {
+				if _, err := os.Stat(filepath.Join(runDir, tc.absent)); !os.IsNotExist(err) {
+					t.Errorf("%s must not be assembled for %s, stat err = %v", tc.absent, tc.vendor, err)
+				}
 			}
 		})
 	}

@@ -127,8 +127,6 @@ Expected output structure:
   mcp.json
 .cursor-plugin/
   plugin.json
-hooks/
-  hooks.json
 .cursorrules
 mcp.json
 ```
@@ -136,7 +134,7 @@ mcp.json
 Note the differences from Claude:
 - Instructions go to `.cursorrules` instead of `CLAUDE.md`
 - Rules are rendered as `.mdc` files (`.cursor/rules/safety.mdc`)
-- Hooks go to `.cursor/hooks.json` (and a root `hooks/hooks.json`) instead of `.claude/hooks/hooks.json`
+- Hooks go to `.cursor/hooks.json` instead of `.claude/hooks/hooks.json`. That is the only project file Cursor reads hooks from; an export writes the plugin's `hooks/hooks.json` instead (see [Hooks: Config File Locations](../hooks.md#config-file-locations))
 - MCP config goes to `.cursor/mcp.json` (and a root `mcp.json`) instead of `.claude/.mcp.json`
 - Artifacts are under `.cursor/` instead of `.claude/`
 
@@ -156,7 +154,6 @@ Only in claude:
 Only in cursor:
   .cursor/hooks.json
   .cursor/mcp.json
-  hooks/hooks.json
   mcp.json
 Same content, vendor-specific rendering:
   .claude/rules/safety.md ↔ .cursor/rules/safety.mdc

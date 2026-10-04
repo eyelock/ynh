@@ -111,6 +111,36 @@ func TestWriteHookConfig(t *testing.T) {
 	}
 }
 
+// pluginHookStub is a vendor whose plugin carries hooks at a different path
+// from its project sessions, as Cursor's does.
+type pluginHookStub struct {
+	stubExporter
+	plugin map[string][]byte
+}
+
+func (s pluginHookStub) GeneratePluginHookConfig(map[string][]plugin.HookEntry) (map[string][]byte, error) {
+	return s.plugin, nil
+}
+
+// An export is a plugin, so a vendor's plugin hook path wins over its project
+// path, and the project file is not written at all (#454).
+func TestWriteHookConfig_PrefersPluginPath(t *testing.T) {
+	out := t.TempDir()
+	s := pluginHookStub{
+		stubExporter: stubExporter{hooks: map[string][]byte{".vendor/hooks.json": []byte(`{}`)}},
+		plugin:       map[string][]byte{"hooks/hooks.json": []byte(`{}`)},
+	}
+	if err := writeHookConfig(out, s, nil); err != nil {
+		t.Fatalf("writeHookConfig: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(out, "hooks", "hooks.json")); err != nil {
+		t.Errorf("plugin hook config not written: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(out, ".vendor")); !os.IsNotExist(err) {
+		t.Errorf("project hook config must not be written to a plugin, stat err = %v", err)
+	}
+}
+
 func TestWriteHookConfig_GeneratorErrorPropagates(t *testing.T) {
 	err := writeHookConfig(t.TempDir(), stubExporter{hookErr: errors.New("boom")}, nil)
 	if err == nil {
