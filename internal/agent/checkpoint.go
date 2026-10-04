@@ -27,11 +27,23 @@ const (
 // WallConsumedMS is cumulative wall-clock so the duration cap survives a
 // relaunch; PlanIterations is retained for observability (the plan phase is
 // re-run from scratch on resume, so it is not re-injected into the loop).
+//
+// The split and cost fields were added later. They are optional so a
+// checkpoint written before them still loads, restoring them as not yet
+// reported, and the *Reported flags keep "reported zero" apart from "never
+// reported".
 type CheckpointBudget struct {
-	Turns          int   `json:"turns"`
-	Tokens         int64 `json:"tokens"`
-	WallConsumedMS int64 `json:"wall_consumed_ms"`
-	PlanIterations int   `json:"plan_iterations"`
+	Turns           int     `json:"turns"`
+	Tokens          int64   `json:"tokens"`
+	WallConsumedMS  int64   `json:"wall_consumed_ms"`
+	PlanIterations  int     `json:"plan_iterations"`
+	InputTokens     int64   `json:"input_tokens,omitempty"`
+	OutputTokens    int64   `json:"output_tokens,omitempty"`
+	CacheReadTokens int64   `json:"cache_read_tokens,omitempty"`
+	UsageReported   bool    `json:"usage_reported,omitempty"`
+	CacheReported   bool    `json:"cache_reported,omitempty"`
+	CostUSD         float64 `json:"cost_usd,omitempty"`
+	CostReported    bool    `json:"cost_reported,omitempty"`
 }
 
 // Checkpoint is the resume source of truth. It is written atomically after
@@ -69,8 +81,11 @@ type Checkpoint struct {
 	// MaxTurns and MaxTokens are the caps, not the counters. Budget carries
 	// consumption; without the caps a resume silently re-derives them from
 	// defaults and can run far past what the original invocation allowed.
-	MaxTurns  int    `json:"max_turns,omitempty"`
-	MaxTokens int64  `json:"max_tokens,omitempty"`
+	MaxTurns  int   `json:"max_turns,omitempty"`
+	MaxTokens int64 `json:"max_tokens,omitempty"`
+	// Effort is the reasoning effort the worker reported, so a resumed run
+	// still reports it before the relaunched worker has said again.
+	Effort    string `json:"effort,omitempty"`
 	UpdatedAt string `json:"updated_at"`
 }
 

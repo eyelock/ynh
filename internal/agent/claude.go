@@ -82,14 +82,42 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 	scanner := bufio.NewScanner(stdoutPipe)
 	scanner.Buffer(make([]byte, 2<<20), 2<<20) // 2 MB — handles large tool outputs
 
-	return &claudeSession{
+	s := &claudeSession{
 		cmd:       cmd,
 		stdin:     stdinPipe,
 		scanner:   scanner,
 		sessionID: sessionID,
 		stderr:    tail,
 		wantMode:  claudePermissionMode(opts.AutoApprove),
-	}, nil
+		// A fresh session's running cost starts at zero. A resumed one may
+		// continue from the total its transcript saved, so it is asked.
+		costBaseKnown: opts.ResumeToken == "",
+	}
+
+	// Ask claude what it runs with, before the first turn. Both answers are
+	// best effort: a write that fails means claude has already exited, and
+	// the first Send reports how.
+	_ = s.writeLine(claudeControlRequest(claudeSettingsRequest, "get_settings"))
+	if !s.costBaseKnown {
+		_ = s.writeLine(claudeControlRequest(claudeUsageRequest, "get_usage"))
+	}
+	return s, nil
+}
+
+// Request ids for the control requests a session sends at start.
+const (
+	claudeSettingsRequest = "ynh-get-settings"
+	claudeUsageRequest    = "ynh-get-usage"
+)
+
+// claudeControlRequest returns one stream-json control request line.
+func claudeControlRequest(id, subtype string) []byte {
+	data, _ := json.Marshal(map[string]any{
+		"type":       "control_request",
+		"request_id": id,
+		"request":    map[string]string{"subtype": subtype},
+	})
+	return append(data, '\n')
 }
 
 // newClaudeSessionID returns a fresh RFC 4122 version-4 UUID string, the
@@ -149,6 +177,17 @@ type claudeSession struct {
 	wantMode string
 	waited   bool
 	waitErr  error
+
+	// effort is the reasoning effort claude reports it applies, once its
+	// get_settings answer arrives. Init does not carry it.
+	effort string
+	// total_cost_usd is a running total for the process, not a per-turn
+	// figure: each result carries the total so far, and a resumed session
+	// may start from the total its transcript saved. costBase is the part of
+	// that total already accounted for, so a turn's cost is the difference.
+	costBase      float64
+	costBaseKnown bool
+	costSeen      bool
 }
 
 // wait reaps the claude process once; later calls return the first result.
@@ -198,6 +237,34 @@ type claudeOutputEvent struct {
 	// Result is the result event's summary text; on an error result it is the
 	// failure message.
 	Result json.RawMessage `json:"result,omitempty"`
+	// TotalCostUSD is the result event's running cost for this process.
+	TotalCostUSD json.RawMessage `json:"total_cost_usd,omitempty"`
+	// Response is a control_response event's body.
+	Response json.RawMessage `json:"response,omitempty"`
+}
+
+// claudeControlResponse is the body of a control_response event, holding the
+// fields of the get_settings and get_usage answers ynh reads.
+type claudeControlResponse struct {
+	Subtype   string `json:"subtype"`
+	RequestID string `json:"request_id"`
+	Response  struct {
+		Applied *struct {
+			Effort *string `json:"effort"`
+		} `json:"applied"`
+		Session *struct {
+			TotalCostUSD *float64 `json:"total_cost_usd"`
+		} `json:"session"`
+	} `json:"response"`
+}
+
+// rawFloat returns raw as a number and true when it is a JSON number.
+func rawFloat(raw json.RawMessage) (float64, bool) {
+	var f float64
+	if len(raw) == 0 || json.Unmarshal(raw, &f) != nil {
+		return 0, false
+	}
+	return f, true
 }
 
 // claudeAuthError is the error code claude puts on the assistant event it
@@ -281,7 +348,11 @@ func (s *claudeSession) Send(msg string) error {
 	if err != nil {
 		return err
 	}
-	data = append(data, '\n')
+	return s.writeLine(append(data, '\n'))
+}
+
+// writeLine writes one NDJSON line to claude's stdin.
+func (s *claudeSession) writeLine(data []byte) error {
 	if _, err := s.stdin.Write(data); err != nil {
 		// A write fails when claude has already exited, as it does when it
 		// refuses to start. How it exited is the useful error.
@@ -291,6 +362,55 @@ func (s *claudeSession) Send(msg string) error {
 		return err
 	}
 	return nil
+}
+
+// applyControlResponse takes what ynh reads from claude's answers to the
+// control requests sent at start.
+func (s *claudeSession) applyControlResponse(raw json.RawMessage) {
+	var r claudeControlResponse
+	if len(raw) == 0 || json.Unmarshal(raw, &r) != nil || r.Subtype != "success" {
+		// An older claude may not know the request. Nothing is reported.
+		return
+	}
+	switch r.RequestID {
+	case claudeSettingsRequest:
+		if a := r.Response.Applied; a != nil && a.Effort != nil {
+			s.effort = *a.Effort
+		}
+	case claudeUsageRequest:
+		// Only before the first result: after it the base has been taken
+		// from that result instead.
+		if sess := r.Response.Session; sess != nil && sess.TotalCostUSD != nil && !s.costSeen {
+			s.costBase = *sess.TotalCostUSD
+			s.costBaseKnown = true
+		}
+	}
+}
+
+// recordCost turns a result's running total into this turn's cost.
+func (s *claudeSession) recordCost(raw json.RawMessage, turn *Turn) {
+	total, ok := rawFloat(raw)
+	if !ok {
+		return
+	}
+	s.costSeen = true
+	if !s.costBaseKnown {
+		// A resumed session whose starting total never arrived. This
+		// result's total includes turns already counted before the resume,
+		// so it cannot be split; it becomes the base and the turn reports
+		// no cost rather than counting earlier turns twice.
+		s.costBase, s.costBaseKnown = total, true
+		return
+	}
+	cost := total - s.costBase
+	if cost < 0 {
+		// The running total was reset (claude's /clear does this), so the
+		// whole of it is new.
+		cost = total
+	}
+	s.costBase = total
+	turn.CostUSD = cost
+	turn.CostReported = true
 }
 
 // Next reads output events until the worker completes the current turn.
@@ -313,6 +433,9 @@ func (s *claudeSession) Next() (Turn, error) {
 		}
 
 		switch ev.Type {
+		case "control_response":
+			s.applyControlResponse(ev.Response)
+
 		case "system":
 			if err := claudeModeMismatch(ev, s.wantMode); err != nil {
 				// Stop it now: left running, it would work through the turn
@@ -353,6 +476,10 @@ func (s *claudeSession) Next() (Turn, error) {
 			if err := claudeTurnError(ev, apiError, turn); err != nil {
 				return Turn{}, err
 			}
+			// Claude's usage record always carries cache_read_input_tokens.
+			turn.CacheReported = turn.UsageReported
+			turn.Effort = s.effort
+			s.recordCost(ev.TotalCostUSD, &turn)
 			return turn, nil
 
 			// All other types (system, tool_use, tool_result, stream_event, etc.)

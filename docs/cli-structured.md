@@ -171,4 +171,11 @@ level the worker ran with. Absent means none. An older ynh rejects
 `--auto-approve` as an unknown flag, so a consumer that passes it checks
 `capabilities` first.
 
+The `agent run` result also carries `effort` and, under `consumed`,
+`input_tokens`, `output_tokens`, `cache_read_tokens` and `cost_usd`. They were
+added as optional fields without a capabilities bump, so a consumer detects
+them by presence, not by version. Each is absent when the backend did not
+report it; a consumer must not read an absent `cost_usd` as zero. See
+[Agent](agent.md#cost-the-token-split-and-effort).
+
 **Error envelope evolution.** The current emission is `{"error": {"code": "...", "message": "..."}}` (the `code` values listed above are the closed enum). Additive fields `category` (coarse routing class), `retryable` (bool), and `hint` (human guidance) are reserved and may appear on a future capabilities bump — consumers must tolerate either shape today.

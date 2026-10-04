@@ -71,6 +71,18 @@ type Turn struct {
 	// this turn, even one of all zeros. A zero Usage alone cannot tell "the
 	// model consumed nothing" from "this backend does not report usage".
 	UsageReported bool
+	// CacheReported is true when that usage record carries a cache-read
+	// count, so Usage.CacheTokens is a measurement rather than a default.
+	CacheReported bool
+	// CostUSD is what the vendor reported this turn cost, in US dollars.
+	// It is meaningful only when CostReported: ynh never prices tokens itself,
+	// and a zero for a backend that reports no cost would read as "free".
+	CostUSD      float64
+	CostReported bool
+	// Effort is the reasoning effort the worker reported it runs with, once
+	// the backend has said. Empty means the backend has not reported one,
+	// not that the worker runs without one.
+	Effort string
 }
 
 // Usage tracks token consumption for a turn.

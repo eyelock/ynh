@@ -357,6 +357,39 @@ Two fields earn their place in a batch of a hundred runs:
   run that changed nothing, and a run that rewrote forty files nobody asked
   about, are both findings.
 
+### Cost, the token split and effort
+
+Comparing runs (does this lane need a bigger model, or less effort, and what
+does each cost?) needs more than the token total. Each of these is **absent
+when the backend did not report it**, never zero, because a zero cost would
+read as "free":
+
+| Field | What it holds |
+|---|---|
+| `consumed.tokens` | Input plus output tokens. Cache reads are not included. |
+| `consumed.input_tokens`, `consumed.output_tokens` | The split behind `tokens`. |
+| `consumed.cache_read_tokens` | Tokens read from the prompt cache, beside the total rather than in it. |
+| `consumed.cost_usd` | The cost the backend reported, summed over the run. ynh never prices tokens itself. |
+| `effort` | The reasoning effort the worker reported it ran with. Never inferred from the model name. |
+
+All of them count plan-phase turns, as `tokens` does, and carry across
+`--resume` through the checkpoint.
+
+What each backend reports today:
+
+| Backend | Split | Cache reads | Cost | Effort |
+|---|---|---|---|---|
+| `claude` | yes | yes | yes | yes |
+| `codex` | yes | no | no | no |
+| `cursor` | when its output carries usage | when its output carries usage | no | no |
+
+Claude Code reports cost as a running total for the worker process, which a
+resumed session may continue from where its transcript left off. ynh takes
+each turn's cost as the difference, so nothing is counted twice across a
+resume. The effort is the one Claude Code says it applies at runtime, after
+flags, settings and environment, so it is reported but not set: ynh passes no
+effort to the worker.
+
 ### Pinning a run to a toolchain
 
 `harness.sha` is the resolved commit the harness was installed from. `version`
