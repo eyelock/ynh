@@ -88,6 +88,13 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 			}
 			opts.Sandbox = args[i]
 
+		case "--auto-approve":
+			i++
+			if i >= len(args) {
+				return cliError(stderr, false, errCodeInvalidInput, "--auto-approve requires a value (edits or all)")
+			}
+			opts.AutoApprove = args[i]
+
 		case "--model":
 			i++
 			if i >= len(args) {

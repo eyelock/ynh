@@ -368,11 +368,21 @@ enforce containment, and it never claims to.
 For a factory this is not a caveat, it is a **prerequisite**. A loop that runs
 unattended, proposes changes and touches credentials needs a container and an
 egress policy that the operator owns [8]. That is not optional hardening to be
-scheduled later — an unattended agent without it is an unattended agent with
+scheduled later: an unattended agent without it is an unattended agent with
 your credentials on an open network. `--sandbox` may hand the request to a
 sandbox you installed; where a backend cannot honour it, ynh fails rather than
 proceeding unsandboxed. A containment control that cannot be applied is an
 error, not a warning.
+
+ynh still does not contain or isolate a worker, and by default it passes no
+permission flag: the worker gets what the vendor CLI and the project grant it.
+`ynh agent run --auto-approve edits|all` lets a worker act without prompting,
+and it exists for exactly the runs described above, inside containment the
+operator owns (container, egress policy, diff gate, human review). Used outside
+such containment, it hands an unattended agent your credentials. The project's
+own permission setting wins over the flag, a vendor refusal ends the run, and
+the level is recorded on the trajectory. See
+[Permissions](agent.md#permissions-and-auto-approve).
 
 One property is worth relying on when you build the pipeline around it:
 **environment parity**. There is no TTY-dependent behaviour, exactly one

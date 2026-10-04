@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/agent/trajectory.schema.json",
   "title": "ynh agent run \u2014 trajectory event",
   "description": "One line of the NDJSON trajectory emitted by `ynh agent run --emit-jsonl`. Each line is a complete JSON object; the file as a whole is not JSON. Validate line by line against this schema.\n\nThis is a discriminated union on `type`, rather than one schema per event, because a consumer reads a stream of heterogeneous events and must validate whatever arrives next. A directory of per-event files would make the consumer choose the schema first, which is the job the discriminator already does.\n\nUnknown event types must be tolerated: new kinds are added additively and, per docs/cli-structured.md, consumers must not fail on members they do not know.",
-  "x-capabilities": "0.8",
+  "x-capabilities": "0.9",
   "$defs": {
     "Timestamp": {
       "type": "string",
@@ -83,6 +83,11 @@
             "model": {
               "type": "string"
             },
+            "auto_approve": {
+              "type": "string",
+              "enum": ["edits", "all"],
+              "description": "The --auto-approve level the worker was granted: edits approves file edits only, all approves everything. Absent means none, and no permission flag was passed to the worker."
+            },
             "ynh_version": {
               "type": "string"
             },
@@ -159,6 +164,11 @@
             "pending_approval": {
               "type": "string",
               "description": "An approval the previous session was waiting on when it stopped."
+            },
+            "auto_approve": {
+              "type": "string",
+              "enum": ["edits", "all"],
+              "description": "The --auto-approve level this resumed process was granted. Not restored from the checkpoint, so it can differ from the level the session started with. Absent means none."
             }
           },
           "required": [

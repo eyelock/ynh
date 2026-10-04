@@ -59,6 +59,10 @@ type RunOptions struct {
 	Backend string
 	// Sandbox is "srt" or "none". Defaults to "none".
 	Sandbox string
+	// AutoApprove is "", "edits" or "all". Empty passes no permission flag to
+	// the worker. Set per run only: it is not read from the harness manifest
+	// and not restored on resume, so the operator re-grants it every time.
+	AutoApprove string
 	// Model overrides the worker's default model. Empty means backend default.
 	Model string
 
@@ -175,12 +179,19 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	if err := validateSandbox(opts.Sandbox, opts.Backend); err != nil {
 		return result, err
 	}
+	if err := validateAutoApprove(opts.AutoApprove, opts.Backend); err != nil {
+		return result, err
+	}
 	if opts.WorktreeDir == "" {
 		var err error
 		opts.WorktreeDir, err = os.Getwd()
 		if err != nil {
 			return result, fmt.Errorf("resolving working directory: %w", err)
 		}
+	}
+	// The project's own permission choice wins over a run-time grant.
+	if err := checkProjectPermissions(opts.AutoApprove, opts.Backend, opts.WorktreeDir); err != nil {
+		return result, err
 	}
 
 	result.Worktree = opts.WorktreeDir
@@ -425,18 +436,20 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			RestoredTurns:   budget.Turns(),
 			RestoredTokens:  budget.Tokens(),
 			PendingApproval: resumeCP.PendingApproval,
+			AutoApprove:     opts.AutoApprove,
 		}); emitErr != nil {
 			return result, fmt.Errorf("writing trajectory: %w", emitErr)
 		}
 	} else {
 		start := SessionStartData{
-			SessionID:  sessionID,
-			Harness:    harnessName,
-			Backend:    wb.Name(),
-			Task:       opts.Task,
-			Model:      opts.Model,
-			YnhVersion: config.Version,
-			BaseCommit: baseCommit(opts.WorktreeDir),
+			SessionID:   sessionID,
+			Harness:     harnessName,
+			Backend:     wb.Name(),
+			Task:        opts.Task,
+			Model:       opts.Model,
+			AutoApprove: opts.AutoApprove,
+			YnhVersion:  config.Version,
+			BaseCommit:  baseCommit(opts.WorktreeDir),
 			Budgets: &BudgetLimits{
 				MaxTurns:  opts.MaxTurns,
 				MaxTokens: opts.MaxTokens,
@@ -460,6 +473,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	result.SessionDir = sessionDir
 	result.Backend = wb.Name()
 	result.Model = opts.Model
+	result.AutoApprove = opts.AutoApprove
 	// opts.HarnessName, not harnessName: the latter is "(none)" for display in
 	// the trajectory when no harness was given, and a structured consumer
 	// reading a harness literally named "(none)" would be worse served than by
@@ -521,6 +535,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		WorktreeDir: opts.WorktreeDir,
 		ConfigPath:  configPath,
 		Sandbox:     opts.Sandbox,
+		AutoApprove: opts.AutoApprove,
 		Model:       opts.Model,
 		ResumeToken: resumeToken,
 		Env:         workerEnv,
@@ -680,7 +695,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			}
 			if err := sess.Send(planMsg); err != nil {
 				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
-				return result, &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("sending plan request: %v", err)}
+				return result, workerTurnExit(err, fmt.Sprintf("sending plan request: %v", err))
 			}
 			planTurn, err := sess.Next()
 			if err == nil {
@@ -808,7 +823,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 
 	if err := sess.Send(firstMsg); err != nil {
 		_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
-		return result, &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("sending first message: %v", err)}
+		return result, workerTurnExit(err, fmt.Sprintf("sending first message: %v", err))
 	}
 
 	for {
@@ -973,7 +988,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			_ = traj.Emit(KindFeedbackSent, turnN, feedback)
 			if err := sess.Send(feedback); err != nil {
 				_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
-				return result, &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("sending feedback turn %d: %v", turnN, err)}
+				return result, workerTurnExit(err, fmt.Sprintf("sending feedback turn %d: %v", turnN, err))
 			}
 
 			// ── Checkpoint the completed turn ──────────────────────────────────

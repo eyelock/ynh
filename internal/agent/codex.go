@@ -24,28 +24,13 @@ func (b *CodexBackend) Start(ctx context.Context, opts StartOptions) (WorkerSess
 		return nil, fmt.Errorf("codex not found on PATH: %w", err)
 	}
 
-	// Resume token = codex session id. codex persists session rollouts and
-	// resumes them via `codex exec resume <id>`. The id is not known up front
-	// (codex assigns it), so it is captured from the --json stream on the first
-	// turn (see codexSession.Next) and only then becomes available to persist.
-	var args []string
-	if opts.ResumeToken != "" {
-		args = []string{"exec", "resume", opts.ResumeToken, "--json"}
-	} else {
-		args = []string{"exec", "--json"}
-	}
-	if opts.Model != "" {
-		args = append(args, "--model", opts.Model)
-	}
-
-	cmd := exec.CommandContext(ctx, codexBin, args...)
+	cmd := exec.CommandContext(ctx, codexBin, buildCodexArgs(opts)...)
 	if opts.WorktreeDir != "" {
 		cmd.Dir = opts.WorktreeDir
 	}
 	cmd.Env = workerEnvFor(opts.Env)
-	if opts.Stderr != nil {
-		cmd.Stderr = opts.Stderr
-	}
+	tail := &stderrTail{}
+	cmd.Stderr = stderrSink(opts.Stderr, tail)
 
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
@@ -68,7 +53,32 @@ func (b *CodexBackend) Start(ctx context.Context, opts StartOptions) (WorkerSess
 		stdin:     stdinPipe,
 		scanner:   scanner,
 		sessionID: opts.ResumeToken,
+		stderr:    tail,
 	}, nil
+}
+
+// buildCodexArgs constructs the codex exec arguments.
+func buildCodexArgs(opts StartOptions) []string {
+	// Resume token = codex session id. codex persists session rollouts and
+	// resumes them via `codex exec resume <id>`. The id is not known up front
+	// (codex assigns it), so it is captured from the --json stream on the first
+	// turn (see codexSession.Next) and only then becomes available to persist.
+	var args []string
+	if opts.ResumeToken != "" {
+		args = []string{"exec", "resume", opts.ResumeToken, "--json"}
+	} else {
+		args = []string{"exec", "--json"}
+	}
+	if opts.Model != "" {
+		args = append(args, "--model", opts.Model)
+	}
+	// codex has no edits-only mode (its sandbox modes govern commands), so
+	// validateAutoApprove admits only "all" here. Without --auto-approve no
+	// approval or sandbox flag is passed.
+	if opts.AutoApprove == AutoApproveAll {
+		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
+	}
+	return args
 }
 
 // codex NDJSON input shape.
@@ -124,6 +134,21 @@ type codexSession struct {
 	stdin     io.WriteCloser
 	scanner   *bufio.Scanner
 	sessionID string
+	stderr    *stderrTail
+	waited    bool
+	waitErr   error
+}
+
+// wait reaps the codex process once; later calls return the first result.
+func (s *codexSession) wait() error {
+	if s.cmd == nil {
+		return nil
+	}
+	if !s.waited {
+		s.waitErr = s.cmd.Wait()
+		s.waited = true
+	}
+	return s.waitErr
 }
 
 // ResumeToken returns the codex session id once captured from the event
@@ -139,8 +164,15 @@ func (s *codexSession) Send(msg string) error {
 		return err
 	}
 	data = append(data, '\n')
-	_, err = s.stdin.Write(data)
-	return err
+	if _, err := s.stdin.Write(data); err != nil {
+		// A write fails when codex has already exited, as it does when it
+		// refuses to start. How it exited is the useful error.
+		if exitErr := exitedWorkerError("codex", s.wait(), s.stderr); exitErr != io.EOF {
+			return exitErr
+		}
+		return err
+	}
+	return nil
 }
 
 // Next reads events until the codex subprocess signals end-of-turn.
@@ -203,15 +235,21 @@ func (s *codexSession) Next() (Turn, error) {
 	if err := s.scanner.Err(); err != nil {
 		return Turn{}, fmt.Errorf("reading codex output: %w", err)
 	}
-	return Turn{}, io.EOF
+	// stdout closed: codex has exited. A non-zero exit is codex refusing or
+	// failing, and its stderr says why.
+	return Turn{}, exitedWorkerError("codex", s.wait(), s.stderr)
 }
 
 // Close terminates the codex subprocess cleanly.
 func (s *codexSession) Close() error {
+	if s.waited {
+		// Next already reaped the process and reported how it ended.
+		return nil
+	}
 	if err := s.stdin.Close(); err != nil {
 		_ = s.cmd.Process.Kill()
-		_ = s.cmd.Wait()
+		_ = s.wait()
 		return err
 	}
-	return s.cmd.Wait()
+	return s.wait()
 }

@@ -2,9 +2,12 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"os/exec"
 	"strings"
+	"sync"
 )
 
 // WorkerBackend abstracts over different vendor agent CLIs.
@@ -42,6 +45,9 @@ type StartOptions struct {
 	ConfigPath string
 	// Sandbox is "srt" or "none".
 	Sandbox string
+	// AutoApprove is "", "edits" or "all": the --auto-approve level, already
+	// validated for this backend. Empty passes no permission flag at all.
+	AutoApprove string
 	// Model overrides the default model. Empty means backend default.
 	Model string
 	// ResumeToken, when non-empty, starts the worker in resume mode against a
@@ -132,5 +138,71 @@ func unmeteredTurn(backend string, t Turn) error {
 	return &WorkerError{
 		Backend: backend,
 		Message: fmt.Sprintf("the response consumed no tokens, so the model did not write it: %q", content),
+	}
+}
+
+// stderrTail keeps the last part of a worker's stderr while it is also passed
+// through to the operator. A vendor CLI that refuses to start (bypass
+// permissions as root, a mode disabled by managed policy) says why on stderr
+// and exits; without the tail the run would end as "worker exited" with the
+// reason scrolled past.
+type stderrTail struct {
+	mu  sync.Mutex
+	buf []byte
+}
+
+const stderrTailMax = 4096
+
+func (t *stderrTail) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.buf = append(t.buf, p...)
+	if over := len(t.buf) - stderrTailMax; over > 0 {
+		t.buf = append(t.buf[:0], t.buf[over:]...)
+	}
+	return len(p), nil
+}
+
+// String returns the retained stderr, trimmed, starting at a line boundary
+// when the start was cut off.
+func (t *stderrTail) String() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	s := string(t.buf)
+	if len(t.buf) == stderrTailMax {
+		if _, rest, ok := strings.Cut(s, "\n"); ok {
+			s = rest
+		}
+	}
+	return strings.TrimSpace(s)
+}
+
+// stderrSink returns the writer a worker subprocess's stderr goes to: the
+// operator's stream, if any, and the tail.
+func stderrSink(operator io.Writer, tail *stderrTail) io.Writer {
+	if operator == nil {
+		return tail
+	}
+	return io.MultiWriter(operator, tail)
+}
+
+// exitedWorkerError classifies a worker process that ended. A clean exit is
+// io.EOF, as before. A non-zero exit is the vendor refusing or failing, and
+// its own words on stderr are the reason.
+func exitedWorkerError(backend string, waitErr error, tail *stderrTail) error {
+	if waitErr == nil {
+		return io.EOF
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(waitErr, &exitErr) {
+		return fmt.Errorf("%s: waiting for worker: %w", backend, waitErr)
+	}
+	var stderr string
+	if tail != nil {
+		stderr = tail.String()
+	}
+	return &WorkerError{
+		Backend: backend,
+		Message: firstNonBlank(stderr, "exited with "+exitErr.String()+" and no message"),
 	}
 }

@@ -73,3 +73,30 @@ func cmdAgentRunTo(t *testing.T, args []string) error {
 	t.Helper()
 	return cmdAgentRun(args, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 }
+
+func TestCmdAgentRun_AutoApproveRequiresValue(t *testing.T) {
+	err := cmdAgentRunTo(t, []string{"--task", "t", "--auto-approve"})
+	if err == nil || !strings.Contains(err.Error(), "--auto-approve requires a value") {
+		t.Fatalf("expected --auto-approve value-required, got: %v", err)
+	}
+}
+
+// A level the backend cannot honour fails before any run starts.
+func TestCmdAgentRun_AutoApproveValidatedBeforeTheRun(t *testing.T) {
+	tests := []struct {
+		args    []string
+		wantSub string
+	}{
+		{[]string{"--task", "t", "--auto-approve", "sometimes"}, "unknown --auto-approve level"},
+		{[]string{"--task", "t", "--backend", "codex", "--auto-approve", "edits"}, "codex cannot auto-approve edits only"},
+		{[]string{"--task", "t", "--backend", "cursor", "--auto-approve", "edits"}, "cursor cannot auto-approve edits only"},
+	}
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			err := cmdAgentRunTo(t, tt.args)
+			if err == nil || !strings.Contains(err.Error(), tt.wantSub) {
+				t.Fatalf("err = %v, want it to contain %q", err, tt.wantSub)
+			}
+		})
+	}
+}
