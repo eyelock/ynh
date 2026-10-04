@@ -79,6 +79,7 @@ Re-run `make install` after any code change you want to test.
 | Install from monorepo | [Install from a monorepo](composition.md#install-from-a-monorepo) |
 | Allow-list deny | [Allow-list — deny a source](composition.md#allow-list-deny-a-source) |
 | Allow-list allow | [Allow-list — allow a source](composition.md#allow-list-allow-a-source) |
+| Allow-list local path | [Allow-list: local paths are sources too](composition.md#allow-list-local-paths-are-sources-too) |
 
 ### Delegation
 
@@ -526,7 +527,7 @@ echo '{"default_vendor":"claude","allowed_remote_sources":[]}' > ~/.ynh/config.j
 # Any harness with remote includes should fail at both install and run time
 # (install my-dev first if not already installed)
 my-dev "hello" 2>&1 | grep Error
-# Expected: Error: resolving includes: include "github.com/eyelock/assistants": remote source ... is not in the allowed sources list (exit 1)
+# Expected: Error: resolving includes: include "github.com/eyelock/assistants": remote source ... is not in the allowed sources list (add "github.com/eyelock/assistants" to allowed_remote_sources) (exit 1)
 
 mv ~/.ynh/config.json.bak ~/.ynh/config.json
 ```

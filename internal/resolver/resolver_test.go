@@ -681,3 +681,63 @@ func TestLsRemoteFunc_ExactRefMatch(t *testing.T) {
 		t.Errorf("LsRemoteFunc returned shadow/main SHA — suffix-match bug not fixed")
 	}
 }
+
+// TestResolve_LocalIncludesAndAllowList: a "local" include inside the harness
+// is part of the harness and never checked; one at an absolute path is a
+// source like any other and must be listed.
+func TestResolve_LocalIncludesAndAllowList(t *testing.T) {
+	harnessDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(harnessDir, "bundled"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+
+	tests := []struct {
+		name    string
+		local   string
+		allow   []string
+		wantErr string
+	}{
+		{"bundled relative is not a source", "bundled", []string{}, ""},
+		{"absolute unlisted is refused", outside, []string{"github.com/eyelock/**"},
+			`include "` + outside + `": source "` + outside + `" is not in the allowed sources list (add "` + outside + `" to allowed_remote_sources)`},
+		{"absolute listed is allowed", outside, []string{outside}, ""},
+		{"absolute under a listed glob is allowed", outside, []string{filepath.Dir(outside) + "/*"}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &harness.Harness{
+				Name:     "local-incs",
+				Dir:      harnessDir,
+				Includes: []harness.Include{{GitSource: harness.GitSource{Local: tt.local}}},
+			}
+			_, err := Resolve(p, &config.Config{AllowedRemoteSources: tt.allow})
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("Resolve: %v", err)
+				}
+				return
+			}
+			if err == nil || err.Error() != tt.wantErr {
+				t.Fatalf("Resolve error = %v, want %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestResolve_RelativeGitIncludeMatchedAgainstHarnessDir: a relative git
+// include is resolved against the harness directory before matching, so the
+// allow-list entry is an absolute path.
+func TestResolve_RelativeGitIncludeMatchedAgainstHarnessDir(t *testing.T) {
+	harnessDir := t.TempDir()
+	p := &harness.Harness{
+		Name:     "rel-git",
+		Dir:      harnessDir,
+		Includes: []harness.Include{{GitSource: harness.GitSource{Git: "./inc"}}},
+	}
+	_, err := Resolve(p, &config.Config{AllowedRemoteSources: []string{"github.com/eyelock/**"}})
+	want := `(add "` + filepath.Join(harnessDir, "inc") + `" to allowed_remote_sources)`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("Resolve error = %v, want it to contain %q", err, want)
+	}
+}

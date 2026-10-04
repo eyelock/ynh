@@ -232,7 +232,7 @@ func cmdRun(args []string) error {
 
 		// Check delegates against remote source allow-list
 		for _, del := range p.DelegatesTo {
-			if err := cfg.CheckRemoteSource(del.Git); err != nil {
+			if err := cfg.CheckSource(del.Git, p.Dir); err != nil {
 				return fmt.Errorf("delegate %q: %w", del.Git, err)
 			}
 		}
