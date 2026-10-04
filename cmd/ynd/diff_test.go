@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -141,5 +143,85 @@ func TestCmdDiffSingleVendor(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "at least 2 vendors") {
 		t.Errorf("expected '2 vendors' error, got: %v", err)
+	}
+}
+
+// captureDiff runs cmdDiff and returns what it printed.
+func captureDiff(t *testing.T, args []string) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := os.Stdout
+	os.Stdout = w
+	runErr := cmdDiff(args)
+	os.Stdout = orig
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runErr != nil {
+		t.Fatalf("cmdDiff failed: %v", runErr)
+	}
+	return string(out)
+}
+
+// section returns the lines listed under heading within one pairing's block.
+func section(out, pairing, heading string) []string {
+	_, block, ok := strings.Cut(out, "=== "+pairing+" ===\n")
+	if !ok {
+		return nil
+	}
+	block, _, _ = strings.Cut(block, "\n\n")
+	var lines []string
+	in := false
+	for _, line := range strings.Split(block, "\n") {
+		if !strings.HasPrefix(line, "  ") {
+			in = line == heading
+			continue
+		}
+		if in {
+			lines = append(lines, strings.TrimSpace(line))
+		}
+	}
+	return lines
+}
+
+// Cursor writes .cursor/hooks.json and codex .codex/hooks.json. Both sit at
+// hooks.json under their config dir, so mapping the whole config dir paired
+// them and reported .cursor/hooks.json as "Different content", as though
+// codex had that file (#452). Hook config is each vendor's own file and is
+// reported as only in that vendor in every pairing, while a skill assembled
+// under each vendor's directory still pairs.
+func TestCmdDiff_VendorOnlyFilesAreNotPaired(t *testing.T) {
+	srcDir := createDiffHarness(t)
+	out := captureDiff(t, []string{srcDir, "claude", "cursor", "codex"})
+
+	cases := []struct {
+		pairing, heading, file string
+	}{
+		{"claude vs cursor", "Only in claude:", ".claude/hooks/hooks.json"},
+		{"claude vs cursor", "Only in cursor:", ".cursor/hooks.json"},
+		{"claude vs codex", "Only in claude:", ".claude/hooks/hooks.json"},
+		{"claude vs codex", "Only in codex:", ".codex/hooks.json"},
+		{"cursor vs codex", "Only in cursor:", ".cursor/hooks.json"},
+		{"cursor vs codex", "Only in codex:", ".codex/hooks.json"},
+		{"cursor vs codex", "Only in cursor:", ".cursor/mcp.json"},
+		{"claude vs cursor", "Identical:", ".claude/skills/diff-skill/SKILL.md"},
+		{"cursor vs codex", "Identical:", ".cursor/skills/diff-skill/SKILL.md"},
+	}
+	for _, c := range cases {
+		t.Run(c.pairing+"/"+c.file, func(t *testing.T) {
+			if !slices.Contains(section(out, c.pairing, c.heading), c.file) {
+				t.Errorf("%s: %s not listed under %q\n%s", c.pairing, c.file, c.heading, out)
+			}
+		})
+	}
+	if got := section(out, "cursor vs codex", "Different content:"); slices.Contains(got, ".cursor/hooks.json") {
+		t.Errorf(".cursor/hooks.json paired with codex's hooks file: %v", got)
 	}
 }

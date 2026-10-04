@@ -38,13 +38,35 @@ func canonicalPath(adapter vendor.Adapter, path string) string {
 	}
 	if cd := filepath.ToSlash(adapter.ConfigDir()); cd != "" {
 		if rest, ok := trimSegment(path, cd); ok {
-			return joinCanon(canonConfigDir, rest)
+			if canon, ok := canonicalArtifact(adapter, rest); ok {
+				return canon
+			}
 		}
 	}
 	if inst := filepath.ToSlash(adapter.InstructionsFile()); inst != "" && path == inst {
 		return canonInstruction
 	}
 	return path
+}
+
+// canonicalArtifact maps a path inside the config dir to its canonical form
+// when it sits in one of the vendor's artifact directories (skills, agents,
+// rules, commands), keyed by artifact type so the directory name each vendor
+// uses does not matter.
+//
+// Anything else under the config dir (hooks.json, mcp.json, settings) is that
+// vendor's own configuration file and keeps its literal path. Mapping the
+// whole config dir paired cursor's `.cursor/hooks.json` with codex's
+// `.codex/hooks.json` only because both happen to sit at the same relative
+// path, reporting a vendor-only file as "Different content" (#452), while
+// claude's `.claude/hooks/hooks.json` stayed "only in".
+func canonicalArtifact(adapter vendor.Adapter, rest string) (string, bool) {
+	for kind, dir := range adapter.ArtifactDirs() {
+		if inner, ok := trimSegment(rest, filepath.ToSlash(dir)); ok {
+			return joinCanon(canonConfigDir+"/"+kind, inner), true
+		}
+	}
+	return "", false
 }
 
 // trimSegment reports whether path sits under prefix, and returns the remainder.

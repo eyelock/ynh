@@ -177,6 +177,9 @@ how hooks and MCP config are laid out.
 `ynd diff` normalises each vendor's prefixes before comparing — `.claude/`,
 `.claude-plugin/` and `CLAUDE.md` against `.cursor/`, `.cursor-plugin/` and
 `.cursorrules` — which is what lets the two file sets intersect at all.
+Inside the config directory only artifacts (skills, agents, rules, commands)
+are paired. Hook and MCP config is each vendor's own file, so it is always
+listed as only in that vendor, never compared against another vendor's.
 
 ## Preview a harness with hooks
 
