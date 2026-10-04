@@ -15,13 +15,15 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
-// claudePluginJSON is the Claude Code plugin.json schema — identity fields only.
+// claudePluginJSON is the Claude Code plugin.json schema: identity fields,
+// plus a pointer to the plugin's hooks file when it carries one.
 type claudePluginJSON struct {
 	Name        string             `json:"name"`
 	Version     string             `json:"version"`
 	Description string             `json:"description,omitempty"`
 	Author      *plugin.AuthorInfo `json:"author,omitempty"`
 	Keywords    []string           `json:"keywords,omitempty"`
+	Hooks       string             `json:"hooks,omitempty"`
 }
 
 func init() {
@@ -215,7 +217,35 @@ func ClaudeHookEvent(canonical string) (string, bool) {
 	return native, ok
 }
 
+// GenerateHookConfig writes the session hook file, .claude/hooks/hooks.json.
+// `ynh run` launches Claude with --plugin-dir pointed at the assembled .claude/
+// directory, so this is hooks/hooks.json at that plugin's root, the default
+// location Claude Code reads (code.claude.com/docs/en/plugins-reference). It
+// serves `ynh run`, `ynd preview` and the agent loop. An exported plugin uses
+// GeneratePluginHookConfig instead.
 func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
+	data, err := claudeHookDocument(hooks)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{filepath.Join(".claude", "hooks", "hooks.json"): data}, nil
+}
+
+// GeneratePluginHookConfig writes the plugin hook file, hooks/claude.json at
+// the root of an exported plugin, which GeneratePluginManifest names in the
+// manifest's "hooks" field. The exporter uses it for `ynd export` and
+// marketplace packages (#468). The document is the same as the session file.
+func (c *Claude) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
+	data, err := claudeHookDocument(hooks)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{pluginHookFile(c.Name()): data}, nil
+}
+
+// claudeHookDocument renders canonical hooks in Claude Code's format, or nil
+// when none of them maps to a Claude event.
+func claudeHookDocument(hooks map[string][]plugin.HookEntry) ([]byte, error) {
 	if len(hooks) == 0 {
 		return nil, nil
 	}
@@ -295,30 +325,40 @@ func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[st
 	}
 	data = append(data, '\n')
 
-	// Write to hooks/hooks.json inside the plugin dir (.claude/).
-	// Claude Code discovers hooks from plugins via hooks/hooks.json,
-	// not from settings.json (which only supports the "agent" key in plugins).
-	return map[string][]byte{
-		filepath.Join(".claude", "hooks", "hooks.json"): data,
-	}, nil
+	// Claude Code reads plugin hooks from a hooks file, not from a plugin's
+	// settings.json (which only supports the "agent" key in plugins).
+	return data, nil
 }
 
 func (c *Claude) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {
+	data, err := claudePluginManifest(hj, outputDir)
+	if err != nil {
+		return nil, err
+	}
+	return map[string][]byte{
+		filepath.Join(c.PluginManifestDir(), "plugin.json"): data,
+	}, nil
+}
+
+// claudePluginManifest renders .claude-plugin/plugin.json. Copilot reads the
+// same file, so both adapters render it here and a merged package gets the
+// same bytes whichever vendor writes it last. The "hooks" field names Claude's
+// plugin hook file when outputDir carries one; Claude Code also loads a
+// default hooks/hooks.json, which ynh never writes into a plugin.
+func claudePluginManifest(hj *plugin.HarnessJSON, outputDir string) ([]byte, error) {
 	pj := &claudePluginJSON{
 		Name:        hj.Name,
 		Version:     hj.Version,
 		Description: hj.Description,
 		Author:      hj.Author,
 		Keywords:    hj.Keywords,
+		Hooks:       pluginHookPointer(outputDir, "claude"),
 	}
 	data, err := json.MarshalIndent(pj, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshalling plugin.json: %w", err)
 	}
-	data = append(data, '\n')
-	return map[string][]byte{
-		filepath.Join(c.PluginManifestDir(), "plugin.json"): data,
-	}, nil
+	return append(data, '\n'), nil
 }
 
 func (c *Claude) ExportArtifactDirs() map[string]string { return nil }

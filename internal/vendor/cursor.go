@@ -13,13 +13,15 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
-// cursorPluginJSON is the Cursor plugin.json schema — identity fields only.
+// cursorPluginJSON is the Cursor plugin.json schema: identity fields, plus a
+// pointer to the plugin's hooks file when it carries one.
 type cursorPluginJSON struct {
 	Name        string             `json:"name"`
 	Version     string             `json:"version"`
 	Description string             `json:"description,omitempty"`
 	Author      *plugin.AuthorInfo `json:"author,omitempty"`
 	Keywords    []string           `json:"keywords,omitempty"`
+	Hooks       string             `json:"hooks,omitempty"`
 }
 
 func init() {
@@ -147,17 +149,20 @@ func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[st
 	return map[string][]byte{filepath.Join(".cursor", "hooks.json"): data}, nil
 }
 
-// GeneratePluginHookConfig writes the plugin hook file, hooks/hooks.json at the
-// plugin root, the only place a Cursor plugin carries hooks
-// (cursor.com/docs/reference/plugins). The exporter uses it for `ynd export`
-// and marketplace packages. The document is the same as the project file;
-// only the path differs, and each context reads exactly one of them (#454).
+// GeneratePluginHookConfig writes the plugin hook file, hooks/cursor.json at
+// the plugin root, which GeneratePluginManifest names in the manifest's
+// "hooks" field. A Cursor plugin reads hooks/hooks.json by default, and a
+// manifest "hooks" path replaces that discovery
+// (cursor.com/docs/reference/plugins), so Cursor reads this file and nothing
+// else. The exporter uses it for `ynd export` and marketplace packages. The
+// document is the same as the project file; only the path differs, and each
+// context reads exactly one of them (#454, #469).
 func (c *Cursor) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
 	data, err := cursorHookDocument(hooks)
 	if err != nil || data == nil {
 		return nil, err
 	}
-	return map[string][]byte{filepath.Join("hooks", "hooks.json"): data}, nil
+	return map[string][]byte{pluginHookFile(c.Name()): data}, nil
 }
 
 // cursorHookDocument renders canonical hooks in Cursor's flat format, or nil
@@ -220,6 +225,7 @@ func (c *Cursor) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string
 		Description: hj.Description,
 		Author:      hj.Author,
 		Keywords:    hj.Keywords,
+		Hooks:       pluginHookPointer(outputDir, c.Name()),
 	}
 	data, err := json.MarshalIndent(pj, "", "  ")
 	if err != nil {

@@ -299,7 +299,8 @@ Key differences from runtime layout:
 - Codex is limited to skills only — agents, rules, commands, and delegates are excluded with warnings
 - Copilot is limited to skills and agents — rules and commands are excluded with warnings
 - Copilot reuses Claude's `.claude-plugin/plugin.json` schema (Copilot's plugin loader reads the same format)
-- `--merged` produces one directory with all vendor manifests; Claude and Copilot share the same `.claude-plugin/` manifest path harmlessly (identical schema)
+- `--merged` produces one directory with all vendor manifests; Claude and Copilot share the same `.claude-plugin/plugin.json`, which both render identically
+- Hooks go to `hooks/<vendor>.json` at the plugin root, named by the `"hooks"` field of that vendor's manifest; there is no shared `hooks/hooks.json` (see [Hooks: Config File Locations](hooks.md#config-file-locations))
 
 See [Export](tutorial/export.md) for a guided walkthrough.
 

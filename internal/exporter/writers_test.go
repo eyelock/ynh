@@ -140,7 +140,7 @@ func (exportManifestStub) GeneratePluginManifest(*plugin.HarnessJSON, string) (m
 	return map[string][]byte{".vendor/.plugin/plugin.json": nil}, nil
 }
 
-func (exportManifestStub) GenerateExportPluginManifest(*plugin.HarnessJSON) (map[string][]byte, error) {
+func (exportManifestStub) GenerateExportPluginManifest(*plugin.HarnessJSON, string) (map[string][]byte, error) {
 	return map[string][]byte{".plugin/plugin.json": nil}, nil
 }
 

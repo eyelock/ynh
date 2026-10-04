@@ -203,7 +203,7 @@ Key differences between runtime and export:
 - **Export** places artifacts at the plugin root (e.g., `skills/`) — the standard distributable layout
 - Claude export writes `AGENTS.md` for instructions, not `CLAUDE.md` (which would conflict with the installing project's own)
 - Codex export is limited to skills — agents, rules, commands, and delegates are excluded with warnings
-- Cursor hooks go to `.cursor/hooks.json` at runtime and to `hooks/hooks.json` at the plugin root in an export, never both: a project session reads only the first, a Cursor plugin only the second (see [Hooks: Config File Locations](hooks.md#config-file-locations))
+- Hooks go to the session path at runtime (`.claude/hooks/hooks.json`, `.cursor/hooks.json`, `.codex/hooks.json`) and to `hooks/<vendor>.json` at the plugin root in an export, named by the `"hooks"` field of that vendor's manifest, never both. A plugin never reads the session path, and there is no shared `hooks/hooks.json`, so a merged package never hands one vendor's format to another (see [Hooks: Config File Locations](hooks.md#config-file-locations))
 - Cursor MCP config goes to `.cursor/mcp.json` at runtime and to `mcp.json` at the plugin root in an export, never both, for the same reason (see [MCP Servers: Config File Locations](mcp.md#config-file-locations))
 - Codex is excluded from merged export mode (different marketplace format)
 - Copilot export is limited to skills and agents — rules and commands are excluded with warnings

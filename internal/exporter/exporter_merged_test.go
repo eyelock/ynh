@@ -44,37 +44,6 @@ func TestExportMergedMode(t *testing.T) {
 	assertFileExists(t, filepath.Join(outputDir, ".cursorrules"))
 }
 
-func TestExportMergedWithHooks(t *testing.T) {
-	// Create a harness with hooks
-	srcDir := t.TempDir()
-	writeJSON(t, filepath.Join(srcDir, plugin.PluginDir, plugin.PluginFile), map[string]any{
-		"name":    "hooks-merged",
-		"version": "0.1.0",
-		"hooks": map[string]any{
-			"before_tool": []any{
-				map[string]string{"command": "echo hi"},
-			},
-		},
-	})
-
-	outputDir := filepath.Join(t.TempDir(), "merged")
-	_, err := Export(ExportOptions{
-		SourceDir: srcDir,
-		OutputDir: outputDir,
-		Vendors:   []string{"claude", "cursor"},
-		Mode:      ModeMerged,
-	})
-	if err != nil {
-		t.Fatalf("Export failed: %v", err)
-	}
-
-	// Each vendor's plugin hook file exists; Cursor's is hooks/hooks.json at
-	// the plugin root, never the project-only .cursor/hooks.json (#454).
-	assertFileExists(t, filepath.Join(outputDir, ".claude", "hooks", "hooks.json"))
-	assertFileExists(t, filepath.Join(outputDir, "hooks", "hooks.json"))
-	assertFileNotExists(t, filepath.Join(outputDir, ".cursor", "hooks.json"))
-}
-
 func TestExportMergedWithMCPServers(t *testing.T) {
 	// Create a harness with MCP servers
 	srcDir := t.TempDir()

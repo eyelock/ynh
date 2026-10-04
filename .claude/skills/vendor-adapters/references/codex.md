@@ -36,6 +36,13 @@ plugin-root/
 
 - Repo-level: `<repo>/.codex/hooks.json`
 - User-level: `~/.codex/hooks.json`
+- Plugin: `hooks/hooks.json` at the plugin root by default; a `hooks` value (path, inline
+  object or array) replaces that default-file discovery. A legacy package declares it in
+  `.codex-plugin/plugin.json` (CONFIRMED 2026-10-04,
+  developers.openai.com/codex/plugins/build "Bundled MCP servers and lifecycle hooks").
+  Plugin hooks are non-managed and skipped until the user trusts them in `/hooks`.
+- ynh writes `.codex/hooks.json` for a session (run, preview, agent loop) and
+  `hooks/codex.json`, named by the manifest `hooks` field, in an export (#469)
 - Feature flag required: `[features] codex_hooks = true` in `config.toml`
 - Status: **Experimental**
 
@@ -146,6 +153,7 @@ All discrepancies noted on 2026-04-07 were fixed in the same PR (#23, "modernize
 - ynh writes MCP to `.mcp.json` (JSON) — OK
 - ynh includes Codex in marketplace generation (`.agents/plugins/marketplace.json`) and merged export — OK
 - ynh hook format matches Codex spec — OK
-- ynh hook path `.codex/hooks.json` matches Codex spec — OK
+- ynh hook path `.codex/hooks.json` matches Codex spec for a session: OK
+- ynh plugin hook path: an export used to write `.codex/hooks.json`, which a Codex plugin never reads; it now writes `hooks/codex.json` and names it in the manifest `hooks` field (#469)
 
 No known discrepancies at this time.

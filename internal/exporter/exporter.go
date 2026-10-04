@@ -34,9 +34,11 @@ type VendorExporter interface {
 }
 
 // PluginHookGenerator is implemented by a vendor whose plugin package carries
-// hooks at a different path from the one its project sessions read. Cursor is
-// the case: a project reads .cursor/hooks.json, a plugin hooks/hooks.json. An
-// export is a plugin, so it uses this path when the vendor offers one, and
+// hooks at a different path from the one its project sessions read. Claude,
+// Codex and Cursor all do: a session reads .claude/hooks/hooks.json,
+// .codex/hooks.json or .cursor/hooks.json, while a plugin carries
+// hooks/<vendor>.json, named by the vendor's manifest "hooks" field. An export
+// is a plugin, so it uses this path when the vendor offers one, and
 // GenerateHookConfig otherwise.
 type PluginHookGenerator interface {
 	GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)
@@ -58,7 +60,7 @@ type PluginMCPGenerator interface {
 // asks for its own layout explicitly rather than having the vendor guess it
 // from the files present (#471).
 type ExportManifestGenerator interface {
-	GenerateExportPluginManifest(hj *plugin.HarnessJSON) (map[string][]byte, error)
+	GenerateExportPluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error)
 }
 
 // PluginManifest returns a vendor's manifest files for an exported plugin
@@ -66,7 +68,7 @@ type ExportManifestGenerator interface {
 // GeneratePluginManifest otherwise. Marketplace builds use it too.
 func PluginManifest(adapter VendorExporter, hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {
 	if eg, ok := adapter.(ExportManifestGenerator); ok {
-		return eg.GenerateExportPluginManifest(hj)
+		return eg.GenerateExportPluginManifest(hj, outputDir)
 	}
 	return adapter.GeneratePluginManifest(hj, outputDir)
 }
@@ -227,6 +229,20 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 	skills := countDir(filepath.Join(outputDir, "skills"))
 	agents := countDir(filepath.Join(outputDir, "agents"))
 
+	// Hook config for each vendor, before the manifests: each vendor's
+	// manifest names its hooks file only when the file is there.
+	if len(p.Hooks) > 0 {
+		for _, v := range vendors {
+			adapter, err := vendor.Get(v)
+			if err != nil {
+				continue
+			}
+			if err := writeHookConfig(outputDir, adapter, p.Hooks); err != nil {
+				return nil, fmt.Errorf("writing hook config for %s: %w", v, err)
+			}
+		}
+	}
+
 	// Generate manifests and instructions for each vendor
 	var results []ExportResult
 
@@ -258,19 +274,6 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 		}
 		// Recount agents after delegate generation
 		agents = countDir(filepath.Join(outputDir, "agents"))
-	}
-
-	// Hook config for each vendor
-	if len(p.Hooks) > 0 {
-		for _, v := range vendors {
-			adapter, err := vendor.Get(v)
-			if err != nil {
-				continue
-			}
-			if err := writeHookConfig(outputDir, adapter, p.Hooks); err != nil {
-				return nil, fmt.Errorf("writing hook config for %s: %w", v, err)
-			}
-		}
 	}
 
 	// MCP config for each vendor

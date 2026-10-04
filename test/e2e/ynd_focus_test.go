@@ -124,20 +124,9 @@ func TestYnd_Export_WithFocus(t *testing.T) {
 
 	mustRunYnd(t, "export", harness, "-v", "claude", "-o", out, "--focus", "code-review", "--clean")
 
-	// Export writes hook configuration under <out>/claude/.claude/hooks/hooks.json
-	// (Claude's hooks namespace). Search for any hooks.json under the export tree
-	// to tolerate layout variation.
-	var hookFile string
-	_ = filepath.Walk(out, func(path string, info os.FileInfo, _ error) error {
-		if info != nil && !info.IsDir() && strings.HasSuffix(path, "hooks.json") {
-			hookFile = path
-		}
-		return nil
-	})
-	if hookFile == "" {
-		t.Fatalf("no hooks.json produced under %s", out)
-	}
-	body, err := os.ReadFile(hookFile)
+	// A Claude plugin export carries its hooks in <out>/claude/hooks/claude.json,
+	// which the plugin manifest names (#468).
+	body, err := os.ReadFile(filepath.Join(out, "claude", "hooks", "claude.json"))
 	if err != nil {
 		t.Fatalf("reading export hook config: %v", err)
 	}
