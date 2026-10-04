@@ -221,6 +221,18 @@ CLAUDE.md
 
 One physical directory with both vendor manifests — serves Claude and Cursor from the same files.
 
+Select Codex as well and the shared `agents/` stays for Claude, but Codex's manifest points only at `skills/`. The export says so, in the same words as the per-vendor Codex export above:
+
+```bash
+ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/export-merged-codex --merged -v claude,codex
+```
+
+Expected:
+```
+Exported for merged → /tmp/ynh-tutorial/export-merged-codex (2 skills, 1 agents)
+  warning: codex: skipping 1 agents (not supported)
+```
+
 ## Export with --clean
 
 ```bash

@@ -16,7 +16,7 @@ import (
 )
 
 // claudePluginJSON is the Claude Code plugin.json schema: identity fields,
-// plus a pointer to the plugin's hooks file when it carries one.
+// plus pointers to the plugin's hooks and MCP files when it carries them.
 type claudePluginJSON struct {
 	Name        string             `json:"name"`
 	Version     string             `json:"version"`
@@ -24,7 +24,15 @@ type claudePluginJSON struct {
 	Author      *plugin.AuthorInfo `json:"author,omitempty"`
 	Keywords    []string           `json:"keywords,omitempty"`
 	Hooks       string             `json:"hooks,omitempty"`
+	MCPServers  string             `json:"mcpServers,omitempty"`
 }
+
+// claudePluginMCPFile is where an exported Claude plugin carries its MCP
+// servers, named by the manifest's "mcpServers" field. A Claude plugin reads
+// .mcp.json at its root and what that field names
+// (code.claude.com/docs/en/plugins-reference); the root .mcp.json is Codex's
+// in a merged package, so Claude gets a file of its own (#481).
+var claudePluginMCPFile = filepath.Join("mcp", "claude.json")
 
 func init() {
 	Register(&Claude{})
@@ -348,7 +356,11 @@ func (c *Claude) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string
 // same file, so both adapters render it here and a merged package gets the
 // same bytes whichever vendor writes it last. The "hooks" field names Claude's
 // plugin hook file when outputDir carries one; Claude Code also loads a
-// default hooks/hooks.json, which ynh never writes into a plugin.
+// default hooks/hooks.json, which ynh never writes into a plugin. The
+// "mcpServers" field names Claude's plugin MCP file when outputDir carries
+// one; Claude Code loads a root .mcp.json first and merges the named file
+// over it. A session layout carries neither file, so its manifest names
+// neither.
 func claudePluginManifest(hj *plugin.HarnessJSON, outputDir string) ([]byte, error) {
 	pj := &claudePluginJSON{
 		Name:        hj.Name,
@@ -357,6 +369,7 @@ func claudePluginManifest(hj *plugin.HarnessJSON, outputDir string) ([]byte, err
 		Author:      hj.Author,
 		Keywords:    hj.Keywords,
 		Hooks:       pluginHookPointer(outputDir, "claude"),
+		MCPServers:  pluginFilePointer(outputDir, claudePluginMCPFile),
 	}
 	data, err := json.MarshalIndent(pj, "", "  ")
 	if err != nil {
@@ -413,27 +426,42 @@ func (c *Claude) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []
 	return data, nil
 }
 
+// GenerateMCPConfig writes the session MCP file, .claude/.mcp.json. `ynh run`
+// launches Claude with --plugin-dir pointed at the assembled .claude/
+// directory, so this is .mcp.json at that plugin's root, the default location
+// Claude Code reads. It serves `ynh run`, `ynd preview` and the agent loop.
+// An exported plugin uses GeneratePluginMCPConfig instead.
 func (c *Claude) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
+	data, err := claudeMCPDocument(servers)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{filepath.Join(".claude", ".mcp.json"): data}, nil
+}
+
+// GeneratePluginMCPConfig writes the plugin MCP file, mcp/claude.json at the
+// root of an exported plugin, which claudePluginManifest names in the
+// manifest's "mcpServers" field. The exporter uses it for `ynd export` and
+// marketplace packages (#481). The document is the same as the session file.
+func (c *Claude) GeneratePluginMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
+	data, err := claudeMCPDocument(servers)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{claudePluginMCPFile: data}, nil
+}
+
+// claudeMCPDocument renders MCP servers under Claude's "mcpServers" key, a
+// direct passthrough, or nil when there are none.
+func claudeMCPDocument(servers map[string]plugin.MCPServer) ([]byte, error) {
 	if len(servers) == 0 {
 		return nil, nil
 	}
-
-	// Claude uses .mcp.json with "mcpServers" key — direct passthrough
-	config := map[string]any{
-		"mcpServers": servers,
-	}
-
-	data, err := json.MarshalIndent(config, "", "  ")
+	data, err := json.MarshalIndent(map[string]any{"mcpServers": servers}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshalling MCP config: %w", err)
 	}
-	data = append(data, '\n')
-
-	// Write inside the plugin dir (.claude/) so Claude Code discovers it
-	// as a plugin-provided MCP server configuration.
-	return map[string][]byte{
-		filepath.Join(".claude", ".mcp.json"): data,
-	}, nil
+	return append(data, '\n'), nil
 }
 
 func launchClaude(configPath string, initialPrompt string, extraArgs []string) error {

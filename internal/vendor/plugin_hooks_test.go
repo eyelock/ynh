@@ -106,7 +106,8 @@ func TestPluginManifestHooksPointer(t *testing.T) {
 
 // Copilot reads .claude-plugin/plugin.json, the same file Claude writes. In a
 // merged package both adapters write it, so they must render the same bytes
-// or whichever writes last decides whether Claude's hooks pointer survives.
+// or whichever writes last decides whether Claude's hooks and MCP pointers
+// survive.
 func TestCopilotManifestMatchesClaude(t *testing.T) {
 	hj := &plugin.HarnessJSON{Name: "h", Version: "1.0.0", Description: "d", Keywords: []string{"k"}}
 	dir := t.TempDir()
@@ -116,6 +117,7 @@ func TestCopilotManifestMatchesClaude(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "hooks", "claude.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	writeTestFile(t, filepath.Join(dir, "mcp", "claude.json"))
 	key := filepath.Join(".claude-plugin", "plugin.json")
 	claude, err := (&Claude{}).GeneratePluginManifest(hj, dir)
 	if err != nil {

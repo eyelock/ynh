@@ -48,10 +48,11 @@ type PluginHookGenerator interface {
 
 // PluginMCPGenerator is implemented by a vendor whose plugin package carries
 // MCP servers at a different path from the one its project sessions read.
-// Cursor: a project reads .cursor/mcp.json, a plugin mcp.json (#470). Copilot:
-// a run dir carries .copilot/.mcp.json, a plugin .github/mcp.json (#471). An
-// export is a plugin, so it uses this path when the vendor offers one, and
-// GenerateMCPConfig otherwise.
+// Claude: a session reads .claude/.mcp.json, a plugin mcp/claude.json, named
+// by its manifest (#481). Cursor: a project reads .cursor/mcp.json, a plugin
+// mcp.json (#470). Copilot: a run dir carries .copilot/.mcp.json, a plugin
+// .github/mcp.json (#471). An export is a plugin, so it uses this path when
+// the vendor offers one, and GenerateMCPConfig otherwise.
 type PluginMCPGenerator interface {
 	GeneratePluginMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error)
 }
@@ -232,34 +233,44 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 	skills := countDir(filepath.Join(outputDir, "skills"))
 	agents := countDir(filepath.Join(outputDir, "agents"))
 
-	// Hook config for each vendor, before the manifests: each vendor's
-	// manifest names its hooks file only when the file is there. The scripts
-	// those hooks run are copied once, since the vendors share the root.
-	var warnings []string
-	if len(p.Hooks) > 0 {
-		wroteHooks := false
-		for _, v := range vendors {
-			adapter, err := vendor.Get(v)
-			if err != nil {
-				continue
-			}
+	result := ExportResult{
+		Vendor:    "merged",
+		OutputDir: outputDir,
+	}
+
+	// Hook and MCP config for each vendor, before the manifests: each
+	// vendor's manifest names its hooks and MCP files only when they are
+	// there (#482). The scripts those hooks run are copied once, since the
+	// vendors share the root. A vendor that loads less than the shared tree
+	// holds (Codex: skills only) gets the same note a per-vendor export
+	// prints (#488).
+	wroteHooks := false
+	for _, v := range vendors {
+		adapter, err := vendor.Get(v)
+		if err != nil {
+			continue
+		}
+		if len(p.Hooks) > 0 {
 			wrote, err := writeHookConfig(outputDir, adapter, p.Hooks)
 			if err != nil {
 				return nil, fmt.Errorf("writing hook config for %s: %w", v, err)
 			}
 			wroteHooks = wroteHooks || wrote
 		}
-		if wroteHooks {
-			w, err := copyHookScripts(p.Dir, outputDir, p.Hooks)
-			if err != nil {
-				return nil, err
+		if len(p.MCPServers) > 0 {
+			if err := writeMCPConfig(outputDir, adapter, p.MCPServers); err != nil {
+				return nil, fmt.Errorf("writing MCP config for %s: %w", v, err)
 			}
-			warnings = w
 		}
+		result.Warnings = append(result.Warnings, skippedArtifactWarnings(v, adapter, p, content)...)
 	}
-
-	// Generate manifests and instructions for each vendor
-	var results []ExportResult
+	if wroteHooks {
+		warnings, err := copyHookScripts(p.Dir, outputDir, p.Hooks)
+		if err != nil {
+			return nil, err
+		}
+		result.Warnings = append(result.Warnings, warnings...)
+	}
 
 	for _, v := range vendors {
 		adapter, err := vendor.Get(v)
@@ -282,7 +293,8 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 		}
 	}
 
-	// Delegates (Claude/Cursor only in merged mode)
+	// Delegates land in the shared agents/, read by every vendor whose
+	// manifest does not restrict it to skills.
 	if len(p.DelegatesTo) > 0 {
 		if err := ExportDelegates(outputDir, p.DelegatesTo, p.Dir); err != nil {
 			return nil, fmt.Errorf("exporting delegates: %w", err)
@@ -291,28 +303,9 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 		agents = countDir(filepath.Join(outputDir, "agents"))
 	}
 
-	// MCP config for each vendor
-	if len(p.MCPServers) > 0 {
-		for _, v := range vendors {
-			adapter, err := vendor.Get(v)
-			if err != nil {
-				continue
-			}
-			if err := writeMCPConfig(outputDir, adapter, p.MCPServers); err != nil {
-				return nil, fmt.Errorf("writing MCP config for %s: %w", v, err)
-			}
-		}
-	}
-
-	results = append(results, ExportResult{
-		Vendor:    "merged",
-		OutputDir: outputDir,
-		Skills:    skills,
-		Agents:    agents,
-		Warnings:  warnings,
-	})
-
-	return results, nil
+	result.Skills = skills
+	result.Agents = agents
+	return []ExportResult{result}, nil
 }
 
 func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
@@ -339,31 +332,7 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 		return result, err
 	}
 
-	// Warn about skipped artifact types when export uses a restricted set
-	if exportDirs := adapter.ExportArtifactDirs(); exportDirs != nil {
-		allDirs := adapter.ArtifactDirs()
-		skippedCounts := map[string]int{}
-		for artifactType := range allDirs {
-			if _, ok := exportDirs[artifactType]; ok {
-				continue
-			}
-			for _, rc := range content {
-				skippedCounts[artifactType] += countDir(filepath.Join(rc.BasePath, artifactType))
-			}
-		}
-		var parts []string
-		for _, artifactType := range []string{"agents", "rules", "commands"} {
-			if n := skippedCounts[artifactType]; n > 0 {
-				parts = append(parts, fmt.Sprintf("%d %s", n, artifactType))
-			}
-		}
-		if len(parts) > 0 {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("%s: skipping %s (not supported)", vendorName, joinParts(parts)))
-		}
-		if len(p.DelegatesTo) > 0 && !adapter.SupportsExportDelegates() {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("%s: skipping %d delegates (not supported)", vendorName, len(p.DelegatesTo)))
-		}
-	}
+	result.Warnings = skippedArtifactWarnings(vendorName, adapter, p, content)
 
 	// Instructions
 	if instructionsPath != "" {
@@ -413,6 +382,42 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 	result.Skills = countDir(filepath.Join(outputDir, "skills"))
 	result.Agents = countDir(filepath.Join(outputDir, "agents"))
 	return result, nil
+}
+
+// skippedArtifactWarnings notes the artifact types and delegates the harness
+// carries that vendorName's plugin does not load, when the vendor restricts
+// its export to a subset (Codex: skills only). A per-vendor export leaves
+// them out of the vendor's directory; a merged package keeps them in the
+// shared tree for the other vendors, but the vendor still does not read
+// them, so both say the same thing.
+func skippedArtifactWarnings(vendorName string, adapter VendorExporter, p *harness.Harness, content []resolver.ResolvedContent) []string {
+	exportDirs := adapter.ExportArtifactDirs()
+	if exportDirs == nil {
+		return nil
+	}
+	skippedCounts := map[string]int{}
+	for artifactType := range adapter.ArtifactDirs() {
+		if _, ok := exportDirs[artifactType]; ok {
+			continue
+		}
+		for _, rc := range content {
+			skippedCounts[artifactType] += countDir(filepath.Join(rc.BasePath, artifactType))
+		}
+	}
+	var warnings []string
+	var parts []string
+	for _, artifactType := range []string{"agents", "rules", "commands"} {
+		if n := skippedCounts[artifactType]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, artifactType))
+		}
+	}
+	if len(parts) > 0 {
+		warnings = append(warnings, fmt.Sprintf("%s: skipping %s (not supported)", vendorName, joinParts(parts)))
+	}
+	if len(p.DelegatesTo) > 0 && !adapter.SupportsExportDelegates() {
+		warnings = append(warnings, fmt.Sprintf("%s: skipping %d delegates (not supported)", vendorName, len(p.DelegatesTo)))
+	}
+	return warnings
 }
 
 // writeMCPConfig generates the vendor's plugin MCP config and writes it to the output directory.

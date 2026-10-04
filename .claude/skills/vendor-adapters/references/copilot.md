@@ -307,6 +307,16 @@ plugin, and Codex already writes `.mcp.json` into a merged package. Whether an
 installed plugin (rather than one loaded with `--plugin-dir`) reads it has not
 been hand-tested.
 
+The reference lists the legacy MCP sources as "`.mcp.json`, `.github/mcp.json`,
+or the `mcpServers` manifest field" (fetched 2026-10-04) and does not say how they
+combine. A Copilot-only export's `.claude-plugin/plugin.json` names no MCP file,
+so Copilot reads `.github/mcp.json`. In a package that also carries Claude, the
+shared manifest's `mcpServers` names Claude's `mcp/claude.json` (#481), whose
+entries lack `type` and `tools`, and a merged package that includes Codex also
+has Codex's `.mcp.json` (same format) at the root. Which of those an installed
+Copilot plugin loads, and whether it accepts entries without `type`, is
+**UNVERIFIED** (#499). Hand-test before relying on Copilot MCP from a merged package.
+
 **Never shell out to `copilot mcp add`**: it only writes user-level
 `~/.copilot/mcp-config.json` and has no flag to target the workspace file.
 

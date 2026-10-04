@@ -70,9 +70,11 @@ func TestExportMergedWithMCPServers(t *testing.T) {
 	}
 
 	// Each vendor's plugin MCP file exists, and no project-session file does:
+	// Claude's is mcp/claude.json, not .claude/.mcp.json (#481),
 	// Cursor's plugin file is mcp.json at the root (#470), Copilot's is
 	// .github/mcp.json at the root, and nothing lands under .copilot/ (#471).
-	assertFileExists(t, filepath.Join(outputDir, ".claude", ".mcp.json"))
+	assertFileExists(t, filepath.Join(outputDir, "mcp", "claude.json"))
+	assertFileNotExists(t, filepath.Join(outputDir, ".claude"))
 	assertFileExists(t, filepath.Join(outputDir, "mcp.json"))
 	assertFileNotExists(t, filepath.Join(outputDir, ".cursor", "mcp.json"))
 	assertFileExists(t, filepath.Join(outputDir, ".github", "mcp.json"))

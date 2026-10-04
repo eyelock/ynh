@@ -244,8 +244,12 @@ func (c *Copilot) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir strin
 //
 // The file is Claude's manifest, so both are rendered by claudePluginManifest:
 // in a merged package Claude and Copilot both write it, and a Copilot render
-// that differed would drop Claude's "hooks" pointer whenever Copilot wrote
-// last (#469). Copilot itself emits no hooks (see GenerateHookConfig).
+// that differed would drop Claude's "hooks" and "mcpServers" pointers whenever
+// Copilot wrote last (#469, #481). Copilot itself emits no hooks (see
+// GenerateHookConfig), and its MCP file, .github/mcp.json, is one of its
+// defaults, so a Copilot-only export names neither. In a package that also
+// carries Claude, the manifest's "mcpServers" names Claude's mcp/claude.json,
+// which Copilot reads too; see GeneratePluginMCPConfig.
 func (c *Copilot) GenerateExportPluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {
 	data, err := claudePluginManifest(hj, outputDir)
 	if err != nil {
@@ -348,6 +352,12 @@ func (c *Copilot) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[st
 // plugin reference). The other, .mcp.json, is where Codex keeps its own
 // config, so a merged package carrying both vendors would have one overwrite
 // the other. Same document as the run file; only the path differs (#471).
+//
+// The reference lists the manifest's "mcpServers" field as a third source
+// and does not say how the three combine. In a package that also carries
+// Claude, the shared manifest names Claude's mcp/claude.json, whose entries
+// lack the "type" field Copilot's own schema carries; which file an installed
+// Copilot plugin then loads has not been hand-tested (#499).
 func (c *Copilot) GeneratePluginMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
 	data, err := copilotMCPDocument(servers)
 	if err != nil || data == nil {

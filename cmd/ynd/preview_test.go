@@ -209,6 +209,19 @@ func TestCmdPreviewWithMCP(t *testing.T) {
 	if !strings.Contains(string(data), "test-server") {
 		t.Error("expected .mcp.json to contain test-server")
 	}
+
+	// A preview is a session layout: the plugin MCP file and the manifest
+	// pointer to it belong to an export only (#481).
+	if _, err := os.Stat(filepath.Join(outputDir, "mcp")); !os.IsNotExist(err) {
+		t.Errorf("expected no mcp/ in a preview, stat err = %v", err)
+	}
+	manifest, err := os.ReadFile(filepath.Join(outputDir, ".claude-plugin", "plugin.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(manifest), "mcpServers") {
+		t.Errorf("preview manifest must not name an MCP file:\n%s", manifest)
+	}
 }
 
 func TestCmdPreviewBareAGENTS(t *testing.T) {

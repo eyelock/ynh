@@ -26,7 +26,11 @@ each combines with its default differs (CONFIRMED 2026-10-04, plugins-reference
 - `hooks`: `.json` file path, inline object, or array of either. MERGES with
   `hooks/hooks.json`: the default file loads whenever it exists, even when the manifest
   names another. A hooks file wraps its event map in a top-level `"hooks"` key.
-- `mcpServers` — path to MCP config or inline object
+- `mcpServers`: `.json` file path, `.mcpb`/`.dxt` bundle path or URL, inline map, or
+  array of any of them. MERGES with `.mcp.json`: the root `.mcp.json` loads first, then
+  each declared shape in order, and a server name declared later replaces an earlier one.
+  A named `.json` file is read as an `mcpServers` map (top-level `"mcpServers"` key, as
+  in `.mcp.json`).
 - `lspServers` — path to LSP config or inline object
 - `outputStyles` — path to output styles
 - `userConfig` — user-configurable options (substituted into configs)
@@ -40,7 +44,7 @@ plugin-root/
   commands/<name>.md            (legacy skills)
   agents/<name>.md              (subagents)
   hooks/hooks.json              (hook config, default; ynh exports use hooks/claude.json via the manifest)
-  .mcp.json                     (MCP servers)
+  .mcp.json                     (MCP servers, default; ynh exports use mcp/claude.json via the manifest)
   .lsp.json                     (LSP servers)
   bin/                          (executables added to PATH)
   settings.json                 (only "agent" key supported)
@@ -76,6 +80,14 @@ command, http, prompt, agent
 ```
 
 ## MCP Format (.mcp.json at plugin root or project root)
+
+ynh writes this document to `.claude/.mcp.json` for a session (`ynh run` passes
+`.claude/` to `--plugin-dir`, so it is that plugin's root `.mcp.json`) and to
+`mcp/claude.json` in an exported plugin, named by the manifest's `mcpServers`
+(#481). An export never uses the root `.mcp.json`: Codex keeps its own there in a
+merged package, and Copilot reads it too. Because the root file loads first and
+merges, Claude in a merged package also sees Codex's `.mcp.json`; the two
+documents are byte-identical today, so the merge is a no-op.
 
 ```json
 {
