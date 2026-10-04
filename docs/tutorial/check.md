@@ -559,7 +559,11 @@ one that matters.
 
 ```bash
 ynh uninstall local/gate-demo
+ynh ls
+# Expected: No harnesses installed. (fresh-demo was uninstalled earlier)
+cd /tmp
 rm -rf /tmp/ynh-t20
+unset YNH_HOME
 ```
 
 ## What you learned

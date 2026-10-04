@@ -13,8 +13,9 @@ ynh uninstall local/with-vercel 2>/dev/null
 ynh uninstall local/full-stack 2>/dev/null
 ynh uninstall local/mixed 2>/dev/null
 ynh uninstall local/local-ref 2>/dev/null
+ynh uninstall local/with-bundled 2>/dev/null
 ynh uninstall local/pinned 2>/dev/null
-ynh uninstall local/david 2>/dev/null
+ynh uninstall github.com/eyelock/assistants/david 2>/dev/null
 
 mkdir -p /tmp/ynh-tutorial
 ```
@@ -565,6 +566,8 @@ mv ~/.ynh/config.json.bak ~/.ynh/config.json
 
 ## Clean up
 
+Every local-path install above has a `local/` id. The monorepo install does not: a harness installed from a Git URL takes its id from the repository, so `david` is `github.com/eyelock/assistants/david`.
+
 ```bash
 ynh uninstall local/my-dev 2>/dev/null
 ynh uninstall local/with-anthropic 2>/dev/null
@@ -572,9 +575,12 @@ ynh uninstall local/with-vercel 2>/dev/null
 ynh uninstall local/full-stack 2>/dev/null
 ynh uninstall local/mixed 2>/dev/null
 ynh uninstall local/local-ref 2>/dev/null
-ynh uninstall local/pinned 2>/dev/null
-ynh uninstall local/david 2>/dev/null
 ynh uninstall local/with-bundled 2>/dev/null
+ynh uninstall local/pinned 2>/dev/null
+ynh uninstall github.com/eyelock/assistants/david 2>/dev/null
+ynh ls
+# Expected: none of the harnesses above is listed
+rm -rf /tmp/ynh-tutorial
 ```
 
 ## What you learned

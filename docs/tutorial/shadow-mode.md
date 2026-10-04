@@ -167,6 +167,12 @@ Both commands also print a warning on stderr that the base commit keeps its
 manifest in `.ynh-plugin/`, which is deprecated. It does not affect the result:
 an old commit is read as it is, and nothing is written back to it.
 
+That install was only to show the problem, so remove it before going on:
+
+```bash
+ynh uninstall local/ynh-guide
+```
+
 At that commit the harness declared **no sensors at all** — they were added
 later. Had the base commit been three months further back, the sensors might
 have existed but with different commands.
@@ -309,11 +315,20 @@ for FIX in $(cat /tmp/shadow/candidates.txt); do
 done
 ```
 
-Clean up when finished:
+Clean up when finished. Remove every worktree the rig added, the base state from
+[Build the base state](#build-the-base-state) included, then the scratch directory.
+Run it from your own checkout, the one the worktrees were added to:
 
 ```bash
-git worktree remove --force /tmp/shadow/<name>
+git worktree remove --force /tmp/shadow/base
+for FIX in $(cat /tmp/shadow/candidates.txt); do
+  git worktree remove --force "/tmp/shadow/$FIX"
+done
+rm -rf /tmp/shadow
 ```
+
+`local/ynh-guide` was uninstalled when it had made its point, and the pinned
+harness is yours to keep, so nothing else is left installed.
 
 That loop is the whole rig. What it produces is a defensible `y`, its confidence
 interval, and a pile of graded patches. Compare `y` against the `y* = r/h` you
