@@ -130,6 +130,15 @@ Expected output includes `.cursor/hooks.json` with Cursor's format:
 
 Note: Cursor uses different event names (`beforeShellExecution` / `afterFileEdit` vs `PreToolUse` / `PostToolUse`), includes a `version: 1` key, and a flat structure without matchers or type wrappers.
 
+`.cursor/hooks.json` is the only hook file in the Cursor preview, because it is the one project path Cursor reads hooks from. There is no root `hooks/hooks.json`: that path belongs to a Cursor plugin, and `ynd export -v cursor` writes it there instead (see [Hooks: Config File Locations](../hooks.md#config-file-locations)). Check it:
+
+```bash
+ynd preview /tmp/ynh-tutorial/hook-harness -v cursor -o /tmp/ynh-tutorial/hook-harness-cursor
+find /tmp/ynh-tutorial/hook-harness-cursor -name hooks.json
+```
+
+Expected: exactly one line, ending in `.cursor/hooks.json`.
+
 ## Preview for Codex
 
 ```bash

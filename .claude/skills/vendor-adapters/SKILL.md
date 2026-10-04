@@ -194,7 +194,7 @@ converted only by `ynd migrate` and refused by every other command.
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Source:            |                                  |                                  |                                  |
 | plugin.json       | hooks/hooks.json (plugin)        | .codex/hooks.json                | hooks/hooks.json (plugin)        |
-|   hooks: {}       | .claude/settings.json (project)  | ~/.codex/hooks.json (user)       | .cursor/settings.json (project)  |
+|   hooks: {}       | .claude/settings.json (project)  | ~/.codex/hooks.json (user)       | .cursor/hooks.json (project)     |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Format:           | Three-level nesting:             | Three-level nesting:             | Flat format, same at both paths: |
 |                   | event > matcher > hooks[]        | event > matcher > hooks[]        | {event: [{command}]} — CONFIRMED |
@@ -505,8 +505,8 @@ not conflict with the project's own `CLAUDE.md`.
 |      |   (see internal/vendor/cursor.go,        |            |
 |      |    Cursor.TransformArtifact)              |            |
 | ---  | Cursor plugin hooks path: RESOLVED       | Cursor     |
-|      |   (writes both .cursor/hooks.json and    |            |
-|      |    hooks/hooks.json — same format/names)  |            |
+|      |   (.cursor/hooks.json in run assembly,   |            |
+|      |    hooks/hooks.json in export, #454)      |            |
 | ---  | Cursor plugin MCP path: RESOLVED         | Cursor     |
 |      |   (writes both .cursor/mcp.json and      |            |
 |      |    mcp.json at plugin root)                |            |

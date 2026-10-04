@@ -33,6 +33,15 @@ type VendorExporter interface {
 	GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error)
 }
 
+// PluginHookGenerator is implemented by a vendor whose plugin package carries
+// hooks at a different path from the one its project sessions read. Cursor is
+// the case: a project reads .cursor/hooks.json, a plugin hooks/hooks.json. An
+// export is a plugin, so it uses this path when the vendor offers one, and
+// GenerateHookConfig otherwise.
+type PluginHookGenerator interface {
+	GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)
+}
+
 // ExportMode controls the output layout.
 type ExportMode int
 
@@ -376,9 +385,13 @@ func writeMCPConfig(outputDir string, adapter VendorExporter, servers map[string
 	return nil
 }
 
-// writeHookConfig generates vendor-native hook config files and writes them to the output directory.
+// writeHookConfig generates the vendor's plugin hook config and writes it to the output directory.
 func writeHookConfig(outputDir string, adapter VendorExporter, hooks map[string][]plugin.HookEntry) error {
-	hookFiles, err := adapter.GenerateHookConfig(hooks)
+	generate := adapter.GenerateHookConfig
+	if pg, ok := adapter.(PluginHookGenerator); ok {
+		generate = pg.GeneratePluginHookConfig
+	}
+	hookFiles, err := generate(hooks)
 	if err != nil {
 		return fmt.Errorf("generating hook config: %w", err)
 	}

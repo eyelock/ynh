@@ -133,6 +133,24 @@ func TestCmdPreviewWithHooks(t *testing.T) {
 	}
 }
 
+// TestCmdPreviewCursorHooksOnlyWhereCursorReads locks #454: a Cursor project
+// session reads hooks from .cursor/hooks.json alone (cursor.com/docs/hooks),
+// so the preview of a run assembly carries that file and no root
+// hooks/hooks.json, which only a Cursor plugin reads.
+func TestCmdPreviewCursorHooksOnlyWhereCursorReads(t *testing.T) {
+	srcDir := createPreviewHarness(t)
+	outputDir := filepath.Join(t.TempDir(), "preview-cursor-hooks")
+
+	if err := cmdPreview([]string{srcDir, "-v", "cursor", "-o", outputDir}); err != nil {
+		t.Fatalf("cmdPreview failed: %v", err)
+	}
+
+	assertExists(t, filepath.Join(outputDir, ".cursor", "hooks.json"))
+	if _, err := os.Stat(filepath.Join(outputDir, "hooks")); !os.IsNotExist(err) {
+		t.Errorf("expected no root hooks/ in cursor preview, stat err = %v", err)
+	}
+}
+
 func TestCmdPreviewWithMCP(t *testing.T) {
 	srcDir := createPreviewHarness(t)
 	outputDir := filepath.Join(t.TempDir(), "preview-mcp")

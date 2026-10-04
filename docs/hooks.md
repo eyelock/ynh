@@ -82,6 +82,15 @@ Each vendor uses different event names and config file formats. **GitHub Copilot
 | Cursor | `.cursor/hooks.json` | Flat: event > hook array (with `"version": 1` required) |
 | Codex | `.codex/hooks.json` | Three-level nesting: event > matcher group > hook array (same structure as Claude) |
 
+Cursor reads hooks from a different file depending on how the harness reaches it, and ynh writes each file only where Cursor reads it:
+
+| Cursor output | Hook file | Why |
+|---------------|-----------|-----|
+| `ynh run`, `ynd preview`, `ynh agent` (a project directory) | `.cursor/hooks.json` | The only project-level path Cursor reads ([cursor.com/docs/hooks](https://cursor.com/docs/hooks)). A `hooks.json` anywhere else in the project is not loaded. |
+| `ynd export -v cursor`, `ynd marketplace build` (a Cursor plugin) | `hooks/hooks.json` at the plugin root | Where a Cursor plugin carries hooks ([cursor.com/docs/reference/plugins](https://cursor.com/docs/reference/plugins)). A plugin's `.cursor/hooks.json` is not read. |
+
+The document is identical in both places; only the path differs.
+
 ### Claude Code Runtime Limitation
 
 Claude Code's `--plugin-dir` flag (used by `ynh run` for Claude) only auto-activates **skills and commands** from plugins. Hooks and MCP servers in `--plugin-dir` plugins are **not activated** at runtime — they require the plugin to be formally installed via `/plugin install`. See [Claude Code plugin docs](https://code.claude.com/docs/en/plugins).

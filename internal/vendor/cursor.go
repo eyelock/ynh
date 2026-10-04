@@ -134,7 +134,35 @@ var cursorHookEventMap = map[string]string{
 	"on_session_start": "sessionStart",
 }
 
+// GenerateHookConfig writes the project hook file, .cursor/hooks.json, the
+// only project-level path Cursor reads (cursor.com/docs/hooks). It serves
+// `ynh run`, `ynd preview` and the agent loop, which all launch Cursor in the
+// assembled directory. A plugin reads a different path; see
+// GeneratePluginHookConfig.
 func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
+	data, err := cursorHookDocument(hooks)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{filepath.Join(".cursor", "hooks.json"): data}, nil
+}
+
+// GeneratePluginHookConfig writes the plugin hook file, hooks/hooks.json at the
+// plugin root, the only place a Cursor plugin carries hooks
+// (cursor.com/docs/reference/plugins). The exporter uses it for `ynd export`
+// and marketplace packages. The document is the same as the project file;
+// only the path differs, and each context reads exactly one of them (#454).
+func (c *Cursor) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
+	data, err := cursorHookDocument(hooks)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{filepath.Join("hooks", "hooks.json"): data}, nil
+}
+
+// cursorHookDocument renders canonical hooks in Cursor's flat format, or nil
+// when none of them maps to a Cursor event.
+func cursorHookDocument(hooks map[string][]plugin.HookEntry) ([]byte, error) {
 	if len(hooks) == 0 {
 		return nil, nil
 	}
@@ -182,17 +210,7 @@ func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[st
 	}
 	data = append(data, '\n')
 
-	// Same JSON shape and event names in both locations — only the path
-	// differs: .cursor/hooks.json for project-level config (read by `ynh run`
-	// staging), hooks/hooks.json at plugin root for plugin-format export
-	// (cursor.com/docs/reference/plugins, "Define hooks in hooks/hooks.json").
-	// There's no "is this a plugin export" flag threaded through Adapter, so
-	// both are always emitted — the unused one is simply inert in the other
-	// context.
-	return map[string][]byte{
-		filepath.Join(".cursor", "hooks.json"): data,
-		filepath.Join("hooks", "hooks.json"):   data,
-	}, nil
+	return data, nil
 }
 
 func (c *Cursor) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {

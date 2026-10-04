@@ -273,10 +273,11 @@ func TestExportWithHooks(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	// Cursor should have .cursor/hooks.json (project-level) and hooks/hooks.json
-	// at plugin root (plugin format)
-	assertFileExists(t, filepath.Join(outputDir2, "cursor", ".cursor", "hooks.json"))
+	// A Cursor plugin reads hooks/hooks.json at its root and nothing else
+	// (cursor.com/docs/reference/plugins). .cursor/hooks.json is the project
+	// file a `ynh run` session reads; inside a plugin it is inert (#454).
 	assertFileExists(t, filepath.Join(outputDir2, "cursor", "hooks", "hooks.json"))
+	assertFileNotExists(t, filepath.Join(outputDir2, "cursor", ".cursor", "hooks.json"))
 
 	// Test Codex export
 	outputDir3 := t.TempDir()
