@@ -227,14 +227,14 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 		return "", fmt.Errorf("assembling delegates: %w", err)
 	}
 
-	// Generate hook config
+	// Generate hook config, and copy in the scripts those hooks run
 	if len(h.Hooks) > 0 {
-		hookFiles, err := adapter.GenerateHookConfig(h.Hooks)
+		warnings, err := assembler.WriteSessionHooks(tmpDir, adapter, h.Dir, h.Hooks)
 		if err != nil {
-			return "", fmt.Errorf("generating hook config: %w", err)
+			return "", err
 		}
-		if err := writeGeneratedFiles(tmpDir, hookFiles); err != nil {
-			return "", fmt.Errorf("writing hook config: %w", err)
+		for _, w := range warnings {
+			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 		}
 	}
 

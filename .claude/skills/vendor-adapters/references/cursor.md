@@ -55,8 +55,10 @@ install path in `command`, `args`, `env` values, and `cwd`"; it does not expand 
 standard's `${PLUGIN_ROOT}`. The docs' hook example uses bare `./scripts/...` but never
 states the hook's working directory, so ynh does not rely on it: the plugin file anchors a
 `./` command to `"${CURSOR_PLUGIN_ROOT}"/` and the exporter copies the script into the
-plugin. The session file keeps the command as written (Cursor runs in the run dir, which
-carries no scripts; see docs/hooks.md "Hook script paths").
+plugin. The session file keeps the command as written: "Project hooks run from the
+project root" (CONFIRMED 2026-10-04, cursor.com/docs/hooks), `launchCursor` starts the
+agent in the run dir, and `assembler.WriteSessionHooks` copies the script to the run dir's
+root (#495; see docs/hooks.md "Hook script paths").
 
 ## Hook Events (25 — same as Claude Code)
 

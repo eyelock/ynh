@@ -1351,23 +1351,16 @@ func assembleHarness(h *harness.Harness, backendName string) (string, error) {
 		return "", fmt.Errorf("assembling harness: %w", err)
 	}
 
-	// Generate vendor-native hook config.
+	// Generate vendor-native hook config, and copy in the scripts those hooks
+	// run from the harness.
 	if len(h.Hooks) > 0 {
-		hookFiles, err := adapter.GenerateHookConfig(h.Hooks)
+		warnings, err := assembler.WriteSessionHooks(dir, adapter, h.Dir, h.Hooks)
 		if err != nil {
 			_ = os.RemoveAll(dir)
-			return "", fmt.Errorf("generating hook config: %w", err)
+			return "", err
 		}
-		for relPath, data := range hookFiles {
-			absPath := fmt.Sprintf("%s/%s", dir, relPath)
-			if mkdirErr := os.MkdirAll(dirOf(absPath), 0o755); mkdirErr != nil {
-				_ = os.RemoveAll(dir)
-				return "", mkdirErr
-			}
-			if writeErr := os.WriteFile(absPath, data, 0o644); writeErr != nil {
-				_ = os.RemoveAll(dir)
-				return "", writeErr
-			}
+		for _, w := range warnings {
+			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 		}
 	}
 

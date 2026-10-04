@@ -242,20 +242,15 @@ func cmdRun(args []string) error {
 			return fmt.Errorf("assembling delegates: %w", err)
 		}
 
-		// Generate vendor-native hook config files
+		// Generate vendor-native hook config files, and copy in the scripts
+		// those hooks run from the harness
 		if len(p.Hooks) > 0 {
-			hookFiles, err := adapter.GenerateHookConfig(p.Hooks)
+			warnings, err := assembler.WriteSessionHooks(runDir, adapter, harnessDir, p.Hooks)
 			if err != nil {
-				return fmt.Errorf("generating hook config: %w", err)
+				return err
 			}
-			for relPath, content := range hookFiles {
-				absPath := filepath.Join(runDir, relPath)
-				if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
-					return fmt.Errorf("creating hook config dir: %w", err)
-				}
-				if err := os.WriteFile(absPath, content, 0o644); err != nil {
-					return fmt.Errorf("writing hook config %s: %w", relPath, err)
-				}
+			for _, w := range warnings {
+				fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 			}
 		}
 

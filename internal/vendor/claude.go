@@ -207,9 +207,11 @@ var claudeHookEventMap = map[string]string{
 // anchorHookCommand rewrites a leading "./" in a hook command so it resolves
 // from the project root via $CLAUDE_PROJECT_DIR, which Claude Code injects into
 // the hook subprocess. Without this, a relative command breaks the moment the
-// agent's working directory moves into a subdirectory — and a blocking guard
+// agent's working directory moves into a subdirectory, and a blocking guard
 // hook then silently fails open. Commands that are absolute, already anchored
-// to a variable, or PATH-style (no leading "./") are left unchanged.
+// to a variable, or PATH-style (no leading "./") are left unchanged. It serves
+// the project settings file (ClaudeSettingsHooks), where the hooks and their
+// scripts belong to the project.
 func anchorHookCommand(cmd string) string {
 	if strings.HasPrefix(cmd, "./") {
 		return "$CLAUDE_PROJECT_DIR/" + cmd[2:]
@@ -226,26 +228,42 @@ func ClaudeHookEvent(canonical string) (string, bool) {
 }
 
 // GenerateHookConfig writes the session hook file, .claude/hooks/hooks.json.
-// A "./" command is anchored to $CLAUDE_PROJECT_DIR (see anchorHookCommand).
 // `ynh run` launches Claude with --plugin-dir pointed at the assembled .claude/
 // directory, so this is hooks/hooks.json at that plugin's root, the default
 // location Claude Code reads (code.claude.com/docs/en/plugins-reference). It
-// serves `ynh run`, `ynd preview` and the agent loop. An exported plugin uses
+// serves `ynh run`, `ynd preview` and the agent loop. A "./" command names a
+// script the harness ships: Claude loads a --plugin-dir plugin in place, so
+// the command is anchored to ${CLAUDE_PLUGIN_ROOT}, which is that .claude/
+// directory, and session assembly copies the script there (see
+// SessionHookScriptDir, #495). An exported plugin uses
 // GeneratePluginHookConfig instead.
 func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
-	data, err := claudeHookDocument(hooks, anchorHookCommand)
+	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"))
 	if err != nil || data == nil {
 		return nil, err
 	}
 	return map[string][]byte{filepath.Join(".claude", "hooks", "hooks.json"): data}, nil
 }
 
+// SessionHookScriptDir is where session assembly copies the scripts a session
+// hook runs by a "./" path: the --plugin-dir plugin root, which
+// ${CLAUDE_PLUGIN_ROOT} names in GenerateHookConfig's commands.
+func (c *Claude) SessionHookScriptDir() string { return c.ConfigDir() }
+
+// ClaudeSettingsHooks renders canonical hooks as the "hooks" document `ynh hook
+// export` merges into a project's .claude/settings.json. A settings file
+// belongs to the project, so a "./" command is anchored to $CLAUDE_PROJECT_DIR
+// (see anchorHookCommand). It returns nil when no hook maps to a Claude event.
+func ClaudeSettingsHooks(hooks map[string][]plugin.HookEntry) ([]byte, error) {
+	return claudeHookDocument(hooks, anchorHookCommand)
+}
+
 // GeneratePluginHookConfig writes the plugin hook file, hooks/claude.json at
 // the root of an exported plugin, which GeneratePluginManifest names in the
 // manifest's "hooks" field. The exporter uses it for `ynd export` and
-// marketplace packages (#468). The document is the session file's except for
-// "./" commands, which name a script shipped in the plugin and are anchored to
-// ${CLAUDE_PLUGIN_ROOT} rather than the project (#483).
+// marketplace packages (#468). The document is the session file's: a "./"
+// command names a script shipped in the plugin and is anchored to
+// ${CLAUDE_PLUGIN_ROOT} (#483).
 func (c *Claude) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
 	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"))
 	if err != nil || data == nil {

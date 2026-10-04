@@ -135,13 +135,17 @@ the manifest's `hooks`, a merged package holding Cursor's or Codex's file there 
 Claude another vendor's format. Copilot renders the same `.claude-plugin/plugin.json` via
 `claudePluginManifest`, so the pointer survives whichever adapter writes it last.
 
-Hook command paths (#483): a command starting with `./` is rewritten per output.
-`GenerateHookConfig` anchors it to `$CLAUDE_PROJECT_DIR/` (`anchorHookCommand`; `ynh run`
-starts Claude in the user's directory, so this is the user's project).
-`GeneratePluginHookConfig` anchors it to `"${CLAUDE_PLUGIN_ROOT}"/` (`pluginRootCommand`),
-the installed plugin, and the exporter copies the script from the harness tree into the
-plugin (`copyHookScripts`), warning when it is not there. Absolute, variable-anchored and
-PATH-style commands are untouched in both.
+Hook command paths (#483, #495): a command starting with `./` names a script the harness
+ships. Both `GenerateHookConfig` (session) and `GeneratePluginHookConfig` (plugin) anchor it
+to `"${CLAUDE_PLUGIN_ROOT}"/` (`pluginRootCommand`). In a session that is the `.claude/`
+directory `ynh run` passes as `--plugin-dir`, which Claude loads in place (CONFIRMED
+2026-10-04, code.claude.com/docs/en/plugins/loading "In-place and copied plugins"), so
+`assembler.WriteSessionHooks` copies the script there (`Claude.SessionHookScriptDir`). In a
+plugin the exporter copies it to the plugin root. Both use `assembler.CopyHookScripts`,
+which warns when the script is not a file in the harness. `ClaudeSettingsHooks`, used by
+`ynh hook export` for the project's `.claude/settings.json`, anchors to
+`$CLAUDE_PROJECT_DIR/` instead (`anchorHookCommand`). Absolute, variable-anchored and
+PATH-style commands are untouched everywhere.
 
 ## Known Limitations for ynh
 
