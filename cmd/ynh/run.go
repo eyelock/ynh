@@ -238,7 +238,7 @@ func cmdRun(args []string) error {
 		}
 
 		// Assemble delegate harnesses as agent files
-		if err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo); err != nil {
+		if err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo, p.Dir); err != nil {
 			return fmt.Errorf("assembling delegates: %w", err)
 		}
 

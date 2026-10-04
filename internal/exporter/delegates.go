@@ -12,7 +12,8 @@ import (
 
 // ExportDelegates generates agent files for delegates directly into outputDir/agents/.
 // Unlike assembler.AssembleDelegates, this writes to the plugin root, not inside ConfigDir.
-func ExportDelegates(outputDir string, delegates []harness.Delegate) error {
+// harnessDir is the harness's directory, which a relative delegate source resolves against.
+func ExportDelegates(outputDir string, delegates []harness.Delegate, harnessDir string) error {
 	if len(delegates) == 0 {
 		return nil
 	}
@@ -23,7 +24,7 @@ func ExportDelegates(outputDir string, delegates []harness.Delegate) error {
 	}
 
 	for _, del := range delegates {
-		basePath, _, err := resolver.ResolveGitSource(del.GitSource)
+		basePath, _, err := resolver.ResolveGitSource(del.GitSource, harnessDir)
 		if err != nil {
 			return fmt.Errorf("delegate: %w", err)
 		}

@@ -125,7 +125,7 @@ func cmdUpdate(args []string) error {
 			return fmt.Errorf("include %q: %w", inc.Git, err)
 		}
 		fmt.Printf("Checking %s...\n", inc.Git)
-		result, err := resolver.EnsureRepo(inc.Git, inc.Ref)
+		result, err := resolver.EnsureRepo(resolver.GitSourceURL(inc.Git, p.Dir), inc.Ref)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "  Warning: %v\n", err)
 			continue
@@ -149,7 +149,7 @@ func cmdUpdate(args []string) error {
 			return fmt.Errorf("delegate %q: %w", del.Git, err)
 		}
 		fmt.Printf("Checking delegate %s...\n", del.Git)
-		result, err := resolver.EnsureRepo(del.Git, del.Ref)
+		result, err := resolver.EnsureRepo(resolver.GitSourceURL(del.Git, p.Dir), del.Ref)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "  Warning: %v\n", err)
 			continue

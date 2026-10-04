@@ -155,6 +155,28 @@ git@github.com:company/private-repo.git
 https://github.com/user/repo.git
 ```
 
+**Local Git repositories:** `git` also takes a path to a Git repo on disk,
+absolute (`/srv/shared/skills`, `file:///srv/shared/skills`) or relative
+(`./inc`, `../shared`). A relative path is resolved against the harness
+directory, never against the directory `ynh` or `ynd` is run from, so the
+same harness clones the same repo wherever it is installed, run, updated,
+previewed or exported from. The [allow-list](getting-started.md#restrict-remote-sources)
+checks the same absolute path, and the clone is cached under it, so two
+harnesses that each name `./inc` get their own repos. The same applies to
+`delegates_to`.
+
+The resolved path is what `ynh install` prints:
+
+```
+Fetching 1 include(s) and 0 delegate(s)...
+  Fetched /home/me/harnesses/my-dev/inc
+```
+
+Relative Git sources suit harnesses installed from a local path, which run
+from the source tree. A harness installed from Git runs from its installed
+copy, which holds no nested repos, so a relative Git source there has
+nothing to resolve to.
+
 See [Private Repositories](getting-started.md#private-repositories) for authentication setup and [Restrict Remote Sources](getting-started.md#restrict-remote-sources) to control which Git repos are allowed.
 
 **Monorepo example:**

@@ -297,7 +297,7 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 			return fmt.Errorf("assembling %s layout: %w", adapter.Name(), err)
 		}
 
-		if err := assembler.AssembleDelegates(vendorDir, adapter, p.DelegatesTo); err != nil {
+		if err := assembler.AssembleDelegates(vendorDir, adapter, p.DelegatesTo, p.Dir); err != nil {
 			return fmt.Errorf("assembling %s delegates: %w", adapter.Name(), err)
 		}
 	}
