@@ -218,6 +218,9 @@ func parseCursorOutput(r io.Reader) (Turn, error) {
 					Message: firstNonBlank(rawString(ev.Result), turn.Content, "turn failed"),
 				}
 			}
+			// cursor's usage, when it reports any, is Claude Code's shape,
+			// which carries cache_read_input_tokens. It reports no cost.
+			turn.CacheReported = turn.UsageReported
 			return turn, nil
 		}
 	}

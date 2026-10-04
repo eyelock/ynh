@@ -384,11 +384,8 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	}
 	result.BudgetSources = budgetSource
 	if resuming {
-		budget.Resume(
-			resumeCP.Budget.Turns,
-			resumeCP.Budget.Tokens,
-			time.Duration(resumeCP.Budget.WallConsumedMS)*time.Millisecond,
-		)
+		budget.Resume(resumeCP.Budget)
+		result.Effort = resumeCP.Effort
 	} else {
 		budget.Start()
 	}
@@ -600,12 +597,8 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			return
 		}
 		cp.ResumeToken = sess.ResumeToken()
-		cp.Budget = CheckpointBudget{
-			Turns:          budget.Turns(),
-			Tokens:         budget.Tokens(),
-			WallConsumedMS: budget.WallConsumed().Milliseconds(),
-			PlanIterations: planIterations,
-		}
+		cp.Budget = budget.checkpoint(planIterations)
+		cp.Effort = result.Effort
 		if err := writeCheckpoint(sessionDir, cp); err != nil {
 			_, _ = fmt.Fprintf(opts.Stderr, "checkpoint write failed: %v\n", err)
 		}
@@ -710,7 +703,8 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 				return result, workerTurnExit(err, fmt.Sprintf("plan turn: %v", err))
 			}
 			_ = traj.Emit(KindAssistantMessage, 0, planTurn.Content)
-			budget.RecordTokens(planTurn.Usage)
+			budget.RecordUsage(planTurn)
+			result.noteEffort(planTurn)
 			_ = traj.Emit(KindBudgetSnapshot, 0, BudgetSnapshotData{
 				Turns:  budget.Turns(),
 				Tokens: budget.Tokens(),
@@ -869,7 +863,8 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		_ = traj.Emit(KindAssistantMessage, turnN, turn.Content)
 
 		budget.RecordTurn()
-		budget.RecordTokens(turn.Usage)
+		budget.RecordUsage(turn)
+		result.noteEffort(turn)
 		_ = traj.Emit(KindBudgetSnapshot, turnN, BudgetSnapshotData{
 			Turns:  budget.Turns(),
 			Tokens: budget.Tokens(),

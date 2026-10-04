@@ -60,6 +60,10 @@
       "enum": ["edits", "all"],
       "description": "The --auto-approve level the worker ran with. Absent means none: no permission flag was passed to the worker."
     },
+    "effort": {
+      "type": "string",
+      "description": "The reasoning effort the worker reported it ran with, in the backend's own terms (Claude Code: low, medium, high, xhigh, max). Absent means the backend did not report one, not that none was in force. Never inferred from the model name."
+    },
     "harness": {
       "type": "object",
       "additionalProperties": false,
@@ -151,7 +155,25 @@
           "type": "integer"
         },
         "tokens": {
-          "type": "integer"
+          "type": "integer",
+          "description": "Input plus output tokens. Cache reads are not included."
+        },
+        "input_tokens": {
+          "type": "integer",
+          "description": "Input tokens, summed over every turn including the plan phase. Absent when the backend reported no usage."
+        },
+        "output_tokens": {
+          "type": "integer",
+          "description": "Output tokens, summed like input_tokens. Absent when the backend reported no usage."
+        },
+        "cache_read_tokens": {
+          "type": "integer",
+          "description": "Tokens read from the prompt cache, not counted in tokens. Absent when the backend does not report a cache-read count."
+        },
+        "cost_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Cost in US dollars as the backend reported it, summed over the run. ynh never prices tokens itself. Absent when the backend reported no cost; zero only when it reported zero."
         },
         "wall_ms": {
           "type": "integer"
