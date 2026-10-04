@@ -43,6 +43,13 @@ plugin-root/
   Plugin hooks are non-managed and skipped until the user trusts them in `/hooks`.
 - ynh writes `.codex/hooks.json` for a session (run, preview, agent loop) and
   `hooks/codex.json`, named by the manifest `hooks` field, in an export (#469)
+- Plugin hook commands receive `PLUGIN_ROOT` and `PLUGIN_DATA`, plus `CLAUDE_PLUGIN_ROOT`
+  and `CLAUDE_PLUGIN_DATA` for compatibility (CONFIRMED 2026-10-04,
+  developers.openai.com/codex/plugins/build). Its "Hook paths start with `./`, resolve
+  relative to the plugin root" is about the manifest's hooks file paths, not command
+  strings, and the hook's working directory is not documented. So the plugin file
+  anchors a `./` command to `"${PLUGIN_ROOT}"/` and the exporter copies the script into
+  the plugin; the session file keeps the command as written (#483)
 - Feature flag required: `[features] codex_hooks = true` in `config.toml`
 - Status: **Experimental**
 

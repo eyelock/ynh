@@ -49,6 +49,15 @@ ynh writes each path only where Cursor reads it (#454, #469):
 | `ynh run`, `ynd preview`, agent loop (project dir) | `.cursor/hooks.json` | `Cursor.GenerateHookConfig` |
 | `ynd export -v cursor`, `ynd marketplace build` (plugin) | `hooks/cursor.json`, named by `"hooks"` in `.cursor-plugin/plugin.json` | `Cursor.GeneratePluginHookConfig`, picked by the exporter through its `PluginHookGenerator` interface; `Cursor.GeneratePluginManifest` adds the pointer when the file exists |
 
+Hook command paths (#483). CONFIRMED 2026-10-04 (cursor.com/docs/reference/plugins):
+"Cursor expands `${CURSOR_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_ROOT}` to the plugin's
+install path in `command`, `args`, `env` values, and `cwd`"; it does not expand the
+standard's `${PLUGIN_ROOT}`. The docs' hook example uses bare `./scripts/...` but never
+states the hook's working directory, so ynh does not rely on it: the plugin file anchors a
+`./` command to `"${CURSOR_PLUGIN_ROOT}"/` and the exporter copies the script into the
+plugin. The session file keeps the command as written (Cursor runs in the run dir, which
+carries no scripts; see docs/hooks.md "Hook script paths").
+
 ## Hook Events (25 — same as Claude Code)
 
 SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PermissionDenied,
@@ -100,7 +109,8 @@ CONFIRMED (cursor.com/docs/hooks, cursor.com/docs/reference/plugins): both locat
 use the SAME flat/lowercase-camelCase format and event names — only the path differs.
 Project-level `.cursor/hooks.json` (also `.cursor/hooks.json` gitignored-local,
 `~/.cursor/hooks.json` user, and OS-specific enterprise paths) vs plugin-format
-`hooks/hooks.json` at plugin root. ynh renders the same document for both and writes
+`hooks/hooks.json` at plugin root. ynh renders the same document for both (except `./`
+commands, anchored to the plugin root in the plugin file) and writes
 each to its own context only (see the table under Hook Config Paths). ynh's plugin
 file is `hooks/cursor.json` via the manifest `hooks` field, not the default
 `hooks/hooks.json`: Claude Code always loads a plugin root's `hooks/hooks.json`, so in

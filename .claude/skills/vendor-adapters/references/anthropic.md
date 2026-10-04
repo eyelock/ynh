@@ -123,6 +123,14 @@ the manifest's `hooks`, a merged package holding Cursor's or Codex's file there 
 Claude another vendor's format. Copilot renders the same `.claude-plugin/plugin.json` via
 `claudePluginManifest`, so the pointer survives whichever adapter writes it last.
 
+Hook command paths (#483): a command starting with `./` is rewritten per output.
+`GenerateHookConfig` anchors it to `$CLAUDE_PROJECT_DIR/` (`anchorHookCommand`; `ynh run`
+starts Claude in the user's directory, so this is the user's project).
+`GeneratePluginHookConfig` anchors it to `"${CLAUDE_PLUGIN_ROOT}"/` (`pluginRootCommand`),
+the installed plugin, and the exporter copies the script from the harness tree into the
+plugin (`copyHookScripts`), warning when it is not there. Absolute, variable-anchored and
+PATH-style commands are untouched in both.
+
 ## Known Limitations for ynh
 
 - `--plugin-dir` auto-activates skills/commands but NOT hooks/MCP (need `/plugin enable` + `/reload-plugins`)

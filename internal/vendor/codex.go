@@ -140,7 +140,7 @@ var codexHookEventMap = map[string]string{
 // the agent loop. A plugin reads a different path; see
 // GeneratePluginHookConfig.
 func (c *Codex) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
-	data, err := codexHookDocument(hooks)
+	data, err := codexHookDocument(hooks, keepHookCommand)
 	if err != nil || data == nil {
 		return nil, err
 	}
@@ -152,9 +152,12 @@ func (c *Codex) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[str
 // "hooks" field. A Codex plugin reads hooks/hooks.json by default, and a
 // manifest "hooks" value replaces that discovery
 // (developers.openai.com/codex/plugins/build), so Codex reads this file and
-// nothing else. .codex/hooks.json inside a plugin is never read (#469).
+// nothing else. .codex/hooks.json inside a plugin is never read (#469). The
+// document is the project file's except for "./" commands, which name a script
+// shipped in the plugin and are anchored to $PLUGIN_ROOT, which Codex exports
+// to plugin hook commands (#483).
 func (c *Codex) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
-	data, err := codexHookDocument(hooks)
+	data, err := codexHookDocument(hooks, pluginRootCommand("PLUGIN_ROOT"))
 	if err != nil || data == nil {
 		return nil, err
 	}
@@ -162,8 +165,9 @@ func (c *Codex) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (m
 }
 
 // codexHookDocument renders canonical hooks in Codex's format, or nil when
-// none of them maps to a Codex event.
-func codexHookDocument(hooks map[string][]plugin.HookEntry) ([]byte, error) {
+// none of them maps to a Codex event. anchor rewrites each command for where
+// the file is read.
+func codexHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string) string) ([]byte, error) {
 	if len(hooks) == 0 {
 		return nil, nil
 	}
@@ -217,7 +221,7 @@ func codexHookDocument(hooks map[string][]plugin.HookEntry) ([]byte, error) {
 		for _, g := range groups {
 			var inner []codexInnerHook
 			for _, cmd := range g.cmds {
-				inner = append(inner, codexInnerHook{Type: "command", Command: cmd})
+				inner = append(inner, codexInnerHook{Type: "command", Command: anchor(cmd)})
 			}
 			hookGroups = append(hookGroups, codexHookGroup{
 				Matcher: g.matcher,

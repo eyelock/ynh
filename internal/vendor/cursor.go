@@ -142,7 +142,7 @@ var cursorHookEventMap = map[string]string{
 // assembled directory. A plugin reads a different path; see
 // GeneratePluginHookConfig.
 func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
-	data, err := cursorHookDocument(hooks)
+	data, err := cursorHookDocument(hooks, keepHookCommand)
 	if err != nil || data == nil {
 		return nil, err
 	}
@@ -154,11 +154,13 @@ func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[st
 // "hooks" field. A Cursor plugin reads hooks/hooks.json by default, and a
 // manifest "hooks" path replaces that discovery
 // (cursor.com/docs/reference/plugins), so Cursor reads this file and nothing
-// else. The exporter uses it for `ynd export` and marketplace packages. The
-// document is the same as the project file; only the path differs, and each
-// context reads exactly one of them (#454, #469).
+// else. The exporter uses it for `ynd export` and marketplace packages. Each
+// context reads exactly one of the two files (#454, #469). The document is the
+// project file's except for "./" commands, which name a script shipped in the
+// plugin and are anchored to ${CURSOR_PLUGIN_ROOT}, which Cursor expands in a
+// plugin hook command (cursor.com/docs/reference/plugins, #483).
 func (c *Cursor) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
-	data, err := cursorHookDocument(hooks)
+	data, err := cursorHookDocument(hooks, pluginRootCommand("CURSOR_PLUGIN_ROOT"))
 	if err != nil || data == nil {
 		return nil, err
 	}
@@ -166,8 +168,9 @@ func (c *Cursor) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (
 }
 
 // cursorHookDocument renders canonical hooks in Cursor's flat format, or nil
-// when none of them maps to a Cursor event.
-func cursorHookDocument(hooks map[string][]plugin.HookEntry) ([]byte, error) {
+// when none of them maps to a Cursor event. anchor rewrites each command for
+// where the file is read.
+func cursorHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string) string) ([]byte, error) {
 	if len(hooks) == 0 {
 		return nil, nil
 	}
@@ -194,7 +197,7 @@ func cursorHookDocument(hooks map[string][]plugin.HookEntry) ([]byte, error) {
 
 		var hookEntries []cursorHookEntry
 		for _, entry := range entries {
-			hookEntries = append(hookEntries, cursorHookEntry{Command: entry.Command})
+			hookEntries = append(hookEntries, cursorHookEntry{Command: anchor(entry.Command)})
 		}
 
 		allEvents[cursorEvent] = hookEntries

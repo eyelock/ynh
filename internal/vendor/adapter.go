@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
@@ -266,6 +267,25 @@ func pluginHookPointer(outputDir, vendorName string) string {
 	}
 	return "./" + filepath.ToSlash(rel)
 }
+
+// pluginRootCommand returns a hook command rewriter for a plugin: a leading
+// "./" names a script shipped inside the plugin, so it is anchored to the
+// vendor's plugin-root variable, quoted so an install path with spaces stays
+// one word (#483). A hook runs in the agent's working directory, not the
+// plugin root, so the bare "./" would look in the user's project. Commands
+// that are absolute, already anchored or PATH-style are left unchanged. The
+// exporter copies each such script into the plugin.
+func pluginRootCommand(rootVar string) func(string) string {
+	return func(cmd string) string {
+		if rest, ok := strings.CutPrefix(cmd, "./"); ok {
+			return `"${` + rootVar + `}"/` + rest
+		}
+		return cmd
+	}
+}
+
+// keepHookCommand leaves a hook command exactly as the harness wrote it.
+func keepHookCommand(cmd string) string { return cmd }
 
 // Available returns all registered vendor names, sorted alphabetically.
 func Available() []string {
