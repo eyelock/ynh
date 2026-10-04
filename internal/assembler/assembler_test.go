@@ -60,6 +60,7 @@ func (m *mockAdapter) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir s
 }
 func (m *mockAdapter) ExportArtifactDirs() map[string]string { return nil }
 func (m *mockAdapter) SupportsExportDelegates() bool         { return true }
+func (m *mockAdapter) PluginManifestDir() string             { return ".mock-plugin" }
 func (m *mockAdapter) MarketplaceManifestDir() string        { return ".mock-plugin" }
 func (m *mockAdapter) GenerateMarketplaceIndex(cfg vendor.MarketplaceIndexConfig, plugins []vendor.MarketplacePluginInfo) ([]byte, error) {
 	return nil, nil

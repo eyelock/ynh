@@ -259,9 +259,9 @@ func (c *Copilot) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir strin
 	}
 	data = append(data, '\n')
 
-	relPath := filepath.Join(".claude-plugin", "plugin.json")
+	relPath := filepath.Join(c.PluginManifestDir(), "plugin.json")
 	if copilotRunDirLayout(outputDir) {
-		relPath = filepath.Join(".copilot", ".claude-plugin", "plugin.json")
+		relPath = filepath.Join(c.ConfigDir(), relPath)
 	}
 	return map[string][]byte{relPath: data}, nil
 }
@@ -276,6 +276,9 @@ func (c *Copilot) ExportArtifactDirs() map[string]string {
 }
 
 func (c *Copilot) SupportsExportDelegates() bool { return true }
+
+// PluginManifestDir is the same as Claude: Copilot reads that manifest schema.
+func (c *Copilot) PluginManifestDir() string { return ".claude-plugin" }
 
 func (c *Copilot) MarketplaceManifestDir() string { return filepath.Join(".github", "plugin") }
 

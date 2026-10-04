@@ -72,6 +72,52 @@ func TestPluginManifestPaths(t *testing.T) {
 	}
 }
 
+// PluginManifestDir must name the directory the manifest is actually written
+// to, in both layouts: an export (nothing under the config dir) and a run dir
+// (artifacts under it, where Copilot nests its plugin). Codex once reported its
+// marketplace index directory, .agents/plugins, in that role, so `ynd diff`
+// never found its .codex-plugin/plugin.json (#453). The marketplace dir is
+// asserted separately in TestAdapterContract and may differ.
+func TestPluginManifestDirMatchesGeneratedManifest(t *testing.T) {
+	hj := &plugin.HarnessJSON{Name: "demo", Version: "1.0.0", Description: "d"}
+
+	for name, a := range allAdapters(t) {
+		md := a.PluginManifestDir()
+		if md == "" {
+			t.Errorf("%s: PluginManifestDir is empty but the vendor writes a manifest", name)
+			continue
+		}
+		atRoot := filepath.Join(md, "plugin.json")
+		underConfig := filepath.Join(a.ConfigDir(), atRoot)
+
+		t.Run(name+"/export", func(t *testing.T) {
+			files, err := a.GeneratePluginManifest(hj, t.TempDir())
+			if err != nil {
+				t.Fatalf("GeneratePluginManifest: %v", err)
+			}
+			if got := keysOf(files); len(got) != 1 || got[0] != atRoot {
+				t.Errorf("manifest written to %v, PluginManifestDir says %q", got, atRoot)
+			}
+		})
+
+		t.Run(name+"/run-dir", func(t *testing.T) {
+			out := t.TempDir()
+			skill := filepath.Join(out, a.ConfigDir(), "skills", "s")
+			if err := os.MkdirAll(skill, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			files, err := a.GeneratePluginManifest(hj, out)
+			if err != nil {
+				t.Fatalf("GeneratePluginManifest: %v", err)
+			}
+			got := keysOf(files)
+			if len(got) != 1 || (got[0] != atRoot && got[0] != underConfig) {
+				t.Errorf("manifest written to %v, want %q or %q", got, atRoot, underConfig)
+			}
+		})
+	}
+}
+
 // Each vendor's manifest must carry the harness's own identity. A generator
 // that ignores its input produces a plausible file describing nothing.
 func TestPluginManifestCarriesHarnessIdentity(t *testing.T) {
@@ -304,6 +350,7 @@ func TestVendorDeclarativeContract(t *testing.T) {
 		exportDelegates bool
 		initialPrompt   bool
 		supportsResume  bool
+		pluginDir       string
 		marketplaceDir  string
 		exportArtifacts map[string]string
 	}
@@ -311,23 +358,23 @@ func TestVendorDeclarativeContract(t *testing.T) {
 		"claude": {
 			displayName: "Claude Code", configDir: ".claude",
 			needsSymlinks: false, exportDelegates: true, initialPrompt: true,
-			supportsResume: true, marketplaceDir: ".claude-plugin",
+			supportsResume: true, pluginDir: ".claude-plugin", marketplaceDir: ".claude-plugin",
 		},
 		"codex": {
 			displayName: "OpenAI Codex", configDir: ".codex",
 			needsSymlinks: true, exportDelegates: false, initialPrompt: true,
-			supportsResume: true, marketplaceDir: filepath.Join(".agents", "plugins"),
+			supportsResume: true, pluginDir: ".codex-plugin", marketplaceDir: filepath.Join(".agents", "plugins"),
 			exportArtifacts: map[string]string{"skills": "skills"},
 		},
 		"cursor": {
 			displayName: "Cursor", configDir: ".cursor",
 			needsSymlinks: true, exportDelegates: true, initialPrompt: true,
-			supportsResume: true, marketplaceDir: ".cursor-plugin",
+			supportsResume: true, pluginDir: ".cursor-plugin", marketplaceDir: ".cursor-plugin",
 		},
 		"copilot": {
 			displayName: "GitHub Copilot CLI", configDir: ".copilot",
 			needsSymlinks: false, exportDelegates: true, initialPrompt: true,
-			supportsResume: true, marketplaceDir: filepath.Join(".github", "plugin"),
+			supportsResume: true, pluginDir: ".claude-plugin", marketplaceDir: filepath.Join(".github", "plugin"),
 			exportArtifacts: map[string]string{"agents": "agents", "skills": "skills"},
 		},
 	}
@@ -364,6 +411,9 @@ func TestVendorDeclarativeContract(t *testing.T) {
 		}
 		if got := a.SupportsResume(); got != w.supportsResume {
 			t.Errorf("%s SupportsResume = %v, want %v", name, got, w.supportsResume)
+		}
+		if got := a.PluginManifestDir(); got != w.pluginDir {
+			t.Errorf("%s PluginManifestDir = %q, want %q", name, got, w.pluginDir)
 		}
 		if got := a.MarketplaceManifestDir(); got != w.marketplaceDir {
 			t.Errorf("%s MarketplaceManifestDir = %q, want %q", name, got, w.marketplaceDir)

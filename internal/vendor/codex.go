@@ -240,7 +240,7 @@ func (c *Codex) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string)
 	}
 	data = append(data, '\n')
 	return map[string][]byte{
-		filepath.Join(".codex-plugin", "plugin.json"): data,
+		filepath.Join(c.PluginManifestDir(), "plugin.json"): data,
 	}, nil
 }
 
@@ -262,6 +262,8 @@ func (c *Codex) ExportArtifactDirs() map[string]string {
 }
 
 func (c *Codex) SupportsExportDelegates() bool { return false }
+
+func (c *Codex) PluginManifestDir() string { return ".codex-plugin" }
 
 func (c *Codex) MarketplaceManifestDir() string { return filepath.Join(".agents", "plugins") }
 

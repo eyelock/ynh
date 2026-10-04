@@ -209,13 +209,15 @@ func (c *Cursor) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string
 	}
 	data = append(data, '\n')
 	return map[string][]byte{
-		filepath.Join(".cursor-plugin", "plugin.json"): data,
+		filepath.Join(c.PluginManifestDir(), "plugin.json"): data,
 	}, nil
 }
 
 func (c *Cursor) ExportArtifactDirs() map[string]string { return nil }
 
 func (c *Cursor) SupportsExportDelegates() bool { return true }
+
+func (c *Cursor) PluginManifestDir() string { return ".cursor-plugin" }
 
 func (c *Cursor) MarketplaceManifestDir() string { return ".cursor-plugin" }
 

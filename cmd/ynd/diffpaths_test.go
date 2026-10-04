@@ -29,8 +29,13 @@ func TestCanonicalPath(t *testing.T) {
 		{"cursor", ".cursor/agents/x.md", "<config>/agents/x.md"},
 		{"claude", ".claude-plugin/plugin.json", "<manifest>/plugin.json"},
 		{"cursor", ".cursor-plugin/plugin.json", "<manifest>/plugin.json"},
-		{"codex", ".agents/plugins/plugin.json", "<manifest>/plugin.json"},
-		{"copilot", ".github/plugin/plugin.json", "<manifest>/plugin.json"},
+		{"codex", ".codex-plugin/plugin.json", "<manifest>/plugin.json"},
+		{"copilot", ".claude-plugin/plugin.json", "<manifest>/plugin.json"},
+		{"copilot", ".copilot/.claude-plugin/plugin.json", "<manifest>/plugin.json"},
+		// Untouched: a marketplace index directory, not the plugin manifest's.
+		// Codex's sits apart from its manifest (#453).
+		{"codex", ".agents/plugins/marketplace.json", ".agents/plugins/marketplace.json"},
+		{"copilot", ".github/plugin/marketplace.json", ".github/plugin/marketplace.json"},
 		{"claude", "CLAUDE.md", "<instructions>"},
 		{"cursor", ".cursorrules", "<instructions>"},
 		{"copilot", "AGENTS.md", "<instructions>"},

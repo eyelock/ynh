@@ -141,6 +141,7 @@ Note: Different format from Claude/Cursor — uses `source` object with `source`
 All discrepancies noted on 2026-04-07 were fixed in the same PR (#23, "modernize Codex adapter to current plugin spec"):
 
 - ynh generates `.codex-plugin/plugin.json` — OK
+- The adapter reports two different directories: `PluginManifestDir()` is `.codex-plugin` and `MarketplaceManifestDir()` is `.agents/plugins`. Codex keeps the two apart, so neither can stand in for the other (#453)
 - ynh exports skills to `skills/` at plugin root — OK
 - ynh writes MCP to `.mcp.json` (JSON) — OK
 - ynh includes Codex in marketplace generation (`.agents/plugins/marketplace.json`) and merged export — OK
