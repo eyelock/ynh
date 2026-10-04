@@ -26,10 +26,11 @@ func TestMarketplaceHarnessExport(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	// Harness should have dual manifests
+	// Harness should have every default vendor's manifest, Codex included (#479)
 	harnessDir := filepath.Join(outputDir, "plugins", "export-test")
 	assertFileExists(t, filepath.Join(harnessDir, ".claude-plugin", "plugin.json"))
 	assertFileExists(t, filepath.Join(harnessDir, ".cursor-plugin", "plugin.json"))
+	assertFileExists(t, filepath.Join(harnessDir, ".codex-plugin", "plugin.json"))
 
 	// Skills should be present
 	assertFileExists(t, filepath.Join(harnessDir, "skills", "dev-project", "SKILL.md"))

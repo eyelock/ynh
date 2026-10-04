@@ -1,6 +1,7 @@
 package exporter
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -118,5 +119,60 @@ func TestExportCodexSkipsAgentsRulesCommands(t *testing.T) {
 	// Should have warnings
 	if len(r.Warnings) == 0 {
 		t.Error("expected warnings about skipped artifacts")
+	}
+}
+
+// TestExportMergedCodex pins #479: merged export, which ynd marketplace build
+// also uses, carries Codex's manifest whenever codex is a selected vendor, and
+// no vendor list means all of them. The shared tree holds agents for the other
+// vendors, so the Codex manifest must point at skills and nothing else.
+func TestExportMergedCodex(t *testing.T) {
+	srcDir := filepath.Join(testdataDir(), "export-harness")
+
+	tests := []struct {
+		name      string
+		vendors   []string
+		wantCodex bool
+	}{
+		{name: "default vendors", vendors: nil, wantCodex: true},
+		{name: "codex selected", vendors: []string{"claude", "codex"}, wantCodex: true},
+		{name: "codex not selected", vendors: []string{"claude", "cursor"}, wantCodex: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			outputDir := filepath.Join(t.TempDir(), "merged")
+			if _, err := Export(ExportOptions{
+				SourceDir: srcDir,
+				OutputDir: outputDir,
+				Vendors:   tt.vendors,
+				Mode:      ModeMerged,
+			}); err != nil {
+				t.Fatalf("Export failed: %v", err)
+			}
+
+			manifest := filepath.Join(outputDir, ".codex-plugin", "plugin.json")
+			if !tt.wantCodex {
+				assertFileNotExists(t, manifest)
+				return
+			}
+			data, err := os.ReadFile(manifest)
+			if err != nil {
+				t.Fatalf("reading Codex manifest: %v", err)
+			}
+			var got map[string]any
+			if err := json.Unmarshal(data, &got); err != nil {
+				t.Fatalf("parsing Codex manifest: %v", err)
+			}
+			if got["skills"] != "./skills/" {
+				t.Errorf("skills = %v, want ./skills/", got["skills"])
+			}
+			for _, key := range []string{"agents", "rules", "commands"} {
+				if _, ok := got[key]; ok {
+					t.Errorf("Codex manifest declares %q; Codex loads skills only", key)
+				}
+			}
+			// The shared tree still carries agents for the other vendors.
+			assertFileExists(t, filepath.Join(outputDir, "agents", "planner.md"))
+		})
 	}
 }

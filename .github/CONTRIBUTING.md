@@ -302,9 +302,9 @@ The exporter (`internal/exporter/`) takes the same inputs as the assembler but p
 
 **Key differences from assembler:**
 - Output goes to plugin root (not inside `ConfigDir`)
-- Generates vendor-specific manifests (`.claude-plugin/plugin.json`, `.cursor-plugin/plugin.json`)
-- Codex export uses `.agents/skills/` layout (different from runtime `.codex/`)
-- Supports merged mode (dual manifests in one directory) for marketplace builds
+- Generates vendor-specific manifests (`.claude-plugin/plugin.json`, `.cursor-plugin/plugin.json`, `.codex-plugin/plugin.json`)
+- Codex export puts `skills/` at the plugin root (different from runtime `.codex/`)
+- Supports merged mode (every selected vendor's manifest in one directory, Codex included) for marketplace builds
 
 The exporter reuses `assembler.CopyPicked`, `CopyAllArtifacts`, `CopyFile`, and `BuildDelegateAgent` for content operations but owns its own layout decisions per vendor.
 
