@@ -164,7 +164,11 @@ func printInfoText(w io.Writer, name string) error {
 		_, _ = fmt.Fprintln(w, "  (none)")
 	} else {
 		for _, inc := range p.Includes {
-			line := "  " + inc.Git
+			source := inc.Git
+			if inc.IsLocal() {
+				source = inc.Local
+			}
+			line := "  " + source
 			if inc.Path != "" {
 				line += "  path=" + inc.Path
 			}
