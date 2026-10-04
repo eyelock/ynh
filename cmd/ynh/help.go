@@ -337,7 +337,8 @@ Flags:
   --task <text|@file>         The task to work on
   --focus <name>              Load a named focus instead of a task
   --profile <name>            Apply a named profile overlay
-  --backend <name>            Model backend to use
+  --backend <name>            Worker backend: claude (default), codex, cursor.
+                              On --resume, the session's backend
   --model <name>              Model override
   --worktree <path>           Run against a specific worktree
   --max-turns <n>             Stop after n turns
