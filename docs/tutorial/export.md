@@ -192,7 +192,7 @@ ls /tmp/ynh-tutorial/export-claude/
 
 ## Export in merged mode
 
-Merged mode produces one directory with both Claude and Cursor manifests — useful for CI pipelines and marketplace-ready plugins:
+Merged mode produces one directory with every selected vendor's manifest, useful for CI pipelines and marketplace-ready plugins. Without `-v` that is all four vendors, Codex included; this example selects Claude and Cursor:
 
 ```bash
 ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/export-merged --merged -v claude,cursor
@@ -292,7 +292,7 @@ rm -rf /tmp/ynh-tutorial/no-inst-out
   - Claude: `.claude-plugin/plugin.json` + artifacts at root
   - Cursor: `.cursor-plugin/plugin.json` + `.cursorrules`
   - Codex: `.codex-plugin/plugin.json` + `skills/` (agents, rules, commands excluded)
-- `--merged` produces a single dir with dual manifests (marketplace-ready)
+- `--merged` produces a single dir with every selected vendor's manifest (marketplace-ready)
 - Remote includes are resolved and flattened into the export
 - Pick filtering carries through to the export
 - `AGENTS.md` is the universal instruction format (read by Codex, Cursor, Copilot, etc.)

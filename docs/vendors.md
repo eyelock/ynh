@@ -205,7 +205,7 @@ Key differences between runtime and export:
 - Codex export is limited to skills — agents, rules, commands, and delegates are excluded with warnings
 - Hooks go to the session path at runtime (`.claude/hooks/hooks.json`, `.cursor/hooks.json`, `.codex/hooks.json`) and to `hooks/<vendor>.json` at the plugin root in an export, named by the `"hooks"` field of that vendor's manifest, never both. A plugin never reads the session path, and there is no shared `hooks/hooks.json`, so a merged package never hands one vendor's format to another (see [Hooks: Config File Locations](hooks.md#config-file-locations))
 - Cursor MCP config goes to `.cursor/mcp.json` at runtime and to `mcp.json` at the plugin root in an export, never both, for the same reason (see [MCP Servers: Config File Locations](mcp.md#config-file-locations))
-- Codex is excluded from merged export mode (different marketplace format)
+- Codex is included in merged export (`--merged`) and in `ynd marketplace build`, which exports each harness the same way: `.codex-plugin/plugin.json` sits beside the other vendors' manifests and points only at `skills/`, so Codex ignores the agents, rules and commands the other vendors read from the same directory. Pass `-v` without `codex` to leave it out
 - Copilot export is limited to skills and agents — rules and commands are excluded with warnings
 - Copilot uses Claude's plugin manifest format (`.claude-plugin/plugin.json`), since Copilot's own plugin loader reads the same schema. At runtime the manifest and MCP config nest under `.copilot/`, the `--plugin-dir` target; an export always puts the manifest at the plugin root beside the skills, and MCP config at `.github/mcp.json` there
 

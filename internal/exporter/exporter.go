@@ -79,7 +79,8 @@ type ExportMode int
 const (
 	// ModePerVendor creates separate dirs: output/claude/, output/cursor/, output/codex/
 	ModePerVendor ExportMode = iota
-	// ModeMerged creates a single dir with dual manifests (for marketplace builds)
+	// ModeMerged creates a single dir with every selected vendor's manifest,
+	// Codex included (for marketplace builds)
 	ModeMerged
 )
 

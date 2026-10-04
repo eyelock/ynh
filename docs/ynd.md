@@ -244,7 +244,7 @@ Export a harness as vendor-native plugins. Resolves all remote includes, flatten
 ynd export ./my-harness                          # all vendors → ./dist/my-harness/
 ynd export ./my-harness -v claude,cursor          # specific vendors only
 ynd export ./my-harness -o ./out                  # custom output directory
-ynd export ./my-harness --merged                  # single dir with dual manifests
+ynd export ./my-harness --merged                  # single dir with every vendor's manifest
 ynd export ./my-harness --clean                   # remove output dir before export
 ynd export ./my-harness --profile strict          # export with a specific profile applied
 ynd export ./my-harness --focus review            # export with a focus applied (mutex with --profile)
@@ -299,7 +299,7 @@ Key differences from runtime layout:
 - Codex is limited to skills only — agents, rules, commands, and delegates are excluded with warnings
 - Copilot is limited to skills and agents — rules and commands are excluded with warnings
 - Copilot reuses Claude's `.claude-plugin/plugin.json` schema (Copilot's plugin loader reads the same format)
-- `--merged` produces one directory with all vendor manifests; Claude and Copilot share the same `.claude-plugin/plugin.json`, which both render identically
+- `--merged` produces one directory with all vendor manifests, Codex's included; Claude and Copilot share the same `.claude-plugin/plugin.json`, which both render identically. `ynd marketplace build` exports each harness entry this way
 - Hooks go to `hooks/<vendor>.json` at the plugin root, named by the `"hooks"` field of that vendor's manifest; there is no shared `hooks/hooks.json` (see [Hooks: Config File Locations](hooks.md#config-file-locations))
 
 See [Export](tutorial/export.md) for a guided walkthrough.
@@ -400,7 +400,7 @@ Schemas are embedded in the binary — `ynh schema <name>` and `ynh schema --all
 | `-o, --output <path>` | inspect, export, preview, marketplace | Output directory. Defaults vary by command. |
 | `--harness <dir>` | preview, diff, export, validate, lint, fmt | Harness source directory. Alternative to positional arg. Also honored via `YNH_HARNESS` env var. |
 | `--clean` | export, marketplace | Remove output directory before writing. Never the filesystem root, your home, the current directory or a git working copy, unless `ynd marketplace build` created that repository itself, in which case it is emptied and its `.git` kept. |
-| `--merged` | export | Single output dir with dual vendor manifests. |
+| `--merged` | export | Single output dir with every selected vendor's manifest. |
 | `--profile <name>` | preview, diff, export | Profile to apply during assembly. Also honored via `YNH_PROFILE`. |
 | `--focus <name>` | preview, diff, export | Focus to apply (resolves its bound profile). Mutually exclusive with `--profile`. Also honored via `YNH_FOCUS`. |
 | `--path <subdir>` | export | Subdirectory within source (for monorepos). Must be a relative path with no `..` traversal. |
