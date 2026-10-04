@@ -552,3 +552,92 @@ func TestRecord_CapturesTheRawTotal(t *testing.T) {
 		t.Errorf("Count = %d, want 1 — distinct lines, which is why Total is needed", sb.Count)
 	}
 }
+
+// Durations are run-to-run noise. Go prints one on every line that matters
+// (`--- FAIL: TestX (0.03s)`, `FAIL\tpkg\t0.512s`), so without this the same
+// failure never fingerprints the same twice: the baseline cannot forgive it
+// and the agent watchdog reads every identical turn as progress (#434).
+func TestFingerprints_IgnoresDurations(t *testing.T) {
+	tests := []struct {
+		name, a, b string
+	}{
+		{"go test failure line", "--- FAIL: TestParse (0.03s)", "--- FAIL: TestParse (1.27s)"},
+		{"go package FAIL line", "FAIL\tgithub.com/x/y/pkg\t0.512s", "FAIL\tgithub.com/x/y/pkg\t3.004s"},
+		{"go package ok line", "ok  \tgithub.com/x/y/pkg\t0.2s", "ok  \tgithub.com/x/y/pkg\t12.9s"},
+		{"go subtest line", "    --- FAIL: TestParse/empty_input (0.00s)", "    --- FAIL: TestParse/empty_input (0.01s)"},
+		{"minutes and seconds", "panic: test timed out after 1m2.3s", "panic: test timed out after 4m0.25s"},
+		{"hours minutes seconds", "elapsed 1h2m3s", "elapsed 2h0m59s"},
+		{"milliseconds", "request took 12ms", "request took 340ms"},
+		{"micro sign", "op took 250µs", "op took 31µs"},
+		{"greek mu", "op took 250μs", "op took 31μs"},
+		{"ascii micro", "op took 250us", "op took 31us"},
+		{"nanoseconds", "op took 3.2ns", "op took 41ns"},
+		{"seconds versus milliseconds", "--- FAIL: TestX (1.5s)", "--- FAIL: TestX (900ms)"},
+		{"duration after a colon", "elapsed:3.2s", "elapsed:4.75s"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := Fingerprints(tt.a, "", nil)
+			b := Fingerprints(tt.b, "", nil)
+			if len(a) != 1 || len(b) != 1 {
+				t.Fatalf("want 1 fingerprint each, got %d and %d", len(a), len(b))
+			}
+			if a[0] != b[0] {
+				t.Errorf("only the duration differs, but the fingerprints do:\n %q\n %q", tt.a, tt.b)
+			}
+		})
+	}
+}
+
+// The duration rule must not swallow real content. A count, an error code, a
+// test name that happens to end in digits and a unit letter: each is a real
+// difference and must still change the fingerprint.
+func TestFingerprints_DurationsDoNotEatRealDifferences(t *testing.T) {
+	tests := []struct {
+		name, a, b string
+	}{
+		{"different test name", "--- FAIL: TestParse (0.03s)", "--- FAIL: TestFormat (0.03s)"},
+		{"different message", "    parse_test.go:12: got 3, want 4", "    parse_test.go:12: got 3, want 5"},
+		{"different failure count", "3 failures", "4 failures"},
+		{"different package", "FAIL\tgithub.com/x/y/pkg\t0.5s", "FAIL\tgithub.com/x/y/other\t0.5s"},
+		{"digits inside a test name", "--- FAIL: TestRetry3s (0.01s)", "--- FAIL: TestRetry4s (0.01s)"},
+		{"error code", "error E1234s: bad thing", "error E1235s: bad thing"},
+		{"bare number", "exit status 1", "exit status 2"},
+		{"minutes without seconds is not a duration", "page 5m of the manual", "page 6m of the manual"},
+		{"plain word after a number", "found 2 issues", "found 3 issues"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := Fingerprints(tt.a, "", nil)
+			b := Fingerprints(tt.b, "", nil)
+			if len(a) != 1 || len(b) != 1 {
+				t.Fatalf("want 1 fingerprint each, got %d and %d", len(a), len(b))
+			}
+			if a[0] == b[0] {
+				t.Errorf("a real difference was normalised away:\n %q\n %q", tt.a, tt.b)
+			}
+		})
+	}
+}
+
+// The ratchet case: a failure recorded with one set of timings is the same
+// failure on the next run with another, and must read as known, not new.
+func TestCompare_TimingDriftIsNotANewFailure(t *testing.T) {
+	recorded := "--- FAIL: TestParse (0.03s)\n    parse_test.go:12: got 3, want 4\nFAIL\nFAIL\tgithub.com/x/y/pkg\t0.512s\n"
+	rerun := "--- FAIL: TestParse (0.05s)\n    parse_test.go:12: got 3, want 4\nFAIL\nFAIL\tgithub.com/x/y/pkg\t0.498s\n"
+
+	b := &Baseline{}
+	b.Set("h", "test", Record("fail", recorded, "", nil))
+
+	current := Fingerprints(rerun, "", nil)
+	cmp := b.Compare("h", "test", current, len(current))
+	if len(cmp.New) != 0 {
+		t.Errorf("timing-only drift reported %d new findings, want 0", len(cmp.New))
+	}
+	if cmp.Fixed != 0 {
+		t.Errorf("timing-only drift reported %d fixed findings, want 0", cmp.Fixed)
+	}
+	if cmp.Known != len(current) {
+		t.Errorf("known = %d, want %d", cmp.Known, len(current))
+	}
+}

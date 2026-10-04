@@ -64,7 +64,8 @@ into one another easily. A reader who has finished [Sensors](sensors.md) and
 
 **How the ratchet works.** Each line of sensor output is reduced to a
 fingerprint: paths are made relative to the repository root, line and column
-positions are collapsed to a placeholder, and what remains is hashed. Comparing
+positions and durations (`0.03s`, `12ms`) are collapsed to a placeholder, and
+what remains is hashed. Comparing
 a run against the record sorts findings into *new* (fails the build), *known*
 (forgiven) and *fixed* (debt paid off). Collapsing the positions is what makes
 it a ratchet rather than a tripwire — a finding does not become a different

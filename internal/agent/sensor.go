@@ -134,7 +134,8 @@ func defaultRunSensor(ynhPath, harnessName, sensorName, cwd, overlayJSON string)
 //
 // Output is fingerprinted rather than hashed raw so that file positions
 // shifting (a line inserted above an existing finding) does not read as
-// progress. The same normalisation the baseline uses.
+// progress, and nor does a test failing identically with a different timing
+// (#434). The same normalisation the baseline uses.
 // matchers maps sensor name to its compiled output.match, nil where none is
 // declared. Passed in because the envelope carries results, not declarations,
 // and a hash over a tool's decoration would read a changed summary line as
