@@ -224,7 +224,7 @@ ynd diff ./my-harness --focus review        # diff with a focus applied
 ynd diff --harness ./my-harness             # explicit harness flag
 ```
 
-Files are paired across vendors by what they are, not where each vendor puts them. The same skill, agent, rule or command pairs across vendors' config directories (`.claude/skills/x/SKILL.md` with `.cursor/skills/x/SKILL.md`), as do the plugin manifest and the instructions file (`CLAUDE.md` with `.cursorrules`). Any other file is that vendor's own and is never paired, even when two vendors happen to use the same name: hook config (`.claude/hooks/hooks.json`, `.cursor/hooks.json`, `.codex/hooks.json`) is always reported as only in its vendor.
+Files are paired across vendors by what they are, not where each vendor puts them. The same skill, agent, rule or command pairs across vendors' config directories (`.claude/skills/x/SKILL.md` with `.cursor/skills/x/SKILL.md`), as do the plugin manifest (`.claude-plugin/plugin.json` with `.codex-plugin/plugin.json`) and the instructions file (`CLAUDE.md` with `.cursorrules`). A marketplace index is not a plugin manifest and never pairs with one: Codex keeps its index at `.agents/plugins/`. Any other file is that vendor's own and is never paired, even when two vendors happen to use the same name: hook config (`.claude/hooks/hooks.json`, `.cursor/hooks.json`, `.codex/hooks.json`) is always reported as only in its vendor.
 
 The diff output groups files into four categories:
 - **Only in \<vendor\>**: files unique to that vendor (e.g., `.claude/hooks/hooks.json` for Claude hooks)

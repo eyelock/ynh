@@ -317,13 +317,15 @@ func (c *Claude) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string
 	}
 	data = append(data, '\n')
 	return map[string][]byte{
-		filepath.Join(".claude-plugin", "plugin.json"): data,
+		filepath.Join(c.PluginManifestDir(), "plugin.json"): data,
 	}, nil
 }
 
 func (c *Claude) ExportArtifactDirs() map[string]string { return nil }
 
 func (c *Claude) SupportsExportDelegates() bool { return true }
+
+func (c *Claude) PluginManifestDir() string { return ".claude-plugin" }
 
 func (c *Claude) MarketplaceManifestDir() string { return ".claude-plugin" }
 

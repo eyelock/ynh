@@ -225,3 +225,44 @@ func TestCmdDiff_VendorOnlyFilesAreNotPaired(t *testing.T) {
 		t.Errorf(".cursor/hooks.json paired with codex's hooks file: %v", got)
 	}
 }
+
+// Codex assembles .codex-plugin/plugin.json and copilot, in a run dir,
+// .copilot/.claude-plugin/plugin.json, but diff looked for each vendor's plugin
+// manifest in its marketplace index directory (.agents/plugins, .github/plugin).
+// Neither manifest was ever paired, so every pairing with codex or copilot
+// listed the manifests as only in each side (#453). The manifests are the same
+// artifact in every vendor and pair; codex's carries path pointers the others
+// do not, so its content differs.
+func TestCmdDiff_PluginManifestsPair(t *testing.T) {
+	srcDir := createDiffHarness(t)
+	out := captureDiff(t, []string{srcDir, "claude", "cursor", "codex", "copilot"})
+
+	cases := []struct {
+		pairing, heading, file string
+	}{
+		{"claude vs cursor", "Identical:", ".claude-plugin/plugin.json"},
+		{"claude vs codex", "Different content:", ".claude-plugin/plugin.json"},
+		{"cursor vs codex", "Different content:", ".cursor-plugin/plugin.json"},
+		{"claude vs copilot", "Identical:", ".claude-plugin/plugin.json"},
+		{"cursor vs copilot", "Identical:", ".cursor-plugin/plugin.json"},
+		{"codex vs copilot", "Different content:", ".codex-plugin/plugin.json"},
+	}
+	for _, c := range cases {
+		t.Run(c.pairing+"/"+c.file, func(t *testing.T) {
+			if !slices.Contains(section(out, c.pairing, c.heading), c.file) {
+				t.Errorf("%s: %s not listed under %q\n%s", c.pairing, c.file, c.heading, out)
+			}
+		})
+	}
+
+	for _, pairing := range []string{"claude vs codex", "cursor vs codex", "claude vs copilot", "codex vs copilot"} {
+		a, b, _ := strings.Cut(pairing, " vs ")
+		for _, v := range []string{a, b} {
+			for _, f := range section(out, pairing, "Only in "+v+":") {
+				if strings.HasSuffix(f, "plugin.json") {
+					t.Errorf("%s: manifest %s listed as only in %s\n%s", pairing, f, v, out)
+				}
+			}
+		}
+	}
+}

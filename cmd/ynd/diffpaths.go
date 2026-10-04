@@ -21,7 +21,12 @@ const (
 // Three prefixes differ per vendor and all three must be mapped, not just the
 // config directory: claude writes `.claude/` + `.claude-plugin/` + `CLAUDE.md`,
 // cursor writes `.cursor/` + `.cursor-plugin/` + `.cursorrules`, codex writes
-// `.agents/plugins/` + `codex.md`, copilot `.github/plugin/` + `AGENTS.md`.
+// `.codex/` + `.codex-plugin/` + `codex.md`, copilot `.copilot/` +
+// `.copilot/.claude-plugin/` + `AGENTS.md`.
+//
+// The manifest dir is the plugin manifest's, never the marketplace index's.
+// Codex keeps its index at `.agents/plugins/`, apart from its manifest, and
+// looking for the manifest there left it unpaired in every comparison (#453).
 //
 // Without this the two file sets never intersect, so `ynd diff` between any
 // two vendors reported every file as "only in" one side and its
@@ -31,12 +36,20 @@ func canonicalPath(adapter vendor.Adapter, path string) string {
 
 	// Manifest dir first: ".claude-plugin" would otherwise be caught by a
 	// ".claude" prefix test and mapped to the wrong thing.
-	if md := filepath.ToSlash(adapter.MarketplaceManifestDir()); md != "" {
+	cd := filepath.ToSlash(adapter.ConfigDir())
+	if md := filepath.ToSlash(adapter.PluginManifestDir()); md != "" {
 		if rest, ok := trimSegment(path, md); ok {
 			return joinCanon(canonManifestDir, rest)
 		}
+		// Copilot's run-dir layout nests the manifest under its config dir,
+		// beside the artifacts it describes.
+		if cd != "" {
+			if rest, ok := trimSegment(path, cd+"/"+md); ok {
+				return joinCanon(canonManifestDir, rest)
+			}
+		}
 	}
-	if cd := filepath.ToSlash(adapter.ConfigDir()); cd != "" {
+	if cd != "" {
 		if rest, ok := trimSegment(path, cd); ok {
 			if canon, ok := canonicalArtifact(adapter, rest); ok {
 				return canon

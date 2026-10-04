@@ -158,6 +158,14 @@ type Adapter interface {
 	// Returns nil if the vendor has no manifest format.
 	GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error)
 
+	// PluginManifestDir returns the directory GeneratePluginManifest writes
+	// plugin.json into (e.g. ".claude-plugin", ".codex-plugin"). A vendor
+	// whose run-dir layout nests its plugin under ConfigDir (Copilot) writes
+	// it at ConfigDir()/PluginManifestDir() there. Not the marketplace index
+	// directory: Codex keeps its index at .agents/plugins, apart from its
+	// manifest. Returns empty string if the vendor has no manifest format.
+	PluginManifestDir() string
+
 	// ExportArtifactDirs returns the artifact directory mapping for export.
 	// Some vendors support a subset of artifact types in their plugin format
 	// (e.g. Codex only supports skills). Returns nil to use ArtifactDirs().
@@ -168,8 +176,9 @@ type Adapter interface {
 	SupportsExportDelegates() bool
 
 	// MarketplaceManifestDir returns the directory name for marketplace index
-	// files (e.g. ".claude-plugin", ".agents/plugins"). Returns empty string
-	// if the vendor has no marketplace system.
+	// files (e.g. ".claude-plugin", ".agents/plugins"). It can differ from
+	// PluginManifestDir, so it never locates a plugin manifest. Returns empty
+	// string if the vendor has no marketplace system.
 	MarketplaceManifestDir() string
 
 	// GenerateMarketplaceIndex produces vendor-native marketplace index content.
