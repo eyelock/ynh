@@ -166,8 +166,11 @@ type BuildOptions struct {
 	BeforeWrite func() error
 }
 
-// Build generates a vendor-native marketplace directory from a marketplace config.
-func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
+// Build generates a vendor-native marketplace directory from a marketplace
+// config. It returns the export warnings of every harness entry, each
+// prefixed with the entry's name ("reviewer: codex: ..."). Warnings never
+// fail a build; the caller decides how to show them.
+func Build(cfg *MarketplaceConfig, opts BuildOptions) ([]string, error) {
 	vendors := opts.Vendors
 	if len(vendors) == 0 {
 		vendors = []string{"claude", "cursor", "codex", "copilot"}
@@ -185,13 +188,13 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 	for _, entry := range cfg.Harnesses {
 		srcDir, err := resolveEntrySource(entry.Source, opts.ConfigDir)
 		if err != nil {
-			return fmt.Errorf("entry %q: %w", entry.Source, err)
+			return nil, fmt.Errorf("entry %q: %w", entry.Source, err)
 		}
 
 		// Apply monorepo subdir
 		if entry.Path != "" {
 			if err := pathutil.CheckSubpath(entry.Path); err != nil {
-				return fmt.Errorf("entry %q: invalid path: %w", entry.Source, err)
+				return nil, fmt.Errorf("entry %q: invalid path: %w", entry.Source, err)
 			}
 			srcDir = filepath.Join(srcDir, entry.Path)
 		}
@@ -201,20 +204,20 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 		switch entry.Type {
 		case "harness":
 			if _, err := migration.FormatChain().Run(srcDir); err != nil {
-				return fmt.Errorf("entry %q: %w", entry.Source, err)
+				return nil, fmt.Errorf("entry %q: %w", entry.Source, err)
 			}
 			hj, err := plugin.LoadPluginJSON(srcDir)
 			if err != nil {
-				return fmt.Errorf("entry %q: %w", entry.Source, err)
+				return nil, fmt.Errorf("entry %q: %w", entry.Source, err)
 			}
 			info = pluginInfo{Name: hj.Name, Description: hj.Description, Version: hj.Version}
 		case "plugin":
 			if _, err := migration.FormatChain().Run(srcDir); err != nil {
-				return fmt.Errorf("entry %q: %w", entry.Source, err)
+				return nil, fmt.Errorf("entry %q: %w", entry.Source, err)
 			}
 			pi, err := loadPluginManifest(srcDir)
 			if err != nil {
-				return fmt.Errorf("entry %q: %w", entry.Source, err)
+				return nil, fmt.Errorf("entry %q: %w", entry.Source, err)
 			}
 			info = pi
 		}
@@ -224,16 +227,17 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 
 	if opts.BeforeWrite != nil {
 		if err := opts.BeforeWrite(); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	pluginsDir := filepath.Join(opts.OutputDir, "plugins")
 	if err := os.MkdirAll(pluginsDir, 0o755); err != nil {
-		return fmt.Errorf("creating plugins dir: %w", err)
+		return nil, fmt.Errorf("creating plugins dir: %w", err)
 	}
 
 	var pluginInfos []pluginInfo
+	var warnings []string
 	for i, p := range prepared {
 		entry := cfg.Harnesses[i]
 		info := p.info
@@ -241,12 +245,16 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 
 		switch p.kind {
 		case "harness":
-			if err := buildHarnessEntry(p.srcDir, pluginOutputDir, vendors, opts.Config); err != nil {
-				return fmt.Errorf("harness %q: %w", info.Name, err)
+			entryWarnings, err := buildHarnessEntry(p.srcDir, pluginOutputDir, vendors, opts.Config)
+			if err != nil {
+				return nil, fmt.Errorf("harness %q: %w", info.Name, err)
+			}
+			for _, w := range entryWarnings {
+				warnings = append(warnings, info.Name+": "+w)
 			}
 		case "plugin":
 			if err := buildPluginEntry(p.srcDir, pluginOutputDir, vendors); err != nil {
-				return fmt.Errorf("plugin %q: %w", info.Name, err)
+				return nil, fmt.Errorf("plugin %q: %w", info.Name, err)
 			}
 		}
 
@@ -263,13 +271,13 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 	// Generate marketplace indexes for each vendor
 	for _, v := range vendors {
 		if err := GenerateIndex(cfg, pluginInfos, opts.OutputDir, v); err != nil {
-			return fmt.Errorf("generating %s index: %w", v, err)
+			return nil, fmt.Errorf("generating %s index: %w", v, err)
 		}
 	}
 
 	// Generate README.md
 	if err := generateReadme(cfg, pluginInfos, opts.OutputDir); err != nil {
-		return fmt.Errorf("generating README: %w", err)
+		return nil, fmt.Errorf("generating README: %w", err)
 	}
 
 	// Claude Code requires a working tree for relative plugin source paths to
@@ -283,27 +291,35 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 	switch {
 	case !isGitRepo(opts.OutputDir):
 		if err := initGitRepo(opts.OutputDir); err != nil {
-			return fmt.Errorf("initializing git repo: %w", err)
+			return nil, fmt.Errorf("initializing git repo: %w", err)
 		}
 	case OwnsRepo(opts.OutputDir):
 		if err := commitBuild(opts.OutputDir); err != nil {
-			return fmt.Errorf("committing build: %w", err)
+			return nil, fmt.Errorf("committing build: %w", err)
 		}
 	}
 
-	return nil
+	return warnings, nil
 }
 
-// buildHarnessEntry exports a harness using ModeMerged into the plugin output dir.
-func buildHarnessEntry(srcDir, outputDir string, vendors []string, cfg *config.Config) error {
-	_, err := exporter.Export(exporter.ExportOptions{
+// buildHarnessEntry exports a harness using ModeMerged into the plugin output
+// dir and returns the export's warnings.
+func buildHarnessEntry(srcDir, outputDir string, vendors []string, cfg *config.Config) ([]string, error) {
+	results, err := exporter.Export(exporter.ExportOptions{
 		SourceDir: srcDir,
 		OutputDir: outputDir,
 		Vendors:   vendors,
 		Mode:      exporter.ModeMerged,
 		Config:    cfg,
 	})
-	return err
+	if err != nil {
+		return nil, err
+	}
+	var warnings []string
+	for _, r := range results {
+		warnings = append(warnings, r.Warnings...)
+	}
+	return warnings, nil
 }
 
 // buildPluginEntry copies a self-contained plugin directory as-is,

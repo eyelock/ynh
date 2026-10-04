@@ -129,7 +129,7 @@ The variable is quoted so an install path with spaces stays one word, as Claude 
   warning: hook script ./scripts/missing.sh is not a file in the harness, so the plugin does not carry it
 ```
 
-The hook is still written, anchored to the plugin root, so it will not find the script. To run a script that belongs to the project rather than to the plugin, anchor it yourself (`$CLAUDE_PROJECT_DIR/scripts/x.sh` on Claude Code) and it is left alone. A Copilot-only export carries no hooks, so it copies no scripts. `ynd marketplace build` copies scripts the same way, but does not print the warnings.
+The hook is still written, anchored to the plugin root, so it will not find the script. To run a script that belongs to the project rather than to the plugin, anchor it yourself (`$CLAUDE_PROJECT_DIR/scripts/x.sh` on Claude Code) and it is left alone. A Copilot-only export carries no hooks, so it copies no scripts. `ynd marketplace build` copies scripts the same way and prints the same warnings on stderr, each prefixed with the entry's name (`warning: reviewer: hook script ...`).
 
 Copilot's documentation does not say whether it expands `${CLAUDE_PLUGIN_ROOT}` in a hook command (it documents `${PLUGIN_ROOT}` and its `${CLAUDE_PLUGIN_ROOT}` alias for MCP servers), so a `./` script in a merged package is unverified on Copilot.
 

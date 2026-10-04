@@ -340,6 +340,7 @@ ynd marketplace build --clean                     # empty the output dir before 
 - `plugin` entries are copied as-is (already in vendor-native format)
 - `harness` entries are fully exported — includes resolved, artifacts flattened
 - Codex participates like the other vendors: it gets its own index at `.agents/plugins/marketplace.json` using its native `source`/`policy` format
+- A `harness` entry's export warnings are printed to stderr, the same warnings `ynd export --merged` reports, one line each, prefixed with the entry's name: `warning: reviewer: hook script ./scripts/guard.sh is not a file in the harness, so the plugin does not carry it`. Warnings never change the exit code. `plugin` entries are copied, not exported, so they produce none
 
 ### migrate
 

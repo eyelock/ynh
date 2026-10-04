@@ -356,7 +356,7 @@ ynh acts as the translation layer between your harness definition and vendor-nat
 
 1. **Reads** your `marketplace.json` config listing harnesses and plugins
 2. **Resolves** all remote includes (Git repos, pick filtering, monorepo subpaths)
-3. **Exports** each entry as a merged plugin with `.claude-plugin/` (shared by Claude Code and Copilot), `.cursor-plugin/` and `.codex-plugin/` manifests
+3. **Exports** each entry as a merged plugin with `.claude-plugin/` (shared by Claude Code and Copilot), `.cursor-plugin/` and `.codex-plugin/` manifests, printing any export warning to stderr prefixed with the entry's name (`warning: reviewer: ...`)
 4. **Generates** vendor-native `marketplace.json` indexes for Claude Code, Cursor, Codex and Copilot
 5. **Initializes** the output as a Git repo (required by Claude Code for relative source path resolution)
 
