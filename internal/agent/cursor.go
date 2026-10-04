@@ -167,6 +167,21 @@ type cursorUsage struct {
 	InputTokens  int64 `json:"input_tokens"`
 	OutputTokens int64 `json:"output_tokens"`
 	CacheTokens  int64 `json:"cache_read_input_tokens,omitempty"`
+	// Claude's cache-write total. A pointer, so its absence is not a zero;
+	// the cache_creation breakdown beside it is not decoded.
+	CacheCreationTokens *int64 `json:"cache_creation_input_tokens,omitempty"`
+}
+
+// add sums the record into turn's usage.
+func (u *cursorUsage) add(turn *Turn) {
+	turn.UsageReported = true
+	turn.Usage.InputTokens += u.InputTokens
+	turn.Usage.OutputTokens += u.OutputTokens
+	turn.Usage.CacheTokens += u.CacheTokens
+	if u.CacheCreationTokens != nil {
+		turn.CacheCreationReported = true
+		turn.Usage.CacheCreationTokens += *u.CacheCreationTokens
+	}
 }
 
 // parseCursorOutput reads stream-json events from a single Cursor subprocess run.
@@ -197,19 +212,13 @@ func parseCursorOutput(r io.Reader) (Turn, error) {
 					}
 				}
 				if ev.Message.Usage != nil {
-					turn.UsageReported = true
-					turn.Usage.InputTokens += ev.Message.Usage.InputTokens
-					turn.Usage.OutputTokens += ev.Message.Usage.OutputTokens
-					turn.Usage.CacheTokens += ev.Message.Usage.CacheTokens
+					ev.Message.Usage.add(&turn)
 				}
 			}
 
 		case "result":
 			if ev.Usage != nil {
-				turn.UsageReported = true
-				turn.Usage.InputTokens += ev.Usage.InputTokens
-				turn.Usage.OutputTokens += ev.Usage.OutputTokens
-				turn.Usage.CacheTokens += ev.Usage.CacheTokens
+				ev.Usage.add(&turn)
 			}
 			turn.Content = contentBuf.String()
 			if ev.IsError {

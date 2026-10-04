@@ -336,6 +336,20 @@ type claudeUsage struct {
 	InputTokens  int64 `json:"input_tokens"`
 	OutputTokens int64 `json:"output_tokens"`
 	CacheTokens  int64 `json:"cache_read_input_tokens,omitempty"`
+	// CacheCreationTokens is the total written to the cache. The usage
+	// record also carries a cache_creation object splitting that total by
+	// cache lifetime; it is not decoded, so the writes count once. A pointer,
+	// so a record without the field reports no cache writes rather than zero.
+	CacheCreationTokens *int64 `json:"cache_creation_input_tokens,omitempty"`
+}
+
+// usage converts the record to a turn's usage.
+func (u *claudeUsage) usage() Usage {
+	out := Usage{InputTokens: u.InputTokens, OutputTokens: u.OutputTokens, CacheTokens: u.CacheTokens}
+	if u.CacheCreationTokens != nil {
+		out.CacheCreationTokens = *u.CacheCreationTokens
+	}
+	return out
 }
 
 // Send delivers a user-turn message to the worker via NDJSON.
@@ -427,7 +441,7 @@ func (s *claudeSession) Next() (Turn, error) {
 	// message repeats the same usage. Events without an id each count.
 	msgUsage := map[string]Usage{}
 	var anonUsage Usage
-	var assistantUsage bool
+	var assistantUsage, assistantCacheCreation bool
 
 	for s.scanner.Scan() {
 		line := s.scanner.Bytes()
@@ -467,7 +481,8 @@ func (s *claudeSession) Next() (Turn, error) {
 				}
 				if mu := ev.Message.Usage; mu != nil {
 					assistantUsage = true
-					u := Usage{InputTokens: mu.InputTokens, OutputTokens: mu.OutputTokens, CacheTokens: mu.CacheTokens}
+					assistantCacheCreation = assistantCacheCreation || mu.CacheCreationTokens != nil
+					u := mu.usage()
 					if ev.Message.ID == "" {
 						anonUsage = addUsage(anonUsage, u)
 					} else {
@@ -484,9 +499,11 @@ func (s *claudeSession) Next() (Turn, error) {
 			switch {
 			case ev.Usage != nil:
 				turn.UsageReported = true
-				turn.Usage = Usage{InputTokens: ev.Usage.InputTokens, OutputTokens: ev.Usage.OutputTokens, CacheTokens: ev.Usage.CacheTokens}
+				turn.CacheCreationReported = ev.Usage.CacheCreationTokens != nil
+				turn.Usage = ev.Usage.usage()
 			case assistantUsage:
 				turn.UsageReported = true
+				turn.CacheCreationReported = assistantCacheCreation
 				turn.Usage = anonUsage
 				for _, u := range msgUsage {
 					turn.Usage = addUsage(turn.Usage, u)
@@ -518,9 +535,10 @@ func (s *claudeSession) Next() (Turn, error) {
 // addUsage returns the sum of two usage records.
 func addUsage(a, b Usage) Usage {
 	return Usage{
-		InputTokens:  a.InputTokens + b.InputTokens,
-		OutputTokens: a.OutputTokens + b.OutputTokens,
-		CacheTokens:  a.CacheTokens + b.CacheTokens,
+		InputTokens:         a.InputTokens + b.InputTokens,
+		OutputTokens:        a.OutputTokens + b.OutputTokens,
+		CacheTokens:         a.CacheTokens + b.CacheTokens,
+		CacheCreationTokens: a.CacheCreationTokens + b.CacheCreationTokens,
 	}
 }
 

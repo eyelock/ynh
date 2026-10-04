@@ -137,19 +137,21 @@ type RunHarness struct {
 
 // RunConsumed is what the run actually spent.
 //
-// Tokens is input plus output, excluding cache reads, as it always has been.
+// Tokens is input plus output, excluding cache reads and writes, as it always
+// has been.
 // The split and cost beside it are pointers because each is absent when the
 // backend did not report it: a zero cost would read as "free", and a zero
 // count as a measurement nobody took.
 type RunConsumed struct {
-	Turns           int      `json:"turns"`
-	Tokens          int64    `json:"tokens"`
-	InputTokens     *int64   `json:"input_tokens,omitempty"`
-	OutputTokens    *int64   `json:"output_tokens,omitempty"`
-	CacheReadTokens *int64   `json:"cache_read_tokens,omitempty"`
-	CostUSD         *float64 `json:"cost_usd,omitempty"`
-	WallMS          int64    `json:"wall_ms"`
-	PlanIter        int      `json:"plan_iterations,omitempty"`
+	Turns               int      `json:"turns"`
+	Tokens              int64    `json:"tokens"`
+	InputTokens         *int64   `json:"input_tokens,omitempty"`
+	OutputTokens        *int64   `json:"output_tokens,omitempty"`
+	CacheReadTokens     *int64   `json:"cache_read_tokens,omitempty"`
+	CacheCreationTokens *int64   `json:"cache_creation_tokens,omitempty"`
+	CostUSD             *float64 `json:"cost_usd,omitempty"`
+	WallMS              int64    `json:"wall_ms"`
+	PlanIter            int      `json:"plan_iterations,omitempty"`
 }
 
 // RunConvergence is the convergence-verifier's verdict.

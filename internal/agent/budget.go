@@ -18,13 +18,15 @@ type Budget struct {
 	// The split behind tokens, and the cost the vendor reported. Each is
 	// known only once a turn has reported it: a backend that reports none
 	// leaves the field absent from the result, never zero.
-	inputTokens     int64
-	outputTokens    int64
-	cacheReadTokens int64
-	usageReported   bool
-	cacheReported   bool
-	costUSD         float64
-	costReported    bool
+	inputTokens           int64
+	outputTokens          int64
+	cacheReadTokens       int64
+	usageReported         bool
+	cacheReported         bool
+	cacheCreationTokens   int64
+	cacheCreationReported bool
+	costUSD               float64
+	costReported          bool
 }
 
 // Start records the session start time. Must be called before the loop begins.
@@ -45,6 +47,8 @@ func (b *Budget) Resume(cb CheckpointBudget) {
 	b.cacheReadTokens = cb.CacheReadTokens
 	b.usageReported = cb.UsageReported
 	b.cacheReported = cb.CacheReported
+	b.cacheCreationTokens = cb.CacheCreationTokens
+	b.cacheCreationReported = cb.CacheCreationReported
 	b.costUSD = cb.CostUSD
 	b.costReported = cb.CostReported
 	b.startTime = time.Now().Add(-time.Duration(cb.WallConsumedMS) * time.Millisecond)
@@ -53,17 +57,19 @@ func (b *Budget) Resume(cb CheckpointBudget) {
 // checkpoint returns the budget's accounting in its persisted form.
 func (b *Budget) checkpoint(planIterations int) CheckpointBudget {
 	return CheckpointBudget{
-		Turns:           b.turns,
-		Tokens:          b.tokens,
-		WallConsumedMS:  b.WallConsumed().Milliseconds(),
-		PlanIterations:  planIterations,
-		InputTokens:     b.inputTokens,
-		OutputTokens:    b.outputTokens,
-		CacheReadTokens: b.cacheReadTokens,
-		UsageReported:   b.usageReported,
-		CacheReported:   b.cacheReported,
-		CostUSD:         b.costUSD,
-		CostReported:    b.costReported,
+		Turns:                 b.turns,
+		Tokens:                b.tokens,
+		WallConsumedMS:        b.WallConsumed().Milliseconds(),
+		PlanIterations:        planIterations,
+		InputTokens:           b.inputTokens,
+		OutputTokens:          b.outputTokens,
+		CacheReadTokens:       b.cacheReadTokens,
+		UsageReported:         b.usageReported,
+		CacheReported:         b.cacheReported,
+		CacheCreationTokens:   b.cacheCreationTokens,
+		CacheCreationReported: b.cacheCreationReported,
+		CostUSD:               b.costUSD,
+		CostReported:          b.costReported,
 	}
 }
 
@@ -80,8 +86,8 @@ func (b *Budget) RecordTurn() {
 }
 
 // RecordUsage adds what a completed turn consumed. The token total counts
-// input and output only, as it always has; the split and the cost are carried
-// beside it and never change it.
+// input and output only, as it always has; the split, the cache reads and
+// writes and the cost are carried beside it and never change it.
 func (b *Budget) RecordUsage(t Turn) {
 	b.tokens += t.Usage.InputTokens + t.Usage.OutputTokens
 	if t.UsageReported {
@@ -91,6 +97,10 @@ func (b *Budget) RecordUsage(t Turn) {
 		if t.CacheReported {
 			b.cacheReported = true
 			b.cacheReadTokens += t.Usage.CacheTokens
+		}
+		if t.CacheCreationReported {
+			b.cacheCreationReported = true
+			b.cacheCreationTokens += t.Usage.CacheCreationTokens
 		}
 	}
 	if t.CostReported {
@@ -113,6 +123,9 @@ func (b *Budget) fillConsumed(c *RunConsumed) {
 		c.OutputTokens = ptr(b.outputTokens)
 		if b.cacheReported {
 			c.CacheReadTokens = ptr(b.cacheReadTokens)
+		}
+		if b.cacheCreationReported {
+			c.CacheCreationTokens = ptr(b.cacheCreationTokens)
 		}
 	}
 	if b.costReported {
