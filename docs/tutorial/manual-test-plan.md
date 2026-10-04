@@ -542,7 +542,8 @@ ynh info local/my-harness
 
 ```bash
 ynh info nonexistent
-# Expected: Error: "nonexistent" is not a valid harness id. Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>', or './<path>' for a local harness directory. Run 'ynh ls' to see installed ids
+# Expected: Error: "nonexistent" is not a valid harness id. Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>'. Run 'ynh ls' to see installed ids
+# (no './<path>': `ynh info` takes only an installed id, unlike `ynh run` in E6)
 
 ynh info local/nonexistent
 # Expected: Error: harness "local/nonexistent": harness not found
@@ -765,6 +766,46 @@ rm -rf /tmp/ynh-multi "$YNH_HOME"
 unset YNH_HOME
 ```
 
+### E28: Run a local directory; refuse a legacy manifest however it is named
+
+`ynh run` takes a local harness directory as well as an installed id (#448).
+A legacy `.harness.json` is refused whether it is reached through a path or
+through `--harness-file` (#449), and nothing is written.
+
+```bash
+export YNH_HOME=$(mktemp -d)
+mkdir -p /tmp/ynh-runpath/my-dev/.agents/harness /tmp/ynh-runpath/my-dev/skills/hello /tmp/ynh-runpath/old /tmp/ynh-runpath/project
+printf '{"name":"my-dev","version":"0.1.0"}' > /tmp/ynh-runpath/my-dev/.agents/harness/plugin.json
+printf -- '---\nname: hello\ndescription: A trivial skill.\n---\n\n# hello\n' > /tmp/ynh-runpath/my-dev/skills/hello/SKILL.md
+printf '{"name":"old","version":"0.1.0"}' > /tmp/ynh-runpath/old/.harness.json
+cd /tmp/ynh-runpath/project
+
+ynh run ../my-dev -v cursor --install
+ls .cursor/skills
+# Expected: hello. `ynh ls` lists nothing: running a path installs nothing
+
+ynh run --harness-file /tmp/ynh-runpath/my-dev/.agents/harness/plugin.json -v cursor --clean
+ynh run --harness-file /tmp/ynh-runpath/my-dev/.agents/harness/plugin.json -v cursor --install
+ls .cursor/skills
+# Expected: hello. A plugin.json in its manifest directory takes its skills from the tree above it
+
+ynh run /tmp/ynh-runpath/old -v cursor --install
+# Expected: Error: /tmp/ynh-runpath/old uses the legacy .harness.json manifest, which ynh no longer reads; convert it with: ynd migrate /tmp/ynh-runpath/old
+
+ynh run --harness-file /tmp/ynh-runpath/old/.harness.json -v cursor --install
+# Expected: the same error
+
+ls -a /tmp/ynh-runpath/old
+# Expected: only .harness.json; no .agents was written
+
+ynh run my-dev
+# Expected: Error: "my-dev" is not a valid harness id. Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>', or './<path>' for a local harness directory. Run 'ynh ls' to see installed ids
+
+cd /
+rm -rf /tmp/ynh-runpath "$YNH_HOME"
+unset YNH_HOME
+```
+
 ---
 
 ## Sensors
@@ -829,5 +870,5 @@ Re-run S1 with a focus-source sensor and verify `ynh sensors run` returns the re
 | Project-Local Config | 4 |
 | Structured Output | 11 |
 | Sensors | 3 |
-| Edge Cases | 27 |
-| **Total** | **158** |
+| Edge Cases | 28 |
+| **Total** | **159** |
