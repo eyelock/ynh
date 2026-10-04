@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"0199a213-81c0-7800-8aa1-bbab2a035a53"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"Cached the prompt."}}
+{"type":"turn.completed","usage":{"input_tokens":24763,"cached_input_tokens":20000,"cache_write_input_tokens":4000,"output_tokens":122,"reasoning_output_tokens":64}}

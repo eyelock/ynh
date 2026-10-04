@@ -399,8 +399,39 @@ What each backend reports today:
 | Backend | Split | Cache reads | Cache writes | Cost | Effort |
 |---|---|---|---|---|---|
 | `claude` | yes | yes | yes | yes | yes |
-| `codex` | yes | no | no | no | no |
+| `codex` | yes | yes | when its usage carries `cache_write_input_tokens` | no | no |
 | `cursor` | when its output carries usage | when its output carries usage | when its usage carries `cache_creation_input_tokens` | no | no |
+
+Every backend reports the fields in the same meaning. `input_tokens` excludes
+cache reads and cache writes, `cache_read_tokens` is the cache reads,
+`cache_creation_tokens` is the cache writes, and `tokens` is `input_tokens`
+plus `output_tokens`. Codex counts differently, the way the OpenAI API does:
+its `input_tokens` includes its `cached_input_tokens` and its
+`cache_write_input_tokens`, and its `output_tokens` includes its
+`reasoning_output_tokens`. So for `codex`:
+
+| ynh field | From Codex's `turn.completed` usage |
+|---|---|
+| `consumed.input_tokens` | `input_tokens` minus `cached_input_tokens` minus `cache_write_input_tokens` |
+| `consumed.cache_read_tokens` | `cached_input_tokens` |
+| `consumed.cache_creation_tokens` | `cache_write_input_tokens`; absent from a Codex too old to report it |
+| `consumed.output_tokens` | `output_tokens`, reasoning included and not added again |
+| `consumed.tokens` | non-cached, non-written input plus output |
+| `consumed.cost_usd`, `effort` | absent: Codex reports neither, and ynh passes it no effort |
+
+Codex reports these as running totals for the thread, and a resumed thread
+continues from the totals it saved. ynh counts each turn as the difference from
+the totals already counted. On `--resume` it starts from what the checkpoint
+recorded; a checkpoint with no usage record (one written before ynh read Codex
+usage) leaves the first resumed turn's share unknown, so that one turn reports
+no usage rather than counting the earlier turns twice.
+
+Before this release ynh never read Codex's usage at all: a `codex` run reported
+no tokens, the token cap never bound it, and the zero-token rule above did not
+apply to it. It also could not drive a turn: `codex exec` reads its prompt
+from stdin to the end and runs a single turn, so ynh now runs one `codex exec`
+per turn and continues the thread with `codex exec resume <thread_id>`, as it
+does with cursor.
 
 Claude Code reports cost as a running total for the worker process, which a
 resumed session may continue from where its transcript left off. ynh takes

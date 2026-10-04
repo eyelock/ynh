@@ -528,6 +528,20 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		})
 	}
 
+	// What the resumed conversation already consumed, for a backend that
+	// reports running totals. Only a complete record serves: codex's totals
+	// carry cache reads, so a checkpoint without them cannot be its base.
+	var usageBase *Usage
+	if resumeToken != "" && resumeCP.Budget.UsageReported && resumeCP.Budget.CacheReported {
+		usageBase = &Usage{
+			InputTokens:  resumeCP.Budget.InputTokens,
+			OutputTokens: resumeCP.Budget.OutputTokens,
+			CacheTokens:  resumeCP.Budget.CacheReadTokens,
+			// Zero when the backend never reported cache writes, which is
+			// what codex's totals then hold too.
+			CacheCreationTokens: resumeCP.Budget.CacheCreationTokens,
+		}
+	}
 	sess, err := wb.Start(ctx, StartOptions{
 		WorktreeDir: opts.WorktreeDir,
 		ConfigPath:  configPath,
@@ -535,6 +549,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		AutoApprove: opts.AutoApprove,
 		Model:       opts.Model,
 		ResumeToken: resumeToken,
+		UsageBase:   usageBase,
 		Env:         workerEnv,
 		Stderr:      opts.Stderr,
 	})

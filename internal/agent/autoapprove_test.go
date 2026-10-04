@@ -63,7 +63,7 @@ func backendArgs(backend string, opts StartOptions) []string {
 	case "claude":
 		return buildClaudeStreamArgs(opts)
 	case "codex":
-		return buildCodexArgs(opts)
+		return buildCodexArgs(opts, "")
 	default:
 		return buildCursorArgs(opts, "chat", true, "do the task")
 	}

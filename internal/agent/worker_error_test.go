@@ -26,6 +26,11 @@ func claudeNotLoggedIn(t *testing.T) string {
 	return string(data)
 }
 
+// nopWriteCloser wraps a bytes.Buffer so it satisfies io.WriteCloser.
+type nopWriteCloser struct{ *bytes.Buffer }
+
+func (n *nopWriteCloser) Close() error { return nil }
+
 func claudeSessionOver(raw string) *claudeSession {
 	scanner := bufio.NewScanner(strings.NewReader(raw))
 	scanner.Buffer(make([]byte, 2<<20), 2<<20)
@@ -137,38 +142,6 @@ func TestParseCursorOutput_ErrorResultIsWorkerError(t *testing.T) {
 	var we *WorkerError
 	if !errors.As(err, &we) || we.Backend != "cursor" || we.Message != "Authentication required" {
 		t.Fatalf("want cursor WorkerError with the result text, got %v", err)
-	}
-}
-
-func TestCodexSession_TurnFailedIsWorkerError(t *testing.T) {
-	tests := []struct {
-		name string
-		raw  string
-		want string
-	}{
-		{
-			name: "with message",
-			raw:  `{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized"}}` + "\n",
-			want: "unexpected status 401 Unauthorized",
-		},
-		{
-			name: "without message",
-			raw:  `{"type":"turn.failed","error":"not an object"}` + "\n",
-			want: "turn failed",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			sess := &codexSession{
-				scanner: bufio.NewScanner(strings.NewReader(tt.raw)),
-				stdin:   &nopWriteCloser{new(bytes.Buffer)},
-			}
-			_, err := sess.Next()
-			var we *WorkerError
-			if !errors.As(err, &we) || we.Backend != "codex" || we.Message != tt.want {
-				t.Fatalf("want codex WorkerError %q, got %v", tt.want, err)
-			}
-		})
 	}
 }
 
