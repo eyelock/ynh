@@ -172,7 +172,8 @@ level the worker ran with. Absent means none. An older ynh rejects
 `capabilities` first.
 
 The `agent run` result also carries `effort` and, under `consumed`,
-`input_tokens`, `output_tokens`, `cache_read_tokens` and `cost_usd`. They were
+`input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens`
+and `cost_usd`. They were
 added as optional fields without a capabilities bump, so a consumer detects
 them by presence, not by version. Each is absent when the backend did not
 report it; a consumer must not read an absent `cost_usd` as zero. See

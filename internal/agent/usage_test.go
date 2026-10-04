@@ -38,6 +38,7 @@ func withoutLine(raw, marker string) string {
 func TestClaudeSession_CostSplitAndEffort(t *testing.T) {
 	type want struct {
 		in, out, cache int64
+		cacheWrite     int64
 		cost           float64
 		costReported   bool
 		effort         string
@@ -52,7 +53,7 @@ func TestClaudeSession_CostSplitAndEffort(t *testing.T) {
 			name: "fresh session: running total becomes per-turn cost",
 			raw:  readFixture(t, "claude-cost-fresh.jsonl"),
 			turns: []want{
-				{in: 10, out: 5, cache: 100, cost: 0.05, costReported: true, effort: "high"},
+				{in: 10, out: 5, cache: 100, cacheWrite: 50, cost: 0.05, costReported: true, effort: "high"},
 				{in: 20, out: 7, cache: 200, cost: 0.07, costReported: true, effort: "high"},
 			},
 		},
@@ -86,7 +87,7 @@ func TestClaudeSession_CostSplitAndEffort(t *testing.T) {
 			name: "no get_settings answer: effort is not reported",
 			raw:  withoutLine(readFixture(t, "claude-cost-fresh.jsonl"), "ynh-get-settings"),
 			turns: []want{
-				{in: 10, out: 5, cache: 100, cost: 0.05, costReported: true},
+				{in: 10, out: 5, cache: 100, cacheWrite: 50, cost: 0.05, costReported: true},
 				{in: 20, out: 7, cache: 200, cost: 0.07, costReported: true},
 			},
 		},
@@ -100,11 +101,13 @@ func TestClaudeSession_CostSplitAndEffort(t *testing.T) {
 				if err != nil {
 					t.Fatalf("turn %d: %v", i+1, err)
 				}
-				if !turn.UsageReported || !turn.CacheReported {
-					t.Errorf("turn %d: usage reported=%v cache reported=%v, want both", i+1, turn.UsageReported, turn.CacheReported)
+				if !turn.UsageReported || !turn.CacheReported || !turn.CacheCreationReported {
+					t.Errorf("turn %d: usage reported=%v cache reported=%v cache writes reported=%v, want all",
+						i+1, turn.UsageReported, turn.CacheReported, turn.CacheCreationReported)
 				}
-				if turn.Usage.InputTokens != w.in || turn.Usage.OutputTokens != w.out || turn.Usage.CacheTokens != w.cache {
-					t.Errorf("turn %d: usage = %+v, want in=%d out=%d cache=%d", i+1, turn.Usage, w.in, w.out, w.cache)
+				if turn.Usage.InputTokens != w.in || turn.Usage.OutputTokens != w.out || turn.Usage.CacheTokens != w.cache ||
+					turn.Usage.CacheCreationTokens != w.cacheWrite {
+					t.Errorf("turn %d: usage = %+v, want in=%d out=%d cache=%d cache writes=%d", i+1, turn.Usage, w.in, w.out, w.cache, w.cacheWrite)
 				}
 				if turn.CostReported != w.costReported || !near(turn.CostUSD, w.cost) {
 					t.Errorf("turn %d: cost = %v (reported %v), want %v (reported %v)", i+1, turn.CostUSD, turn.CostReported, w.cost, w.costReported)
@@ -157,8 +160,8 @@ func consumedJSON(t *testing.T, res *RunResult) (map[string]any, map[string]any)
 }
 
 func TestRunLoop_ResultReportsCostSplitAndEffort(t *testing.T) {
-	usage1 := Usage{InputTokens: 100, OutputTokens: 40, CacheTokens: 900}
-	usage2 := Usage{InputTokens: 50, OutputTokens: 10, CacheTokens: 300}
+	usage1 := Usage{InputTokens: 100, OutputTokens: 40, CacheTokens: 900, CacheCreationTokens: 70}
+	usage2 := Usage{InputTokens: 50, OutputTokens: 10, CacheTokens: 300, CacheCreationTokens: 5}
 	tests := []struct {
 		name       string
 		turns      []Turn
@@ -168,13 +171,32 @@ func TestRunLoop_ResultReportsCostSplitAndEffort(t *testing.T) {
 		{
 			name: "claude-like: usage, cache, cost and effort reported",
 			turns: []Turn{
-				{Content: "1", Usage: usage1, UsageReported: true, CacheReported: true, CostUSD: 0.25, CostReported: true, Effort: "high"},
-				{Content: "2", Usage: usage2, UsageReported: true, CacheReported: true, CostUSD: 0.5, CostReported: true, Effort: "high"},
+				{Content: "1", Usage: usage1, UsageReported: true, CacheReported: true, CacheCreationReported: true, CostUSD: 0.25, CostReported: true, Effort: "high"},
+				{Content: "2", Usage: usage2, UsageReported: true, CacheReported: true, CacheCreationReported: true, CostUSD: 0.5, CostReported: true, Effort: "high"},
 			},
 			wantTokens: 200,
 			want: map[string]any{
-				"input_tokens": 150.0, "output_tokens": 50.0, "cache_read_tokens": 1200.0, "cost_usd": 0.75, "effort": "high",
+				"input_tokens": 150.0, "output_tokens": 50.0, "cache_read_tokens": 1200.0, "cache_creation_tokens": 75.0,
+				"cost_usd": 0.75, "effort": "high",
 			},
+		},
+		{
+			name: "cache writes reported as zero are present, not absent",
+			turns: []Turn{
+				{Content: "1", Usage: Usage{InputTokens: 10, OutputTokens: 5}, UsageReported: true, CacheReported: true, CacheCreationReported: true},
+				{Content: "2", Usage: Usage{InputTokens: 10, OutputTokens: 5}, UsageReported: true, CacheReported: true, CacheCreationReported: true},
+			},
+			wantTokens: 30,
+			want:       map[string]any{"cache_read_tokens": 0.0, "cache_creation_tokens": 0.0},
+		},
+		{
+			name: "cache reads without cache writes: the write count is absent",
+			turns: []Turn{
+				{Content: "1", Usage: usage1, UsageReported: true, CacheReported: true},
+				{Content: "2", Usage: usage2, UsageReported: true, CacheReported: true},
+			},
+			wantTokens: 200,
+			want:       map[string]any{"cache_read_tokens": 1200.0, "cache_creation_tokens": nil},
 		},
 		{
 			name: "codex-like: usage without cache or cost",
@@ -184,7 +206,8 @@ func TestRunLoop_ResultReportsCostSplitAndEffort(t *testing.T) {
 			},
 			wantTokens: 200,
 			want: map[string]any{
-				"input_tokens": 150.0, "output_tokens": 50.0, "cache_read_tokens": nil, "cost_usd": nil, "effort": nil,
+				"input_tokens": 150.0, "output_tokens": 50.0, "cache_read_tokens": nil, "cache_creation_tokens": nil,
+				"cost_usd": nil, "effort": nil,
 			},
 		},
 		{
@@ -195,7 +218,8 @@ func TestRunLoop_ResultReportsCostSplitAndEffort(t *testing.T) {
 			},
 			wantTokens: 200,
 			want: map[string]any{
-				"input_tokens": nil, "output_tokens": nil, "cache_read_tokens": nil, "cost_usd": nil, "effort": nil,
+				"input_tokens": nil, "output_tokens": nil, "cache_read_tokens": nil, "cache_creation_tokens": nil,
+				"cost_usd": nil, "effort": nil,
 			},
 		},
 		{
@@ -221,7 +245,7 @@ func TestRunLoop_ResultReportsCostSplitAndEffort(t *testing.T) {
 			}
 			consumed, top := consumedJSON(t, res)
 			if consumed["tokens"] != tt.wantTokens {
-				t.Errorf("tokens = %v, want %v (input plus output, cache excluded, as before)", consumed["tokens"], tt.wantTokens)
+				t.Errorf("tokens = %v, want %v (input plus output, cache reads and writes excluded, as before)", consumed["tokens"], tt.wantTokens)
 			}
 			for key, want := range tt.want {
 				src := consumed
@@ -260,8 +284,8 @@ func TestRunLoop_ResumeCarriesCostSplitAndEffort(t *testing.T) {
 	mb1 := &mockBackend{
 		name: "mock",
 		turns: []Turn{
-			{Content: "r1", Usage: Usage{InputTokens: 10, OutputTokens: 5, CacheTokens: 100}, UsageReported: true, CacheReported: true, CostUSD: 0.1, CostReported: true, Effort: "high"},
-			{Content: "r2", Usage: Usage{InputTokens: 20, OutputTokens: 5, CacheTokens: 200}, UsageReported: true, CacheReported: true, CostUSD: 0.2, CostReported: true, Effort: "high"},
+			{Content: "r1", Usage: Usage{InputTokens: 10, OutputTokens: 5, CacheTokens: 100, CacheCreationTokens: 40}, UsageReported: true, CacheReported: true, CacheCreationReported: true, CostUSD: 0.1, CostReported: true, Effort: "high"},
+			{Content: "r2", Usage: Usage{InputTokens: 20, OutputTokens: 5, CacheTokens: 200}, UsageReported: true, CacheReported: true, CacheCreationReported: true, CostUSD: 0.2, CostReported: true, Effort: "high"},
 		},
 		resumeToken: "tok-1",
 	}
@@ -275,6 +299,7 @@ func TestRunLoop_ResumeCarriesCostSplitAndEffort(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cp.Budget.InputTokens != 30 || cp.Budget.OutputTokens != 10 || cp.Budget.CacheReadTokens != 300 ||
+		cp.Budget.CacheCreationTokens != 40 || !cp.Budget.CacheCreationReported ||
 		!cp.Budget.UsageReported || !cp.Budget.CacheReported || !cp.Budget.CostReported || !near(cp.Budget.CostUSD, 0.3) {
 		t.Errorf("checkpoint budget does not carry the split and cost: %+v", cp.Budget)
 	}
@@ -287,7 +312,7 @@ func TestRunLoop_ResumeCarriesCostSplitAndEffort(t *testing.T) {
 	passSensor(t)
 	mb2 := &mockBackend{
 		name:        "mock",
-		turns:       []Turn{{Content: "done", Usage: Usage{InputTokens: 1, OutputTokens: 2, CacheTokens: 3}, UsageReported: true, CacheReported: true, CostUSD: 0.05, CostReported: true}},
+		turns:       []Turn{{Content: "done", Usage: Usage{InputTokens: 1, OutputTokens: 2, CacheTokens: 3, CacheCreationTokens: 4}, UsageReported: true, CacheReported: true, CacheCreationReported: true, CostUSD: 0.05, CostReported: true}},
 		resumeToken: "tok-1",
 	}
 	opts2 := resumeOpts(mb2, dir)
@@ -302,7 +327,7 @@ func TestRunLoop_ResumeCarriesCostSplitAndEffort(t *testing.T) {
 		t.Errorf("tokens = %d, want 43", c.Tokens)
 	}
 	if c.InputTokens == nil || *c.InputTokens != 31 || c.OutputTokens == nil || *c.OutputTokens != 12 ||
-		c.CacheReadTokens == nil || *c.CacheReadTokens != 303 {
+		c.CacheReadTokens == nil || *c.CacheReadTokens != 303 || c.CacheCreationTokens == nil || *c.CacheCreationTokens != 44 {
 		t.Errorf("split did not sum across the resume: %+v", c)
 	}
 	if c.CostUSD == nil || !near(*c.CostUSD, 0.35) {
@@ -319,8 +344,8 @@ func TestRunLoop_PlanPhaseCountsCostAndSplit(t *testing.T) {
 	mb := &mockBackend{
 		name: "mock",
 		turns: []Turn{
-			{Content: "the plan", Usage: Usage{InputTokens: 7, OutputTokens: 3, CacheTokens: 11}, UsageReported: true, CacheReported: true, CostUSD: 0.01, CostReported: true, Effort: "low"},
-			{Content: "act done", Usage: Usage{InputTokens: 5, OutputTokens: 5, CacheTokens: 9}, UsageReported: true, CacheReported: true, CostUSD: 0.02, CostReported: true},
+			{Content: "the plan", Usage: Usage{InputTokens: 7, OutputTokens: 3, CacheTokens: 11, CacheCreationTokens: 13}, UsageReported: true, CacheReported: true, CacheCreationReported: true, CostUSD: 0.01, CostReported: true, Effort: "low"},
+			{Content: "act done", Usage: Usage{InputTokens: 5, OutputTokens: 5, CacheTokens: 9, CacheCreationTokens: 2}, UsageReported: true, CacheReported: true, CacheCreationReported: true, CostUSD: 0.02, CostReported: true},
 		},
 	}
 	opts := planOpts(mb, io.Discard, strings.NewReader(`{"action":"approve_plan"}`+"\n"))
@@ -333,7 +358,7 @@ func TestRunLoop_PlanPhaseCountsCostAndSplit(t *testing.T) {
 		t.Errorf("tokens = %d, want 20 including the plan turn", c.Tokens)
 	}
 	if c.InputTokens == nil || *c.InputTokens != 12 || c.OutputTokens == nil || *c.OutputTokens != 8 ||
-		c.CacheReadTokens == nil || *c.CacheReadTokens != 20 {
+		c.CacheReadTokens == nil || *c.CacheReadTokens != 20 || c.CacheCreationTokens == nil || *c.CacheCreationTokens != 15 {
 		t.Errorf("split does not include the plan turn: %+v", c)
 	}
 	if c.CostUSD == nil || !near(*c.CostUSD, 0.03) {
@@ -375,8 +400,54 @@ func TestReadCheckpoint_OldFormatLoadsWithoutSplitOrCost(t *testing.T) {
 	}
 	var c RunConsumed
 	b.fillConsumed(&c)
-	if c.InputTokens != nil || c.OutputTokens != nil || c.CacheReadTokens != nil || c.CostUSD != nil {
+	if c.InputTokens != nil || c.OutputTokens != nil || c.CacheReadTokens != nil || c.CacheCreationTokens != nil || c.CostUSD != nil {
 		t.Errorf("an old checkpoint must restore the split and cost as absent: %+v", c)
+	}
+}
+
+// A checkpoint written with the split but before cache writes were recorded
+// still loads: the split carries over and the cache-write count stays absent
+// until a turn reports one, then counts only from there.
+func TestReadCheckpoint_WithoutCacheWritesLoads(t *testing.T) {
+	dir := t.TempDir()
+	old := `{
+  "version": 1,
+  "session_id": "s-split",
+  "backend": "claude",
+  "phase": "act",
+  "plan_finalized": true,
+  "last_completed_turn": 2,
+  "budget": {"turns": 2, "tokens": 300, "wall_consumed_ms": 5000, "plan_iterations": 0,
+    "input_tokens": 200, "output_tokens": 100, "cache_read_tokens": 900,
+    "usage_reported": true, "cache_reported": true, "cost_usd": 0.4, "cost_reported": true},
+  "updated_at": "2026-10-01T00:00:00Z"
+}`
+	if err := os.WriteFile(checkpointPath(dir), []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cp, err := readCheckpoint(dir)
+	if err != nil {
+		t.Fatalf("checkpoint must load: %v", err)
+	}
+	var b Budget
+	b.Resume(cp.Budget)
+	var c RunConsumed
+	b.fillConsumed(&c)
+	if c.CacheReadTokens == nil || *c.CacheReadTokens != 900 || c.InputTokens == nil || *c.InputTokens != 200 {
+		t.Errorf("the split must carry over: %+v", c)
+	}
+	if c.CacheCreationTokens != nil {
+		t.Errorf("cache writes = %d, want absent", *c.CacheCreationTokens)
+	}
+
+	b.RecordUsage(Turn{Usage: Usage{InputTokens: 1, OutputTokens: 1, CacheCreationTokens: 7}, UsageReported: true, CacheReported: true, CacheCreationReported: true})
+	c = RunConsumed{}
+	b.fillConsumed(&c)
+	if c.CacheCreationTokens == nil || *c.CacheCreationTokens != 7 {
+		t.Errorf("cache writes = %v, want 7 from the first turn that reported them", c.CacheCreationTokens)
+	}
+	if b.Tokens() != 302 {
+		t.Errorf("tokens = %d, want 302: cache writes never count toward the total", b.Tokens())
 	}
 }
 
@@ -391,8 +462,11 @@ func TestClaudeSession_CountsEachTurnOnce(t *testing.T) {
 		fixture string
 		want    Usage
 	}{
-		{"result usage is authoritative", "claude-tool-turn.jsonl", Usage{InputTokens: 25, OutputTokens: 25, CacheTokens: 300}},
-		{"no result usage: one count per message id", "claude-tool-turn-no-result-usage.jsonl", Usage{InputTokens: 25, OutputTokens: 25, CacheTokens: 300}},
+		// The cache writes are 40, not 80: the cache_creation breakdown
+		// beside the total is not added to it, and msg_A's two events count
+		// once.
+		{"result usage is authoritative", "claude-tool-turn.jsonl", Usage{InputTokens: 25, OutputTokens: 25, CacheTokens: 300, CacheCreationTokens: 40}},
+		{"no result usage: one count per message id", "claude-tool-turn-no-result-usage.jsonl", Usage{InputTokens: 25, OutputTokens: 25, CacheTokens: 300, CacheCreationTokens: 40}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -402,8 +476,8 @@ func TestClaudeSession_CountsEachTurnOnce(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !turn.UsageReported {
-				t.Error("usage must be reported")
+			if !turn.UsageReported || !turn.CacheCreationReported {
+				t.Errorf("usage reported=%v cache writes reported=%v, want both", turn.UsageReported, turn.CacheCreationReported)
 			}
 			if turn.Usage != tt.want {
 				t.Errorf("usage = %+v, want %+v", turn.Usage, tt.want)
@@ -411,7 +485,7 @@ func TestClaudeSession_CountsEachTurnOnce(t *testing.T) {
 			var b Budget
 			b.RecordUsage(turn)
 			if b.Tokens() != 50 {
-				t.Errorf("tokens = %d, want 50", b.Tokens())
+				t.Errorf("tokens = %d, want 50, cache reads and writes excluded", b.Tokens())
 			}
 		})
 	}
@@ -434,5 +508,103 @@ func TestClaudeSession_ZeroUsageStillReportedForUnmeteredTurn(t *testing.T) {
 	}
 	if err := unmeteredTurn("claude", turn); err == nil {
 		t.Error("a zero-usage turn with a response must be a worker error")
+	}
+}
+
+// A usage record without cache_creation_input_tokens reports no cache writes,
+// rather than a zero nobody measured. The cache_creation breakdown on its own
+// is not a total and is never summed into one.
+func TestClaudeSession_CacheWritesOnlyWhenReported(t *testing.T) {
+	tests := []struct {
+		name         string
+		raw          string
+		wantReported bool
+		wantWrites   int64
+	}{
+		{
+			name: "field absent from result and assistant events",
+			raw: `{"type":"assistant","message":{"id":"msg_1","role":"assistant","content":[{"type":"text","text":"hi"}],"usage":{"input_tokens":3,"output_tokens":2,"cache_read_input_tokens":0}}}
+{"type":"result","subtype":"success","is_error":false,"result":"hi","usage":{"input_tokens":3,"output_tokens":2,"cache_read_input_tokens":0}}
+`,
+		},
+		{
+			name: "breakdown without the total",
+			raw: `{"type":"result","subtype":"success","is_error":false,"result":"hi","usage":{"input_tokens":3,"output_tokens":2,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_1h_input_tokens":6,"ephemeral_5m_input_tokens":9}}}
+`,
+		},
+		{
+			name: "total and breakdown: the total counts once",
+			raw: `{"type":"result","subtype":"success","is_error":false,"result":"hi","usage":{"input_tokens":3,"output_tokens":2,"cache_read_input_tokens":0,"cache_creation_input_tokens":15,"cache_creation":{"ephemeral_1h_input_tokens":6,"ephemeral_5m_input_tokens":9}}}
+`,
+			wantReported: true,
+			wantWrites:   15,
+		},
+		{
+			name: "reported zero stays reported",
+			raw: `{"type":"result","subtype":"success","is_error":false,"result":"hi","usage":{"input_tokens":3,"output_tokens":2,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}
+`,
+			wantReported: true,
+		},
+		{
+			name: "no result usage: taken from the assistant events",
+			raw: `{"type":"assistant","message":{"id":"msg_1","role":"assistant","content":[{"type":"text","text":"a"}],"usage":{"input_tokens":3,"output_tokens":2,"cache_creation_input_tokens":8}}}
+{"type":"assistant","message":{"id":"msg_2","role":"assistant","content":[{"type":"text","text":"b"}],"usage":{"input_tokens":1,"output_tokens":1,"cache_creation_input_tokens":4}}}
+{"type":"result","subtype":"success","is_error":false,"result":"ab"}
+`,
+			wantReported: true,
+			wantWrites:   12,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := claudeSessionOver(tt.raw)
+			s.costBaseKnown = true
+			turn, err := s.Next()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if turn.CacheCreationReported != tt.wantReported || turn.Usage.CacheCreationTokens != tt.wantWrites {
+				t.Errorf("cache writes = %d (reported %v), want %d (reported %v)",
+					turn.Usage.CacheCreationTokens, turn.CacheCreationReported, tt.wantWrites, tt.wantReported)
+			}
+		})
+	}
+}
+
+// cursor's usage, when in Claude's shape, carries the cache-write total too.
+func TestParseCursorOutput_CacheWrites(t *testing.T) {
+	tests := []struct {
+		name         string
+		raw          string
+		wantReported bool
+		wantWrites   int64
+	}{
+		{
+			name: "reported",
+			raw: `{"type":"result","is_error":false,"result":"ok","usage":{"input_tokens":3,"output_tokens":2,"cache_read_input_tokens":5,"cache_creation_input_tokens":11,"cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":11}}}
+`,
+			wantReported: true,
+			wantWrites:   11,
+		},
+		{
+			name: "not reported",
+			raw: `{"type":"result","is_error":false,"result":"ok","usage":{"input_tokens":3,"output_tokens":2}}
+`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			turn, err := parseCursorOutput(strings.NewReader(tt.raw))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if turn.CacheCreationReported != tt.wantReported || turn.Usage.CacheCreationTokens != tt.wantWrites {
+				t.Errorf("cache writes = %d (reported %v), want %d (reported %v)",
+					turn.Usage.CacheCreationTokens, turn.CacheCreationReported, tt.wantWrites, tt.wantReported)
+			}
+			if turn.Usage.InputTokens != 3 || turn.Usage.OutputTokens != 2 {
+				t.Errorf("usage = %+v, want in=3 out=2", turn.Usage)
+			}
+		})
 	}
 }

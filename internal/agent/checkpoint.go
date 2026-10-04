@@ -33,17 +33,19 @@ const (
 // reported, and the *Reported flags keep "reported zero" apart from "never
 // reported".
 type CheckpointBudget struct {
-	Turns           int     `json:"turns"`
-	Tokens          int64   `json:"tokens"`
-	WallConsumedMS  int64   `json:"wall_consumed_ms"`
-	PlanIterations  int     `json:"plan_iterations"`
-	InputTokens     int64   `json:"input_tokens,omitempty"`
-	OutputTokens    int64   `json:"output_tokens,omitempty"`
-	CacheReadTokens int64   `json:"cache_read_tokens,omitempty"`
-	UsageReported   bool    `json:"usage_reported,omitempty"`
-	CacheReported   bool    `json:"cache_reported,omitempty"`
-	CostUSD         float64 `json:"cost_usd,omitempty"`
-	CostReported    bool    `json:"cost_reported,omitempty"`
+	Turns                 int     `json:"turns"`
+	Tokens                int64   `json:"tokens"`
+	WallConsumedMS        int64   `json:"wall_consumed_ms"`
+	PlanIterations        int     `json:"plan_iterations"`
+	InputTokens           int64   `json:"input_tokens,omitempty"`
+	OutputTokens          int64   `json:"output_tokens,omitempty"`
+	CacheReadTokens       int64   `json:"cache_read_tokens,omitempty"`
+	UsageReported         bool    `json:"usage_reported,omitempty"`
+	CacheReported         bool    `json:"cache_reported,omitempty"`
+	CacheCreationTokens   int64   `json:"cache_creation_tokens,omitempty"`
+	CacheCreationReported bool    `json:"cache_creation_reported,omitempty"`
+	CostUSD               float64 `json:"cost_usd,omitempty"`
+	CostReported          bool    `json:"cost_reported,omitempty"`
 }
 
 // Checkpoint is the resume source of truth. It is written atomically after

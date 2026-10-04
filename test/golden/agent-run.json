@@ -31,6 +31,7 @@
     "input_tokens": 396410,
     "output_tokens": 21823,
     "cache_read_tokens": 2871904,
+    "cache_creation_tokens": 214760,
     "cost_usd": 4.1873,
     "wall_ms": 512400,
     "plan_iterations": 1

@@ -156,7 +156,7 @@
         },
         "tokens": {
           "type": "integer",
-          "description": "Input plus output tokens. Cache reads are not included."
+          "description": "Input plus output tokens. Cache reads and cache writes are not included."
         },
         "input_tokens": {
           "type": "integer",
@@ -169,6 +169,10 @@
         "cache_read_tokens": {
           "type": "integer",
           "description": "Tokens read from the prompt cache, not counted in tokens. Absent when the backend does not report a cache-read count."
+        },
+        "cache_creation_tokens": {
+          "type": "integer",
+          "description": "Tokens written to the prompt cache, summed per turn like cache_read_tokens and not counted in tokens. Their cost is already inside cost_usd. Absent when the backend does not report a cache-write count; zero only when it reported zero."
         },
         "cost_usd": {
           "type": "number",

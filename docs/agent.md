@@ -366,14 +366,21 @@ read as "free":
 
 | Field | What it holds |
 |---|---|
-| `consumed.tokens` | Input plus output tokens. Cache reads are not included. |
+| `consumed.tokens` | Input plus output tokens. Cache reads and writes are not included. |
 | `consumed.input_tokens`, `consumed.output_tokens` | The split behind `tokens`. |
 | `consumed.cache_read_tokens` | Tokens read from the prompt cache, beside the total rather than in it. |
+| `consumed.cache_creation_tokens` | Tokens written to the prompt cache, also beside the total. Their cost is already inside `cost_usd`. |
 | `consumed.cost_usd` | The cost the backend reported, summed over the run. ynh never prices tokens itself. |
 | `effort` | The reasoning effort the worker reported it ran with. Never inferred from the model name. |
 
 All of them count plan-phase turns, as `tokens` does, and carry across
-`--resume` through the checkpoint.
+`--resume` through the checkpoint. A count the backend reported as zero is
+present as zero.
+
+Cache writes come from Claude's `cache_creation_input_tokens`, summed per turn
+the same way as cache reads. Claude's usage record also splits that total by
+cache lifetime in a `cache_creation` object; ynh takes the total only, so the
+writes are never counted twice.
 
 **Claude token counts were double before this release.** ynh added each
 turn's usage from the assistant events to the same turn's usage on the result
@@ -389,11 +396,11 @@ before, which is the cap meaning what it says.
 
 What each backend reports today:
 
-| Backend | Split | Cache reads | Cost | Effort |
-|---|---|---|---|---|
-| `claude` | yes | yes | yes | yes |
-| `codex` | yes | no | no | no |
-| `cursor` | when its output carries usage | when its output carries usage | no | no |
+| Backend | Split | Cache reads | Cache writes | Cost | Effort |
+|---|---|---|---|---|---|
+| `claude` | yes | yes | yes | yes | yes |
+| `codex` | yes | no | no | no | no |
+| `cursor` | when its output carries usage | when its output carries usage | when its usage carries `cache_creation_input_tokens` | no | no |
 
 Claude Code reports cost as a running total for the worker process, which a
 resumed session may continue from where its transcript left off. ynh takes

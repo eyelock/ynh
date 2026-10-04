@@ -74,6 +74,9 @@ type Turn struct {
 	// CacheReported is true when that usage record carries a cache-read
 	// count, so Usage.CacheTokens is a measurement rather than a default.
 	CacheReported bool
+	// CacheCreationReported is true when that usage record carries a
+	// cache-write count, so Usage.CacheCreationTokens is a measurement.
+	CacheCreationReported bool
 	// CostUSD is what the vendor reported this turn cost, in US dollars.
 	// It is meaningful only when CostReported: ynh never prices tokens itself,
 	// and a zero for a backend that reports no cost would read as "free".
@@ -90,6 +93,9 @@ type Usage struct {
 	InputTokens  int64
 	OutputTokens int64
 	CacheTokens  int64
+	// CacheCreationTokens is what the turn wrote to the prompt cache. Like
+	// CacheTokens it is carried beside the input and output, never in them.
+	CacheCreationTokens int64
 }
 
 // WorkerError is a turn the worker could not complete: the vendor CLI said so
