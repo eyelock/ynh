@@ -2,7 +2,7 @@
 
 Hooks are shell commands that vendors execute at specific lifecycle events during an agent session. They bridge the **guide layer** (what ynh manages) to the **sensor layer** (linters, tests, validators) by declaring *when* a command should run, without embedding the tool itself.
 
-A harness declares hooks in `.agents/harness/plugin.json` at the top level. At assembly time, ynh translates them into the vendor-native config format. A hook command is a regular shell command: a tool on the host machine, a script in the project, or a script the harness ships in its own tree. How a relative `./` script path is rewritten depends on where the hooks are read; see [Hook script paths](#hook-script-paths).
+A harness declares hooks in `.agents/harness/plugin.json` at the top level. At assembly time, ynh translates them into the vendor-native config format. A hook command is a regular shell command: a tool on the host machine, a script in the project, or a script the harness ships in its own tree. A command that starts with `./` names a script the harness ships; ynh carries it with the hooks and rewrites the path to reach it, in a session and in a plugin alike. See [Hook script paths](#hook-script-paths).
 
 > **Note:** Hooks can vary by [profile](harnesses.md#profiles). When a profile is selected, its `hooks` field replaces the top-level hooks entirely.
 
@@ -91,7 +91,7 @@ Each vendor reads hooks from a different file depending on how the harness reach
 | Codex | `.codex/hooks.json`, read from a trusted project's `.codex/` layer ([developers.openai.com/codex/hooks](https://developers.openai.com/codex/hooks)) | `hooks/codex.json`, named by `"hooks"` in `.codex-plugin/plugin.json` |
 | Copilot | none (see [Vendor Translation](#vendor-translation)) | none of its own; see below |
 
-The document is the same in a vendor's session file and its plugin file except for commands that start with `./`, which resolve against a different root in each (see [Hook script paths](#hook-script-paths)). A plugin never reads a session path, so an export does not carry `.claude/hooks/`, `.cursor/hooks.json` or `.codex/hooks.json`, and a session assembly does not carry `hooks/<vendor>.json`.
+The document is the same in a vendor's session file and its plugin file except, on Cursor and Codex, for commands that start with `./`, which reach the harness's script from a different root in each (see [Hook script paths](#hook-script-paths)). A plugin never reads a session path, so an export does not carry `.claude/hooks/`, `.cursor/hooks.json` or `.codex/hooks.json`, and a session assembly does not carry `hooks/<vendor>.json`.
 
 #### Why a plugin's hooks are not in `hooks/hooks.json`
 
@@ -112,13 +112,13 @@ Copilot has no manifest of its own: it reads `.claude-plugin/plugin.json`, the f
 
 ### Hook script paths
 
-A hook runs in the agent's current working directory, which moves as the agent works, so a command such as `./scripts/guard.sh` needs a fixed root. ynh rewrites a command whose first characters are `./`, and only those; an absolute path (`/usr/local/bin/lint.sh`), a command already anchored to a variable (`$CLAUDE_PROJECT_DIR/x.sh`) and a PATH-style command (`make check`) are written exactly as declared.
+A command such as `./scripts/guard.sh` names a script relative to the harness that declares it: `scripts/guard.sh` in the harness's own tree. Wherever the hooks end up, in a session's run directory or an installed plugin, the harness tree is not there, so ynh copies the script alongside the hooks and makes the command reach the copy. It does this for a command whose first characters are `./`, and only those; an absolute path (`/usr/local/bin/lint.sh`), a command already anchored to a variable (`$CLAUDE_PROJECT_DIR/x.sh`) and a PATH-style command (`make check`) are written exactly as declared.
 
 | Vendor | Session (`ynh run`, `ynd preview`, `ynh agent`) | Plugin (`ynd export`, `ynd marketplace build`) |
 |--------|--------------------------------------------------|-----------------------------------------------|
-| Claude Code | `$CLAUDE_PROJECT_DIR/scripts/guard.sh`: the project root | `"${CLAUDE_PLUGIN_ROOT}"/scripts/guard.sh`: the installed plugin ([code.claude.com/docs/en/plugins-reference](https://code.claude.com/docs/en/plugins-reference)) |
-| Cursor | `./scripts/guard.sh`, unchanged | `"${CURSOR_PLUGIN_ROOT}"/scripts/guard.sh`, which Cursor expands in a plugin hook command ([cursor.com/docs/reference/plugins](https://cursor.com/docs/reference/plugins)) |
-| Codex | `./scripts/guard.sh`, unchanged | `"${PLUGIN_ROOT}"/scripts/guard.sh`; Codex exports `PLUGIN_ROOT` to plugin hook commands ([developers.openai.com/codex/plugins/build](https://developers.openai.com/codex/plugins/build)) |
+| Claude Code | `"${CLAUDE_PLUGIN_ROOT}"/scripts/guard.sh`, script copied to `.claude/scripts/guard.sh`: the `--plugin-dir` plugin root | `"${CLAUDE_PLUGIN_ROOT}"/scripts/guard.sh`: the installed plugin ([code.claude.com/docs/en/plugins-reference](https://code.claude.com/docs/en/plugins-reference)) |
+| Cursor | `./scripts/guard.sh`, unchanged, script copied to `scripts/guard.sh` in the run directory | `"${CURSOR_PLUGIN_ROOT}"/scripts/guard.sh`, which Cursor expands in a plugin hook command ([cursor.com/docs/reference/plugins](https://cursor.com/docs/reference/plugins)) |
+| Codex | `./scripts/guard.sh`, unchanged, script copied to `scripts/guard.sh` in the run directory | `"${PLUGIN_ROOT}"/scripts/guard.sh`; Codex exports `PLUGIN_ROOT` to plugin hook commands ([developers.openai.com/codex/plugins/build](https://developers.openai.com/codex/plugins/build)) |
 | Copilot | no hooks | none of its own; in a merged package it reads `hooks/claude.json`, with Claude's `${CLAUDE_PLUGIN_ROOT}` (see below) |
 
 The variable is quoted so an install path with spaces stays one word, as Claude Code's reference recommends.
@@ -133,7 +133,18 @@ The hook is still written, anchored to the plugin root, so it will not find the 
 
 Copilot's documentation does not say whether it expands `${CLAUDE_PLUGIN_ROOT}` in a hook command (it documents `${PLUGIN_ROOT}` and its `${CLAUDE_PLUGIN_ROOT}` alias for MCP servers), so a `./` script in a merged package is unverified on Copilot.
 
-**In a session, a `./` script is not shipped.** Session assembly does not copy hook scripts into the run directory. On Claude Code, `ynh run` starts Claude in your current directory and the command resolves against `$CLAUDE_PROJECT_DIR`, so the script must be in that project, not in the harness. Cursor and Codex are launched with the assembled run directory as their working directory, and their session files keep the bare `./`, so the script must be there, which a harness cannot arrange today. For a hook that must work in both a session and a plugin, use an absolute path or a command on `PATH`.
+**In a session, a `./` script is part of the run directory.** `ynh run`, `ynd preview` and the agent loop copy each `./` script a hook runs into the run directory, by the same rules as an export (first word only, a regular file inside the harness, mode kept), and warn about any they cannot carry:
+
+```
+  warning: hook script ./scripts/missing.sh is not a file in the harness, so the session does not carry it
+```
+
+Where the copy goes follows where each vendor runs session hooks from:
+
+- **Claude Code** reads the session hooks from the `.claude/` directory `ynh run` passes as `--plugin-dir`. Claude loads a `--plugin-dir` plugin in place and sets `${CLAUDE_PLUGIN_ROOT}` to it for that plugin's hook commands ([code.claude.com/docs/en/plugins/loading](https://code.claude.com/docs/en/plugins/loading)), so the script is copied to `.claude/scripts/guard.sh` and the command is anchored there. `ynh run` still starts Claude in your project, so the command no longer depends on the agent's working directory. Whether Claude fires `--plugin-dir` hooks at all is covered under [Claude Code Runtime Limitation](#claude-code-runtime-limitation).
+- **Cursor** runs project hooks from the project root ([cursor.com/docs/hooks](https://cursor.com/docs/hooks)), and **Codex** runs hooks in the session's working directory ([developers.openai.com/codex/hooks](https://developers.openai.com/codex/hooks)). `ynh run` launches both with the run directory as their working directory, so the script is copied to the run directory's root and the bare `./scripts/guard.sh` reaches it.
+
+A `./` command therefore means the harness's script in a session too, not a file in your project. To run a script that belongs to the project, anchor it yourself (`$CLAUDE_PROJECT_DIR/scripts/x.sh` on Claude Code) or give an absolute path, and it is left alone. `ynh hook export`, which writes your project's own `.claude/settings.json`, is the exception: there the hooks belong to the project, and a `./` command is anchored to `$CLAUDE_PROJECT_DIR` (see [Running hooks in a plain Claude session](#running-hooks-in-a-plain-claude-session)).
 
 ### Claude Code Runtime Limitation
 
@@ -323,7 +334,7 @@ When writing hook scripts for use across vendors:
 2. **Use exit code 2 for blocking** — all three vendors recognize exit code 2 as "block this action."
 3. **Include remediation instructions** — tell the agent how to fix the problem, not just that there is one.
 4. **Keep scripts idempotent** — hooks may fire multiple times per session.
-5. **Make command paths cwd-independent**: hooks run in the agent's current working directory, not the project root, and that cwd changes as the agent navigates. A relative command (`./tools/hooks/foo.sh`) breaks after any `cd`. Anchor to the vendor's project-root variable (`$CLAUDE_PROJECT_DIR` on Claude Code) or use an absolute path. In a plugin export ynh anchors a `./` script to the plugin root for you and ships the script with the plugin; see [Hook script paths](#hook-script-paths).
+5. **Make command paths cwd-independent**: hooks run in the agent's current working directory, not the project root, and that cwd changes as the agent navigates. A relative command (`./tools/hooks/foo.sh`) breaks after any `cd`. Anchor to the vendor's project-root variable (`$CLAUDE_PROJECT_DIR` on Claude Code) or use an absolute path. For a session or a plugin export, ynh anchors a `./` script for you and ships the script alongside the hooks; see [Hook script paths](#hook-script-paths).
 
 ## Pairing with Sensors
 

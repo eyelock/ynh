@@ -189,13 +189,14 @@ func sortedKeys(m map[string]any) []string {
 	return keys
 }
 
-// TestHookCommandRoots: a "./" hook command names a script relative to
-// something, and what that is depends on where the hooks are read (#483). A
-// plugin's script ships inside the plugin, so a plugin hook file anchors it
-// to the vendor's plugin-root variable. A session file keeps what it had:
-// Claude anchors to $CLAUDE_PROJECT_DIR, Codex and Cursor leave it as
-// written. Absolute, already-anchored and PATH-style commands are never
-// touched.
+// TestHookCommandRoots: a "./" hook command names a script the harness ships,
+// and how it is reached depends on where the hooks are read. A plugin's script
+// ships inside the plugin, so a plugin hook file anchors it to the vendor's
+// plugin-root variable (#483). A session carries the script too (#495):
+// Claude reads its session hooks as a --plugin-dir plugin, so they anchor to
+// ${CLAUDE_PLUGIN_ROOT} as well; Codex and Cursor run session hooks from the
+// run directory, so the command stays as written. Absolute, already-anchored
+// and PATH-style commands are never touched.
 func TestHookCommandRoots(t *testing.T) {
 	untouched := []string{"/usr/local/bin/lint.sh", "$CLAUDE_PROJECT_DIR/x.sh", "make check", "tools/x.sh", "../x.sh"}
 	var entries []plugin.HookEntry
@@ -210,7 +211,7 @@ func TestHookCommandRoots(t *testing.T) {
 		session string
 		plugin  string
 	}{
-		{&Claude{}, "$CLAUDE_PROJECT_DIR/scripts/guard.sh --strict", `"${CLAUDE_PLUGIN_ROOT}"/scripts/guard.sh --strict`},
+		{&Claude{}, `"${CLAUDE_PLUGIN_ROOT}"/scripts/guard.sh --strict`, `"${CLAUDE_PLUGIN_ROOT}"/scripts/guard.sh --strict`},
 		{&Codex{}, "./scripts/guard.sh --strict", `"${PLUGIN_ROOT}"/scripts/guard.sh --strict`},
 		{&Cursor{}, "./scripts/guard.sh --strict", `"${CURSOR_PLUGIN_ROOT}"/scripts/guard.sh --strict`},
 	}

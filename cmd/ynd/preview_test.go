@@ -410,3 +410,65 @@ func TestPreview_ManifestMatchesTheSource(t *testing.T) {
 		t.Errorf("keywords = %v, want 3", got["keywords"])
 	}
 }
+
+// TestCmdPreviewShipsHookScripts locks #495: a session carries the scripts its
+// hooks run by a "./" path, and the session hook command reaches the copy.
+// Claude reads the session hooks as a --plugin-dir plugin rooted at .claude/;
+// Cursor and Codex run hooks from the run directory, where the session starts.
+func TestCmdPreviewShipsHookScripts(t *testing.T) {
+	tests := []struct {
+		vendor   string
+		hookFile string
+		command  string
+		script   string
+	}{
+		{"claude", ".claude/hooks/hooks.json", `\"${CLAUDE_PLUGIN_ROOT}\"/scripts/guard.sh --strict`, ".claude/scripts/guard.sh"},
+		{"codex", ".codex/hooks.json", "./scripts/guard.sh --strict", "scripts/guard.sh"},
+		{"cursor", ".cursor/hooks.json", "./scripts/guard.sh --strict", "scripts/guard.sh"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.vendor, func(t *testing.T) {
+			srcDir := t.TempDir()
+			hj := map[string]any{
+				"name":    "preview-hook-scripts",
+				"version": "1.0.0",
+				"hooks": map[string]any{
+					"on_stop": []map[string]any{{"command": "./scripts/guard.sh --strict"}},
+				},
+			}
+			data, err := json.Marshal(hj)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := writePluginJSONFile(srcDir, data); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(filepath.Join(srcDir, "scripts"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(srcDir, "scripts", "guard.sh"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+
+			outputDir := filepath.Join(t.TempDir(), "out")
+			if err := cmdPreview([]string{srcDir, "-v", tt.vendor, "-o", outputDir}); err != nil {
+				t.Fatalf("cmdPreview failed: %v", err)
+			}
+
+			hooks, err := os.ReadFile(filepath.Join(outputDir, filepath.FromSlash(tt.hookFile)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(hooks), `"command": "`+tt.command+`"`) {
+				t.Errorf("%s does not run %s:\n%s", tt.hookFile, tt.command, hooks)
+			}
+			info, err := os.Stat(filepath.Join(outputDir, filepath.FromSlash(tt.script)))
+			if err != nil {
+				t.Fatalf("hook script not in the session: %v", err)
+			}
+			if info.Mode().Perm()&0o111 == 0 {
+				t.Errorf("hook script mode = %v, want executable", info.Mode())
+			}
+		})
+	}
+}

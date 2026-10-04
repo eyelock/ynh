@@ -49,7 +49,10 @@ plugin-root/
   relative to the plugin root" is about the manifest's hooks file paths, not command
   strings, and the hook's working directory is not documented. So the plugin file
   anchors a `./` command to `"${PLUGIN_ROOT}"/` and the exporter copies the script into
-  the plugin; the session file keeps the command as written (#483)
+  the plugin (#483). The session file keeps the command as written: hooks "run with the
+  session `cwd` as their working directory" (CONFIRMED 2026-10-04,
+  developers.openai.com/codex/hooks), `launchCodex` sets that to the run dir, and
+  `assembler.WriteSessionHooks` copies the script to the run dir's root (#495)
 - Feature flag required: `[features] codex_hooks = true` in `config.toml`
 - Status: **Experimental**
 
