@@ -142,9 +142,10 @@
     },
     "Include": {
       "type": "object",
-      "description": "Git include reference declared by the harness manifest.",
+      "description": "Include reference declared by the harness manifest: a git source, or a local path (git empty, local set).",
       "properties": {
-        "git": {"type": "string"},
+        "git": {"type": "string", "description": "Git URL of the include. Empty for a local include."},
+        "local": {"type": "string", "description": "Filesystem path of a local include, as declared in the manifest. Absent for a git include."},
         "ref_installed": {"type": "string"},
         "ref_available": {"type": "string"},
         "is_pinned": {"type": "boolean"},

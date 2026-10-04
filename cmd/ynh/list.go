@@ -115,6 +115,9 @@ type listArtifacts struct {
 
 type listInclude struct {
 	Git string `json:"git"`
+	// Local is the filesystem path of a `local` include, as declared in the
+	// manifest. Git is empty for such an include.
+	Local string `json:"local,omitempty"`
 	// Ref is the ref this include actually tracks — equal to the manifest
 	// pin if non-empty, otherwise the resolved branch name recorded in
 	// installed.json (e.g. "main" for an empty manifest ref where the
@@ -464,6 +467,7 @@ func buildIncludes(includes []harness.Include) []listInclude {
 		}
 		li := listInclude{
 			Git:          inc.Git,
+			Local:        inc.Local,
 			Ref:          probeRef,
 			RefInstalled: refInstalled,
 			IsPinned:     harness.IsPinnedRef(inc.Ref),
@@ -563,6 +567,9 @@ func formatIncludes(includes []harness.Include) string {
 	parts := make([]string, 0, len(includes))
 	for _, inc := range includes {
 		s := resolver.ShortGitURL(inc.Git)
+		if inc.IsLocal() {
+			s = inc.Local
+		}
 		if inc.Path != "" {
 			s += "/" + inc.Path
 		}

@@ -1046,6 +1046,16 @@ func TestFormatIncludes(t *testing.T) {
 			{GitSource: harness.GitSource{Git: "github.com/example/skills", Path: "dev"}, Pick: []string{"a", "b"}},
 			{GitSource: harness.GitSource{Git: "github.com/example/skills", Path: "infra"}, Pick: []string{"c"}},
 		}, "example/skills/dev [2], example/skills/infra [1]"},
+		{"local", []harness.Include{
+			{GitSource: harness.GitSource{Local: "extras"}},
+		}, "extras"},
+		{"local with pick", []harness.Include{
+			{GitSource: harness.GitSource{Local: "./bundled/extras"}, Pick: []string{"skills/a"}},
+		}, "./bundled/extras [1]"},
+		{"local and git", []harness.Include{
+			{GitSource: harness.GitSource{Local: "extras"}},
+			{GitSource: harness.GitSource{Git: "github.com/example/skills", Path: "dev"}, Pick: []string{"a", "b"}},
+		}, "extras, example/skills/dev [2]"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
