@@ -31,6 +31,7 @@ ynh agent run --resume <session-dir> [flags]
 | `--profile <name>` | Apply a profile overlay |
 | `--backend <name>` | Backend to drive: `claude`, `codex` or `cursor` (default: `claude`; on `--resume`, the session's own) |
 | `--model <name>` | Model override passed to the backend |
+| `--effort <low\|medium\|high>` | Reasoning effort, mapped to the backend's own setting; overrides the harness's `agent.effort`. See [Effort](#effort) |
 | `--convergence-sensor <name>` | Sensor consulted once all blocking sensors pass |
 | `--sensor-overlay <json>` | Per-run sensor overrides |
 | `--worktree <dir>` | Directory the agent works in and sensors run against |
@@ -265,7 +266,7 @@ The backend, task and focus cannot be changed on a resume, only repeated:
   different task is a new run, not a resume.
 
 Some settings are not restored. Pass them again if the original run used them:
-`--model`, `--worktree`, `--max-wall`, `--sandbox`, `--auto-approve`,
+`--model`, `--effort`, `--worktree`, `--max-wall`, `--sandbox`, `--auto-approve`,
 `--auto-commit` and `--interactive`. `--auto-approve` stays out deliberately, as
 `--sandbox` does: a grant to skip permission checks is made by the operator each
 time, not inherited from a file.
@@ -437,7 +438,7 @@ its `input_tokens` includes its `cached_input_tokens` and its
 | `consumed.cache_creation_tokens` | `cache_write_input_tokens`; absent from a Codex too old to report it |
 | `consumed.output_tokens` | `output_tokens`, reasoning included and not added again |
 | `consumed.tokens` | non-cached, non-written input plus output |
-| `consumed.cost_usd`, `effort` | absent: Codex reports neither, and ynh passes it no effort |
+| `consumed.cost_usd`, `effort` | absent: Codex reports neither. An effort ynh asked for is in `effort_requested` |
 
 Codex reports these as running totals for the thread, and a resumed thread
 continues from the totals it saved. ynh counts each turn as the difference from
@@ -457,8 +458,8 @@ Claude Code reports cost as a running total for the worker process, which a
 resumed session may continue from where its transcript left off. ynh takes
 each turn's cost as the difference, so nothing is counted twice across a
 resume. The effort is the one Claude Code says it applies at runtime, after
-flags, settings and environment, so it is reported but not set: ynh passes no
-effort to the worker.
+flags, settings and environment. It is reported whether or not ynh asked for
+one; what ynh asked for is `effort_requested` (see [Effort](#effort)).
 
 ### The model
 
@@ -506,6 +507,55 @@ reports a model and again whenever it reports a different one.
 no field disappears from the header. It is deprecated and goes in a release
 that bumps the capabilities version; read `model_requested` instead.
 
+### Effort
+
+`--effort low|medium|high` asks the worker for a reasoning effort. A harness
+can carry its own in the `agent` block, and the flag wins over it:
+
+```json
+"agent": { "max_turns": 40, "effort": "low" }
+```
+
+The three levels are ynh's, and each backend maps them to its own setting.
+The backends offer more levels than these (Claude Code's `xhigh` and `max`,
+Codex's `minimal`, `xhigh` and above), which ynh does not expose, so a level
+means the same thing whichever backend runs it.
+
+| ynh | `claude` | `codex` | `cursor` |
+|---|---|---|---|
+| `low` | `--effort low` | `-c model_reasoning_effort="low"` | refused |
+| `medium` | `--effort medium` | `-c model_reasoning_effort="medium"` | refused |
+| `high` | `--effort high` | `-c model_reasoning_effort="high"` | refused |
+
+Sources:
+[Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference)
+(`--effort`: low, medium, high, xhigh, max; "Available levels depend on the
+model"); the Codex
+[configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+(`model_reasoning_effort`) and its `-c key=value` override, which `codex exec`
+accepts (`codex-rs/utils/cli/src/config_override.rs`); and `cursor-agent
+--help` (2026.10.01), which has no effort flag. Some Cursor models take an
+effort inside the model name (`'<model>[effort=high]'`), which is per model,
+so it is yours to pass with `--model`, not something ynh can map.
+
+A level the backend cannot honour, or any level on `cursor`, is **refused
+before the run starts**, not ignored, whether it came from the flag or the
+harness. A harness that sets `agent.effort` therefore cannot run on `cursor`;
+`ynd validate` rejects a level other than the three.
+
+The result keeps the request apart from what ran, as it does for the model:
+
+| Field | What it holds |
+|---|---|
+| `effort` | The effort the worker reported it ran with, in the backend's own words. Today only Claude Code reports one. |
+| `effort_requested` | What `--effort` or `agent.effort` asked for. Absent when nothing was asked for. |
+
+A backend that applied a different level than the one asked for (a model that
+does not support it, a managed setting that overrides it) shows as the two
+disagreeing. The trajectory's `session_start` and `session_resumed` carry
+`effort_requested`. `--effort` is not restored on `--resume` (see
+[Resume](#resume)): a resume asks for what its own flag, or the harness, says.
+
 ### Pinning a run to a toolchain
 
 `harness.sha` is the resolved commit the harness was installed from. `version`
@@ -536,8 +586,8 @@ a run without parsing terminal output.
 
 | Event | Emitted when |
 |---|---|
-| `session_start` | Run begins. Carries the model requested (`model_requested`, and the deprecated `model` copy of it), ynh version, harness version, base commit, the `--auto-approve` level, and the resolved budgets with their sources |
-| `session_resumed` | Resumed run begins, before the first new turn. Carries this process's `--auto-approve` level and model requested |
+| `session_start` | Run begins. Carries the model requested (`model_requested`, and the deprecated `model` copy of it), the effort requested (`effort_requested`), ynh version, harness version, base commit, the `--auto-approve` level, and the resolved budgets with their sources |
+| `session_resumed` | Resumed run begins, before the first new turn. Carries this process's `--auto-approve` level, model requested and effort requested |
 | `worker_model` | The worker reported the model it runs on: once per worker process, and again if it reports another |
 | `plan` / `plan_revised` | Plan produced or revised |
 | `plan_approval_required` | Plan phase is waiting for approval |

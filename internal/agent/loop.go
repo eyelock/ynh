@@ -67,6 +67,10 @@ type RunOptions struct {
 	AutoApprove string
 	// Model overrides the worker's default model. Empty means backend default.
 	Model string
+	// Effort is the reasoning effort to ask the worker for: "low", "medium"
+	// or "high". Empty falls back to the harness's agent.effort, and then to
+	// asking for none. Not restored on resume, like Model.
+	Effort string
 
 	// Budget limits — zero means unlimited.
 	MaxTurns  int
@@ -251,6 +255,9 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	if err := validateAutoApprove(opts.AutoApprove, opts.Backend); err != nil {
 		return result, err
 	}
+	if err := validateEffort(opts.Effort, opts.Backend); err != nil {
+		return result, err
+	}
 	if opts.WorktreeDir == "" {
 		var err error
 		opts.WorktreeDir, err = os.Getwd()
@@ -361,6 +368,16 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 				"checkpoint %q records no task, and a run interrupted before acting starts again from it: pass --task",
 				checkpointPath(opts.Resume))}
 		}
+	}
+
+	// The harness's effort applies when the flag gave none. It is checked
+	// here, once the harness has loaded, so a level the backend cannot honour
+	// still stops the run before a worker starts.
+	if opts.Effort == "" && harnessObj != nil && harnessObj.Agent != nil && harnessObj.Agent.Effort != "" {
+		if err := validateEffort(harnessObj.Agent.Effort, opts.Backend); err != nil {
+			return result, fmt.Errorf("harness agent.effort: %w", err)
+		}
+		opts.Effort = harnessObj.Agent.Effort
 	}
 
 	// ── Select backend ────────────────────────────────────────────────────────
@@ -477,20 +494,22 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			PendingApproval: resumeCP.PendingApproval,
 			AutoApprove:     opts.AutoApprove,
 			ModelRequested:  opts.Model,
+			EffortRequested: opts.Effort,
 		}); emitErr != nil {
 			return result, fmt.Errorf("writing trajectory: %w", emitErr)
 		}
 	} else {
 		start := SessionStartData{
-			SessionID:      sessionID,
-			Harness:        harnessName,
-			Backend:        wb.Name(),
-			Task:           opts.Task,
-			ModelRequested: opts.Model,
-			Model:          opts.Model,
-			AutoApprove:    opts.AutoApprove,
-			YnhVersion:     config.Version,
-			BaseCommit:     baseCommit(opts.WorktreeDir),
+			SessionID:       sessionID,
+			Harness:         harnessName,
+			Backend:         wb.Name(),
+			Task:            opts.Task,
+			ModelRequested:  opts.Model,
+			Model:           opts.Model,
+			EffortRequested: opts.Effort,
+			AutoApprove:     opts.AutoApprove,
+			YnhVersion:      config.Version,
+			BaseCommit:      baseCommit(opts.WorktreeDir),
 			Budgets: &BudgetLimits{
 				MaxTurns:  opts.MaxTurns,
 				MaxTokens: opts.MaxTokens,
@@ -514,6 +533,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	result.SessionDir = sessionDir
 	result.Backend = wb.Name()
 	result.ModelRequested = opts.Model
+	result.EffortRequested = opts.Effort
 	result.AutoApprove = opts.AutoApprove
 	// opts.HarnessName, not harnessName: the latter is "(none)" for display in
 	// the trajectory when no harness was given, and a structured consumer
@@ -592,6 +612,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		Sandbox:     opts.Sandbox,
 		AutoApprove: opts.AutoApprove,
 		Model:       opts.Model,
+		Effort:      opts.Effort,
 		ResumeToken: resumeToken,
 		UsageBase:   usageBase,
 		Env:         workerEnv,

@@ -193,4 +193,12 @@ ran, since the header is written before the worker reports one.
 ([#443](https://github.com/eyelock/ynh/issues/443)). See
 [Agent](agent.md#the-model).
 
+`effort_requested` in the `agent run` result, and on the trajectory's
+`session_start` and `session_resumed`, is the effort `--effort` or the
+harness's `agent.effort` asked for: `low`, `medium` or `high`. It sits beside
+`effort`, which keeps meaning what the backend reported it used, so a request
+the backend changed shows as the two disagreeing. It is optional, absent when
+nothing was asked for, and was added without a capabilities bump. An older ynh
+rejects `--effort` as an unknown flag. See [Agent](agent.md#effort).
+
 **Error envelope evolution.** The current emission is `{"error": {"code": "...", "message": "..."}}` (the `code` values listed above are the closed enum). Additive fields `category` (coarse routing class), `retryable` (bool), and `hint` (human guidance) are reserved and may appear on a future capabilities bump — consumers must tolerate either shape today.

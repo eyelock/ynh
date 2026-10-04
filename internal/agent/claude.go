@@ -155,6 +155,10 @@ func buildClaudeStreamArgs(opts StartOptions) []string {
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}
+	// The neutral levels are Claude Code's own words for them.
+	if opts.Effort != "" {
+		args = append(args, "--effort", opts.Effort)
+	}
 
 	// No --auto-approve, no permission flag: the worker gets what claude and
 	// the project grant it, and nothing more.

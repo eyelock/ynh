@@ -88,6 +88,11 @@
               "type": "string",
               "description": "Deprecated: same as model_requested; the model that ran is in worker_model. Will be removed in a release that bumps CapabilitiesVersion."
             },
+            "effort_requested": {
+              "type": "string",
+              "enum": ["low", "medium", "high"],
+              "description": "The reasoning effort the run asked for, from --effort or the harness's agent.effort. Absent when none was asked for and the backend used its default."
+            },
             "auto_approve": {
               "type": "string",
               "enum": ["edits", "all"],
@@ -178,6 +183,11 @@
             "model_requested": {
               "type": "string",
               "description": "The model this resumed process asked for with --model. Not restored from the checkpoint, so it can differ from the model the session started with. Absent when none was pinned."
+            },
+            "effort_requested": {
+              "type": "string",
+              "enum": ["low", "medium", "high"],
+              "description": "The reasoning effort this resumed process asked for, from --effort or the harness's agent.effort. Not restored from the checkpoint. Absent when none was asked for."
             }
           },
           "required": [
