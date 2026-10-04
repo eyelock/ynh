@@ -58,6 +58,33 @@ func TestMarketplacePluginCopy(t *testing.T) {
 	assertFileExists(t, filepath.Join(pluginDir, "skills", "format", "SKILL.md"))
 }
 
+// TestBuildPluginEntryCopilotManifestAtRoot locks #471 for marketplace
+// plugins: a copied plugin is a plugin, so a missing Copilot manifest is
+// generated at its root whatever else the plugin carries, including a
+// .copilot/ directory that once made the generator assume a `ynh run` layout.
+func TestBuildPluginEntryCopilotManifestAtRoot(t *testing.T) {
+	src := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(src, ".agents", "harness"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(src, ".agents", "harness", "plugin.json"), map[string]any{
+		"name": "has-copilot-dir", "version": "0.1.0",
+	})
+	if err := os.MkdirAll(filepath.Join(src, ".copilot"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, ".copilot", "notes.md"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := filepath.Join(t.TempDir(), "plugin")
+	if err := buildPluginEntry(src, out, []string{"copilot"}); err != nil {
+		t.Fatalf("buildPluginEntry: %v", err)
+	}
+	assertFileExists(t, filepath.Join(out, ".claude-plugin", "plugin.json"))
+	assertFileNotExists(t, filepath.Join(out, ".copilot", ".claude-plugin"))
+}
+
 func TestMarketplacePluginMissingManifest(t *testing.T) {
 	configPath, configDir := setupMarketplace(t)
 	outputDir := t.TempDir()

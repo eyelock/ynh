@@ -87,6 +87,15 @@ Expected output includes `.cursor/mcp.json`:
 
 Cursor uses the same JSON structure as Claude but places the file at `.cursor/mcp.json` instead of `.claude/.mcp.json`.
 
+`.cursor/mcp.json` is the only MCP file in the Cursor preview, because it is the one project path Cursor reads MCP servers from. There is no root `mcp.json`: that path belongs to a Cursor plugin, and `ynd export -v cursor` writes it there instead (see [MCP Servers: Config File Locations](../mcp.md#config-file-locations)). Check it:
+
+```bash
+ynd preview /tmp/ynh-tutorial/mcp-harness -v cursor -o /tmp/ynh-tutorial/mcp-harness-cursor
+find /tmp/ynh-tutorial/mcp-harness-cursor -name mcp.json
+```
+
+Expected: exactly one line, ending in `.cursor/mcp.json`.
+
 ## Preview for Codex
 
 ```bash
@@ -110,6 +119,32 @@ Expected output includes `.mcp.json` with JSON format (same structure as Claude,
 ```
 
 Codex uses the same JSON format as Claude with a `mcpServers` key, placed at the plugin root as `.mcp.json`.
+
+## Export for Cursor and Copilot
+
+An export is a plugin, and a plugin reads its MCP config from a different file than a project session does:
+
+```bash
+ynd export /tmp/ynh-tutorial/mcp-harness -v cursor,copilot -o /tmp/ynh-tutorial/mcp-export
+cd /tmp/ynh-tutorial/mcp-export && find . -type f | sort && cd - > /dev/null
+```
+
+Expected:
+
+```
+Exported for cursor → /tmp/ynh-tutorial/mcp-export/cursor (0 skills, 0 agents)
+Exported for copilot → /tmp/ynh-tutorial/mcp-export/copilot (0 skills, 0 agents)
+./copilot/.claude-plugin/plugin.json
+./copilot/.github/mcp.json
+./copilot/AGENTS.md
+./cursor/.cursor-plugin/plugin.json
+./cursor/.cursorrules
+./cursor/AGENTS.md
+./cursor/mcp.json
+```
+
+- Cursor's plugin carries `mcp.json` (no dot) at its root, which a Cursor plugin discovers automatically. There is no `.cursor/mcp.json`: inside a plugin nothing reads it.
+- Copilot's plugin carries `.github/mcp.json` at its root, in Copilot's format with `"type"` and `"tools"` on each server, and its manifest at `.claude-plugin/plugin.json` beside it. Nothing is nested under `.copilot/`, which is only the `ynh run` layout.
 
 ## Add an HTTP MCP server
 
@@ -294,6 +329,7 @@ rm -rf /tmp/ynh-tutorial
 - Servers can use stdio transport (`command` + `args`) or HTTP transport (`url`)
 - All three vendors use JSON with a `mcpServers` key, but in different file locations
 - Claude places MCP config at `.claude/.mcp.json`, Cursor at `.cursor/mcp.json`, and Codex at `.mcp.json` (plugin root)
+- An export writes each vendor's plugin MCP file instead: Cursor's root `mcp.json`, Copilot's `.github/mcp.json`
 - `ynd preview` and `ynd diff` let you verify MCP config without installing
 - MCP servers can be edited from the CLI with `ynh mcp add/update/remove` (top-level) and `ynh profile mcp add/update/remove` (profile-level), with `--null` available on profile-level to suppress an inherited entry
 

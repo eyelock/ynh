@@ -63,8 +63,14 @@ loading, silently and with no error.
 This is the one Copilot-specific trap in the adapter: `ynh run` nests artifacts
 under `.copilot/` (matching what `--plugin-dir` is given), while `ynd export`
 flattens them to the export root. A fixed manifest path was correct for one
-caller and silently broken for the other. `copilotRunDirLayout(outputDir)`
-detects the caller by testing for `outputDir/.copilot`.
+caller and silently broken for the other. Each caller now asks for its own
+layout: `GeneratePluginManifest` writes the run-dir manifest at
+`.copilot/.claude-plugin/plugin.json`, and `GenerateExportPluginManifest`
+writes the export manifest at `.claude-plugin/plugin.json`, which the exporter
+and marketplace prefer. The layout used to be inferred by testing for
+`outputDir/.copilot`, which an export with MCP servers tripped over: it had
+just written `.copilot/.mcp.json` itself, so its manifest nested under
+`.copilot/` while its skills sat at the root (#471).
 
 ## Native discovery: agents and skills
 
@@ -278,7 +284,14 @@ mid-session. `~/.copilot/mcp-config.json` is user scope, lower precedence.
 (tested at both `.mcp.json` and `.github/mcp.json` placements inside the plugin
 dir). `GenerateMCPConfig` still writes `.copilot/.mcp.json` for interface
 consistency, but `buildCopilotArgs` re-reads it and projects it into the real
-project's `.github/mcp.json` — the path that actually works.
+project's `.github/mcp.json`, the path that actually works.
+
+An export writes `GeneratePluginMCPConfig`'s `.github/mcp.json` at the plugin
+root instead: the Copilot CLI plugin reference lists `.mcp.json` and
+`.github/mcp.json` as the default MCP paths of a legacy (`.claude-plugin`)
+plugin, and Codex already writes `.mcp.json` into a merged package. Whether an
+installed plugin (rather than one loaded with `--plugin-dir`) reads it has not
+been hand-tested.
 
 **Never shell out to `copilot mcp add`**: it only writes user-level
 `~/.copilot/mcp-config.json` and has no flag to target the workspace file.

@@ -93,16 +93,21 @@ func TestExportMergedWithMCPServers(t *testing.T) {
 	_, err := Export(ExportOptions{
 		SourceDir: srcDir,
 		OutputDir: outputDir,
-		Vendors:   []string{"claude", "cursor"},
+		Vendors:   []string{"claude", "copilot", "cursor"},
 		Mode:      ModeMerged,
 	})
 	if err != nil {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	// Both MCP configs should exist
+	// Each vendor's plugin MCP file exists, and no project-session file does:
+	// Cursor's plugin file is mcp.json at the root (#470), Copilot's is
+	// .github/mcp.json at the root, and nothing lands under .copilot/ (#471).
 	assertFileExists(t, filepath.Join(outputDir, ".claude", ".mcp.json"))
-	assertFileExists(t, filepath.Join(outputDir, ".cursor", "mcp.json"))
+	assertFileExists(t, filepath.Join(outputDir, "mcp.json"))
+	assertFileNotExists(t, filepath.Join(outputDir, ".cursor", "mcp.json"))
+	assertFileExists(t, filepath.Join(outputDir, ".github", "mcp.json"))
+	assertFileNotExists(t, filepath.Join(outputDir, ".copilot"))
 }
 
 func TestExportCleanFlag(t *testing.T) {

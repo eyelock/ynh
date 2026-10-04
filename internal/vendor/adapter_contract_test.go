@@ -56,9 +56,9 @@ func TestPluginManifestPaths(t *testing.T) {
 	hj := &plugin.HarnessJSON{Name: "demo", Version: "1.0.0", Description: "d"}
 
 	for name, a := range allAdapters(t) {
-		files, err := a.GeneratePluginManifest(hj, t.TempDir())
+		files, err := exportManifest(a, hj, t.TempDir())
 		if err != nil {
-			t.Errorf("%s: GeneratePluginManifest: %v", name, err)
+			t.Errorf("%s: export manifest: %v", name, err)
 			continue
 		}
 		got := keysOf(files)
@@ -73,8 +73,9 @@ func TestPluginManifestPaths(t *testing.T) {
 }
 
 // PluginManifestDir must name the directory the manifest is actually written
-// to, in both layouts: an export (nothing under the config dir) and a run dir
-// (artifacts under it, where Copilot nests its plugin). Codex once reported its
+// to, in both layouts: an export (at the plugin root, whatever files exist
+// there, #471) and a run dir (artifacts under the config dir, where Copilot
+// nests its plugin). Codex once reported its
 // marketplace index directory, .agents/plugins, in that role, so `ynd diff`
 // never found its .codex-plugin/plugin.json (#453). The marketplace dir is
 // asserted separately in TestAdapterContract and may differ.
@@ -91,9 +92,16 @@ func TestPluginManifestDirMatchesGeneratedManifest(t *testing.T) {
 		underConfig := filepath.Join(a.ConfigDir(), atRoot)
 
 		t.Run(name+"/export", func(t *testing.T) {
-			files, err := a.GeneratePluginManifest(hj, t.TempDir())
+			// A config dir with content in the export must not turn it into
+			// a run dir: Copilot's export once wrote .copilot/.mcp.json and
+			// then nested its manifest beside it (#471).
+			out := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(out, a.ConfigDir(), "skills", "s"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			files, err := exportManifest(a, hj, out)
 			if err != nil {
-				t.Fatalf("GeneratePluginManifest: %v", err)
+				t.Fatalf("export manifest: %v", err)
 			}
 			if got := keysOf(files); len(got) != 1 || got[0] != atRoot {
 				t.Errorf("manifest written to %v, PluginManifestDir says %q", got, atRoot)
@@ -327,6 +335,17 @@ func TestClaudeHookEvent(t *testing.T) {
 			t.Errorf("ClaudeHookEvent(%q) = %q, want %q", tc.in, native, tc.wantNative)
 		}
 	}
+}
+
+// exportManifest mirrors exporter.PluginManifest, which this package cannot
+// import: an export asks for the export layout when the vendor has one.
+func exportManifest(a Adapter, hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {
+	if eg, ok := a.(interface {
+		GenerateExportPluginManifest(*plugin.HarnessJSON) (map[string][]byte, error)
+	}); ok {
+		return eg.GenerateExportPluginManifest(hj)
+	}
+	return a.GeneratePluginManifest(hj, outputDir)
 }
 
 func keysOf(m map[string][]byte) []string {

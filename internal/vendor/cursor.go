@@ -296,31 +296,43 @@ func (c *Cursor) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []
 	return data, nil
 }
 
+// GenerateMCPConfig writes the project MCP file, .cursor/mcp.json, the only
+// project-level path Cursor reads (cursor.com/docs/context/mcp). It serves
+// `ynh run`, `ynd preview` and the agent loop, which all launch Cursor in the
+// assembled directory. A plugin reads a different path; see
+// GeneratePluginMCPConfig.
 func (c *Cursor) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
+	data, err := cursorMCPDocument(servers)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{filepath.Join(".cursor", "mcp.json"): data}, nil
+}
+
+// GeneratePluginMCPConfig writes the plugin MCP file, mcp.json (no dot) at the
+// plugin root, which a Cursor plugin discovers automatically
+// (cursor.com/docs/reference/plugins). The exporter uses it for `ynd export`
+// and marketplace packages. The document is the same as the project file;
+// only the path differs, and each context reads exactly one of them (#470).
+func (c *Cursor) GeneratePluginMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
+	data, err := cursorMCPDocument(servers)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{"mcp.json": data}, nil
+}
+
+// cursorMCPDocument renders MCP servers under Cursor's "mcpServers" key, the
+// same structure as Claude's, or nil when there are none.
+func cursorMCPDocument(servers map[string]plugin.MCPServer) ([]byte, error) {
 	if len(servers) == 0 {
 		return nil, nil
 	}
-
-	// Cursor uses "mcpServers" key — same structure as Claude. Written at two
-	// locations: .cursor/mcp.json for project-level config (read by `ynh run`
-	// staging) and mcp.json (no dot) at plugin root for plugin-format export
-	// (cursor.com/docs/reference/plugins). Both are the same content; there's
-	// no "is this a plugin export" flag threaded through Adapter, so both are
-	// always emitted — the unused one is simply inert in the other context.
-	config := map[string]any{
-		"mcpServers": servers,
-	}
-
-	data, err := json.MarshalIndent(config, "", "  ")
+	data, err := json.MarshalIndent(map[string]any{"mcpServers": servers}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshalling MCP config: %w", err)
 	}
-	data = append(data, '\n')
-
-	return map[string][]byte{
-		filepath.Join(".cursor", "mcp.json"): data,
-		"mcp.json":                           data,
-	}, nil
+	return append(data, '\n'), nil
 }
 
 // TransformArtifact rewrites Cursor rule files to the .mdc format Cursor

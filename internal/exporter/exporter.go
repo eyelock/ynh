@@ -42,6 +42,35 @@ type PluginHookGenerator interface {
 	GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)
 }
 
+// PluginMCPGenerator is implemented by a vendor whose plugin package carries
+// MCP servers at a different path from the one its project sessions read.
+// Cursor: a project reads .cursor/mcp.json, a plugin mcp.json (#470). Copilot:
+// a run dir carries .copilot/.mcp.json, a plugin .github/mcp.json (#471). An
+// export is a plugin, so it uses this path when the vendor offers one, and
+// GenerateMCPConfig otherwise.
+type PluginMCPGenerator interface {
+	GeneratePluginMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error)
+}
+
+// ExportManifestGenerator is implemented by a vendor whose run-dir layout puts
+// its manifest somewhere other than the plugin root. Copilot is the case: a
+// run dir nests the plugin under .copilot/, an export does not. An export
+// asks for its own layout explicitly rather than having the vendor guess it
+// from the files present (#471).
+type ExportManifestGenerator interface {
+	GenerateExportPluginManifest(hj *plugin.HarnessJSON) (map[string][]byte, error)
+}
+
+// PluginManifest returns a vendor's manifest files for an exported plugin
+// rooted at outputDir: the export layout when the vendor distinguishes one,
+// GeneratePluginManifest otherwise. Marketplace builds use it too.
+func PluginManifest(adapter VendorExporter, hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {
+	if eg, ok := adapter.(ExportManifestGenerator); ok {
+		return eg.GenerateExportPluginManifest(hj)
+	}
+	return adapter.GeneratePluginManifest(hj, outputDir)
+}
+
 // ExportMode controls the output layout.
 type ExportMode int
 
@@ -206,7 +235,7 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 		if err != nil {
 			continue
 		}
-		manifestFiles, err := adapter.GeneratePluginManifest(pj, outputDir)
+		manifestFiles, err := PluginManifest(adapter, pj, outputDir)
 		if err != nil {
 			return nil, fmt.Errorf("generating %s manifest: %w", v, err)
 		}
@@ -346,7 +375,7 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 	}
 
 	// Manifest — generated after content (MCP, skills) so path pointers are accurate
-	manifestFiles, err := adapter.GeneratePluginManifest(pj, outputDir)
+	manifestFiles, err := PluginManifest(adapter, pj, outputDir)
 	if err != nil {
 		return result, fmt.Errorf("generating manifest: %w", err)
 	}
@@ -359,7 +388,7 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 	return result, nil
 }
 
-// writeMCPConfig generates vendor-native MCP config files and writes them to the output directory.
+// writeMCPConfig generates the vendor's plugin MCP config and writes it to the output directory.
 //
 // Note what this deliberately does not do: it does not expand ${VAR}
 // references in MCP env values. Assembly for a local run resolves them
@@ -369,7 +398,11 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 // bundle meant to be shared. References stay literal so the consumer resolves
 // them from their own environment.
 func writeMCPConfig(outputDir string, adapter VendorExporter, servers map[string]plugin.MCPServer) error {
-	mcpFiles, err := adapter.GenerateMCPConfig(servers)
+	generate := adapter.GenerateMCPConfig
+	if pg, ok := adapter.(PluginMCPGenerator); ok {
+		generate = pg.GeneratePluginMCPConfig
+	}
+	mcpFiles, err := generate(servers)
 	if err != nil {
 		return fmt.Errorf("generating MCP config: %w", err)
 	}

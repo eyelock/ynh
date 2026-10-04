@@ -204,9 +204,10 @@ Key differences between runtime and export:
 - Claude export writes `AGENTS.md` for instructions, not `CLAUDE.md` (which would conflict with the installing project's own)
 - Codex export is limited to skills — agents, rules, commands, and delegates are excluded with warnings
 - Cursor hooks go to `.cursor/hooks.json` at runtime and to `hooks/hooks.json` at the plugin root in an export, never both: a project session reads only the first, a Cursor plugin only the second (see [Hooks: Config File Locations](hooks.md#config-file-locations))
+- Cursor MCP config goes to `.cursor/mcp.json` at runtime and to `mcp.json` at the plugin root in an export, never both, for the same reason (see [MCP Servers: Config File Locations](mcp.md#config-file-locations))
 - Codex is excluded from merged export mode (different marketplace format)
 - Copilot export is limited to skills and agents — rules and commands are excluded with warnings
-- Copilot uses Claude's plugin manifest format (`.claude-plugin/plugin.json`), since Copilot's own plugin loader reads the same schema
+- Copilot uses Claude's plugin manifest format (`.claude-plugin/plugin.json`), since Copilot's own plugin loader reads the same schema. At runtime the manifest and MCP config nest under `.copilot/`, the `--plugin-dir` target; an export always puts the manifest at the plugin root beside the skills, and MCP config at `.github/mcp.json` there
 
 See [ynd export](ynd.md#export) for full command reference.
 

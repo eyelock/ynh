@@ -252,67 +252,102 @@ func TestCopilotGenerateMCPConfig_TypeTranslation(t *testing.T) {
 	}
 }
 
-func TestCopilotGeneratePluginManifest_RunDirLayout(t *testing.T) {
+// TestCopilotManifestLayouts locks #471: each generator writes one layout,
+// chosen by its caller, whatever files the output directory holds. The run
+// dir nests the plugin under .copilot/ (the --plugin-dir target); an export
+// keeps it at the plugin root beside the flattened skills. Copilot loads no
+// plugin content unless .claude-plugin/plugin.json is at the root it is
+// pointed at (hand-tested, v1.0.75), so the wrong layout breaks the plugin.
+func TestCopilotManifestLayouts(t *testing.T) {
 	c := &Copilot{}
-	hj := &plugin.HarnessJSON{
-		Name:        "my-harness",
-		Version:     "1.0.0",
-		Description: "test harness",
-	}
+	hj := &plugin.HarnessJSON{Name: "my-harness", Version: "1.0.0", Description: "test harness"}
+	runDirManifest := filepath.Join(".copilot", ".claude-plugin", "plugin.json")
+	exportManifest := filepath.Join(".claude-plugin", "plugin.json")
 
-	// Mirrors ynh-run: the assembler always creates outputDir/.copilot/<artifactDir>
-	// (even if empty) before GeneratePluginManifest is called.
-	outputDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(outputDir, ".copilot", "skills"), 0o755); err != nil {
-		t.Fatal(err)
+	// What an output directory may hold when the manifest is generated. The
+	// last is the #471 trigger: an export that had just written
+	// .copilot/.mcp.json.
+	contents := map[string][]string{
+		"empty":            nil,
+		"flattened skills": {filepath.Join("skills", "s", "SKILL.md")},
+		"nested skills":    {filepath.Join(".copilot", "skills", "s", "SKILL.md")},
+		"nested mcp":       {filepath.Join(".copilot", ".mcp.json")},
 	}
+	for label, files := range contents {
+		outputDir := t.TempDir()
+		for _, f := range files {
+			if err := os.MkdirAll(filepath.Dir(filepath.Join(outputDir, f)), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(outputDir, f), []byte("x"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
 
-	result, err := c.GeneratePluginManifest(hj, outputDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	key := filepath.Join(".copilot", ".claude-plugin", "plugin.json")
-	data, ok := result[key]
-	if !ok {
-		t.Fatalf("expected %s key, got keys: %v", key, mapKeys(result))
-	}
-
-	var pj copilotPluginJSON
-	if err := json.Unmarshal(data, &pj); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
-	}
-	if pj.Name != "my-harness" {
-		t.Errorf("name = %q, want my-harness", pj.Name)
+		t.Run(label+"/run dir", func(t *testing.T) {
+			result, err := c.GeneratePluginManifest(hj, outputDir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := mapKeys(result); len(got) != 1 || got[0] != runDirManifest {
+				t.Fatalf("manifest written to %v, want %s", got, runDirManifest)
+			}
+			var pj copilotPluginJSON
+			if err := json.Unmarshal(result[runDirManifest], &pj); err != nil {
+				t.Fatalf("invalid JSON: %v", err)
+			}
+			if pj.Name != "my-harness" {
+				t.Errorf("name = %q, want my-harness", pj.Name)
+			}
+		})
+		t.Run(label+"/export", func(t *testing.T) {
+			result, err := c.GenerateExportPluginManifest(hj)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := mapKeys(result); len(got) != 1 || got[0] != exportManifest {
+				t.Fatalf("manifest written to %v, want %s", got, exportManifest)
+			}
+		})
 	}
 }
 
-func TestCopilotGeneratePluginManifest_ExportLayout(t *testing.T) {
+// TestCopilotMCPConfigPaths locks where each Copilot MCP generator writes. A
+// run dir carries .copilot/.mcp.json, which buildCopilotArgs projects into the
+// project's .github/mcp.json. An exported plugin carries .github/mcp.json at
+// its root, a default MCP path for a .claude-plugin Copilot plugin, and not
+// .mcp.json, which Codex writes in a merged package (#471).
+func TestCopilotMCPConfigPaths(t *testing.T) {
+	servers := map[string]plugin.MCPServer{"local": {Command: "npx"}}
 	c := &Copilot{}
-	hj := &plugin.HarnessJSON{Name: "my-harness", Version: "1.0.0"}
-
-	// Mirrors `ynd export`: skills/agents are flattened directly under
-	// outputDir, with no .copilot/ nesting (see exportForVendor/exportMerged
-	// in internal/exporter). The manifest must sit alongside them — a
-	// manifest nested under a phantom .copilot/ here would silently break
-	// the exported plugin (confirmed by hand-testing: Copilot requires
-	// .claude-plugin/plugin.json at the exact root it's pointed at).
-	outputDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(outputDir, "skills"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	result, err := c.GeneratePluginManifest(hj, outputDir)
+	run, err := c.GenerateMCPConfig(servers)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	key := filepath.Join(".claude-plugin", "plugin.json")
-	if _, ok := result[key]; !ok {
-		t.Fatalf("expected flat %s key, got keys: %v", key, mapKeys(result))
+	plug, err := c.GeneratePluginMCPConfig(servers)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, ok := result[filepath.Join(".copilot", ".claude-plugin", "plugin.json")]; ok {
-		t.Error("manifest should not be nested under .copilot/ in export layout")
+	runPath := filepath.Join(".copilot", ".mcp.json")
+	plugPath := filepath.Join(".github", "mcp.json")
+	if got := mapKeys(run); len(got) != 1 || got[0] != runPath {
+		t.Errorf("run MCP written to %v, want %s", got, runPath)
+	}
+	if got := mapKeys(plug); len(got) != 1 || got[0] != plugPath {
+		t.Errorf("plugin MCP written to %v, want %s", got, plugPath)
+	}
+	if string(run[runPath]) != string(plug[plugPath]) {
+		t.Errorf("run and plugin MCP documents differ:\n%s\n---\n%s", run[runPath], plug[plugPath])
+	}
+
+	for _, empty := range []map[string]plugin.MCPServer{nil, {}} {
+		result, err := c.GeneratePluginMCPConfig(empty)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result != nil {
+			t.Errorf("expected nil for no servers, got %v", mapKeys(result))
+		}
 	}
 }
 

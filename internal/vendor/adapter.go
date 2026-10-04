@@ -147,21 +147,29 @@ type Adapter interface {
 	GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)
 
 	// GenerateMCPConfig translates MCP server declarations to vendor-native
-	// MCP configuration files. Returns a map of relative file paths to file contents.
-	// Returns nil if servers is nil or empty.
+	// MCP configuration files for the assembled session layout (`ynh run`,
+	// `ynd preview`, the agent loop). Returns a map of relative file paths to
+	// file contents. Returns nil if servers is nil or empty. A vendor whose
+	// plugin reads a different path also implements GeneratePluginMCPConfig,
+	// which the exporter prefers (see exporter.PluginMCPGenerator).
 	GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error)
 
 	// GeneratePluginManifest produces vendor-native plugin manifest files
 	// (e.g. .claude-plugin/plugin.json). Returns a map of relative file paths
 	// to file contents. The outputDir is needed by some vendors to detect
-	// existing content (e.g. Codex checks for skills/ and .mcp.json).
-	// Returns nil if the vendor has no manifest format.
+	// existing content (e.g. Codex checks for skills/ and .mcp.json), never to
+	// guess the layout. A vendor whose run-dir layout differs from its export
+	// layout (Copilot) writes the run-dir manifest here and also implements
+	// GenerateExportPluginManifest, which the exporter prefers (see
+	// exporter.ExportManifestGenerator). Returns nil if the vendor has no
+	// manifest format.
 	GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error)
 
 	// PluginManifestDir returns the directory GeneratePluginManifest writes
 	// plugin.json into (e.g. ".claude-plugin", ".codex-plugin"). A vendor
 	// whose run-dir layout nests its plugin under ConfigDir (Copilot) writes
-	// it at ConfigDir()/PluginManifestDir() there. Not the marketplace index
+	// it at ConfigDir()/PluginManifestDir() there, and at PluginManifestDir()
+	// in an export. Not the marketplace index
 	// directory: Codex keeps its index at .agents/plugins, apart from its
 	// manifest. Returns empty string if the vendor has no manifest format.
 	PluginManifestDir() string
