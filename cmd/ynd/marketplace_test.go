@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -422,5 +423,53 @@ func TestCmdMarketplaceBuildRefusedLeavesOutputUntouched(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// Each harness entry's export warnings go to stderr, one "warning: " line
+// each, prefixed with the entry's name, and the build still succeeds. An entry
+// that exports cleanly prints nothing there (#496).
+func TestCmdMarketplaceBuild_PrintsEntryWarnings(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+		want    string
+	}{
+		{
+			name:    "missing hook script",
+			command: "./scripts/missing.sh",
+			want:    "warning: reviewer: hook script ./scripts/missing.sh is not a file in the harness, so the plugin does not carry it\n",
+		},
+		{name: "clean entry", command: "echo before"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			harnessDir := filepath.Join(dir, "harnesses", "reviewer")
+			if err := os.MkdirAll(filepath.Join(harnessDir, ".agents", "harness"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			writeTestJSON(t, filepath.Join(harnessDir, ".agents", "harness", "plugin.json"), map[string]any{
+				"name":    "reviewer",
+				"version": "0.1.0",
+				"hooks": map[string]any{
+					"before_tool": []any{map[string]string{"matcher": "Bash", "command": tt.command}},
+				},
+			})
+			configFile := filepath.Join(dir, "marketplace.json")
+			writeTestJSON(t, configFile, map[string]any{
+				"name":      "warnings-marketplace",
+				"owner":     map[string]string{"name": "tester"},
+				"harnesses": []map[string]string{{"type": "harness", "source": "./harnesses/reviewer"}},
+			})
+
+			var stderr bytes.Buffer
+			if err := cmdMarketplaceBuild([]string{configFile, "-o", filepath.Join(dir, "out")}, &stderr); err != nil {
+				t.Fatalf("cmdMarketplaceBuild: %v", err)
+			}
+			if got := stderr.String(); got != tt.want {
+				t.Errorf("stderr = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

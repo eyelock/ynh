@@ -17,7 +17,7 @@ func TestMarketplaceIndexClaude(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 	})
@@ -63,7 +63,7 @@ func TestMarketplaceIndexCursor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 	})
@@ -97,7 +97,7 @@ func TestMarketplaceIndexCodex(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 	})
@@ -147,7 +147,7 @@ func TestMarketplaceReadme(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 	})
@@ -202,7 +202,7 @@ func TestBuildBeforeWrite(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			out := filepath.Join(t.TempDir(), "out")
 			called := false
-			err := Build(tt.cfg, BuildOptions{
+			_, err := Build(tt.cfg, BuildOptions{
 				ConfigDir: configDir,
 				OutputDir: out,
 				Vendors:   []string{"claude"},

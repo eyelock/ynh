@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -17,7 +19,7 @@ func cmdMarketplace(args []string) error {
 
 	switch args[0] {
 	case "build":
-		return cmdMarketplaceBuild(args[1:])
+		return cmdMarketplaceBuild(args[1:], os.Stderr)
 	case "-h", "--help", "help":
 		return errHelp
 	default:
@@ -25,7 +27,9 @@ func cmdMarketplace(args []string) error {
 	}
 }
 
-func cmdMarketplaceBuild(args []string) error {
+// cmdMarketplaceBuild builds a marketplace and writes each entry's export
+// warnings to stderr.
+func cmdMarketplaceBuild(args []string, stderr io.Writer) error {
 	var (
 		outputDir   string
 		vendors     string
@@ -114,7 +118,7 @@ func cmdMarketplaceBuild(args []string) error {
 		return err
 	}
 
-	err = marketplace.Build(cfg, marketplace.BuildOptions{
+	warnings, err := marketplace.Build(cfg, marketplace.BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 		Vendors:   vendorList,
@@ -133,6 +137,9 @@ func cmdMarketplaceBuild(args []string) error {
 		return err
 	}
 
+	for _, w := range warnings {
+		_, _ = fmt.Fprintf(stderr, "warning: %s\n", w)
+	}
 	fmt.Printf("Marketplace built → %s (%d plugins)\n", outputDir, len(cfg.Harnesses))
 	return nil
 }

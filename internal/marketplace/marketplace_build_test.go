@@ -18,7 +18,7 @@ func TestMarketplaceHarnessExport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 	})
@@ -45,7 +45,7 @@ func TestMarketplacePluginCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 	})
@@ -95,7 +95,7 @@ func TestMarketplacePluginMissingManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 	})
@@ -124,7 +124,7 @@ func TestMarketplaceCleanFlag(t *testing.T) {
 	}
 
 	// Build (without clean — stale file should remain since we don't clean at package level)
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 	})
@@ -162,7 +162,7 @@ func TestMarketplaceDescriptionOverride(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: dir,
 		OutputDir: outputDir,
 	})
@@ -195,7 +195,7 @@ func TestMarketplaceBuildInitGitRepo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 	})
@@ -235,7 +235,7 @@ func TestMarketplaceBuildSkipsExistingGitRepo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 	})
@@ -265,7 +265,7 @@ func TestMarketplaceVendorFiltering(t *testing.T) {
 	}
 
 	// Build for claude only
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 		Vendors:   []string{"claude"},
@@ -288,7 +288,7 @@ func TestMarketplaceBuild_EntryPathTraversalBlocked(t *testing.T) {
 				{Type: "plugin", Source: "./plugins/foo", Path: badPath},
 			},
 		}
-		err := Build(cfg, BuildOptions{ConfigDir: dir, OutputDir: t.TempDir()})
+		_, err := Build(cfg, BuildOptions{ConfigDir: dir, OutputDir: t.TempDir()})
 		if err == nil {
 			t.Errorf("path %q: expected error, got nil", badPath)
 			continue
@@ -325,7 +325,7 @@ func buildOnce(t *testing.T, configPath, configDir, outputDir string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := Build(cfg, BuildOptions{ConfigDir: configDir, OutputDir: outputDir}); err != nil {
+	if _, err := Build(cfg, BuildOptions{ConfigDir: configDir, OutputDir: outputDir}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 }
