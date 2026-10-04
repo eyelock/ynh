@@ -248,6 +248,17 @@ ls ~/.ynh/bin/ynh ~/.ynh/bin/ynd
 # Expected: both still exist
 ```
 
+## Clean up
+
+The prune above already removed everything `local/my-harness` left in `~/.ynh`: its install record, launcher and run directories. There is nothing left to uninstall:
+
+```bash
+cd /tmp
+ynh ls
+# Expected: local/my-harness is not listed
+rm -rf /tmp/ynh-tutorial
+```
+
 ## What you learned
 
 - ynh supports three vendors: Claude, Codex, Cursor

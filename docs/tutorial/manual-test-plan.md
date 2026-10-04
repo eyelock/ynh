@@ -521,22 +521,38 @@ rm -rf broken-test
 ### E15: Empty allow-list blocks all sources
 
 ```bash
+mkdir -p /tmp/ynh-edge/allow/.agents/harness
+echo '{"name":"allow-edge","version":"0.1.0","default_vendor":"claude","includes":[{"git":"github.com/eyelock/assistants","path":"skills/pause","pick":["skills/help-me-answer"]}]}' > /tmp/ynh-edge/allow/.agents/harness/plugin.json
+
 cp ~/.ynh/config.json ~/.ynh/config.json.bak
 echo '{"default_vendor":"claude","allowed_remote_sources":[]}' > ~/.ynh/config.json
 
-# Any harness with remote includes should fail at both install and run time
-# (install my-dev first if not already installed)
-my-dev "hello" 2>&1 | grep Error
-# Expected: Error: resolving includes: include "github.com/eyelock/assistants": remote source ... is not in the allowed sources list (add "github.com/eyelock/assistants" to allowed_remote_sources) (exit 1)
+# A harness with a remote include fails at both install and run time.
+# Neither step needs the network: the allow-list is checked before any fetch.
+ynh install /tmp/ynh-edge/allow 2>&1 | grep Error
+# Expected: Error: include "github.com/eyelock/assistants": remote source "github.com/eyelock/assistants" is not in the allowed sources list (add "github.com/eyelock/assistants" to allowed_remote_sources) (exit 1)
+
+ynh run /tmp/ynh-edge/allow "hello" 2>&1 | grep Error
+# Expected: Error: resolving includes: include "github.com/eyelock/assistants": remote source "github.com/eyelock/assistants" is not in the allowed sources list (add "github.com/eyelock/assistants" to allowed_remote_sources) (exit 1)
 
 mv ~/.ynh/config.json.bak ~/.ynh/config.json
+ynh ls
+# Expected: local/allow-edge is not listed. The install was refused, and running a path installs nothing
+rm -rf /tmp/ynh-edge/allow
 ```
 
 ### E16: Info on installed harness
 
 ```bash
-ynh info local/my-harness
+mkdir -p /tmp/ynh-edge/info/.agents/harness
+echo '{"name":"info-edge","version":"0.1.0","default_vendor":"claude"}' > /tmp/ynh-edge/info/.agents/harness/plugin.json
+ynh install /tmp/ynh-edge/info
+
+ynh info local/info-edge
 # Expected: Name, Vendor, Installed timestamp, Source (local path), no includes, no delegates
+
+ynh uninstall local/info-edge
+rm -rf /tmp/ynh-edge
 ```
 
 ### E17: Info on non-existent harness
@@ -648,6 +664,11 @@ ynh uninstall local/fork-copy
 # Verify the pointer is gone
 ynh ls --format json | jq -r '.harnesses[] | select(.name=="fork-copy") | .id'
 # Expected: (empty — no output)
+
+# The fork's source is installed too; uninstall it before deleting its tree
+ynh uninstall local/fork-src
+# Expected: Uninstalled harness "fork-src"
+#             Source tree left in place: /tmp/ynh-fork-src
 
 rm -rf /tmp/ynh-fork-src /tmp/ynh-fork-copy
 ```
