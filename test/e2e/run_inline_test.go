@@ -57,3 +57,44 @@ func TestRun_InlineHarness(t *testing.T) {
 		t.Errorf("inline run should not install into harnesses/ — found ephemeral/")
 	}
 }
+
+// TestRun_LocalPath covers `ynh run <path>` (#448): a local harness directory
+// runs without being installed, and a legacy tree is refused with the
+// `ynd migrate` fix rather than the canonical-id hint.
+func TestRun_LocalPath(t *testing.T) {
+	s := newSandbox(t)
+	work := t.TempDir()
+	harness := newSyntheticSkillHarness(t, "my-dev")
+	local := filepath.Join(work, "my-dev")
+	if err := os.Rename(harness, local); err != nil {
+		t.Fatal(err)
+	}
+
+	mustRunYnhInDir(t, s, work, "run", "./my-dev", "-v", "cursor", "--install")
+	assertFileExists(t, filepath.Join(work, ".cursor", "skills", "hello", "SKILL.md"))
+	if entries, err := os.ReadDir(filepath.Join(s.home, "harnesses")); err == nil && len(entries) > 0 {
+		t.Errorf("running a path installed something: %v", entries)
+	}
+
+	legacy := filepath.Join(t.TempDir(), "old")
+	if err := os.MkdirAll(legacy, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacy, ".harness.json"), []byte(`{"name":"old","version":"0.1.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, errOut, err := runYnhInDirRaw(t, s, work, "run", legacy, "-v", "cursor", "--install")
+	if err == nil {
+		t.Fatal("expected a legacy tree to be refused")
+	}
+	if !strings.Contains(errOut, "convert it with: ynd migrate "+legacy) {
+		t.Errorf("expected the ynd migrate fix, got: %s", errOut)
+	}
+	_, errOut, err = runYnhInDirRaw(t, s, work, "run", "--harness-file", filepath.Join(legacy, ".harness.json"), "-v", "cursor", "--install")
+	if err == nil {
+		t.Fatal("expected --harness-file at a legacy .harness.json to be refused")
+	}
+	if !strings.Contains(errOut, "convert it with: ynd migrate "+legacy) {
+		t.Errorf("expected the ynd migrate fix, got: %s", errOut)
+	}
+}

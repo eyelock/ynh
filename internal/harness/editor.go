@@ -63,7 +63,7 @@ func ResolveEditTarget(ref string) (dir string, installed bool, err error) {
 		}
 		return "", false, fmt.Errorf("harness %q: %w", ref, ErrNotFound)
 	default:
-		return "", false, BadRefError(ref)
+		return "", false, BadRefOrPathError(ref)
 	}
 }
 

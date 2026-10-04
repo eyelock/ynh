@@ -41,7 +41,7 @@ Commands:
     sources <add|list|remove>              Manage local harness source directories
 
   Using one
-    run <name> [flags] [prompt]            Launch a harness session
+    run <harness-id|path> [flags] [prompt]  Launch a harness session
     agent run --task <text> [flags]        Run an autonomous agent loop
     ls                                     List installed harnesses
     info <name>                            Show a harness's resolved configuration

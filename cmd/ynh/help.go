@@ -67,9 +67,16 @@ Examples:
 
 Refresh the cached Git repositories a harness resolves from.`,
 
-	"run": `ynh run <name> [flags] [prompt]
+	"run": `ynh run [<harness-id|path>] [flags] [prompt]
 
 Launch a harness session with the vendor CLI.
+
+The harness is an installed id (local/<name>, github.com/<org>/<repo>/<name>),
+a local harness directory (./<path>, ../<path>, /abs/path, ~/<path>), the
+manifest named by --harness-file, or, with none of these, the harness in the
+current directory. A directory is run in place without installing it. A tree
+whose only manifest is a legacy .harness.json is refused with the
+'ynd migrate' fix.
 
 Flags:
   -v <vendor>              Override vendor (claude, codex, cursor, copilot), or
@@ -80,7 +87,8 @@ Flags:
   --profile <name>         Apply a named profile overlay
   --interactive            Stay in session after a focus or prompt
   --instructions "<text>"  Inject per-invocation context after harness instructions
-  --harness-file <path>    Load a harness from an explicit manifest path
+  --harness-file <path>    Load a harness from one manifest file, of any name
+                           except a legacy .harness.json
   --session-name <name>    Session label, recorded by ynh and not forwarded
   --resume                 Continue the previous session in this directory
   --resume=<id>            Continue one specific session by id
@@ -91,10 +99,11 @@ All other flags are passed through to the vendor CLI. Use -- to separate the
 prompt from flags.
 
 Examples:
-  ynh run david
-  ynh run david "review this PR"
-  ynh run david --focus code-review
-  ynh run david -v codex -- "refactor auth"`,
+  ynh run local/david
+  ynh run local/david "review this PR"
+  ynh run local/david --focus code-review
+  ynh run local/david -v codex -- "refactor auth"
+  ynh run ./my-harness -v claude`,
 
 	"ls": `ynh ls [flags]
 

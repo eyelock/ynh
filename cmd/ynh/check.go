@@ -731,13 +731,32 @@ func plural(n int, word string) string {
 	return word + "s"
 }
 
-// loadHarnessRef resolves either a canonical id or a filesystem path.
-//
-// Paths go through the same migration chain `ynh run` uses, so a harness still
-// carrying a legacy manifest can be checked without being installed first.
+// loadHarnessRef resolves either a canonical id or a filesystem path, with
+// the sensors its includes declare folded in.
 func loadHarnessRef(ref string) (*harness.Harness, error) {
-	if namespace.Classify(ref) != namespace.RefPath {
-		return harness.LoadQualified(ref)
+	h, err := loadHarnessIDOrPath(ref)
+	if err != nil {
+		return nil, err
+	}
+	return withIncludedSensors(h)
+}
+
+// loadHarnessIDOrPath resolves the harness argument of a command that takes
+// either an installed id or a local harness directory (`ynh check`, `ynh
+// run`), so both accept and refuse exactly the same refs.
+//
+// A path goes through the format chain, which refuses a tree whose manifest
+// ynh no longer reads (a legacy .harness.json) with the `ynd migrate` fix and
+// writes nothing. Anything that is neither an id nor a path gets the hint that
+// names both forms.
+func loadHarnessIDOrPath(ref string) (*harness.Harness, error) {
+	switch namespace.Classify(ref) {
+	case namespace.RefID:
+		return harness.LoadByID(ref)
+	case namespace.RefPath:
+		// Resolved below.
+	default:
+		return nil, harness.BadRefOrPathError(ref)
 	}
 
 	dir := ref
@@ -759,14 +778,10 @@ func loadHarnessRef(ref string) (*harness.Harness, error) {
 	if !plugin.IsPluginDir(abs) {
 		return nil, fmt.Errorf(
 			"no harness at %s: expected %s. Run `ynd create harness <name>` to make one, "+
-				"or pass an installed id — `ynh ls` lists them",
+				"or pass an installed id (`ynh ls` lists them)",
 			abs, plugin.PluginFile)
 	}
-	h, err := harness.LoadDir(abs)
-	if err != nil {
-		return nil, err
-	}
-	return withIncludedSensors(h)
+	return harness.LoadDir(abs)
 }
 
 // withIncludedSensors folds in the sensors an include declares, so a sensor

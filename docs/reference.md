@@ -34,7 +34,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | Command | Key Flags |
 |---------|-----------|
 | `ynh install <source>` | `--path`, `-v` |
-| `ynh run [harness]` | `-v`, `--profile`, `--focus`, `--install`, `--clean` |
+| `ynh run [harness-id\|path]` | `-v`, `--profile`, `--focus`, `--harness-file <file>`, `--install`, `--clean` |
 | `ynh uninstall <harness>...` | |
 | `ynh update [harness]` | |
 | `ynh fork <name>` | `--to <path>`, `--name <new>`, `--format <text\|json>` |

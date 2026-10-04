@@ -162,7 +162,8 @@ rm -rf /tmp/ynh-tutorial
 - A project still on `.ynh-plugin/plugin.json` keeps working for now, with a deprecation warning: ynh reads `.agents/harness/` first and falls back to `.ynh-plugin/`. `ynd migrate` moves it
 - `ynd validate`, `ynd preview`, and `ynd diff` work with project directories containing `.agents/harness/plugin.json`
 - `ynh run` auto-discovers `.agents/harness/plugin.json` in the current working directory
-- `ynh run --harness-file <path>` points to a specific manifest file by path
+- `ynh run <path>` (for example `ynh run ./my-project`) runs a project directory from anywhere, without installing it
+- `ynh run --harness-file <path>` points to a specific manifest file by path. A legacy `.harness.json` is refused there too, with the `ynd migrate` fix
 - The file format is identical to installed harnesses — same hooks, MCP servers, profiles, and focus entries
 
 ## Composition with focus
