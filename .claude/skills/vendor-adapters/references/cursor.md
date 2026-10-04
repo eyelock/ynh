@@ -117,7 +117,13 @@ currently mapped by ynh). ynh's canonical map covers five events:
 Project: `.cursor/mcp.json`
 User: `~/.cursor/mcp.json`
 Plugin: `mcp.json` (at plugin root, NO dot prefix — differs from Claude's `.mcp.json`)
-FIXED: ynh writes both — `Cursor.GenerateMCPConfig` emits identical content to both paths.
+CONFIRMED 2026-10-04 (cursor.com/docs/context/mcp, cursor.com/docs/reference/plugins):
+a project reads only `.cursor/mcp.json` (no root `mcp.json`); a plugin discovers
+`mcp.json` at its root automatically, or a custom path named by `mcpServers` in
+`.cursor-plugin/plugin.json`. ynh writes each only where it is read (#470):
+`Cursor.GenerateMCPConfig` returns `.cursor/mcp.json` (run, preview, agent loop),
+`Cursor.GeneratePluginMCPConfig` returns `mcp.json` (export, marketplace). Same
+document, one renderer.
 
 ```json
 {
@@ -188,7 +194,7 @@ from.
 - Rules: YES (.cursor/rules/<name>.mdc) — FIXED: ynh now writes `.mdc` with frontmatter
 - Commands: YES (commands/<name>.md)
 - Hooks: YES. `.cursor/hooks.json` in the run assembly, `hooks/hooks.json` in an export, same format and event names; never both in one output (#454)
-- MCP: YES — FIXED: ynh writes both `.cursor/mcp.json` (project) and `mcp.json` (plugin root, no dot)
+- MCP: YES. `.cursor/mcp.json` in the run assembly, `mcp.json` (plugin root, no dot) in an export, same content; never both in one output (#470)
 - Marketplace: YES (.cursor-plugin/marketplace.json)
 - .agents/skills/: PARTIAL — Cursor reads `.agents/skills/` but NOT `.agents/rules/` or other subdirs
 

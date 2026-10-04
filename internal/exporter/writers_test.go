@@ -100,6 +100,68 @@ func TestWriteMCPConfig_GeneratorErrorPropagates(t *testing.T) {
 	}
 }
 
+// pluginMCPStub is a vendor whose plugin carries MCP servers at a different
+// path from its project sessions, as Cursor's and Copilot's do.
+type pluginMCPStub struct {
+	stubExporter
+	plugin map[string][]byte
+}
+
+func (s pluginMCPStub) GeneratePluginMCPConfig(map[string]plugin.MCPServer) (map[string][]byte, error) {
+	return s.plugin, nil
+}
+
+// An export is a plugin, so a vendor's plugin MCP path wins over its project
+// path, and the project file is not written at all (#470).
+func TestWriteMCPConfig_PrefersPluginPath(t *testing.T) {
+	out := t.TempDir()
+	s := pluginMCPStub{
+		stubExporter: stubExporter{mcp: map[string][]byte{".vendor/mcp.json": []byte(`{}`)}},
+		plugin:       map[string][]byte{"mcp.json": []byte(`{}`)},
+	}
+	if err := writeMCPConfig(out, s, nil); err != nil {
+		t.Fatalf("writeMCPConfig: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(out, "mcp.json")); err != nil {
+		t.Errorf("plugin MCP config not written: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(out, ".vendor")); !os.IsNotExist(err) {
+		t.Errorf("project MCP config must not be written to a plugin, stat err = %v", err)
+	}
+}
+
+// exportManifestStub is a vendor whose run-dir manifest sits apart from its
+// export manifest, as Copilot's does.
+type exportManifestStub struct {
+	stubExporter
+}
+
+func (exportManifestStub) GeneratePluginManifest(*plugin.HarnessJSON, string) (map[string][]byte, error) {
+	return map[string][]byte{".vendor/.plugin/plugin.json": nil}, nil
+}
+
+func (exportManifestStub) GenerateExportPluginManifest(*plugin.HarnessJSON) (map[string][]byte, error) {
+	return map[string][]byte{".plugin/plugin.json": nil}, nil
+}
+
+// An export asks for the export layout explicitly when the vendor has one
+// (#471), and falls back to GeneratePluginManifest when it does not.
+func TestPluginManifest_PrefersExportLayout(t *testing.T) {
+	hj := &plugin.HarnessJSON{Name: "n"}
+	got, err := PluginManifest(exportManifestStub{}, hj, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got[".plugin/plugin.json"]; !ok || len(got) != 1 {
+		t.Errorf("export layout not used, got %v", got)
+	}
+
+	got, err = PluginManifest(stubExporter{}, hj, t.TempDir())
+	if err != nil || got != nil {
+		t.Errorf("fallback = %v, %v; want the stub's nil manifest", got, err)
+	}
+}
+
 func TestWriteHookConfig(t *testing.T) {
 	out := t.TempDir()
 	s := stubExporter{hooks: map[string][]byte{"hooks/hooks.json": []byte(`{}`)}}

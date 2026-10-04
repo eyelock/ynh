@@ -151,6 +151,44 @@ func TestCmdPreviewCursorHooksOnlyWhereCursorReads(t *testing.T) {
 	}
 }
 
+// TestCmdPreviewCursorMCPOnlyWhereCursorReads locks #470: a Cursor project
+// session reads MCP servers from .cursor/mcp.json alone
+// (cursor.com/docs/context/mcp), so the preview of a run assembly carries
+// that file and no root mcp.json, which only a Cursor plugin reads.
+func TestCmdPreviewCursorMCPOnlyWhereCursorReads(t *testing.T) {
+	srcDir := createPreviewHarness(t)
+	outputDir := filepath.Join(t.TempDir(), "preview-cursor-mcp")
+
+	if err := cmdPreview([]string{srcDir, "-v", "cursor", "-o", outputDir}); err != nil {
+		t.Fatalf("cmdPreview failed: %v", err)
+	}
+
+	assertExists(t, filepath.Join(outputDir, ".cursor", "mcp.json"))
+	if _, err := os.Stat(filepath.Join(outputDir, "mcp.json")); !os.IsNotExist(err) {
+		t.Errorf("expected no root mcp.json in cursor preview, stat err = %v", err)
+	}
+}
+
+// TestCmdPreviewCopilotRunLayout locks the run-dir layout #471 must leave
+// alone: `ynh run` points --plugin-dir at .copilot/, so the preview nests the
+// manifest and MCP file there, beside the skills.
+func TestCmdPreviewCopilotRunLayout(t *testing.T) {
+	srcDir := createPreviewHarness(t)
+	outputDir := filepath.Join(t.TempDir(), "preview-copilot")
+
+	if err := cmdPreview([]string{srcDir, "-v", "copilot", "-o", outputDir}); err != nil {
+		t.Fatalf("cmdPreview failed: %v", err)
+	}
+
+	assertExists(t, filepath.Join(outputDir, ".copilot", ".claude-plugin", "plugin.json"))
+	assertExists(t, filepath.Join(outputDir, ".copilot", ".mcp.json"))
+	for _, rel := range []string{".claude-plugin", filepath.Join(".github", "mcp.json")} {
+		if _, err := os.Stat(filepath.Join(outputDir, rel)); !os.IsNotExist(err) {
+			t.Errorf("expected no %s at the copilot run-dir root, stat err = %v", rel, err)
+		}
+	}
+}
+
 func TestCmdPreviewWithMCP(t *testing.T) {
 	srcDir := createPreviewHarness(t)
 	outputDir := filepath.Join(t.TempDir(), "preview-mcp")

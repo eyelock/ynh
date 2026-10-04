@@ -24,10 +24,13 @@ func TestMcp_PerVendor(t *testing.T) {
 	cases := []struct {
 		vendor string
 		mcpRel string // path relative to runDir
+		absent string // relative to runDir; an MCP file the vendor never reads in a project
 	}{
 		{vendor: "claude", mcpRel: filepath.Join(".claude", ".mcp.json")},
 		{vendor: "codex", mcpRel: ".mcp.json"},
-		{vendor: "cursor", mcpRel: filepath.Join(".cursor", "mcp.json")},
+		// mcp.json at the root is the Cursor plugin path; a project session
+		// reads only .cursor/mcp.json, so the run assembly must not carry it (#470).
+		{vendor: "cursor", mcpRel: filepath.Join(".cursor", "mcp.json"), absent: "mcp.json"},
 	}
 
 	for _, tc := range cases {
@@ -55,6 +58,11 @@ func TestMcp_PerVendor(t *testing.T) {
 			// Server name "echoer" appears as a key somewhere in the rendered file.
 			if !bytes.Contains(body, []byte("echoer")) {
 				t.Errorf("MCP file missing server name 'echoer':\n%s", body)
+			}
+			if tc.absent != "" {
+				if _, err := os.Stat(filepath.Join(runDir, tc.absent)); !os.IsNotExist(err) {
+					t.Errorf("%s must not be assembled for %s, stat err = %v", tc.absent, tc.vendor, err)
+				}
 			}
 		})
 	}

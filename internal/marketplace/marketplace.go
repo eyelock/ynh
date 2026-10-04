@@ -342,7 +342,7 @@ func buildPluginEntry(srcDir, outputDir string, vendors []string) error {
 		if err != nil {
 			continue
 		}
-		manifestFiles, err := adapter.GeneratePluginManifest(hj, outputDir)
+		manifestFiles, err := exporter.PluginManifest(adapter, hj, outputDir)
 		if err != nil {
 			return fmt.Errorf("generating %s manifest: %w", v, err)
 		}

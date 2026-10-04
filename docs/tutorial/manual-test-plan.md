@@ -188,6 +188,7 @@ Requires Docker installed and running.
 | Preview for Claude — verify .claude/.mcp.json | [Preview for Claude](mcp-servers.md#preview-for-claude) |
 | Preview for Cursor — verify .cursor/mcp.json | [Preview for Cursor](mcp-servers.md#preview-for-cursor) |
 | Preview for Codex — verify JSON | [Preview for Codex](mcp-servers.md#preview-for-codex) |
+| Export for Cursor and Copilot, verify plugin MCP paths | [Export for Cursor and Copilot](mcp-servers.md#export-for-cursor-and-copilot) |
 | Add HTTP MCP server — verify URL | [Add an HTTP MCP server](mcp-servers.md#add-an-http-mcp-server) |
 | Diff MCP config across vendors | [Compare MCP config across vendors](mcp-servers.md#compare-mcp-config-across-vendors) |
 
@@ -886,7 +887,7 @@ Re-run S1 with a focus-source sensor and verify `ynh sensors run` returns the re
 | Developer Tools | 8 |
 | Docker Images | 10 |
 | Hooks | 6 |
-| MCP Servers | 6 |
+| MCP Servers | 7 |
 | Developer Preview | 5 |
 | Profiles | 8 |
 | Focus | 7 |
@@ -894,4 +895,4 @@ Re-run S1 with a focus-source sensor and verify `ynh sensors run` returns the re
 | Structured Output | 11 |
 | Sensors | 3 |
 | Edge Cases | 28 |
-| **Total** | **159** |
+| **Total** | **160** |
