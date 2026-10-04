@@ -34,8 +34,16 @@ func TestCanonicalPath(t *testing.T) {
 		{"claude", "CLAUDE.md", "<instructions>"},
 		{"cursor", ".cursorrules", "<instructions>"},
 		{"copilot", "AGENTS.md", "<instructions>"},
+		{"codex", ".codex/skills/s/SKILL.md", "<config>/skills/s/SKILL.md"},
+		{"cursor", ".cursor/rules/r.mdc", "<config>/rules/r.mdc"},
 		// Untouched: not one of the three mapped prefixes.
 		{"claude", "README.md", "README.md"},
+		// Untouched: under the config dir but not an artifact. Hook and MCP
+		// config is each vendor's own file, so it keeps its literal path.
+		{"cursor", ".cursor/hooks.json", ".cursor/hooks.json"},
+		{"codex", ".codex/hooks.json", ".codex/hooks.json"},
+		{"claude", ".claude/hooks/hooks.json", ".claude/hooks/hooks.json"},
+		{"cursor", ".cursor/mcp.json", ".cursor/mcp.json"},
 	}
 	for _, c := range cases {
 		t.Run(c.vendor+"/"+c.in, func(t *testing.T) {

@@ -224,10 +224,13 @@ ynd diff ./my-harness --focus review        # diff with a focus applied
 ynd diff --harness ./my-harness             # explicit harness flag
 ```
 
+Files are paired across vendors by what they are, not where each vendor puts them. The same skill, agent, rule or command pairs across vendors' config directories (`.claude/skills/x/SKILL.md` with `.cursor/skills/x/SKILL.md`), as do the plugin manifest and the instructions file (`CLAUDE.md` with `.cursorrules`). Any other file is that vendor's own and is never paired, even when two vendors happen to use the same name: hook config (`.claude/hooks/hooks.json`, `.cursor/hooks.json`, `.codex/hooks.json`) is always reported as only in its vendor.
+
 The diff output groups files into four categories:
-- **Only in \<vendor\>** — files unique to that vendor (e.g., `.claude/settings.json` for Claude hooks)
-- **Different content** — files present in both but with different content
-- **Identical** — files present in both with the same content
+- **Only in \<vendor\>**: files unique to that vendor (e.g., `.claude/hooks/hooks.json` for Claude hooks)
+- **Different content**: files present in both but with different content
+- **Same content, vendor-specific rendering**: the same artifact in the form each vendor requires (e.g., Cursor's `.mdc` rules against `.md`)
+- **Identical**: files present in both with the same content
 
 At least two vendors are required for comparison. If no vendors are specified, all registered vendors are compared.
 
