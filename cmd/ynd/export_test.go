@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -239,5 +240,146 @@ func assertExists(t *testing.T, path string) {
 	t.Helper()
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		t.Errorf("expected to exist: %s", path)
+	}
+}
+
+// snapshotDir records every path under dir with its contents, so a test can
+// assert that a refused command left a directory exactly as it found it. A
+// missing dir snapshots as nil.
+func snapshotDir(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return nil
+	}
+	snap := map[string]string{}
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			snap[rel+"/"] = ""
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		snap[rel] = string(data)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return snap
+}
+
+// outputDirStates are the three states -o can be in before a refused command
+// runs: absent, an existing empty directory, and an existing directory with
+// content. Each setup returns the -o path, always under t.TempDir().
+var outputDirStates = []struct {
+	name  string
+	setup func(t *testing.T) string
+}{
+	{"absent", func(t *testing.T) string {
+		return filepath.Join(t.TempDir(), "out")
+	}},
+	{"existing empty", func(t *testing.T) string {
+		return t.TempDir()
+	}},
+	{"existing with content", func(t *testing.T) string {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "keep.txt"), []byte("keep"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Join(dir, "claude"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return dir
+	}},
+}
+
+// A refused export must create nothing (#451). It used to create -o before it
+// looked at the source, so refusing a legacy tree left an empty directory
+// behind. An -o that already existed must be left exactly as it was.
+func TestCmdExportRefusedLeavesOutputUntouched(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	t.Setenv("YNH_FOCUS", "")
+	t.Setenv("YNH_PROFILE", "")
+
+	legacy := filepath.Join(t.TempDir(), "legacy")
+	writeLegacyHarnessJSON(t, legacy)
+	good, err := filepath.Abs(testdataExportDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	refusals := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"legacy source", []string{legacy, "-v", "claude"}, "ynd migrate"},
+		{"legacy source merged", []string{legacy, "--merged"}, "ynd migrate"},
+		// --clean -y must not empty -o for an export that is then refused.
+		{"legacy source with clean", []string{legacy, "--clean", "-y"}, "ynd migrate"},
+		{"unknown vendor", []string{good, "-v", "bogus"}, "unknown vendor"},
+		{"focus and profile", []string{good, "--focus", "f", "--profile", "p"}, "--focus and --profile"},
+		{"undefined focus", []string{good, "--focus", "nope"}, "focus \"nope\" not defined"},
+		{"undefined profile", []string{good, "--profile", "nope"}, "nope"},
+		{"undefined profile with clean", []string{good, "--profile", "nope", "--clean", "-y"}, "nope"},
+	}
+
+	for _, r := range refusals {
+		for _, s := range outputDirStates {
+			t.Run(r.name+"/"+s.name, func(t *testing.T) {
+				out := s.setup(t)
+				before := snapshotDir(t, out)
+
+				err := cmdExport(append(append([]string{}, r.args...), "-o", out))
+				if err == nil {
+					t.Fatal("expected the export to be refused")
+				}
+				if !strings.Contains(err.Error(), r.want) {
+					t.Errorf("error = %q, want it to contain %q", err, r.want)
+				}
+				if after := snapshotDir(t, out); !reflect.DeepEqual(before, after) {
+					t.Errorf("refused export changed -o\nbefore: %v\nafter:  %v", before, after)
+				}
+			})
+		}
+	}
+}
+
+// With no -o the default is ./dist/<name>; a refused export must not create
+// ./dist either.
+func TestCmdExportRefusedCreatesNoDefaultOutput(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	legacy := filepath.Join(t.TempDir(), "legacy")
+	writeLegacyHarnessJSON(t, legacy)
+	work := t.TempDir()
+	t.Chdir(work)
+
+	if err := cmdExport([]string{legacy, "-v", "claude"}); err == nil {
+		t.Fatal("expected the export to be refused")
+	}
+	if _, err := os.Stat(filepath.Join(work, "dist")); !os.IsNotExist(err) {
+		t.Errorf("refused export created ./dist (stat err: %v)", err)
+	}
+}
+
+// writeLegacyHarnessJSON writes a pre-plugin `.harness.json` tree, which every
+// command now refuses with a pointer to `ynd migrate` (#417).
+func writeLegacyHarnessJSON(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := `{"$schema":"https://eyelock.github.io/ynh/schema/harness.schema.json","name":"legacy","version":"0.1.0"}`
+	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -172,3 +172,59 @@ func TestMarketplaceReadme(t *testing.T) {
 		t.Error("README should contain plugin name")
 	}
 }
+
+// BeforeWrite runs once every entry has been checked and before anything is
+// written, so a refused entry never reaches it and a failing hook writes
+// nothing (#451).
+func TestBuildBeforeWrite(t *testing.T) {
+	configPath, configDir := setupMarketplace(t)
+	goodCfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refusedCfg := &MarketplaceConfig{
+		Name:      goodCfg.Name,
+		Owner:     goodCfg.Owner,
+		Harnesses: append(append([]MarketplaceEntry{}, goodCfg.Harnesses...), MarketplaceEntry{Type: "harness", Source: "./does-not-exist"}),
+	}
+
+	tests := []struct {
+		name       string
+		cfg        *MarketplaceConfig
+		hookErr    error
+		wantCalled bool
+	}{
+		{"refused entry never calls the hook", refusedCfg, nil, false},
+		{"failing hook stops the build", goodCfg, os.ErrPermission, true},
+		{"passing hook lets the build run", goodCfg, nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "out")
+			called := false
+			err := Build(tt.cfg, BuildOptions{
+				ConfigDir: configDir,
+				OutputDir: out,
+				Vendors:   []string{"claude"},
+				BeforeWrite: func() error {
+					if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+						t.Errorf("output existed before BeforeWrite ran (stat err: %v)", statErr)
+					}
+					called = true
+					return tt.hookErr
+				},
+			})
+			if called != tt.wantCalled {
+				t.Errorf("BeforeWrite called = %v, want %v", called, tt.wantCalled)
+			}
+			wantOK := tt.cfg == goodCfg && tt.hookErr == nil
+			if (err == nil) != wantOK {
+				t.Fatalf("err = %v, want success %v", err, wantOK)
+			}
+			_, statErr := os.Stat(out)
+			if wantOK == os.IsNotExist(statErr) {
+				t.Errorf("output exists = %v, want %v", !os.IsNotExist(statErr), wantOK)
+			}
+		})
+	}
+}

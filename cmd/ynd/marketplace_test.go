@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -346,5 +347,80 @@ func TestCmdMarketplaceBuildClean_StillRefusesAForeignRepo(t *testing.T) {
 	}
 	if _, statErr := os.Stat(source); statErr != nil {
 		t.Error("the source file was deleted despite the refusal")
+	}
+}
+
+// A refused marketplace build must create nothing (#451). It created -o, and
+// then -o/plugins, before it looked at a single entry, so a legacy entry or a
+// malformed global config left empty directories behind. An -o that already
+// existed must be left exactly as it was.
+func TestCmdMarketplaceBuildRefusedLeavesOutputUntouched(t *testing.T) {
+	refusals := []struct {
+		name  string
+		setup func(t *testing.T) (configFile string, extra []string)
+		want  string
+	}{
+		{"legacy entry after valid ones", func(t *testing.T) (string, []string) {
+			t.Setenv("YNH_HOME", t.TempDir())
+			configFile := setupMarketplaceTest(t)
+			dir := filepath.Dir(configFile)
+			writeLegacyHarnessJSON(t, filepath.Join(dir, "harnesses", "legacy"))
+			writeTestJSON(t, configFile, map[string]any{
+				"name":  "cli-test-marketplace",
+				"owner": map[string]string{"name": "tester"},
+				"harnesses": []map[string]string{
+					{"type": "harness", "source": "./harnesses/david"},
+					{"type": "plugin", "source": "./plugins/my-tool"},
+					{"type": "harness", "source": "./harnesses/legacy"},
+				},
+			})
+			return configFile, nil
+		}, "ynd migrate"},
+		{"legacy entry with clean", func(t *testing.T) (string, []string) {
+			t.Setenv("YNH_HOME", t.TempDir())
+			configFile := setupMarketplaceTest(t)
+			dir := filepath.Dir(configFile)
+			writeLegacyHarnessJSON(t, filepath.Join(dir, "harnesses", "legacy"))
+			writeTestJSON(t, configFile, map[string]any{
+				"name":      "cli-test-marketplace",
+				"owner":     map[string]string{"name": "tester"},
+				"harnesses": []map[string]string{{"type": "harness", "source": "./harnesses/legacy"}},
+			})
+			return configFile, []string{"--clean", "-y"}
+		}, "ynd migrate"},
+		{"malformed global config", func(t *testing.T) (string, []string) {
+			home := t.TempDir()
+			t.Setenv("YNH_HOME", home)
+			if err := os.WriteFile(filepath.Join(home, "config.json"), []byte("{ not json"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			return setupMarketplaceTest(t), nil
+		}, "global config"},
+		{"unknown vendor", func(t *testing.T) (string, []string) {
+			t.Setenv("YNH_HOME", t.TempDir())
+			return setupMarketplaceTest(t), []string{"-v", "bogus"}
+		}, "unknown vendor"},
+	}
+
+	for _, r := range refusals {
+		for _, s := range outputDirStates {
+			t.Run(r.name+"/"+s.name, func(t *testing.T) {
+				configFile, extra := r.setup(t)
+				out := s.setup(t)
+				before := snapshotDir(t, out)
+
+				args := append([]string{"build", configFile, "-o", out}, extra...)
+				err := cmdMarketplace(args)
+				if err == nil {
+					t.Fatal("expected the build to be refused")
+				}
+				if !strings.Contains(err.Error(), r.want) {
+					t.Errorf("error = %q, want it to contain %q", err, r.want)
+				}
+				if after := snapshotDir(t, out); !reflect.DeepEqual(before, after) {
+					t.Errorf("refused build changed -o\nbefore: %v\nafter:  %v", before, after)
+				}
+			})
+		}
 	}
 }
