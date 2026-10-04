@@ -172,10 +172,17 @@ when its verdict is `pass`.
   the loop treats it as debt the run inherited rather than work it owes. Only
   the lines a turn actually introduced are fed back, so the agent is not asked
   to clean a repository it was pointed at.
-- When the gate is green and a `--convergence-sensor` is declared, that sensor
-  is consulted as the final say. It stays a direct `ynh sensors run`: resolving
-  a focus sensor needs an agent runtime, which is why `ynh check` reports one as
-  `deferred` rather than judging it.
+- When the gate is green and a convergence verifier is declared (a sensor with
+  `role: convergence-verifier`, or one named by `--convergence-sensor`), that
+  sensor is consulted as the final say, through a direct `ynh sensors run`, and
+  the run converges only on `pass`.
+- **A verifier that can never pass is refused before the run starts.** A
+  `focus` sensor needs an agent runtime to resolve, so ynh reports it
+  `deferred`; a `files` sensor reports freshness, which is `reported`. Neither
+  is ever `pass`, so either would spend the whole budget and end at the turn
+  cap. `ynh agent run` exits with an error before any worker starts, saying the
+  verifier requires a command source, and `ynd validate` reports the same
+  sensor. See [`convergence-verifier` needs a source that can decide](sensors.md#convergence-verifier-needs-a-source-that-can-decide).
 - **A run that expected verification and produced no sensor results does not
   converge.** This matters on resume: a session whose harness cannot be restored
   has no sensors, and a verdict with no evidence behind it is worse than no

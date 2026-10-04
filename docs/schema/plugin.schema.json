@@ -207,7 +207,7 @@
           ]
         },
         "role": {
-          "description": "Optional role hint for loop drivers. regular = run between turns; convergence-verifier = the loop's done-check; stuck-recovery = invoked when the stuckness watchdog fires. Pure metadata \u2014 ynh does not enforce semantics. `convergence-verifier` requires a command or focus source: no verdict about a files sensor's contents is derivable, so a files sensor would end the run because a path exists and is newer than its inputs \u2014 with contents never read, and the path inside the agent's own write path, which the run could write itself.",
+          "description": "Optional role hint for loop drivers. regular = run between turns; convergence-verifier = the loop's done-check; stuck-recovery = invoked when the stuckness watchdog fires. `convergence-verifier` requires a command source (github_status and github_check are also accepted), and `ynd validate` and `ynh agent run` refuse files and focus: a run ends only on pass, and neither ever reports it. A files sensor reports freshness, which says whether an artifact is current, never whether the work is done, and the path sits inside the agent's own write path. A focus sensor needs an agent runtime ynh does not own, so ynh reports it deferred.",
           "type": "string",
           "enum": [
             "regular",

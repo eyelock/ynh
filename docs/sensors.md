@@ -25,6 +25,7 @@ Sensors live under the top-level `sensors` key in `.agents/harness/plugin.json`.
   "sensors": {
     "build": {
       "category": "maintainability",
+      "role": "convergence-verifier",
       "source": { "command": "make check" },
       "output": { "format": "text" }
     },
@@ -39,7 +40,6 @@ Sensors live under the top-level `sensors` key in `.agents/harness/plugin.json`.
       "output": { "format": "markdown" }
     },
     "coverage-judge": {
-      "role": "convergence-verifier",
       "source": {
         "focus": {
           "profile": "ci",
@@ -57,7 +57,7 @@ Sensors live under the top-level `sensors` key in `.agents/harness/plugin.json`.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `category` | enum | No | Fowler bucket: `maintainability`, `architecture`, `behaviour`. Free metadata for loop-driver triage. |
-| `role` | enum | No | Role hint: `regular` (default), `convergence-verifier`, `stuck-recovery`. Pure metadata — ynh does not enforce semantics. Loop drivers filter sensors by role to discover which one is the loop's done-check or the recovery sensor. |
+| `role` | enum | No | Role hint: `regular` (default), `convergence-verifier`, `stuck-recovery`. Loop drivers filter sensors by role to discover which one is the loop's done-check or the recovery sensor. ynh enforces one rule: a `convergence-verifier` needs a source that can return `pass`, so `files` and `focus` are refused. See [`convergence-verifier` needs a source that can decide](#convergence-verifier-needs-a-source-that-can-decide). |
 | `tolerance` | enum | No | How `ynh check` treats a failure: `blocking` (default), `advisory`, `report`. See [Tolerance](#tolerance). |
 | `observes` | string[] | No | For `files` sensors: the paths the artifact depends on. Empty means the whole tracked tree. See [Freshness](#freshness-is-this-artifact-still-true). |
 | `source` | object | **Yes** | Strict one-of: `files` \| `command` \| `focus`. Discriminates the sensor type. |
@@ -543,7 +543,7 @@ Inline focuses are scoped to the sensor that declares them — they do **not** a
 
 `ynh sensors run` does not invoke an agent for a focus-sourced sensor. It returns the resolved focus declaration, and a loop driver that wants a verdict invokes its own agent runtime with it.
 
-[`ynh agent run`](agent.md), ynh's built-in loop driver, does invoke an agent runtime, but only for the worker turns that do the task. It does not resolve focus-sourced sensors either. Its gate is `ynh check`, which reports a focus sensor as `deferred`, and a focus sensor never gates convergence there. To have a focus sensor judged, use your own loop driver.
+[`ynh agent run`](agent.md), ynh's built-in loop driver, does invoke an agent runtime, but only for the worker turns that do the task. It does not resolve focus-sourced sensors either. Its gate is `ynh check`, which reports a focus sensor as `deferred`, and a focus sensor never gates convergence there. A focus sensor cannot be its convergence verifier either: `ynh agent run` refuses to start with one, and `ynd validate` reports it (see [`convergence-verifier` needs a source that can decide](#convergence-verifier-needs-a-source-that-can-decide)). To have a focus sensor judged, use your own loop driver.
 
 ## Output contract
 
@@ -768,31 +768,40 @@ did not, `2` ynh could not run the calibration. Shape:
 ### `convergence-verifier` needs a source that can decide
 
 A sensor with `role: convergence-verifier` tells the loop the run is finished,
-so it must be able to produce a verdict. **A `files` source cannot**, and
-`ynd validate` refuses the combination.
+and a run ends only when it reports `status: pass`. A source that can never
+report `pass` would hold every run open until its turn cap, with nothing saying
+why. Two sources are like that, and both are refused: `ynd validate` reports
+the sensor as an issue, and `ynh agent run` refuses to start, before any worker
+turn, when its convergence verifier (by role or by `--convergence-sensor`) has
+one of them. Both say the verifier requires a command source.
 
-No verdict about a files sensor's **contents** is mechanically derivable. It
-now carries a [freshness](#freshness-is-this-artifact-still-true) verdict, but
-freshness answers "is this artifact still about the current tree", not "is the
-work done" — and convergence is a question about the work.
+**A `files` source cannot decide.** No verdict about a files sensor's
+**contents** is mechanically derivable. It now carries a
+[freshness](#freshness-is-this-artifact-still-true) verdict, but freshness
+answers "is this artifact still about the current tree", not "is the work
+done", and convergence is a question about the work.
 
 A files sensor declared as the verifier would end the run because a path exists
 and is newer than its inputs. Contents never read, `output.format` never
 consulted. That path sits inside the agent's own write path, so the run could
-manufacture its own convergence by writing the file — and freshness does not
+manufacture its own convergence by writing the file, and freshness does not
 close that door: an artifact the agent regenerated without doing the work reads
 as perfectly fresh. Freshness catches an observation that has gone out of date.
-It cannot catch one that was never made.
+It cannot catch one that was never made. A fresh files sensor is
+`status: reported`, and `reported` is not `pass`. Its failing states are worse
+still: converging on `absent` or `stale` would end a run on the strength of a
+missing or outdated file.
 
-The refusal is structural rather than a special case. Convergence is
-`status: pass`; a fresh files sensor is `status: reported`, and `reported` is
-not `pass`. Its failing states are worse still — converging on `absent` or
-`stale` would end a run on the strength of a missing or outdated file.
+**A `focus` source cannot decide either.** Resolving one needs an agent
+runtime, which ynh does not own, so `ynh check` and `ynh sensors run` report it
+`deferred`, never `pass`. Resolving focus sensors inside `ynh agent run` was the
+alternative; refusing the combination is the smaller and honest one. A loop
+driver of your own that does resolve focus sensors can still pick its done-check
+by name; it just cannot use the `convergence-verifier` role for it.
 
-Use a command source that exits non-zero until the work is done, or a focus
-source, which a loop driver resolves with an agent runtime. `ynh agent run`
-does not resolve focus sources, so a focus verifier can never report `pass`
-there and the run cannot converge. With `ynh agent run`, use a command source.
+Use a command source that exits non-zero until the work is done. A
+`github_status` or `github_check` source also returns a verdict and is
+accepted.
 
 ## Validation
 
@@ -808,6 +817,7 @@ there and the run cannot converge. With `ynh agent run`, use a command source.
 - `output.format` is non-empty.
 - `category`, if set, is one of the three Fowler enum values.
 - `role`, if set, is one of `regular`, `convergence-verifier`, `stuck-recovery`.
+- A `convergence-verifier` does not have a `files` or `focus` source.
 - Unknown fields inside a sensor are rejected.
 
 Errors are prefixed with the sensor name:
@@ -859,8 +869,8 @@ JSON form returns an array of summary objects — the canonical machine-readable
 
 ```json
 [
-  { "name": "build", "category": "maintainability", "source_kind": "command", "format": "text" },
-  { "name": "coverage-judge", "role": "convergence-verifier", "source_kind": "focus", "format": "markdown", "inline_focus": true }
+  { "name": "build", "category": "maintainability", "role": "convergence-verifier", "source_kind": "command", "format": "text" },
+  { "name": "coverage-judge", "category": "behaviour", "source_kind": "focus", "format": "markdown", "inline_focus": true }
 ]
 ```
 
@@ -986,6 +996,7 @@ ynh ships one loop driver, [`ynh agent run`](agent.md). It runs `ynh check` betw
     },
     "test": {
       "category": "behaviour",
+      "role": "convergence-verifier",
       "source": { "command": "go test -race -coverprofile=coverage.out ./..." },
       "output": { "format": "text" }
     },
@@ -995,7 +1006,6 @@ ynh ships one loop driver, [`ynh agent run`](agent.md). It runs `ynh check` betw
     },
     "security": {
       "category": "behaviour",
-      "role": "convergence-verifier",
       "source": {
         "focus": { "prompt": "Are there any security regressions in the diff vs main?" }
       },

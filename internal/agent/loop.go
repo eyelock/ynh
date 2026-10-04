@@ -313,6 +313,12 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			}
 		}
 
+		// Before the worker starts: a verifier that can never pass would
+		// spend the whole budget and end at the turn cap (#447).
+		if err := refuseConvergenceVerifier(harnessObj.Sensors, opts.ConvergenceSensor); err != nil {
+			return result, err
+		}
+
 		configPath, err = assembleHarness(harnessObj, opts.Backend)
 		if err != nil {
 			return result, fmt.Errorf("assembling harness: %w", err)
@@ -1031,6 +1037,27 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			saveCheckpoint()
 		}
 	}
+}
+
+// refuseConvergenceVerifier rejects a run whose convergence verifier could
+// never return pass. Every sensor the collection below might pick is checked,
+// in name order, because it picks among them in map order.
+func refuseConvergenceVerifier(sensors map[string]plugin.Sensor, flagName string) error {
+	names := make([]string, 0, len(sensors))
+	for name := range sensors {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		s := sensors[name]
+		if s.Role != "convergence-verifier" && name != flagName {
+			continue
+		}
+		if why := plugin.ConvergenceVerifierRefusal(s.Source.Kind()); why != "" {
+			return fmt.Errorf("sensor %q cannot be the convergence verifier: %s", name, why)
+		}
+	}
+	return nil
 }
 
 // checkConvergence decides whether the turn's gate result means done.

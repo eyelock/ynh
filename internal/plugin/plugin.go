@@ -180,6 +180,30 @@ var ValidSensorRoles = map[string]bool{
 	"stuck-recovery":       true,
 }
 
+// ConvergenceVerifierRefusal returns why a sensor with the given source kind
+// cannot be a convergence verifier, or "" when it can. A verifier ends a run
+// only on gate.StatusPass, so a source that never yields one would hold every
+// run open until its turn cap, with nothing saying why.
+//
+// Two sources never yield it. A files sensor reports freshness, which says
+// whether an artifact is current, never whether the work is done; it would
+// also be inside the agent's own write path. A focus sensor needs an agent
+// runtime to resolve, which ynh does not own, so `ynh sensors run` reports it
+// deferred (#447). Command and github sensors return a verdict and can decide.
+//
+// Pure predicate shared by `ynd validate` and `ynh agent run`, so the two
+// refuse the same sensors with the same words.
+func ConvergenceVerifierRefusal(kind string) string {
+	const prefix = "role convergence-verifier requires a command source: "
+	switch kind {
+	case "files":
+		return prefix + "a files sensor's freshness says whether its artifact is current, never whether the work is done"
+	case "focus":
+		return prefix + "a focus sensor is never resolved by ynh, which reports it deferred, so it can never pass and the run would go to its turn cap"
+	}
+	return ""
+}
+
 // SensorSource is a strict one-of: files, command, or focus. Exactly one
 // must be set. Discriminated by structure, not labels.
 type SensorSource struct {
@@ -431,16 +455,6 @@ func ValidateSensors(sensors map[string]Sensor, profileNames, focusNames map[str
 		if s.Role != "" && !ValidSensorRoles[s.Role] {
 			issues = append(issues, fmt.Sprintf("%s role %q must be one of regular, convergence-verifier, stuck-recovery", prefix, s.Role))
 		}
-		// A convergence verifier decides that a run is finished, so it must be
-		// able to produce a verdict. No verdict is mechanically derivable from
-		// a file glob: such a sensor would end the run because a path exists,
-		// with contents never read — and the path sits inside the agent's own
-		// write path, so the run could manufacture its own convergence.
-		//
-		// The loop refuses this at runtime because a files sensor is
-		// StatusReported and never StatusPass. Refusing it here as well means
-		// the author is told at `ynd validate` time rather than discovering it
-		// as a run that silently never converges.
 		if s.Ratchet != "" && !ValidSensorRatchets[s.Ratchet] {
 			issues = append(issues, fmt.Sprintf("%s ratchet %q must be one of fingerprint, count", prefix, s.Ratchet))
 		}
@@ -474,9 +488,10 @@ func ValidateSensors(sensors map[string]Sensor, profileNames, focusNames map[str
 					"%s reference requires a command source: no verdict about a %s sensor's output is derivable", prefix, k))
 			}
 		}
-		if s.Role == "convergence-verifier" && s.Source.Kind() == "files" {
-			issues = append(issues, fmt.Sprintf(
-				"%s role convergence-verifier requires a command source: a files sensor's freshness says whether its artifact is current, never whether the work is done", prefix))
+		if s.Role == "convergence-verifier" {
+			if why := ConvergenceVerifierRefusal(s.Source.Kind()); why != "" {
+				issues = append(issues, prefix+" "+why)
+			}
 		}
 		if s.Tolerance != "" && !ValidSensorTolerances[s.Tolerance] {
 			issues = append(issues, fmt.Sprintf("%s tolerance %q must be one of blocking, advisory, report", prefix, s.Tolerance))
