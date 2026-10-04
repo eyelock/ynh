@@ -319,6 +319,9 @@ func claudeTurnError(ev claudeOutputEvent, apiError string, turn Turn) error {
 }
 
 type claudeOutputMsg struct {
+	// ID is the API message id. Claude Code emits one assistant event per
+	// content block, each repeating that message's usage.
+	ID      string          `json:"id,omitempty"`
 	Role    string          `json:"role"`
 	Content []claudeContent `json:"content"`
 	Usage   *claudeUsage    `json:"usage,omitempty"`
@@ -419,6 +422,12 @@ func (s *claudeSession) Next() (Turn, error) {
 	var turn Turn
 	var contentBuf bytes.Buffer
 	var apiError string
+	// The assistant events' usage, the fallback for a result without its
+	// own: one entry per API message, since every content-block event of a
+	// message repeats the same usage. Events without an id each count.
+	msgUsage := map[string]Usage{}
+	var anonUsage Usage
+	var assistantUsage bool
 
 	for s.scanner.Scan() {
 		line := s.scanner.Bytes()
@@ -456,21 +465,32 @@ func (s *claudeSession) Next() (Turn, error) {
 						contentBuf.WriteString(block.Text)
 					}
 				}
-				if ev.Message.Usage != nil {
-					turn.UsageReported = true
-					turn.Usage.InputTokens += ev.Message.Usage.InputTokens
-					turn.Usage.OutputTokens += ev.Message.Usage.OutputTokens
-					turn.Usage.CacheTokens += ev.Message.Usage.CacheTokens
+				if mu := ev.Message.Usage; mu != nil {
+					assistantUsage = true
+					u := Usage{InputTokens: mu.InputTokens, OutputTokens: mu.OutputTokens, CacheTokens: mu.CacheTokens}
+					if ev.Message.ID == "" {
+						anonUsage = addUsage(anonUsage, u)
+					} else {
+						msgUsage[ev.Message.ID] = u
+					}
 				}
 			}
 
 		case "result":
-			// result signals end of this turn.
-			if ev.Usage != nil {
+			// result signals end of this turn. Its usage is the turn's own
+			// (per turn in a streaming-input session) and is authoritative;
+			// adding the assistant events' usage to it counted every turn
+			// at least twice.
+			switch {
+			case ev.Usage != nil:
 				turn.UsageReported = true
-				turn.Usage.InputTokens += ev.Usage.InputTokens
-				turn.Usage.OutputTokens += ev.Usage.OutputTokens
-				turn.Usage.CacheTokens += ev.Usage.CacheTokens
+				turn.Usage = Usage{InputTokens: ev.Usage.InputTokens, OutputTokens: ev.Usage.OutputTokens, CacheTokens: ev.Usage.CacheTokens}
+			case assistantUsage:
+				turn.UsageReported = true
+				turn.Usage = anonUsage
+				for _, u := range msgUsage {
+					turn.Usage = addUsage(turn.Usage, u)
+				}
 			}
 			turn.Content = contentBuf.String()
 			if err := claudeTurnError(ev, apiError, turn); err != nil {
@@ -493,6 +513,15 @@ func (s *claudeSession) Next() (Turn, error) {
 	// stdout closed: claude has exited. A non-zero exit before any result is
 	// claude refusing to run, and its stderr says why.
 	return Turn{}, exitedWorkerError("claude", s.wait(), s.stderr)
+}
+
+// addUsage returns the sum of two usage records.
+func addUsage(a, b Usage) Usage {
+	return Usage{
+		InputTokens:  a.InputTokens + b.InputTokens,
+		OutputTokens: a.OutputTokens + b.OutputTokens,
+		CacheTokens:  a.CacheTokens + b.CacheTokens,
+	}
 }
 
 // claudeModeMismatch reports a session that did not start in the permission

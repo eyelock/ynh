@@ -52,8 +52,8 @@ func TestClaudeSession_CostSplitAndEffort(t *testing.T) {
 			name: "fresh session: running total becomes per-turn cost",
 			raw:  readFixture(t, "claude-cost-fresh.jsonl"),
 			turns: []want{
-				{in: 20, out: 10, cache: 200, cost: 0.05, costReported: true, effort: "high"},
-				{in: 40, out: 14, cache: 400, cost: 0.07, costReported: true, effort: "high"},
+				{in: 10, out: 5, cache: 100, cost: 0.05, costReported: true, effort: "high"},
+				{in: 20, out: 7, cache: 200, cost: 0.07, costReported: true, effort: "high"},
 			},
 		},
 		{
@@ -61,8 +61,8 @@ func TestClaudeSession_CostSplitAndEffort(t *testing.T) {
 			raw:     readFixture(t, "claude-cost-resumed.jsonl"),
 			resumed: true,
 			turns: []want{
-				{in: 20, out: 10, cache: 200, cost: 0.12, costReported: true, effort: "high"},
-				{in: 20, out: 10, cache: 200, cost: 0.08, costReported: true, effort: "high"},
+				{in: 10, out: 5, cache: 100, cost: 0.12, costReported: true, effort: "high"},
+				{in: 10, out: 5, cache: 100, cost: 0.08, costReported: true, effort: "high"},
 			},
 		},
 		{
@@ -70,24 +70,24 @@ func TestClaudeSession_CostSplitAndEffort(t *testing.T) {
 			raw:     withoutLine(readFixture(t, "claude-cost-resumed.jsonl"), "ynh-get-usage"),
 			resumed: true,
 			turns: []want{
-				{in: 20, out: 10, cache: 200, effort: "high"},
-				{in: 20, out: 10, cache: 200, cost: 0.08, costReported: true, effort: "high"},
+				{in: 10, out: 5, cache: 100, effort: "high"},
+				{in: 10, out: 5, cache: 100, cost: 0.08, costReported: true, effort: "high"},
 			},
 		},
 		{
 			name: "no cost in the result and a null effort: neither is reported",
 			raw:  readFixture(t, "claude-no-cost.jsonl"),
 			turns: []want{
-				{in: 20, out: 10, cache: 200},
-				{in: 40, out: 14, cache: 400},
+				{in: 10, out: 5, cache: 100},
+				{in: 20, out: 7, cache: 200},
 			},
 		},
 		{
 			name: "no get_settings answer: effort is not reported",
 			raw:  withoutLine(readFixture(t, "claude-cost-fresh.jsonl"), "ynh-get-settings"),
 			turns: []want{
-				{in: 20, out: 10, cache: 200, cost: 0.05, costReported: true},
-				{in: 40, out: 14, cache: 400, cost: 0.07, costReported: true},
+				{in: 10, out: 5, cache: 100, cost: 0.05, costReported: true},
+				{in: 20, out: 7, cache: 200, cost: 0.07, costReported: true},
 			},
 		},
 	}
@@ -377,5 +377,62 @@ func TestReadCheckpoint_OldFormatLoadsWithoutSplitOrCost(t *testing.T) {
 	b.fillConsumed(&c)
 	if c.InputTokens != nil || c.OutputTokens != nil || c.CacheReadTokens != nil || c.CostUSD != nil {
 		t.Errorf("an old checkpoint must restore the split and cost as absent: %+v", c)
+	}
+}
+
+// Each claude turn's tokens count once. The result event's usage is the
+// turn's own (per-turn in streaming-input sessions) and is authoritative.
+// Without it, the assistant events are the fallback: Claude Code repeats an
+// API call's usage on every content-block event of that message, so each
+// message id counts once, and distinct ids (one per API call) are summed.
+func TestClaudeSession_CountsEachTurnOnce(t *testing.T) {
+	tests := []struct {
+		name    string
+		fixture string
+		want    Usage
+	}{
+		{"result usage is authoritative", "claude-tool-turn.jsonl", Usage{InputTokens: 25, OutputTokens: 25, CacheTokens: 300}},
+		{"no result usage: one count per message id", "claude-tool-turn-no-result-usage.jsonl", Usage{InputTokens: 25, OutputTokens: 25, CacheTokens: 300}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := claudeSessionOver(readFixture(t, tt.fixture))
+			s.costBaseKnown = true
+			turn, err := s.Next()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !turn.UsageReported {
+				t.Error("usage must be reported")
+			}
+			if turn.Usage != tt.want {
+				t.Errorf("usage = %+v, want %+v", turn.Usage, tt.want)
+			}
+			var b Budget
+			b.RecordUsage(turn)
+			if b.Tokens() != 50 {
+				t.Errorf("tokens = %d, want 50", b.Tokens())
+			}
+		})
+	}
+}
+
+// The #416 safety net still sees a turn that reported zero usage: taking the
+// result's usage instead of adding to it must keep UsageReported and zero.
+func TestClaudeSession_ZeroUsageStillReportedForUnmeteredTurn(t *testing.T) {
+	raw := `{"type":"assistant","message":{"id":"msg_Z","role":"assistant","content":[{"type":"text","text":"Some banner"}],"usage":{"input_tokens":0,"output_tokens":0,"cache_read_input_tokens":0}}}
+{"type":"result","subtype":"success","is_error":false,"result":"Some banner","usage":{"input_tokens":0,"output_tokens":0,"cache_read_input_tokens":0}}
+`
+	s := claudeSessionOver(raw)
+	s.costBaseKnown = true
+	turn, err := s.Next()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !turn.UsageReported || turn.Usage != (Usage{}) {
+		t.Fatalf("turn = %+v, want usage reported and zero", turn)
+	}
+	if err := unmeteredTurn("claude", turn); err == nil {
+		t.Error("a zero-usage turn with a response must be a worker error")
 	}
 }

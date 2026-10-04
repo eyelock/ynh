@@ -375,6 +375,18 @@ read as "free":
 All of them count plan-phase turns, as `tokens` does, and carry across
 `--resume` through the checkpoint.
 
+**Claude token counts were double before this release.** ynh added each
+turn's usage from the assistant events to the same turn's usage on the result
+event, and counted an API call again for every content block Claude Code
+emits it in. So `consumed.tokens` for the `claude` backend came out at least
+twice the real figure, and more on turns with tool calls. Each turn now counts
+once, from the result event's per-turn usage, so expect claude token totals
+of roughly half what earlier runs reported. The field's meaning is unchanged;
+its values were wrong. Compare claude runs across this change with that in
+mind. `--max-tokens` and the 2,000,000 default cap are measured against the
+corrected total, so a claude run now reaches them about twice as late as
+before, which is the cap meaning what it says.
+
 What each backend reports today:
 
 | Backend | Split | Cache reads | Cost | Effort |
