@@ -157,7 +157,6 @@ cat > /tmp/ynh-tutorial/sensor-harness/.agents/harness/plugin.json << 'EOF'
       "output": { "format": "markdown" }
     },
     "coverage-judge": {
-      "role": "convergence-verifier",
       "source": {
         "focus": {
           "prompt": "Assess if test coverage is adequate for the changed surface area."

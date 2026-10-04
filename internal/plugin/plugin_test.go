@@ -458,9 +458,10 @@ func writeHarnessJSON(t *testing.T, dir string, content string) {
 }
 
 // A convergence verifier decides a run is finished, so it must be able to
-// produce a verdict. A files sensor cannot — it would end the run because a
+// produce a verdict. A files sensor cannot: it would end the run because a
 // path exists, with contents never read, and the path sits inside the agent's
-// own write path.
+// own write path. A focus sensor cannot either: `ynh sensors run` reports it
+// deferred, never pass, so the run would go to its turn cap (#447).
 func TestValidate_ConvergenceVerifierRejectsFilesSource(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -492,9 +493,25 @@ func TestValidate_ConvergenceVerifierRejectsFilesSource(t *testing.T) {
 			},
 		},
 		{
-			name: "focus source as convergence verifier stays legal — a runtime resolves it",
+			name: "focus source as convergence verifier is refused",
 			sensor: Sensor{
 				Role:   "convergence-verifier",
+				Source: SensorSource{Focus: &FocusRef{Name: "reviewer"}},
+				Output: SensorOutput{Format: "text"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "github_check source as convergence verifier is fine",
+			sensor: Sensor{
+				Role:   "convergence-verifier",
+				Source: SensorSource{GitHubCheck: &GitHubCheckSource{Name: "build"}},
+				Output: SensorOutput{Format: "text"},
+			},
+		},
+		{
+			name: "a focus sensor with no special role stays legal",
+			sensor: Sensor{
 				Source: SensorSource{Focus: &FocusRef{Name: "reviewer"}},
 				Output: SensorOutput{Format: "text"},
 			},

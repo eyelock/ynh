@@ -1547,3 +1547,42 @@ func TestValidateHarness_SplitManifestDir(t *testing.T) {
 		})
 	}
 }
+
+// A convergence verifier must be able to return pass. A files sensor reports
+// freshness and a focus sensor is deferred, so neither ever can, and a harness
+// that names one as its verifier runs every agent session to the turn cap
+// (#447). `ynd validate` says so instead.
+func TestValidateHarnessSensors_ConvergenceVerifierSource(t *testing.T) {
+	out := map[string]any{"format": "text"}
+	cases := []struct {
+		name    string
+		source  map[string]any
+		role    string
+		refused bool
+	}{
+		{"focus verifier", map[string]any{"focus": map[string]any{"prompt": "p"}}, "convergence-verifier", true},
+		{"files verifier", map[string]any{"files": []any{"done.txt"}}, "convergence-verifier", true},
+		{"command verifier", map[string]any{"command": "make verify"}, "convergence-verifier", false},
+		{"github_check verifier", map[string]any{"github_check": map[string]any{"name": "build"}}, "convergence-verifier", false},
+		{"focus without the role", map[string]any{"focus": map[string]any{"prompt": "p"}}, "", false},
+		{"files without the role", map[string]any{"files": []any{"done.txt"}}, "regular", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			entry := map[string]any{"source": c.source, "output": out}
+			if c.role != "" {
+				entry["role"] = c.role
+			}
+			issues := validateHarnessSensors(map[string]any{"sensors": map[string]any{"s": entry}})
+			var found bool
+			for _, i := range issues {
+				if strings.Contains(i, "role convergence-verifier requires a command source") {
+					found = true
+				}
+			}
+			if found != c.refused {
+				t.Errorf("refused=%v want %v; issues: %v", found, c.refused, issues)
+			}
+		})
+	}
+}
