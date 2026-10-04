@@ -71,6 +71,12 @@ func buildCodexArgs(opts StartOptions, threadID string) []string {
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}
+	// codex exec has no effort flag; the config override sets it for this
+	// process. The value is TOML, so it is quoted as a string. Every turn is
+	// its own codex exec, so every turn passes it.
+	if opts.Effort != "" {
+		args = append(args, "-c", `model_reasoning_effort="`+opts.Effort+`"`)
+	}
 	// codex has no edits-only mode (its sandbox modes govern commands), so
 	// validateAutoApprove admits only "all" here. Without --auto-approve no
 	// approval or sandbox flag is passed.

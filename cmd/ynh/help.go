@@ -340,7 +340,11 @@ Flags:
   --backend <name>            Worker backend: claude (default), codex, cursor.
                               On --resume, the session's backend
   --model <name>              Model override
-  --worktree <path>           Run against a specific worktree
+  --effort low|medium|high    Reasoning effort, mapped to the backend's own
+                              setting (claude, codex; refused on cursor).
+                              Overrides the harness's agent.effort. Not
+                              restored on --resume.
+  --worktree <path>          Run against a specific worktree
   --max-turns <n>             Stop after n turns
   --max-wall <duration>       Stop after a wall-clock budget
   --max-tokens <n>            Stop after a token budget

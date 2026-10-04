@@ -111,6 +111,9 @@ type SessionStartData struct {
 	// disappears from the header. It goes in a release that bumps
 	// CapabilitiesVersion.
 	Model string `json:"model,omitempty"`
+	// EffortRequested is the reasoning effort the run asked for, from
+	// --effort or the harness's agent.effort. Absent when none was asked for.
+	EffortRequested string `json:"effort_requested,omitempty"`
 	// AutoApprove is the --auto-approve level the worker was granted, "edits"
 	// or "all". Absent means none: no permission flag was passed.
 	AutoApprove    string `json:"auto_approve,omitempty"`
@@ -160,6 +163,9 @@ type SessionResumedData struct {
 	// ModelRequested is the model this resumed process asked for with
 	// --model, which a resume does not restore from the checkpoint.
 	ModelRequested string `json:"model_requested,omitempty"`
+	// EffortRequested is the effort this resumed process asked for. Like
+	// ModelRequested it is not restored from the checkpoint.
+	EffortRequested string `json:"effort_requested,omitempty"`
 }
 
 // WorkerModelData is the payload for KindWorkerModel events: the model the

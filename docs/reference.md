@@ -76,7 +76,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh sensors run <harness> <name>` | `--cwd <dir>`, `--no-content` |
 | `ynh check <harness-id\|path>` | `--only <a,b>`, `--cwd <dir>`, `--update-baseline`, `--no-baseline`, `--sensor-overlay <json>`, `--format <text\|json>` |
 | `ynh trust [ls\|show\|accept] [harness]` | `--format <text\|json>` |
-| `ynh agent run` | `--harness`, `--task`, `--focus`, `--profile`, `--backend`, `--model`, `--convergence-sensor`, `--sensor-overlay`, `--worktree`, `--sandbox`, `--auto-approve`, `--auto-commit`, `--interactive`, `--no-plan`, `--max-turns`, `--max-tokens`, `--max-wall`, `--max-plan-iterations`, `--emit-jsonl`, `--resume`. See [Agent Loop](agent.md) |
+| `ynh agent run` | `--harness`, `--task`, `--focus`, `--profile`, `--backend`, `--model`, `--effort`, `--convergence-sensor`, `--sensor-overlay`, `--worktree`, `--sandbox`, `--auto-approve`, `--auto-commit`, `--interactive`, `--no-plan`, `--max-turns`, `--max-tokens`, `--max-wall`, `--max-plan-iterations`, `--emit-jsonl`, `--resume`. See [Agent Loop](agent.md) |
 | `ynh sources add <path>` | `--name`, `--description` |
 | `ynh sources list` | `--format <text\|json>` |
 | `ynh sources remove <name>` | |

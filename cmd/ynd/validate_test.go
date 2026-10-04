@@ -347,6 +347,35 @@ func TestValidateFile_PluginJSON_Invalid(t *testing.T) {
 	}
 }
 
+// agent.effort takes one of the three neutral levels; a vendor's own word
+// such as "max" is not one of them.
+func TestValidateFile_PluginJSON_AgentEffort(t *testing.T) {
+	for _, tt := range []struct {
+		effort  string
+		wantErr bool
+	}{
+		{"low", false},
+		{"medium", false},
+		{"high", false},
+		{"max", true},
+		{"minimal", true},
+		{"", true},
+	} {
+		t.Run("effort="+tt.effort, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), ".agents/harness", "plugin.json")
+			writeFile(t, path, []byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"test","version":"0.1.0",`+
+				`"agent":{"max_turns":10,"effort":"`+tt.effort+`"}}`))
+			err := validateFile(path)
+			if tt.wantErr && err == nil {
+				t.Fatalf("agent.effort %q validated, want a schema error", tt.effort)
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("agent.effort %q: %v", tt.effort, err)
+			}
+		})
+	}
+}
+
 func TestValidateFile_Markdown_Valid(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.md")

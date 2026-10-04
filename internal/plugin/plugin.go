@@ -589,6 +589,9 @@ type AgentConfig struct {
 	MaxTurns  int    `json:"max_turns,omitempty"`
 	MaxTokens int64  `json:"max_tokens,omitempty"`
 	MaxWall   string `json:"max_wall,omitempty"` // Go duration, e.g. "45m"
+	// Effort is the reasoning effort to ask the worker for: "low", "medium"
+	// or "high". Empty asks for none, leaving the backend's own default.
+	Effort string `json:"effort,omitempty"`
 }
 
 // AuthorInfo holds harness author information.

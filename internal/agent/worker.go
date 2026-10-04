@@ -50,6 +50,9 @@ type StartOptions struct {
 	AutoApprove string
 	// Model overrides the default model. Empty means backend default.
 	Model string
+	// Effort is "", "low", "medium" or "high": the reasoning effort to ask
+	// for, already validated for this backend. Empty passes no effort setting.
+	Effort string
 	// ResumeToken, when non-empty, starts the worker in resume mode against a
 	// prior conversation rather than a fresh one. The value is a backend-native
 	// handle previously obtained from WorkerSession.ResumeToken (claude session

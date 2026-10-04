@@ -52,6 +52,11 @@ type RunResult struct {
 	// means the backend did not report one, not that none was in force; it is
 	// never inferred from the model name.
 	Effort string `json:"effort,omitempty"`
+	// EffortRequested is the effort this process asked the worker for, from
+	// --effort or the harness's agent.effort. Absent when none was asked for.
+	// Effort stays what the backend reported, so a request the backend
+	// changed shows as the two disagreeing. A resume does not restore it.
+	EffortRequested string `json:"effort_requested,omitempty"`
 
 	Harness *RunHarness `json:"harness,omitempty"`
 

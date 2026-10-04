@@ -67,7 +67,12 @@
     },
     "effort": {
       "type": "string",
-      "description": "The reasoning effort the worker reported it ran with, in the backend's own terms (Claude Code: low, medium, high, xhigh, max). Absent means the backend did not report one, not that none was in force. Never inferred from the model name."
+      "description": "The reasoning effort the worker reported it ran with, in the backend's own terms (Claude Code: low, medium, high, xhigh, max). Absent means the backend did not report one, not that none was in force. Never inferred from the model name, and never filled in from `effort_requested`."
+    },
+    "effort_requested": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "description": "The reasoning effort this run asked the worker for, from --effort or the harness's agent.effort. Absent when none was asked for. Compare with `effort`: a backend that applied another level shows as the two disagreeing. Not restored by --resume."
     },
     "harness": {
       "type": "object",
