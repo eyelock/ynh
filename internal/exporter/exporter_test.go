@@ -406,3 +406,51 @@ func writeJSON(t *testing.T, path string, v any) {
 		t.Fatal(err)
 	}
 }
+
+// BeforeWrite runs once the source has loaded and before anything is written,
+// so a refused source never reaches it and a failing hook writes nothing
+// (#451).
+func TestExportBeforeWrite(t *testing.T) {
+	good := filepath.Join(testdataDir(), "export-harness")
+	refused := t.TempDir() // no manifest and no AGENTS.md: LoadDir refuses it
+
+	tests := []struct {
+		name       string
+		src        string
+		hookErr    error
+		wantCalled bool
+	}{
+		{"refused source never calls the hook", refused, nil, false},
+		{"failing hook stops the export", good, os.ErrPermission, true},
+		{"passing hook lets the export run", good, nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "out")
+			called := false
+			_, err := Export(ExportOptions{
+				SourceDir: tt.src,
+				OutputDir: out,
+				Vendors:   []string{"claude"},
+				BeforeWrite: func() error {
+					if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+						t.Errorf("output existed before BeforeWrite ran (stat err: %v)", statErr)
+					}
+					called = true
+					return tt.hookErr
+				},
+			})
+			if called != tt.wantCalled {
+				t.Errorf("BeforeWrite called = %v, want %v", called, tt.wantCalled)
+			}
+			wantOK := tt.src == good && tt.hookErr == nil
+			if (err == nil) != wantOK {
+				t.Fatalf("err = %v, want success %v", err, wantOK)
+			}
+			_, statErr := os.Stat(out)
+			if wantOK == os.IsNotExist(statErr) {
+				t.Errorf("output exists = %v, want %v", !os.IsNotExist(statErr), wantOK)
+			}
+		})
+	}
+}

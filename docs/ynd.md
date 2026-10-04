@@ -260,7 +260,7 @@ ynd export github.com/user/repo --path harnesses/david  # from a monorepo
 | `--path <subdir>` | Subdirectory within source (for monorepos). Must be a relative path with no `..` traversal. |
 | `--profile <name>` | Profile to apply during assembly |
 | `--merged` | Single output dir with all vendor manifests (for CI/marketplace use) |
-| `--clean` | Remove entire output dir before export |
+| `--clean` | Remove entire output dir before export. Runs only once the source has loaded, so a refused export (a legacy tree, an unknown profile) neither creates nor empties `-o` |
 
 **Output structure** (per-vendor mode):
 
@@ -319,7 +319,7 @@ ynd marketplace build --clean                     # empty the output dir before 
 |------|-------------|
 | `-o, --output <dir>` | Output directory. Default: `./dist` |
 | `-v, --vendor <names>` | Comma-separated vendors. Default: `claude,cursor,codex,copilot` |
-| `--clean` | Empty the output dir before building. Refuses the filesystem root, your home, the current directory and any git working copy, except the repository a previous `ynd marketplace build` created in that directory: that one is emptied but keeps its `.git`, so the rebuild commits on top and the history survives. Asks before deleting a non-empty directory unless `-y`, `YNH_YES` or `CI` is set. |
+| `--clean` | Empty the output dir before building. Refuses the filesystem root, your home, the current directory and any git working copy, except the repository a previous `ynd marketplace build` created in that directory: that one is emptied but keeps its `.git`, so the rebuild commits on top and the history survives. Asks before deleting a non-empty directory unless `-y`, `YNH_YES` or `CI` is set. Runs only once every entry has been checked, so a refused build neither creates nor empties `-o`. |
 
 **Config format** (`marketplace.json`):
 

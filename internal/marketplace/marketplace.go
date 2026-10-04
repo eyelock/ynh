@@ -160,6 +160,10 @@ type BuildOptions struct {
 	Vendors []string
 	// Config provides remote source checking.
 	Config *config.Config
+	// BeforeWrite, when set, runs once every entry has been checked and
+	// before anything is written. The CLI runs --clean here, so a refused
+	// build does not empty the output directory first.
+	BeforeWrite func() error
 }
 
 // Build generates a vendor-native marketplace directory from a marketplace config.
@@ -169,13 +173,15 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 		vendors = []string{"claude", "cursor", "codex", "copilot"}
 	}
 
-	pluginsDir := filepath.Join(opts.OutputDir, "plugins")
-	if err := os.MkdirAll(pluginsDir, 0o755); err != nil {
-		return fmt.Errorf("creating plugins dir: %w", err)
+	// Read and check every entry before writing anything, so a refused entry
+	// (a legacy manifest, a missing source) leaves OutputDir as it was rather
+	// than creating it, or a plugins/ directory inside it (#451).
+	type preparedEntry struct {
+		kind   string
+		srcDir string
+		info   pluginInfo
 	}
-
-	// Process each entry
-	var pluginInfos []pluginInfo
+	var prepared []preparedEntry
 	for _, entry := range cfg.Harnesses {
 		srcDir, err := resolveEntrySource(entry.Source, opts.ConfigDir)
 		if err != nil {
@@ -202,19 +208,45 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) error {
 				return fmt.Errorf("entry %q: %w", entry.Source, err)
 			}
 			info = pluginInfo{Name: hj.Name, Description: hj.Description, Version: hj.Version}
-			pluginOutputDir := filepath.Join(pluginsDir, hj.Name)
-			if err := buildHarnessEntry(srcDir, pluginOutputDir, vendors, opts.Config); err != nil {
-				return fmt.Errorf("harness %q: %w", hj.Name, err)
-			}
 		case "plugin":
+			if _, err := migration.FormatChain().Run(srcDir); err != nil {
+				return fmt.Errorf("entry %q: %w", entry.Source, err)
+			}
 			pi, err := loadPluginManifest(srcDir)
 			if err != nil {
 				return fmt.Errorf("entry %q: %w", entry.Source, err)
 			}
 			info = pi
-			pluginOutputDir := filepath.Join(pluginsDir, pi.Name)
-			if err := buildPluginEntry(srcDir, pluginOutputDir, vendors); err != nil {
-				return fmt.Errorf("plugin %q: %w", pi.Name, err)
+		}
+
+		prepared = append(prepared, preparedEntry{kind: entry.Type, srcDir: srcDir, info: info})
+	}
+
+	if opts.BeforeWrite != nil {
+		if err := opts.BeforeWrite(); err != nil {
+			return err
+		}
+	}
+
+	pluginsDir := filepath.Join(opts.OutputDir, "plugins")
+	if err := os.MkdirAll(pluginsDir, 0o755); err != nil {
+		return fmt.Errorf("creating plugins dir: %w", err)
+	}
+
+	var pluginInfos []pluginInfo
+	for i, p := range prepared {
+		entry := cfg.Harnesses[i]
+		info := p.info
+		pluginOutputDir := filepath.Join(pluginsDir, info.Name)
+
+		switch p.kind {
+		case "harness":
+			if err := buildHarnessEntry(p.srcDir, pluginOutputDir, vendors, opts.Config); err != nil {
+				return fmt.Errorf("harness %q: %w", info.Name, err)
+			}
+		case "plugin":
+			if err := buildPluginEntry(p.srcDir, pluginOutputDir, vendors); err != nil {
+				return fmt.Errorf("plugin %q: %w", info.Name, err)
 			}
 		}
 
@@ -275,13 +307,9 @@ func buildHarnessEntry(srcDir, outputDir string, vendors []string, cfg *config.C
 }
 
 // buildPluginEntry copies a self-contained plugin directory as-is,
-// generating missing vendor manifests.
+// generating missing vendor manifests. Build has already refused a manifest
+// ynh no longer reads, against the source rather than the copy (#406).
 func buildPluginEntry(srcDir, outputDir string, vendors []string) error {
-	// Refuse a manifest ynh no longer reads before copying, so the error
-	// names the source rather than the staging copy (#406).
-	if _, err := migration.FormatChain().Run(srcDir); err != nil {
-		return err
-	}
 	if err := assembler.CopyDir(srcDir, outputDir); err != nil {
 		return fmt.Errorf("copying plugin: %w", err)
 	}

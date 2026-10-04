@@ -58,6 +58,10 @@ type ExportOptions struct {
 	Config *config.Config
 	// Profile selects a named configuration variant. Empty means no profile.
 	Profile string
+	// BeforeWrite, when set, runs once the source has loaded and its includes
+	// have resolved, before anything is written. The CLI runs --clean here, so
+	// a refused export does not empty the output directory first.
+	BeforeWrite func() error
 }
 
 // ExportResult describes the output for one vendor.
@@ -124,6 +128,12 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	vendors := opts.Vendors
 	if len(vendors) == 0 {
 		vendors = vendor.Available()
+	}
+
+	if opts.BeforeWrite != nil {
+		if err := opts.BeforeWrite(); err != nil {
+			return nil, err
+		}
 	}
 
 	if opts.Mode == ModeMerged {
