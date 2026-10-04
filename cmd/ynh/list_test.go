@@ -941,3 +941,126 @@ func TestCmdListJSON_ErrorPathSchema(t *testing.T) {
 		t.Errorf("error envelope does not validate: %v\nstderr: %s", err, stderr.String())
 	}
 }
+
+// TestCmdList_LocalIncludes covers #477: a harness whose include is a
+// `local` bundle showed a blank INCLUDES cell in the text table, and its
+// JSON entry carried an empty "git" and no path at all. The include must be
+// shown by the path it was declared with, in both formats.
+func TestCmdList_LocalIncludes(t *testing.T) {
+	tests := []struct {
+		name     string
+		includes string
+		wantCell string
+		wantJSON []listInclude
+	}{
+		{
+			name:     "none",
+			includes: `[]`,
+			wantCell: "0",
+			wantJSON: []listInclude{},
+		},
+		{
+			name:     "local only",
+			includes: `[{"local": "extras"}]`,
+			wantCell: "extras",
+			wantJSON: []listInclude{{Local: "extras"}},
+		},
+		{
+			name:     "local with pick",
+			includes: `[{"local": "./bundled/extras", "pick": ["skills/a"]}]`,
+			wantCell: "./bundled/extras [1]",
+			wantJSON: []listInclude{{Local: "./bundled/extras", Pick: []string{"skills/a"}}},
+		},
+		{
+			name:     "local and git",
+			includes: `[{"local": "extras"}, {"git": "github.com/example/skills", "path": "dev", "pick": ["a", "b"]}]`,
+			wantCell: "extras, example/skills/dev [2]",
+			wantJSON: []listInclude{
+				{Local: "extras"},
+				{Git: "github.com/example/skills", Path: "dev", Pick: []string{"a", "b"}},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("YNH_HOME", home)
+			installListTestHarness(t, home, "inc", `{
+				"name": "inc",
+				"version": "0.1.0",
+				"default_vendor": "claude",
+				"includes": `+tt.includes+`
+			}`)
+
+			var text bytes.Buffer
+			if err := cmdListTo(nil, &text, io.Discard); err != nil {
+				t.Fatalf("cmdListTo text: %v", err)
+			}
+			if got := listTextCell(t, text.String(), "local/inc", "INCLUDES"); got != tt.wantCell {
+				t.Errorf("INCLUDES cell = %q, want %q\noutput:\n%s", got, tt.wantCell, text.String())
+			}
+
+			var raw bytes.Buffer
+			if err := cmdListTo([]string{"--format", "json"}, &raw, io.Discard); err != nil {
+				t.Fatalf("cmdListTo json: %v", err)
+			}
+			var v any
+			if err := json.Unmarshal(raw.Bytes(), &v); err != nil {
+				t.Fatalf("unmarshal: %v\noutput: %s", err, raw.String())
+			}
+			schema, err := clischema.Get("list")
+			if err != nil {
+				t.Fatalf("Get list schema: %v", err)
+			}
+			if err := schema.Validate(v); err != nil {
+				t.Errorf("ls JSON does not validate against schema: %v\noutput: %s", err, raw.String())
+			}
+			var env listEnvelope
+			if err := json.Unmarshal(raw.Bytes(), &env); err != nil {
+				t.Fatalf("unmarshal envelope: %v", err)
+			}
+			if len(env.Harnesses) != 1 {
+				t.Fatalf("got %d harnesses, want 1", len(env.Harnesses))
+			}
+			got := env.Harnesses[0].Includes
+			if len(got) != len(tt.wantJSON) {
+				t.Fatalf("includes = %+v, want %+v", got, tt.wantJSON)
+			}
+			for i, want := range tt.wantJSON {
+				g := got[i]
+				if g.Git != want.Git || g.Local != want.Local || g.Path != want.Path ||
+					strings.Join(g.Pick, ",") != strings.Join(want.Pick, ",") {
+					t.Errorf("includes[%d] = %+v, want %+v", i, g, want)
+				}
+			}
+		})
+	}
+}
+
+// listTextCell returns the trimmed cell under column for the row whose ID is
+// id in a `ynh ls` text table. Cells are located by the header's column
+// offsets, so a cell containing spaces ("extras [1]") is read whole.
+func listTextCell(t *testing.T, out, id, column string) string {
+	t.Helper()
+	lines := strings.Split(out, "\n")
+	header := lines[0]
+	start := strings.Index(header, column)
+	if start < 0 {
+		t.Fatalf("column %q not in header %q", column, header)
+	}
+	end := len(header)
+	if rest := header[start+len(column):]; strings.TrimLeft(rest, " ") != "" {
+		end = start + len(column) + len(rest) - len(strings.TrimLeft(rest, " "))
+	}
+	for _, line := range lines[1:] {
+		if !strings.HasPrefix(line, id+" ") {
+			continue
+		}
+		if len(line) < end {
+			return strings.TrimSpace(line[start:])
+		}
+		return strings.TrimSpace(line[start:end])
+	}
+	t.Fatalf("row %q not found in:\n%s", id, out)
+	return ""
+}

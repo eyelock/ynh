@@ -18,7 +18,9 @@
         "installed_at": "2026-05-13T12:00:00Z"
       },
       "artifacts": {"skills": 1, "agents": 0, "rules": 0, "commands": 0},
-      "includes": [],
+      "includes": [
+        {"git": "", "local": "extras", "is_pinned": false}
+      ],
       "delegates_to": []
     }
   ]

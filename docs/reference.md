@@ -209,7 +209,7 @@ Per-harness fields:
 | `installed_from.sha` | Resolved commit SHA at install time. Empty for pre-migration installs |
 | `installed_from.forked_from` | Upstream a forked harness was copied from — `source_type`, `source`, `version`, `sha`, optional `ref`, `path`, `registry_name`. Absent on non-fork installs |
 | `artifacts` | (`ynh ls` only) Counts: `skills`, `agents`, `rules`, `commands` |
-| `includes` | Array of include objects: `git`, `ref_installed`, `ref_available`, `is_pinned`, optional `path`, `pick` |
+| `includes` | Array of include objects: `git`, `ref_installed`, `ref_available`, `is_pinned`, optional `path`, `pick`. A `local` include has an empty `git` and carries `local`, its path as declared in the manifest |
 | `delegates_to` | Array of delegate objects: `git`, `ref_installed`, `ref_available`, `is_pinned`, optional `path` |
 | `manifest` | (`ynh info` only) Raw `.agents/harness/plugin.json` body, JSON-compacted |
 
