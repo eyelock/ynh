@@ -55,6 +55,12 @@ type StartOptions struct {
 	// handle previously obtained from WorkerSession.ResumeToken (claude session
 	// id, cursor chatId, codex session id).
 	ResumeToken string
+	// UsageBase is what the resumed conversation had already consumed, as
+	// the checkpoint recorded it, or nil when that is unknown or nothing is
+	// resumed. A backend whose vendor reports running totals per
+	// conversation (codex) subtracts it so earlier turns are not counted
+	// again; the others ignore it.
+	UsageBase *Usage
 	// Env holds additional environment variables to pass to the subprocess.
 	Env []string
 	// Stderr captures subprocess stderr if non-nil.
