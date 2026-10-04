@@ -33,13 +33,55 @@ type VendorExporter interface {
 	GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error)
 }
 
+// PluginHookGenerator is implemented by a vendor whose plugin package carries
+// hooks at a different path from the one its project sessions read. Claude,
+// Codex and Cursor all do: a session reads .claude/hooks/hooks.json,
+// .codex/hooks.json or .cursor/hooks.json, while a plugin carries
+// hooks/<vendor>.json, named by the vendor's manifest "hooks" field. An export
+// is a plugin, so it uses this path when the vendor offers one, and
+// GenerateHookConfig otherwise.
+type PluginHookGenerator interface {
+	GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)
+}
+
+// PluginMCPGenerator is implemented by a vendor whose plugin package carries
+// MCP servers at a different path from the one its project sessions read.
+// Claude: a session reads .claude/.mcp.json, a plugin mcp/claude.json, named
+// by its manifest (#481). Cursor: a project reads .cursor/mcp.json, a plugin
+// mcp.json (#470). Copilot: a run dir carries .copilot/.mcp.json, a plugin
+// .github/mcp.json (#471). An export is a plugin, so it uses this path when
+// the vendor offers one, and GenerateMCPConfig otherwise.
+type PluginMCPGenerator interface {
+	GeneratePluginMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error)
+}
+
+// ExportManifestGenerator is implemented by a vendor whose run-dir layout puts
+// its manifest somewhere other than the plugin root. Copilot is the case: a
+// run dir nests the plugin under .copilot/, an export does not. An export
+// asks for its own layout explicitly rather than having the vendor guess it
+// from the files present (#471).
+type ExportManifestGenerator interface {
+	GenerateExportPluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error)
+}
+
+// PluginManifest returns a vendor's manifest files for an exported plugin
+// rooted at outputDir: the export layout when the vendor distinguishes one,
+// GeneratePluginManifest otherwise. Marketplace builds use it too.
+func PluginManifest(adapter VendorExporter, hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {
+	if eg, ok := adapter.(ExportManifestGenerator); ok {
+		return eg.GenerateExportPluginManifest(hj, outputDir)
+	}
+	return adapter.GeneratePluginManifest(hj, outputDir)
+}
+
 // ExportMode controls the output layout.
 type ExportMode int
 
 const (
 	// ModePerVendor creates separate dirs: output/claude/, output/cursor/, output/codex/
 	ModePerVendor ExportMode = iota
-	// ModeMerged creates a single dir with dual manifests (for marketplace builds)
+	// ModeMerged creates a single dir with every selected vendor's manifest,
+	// Codex included (for marketplace builds)
 	ModeMerged
 )
 
@@ -58,6 +100,10 @@ type ExportOptions struct {
 	Config *config.Config
 	// Profile selects a named configuration variant. Empty means no profile.
 	Profile string
+	// BeforeWrite, when set, runs once the source has loaded and its includes
+	// have resolved, before anything is written. The CLI runs --clean here, so
+	// a refused export does not empty the output directory first.
+	BeforeWrite func() error
 }
 
 // ExportResult describes the output for one vendor.
@@ -94,7 +140,7 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	// Check remote sources for all delegates
 	if opts.Config != nil {
 		for _, del := range p.DelegatesTo {
-			if err := opts.Config.CheckRemoteSource(del.Git); err != nil {
+			if err := opts.Config.CheckSource(del.Git, p.Dir); err != nil {
 				return nil, fmt.Errorf("delegate %q: %w", del.Git, err)
 			}
 		}
@@ -124,6 +170,12 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	vendors := opts.Vendors
 	if len(vendors) == 0 {
 		vendors = vendor.Available()
+	}
+
+	if opts.BeforeWrite != nil {
+		if err := opts.BeforeWrite(); err != nil {
+			return nil, err
+		}
 	}
 
 	if opts.Mode == ModeMerged {
@@ -179,15 +231,51 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 	skills := countDir(filepath.Join(outputDir, "skills"))
 	agents := countDir(filepath.Join(outputDir, "agents"))
 
-	// Generate manifests and instructions for each vendor
-	var results []ExportResult
+	result := ExportResult{
+		Vendor:    "merged",
+		OutputDir: outputDir,
+	}
+
+	// Hook and MCP config for each vendor, before the manifests: each
+	// vendor's manifest names its hooks and MCP files only when they are
+	// there (#482). The scripts those hooks run are copied once, since the
+	// vendors share the root. A vendor that loads less than the shared tree
+	// holds (Codex: skills only) gets the same note a per-vendor export
+	// prints (#488).
+	wroteHooks := false
+	for _, v := range vendors {
+		adapter, err := vendor.Get(v)
+		if err != nil {
+			continue
+		}
+		if len(p.Hooks) > 0 {
+			wrote, err := writeHookConfig(outputDir, adapter, p.Hooks)
+			if err != nil {
+				return nil, fmt.Errorf("writing hook config for %s: %w", v, err)
+			}
+			wroteHooks = wroteHooks || wrote
+		}
+		if len(p.MCPServers) > 0 {
+			if err := writeMCPConfig(outputDir, adapter, p.MCPServers); err != nil {
+				return nil, fmt.Errorf("writing MCP config for %s: %w", v, err)
+			}
+		}
+		result.Warnings = append(result.Warnings, skippedArtifactWarnings(v, adapter, p, content)...)
+	}
+	if wroteHooks {
+		warnings, err := assembler.CopyHookScripts(p.Dir, outputDir, p.Hooks, "the plugin")
+		if err != nil {
+			return nil, err
+		}
+		result.Warnings = append(result.Warnings, warnings...)
+	}
 
 	for _, v := range vendors {
 		adapter, err := vendor.Get(v)
 		if err != nil {
 			continue
 		}
-		manifestFiles, err := adapter.GeneratePluginManifest(pj, outputDir)
+		manifestFiles, err := PluginManifest(adapter, pj, outputDir)
 		if err != nil {
 			return nil, fmt.Errorf("generating %s manifest: %w", v, err)
 		}
@@ -203,49 +291,19 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 		}
 	}
 
-	// Delegates (Claude/Cursor only in merged mode)
+	// Delegates land in the shared agents/, read by every vendor whose
+	// manifest does not restrict it to skills.
 	if len(p.DelegatesTo) > 0 {
-		if err := ExportDelegates(outputDir, p.DelegatesTo); err != nil {
+		if err := ExportDelegates(outputDir, p.DelegatesTo, p.Dir); err != nil {
 			return nil, fmt.Errorf("exporting delegates: %w", err)
 		}
 		// Recount agents after delegate generation
 		agents = countDir(filepath.Join(outputDir, "agents"))
 	}
 
-	// Hook config for each vendor
-	if len(p.Hooks) > 0 {
-		for _, v := range vendors {
-			adapter, err := vendor.Get(v)
-			if err != nil {
-				continue
-			}
-			if err := writeHookConfig(outputDir, adapter, p.Hooks); err != nil {
-				return nil, fmt.Errorf("writing hook config for %s: %w", v, err)
-			}
-		}
-	}
-
-	// MCP config for each vendor
-	if len(p.MCPServers) > 0 {
-		for _, v := range vendors {
-			adapter, err := vendor.Get(v)
-			if err != nil {
-				continue
-			}
-			if err := writeMCPConfig(outputDir, adapter, p.MCPServers); err != nil {
-				return nil, fmt.Errorf("writing MCP config for %s: %w", v, err)
-			}
-		}
-	}
-
-	results = append(results, ExportResult{
-		Vendor:    "merged",
-		OutputDir: outputDir,
-		Skills:    skills,
-		Agents:    agents,
-	})
-
-	return results, nil
+	result.Skills = skills
+	result.Agents = agents
+	return []ExportResult{result}, nil
 }
 
 func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
@@ -272,31 +330,7 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 		return result, err
 	}
 
-	// Warn about skipped artifact types when export uses a restricted set
-	if exportDirs := adapter.ExportArtifactDirs(); exportDirs != nil {
-		allDirs := adapter.ArtifactDirs()
-		skippedCounts := map[string]int{}
-		for artifactType := range allDirs {
-			if _, ok := exportDirs[artifactType]; ok {
-				continue
-			}
-			for _, rc := range content {
-				skippedCounts[artifactType] += countDir(filepath.Join(rc.BasePath, artifactType))
-			}
-		}
-		var parts []string
-		for _, artifactType := range []string{"agents", "rules", "commands"} {
-			if n := skippedCounts[artifactType]; n > 0 {
-				parts = append(parts, fmt.Sprintf("%d %s", n, artifactType))
-			}
-		}
-		if len(parts) > 0 {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("%s: skipping %s (not supported)", vendorName, joinParts(parts)))
-		}
-		if len(p.DelegatesTo) > 0 && !adapter.SupportsExportDelegates() {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("%s: skipping %d delegates (not supported)", vendorName, len(p.DelegatesTo)))
-		}
-	}
+	result.Warnings = skippedArtifactWarnings(vendorName, adapter, p, content)
 
 	// Instructions
 	if instructionsPath != "" {
@@ -307,15 +341,23 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 
 	// Delegates
 	if len(p.DelegatesTo) > 0 && adapter.SupportsExportDelegates() {
-		if err := ExportDelegates(outputDir, p.DelegatesTo); err != nil {
+		if err := ExportDelegates(outputDir, p.DelegatesTo, p.Dir); err != nil {
 			return result, fmt.Errorf("exporting delegates: %w", err)
 		}
 	}
 
-	// Hook config
+	// Hook config, and the scripts its hooks run
 	if len(p.Hooks) > 0 {
-		if err := writeHookConfig(outputDir, adapter, p.Hooks); err != nil {
+		wrote, err := writeHookConfig(outputDir, adapter, p.Hooks)
+		if err != nil {
 			return result, fmt.Errorf("writing hook config: %w", err)
+		}
+		if wrote {
+			warnings, err := assembler.CopyHookScripts(p.Dir, outputDir, p.Hooks, "the plugin")
+			if err != nil {
+				return result, err
+			}
+			result.Warnings = append(result.Warnings, warnings...)
 		}
 	}
 
@@ -327,7 +369,7 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 	}
 
 	// Manifest — generated after content (MCP, skills) so path pointers are accurate
-	manifestFiles, err := adapter.GeneratePluginManifest(pj, outputDir)
+	manifestFiles, err := PluginManifest(adapter, pj, outputDir)
 	if err != nil {
 		return result, fmt.Errorf("generating manifest: %w", err)
 	}
@@ -340,7 +382,43 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 	return result, nil
 }
 
-// writeMCPConfig generates vendor-native MCP config files and writes them to the output directory.
+// skippedArtifactWarnings notes the artifact types and delegates the harness
+// carries that vendorName's plugin does not load, when the vendor restricts
+// its export to a subset (Codex: skills only). A per-vendor export leaves
+// them out of the vendor's directory; a merged package keeps them in the
+// shared tree for the other vendors, but the vendor still does not read
+// them, so both say the same thing.
+func skippedArtifactWarnings(vendorName string, adapter VendorExporter, p *harness.Harness, content []resolver.ResolvedContent) []string {
+	exportDirs := adapter.ExportArtifactDirs()
+	if exportDirs == nil {
+		return nil
+	}
+	skippedCounts := map[string]int{}
+	for artifactType := range adapter.ArtifactDirs() {
+		if _, ok := exportDirs[artifactType]; ok {
+			continue
+		}
+		for _, rc := range content {
+			skippedCounts[artifactType] += countDir(filepath.Join(rc.BasePath, artifactType))
+		}
+	}
+	var warnings []string
+	var parts []string
+	for _, artifactType := range []string{"agents", "rules", "commands"} {
+		if n := skippedCounts[artifactType]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, artifactType))
+		}
+	}
+	if len(parts) > 0 {
+		warnings = append(warnings, fmt.Sprintf("%s: skipping %s (not supported)", vendorName, joinParts(parts)))
+	}
+	if len(p.DelegatesTo) > 0 && !adapter.SupportsExportDelegates() {
+		warnings = append(warnings, fmt.Sprintf("%s: skipping %d delegates (not supported)", vendorName, len(p.DelegatesTo)))
+	}
+	return warnings
+}
+
+// writeMCPConfig generates the vendor's plugin MCP config and writes it to the output directory.
 //
 // Note what this deliberately does not do: it does not expand ${VAR}
 // references in MCP env values. Assembly for a local run resolves them
@@ -350,7 +428,11 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 // bundle meant to be shared. References stay literal so the consumer resolves
 // them from their own environment.
 func writeMCPConfig(outputDir string, adapter VendorExporter, servers map[string]plugin.MCPServer) error {
-	mcpFiles, err := adapter.GenerateMCPConfig(servers)
+	generate := adapter.GenerateMCPConfig
+	if pg, ok := adapter.(PluginMCPGenerator); ok {
+		generate = pg.GeneratePluginMCPConfig
+	}
+	mcpFiles, err := generate(servers)
 	if err != nil {
 		return fmt.Errorf("generating MCP config: %w", err)
 	}
@@ -366,22 +448,28 @@ func writeMCPConfig(outputDir string, adapter VendorExporter, servers map[string
 	return nil
 }
 
-// writeHookConfig generates vendor-native hook config files and writes them to the output directory.
-func writeHookConfig(outputDir string, adapter VendorExporter, hooks map[string][]plugin.HookEntry) error {
-	hookFiles, err := adapter.GenerateHookConfig(hooks)
+// writeHookConfig generates the vendor's plugin hook config and writes it to
+// the output directory. It reports whether it wrote any file: a vendor that
+// emits no hooks (Copilot) needs none of the scripts they run.
+func writeHookConfig(outputDir string, adapter VendorExporter, hooks map[string][]plugin.HookEntry) (bool, error) {
+	generate := adapter.GenerateHookConfig
+	if pg, ok := adapter.(PluginHookGenerator); ok {
+		generate = pg.GeneratePluginHookConfig
+	}
+	hookFiles, err := generate(hooks)
 	if err != nil {
-		return fmt.Errorf("generating hook config: %w", err)
+		return false, fmt.Errorf("generating hook config: %w", err)
 	}
 	for relPath, content := range hookFiles {
 		absPath := filepath.Join(outputDir, relPath)
 		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
-			return fmt.Errorf("creating hook config dir: %w", err)
+			return false, fmt.Errorf("creating hook config dir: %w", err)
 		}
 		if err := os.WriteFile(absPath, content, 0o644); err != nil {
-			return fmt.Errorf("writing hook config %s: %w", relPath, err)
+			return false, fmt.Errorf("writing hook config %s: %w", relPath, err)
 		}
 	}
-	return nil
+	return len(hookFiles) > 0, nil
 }
 
 // writeGeneratedFiles writes a map of relative paths to file contents into baseDir.

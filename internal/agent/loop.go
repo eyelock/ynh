@@ -55,7 +55,9 @@ type RunOptions struct {
 	// and the focus's bound profile (if any) is applied. Mirrors
 	// `ynh run --focus`. Mutually exclusive with Task and Profile.
 	Focus string
-	// Backend selects the worker backend ("claude" or "codex"). Defaults to "claude".
+	// Backend selects the worker backend ("claude", "codex" or "cursor").
+	// Defaults to "claude", or on a resume to the checkpoint's backend, which
+	// it may repeat but not change.
 	Backend string
 	// Sandbox is "srt" or "none". Defaults to "none".
 	Sandbox string
@@ -65,6 +67,10 @@ type RunOptions struct {
 	AutoApprove string
 	// Model overrides the worker's default model. Empty means backend default.
 	Model string
+	// Effort is the reasoning effort to ask the worker for: "low", "medium"
+	// or "high". Empty falls back to the harness's agent.effort, and then to
+	// asking for none. Not restored on resume, like Model.
+	Effort string
 
 	// Budget limits — zero means unlimited.
 	MaxTurns  int
@@ -171,37 +177,6 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	if opts.Stdin == nil {
 		opts.Stdin = os.Stdin
 	}
-	backend, err := validateBackend(opts.Backend)
-	if err != nil {
-		return result, err
-	}
-	opts.Backend = backend
-	if err := validateSandbox(opts.Sandbox, opts.Backend); err != nil {
-		return result, err
-	}
-	if err := validateAutoApprove(opts.AutoApprove, opts.Backend); err != nil {
-		return result, err
-	}
-	if opts.WorktreeDir == "" {
-		var err error
-		opts.WorktreeDir, err = os.Getwd()
-		if err != nil {
-			return result, fmt.Errorf("resolving working directory: %w", err)
-		}
-	}
-	// The project's own permission choice wins over a run-time grant.
-	if err := checkProjectPermissions(opts.AutoApprove, opts.Backend, opts.WorktreeDir); err != nil {
-		return result, err
-	}
-
-	result.Worktree = opts.WorktreeDir
-	result.BaseCommit = baseCommit(opts.WorktreeDir)
-
-	ynh, err := resolveYNHBinary(opts.YNHBinary)
-	if err != nil {
-		return result, err
-	}
-
 	// ── Resume state ──────────────────────────────────────────────────────────
 	var resumeCP *Checkpoint
 	resuming := opts.Resume != ""
@@ -209,6 +184,9 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	// harness or it would not have been checkpointing sensor state — so a
 	// resume that cannot restore one must not be able to claim convergence.
 	verificationExpected := opts.HarnessName != "" || resuming
+	// taskGiven records whether this resume named its own task or focus, which
+	// must then be the session's (checked once a focus has resolved).
+	taskGiven := opts.Task != "" || opts.Focus != ""
 	if resuming {
 		var rerr error
 		resumeCP, rerr = readCheckpoint(opts.Resume)
@@ -238,6 +216,14 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		if opts.MaxTokens == 0 {
 			opts.MaxTokens = resumeCP.MaxTokens
 		}
+		// A run interrupted while planning re-runs the plan, which needs the
+		// task. A focus is restored by name so its bound profile applies again.
+		if !taskGiven {
+			opts.Focus = resumeCP.Focus
+			if opts.Focus == "" {
+				opts.Task = resumeCP.Task
+			}
+		}
 		verificationExpected = true
 		// A checkpoint written before these fields existed has none to restore.
 		// Warn rather than refuse: failing here would break resumes that are
@@ -249,6 +235,47 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 				"warning: this checkpoint records no harness, so no sensors will run. "+
 					"This run cannot converge — pass --harness <name> to resume with verification.")
 		}
+	}
+
+	// On a resume the backend comes from the checkpoint: the resume token is
+	// that backend's own and means nothing to another.
+	var backend string
+	if resuming {
+		backend, err = resumeBackend(opts.Backend, resumeCP.Backend)
+		if err != nil {
+			return result, &ExitError{Code: ExitResumeError, Message: err.Error()}
+		}
+	} else if backend, err = validateBackend(opts.Backend); err != nil {
+		return result, err
+	}
+	opts.Backend = backend
+	if err := validateSandbox(opts.Sandbox, opts.Backend); err != nil {
+		return result, err
+	}
+	if err := validateAutoApprove(opts.AutoApprove, opts.Backend); err != nil {
+		return result, err
+	}
+	if err := validateEffort(opts.Effort, opts.Backend); err != nil {
+		return result, err
+	}
+	if opts.WorktreeDir == "" {
+		var err error
+		opts.WorktreeDir, err = os.Getwd()
+		if err != nil {
+			return result, fmt.Errorf("resolving working directory: %w", err)
+		}
+	}
+	// The project's own permission choice wins over a run-time grant.
+	if err := checkProjectPermissions(opts.AutoApprove, opts.Backend, opts.WorktreeDir); err != nil {
+		return result, err
+	}
+
+	result.Worktree = opts.WorktreeDir
+	result.BaseCommit = baseCommit(opts.WorktreeDir)
+
+	ynh, err := resolveYNHBinary(opts.YNHBinary)
+	if err != nil {
+		return result, err
 	}
 
 	// ── Trajectory writer (append on resume, truncate on a fresh run) ─────────
@@ -313,6 +340,12 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			}
 		}
 
+		// Before the worker starts: a verifier that can never pass would
+		// spend the whole budget and end at the turn cap (#447).
+		if err := refuseConvergenceVerifier(harnessObj.Sensors, opts.ConvergenceSensor); err != nil {
+			return result, err
+		}
+
 		configPath, err = assembleHarness(harnessObj, opts.Backend)
 		if err != nil {
 			return result, fmt.Errorf("assembling harness: %w", err)
@@ -320,6 +353,31 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		defer func() { _ = os.RemoveAll(configPath) }()
 	} else if opts.Focus != "" || opts.Profile != "" {
 		return result, fmt.Errorf("--focus and --profile require --harness")
+	}
+
+	if resuming {
+		if taskGiven {
+			if conflict := resumeTaskConflict(opts.Focus, opts.Task, resumeCP); conflict != "" {
+				return result, &ExitError{Code: ExitResumeError, Message: conflict}
+			}
+		}
+		// Only a run that reached the act phase resumes from a pending message;
+		// any other starts again from the task.
+		if resumeCP.Phase != PhaseAct && opts.Task == "" {
+			return result, &ExitError{Code: ExitResumeError, Message: fmt.Sprintf(
+				"checkpoint %q records no task, and a run interrupted before acting starts again from it: pass --task",
+				checkpointPath(opts.Resume))}
+		}
+	}
+
+	// The harness's effort applies when the flag gave none. It is checked
+	// here, once the harness has loaded, so a level the backend cannot honour
+	// still stops the run before a worker starts.
+	if opts.Effort == "" && harnessObj != nil && harnessObj.Agent != nil && harnessObj.Agent.Effort != "" {
+		if err := validateEffort(harnessObj.Agent.Effort, opts.Backend); err != nil {
+			return result, fmt.Errorf("harness agent.effort: %w", err)
+		}
+		opts.Effort = harnessObj.Agent.Effort
 	}
 
 	// ── Select backend ────────────────────────────────────────────────────────
@@ -384,11 +442,9 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	}
 	result.BudgetSources = budgetSource
 	if resuming {
-		budget.Resume(
-			resumeCP.Budget.Turns,
-			resumeCP.Budget.Tokens,
-			time.Duration(resumeCP.Budget.WallConsumedMS)*time.Millisecond,
-		)
+		budget.Resume(resumeCP.Budget)
+		result.Effort = resumeCP.Effort
+		result.Model = resumeCP.Model
 	} else {
 		budget.Start()
 	}
@@ -437,19 +493,23 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			RestoredTokens:  budget.Tokens(),
 			PendingApproval: resumeCP.PendingApproval,
 			AutoApprove:     opts.AutoApprove,
+			ModelRequested:  opts.Model,
+			EffortRequested: opts.Effort,
 		}); emitErr != nil {
 			return result, fmt.Errorf("writing trajectory: %w", emitErr)
 		}
 	} else {
 		start := SessionStartData{
-			SessionID:   sessionID,
-			Harness:     harnessName,
-			Backend:     wb.Name(),
-			Task:        opts.Task,
-			Model:       opts.Model,
-			AutoApprove: opts.AutoApprove,
-			YnhVersion:  config.Version,
-			BaseCommit:  baseCommit(opts.WorktreeDir),
+			SessionID:       sessionID,
+			Harness:         harnessName,
+			Backend:         wb.Name(),
+			Task:            opts.Task,
+			ModelRequested:  opts.Model,
+			Model:           opts.Model,
+			EffortRequested: opts.Effort,
+			AutoApprove:     opts.AutoApprove,
+			YnhVersion:      config.Version,
+			BaseCommit:      baseCommit(opts.WorktreeDir),
 			Budgets: &BudgetLimits{
 				MaxTurns:  opts.MaxTurns,
 				MaxTokens: opts.MaxTokens,
@@ -472,7 +532,8 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	result.SessionID = sessionID
 	result.SessionDir = sessionDir
 	result.Backend = wb.Name()
-	result.Model = opts.Model
+	result.ModelRequested = opts.Model
+	result.EffortRequested = opts.Effort
 	result.AutoApprove = opts.AutoApprove
 	// opts.HarnessName, not harnessName: the latter is "(none)" for display in
 	// the trajectory when no harness was given, and a structured consumer
@@ -531,13 +592,29 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		})
 	}
 
+	// What the resumed conversation already consumed, for a backend that
+	// reports running totals. Only a complete record serves: codex's totals
+	// carry cache reads, so a checkpoint without them cannot be its base.
+	var usageBase *Usage
+	if resumeToken != "" && resumeCP.Budget.UsageReported && resumeCP.Budget.CacheReported {
+		usageBase = &Usage{
+			InputTokens:  resumeCP.Budget.InputTokens,
+			OutputTokens: resumeCP.Budget.OutputTokens,
+			CacheTokens:  resumeCP.Budget.CacheReadTokens,
+			// Zero when the backend never reported cache writes, which is
+			// what codex's totals then hold too.
+			CacheCreationTokens: resumeCP.Budget.CacheCreationTokens,
+		}
+	}
 	sess, err := wb.Start(ctx, StartOptions{
 		WorktreeDir: opts.WorktreeDir,
 		ConfigPath:  configPath,
 		Sandbox:     opts.Sandbox,
 		AutoApprove: opts.AutoApprove,
 		Model:       opts.Model,
+		Effort:      opts.Effort,
 		ResumeToken: resumeToken,
+		UsageBase:   usageBase,
 		Env:         workerEnv,
 		Stderr:      opts.Stderr,
 	})
@@ -571,8 +648,9 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	// refreshed from live state on every write.
 	cp := &Checkpoint{
 		SessionID:         sessionID,
-		Backend:           wb.Name(),
+		Backend:           opts.Backend,
 		Task:              opts.Task,
+		Focus:             opts.Focus,
 		HarnessName:       opts.HarnessName,
 		Profile:           opts.Profile,
 		ConvergenceSensor: opts.ConvergenceSensor,
@@ -591,23 +669,32 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		cp.LastCompletedTurn = resumeCP.LastCompletedTurn
 		cp.PendingMessage = resumeCP.PendingMessage
 		cp.PendingApproval = resumeCP.PendingApproval
-		if opts.Task == "" {
-			cp.Task = resumeCP.Task
-		}
 	}
 	saveCheckpoint := func() {
 		if sessionDir == "" {
 			return
 		}
 		cp.ResumeToken = sess.ResumeToken()
-		cp.Budget = CheckpointBudget{
-			Turns:          budget.Turns(),
-			Tokens:         budget.Tokens(),
-			WallConsumedMS: budget.WallConsumed().Milliseconds(),
-			PlanIterations: planIterations,
-		}
+		cp.Budget = budget.checkpoint(planIterations)
+		cp.Effort = result.Effort
+		cp.Model = result.Model
 		if err := writeCheckpoint(sessionDir, cp); err != nil {
 			_, _ = fmt.Fprintf(opts.Stderr, "checkpoint write failed: %v\n", err)
+		}
+	}
+	// noteModel takes the model a turn reports into the result, and records
+	// it in the trajectory the first time this process's worker reports it
+	// and whenever it reports another. A turn that reports none leaves the
+	// last one seen in place.
+	var workerModel string
+	noteModel := func(atTurn int, t Turn) {
+		if t.Model == "" {
+			return
+		}
+		result.Model = t.Model
+		if t.Model != workerModel {
+			workerModel = t.Model
+			_ = traj.Emit(KindWorkerModel, atTurn, WorkerModelData{Model: t.Model})
 		}
 	}
 	interruptExit := func(atTurn int) error {
@@ -710,7 +797,9 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 				return result, workerTurnExit(err, fmt.Sprintf("plan turn: %v", err))
 			}
 			_ = traj.Emit(KindAssistantMessage, 0, planTurn.Content)
-			budget.RecordTokens(planTurn.Usage)
+			budget.RecordUsage(planTurn)
+			result.noteEffort(planTurn)
+			noteModel(0, planTurn)
 			_ = traj.Emit(KindBudgetSnapshot, 0, BudgetSnapshotData{
 				Turns:  budget.Turns(),
 				Tokens: budget.Tokens(),
@@ -869,7 +958,9 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		_ = traj.Emit(KindAssistantMessage, turnN, turn.Content)
 
 		budget.RecordTurn()
-		budget.RecordTokens(turn.Usage)
+		budget.RecordUsage(turn)
+		result.noteEffort(turn)
+		noteModel(turnN, turn)
 		_ = traj.Emit(KindBudgetSnapshot, turnN, BudgetSnapshotData{
 			Turns:  budget.Turns(),
 			Tokens: budget.Tokens(),
@@ -1000,6 +1091,27 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			saveCheckpoint()
 		}
 	}
+}
+
+// refuseConvergenceVerifier rejects a run whose convergence verifier could
+// never return pass. Every sensor the collection below might pick is checked,
+// in name order, because it picks among them in map order.
+func refuseConvergenceVerifier(sensors map[string]plugin.Sensor, flagName string) error {
+	names := make([]string, 0, len(sensors))
+	for name := range sensors {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		s := sensors[name]
+		if s.Role != "convergence-verifier" && name != flagName {
+			continue
+		}
+		if why := plugin.ConvergenceVerifierRefusal(s.Source.Kind()); why != "" {
+			return fmt.Errorf("sensor %q cannot be the convergence verifier: %s", name, why)
+		}
+	}
+	return nil
 }
 
 // checkConvergence decides whether the turn's gate result means done.
@@ -1260,23 +1372,16 @@ func assembleHarness(h *harness.Harness, backendName string) (string, error) {
 		return "", fmt.Errorf("assembling harness: %w", err)
 	}
 
-	// Generate vendor-native hook config.
+	// Generate vendor-native hook config, and copy in the scripts those hooks
+	// run from the harness.
 	if len(h.Hooks) > 0 {
-		hookFiles, err := adapter.GenerateHookConfig(h.Hooks)
+		warnings, err := assembler.WriteSessionHooks(dir, adapter, h.Dir, h.Hooks)
 		if err != nil {
 			_ = os.RemoveAll(dir)
-			return "", fmt.Errorf("generating hook config: %w", err)
+			return "", err
 		}
-		for relPath, data := range hookFiles {
-			absPath := fmt.Sprintf("%s/%s", dir, relPath)
-			if mkdirErr := os.MkdirAll(dirOf(absPath), 0o755); mkdirErr != nil {
-				_ = os.RemoveAll(dir)
-				return "", mkdirErr
-			}
-			if writeErr := os.WriteFile(absPath, data, 0o644); writeErr != nil {
-				_ = os.RemoveAll(dir)
-				return "", writeErr
-			}
+		for _, w := range warnings {
+			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 		}
 	}
 
@@ -1326,6 +1431,48 @@ func gitAutoCommit(dir string, turnN int) error {
 		return fmt.Errorf("git commit: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// resumeBackend picks the backend a resume drives: the checkpoint's, which a
+// --backend flag may repeat but not change. The resume token belongs to that
+// backend (a codex thread id, a claude or cursor session id) and is meaningless
+// to any other. A checkpoint without a backend predates recording it and was
+// claude's, the only backend then.
+func resumeBackend(flag, recorded string) (string, error) {
+	want, err := validateBackend(recorded)
+	if err != nil {
+		return "", fmt.Errorf("checkpoint records unknown backend %q", recorded)
+	}
+	if flag == "" {
+		return want, nil
+	}
+	got, err := validateBackend(flag)
+	if err != nil {
+		return "", err
+	}
+	if got != want {
+		return "", fmt.Errorf(
+			"this session was started on the %q backend, so it cannot resume on %q: its resume token is %s's; "+
+				"omit --backend or pass --backend %s", want, got, want, want)
+	}
+	return got, nil
+}
+
+// resumeTaskConflict reports why the focus and task a resume was given cannot
+// continue the checkpoint's session, or "" when they can. task is the resolved
+// task, a focus's prompt once the focus has loaded. A resumed conversation
+// carrying on with a different task is not a resume, so this refuses rather
+// than override.
+func resumeTaskConflict(focus, task string, cp *Checkpoint) string {
+	if cp.Focus != "" && focus != cp.Focus {
+		return fmt.Sprintf(
+			"this session ran focus %q; resume it with --focus %s or with neither --task nor --focus", cp.Focus, cp.Focus)
+	}
+	if cp.Task != "" && task != cp.Task {
+		return "the task given on this resume differs from the task this session was started with; " +
+			"resume without --task or --focus to continue it, or start a new run for the new task"
+	}
+	return ""
 }
 
 // validateBackend defaults the backend name and rejects unknown values

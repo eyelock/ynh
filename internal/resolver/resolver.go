@@ -35,9 +35,30 @@ type ResolveResult struct {
 // repoFunc is a function that fetches or looks up a Git repo.
 type repoFunc func(gitURL, ref string) (RepoResult, error)
 
-// resolveGitSourceWith resolves a GitSource using the given repo function.
-func resolveGitSourceWith(gs harness.GitSource, fetch repoFunc) (string, *RepoResult, error) {
-	result, err := fetch(gs.Git, gs.Ref)
+// GitSourceURL returns the URL a git source is fetched from. A relative local
+// path ("./inc", "../inc") belongs to the harness that names it, so it is
+// joined to harnessDir, the directory the harness was loaded from, and made
+// absolute. The same harness then fetches the same repo wherever ynh runs,
+// the fetch agrees with the allow-list (config.CheckSource joins the same
+// directory), and the absolute path is the cache key, so two harnesses that
+// each name "./inc" never share a cache entry. With no harnessDir the path
+// is taken from the working directory. Any other source is returned as is.
+func GitSourceURL(gitURL, harnessDir string) string {
+	if !strings.HasPrefix(gitURL, ".") {
+		return gitURL
+	}
+	joined := filepath.Join(harnessDir, gitURL)
+	abs, err := filepath.Abs(joined)
+	if err != nil {
+		return joined
+	}
+	return abs
+}
+
+// resolveGitSourceWith resolves a GitSource using the given repo function. A
+// relative source is resolved against harnessDir (see GitSourceURL).
+func resolveGitSourceWith(gs harness.GitSource, harnessDir string, fetch repoFunc) (string, *RepoResult, error) {
+	result, err := fetch(GitSourceURL(gs.Git, harnessDir), gs.Ref)
 	if err != nil {
 		return "", nil, fmt.Errorf("resolving %s: %w", gs.Git, err)
 	}
@@ -87,12 +108,30 @@ func resolveLocalSource(gs harness.GitSource, harnessDir string) (string, error)
 	return basePath, nil
 }
 
+// CheckLocalInclude checks a "local" include against the allow-list. A
+// relative one is confined to the harness directory (resolveLocalSource
+// refuses an escape), so it is part of the harness and not a source. An
+// absolute one can point anywhere and is read on every run, so it is
+// governed like any other source. A nil cfg allows everything.
+func CheckLocalInclude(cfg *config.Config, inc harness.Include, harnessDir string) error {
+	if cfg == nil || !filepath.IsAbs(inc.Local) {
+		return nil
+	}
+	if err := cfg.CheckSource(inc.Local, harnessDir); err != nil {
+		return fmt.Errorf("include %q: %w", inc.Local, err)
+	}
+	return nil
+}
+
 // resolveWith fetches all includes using the given repo function.
 func resolveWith(p *harness.Harness, cfg *config.Config, fetch repoFunc) ([]ResolveResult, error) {
 	var results []ResolveResult
 
 	for _, inc := range p.Includes {
 		if inc.IsLocal() {
+			if err := CheckLocalInclude(cfg, inc, p.Dir); err != nil {
+				return nil, err
+			}
 			basePath, err := resolveLocalSource(inc.GitSource, p.Dir)
 			if err != nil {
 				return nil, err
@@ -111,12 +150,12 @@ func resolveWith(p *harness.Harness, cfg *config.Config, fetch repoFunc) ([]Reso
 		}
 
 		if cfg != nil {
-			if err := cfg.CheckRemoteSource(inc.Git); err != nil {
+			if err := cfg.CheckSource(inc.Git, p.Dir); err != nil {
 				return nil, fmt.Errorf("include %q: %w", inc.Git, err)
 			}
 		}
 
-		basePath, repoResult, err := resolveGitSourceWith(inc.GitSource, fetch)
+		basePath, repoResult, err := resolveGitSourceWith(inc.GitSource, p.Dir, fetch)
 		if err != nil {
 			return nil, err
 		}
@@ -137,9 +176,10 @@ func resolveWith(p *harness.Harness, cfg *config.Config, fetch repoFunc) ([]Reso
 }
 
 // ResolveGitSource clones/updates a GitSource and returns the resolved base path,
-// scoped to the optional sub-path within the repo.
-func ResolveGitSource(gs harness.GitSource) (string, *RepoResult, error) {
-	return resolveGitSourceWith(gs, EnsureRepo)
+// scoped to the optional sub-path within the repo. harnessDir is the directory
+// of the harness that names the source; a relative source resolves against it.
+func ResolveGitSource(gs harness.GitSource, harnessDir string) (string, *RepoResult, error) {
+	return resolveGitSourceWith(gs, harnessDir, EnsureRepo)
 }
 
 // Resolve fetches all includes for a harness and returns resolved content
@@ -149,19 +189,48 @@ func Resolve(p *harness.Harness, cfg *config.Config) ([]ResolveResult, error) {
 	return resolveWith(p, cfg, EnsureRepo)
 }
 
-// ShortGitURL abbreviates a git URL for display.
-// "github.com/eyelock/assistants" -> "eyelock/assistants"
+// ShortGitURL abbreviates a git URL for display: the host, scheme, user and
+// port are dropped, along with a trailing ".git", so every spelling of one
+// repo reads the same.
+//
+//	"github.com/eyelock/assistants"              -> "eyelock/assistants"
+//	"https://github.com/eyelock/assistants.git"  -> "eyelock/assistants"
+//	"git@github.com:eyelock/assistants.git"      -> "eyelock/assistants"
+//	"ssh://git@github.com/eyelock/assistants"    -> "eyelock/assistants"
+//	"file:///tmp/repos/inc"                      -> "/tmp/repos/inc"
+//
+// Local paths are kept as written.
 func ShortGitURL(url string) string {
-	// Local paths: keep as-is
 	if strings.HasPrefix(url, "/") || strings.HasPrefix(url, ".") {
 		return url
 	}
-	// Strip host prefix
-	parts := strings.SplitN(url, "/", 2)
-	if len(parts) == 2 {
-		return parts[1]
+	if p, ok := strings.CutPrefix(url, "file://"); ok {
+		return p
 	}
-	return url
+
+	var repoPath string
+	if _, rest, ok := strings.Cut(url, "://"); ok {
+		// scheme://[user@]host[:port]/org/repo
+		_, repoPath, ok = strings.Cut(rest, "/")
+		if !ok {
+			return rest
+		}
+	} else if colon, slash := strings.Index(url, ":"), strings.Index(url, "/"); colon >= 0 && (slash < 0 || colon < slash) {
+		// scp-like ssh: [user@]host:org/repo
+		repoPath = url[colon+1:]
+	} else if slash >= 0 {
+		// shorthand: host/org/repo
+		repoPath = url[slash+1:]
+	} else {
+		return url
+	}
+
+	repoPath = strings.Trim(repoPath, "/")
+	repoPath = strings.TrimSuffix(repoPath, ".git")
+	if repoPath == "" {
+		return url
+	}
+	return repoPath
 }
 
 // RepoResult describes the outcome of EnsureRepo.
@@ -304,8 +373,8 @@ func LookupCache(gitURL string, ref string) (RepoResult, bool) {
 
 // ResolveGitSourceFromCache is like ResolveGitSource but uses CacheOnlyRepo
 // to avoid network access when the cache is warm.
-func ResolveGitSourceFromCache(gs harness.GitSource) (string, *RepoResult, error) {
-	return resolveGitSourceWith(gs, CacheOnlyRepo)
+func ResolveGitSourceFromCache(gs harness.GitSource, harnessDir string) (string, *RepoResult, error) {
+	return resolveGitSourceWith(gs, harnessDir, CacheOnlyRepo)
 }
 
 // ResolveFromCache is like Resolve but uses CacheOnlyRepo to avoid network

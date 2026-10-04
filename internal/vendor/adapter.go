@@ -3,7 +3,9 @@ package vendor
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
@@ -147,16 +149,32 @@ type Adapter interface {
 	GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)
 
 	// GenerateMCPConfig translates MCP server declarations to vendor-native
-	// MCP configuration files. Returns a map of relative file paths to file contents.
-	// Returns nil if servers is nil or empty.
+	// MCP configuration files for the assembled session layout (`ynh run`,
+	// `ynd preview`, the agent loop). Returns a map of relative file paths to
+	// file contents. Returns nil if servers is nil or empty. A vendor whose
+	// plugin reads a different path also implements GeneratePluginMCPConfig,
+	// which the exporter prefers (see exporter.PluginMCPGenerator).
 	GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error)
 
 	// GeneratePluginManifest produces vendor-native plugin manifest files
 	// (e.g. .claude-plugin/plugin.json). Returns a map of relative file paths
 	// to file contents. The outputDir is needed by some vendors to detect
-	// existing content (e.g. Codex checks for skills/ and .mcp.json).
-	// Returns nil if the vendor has no manifest format.
+	// existing content (e.g. Codex checks for skills/ and .mcp.json), never to
+	// guess the layout. A vendor whose run-dir layout differs from its export
+	// layout (Copilot) writes the run-dir manifest here and also implements
+	// GenerateExportPluginManifest, which the exporter prefers (see
+	// exporter.ExportManifestGenerator). Returns nil if the vendor has no
+	// manifest format.
 	GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error)
+
+	// PluginManifestDir returns the directory GeneratePluginManifest writes
+	// plugin.json into (e.g. ".claude-plugin", ".codex-plugin"). A vendor
+	// whose run-dir layout nests its plugin under ConfigDir (Copilot) writes
+	// it at ConfigDir()/PluginManifestDir() there, and at PluginManifestDir()
+	// in an export. Not the marketplace index
+	// directory: Codex keeps its index at .agents/plugins, apart from its
+	// manifest. Returns empty string if the vendor has no manifest format.
+	PluginManifestDir() string
 
 	// ExportArtifactDirs returns the artifact directory mapping for export.
 	// Some vendors support a subset of artifact types in their plugin format
@@ -168,8 +186,9 @@ type Adapter interface {
 	SupportsExportDelegates() bool
 
 	// MarketplaceManifestDir returns the directory name for marketplace index
-	// files (e.g. ".claude-plugin", ".agents/plugins"). Returns empty string
-	// if the vendor has no marketplace system.
+	// files (e.g. ".claude-plugin", ".agents/plugins"). It can differ from
+	// PluginManifestDir, so it never locates a plugin manifest. Returns empty
+	// string if the vendor has no marketplace system.
 	MarketplaceManifestDir() string
 
 	// GenerateMarketplaceIndex produces vendor-native marketplace index content.
@@ -225,6 +244,53 @@ func DefaultArtifactDirs() map[string]string {
 		"commands": "commands",
 	}
 }
+
+// pluginHookFile is where a plugin package carries one vendor's hooks: a file
+// under hooks/ named for the vendor, which that vendor's manifest names in its
+// "hooks" field. Never the shared default hooks/hooks.json: Claude Code loads
+// that file from a plugin root even when the manifest names another, and
+// Copilot reads it by default, so in a package several vendors share it would
+// hand one vendor's format to another (#469). The same layout is used for a
+// single-vendor export, so every plugin ynh writes follows one rule.
+func pluginHookFile(vendorName string) string {
+	return filepath.Join("hooks", vendorName+".json")
+}
+
+// pluginHookPointer returns the manifest "hooks" value naming vendorName's
+// plugin hook file, or "" when outputDir does not carry one.
+func pluginHookPointer(outputDir, vendorName string) string {
+	return pluginFilePointer(outputDir, pluginHookFile(vendorName))
+}
+
+// pluginFilePointer returns the manifest value naming rel, a file relative to
+// the plugin root outputDir, in the "./"-prefixed form plugin loaders require,
+// or "" when the file is not there. A plugin loader rejects a component path
+// that does not exist, so a manifest names a file only when it is present.
+func pluginFilePointer(outputDir, rel string) string {
+	if !fileExists(filepath.Join(outputDir, rel)) {
+		return ""
+	}
+	return "./" + filepath.ToSlash(rel)
+}
+
+// pluginRootCommand returns a hook command rewriter for a plugin: a leading
+// "./" names a script shipped inside the plugin, so it is anchored to the
+// vendor's plugin-root variable, quoted so an install path with spaces stays
+// one word (#483). A hook runs in the agent's working directory, not the
+// plugin root, so the bare "./" would look in the user's project. Commands
+// that are absolute, already anchored or PATH-style are left unchanged. The
+// exporter copies each such script into the plugin.
+func pluginRootCommand(rootVar string) func(string) string {
+	return func(cmd string) string {
+		if rest, ok := strings.CutPrefix(cmd, "./"); ok {
+			return `"${` + rootVar + `}"/` + rest
+		}
+		return cmd
+	}
+}
+
+// keepHookCommand leaves a hook command exactly as the harness wrote it.
+func keepHookCommand(cmd string) string { return cmd }
 
 // Available returns all registered vendor names, sorted alphabetically.
 func Available() []string {

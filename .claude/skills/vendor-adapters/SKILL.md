@@ -193,8 +193,12 @@ converted only by `ynd migrate` and refused by every other command.
 | ynh               | Claude Code                      | Codex                            | Cursor                           |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Source:            |                                  |                                  |                                  |
-| plugin.json       | hooks/hooks.json (plugin)        | .codex/hooks.json                | hooks/hooks.json (plugin)        |
-|   hooks: {}       | .claude/settings.json (project)  | ~/.codex/hooks.json (user)       | .cursor/settings.json (project)  |
+| plugin.json       | hooks/hooks.json (plugin default)| .codex/hooks.json (project)      | hooks/hooks.json (plugin default)|
+|   hooks: {}       | .claude/settings.json (project)  | ~/.codex/hooks.json (user)       | .cursor/hooks.json (project)     |
+|                   |                                  | hooks/hooks.json (plugin default)|                                  |
+| ynh session:      | .claude/hooks/hooks.json         | .codex/hooks.json                | .cursor/hooks.json               |
+| ynh plugin:       | hooks/claude.json                | hooks/codex.json                 | hooks/cursor.json                |
+|                   |  (manifest "hooks" names it)     |  (manifest "hooks" names it)     |  (manifest "hooks" names it)     |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Format:           | Three-level nesting:             | Three-level nesting:             | Flat format, same at both paths: |
 |                   | event > matcher > hooks[]        | event > matcher > hooks[]        | {event: [{command}]} — CONFIRMED |
@@ -226,8 +230,9 @@ converted only by `ynd migrate` and refused by every other command.
 | ynh               | Claude Code                      | Codex                            | Cursor                           |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Source:            |                                  |                                  |                                  |
-| plugin.json       | .claude/.mcp.json (plugin)       | .mcp.json (plugin root)          | .cursor/mcp.json (project)       |
-|   mcp_servers: {} | .mcp.json (project root)         |                                  | mcp.json (plugin root)           |
+| plugin.json       | .claude/.mcp.json (run assembly) | .mcp.json (plugin root)          | .cursor/mcp.json (run assembly)  |
+|   mcp_servers: {} | mcp/claude.json (export, named   |                                  | mcp.json (export, plugin root)   |
+|                   |   by manifest mcpServers)        |                                  |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Format:           | JSON: {"mcpServers": {...}}      | JSON: {"mcpServers": {...}}      | JSON: {"mcpServers": {...}}      |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
@@ -268,7 +273,7 @@ lands and the shape stabilizes.
 
 | Concept | ynh | Copilot CLI |
 |---|---|---|
-| Plugin manifest | `.agents/harness/plugin.json` | **CONFIRMED by hand-testing** (v1.0.75): `plugin.json` at `.plugin/`, repo root, `.github/plugin/`, or `.claude-plugin/` (compat path) — all four verified to work identically via `--plugin-dir <dir>`. Only `name` required. Bundled `skills/<name>/SKILL.md` inside the plugin dir load and activate correctly regardless of which manifest path is used (verified: asked the live model whether the skill was available — yes, both times). **Caveat:** `copilot skill list`'s static table does NOT show `--plugin-dir`-bundled skills at all (only Project/Personal/Builtin categories) — this is a listing/display gap in that specific command, not a functional one; don't take `skill list` output as the source of truth for whether a plugin's skills are actually loaded. **CONFIRMED: the manifest is required, not optional** — removing it entirely (skills present, no manifest anywhere) made a previously-working skill stop loading; skills silently fail with no error when the manifest is missing or misplaced. **Shipped adapter bug caught by this**: `GeneratePluginManifest` is called with a different root by `ynh run` (skills nested under `.copilot/`, matching `--plugin-dir`) than by `ynd export` (skills flattened to the export root) — a fixed manifest path was correct for one caller and silently broken for the other. Fixed via `copilotRunDirLayout(outputDir)`, which detects the caller by checking whether `outputDir/.copilot` exists, verified against a real export + reload. |
+| Plugin manifest | `.agents/harness/plugin.json` | **CONFIRMED by hand-testing** (v1.0.75): `plugin.json` at `.plugin/`, repo root, `.github/plugin/`, or `.claude-plugin/` (compat path); all four verified to work identically via `--plugin-dir <dir>`. Only `name` required. Bundled `skills/<name>/SKILL.md` inside the plugin dir load and activate correctly regardless of which manifest path is used (verified: asked the live model whether the skill was available: yes, both times). **Caveat:** `copilot skill list`'s static table does NOT show `--plugin-dir`-bundled skills at all (only Project/Personal/Builtin categories). This is a listing/display gap in that specific command, not a functional one; don't take `skill list` output as the source of truth for whether a plugin's skills are actually loaded. **CONFIRMED: the manifest is required, not optional**: removing it entirely (skills present, no manifest anywhere) made a previously-working skill stop loading; skills silently fail with no error when the manifest is missing or misplaced. **Shipped adapter bug caught by this**: `GeneratePluginManifest` is called with a different root by `ynh run` (skills nested under `.copilot/`, matching `--plugin-dir`) than by `ynd export` (skills flattened to the export root), so a fixed manifest path was correct for one caller and silently broken for the other. Fixed by having each caller ask for its layout explicitly: `GeneratePluginManifest` for the run dir (`.copilot/.claude-plugin/plugin.json`), `GenerateExportPluginManifest` for an export (`.claude-plugin/plugin.json`). An earlier fix inferred the caller from whether `outputDir/.copilot` existed, which broke for an export with MCP servers (#471). |
 | Skills | `skills/<name>/SKILL.md` | `SKILL.md` under `.github/skills/`, `.claude/skills/`, or `.agents/skills/` (project); `~/.copilot/skills/` (user). Reads Claude's `.claude/skills/` natively. Native support, not just markdown-by-convention. |
 | Agents / subagents | `agents/<name>.md` | `.agent.md` under `.github/agents/` (project), `~/.copilot/agents/` (user, overrides same-named project agent). 6 built-in agents ship by default. Invoked via `/agent`, `--agent NAME`, or auto-inferred. |
 | Rules | `rules/<name>.md` | No "rules" concept by that name. Closest analog: `NAME.instructions.md` under `.github/instructions/` with `applyTo: <glob>` frontmatter — no defined precedence when multiple files match. |
@@ -504,12 +509,14 @@ not conflict with the project's own `CLAUDE.md`.
 | ---  | Cursor .mdc rules format: RESOLVED       | Cursor     |
 |      |   (see internal/vendor/cursor.go,        |            |
 |      |    Cursor.TransformArtifact)              |            |
-| ---  | Cursor plugin hooks path: RESOLVED       | Cursor     |
-|      |   (writes both .cursor/hooks.json and    |            |
-|      |    hooks/hooks.json — same format/names)  |            |
+| ---  | Plugin hooks paths: RESOLVED             | All        |
+|      |   (session path in run assembly,         |            |
+|      |    hooks/<vendor>.json named by the      |            |
+|      |    manifest in export; no shared         |            |
+|      |    hooks/hooks.json, #454 #468 #469)     |            |
 | ---  | Cursor plugin MCP path: RESOLVED         | Cursor     |
-|      |   (writes both .cursor/mcp.json and      |            |
-|      |    mcp.json at plugin root)                |            |
+|      |   (.cursor/mcp.json in run assembly,     |            |
+|      |    mcp.json in export, #470)              |            |
 | ---  | Cursor subagent/delegation support:      | Cursor     |
 |      |   RESOLVED — confirmed working, ynh's    |            |
 |      |   name+description frontmatter matches   |            |

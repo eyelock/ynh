@@ -182,7 +182,7 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 	// Check remote sources for delegates
 	if cfg != nil {
 		for _, del := range h.DelegatesTo {
-			if err := cfg.CheckRemoteSource(del.Git); err != nil {
+			if err := cfg.CheckSource(del.Git, h.Dir); err != nil {
 				return "", fmt.Errorf("delegate %q: %w", del.Git, err)
 			}
 		}
@@ -223,18 +223,18 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 	}
 
 	// Assemble delegates
-	if err := assembler.AssembleDelegates(tmpDir, adapter, h.DelegatesTo); err != nil {
+	if err := assembler.AssembleDelegates(tmpDir, adapter, h.DelegatesTo, h.Dir); err != nil {
 		return "", fmt.Errorf("assembling delegates: %w", err)
 	}
 
-	// Generate hook config
+	// Generate hook config, and copy in the scripts those hooks run
 	if len(h.Hooks) > 0 {
-		hookFiles, err := adapter.GenerateHookConfig(h.Hooks)
+		warnings, err := assembler.WriteSessionHooks(tmpDir, adapter, h.Dir, h.Hooks)
 		if err != nil {
-			return "", fmt.Errorf("generating hook config: %w", err)
+			return "", err
 		}
-		if err := writeGeneratedFiles(tmpDir, hookFiles); err != nil {
-			return "", fmt.Errorf("writing hook config: %w", err)
+		for _, w := range warnings {
+			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 		}
 	}
 

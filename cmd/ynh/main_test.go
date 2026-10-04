@@ -1002,6 +1002,8 @@ func TestFormatProvenance(t *testing.T) {
 		{"local", &harness.Provenance{SourceType: "local", Source: "./my-harness"}, "./my-harness"},
 		{"git no path", &harness.Provenance{SourceType: "git", Source: "github.com/eyelock/assistants"}, "eyelock/assistants"},
 		{"git with path", &harness.Provenance{SourceType: "git", Source: "github.com/eyelock/assistants", Path: "ynh/david"}, "eyelock/assistants/ynh/david"},
+		{"git https", &harness.Provenance{SourceType: "git", Source: "https://github.com/eyelock/assistants"}, "eyelock/assistants"},
+		{"git ssh", &harness.Provenance{SourceType: "git", Source: "git@github.com:eyelock/assistants.git"}, "eyelock/assistants"},
 		{"registry", &harness.Provenance{SourceType: "registry", Source: "github.com/eyelock/assistants", RegistryName: "my-reg"}, "eyelock/assistants (my-reg)"},
 		{"registry with path", &harness.Provenance{SourceType: "registry", Source: "github.com/eyelock/assistants", Path: "ynh/david", RegistryName: "my-reg"}, "eyelock/assistants/ynh/david (my-reg)"},
 	}
@@ -1034,10 +1036,26 @@ func TestFormatIncludes(t *testing.T) {
 		{"main ref omitted", []harness.Include{
 			{GitSource: harness.GitSource{Git: "github.com/example/skills", Ref: "main"}},
 		}, "example/skills"},
+		{"https", []harness.Include{
+			{GitSource: harness.GitSource{Git: "https://github.com/eyelock/assistants", Path: "skills/pause"}, Pick: []string{"a"}},
+		}, "eyelock/assistants/skills/pause [1]"},
+		{"relative local", []harness.Include{
+			{GitSource: harness.GitSource{Git: "./inc"}},
+		}, "./inc"},
 		{"multiple", []harness.Include{
 			{GitSource: harness.GitSource{Git: "github.com/example/skills", Path: "dev"}, Pick: []string{"a", "b"}},
 			{GitSource: harness.GitSource{Git: "github.com/example/skills", Path: "infra"}, Pick: []string{"c"}},
 		}, "example/skills/dev [2], example/skills/infra [1]"},
+		{"local", []harness.Include{
+			{GitSource: harness.GitSource{Local: "extras"}},
+		}, "extras"},
+		{"local with pick", []harness.Include{
+			{GitSource: harness.GitSource{Local: "./bundled/extras"}, Pick: []string{"skills/a"}},
+		}, "./bundled/extras [1]"},
+		{"local and git", []harness.Include{
+			{GitSource: harness.GitSource{Local: "extras"}},
+			{GitSource: harness.GitSource{Git: "github.com/example/skills", Path: "dev"}, Pick: []string{"a", "b"}},
+		}, "extras, example/skills/dev [2]"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1058,6 +1076,9 @@ func TestFormatDelegates(t *testing.T) {
 		{"empty", nil, "0"},
 		{"single", []harness.Delegate{
 			{GitSource: harness.GitSource{Git: "github.com/example/team"}},
+		}, "example/team"},
+		{"https", []harness.Delegate{
+			{GitSource: harness.GitSource{Git: "https://github.com/example/team.git"}},
 		}, "example/team"},
 		{"with path and ref", []harness.Delegate{
 			{GitSource: harness.GitSource{Git: "github.com/example/mono", Path: "harnesses/ops", Ref: "v2"}},

@@ -44,35 +44,6 @@ func TestExportMergedMode(t *testing.T) {
 	assertFileExists(t, filepath.Join(outputDir, ".cursorrules"))
 }
 
-func TestExportMergedWithHooks(t *testing.T) {
-	// Create a harness with hooks
-	srcDir := t.TempDir()
-	writeJSON(t, filepath.Join(srcDir, plugin.PluginDir, plugin.PluginFile), map[string]any{
-		"name":    "hooks-merged",
-		"version": "0.1.0",
-		"hooks": map[string]any{
-			"before_tool": []any{
-				map[string]string{"command": "echo hi"},
-			},
-		},
-	})
-
-	outputDir := filepath.Join(t.TempDir(), "merged")
-	_, err := Export(ExportOptions{
-		SourceDir: srcDir,
-		OutputDir: outputDir,
-		Vendors:   []string{"claude", "cursor"},
-		Mode:      ModeMerged,
-	})
-	if err != nil {
-		t.Fatalf("Export failed: %v", err)
-	}
-
-	// Both hook configs should exist
-	assertFileExists(t, filepath.Join(outputDir, ".claude", "hooks", "hooks.json"))
-	assertFileExists(t, filepath.Join(outputDir, ".cursor", "hooks.json"))
-}
-
 func TestExportMergedWithMCPServers(t *testing.T) {
 	// Create a harness with MCP servers
 	srcDir := t.TempDir()
@@ -91,16 +62,23 @@ func TestExportMergedWithMCPServers(t *testing.T) {
 	_, err := Export(ExportOptions{
 		SourceDir: srcDir,
 		OutputDir: outputDir,
-		Vendors:   []string{"claude", "cursor"},
+		Vendors:   []string{"claude", "copilot", "cursor"},
 		Mode:      ModeMerged,
 	})
 	if err != nil {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	// Both MCP configs should exist
-	assertFileExists(t, filepath.Join(outputDir, ".claude", ".mcp.json"))
-	assertFileExists(t, filepath.Join(outputDir, ".cursor", "mcp.json"))
+	// Each vendor's plugin MCP file exists, and no project-session file does:
+	// Claude's is mcp/claude.json, not .claude/.mcp.json (#481),
+	// Cursor's plugin file is mcp.json at the root (#470), Copilot's is
+	// .github/mcp.json at the root, and nothing lands under .copilot/ (#471).
+	assertFileExists(t, filepath.Join(outputDir, "mcp", "claude.json"))
+	assertFileNotExists(t, filepath.Join(outputDir, ".claude"))
+	assertFileExists(t, filepath.Join(outputDir, "mcp.json"))
+	assertFileNotExists(t, filepath.Join(outputDir, ".cursor", "mcp.json"))
+	assertFileExists(t, filepath.Join(outputDir, ".github", "mcp.json"))
+	assertFileNotExists(t, filepath.Join(outputDir, ".copilot"))
 }
 
 func TestExportCleanFlag(t *testing.T) {

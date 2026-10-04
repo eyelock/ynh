@@ -9,7 +9,7 @@ func TestBudget_NotExceeded(t *testing.T) {
 	b := &Budget{MaxTurns: 10, MaxTokens: 1000, MaxWall: time.Hour}
 	b.Start()
 	b.RecordTurn()
-	b.RecordTokens(Usage{InputTokens: 100, OutputTokens: 50})
+	b.RecordUsage(Turn{Usage: Usage{InputTokens: 100, OutputTokens: 50}})
 
 	reason, _, code := b.Exceeded()
 	if reason != "" || code != 0 {
@@ -35,7 +35,7 @@ func TestBudget_TurnCap(t *testing.T) {
 func TestBudget_TokenBudget(t *testing.T) {
 	b := &Budget{MaxTokens: 100}
 	b.Start()
-	b.RecordTokens(Usage{InputTokens: 60, OutputTokens: 50})
+	b.RecordUsage(Turn{Usage: Usage{InputTokens: 60, OutputTokens: 50}})
 
 	reason, _, code := b.Exceeded()
 	if reason == "" {
@@ -65,8 +65,8 @@ func TestBudget_Counters(t *testing.T) {
 	b.Start()
 	b.RecordTurn()
 	b.RecordTurn()
-	b.RecordTokens(Usage{InputTokens: 10, OutputTokens: 5, CacheTokens: 2})
-	b.RecordTokens(Usage{InputTokens: 20, OutputTokens: 3})
+	b.RecordUsage(Turn{Usage: Usage{InputTokens: 10, OutputTokens: 5, CacheTokens: 2}})
+	b.RecordUsage(Turn{Usage: Usage{InputTokens: 20, OutputTokens: 3}})
 
 	if b.Turns() != 2 {
 		t.Errorf("expected 2 turns, got %d", b.Turns())
@@ -82,7 +82,7 @@ func TestBudget_ZeroLimitsUnlimited(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		b.RecordTurn()
 	}
-	b.RecordTokens(Usage{InputTokens: 1e9, OutputTokens: 1e9})
+	b.RecordUsage(Turn{Usage: Usage{InputTokens: 1e9, OutputTokens: 1e9}})
 	reason, _, code := b.Exceeded()
 	if reason != "" || code != 0 {
 		t.Errorf("zero limits should be unlimited, got reason=%q code=%d", reason, code)

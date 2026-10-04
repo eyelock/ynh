@@ -192,7 +192,7 @@ ls /tmp/ynh-tutorial/export-claude/
 
 ## Export in merged mode
 
-Merged mode produces one directory with both Claude and Cursor manifests — useful for CI pipelines and marketplace-ready plugins:
+Merged mode produces one directory with every selected vendor's manifest, useful for CI pipelines and marketplace-ready plugins. Without `-v` that is all four vendors, Codex included; this example selects Claude and Cursor:
 
 ```bash
 ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/export-merged --merged -v claude,cursor
@@ -220,6 +220,18 @@ CLAUDE.md
 ```
 
 One physical directory with both vendor manifests — serves Claude and Cursor from the same files.
+
+Select Codex as well and the shared `agents/` stays for Claude, but Codex's manifest points only at `skills/`. The export says so, in the same words as the per-vendor Codex export above:
+
+```bash
+ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/export-merged-codex --merged -v claude,codex
+```
+
+Expected:
+```
+Exported for merged → /tmp/ynh-tutorial/export-merged-codex (2 skills, 1 agents)
+  warning: codex: skipping 1 agents (not supported)
+```
 
 ## Export with --clean
 
@@ -278,11 +290,10 @@ ls -a /tmp/ynh-tutorial/no-inst-out/claude/
 
 ## Clean up
 
+Everything above, the two harnesses and every export, is under the tutorial workspace:
+
 ```bash
-rm -rf /tmp/ynh-tutorial/export-*
-rm -rf /tmp/ynh-tutorial/clean-test
-rm -rf /tmp/ynh-tutorial/remote-export
-rm -rf /tmp/ynh-tutorial/no-inst-out
+rm -rf /tmp/ynh-tutorial
 ```
 
 ## What you learned
@@ -292,7 +303,7 @@ rm -rf /tmp/ynh-tutorial/no-inst-out
   - Claude: `.claude-plugin/plugin.json` + artifacts at root
   - Cursor: `.cursor-plugin/plugin.json` + `.cursorrules`
   - Codex: `.codex-plugin/plugin.json` + `skills/` (agents, rules, commands excluded)
-- `--merged` produces a single dir with dual manifests (marketplace-ready)
+- `--merged` produces a single dir with every selected vendor's manifest (marketplace-ready)
 - Remote includes are resolved and flattened into the export
 - Pick filtering carries through to the export
 - `AGENTS.md` is the universal instruction format (read by Codex, Cursor, Copilot, etc.)

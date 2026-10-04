@@ -214,7 +214,7 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 			}
 			harnessSrcDir = absPath
 		} else {
-			if err := cfg.CheckRemoteSource(source); err != nil {
+			if err := cfg.CheckSource(source, ""); err != nil {
 				return err
 			}
 			result, err := resolver.EnsureRepo(source, resolved.ref)
@@ -269,7 +269,7 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 
 	// Check delegates against remote source allow-list
 	for _, del := range p.DelegatesTo {
-		if err := cfg.CheckRemoteSource(del.Git); err != nil {
+		if err := cfg.CheckSource(del.Git, p.Dir); err != nil {
 			return fmt.Errorf("delegate %q: %w", del.Git, err)
 		}
 	}
@@ -297,7 +297,7 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 			return fmt.Errorf("assembling %s layout: %w", adapter.Name(), err)
 		}
 
-		if err := assembler.AssembleDelegates(vendorDir, adapter, p.DelegatesTo); err != nil {
+		if err := assembler.AssembleDelegates(vendorDir, adapter, p.DelegatesTo, p.Dir); err != nil {
 			return fmt.Errorf("assembling %s delegates: %w", adapter.Name(), err)
 		}
 	}

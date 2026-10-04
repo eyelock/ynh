@@ -71,16 +71,31 @@ Each server must have either `command` or `url`, not both. Validation rejects se
 
 | Vendor | File | Format |
 |--------|------|--------|
-| Claude Code | `.claude/.mcp.json` | JSON with `mcpServers` key (inside plugin dir) |
+| Claude Code | `.claude/.mcp.json` in a session, `mcp/claude.json` in a plugin | JSON with `mcpServers` key |
 | Cursor | `.cursor/mcp.json` | JSON with `mcpServers` key |
 | Codex | `.mcp.json` | JSON with `mcpServers` key (at plugin root) |
 | Copilot | `.github/mcp.json` (project root) | JSON with `mcpServers` key, each server requires an explicit `"type": "local"|"http"` field |
+
+Claude, Cursor and Copilot read MCP servers from a different file depending on how the harness reaches them, and ynh writes each file only where it is read:
+
+| Vendor | `ynh run`, `ynd preview`, `ynh agent` (a session) | `ynd export`, `ynd marketplace build` (a plugin) |
+|--------|------|------|
+| Claude Code | `.claude/.mcp.json`: `.mcp.json` at the root of the `.claude/` plugin directory the session loads | `mcp/claude.json`, named by the `mcpServers` field of `.claude-plugin/plugin.json` ([plugin reference](https://code.claude.com/docs/en/plugins-reference)) |
+| Codex | `.mcp.json` | `.mcp.json` at the plugin root, named by the `mcpServers` field of `.codex-plugin/plugin.json` |
+| Cursor | `.cursor/mcp.json`, the only project-level path Cursor reads ([cursor.com/docs/context/mcp](https://cursor.com/docs/context/mcp)) | `mcp.json` (no dot) at the plugin root, which a Cursor plugin discovers automatically ([cursor.com/docs/reference/plugins](https://cursor.com/docs/reference/plugins)) |
+| Copilot | `.copilot/.mcp.json` in the run directory, projected into the calling project's `.github/mcp.json` at launch (see [Copilot Format](#copilot-format)) | `.github/mcp.json` at the plugin root, a default MCP path for a Copilot plugin ([Copilot CLI plugin reference](https://docs.github.com/en/copilot/reference/cli-plugin-reference)) |
+
+The document is identical in both places; only the path differs. A manifest names a file only when the plugin carries it.
+
+Every vendor in a merged package gets a file of its own. A Claude plugin reads `.mcp.json` at its root and then what its manifest's `mcpServers` names, but Codex keeps its `.mcp.json` at the root, so Claude's servers go in `mcp/claude.json` instead. Claude still loads that root file first; it holds the same document, so the merge changes nothing. Copilot also accepts `.mcp.json` at a plugin root, which is why its file is `.github/mcp.json`.
+
+Copilot reads `.claude-plugin/plugin.json`, the manifest Claude writes. In a Copilot-only export that manifest names no MCP file and Copilot reads `.github/mcp.json`, its default. In a package that also carries Claude, the manifest's `mcpServers` names `mcp/claude.json`, and Copilot's plugin reference lists that field beside `.mcp.json` and `.github/mcp.json` without saying how the three combine. `mcp/claude.json` is in Claude's format, without the `"type"` field Copilot's own file carries; which file an installed Copilot plugin loads from such a package has not been tested by hand ([#499](https://github.com/eyelock/ynh/issues/499)).
 
 > **Claude Code runtime limitation:** MCP servers in `--plugin-dir` plugins are not auto-activated during `ynh run` sessions. They work correctly when the plugin is installed via `/plugin install` or when using Codex/Cursor. See [Hooks](hooks.md#claude-code-runtime-limitation) for details.
 
 ### Claude Code Format
 
-Claude uses `.mcp.json` at the project root with direct passthrough of the server definition:
+Claude uses the same document in `.claude/.mcp.json` (a session) and `mcp/claude.json` (a plugin), with direct passthrough of the server definition:
 
 ```json
 {
@@ -98,7 +113,7 @@ Claude uses `.mcp.json` at the project root with direct passthrough of the serve
 
 ### Cursor Format
 
-Cursor uses `.cursor/mcp.json` with the same JSON structure as Claude:
+Cursor uses `.cursor/mcp.json` in a project, or `mcp.json` at the root of an exported plugin, with the same JSON structure as Claude:
 
 ```json
 {
@@ -151,7 +166,7 @@ Copilot requires an explicit `"type"` field per server (`"local"` for a `command
 }
 ```
 
-**Delivery is project-root, not plugin-dir.** Copilot does not read a plugin-bundled `.mcp.json` via `--plugin-dir` (confirmed by hand-testing), so `ynh run` projects the generated config directly into the calling project's `.github/mcp.json` instead — a file fully owned by ynh, distinct from anything the user might hand-author. `ynd export` writes the vendor-native `.mcp.json` at the plugin root as usual; it is inert until copied into a real project's `.github/` by the consumer, since export has no project-root context to project into.
+**Delivery is project-root, not plugin-dir.** Copilot does not read a plugin-bundled `.mcp.json` via `--plugin-dir` (confirmed by hand-testing), so `ynh run` projects the generated config directly into the calling project's `.github/mcp.json` instead: a file fully owned by ynh, distinct from anything the user might hand-author. `ynd export` writes the same document to `.github/mcp.json` at the plugin root, where an installed Copilot plugin reads it (untested by hand: a plugin loaded with `--plugin-dir` ignores it, as above). The manifest sits beside it at `.claude-plugin/plugin.json` in the plugin root, next to the exported skills, whatever other files the export holds.
 
 ## Root-Harness-Only Rule
 

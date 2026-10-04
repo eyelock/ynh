@@ -229,71 +229,6 @@ func TestExportInstructionDiscovery(t *testing.T) {
 	}
 }
 
-func TestExportWithHooks(t *testing.T) {
-	// Create a harness with hooks
-	srcDir := t.TempDir()
-	writeJSON(t, filepath.Join(srcDir, plugin.PluginDir, plugin.PluginFile), map[string]any{
-		"name":           "hooks-test",
-		"version":        "0.1.0",
-		"default_vendor": "claude",
-		"hooks": map[string]any{
-			"before_tool": []any{
-				map[string]string{"matcher": "Bash", "command": "echo before bash"},
-			},
-			"on_stop": []any{
-				map[string]string{"command": "echo done"},
-			},
-		},
-	})
-
-	// Test Claude export
-	outputDir := t.TempDir()
-	_, err := Export(ExportOptions{
-		SourceDir: srcDir,
-		OutputDir: outputDir,
-		Vendors:   []string{"claude"},
-		Mode:      ModePerVendor,
-	})
-	if err != nil {
-		t.Fatalf("Export failed: %v", err)
-	}
-
-	// Claude should have .claude/hooks/hooks.json (plugin format)
-	assertFileExists(t, filepath.Join(outputDir, "claude", ".claude", "hooks", "hooks.json"))
-
-	// Test Cursor export
-	outputDir2 := t.TempDir()
-	_, err = Export(ExportOptions{
-		SourceDir: srcDir,
-		OutputDir: outputDir2,
-		Vendors:   []string{"cursor"},
-		Mode:      ModePerVendor,
-	})
-	if err != nil {
-		t.Fatalf("Export failed: %v", err)
-	}
-
-	// Cursor should have .cursor/hooks.json (project-level) and hooks/hooks.json
-	// at plugin root (plugin format)
-	assertFileExists(t, filepath.Join(outputDir2, "cursor", ".cursor", "hooks.json"))
-	assertFileExists(t, filepath.Join(outputDir2, "cursor", "hooks", "hooks.json"))
-
-	// Test Codex export
-	outputDir3 := t.TempDir()
-	_, err = Export(ExportOptions{
-		SourceDir: srcDir,
-		OutputDir: outputDir3,
-		Vendors:   []string{"codex"},
-		Mode:      ModePerVendor,
-	})
-	if err != nil {
-		t.Fatalf("Export failed: %v", err)
-	}
-
-	// Codex should have .codex/hooks.json
-	assertFileExists(t, filepath.Join(outputDir3, "codex", ".codex", "hooks.json"))
-}
-
 func TestExportWithMCPServers(t *testing.T) {
 	// Create a harness with MCP servers
 	srcDir := t.TempDir()
@@ -322,8 +257,10 @@ func TestExportWithMCPServers(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	// Claude should have .claude/.mcp.json (plugin format)
-	assertFileExists(t, filepath.Join(outputDir, "claude", ".claude", ".mcp.json"))
+	// A Claude plugin reads mcp/claude.json, which its manifest names, and
+	// never .claude/.mcp.json, the session path (#481).
+	assertFileExists(t, filepath.Join(outputDir, "claude", "mcp", "claude.json"))
+	assertFileNotExists(t, filepath.Join(outputDir, "claude", ".claude"))
 
 	// Test Cursor export
 	outputDir2 := t.TempDir()
@@ -337,10 +274,11 @@ func TestExportWithMCPServers(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	// Cursor should have .cursor/mcp.json (project-level) and mcp.json at
-	// plugin root (plugin format, no dot prefix)
-	assertFileExists(t, filepath.Join(outputDir2, "cursor", ".cursor", "mcp.json"))
+	// A Cursor plugin reads mcp.json at its root and nothing else
+	// (cursor.com/docs/reference/plugins). .cursor/mcp.json is the project
+	// file a `ynh run` session reads; inside a plugin it is inert (#470).
 	assertFileExists(t, filepath.Join(outputDir2, "cursor", "mcp.json"))
+	assertFileNotExists(t, filepath.Join(outputDir2, "cursor", ".cursor", "mcp.json"))
 
 	// Test Codex export
 	outputDir3 := t.TempDir()
@@ -356,6 +294,54 @@ func TestExportWithMCPServers(t *testing.T) {
 
 	// Codex should have .mcp.json (JSON format at plugin root)
 	assertFileExists(t, filepath.Join(outputDir3, "codex", ".mcp.json"))
+}
+
+// TestExportCopilotWithMCPUsesExportLayout locks #471. A copilot export is a
+// plugin whose skills sit at its root, so the manifest must sit there too:
+// Copilot loads nothing from a plugin whose .claude-plugin/plugin.json is not
+// at the directory it is pointed at. The export used to infer a `ynh run`
+// layout from the MCP file it had just written under .copilot/, and nested the
+// manifest there. The MCP file goes where a Copilot plugin reads it,
+// .github/mcp.json at the plugin root (docs.github.com, CLI plugin reference).
+func TestExportCopilotWithMCPUsesExportLayout(t *testing.T) {
+	srcDir := t.TempDir()
+	writeJSON(t, filepath.Join(srcDir, plugin.PluginDir, plugin.PluginFile), map[string]any{
+		"name":    "copilot-mcp",
+		"version": "0.1.0",
+		"mcp_servers": map[string]any{
+			"github": map[string]any{"command": "npx", "args": []string{"-y", "server"}},
+		},
+	})
+	skill := filepath.Join(srcDir, "skills", "greet", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(skill), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(skill, []byte("---\nname: greet\ndescription: Greets.\n---\n\nSay hello.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	outputDir := t.TempDir()
+	if _, err := Export(ExportOptions{
+		SourceDir: srcDir,
+		OutputDir: outputDir,
+		Vendors:   []string{"copilot"},
+		Mode:      ModePerVendor,
+	}); err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+
+	root := filepath.Join(outputDir, "copilot")
+	assertFileExists(t, filepath.Join(root, "skills", "greet", "SKILL.md"))
+	assertFileExists(t, filepath.Join(root, ".claude-plugin", "plugin.json"))
+	assertFileNotExists(t, filepath.Join(root, ".copilot"))
+
+	data, err := os.ReadFile(filepath.Join(root, ".github", "mcp.json"))
+	if err != nil {
+		t.Fatalf("copilot plugin MCP file: %v", err)
+	}
+	if !strings.Contains(string(data), `"type": "local"`) {
+		t.Errorf("copilot MCP file should be in Copilot's format:\n%s", data)
+	}
 }
 
 func TestJoinParts(t *testing.T) {
@@ -404,5 +390,53 @@ func writeJSON(t *testing.T, path string, v any) {
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// BeforeWrite runs once the source has loaded and before anything is written,
+// so a refused source never reaches it and a failing hook writes nothing
+// (#451).
+func TestExportBeforeWrite(t *testing.T) {
+	good := filepath.Join(testdataDir(), "export-harness")
+	refused := t.TempDir() // no manifest and no AGENTS.md: LoadDir refuses it
+
+	tests := []struct {
+		name       string
+		src        string
+		hookErr    error
+		wantCalled bool
+	}{
+		{"refused source never calls the hook", refused, nil, false},
+		{"failing hook stops the export", good, os.ErrPermission, true},
+		{"passing hook lets the export run", good, nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "out")
+			called := false
+			_, err := Export(ExportOptions{
+				SourceDir: tt.src,
+				OutputDir: out,
+				Vendors:   []string{"claude"},
+				BeforeWrite: func() error {
+					if _, statErr := os.Stat(out); !os.IsNotExist(statErr) {
+						t.Errorf("output existed before BeforeWrite ran (stat err: %v)", statErr)
+					}
+					called = true
+					return tt.hookErr
+				},
+			})
+			if called != tt.wantCalled {
+				t.Errorf("BeforeWrite called = %v, want %v", called, tt.wantCalled)
+			}
+			wantOK := tt.src == good && tt.hookErr == nil
+			if (err == nil) != wantOK {
+				t.Fatalf("err = %v, want success %v", err, wantOK)
+			}
+			_, statErr := os.Stat(out)
+			if wantOK == os.IsNotExist(statErr) {
+				t.Errorf("output exists = %v, want %v", !os.IsNotExist(statErr), wantOK)
+			}
+		})
 	}
 }

@@ -26,7 +26,11 @@ const (
 	KindFeedbackSent         EventKind = "feedback_sent"
 	// KindTurnApprovalRequired is emitted only during the act phase (turn ≥ 1).
 	// Plan-phase approval gates use KindPlanApprovalRequired.
-	KindWorkerEnv            EventKind = "worker_env"
+	KindWorkerEnv EventKind = "worker_env"
+	// KindWorkerModel is emitted when the worker first reports the model it
+	// runs on, and again if it reports a different one. The header cannot
+	// carry it: it is written before the worker has said anything.
+	KindWorkerModel          EventKind = "worker_model"
 	KindTurnApprovalRequired EventKind = "turn_approval_required"
 	KindStuckDetected        EventKind = "stuck_detected"
 	// KindTamperDetected is emitted when the gate's own reference point moved
@@ -96,11 +100,20 @@ type SessionStartData struct {
 	Harness   string `json:"harness"`
 	Backend   string `json:"backend"`
 	Task      string `json:"task"`
-	// The fields below make a run reproducible. Without the model, the harness
-	// version and the commit the work started from, a trajectory records what
-	// happened but not what it happened to, and cannot be replayed or audited
-	// after the fact.
+	// The fields below make a run reproducible. Without the model asked for,
+	// the harness version and the commit the work started from, a trajectory
+	// records what happened but not what it happened to, and cannot be
+	// replayed or audited after the fact. ModelRequested reproduces the
+	// request; what ran is recorded by the worker_model event, since the
+	// worker reports it only after this header is written.
+	ModelRequested string `json:"model_requested,omitempty"`
+	// Model is deprecated: a copy of ModelRequested, written so no field
+	// disappears from the header. It goes in a release that bumps
+	// CapabilitiesVersion.
 	Model string `json:"model,omitempty"`
+	// EffortRequested is the reasoning effort the run asked for, from
+	// --effort or the harness's agent.effort. Absent when none was asked for.
+	EffortRequested string `json:"effort_requested,omitempty"`
 	// AutoApprove is the --auto-approve level the worker was granted, "edits"
 	// or "all". Absent means none: no permission flag was passed.
 	AutoApprove    string `json:"auto_approve,omitempty"`
@@ -147,6 +160,18 @@ type SessionResumedData struct {
 	// granted. It is not restored from the checkpoint, so it can differ from
 	// the level the session started with.
 	AutoApprove string `json:"auto_approve,omitempty"`
+	// ModelRequested is the model this resumed process asked for with
+	// --model, which a resume does not restore from the checkpoint.
+	ModelRequested string `json:"model_requested,omitempty"`
+	// EffortRequested is the effort this resumed process asked for. Like
+	// ModelRequested it is not restored from the checkpoint.
+	EffortRequested string `json:"effort_requested,omitempty"`
+}
+
+// WorkerModelData is the payload for KindWorkerModel events: the model the
+// worker reported, in the backend's own words.
+type WorkerModelData struct {
+	Model string `json:"model"`
 }
 
 // SensorResultData is the payload for KindSensorResult events.

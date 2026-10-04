@@ -14,20 +14,6 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
-// copilotPluginJSON is the GitHub Copilot CLI plugin.json schema — identity
-// fields only. Confirmed by hand-testing (v1.0.75): Copilot's manifest search
-// order includes .claude-plugin/plugin.json (a documented compatibility
-// path), and a bundled skills/agents dir alongside it loads and activates
-// correctly via --plugin-dir. See .claude/skills/vendor-adapters/SKILL.md
-// § "Copilot CLI" for the full research trail.
-type copilotPluginJSON struct {
-	Name        string             `json:"name"`
-	Version     string             `json:"version"`
-	Description string             `json:"description,omitempty"`
-	Author      *plugin.AuthorInfo `json:"author,omitempty"`
-	Keywords    []string           `json:"keywords,omitempty"`
-}
-
 func init() {
 	Register(&Copilot{})
 }
@@ -233,37 +219,43 @@ func (c *Copilot) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[s
 	return nil, nil
 }
 
-// copilotRunDirLayout reports whether outputDir looks like a `ynh run`
-// staging directory (skills/agents nested under .copilot/, matching what
-// buildCopilotArgs passes to --plugin-dir) rather than an `ynd export`
-// output directory (which flattens skills/agents to its own root — see
-// exporter.exportForVendor/exportMerged). The manifest must sit alongside
-// wherever skills/agents actually landed: confirmed by hand-testing that
-// Copilot silently fails to load ANY plugin content via --plugin-dir when
+// GeneratePluginManifest writes the manifest for the `ynh run` layout, which
+// `ynd preview` shares: skills and agents nest under .copilot/, the directory
+// buildCopilotArgs passes to --plugin-dir, so the manifest sits at
+// .copilot/.claude-plugin/plugin.json beside them. Confirmed by hand-testing
+// that Copilot silently fails to load ANY plugin content via --plugin-dir when
 // .claude-plugin/plugin.json isn't present at that exact directory's root.
-func copilotRunDirLayout(outputDir string) bool {
-	return dirHasContent(filepath.Join(outputDir, ".copilot"))
+// An export flattens its content to the plugin root and uses
+// GenerateExportPluginManifest instead. The layout is chosen by the caller,
+// never inferred from the files present: an export's own .copilot/.mcp.json
+// once made it look like a run dir (#471).
+func (c *Copilot) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {
+	data, err := claudePluginManifest(hj, outputDir)
+	if err != nil {
+		return nil, err
+	}
+	return map[string][]byte{filepath.Join(c.ConfigDir(), c.PluginManifestDir(), "plugin.json"): data}, nil
 }
 
-func (c *Copilot) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {
-	pj := &copilotPluginJSON{
-		Name:        hj.Name,
-		Version:     hj.Version,
-		Description: hj.Description,
-		Author:      hj.Author,
-		Keywords:    hj.Keywords,
-	}
-	data, err := json.MarshalIndent(pj, "", "  ")
+// GenerateExportPluginManifest writes the manifest for an exported plugin, at
+// .claude-plugin/plugin.json in the plugin root, next to the skills and
+// agents the exporter copies there. Copilot's manifest search order includes
+// that path (docs.github.com, Copilot CLI plugin reference).
+//
+// The file is Claude's manifest, so both are rendered by claudePluginManifest:
+// in a merged package Claude and Copilot both write it, and a Copilot render
+// that differed would drop Claude's "hooks" and "mcpServers" pointers whenever
+// Copilot wrote last (#469, #481). Copilot itself emits no hooks (see
+// GenerateHookConfig), and its MCP file, .github/mcp.json, is one of its
+// defaults, so a Copilot-only export names neither. In a package that also
+// carries Claude, the manifest's "mcpServers" names Claude's mcp/claude.json,
+// which Copilot reads too; see GeneratePluginMCPConfig.
+func (c *Copilot) GenerateExportPluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {
+	data, err := claudePluginManifest(hj, outputDir)
 	if err != nil {
-		return nil, fmt.Errorf("marshalling plugin.json: %w", err)
+		return nil, err
 	}
-	data = append(data, '\n')
-
-	relPath := filepath.Join(".claude-plugin", "plugin.json")
-	if copilotRunDirLayout(outputDir) {
-		relPath = filepath.Join(".copilot", ".claude-plugin", "plugin.json")
-	}
-	return map[string][]byte{relPath: data}, nil
+	return map[string][]byte{filepath.Join(c.PluginManifestDir(), "plugin.json"): data}, nil
 }
 
 func (c *Copilot) ExportArtifactDirs() map[string]string {
@@ -276,6 +268,9 @@ func (c *Copilot) ExportArtifactDirs() map[string]string {
 }
 
 func (c *Copilot) SupportsExportDelegates() bool { return true }
+
+// PluginManifestDir is the same as Claude: Copilot reads that manifest schema.
+func (c *Copilot) PluginManifestDir() string { return ".claude-plugin" }
 
 func (c *Copilot) MarketplaceManifestDir() string { return filepath.Join(".github", "plugin") }
 
@@ -337,7 +332,43 @@ type copilotMCPServer struct {
 	Tools   []string          `json:"tools"`
 }
 
+// GenerateMCPConfig writes the MCP file for the `ynh run` layout, into
+// .copilot/ (the --plugin-dir target). buildCopilotArgs re-reads this same
+// file and projects it into the project's own .github/mcp.json, which is the
+// path confirmed to actually work (see package doc): a plugin loaded via
+// --plugin-dir does not get its bundled MCP config read. An export uses
+// GeneratePluginMCPConfig.
 func (c *Copilot) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
+	data, err := copilotMCPDocument(servers)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{filepath.Join(c.ConfigDir(), ".mcp.json"): data}, nil
+}
+
+// GeneratePluginMCPConfig writes the MCP file for an exported plugin, at
+// .github/mcp.json in the plugin root: one of the two default MCP paths a
+// legacy (.claude-plugin) Copilot plugin reads (docs.github.com, Copilot CLI
+// plugin reference). The other, .mcp.json, is where Codex keeps its own
+// config, so a merged package carrying both vendors would have one overwrite
+// the other. Same document as the run file; only the path differs (#471).
+//
+// The reference lists the manifest's "mcpServers" field as a third source
+// and does not say how the three combine. In a package that also carries
+// Claude, the shared manifest names Claude's mcp/claude.json, whose entries
+// lack the "type" field Copilot's own schema carries; which file an installed
+// Copilot plugin then loads has not been hand-tested (#499).
+func (c *Copilot) GeneratePluginMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
+	data, err := copilotMCPDocument(servers)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{filepath.Join(".github", "mcp.json"): data}, nil
+}
+
+// copilotMCPDocument renders MCP servers in Copilot's schema, or nil when there
+// are none.
+func copilotMCPDocument(servers map[string]plugin.MCPServer) ([]byte, error) {
 	if len(servers) == 0 {
 		return nil, nil
 	}
@@ -367,26 +398,11 @@ func (c *Copilot) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[st
 		out[name] = cs
 	}
 
-	config := map[string]any{"mcpServers": out}
-	data, err := json.MarshalIndent(config, "", "  ")
+	data, err := json.MarshalIndent(map[string]any{"mcpServers": out}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshalling MCP config: %w", err)
 	}
-	data = append(data, '\n')
-
-	// Written into .copilot/ (the --plugin-dir target) for ynh-run
-	// consistency — buildCopilotArgs re-reads this same file and projects it
-	// into the project's own .github/mcp.json, which is the path confirmed
-	// to actually work (see package doc). Unlike GeneratePluginManifest, this
-	// method has no outputDir parameter to detect the `ynd export` flattened
-	// layout, so exported plugins get this nested under a .copilot/ that
-	// doesn't otherwise exist there — orphaned but harmless, since
-	// plugin-bundled MCP config isn't read by --plugin-dir loading either way
-	// (confirmed by hand-testing); untested whether a real `copilot plugin
-	// install` reads root-level bundled MCP config at all.
-	return map[string][]byte{
-		filepath.Join(".copilot", ".mcp.json"): data,
-	}, nil
+	return append(data, '\n'), nil
 }
 
 // copilotInstructionsRelPath is a uniquely-namespaced, fully ynh-owned file —

@@ -123,6 +123,11 @@ The rule that resume must not weaken: a session that was checkpointing sensor
 state had a harness, so a resume that cannot restore one must not be allowed to
 claim convergence. That is the hole the convergence comment above describes.
 
+The backend, task and focus belong to the session. A resume restores them and
+refuses a flag that would change them (`resumeBackend`, `resumeTaskConflict` in
+`loop.go`): the resume token is one backend's, and a conversation continuing a
+different task is not a resume.
+
 ## Trajectory and redaction
 
 `trajectory.go` emits NDJSON events — `session_start`, `plan`, `turn_start`,

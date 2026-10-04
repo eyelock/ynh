@@ -13,8 +13,7 @@ mkdir -p /tmp/ynh-ns-tutorial
 ynh registry remove /tmp/ynh-ns-tutorial/reg-a 2>/dev/null
 ynh registry remove /tmp/ynh-ns-tutorial/reg-b 2>/dev/null
 ynh uninstall github.com/eyelock/assistants/david 2>/dev/null
-ynh uninstall github.com/acme/tools/david 2>/dev/null
-ynh uninstall local/david 2>/dev/null
+ynh uninstall local/legacy-demo 2>/dev/null
 ```
 
 ## Canonical ids — the new identity model
@@ -374,8 +373,6 @@ or delete it (`drop`).
 ```bash
 ynh uninstall github.com/eyelock/assistants/david 2>/dev/null
 ynh uninstall local/legacy-demo 2>/dev/null
-ynh uninstall local/h1 2>/dev/null
-ynh uninstall local/h2 2>/dev/null
 ynh registry remove /tmp/ynh-ns-tutorial/reg-a 2>/dev/null
 ynh registry remove /tmp/ynh-ns-tutorial/reg-b 2>/dev/null
 rm -rf /tmp/ynh-ns-tutorial

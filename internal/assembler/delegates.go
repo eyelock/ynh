@@ -12,8 +12,9 @@ import (
 
 // AssembleDelegates generates agent files for each delegate harness
 // in the assembled config directory. Each delegate becomes a vendor-native
-// agent that the parent harness can invoke.
-func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harness.Delegate) error {
+// agent that the parent harness can invoke. harnessDir is the parent
+// harness's directory, which a relative delegate source resolves against.
+func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harness.Delegate, harnessDir string) error {
 	if len(delegates) == 0 {
 		return nil
 	}
@@ -30,7 +31,7 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 	}
 
 	for _, del := range delegates {
-		basePath, _, err := resolver.ResolveGitSourceFromCache(del.GitSource)
+		basePath, _, err := resolver.ResolveGitSourceFromCache(del.GitSource, harnessDir)
 		if err != nil {
 			return fmt.Errorf("delegate: %w", err)
 		}

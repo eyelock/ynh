@@ -141,6 +141,7 @@ This delegates to the researcher harness — a remote delegate from GitHub (from
 
 ```bash
 ynh uninstall local/team-lead
+rm -rf /tmp/ynh-tutorial
 ```
 
 ## What you learned

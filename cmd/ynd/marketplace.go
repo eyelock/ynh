@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,7 +19,7 @@ func cmdMarketplace(args []string) error {
 
 	switch args[0] {
 	case "build":
-		return cmdMarketplaceBuild(args[1:])
+		return cmdMarketplaceBuild(args[1:], os.Stderr)
 	case "-h", "--help", "help":
 		return errHelp
 	default:
@@ -26,7 +27,9 @@ func cmdMarketplace(args []string) error {
 	}
 }
 
-func cmdMarketplaceBuild(args []string) error {
+// cmdMarketplaceBuild builds a marketplace and writes each entry's export
+// warnings to stderr.
+func cmdMarketplaceBuild(args []string, stderr io.Writer) error {
 	var (
 		outputDir   string
 		vendors     string
@@ -101,20 +104,9 @@ func cmdMarketplaceBuild(args []string) error {
 		}
 	}
 
-	// Handle --clean
-	if clean {
-		if err := cleanOutputDir(outputDir, skipConfirm || skipConfirmEnv()); err != nil {
-			return err
-		}
-	}
-
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		return fmt.Errorf("creating output dir: %w", err)
-	}
-
 	// Load global config for remote source checking. config.Load already
 	// returns an empty config for an absent file, so an error here means the
-	// file exists and is malformed — worth failing on immediately rather than
+	// file exists and is malformed, worth failing on immediately rather than
 	// surfacing several steps later as a confusing resolution failure.
 	globalCfg, err := config.Load()
 	if err != nil {
@@ -126,16 +118,28 @@ func cmdMarketplaceBuild(args []string) error {
 		return err
 	}
 
-	err = marketplace.Build(cfg, marketplace.BuildOptions{
+	warnings, err := marketplace.Build(cfg, marketplace.BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 		Vendors:   vendorList,
 		Config:    globalCfg,
+		// --clean runs only once Build has checked every entry. Nothing
+		// before Build writes, and Build creates the output only after this,
+		// so a refused build leaves -o exactly as it found it (#451).
+		BeforeWrite: func() error {
+			if !clean {
+				return nil
+			}
+			return cleanOutputDir(outputDir, skipConfirm || skipConfirmEnv())
+		},
 	})
 	if err != nil {
 		return err
 	}
 
+	for _, w := range warnings {
+		_, _ = fmt.Fprintf(stderr, "warning: %s\n", w)
+	}
 	fmt.Printf("Marketplace built → %s (%d plugins)\n", outputDir, len(cfg.Harnesses))
 	return nil
 }

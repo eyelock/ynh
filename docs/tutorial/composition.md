@@ -13,8 +13,9 @@ ynh uninstall local/with-vercel 2>/dev/null
 ynh uninstall local/full-stack 2>/dev/null
 ynh uninstall local/mixed 2>/dev/null
 ynh uninstall local/local-ref 2>/dev/null
+ynh uninstall local/with-bundled 2>/dev/null
 ynh uninstall local/pinned 2>/dev/null
-ynh uninstall local/david 2>/dev/null
+ynh uninstall github.com/eyelock/assistants/david 2>/dev/null
 
 mkdir -p /tmp/ynh-tutorial
 ```
@@ -452,10 +453,11 @@ The `--path` flag scopes into a subdirectory of the repo, installing only what's
 
 For security (especially in team environments), restrict which Git repos ynh can pull from.
 
-First, back up your current config:
+First, back up your current config, if you have one:
 
 ```bash
-cp ~/.ynh/config.json ~/.ynh/config.json.bak
+# A fresh ynh home has no config.json yet: back it up only if there is one.
+if [ -f ~/.ynh/config.json ]; then cp ~/.ynh/config.json ~/.ynh/config.json.bak; fi
 ```
 
 Restrict to only `eyelock` repos:
@@ -475,7 +477,7 @@ Now try to run a harness that includes a non-eyelock source:
 
 ```bash
 with-anthropic "hello" 2>&1
-# Expected error: resolving includes: include "github.com/anthropics/skills": remote source "github.com/anthropics/skills" is not in the allowed sources list
+# Expected error: resolving includes: include "github.com/anthropics/skills": remote source "github.com/anthropics/skills" is not in the allowed sources list (add "github.com/anthropics/skills" to allowed_remote_sources)
 ```
 
 The `anthropics/skills` source doesn't match `github.com/eyelock/**`, so it's rejected at run time when ynh tries to resolve the includes.
@@ -484,7 +486,7 @@ The `full-stack` harness also fails (it includes both eyelock and anthropic sour
 
 ```bash
 full-stack "hello" 2>&1
-# Expected error: resolving includes: include "github.com/anthropics/skills": remote source "github.com/anthropics/skills" is not in the allowed sources list
+# Expected error: resolving includes: include "github.com/anthropics/skills": remote source "github.com/anthropics/skills" is not in the allowed sources list (add "github.com/anthropics/skills" to allowed_remote_sources)
 ```
 
 > **Note:** `ynh install` now fetches all includes at install time, so the allow-list is enforced during install as well as at run time. If an include is blocked by the allow-list, `ynh install` will fail with an error.
@@ -512,10 +514,44 @@ full-stack "what skills do you have?"
 # Expected: launches successfully with skills from both repos
 ```
 
+## Allow-list: local paths are sources too
+
+The allow-list governs every include and delegate source, local paths included. A local Git checkout is code from outside the harness, the same as a network repo, and `ynh run` re-resolves includes from their sources on every launch, so a local path is read, and checked, on every run.
+
+The `local-ref` harness from earlier includes `/tmp/ynh-tutorial/local-lib`, which the list above does not cover:
+
+```bash
+local-ref "hello" 2>&1
+# Expected error: resolving includes: include "/tmp/ynh-tutorial/local-lib": source "/tmp/ynh-tutorial/local-lib" is not in the allowed sources list (add "/tmp/ynh-tutorial/local-lib" to allowed_remote_sources)
+```
+
+The message says "source" rather than "remote source", and names the entry to add. Add it:
+
+```bash
+cat > ~/.ynh/config.json << 'EOF'
+{
+  "default_vendor": "claude",
+  "allowed_remote_sources": [
+    "github.com/eyelock/**",
+    "github.com/anthropics/**",
+    "/tmp/ynh-tutorial/local-lib"
+  ]
+}
+EOF
+
+local-ref "what skills do you have?"
+# Expected: launches successfully with fast-deploy
+```
+
+A local entry is an absolute path, matched as written (symlinks are not resolved), and takes the same `*` and `**` patterns: `/tmp/ynh-tutorial/*` or `/Users/me/shared/**`. A relative include such as `"git": "./lib"` is resolved against the harness directory before it is matched, so its entry is the absolute path; the error message prints it. A `"local"` include inside the harness is part of the harness and is not checked; one at an absolute path is.
+
+The key is named `allowed_remote_sources` for historical reasons: it covers local paths as well, and is not renamed so existing configs keep working.
+
 Restore config:
 
 ```bash
-mv ~/.ynh/config.json.bak ~/.ynh/config.json
+# Put the backup back, or, if there was none, remove the config written above.
+if [ -f ~/.ynh/config.json.bak ]; then mv ~/.ynh/config.json.bak ~/.ynh/config.json; else rm -f ~/.ynh/config.json; fi
 ```
 
 **Pattern reference:**
@@ -525,10 +561,14 @@ mv ~/.ynh/config.json.bak ~/.ynh/config.json
 | `github.com/eyelock/**` | Any repo under the eyelock org |
 | `github.com/eyelock/assistants` | Exactly that one repo |
 | `github.com/*/public-*` | Any org, repos starting with `public-` |
+| `/tmp/ynh-tutorial/local-lib` | Exactly that local path |
+| `/Users/me/shared/**` | Any local path under `/Users/me/shared` |
 | Not set (default) | All sources allowed |
 | `[]` (empty array) | All sources denied |
 
 ## Clean up
+
+Every local-path install above has a `local/` id. The monorepo install does not: a harness installed from a Git URL takes its id from the repository, so `david` is `github.com/eyelock/assistants/david`.
 
 ```bash
 ynh uninstall local/my-dev 2>/dev/null
@@ -537,9 +577,12 @@ ynh uninstall local/with-vercel 2>/dev/null
 ynh uninstall local/full-stack 2>/dev/null
 ynh uninstall local/mixed 2>/dev/null
 ynh uninstall local/local-ref 2>/dev/null
-ynh uninstall local/pinned 2>/dev/null
-ynh uninstall local/david 2>/dev/null
 ynh uninstall local/with-bundled 2>/dev/null
+ynh uninstall local/pinned 2>/dev/null
+ynh uninstall github.com/eyelock/assistants/david 2>/dev/null
+ynh ls
+# Expected: none of the harnesses above is listed
+rm -rf /tmp/ynh-tutorial
 ```
 
 ## What you learned
@@ -554,7 +597,7 @@ ynh uninstall local/with-bundled 2>/dev/null
 - **Offline-ready:** All includes are fetched at install time — `ynh run` works offline
 - `ref` pins to branches, tags, or commits
 - `ynh update` refreshes cached repos
-- `allowed_remote_sources` restricts which repos are permitted (enforced at both install and run time)
+- `allowed_remote_sources` restricts which sources are permitted, local paths included (enforced at both install and run time)
 
 ## Next
 

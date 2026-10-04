@@ -112,7 +112,7 @@ func TestAssembleDelegates_WithLocalRepo(t *testing.T) {
 		{GitSource: harness.GitSource{Git: delegateDir}},
 	}
 
-	if err := AssembleDelegates(workDir, adapter, delegates); err != nil {
+	if err := AssembleDelegates(workDir, adapter, delegates, ""); err != nil {
 		t.Fatalf("AssembleDelegates failed: %v", err)
 	}
 
@@ -132,15 +132,47 @@ func TestAssembleDelegates_WithLocalRepo(t *testing.T) {
 	}
 }
 
+// A relative delegate source belongs to the harness that names it (#461): it
+// resolves against harnessDir, not the working directory.
+func TestAssembleDelegates_RelativeSourceUsesHarnessDir(t *testing.T) {
+	harnessDir := t.TempDir()
+	delegateDir := filepath.Join(harnessDir, "team")
+	if err := os.MkdirAll(delegateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePluginJSONFile(delegateDir, []byte(`{"name":"team-rel","version":"0.1.0"}`)); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, delegateDir, "init")
+	runGit(t, delegateDir, "config", "user.email", "test@test.com")
+	runGit(t, delegateDir, "config", "user.name", "Test")
+	runGit(t, delegateDir, "add", ".")
+	runGit(t, delegateDir, "commit", "-m", "init")
+
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+	t.Chdir(t.TempDir())
+
+	workDir := t.TempDir()
+	adapter := &mockAdapter{}
+	delegates := []harness.Delegate{{GitSource: harness.GitSource{Git: "./team"}}}
+	if err := AssembleDelegates(workDir, adapter, delegates, harnessDir); err != nil {
+		t.Fatalf("AssembleDelegates failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workDir, adapter.ConfigDir(), "agents", "team-rel.md")); err != nil {
+		t.Errorf("delegate agent file not created: %v", err)
+	}
+}
+
 func TestAssembleDelegates_Empty(t *testing.T) {
 	workDir := t.TempDir()
 	adapter := &mockAdapter{}
 
 	// Should be a no-op
-	if err := AssembleDelegates(workDir, adapter, nil); err != nil {
+	if err := AssembleDelegates(workDir, adapter, nil, ""); err != nil {
 		t.Fatalf("AssembleDelegates with nil delegates failed: %v", err)
 	}
-	if err := AssembleDelegates(workDir, adapter, []harness.Delegate{}); err != nil {
+	if err := AssembleDelegates(workDir, adapter, []harness.Delegate{}, ""); err != nil {
 		t.Fatalf("AssembleDelegates with empty delegates failed: %v", err)
 	}
 }

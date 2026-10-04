@@ -29,8 +29,9 @@ ynh agent run --resume <session-dir> [flags]
 | `--task "<text>"` | What the agent is being asked to do |
 | `--focus <name>` | Use a declared focus for the task and its profile |
 | `--profile <name>` | Apply a profile overlay |
-| `--backend <name>` | Vendor backend to drive (default: the harness's) |
+| `--backend <name>` | Backend to drive: `claude`, `codex` or `cursor` (default: `claude`; on `--resume`, the session's own) |
 | `--model <name>` | Model override passed to the backend |
+| `--effort <low\|medium\|high>` | Reasoning effort, mapped to the backend's own setting; overrides the harness's `agent.effort`. See [Effort](#effort) |
 | `--convergence-sensor <name>` | Sensor consulted once all blocking sensors pass |
 | `--sensor-overlay <json>` | Per-run sensor overrides |
 | `--worktree <dir>` | Directory the agent works in and sensors run against |
@@ -172,10 +173,17 @@ when its verdict is `pass`.
   the loop treats it as debt the run inherited rather than work it owes. Only
   the lines a turn actually introduced are fed back, so the agent is not asked
   to clean a repository it was pointed at.
-- When the gate is green and a `--convergence-sensor` is declared, that sensor
-  is consulted as the final say. It stays a direct `ynh sensors run`: resolving
-  a focus sensor needs an agent runtime, which is why `ynh check` reports one as
-  `deferred` rather than judging it.
+- When the gate is green and a convergence verifier is declared (a sensor with
+  `role: convergence-verifier`, or one named by `--convergence-sensor`), that
+  sensor is consulted as the final say, through a direct `ynh sensors run`, and
+  the run converges only on `pass`.
+- **A verifier that can never pass is refused before the run starts.** A
+  `focus` sensor needs an agent runtime to resolve, so ynh reports it
+  `deferred`; a `files` sensor reports freshness, which is `reported`. Neither
+  is ever `pass`, so either would spend the whole budget and end at the turn
+  cap. `ynh agent run` exits with an error before any worker starts, saying the
+  verifier requires a command source, and `ynd validate` reports the same
+  sensor. See [`convergence-verifier` needs a source that can decide](sensors.md#convergence-verifier-needs-a-source-that-can-decide).
 - **A run that expected verification and produced no sensor results does not
   converge.** This matters on resume: a session whose harness cannot be restored
   has no sensors, and a verdict with no evidence behind it is worse than no
@@ -194,8 +202,10 @@ Two detectors stop a loop that is not going anywhere:
 
 - **No progress** — the sensor picture is unchanged for several turns. The
   comparison covers each sensor's *output*, not just its status, so fixing some
-  findings while a sensor still fails counts as progress. File positions are
-  normalised, so a finding moving down a file does not. Where a baseline is in
+  findings while a sensor still fails counts as progress. File positions and
+  durations are normalised, so a finding moving down a file does not, and
+  neither does the same test failing with a different timing
+  (`--- FAIL: TestX (0.03s)`). Where a baseline is in
   play it compares the *new* failures only: churn among findings that were
   already forgiven is not progress either.
 - **Edit loop** — the agent repeats itself across turns.
@@ -236,22 +246,35 @@ file `trajectory.jsonl` in the first place, as above, or pass the same
 Give each run its own folder. Two runs that emit into the same folder write the
 same `checkpoint.json`, and the last one to write wins.
 
-The checkpoint records the run's identity (harness, profile, convergence sensor,
-and the turn and token caps) as well as its counters, so a resume restores
-the run it is actually resuming. Flags passed on the resume take precedence;
-anything omitted comes from the checkpoint.
+The checkpoint records the run's identity (backend, task or focus, harness,
+profile, convergence sensor, and the turn and token caps) as well as its
+counters, so a resume restores the run it is actually resuming. For the
+harness, profile, convergence sensor and caps, flags passed on the resume take
+precedence and anything omitted comes from the checkpoint.
+
+The backend, task and focus cannot be changed on a resume, only repeated:
+
+- **Backend.** A resume drives the backend the run started on. The resume token
+  belongs to that backend (a codex thread id, a claude or cursor session id) and
+  means nothing to another, so `--backend` naming a different one is refused
+  with exit 21. A checkpoint that records no backend predates recording it and
+  resumes on `claude`.
+- **Task and focus.** Given neither `--task` nor `--focus`, a resume takes the
+  checkpoint's: its focus by name, so the focus's profile applies again, or else
+  its task. Given either, it must match what the session was started with, or
+  the resume is refused with exit 21. A conversation carrying on under a
+  different task is a new run, not a resume.
 
 Some settings are not restored. Pass them again if the original run used them:
-`--backend`, `--model`, `--worktree`, `--max-wall`, `--sandbox`,
-`--auto-approve`, `--auto-commit` and `--interactive`. `--auto-approve` stays
-out deliberately, as `--sandbox` does: a grant to skip permission checks is
-made by the operator each time, not inherited from a file. Without `--backend` a resume drives
-`claude`, whatever backend the run started on.
+`--model`, `--effort`, `--worktree`, `--max-wall`, `--sandbox`, `--auto-approve`,
+`--auto-commit` and `--interactive`. `--auto-approve` stays out deliberately, as
+`--sandbox` does: a grant to skip permission checks is made by the operator each
+time, not inherited from a file.
 
-A run interrupted after planning picks up from the checkpoint's pending message
-and needs no task. A run interrupted during planning starts the plan again, and
-that needs the task: pass `--task` again, because the task is not read back from
-the checkpoint.
+A run interrupted after planning picks up from the checkpoint's pending message.
+A run interrupted during planning starts the plan again from the checkpoint's
+task. If the checkpoint records no task, the resume is refused until `--task`
+supplies one.
 
 Budgets carry across: consumption is restored alongside the caps, so resuming
 does not hand the run a fresh allowance. The wall-clock time already spent
@@ -355,6 +378,184 @@ Two fields earn their place in a batch of a hundred runs:
   run that changed nothing, and a run that rewrote forty files nobody asked
   about, are both findings.
 
+### Cost, the token split and effort
+
+Comparing runs (does this lane need a bigger model, or less effort, and what
+does each cost?) needs more than the token total. Each of these is **absent
+when the backend did not report it**, never zero, because a zero cost would
+read as "free":
+
+| Field | What it holds |
+|---|---|
+| `consumed.tokens` | Input plus output tokens. Cache reads and writes are not included. |
+| `consumed.input_tokens`, `consumed.output_tokens` | The split behind `tokens`. |
+| `consumed.cache_read_tokens` | Tokens read from the prompt cache, beside the total rather than in it. |
+| `consumed.cache_creation_tokens` | Tokens written to the prompt cache, also beside the total. Their cost is already inside `cost_usd`. |
+| `consumed.cost_usd` | The cost the backend reported, summed over the run. ynh never prices tokens itself. |
+| `effort` | The reasoning effort the worker reported it ran with. Never inferred from the model name. |
+
+All of them count plan-phase turns, as `tokens` does, and carry across
+`--resume` through the checkpoint. A count the backend reported as zero is
+present as zero.
+
+Cache writes come from Claude's `cache_creation_input_tokens`, summed per turn
+the same way as cache reads. Claude's usage record also splits that total by
+cache lifetime in a `cache_creation` object; ynh takes the total only, so the
+writes are never counted twice.
+
+**Claude token counts were double before this release.** ynh added each
+turn's usage from the assistant events to the same turn's usage on the result
+event, and counted an API call again for every content block Claude Code
+emits it in. So `consumed.tokens` for the `claude` backend came out at least
+twice the real figure, and more on turns with tool calls. Each turn now counts
+once, from the result event's per-turn usage, so expect claude token totals
+of roughly half what earlier runs reported. The field's meaning is unchanged;
+its values were wrong. Compare claude runs across this change with that in
+mind. `--max-tokens` and the 2,000,000 default cap are measured against the
+corrected total, so a claude run now reaches them about twice as late as
+before, which is the cap meaning what it says.
+
+What each backend reports today:
+
+| Backend | Split | Cache reads | Cache writes | Cost | Effort |
+|---|---|---|---|---|---|
+| `claude` | yes | yes | yes | yes | yes |
+| `codex` | yes | yes | when its usage carries `cache_write_input_tokens` | no | no |
+| `cursor` | when its output carries usage | when its output carries usage | when its usage carries `cache_creation_input_tokens` | no | no |
+
+Every backend reports the fields in the same meaning. `input_tokens` excludes
+cache reads and cache writes, `cache_read_tokens` is the cache reads,
+`cache_creation_tokens` is the cache writes, and `tokens` is `input_tokens`
+plus `output_tokens`. Codex counts differently, the way the OpenAI API does:
+its `input_tokens` includes its `cached_input_tokens` and its
+`cache_write_input_tokens`, and its `output_tokens` includes its
+`reasoning_output_tokens`. So for `codex`:
+
+| ynh field | From Codex's `turn.completed` usage |
+|---|---|
+| `consumed.input_tokens` | `input_tokens` minus `cached_input_tokens` minus `cache_write_input_tokens` |
+| `consumed.cache_read_tokens` | `cached_input_tokens` |
+| `consumed.cache_creation_tokens` | `cache_write_input_tokens`; absent from a Codex too old to report it |
+| `consumed.output_tokens` | `output_tokens`, reasoning included and not added again |
+| `consumed.tokens` | non-cached, non-written input plus output |
+| `consumed.cost_usd`, `effort` | absent: Codex reports neither. An effort ynh asked for is in `effort_requested` |
+
+Codex reports these as running totals for the thread, and a resumed thread
+continues from the totals it saved. ynh counts each turn as the difference from
+the totals already counted. On `--resume` it starts from what the checkpoint
+recorded; a checkpoint with no usage record (one written before ynh read Codex
+usage) leaves the first resumed turn's share unknown, so that one turn reports
+no usage rather than counting the earlier turns twice.
+
+Before this release ynh never read Codex's usage at all: a `codex` run reported
+no tokens, the token cap never bound it, and the zero-token rule above did not
+apply to it. It also could not drive a turn: `codex exec` reads its prompt
+from stdin to the end and runs a single turn, so ynh now runs one `codex exec`
+per turn and continues the thread with `codex exec resume <thread_id>`, as it
+does with cursor.
+
+Claude Code reports cost as a running total for the worker process, which a
+resumed session may continue from where its transcript left off. ynh takes
+each turn's cost as the difference, so nothing is counted twice across a
+resume. The effort is the one Claude Code says it applies at runtime, after
+flags, settings and environment. It is reported whether or not ynh asked for
+one; what ynh asked for is `effort_requested` (see [Effort](#effort)).
+
+### The model
+
+Two fields keep what a run asked for apart from what ran:
+
+| Field | What it holds |
+|---|---|
+| `model` | The model the worker reported it ran on, in the backend's own words. An alias is resolved: `--model sonnet` on Claude Code reports `claude-sonnet-5-5`. Absent when the backend reported none. |
+| `model_requested` | What `--model` asked for, as given. Absent when no model was pinned and the backend chose its default. |
+
+`model` is never filled in from `model_requested`. A run on the backend's
+default has only `model`; a backend that reports nothing has only
+`model_requested`, or neither. Before this release `model` held what
+`--model` asked for, which was empty for every run on a default model and an
+alias for a pinned one. That value is now `model_requested`.
+
+What each backend reports:
+
+| Backend | `model` comes from |
+|---|---|
+| `claude` | The `system` `init` event, then each main-thread assistant message's `message.model` |
+| `codex` | Nothing: no `codex exec --json` event names the model, so `model` is absent |
+| `cursor` | The `system` `init` event, which gives a display name such as `Claude 4 Sonnet` |
+
+For `claude`, the init event names the model the session starts on, and every
+assistant message names the model that wrote it. These agree unless Claude
+Code switches model mid-run, as when a fallback model takes over; then the
+latest main-thread message wins, since it is what actually answered. A
+subagent's messages are ignored: it may run on a smaller model while the
+session's stays the run's. The model Claude Code names on an answer it wrote
+itself, such as "Not logged in", is `<synthetic>`, and is never reported.
+
+On `--resume`, `model` carries over from the checkpoint until the relaunched
+worker reports one, and is then that process's: when the model changes across
+a resume, the result names the latest. `--model` is not restored (see
+[Resume](#resume)), so `model_requested` is what the resume
+itself passed.
+
+The trajectory's `session_start` carries `model_requested`, which with the
+harness SHA and base commit reproduces the request. It cannot carry the model
+that ran: the header is written before the worker has said anything. A
+`worker_model` event records that instead, when each worker process first
+reports a model and again whenever it reports a different one.
+`session_start` still writes `model` too, as a copy of `model_requested`, so
+no field disappears from the header. It is deprecated and goes in a release
+that bumps the capabilities version; read `model_requested` instead.
+
+### Effort
+
+`--effort low|medium|high` asks the worker for a reasoning effort. A harness
+can carry its own in the `agent` block, and the flag wins over it:
+
+```json
+"agent": { "max_turns": 40, "effort": "low" }
+```
+
+The three levels are ynh's, and each backend maps them to its own setting.
+The backends offer more levels than these (Claude Code's `xhigh` and `max`,
+Codex's `minimal`, `xhigh` and above), which ynh does not expose, so a level
+means the same thing whichever backend runs it.
+
+| ynh | `claude` | `codex` | `cursor` |
+|---|---|---|---|
+| `low` | `--effort low` | `-c model_reasoning_effort="low"` | refused |
+| `medium` | `--effort medium` | `-c model_reasoning_effort="medium"` | refused |
+| `high` | `--effort high` | `-c model_reasoning_effort="high"` | refused |
+
+Sources:
+[Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference)
+(`--effort`: low, medium, high, xhigh, max; "Available levels depend on the
+model"); the Codex
+[configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+(`model_reasoning_effort`) and its `-c key=value` override, which `codex exec`
+accepts (`codex-rs/utils/cli/src/config_override.rs`); and `cursor-agent
+--help` (2026.10.01), which has no effort flag. Some Cursor models take an
+effort inside the model name (`'<model>[effort=high]'`), which is per model,
+so it is yours to pass with `--model`, not something ynh can map.
+
+A level the backend cannot honour, or any level on `cursor`, is **refused
+before the run starts**, not ignored, whether it came from the flag or the
+harness. A harness that sets `agent.effort` therefore cannot run on `cursor`;
+`ynd validate` rejects a level other than the three.
+
+The result keeps the request apart from what ran, as it does for the model:
+
+| Field | What it holds |
+|---|---|
+| `effort` | The effort the worker reported it ran with, in the backend's own words. Today only Claude Code reports one. |
+| `effort_requested` | What `--effort` or `agent.effort` asked for. Absent when nothing was asked for. |
+
+A backend that applied a different level than the one asked for (a model that
+does not support it, a managed setting that overrides it) shows as the two
+disagreeing. The trajectory's `session_start` and `session_resumed` carry
+`effort_requested`. `--effort` is not restored on `--resume` (see
+[Resume](#resume)): a resume asks for what its own flag, or the harness, says.
+
 ### Pinning a run to a toolchain
 
 `harness.sha` is the resolved commit the harness was installed from. `version`
@@ -385,8 +586,9 @@ a run without parsing terminal output.
 
 | Event | Emitted when |
 |---|---|
-| `session_start` | Run begins. Carries model, ynh version, harness version, base commit, the `--auto-approve` level, and the resolved budgets with their sources |
-| `session_resumed` | Resumed run begins, before the first new turn |
+| `session_start` | Run begins. Carries the model requested (`model_requested`, and the deprecated `model` copy of it), the effort requested (`effort_requested`), ynh version, harness version, base commit, the `--auto-approve` level, and the resolved budgets with their sources |
+| `session_resumed` | Resumed run begins, before the first new turn. Carries this process's `--auto-approve` level, model requested and effort requested |
+| `worker_model` | The worker reported the model it runs on: once per worker process, and again if it reports another |
 | `plan` / `plan_revised` | Plan produced or revised |
 | `plan_approval_required` | Plan phase is waiting for approval |
 | `turn_start` | Act-phase turn begins |

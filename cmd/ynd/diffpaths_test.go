@@ -29,13 +29,26 @@ func TestCanonicalPath(t *testing.T) {
 		{"cursor", ".cursor/agents/x.md", "<config>/agents/x.md"},
 		{"claude", ".claude-plugin/plugin.json", "<manifest>/plugin.json"},
 		{"cursor", ".cursor-plugin/plugin.json", "<manifest>/plugin.json"},
-		{"codex", ".agents/plugins/plugin.json", "<manifest>/plugin.json"},
-		{"copilot", ".github/plugin/plugin.json", "<manifest>/plugin.json"},
+		{"codex", ".codex-plugin/plugin.json", "<manifest>/plugin.json"},
+		{"copilot", ".claude-plugin/plugin.json", "<manifest>/plugin.json"},
+		{"copilot", ".copilot/.claude-plugin/plugin.json", "<manifest>/plugin.json"},
+		// Untouched: a marketplace index directory, not the plugin manifest's.
+		// Codex's sits apart from its manifest (#453).
+		{"codex", ".agents/plugins/marketplace.json", ".agents/plugins/marketplace.json"},
+		{"copilot", ".github/plugin/marketplace.json", ".github/plugin/marketplace.json"},
 		{"claude", "CLAUDE.md", "<instructions>"},
 		{"cursor", ".cursorrules", "<instructions>"},
 		{"copilot", "AGENTS.md", "<instructions>"},
+		{"codex", ".codex/skills/s/SKILL.md", "<config>/skills/s/SKILL.md"},
+		{"cursor", ".cursor/rules/r.mdc", "<config>/rules/r.mdc"},
 		// Untouched: not one of the three mapped prefixes.
 		{"claude", "README.md", "README.md"},
+		// Untouched: under the config dir but not an artifact. Hook and MCP
+		// config is each vendor's own file, so it keeps its literal path.
+		{"cursor", ".cursor/hooks.json", ".cursor/hooks.json"},
+		{"codex", ".codex/hooks.json", ".codex/hooks.json"},
+		{"claude", ".claude/hooks/hooks.json", ".claude/hooks/hooks.json"},
+		{"cursor", ".cursor/mcp.json", ".cursor/mcp.json"},
 	}
 	for _, c := range cases {
 		t.Run(c.vendor+"/"+c.in, func(t *testing.T) {

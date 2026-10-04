@@ -224,10 +224,13 @@ ynd diff ./my-harness --focus review        # diff with a focus applied
 ynd diff --harness ./my-harness             # explicit harness flag
 ```
 
+Files are paired across vendors by what they are, not where each vendor puts them. The same skill, agent, rule or command pairs across vendors' config directories (`.claude/skills/x/SKILL.md` with `.cursor/skills/x/SKILL.md`), as do the plugin manifest (`.claude-plugin/plugin.json` with `.codex-plugin/plugin.json`) and the instructions file (`CLAUDE.md` with `.cursorrules`). A marketplace index is not a plugin manifest and never pairs with one: Codex keeps its index at `.agents/plugins/`. Any other file is that vendor's own and is never paired, even when two vendors happen to use the same name: hook config (`.claude/hooks/hooks.json`, `.cursor/hooks.json`, `.codex/hooks.json`) is always reported as only in its vendor.
+
 The diff output groups files into four categories:
-- **Only in \<vendor\>** — files unique to that vendor (e.g., `.claude/settings.json` for Claude hooks)
-- **Different content** — files present in both but with different content
-- **Identical** — files present in both with the same content
+- **Only in \<vendor\>**: files unique to that vendor (e.g., `.claude/hooks/hooks.json` for Claude hooks)
+- **Different content**: files present in both but with different content
+- **Same content, vendor-specific rendering**: the same artifact in the form each vendor requires (e.g., Cursor's `.mdc` rules against `.md`)
+- **Identical**: files present in both with the same content
 
 At least two vendors are required for comparison. If no vendors are specified, all registered vendors are compared.
 
@@ -241,7 +244,7 @@ Export a harness as vendor-native plugins. Resolves all remote includes, flatten
 ynd export ./my-harness                          # all vendors → ./dist/my-harness/
 ynd export ./my-harness -v claude,cursor          # specific vendors only
 ynd export ./my-harness -o ./out                  # custom output directory
-ynd export ./my-harness --merged                  # single dir with dual manifests
+ynd export ./my-harness --merged                  # single dir with every vendor's manifest
 ynd export ./my-harness --clean                   # remove output dir before export
 ynd export ./my-harness --profile strict          # export with a specific profile applied
 ynd export ./my-harness --focus review            # export with a focus applied (mutex with --profile)
@@ -257,7 +260,7 @@ ynd export github.com/user/repo --path harnesses/david  # from a monorepo
 | `--path <subdir>` | Subdirectory within source (for monorepos). Must be a relative path with no `..` traversal. |
 | `--profile <name>` | Profile to apply during assembly |
 | `--merged` | Single output dir with all vendor manifests (for CI/marketplace use) |
-| `--clean` | Remove entire output dir before export |
+| `--clean` | Remove entire output dir before export. Runs only once the source has loaded, so a refused export (a legacy tree, an unknown profile) neither creates nor empties `-o` |
 
 **Output structure** (per-vendor mode):
 
@@ -296,7 +299,9 @@ Key differences from runtime layout:
 - Codex is limited to skills only — agents, rules, commands, and delegates are excluded with warnings
 - Copilot is limited to skills and agents — rules and commands are excluded with warnings
 - Copilot reuses Claude's `.claude-plugin/plugin.json` schema (Copilot's plugin loader reads the same format)
-- `--merged` produces one directory with all vendor manifests; Claude and Copilot share the same `.claude-plugin/` manifest path harmlessly (identical schema)
+- `--merged` produces one directory with all vendor manifests, Codex's included; Claude and Copilot share the same `.claude-plugin/plugin.json`, which both render identically. `ynd marketplace build` exports each harness entry this way. The shared tree keeps agents, rules and commands for the vendors that read them, and the Codex and Copilot warnings above are printed in merged mode too, because those vendors still do not load them
+- Hooks go to `hooks/<vendor>.json` at the plugin root, named by the `"hooks"` field of that vendor's manifest; there is no shared `hooks/hooks.json` (see [Hooks: Config File Locations](hooks.md#config-file-locations))
+- MCP servers go to each vendor's plugin file: `mcp/claude.json` (named by the `"mcpServers"` field of `.claude-plugin/plugin.json`), Codex's `.mcp.json` (named by its manifest), Cursor's `mcp.json` and Copilot's `.github/mcp.json`. No two share a path, and every manifest is written after the files it names (see [MCP Servers: Config File Locations](mcp.md#config-file-locations))
 
 See [Export](tutorial/export.md) for a guided walkthrough.
 
@@ -316,7 +321,7 @@ ynd marketplace build --clean                     # empty the output dir before 
 |------|-------------|
 | `-o, --output <dir>` | Output directory. Default: `./dist` |
 | `-v, --vendor <names>` | Comma-separated vendors. Default: `claude,cursor,codex,copilot` |
-| `--clean` | Empty the output dir before building. Refuses the filesystem root, your home, the current directory and any git working copy, except the repository a previous `ynd marketplace build` created in that directory: that one is emptied but keeps its `.git`, so the rebuild commits on top and the history survives. Asks before deleting a non-empty directory unless `-y`, `YNH_YES` or `CI` is set. |
+| `--clean` | Empty the output dir before building. Refuses the filesystem root, your home, the current directory and any git working copy, except the repository a previous `ynd marketplace build` created in that directory: that one is emptied but keeps its `.git`, so the rebuild commits on top and the history survives. Asks before deleting a non-empty directory unless `-y`, `YNH_YES` or `CI` is set. Runs only once every entry has been checked, so a refused build neither creates nor empties `-o`. |
 
 **Config format** (`marketplace.json`):
 
@@ -335,6 +340,7 @@ ynd marketplace build --clean                     # empty the output dir before 
 - `plugin` entries are copied as-is (already in vendor-native format)
 - `harness` entries are fully exported — includes resolved, artifacts flattened
 - Codex participates like the other vendors: it gets its own index at `.agents/plugins/marketplace.json` using its native `source`/`policy` format
+- A `harness` entry's export warnings are printed to stderr, the same warnings `ynd export --merged` reports, one line each, prefixed with the entry's name: `warning: reviewer: hook script ./scripts/guard.sh is not a file in the harness, so the plugin does not carry it`. Warnings never change the exit code. `plugin` entries are copied, not exported, so they produce none
 
 ### migrate
 
@@ -396,7 +402,7 @@ Schemas are embedded in the binary — `ynh schema <name>` and `ynh schema --all
 | `-o, --output <path>` | inspect, export, preview, marketplace | Output directory. Defaults vary by command. |
 | `--harness <dir>` | preview, diff, export, validate, lint, fmt | Harness source directory. Alternative to positional arg. Also honored via `YNH_HARNESS` env var. |
 | `--clean` | export, marketplace | Remove output directory before writing. Never the filesystem root, your home, the current directory or a git working copy, unless `ynd marketplace build` created that repository itself, in which case it is emptied and its `.git` kept. |
-| `--merged` | export | Single output dir with dual vendor manifests. |
+| `--merged` | export | Single output dir with every selected vendor's manifest. |
 | `--profile <name>` | preview, diff, export | Profile to apply during assembly. Also honored via `YNH_PROFILE`. |
 | `--focus <name>` | preview, diff, export | Focus to apply (resolves its bound profile). Mutually exclusive with `--profile`. Also honored via `YNH_FOCUS`. |
 | `--path <subdir>` | export | Subdirectory within source (for monorepos). Must be a relative path with no `..` traversal. |

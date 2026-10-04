@@ -222,7 +222,8 @@ func probeInclude(entry *listEntry, idx int, probe updateProbe, mu *sync.Mutex) 
 	if !inc.IsPinned {
 		ref = inc.Ref
 	}
-	sha, ok := probe.git(inc.Git, ref)
+	// entry.Path is the harness directory, which a relative source names.
+	sha, ok := probe.git(resolver.GitSourceURL(inc.Git, entry.Path), ref)
 	if !ok {
 		return
 	}

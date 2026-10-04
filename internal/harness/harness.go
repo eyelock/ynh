@@ -175,7 +175,7 @@ var ErrNotFound = errors.New("harness not found")
 
 // LoadQualified loads an installed harness by canonical id. Schema 2 only:
 // bare names and the legacy "name@org/repo" form are hard-rejected with a
-// hint pointing at the canonical id and the local path alternative.
+// hint pointing at the canonical id.
 //
 // Auto-migration runs before any command (see cmd/ynh autoMigrate), so by
 // the time this function is reached the home is at schema 2 — every
@@ -189,23 +189,36 @@ func LoadQualified(ref string) (*Harness, error) {
 	return LoadByID(ref)
 }
 
-// BadRefError formats the rejection message for refs that aren't a valid
-// canonical id. Exported so cmd/ynh callers that pre-classify refs (e.g.
-// to decide between an id and a path) can emit the same hint. The message
-// is multi-line; lint suppresses the trailing-punctuation check via the
-// nolint directive — the hint trailer is intentionally human-readable.
+// BadRefError formats the rejection message for a ref that is not a valid
+// canonical id, for a command that takes only an installed id. Its hint
+// lists only the forms such a command accepts: a command that also takes a
+// local harness directory uses BadRefOrPathError instead, so no command
+// offers a form it then refuses (#448).
+func BadRefError(ref string) error {
+	return badRef(ref, false)
+}
+
+// BadRefOrPathError is BadRefError for a command that takes either an
+// installed id or a local harness directory, and its hint names both.
+func BadRefOrPathError(ref string) error {
+	return badRef(ref, true)
+}
+
+// badRef builds both rejections. The message is multi-line; lint suppresses
+// the trailing-punctuation check via the nolint directive, as the hint
+// trailer is intentionally human-readable.
 //
 //nolint:staticcheck // ST1005: multi-line user-facing hint
-func BadRefError(ref string) error {
+func badRef(ref string, pathOK bool) error {
 	if ref == "" {
 		return fmt.Errorf("missing harness reference")
 	}
-	return fmt.Errorf(
-		"%q is not a valid harness id. "+
-			"Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>', "+
-			"or './<path>' for a local harness directory. "+
-			"Run 'ynh ls' to see installed ids",
-		ref)
+	forms := "Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>'. "
+	if pathOK {
+		forms = "Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>', " +
+			"or './<path>' for a local harness directory. "
+	}
+	return fmt.Errorf("%q is not a valid harness id. %sRun 'ynh ls' to see installed ids", ref, forms)
 }
 
 // LoadNS loads an installed harness by namespace-qualified name.
@@ -706,10 +719,34 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 	return &resolved, nil
 }
 
+// legacyHarnessFile refuses a --harness-file that names a legacy
+// .harness.json, as every other read has since #417: only `ynd migrate` reads
+// that file (#449). It goes by the name because the contents cannot tell the
+// two apart: a single-file manifest has the same shape. A pure predicate.
+func legacyHarnessFile(path string) error {
+	if filepath.Base(path) != plugin.HarnessFile {
+		return nil
+	}
+	dir := filepath.Dir(path)
+	if err := migration.LegacyHarnessManifest(dir); err != nil {
+		return err
+	}
+	// The tree has already been converted and the old file left behind:
+	// point at the manifest ynh does read.
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	return fmt.Errorf("%s is the legacy %s manifest, which ynh no longer reads; %s is already converted, so run it with: ynh run %s",
+		filepath.Join(dir, plugin.HarnessFile), plugin.HarnessFile, dir, dir)
+}
+
 // LoadFile loads a harness from a single manifest file given by path
-// (--harness-file), whatever it is named.
+// (--harness-file), whatever it is named, except a legacy .harness.json.
 // Unlike LoadDir, name is optional and the validName check is skipped.
 func LoadFile(path string) (*Harness, error) {
+	if err := legacyHarnessFile(path); err != nil {
+		return nil, err
+	}
 	hj, err := plugin.LoadHarnessFile(path)
 	if err != nil {
 		return nil, err

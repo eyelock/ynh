@@ -8,7 +8,10 @@
   "session_dir": "/Users/dev/src/demo/runs/stuck",
   "worktree": "/Users/dev/src/demo",
   "backend": "claude",
-  "model": "claude-opus-5",
+  "model": "claude-opus-5-5",
+  "model_requested": "opus",
+  "effort": "high",
+  "effort_requested": "high",
   "harness": {
     "name": "local/demo",
     "version": "0.2.0",
@@ -27,6 +30,11 @@
   "consumed": {
     "turns": 7,
     "tokens": 418233,
+    "input_tokens": 396410,
+    "output_tokens": 21823,
+    "cache_read_tokens": 2871904,
+    "cache_creation_tokens": 214760,
+    "cost_usd": 4.1873,
     "wall_ms": 512400,
     "plan_iterations": 1
   },

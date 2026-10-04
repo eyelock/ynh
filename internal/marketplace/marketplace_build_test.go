@@ -18,7 +18,7 @@ func TestMarketplaceHarnessExport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 	})
@@ -26,10 +26,11 @@ func TestMarketplaceHarnessExport(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	// Harness should have dual manifests
+	// Harness should have every default vendor's manifest, Codex included (#479)
 	harnessDir := filepath.Join(outputDir, "plugins", "export-test")
 	assertFileExists(t, filepath.Join(harnessDir, ".claude-plugin", "plugin.json"))
 	assertFileExists(t, filepath.Join(harnessDir, ".cursor-plugin", "plugin.json"))
+	assertFileExists(t, filepath.Join(harnessDir, ".codex-plugin", "plugin.json"))
 
 	// Skills should be present
 	assertFileExists(t, filepath.Join(harnessDir, "skills", "dev-project", "SKILL.md"))
@@ -44,7 +45,7 @@ func TestMarketplacePluginCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 	})
@@ -58,6 +59,33 @@ func TestMarketplacePluginCopy(t *testing.T) {
 	assertFileExists(t, filepath.Join(pluginDir, "skills", "format", "SKILL.md"))
 }
 
+// TestBuildPluginEntryCopilotManifestAtRoot locks #471 for marketplace
+// plugins: a copied plugin is a plugin, so a missing Copilot manifest is
+// generated at its root whatever else the plugin carries, including a
+// .copilot/ directory that once made the generator assume a `ynh run` layout.
+func TestBuildPluginEntryCopilotManifestAtRoot(t *testing.T) {
+	src := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(src, ".agents", "harness"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(src, ".agents", "harness", "plugin.json"), map[string]any{
+		"name": "has-copilot-dir", "version": "0.1.0",
+	})
+	if err := os.MkdirAll(filepath.Join(src, ".copilot"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, ".copilot", "notes.md"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := filepath.Join(t.TempDir(), "plugin")
+	if err := buildPluginEntry(src, out, []string{"copilot"}); err != nil {
+		t.Fatalf("buildPluginEntry: %v", err)
+	}
+	assertFileExists(t, filepath.Join(out, ".claude-plugin", "plugin.json"))
+	assertFileNotExists(t, filepath.Join(out, ".copilot", ".claude-plugin"))
+}
+
 func TestMarketplacePluginMissingManifest(t *testing.T) {
 	configPath, configDir := setupMarketplace(t)
 	outputDir := t.TempDir()
@@ -67,7 +95,7 @@ func TestMarketplacePluginMissingManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 	})
@@ -96,7 +124,7 @@ func TestMarketplaceCleanFlag(t *testing.T) {
 	}
 
 	// Build (without clean — stale file should remain since we don't clean at package level)
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 	})
@@ -134,7 +162,7 @@ func TestMarketplaceDescriptionOverride(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: dir,
 		OutputDir: outputDir,
 	})
@@ -167,7 +195,7 @@ func TestMarketplaceBuildInitGitRepo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 	})
@@ -207,7 +235,7 @@ func TestMarketplaceBuildSkipsExistingGitRepo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 	})
@@ -237,7 +265,7 @@ func TestMarketplaceVendorFiltering(t *testing.T) {
 	}
 
 	// Build for claude only
-	err = Build(cfg, BuildOptions{
+	_, err = Build(cfg, BuildOptions{
 		ConfigDir: configDir,
 		OutputDir: outputDir,
 		Vendors:   []string{"claude"},
@@ -260,7 +288,7 @@ func TestMarketplaceBuild_EntryPathTraversalBlocked(t *testing.T) {
 				{Type: "plugin", Source: "./plugins/foo", Path: badPath},
 			},
 		}
-		err := Build(cfg, BuildOptions{ConfigDir: dir, OutputDir: t.TempDir()})
+		_, err := Build(cfg, BuildOptions{ConfigDir: dir, OutputDir: t.TempDir()})
 		if err == nil {
 			t.Errorf("path %q: expected error, got nil", badPath)
 			continue
@@ -297,7 +325,7 @@ func buildOnce(t *testing.T, configPath, configDir, outputDir string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := Build(cfg, BuildOptions{ConfigDir: configDir, OutputDir: outputDir}); err != nil {
+	if _, err := Build(cfg, BuildOptions{ConfigDir: configDir, OutputDir: outputDir}); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 }

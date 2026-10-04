@@ -50,25 +50,36 @@ func cmdRun(args []string) error {
 		return fmt.Errorf("cannot use --focus and a trailing prompt together (focus includes a prompt)")
 	}
 
-	// Resolve harness source: name > --harness-file > manifest in cwd > error
+	// Resolve harness source: id or path > --harness-file > manifest in cwd > error
 	var p *harness.Harness
 	var harnessDir string // directory containing harness content (for local artifacts)
+	var harnessID string  // canonical id when the positional ref is one; "" for a path
 	var err error
 
 	switch {
 	case ra.HarnessName != "":
-		p, err = harness.LoadQualified(ra.HarnessName)
+		// An installed id or a local harness directory, resolved exactly as
+		// `ynh check` resolves its argument (#448).
+		p, err = loadHarnessIDOrPath(ra.HarnessName)
 		if err != nil {
 			return err
 		}
 		harnessDir = p.Dir
+		if namespace.Classify(ra.HarnessName) == namespace.RefID {
+			harnessID = ra.HarnessName
+		}
 
 	case ra.HarnessFile != "":
 		p, err = harness.LoadFile(ra.HarnessFile)
 		if err != nil {
 			return err
 		}
+		// A plugin.json inside its manifest directory belongs to the tree
+		// above it, which is where the harness's own artifacts live.
 		harnessDir = filepath.Dir(ra.HarnessFile)
+		if root := plugin.HarnessRoot(ra.HarnessFile); root != "" {
+			harnessDir = root
+		}
 
 	default:
 		// Auto-discover a harness in cwd. The format chain never rewrites
@@ -81,7 +92,7 @@ func cmdRun(args []string) error {
 			return err
 		}
 		if !plugin.IsPluginDir(cwd) {
-			return fmt.Errorf("usage: ynh run <harness-name> [-v vendor] [--focus name] [--harness-file path] [-- prompt]")
+			return fmt.Errorf("usage: ynh run <harness-id|path> [-v vendor] [--focus name] [--harness-file path] [-- prompt]")
 		}
 		p, err = harness.LoadDir(cwd)
 		if err != nil {
@@ -198,11 +209,10 @@ func cmdRun(args []string) error {
 	// Run-dir naming uses the canonical id's fs name ("local/foo" →
 	// "local--foo") so same-named installs with distinct canonical ids get
 	// distinct run dirs and can't clobber each other's live sessions.
-	// LoadQualified already enforced that ra.HarnessName is a canonical id.
-	// Inline/discovered harnesses have no canonical id and use a hash-based
-	// name instead.
-	runDirName := namespace.IDToFSName(ra.HarnessName)
-	if ra.HarnessFile != "" || ra.HarnessName == "" {
+	// A local directory, an inline manifest and a discovered harness have no
+	// canonical id and use a hash-based name instead.
+	runDirName := namespace.IDToFSName(harnessID)
+	if harnessID == "" {
 		// Inline/discovered harness: use a hash-based stable dir name
 		h := fmt.Sprintf("%x", hashString(harnessDir))
 		runDirName = "_inline-" + h[:8]
@@ -222,30 +232,25 @@ func cmdRun(args []string) error {
 
 		// Check delegates against remote source allow-list
 		for _, del := range p.DelegatesTo {
-			if err := cfg.CheckRemoteSource(del.Git); err != nil {
+			if err := cfg.CheckSource(del.Git, p.Dir); err != nil {
 				return fmt.Errorf("delegate %q: %w", del.Git, err)
 			}
 		}
 
 		// Assemble delegate harnesses as agent files
-		if err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo); err != nil {
+		if err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo, p.Dir); err != nil {
 			return fmt.Errorf("assembling delegates: %w", err)
 		}
 
-		// Generate vendor-native hook config files
+		// Generate vendor-native hook config files, and copy in the scripts
+		// those hooks run from the harness
 		if len(p.Hooks) > 0 {
-			hookFiles, err := adapter.GenerateHookConfig(p.Hooks)
+			warnings, err := assembler.WriteSessionHooks(runDir, adapter, harnessDir, p.Hooks)
 			if err != nil {
-				return fmt.Errorf("generating hook config: %w", err)
+				return err
 			}
-			for relPath, content := range hookFiles {
-				absPath := filepath.Join(runDir, relPath)
-				if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
-					return fmt.Errorf("creating hook config dir: %w", err)
-				}
-				if err := os.WriteFile(absPath, content, 0o644); err != nil {
-					return fmt.Errorf("writing hook config %s: %w", relPath, err)
-				}
+			for _, w := range warnings {
+				fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 			}
 		}
 
@@ -297,7 +302,7 @@ func cmdRun(args []string) error {
 
 		// Keep the legacy bare-name run path resolving for project symlinks
 		// planted before run dirs were keyed by canonical id.
-		if ra.HarnessName != "" {
+		if harnessID != "" {
 			updateLegacyRunAlias(p.Name, runDirName)
 		}
 	}

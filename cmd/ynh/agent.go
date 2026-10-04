@@ -102,6 +102,13 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 			}
 			opts.Model = args[i]
 
+		case "--effort":
+			i++
+			if i >= len(args) {
+				return cliError(stderr, false, errCodeInvalidInput, "--effort requires a value (low, medium or high)")
+			}
+			opts.Effort = args[i]
+
 		case "--max-turns":
 			i++
 			if i >= len(args) {

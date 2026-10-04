@@ -36,10 +36,27 @@ type RunResult struct {
 	SessionDir string `json:"session_dir,omitempty"`
 	Worktree   string `json:"worktree,omitempty"`
 	Backend    string `json:"backend,omitempty"`
-	Model      string `json:"model,omitempty"`
+	// Model is the model the worker reported running, as the backend states
+	// it (an alias resolved to its id). Absent when the backend reported
+	// none, which is never filled in from ModelRequested. After a resume it
+	// is the latest process's.
+	Model string `json:"model,omitempty"`
+	// ModelRequested is the model this process asked for with --model.
+	// Absent when none was pinned and the backend chose. A resume does not
+	// restore it, as it does not restore --model.
+	ModelRequested string `json:"model_requested,omitempty"`
 	// AutoApprove is the --auto-approve level the worker ran with. Absent
 	// means none.
 	AutoApprove string `json:"auto_approve,omitempty"`
+	// Effort is the reasoning effort the worker reported it ran with. Absent
+	// means the backend did not report one, not that none was in force; it is
+	// never inferred from the model name.
+	Effort string `json:"effort,omitempty"`
+	// EffortRequested is the effort this process asked the worker for, from
+	// --effort or the harness's agent.effort. Absent when none was asked for.
+	// Effort stays what the backend reported, so a request the backend
+	// changed shows as the two disagreeing. A resume does not restore it.
+	EffortRequested string `json:"effort_requested,omitempty"`
 
 	Harness *RunHarness `json:"harness,omitempty"`
 
@@ -105,12 +122,21 @@ func (r *RunResult) finalise(err error) {
 		r.Consumed.Turns = r.budget.Turns()
 		r.Consumed.Tokens = r.budget.Tokens()
 		r.Consumed.WallMS = r.budget.WallConsumed().Milliseconds()
+		r.budget.fillConsumed(&r.Consumed)
 	}
 	if r.planIterations != nil {
 		r.Consumed.PlanIter = *r.planIterations
 	}
 
 	r.ChangedFiles = changedFiles(r.Worktree, r.BaseCommit)
+}
+
+// noteEffort records the effort a turn reports. A turn that reports none
+// leaves the last one seen in place.
+func (r *RunResult) noteEffort(t Turn) {
+	if t.Effort != "" {
+		r.Effort = t.Effort
+	}
 }
 
 // RunHarness identifies the harness the run was verified against.
@@ -123,11 +149,22 @@ type RunHarness struct {
 }
 
 // RunConsumed is what the run actually spent.
+//
+// Tokens is input plus output, excluding cache reads and writes, as it always
+// has been.
+// The split and cost beside it are pointers because each is absent when the
+// backend did not report it: a zero cost would read as "free", and a zero
+// count as a measurement nobody took.
 type RunConsumed struct {
-	Turns    int   `json:"turns"`
-	Tokens   int64 `json:"tokens"`
-	WallMS   int64 `json:"wall_ms"`
-	PlanIter int   `json:"plan_iterations,omitempty"`
+	Turns               int      `json:"turns"`
+	Tokens              int64    `json:"tokens"`
+	InputTokens         *int64   `json:"input_tokens,omitempty"`
+	OutputTokens        *int64   `json:"output_tokens,omitempty"`
+	CacheReadTokens     *int64   `json:"cache_read_tokens,omitempty"`
+	CacheCreationTokens *int64   `json:"cache_creation_tokens,omitempty"`
+	CostUSD             *float64 `json:"cost_usd,omitempty"`
+	WallMS              int64    `json:"wall_ms"`
+	PlanIter            int      `json:"plan_iterations,omitempty"`
 }
 
 // RunConvergence is the convergence-verifier's verdict.

@@ -29,13 +29,13 @@ Both share `internal/config` for version injection. `ynd` is self-contained in `
 
 Read the "Vendor Adapters" section in `.github/CONTRIBUTING.md`. It has the full `Adapter` interface and working examples. Key points:
 - One file in `internal/vendor/`
-- Implements the `Adapter` interface — **24 methods**, grouped: identity
+- Implements the `Adapter` interface (**25 methods**), grouped: identity
   (`Name`, `DisplayName`, `CLIName`), layout (`ConfigDir`, `ArtifactDirs`,
   `InstructionsFile`, `NeedsSymlinks`, `Install`, `Clean`), launch
   (`LaunchInteractive`, `LaunchNonInteractive`, `LaunchWithInitialPrompt`),
   resume (`SupportsResume`, `ResolveLastSession`, `LaunchResume`), generation
   (`GenerateSystemPrompt`, `ApplyRuntimeInstructions`, `GenerateHookConfig`,
-  `GenerateMCPConfig`, `GeneratePluginManifest`) and export
+  `GenerateMCPConfig`, `GeneratePluginManifest`, `PluginManifestDir`) and export
   (`ExportArtifactDirs`, `SupportsExportDelegates`, `MarketplaceManifestDir`,
   `GenerateMarketplaceIndex`)
 - **Read the resume contract before implementing it.** `adapter.go` warns that

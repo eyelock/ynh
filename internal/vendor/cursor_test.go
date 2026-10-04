@@ -54,30 +54,6 @@ func TestCursorTransformArtifact_NonMdRulesPassthrough(t *testing.T) {
 	}
 }
 
-func TestCursorGenerateHookConfig_PluginRootAlsoWritten(t *testing.T) {
-	c := &Cursor{}
-	hooks := map[string][]plugin.HookEntry{
-		"on_stop": {{Command: "echo done"}},
-	}
-
-	result, err := c.GenerateHookConfig(hooks)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	projectData, ok := result[filepath.Join(".cursor", "hooks.json")]
-	if !ok {
-		t.Fatal("expected .cursor/hooks.json key")
-	}
-	rootData, ok := result[filepath.Join("hooks", "hooks.json")]
-	if !ok {
-		t.Fatal("expected plugin-root hooks/hooks.json key")
-	}
-	if string(projectData) != string(rootData) {
-		t.Errorf("expected identical content, .cursor/hooks.json=%q hooks/hooks.json=%q", projectData, rootData)
-	}
-}
-
 func TestCursorGenerateHookConfig_NilHooks(t *testing.T) {
 	c := &Cursor{}
 	result, err := c.GenerateHookConfig(nil)
@@ -212,27 +188,59 @@ func TestCursorGenerateMCPConfig_Format(t *testing.T) {
 	}
 }
 
-func TestCursorGenerateMCPConfig_PluginRootAlsoWritten(t *testing.T) {
+// TestCursorMCPConfigPaths locks which file each Cursor MCP generator writes
+// (#470). A project session reads only .cursor/mcp.json
+// (cursor.com/docs/context/mcp), so the assembly for `ynh run` and
+// `ynd preview` must not also carry a root mcp.json that nothing reads. A
+// Cursor plugin discovers mcp.json at its root
+// (cursor.com/docs/reference/plugins), so an export carries that one alone.
+func TestCursorMCPConfigPaths(t *testing.T) {
+	servers := map[string]plugin.MCPServer{"github": {Command: "npx"}}
 	c := &Cursor{}
-	servers := map[string]plugin.MCPServer{
-		"github": {Command: "npx"},
+	tests := []struct {
+		name string
+		gen  func(map[string]plugin.MCPServer) (map[string][]byte, error)
+		want string
+	}{
+		{name: "project assembly", gen: c.GenerateMCPConfig, want: filepath.Join(".cursor", "mcp.json")},
+		{name: "plugin export", gen: c.GeneratePluginMCPConfig, want: "mcp.json"},
 	}
+	docs := map[string]string{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := tt.gen(servers)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result) != 1 {
+				t.Fatalf("expected exactly one file %s, got %v", tt.want, keysOf(result))
+			}
+			data, ok := result[tt.want]
+			if !ok {
+				t.Fatalf("expected %s, got %v", tt.want, keysOf(result))
+			}
+			if !strings.Contains(string(data), `"mcpServers"`) || !strings.Contains(string(data), `"npx"`) {
+				t.Errorf("unexpected %s content:\n%s", tt.want, data)
+			}
+			docs[tt.name] = string(data)
+		})
+	}
+	// Both generators render the same document; only the path differs.
+	if docs["project assembly"] != docs["plugin export"] {
+		t.Errorf("project and plugin MCP documents differ:\n%s\n---\n%s", docs["project assembly"], docs["plugin export"])
+	}
+}
 
-	result, err := c.GenerateMCPConfig(servers)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	projectData, ok := result[filepath.Join(".cursor", "mcp.json")]
-	if !ok {
-		t.Fatal("expected .cursor/mcp.json key")
-	}
-	rootData, ok := result["mcp.json"]
-	if !ok {
-		t.Fatal("expected plugin-root mcp.json key")
-	}
-	if string(projectData) != string(rootData) {
-		t.Errorf("expected identical content, .cursor/mcp.json=%q mcp.json=%q", projectData, rootData)
+func TestCursorGeneratePluginMCPConfig_NoServers(t *testing.T) {
+	c := &Cursor{}
+	for _, servers := range []map[string]plugin.MCPServer{nil, {}} {
+		result, err := c.GeneratePluginMCPConfig(servers)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result != nil {
+			t.Errorf("expected nil, got %v", keysOf(result))
+		}
 	}
 }
 

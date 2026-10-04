@@ -347,6 +347,35 @@ func TestValidateFile_PluginJSON_Invalid(t *testing.T) {
 	}
 }
 
+// agent.effort takes one of the three neutral levels; a vendor's own word
+// such as "max" is not one of them.
+func TestValidateFile_PluginJSON_AgentEffort(t *testing.T) {
+	for _, tt := range []struct {
+		effort  string
+		wantErr bool
+	}{
+		{"low", false},
+		{"medium", false},
+		{"high", false},
+		{"max", true},
+		{"minimal", true},
+		{"", true},
+	} {
+		t.Run("effort="+tt.effort, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), ".agents/harness", "plugin.json")
+			writeFile(t, path, []byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"test","version":"0.1.0",`+
+				`"agent":{"max_turns":10,"effort":"`+tt.effort+`"}}`))
+			err := validateFile(path)
+			if tt.wantErr && err == nil {
+				t.Fatalf("agent.effort %q validated, want a schema error", tt.effort)
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("agent.effort %q: %v", tt.effort, err)
+			}
+		})
+	}
+}
+
 func TestValidateFile_Markdown_Valid(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.md")
@@ -1543,6 +1572,45 @@ func TestValidateHarness_SplitManifestDir(t *testing.T) {
 			}
 			if !tc.wantErr && strings.Contains(out, "split from") {
 				t.Errorf("a tree in one directory must not be reported as split:\n%s", out)
+			}
+		})
+	}
+}
+
+// A convergence verifier must be able to return pass. A files sensor reports
+// freshness and a focus sensor is deferred, so neither ever can, and a harness
+// that names one as its verifier runs every agent session to the turn cap
+// (#447). `ynd validate` says so instead.
+func TestValidateHarnessSensors_ConvergenceVerifierSource(t *testing.T) {
+	out := map[string]any{"format": "text"}
+	cases := []struct {
+		name    string
+		source  map[string]any
+		role    string
+		refused bool
+	}{
+		{"focus verifier", map[string]any{"focus": map[string]any{"prompt": "p"}}, "convergence-verifier", true},
+		{"files verifier", map[string]any{"files": []any{"done.txt"}}, "convergence-verifier", true},
+		{"command verifier", map[string]any{"command": "make verify"}, "convergence-verifier", false},
+		{"github_check verifier", map[string]any{"github_check": map[string]any{"name": "build"}}, "convergence-verifier", false},
+		{"focus without the role", map[string]any{"focus": map[string]any{"prompt": "p"}}, "", false},
+		{"files without the role", map[string]any{"files": []any{"done.txt"}}, "regular", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			entry := map[string]any{"source": c.source, "output": out}
+			if c.role != "" {
+				entry["role"] = c.role
+			}
+			issues := validateHarnessSensors(map[string]any{"sensors": map[string]any{"s": entry}})
+			var found bool
+			for _, i := range issues {
+				if strings.Contains(i, "role convergence-verifier requires a command source") {
+					found = true
+				}
+			}
+			if found != c.refused {
+				t.Errorf("refused=%v want %v; issues: %v", found, c.refused, issues)
 			}
 		})
 	}

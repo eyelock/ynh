@@ -106,6 +106,8 @@ Key things to verify:
 - `.claude/hooks/hooks.json` has hooks in Claude's three-level format
 - `.claude/.mcp.json` has the MCP server config
 
+These are session paths: `ynh run` loads `.claude/` as a plugin directory. An export is a plugin in its own right and lays hooks and MCP out differently, in `hooks/claude.json` and `mcp/claude.json` at its root, both named by `.claude-plugin/plugin.json` (see [MCP Servers: Config File Locations](../mcp.md#config-file-locations)).
+
 ## Preview the same harness for Cursor
 
 ```bash
@@ -127,17 +129,14 @@ Expected output structure:
   mcp.json
 .cursor-plugin/
   plugin.json
-hooks/
-  hooks.json
 .cursorrules
-mcp.json
 ```
 
 Note the differences from Claude:
 - Instructions go to `.cursorrules` instead of `CLAUDE.md`
 - Rules are rendered as `.mdc` files (`.cursor/rules/safety.mdc`)
-- Hooks go to `.cursor/hooks.json` (and a root `hooks/hooks.json`) instead of `.claude/hooks/hooks.json`
-- MCP config goes to `.cursor/mcp.json` (and a root `mcp.json`) instead of `.claude/.mcp.json`
+- Hooks go to `.cursor/hooks.json` instead of `.claude/hooks/hooks.json`. That is the only project file Cursor reads hooks from; an export writes the plugin's `hooks/cursor.json` instead, named by the plugin manifest (see [Hooks: Config File Locations](../hooks.md#config-file-locations))
+- MCP config goes to `.cursor/mcp.json` instead of `.claude/.mcp.json`. That is the only project file Cursor reads MCP servers from; an export writes the plugin's root `mcp.json` instead (see [MCP Servers: Config File Locations](../mcp.md#config-file-locations))
 - Artifacts are under `.cursor/` instead of `.claude/`
 
 ## Compare Claude vs Cursor output
@@ -156,8 +155,6 @@ Only in claude:
 Only in cursor:
   .cursor/hooks.json
   .cursor/mcp.json
-  hooks/hooks.json
-  mcp.json
 Same content, vendor-specific rendering:
   .claude/rules/safety.md ↔ .cursor/rules/safety.mdc
 Identical:
@@ -177,6 +174,9 @@ how hooks and MCP config are laid out.
 `ynd diff` normalises each vendor's prefixes before comparing — `.claude/`,
 `.claude-plugin/` and `CLAUDE.md` against `.cursor/`, `.cursor-plugin/` and
 `.cursorrules` — which is what lets the two file sets intersect at all.
+Inside the config directory only artifacts (skills, agents, rules, commands)
+are paired. Hook and MCP config is each vendor's own file, so it is always
+listed as only in that vendor, never compared against another vendor's.
 
 ## Preview a harness with hooks
 

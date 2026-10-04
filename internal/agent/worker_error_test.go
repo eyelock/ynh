@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -24,6 +25,11 @@ func claudeNotLoggedIn(t *testing.T) string {
 	}
 	return string(data)
 }
+
+// nopWriteCloser wraps a bytes.Buffer so it satisfies io.WriteCloser.
+type nopWriteCloser struct{ *bytes.Buffer }
+
+func (n *nopWriteCloser) Close() error { return nil }
 
 func claudeSessionOver(raw string) *claudeSession {
 	scanner := bufio.NewScanner(strings.NewReader(raw))
@@ -136,38 +142,6 @@ func TestParseCursorOutput_ErrorResultIsWorkerError(t *testing.T) {
 	var we *WorkerError
 	if !errors.As(err, &we) || we.Backend != "cursor" || we.Message != "Authentication required" {
 		t.Fatalf("want cursor WorkerError with the result text, got %v", err)
-	}
-}
-
-func TestCodexSession_TurnFailedIsWorkerError(t *testing.T) {
-	tests := []struct {
-		name string
-		raw  string
-		want string
-	}{
-		{
-			name: "with message",
-			raw:  `{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized"}}` + "\n",
-			want: "unexpected status 401 Unauthorized",
-		},
-		{
-			name: "without message",
-			raw:  `{"type":"turn.failed","error":"not an object"}` + "\n",
-			want: "turn failed",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			sess := &codexSession{
-				scanner: bufio.NewScanner(strings.NewReader(tt.raw)),
-				stdin:   &nopWriteCloser{new(bytes.Buffer)},
-			}
-			_, err := sess.Next()
-			var we *WorkerError
-			if !errors.As(err, &we) || we.Backend != "codex" || we.Message != tt.want {
-				t.Fatalf("want codex WorkerError %q, got %v", tt.want, err)
-			}
-		})
 	}
 }
 
@@ -336,5 +310,35 @@ func TestRunLoop_PlanPhaseWorkerErrorKeepsVendorMessage(t *testing.T) {
 	}
 	if !strings.HasPrefix(exitErr.Message, "worker error: claude: Not logged in") {
 		t.Errorf("reason = %q", exitErr.Message)
+	}
+}
+
+// The run ynf saw (#434): the same test failing every turn, only its timings
+// changing. The loop must end it as stuck, not spend the whole turn budget.
+func TestRunLoop_IdenticalFailureWithVaryingTimingsIsStuck(t *testing.T) {
+	stubCheck(t, func(call int, name string) gate.Result {
+		out := fmt.Sprintf("--- FAIL: TestParse (0.%02ds)\n    parse_test.go:12: got 3, want 4\nFAIL\nFAIL\tgithub.com/x/y/pkg\t%d.%03ds\n", call, call, call*37)
+		return gate.Result{Name: name, Kind: "command", Tolerance: "blocking", Status: gate.StatusFail, ExitCode: 1, Stdout: out}
+	})
+	var turns []Turn
+	for i := 1; i <= 12; i++ {
+		turns = append(turns, Turn{Content: fmt.Sprintf("attempt %d", i)})
+	}
+	mb := &mockBackend{name: "mock", turns: turns}
+	var stdout, stderr bytes.Buffer
+	opts := baseOpts(mb, &stdout, &stderr, strings.NewReader(""))
+	opts.MaxTurns = 12
+	opts.testSensorNames = []string{"test"}
+
+	_, err := RunLoop(opts)
+	var exitErr *ExitError
+	if !asExitError(err, &exitErr) || exitErr.Code != ExitStuck {
+		t.Fatalf("want ExitStuck (%d), got %v", ExitStuck, err)
+	}
+	if !strings.Contains(exitErr.Message, "no sensor progress for 5 consecutive turns") {
+		t.Errorf("reason = %q, want the no-progress signal", exitErr.Message)
+	}
+	if mb.pos != 6 {
+		t.Errorf("worker turns read = %d, want 6 (one reference turn, five unchanged)", mb.pos)
 	}
 }

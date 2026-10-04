@@ -133,6 +133,62 @@ func TestCmdPreviewWithHooks(t *testing.T) {
 	}
 }
 
+// TestCmdPreviewCursorHooksOnlyWhereCursorReads locks #454: a Cursor project
+// session reads hooks from .cursor/hooks.json alone (cursor.com/docs/hooks),
+// so the preview of a run assembly carries that file and no root
+// hooks/hooks.json, which only a Cursor plugin reads.
+func TestCmdPreviewCursorHooksOnlyWhereCursorReads(t *testing.T) {
+	srcDir := createPreviewHarness(t)
+	outputDir := filepath.Join(t.TempDir(), "preview-cursor-hooks")
+
+	if err := cmdPreview([]string{srcDir, "-v", "cursor", "-o", outputDir}); err != nil {
+		t.Fatalf("cmdPreview failed: %v", err)
+	}
+
+	assertExists(t, filepath.Join(outputDir, ".cursor", "hooks.json"))
+	if _, err := os.Stat(filepath.Join(outputDir, "hooks")); !os.IsNotExist(err) {
+		t.Errorf("expected no root hooks/ in cursor preview, stat err = %v", err)
+	}
+}
+
+// TestCmdPreviewCursorMCPOnlyWhereCursorReads locks #470: a Cursor project
+// session reads MCP servers from .cursor/mcp.json alone
+// (cursor.com/docs/context/mcp), so the preview of a run assembly carries
+// that file and no root mcp.json, which only a Cursor plugin reads.
+func TestCmdPreviewCursorMCPOnlyWhereCursorReads(t *testing.T) {
+	srcDir := createPreviewHarness(t)
+	outputDir := filepath.Join(t.TempDir(), "preview-cursor-mcp")
+
+	if err := cmdPreview([]string{srcDir, "-v", "cursor", "-o", outputDir}); err != nil {
+		t.Fatalf("cmdPreview failed: %v", err)
+	}
+
+	assertExists(t, filepath.Join(outputDir, ".cursor", "mcp.json"))
+	if _, err := os.Stat(filepath.Join(outputDir, "mcp.json")); !os.IsNotExist(err) {
+		t.Errorf("expected no root mcp.json in cursor preview, stat err = %v", err)
+	}
+}
+
+// TestCmdPreviewCopilotRunLayout locks the run-dir layout #471 must leave
+// alone: `ynh run` points --plugin-dir at .copilot/, so the preview nests the
+// manifest and MCP file there, beside the skills.
+func TestCmdPreviewCopilotRunLayout(t *testing.T) {
+	srcDir := createPreviewHarness(t)
+	outputDir := filepath.Join(t.TempDir(), "preview-copilot")
+
+	if err := cmdPreview([]string{srcDir, "-v", "copilot", "-o", outputDir}); err != nil {
+		t.Fatalf("cmdPreview failed: %v", err)
+	}
+
+	assertExists(t, filepath.Join(outputDir, ".copilot", ".claude-plugin", "plugin.json"))
+	assertExists(t, filepath.Join(outputDir, ".copilot", ".mcp.json"))
+	for _, rel := range []string{".claude-plugin", filepath.Join(".github", "mcp.json")} {
+		if _, err := os.Stat(filepath.Join(outputDir, rel)); !os.IsNotExist(err) {
+			t.Errorf("expected no %s at the copilot run-dir root, stat err = %v", rel, err)
+		}
+	}
+}
+
 func TestCmdPreviewWithMCP(t *testing.T) {
 	srcDir := createPreviewHarness(t)
 	outputDir := filepath.Join(t.TempDir(), "preview-mcp")
@@ -152,6 +208,19 @@ func TestCmdPreviewWithMCP(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "test-server") {
 		t.Error("expected .mcp.json to contain test-server")
+	}
+
+	// A preview is a session layout: the plugin MCP file and the manifest
+	// pointer to it belong to an export only (#481).
+	if _, err := os.Stat(filepath.Join(outputDir, "mcp")); !os.IsNotExist(err) {
+		t.Errorf("expected no mcp/ in a preview, stat err = %v", err)
+	}
+	manifest, err := os.ReadFile(filepath.Join(outputDir, ".claude-plugin", "plugin.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(manifest), "mcpServers") {
+		t.Errorf("preview manifest must not name an MCP file:\n%s", manifest)
 	}
 }
 
@@ -339,5 +408,67 @@ func TestPreview_ManifestMatchesTheSource(t *testing.T) {
 	}
 	if kw, _ := got["keywords"].([]any); len(kw) != 3 {
 		t.Errorf("keywords = %v, want 3", got["keywords"])
+	}
+}
+
+// TestCmdPreviewShipsHookScripts locks #495: a session carries the scripts its
+// hooks run by a "./" path, and the session hook command reaches the copy.
+// Claude reads the session hooks as a --plugin-dir plugin rooted at .claude/;
+// Cursor and Codex run hooks from the run directory, where the session starts.
+func TestCmdPreviewShipsHookScripts(t *testing.T) {
+	tests := []struct {
+		vendor   string
+		hookFile string
+		command  string
+		script   string
+	}{
+		{"claude", ".claude/hooks/hooks.json", `\"${CLAUDE_PLUGIN_ROOT}\"/scripts/guard.sh --strict`, ".claude/scripts/guard.sh"},
+		{"codex", ".codex/hooks.json", "./scripts/guard.sh --strict", "scripts/guard.sh"},
+		{"cursor", ".cursor/hooks.json", "./scripts/guard.sh --strict", "scripts/guard.sh"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.vendor, func(t *testing.T) {
+			srcDir := t.TempDir()
+			hj := map[string]any{
+				"name":    "preview-hook-scripts",
+				"version": "1.0.0",
+				"hooks": map[string]any{
+					"on_stop": []map[string]any{{"command": "./scripts/guard.sh --strict"}},
+				},
+			}
+			data, err := json.Marshal(hj)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := writePluginJSONFile(srcDir, data); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(filepath.Join(srcDir, "scripts"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(srcDir, "scripts", "guard.sh"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+
+			outputDir := filepath.Join(t.TempDir(), "out")
+			if err := cmdPreview([]string{srcDir, "-v", tt.vendor, "-o", outputDir}); err != nil {
+				t.Fatalf("cmdPreview failed: %v", err)
+			}
+
+			hooks, err := os.ReadFile(filepath.Join(outputDir, filepath.FromSlash(tt.hookFile)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(hooks), `"command": "`+tt.command+`"`) {
+				t.Errorf("%s does not run %s:\n%s", tt.hookFile, tt.command, hooks)
+			}
+			info, err := os.Stat(filepath.Join(outputDir, filepath.FromSlash(tt.script)))
+			if err != nil {
+				t.Fatalf("hook script not in the session: %v", err)
+			}
+			if info.Mode().Perm()&0o111 == 0 {
+				t.Errorf("hook script mode = %v, want executable", info.Mode())
+			}
+		})
 	}
 }

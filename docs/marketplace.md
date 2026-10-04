@@ -296,7 +296,7 @@ Cursor and Claude Code share nearly identical plugin and marketplace formats:
 | Marketplace index | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` |
 | Schema | Same | Same |
 
-This is why ynh's merged export mode works — one set of artifacts with both `.claude-plugin/` and `.cursor-plugin/` directories serves both vendors from the same physical plugin directory.
+This is why ynh's merged export mode works: one set of artifacts with both `.claude-plugin/` and `.cursor-plugin/` directories serves both vendors from the same physical plugin directory. Codex's `.codex-plugin/` manifest sits in the same directory too; it points only at `skills/`, so the shared agents, rules and commands do not reach Codex.
 
 ### Official Resources
 
@@ -356,8 +356,8 @@ ynh acts as the translation layer between your harness definition and vendor-nat
 
 1. **Reads** your `marketplace.json` config listing harnesses and plugins
 2. **Resolves** all remote includes (Git repos, pick filtering, monorepo subpaths)
-3. **Exports** each entry as a merged plugin with both `.claude-plugin/` and `.cursor-plugin/` manifests
-4. **Generates** vendor-native `marketplace.json` indexes for Claude Code and Cursor
+3. **Exports** each entry as a merged plugin with `.claude-plugin/` (shared by Claude Code and Copilot), `.cursor-plugin/` and `.codex-plugin/` manifests, printing any export warning to stderr prefixed with the entry's name (`warning: reviewer: ...`)
+4. **Generates** vendor-native `marketplace.json` indexes for Claude Code, Cursor, Codex and Copilot
 5. **Initializes** the output as a Git repo (required by Claude Code for relative source path resolution)
 
 ### marketplace.json (ynh Config)
@@ -415,7 +415,7 @@ ynh's `marketplace.json` is a build config — it describes *what* to include in
 ### Entry Types
 
 - **`plugin`** — a self-contained plugin directory (already has `.claude-plugin/plugin.json`). Copied as-is with missing vendor manifests generated.
-- **`harness`** — a ynh harness (has `.agents/harness/plugin.json` with includes). Fully exported: remote includes resolved, pick filtering applied, delegates generated, dual manifests written.
+- **`harness`**: a ynh harness (has `.agents/harness/plugin.json` with includes). Fully exported: remote includes resolved, pick filtering applied, delegates generated, every vendor's manifest written.
 
 ### Output Structure
 

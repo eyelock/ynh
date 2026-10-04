@@ -15,14 +15,24 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
-// claudePluginJSON is the Claude Code plugin.json schema — identity fields only.
+// claudePluginJSON is the Claude Code plugin.json schema: identity fields,
+// plus pointers to the plugin's hooks and MCP files when it carries them.
 type claudePluginJSON struct {
 	Name        string             `json:"name"`
 	Version     string             `json:"version"`
 	Description string             `json:"description,omitempty"`
 	Author      *plugin.AuthorInfo `json:"author,omitempty"`
 	Keywords    []string           `json:"keywords,omitempty"`
+	Hooks       string             `json:"hooks,omitempty"`
+	MCPServers  string             `json:"mcpServers,omitempty"`
 }
+
+// claudePluginMCPFile is where an exported Claude plugin carries its MCP
+// servers, named by the manifest's "mcpServers" field. A Claude plugin reads
+// .mcp.json at its root and what that field names
+// (code.claude.com/docs/en/plugins-reference); the root .mcp.json is Codex's
+// in a merged package, so Claude gets a file of its own (#481).
+var claudePluginMCPFile = filepath.Join("mcp", "claude.json")
 
 func init() {
 	Register(&Claude{})
@@ -197,9 +207,11 @@ var claudeHookEventMap = map[string]string{
 // anchorHookCommand rewrites a leading "./" in a hook command so it resolves
 // from the project root via $CLAUDE_PROJECT_DIR, which Claude Code injects into
 // the hook subprocess. Without this, a relative command breaks the moment the
-// agent's working directory moves into a subdirectory — and a blocking guard
+// agent's working directory moves into a subdirectory, and a blocking guard
 // hook then silently fails open. Commands that are absolute, already anchored
-// to a variable, or PATH-style (no leading "./") are left unchanged.
+// to a variable, or PATH-style (no leading "./") are left unchanged. It serves
+// the project settings file (ClaudeSettingsHooks), where the hooks and their
+// scripts belong to the project.
 func anchorHookCommand(cmd string) string {
 	if strings.HasPrefix(cmd, "./") {
 		return "$CLAUDE_PROJECT_DIR/" + cmd[2:]
@@ -215,7 +227,55 @@ func ClaudeHookEvent(canonical string) (string, bool) {
 	return native, ok
 }
 
+// GenerateHookConfig writes the session hook file, .claude/hooks/hooks.json.
+// `ynh run` launches Claude with --plugin-dir pointed at the assembled .claude/
+// directory, so this is hooks/hooks.json at that plugin's root, the default
+// location Claude Code reads (code.claude.com/docs/en/plugins-reference). It
+// serves `ynh run`, `ynd preview` and the agent loop. A "./" command names a
+// script the harness ships: Claude loads a --plugin-dir plugin in place, so
+// the command is anchored to ${CLAUDE_PLUGIN_ROOT}, which is that .claude/
+// directory, and session assembly copies the script there (see
+// SessionHookScriptDir, #495). An exported plugin uses
+// GeneratePluginHookConfig instead.
 func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
+	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"))
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{filepath.Join(".claude", "hooks", "hooks.json"): data}, nil
+}
+
+// SessionHookScriptDir is where session assembly copies the scripts a session
+// hook runs by a "./" path: the --plugin-dir plugin root, which
+// ${CLAUDE_PLUGIN_ROOT} names in GenerateHookConfig's commands.
+func (c *Claude) SessionHookScriptDir() string { return c.ConfigDir() }
+
+// ClaudeSettingsHooks renders canonical hooks as the "hooks" document `ynh hook
+// export` merges into a project's .claude/settings.json. A settings file
+// belongs to the project, so a "./" command is anchored to $CLAUDE_PROJECT_DIR
+// (see anchorHookCommand). It returns nil when no hook maps to a Claude event.
+func ClaudeSettingsHooks(hooks map[string][]plugin.HookEntry) ([]byte, error) {
+	return claudeHookDocument(hooks, anchorHookCommand)
+}
+
+// GeneratePluginHookConfig writes the plugin hook file, hooks/claude.json at
+// the root of an exported plugin, which GeneratePluginManifest names in the
+// manifest's "hooks" field. The exporter uses it for `ynd export` and
+// marketplace packages (#468). The document is the session file's: a "./"
+// command names a script shipped in the plugin and is anchored to
+// ${CLAUDE_PLUGIN_ROOT} (#483).
+func (c *Claude) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
+	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"))
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{pluginHookFile(c.Name()): data}, nil
+}
+
+// claudeHookDocument renders canonical hooks in Claude Code's format, or nil
+// when none of them maps to a Claude event. anchor rewrites each command for
+// where the file is read.
+func claudeHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string) string) ([]byte, error) {
 	if len(hooks) == 0 {
 		return nil, nil
 	}
@@ -270,7 +330,7 @@ func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[st
 		for _, g := range groups {
 			var inner []claudeInnerHook
 			for _, cmd := range g.cmds {
-				inner = append(inner, claudeInnerHook{Type: "command", Command: anchorHookCommand(cmd)})
+				inner = append(inner, claudeInnerHook{Type: "command", Command: anchor(cmd)})
 			}
 			hookGroups = append(hookGroups, claudeHookGroup{
 				Matcher: g.matcher,
@@ -295,35 +355,52 @@ func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[st
 	}
 	data = append(data, '\n')
 
-	// Write to hooks/hooks.json inside the plugin dir (.claude/).
-	// Claude Code discovers hooks from plugins via hooks/hooks.json,
-	// not from settings.json (which only supports the "agent" key in plugins).
-	return map[string][]byte{
-		filepath.Join(".claude", "hooks", "hooks.json"): data,
-	}, nil
+	// Claude Code reads plugin hooks from a hooks file, not from a plugin's
+	// settings.json (which only supports the "agent" key in plugins).
+	return data, nil
 }
 
 func (c *Claude) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {
+	data, err := claudePluginManifest(hj, outputDir)
+	if err != nil {
+		return nil, err
+	}
+	return map[string][]byte{
+		filepath.Join(c.PluginManifestDir(), "plugin.json"): data,
+	}, nil
+}
+
+// claudePluginManifest renders .claude-plugin/plugin.json. Copilot reads the
+// same file, so both adapters render it here and a merged package gets the
+// same bytes whichever vendor writes it last. The "hooks" field names Claude's
+// plugin hook file when outputDir carries one; Claude Code also loads a
+// default hooks/hooks.json, which ynh never writes into a plugin. The
+// "mcpServers" field names Claude's plugin MCP file when outputDir carries
+// one; Claude Code loads a root .mcp.json first and merges the named file
+// over it. A session layout carries neither file, so its manifest names
+// neither.
+func claudePluginManifest(hj *plugin.HarnessJSON, outputDir string) ([]byte, error) {
 	pj := &claudePluginJSON{
 		Name:        hj.Name,
 		Version:     hj.Version,
 		Description: hj.Description,
 		Author:      hj.Author,
 		Keywords:    hj.Keywords,
+		Hooks:       pluginHookPointer(outputDir, "claude"),
+		MCPServers:  pluginFilePointer(outputDir, claudePluginMCPFile),
 	}
 	data, err := json.MarshalIndent(pj, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshalling plugin.json: %w", err)
 	}
-	data = append(data, '\n')
-	return map[string][]byte{
-		filepath.Join(".claude-plugin", "plugin.json"): data,
-	}, nil
+	return append(data, '\n'), nil
 }
 
 func (c *Claude) ExportArtifactDirs() map[string]string { return nil }
 
 func (c *Claude) SupportsExportDelegates() bool { return true }
+
+func (c *Claude) PluginManifestDir() string { return ".claude-plugin" }
 
 func (c *Claude) MarketplaceManifestDir() string { return ".claude-plugin" }
 
@@ -367,27 +444,42 @@ func (c *Claude) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []
 	return data, nil
 }
 
+// GenerateMCPConfig writes the session MCP file, .claude/.mcp.json. `ynh run`
+// launches Claude with --plugin-dir pointed at the assembled .claude/
+// directory, so this is .mcp.json at that plugin's root, the default location
+// Claude Code reads. It serves `ynh run`, `ynd preview` and the agent loop.
+// An exported plugin uses GeneratePluginMCPConfig instead.
 func (c *Claude) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
+	data, err := claudeMCPDocument(servers)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{filepath.Join(".claude", ".mcp.json"): data}, nil
+}
+
+// GeneratePluginMCPConfig writes the plugin MCP file, mcp/claude.json at the
+// root of an exported plugin, which claudePluginManifest names in the
+// manifest's "mcpServers" field. The exporter uses it for `ynd export` and
+// marketplace packages (#481). The document is the same as the session file.
+func (c *Claude) GeneratePluginMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
+	data, err := claudeMCPDocument(servers)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{claudePluginMCPFile: data}, nil
+}
+
+// claudeMCPDocument renders MCP servers under Claude's "mcpServers" key, a
+// direct passthrough, or nil when there are none.
+func claudeMCPDocument(servers map[string]plugin.MCPServer) ([]byte, error) {
 	if len(servers) == 0 {
 		return nil, nil
 	}
-
-	// Claude uses .mcp.json with "mcpServers" key — direct passthrough
-	config := map[string]any{
-		"mcpServers": servers,
-	}
-
-	data, err := json.MarshalIndent(config, "", "  ")
+	data, err := json.MarshalIndent(map[string]any{"mcpServers": servers}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshalling MCP config: %w", err)
 	}
-	data = append(data, '\n')
-
-	// Write inside the plugin dir (.claude/) so Claude Code discovers it
-	// as a plugin-provided MCP server configuration.
-	return map[string][]byte{
-		filepath.Join(".claude", ".mcp.json"): data,
-	}, nil
+	return append(data, '\n'), nil
 }
 
 func launchClaude(configPath string, initialPrompt string, extraArgs []string) error {

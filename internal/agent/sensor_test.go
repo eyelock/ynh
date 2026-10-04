@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/eyelock/ynh/internal/gate"
@@ -77,4 +79,56 @@ func TestSensorHash_NilEnvelope(t *testing.T) {
 	if SensorHash(nil, nil) == "" {
 		t.Error("SensorHash of a nil envelope should still return a string")
 	}
+}
+
+// goTestFailure is realistic `go test` output for one failing test, with the
+// timings a real run varies from one invocation to the next.
+func goTestFailure(testDur, pkgDur string) string {
+	return "--- FAIL: TestParse (" + testDur + ")\n" +
+		"    parse_test.go:12: got 3, want 4\n" +
+		"FAIL\n" +
+		"FAIL\tgithub.com/x/y/pkg\t" + pkgDur + "\n" +
+		"ok  \tgithub.com/x/y/other\t0.2s\n"
+}
+
+func failingTestEnv(stdout string) *gate.Envelope {
+	return env(gate.Result{Name: "test", Kind: "command", Tolerance: "blocking", Status: gate.StatusFail, ExitCode: 1, Stdout: stdout})
+}
+
+// The same failure with different timings is no progress (#434).
+func TestSensorHash_IgnoresTimings(t *testing.T) {
+	a := SensorHash(failingTestEnv(goTestFailure("0.03s", "0.512s")), nil)
+	b := SensorHash(failingTestEnv(goTestFailure("1.2s", "1m2.3s")), nil)
+	if a != b {
+		t.Errorf("output differing only in timings hashed differently: %s vs %s", a, b)
+	}
+	fixed := strings.Replace(goTestFailure("0.03s", "0.512s"), "want 4", "want 3", 1)
+	if SensorHash(failingTestEnv(fixed), nil) == a {
+		t.Error("a changed failure message must change the hash")
+	}
+}
+
+// The watchdog fed real hashes: an identical failure whose timings vary must
+// end the run as stuck once it has been unchanged for the threshold.
+func TestWatchdog_NoProgressFiresDespiteTimings(t *testing.T) {
+	w := NewWatchdog()
+	durs := []string{"0.03s", "0.05s", "0.04s", "1.1s", "12ms", "0.07s", "0.02s", "0.09s"}
+	for i, d := range durs {
+		turn := i + 1
+		h := SensorHash(failingTestEnv(goTestFailure(d, d)), nil)
+		reason := w.RecordTurn(fmt.Sprintf("attempt %d", turn), h)
+		// Turn 1 sets the reference hash; turns 2 to 6 are the five unchanged
+		// turns NoProgressThreshold counts.
+		if turn < 1+w.NoProgressThreshold {
+			if reason != "" {
+				t.Fatalf("turn %d: fired early: %s", turn, reason)
+			}
+			continue
+		}
+		if !strings.Contains(reason, "no sensor progress for 5 consecutive turns") {
+			t.Fatalf("turn %d: want no-progress, got %q", turn, reason)
+		}
+		return
+	}
+	t.Fatal("no-progress never fired")
 }

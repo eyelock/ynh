@@ -572,3 +572,74 @@ func TestCmdInfoJSON_SchemaRoundTrip(t *testing.T) {
 		t.Errorf("info JSON does not validate: %v\noutput: %s", err, stdout.String())
 	}
 }
+
+// infoSection returns the indented lines under a "<header>:" line of
+// ynh info's text output, up to the blank line that ends the section.
+func infoSection(out, header string) []string {
+	var lines []string
+	in := false
+	for _, l := range strings.Split(out, "\n") {
+		if l == header+":" {
+			in = true
+			continue
+		}
+		if in {
+			if l == "" {
+				break
+			}
+			lines = append(lines, l)
+		}
+	}
+	return lines
+}
+
+func TestCmdInfoText_LocalIncludes(t *testing.T) {
+	tests := []struct {
+		name     string
+		includes string
+		want     []string
+	}{
+		{
+			name:     "local include",
+			includes: `[{"local": "extras"}]`,
+			want:     []string{"  extras"},
+		},
+		{
+			name:     "local include with path and pick",
+			includes: `[{"local": "../shared", "path": "skills", "pick": ["skills/a", "skills/b"]}]`,
+			want:     []string{"  ../shared  path=skills  pick=[skills/a, skills/b]"},
+		},
+		{
+			name: "local plus git",
+			includes: `[
+				{"local": "extras"},
+				{"git": "github.com/eyelock/assistants", "path": "skills/dev", "ref": "v2"}
+			]`,
+			want: []string{
+				"  extras",
+				"  github.com/eyelock/assistants  path=skills/dev  ref=v2",
+			},
+		},
+		{
+			name:     "no includes",
+			includes: `[]`,
+			want:     []string{"  (none)"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("YNH_HOME", home)
+			installListTestHarness(t, home, "inc", `{"name": "inc", "version": "0.1.0", "includes": `+tt.includes+`}`)
+
+			var stdout bytes.Buffer
+			if err := cmdInfoTo([]string{"local/inc"}, &stdout, io.Discard); err != nil {
+				t.Fatalf("cmdInfoTo: %v", err)
+			}
+			got := infoSection(stdout.String(), "Includes")
+			if strings.Join(got, "\n") != strings.Join(tt.want, "\n") {
+				t.Errorf("Includes section:\ngot  %q\nwant %q\nfull output:\n%s", got, tt.want, stdout.String())
+			}
+		})
+	}
+}

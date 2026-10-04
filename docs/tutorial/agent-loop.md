@@ -91,6 +91,10 @@ tidy this up
 `--task "..."` passes a one-off instruction instead of a declared focus. The two
 are mutually exclusive:
 
+```bash
+ynh agent run --harness local/demo --focus tidy --task "x"
+```
+
 ```
 Error: cannot use --focus and --task together (focus includes a prompt)
 ```
@@ -151,7 +155,7 @@ the record of what counts as failure can declare itself finished.
 ## Running against a scratch checkout
 
 ```bash
-ynh agent run --harness local/demo --focus tidy --worktree /path/to/scratch
+ynh agent run --harness local/demo --focus tidy --worktree /nope/nothing
 ```
 
 `--worktree` runs the loop with its working directory set elsewhere — typically
@@ -160,7 +164,8 @@ the tree being modified moves. This is the basis of [shadow mode](shadow-mode.md
 where the loop runs against a historical commit and must not touch your
 checkout.
 
-The path must exist:
+The path must exist. `/nope/nothing` does not, so the run above stops before
+the worker starts, with exit code `20`:
 
 ```
 Error: starting worker: starting claude: chdir /nope/nothing: no such file or directory
@@ -184,6 +189,7 @@ session_start      turn=
 worker_env         turn=
 plan               turn=
 assistant_message  turn=
+worker_model       turn=
 budget_snapshot    turn=
 turn_start         turn=1
 assistant_message  turn=1
@@ -195,7 +201,8 @@ session_end        turn=1
 ```
 
 The shape is the mechanism: plan once, then repeat *act → observe → feed back*
-until `converged` or a budget event. `session_end` carries the outcome:
+until `converged` or a budget event. `worker_model` records the model the
+worker reported it is running, once per worker process and again if it changes. `session_end` carries the outcome:
 
 ```json
 {"exit_code": 0, "total_turns": 1, "total_tokens": 3637}
@@ -232,10 +239,13 @@ that, see [the run result](#the-run-result), and
 ## The run result
 
 The trajectory is the stream; the result is the answer. `--format json` returns
-one object when the run ends:
+one object when the run ends. The `demo` harness converges in one turn, so its
+result says little; this one, trimmed to the fields discussed below, is from a
+larger harness that declares a `reviewer` convergence verifier and stopped
+without converging:
 
 ```bash
-ynh agent run --harness local/demo --focus tidy --format json
+ynh agent run --harness local/api --focus add-handler --max-wall 60m --format json
 ```
 
 ```json
@@ -243,9 +253,9 @@ ynh agent run --harness local/demo --focus tidy --format json
   "exit_code": 13,
   "reason": "stuck: sensors unchanged for 3 turns",
   "converged": false,
-  "session_id": "20260829-190412-a3f9",
-  "harness": { "name": "local/demo", "version": "0.2.0", "sha": "4c1f9ab…" },
-  "budgets":        { "max_turns": 25, "max_tokens": 2000000, "max_wall_ms": 3600000 },
+  "session_id": "8e41c07d2b9a5f13",
+  "harness": { "name": "local/api", "version": "0.2.0", "sha": "4c1f9ab…" },
+  "budgets":        { "max_turns": 25, "max_tokens": 1000000, "max_wall_ms": 3600000 },
   "budget_sources": { "turns": "default", "tokens": "manifest", "wall": "flag" },
   "consumed":       { "turns": 7, "tokens": 418233, "wall_ms": 512400, "plan_iterations": 1 },
   "convergence": {
@@ -333,6 +343,13 @@ it, the resumed events go to `trajectory.jsonl` in the same folder.
 The budget resumes where it stopped — it is not reset. A run interrupted at
 turn 20 of 25 gets five more turns, not twenty-five.
 
+`--resume` takes a directory. Given one with no checkpoint, it stops with exit
+code `21`:
+
+```bash
+ynh agent run --resume deadbeef
+```
+
 ```
 Error: no checkpoint found in "deadbeef": open deadbeef/checkpoint.json: no such file or directory
 ```
@@ -366,6 +383,14 @@ For unattended use, this is a prerequisite rather than a refinement. See
 Environment variables reaching the worker are declared too, via
 `env_passthrough`. Empty means none — a worker inheriting the whole environment
 holds every credential the operator holds, which is not a default anyone chose.
+
+## Clean up
+
+```bash
+ynh uninstall local/demo
+cd /
+rm -rf /tmp/loop-demo
+```
 
 ## Summary
 

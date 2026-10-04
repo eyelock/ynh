@@ -252,9 +252,11 @@ Mark the sensor that decides "done":
 "role": "convergence-verifier"
 ```
 
-A `files` sensor **cannot** be one, and `ynd validate` rejects it: no verdict is
+Give it a command source. A `files` sensor **cannot** be one: no verdict is
 derivable from a file glob, and the path sits inside the agent's own write path,
-so the run could manufacture its own convergence.
+so the run could manufacture its own convergence. A `focus` sensor cannot either:
+ynh reports it `deferred`, never `pass`, so the run would go to its turn cap.
+`ynd validate` rejects both, and `ynh agent run` refuses to start with one.
 
 ## Finish
 

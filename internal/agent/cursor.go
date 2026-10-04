@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strings"
 )
 
 // CursorBackend implements WorkerBackend for Cursor's headless agent CLI.
@@ -144,8 +145,14 @@ func (s *cursorSession) Close() error { return nil }
 // cursor stream-json output shapes (same wire format as Claude Code).
 // IsError and Result mark a turn cursor itself reports as failed; Result is
 // held raw so a field of an unexpected type cannot drop the result event.
+//
+// Model is on the system init event, the only one that names the model:
+// cursor's documented stream-json output gives a display name there, such as
+// "Claude 4 Sonnet", and neither assistant messages nor the result carry one.
 type cursorOutputEvent struct {
 	Type    string           `json:"type"`
+	Subtype string           `json:"subtype,omitempty"`
+	Model   string           `json:"model,omitempty"`
 	Message *cursorOutputMsg `json:"message,omitempty"`
 	Usage   *cursorUsage     `json:"usage,omitempty"`
 	IsError bool             `json:"is_error,omitempty"`
@@ -167,6 +174,21 @@ type cursorUsage struct {
 	InputTokens  int64 `json:"input_tokens"`
 	OutputTokens int64 `json:"output_tokens"`
 	CacheTokens  int64 `json:"cache_read_input_tokens,omitempty"`
+	// Claude's cache-write total. A pointer, so its absence is not a zero;
+	// the cache_creation breakdown beside it is not decoded.
+	CacheCreationTokens *int64 `json:"cache_creation_input_tokens,omitempty"`
+}
+
+// add sums the record into turn's usage.
+func (u *cursorUsage) add(turn *Turn) {
+	turn.UsageReported = true
+	turn.Usage.InputTokens += u.InputTokens
+	turn.Usage.OutputTokens += u.OutputTokens
+	turn.Usage.CacheTokens += u.CacheTokens
+	if u.CacheCreationTokens != nil {
+		turn.CacheCreationReported = true
+		turn.Usage.CacheCreationTokens += *u.CacheCreationTokens
+	}
 }
 
 // parseCursorOutput reads stream-json events from a single Cursor subprocess run.
@@ -189,6 +211,12 @@ func parseCursorOutput(r io.Reader) (Turn, error) {
 		}
 
 		switch ev.Type {
+		case "system":
+			// One process per turn, so the model is this turn's process's.
+			if m := strings.TrimSpace(ev.Model); ev.Subtype == "init" && m != "" {
+				turn.Model = m
+			}
+
 		case "assistant":
 			if ev.Message != nil {
 				for _, block := range ev.Message.Content {
@@ -197,19 +225,13 @@ func parseCursorOutput(r io.Reader) (Turn, error) {
 					}
 				}
 				if ev.Message.Usage != nil {
-					turn.UsageReported = true
-					turn.Usage.InputTokens += ev.Message.Usage.InputTokens
-					turn.Usage.OutputTokens += ev.Message.Usage.OutputTokens
-					turn.Usage.CacheTokens += ev.Message.Usage.CacheTokens
+					ev.Message.Usage.add(&turn)
 				}
 			}
 
 		case "result":
 			if ev.Usage != nil {
-				turn.UsageReported = true
-				turn.Usage.InputTokens += ev.Usage.InputTokens
-				turn.Usage.OutputTokens += ev.Usage.OutputTokens
-				turn.Usage.CacheTokens += ev.Usage.CacheTokens
+				ev.Usage.add(&turn)
 			}
 			turn.Content = contentBuf.String()
 			if ev.IsError {
@@ -218,6 +240,9 @@ func parseCursorOutput(r io.Reader) (Turn, error) {
 					Message: firstNonBlank(rawString(ev.Result), turn.Content, "turn failed"),
 				}
 			}
+			// cursor's usage, when it reports any, is Claude Code's shape,
+			// which carries cache_read_input_tokens. It reports no cost.
+			turn.CacheReported = turn.UsageReported
 			return turn, nil
 		}
 	}

@@ -100,19 +100,115 @@ func TestWriteMCPConfig_GeneratorErrorPropagates(t *testing.T) {
 	}
 }
 
+// pluginMCPStub is a vendor whose plugin carries MCP servers at a different
+// path from its project sessions, as Cursor's and Copilot's do.
+type pluginMCPStub struct {
+	stubExporter
+	plugin map[string][]byte
+}
+
+func (s pluginMCPStub) GeneratePluginMCPConfig(map[string]plugin.MCPServer) (map[string][]byte, error) {
+	return s.plugin, nil
+}
+
+// An export is a plugin, so a vendor's plugin MCP path wins over its project
+// path, and the project file is not written at all (#470).
+func TestWriteMCPConfig_PrefersPluginPath(t *testing.T) {
+	out := t.TempDir()
+	s := pluginMCPStub{
+		stubExporter: stubExporter{mcp: map[string][]byte{".vendor/mcp.json": []byte(`{}`)}},
+		plugin:       map[string][]byte{"mcp.json": []byte(`{}`)},
+	}
+	if err := writeMCPConfig(out, s, nil); err != nil {
+		t.Fatalf("writeMCPConfig: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(out, "mcp.json")); err != nil {
+		t.Errorf("plugin MCP config not written: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(out, ".vendor")); !os.IsNotExist(err) {
+		t.Errorf("project MCP config must not be written to a plugin, stat err = %v", err)
+	}
+}
+
+// exportManifestStub is a vendor whose run-dir manifest sits apart from its
+// export manifest, as Copilot's does.
+type exportManifestStub struct {
+	stubExporter
+}
+
+func (exportManifestStub) GeneratePluginManifest(*plugin.HarnessJSON, string) (map[string][]byte, error) {
+	return map[string][]byte{".vendor/.plugin/plugin.json": nil}, nil
+}
+
+func (exportManifestStub) GenerateExportPluginManifest(*plugin.HarnessJSON, string) (map[string][]byte, error) {
+	return map[string][]byte{".plugin/plugin.json": nil}, nil
+}
+
+// An export asks for the export layout explicitly when the vendor has one
+// (#471), and falls back to GeneratePluginManifest when it does not.
+func TestPluginManifest_PrefersExportLayout(t *testing.T) {
+	hj := &plugin.HarnessJSON{Name: "n"}
+	got, err := PluginManifest(exportManifestStub{}, hj, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got[".plugin/plugin.json"]; !ok || len(got) != 1 {
+		t.Errorf("export layout not used, got %v", got)
+	}
+
+	got, err = PluginManifest(stubExporter{}, hj, t.TempDir())
+	if err != nil || got != nil {
+		t.Errorf("fallback = %v, %v; want the stub's nil manifest", got, err)
+	}
+}
+
 func TestWriteHookConfig(t *testing.T) {
 	out := t.TempDir()
 	s := stubExporter{hooks: map[string][]byte{"hooks/hooks.json": []byte(`{}`)}}
-	if err := writeHookConfig(out, s, nil); err != nil {
+	wrote, err := writeHookConfig(out, s, nil)
+	if err != nil {
 		t.Fatalf("writeHookConfig: %v", err)
+	}
+	if !wrote {
+		t.Error("writeHookConfig reported nothing written")
 	}
 	if _, err := os.Stat(filepath.Join(out, "hooks", "hooks.json")); err != nil {
 		t.Errorf("hook config not written: %v", err)
 	}
 }
 
+// pluginHookStub is a vendor whose plugin carries hooks at a different path
+// from its project sessions, as Cursor's does.
+type pluginHookStub struct {
+	stubExporter
+	plugin map[string][]byte
+}
+
+func (s pluginHookStub) GeneratePluginHookConfig(map[string][]plugin.HookEntry) (map[string][]byte, error) {
+	return s.plugin, nil
+}
+
+// An export is a plugin, so a vendor's plugin hook path wins over its project
+// path, and the project file is not written at all (#454).
+func TestWriteHookConfig_PrefersPluginPath(t *testing.T) {
+	out := t.TempDir()
+	s := pluginHookStub{
+		stubExporter: stubExporter{hooks: map[string][]byte{".vendor/hooks.json": []byte(`{}`)}},
+		plugin:       map[string][]byte{"hooks/hooks.json": []byte(`{}`)},
+	}
+	if _, err := writeHookConfig(out, s, nil); err != nil {
+		t.Fatalf("writeHookConfig: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(out, "hooks", "hooks.json")); err != nil {
+		t.Errorf("plugin hook config not written: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(out, ".vendor")); !os.IsNotExist(err) {
+		t.Errorf("project hook config must not be written to a plugin, stat err = %v", err)
+	}
+}
+
 func TestWriteHookConfig_GeneratorErrorPropagates(t *testing.T) {
-	err := writeHookConfig(t.TempDir(), stubExporter{hookErr: errors.New("boom")}, nil)
+	_, err := writeHookConfig(t.TempDir(), stubExporter{hookErr: errors.New("boom")}, nil)
 	if err == nil {
 		t.Fatal("a generator failure must not be swallowed")
 	}
@@ -125,8 +221,12 @@ func TestWriteHookConfig_GeneratorErrorPropagates(t *testing.T) {
 // exactly this because its hooks never fire.
 func TestWriteHookConfig_NoFilesIsFine(t *testing.T) {
 	out := t.TempDir()
-	if err := writeHookConfig(out, stubExporter{}, nil); err != nil {
+	wrote, err := writeHookConfig(out, stubExporter{}, nil)
+	if err != nil {
 		t.Fatalf("a vendor with no hook config must not fail: %v", err)
+	}
+	if wrote {
+		t.Error("writeHookConfig reported a write with no files")
 	}
 	entries, err := os.ReadDir(out)
 	if err != nil {

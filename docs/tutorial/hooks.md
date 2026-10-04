@@ -130,6 +130,15 @@ Expected output includes `.cursor/hooks.json` with Cursor's format:
 
 Note: Cursor uses different event names (`beforeShellExecution` / `afterFileEdit` vs `PreToolUse` / `PostToolUse`), includes a `version: 1` key, and a flat structure without matchers or type wrappers.
 
+`.cursor/hooks.json` is the only hook file in the Cursor preview, because it is the one project path Cursor reads hooks from. A Cursor plugin reads its hooks from a different file, which `ynd export` writes instead (see [Export hooks in a plugin](#export-hooks-in-a-plugin)). Check it:
+
+```bash
+ynd preview /tmp/ynh-tutorial/hook-harness -v cursor -o /tmp/ynh-tutorial/hook-harness-cursor
+find /tmp/ynh-tutorial/hook-harness-cursor -name hooks.json
+```
+
+Expected: exactly one line, ending in `.cursor/hooks.json`.
+
 ## Preview for Codex
 
 ```bash
@@ -168,6 +177,36 @@ Expected output includes `.codex/hooks.json` with Codex's three-level format (sa
 ```
 
 Note: Codex uses the same event names and three-level nesting as Claude — matcher objects wrapping hook arrays with `{"type": "command", ...}` entries.
+
+## Export hooks in a plugin
+
+A preview is a session layout. An exported plugin carries hooks where each vendor's plugin loader reads them: `hooks/<vendor>.json` at the plugin root, named by the `"hooks"` field of that vendor's manifest.
+
+```bash
+ynd export /tmp/ynh-tutorial/hook-harness -v claude,cursor,codex -o /tmp/ynh-tutorial/hook-export
+find /tmp/ynh-tutorial/hook-export -path '*hooks*' -type f | sort
+cat /tmp/ynh-tutorial/hook-export/claude/.claude-plugin/plugin.json
+```
+
+Expected: one `Exported for` line per vendor, plus `warning: codex: skipping 1 rules (not supported)` because a Codex plugin carries only skills. Then exactly three hook files, one per vendor, and no `hooks/hooks.json` or session path such as `.claude/hooks/hooks.json`:
+
+```
+/tmp/ynh-tutorial/hook-export/claude/hooks/claude.json
+/tmp/ynh-tutorial/hook-export/codex/hooks/codex.json
+/tmp/ynh-tutorial/hook-export/cursor/hooks/cursor.json
+```
+
+The Claude manifest names its file:
+
+```json
+{
+  "name": "hook-demo",
+  "version": "0.1.0",
+  "hooks": "./hooks/claude.json"
+}
+```
+
+A merged export (`--merged`, and every `ynd marketplace build` package) puts all three files in one plugin root, and each manifest still names only its own, so no vendor reads another's format. See [Hooks: Config File Locations](../hooks.md#config-file-locations) for why there is no shared `hooks/hooks.json`.
 
 ## Write a blocking hook example
 

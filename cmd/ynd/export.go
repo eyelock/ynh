@@ -116,30 +116,6 @@ func cmdExport(args []string) error {
 		}
 	}
 
-	// Determine output directory. The format chain never rewrites srcDir: it
-	// refuses a legacy manifest with the fix (#406).
-	if outputDir == "" {
-		if _, err := migration.FormatChain().Run(srcDir); err != nil {
-			return err
-		}
-		pj, err := plugin.LoadPluginJSON(srcDir)
-		if err != nil {
-			return fmt.Errorf("loading plugin.json for name: %w", err)
-		}
-		outputDir = filepath.Join(".", "dist", pj.Name)
-	}
-
-	// Handle --clean
-	if clean {
-		if err := cleanOutputDir(outputDir, skipConfirm || skipConfirmEnv()); err != nil {
-			return err
-		}
-	}
-
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		return fmt.Errorf("creating output dir: %w", err)
-	}
-
 	// Parse vendor list
 	var vendorList []string
 	if vendors != "" {
@@ -149,17 +125,6 @@ func cmdExport(args []string) error {
 				return err
 			}
 		}
-	}
-
-	// Load config for remote source checking
-	cfg, err := config.Load()
-	if err != nil {
-		cfg = &config.Config{}
-	}
-
-	mode := exporter.ModePerVendor
-	if merged {
-		mode = exporter.ModeMerged
 	}
 
 	// Resolve focus from flag or env var
@@ -193,6 +158,30 @@ func cmdExport(args []string) error {
 		}
 	}
 
+	// Determine output directory. The format chain never rewrites srcDir: it
+	// refuses a legacy manifest with the fix (#406).
+	if outputDir == "" {
+		if _, err := migration.FormatChain().Run(srcDir); err != nil {
+			return err
+		}
+		pj, err := plugin.LoadPluginJSON(srcDir)
+		if err != nil {
+			return fmt.Errorf("loading plugin.json for name: %w", err)
+		}
+		outputDir = filepath.Join(".", "dist", pj.Name)
+	}
+
+	// Load config for remote source checking
+	cfg, err := config.Load()
+	if err != nil {
+		cfg = &config.Config{}
+	}
+
+	mode := exporter.ModePerVendor
+	if merged {
+		mode = exporter.ModeMerged
+	}
+
 	results, err := exporter.Export(exporter.ExportOptions{
 		SourceDir: srcDir,
 		OutputDir: outputDir,
@@ -200,6 +189,15 @@ func cmdExport(args []string) error {
 		Mode:      mode,
 		Config:    cfg,
 		Profile:   profileName,
+		// Nothing above writes. Export creates the output, and runs --clean,
+		// only once the source has loaded, so a refused export leaves -o
+		// exactly as it found it (#451).
+		BeforeWrite: func() error {
+			if !clean {
+				return nil
+			}
+			return cleanOutputDir(outputDir, skipConfirm || skipConfirmEnv())
+		},
 	})
 	if err != nil {
 		return err

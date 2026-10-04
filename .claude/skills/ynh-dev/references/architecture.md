@@ -90,6 +90,7 @@ type Adapter interface {
 	GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)
 	GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error)
 	GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error)
+	PluginManifestDir() string
 	ExportArtifactDirs() map[string]string
 	SupportsExportDelegates() bool
 	MarketplaceManifestDir() string
@@ -97,7 +98,7 @@ type Adapter interface {
 }
 ```
 
-**24 methods.** Regenerated from `internal/vendor/adapter.go` — that
+**25 methods.** Regenerated from `internal/vendor/adapter.go`; that
 declaration is the only authority. This copy has drifted before (it read 10,
 11 and 18 methods in three different places while the interface had 24), which
 hid the entire resume subsystem from anyone writing a new adapter.

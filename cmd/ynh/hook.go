@@ -162,19 +162,15 @@ func cmdHookExport(args []string, stdout io.Writer) error {
 		return fmt.Errorf("harness %q declares no hooks to export", harnessRef)
 	}
 
-	adapter, err := vendor.Get(vendorName)
+	// ClaudeSettingsHooks emits a single {"hooks": {...}} document; pull out
+	// the translated hooks object to merge into the target settings file.
+	gen, err := vendor.ClaudeSettingsHooks(hj.Hooks)
 	if err != nil {
 		return err
 	}
-	gen, err := adapter.GenerateHookConfig(hj.Hooks)
-	if err != nil {
-		return err
-	}
-	// GenerateHookConfig emits a single {"hooks": {...}} document; pull out the
-	// translated hooks object to merge into the target settings file.
 	var genDoc map[string]any
-	for _, data := range gen {
-		if err := json.Unmarshal(data, &genDoc); err != nil {
+	if gen != nil {
+		if err := json.Unmarshal(gen, &genDoc); err != nil {
 			return fmt.Errorf("parsing generated hook config: %w", err)
 		}
 	}

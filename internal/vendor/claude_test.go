@@ -295,8 +295,12 @@ func TestAnchorHookCommand(t *testing.T) {
 	}
 }
 
-func TestClaudeGenerateHookConfig_AnchorsRelativePaths(t *testing.T) {
-	c := &Claude{}
+// TestClaudeHookAnchors: the same "./" command reaches a different root in
+// each Claude hook file. The session file is read from the --plugin-dir
+// plugin, where session assembly copies the script, so it anchors to
+// ${CLAUDE_PLUGIN_ROOT} (#495). The settings file `ynh hook export` writes
+// belongs to the project, so it anchors to $CLAUDE_PROJECT_DIR.
+func TestClaudeHookAnchors(t *testing.T) {
 	hooks := map[string][]plugin.HookEntry{
 		"before_tool": {
 			{Matcher: "Bash", Command: "./tools/hooks/guard.sh"},
@@ -305,29 +309,49 @@ func TestClaudeGenerateHookConfig_AnchorsRelativePaths(t *testing.T) {
 			{Command: "make check"},
 		},
 	}
-
-	result, err := c.GenerateHookConfig(hooks)
+	session, err := (&Claude{}).GenerateHookConfig(hooks)
 	if err != nil {
 		t.Fatal(err)
 	}
-	data := result[filepath.Join(".claude", "hooks", "hooks.json")]
-
-	var settings struct {
-		Hooks map[string][]struct {
-			Hooks []struct {
-				Command string `json:"command"`
-			} `json:"hooks"`
-		} `json:"hooks"`
-	}
-	if err := json.Unmarshal(data, &settings); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
+	settings, err := ClaudeSettingsHooks(hooks)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	if got := settings.Hooks["PreToolUse"][0].Hooks[0].Command; got != "$CLAUDE_PROJECT_DIR/tools/hooks/guard.sh" {
-		t.Errorf("relative command not anchored: got %q", got)
+	tests := []struct {
+		name string
+		data []byte
+		want string
+	}{
+		{"session", session[filepath.Join(".claude", "hooks", "hooks.json")], `"${CLAUDE_PLUGIN_ROOT}"/tools/hooks/guard.sh`},
+		{"settings", settings, "$CLAUDE_PROJECT_DIR/tools/hooks/guard.sh"},
 	}
-	if got := settings.Hooks["Stop"][0].Hooks[0].Command; got != "make check" {
-		t.Errorf("path-style command should be untouched: got %q", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var doc struct {
+				Hooks map[string][]struct {
+					Hooks []struct {
+						Command string `json:"command"`
+					} `json:"hooks"`
+				} `json:"hooks"`
+			}
+			if err := json.Unmarshal(tt.data, &doc); err != nil {
+				t.Fatalf("invalid JSON: %v", err)
+			}
+			if got := doc.Hooks["PreToolUse"][0].Hooks[0].Command; got != tt.want {
+				t.Errorf("relative command = %q, want %q", got, tt.want)
+			}
+			if got := doc.Hooks["Stop"][0].Hooks[0].Command; got != "make check" {
+				t.Errorf("path-style command should be untouched: got %q", got)
+			}
+		})
+	}
+}
+
+func TestClaudeSettingsHooks_NoClaudeEvents(t *testing.T) {
+	data, err := ClaudeSettingsHooks(nil)
+	if err != nil || data != nil {
+		t.Errorf("ClaudeSettingsHooks(nil) = %q, %v; want nil, nil", data, err)
 	}
 }
 

@@ -860,6 +860,20 @@ func validateHarnessSensors(hj map[string]any) []string {
 		}
 		if count != 1 {
 			issues = append(issues, fmt.Sprintf("%s source must have exactly one of files, command, focus, github_status, github_check", prefix))
+		} else if role, _ := entry["role"].(string); role == "convergence-verifier" {
+			// plugin.ValidateSensors held the files half of this rule with no
+			// production caller, so `ynd validate` accepted a verifier that
+			// could never end a run (#447).
+			kind := ""
+			switch {
+			case hasFiles:
+				kind = "files"
+			case hasFocus:
+				kind = "focus"
+			}
+			if why := plugin.ConvergenceVerifierRefusal(kind); why != "" {
+				issues = append(issues, prefix+" "+why)
+			}
 		}
 	}
 

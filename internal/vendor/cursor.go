@@ -13,13 +13,15 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
-// cursorPluginJSON is the Cursor plugin.json schema — identity fields only.
+// cursorPluginJSON is the Cursor plugin.json schema: identity fields, plus a
+// pointer to the plugin's hooks file when it carries one.
 type cursorPluginJSON struct {
 	Name        string             `json:"name"`
 	Version     string             `json:"version"`
 	Description string             `json:"description,omitempty"`
 	Author      *plugin.AuthorInfo `json:"author,omitempty"`
 	Keywords    []string           `json:"keywords,omitempty"`
+	Hooks       string             `json:"hooks,omitempty"`
 }
 
 func init() {
@@ -134,7 +136,41 @@ var cursorHookEventMap = map[string]string{
 	"on_session_start": "sessionStart",
 }
 
+// GenerateHookConfig writes the project hook file, .cursor/hooks.json, the
+// only project-level path Cursor reads (cursor.com/docs/hooks). It serves
+// `ynh run`, `ynd preview` and the agent loop, which all launch Cursor in the
+// assembled directory. A plugin reads a different path; see
+// GeneratePluginHookConfig.
 func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
+	data, err := cursorHookDocument(hooks, keepHookCommand)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{filepath.Join(".cursor", "hooks.json"): data}, nil
+}
+
+// GeneratePluginHookConfig writes the plugin hook file, hooks/cursor.json at
+// the plugin root, which GeneratePluginManifest names in the manifest's
+// "hooks" field. A Cursor plugin reads hooks/hooks.json by default, and a
+// manifest "hooks" path replaces that discovery
+// (cursor.com/docs/reference/plugins), so Cursor reads this file and nothing
+// else. The exporter uses it for `ynd export` and marketplace packages. Each
+// context reads exactly one of the two files (#454, #469). The document is the
+// project file's except for "./" commands, which name a script shipped in the
+// plugin and are anchored to ${CURSOR_PLUGIN_ROOT}, which Cursor expands in a
+// plugin hook command (cursor.com/docs/reference/plugins, #483).
+func (c *Cursor) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
+	data, err := cursorHookDocument(hooks, pluginRootCommand("CURSOR_PLUGIN_ROOT"))
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{pluginHookFile(c.Name()): data}, nil
+}
+
+// cursorHookDocument renders canonical hooks in Cursor's flat format, or nil
+// when none of them maps to a Cursor event. anchor rewrites each command for
+// where the file is read.
+func cursorHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string) string) ([]byte, error) {
 	if len(hooks) == 0 {
 		return nil, nil
 	}
@@ -161,7 +197,7 @@ func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[st
 
 		var hookEntries []cursorHookEntry
 		for _, entry := range entries {
-			hookEntries = append(hookEntries, cursorHookEntry{Command: entry.Command})
+			hookEntries = append(hookEntries, cursorHookEntry{Command: anchor(entry.Command)})
 		}
 
 		allEvents[cursorEvent] = hookEntries
@@ -182,17 +218,7 @@ func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[st
 	}
 	data = append(data, '\n')
 
-	// Same JSON shape and event names in both locations — only the path
-	// differs: .cursor/hooks.json for project-level config (read by `ynh run`
-	// staging), hooks/hooks.json at plugin root for plugin-format export
-	// (cursor.com/docs/reference/plugins, "Define hooks in hooks/hooks.json").
-	// There's no "is this a plugin export" flag threaded through Adapter, so
-	// both are always emitted — the unused one is simply inert in the other
-	// context.
-	return map[string][]byte{
-		filepath.Join(".cursor", "hooks.json"): data,
-		filepath.Join("hooks", "hooks.json"):   data,
-	}, nil
+	return data, nil
 }
 
 func (c *Cursor) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {
@@ -202,6 +228,7 @@ func (c *Cursor) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string
 		Description: hj.Description,
 		Author:      hj.Author,
 		Keywords:    hj.Keywords,
+		Hooks:       pluginHookPointer(outputDir, c.Name()),
 	}
 	data, err := json.MarshalIndent(pj, "", "  ")
 	if err != nil {
@@ -209,13 +236,15 @@ func (c *Cursor) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string
 	}
 	data = append(data, '\n')
 	return map[string][]byte{
-		filepath.Join(".cursor-plugin", "plugin.json"): data,
+		filepath.Join(c.PluginManifestDir(), "plugin.json"): data,
 	}, nil
 }
 
 func (c *Cursor) ExportArtifactDirs() map[string]string { return nil }
 
 func (c *Cursor) SupportsExportDelegates() bool { return true }
+
+func (c *Cursor) PluginManifestDir() string { return ".cursor-plugin" }
 
 func (c *Cursor) MarketplaceManifestDir() string { return ".cursor-plugin" }
 
@@ -276,31 +305,43 @@ func (c *Cursor) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []
 	return data, nil
 }
 
+// GenerateMCPConfig writes the project MCP file, .cursor/mcp.json, the only
+// project-level path Cursor reads (cursor.com/docs/context/mcp). It serves
+// `ynh run`, `ynd preview` and the agent loop, which all launch Cursor in the
+// assembled directory. A plugin reads a different path; see
+// GeneratePluginMCPConfig.
 func (c *Cursor) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
+	data, err := cursorMCPDocument(servers)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{filepath.Join(".cursor", "mcp.json"): data}, nil
+}
+
+// GeneratePluginMCPConfig writes the plugin MCP file, mcp.json (no dot) at the
+// plugin root, which a Cursor plugin discovers automatically
+// (cursor.com/docs/reference/plugins). The exporter uses it for `ynd export`
+// and marketplace packages. The document is the same as the project file;
+// only the path differs, and each context reads exactly one of them (#470).
+func (c *Cursor) GeneratePluginMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
+	data, err := cursorMCPDocument(servers)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{"mcp.json": data}, nil
+}
+
+// cursorMCPDocument renders MCP servers under Cursor's "mcpServers" key, the
+// same structure as Claude's, or nil when there are none.
+func cursorMCPDocument(servers map[string]plugin.MCPServer) ([]byte, error) {
 	if len(servers) == 0 {
 		return nil, nil
 	}
-
-	// Cursor uses "mcpServers" key — same structure as Claude. Written at two
-	// locations: .cursor/mcp.json for project-level config (read by `ynh run`
-	// staging) and mcp.json (no dot) at plugin root for plugin-format export
-	// (cursor.com/docs/reference/plugins). Both are the same content; there's
-	// no "is this a plugin export" flag threaded through Adapter, so both are
-	// always emitted — the unused one is simply inert in the other context.
-	config := map[string]any{
-		"mcpServers": servers,
-	}
-
-	data, err := json.MarshalIndent(config, "", "  ")
+	data, err := json.MarshalIndent(map[string]any{"mcpServers": servers}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshalling MCP config: %w", err)
 	}
-	data = append(data, '\n')
-
-	return map[string][]byte{
-		filepath.Join(".cursor", "mcp.json"): data,
-		"mcp.json":                           data,
-	}, nil
+	return append(data, '\n'), nil
 }
 
 // TransformArtifact rewrites Cursor rule files to the .mdc format Cursor

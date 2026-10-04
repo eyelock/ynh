@@ -465,10 +465,16 @@ Remote registries use Git URLs:
 
 ## Clean up
 
+`local/codereview` is already gone, and so are both registries and the source. `david-stable` needs no line of its own: a canonical id comes from the source repo and the harness's own name, not the registry entry's, so it installed as `github.com/eyelock/assistants/david`, over the earlier `david`.
+
 ```bash
 ynh uninstall github.com/eyelock/assistants/david 2>/dev/null
 ynh uninstall github.com/eyelock/assistants/planner 2>/dev/null
 ynh uninstall github.com/eyelock/assistants/tester 2>/dev/null
+ynh ls
+# Expected: none of the three is listed
+cd /
+rm -rf /tmp/ynh-tutorial
 ```
 
 ## What you learned

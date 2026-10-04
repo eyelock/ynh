@@ -467,19 +467,137 @@ func TestResolve_NilConfigAllowsAll(t *testing.T) {
 
 func TestShortGitURL(t *testing.T) {
 	tests := []struct {
+		name  string
 		input string
 		want  string
 	}{
-		{"github.com/eyelock/assistants", "eyelock/assistants"},
-		{"/tmp/local", "/tmp/local"},
-		{"./relative", "./relative"},
-		{"solo", "solo"},
+		{"shorthand", "github.com/eyelock/assistants", "eyelock/assistants"},
+		{"https", "https://github.com/eyelock/assistants", "eyelock/assistants"},
+		{"https with .git", "https://github.com/eyelock/assistants.git", "eyelock/assistants"},
+		{"https with trailing slash", "https://github.com/eyelock/assistants/", "eyelock/assistants"},
+		{"http", "http://git.example.com/org/repo", "org/repo"},
+		{"https with port", "https://git.example.com:8443/org/repo.git", "org/repo"},
+		{"https host only", "https://github.com", "github.com"},
+		{"scp ssh", "git@github.com:eyelock/assistants.git", "eyelock/assistants"},
+		{"scp ssh without .git", "git@github.com:eyelock/assistants", "eyelock/assistants"},
+		{"ssh scheme", "ssh://git@github.com/eyelock/assistants.git", "eyelock/assistants"},
+		{"ssh scheme with port", "ssh://git@git.example.com:2222/org/repo.git", "org/repo"},
+		{"file url", "file:///tmp/repos/inc", "/tmp/repos/inc"},
+		{"absolute path", "/tmp/local", "/tmp/local"},
+		{"relative path", "./relative", "./relative"},
+		{"parent relative path", "../sibling", "../sibling"},
+		{"single word", "solo", "solo"},
+		{"empty", "", ""},
 	}
 	for _, tt := range tests {
-		got := ShortGitURL(tt.input)
-		if got != tt.want {
-			t.Errorf("ShortGitURL(%q) = %q, want %q", tt.input, got, tt.want)
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ShortGitURL(tt.input); got != tt.want {
+				t.Errorf("ShortGitURL(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestResolve_RelativeGitSourceUsesHarnessDir pins #461: a relative git
+// source is cloned from the harness directory, not from wherever ynh happens
+// to be running, so the clone agrees with the allow-list check.
+func TestResolve_RelativeGitSourceUsesHarnessDir(t *testing.T) {
+	root := t.TempDir()
+	harnessDir := filepath.Join(root, "h")
+	elsewhere := filepath.Join(root, "elsewhere")
+	for _, d := range []string{harnessDir, elsewhere} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
 		}
+	}
+	t.Chdir(elsewhere)
+
+	var fetched []string
+	fetch := func(url, ref string) (RepoResult, error) {
+		fetched = append(fetched, url)
+		return RepoResult{Path: t.TempDir()}, nil
+	}
+
+	p := &harness.Harness{
+		Name: "h",
+		Dir:  harnessDir,
+		Includes: []harness.Include{
+			{GitSource: harness.GitSource{Git: "./inc"}},
+			{GitSource: harness.GitSource{Git: "../shared"}},
+			{GitSource: harness.GitSource{Git: "/abs/repo"}},
+			{GitSource: harness.GitSource{Git: "https://github.com/eyelock/assistants"}},
+		},
+	}
+	if _, err := resolveWith(p, nil, fetch); err != nil {
+		t.Fatalf("resolveWith: %v", err)
+	}
+	want := []string{
+		filepath.Join(harnessDir, "inc"),
+		filepath.Join(root, "shared"),
+		"/abs/repo",
+		"https://github.com/eyelock/assistants",
+	}
+	if strings.Join(fetched, "\n") != strings.Join(want, "\n") {
+		t.Errorf("fetched\n  %q\nwant\n  %q", fetched, want)
+	}
+}
+
+func TestResolveGitSource_RelativeUsesHarnessDir(t *testing.T) {
+	harnessDir := t.TempDir()
+	t.Chdir(t.TempDir())
+
+	var fetched string
+	fetch := func(url, ref string) (RepoResult, error) {
+		fetched = url
+		return RepoResult{Path: t.TempDir()}, nil
+	}
+	if _, _, err := resolveGitSourceWith(harness.GitSource{Git: "./del"}, harnessDir, fetch); err != nil {
+		t.Fatalf("resolveGitSourceWith: %v", err)
+	}
+	if want := filepath.Join(harnessDir, "del"); fetched != want {
+		t.Errorf("fetched %q, want %q", fetched, want)
+	}
+}
+
+func TestGitSourceURL(t *testing.T) {
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	// t.TempDir can sit behind a symlink (macOS /var -> /private/var), and
+	// Abs works from the logical working directory, so compare against that.
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name, source, dir, want string
+	}{
+		{"relative joined to harness", "./inc", "/h/one", "/h/one/inc"},
+		{"parent joined to harness", "../shared", "/h/one", "/h/shared"},
+		{"unclean relative is cleaned", "./a/../inc/", "/h/one", "/h/one/inc"},
+		{"no harness dir falls back to cwd", "./inc", "", filepath.Join(wd, "inc")},
+		{"absolute unchanged", "/abs/repo", "/h/one", "/abs/repo"},
+		{"file url unchanged", "file:///abs/repo", "/h/one", "file:///abs/repo"},
+		{"https unchanged", "https://github.com/o/r", "/h/one", "https://github.com/o/r"},
+		{"ssh unchanged", "git@github.com:o/r.git", "/h/one", "git@github.com:o/r.git"},
+		{"shorthand unchanged", "github.com/o/r", "/h/one", "github.com/o/r"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := GitSourceURL(tt.source, tt.dir); got != tt.want {
+				t.Errorf("GitSourceURL(%q, %q) = %q, want %q", tt.source, tt.dir, got, tt.want)
+			}
+		})
+	}
+}
+
+// Two harnesses that each name "./inc" mean two different repos, so they must
+// not share a cache entry.
+func TestGitSourceURL_CacheKeyPerHarness(t *testing.T) {
+	a := repoDirName(GitSourceURL("./inc", "/h/one"), "")
+	b := repoDirName(GitSourceURL("./inc", "/h/two"), "")
+	if a == b {
+		t.Errorf("both harnesses map ./inc to cache entry %q", a)
 	}
 }
 
@@ -614,7 +732,7 @@ func TestResolveGitSource_PathTraversalBlocked(t *testing.T) {
 
 	for _, badPath := range []string{"../../etc", "../secret", "/etc/passwd"} {
 		gs := harness.GitSource{Git: "github.com/org/repo", Path: badPath}
-		_, _, err := resolveGitSourceWith(gs, fetch)
+		_, _, err := resolveGitSourceWith(gs, "", fetch)
 		if err == nil {
 			t.Errorf("path %q: expected error, got nil", badPath)
 			continue
@@ -679,5 +797,65 @@ func TestLsRemoteFunc_ExactRefMatch(t *testing.T) {
 	}
 	if got == shadowSHA {
 		t.Errorf("LsRemoteFunc returned shadow/main SHA — suffix-match bug not fixed")
+	}
+}
+
+// TestResolve_LocalIncludesAndAllowList: a "local" include inside the harness
+// is part of the harness and never checked; one at an absolute path is a
+// source like any other and must be listed.
+func TestResolve_LocalIncludesAndAllowList(t *testing.T) {
+	harnessDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(harnessDir, "bundled"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+
+	tests := []struct {
+		name    string
+		local   string
+		allow   []string
+		wantErr string
+	}{
+		{"bundled relative is not a source", "bundled", []string{}, ""},
+		{"absolute unlisted is refused", outside, []string{"github.com/eyelock/**"},
+			`include "` + outside + `": source "` + outside + `" is not in the allowed sources list (add "` + outside + `" to allowed_remote_sources)`},
+		{"absolute listed is allowed", outside, []string{outside}, ""},
+		{"absolute under a listed glob is allowed", outside, []string{filepath.Dir(outside) + "/*"}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &harness.Harness{
+				Name:     "local-incs",
+				Dir:      harnessDir,
+				Includes: []harness.Include{{GitSource: harness.GitSource{Local: tt.local}}},
+			}
+			_, err := Resolve(p, &config.Config{AllowedRemoteSources: tt.allow})
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("Resolve: %v", err)
+				}
+				return
+			}
+			if err == nil || err.Error() != tt.wantErr {
+				t.Fatalf("Resolve error = %v, want %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestResolve_RelativeGitIncludeMatchedAgainstHarnessDir: a relative git
+// include is resolved against the harness directory before matching, so the
+// allow-list entry is an absolute path.
+func TestResolve_RelativeGitIncludeMatchedAgainstHarnessDir(t *testing.T) {
+	harnessDir := t.TempDir()
+	p := &harness.Harness{
+		Name:     "rel-git",
+		Dir:      harnessDir,
+		Includes: []harness.Include{{GitSource: harness.GitSource{Git: "./inc"}}},
+	}
+	_, err := Resolve(p, &config.Config{AllowedRemoteSources: []string{"github.com/eyelock/**"}})
+	want := `(add "` + filepath.Join(harnessDir, "inc") + `" to allowed_remote_sources)`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("Resolve error = %v, want it to contain %q", err, want)
 	}
 }

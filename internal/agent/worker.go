@@ -50,11 +50,20 @@ type StartOptions struct {
 	AutoApprove string
 	// Model overrides the default model. Empty means backend default.
 	Model string
+	// Effort is "", "low", "medium" or "high": the reasoning effort to ask
+	// for, already validated for this backend. Empty passes no effort setting.
+	Effort string
 	// ResumeToken, when non-empty, starts the worker in resume mode against a
 	// prior conversation rather than a fresh one. The value is a backend-native
 	// handle previously obtained from WorkerSession.ResumeToken (claude session
 	// id, cursor chatId, codex session id).
 	ResumeToken string
+	// UsageBase is what the resumed conversation had already consumed, as
+	// the checkpoint recorded it, or nil when that is unknown or nothing is
+	// resumed. A backend whose vendor reports running totals per
+	// conversation (codex) subtracts it so earlier turns are not counted
+	// again; the others ignore it.
+	UsageBase *Usage
 	// Env holds additional environment variables to pass to the subprocess.
 	Env []string
 	// Stderr captures subprocess stderr if non-nil.
@@ -71,6 +80,25 @@ type Turn struct {
 	// this turn, even one of all zeros. A zero Usage alone cannot tell "the
 	// model consumed nothing" from "this backend does not report usage".
 	UsageReported bool
+	// CacheReported is true when that usage record carries a cache-read
+	// count, so Usage.CacheTokens is a measurement rather than a default.
+	CacheReported bool
+	// CacheCreationReported is true when that usage record carries a
+	// cache-write count, so Usage.CacheCreationTokens is a measurement.
+	CacheCreationReported bool
+	// CostUSD is what the vendor reported this turn cost, in US dollars.
+	// It is meaningful only when CostReported: ynh never prices tokens itself,
+	// and a zero for a backend that reports no cost would read as "free".
+	CostUSD      float64
+	CostReported bool
+	// Effort is the reasoning effort the worker reported it runs with, once
+	// the backend has said. Empty means the backend has not reported one,
+	// not that the worker runs without one.
+	Effort string
+	// Model is the model the worker reported running, in the backend's own
+	// words, once it has said. Empty means the backend has not reported one;
+	// it is never the model that was asked for.
+	Model string
 }
 
 // Usage tracks token consumption for a turn.
@@ -78,6 +106,9 @@ type Usage struct {
 	InputTokens  int64
 	OutputTokens int64
 	CacheTokens  int64
+	// CacheCreationTokens is what the turn wrote to the prompt cache. Like
+	// CacheTokens it is carried beside the input and output, never in them.
+	CacheCreationTokens int64
 }
 
 // WorkerError is a turn the worker could not complete: the vendor CLI said so

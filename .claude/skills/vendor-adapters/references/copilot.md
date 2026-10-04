@@ -63,8 +63,14 @@ loading, silently and with no error.
 This is the one Copilot-specific trap in the adapter: `ynh run` nests artifacts
 under `.copilot/` (matching what `--plugin-dir` is given), while `ynd export`
 flattens them to the export root. A fixed manifest path was correct for one
-caller and silently broken for the other. `copilotRunDirLayout(outputDir)`
-detects the caller by testing for `outputDir/.copilot`.
+caller and silently broken for the other. Each caller now asks for its own
+layout: `GeneratePluginManifest` writes the run-dir manifest at
+`.copilot/.claude-plugin/plugin.json`, and `GenerateExportPluginManifest`
+writes the export manifest at `.claude-plugin/plugin.json`, which the exporter
+and marketplace prefer. The layout used to be inferred by testing for
+`outputDir/.copilot`, which an export with MCP servers tripped over: it had
+just written `.copilot/.mcp.json` itself, so its manifest nested under
+`.copilot/` while its skills sat at the root (#471).
 
 ## Native discovery: agents and skills
 
@@ -154,6 +160,20 @@ the CLI's own help.
 
 - `.github/hooks/*.json` (repo scope, any filename)
 - `~/.copilot/hooks/*.json` (user scope)
+- Plugin (legacy manifest): `hooks.json` or `hooks/hooks.json`, or the manifest `hooks`
+  field (path or inline object). Claude-format hooks (PascalCase events such as
+  `PreToolUse`) are accepted with Claude's matcher semantics. CONFIRMED 2026-10-04,
+  docs.github.com/en/copilot/reference/cli-plugin-reference and
+  docs.github.com/en/copilot/reference/hooks-configuration.
+- ynh emits no Copilot hooks, but Copilot reads `.claude-plugin/plugin.json`, the file
+  Claude writes, rendered for both by `claudePluginManifest`. In a merged package that
+  also targets Claude, its `hooks` field names `hooks/claude.json`, so Copilot finds
+  Claude-format hooks there. A Copilot-only export carries none (#469).
+- That file anchors a `./` hook command to `"${CLAUDE_PLUGIN_ROOT}"/` (#483). Copilot
+  documents `${PLUGIN_ROOT}` and its `${CLAUDE_PLUGIN_ROOT}`/`${COPILOT_PLUGIN_ROOT}`
+  aliases for MCP servers and LSP config, and says a plugin hook "can also read the
+  directory it was loaded from", but not whether it expands the variable in a hook
+  command. UNVERIFIED for Copilot.
 
 ## Hook Events (14 — confirmed complete)
 
@@ -278,7 +298,24 @@ mid-session. `~/.copilot/mcp-config.json` is user scope, lower precedence.
 (tested at both `.mcp.json` and `.github/mcp.json` placements inside the plugin
 dir). `GenerateMCPConfig` still writes `.copilot/.mcp.json` for interface
 consistency, but `buildCopilotArgs` re-reads it and projects it into the real
-project's `.github/mcp.json` — the path that actually works.
+project's `.github/mcp.json`, the path that actually works.
+
+An export writes `GeneratePluginMCPConfig`'s `.github/mcp.json` at the plugin
+root instead: the Copilot CLI plugin reference lists `.mcp.json` and
+`.github/mcp.json` as the default MCP paths of a legacy (`.claude-plugin`)
+plugin, and Codex already writes `.mcp.json` into a merged package. Whether an
+installed plugin (rather than one loaded with `--plugin-dir`) reads it has not
+been hand-tested.
+
+The reference lists the legacy MCP sources as "`.mcp.json`, `.github/mcp.json`,
+or the `mcpServers` manifest field" (fetched 2026-10-04) and does not say how they
+combine. A Copilot-only export's `.claude-plugin/plugin.json` names no MCP file,
+so Copilot reads `.github/mcp.json`. In a package that also carries Claude, the
+shared manifest's `mcpServers` names Claude's `mcp/claude.json` (#481), whose
+entries lack `type` and `tools`, and a merged package that includes Codex also
+has Codex's `.mcp.json` (same format) at the root. Which of those an installed
+Copilot plugin loads, and whether it accepts entries without `type`, is
+**UNVERIFIED** (#499). Hand-test before relying on Copilot MCP from a merged package.
 
 **Never shell out to `copilot mcp add`**: it only writes user-level
 `~/.copilot/mcp-config.json` and has no flag to target the workspace file.

@@ -966,3 +966,22 @@ func writeHarnessAt(t *testing.T, dir, name string) {
 		t.Fatal(err)
 	}
 }
+
+// Go test output carries a duration on the very lines that name the failure.
+// A baseline that hashed them would never forgive a failing test, because the
+// next run's timing is never the recorded one (#434).
+func TestCheck_TimingDriftIsNotANewFailure(t *testing.T) {
+	home, work := setupBaselineRepo(t, "--- FAIL: TestParse (0.03s)\n    parse_test.go:12: got 3, want 4\nFAIL\nFAIL\tgithub.com/x/y/pkg\t0.512s\n")
+	if _, _, err := runBaselineCheck(t, home, work, "--update-baseline"); err != nil {
+		t.Fatal(err)
+	}
+	writeIssues(t, work, "--- FAIL: TestParse (0.07s)\n    parse_test.go:12: got 3, want 4\nFAIL\nFAIL\tgithub.com/x/y/pkg\t1.204s\n")
+	env, _, err := runBaselineCheck(t, home, work)
+	if err != nil {
+		t.Fatalf("timing-only drift must not block, got %v", err)
+	}
+	r := sensorNamed(t, env, "lint")
+	if r.Status != gate.StatusKnown || r.NewCount != 0 {
+		t.Errorf("lint status = %q new = %d, want known with 0 new", r.Status, r.NewCount)
+	}
+}

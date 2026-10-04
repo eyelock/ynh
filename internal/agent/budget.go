@@ -14,6 +14,19 @@ type Budget struct {
 	startTime time.Time
 	turns     int
 	tokens    int64
+
+	// The split behind tokens, and the cost the vendor reported. Each is
+	// known only once a turn has reported it: a backend that reports none
+	// leaves the field absent from the result, never zero.
+	inputTokens           int64
+	outputTokens          int64
+	cacheReadTokens       int64
+	usageReported         bool
+	cacheReported         bool
+	cacheCreationTokens   int64
+	cacheCreationReported bool
+	costUSD               float64
+	costReported          bool
 }
 
 // Start records the session start time. Must be called before the loop begins.
@@ -22,13 +35,42 @@ func (b *Budget) Start() {
 }
 
 // Resume restores counters from a checkpoint so caps carry across a relaunch.
-// wallConsumed is the wall-clock already spent in prior sessions; the start
-// time is back-dated by that amount so Exceeded() measures cumulative elapsed
-// time, not just this process's lifetime. Use instead of Start on resume.
-func (b *Budget) Resume(turns int, tokens int64, wallConsumed time.Duration) {
-	b.turns = turns
-	b.tokens = tokens
-	b.startTime = time.Now().Add(-wallConsumed)
+// The wall-clock already spent in prior sessions back-dates the start time,
+// so Exceeded() measures cumulative elapsed time, not just this process's
+// lifetime. Use instead of Start on resume. A checkpoint written before the
+// split and cost were recorded restores them as not yet reported.
+func (b *Budget) Resume(cb CheckpointBudget) {
+	b.turns = cb.Turns
+	b.tokens = cb.Tokens
+	b.inputTokens = cb.InputTokens
+	b.outputTokens = cb.OutputTokens
+	b.cacheReadTokens = cb.CacheReadTokens
+	b.usageReported = cb.UsageReported
+	b.cacheReported = cb.CacheReported
+	b.cacheCreationTokens = cb.CacheCreationTokens
+	b.cacheCreationReported = cb.CacheCreationReported
+	b.costUSD = cb.CostUSD
+	b.costReported = cb.CostReported
+	b.startTime = time.Now().Add(-time.Duration(cb.WallConsumedMS) * time.Millisecond)
+}
+
+// checkpoint returns the budget's accounting in its persisted form.
+func (b *Budget) checkpoint(planIterations int) CheckpointBudget {
+	return CheckpointBudget{
+		Turns:                 b.turns,
+		Tokens:                b.tokens,
+		WallConsumedMS:        b.WallConsumed().Milliseconds(),
+		PlanIterations:        planIterations,
+		InputTokens:           b.inputTokens,
+		OutputTokens:          b.outputTokens,
+		CacheReadTokens:       b.cacheReadTokens,
+		UsageReported:         b.usageReported,
+		CacheReported:         b.cacheReported,
+		CacheCreationTokens:   b.cacheCreationTokens,
+		CacheCreationReported: b.cacheCreationReported,
+		CostUSD:               b.costUSD,
+		CostReported:          b.costReported,
+	}
 }
 
 // WallConsumed returns the cumulative wall-clock elapsed since the (possibly
@@ -43,9 +85,28 @@ func (b *Budget) RecordTurn() {
 	b.turns++
 }
 
-// RecordTokens adds token usage from a completed turn.
-func (b *Budget) RecordTokens(u Usage) {
-	b.tokens += u.InputTokens + u.OutputTokens
+// RecordUsage adds what a completed turn consumed. The token total counts
+// input and output only, as it always has; the split, the cache reads and
+// writes and the cost are carried beside it and never change it.
+func (b *Budget) RecordUsage(t Turn) {
+	b.tokens += t.Usage.InputTokens + t.Usage.OutputTokens
+	if t.UsageReported {
+		b.usageReported = true
+		b.inputTokens += t.Usage.InputTokens
+		b.outputTokens += t.Usage.OutputTokens
+		if t.CacheReported {
+			b.cacheReported = true
+			b.cacheReadTokens += t.Usage.CacheTokens
+		}
+		if t.CacheCreationReported {
+			b.cacheCreationReported = true
+			b.cacheCreationTokens += t.Usage.CacheCreationTokens
+		}
+	}
+	if t.CostReported {
+		b.costReported = true
+		b.costUSD += t.CostUSD
+	}
 }
 
 // Turns returns the number of completed turns so far.
@@ -53,6 +114,26 @@ func (b *Budget) Turns() int { return b.turns }
 
 // Tokens returns the total tokens consumed so far.
 func (b *Budget) Tokens() int64 { return b.tokens }
+
+// fillConsumed sets the split and cost fields a backend reported, leaving
+// the rest nil so they are absent from the result.
+func (b *Budget) fillConsumed(c *RunConsumed) {
+	if b.usageReported {
+		c.InputTokens = ptr(b.inputTokens)
+		c.OutputTokens = ptr(b.outputTokens)
+		if b.cacheReported {
+			c.CacheReadTokens = ptr(b.cacheReadTokens)
+		}
+		if b.cacheCreationReported {
+			c.CacheCreationTokens = ptr(b.cacheCreationTokens)
+		}
+	}
+	if b.costReported {
+		c.CostUSD = ptr(b.costUSD)
+	}
+}
+
+func ptr[T any](v T) *T { return &v }
 
 // Exceeded returns a non-empty reason string if any limit has been hit,
 // or an empty string if still within budget. The BudgetType and exit code

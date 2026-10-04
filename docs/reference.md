@@ -34,7 +34,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | Command | Key Flags |
 |---------|-----------|
 | `ynh install <source>` | `--path`, `-v` |
-| `ynh run [harness]` | `-v`, `--profile`, `--focus`, `--install`, `--clean` |
+| `ynh run [harness-id\|path]` | `-v`, `--profile`, `--focus`, `--harness-file <file>`, `--install`, `--clean` |
 | `ynh uninstall <harness>...` | |
 | `ynh update [harness]` | |
 | `ynh fork <name>` | `--to <path>`, `--name <new>`, `--format <text\|json>` |
@@ -76,7 +76,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh sensors run <harness> <name>` | `--cwd <dir>`, `--no-content` |
 | `ynh check <harness-id\|path>` | `--only <a,b>`, `--cwd <dir>`, `--update-baseline`, `--no-baseline`, `--sensor-overlay <json>`, `--format <text\|json>` |
 | `ynh trust [ls\|show\|accept] [harness]` | `--format <text\|json>` |
-| `ynh agent run` | `--harness`, `--task`, `--focus`, `--profile`, `--backend`, `--model`, `--convergence-sensor`, `--sensor-overlay`, `--worktree`, `--sandbox`, `--auto-approve`, `--auto-commit`, `--interactive`, `--no-plan`, `--max-turns`, `--max-tokens`, `--max-wall`, `--max-plan-iterations`, `--emit-jsonl`, `--resume`. See [Agent Loop](agent.md) |
+| `ynh agent run` | `--harness`, `--task`, `--focus`, `--profile`, `--backend`, `--model`, `--effort`, `--convergence-sensor`, `--sensor-overlay`, `--worktree`, `--sandbox`, `--auto-approve`, `--auto-commit`, `--interactive`, `--no-plan`, `--max-turns`, `--max-tokens`, `--max-wall`, `--max-plan-iterations`, `--emit-jsonl`, `--resume`. See [Agent Loop](agent.md) |
 | `ynh sources add <path>` | `--name`, `--description` |
 | `ynh sources list` | `--format <text\|json>` |
 | `ynh sources remove <name>` | |
@@ -209,7 +209,7 @@ Per-harness fields:
 | `installed_from.sha` | Resolved commit SHA at install time. Empty for pre-migration installs |
 | `installed_from.forked_from` | Upstream a forked harness was copied from — `source_type`, `source`, `version`, `sha`, optional `ref`, `path`, `registry_name`. Absent on non-fork installs |
 | `artifacts` | (`ynh ls` only) Counts: `skills`, `agents`, `rules`, `commands` |
-| `includes` | Array of include objects: `git`, `ref_installed`, `ref_available`, `is_pinned`, optional `path`, `pick` |
+| `includes` | Array of include objects: `git`, `ref_installed`, `ref_available`, `is_pinned`, optional `path`, `pick`. A `local` include has an empty `git` and carries `local`, its path as declared in the manifest |
 | `delegates_to` | Array of delegate objects: `git`, `ref_installed`, `ref_available`, `is_pinned`, optional `path` |
 | `manifest` | (`ynh info` only) Raw `.agents/harness/plugin.json` body, JSON-compacted |
 

@@ -77,23 +77,23 @@ func TestMatchGlob(t *testing.T) {
 	}
 }
 
-func TestCheckRemoteSource_NilAllowAll(t *testing.T) {
+func TestCheckSource_NilAllowAll(t *testing.T) {
 	cfg := &Config{AllowedRemoteSources: nil}
 
-	if err := cfg.CheckRemoteSource("github.com/anyone/anything"); err != nil {
+	if err := cfg.CheckSource("github.com/anyone/anything", ""); err != nil {
 		t.Errorf("nil allow list should permit all, got: %v", err)
 	}
 }
 
-func TestCheckRemoteSource_EmptyDenyAll(t *testing.T) {
+func TestCheckSource_EmptyDenyAll(t *testing.T) {
 	cfg := &Config{AllowedRemoteSources: []string{}}
 
-	if err := cfg.CheckRemoteSource("github.com/user/repo"); err == nil {
+	if err := cfg.CheckSource("github.com/user/repo", ""); err == nil {
 		t.Error("empty allow list should deny all remote sources")
 	}
 }
 
-func TestCheckRemoteSource_MatchesAllowed(t *testing.T) {
+func TestCheckSource_MatchesAllowed(t *testing.T) {
 	cfg := &Config{
 		AllowedRemoteSources: []string{
 			"github.com/eyelock/*",
@@ -116,17 +116,17 @@ func TestCheckRemoteSource_MatchesAllowed(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		err := cfg.CheckRemoteSource(tt.url)
+		err := cfg.CheckSource(tt.url, "")
 		if tt.allowed && err != nil {
-			t.Errorf("CheckRemoteSource(%q) should be allowed, got: %v", tt.url, err)
+			t.Errorf("CheckSource(%q) should be allowed, got: %v", tt.url, err)
 		}
 		if !tt.allowed && err == nil {
-			t.Errorf("CheckRemoteSource(%q) should be denied", tt.url)
+			t.Errorf("CheckSource(%q) should be denied", tt.url)
 		}
 	}
 }
 
-func TestCheckRemoteSource_DeepPaths(t *testing.T) {
+func TestCheckSource_DeepPaths(t *testing.T) {
 	cfg := &Config{
 		AllowedRemoteSources: []string{
 			"github.com/org/**/my-team-skills/*",
@@ -145,12 +145,104 @@ func TestCheckRemoteSource_DeepPaths(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		err := cfg.CheckRemoteSource(tt.url)
+		err := cfg.CheckSource(tt.url, "")
 		if tt.allowed && err != nil {
-			t.Errorf("CheckRemoteSource(%q) should be allowed, got: %v", tt.url, err)
+			t.Errorf("CheckSource(%q) should be allowed, got: %v", tt.url, err)
 		}
 		if !tt.allowed && err == nil {
-			t.Errorf("CheckRemoteSource(%q) should be denied", tt.url)
+			t.Errorf("CheckSource(%q) should be denied", tt.url)
+		}
+	}
+}
+
+func TestCheckSource_GitURLMessage(t *testing.T) {
+	cfg := &Config{AllowedRemoteSources: []string{"github.com/eyelock/**"}}
+	err := cfg.CheckSource("https://github.com/anthropics/skills.git", "")
+	want := `remote source "https://github.com/anthropics/skills.git" is not in the allowed sources list (add "github.com/anthropics/skills" to allowed_remote_sources)`
+	if err == nil || err.Error() != want {
+		t.Errorf("got %v, want %q", err, want)
+	}
+}
+
+func TestCheckSource_LocalPaths(t *testing.T) {
+	const harnessDir = "/work/harness"
+	tests := []struct {
+		name    string
+		allow   []string
+		source  string
+		allowed bool
+	}{
+		{"exact absolute", []string{"/tmp/inc"}, "/tmp/inc", true},
+		{"other absolute", []string{"/tmp/inc"}, "/tmp/other", false},
+		{"entry with trailing slash", []string{"/tmp/inc/"}, "/tmp/inc", true},
+		{"source not clean", []string{"/tmp/inc"}, "/tmp/x/../inc/", true},
+		{"dot-dot cannot escape a glob", []string{"/tmp/*"}, "/tmp/../etc", false},
+		{"star is one segment", []string{"/tmp/*"}, "/tmp/inc", true},
+		{"star does not cross a slash", []string{"/tmp/*"}, "/tmp/a/inc", false},
+		{"double star is any depth", []string{"/Users/me/shared/**"}, "/Users/me/shared/a/b/inc", true},
+		{"double star covers the root itself", []string{"/Users/me/shared/**"}, "/Users/me/shared", true},
+		{"double star stays under its root", []string{"/Users/me/shared/**"}, "/Users/me/other/inc", false},
+		{"file url", []string{"/tmp/inc"}, "file:///tmp/inc", true},
+		{"relative resolved against the harness", []string{"/work/harness/inc"}, "./inc", true},
+		{"parent-relative resolved against the harness", []string{"/work/shared/*"}, "../shared/inc", true},
+		{"relative is not matched as written", []string{"./inc"}, "./inc", false},
+		{"git url entry does not admit a path", []string{"github.com/**"}, "/tmp/inc", false},
+		{"path entry does not admit a git url", []string{"/**"}, "github.com/user/repo", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{AllowedRemoteSources: tt.allow}
+			err := cfg.CheckSource(tt.source, harnessDir)
+			if tt.allowed && err != nil {
+				t.Errorf("CheckSource(%q) should be allowed by %v, got: %v", tt.source, tt.allow, err)
+			}
+			if !tt.allowed && err == nil {
+				t.Errorf("CheckSource(%q) should be denied by %v", tt.source, tt.allow)
+			}
+		})
+	}
+}
+
+func TestCheckSource_LocalPathMessage(t *testing.T) {
+	cfg := &Config{AllowedRemoteSources: []string{"github.com/eyelock/**"}}
+	tests := []struct {
+		source string
+		want   string
+	}{
+		{"/tmp/inc", `source "/tmp/inc" is not in the allowed sources list (add "/tmp/inc" to allowed_remote_sources)`},
+		{"./inc", `source "./inc" is not in the allowed sources list (add "/work/harness/inc" to allowed_remote_sources)`},
+		{"file:///tmp/inc", `source "file:///tmp/inc" is not in the allowed sources list (add "/tmp/inc" to allowed_remote_sources)`},
+	}
+	for _, tt := range tests {
+		err := cfg.CheckSource(tt.source, "/work/harness")
+		if err == nil || err.Error() != tt.want {
+			t.Errorf("CheckSource(%q) = %v, want %q", tt.source, err, tt.want)
+		}
+	}
+}
+
+func TestLocalSourcePath(t *testing.T) {
+	tests := []struct {
+		source  string
+		baseDir string
+		want    string
+		local   bool
+	}{
+		{"/tmp/inc", "/h", "/tmp/inc", true},
+		{"./inc", "/h", "/h/inc", true},
+		{"../inc", "/h/x", "/h/inc", true},
+		{"file:///tmp/inc", "/h", "/tmp/inc", true},
+		{"file://host/tmp/inc", "/h", "", false},
+		{"~/inc", "/h", "", false},
+		{"github.com/user/repo", "/h", "", false},
+		{"git@github.com:user/repo.git", "/h", "", false},
+		{"https://github.com/user/repo", "/h", "", false},
+		{"./inc", "", "inc", true},
+	}
+	for _, tt := range tests {
+		got, local := localSourcePath(tt.source, tt.baseDir)
+		if got != tt.want || local != tt.local {
+			t.Errorf("localSourcePath(%q, %q) = (%q, %v), want (%q, %v)", tt.source, tt.baseDir, got, local, tt.want, tt.local)
 		}
 	}
 }

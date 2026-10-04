@@ -354,7 +354,7 @@ func TestRunLoop_ResumePastExceededBudgetExits(t *testing.T) {
 	// Hand-author a checkpoint whose budget already exceeds the cap.
 	if err := writeCheckpoint(dir, &Checkpoint{
 		SessionID:         "s",
-		Backend:           "mock",
+		Backend:           "claude",
 		Phase:             PhaseAct,
 		PlanFinalized:     true,
 		LastCompletedTurn: 5,
@@ -414,27 +414,7 @@ func TestSessions_ResumeTokenAccessors(t *testing.T) {
 	if got := (&cursorSession{chatID: "cid"}).ResumeToken(); got != "cid" {
 		t.Errorf("cursor ResumeToken = %q, want cid", got)
 	}
-	if got := (&codexSession{sessionID: "sid"}).ResumeToken(); got != "sid" {
+	if got := (&codexSession{threadID: "sid"}).ResumeToken(); got != "sid" {
 		t.Errorf("codex ResumeToken = %q, want sid", got)
-	}
-}
-
-// codex learns its session id from the event stream; ResumeToken surfaces it.
-func TestCodexSession_CapturesSessionID(t *testing.T) {
-	var sb strings.Builder
-	enc := json.NewEncoder(&sb)
-	_ = enc.Encode(map[string]any{"type": "session.created", "session_id": "sess-xyz"})
-	_ = enc.Encode(codexOutputEvent{
-		Type:    "message",
-		Message: &codexMsg{Role: "assistant", Content: []codexContent{{Type: "text", Text: "hi"}}},
-	})
-	_ = enc.Encode(codexOutputEvent{Type: "result"})
-
-	sess := &codexSession{scanner: bufio.NewScanner(strings.NewReader(sb.String()))}
-	if _, err := sess.Next(); err != nil {
-		t.Fatalf("Next: %v", err)
-	}
-	if sess.ResumeToken() != "sess-xyz" {
-		t.Errorf("captured session id = %q, want sess-xyz", sess.ResumeToken())
 	}
 }

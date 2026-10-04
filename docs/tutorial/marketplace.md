@@ -330,18 +330,18 @@ ynd marketplace build -o /tmp/ynh-tutorial/marketplace-claude -v claude
 ## Clean up
 
 ```bash
-rm -rf /tmp/ynh-tutorial/marketplace-*
+rm -rf /tmp/ynh-tutorial
 ```
 
 ## What you learned
 
 - `ynd marketplace build` generates vendor-native marketplace directories
 - A marketplace config lists `plugin` entries (copy as-is) and `harness` entries (fully exported)
-- Output includes `.claude-plugin/marketplace.json` and `.cursor-plugin/marketplace.json`
-- Plugins get dual manifests so one physical directory serves both vendors
+- Output includes an index per vendor: `.claude-plugin/marketplace.json`, `.cursor-plugin/marketplace.json`, `.agents/plugins/marketplace.json` (Codex) and `.github/plugin/marketplace.json` (Copilot)
+- Plugins get every vendor's manifest so one physical directory serves them all
 - Harnesses' remote includes are resolved and flattened during marketplace build
 - Pick filtering carries through from harness metadata to the marketplace output
-- Codex is excluded from marketplaces (no marketplace system)
+- Codex is included: each plugin gets a `.codex-plugin/plugin.json` that points only at its skills
 
 ## Next
 

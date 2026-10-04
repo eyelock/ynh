@@ -429,7 +429,7 @@ func cmdProfileIncludeAdd(args []string, stdout io.Writer) error {
 
 	if installed {
 		gs := harness.GitSource{Git: url, Ref: opts.Ref, Path: opts.Path}
-		if _, _, fetchErr := resolver.ResolveGitSource(gs); fetchErr != nil {
+		if _, _, fetchErr := resolver.ResolveGitSource(gs, dir); fetchErr != nil {
 			return fmt.Errorf("fetching include: %w", fetchErr)
 		}
 	}
@@ -530,7 +530,7 @@ func cmdProfileIncludeUpdate(args []string, stdout io.Writer) error {
 			return ferr
 		}
 		gs := harness.GitSource{Git: url, Ref: finalInc.Ref, Path: finalInc.Path}
-		if _, _, fetchErr := resolver.ResolveGitSource(gs); fetchErr != nil {
+		if _, _, fetchErr := resolver.ResolveGitSource(gs, dir); fetchErr != nil {
 			return fmt.Errorf("fetching include: %w", fetchErr)
 		}
 	}
