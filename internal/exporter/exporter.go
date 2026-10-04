@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
@@ -231,16 +233,28 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 	agents := countDir(filepath.Join(outputDir, "agents"))
 
 	// Hook config for each vendor, before the manifests: each vendor's
-	// manifest names its hooks file only when the file is there.
+	// manifest names its hooks file only when the file is there. The scripts
+	// those hooks run are copied once, since the vendors share the root.
+	var warnings []string
 	if len(p.Hooks) > 0 {
+		wroteHooks := false
 		for _, v := range vendors {
 			adapter, err := vendor.Get(v)
 			if err != nil {
 				continue
 			}
-			if err := writeHookConfig(outputDir, adapter, p.Hooks); err != nil {
+			wrote, err := writeHookConfig(outputDir, adapter, p.Hooks)
+			if err != nil {
 				return nil, fmt.Errorf("writing hook config for %s: %w", v, err)
 			}
+			wroteHooks = wroteHooks || wrote
+		}
+		if wroteHooks {
+			w, err := copyHookScripts(p.Dir, outputDir, p.Hooks)
+			if err != nil {
+				return nil, err
+			}
+			warnings = w
 		}
 	}
 
@@ -295,6 +309,7 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 		OutputDir: outputDir,
 		Skills:    skills,
 		Agents:    agents,
+		Warnings:  warnings,
 	})
 
 	return results, nil
@@ -364,10 +379,18 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 		}
 	}
 
-	// Hook config
+	// Hook config, and the scripts its hooks run
 	if len(p.Hooks) > 0 {
-		if err := writeHookConfig(outputDir, adapter, p.Hooks); err != nil {
+		wrote, err := writeHookConfig(outputDir, adapter, p.Hooks)
+		if err != nil {
 			return result, fmt.Errorf("writing hook config: %w", err)
+		}
+		if wrote {
+			warnings, err := copyHookScripts(p.Dir, outputDir, p.Hooks)
+			if err != nil {
+				return result, err
+			}
+			result.Warnings = append(result.Warnings, warnings...)
 		}
 	}
 
@@ -422,26 +445,82 @@ func writeMCPConfig(outputDir string, adapter VendorExporter, servers map[string
 	return nil
 }
 
-// writeHookConfig generates the vendor's plugin hook config and writes it to the output directory.
-func writeHookConfig(outputDir string, adapter VendorExporter, hooks map[string][]plugin.HookEntry) error {
+// writeHookConfig generates the vendor's plugin hook config and writes it to
+// the output directory. It reports whether it wrote any file: a vendor that
+// emits no hooks (Copilot) needs none of the scripts they run.
+func writeHookConfig(outputDir string, adapter VendorExporter, hooks map[string][]plugin.HookEntry) (bool, error) {
 	generate := adapter.GenerateHookConfig
 	if pg, ok := adapter.(PluginHookGenerator); ok {
 		generate = pg.GeneratePluginHookConfig
 	}
 	hookFiles, err := generate(hooks)
 	if err != nil {
-		return fmt.Errorf("generating hook config: %w", err)
+		return false, fmt.Errorf("generating hook config: %w", err)
 	}
 	for relPath, content := range hookFiles {
 		absPath := filepath.Join(outputDir, relPath)
 		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
-			return fmt.Errorf("creating hook config dir: %w", err)
+			return false, fmt.Errorf("creating hook config dir: %w", err)
 		}
 		if err := os.WriteFile(absPath, content, 0o644); err != nil {
-			return fmt.Errorf("writing hook config %s: %w", relPath, err)
+			return false, fmt.Errorf("writing hook config %s: %w", relPath, err)
 		}
 	}
-	return nil
+	return len(hookFiles) > 0, nil
+}
+
+// copyHookScripts copies into a plugin each script its hooks run by a "./"
+// path. A plugin hook file anchors such a command to the vendor's plugin-root
+// variable (#483), so the script must ship in the plugin: it is copied from
+// the same path in the harness directory, keeping its mode. A "./" script that
+// is not a regular file in the harness, or that climbs out of it, cannot ship,
+// and comes back as a warning rather than an error, because the export is
+// still a valid plugin and the hook may be meant for a tree the harness does
+// not own. Other commands (absolute, variable-anchored, PATH-style) are not
+// scripts the harness ships and are left alone.
+func copyHookScripts(harnessDir, outputDir string, hooks map[string][]plugin.HookEntry) ([]string, error) {
+	events := make([]string, 0, len(hooks))
+	for event := range hooks {
+		events = append(events, event)
+	}
+	sort.Strings(events)
+
+	var warnings []string
+	seen := map[string]bool{}
+	for _, event := range events {
+		for _, entry := range hooks[event] {
+			script, ok := hookScript(entry.Command)
+			if !ok || seen[script] {
+				continue
+			}
+			seen[script] = true
+			rel := filepath.Clean(filepath.FromSlash(strings.TrimPrefix(script, "./")))
+			if !filepath.IsLocal(rel) {
+				warnings = append(warnings, fmt.Sprintf("hook script %s is outside the harness, so the plugin cannot carry it", script))
+				continue
+			}
+			src := filepath.Join(harnessDir, rel)
+			if info, err := os.Lstat(src); err != nil || !info.Mode().IsRegular() {
+				warnings = append(warnings, fmt.Sprintf("hook script %s is not a file in the harness, so the plugin does not carry it", script))
+				continue
+			}
+			if err := assembler.CopyFile(src, filepath.Join(outputDir, rel)); err != nil {
+				return nil, fmt.Errorf("copying hook script %s: %w", script, err)
+			}
+		}
+	}
+	return warnings, nil
+}
+
+// hookScript returns the script a hook command runs when it names one by a
+// "./" path, the form a plugin hook file anchors to the plugin root: the
+// command's first word.
+func hookScript(cmd string) (string, bool) {
+	fields := strings.Fields(cmd)
+	if len(fields) == 0 || !strings.HasPrefix(fields[0], "./") {
+		return "", false
+	}
+	return fields[0], true
 }
 
 // writeGeneratedFiles writes a map of relative paths to file contents into baseDir.

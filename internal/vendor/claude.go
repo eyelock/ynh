@@ -218,13 +218,14 @@ func ClaudeHookEvent(canonical string) (string, bool) {
 }
 
 // GenerateHookConfig writes the session hook file, .claude/hooks/hooks.json.
+// A "./" command is anchored to $CLAUDE_PROJECT_DIR (see anchorHookCommand).
 // `ynh run` launches Claude with --plugin-dir pointed at the assembled .claude/
 // directory, so this is hooks/hooks.json at that plugin's root, the default
 // location Claude Code reads (code.claude.com/docs/en/plugins-reference). It
 // serves `ynh run`, `ynd preview` and the agent loop. An exported plugin uses
 // GeneratePluginHookConfig instead.
 func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
-	data, err := claudeHookDocument(hooks)
+	data, err := claudeHookDocument(hooks, anchorHookCommand)
 	if err != nil || data == nil {
 		return nil, err
 	}
@@ -234,9 +235,11 @@ func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[st
 // GeneratePluginHookConfig writes the plugin hook file, hooks/claude.json at
 // the root of an exported plugin, which GeneratePluginManifest names in the
 // manifest's "hooks" field. The exporter uses it for `ynd export` and
-// marketplace packages (#468). The document is the same as the session file.
+// marketplace packages (#468). The document is the session file's except for
+// "./" commands, which name a script shipped in the plugin and are anchored to
+// ${CLAUDE_PLUGIN_ROOT} rather than the project (#483).
 func (c *Claude) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
-	data, err := claudeHookDocument(hooks)
+	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"))
 	if err != nil || data == nil {
 		return nil, err
 	}
@@ -244,8 +247,9 @@ func (c *Claude) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (
 }
 
 // claudeHookDocument renders canonical hooks in Claude Code's format, or nil
-// when none of them maps to a Claude event.
-func claudeHookDocument(hooks map[string][]plugin.HookEntry) ([]byte, error) {
+// when none of them maps to a Claude event. anchor rewrites each command for
+// where the file is read.
+func claudeHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string) string) ([]byte, error) {
 	if len(hooks) == 0 {
 		return nil, nil
 	}
@@ -300,7 +304,7 @@ func claudeHookDocument(hooks map[string][]plugin.HookEntry) ([]byte, error) {
 		for _, g := range groups {
 			var inner []claudeInnerHook
 			for _, cmd := range g.cmds {
-				inner = append(inner, claudeInnerHook{Type: "command", Command: anchorHookCommand(cmd)})
+				inner = append(inner, claudeInnerHook{Type: "command", Command: anchor(cmd)})
 			}
 			hookGroups = append(hookGroups, claudeHookGroup{
 				Matcher: g.matcher,

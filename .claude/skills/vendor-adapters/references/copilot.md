@@ -169,6 +169,11 @@ the CLI's own help.
   Claude writes, rendered for both by `claudePluginManifest`. In a merged package that
   also targets Claude, its `hooks` field names `hooks/claude.json`, so Copilot finds
   Claude-format hooks there. A Copilot-only export carries none (#469).
+- That file anchors a `./` hook command to `"${CLAUDE_PLUGIN_ROOT}"/` (#483). Copilot
+  documents `${PLUGIN_ROOT}` and its `${CLAUDE_PLUGIN_ROOT}`/`${COPILOT_PLUGIN_ROOT}`
+  aliases for MCP servers and LSP config, and says a plugin hook "can also read the
+  directory it was loaded from", but not whether it expands the variable in a hook
+  command. UNVERIFIED for Copilot.
 
 ## Hook Events (14 — confirmed complete)
 

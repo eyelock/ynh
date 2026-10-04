@@ -233,3 +233,126 @@ func TestExport_NoHooksNoManifestPointer(t *testing.T) {
 		t.Errorf("hook files = %v, want none", got)
 	}
 }
+
+// writeScriptHooksHarness is a harness whose hooks run a script it ships
+// (scripts/guard.sh), a "./" script it does not ship, one that climbs out of
+// the harness, and a PATH-style command.
+func writeScriptHooksHarness(t *testing.T) string {
+	t.Helper()
+	srcDir := t.TempDir()
+	writeJSON(t, filepath.Join(srcDir, plugin.PluginDir, plugin.PluginFile), map[string]any{
+		"name":    "script-hooks",
+		"version": "0.1.0",
+		"hooks": map[string]any{
+			"before_tool": []any{
+				map[string]string{"matcher": "Bash", "command": "./scripts/guard.sh --strict"},
+			},
+			"on_stop": []any{
+				map[string]string{"command": "./scripts/missing.sh"},
+				map[string]string{"command": "./../outside.sh"},
+				map[string]string{"command": "make check"},
+			},
+		},
+	})
+	if err := os.MkdirAll(filepath.Join(srcDir, "scripts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "scripts", "guard.sh"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return srcDir
+}
+
+// assertHookScripts checks that root carries the shipped script, executable
+// and byte-identical, and nothing for the scripts the harness does not ship.
+func assertHookScripts(t *testing.T, root string, want bool) {
+	t.Helper()
+	info, err := os.Stat(filepath.Join(root, "scripts", "guard.sh"))
+	if !want {
+		if !os.IsNotExist(err) {
+			t.Errorf("scripts/guard.sh should not be exported, stat err = %v", err)
+		}
+		return
+	}
+	if err != nil {
+		t.Fatalf("hook script not exported: %v", err)
+	}
+	if info.Mode().Perm()&0o111 == 0 {
+		t.Errorf("hook script mode = %v, want executable", info.Mode())
+	}
+	if _, err := os.Stat(filepath.Join(root, "scripts", "missing.sh")); !os.IsNotExist(err) {
+		t.Errorf("missing.sh appeared in the export, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(root), "outside.sh")); !os.IsNotExist(err) {
+		t.Errorf("outside.sh appeared beside the export, stat err = %v", err)
+	}
+}
+
+// assertScriptWarnings checks that the export names each "./" script it could
+// not ship, and only those.
+func assertScriptWarnings(t *testing.T, warnings []string) {
+	t.Helper()
+	joined := strings.Join(warnings, "\n")
+	for _, s := range []string{"./scripts/missing.sh", "./../outside.sh"} {
+		if !strings.Contains(joined, s) {
+			t.Errorf("warnings %q do not name %s", warnings, s)
+		}
+	}
+	if strings.Contains(joined, "guard.sh") || strings.Contains(joined, "make check") {
+		t.Errorf("warnings %q name a command that needs none", warnings)
+	}
+}
+
+// A plugin hook anchors a "./" script to the plugin root (#483), so the
+// script must be in the plugin: an export copies each script a hook runs from
+// the harness tree to the same path in the plugin, and warns about any it
+// cannot (not in the harness, or outside it). A vendor whose plugin carries
+// no hooks (Copilot alone) gets no scripts and no warnings.
+func TestExport_PluginHookScripts(t *testing.T) {
+	srcDir := writeScriptHooksHarness(t)
+	for _, c := range pluginHookCases {
+		t.Run(c.vendor, func(t *testing.T) {
+			outputDir := t.TempDir()
+			results, err := Export(ExportOptions{
+				SourceDir: srcDir,
+				OutputDir: outputDir,
+				Vendors:   []string{c.vendor},
+				Mode:      ModePerVendor,
+			})
+			if err != nil {
+				t.Fatalf("Export: %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("results = %d, want 1", len(results))
+			}
+			ships := c.hookFile != ""
+			assertHookScripts(t, filepath.Join(outputDir, c.vendor), ships)
+			if ships {
+				assertScriptWarnings(t, results[0].Warnings)
+			} else if len(results[0].Warnings) != 0 {
+				t.Errorf("warnings = %q, want none", results[0].Warnings)
+			}
+		})
+	}
+
+	t.Run("merged", func(t *testing.T) {
+		outputDir := filepath.Join(t.TempDir(), "merged")
+		results, err := Export(ExportOptions{
+			SourceDir: srcDir,
+			OutputDir: outputDir,
+			Vendors:   []string{"claude", "codex", "copilot", "cursor"},
+			Mode:      ModeMerged,
+		})
+		if err != nil {
+			t.Fatalf("Export: %v", err)
+		}
+		assertHookScripts(t, outputDir, true)
+		if len(results) != 1 {
+			t.Fatalf("results = %d, want 1", len(results))
+		}
+		assertScriptWarnings(t, results[0].Warnings)
+		if n := strings.Count(strings.Join(results[0].Warnings, "\n"), "missing.sh"); n != 1 {
+			t.Errorf("missing.sh warned %d times, want once", n)
+		}
+	})
+}
