@@ -473,7 +473,7 @@ ynh uninstall github.com/eyelock/assistants/planner 2>/dev/null
 ynh uninstall github.com/eyelock/assistants/tester 2>/dev/null
 ynh ls
 # Expected: none of the three is listed
-cd /tmp
+cd /
 rm -rf /tmp/ynh-tutorial
 ```
 

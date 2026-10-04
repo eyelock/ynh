@@ -561,7 +561,7 @@ one that matters.
 ynh uninstall local/gate-demo
 ynh ls
 # Expected: No harnesses installed. (fresh-demo was uninstalled earlier)
-cd /tmp
+cd /
 rm -rf /tmp/ynh-t20
 unset YNH_HOME
 ```

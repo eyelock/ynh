@@ -388,7 +388,7 @@ holds every credential the operator holds, which is not a default anyone chose.
 
 ```bash
 ynh uninstall local/demo
-cd /tmp
+cd /
 rm -rf /tmp/loop-demo
 ```
 

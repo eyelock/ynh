@@ -364,6 +364,16 @@ Requires Docker installed and running.
 
 Tests not covered by tutorials. Run these after completing the tutorials.
 
+Every case that writes files works in its own directory, `/tmp/ynh-edge/<case>` (for
+example `/tmp/ynh-edge/e13`). It creates that directory and moves into it first, and at
+the end it moves out (`cd /`) and removes that directory and nothing else. No case works
+directly in `/tmp`, and no case relies on files another case created, so any case can be
+run on its own and two runs of different cases cannot collide. Cases that use
+`mktemp -d` for `YNH_HOME` remove exactly the directory `mktemp` gave them.
+
+When you have finished, `rmdir /tmp/ynh-edge` removes the root. It fails if a case left
+something behind, which is a bug in that case.
+
 ### E1: Version output
 
 ```bash
@@ -386,24 +396,32 @@ ynd --help         # Expected: same
 ### E3: Install with invalid --path
 
 ```bash
-mkdir -p /tmp/ynh-edge/repo/.agents/harness
-echo '{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"edge","version":"0.1.0"}' > /tmp/ynh-edge/repo/.agents/harness/plugin.json
+mkdir -p /tmp/ynh-edge/e3 && cd /tmp/ynh-edge/e3
+mkdir -p repo/.agents/harness
+echo '{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"edge","version":"0.1.0"}' > repo/.agents/harness/plugin.json
 
-ynh install /tmp/ynh-edge/repo --path nonexistent/path
+ynh install /tmp/ynh-edge/e3/repo --path nonexistent/path
 # Expected: Error: path "nonexistent/path" not found in source
+
+cd /
+rm -rf /tmp/ynh-edge/e3
 ```
 
 ### E4: Install duplicate harness
 
 ```bash
-mkdir -p /tmp/ynh-edge/dup/.agents/harness
-echo '{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"dup","version":"0.1.0"}' > /tmp/ynh-edge/dup/.agents/harness/plugin.json
+mkdir -p /tmp/ynh-edge/e4 && cd /tmp/ynh-edge/e4
+mkdir -p dup/.agents/harness
+echo '{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"dup","version":"0.1.0"}' > dup/.agents/harness/plugin.json
 
-ynh install /tmp/ynh-edge/dup
-ynh install /tmp/ynh-edge/dup
+ynh install /tmp/ynh-edge/e4/dup
+ynh install /tmp/ynh-edge/e4/dup
 # Expected: overwrites without error (idempotent)
 
 ynh uninstall local/dup
+
+cd /
+rm -rf /tmp/ynh-edge/e4
 ```
 
 ### E5: Uninstall nonexistent harness
@@ -426,8 +444,15 @@ ynh run local/nonexistent
 ### E7: Export unknown vendor
 
 ```bash
-ynd export /tmp/ynh-edge/repo -v fakevend
+mkdir -p /tmp/ynh-edge/e7 && cd /tmp/ynh-edge/e7
+mkdir -p repo/.agents/harness
+echo '{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"edge","version":"0.1.0"}' > repo/.agents/harness/plugin.json
+
+ynd export /tmp/ynh-edge/e7/repo -v fakevend
 # Expected: Error: unknown vendor "fakevend" (available: [... order varies ...])
+
+cd /
+rm -rf /tmp/ynh-edge/e7
 ```
 
 ### E8: Export missing source
@@ -440,9 +465,12 @@ ynd export
 ### E9: Marketplace build without config
 
 ```bash
-cd /tmp
+mkdir -p /tmp/ynh-edge/e9 && cd /tmp/ynh-edge/e9
 ynd marketplace build
 # Expected: Error: reading marketplace config: open marketplace.json: no such file or directory
+
+cd /
+rm -rf /tmp/ynh-edge/e9
 ```
 
 ### E10: Search with no registries
@@ -487,18 +515,19 @@ ynh install git@github.com:eyelock/nonexistent.git 2>&1 | head -1
 ### E13: Create duplicate scaffold
 
 ```bash
-cd /tmp
+mkdir -p /tmp/ynh-edge/e13 && cd /tmp/ynh-edge/e13
 ynd create harness edge-test
 ynd create harness edge-test
 # Expected: error about already existing
 
-rm -rf edge-test
+cd /
+rm -rf /tmp/ynh-edge/e13
 ```
 
 ### E14: Validate broken harness
 
 ```bash
-cd /tmp
+mkdir -p /tmp/ynh-edge/e14 && cd /tmp/ynh-edge/e14
 ynd create harness broken-test
 mkdir -p broken-test/skills/orphan
 ynd validate broken-test
@@ -521,14 +550,16 @@ ynd validate broken-test
 #       instructions AGENTS.md
 #   Error: validation failed
 
-rm -rf broken-test
+cd /
+rm -rf /tmp/ynh-edge/e14
 ```
 
 ### E15: Empty allow-list blocks all sources
 
 ```bash
-mkdir -p /tmp/ynh-edge/allow/.agents/harness
-echo '{"name":"allow-edge","version":"0.1.0","default_vendor":"claude","includes":[{"git":"github.com/eyelock/assistants","path":"skills/pause","pick":["skills/help-me-answer"]}]}' > /tmp/ynh-edge/allow/.agents/harness/plugin.json
+mkdir -p /tmp/ynh-edge/e15 && cd /tmp/ynh-edge/e15
+mkdir -p allow/.agents/harness
+echo '{"name":"allow-edge","version":"0.1.0","default_vendor":"claude","includes":[{"git":"github.com/eyelock/assistants","path":"skills/pause","pick":["skills/help-me-answer"]}]}' > allow/.agents/harness/plugin.json
 
 # A fresh ynh home has no config.json yet: back it up only if there is one.
 if [ -f ~/.ynh/config.json ]; then cp ~/.ynh/config.json ~/.ynh/config.json.bak; fi
@@ -536,31 +567,36 @@ echo '{"default_vendor":"claude","allowed_remote_sources":[]}' > ~/.ynh/config.j
 
 # A harness with a remote include fails at both install and run time.
 # Neither step needs the network: the allow-list is checked before any fetch.
-ynh install /tmp/ynh-edge/allow 2>&1 | grep Error
+ynh install /tmp/ynh-edge/e15/allow 2>&1 | grep Error
 # Expected: Error: include "github.com/eyelock/assistants": remote source "github.com/eyelock/assistants" is not in the allowed sources list (add "github.com/eyelock/assistants" to allowed_remote_sources) (exit 1)
 
-ynh run /tmp/ynh-edge/allow "hello" 2>&1 | grep Error
+ynh run /tmp/ynh-edge/e15/allow "hello" 2>&1 | grep Error
 # Expected: Error: resolving includes: include "github.com/eyelock/assistants": remote source "github.com/eyelock/assistants" is not in the allowed sources list (add "github.com/eyelock/assistants" to allowed_remote_sources) (exit 1)
 
 # Put the backup back, or, if there was none, remove the config written above.
 if [ -f ~/.ynh/config.json.bak ]; then mv ~/.ynh/config.json.bak ~/.ynh/config.json; else rm -f ~/.ynh/config.json; fi
 ynh ls
 # Expected: local/allow-edge is not listed. The install was refused, and running a path installs nothing
-rm -rf /tmp/ynh-edge/allow
+
+cd /
+rm -rf /tmp/ynh-edge/e15
 ```
 
 ### E16: Info on installed harness
 
 ```bash
-mkdir -p /tmp/ynh-edge/info/.agents/harness
-echo '{"name":"info-edge","version":"0.1.0","default_vendor":"claude"}' > /tmp/ynh-edge/info/.agents/harness/plugin.json
-ynh install /tmp/ynh-edge/info
+mkdir -p /tmp/ynh-edge/e16 && cd /tmp/ynh-edge/e16
+mkdir -p info/.agents/harness
+echo '{"name":"info-edge","version":"0.1.0","default_vendor":"claude"}' > info/.agents/harness/plugin.json
+ynh install /tmp/ynh-edge/e16/info
 
 ynh info local/info-edge
 # Expected: Name, Vendor, Installed timestamp, Source (local path), no includes, no delegates
 
 ynh uninstall local/info-edge
-rm -rf /tmp/ynh-edge
+
+cd /
+rm -rf /tmp/ynh-edge/e16
 ```
 
 ### E17: Info on non-existent harness
@@ -583,61 +619,75 @@ ynh info
 
 ### E19: Focus and profile mutual exclusivity
 
-E19 and E20 need a harness that defines a focus and a profile. Create one:
+E19 and E20 each use a harness that defines a focus and a profile, and each creates its
+own copy.
 
 ```bash
-mkdir -p /tmp/some-harness/.agents/harness
-cat > /tmp/some-harness/.agents/harness/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-edge/e19 && cd /tmp/ynh-edge/e19
+mkdir -p some-harness/.agents/harness
+cat > some-harness/.agents/harness/plugin.json << 'EOF'
 {"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"some-harness","version":"0.1.0","profiles":{"ci":{}},"focuses":{"review":{"prompt":"Review the diff"}}}
 EOF
-```
 
-```bash
-ynd preview /tmp/some-harness -v claude --focus review --profile ci
+ynd preview /tmp/ynh-edge/e19/some-harness -v claude --focus review --profile ci
 # Expected (exit 1): Error: cannot use --focus and --profile together
+
+cd /
+rm -rf /tmp/ynh-edge/e19
 ```
 
 ### E20: Unknown focus name
 
 ```bash
-ynd preview /tmp/some-harness -v claude --focus nonexistent
+mkdir -p /tmp/ynh-edge/e20 && cd /tmp/ynh-edge/e20
+mkdir -p some-harness/.agents/harness
+cat > some-harness/.agents/harness/plugin.json << 'EOF'
+{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"some-harness","version":"0.1.0","profiles":{"ci":{}},"focuses":{"review":{"prompt":"Review the diff"}}}
+EOF
+
+ynd preview /tmp/ynh-edge/e20/some-harness -v claude --focus nonexistent
 # Expected (exit 1): Error: focus "nonexistent" not defined in harness
 
-rm -rf /tmp/some-harness
+cd /
+rm -rf /tmp/ynh-edge/e20
 ```
 
 ### E21: Focus with missing prompt in .agents/harness/plugin.json
 
 ```bash
-mkdir -p /tmp/ynh-bad-focus
-mkdir -p /tmp/ynh-bad-focus/.agents/harness
-cat > /tmp/ynh-bad-focus/.agents/harness/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-edge/e21 && cd /tmp/ynh-edge/e21
+mkdir -p bad-focus/.agents/harness
+cat > bad-focus/.agents/harness/plugin.json << 'EOF'
 {"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0","focuses":{"review":{"profile":"ci"}}}
 EOF
-ynd validate /tmp/ynh-bad-focus
-# Expected (exit 1): "/tmp/ynh-bad-focus: INVALID", then three errors:
+ynd validate /tmp/ynh-edge/e21/bad-focus
+# Expected (exit 1): "/tmp/ynh-edge/e21/bad-focus: INVALID", then three errors:
 #     - focuses/review: missing property 'prompt'
 #     - focus.review: prompt must not be empty
 #     - focus.review: references unknown profile "ci"
 #   then the "checked:" list (focuses: review, every other part: none)
 #   and "Error: validation failed"
-rm -rf /tmp/ynh-bad-focus
+
+cd /
+rm -rf /tmp/ynh-edge/e21
 ```
 
 ### E22: Focus referencing unknown profile
 
 ```bash
-mkdir -p /tmp/ynh-bad-focus
-mkdir -p /tmp/ynh-bad-focus/.agents/harness
-cat > /tmp/ynh-bad-focus/.agents/harness/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-edge/e22 && cd /tmp/ynh-edge/e22
+mkdir -p bad-focus/.agents/harness
+cat > bad-focus/.agents/harness/plugin.json << 'EOF'
 {"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"bad","version":"0.1.0","focuses":{"review":{"profile":"nonexistent","prompt":"Review code"}}}
 EOF
-ynd validate /tmp/ynh-bad-focus
-# Expected (exit 1): "/tmp/ynh-bad-focus: INVALID", then:
+ynd validate /tmp/ynh-edge/e22/bad-focus
+# Expected (exit 1): "/tmp/ynh-edge/e22/bad-focus: INVALID", then:
 #     - focus.review: references unknown profile "nonexistent"
 #   then the "checked:" list (focuses: review, every other part: none)
 #   and "Error: validation failed"
-rm -rf /tmp/ynh-bad-focus
+
+cd /
+rm -rf /tmp/ynh-edge/e22
 ```
 
 ### E23: Fork uninstall via canonical id
@@ -645,19 +695,21 @@ rm -rf /tmp/ynh-bad-focus
 `ynh fork` registers a pointer-shaped install. `ynh uninstall local/<name>` must resolve the schema-1 pointer and remove the registration cleanly — this is the form JSON consumers pass back.
 
 ```bash
+mkdir -p /tmp/ynh-edge/e23 && cd /tmp/ynh-edge/e23
+
 # Create a minimal harness to fork from
-mkdir -p /tmp/ynh-fork-src/.agents/harness
-cat > /tmp/ynh-fork-src/.agents/harness/plugin.json << 'EOF'
+mkdir -p fork-src/.agents/harness
+cat > fork-src/.agents/harness/plugin.json << 'EOF'
 {"name":"fork-src","version":"1.0.0","default_vendor":"claude"}
 EOF
 
 # Install it, then fork by canonical id. `ynh fork` takes an installed
 # harness, not a source directory — see `ynh fork <harness-name>` in
 # docs/reference.md. Forking a path has never been supported.
-ynh install /tmp/ynh-fork-src
-ynh fork local/fork-src --to /tmp/ynh-fork-copy --name fork-copy
-# Expected: Forked harness "fork-src" as "fork-copy" to /tmp/ynh-fork-copy
-#             Source:  /tmp/ynh-fork-src (local)
+ynh install /tmp/ynh-edge/e23/fork-src
+ynh fork local/fork-src --to /tmp/ynh-edge/e23/fork-copy --name fork-copy
+# Expected: Forked harness "fork-src" as "fork-copy" to /tmp/ynh-edge/e23/fork-copy
+#             Source:  /tmp/ynh-edge/e23/fork-src (local)
 #             Version: 1.0.0
 
 # Verify it appears in ls
@@ -667,7 +719,7 @@ ynh ls --format json | jq -r '.harnesses[] | select(.name=="fork-copy") | .id'
 # Uninstall via canonical id (the form machine consumers use)
 ynh uninstall local/fork-copy
 # Expected: Uninstalled harness "fork-copy"
-#             Source tree left in place: /tmp/ynh-fork-copy
+#             Source tree left in place: /tmp/ynh-edge/e23/fork-copy
 
 # Verify the pointer is gone
 ynh ls --format json | jq -r '.harnesses[] | select(.name=="fork-copy") | .id'
@@ -676,9 +728,10 @@ ynh ls --format json | jq -r '.harnesses[] | select(.name=="fork-copy") | .id'
 # The fork's source is installed too; uninstall it before deleting its tree
 ynh uninstall local/fork-src
 # Expected: Uninstalled harness "fork-src"
-#             Source tree left in place: /tmp/ynh-fork-src
+#             Source tree left in place: /tmp/ynh-edge/e23/fork-src
 
-rm -rf /tmp/ynh-fork-src /tmp/ynh-fork-copy
+cd /
+rm -rf /tmp/ynh-edge/e23
 ```
 
 ### E25: Fork and registry install sharing a leaf name both appear in ls
@@ -686,6 +739,7 @@ rm -rf /tmp/ynh-fork-src /tmp/ynh-fork-copy
 A fork (`local/<name>`) and a registry install (`<host>/…/<name>`) that share the same leaf name but have distinct canonical ids must both appear in `ynh ls`. This is the central scenario the canonical-id work enabled.
 
 ```bash
+mkdir -p /tmp/ynh-edge/e25 && cd /tmp/ynh-edge/e25
 export YNH_HOME=$(mktemp -d)
 
 # Simulate a registry install (schema-2 tree). installed.json is not optional:
@@ -700,12 +754,12 @@ cat > "$YNH_HOME/harnesses/github.com--eyelock--assistants--shared/.agents/harne
 EOF
 
 # Register a fork with the same leaf name
-mkdir -p /tmp/ynh-fork-shared/.agents/harness "$YNH_HOME/installed"
-cat > /tmp/ynh-fork-shared/.agents/harness/plugin.json << 'EOF'
+mkdir -p fork-shared/.agents/harness "$YNH_HOME/installed"
+cat > fork-shared/.agents/harness/plugin.json << 'EOF'
 {"name":"shared","version":"2.0.0","default_vendor":"claude"}
 EOF
 cat > "$YNH_HOME/installed/shared.json" << 'EOF'
-{"name":"shared","source_type":"local","source":"/tmp/ynh-fork-shared","installed_at":"2026-01-01T00:00:00Z"}
+{"name":"shared","source_type":"local","source":"/tmp/ynh-edge/e25/fork-shared","installed_at":"2026-01-01T00:00:00Z"}
 EOF
 
 ynh ls --format json | jq '[.harnesses[] | select(.name=="shared") | .id]'
@@ -715,7 +769,8 @@ ynh ls --format json | jq '[.harnesses[] | select(.name=="shared") | .id]'
 #   "github.com/eyelock/assistants/shared"
 # ]
 
-rm -rf /tmp/ynh-fork-shared "$YNH_HOME"
+cd /
+rm -rf /tmp/ynh-edge/e25 "$YNH_HOME"
 unset YNH_HOME
 ```
 
@@ -724,36 +779,39 @@ unset YNH_HOME
 When a fork's source directory exists but has no `.agents/harness/plugin.json`, `ynh ls --format json` must tag it as `kind: "local-fork-broken"` with a non-empty `broken_reason` rather than emitting an empty-field `local-fork` entry.
 
 ```bash
+mkdir -p /tmp/ynh-edge/e24 && cd /tmp/ynh-edge/e24
+
 # Register a pointer to a directory with no manifest
-mkdir -p /tmp/ynh-hollow-src   # exists but no .agents/harness/
+mkdir -p hollow-src   # exists but no .agents/harness/
 export YNH_HOME=$(mktemp -d)
 mkdir -p "$YNH_HOME/installed"
 cat > "$YNH_HOME/installed/hollow.json" << 'EOF'
-{"name":"hollow","source_type":"local","source":"/tmp/ynh-hollow-src","installed_at":"2026-01-01T00:00:00Z"}
+{"name":"hollow","source_type":"local","source":"/tmp/ynh-edge/e24/hollow-src","installed_at":"2026-01-01T00:00:00Z"}
 EOF
 
 ynh ls --format json | jq '.harnesses[] | select(.name=="hollow") | {kind, broken_reason}'
 # Expected:
 # {
 #   "kind": "local-fork-broken",
-#   "broken_reason": "no harness manifest found in /tmp/ynh-hollow-src"
+#   "broken_reason": "no harness manifest found in /tmp/ynh-edge/e24/hollow-src"
 # }
 
-rm -rf /tmp/ynh-hollow-src "$YNH_HOME"
+cd /
+rm -rf /tmp/ynh-edge/e24 "$YNH_HOME"
 unset YNH_HOME
 ```
 
 ### E26: Local model backend spec — unknown vendor, and vendors listing fallback
 
 ```bash
-mkdir -p /tmp/ynh-backend-edge/.agents/harness
-cat > /tmp/ynh-backend-edge/.agents/harness/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-edge/e26 && cd /tmp/ynh-edge/e26
+mkdir -p .agents/harness
+cat > .agents/harness/plugin.json << 'EOF'
 {"name":"backend-edge","version":"0.1.0","default_vendor":"claude"}
 EOF
 export YNH_HOME=$(mktemp -d)
 echo '{"backends":{"ollama":{"vendors":{"claude":{"base_url":"http://localhost:11434","auth_token":"ollama"}}}}}' > "$YNH_HOME/config.json"
 
-cd /tmp/ynh-backend-edge
 ynh run -v ollama/codex
 # Expected: Error: backend "ollama" has no config for vendor "codex" (add backends.ollama.vendors.codex to ~/.ynh/config.json)
 
@@ -764,7 +822,7 @@ ynh vendors --format json | jq '.[] | select(.name=="ollama/claude")'
 # instead of erroring the whole `ynh vendors` listing.
 
 cd /
-rm -rf /tmp/ynh-backend-edge "$YNH_HOME"
+rm -rf /tmp/ynh-edge/e26 "$YNH_HOME"
 unset YNH_HOME
 ```
 
@@ -774,11 +832,12 @@ unset YNH_HOME
 is removed, so a typo in one name removes nothing (#398).
 
 ```bash
+mkdir -p /tmp/ynh-edge/e27 && cd /tmp/ynh-edge/e27
 export YNH_HOME=$(mktemp -d)
 for n in a b c; do
-  mkdir -p /tmp/ynh-multi/$n/.agents/harness
-  printf '{"name":"%s","version":"0.1.0"}' $n > /tmp/ynh-multi/$n/.agents/harness/plugin.json
-  ynh install /tmp/ynh-multi/$n
+  mkdir -p $n/.agents/harness
+  printf '{"name":"%s","version":"0.1.0"}' $n > $n/.agents/harness/plugin.json
+  ynh install /tmp/ynh-edge/e27/$n
 done
 
 ynh uninstall local/a local/typo; echo "exit=$?"
@@ -793,7 +852,8 @@ ynh uninstall local/a local/b local/c; echo "exit=$?"
 ynh ls
 # Expected: no harnesses
 
-rm -rf /tmp/ynh-multi "$YNH_HOME"
+cd /
+rm -rf /tmp/ynh-edge/e27 "$YNH_HOME"
 unset YNH_HOME
 ```
 
@@ -804,36 +864,37 @@ A legacy `.harness.json` is refused whether it is reached through a path or
 through `--harness-file` (#449), and nothing is written.
 
 ```bash
+mkdir -p /tmp/ynh-edge/e28 && cd /tmp/ynh-edge/e28
 export YNH_HOME=$(mktemp -d)
-mkdir -p /tmp/ynh-runpath/my-dev/.agents/harness /tmp/ynh-runpath/my-dev/skills/hello /tmp/ynh-runpath/old /tmp/ynh-runpath/project
-printf '{"name":"my-dev","version":"0.1.0"}' > /tmp/ynh-runpath/my-dev/.agents/harness/plugin.json
-printf -- '---\nname: hello\ndescription: A trivial skill.\n---\n\n# hello\n' > /tmp/ynh-runpath/my-dev/skills/hello/SKILL.md
-printf '{"name":"old","version":"0.1.0"}' > /tmp/ynh-runpath/old/.harness.json
-cd /tmp/ynh-runpath/project
+mkdir -p my-dev/.agents/harness my-dev/skills/hello old project
+printf '{"name":"my-dev","version":"0.1.0"}' > my-dev/.agents/harness/plugin.json
+printf -- '---\nname: hello\ndescription: A trivial skill.\n---\n\n# hello\n' > my-dev/skills/hello/SKILL.md
+printf '{"name":"old","version":"0.1.0"}' > old/.harness.json
+cd project
 
 ynh run ../my-dev -v cursor --install
 ls .cursor/skills
 # Expected: hello. `ynh ls` lists nothing: running a path installs nothing
 
-ynh run --harness-file /tmp/ynh-runpath/my-dev/.agents/harness/plugin.json -v cursor --clean
-ynh run --harness-file /tmp/ynh-runpath/my-dev/.agents/harness/plugin.json -v cursor --install
+ynh run --harness-file /tmp/ynh-edge/e28/my-dev/.agents/harness/plugin.json -v cursor --clean
+ynh run --harness-file /tmp/ynh-edge/e28/my-dev/.agents/harness/plugin.json -v cursor --install
 ls .cursor/skills
 # Expected: hello. A plugin.json in its manifest directory takes its skills from the tree above it
 
-ynh run /tmp/ynh-runpath/old -v cursor --install
-# Expected: Error: /tmp/ynh-runpath/old uses the legacy .harness.json manifest, which ynh no longer reads; convert it with: ynd migrate /tmp/ynh-runpath/old
+ynh run /tmp/ynh-edge/e28/old -v cursor --install
+# Expected: Error: /tmp/ynh-edge/e28/old uses the legacy .harness.json manifest, which ynh no longer reads; convert it with: ynd migrate /tmp/ynh-edge/e28/old
 
-ynh run --harness-file /tmp/ynh-runpath/old/.harness.json -v cursor --install
+ynh run --harness-file /tmp/ynh-edge/e28/old/.harness.json -v cursor --install
 # Expected: the same error
 
-ls -a /tmp/ynh-runpath/old
+ls -a /tmp/ynh-edge/e28/old
 # Expected: only .harness.json; no .agents was written
 
 ynh run my-dev
 # Expected: Error: "my-dev" is not a valid harness id. Use a canonical id like 'github.com/<org>/<repo>/<name>' or 'local/<name>', or './<path>' for a local harness directory. Run 'ynh ls' to see installed ids
 
 cd /
-rm -rf /tmp/ynh-runpath "$YNH_HOME"
+rm -rf /tmp/ynh-edge/e28 "$YNH_HOME"
 unset YNH_HOME
 ```
 
@@ -844,8 +905,9 @@ unset YNH_HOME
 ### S1: Declare a command sensor and run it
 
 ```bash
-mkdir -p /tmp/ynh-sensors/.agents/harness
-cat > /tmp/ynh-sensors/.agents/harness/plugin.json << 'EOF'
+mkdir -p /tmp/ynh-edge/s1 && cd /tmp/ynh-edge/s1
+mkdir -p .agents/harness
+cat > .agents/harness/plugin.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "sensor-test",
@@ -860,12 +922,14 @@ cat > /tmp/ynh-sensors/.agents/harness/plugin.json << 'EOF'
   }
 }
 EOF
-ynd validate /tmp/ynh-sensors
-ynh install /tmp/ynh-sensors
+ynd validate /tmp/ynh-edge/s1
+ynh install /tmp/ynh-edge/s1
 ynh sensors ls local/sensor-test
 ynh sensors run local/sensor-test build | jq '.exit_code, .output.stdout'
 ynh uninstall local/sensor-test
-rm -rf /tmp/ynh-sensors
+
+cd /
+rm -rf /tmp/ynh-edge/s1
 ```
 
 Expected: `valid`, sensor listed in ls output, run result with `exit_code: 0` and stdout `"built\n"`. No `passed` field in run output.
