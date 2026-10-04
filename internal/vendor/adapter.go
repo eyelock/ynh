@@ -3,6 +3,7 @@ package vendor
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -241,6 +242,29 @@ func DefaultArtifactDirs() map[string]string {
 		"rules":    "rules",
 		"commands": "commands",
 	}
+}
+
+// pluginHookFile is where a plugin package carries one vendor's hooks: a file
+// under hooks/ named for the vendor, which that vendor's manifest names in its
+// "hooks" field. Never the shared default hooks/hooks.json: Claude Code loads
+// that file from a plugin root even when the manifest names another, and
+// Copilot reads it by default, so in a package several vendors share it would
+// hand one vendor's format to another (#469). The same layout is used for a
+// single-vendor export, so every plugin ynh writes follows one rule.
+func pluginHookFile(vendorName string) string {
+	return filepath.Join("hooks", vendorName+".json")
+}
+
+// pluginHookPointer returns the manifest "hooks" value naming vendorName's
+// plugin hook file, or "" when outputDir does not carry one. A plugin loader
+// rejects a "hooks" path that does not exist, so the pointer is written only
+// for a file that is there.
+func pluginHookPointer(outputDir, vendorName string) string {
+	rel := pluginHookFile(vendorName)
+	if !fileExists(filepath.Join(outputDir, rel)) {
+		return ""
+	}
+	return "./" + filepath.ToSlash(rel)
 }
 
 // Available returns all registered vendor names, sorted alphabetically.

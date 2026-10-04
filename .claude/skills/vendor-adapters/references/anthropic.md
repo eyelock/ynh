@@ -17,11 +17,15 @@
 Manifest: `.claude-plugin/plugin.json`
 Only `name` is required. Optional: `version`, `description`, `author`, `homepage`, `repository`, `license`, `keywords`.
 
-Component pointers in manifest (paths relative to plugin root, replace defaults):
-- `skills` — path to skills directory
-- `commands` — path to commands directory (legacy, prefer skills)
-- `agents` — path to agents directory
-- `hooks` — path to hooks config or inline object
+Component pointers in manifest (paths relative to plugin root, must start with `./`). How
+each combines with its default differs (CONFIRMED 2026-10-04, plugins-reference
+"How each key combines with its default location"):
+- `skills`: path to skills directory (adds to the default `skills/` scan)
+- `commands`: path to commands directory (legacy, prefer skills; replaces the default)
+- `agents`: path to agents directory (replaces the default)
+- `hooks`: `.json` file path, inline object, or array of either. MERGES with
+  `hooks/hooks.json`: the default file loads whenever it exists, even when the manifest
+  names another. A hooks file wraps its event map in a top-level `"hooks"` key.
 - `mcpServers` — path to MCP config or inline object
 - `lspServers` — path to LSP config or inline object
 - `outputStyles` — path to output styles
@@ -35,7 +39,7 @@ plugin-root/
   skills/<name>/SKILL.md        (agent skills)
   commands/<name>.md            (legacy skills)
   agents/<name>.md              (subagents)
-  hooks/hooks.json              (hook config)
+  hooks/hooks.json              (hook config, default; ynh exports use hooks/claude.json via the manifest)
   .mcp.json                     (MCP servers)
   .lsp.json                     (LSP servers)
   bin/                          (executables added to PATH)
@@ -106,6 +110,18 @@ command, http, prompt, agent
 - `--mcp-config <path>` — load MCP servers from file
 - `--permission-mode <mode>` — default, auto, plan, dontAsk, bypassPermissions
 - `--dangerously-skip-permissions` — skip tool execution prompts
+
+## Hook Config Paths in ynh (#468, #469)
+
+| ynh output | File | Generator |
+|------------|------|-----------|
+| `ynh run`, `ynd preview`, agent loop | `.claude/hooks/hooks.json` (`ynh run` passes `.claude/` as `--plugin-dir`, so this is that plugin's default `hooks/hooks.json`) | `Claude.GenerateHookConfig` |
+| `ynd export -v claude`, `ynd marketplace build` (plugin) | `hooks/claude.json`, named by `"hooks"` in `.claude-plugin/plugin.json` | `Claude.GeneratePluginHookConfig`; `claudePluginManifest` adds the pointer when the file exists |
+
+ynh never writes `hooks/hooks.json` into a plugin. Because Claude merges that default with
+the manifest's `hooks`, a merged package holding Cursor's or Codex's file there would hand
+Claude another vendor's format. Copilot renders the same `.claude-plugin/plugin.json` via
+`claudePluginManifest`, so the pointer survives whichever adapter writes it last.
 
 ## Known Limitations for ynh
 

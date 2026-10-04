@@ -341,9 +341,9 @@ func TestClaudeHookEvent(t *testing.T) {
 // import: an export asks for the export layout when the vendor has one.
 func exportManifest(a Adapter, hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {
 	if eg, ok := a.(interface {
-		GenerateExportPluginManifest(*plugin.HarnessJSON) (map[string][]byte, error)
+		GenerateExportPluginManifest(*plugin.HarnessJSON, string) (map[string][]byte, error)
 	}); ok {
-		return eg.GenerateExportPluginManifest(hj)
+		return eg.GenerateExportPluginManifest(hj, outputDir)
 	}
 	return a.GeneratePluginManifest(hj, outputDir)
 }

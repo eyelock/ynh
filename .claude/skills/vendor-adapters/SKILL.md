@@ -193,8 +193,12 @@ converted only by `ynd migrate` and refused by every other command.
 | ynh               | Claude Code                      | Codex                            | Cursor                           |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Source:            |                                  |                                  |                                  |
-| plugin.json       | hooks/hooks.json (plugin)        | .codex/hooks.json                | hooks/hooks.json (plugin)        |
+| plugin.json       | hooks/hooks.json (plugin default)| .codex/hooks.json (project)      | hooks/hooks.json (plugin default)|
 |   hooks: {}       | .claude/settings.json (project)  | ~/.codex/hooks.json (user)       | .cursor/hooks.json (project)     |
+|                   |                                  | hooks/hooks.json (plugin default)|                                  |
+| ynh session:      | .claude/hooks/hooks.json         | .codex/hooks.json                | .cursor/hooks.json               |
+| ynh plugin:       | hooks/claude.json                | hooks/codex.json                 | hooks/cursor.json                |
+|                   |  (manifest "hooks" names it)     |  (manifest "hooks" names it)     |  (manifest "hooks" names it)     |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Format:           | Three-level nesting:             | Three-level nesting:             | Flat format, same at both paths: |
 |                   | event > matcher > hooks[]        | event > matcher > hooks[]        | {event: [{command}]} — CONFIRMED |
@@ -504,9 +508,11 @@ not conflict with the project's own `CLAUDE.md`.
 | ---  | Cursor .mdc rules format: RESOLVED       | Cursor     |
 |      |   (see internal/vendor/cursor.go,        |            |
 |      |    Cursor.TransformArtifact)              |            |
-| ---  | Cursor plugin hooks path: RESOLVED       | Cursor     |
-|      |   (.cursor/hooks.json in run assembly,   |            |
-|      |    hooks/hooks.json in export, #454)      |            |
+| ---  | Plugin hooks paths: RESOLVED             | All        |
+|      |   (session path in run assembly,         |            |
+|      |    hooks/<vendor>.json named by the      |            |
+|      |    manifest in export; no shared         |            |
+|      |    hooks/hooks.json, #454 #468 #469)     |            |
 | ---  | Cursor plugin MCP path: RESOLVED         | Cursor     |
 |      |   (.cursor/mcp.json in run assembly,     |            |
 |      |    mcp.json in export, #470)              |            |

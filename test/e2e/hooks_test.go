@@ -95,3 +95,63 @@ func newHookedHarness(t *testing.T, name string) string {
 	}
 	return dir
 }
+
+// TestHooks_Export verifies that an exported plugin carries each vendor's hooks
+// where that vendor's plugin loader reads them: hooks/<vendor>.json, named by
+// the vendor's manifest "hooks" field, in a per-vendor or a merged export.
+// No hooks/hooks.json (Claude Code always loads it from a plugin root, so it
+// could not hold another vendor's format in a shared root) and no session
+// paths, which a plugin never reads (#468, #469).
+func TestHooks_Export(t *testing.T) {
+	harness := newHookedHarness(t, "hooked-export")
+	manifests := map[string]string{
+		"claude": ".claude-plugin/plugin.json",
+		"codex":  ".codex-plugin/plugin.json",
+		"cursor": ".cursor-plugin/plugin.json",
+	}
+	sessionPaths := []string{"hooks/hooks.json", ".claude/hooks", ".codex/hooks.json", ".cursor/hooks.json"}
+
+	check := func(t *testing.T, root string, vendors []string) {
+		t.Helper()
+		for _, v := range vendors {
+			var m struct {
+				Hooks string `json:"hooks"`
+			}
+			body, err := os.ReadFile(filepath.Join(root, manifests[v]))
+			if err != nil {
+				t.Fatalf("%s manifest: %v", v, err)
+			}
+			if err := json.Unmarshal(body, &m); err != nil {
+				t.Fatalf("%s manifest: %v", v, err)
+			}
+			if want := "./hooks/" + v + ".json"; m.Hooks != want {
+				t.Errorf("%s manifest hooks = %q, want %q", v, m.Hooks, want)
+			}
+			hooks, err := os.ReadFile(filepath.Join(root, "hooks", v+".json"))
+			if err != nil {
+				t.Fatalf("%s hooks file: %v", v, err)
+			}
+			if !bytes.Contains(hooks, []byte("echo hooked")) {
+				t.Errorf("hook command not present in hooks/%s.json:\n%s", v, hooks)
+			}
+		}
+		for _, p := range sessionPaths {
+			if _, err := os.Stat(filepath.Join(root, p)); !os.IsNotExist(err) {
+				t.Errorf("%s must not be in a plugin export, stat err = %v", p, err)
+			}
+		}
+	}
+
+	t.Run("per vendor", func(t *testing.T) {
+		out := filepath.Join(t.TempDir(), "out")
+		mustRunYnd(t, "export", harness, "-v", "claude,codex,cursor", "-o", out)
+		for _, v := range []string{"claude", "codex", "cursor"} {
+			check(t, filepath.Join(out, v), []string{v})
+		}
+	})
+	t.Run("merged", func(t *testing.T) {
+		out := filepath.Join(t.TempDir(), "out")
+		mustRunYnd(t, "export", harness, "--merged", "-o", out)
+		check(t, out, []string{"claude", "codex", "cursor"})
+	})
+}

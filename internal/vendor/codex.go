@@ -12,8 +12,8 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
-// codexPluginJSON is the Codex plugin.json schema — identity fields plus path pointers.
-// Codex manifests require path pointers (skills, mcpServers) so the plugin system
+// codexPluginJSON is the Codex plugin.json schema: identity fields plus path pointers.
+// Codex manifests require path pointers (skills, mcpServers, hooks) so the plugin system
 // knows where to find components within the plugin directory.
 type codexPluginJSON struct {
 	Name        string             `json:"name"`
@@ -23,6 +23,7 @@ type codexPluginJSON struct {
 	Keywords    []string           `json:"keywords,omitempty"`
 	Skills      string             `json:"skills,omitempty"`
 	MCPServers  string             `json:"mcpServers,omitempty"`
+	Hooks       string             `json:"hooks,omitempty"`
 }
 
 func init() {
@@ -133,7 +134,36 @@ var codexHookEventMap = map[string]string{
 	"on_session_start": "SessionStart",
 }
 
+// GenerateHookConfig writes the project hook file, .codex/hooks.json, which
+// Codex reads from a trusted project's .codex/ layer
+// (developers.openai.com/codex/hooks). It serves `ynh run`, `ynd preview` and
+// the agent loop. A plugin reads a different path; see
+// GeneratePluginHookConfig.
 func (c *Codex) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
+	data, err := codexHookDocument(hooks)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{filepath.Join(".codex", "hooks.json"): data}, nil
+}
+
+// GeneratePluginHookConfig writes the plugin hook file, hooks/codex.json at
+// the plugin root, which GeneratePluginManifest names in the manifest's
+// "hooks" field. A Codex plugin reads hooks/hooks.json by default, and a
+// manifest "hooks" value replaces that discovery
+// (developers.openai.com/codex/plugins/build), so Codex reads this file and
+// nothing else. .codex/hooks.json inside a plugin is never read (#469).
+func (c *Codex) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
+	data, err := codexHookDocument(hooks)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{pluginHookFile(c.Name()): data}, nil
+}
+
+// codexHookDocument renders canonical hooks in Codex's format, or nil when
+// none of them maps to a Codex event.
+func codexHookDocument(hooks map[string][]plugin.HookEntry) ([]byte, error) {
 	if len(hooks) == 0 {
 		return nil, nil
 	}
@@ -210,11 +240,7 @@ func (c *Codex) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[str
 	if err != nil {
 		return nil, fmt.Errorf("marshalling hook config: %w", err)
 	}
-	data = append(data, '\n')
-
-	return map[string][]byte{
-		filepath.Join(".codex", "hooks.json"): data,
-	}, nil
+	return append(data, '\n'), nil
 }
 
 func (c *Codex) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {
@@ -233,6 +259,7 @@ func (c *Codex) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string)
 	if fileExists(filepath.Join(outputDir, ".mcp.json")) {
 		cpj.MCPServers = "./.mcp.json"
 	}
+	cpj.Hooks = pluginHookPointer(outputDir, c.Name())
 
 	data, err := json.MarshalIndent(cpj, "", "  ")
 	if err != nil {

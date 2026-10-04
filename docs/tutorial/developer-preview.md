@@ -133,7 +133,7 @@ Expected output structure:
 Note the differences from Claude:
 - Instructions go to `.cursorrules` instead of `CLAUDE.md`
 - Rules are rendered as `.mdc` files (`.cursor/rules/safety.mdc`)
-- Hooks go to `.cursor/hooks.json` instead of `.claude/hooks/hooks.json`. That is the only project file Cursor reads hooks from; an export writes the plugin's `hooks/hooks.json` instead (see [Hooks: Config File Locations](../hooks.md#config-file-locations))
+- Hooks go to `.cursor/hooks.json` instead of `.claude/hooks/hooks.json`. That is the only project file Cursor reads hooks from; an export writes the plugin's `hooks/cursor.json` instead, named by the plugin manifest (see [Hooks: Config File Locations](../hooks.md#config-file-locations))
 - MCP config goes to `.cursor/mcp.json` instead of `.claude/.mcp.json`. That is the only project file Cursor reads MCP servers from; an export writes the plugin's root `mcp.json` instead (see [MCP Servers: Config File Locations](../mcp.md#config-file-locations))
 - Artifacts are under `.cursor/` instead of `.claude/`
 

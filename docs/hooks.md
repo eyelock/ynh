@@ -76,20 +76,39 @@ Each vendor uses different event names and config file formats. **GitHub Copilot
 
 ### Config File Locations
 
-| Vendor | File | Format |
-|--------|------|--------|
-| Claude Code | `.claude/hooks/hooks.json` | Three-level nesting: event > matcher group > hook array |
-| Cursor | `.cursor/hooks.json` | Flat: event > hook array (with `"version": 1` required) |
-| Codex | `.codex/hooks.json` | Three-level nesting: event > matcher group > hook array (same structure as Claude) |
+| Vendor | Format |
+|--------|--------|
+| Claude Code | Three-level nesting: event > matcher group > hook array |
+| Cursor | Flat: event > hook array (with `"version": 1` required) |
+| Codex | Three-level nesting: event > matcher group > hook array (same structure as Claude) |
 
-Cursor reads hooks from a different file depending on how the harness reaches it, and ynh writes each file only where Cursor reads it:
+Each vendor reads hooks from a different file depending on how the harness reaches it: a session in a project directory, or an installed plugin. ynh writes each file only where that vendor reads it:
 
-| Cursor output | Hook file | Why |
-|---------------|-----------|-----|
-| `ynh run`, `ynd preview`, `ynh agent` (a project directory) | `.cursor/hooks.json` | The only project-level path Cursor reads ([cursor.com/docs/hooks](https://cursor.com/docs/hooks)). A `hooks.json` anywhere else in the project is not loaded. |
-| `ynd export -v cursor`, `ynd marketplace build` (a Cursor plugin) | `hooks/hooks.json` at the plugin root | Where a Cursor plugin carries hooks ([cursor.com/docs/reference/plugins](https://cursor.com/docs/reference/plugins)). A plugin's `.cursor/hooks.json` is not read. |
+| Vendor | Session (`ynh run`, `ynd preview`, `ynh agent`) | Plugin (`ynd export`, `ynd marketplace build`) |
+|--------|--------------------------------------------------|-----------------------------------------------|
+| Claude Code | `.claude/hooks/hooks.json`: `ynh run` passes `.claude/` as `--plugin-dir`, so this is `hooks/hooks.json` at that plugin's root | `hooks/claude.json`, named by `"hooks"` in `.claude-plugin/plugin.json` |
+| Cursor | `.cursor/hooks.json`, the only project-level path Cursor reads ([cursor.com/docs/hooks](https://cursor.com/docs/hooks)) | `hooks/cursor.json`, named by `"hooks"` in `.cursor-plugin/plugin.json` |
+| Codex | `.codex/hooks.json`, read from a trusted project's `.codex/` layer ([developers.openai.com/codex/hooks](https://developers.openai.com/codex/hooks)) | `hooks/codex.json`, named by `"hooks"` in `.codex-plugin/plugin.json` |
+| Copilot | none (see [Vendor Translation](#vendor-translation)) | none of its own; see below |
 
-The document is identical in both places; only the path differs.
+The document is identical in a vendor's session file and its plugin file; only the path differs. A plugin never reads a session path, so an export does not carry `.claude/hooks/`, `.cursor/hooks.json` or `.codex/hooks.json`, and a session assembly does not carry `hooks/<vendor>.json`.
+
+#### Why a plugin's hooks are not in `hooks/hooks.json`
+
+Every vendor's plugin loader has a default hooks file, `hooks/hooks.json` at the plugin root, and a manifest `"hooks"` field that can name another file. They differ in how the two combine:
+
+| Vendor | Default plugin hooks file | Manifest `"hooks"` field | Source |
+|--------|---------------------------|--------------------------|--------|
+| Claude Code | `hooks/hooks.json` | Path, inline object or array. **Merged with** `hooks/hooks.json`, which loads whenever it exists | [code.claude.com/docs/en/plugins-reference](https://code.claude.com/docs/en/plugins-reference) |
+| Cursor | `hooks/hooks.json` | Path or inline object. **Replaces** folder discovery: the default file is not also read | [cursor.com/docs/reference/plugins](https://cursor.com/docs/reference/plugins) |
+| Codex | `hooks/hooks.json` | Path, inline object or array, in `.codex-plugin/plugin.json` for a legacy package. **Replaces** default-file discovery | [developers.openai.com/codex/plugins/build](https://developers.openai.com/codex/plugins/build) |
+| Copilot CLI | `hooks.json` or `hooks/hooks.json` | Path or inline object | [docs.github.com: CLI plugin reference](https://docs.github.com/en/copilot/reference/cli-plugin-reference) |
+
+A merged export and a marketplace package put every vendor's manifest in one plugin root, and the vendors' formats differ (Cursor's flat `beforeShellExecution` against Claude's nested `PreToolUse`). A shared `hooks/hooks.json` could therefore serve at most one of them, and because Claude Code loads that file even when its manifest names another, no other vendor's format could ever go there. So ynh writes no `hooks/hooks.json` into a plugin. Each vendor gets its own file, `hooks/<vendor>.json`, and its manifest names it in `"hooks"`; Cursor and Codex then read that file instead of the default, and Claude Code reads it alongside a default that is not there. No vendor reads another's format.
+
+A single-vendor export uses the same layout, so every plugin ynh writes follows one rule and a per-vendor export can be combined with another by hand without a clash. A manifest names a hooks file only when the harness has hooks for that vendor, because a plugin loader rejects a `"hooks"` path that does not exist.
+
+Copilot has no manifest of its own: it reads `.claude-plugin/plugin.json`, the file Claude writes, and ynh emits no Copilot hooks. A Copilot-only export therefore carries no hooks. In a merged package that also targets Claude, Copilot reads the same manifest, so it finds `hooks/claude.json`; Copilot accepts hooks in Claude's format, with PascalCase event names and Claude's matcher semantics ([docs.github.com: hooks configuration](https://docs.github.com/en/copilot/reference/hooks-configuration)).
 
 ### Claude Code Runtime Limitation
 

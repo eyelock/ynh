@@ -14,20 +14,6 @@ import (
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
-// copilotPluginJSON is the GitHub Copilot CLI plugin.json schema — identity
-// fields only. Confirmed by hand-testing (v1.0.75): Copilot's manifest search
-// order includes .claude-plugin/plugin.json (a documented compatibility
-// path), and a bundled skills/agents dir alongside it loads and activates
-// correctly via --plugin-dir. See .claude/skills/vendor-adapters/SKILL.md
-// § "Copilot CLI" for the full research trail.
-type copilotPluginJSON struct {
-	Name        string             `json:"name"`
-	Version     string             `json:"version"`
-	Description string             `json:"description,omitempty"`
-	Author      *plugin.AuthorInfo `json:"author,omitempty"`
-	Keywords    []string           `json:"keywords,omitempty"`
-}
-
 func init() {
 	Register(&Copilot{})
 }
@@ -244,7 +230,7 @@ func (c *Copilot) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[s
 // never inferred from the files present: an export's own .copilot/.mcp.json
 // once made it look like a run dir (#471).
 func (c *Copilot) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {
-	data, err := copilotManifestDocument(hj)
+	data, err := claudePluginManifest(hj, outputDir)
 	if err != nil {
 		return nil, err
 	}
@@ -255,27 +241,17 @@ func (c *Copilot) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir strin
 // .claude-plugin/plugin.json in the plugin root, next to the skills and
 // agents the exporter copies there. Copilot's manifest search order includes
 // that path (docs.github.com, Copilot CLI plugin reference).
-func (c *Copilot) GenerateExportPluginManifest(hj *plugin.HarnessJSON) (map[string][]byte, error) {
-	data, err := copilotManifestDocument(hj)
+//
+// The file is Claude's manifest, so both are rendered by claudePluginManifest:
+// in a merged package Claude and Copilot both write it, and a Copilot render
+// that differed would drop Claude's "hooks" pointer whenever Copilot wrote
+// last (#469). Copilot itself emits no hooks (see GenerateHookConfig).
+func (c *Copilot) GenerateExportPluginManifest(hj *plugin.HarnessJSON, outputDir string) (map[string][]byte, error) {
+	data, err := claudePluginManifest(hj, outputDir)
 	if err != nil {
 		return nil, err
 	}
 	return map[string][]byte{filepath.Join(c.PluginManifestDir(), "plugin.json"): data}, nil
-}
-
-func copilotManifestDocument(hj *plugin.HarnessJSON) ([]byte, error) {
-	pj := &copilotPluginJSON{
-		Name:        hj.Name,
-		Version:     hj.Version,
-		Description: hj.Description,
-		Author:      hj.Author,
-		Keywords:    hj.Keywords,
-	}
-	data, err := json.MarshalIndent(pj, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshalling plugin.json: %w", err)
-	}
-	return append(data, '\n'), nil
 }
 
 func (c *Copilot) ExportArtifactDirs() map[string]string {

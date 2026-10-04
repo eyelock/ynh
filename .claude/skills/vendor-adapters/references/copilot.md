@@ -160,6 +160,15 @@ the CLI's own help.
 
 - `.github/hooks/*.json` (repo scope, any filename)
 - `~/.copilot/hooks/*.json` (user scope)
+- Plugin (legacy manifest): `hooks.json` or `hooks/hooks.json`, or the manifest `hooks`
+  field (path or inline object). Claude-format hooks (PascalCase events such as
+  `PreToolUse`) are accepted with Claude's matcher semantics. CONFIRMED 2026-10-04,
+  docs.github.com/en/copilot/reference/cli-plugin-reference and
+  docs.github.com/en/copilot/reference/hooks-configuration.
+- ynh emits no Copilot hooks, but Copilot reads `.claude-plugin/plugin.json`, the file
+  Claude writes, rendered for both by `claudePluginManifest`. In a merged package that
+  also targets Claude, its `hooks` field names `hooks/claude.json`, so Copilot finds
+  Claude-format hooks there. A Copilot-only export carries none (#469).
 
 ## Hook Events (14 — confirmed complete)
 

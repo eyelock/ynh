@@ -177,6 +177,7 @@ Requires Docker installed and running.
 | Preview for Claude — verify hooks.json | [Preview for Claude](hooks.md#preview-for-claude) |
 | Preview for Cursor — verify hooks.json | [Preview for Cursor](hooks.md#preview-for-cursor) |
 | Preview for Codex — verify hooks.json | [Preview for Codex](hooks.md#preview-for-codex) |
+| Export hooks in a plugin: one `hooks/<vendor>.json` per vendor, named by its manifest | [Export hooks in a plugin](hooks.md#export-hooks-in-a-plugin) |
 | Write a blocking hook script | [Write a blocking hook example](hooks.md#write-a-blocking-hook-example) |
 | Diff hook config across vendors | [Compare hook config across vendors](hooks.md#compare-hook-config-across-vendors) |
 

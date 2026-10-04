@@ -292,7 +292,7 @@ func TestCopilotManifestLayouts(t *testing.T) {
 			if got := mapKeys(result); len(got) != 1 || got[0] != runDirManifest {
 				t.Fatalf("manifest written to %v, want %s", got, runDirManifest)
 			}
-			var pj copilotPluginJSON
+			var pj claudePluginJSON
 			if err := json.Unmarshal(result[runDirManifest], &pj); err != nil {
 				t.Fatalf("invalid JSON: %v", err)
 			}
@@ -301,7 +301,7 @@ func TestCopilotManifestLayouts(t *testing.T) {
 			}
 		})
 		t.Run(label+"/export", func(t *testing.T) {
-			result, err := c.GenerateExportPluginManifest(hj)
+			result, err := c.GenerateExportPluginManifest(hj, outputDir)
 			if err != nil {
 				t.Fatal(err)
 			}
