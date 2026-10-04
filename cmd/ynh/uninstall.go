@@ -177,7 +177,9 @@ func (t uninstallTarget) remove() error {
 		runDir := filepath.Join(config.RunDir(), t.bareName)
 		_ = os.RemoveAll(runDir) // ignore error if not present
 
-		// Remove matching sources entry if present
+		// Remove matching sources entry if present. Save only when one was
+		// removed: Load returns defaults for a missing file, and saving those
+		// would create a config.json nobody asked for (#490).
 		if cfg, err := config.Load(); err == nil {
 			remaining := make([]config.Source, 0, len(cfg.Sources))
 			for _, s := range cfg.Sources {
@@ -185,9 +187,11 @@ func (t uninstallTarget) remove() error {
 					remaining = append(remaining, s)
 				}
 			}
-			cfg.Sources = remaining
-			if err := cfg.Save(); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: could not update config after uninstall: %v\n", err)
+			if len(remaining) != len(cfg.Sources) {
+				cfg.Sources = remaining
+				if err := cfg.Save(); err != nil {
+					fmt.Fprintf(os.Stderr, "warning: could not update config after uninstall: %v\n", err)
+				}
 			}
 		}
 	default:

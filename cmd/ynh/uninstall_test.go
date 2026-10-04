@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -105,6 +106,106 @@ func TestCmdUninstall_MultipleNames(t *testing.T) {
 				if _, err := os.Stat(filepath.Join(config.BinDir(), n)); err != nil {
 					t.Errorf("launcher for %q should still be present: %v", n, err)
 				}
+			}
+		})
+	}
+}
+
+// TestCmdUninstall_ConfigWrittenOnlyOnChange covers #490: uninstall used to
+// save config.json unconditionally, so a fresh home gained a config file and
+// an unrelated config was rewritten even when no sources entry was removed.
+func TestCmdUninstall_ConfigWrittenOnlyOnChange(t *testing.T) {
+	tests := []struct {
+		name        string
+		config      string // config.json before uninstall; "" means no file
+		wantNoFile  bool   // config.json must not exist afterwards
+		wantSources []string
+		wantSame    bool // config.json must be byte-identical afterwards
+	}{
+		{
+			name:       "no config stays absent",
+			wantNoFile: true,
+		},
+		{
+			name:     "config without a matching source is not rewritten",
+			config:   "{\n    \"default_vendor\": \"codex\",\n    \"sources\": [{\"name\": \"other\", \"path\": \"/x\"}]\n}\n",
+			wantSame: true,
+		},
+		{
+			name:        "matching source entry is removed and saved",
+			config:      `{"default_vendor":"claude","sources":[{"name":"a","path":"/a"},{"name":"other","path":"/x"}]}`,
+			wantSources: []string{"other"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("YNH_HOME", t.TempDir())
+			if err := config.EnsureDirs(); err != nil {
+				t.Fatal(err)
+			}
+			if tt.config != "" {
+				if err := os.WriteFile(config.ConfigPath(), []byte(tt.config), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			installTestHarness(t, "a")
+
+			if err := cmdUninstall([]string{"local/a"}); err != nil {
+				t.Fatalf("cmdUninstall failed: %v", err)
+			}
+
+			data, err := os.ReadFile(config.ConfigPath())
+			if tt.wantNoFile {
+				if !os.IsNotExist(err) {
+					t.Fatalf("config.json exists after uninstall (err=%v): %s", err, data)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("reading config.json: %v", err)
+			}
+			if tt.wantSame && string(data) != tt.config {
+				t.Errorf("config.json rewritten:\n got %s\nwant %s", data, tt.config)
+			}
+			if tt.wantSources != nil {
+				cfg, err := config.Load()
+				if err != nil {
+					t.Fatal(err)
+				}
+				var got []string
+				for _, s := range cfg.Sources {
+					got = append(got, s.Name)
+				}
+				if strings.Join(got, ",") != strings.Join(tt.wantSources, ",") {
+					t.Errorf("sources = %v, want %v", got, tt.wantSources)
+				}
+			}
+		})
+	}
+}
+
+// TestConfigCommands_NoOpLeavesNoConfig pins the audit done for #490: every
+// other command that saves config.json refuses a no-op with an error before
+// saving, so a fresh home must still have no config.json afterwards.
+func TestConfigCommands_NoOpLeavesNoConfig(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func() error
+	}{
+		{"sources remove missing", func() error { return cmdSourcesRemove([]string{"missing"}, io.Discard) }},
+		{"registry remove missing", func() error { return cmdRegistryRemove([]string{"https://example.invalid/r"}) }},
+		{"backend remove missing", func() error { return cmdBackendRemove([]string{"missing"}) }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("YNH_HOME", t.TempDir())
+			if err := tt.run(); err == nil {
+				t.Fatal("expected an error for a no-op")
+			}
+			if _, err := os.Stat(config.ConfigPath()); !os.IsNotExist(err) {
+				t.Errorf("config.json written by a no-op (stat err=%v)", err)
 			}
 		})
 	}
