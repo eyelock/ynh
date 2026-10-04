@@ -333,7 +333,7 @@ func TestResolveGitSourceFromCache_WithPath(t *testing.T) {
 
 	// Resolve with valid path
 	gs := harness.GitSource{Git: srcDir, Path: "sub"}
-	basePath, _, err := ResolveGitSourceFromCache(gs)
+	basePath, _, err := ResolveGitSourceFromCache(gs, "")
 	if err != nil {
 		t.Fatalf("ResolveGitSourceFromCache failed: %v", err)
 	}
@@ -344,7 +344,7 @@ func TestResolveGitSourceFromCache_WithPath(t *testing.T) {
 
 	// Resolve with invalid path
 	gsBad := harness.GitSource{Git: srcDir, Path: "nonexistent"}
-	_, _, err = ResolveGitSourceFromCache(gsBad)
+	_, _, err = ResolveGitSourceFromCache(gsBad, "")
 	if err == nil {
 		t.Fatal("expected error for nonexistent path")
 	}

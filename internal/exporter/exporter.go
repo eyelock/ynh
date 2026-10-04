@@ -224,7 +224,7 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 
 	// Delegates (Claude/Cursor only in merged mode)
 	if len(p.DelegatesTo) > 0 {
-		if err := ExportDelegates(outputDir, p.DelegatesTo); err != nil {
+		if err := ExportDelegates(outputDir, p.DelegatesTo, p.Dir); err != nil {
 			return nil, fmt.Errorf("exporting delegates: %w", err)
 		}
 		// Recount agents after delegate generation
@@ -326,7 +326,7 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 
 	// Delegates
 	if len(p.DelegatesTo) > 0 && adapter.SupportsExportDelegates() {
-		if err := ExportDelegates(outputDir, p.DelegatesTo); err != nil {
+		if err := ExportDelegates(outputDir, p.DelegatesTo, p.Dir); err != nil {
 			return result, fmt.Errorf("exporting delegates: %w", err)
 		}
 	}

@@ -79,7 +79,7 @@ func cmdIncludeAdd(args []string, stdout io.Writer) error {
 	needFetch := installed || len(opts.Pick) > 0
 	if needFetch {
 		gs := harness.GitSource{Git: url, Ref: opts.Ref, Path: opts.Path}
-		basePath, _, fetchErr := resolver.ResolveGitSource(gs)
+		basePath, _, fetchErr := resolver.ResolveGitSource(gs, dir)
 		if fetchErr != nil {
 			return fmt.Errorf("fetching include: %w", fetchErr)
 		}
@@ -214,7 +214,7 @@ func cmdIncludeUpdate(args []string, stdout io.Writer) error {
 	needFetch := installed || (opts.SetPick && len(opts.Pick) > 0)
 	if needFetch {
 		gs := harness.GitSource{Git: url, Ref: finalInc.Ref, Path: finalInc.Path}
-		basePath, _, fetchErr := resolver.ResolveGitSource(gs)
+		basePath, _, fetchErr := resolver.ResolveGitSource(gs, dir)
 		if fetchErr != nil {
 			return fmt.Errorf("fetching include: %w", fetchErr)
 		}

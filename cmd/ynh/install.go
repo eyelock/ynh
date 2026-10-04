@@ -327,7 +327,10 @@ func cmdInstall(args []string) error {
 		if err := cfg.CheckSource(inc.Git, p.Dir); err != nil {
 			return fmt.Errorf("include %q: %w", inc.Git, err)
 		}
-		res, err := resolver.EnsureRepo(inc.Git, inc.Ref)
+		// A relative source resolves against the harness, as the check
+		// above did, not against wherever ynh install was run from.
+		gitURL := resolver.GitSourceURL(inc.Git, p.Dir)
+		res, err := resolver.EnsureRepo(gitURL, inc.Ref)
 		if err != nil {
 			return fmt.Errorf("fetching include %s: %w", inc.Git, err)
 		}
@@ -337,13 +340,14 @@ func cmdInstall(args []string) error {
 			Path: inc.Path,
 			SHA:  res.SHA,
 		})
-		fmt.Printf("  Fetched %s\n", resolver.ShortGitURL(inc.Git))
+		fmt.Printf("  Fetched %s\n", resolver.ShortGitURL(gitURL))
 	}
 	for _, del := range p.DelegatesTo {
 		if err := cfg.CheckSource(del.Git, p.Dir); err != nil {
 			return fmt.Errorf("delegate %q: %w", del.Git, err)
 		}
-		res, err := resolver.EnsureRepo(del.Git, del.Ref)
+		gitURL := resolver.GitSourceURL(del.Git, p.Dir)
+		res, err := resolver.EnsureRepo(gitURL, del.Ref)
 		if err != nil {
 			return fmt.Errorf("fetching delegate %s: %w", del.Git, err)
 		}
@@ -353,7 +357,7 @@ func cmdInstall(args []string) error {
 			Path: del.Path,
 			SHA:  res.SHA,
 		})
-		fmt.Printf("  Fetched %s\n", resolver.ShortGitURL(del.Git))
+		fmt.Printf("  Fetched %s\n", resolver.ShortGitURL(gitURL))
 	}
 
 	if isLocal {

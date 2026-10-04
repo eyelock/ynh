@@ -223,7 +223,7 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 	}
 
 	// Assemble delegates
-	if err := assembler.AssembleDelegates(tmpDir, adapter, h.DelegatesTo); err != nil {
+	if err := assembler.AssembleDelegates(tmpDir, adapter, h.DelegatesTo, h.Dir); err != nil {
 		return "", fmt.Errorf("assembling delegates: %w", err)
 	}
 

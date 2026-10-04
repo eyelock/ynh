@@ -13,10 +13,10 @@ import (
 // export that creates a stray directory changes what ships.
 func TestExportDelegates_NoneWritesNothing(t *testing.T) {
 	out := t.TempDir()
-	if err := ExportDelegates(out, nil); err != nil {
+	if err := ExportDelegates(out, nil, ""); err != nil {
 		t.Fatalf("ExportDelegates: %v", err)
 	}
-	if err := ExportDelegates(out, []harness.Delegate{}); err != nil {
+	if err := ExportDelegates(out, []harness.Delegate{}, ""); err != nil {
 		t.Fatalf("ExportDelegates: %v", err)
 	}
 	entries, err := os.ReadDir(out)
@@ -38,7 +38,7 @@ func TestExportDelegates_UnresolvableIsAnError(t *testing.T) {
 	out := t.TempDir()
 	err := ExportDelegates(out, []harness.Delegate{
 		{GitSource: harness.GitSource{Git: "example.invalid/nope/nothing-here"}},
-	})
+	}, "")
 	if err == nil {
 		t.Fatal("an unresolvable delegate must be an error, not a silent skip")
 	}
@@ -56,7 +56,7 @@ func TestExportDelegates_TargetsPluginRootNotConfigDir(t *testing.T) {
 	// created path still tells us where it intended to write.
 	_ = ExportDelegates(out, []harness.Delegate{
 		{GitSource: harness.GitSource{Git: "example.invalid/x/y"}},
-	})
+	}, "")
 	if _, err := os.Stat(filepath.Join(out, "agents")); err != nil {
 		t.Errorf("delegates should target <output>/agents/: %v", err)
 	}

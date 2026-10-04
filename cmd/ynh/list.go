@@ -545,7 +545,7 @@ func formatProvenance(prov *harness.Provenance) string {
 	if prov == nil {
 		return "-"
 	}
-	short := shortGitURL(prov.Source)
+	short := resolver.ShortGitURL(prov.Source)
 	if prov.Path != "" {
 		short += "/" + prov.Path
 	}
@@ -562,7 +562,7 @@ func formatIncludes(includes []harness.Include) string {
 	}
 	parts := make([]string, 0, len(includes))
 	for _, inc := range includes {
-		s := shortGitURL(inc.Git)
+		s := resolver.ShortGitURL(inc.Git)
 		if inc.Path != "" {
 			s += "/" + inc.Path
 		}
@@ -584,7 +584,7 @@ func formatDelegates(delegates []harness.Delegate) string {
 	}
 	parts := make([]string, 0, len(delegates))
 	for _, del := range delegates {
-		s := shortGitURL(del.Git)
+		s := resolver.ShortGitURL(del.Git)
 		if del.Path != "" {
 			s += "/" + del.Path
 		}
@@ -594,20 +594,4 @@ func formatDelegates(delegates []harness.Delegate) string {
 		parts = append(parts, s)
 	}
 	return strings.Join(parts, ", ")
-}
-
-// shortGitURL abbreviates a git URL for display.
-// "github.com/eyelock/ynh" -> "eyelock/ynh"
-// "/tmp/ynh-walkthrough/foo" -> "/tmp/ynh-walkthrough/foo"
-func shortGitURL(url string) string {
-	// Local paths: keep as-is
-	if strings.HasPrefix(url, "/") || strings.HasPrefix(url, ".") {
-		return url
-	}
-	// Strip host prefix: "github.com/user/repo" -> "user/repo"
-	parts := strings.SplitN(url, "/", 2)
-	if len(parts) == 2 {
-		return parts[1]
-	}
-	return url
 }
