@@ -184,6 +184,7 @@ session_start      turn=
 worker_env         turn=
 plan               turn=
 assistant_message  turn=
+worker_model       turn=
 budget_snapshot    turn=
 turn_start         turn=1
 assistant_message  turn=1
@@ -195,7 +196,8 @@ session_end        turn=1
 ```
 
 The shape is the mechanism: plan once, then repeat *act → observe → feed back*
-until `converged` or a budget event. `session_end` carries the outcome:
+until `converged` or a budget event. `worker_model` records the model the
+worker reported it is running, once per worker process and again if it changes. `session_end` carries the outcome:
 
 ```json
 {"exit_code": 0, "total_turns": 1, "total_tokens": 3637}
