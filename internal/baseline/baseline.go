@@ -159,10 +159,24 @@ type Comparison struct {
 // any edit.
 var lineNumbers = regexp.MustCompile(`:\d+(:\d+)?`)
 
+// durations matches an elapsed time as Go's time.Duration and common tools
+// print one: "0.03s", "1m2.3s", "1h2m3s", "12ms", "250µs", "250us", "3.2ns".
+// They are stripped before hashing for the same reason as positions: go test
+// puts one on every line that names a failure ("--- FAIL: TestX (0.03s)",
+// "FAIL\tpkg\t0.512s"), so without this the same failure never fingerprints
+// the same twice (#434). A baseline could not forgive it, and the agent
+// watchdog read every identical failing turn as progress.
+//
+// Deliberately narrow. The token must end in a seconds unit, so a bare "5m" or
+// "2h" is left alone; and it must start at a word boundary, so digits inside a
+// name ("TestRetry3s", "E1234s") are not durations. Bare numbers, such as a
+// failure count or an exit status, are real differences and are never touched.
+var durations = regexp.MustCompile(`\b(?:\d+h)?(?:\d+m)?\d+(?:\.\d+)?(?:ms|us|µs|μs|ns|s)\b`)
+
 // Fingerprints reduces raw sensor output to a sorted, deduplicated set of
 // hashes. Blank lines are dropped, absolute paths under root are made
 // relative so a baseline recorded on one machine matches on another, and
-// line/column positions are collapsed.
+// durations and line/column positions are collapsed.
 func Fingerprints(output, root string, match *regexp.Regexp) []string {
 	seen := map[string]bool{}
 	for _, line := range strings.Split(output, "\n") {
@@ -181,6 +195,9 @@ func Fingerprints(output, root string, match *regexp.Regexp) []string {
 			line = strings.ReplaceAll(line, root+string(filepath.Separator), "")
 			line = strings.ReplaceAll(line, root, "")
 		}
+		// Durations first: "elapsed:3.2s" is one duration, but the position
+		// rule would see ":3" and leave a ".2s" behind.
+		line = durations.ReplaceAllString(line, "<dur>")
 		line = lineNumbers.ReplaceAllString(line, ":N")
 		sum := sha256.Sum256([]byte(line))
 		seen[hex.EncodeToString(sum[:])[:12]] = true

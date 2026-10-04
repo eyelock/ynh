@@ -662,8 +662,9 @@ Shape: [`docs/schema/cli/baseline.schema.json`](https://github.com/eyelock/ynh/b
 
 The baseline normally forgives by **fingerprint**: each finding is hashed, a
 fixed one stops being forgiven, and a new one is flagged wherever it appears.
-Line numbers are normalised to `:N` so moving code is not a regression, and
-identical lines are deduplicated.
+Line numbers are normalised to `:N` so moving code is not a regression,
+durations are collapsed so a test's timing is not either, and identical lines
+are deduplicated.
 
 That is the right behaviour for a linter and the wrong one for a suppression
 scan. **The gaming vector for a ratchet is suppression, not relocation.** An
@@ -1186,6 +1187,20 @@ to the working directory. Position collapsing is load-bearing — without it,
 inserting a line above an existing issue would report the whole file as new on
 the next run. Path relativisation lets a baseline recorded on a laptop match on
 a CI runner.
+
+Durations are collapsed as well: a number followed by a seconds unit, in the
+forms Go and most tools print (`0.03s`, `1m2.3s`, `1h2m3s`, `12ms`, `250µs`,
+`250us`, `3.2ns`). Go test output carries one on the very line that names a
+failure (`--- FAIL: TestX (0.03s)`), so without this a failing test would never
+match its recorded fingerprint. Other numbers are left alone: a failure count,
+an exit status or digits inside a test name are real differences.
+
+Baselines recorded before durations were collapsed keep working, with one
+exception. A recorded line that carried a duration (most often a stable
+`(0.00s)`) fingerprints differently now, so it reports as new, and its old
+entry as fixed, until the baseline is re-recorded. Re-record with `ynh check --update-baseline` after checking the
+new lines are the ones you already accepted. A line with a varying timing never
+matched before, so for it this is the fix rather than a change.
 
 A sensor whose failures are all in the baseline reports `known` and does not
 gate. When recorded failures stop appearing, `ynh check` says so:

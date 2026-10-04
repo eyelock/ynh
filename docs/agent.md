@@ -194,8 +194,10 @@ Two detectors stop a loop that is not going anywhere:
 
 - **No progress** — the sensor picture is unchanged for several turns. The
   comparison covers each sensor's *output*, not just its status, so fixing some
-  findings while a sensor still fails counts as progress. File positions are
-  normalised, so a finding moving down a file does not. Where a baseline is in
+  findings while a sensor still fails counts as progress. File positions and
+  durations are normalised, so a finding moving down a file does not, and
+  neither does the same test failing with a different timing
+  (`--- FAIL: TestX (0.03s)`). Where a baseline is in
   play it compares the *new* failures only: churn among findings that were
   already forgiven is not progress either.
 - **Edit loop** — the agent repeats itself across turns.
