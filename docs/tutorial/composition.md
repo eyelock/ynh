@@ -453,10 +453,11 @@ The `--path` flag scopes into a subdirectory of the repo, installing only what's
 
 For security (especially in team environments), restrict which Git repos ynh can pull from.
 
-First, back up your current config:
+First, back up your current config, if you have one:
 
 ```bash
-cp ~/.ynh/config.json ~/.ynh/config.json.bak
+# A fresh ynh home has no config.json yet: back it up only if there is one.
+if [ -f ~/.ynh/config.json ]; then cp ~/.ynh/config.json ~/.ynh/config.json.bak; fi
 ```
 
 Restrict to only `eyelock` repos:
@@ -549,7 +550,8 @@ The key is named `allowed_remote_sources` for historical reasons: it covers loca
 Restore config:
 
 ```bash
-mv ~/.ynh/config.json.bak ~/.ynh/config.json
+# Put the backup back, or, if there was none, remove the config written above.
+if [ -f ~/.ynh/config.json.bak ]; then mv ~/.ynh/config.json.bak ~/.ynh/config.json; else rm -f ~/.ynh/config.json; fi
 ```
 
 **Pattern reference:**

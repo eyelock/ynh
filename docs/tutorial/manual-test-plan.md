@@ -448,20 +448,23 @@ ynd marketplace build
 ### E10: Search with no registries
 
 ```bash
-cp ~/.ynh/config.json ~/.ynh/config.json.bak
+# A fresh ynh home has no config.json yet: back it up only if there is one.
+if [ -f ~/.ynh/config.json ]; then cp ~/.ynh/config.json ~/.ynh/config.json.bak; fi
 echo '{"default_vendor":"claude"}' > ~/.ynh/config.json
 
 ynh search "anything"
 # Expected: No results for "anything"
 # (no error — unified search succeeds with empty results when no registries or sources are configured)
 
-mv ~/.ynh/config.json.bak ~/.ynh/config.json
+# Put the backup back, or, if there was none, remove the config written above.
+if [ -f ~/.ynh/config.json.bak ]; then mv ~/.ynh/config.json.bak ~/.ynh/config.json; else rm -f ~/.ynh/config.json; fi
 ```
 
 ### E11: Install plain word with no registries
 
 ```bash
-cp ~/.ynh/config.json ~/.ynh/config.json.bak
+# A fresh ynh home has no config.json yet: back it up only if there is one.
+if [ -f ~/.ynh/config.json ]; then cp ~/.ynh/config.json ~/.ynh/config.json.bak; fi
 echo '{"default_vendor":"claude"}' > ~/.ynh/config.json
 
 ynh install somename
@@ -470,7 +473,8 @@ ynh install somename
 #     Add one with: ynh registry add <url>
 #     Or specify a Git URL: ynh install github.com/user/somename
 
-mv ~/.ynh/config.json.bak ~/.ynh/config.json
+# Put the backup back, or, if there was none, remove the config written above.
+if [ -f ~/.ynh/config.json.bak ]; then mv ~/.ynh/config.json.bak ~/.ynh/config.json; else rm -f ~/.ynh/config.json; fi
 ```
 
 ### E12: SSH URL not confused with registry
@@ -526,7 +530,8 @@ rm -rf broken-test
 mkdir -p /tmp/ynh-edge/allow/.agents/harness
 echo '{"name":"allow-edge","version":"0.1.0","default_vendor":"claude","includes":[{"git":"github.com/eyelock/assistants","path":"skills/pause","pick":["skills/help-me-answer"]}]}' > /tmp/ynh-edge/allow/.agents/harness/plugin.json
 
-cp ~/.ynh/config.json ~/.ynh/config.json.bak
+# A fresh ynh home has no config.json yet: back it up only if there is one.
+if [ -f ~/.ynh/config.json ]; then cp ~/.ynh/config.json ~/.ynh/config.json.bak; fi
 echo '{"default_vendor":"claude","allowed_remote_sources":[]}' > ~/.ynh/config.json
 
 # A harness with a remote include fails at both install and run time.
@@ -537,7 +542,8 @@ ynh install /tmp/ynh-edge/allow 2>&1 | grep Error
 ynh run /tmp/ynh-edge/allow "hello" 2>&1 | grep Error
 # Expected: Error: resolving includes: include "github.com/eyelock/assistants": remote source "github.com/eyelock/assistants" is not in the allowed sources list (add "github.com/eyelock/assistants" to allowed_remote_sources) (exit 1)
 
-mv ~/.ynh/config.json.bak ~/.ynh/config.json
+# Put the backup back, or, if there was none, remove the config written above.
+if [ -f ~/.ynh/config.json.bak ]; then mv ~/.ynh/config.json.bak ~/.ynh/config.json; else rm -f ~/.ynh/config.json; fi
 ynh ls
 # Expected: local/allow-edge is not listed. The install was refused, and running a path installs nothing
 rm -rf /tmp/ynh-edge/allow
