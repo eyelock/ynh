@@ -182,7 +182,7 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 	// Check remote sources for delegates
 	if cfg != nil {
 		for _, del := range h.DelegatesTo {
-			if err := cfg.CheckRemoteSource(del.Git); err != nil {
+			if err := cfg.CheckSource(del.Git, h.Dir); err != nil {
 				return "", fmt.Errorf("delegate %q: %w", del.Git, err)
 			}
 		}

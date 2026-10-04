@@ -189,7 +189,7 @@ git ls-remote git@github.com:company/private-skills.git
 
 ### Restrict Remote Sources
 
-By default, harnesses can pull skills and agents from any Git repo via `includes` or `delegates_to`. You can restrict which remote sources are allowed by adding an `allowed_remote_sources` list to `~/.ynh/config.json`:
+By default, harnesses can pull skills and agents from any Git repo via `includes` or `delegates_to`. You can restrict which sources are allowed by adding an `allowed_remote_sources` list to `~/.ynh/config.json`. Despite the key's name, the list governs every include and delegate source, local paths included (see [Local paths](#local-paths)):
 
 ```json
 {
@@ -210,7 +210,7 @@ By default, harnesses can pull skills and agents from any Git repo via `includes
 | Empty array `[]` | All remote sources blocked |
 | Patterns present | Only matching sources allowed |
 
-Local paths (e.g. `ynh install ./david`) are always trusted and bypass this check.
+The harness you install from a local directory (e.g. `ynh install ./david`) is trusted and bypasses this check. Its includes and delegates do not.
 
 **Pattern syntax:**
 
@@ -228,7 +228,36 @@ git@github.com:user/repo.git      →  github.com/user/repo
 https://github.com/user/repo.git  →  github.com/user/repo
 ```
 
-**Enforcement points:** The allow-list is checked on `ynh install`, `ynh run`, and `ynh update` — before any Git clone or fetch occurs.
+**Enforcement points:** The allow-list is checked on `ynh install`, `ynh run`, and `ynh update`, before any Git clone or fetch occurs.
+
+#### Local paths
+
+An include or delegate whose source is a local path (`"git": "/srv/shared/skills"`, or a `"local"` include at an absolute path) is code from outside the harness, so the allow-list governs it like a network repo. `ynh run` re-resolves includes from their sources on every launch, so a local path is checked on every run, not only at install.
+
+List a local source by its absolute path. `*` and `**` work as for URLs:
+
+```json
+{
+  "allowed_remote_sources": [
+    "github.com/acme-corp/**",
+    "/srv/shared/skills",
+    "/Users/me/shared/**"
+  ]
+}
+```
+
+- A relative source (`"git": "./lib"`) is resolved against the harness directory first, so its entry is the absolute path.
+- A `file:///path` URL is matched as `/path`.
+- Paths are matched as written: symlinks are not resolved, so on macOS `/tmp/x` and `/private/tmp/x` are different entries.
+- A `"local"` include inside the harness (`"local": "extras"`) is part of the harness and is not checked.
+
+A refused local source names the entry to add:
+
+```
+source "/tmp/inc" is not in the allowed sources list (add "/tmp/inc" to allowed_remote_sources)
+```
+
+The key keeps the name `allowed_remote_sources` so existing configs keep working.
 
 ### Symlink Installation (Codex/Cursor)
 

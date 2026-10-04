@@ -98,7 +98,7 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	// Check remote sources for all delegates
 	if opts.Config != nil {
 		for _, del := range p.DelegatesTo {
-			if err := opts.Config.CheckRemoteSource(del.Git); err != nil {
+			if err := opts.Config.CheckSource(del.Git, p.Dir); err != nil {
 				return nil, fmt.Errorf("delegate %q: %w", del.Git, err)
 			}
 		}

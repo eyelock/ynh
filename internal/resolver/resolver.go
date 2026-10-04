@@ -87,12 +87,30 @@ func resolveLocalSource(gs harness.GitSource, harnessDir string) (string, error)
 	return basePath, nil
 }
 
+// CheckLocalInclude checks a "local" include against the allow-list. A
+// relative one is confined to the harness directory (resolveLocalSource
+// refuses an escape), so it is part of the harness and not a source. An
+// absolute one can point anywhere and is read on every run, so it is
+// governed like any other source. A nil cfg allows everything.
+func CheckLocalInclude(cfg *config.Config, inc harness.Include, harnessDir string) error {
+	if cfg == nil || !filepath.IsAbs(inc.Local) {
+		return nil
+	}
+	if err := cfg.CheckSource(inc.Local, harnessDir); err != nil {
+		return fmt.Errorf("include %q: %w", inc.Local, err)
+	}
+	return nil
+}
+
 // resolveWith fetches all includes using the given repo function.
 func resolveWith(p *harness.Harness, cfg *config.Config, fetch repoFunc) ([]ResolveResult, error) {
 	var results []ResolveResult
 
 	for _, inc := range p.Includes {
 		if inc.IsLocal() {
+			if err := CheckLocalInclude(cfg, inc, p.Dir); err != nil {
+				return nil, err
+			}
 			basePath, err := resolveLocalSource(inc.GitSource, p.Dir)
 			if err != nil {
 				return nil, err
@@ -111,7 +129,7 @@ func resolveWith(p *harness.Harness, cfg *config.Config, fetch repoFunc) ([]Reso
 		}
 
 		if cfg != nil {
-			if err := cfg.CheckRemoteSource(inc.Git); err != nil {
+			if err := cfg.CheckSource(inc.Git, p.Dir); err != nil {
 				return nil, fmt.Errorf("include %q: %w", inc.Git, err)
 			}
 		}

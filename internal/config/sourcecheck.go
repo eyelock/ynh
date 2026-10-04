@@ -2,27 +2,64 @@ package config
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
-// CheckRemoteSource validates a remote Git URL against the configured allow-list.
-// If AllowedRemoteSources is nil (not configured), all remote sources are allowed.
-// If AllowedRemoteSources is an empty slice, all remote sources are denied.
-// Otherwise, the URL must match at least one pattern in the allow-list.
-func (c *Config) CheckRemoteSource(gitURL string) error {
+// CheckSource checks an include or delegate source against the allow-list.
+// It governs every source, local paths included: ynh run re-resolves includes
+// from their sources on every launch, so a local path is read on each run.
+//
+// If AllowedRemoteSources is nil (not configured), every source is allowed.
+// If it is an empty slice, every source is denied. Otherwise the source must
+// match at least one pattern.
+//
+// A Git URL is matched in its host/path form. A local path (absolute, "./" or
+// "../" relative, or a file:// URL) is matched as a clean absolute path, a
+// relative one resolved against baseDir, the harness directory. Allow-list
+// entries for local paths are therefore absolute paths.
+func (c *Config) CheckSource(source, baseDir string) error {
 	if c.AllowedRemoteSources == nil {
 		return nil
 	}
 
-	normalized := normalizeForMatch(gitURL)
+	match, local := localSourcePath(source, baseDir)
+	if !local {
+		match = normalizeForMatch(source)
+	}
 
 	for _, pattern := range c.AllowedRemoteSources {
-		if matchGlob(pattern, normalized) {
+		if local && strings.HasPrefix(pattern, "/") {
+			pattern = filepath.Clean(pattern)
+		}
+		if matchGlob(pattern, match) {
 			return nil
 		}
 	}
 
-	return fmt.Errorf("remote source %q is not in the allowed sources list", gitURL)
+	kind := "remote source"
+	if local {
+		kind = "source"
+	}
+	return fmt.Errorf("%s %q is not in the allowed sources list (add %q to allowed_remote_sources)", kind, source, match)
+}
+
+// localSourcePath reports whether source is a local filesystem path and, if
+// so, returns the clean path an allow-list entry is matched against. A
+// relative path is joined to baseDir, the directory the resolver reads it
+// from. A file:// URL counts only in its local form, file:///abs/path.
+func localSourcePath(source, baseDir string) (string, bool) {
+	p, fileURL := strings.CutPrefix(source, "file://")
+	switch {
+	case fileURL && !strings.HasPrefix(p, "/"):
+		return "", false
+	case !fileURL && !strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "."):
+		return "", false
+	}
+	if !filepath.IsAbs(p) && baseDir != "" {
+		p = filepath.Join(baseDir, p)
+	}
+	return filepath.Clean(p), true
 }
 
 // normalizeForMatch strips a Git URL down to a canonical host/path form for matching.

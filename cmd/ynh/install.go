@@ -110,7 +110,7 @@ func cmdInstall(args []string) error {
 		}
 
 		// Check remote source against allow-list
-		if err := cfg.CheckRemoteSource(cloneURL); err != nil {
+		if err := cfg.CheckSource(cloneURL, ""); err != nil {
 			return err
 		}
 
@@ -313,16 +313,19 @@ func cmdInstall(args []string) error {
 	}
 	for _, inc := range p.Includes {
 		// Local-path includes are resolved on-demand from the harness dir
-		// — there's nothing to pre-fetch. Skip the allow-list check and the
-		// EnsureRepo clone; the resolver will hit the filesystem at run time.
+		// at run time, so there is nothing to pre-fetch. One outside the
+		// harness is still a source the allow-list governs.
 		if inc.IsLocal() {
+			if err := resolver.CheckLocalInclude(cfg, inc, p.Dir); err != nil {
+				return err
+			}
 			fmt.Printf("  Local  %s\n", inc.Local)
 			continue
 		}
-		if !isLocalPath(inc.Git) {
-			if err := cfg.CheckRemoteSource(inc.Git); err != nil {
-				return fmt.Errorf("include %q: %w", inc.Git, err)
-			}
+		// Every git source is governed, a local path included, so install
+		// refuses exactly what ynh run would refuse.
+		if err := cfg.CheckSource(inc.Git, p.Dir); err != nil {
+			return fmt.Errorf("include %q: %w", inc.Git, err)
 		}
 		res, err := resolver.EnsureRepo(inc.Git, inc.Ref)
 		if err != nil {
@@ -337,10 +340,8 @@ func cmdInstall(args []string) error {
 		fmt.Printf("  Fetched %s\n", resolver.ShortGitURL(inc.Git))
 	}
 	for _, del := range p.DelegatesTo {
-		if !isLocalPath(del.Git) {
-			if err := cfg.CheckRemoteSource(del.Git); err != nil {
-				return fmt.Errorf("delegate %q: %w", del.Git, err)
-			}
+		if err := cfg.CheckSource(del.Git, p.Dir); err != nil {
+			return fmt.Errorf("delegate %q: %w", del.Git, err)
 		}
 		res, err := resolver.EnsureRepo(del.Git, del.Ref)
 		if err != nil {

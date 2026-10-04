@@ -66,7 +66,7 @@ func cmdUpdate(args []string) error {
 	var harnessSHA, harnessResolvedRef string
 	if hasHarnessSource {
 		gitURL := p.InstalledFrom.Source
-		if err := cfg.CheckRemoteSource(gitURL); err != nil {
+		if err := cfg.CheckSource(gitURL, ""); err != nil {
 			return fmt.Errorf("harness source %q: %w", gitURL, err)
 		}
 		fmt.Printf("Checking harness source %s...\n", gitURL)
@@ -121,7 +121,7 @@ func cmdUpdate(args []string) error {
 		if inc.IsLocal() {
 			continue
 		}
-		if err := cfg.CheckRemoteSource(inc.Git); err != nil {
+		if err := cfg.CheckSource(inc.Git, p.Dir); err != nil {
 			return fmt.Errorf("include %q: %w", inc.Git, err)
 		}
 		fmt.Printf("Checking %s...\n", inc.Git)
@@ -145,7 +145,7 @@ func cmdUpdate(args []string) error {
 		}
 	}
 	for _, del := range p.DelegatesTo {
-		if err := cfg.CheckRemoteSource(del.Git); err != nil {
+		if err := cfg.CheckSource(del.Git, p.Dir); err != nil {
 			return fmt.Errorf("delegate %q: %w", del.Git, err)
 		}
 		fmt.Printf("Checking delegate %s...\n", del.Git)
