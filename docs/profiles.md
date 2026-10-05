@@ -104,8 +104,11 @@ When both the flag and the environment variable are set, the flag wins. When nei
 Selecting a profile that does not exist in `.agents/harness/plugin.json` is a hard error:
 
 ```
-Error: profile "staging" not defined in harness manifest
+Error: profile "staging" not defined in harness manifest (available: [ci local])
 ```
+
+The error names the profiles the harness does declare, sorted by name. A harness
+with no profiles says `(the harness declares no profiles)` instead.
 
 This is intentional — a typo in a CI pipeline should fail loudly rather than silently falling back to defaults.
 
