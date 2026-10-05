@@ -14,6 +14,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 
@@ -46,14 +48,11 @@ func Get(name string) (*jsonschema.Schema, error) {
 	return s, nil
 }
 
-// Names returns every CLI schema name available.
+// Names returns every CLI schema name available, sorted so a listing of them
+// does not change order between calls (#520).
 func Names() []string {
 	compileOnce.Do(loadAll)
-	out := make([]string, 0, len(compiled))
-	for n := range compiled {
-		out = append(out, n)
-	}
-	return out
+	return slices.Sorted(maps.Keys(compiled))
 }
 
 // Raw returns the unparsed schema JSON bytes for a named schema. Used by

@@ -449,7 +449,7 @@ mkdir -p repo/.agents/harness
 echo '{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"edge","version":"0.1.0"}' > repo/.agents/harness/plugin.json
 
 ynd export /tmp/ynh-edge/e7/repo -v fakevend
-# Expected: Error: unknown vendor "fakevend" (available: [... order varies ...])
+# Expected: Error: unknown vendor "fakevend" (available: [claude codex copilot cursor])
 
 cd /
 rm -rf /tmp/ynh-edge/e7
@@ -763,7 +763,7 @@ cat > "$YNH_HOME/installed/shared.json" << 'EOF'
 EOF
 
 ynh ls --format json | jq '[.harnesses[] | select(.name=="shared") | .id]'
-# Expected (both ids present, order may vary):
+# Expected (both ids, local first: entries sort by namespace, then name):
 # [
 #   "local/shared",
 #   "github.com/eyelock/assistants/shared"
