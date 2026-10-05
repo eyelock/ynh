@@ -293,6 +293,7 @@ showed, a successful run has no output to parse.
 | Code | Meaning |
 |------|---------|
 | `0` | Converged — the gate passes |
+| `1` | Refused before any worker started |
 | `10` | Turn cap reached |
 | `11` | Token budget exhausted |
 | `12` | Wall-clock budget exhausted |
@@ -305,7 +306,9 @@ showed, a successful run has no output to parse.
 | `30` | Aborted by the user |
 | `31` | Interrupted |
 
-The bands carry meaning. `10`–`15` are the loop stopping itself as designed:
+The bands carry meaning. `1` is a run that never started: a flag or setting
+the backend cannot honour, or a harness that cannot load. Retrying it changes
+nothing. `10`–`15` are the loop stopping itself as designed:
 the run is over, nothing is broken. `20`–`22` are faults, and `22` in
 particular says the harness is broken rather than the agent — in a batch, every
 run will hit it, and it is the operator's fault not the model's.

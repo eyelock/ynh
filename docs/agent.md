@@ -181,7 +181,7 @@ when its verdict is `pass`.
   `focus` sensor needs an agent runtime to resolve, so ynh reports it
   `deferred`; a `files` sensor reports freshness, which is `reported`. Neither
   is ever `pass`, so either would spend the whole budget and end at the turn
-  cap. `ynh agent run` exits with an error before any worker starts, saying the
+  cap. `ynh agent run` exits 1 before any worker starts, saying the
   verifier requires a command source, and `ynd validate` reports the same
   sensor. See [`convergence-verifier` needs a source that can decide](sensors.md#convergence-verifier-needs-a-source-that-can-decide).
 - **A run that expected verification and produced no sensor results does not
@@ -289,6 +289,7 @@ warns and continues, but cannot converge. It has no sensors to converge on.
 | Code | Meaning |
 |---|---|
 | 0 | converged |
+| 1 | refused before any worker started |
 | 10 | turn cap reached |
 | 11 | token budget exceeded |
 | 12 | wall-clock limit reached |
@@ -302,8 +303,24 @@ warns and continues, but cannot converge. It has no sensors to converge on.
 | 31 | interrupted |
 
 Anything non-zero means the loop stopped without the sensors agreeing the work
-was done. Codes 10–12 are budgets, 13–15 are the loop deciding to stop, 20–22
-are failures to run, and 30–31 are external interruption.
+was done. Code 1 is a run that never started, 10–12 are budgets, 13–15 are the
+loop deciding to stop, 20–22 are failures to run, and 30–31 are external
+interruption.
+
+Code 1 is the code every ynh command exits with on a user or configuration
+error. Here it means `ynh agent run` refused before starting a worker: an
+unknown backend, a `--sandbox`, `--auto-approve` or `--effort` setting the
+backend cannot honour (including the harness's `agent.effort`), a project that
+[chooses its own permission mode](#permissions-and-auto-approve), a harness,
+focus or profile that cannot be loaded, or a [convergence verifier that can
+never pass](#convergence). ynh failing to write the trajectory also exits 1. A
+refused resume is code 21 instead. Nothing ran, so fix the invocation or the
+harness rather than retrying: every run with the same flags is refused the same
+way.
+
+Earlier releases exited 1 on such a refusal while the `--format json` result
+said `exit_code: 20`. The two now agree, and 20 always means ynh got as far as
+starting a worker (a vendor CLI missing from `PATH` included).
 
 Code 14 is the one a pipeline must **escalate rather than retry**. It means the
 gate's own reference point moved while the run was in progress: the
@@ -353,7 +370,15 @@ worker error: claude: --dangerously-skip-permissions cannot be used with root/su
 
 `--format json` prints one object when the run ends, on **every** path —
 converged or not. A run that did not converge is the one worth investigating,
-so it still reports what it consumed and what it touched.
+so it still reports what it consumed and what it touched. A run refused before
+a worker started gets one too, with `exit_code` 1 (or 21 for a resume) and the
+refusal as its `reason`. The result's `exit_code` is always the code the
+process exits with.
+
+The one exception is a command line that cannot be parsed at all: an unknown
+flag, a flag missing its value, `--task` with `--focus`, or neither of them.
+That is rejected before a run exists, so it prints an error on stderr, exits 1,
+and produces no result.
 
 ```bash
 ynh agent run --harness demo --task "..." --format json

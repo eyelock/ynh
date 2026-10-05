@@ -109,11 +109,12 @@ func (r *RunResult) finalise(err error) {
 			r.ExitCode = exitErr.Code
 			r.Reason = exitErr.Message
 		} else {
-			// A plain error means the loop failed before it could classify
-			// itself. Reporting 0 here would say "converged" about a run that
-			// did not, which is the one lie this whole contract exists to
-			// prevent.
-			r.ExitCode = ExitWorkerError
+			// A plain error is a refusal: the loop stopped before a worker
+			// started, or ynh could not write its own records. Every worker
+			// failure is an ExitError. Reporting 0 here would say "converged"
+			// about a run that did not, and reporting 20 said "worker error"
+			// about a worker that never ran (#509).
+			r.ExitCode = ExitRefused
 			r.Reason = err.Error()
 		}
 	}

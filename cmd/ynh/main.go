@@ -134,6 +134,12 @@ func main() {
 	}
 
 	if err != nil {
+		// `ynh agent run` exits with the code its run result reports, and has
+		// already reported the error.
+		var coded *exitCodeError
+		if errors.As(err, &coded) {
+			os.Exit(coded.code)
+		}
 		// `ynh check` distinguishes its two failure modes by exit code so a
 		// gate is unambiguous: 1 means a blocking sensor failed (the report
 		// is already on stdout), 2 means ynh could not run the check.

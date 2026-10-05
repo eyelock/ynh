@@ -27,7 +27,7 @@
     },
     "exit_code": {
       "type": "integer",
-      "description": "Mirrors the process exit code, so a consumer reading this and a consumer branching on $? never disagree. 0 converged; 10 turn cap; 11 token budget; 12 wall clock; 13 stuck; 14 tamper \u2014 the baseline moved during the run; 15 plan-iteration cap; 20 worker error; 21 resume error; 22 gate error \u2014 `ynh check` could not run; 30 aborted by user; 31 interrupted."
+      "description": "Mirrors the process exit code, so a consumer reading this and a consumer branching on $? never disagree. 0 converged; 1 refused before any worker started (a resume refused is 21); 10 turn cap; 11 token budget; 12 wall clock; 13 stuck; 14 tamper \u2014 the baseline moved during the run; 15 plan-iteration cap; 20 worker error; 21 resume error; 22 gate error \u2014 `ynh check` could not run; 30 aborted by user; 31 interrupted."
     },
     "reason": {
       "type": "string",

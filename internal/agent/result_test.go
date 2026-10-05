@@ -113,15 +113,16 @@ func TestRunResult_ExitCodeMatchesTheError(t *testing.T) {
 	}
 }
 
-// A plain error means the loop failed before it could classify itself.
-// Reporting 0 there would say "converged" about a run that did not — the one
-// lie this contract exists to prevent.
-func TestRunResult_UnclassifiedErrorIsNotConverged(t *testing.T) {
+// A plain error is a refusal: the loop stopped before a worker started.
+// Reporting 0 there would say "converged" about a run that did not, the one
+// lie this contract exists to prevent, and reporting 20 said "worker error"
+// about a worker that never ran while the process exited 1 (#509).
+func TestRunResult_UnclassifiedErrorIsARefusal(t *testing.T) {
 	r := &RunResult{}
 	r.finalise(os.ErrNotExist)
-	if r.Converged || r.ExitCode == ExitConverged {
-		t.Errorf("an unclassified error must never read as converged: exit=%d converged=%v",
-			r.ExitCode, r.Converged)
+	if r.Converged || r.ExitCode != ExitRefused {
+		t.Errorf("an unclassified error must read as a refusal: exit=%d converged=%v, want %d/false",
+			r.ExitCode, r.Converged, ExitRefused)
 	}
 	if r.Reason == "" {
 		t.Error("the reason must carry the error")
