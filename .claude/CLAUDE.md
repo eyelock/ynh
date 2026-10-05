@@ -114,12 +114,15 @@ This applies to everything — code, docs, tutorials. Pushing a fix that hasn't 
 
 ## Code Conventions
 
-- Go 1.26+, standard library by default. Three direct dependencies, each
+- Go 1.26+, standard library by default. A few direct dependencies, each
   deliberate: `santhosh-tekuri/jsonschema/v6` (JSON Schema draft 2020-12 is
   not in the standard library and hand-rolling a validator for the published
   schemas would be worse), `golang.org/x/text`, and the OpenTelemetry Go SDK
-  (ynr's instrumentation contract requires the official SDK for `ynh agent
-  run` telemetry; not its OTLP exporters, which bring in gRPC). **Do not add
+  with ynr's spool exporter, `github.com/eyelock/ynr/spoolexporter` (ynr's
+  instrumentation contract requires both for `ynh agent run` telemetry; not
+  the SDK's OTLP exporters, which bring in gRPC). Until ynr is public that
+  module is private: building needs read access to `eyelock/ynr` and
+  `GOPRIVATE=github.com/eyelock/ynr`, which the Makefile sets. **Do not add
   another without a reason of that weight**: no frameworks, no CLI libraries,
   no assertion packages. `go mod tidy -diff` is enforced in CI.
 - Errors returned, not panicked. Wrap: `fmt.Errorf("context: %w", err)`

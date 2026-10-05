@@ -29,7 +29,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 
-	"github.com/eyelock/ynh/internal/telemetry/spool"
+	spool "github.com/eyelock/ynr/spoolexporter"
 )
 
 // Destination is where telemetry goes, chosen once at process start.

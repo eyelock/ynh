@@ -15,6 +15,11 @@ on:
 permissions:
   contents: read
 
+# The spoolexporter module lives in the private eyelock/ynr repository:
+# fetch it directly, not through the public proxy and checksum database.
+env:
+  GOPRIVATE: github.com/eyelock/ynr
+
 jobs:
   changes:
     name: Detect Changes
@@ -87,6 +92,13 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
         with:
           go-version-file: go.mod
+      # Until eyelock/ynr is public, the spoolexporter module is private.
+      # RELEASE_TOKEN reads it; a pull request from a fork has no secrets
+      # and cannot build.
+      - name: Allow the private ynr module
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: git config --global url."https://x-access-token:${RELEASE_TOKEN}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
       - run: make build
 
   test:
@@ -99,6 +111,13 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
         with:
           go-version-file: go.mod
+      # Until eyelock/ynr is public, the spoolexporter module is private.
+      # RELEASE_TOKEN reads it; a pull request from a fork has no secrets
+      # and cannot build.
+      - name: Allow the private ynr module
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: git config --global url."https://x-access-token:${RELEASE_TOKEN}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
       - run: make test
 
       # A direct import marked `// indirect` — the state this repo was in on
@@ -117,6 +136,13 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
         with:
           go-version-file: go.mod
+      # Until eyelock/ynr is public, the spoolexporter module is private.
+      # RELEASE_TOKEN reads it; a pull request from a fork has no secrets
+      # and cannot build.
+      - name: Allow the private ynr module
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: git config --global url."https://x-access-token:${RELEASE_TOKEN}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a  # v9
 
   format:
@@ -129,6 +155,13 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
         with:
           go-version-file: go.mod
+      # Until eyelock/ynr is public, the spoolexporter module is private.
+      # RELEASE_TOKEN reads it; a pull request from a fork has no secrets
+      # and cannot build.
+      - name: Allow the private ynr module
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: git config --global url."https://x-access-token:${RELEASE_TOKEN}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
       - name: Install goimports
         run: go install golang.org/x/tools/cmd/goimports@latest
       - name: Check formatting
@@ -151,6 +184,13 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
         with:
           go-version-file: go.mod
+      # Until eyelock/ynr is public, the spoolexporter module is private.
+      # RELEASE_TOKEN reads it; a pull request from a fork has no secrets
+      # and cannot build.
+      - name: Allow the private ynr module
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: git config --global url."https://x-access-token:${RELEASE_TOKEN}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
       - name: Validate and lint harness artifacts
         run: make check-artifacts
       # Asserts every vendor ynh reports is documented AND assembles the same
@@ -214,8 +254,12 @@ jobs:
 
       # The image is built nowhere else, so the base-image digest and the
       # installer checksum were unverified until somebody built it by hand.
+      # The token reaches the build as a BuildKit secret, mounted only for
+      # the step that downloads modules, so no image layer holds it.
       - name: Build the container image
-        run: docker build --tag ynh:ci-check .
+        env:
+          YNR_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: docker buildx build --load --secret id=ynr_token,env=YNR_TOKEN --tag ynh:ci-check .
 
   all-clear:
     name: All Clear

@@ -66,9 +66,11 @@ A run killed with `kill -9` leaves its started event and every batch already
 written; a started event with no finished event and no span is how a crash
 shows up.
 
-The writer is a package of its own (`internal/telemetry/spool`) with no ynh
-imports, written to move unchanged into a public module,
-`eyelock/otel-spool-exporter`, that every tool will share.
+The writer is ynr's spool exporter, the Go module
+`github.com/eyelock/ynr/spoolexporter`, which every tool that writes to the
+spool shares. Besides the rules above, it drops an export request over 4 MB
+rather than write a line the reader would skip, and never follows a link
+planted where it creates a file.
 
 ## Joining a trace
 

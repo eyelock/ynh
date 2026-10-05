@@ -44,7 +44,6 @@ internal/
   registry/               Registry discovery: fetch, search, lookup across Git-hosted indexes
   symlink/                Symlink transaction log (~/.ynh/symlinks.json)
   telemetry/              OpenTelemetry for `ynh agent run`: destination, run span and events (docs/telemetry.md)
-    spool/                OTLP JSON lines spool exporter; no ynh imports, destined for eyelock/otel-spool-exporter
   vendor/                 Vendor adapter interface and implementations
     adapter.go            Interface definition + registry
     claude.go             Claude Code adapter (exec with --plugin-dir)
@@ -193,11 +192,22 @@ The user-facing version of this guidance lives in [`docs/marketplace.md` § Pinn
 ## Technologies
 
 - **Go 1.26+** - single binary, no runtime dependencies
-- **OpenTelemetry Go SDK** - telemetry from `ynh agent run` only (API, trace and log SDKs; no OTLP exporters)
+- **OpenTelemetry Go SDK** - telemetry from `ynh agent run` only (API, trace and log SDKs; no OTLP exporters), written to ynr's spool by `github.com/eyelock/ynr/spoolexporter`
 - **Git** - content resolution, caching, versioning
 - **JSON** - all configuration (harness manifests, global config)
 
 ## Development Setup
+
+**Building needs read access to `eyelock/ynr`, for now.** The spool exporter is
+the `github.com/eyelock/ynr/spoolexporter` module, and that repository is
+private until ynr is public. To build from source you need read access to it
+through your git credentials (for example `gh auth login`), and
+`GOPRIVATE=github.com/eyelock/ynr`, so Go fetches it directly instead of
+through the public proxy. The Makefile sets `GOPRIVATE` for every `make`
+target; set it yourself for a raw `go` command. CI reads the module with the
+`RELEASE_TOKEN` secret, so a pull request from a fork, which gets no secrets,
+cannot build in CI. A local `make docker-build` needs the token as a BuildKit
+secret: `YNR_TOKEN=$(gh auth token) make docker-build`.
 
 ```bash
 # Prerequisites + dev tools (Go, linter, formatter)
