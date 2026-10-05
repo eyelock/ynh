@@ -136,7 +136,8 @@ Reports what the harness resolves to once includes, delegates and profiles
 are applied, with each artifact attributed to its source.
 
 Flags:
-  --format <text|json>   Output format
+  --format <text|json>   Output format (default json, so errors are the JSON
+                         envelope unless --format text is given)
   --profile <name>       Apply a named profile (falls back to $YNH_PROFILE)
   --harness <source>     Harness to resolve against (falls back to $YNH_HARNESS)`,
 
@@ -233,9 +234,12 @@ existing invocation validates against.
 Flags:
   --schema <name|path>   Published name (see: ynh schema --all) or a file`,
 
-	"version": `ynd version
+	"version": `ynd version [flags]
 
 Print the ynd version.
+
+Flags:
+  --format <text|json>   Output format (default text)
 
 Use --format json for the machine-readable form; it is the canonical
 wire-contract probe for consumers that gate on capabilities.`,

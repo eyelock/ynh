@@ -25,7 +25,7 @@ import (
 )
 
 func cmdCheck(args []string, stdout, stderr io.Writer) error {
-	structured := false
+	structured := detectJSONFormat(args)
 	cwd := ""
 	var harnessName string
 	var only []string

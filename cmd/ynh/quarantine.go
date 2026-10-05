@@ -25,8 +25,9 @@ func cmdQuarantine(args []string) error {
 }
 
 func cmdQuarantineTo(args []string, stdout, stderr io.Writer) error {
+	structured := detectJSONFormat(args)
 	if len(args) < 1 {
-		return cliError(stderr, false, errCodeInvalidInput,
+		return cliError(stderr, structured, errCodeInvalidInput,
 			"usage: ynh quarantine <list|restore|drop> [args]")
 	}
 	switch args[0] {
@@ -37,7 +38,7 @@ func cmdQuarantineTo(args []string, stdout, stderr io.Writer) error {
 	case "drop":
 		return cmdQuarantineDrop(args[1:], stdout, stderr)
 	default:
-		return cliError(stderr, false, errCodeInvalidInput,
+		return cliError(stderr, structured, errCodeInvalidInput,
 			fmt.Sprintf("unknown quarantine subcommand: %s", args[0]))
 	}
 }

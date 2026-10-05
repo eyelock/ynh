@@ -275,7 +275,7 @@ func cmdTrustTo(args []string, stdout, stderr io.Writer) error {
 	case "accept":
 		return cmdTrustAccept(args[1:], stdout, stderr)
 	default:
-		return cliError(stderr, false, errCodeInvalidInput,
+		return cliError(stderr, detectJSONFormat(args), errCodeInvalidInput,
 			fmt.Sprintf("unknown trust subcommand: %s", args[0]))
 	}
 }

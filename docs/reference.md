@@ -101,7 +101,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynd validate [path]` | `--harness` |
 | `ynd lint [path]` | `--harness` |
 | `ynd fmt [path]` | `--harness` |
-| `ynd compose <source>` | `--harness`, `--profile`, `--format <text\|json>` |
+| `ynd compose <source>` | `--harness`, `--profile`, `--format <text\|json>` (default `json`) |
 | `ynd compress [files...]` | `-v`, `-y`, `--restore`, `--list-backups`, `--pick` |
 | `ynd inspect` | `-v`, `-y`, `-o` |
 | `ynd preview <source>` | `-v`, `-o`, `--harness`, `--profile`, `--focus` |

@@ -80,9 +80,14 @@ func cmdPathsTo(args []string, stdout, stderr io.Writer) error {
 
 // detectJSONFormat scans args for "--format json" without doing full parsing.
 // Used to decide which error shape to emit when parsing itself fails.
+//
+// It also recognises "--json", the older spelling `ynh migrate` and
+// `ynh quarantine list` still accept. No other command takes it, so seeing
+// it anywhere else is itself an argument error, and reporting that one as
+// JSON is what the caller asked for.
 func detectJSONFormat(args []string) bool {
-	for i := 0; i < len(args)-1; i++ {
-		if args[i] == "--format" && args[i+1] == "json" {
+	for i, a := range args {
+		if a == "--json" || (a == "--format" && i+1 < len(args) && args[i+1] == "json") {
 			return true
 		}
 	}

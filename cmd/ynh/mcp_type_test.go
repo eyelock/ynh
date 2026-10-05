@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 
@@ -67,13 +68,13 @@ func TestCmdMCPUpdate_TypeAndCwd(t *testing.T) {
 func TestCmdProfileMCP_TypeAndCwd(t *testing.T) {
 	dir := t.TempDir()
 	writeMCPTestHarness(t, dir, "h")
-	if err := cmdProfileTo([]string{"add", dir, "p"}, &bytes.Buffer{}); err != nil {
+	if err := cmdProfileTo([]string{"add", dir, "p"}, &bytes.Buffer{}, io.Discard); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmdProfileTo([]string{"mcp", "add", dir, "p", "s", "--command", "x", "--type", "stdio", "--cwd", "${PLUGIN_DATA}"}, &bytes.Buffer{}); err != nil {
+	if err := cmdProfileTo([]string{"mcp", "add", dir, "p", "s", "--command", "x", "--type", "stdio", "--cwd", "${PLUGIN_DATA}"}, &bytes.Buffer{}, io.Discard); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmdProfileTo([]string{"mcp", "update", dir, "p", "s", "--cwd", "./other"}, &bytes.Buffer{}); err != nil {
+	if err := cmdProfileTo([]string{"mcp", "update", dir, "p", "s", "--cwd", "./other"}, &bytes.Buffer{}, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	hj, err := plugin.LoadPluginJSON(dir)

@@ -88,42 +88,62 @@ func buildProfileList(p *harness.Harness) []profileListEntry {
 	return out
 }
 
-// lsArgs parses the shared `<harness> [--format text|json]` shape.
-func lsArgs(args []string, verb string) (harnessName, format string, err error) {
+// lsArgs parses the shared `<harness> [--format text|json]` shape. Errors
+// are already reported through cliError, so callers return them unchanged.
+func lsArgs(args []string, verb string, stderr io.Writer) (harnessName, format string, structured bool, err error) {
+	structured = detectJSONFormat(args)
 	format = "text"
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--format":
 			if i+1 >= len(args) {
-				return "", "", fmt.Errorf("--format requires a value")
+				return "", "", structured, cliError(stderr, structured, errCodeInvalidInput, "--format requires a value")
 			}
 			i++
 			format = args[i]
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return "", "", fmt.Errorf("unknown flag: %s", args[i])
+				return "", "", structured, cliError(stderr, structured, errCodeInvalidInput,
+					fmt.Sprintf("unknown flag: %s", args[i]))
 			}
 			if harnessName != "" {
-				return "", "", fmt.Errorf("unexpected argument: %s", args[i])
+				return "", "", structured, cliError(stderr, structured, errCodeInvalidInput,
+					fmt.Sprintf("unexpected argument: %s", args[i]))
 			}
 			harnessName = args[i]
 		}
 	}
 	if harnessName == "" {
-		return "", "", fmt.Errorf("usage: ynh %s ls <harness-name> [--format text|json]", verb)
+		return "", "", structured, cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("usage: ynh %s ls <harness-name> [--format text|json]", verb))
 	}
 	if format != "text" && format != "json" {
-		return "", "", fmt.Errorf("invalid --format value %q (want text or json)", format)
+		return "", "", structured, cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("invalid --format value %q (want text or json)", format))
 	}
-	return harnessName, format, nil
+	return harnessName, format, structured, nil
 }
 
-func cmdFocusLs(args []string, stdout io.Writer) error {
-	name, format, err := lsArgs(args, "focus")
+// loadForLs loads the harness a list verb reads, reporting a failure in the
+// shape --format asks for. The not_found / io_error split matches ynh info.
+func loadForLs(name string, structured bool, stderr io.Writer) (*harness.Harness, error) {
+	p, err := harness.LoadQualified(name)
+	if err != nil {
+		code := errCodeNotFound
+		if !strings.Contains(err.Error(), "not found") {
+			code = errCodeIOError
+		}
+		return nil, cliError(stderr, structured, code, err.Error())
+	}
+	return p, nil
+}
+
+func cmdFocusLs(args []string, stdout, stderr io.Writer) error {
+	name, format, structured, err := lsArgs(args, "focus", stderr)
 	if err != nil {
 		return err
 	}
-	p, err := harness.LoadQualified(name)
+	p, err := loadForLs(name, structured, stderr)
 	if err != nil {
 		return err
 	}
@@ -132,7 +152,7 @@ func cmdFocusLs(args []string, stdout io.Writer) error {
 	if format == "json" {
 		data, mErr := json.MarshalIndent(entries, "", "  ")
 		if mErr != nil {
-			return fmt.Errorf("encoding focuses: %w", mErr)
+			return cliError(stderr, structured, errCodeIOError, fmt.Sprintf("encoding focuses: %v", mErr))
 		}
 		_, wErr := fmt.Fprintln(stdout, string(data))
 		return wErr
@@ -160,12 +180,12 @@ func cmdFocusLs(args []string, stdout io.Writer) error {
 	return tw.Flush()
 }
 
-func cmdProfileLs(args []string, stdout io.Writer) error {
-	name, format, err := lsArgs(args, "profile")
+func cmdProfileLs(args []string, stdout, stderr io.Writer) error {
+	name, format, structured, err := lsArgs(args, "profile", stderr)
 	if err != nil {
 		return err
 	}
-	p, err := harness.LoadQualified(name)
+	p, err := loadForLs(name, structured, stderr)
 	if err != nil {
 		return err
 	}
@@ -174,7 +194,7 @@ func cmdProfileLs(args []string, stdout io.Writer) error {
 	if format == "json" {
 		data, mErr := json.MarshalIndent(entries, "", "  ")
 		if mErr != nil {
-			return fmt.Errorf("encoding profiles: %w", mErr)
+			return cliError(stderr, structured, errCodeIOError, fmt.Sprintf("encoding profiles: %v", mErr))
 		}
 		_, wErr := fmt.Fprintln(stdout, string(data))
 		return wErr

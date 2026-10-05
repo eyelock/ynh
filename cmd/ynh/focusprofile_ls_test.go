@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 )
@@ -34,7 +35,7 @@ func lsHarness(t *testing.T) {
 func TestFocusLs_Text(t *testing.T) {
 	lsHarness(t)
 	var out bytes.Buffer
-	if err := cmdFocusTo([]string{"ls", "local/lsh"}, &out); err != nil {
+	if err := cmdFocusTo([]string{"ls", "local/lsh"}, &out, io.Discard); err != nil {
 		t.Fatalf("focus ls: %v", err)
 	}
 	got := out.String()
@@ -54,7 +55,7 @@ func TestFocusLs_Text(t *testing.T) {
 func TestFocusLs_JSONCarriesTheWholePrompt(t *testing.T) {
 	lsHarness(t)
 	var out bytes.Buffer
-	if err := cmdFocusTo([]string{"ls", "local/lsh", "--format", "json"}, &out); err != nil {
+	if err := cmdFocusTo([]string{"ls", "local/lsh", "--format", "json"}, &out, io.Discard); err != nil {
 		t.Fatalf("focus ls --format json: %v", err)
 	}
 	var entries []focusListEntry
@@ -82,7 +83,7 @@ func TestFocusLs_JSONCarriesTheWholePrompt(t *testing.T) {
 func TestProfileLs_CountsWhatEachTouches(t *testing.T) {
 	lsHarness(t)
 	var out bytes.Buffer
-	if err := cmdProfileTo([]string{"ls", "local/lsh", "--format", "json"}, &out); err != nil {
+	if err := cmdProfileTo([]string{"ls", "local/lsh", "--format", "json"}, &out, io.Discard); err != nil {
 		t.Fatalf("profile ls: %v", err)
 	}
 	var entries []profileListEntry
@@ -117,10 +118,10 @@ func TestFocusProfileLs_EmptyIsExplicit(t *testing.T) {
 		`{"name":"bare","version":"0.1.0","default_vendor":"claude"}`)
 
 	var f, p bytes.Buffer
-	if err := cmdFocusTo([]string{"ls", "local/bare"}, &f); err != nil {
+	if err := cmdFocusTo([]string{"ls", "local/bare"}, &f, io.Discard); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmdProfileTo([]string{"ls", "local/bare"}, &p); err != nil {
+	if err := cmdProfileTo([]string{"ls", "local/bare"}, &p, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(f.String(), "no focuses") {
@@ -134,8 +135,8 @@ func TestFocusProfileLs_EmptyIsExplicit(t *testing.T) {
 // The usage line must advertise the verb that now exists.
 func TestFocusProfile_UsageMentionsLs(t *testing.T) {
 	var out bytes.Buffer
-	fErr := cmdFocusTo(nil, &out)
-	pErr := cmdProfileTo(nil, &out)
+	fErr := cmdFocusTo(nil, &out, io.Discard)
+	pErr := cmdProfileTo(nil, &out, io.Discard)
 	if fErr == nil || !strings.Contains(fErr.Error(), "ls") {
 		t.Errorf("focus usage does not mention ls: %v", fErr)
 	}
