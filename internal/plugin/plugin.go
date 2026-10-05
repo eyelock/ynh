@@ -601,8 +601,33 @@ type AuthorInfo struct {
 	URL   string `json:"url,omitempty"`
 }
 
+// MCP transport names. These are the Agent Plugins vocabulary
+// (https://agent-plugins.org/specification, §7.2.1), adopted as ynh's canonical
+// names so a harness declares a transport once and every adapter maps it to
+// the vendor's own spelling: Claude Code and Codex say "http", Copilot says
+// "local", Cursor infers from the fields present.
+const (
+	MCPTypeStdio          = "stdio"
+	MCPTypeStreamableHTTP = "streamable-http"
+	MCPTypeSSE            = "sse"
+)
+
+// ValidMCPTypes lists the transports a manifest may declare.
+var ValidMCPTypes = map[string]bool{
+	MCPTypeStdio:          true,
+	MCPTypeStreamableHTTP: true,
+	MCPTypeSSE:            true,
+}
+
 // MCPServer defines an MCP server dependency.
+//
+// Type is optional: a server with a command is stdio and a server with a url
+// is streamable-http unless it says otherwise. The field exists for the one
+// case the fields cannot express, a remote server that still speaks the
+// deprecated HTTP+SSE transport, and so that an imported Agent Plugin keeps
+// the transport it declared. Transport reports the effective value.
 type MCPServer struct {
+	Type    string            `json:"type,omitempty"`
 	Command string            `json:"command,omitempty"`
 	Args    []string          `json:"args,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
@@ -611,10 +636,32 @@ type MCPServer struct {
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
-// ValidateMCPServers checks that each MCP server has either Command or URL (not both, not neither).
+// Transport returns the effective transport: the declared Type, or the one
+// implied by the fields when Type is empty. A server that is invalid under
+// ValidateMCPServers (neither command nor url) reports stdio, which keeps the
+// caller's switch total; validation, not Transport, is where that is caught.
+func (s MCPServer) Transport() string {
+	if s.Type != "" {
+		return s.Type
+	}
+	if s.URL != "" {
+		return MCPTypeStreamableHTTP
+	}
+	return MCPTypeStdio
+}
+
+// ValidateMCPServers checks that each MCP server has either Command or URL
+// (not both, not neither) and that a declared Type is a known transport that
+// agrees with those fields.
 func ValidateMCPServers(servers map[string]MCPServer) []string {
 	var issues []string
-	for name, server := range servers {
+	names := make([]string, 0, len(servers))
+	for name := range servers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		server := servers[name]
 		hasCommand := server.Command != ""
 		hasURL := server.URL != ""
 		if !hasCommand && !hasURL {
@@ -622,6 +669,19 @@ func ValidateMCPServers(servers map[string]MCPServer) []string {
 		}
 		if hasCommand && hasURL {
 			issues = append(issues, fmt.Sprintf("mcp_servers.%s: must have command or url, not both", name))
+		}
+		switch server.Type {
+		case "":
+		case MCPTypeStdio:
+			if !hasCommand {
+				issues = append(issues, fmt.Sprintf("mcp_servers.%s: type stdio requires command", name))
+			}
+		case MCPTypeStreamableHTTP, MCPTypeSSE:
+			if !hasURL {
+				issues = append(issues, fmt.Sprintf("mcp_servers.%s: type %s requires url", name, server.Type))
+			}
+		default:
+			issues = append(issues, fmt.Sprintf("mcp_servers.%s: unknown type %q (valid: stdio, streamable-http, sse)", name, server.Type))
 		}
 	}
 	return issues
@@ -1045,6 +1105,22 @@ func LoadMCPJSON(dir string) (map[string]MCPServer, error) {
 	}
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("invalid %s: %w", MCPJSONFile, err)
+	}
+
+	// Claude Code spells the transports "stdio", "http", "sse" and "ws";
+	// this file is its convention, so its spelling is what arrives here.
+	// "http" is the current Streamable HTTP transport under the canonical
+	// name. "ws" has no canonical equivalent and no adapter can emit it, so
+	// it is refused rather than silently rewritten into something else.
+	for name, s := range doc.MCPServers {
+		switch s.Type {
+		case "http":
+			s.Type = MCPTypeStreamableHTTP
+			doc.MCPServers[name] = s
+		case "", MCPTypeStdio, MCPTypeStreamableHTTP, MCPTypeSSE:
+		default:
+			return nil, fmt.Errorf("invalid %s: server %q: unsupported type %q", MCPJSONFile, name, s.Type)
+		}
 	}
 
 	return doc.MCPServers, nil

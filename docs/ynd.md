@@ -138,6 +138,25 @@ ynd validate path/to/harness   # specific harness
 ynd validate --harness ./my-harness  # explicit harness flag
 ```
 
+A directory whose root `plugin.json` declares the
+[Agent Plugins](https://agent-plugins.org) schema is a different package
+format that happens to share the filename. `validate` recognises it by that
+`$schema` value and checks it against the Agent Plugins specification instead:
+the closed manifest, `skills/` discovery (immediate children with a regular
+`SKILL.md`, valid Agent Skills frontmatter), and `mcp.json` (typed servers,
+one-token commands, placeholder and working-directory rules, HTTPS for
+non-loopback URLs). Findings are printed with the specification's own
+boundaries in mind: an unknown manifest field or a broken skill is reported
+and would not stop a client loading the rest, while an invalid `mcp.json`
+disables MCP for the plugin. `validate` fails on either kind, because an
+author about to publish wants both fixed. `lint` applies the same routing to
+any `plugin.json` it walks, so an Agent Plugins manifest is not held to the
+ynh manifest's `version` requirement or name rule.
+
+```bash
+ynd validate ./my-agent-plugin   # root plugin.json with the agent-plugins.org $schema
+```
+
 ### fmt
 
 Format markdown files — normalise headings, whitespace, and list markers.

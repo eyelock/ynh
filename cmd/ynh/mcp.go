@@ -34,6 +34,18 @@ func cmdMCPAdd(args []string, stdout io.Writer) error {
 	var positional []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--type":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--type requires a value")
+			}
+			i++
+			opts.Type = args[i]
+		case "--cwd":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--cwd requires a value")
+			}
+			i++
+			opts.Cwd = args[i]
 		case "--command":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--command requires a value")
@@ -86,7 +98,7 @@ func cmdMCPAdd(args []string, stdout io.Writer) error {
 		}
 	}
 	if len(positional) != 2 {
-		return fmt.Errorf("usage: ynh mcp add <harness> <name> [--command <cmd> | --url <url>] [--arg <v>...] [--env K=V...] [--header K=V...]")
+		return fmt.Errorf("usage: ynh mcp add <harness> <name> [--command <cmd> | --url <url>] [--type <stdio|streamable-http|sse>] [--arg <v>...] [--env K=V...] [--cwd <dir>] [--header K=V...]")
 	}
 	harnessRef, serverName := positional[0], positional[1]
 
@@ -130,6 +142,20 @@ func cmdMCPUpdate(args []string, stdout io.Writer) error {
 	var positional []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--type":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--type requires a value")
+			}
+			i++
+			v := args[i]
+			opts.Type = &v
+		case "--cwd":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--cwd requires a value")
+			}
+			i++
+			v := args[i]
+			opts.Cwd = &v
 		case "--command":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--command requires a value")
@@ -193,7 +219,7 @@ func cmdMCPUpdate(args []string, stdout io.Writer) error {
 		}
 	}
 	if len(positional) != 2 {
-		return fmt.Errorf("usage: ynh mcp update <harness> <name> [--command <cmd>] [--url <url>] [--arg <v>...] [--env K=V...] [--header K=V...] [--clear-args|--clear-env|--clear-headers]")
+		return fmt.Errorf("usage: ynh mcp update <harness> <name> [--command <cmd>] [--url <url>] [--type <t>] [--arg <v>...] [--env K=V...] [--cwd <dir>] [--header K=V...] [--clear-args|--clear-env|--clear-headers]")
 	}
 	harnessRef, serverName := positional[0], positional[1]
 
