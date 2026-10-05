@@ -1,9 +1,19 @@
 package main
 
 import (
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"os/signal"
+	"strings"
+	"sync"
+	"syscall"
+
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/eyelock/ynh/internal/agent"
+	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/telemetry"
 )
@@ -115,10 +125,16 @@ func runEndAttributes(r *agent.RunResult) []attribute.KeyValue {
 }
 
 // runTelemetry gives the agent loop the run's trace context and spool for
-// each process it starts, naming the spans from ynh's constants.
-type runTelemetry struct{ run *telemetry.Run }
+// each process it starts, naming the spans from ynh's constants, and the
+// run's relay when the telemetry relay setting is on.
+type runTelemetry struct {
+	run   *telemetry.Run
+	relay *runRelay // nil when the setting is off
+}
 
 func (r runTelemetry) WorkerEnv() []string { return r.run.WorkerEnv() }
+
+func (r runTelemetry) RelayEndpoint(backend string) string { return r.relay.endpoint(backend) }
 
 func (r runTelemetry) StartCall(kind string, turn int, sensor string) ([]string, func(string, bool)) {
 	attrs := []attribute.KeyValue{telemetry.AttrTurn.Int(turn)}
@@ -128,4 +144,124 @@ func (r runTelemetry) StartCall(kind string, turn int, sensor string) ([]string,
 		attrs = append(attrs, telemetry.AttrSensorName.String(sensor))
 	}
 	return r.run.StartCall(name, attrs...)
+}
+
+// The relay's bounds. Tests shorten them.
+var (
+	relayReadyTimeout = telemetry.RelayReadyTimeout
+	relayStopTimeout  = telemetry.RelayStopTimeout
+)
+
+// telemetryRelayEnv names the telemetry relay setting's variable.
+const telemetryRelayEnv = "YNH_TELEMETRY_RELAY"
+
+// telemetryRelaySetting resolves the telemetry relay setting: the
+// --telemetry-relay flag, else YNH_TELEMETRY_RELAY, else "telemetry_relay"
+// in config.json, else off. The variable can also turn off what the
+// configuration turns on. A value it does not recognise is a note, and off.
+// An unreadable config.json leaves the setting off: telemetry never fails a
+// run, and every other command reports the file.
+func telemetryRelaySetting(flag bool, stderr io.Writer) bool {
+	if flag {
+		return true
+	}
+	if v, ok := os.LookupEnv(telemetryRelayEnv); ok && v != "" {
+		switch strings.ToLower(v) {
+		case "1", "true", "yes", "on":
+			return true
+		case "0", "false", "no", "off":
+			return false
+		}
+		_, _ = fmt.Fprintf(stderr, "ynh: %s=%q is not on or off; the telemetry relay stays off\n", telemetryRelayEnv, v)
+		return false
+	}
+	cfg, err := config.Load()
+	return err == nil && cfg.TelemetryRelay
+}
+
+// runRelay is the `ynr relay` for one run. It starts when the loop is about
+// to start the worker, only if the conditions hold, and is stopped once the
+// worker has exited. When a condition fails, or the relay cannot start,
+// the run carries on without the vendor's own telemetry, after one note.
+type runRelay struct {
+	tel    *telemetry.Telemetry
+	stderr io.Writer
+	// sandbox is the run's --sandbox. Under srt the worker cannot reach a
+	// loopback relay, so none is started.
+	sandbox string
+
+	once  sync.Once
+	relay *telemetry.Relay
+	// sigs holds SIGINT and SIGTERM while the relay runs. The loop handles
+	// them itself; this keeps a signal that arrives after the loop has
+	// returned from killing ynh before it has stopped the relay.
+	sigs chan os.Signal
+}
+
+// endpoint starts the relay, the first time it is asked, and returns its
+// endpoint, or "" when there is none.
+func (r *runRelay) endpoint(backend string) string {
+	if r == nil {
+		return ""
+	}
+	r.once.Do(func() { r.start(backend) })
+	if r.relay == nil {
+		return ""
+	}
+	return r.relay.Endpoint
+}
+
+func (r *runRelay) start(backend string) {
+	skip := func(why string) {
+		_, _ = fmt.Fprintf(r.stderr, "ynh: the telemetry relay is on, but %s; the run continues without %s's own telemetry\n", why, backend)
+	}
+	if !agent.SupportsTelemetryRelay(backend) {
+		skip("ynh does not configure " + backend + "'s telemetry yet")
+		return
+	}
+	// srt denies loopback unless its settings file allow-lists the
+	// address, and ynh does not hand srt a settings file: it passes flags
+	// that srt's current CLI does not read. Until ynh configures srt
+	// properly, the relay is skipped rather than started unreachable.
+	if r.sandbox == "srt" {
+		skip("--sandbox srt would block the worker from reaching it")
+		return
+	}
+	// Only into the spool. An operator's OTEL_EXPORTER_OTLP_* is their
+	// choice, and the vendor reads it for itself (contract rule 1).
+	switch r.tel.Destination() {
+	case telemetry.DestinationOTLP:
+		skip("OTEL_EXPORTER_OTLP_* is set, so the vendor's telemetry is left to it")
+		return
+	case telemetry.DestinationNone:
+		skip("there is no spool folder (YNR_SPOOL, or $XDG_STATE_HOME/ynr/spool/local)")
+		return
+	}
+	bin, err := exec.LookPath("ynr")
+	if err != nil {
+		skip("ynr is not on PATH")
+		return
+	}
+	relay, err := telemetry.StartRelay(bin, r.tel.SpoolDir(), relayReadyTimeout)
+	if err != nil {
+		skip(err.Error())
+		return
+	}
+	r.sigs = make(chan os.Signal, 1)
+	signal.Notify(r.sigs, syscall.SIGINT, syscall.SIGTERM)
+	r.relay = relay
+}
+
+// stop stops the relay, if one is running, within relayStopTimeout. It is
+// safe to call more than once and on a nil runRelay. A relay that died
+// during the run, or did not stop cleanly, is reported in one note; the
+// run's result and exit code are not touched.
+func (r *runRelay) stop() {
+	if r == nil || r.relay == nil {
+		return
+	}
+	if err := r.relay.Stop(relayStopTimeout); err != nil {
+		_, _ = fmt.Fprintf(r.stderr, "ynh: telemetry relay: %v\n", err)
+	}
+	signal.Stop(r.sigs)
 }

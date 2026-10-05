@@ -167,3 +167,4 @@ Any change that bumps capabilities MUST also update goldens under `test/golden/<
 | `XDG_STATE_HOME` | `~/.local/state` | ynh agent run: telemetry goes to `$XDG_STATE_HOME/ynr/spool/local` when that folder exists |
 | `TRACEPARENT` / `TRACESTATE` | _(none)_ | ynh agent run: the trace the run joins |
 | `OTEL_EXPORTER_OTLP_*` | _(none)_ | ynh agent run: an OTLP endpoint wins over the spool; not exported yet, so it turns telemetry off with a note |
+| `YNH_TELEMETRY_RELAY` | _(off)_ | ynh agent run: fallback for `--telemetry-relay`, over `telemetry_relay` in config.json; starts `ynr relay` for Claude Code's own telemetry; see `docs/telemetry.md` |

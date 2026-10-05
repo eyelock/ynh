@@ -166,6 +166,13 @@ func buildClaudeStreamArgs(opts StartOptions) []string {
 		args = append(args, "--permission-mode", mode)
 	}
 
+	// The relay's settings again, at the highest precedence ynh can set
+	// for one session, so no settings file but the organisation's managed
+	// settings can turn content on or move the endpoint.
+	if opts.TelemetryEndpoint != "" {
+		args = append(args, "--settings", claudeSettingsArg(opts.TelemetryEndpoint))
+	}
+
 	return args
 }
 

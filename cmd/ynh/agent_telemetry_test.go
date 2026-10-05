@@ -161,7 +161,10 @@ func TestCmdAgentRun_TelemetryChangesNothing(t *testing.T) {
 		{name: "worker error", args: []string{"--task", "t", "--no-plan"}, worker: "fail", wantCode: agent.ExitWorkerError},
 		{name: "refused", args: []string{"--task", "t", "--backend", "gemini"}, worker: "converge", wantCode: agent.ExitRefused},
 	}
-	modes := []string{"absent", "spool", "unwritable spool", "full spool"}
+	// "relay off" has ynr on PATH and the relay setting off; "relay, no
+	// ynr" has the setting on and no ynr. Neither may change the run: the
+	// second adds one note on stderr and nothing else.
+	modes := []string{"absent", "spool", "unwritable spool", "full spool", "relay off", "relay, no ynr"}
 
 	for _, sc := range scenarios {
 		t.Run(sc.name, func(t *testing.T) {
@@ -194,6 +197,7 @@ func TestCmdAgentRun_TelemetryChangesNothing(t *testing.T) {
 					}
 
 					spoolDir := filepath.Join(t.TempDir(), "spool")
+					var relay stubRelay
 					saved := telemetryOptions
 					t.Cleanup(func() { telemetryOptions = saved })
 					switch mode {
@@ -211,6 +215,13 @@ func TestCmdAgentRun_TelemetryChangesNothing(t *testing.T) {
 						t.Setenv("YNR_SPOOL", spoolDir)
 					case "full spool":
 						telemetryOptions = telemetry.Options{MaxFileBytes: 64, MaxBytes: 64}
+						t.Setenv("YNR_SPOOL", spoolDir)
+					case "relay off":
+						relay = installStubYnr(t, "serve")
+						t.Setenv("YNR_SPOOL", spoolDir)
+					case "relay, no ynr":
+						hideFromPath(t, "ynr")
+						t.Setenv(telemetryRelayEnv, "1")
 						t.Setenv("YNR_SPOOL", spoolDir)
 					}
 
@@ -230,16 +241,28 @@ func TestCmdAgentRun_TelemetryChangesNothing(t *testing.T) {
 					if result["worktree"] != nil {
 						delete(result, "worktree")
 					}
+					gotStderr := stderr.String()
+					// A refused run starts no worker, so never asks for the relay.
+					if mode == "relay, no ynr" && sc.wantCode != agent.ExitRefused {
+						const note = "ynh: the telemetry relay is on, but ynr is not on PATH; the run continues without claude's own telemetry\n"
+						if !strings.Contains(gotStderr, note) {
+							t.Errorf("stderr = %q, want the relay's one note", gotStderr)
+						}
+						gotStderr = strings.Replace(gotStderr, note, "", 1)
+					}
+					if relay.dir != "" && relay.started() {
+						t.Errorf("the relay started with the setting off")
+					}
 					if baseline == nil {
-						baseline, baselineStderr = result, stderr.String()
+						baseline, baselineStderr = result, gotStderr
 					} else {
 						got, _ := json.Marshal(result)
 						want, _ := json.Marshal(baseline)
 						if !bytes.Equal(got, want) {
 							t.Errorf("result differs from the run without telemetry:\n got %s\nwant %s", got, want)
 						}
-						if stderr.String() != baselineStderr {
-							t.Errorf("stderr = %q, want %q as without telemetry", stderr.String(), baselineStderr)
+						if gotStderr != baselineStderr {
+							t.Errorf("stderr = %q, want %q as without telemetry", gotStderr, baselineStderr)
 						}
 					}
 

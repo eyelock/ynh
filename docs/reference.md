@@ -19,6 +19,7 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 | `TRACEPARENT`, `TRACESTATE` | _(none)_ | `ynh agent run` | the trace a run joins |
 | `OTEL_EXPORTER_OTLP_*` | _(none)_ | `ynh agent run` | an OTLP endpoint, which wins over the spool; not exported yet |
 | `OTEL_RESOURCE_ATTRIBUTES` | _(none)_ | `ynh agent run` | extra telemetry resource attributes |
+| `YNH_TELEMETRY_RELAY` | _(off)_ | `ynh agent run` | `--telemetry-relay` flag; turns the [telemetry relay](telemetry.md#vendor-telemetry-through-the-relay) on or off |
 
 **Note:** `YNH_VENDOR` is not used by `ynd diff` — diff always compares across multiple vendors and a single vendor value is not meaningful. Use `-v` with a comma-separated list instead.
 
@@ -31,6 +32,7 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 | Focus | `--focus` flag > `YNH_FOCUS` > no focus (mutually exclusive with `--profile`) |
 | Harness source | `--harness` flag > `YNH_HARNESS` > positional arg > `.` (CWD) or error |
 | Non-interactive | `-y` flag > `YNH_YES` > `CI` |
+| Telemetry relay | `--telemetry-relay` flag > `YNH_TELEMETRY_RELAY` > `telemetry_relay` in `config.json` > off |
 
 The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For `preview`, `export`, and `diff` it is an error if no source is specified.
 
@@ -81,7 +83,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh sensors run <harness> <name>` | `--cwd <dir>`, `--no-content` |
 | `ynh check <harness-id\|path>` | `--only <a,b>`, `--cwd <dir>`, `--update-baseline`, `--no-baseline`, `--sensor-overlay <json>`, `--format <text\|json>` |
 | `ynh trust [ls\|show\|accept] [harness]` | `--format <text\|json>` |
-| `ynh agent run` | `--harness`, `--task`, `--focus`, `--profile`, `--backend`, `--model`, `--effort`, `--convergence-sensor`, `--sensor-overlay`, `--worktree`, `--sandbox`, `--auto-approve`, `--auto-commit`, `--interactive`, `--no-plan`, `--max-turns`, `--max-tokens`, `--max-wall`, `--max-plan-iterations`, `--emit-jsonl`, `--resume`. See [Agent Loop](agent.md) |
+| `ynh agent run` | `--harness`, `--task`, `--focus`, `--profile`, `--backend`, `--model`, `--effort`, `--convergence-sensor`, `--sensor-overlay`, `--worktree`, `--sandbox`, `--auto-approve`, `--auto-commit`, `--interactive`, `--no-plan`, `--max-turns`, `--max-tokens`, `--max-wall`, `--max-plan-iterations`, `--emit-jsonl`, `--resume`, `--telemetry-relay`. See [Agent Loop](agent.md) |
 | `ynh sources add <path>` | `--name`, `--description` |
 | `ynh sources list` | `--format <text\|json>` |
 | `ynh sources remove <name>` | |

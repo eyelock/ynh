@@ -282,3 +282,27 @@ func TestApplyUnsupportedVendorErrors(t *testing.T) {
 		t.Fatal("expected error for unsupported vendor")
 	}
 }
+
+// A backend server is a third party: ynh's one HTTP call carries no trace
+// context, even when ynh itself runs inside a trace (ynr ADR-006, rule 4).
+func TestListModels_SendsNoTraceContext(t *testing.T) {
+	t.Setenv("TRACEPARENT", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+	t.Setenv("TRACESTATE", "vendor=value")
+	var got http.Header
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Clone()
+		_, _ = w.Write([]byte(`{"models":[]}`))
+	}))
+	defer server.Close()
+	cfg := &config.Config{Backends: map[string]config.BackendDef{
+		"ollama": {Type: "ollama", Vendors: map[string]config.BackendConnection{"claude": {BaseURL: server.URL}}},
+	}}
+	if _, err := ListModels(cfg, "ollama"); err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range []string{"Traceparent", "Tracestate", "Baggage"} {
+		if v := got.Get(h); v != "" {
+			t.Errorf("request carried %s: %q", h, v)
+		}
+	}
+}

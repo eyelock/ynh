@@ -118,6 +118,13 @@ jobs:
         env:
           YNR_READ_REPO: ${{ secrets.YNR_READ_REPO }}
         run: git config --global url."https://x-access-token:${YNR_READ_REPO}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
+      # The telemetry relay test against the real ynr (TestAgentRun_RealRelayJoinsRunTrace)
+      # skips without ynr on PATH. ynr has no release yet, so it is built from a
+      # pinned commit; move the pin when the relay's contract changes.
+      - name: Install ynr for the relay test
+        run: |
+          GOBIN="$RUNNER_TEMP/ynr" go install github.com/eyelock/ynr/cmd/ynr@v0.0.0-20261005200718-b391a994995a
+          echo "$RUNNER_TEMP/ynr" >> "$GITHUB_PATH"
       - run: make test
 
       # A direct import marked `// indirect` — the state this repo was in on

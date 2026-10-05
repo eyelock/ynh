@@ -24,6 +24,10 @@ import (
 // about the base image: the suite must not depend on what this machine has
 // pulled.
 func TestMain(m *testing.M) {
+	// Run as a stub claude that exports a span, for the real relay test.
+	if record := os.Getenv(fakeClaudeEnv); record != "" {
+		os.Exit(fakeClaude(record))
+	}
 	// Run as ynh itself, for a test that needs a real process to kill.
 	if os.Getenv(execMainEnv) == "1" {
 		main()
@@ -63,7 +67,7 @@ func TestMain(m *testing.M) {
 const execMainEnv = "YNH_TEST_EXEC_MAIN"
 
 // isolateTelemetry clears every variable that would send `ynh agent run`
-// telemetry anywhere, and points the laptop default spool into a temporary
+// telemetry anywhere or start a relay, and points the laptop default spool into a temporary
 // state home, so no test writes to this machine's real spool or to an
 // operator's collector. A test that wants telemetry sets its own with
 // t.Setenv.
@@ -76,7 +80,7 @@ func isolateTelemetry() (string, error) {
 			}
 		}
 	}
-	for _, name := range []string{"YNR_SPOOL", "TRACEPARENT", "TRACESTATE"} {
+	for _, name := range []string{"YNR_SPOOL", "TRACEPARENT", "TRACESTATE", telemetryRelayEnv} {
 		if err := os.Unsetenv(name); err != nil {
 			return "", fmt.Errorf("clearing %s: %w", name, err)
 		}

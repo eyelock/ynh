@@ -12,6 +12,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 // clearTelemetryEnv empties every variable Setup reads, for this test only.
@@ -508,5 +511,30 @@ func TestSetup_ShutdownStopsRecheck(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(laptop); len(entries) != 0 {
 		t.Errorf("spool holds %d files after Shutdown", len(entries))
+	}
+}
+
+// Trace context goes only into the environment of processes ynh starts.
+// No global propagator is ever installed, so no HTTP client, ynh's or a
+// library's, can pick the run's trace up and send it to a third party
+// (ynr ADR-006, rule 4).
+func TestSetup_InstallsNoGlobalPropagator(t *testing.T) {
+	clearTelemetryEnv(t)
+	t.Setenv("YNR_SPOOL", t.TempDir())
+	t.Setenv("TRACEPARENT", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+	tel := Setup("1.0.0", Options{}, &bytes.Buffer{})
+	defer tel.Shutdown()
+	run := tel.StartRun()
+	defer run.Finish("converged", true)
+	if !tel.Active() {
+		t.Fatal("telemetry is not on")
+	}
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(run.ctx, carrier)
+	if len(carrier) != 0 {
+		t.Errorf("the global propagator injected %v; ynh must install none", carrier)
+	}
+	if len(otel.GetTextMapPropagator().Fields()) != 0 {
+		t.Errorf("global propagator fields %v, want none", otel.GetTextMapPropagator().Fields())
 	}
 }
