@@ -1,4 +1,4 @@
-Use Go 1.26+ idioms. Prefer standard library over external dependencies. Zero external deps is a deliberate design choice.
+Use Go 1.26+ idioms. Prefer standard library over external dependencies. The few dependencies there are, each named with its reason in `.claude/CLAUDE.md`, are deliberate; do not add another without a reason of that weight.
 
 Return errors, don't panic. Wrap with context: `fmt.Errorf("doing thing: %w", err)`. Handle errors once — don't log AND return.
 

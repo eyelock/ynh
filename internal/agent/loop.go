@@ -125,6 +125,11 @@ type RunOptions struct {
 	// via --sensor-overlay-json so the merge happens inside ynh.
 	SensorOverlay map[string]json.RawMessage
 
+	// TraceEnv is the trace context for the worker, TRACEPARENT and
+	// TRACESTATE entries naming the run's span. It is set only when ynh's
+	// telemetry is on; empty, the worker's environment is unchanged.
+	TraceEnv []string
+
 	// backendOverride is the resolved WorkerBackend; set by tests or left nil to auto-select.
 	backendOverride WorkerBackend
 
@@ -572,6 +577,9 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			}
 		}
 	}
+	// After the passthrough, so the run's own span is the vendor's parent
+	// even when a harness passes the caller's TRACEPARENT through.
+	workerEnv = append(workerEnv, opts.TraceEnv...)
 	// Record what actually reached the worker, names only. An agent that
 	// cannot authenticate because a variable was never declared is otherwise
 	// indistinguishable from one that is simply failing.

@@ -114,12 +114,14 @@ This applies to everything — code, docs, tutorials. Pushing a fix that hasn't 
 
 ## Code Conventions
 
-- Go 1.26+, standard library by default. Two direct dependencies, both
+- Go 1.26+, standard library by default. Three direct dependencies, each
   deliberate: `santhosh-tekuri/jsonschema/v6` (JSON Schema draft 2020-12 is
   not in the standard library and hand-rolling a validator for the published
-  schemas would be worse) and `golang.org/x/text`. **Do not add a third
-  without a reason of that weight** — no frameworks, no CLI libraries, no
-  assertion packages. `go mod tidy -diff` is enforced in CI.
+  schemas would be worse), `golang.org/x/text`, and the OpenTelemetry Go SDK
+  (ynr's instrumentation contract requires the official SDK for `ynh agent
+  run` telemetry; not its OTLP exporters, which bring in gRPC). **Do not add
+  another without a reason of that weight**: no frameworks, no CLI libraries,
+  no assertion packages. `go mod tidy -diff` is enforced in CI.
 - Errors returned, not panicked. Wrap: `fmt.Errorf("context: %w", err)`
 - Standard `testing` package, `t.TempDir()`, `t.Setenv()` for isolation
 - errcheck is strict — all returned errors must be checked
@@ -158,3 +160,7 @@ Any change that bumps capabilities MUST also update goldens under `test/golden/<
 | `CI` | _(none)_ | ynd compress/inspect — lowest priority skip-confirm |
 | `YND_BACKUP_DIR` | `~/.ynd/backups` | ynd compress |
 | `YNH_HARNESS_DIR` | _(set by ynh)_ | exported to `command` sensors and `version_command`, so a harness can address a script it ships |
+| `YNR_SPOOL` | _(none)_ | ynh agent run: spool folder for telemetry; see `docs/telemetry.md` |
+| `XDG_STATE_HOME` | `~/.local/state` | ynh agent run: telemetry goes to `$XDG_STATE_HOME/ynr/spool/local` when that folder exists |
+| `TRACEPARENT` / `TRACESTATE` | _(none)_ | ynh agent run: the trace the run joins |
+| `OTEL_EXPORTER_OTLP_*` | _(none)_ | ynh agent run: an OTLP endpoint wins over the spool; not exported yet, so it turns telemetry off with a note |

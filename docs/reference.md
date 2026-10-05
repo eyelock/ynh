@@ -14,6 +14,11 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 | `YNH_YES` | _(none)_ | `ynd compress/inspect` | `-y` flag |
 | `CI` | _(none)_ | `ynd compress/inspect` | (lowest priority skip-confirm) |
 | `YND_BACKUP_DIR` | `~/.ynd/backups` | `ynd compress` | — |
+| `YNR_SPOOL` | _(none)_ | `ynh agent run` | telemetry spool folder ([Telemetry](telemetry.md)) |
+| `XDG_STATE_HOME` | `~/.local/state` | `ynh agent run` | telemetry goes to `$XDG_STATE_HOME/ynr/spool/local` when it exists |
+| `TRACEPARENT`, `TRACESTATE` | _(none)_ | `ynh agent run` | the trace a run joins |
+| `OTEL_EXPORTER_OTLP_*` | _(none)_ | `ynh agent run` | an OTLP endpoint, which wins over the spool; not exported yet |
+| `OTEL_RESOURCE_ATTRIBUTES` | _(none)_ | `ynh agent run` | extra telemetry resource attributes |
 
 **Note:** `YNH_VENDOR` is not used by `ynd diff` — diff always compares across multiple vendors and a single vendor value is not meaningful. Use `-v` with a comma-separated list instead.
 

@@ -43,6 +43,8 @@ internal/
   namespace/              @ syntax parsing, URL → namespace derivation, FS name encoding
   registry/               Registry discovery: fetch, search, lookup across Git-hosted indexes
   symlink/                Symlink transaction log (~/.ynh/symlinks.json)
+  telemetry/              OpenTelemetry for `ynh agent run`: destination, run span and events (docs/telemetry.md)
+    spool/                OTLP JSON lines spool exporter; no ynh imports, destined for eyelock/otel-spool-exporter
   vendor/                 Vendor adapter interface and implementations
     adapter.go            Interface definition + registry
     claude.go             Claude Code adapter (exec with --plugin-dir)
@@ -191,6 +193,7 @@ The user-facing version of this guidance lives in [`docs/marketplace.md` § Pinn
 ## Technologies
 
 - **Go 1.26+** - single binary, no runtime dependencies
+- **OpenTelemetry Go SDK** - telemetry from `ynh agent run` only (API, trace and log SDKs; no OTLP exporters)
 - **Git** - content resolution, caching, versioning
 - **JSON** - all configuration (harness manifests, global config)
 

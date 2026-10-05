@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/eyelock/ynh/internal/agent"
+	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/telemetry"
 )
 
 func cmdAgent(args []string) error {
@@ -247,7 +249,15 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 			"--task or --focus is required")
 	}
 
+	// Telemetry starts only once the arguments are good: an argument error is
+	// not a run. With no destination this is a no-op and changes nothing.
+	tel := telemetry.Setup(config.Version, telemetryOptions, stderr)
+	defer tel.Shutdown()
+	run := tel.StartRun(runStartAttributes(opts)...)
+	opts.TraceEnv = run.WorkerEnv()
+
 	result, err := agent.RunLoop(opts)
+	run.Finish(runOutcome(result.ExitCode), result.ExitCode == agent.ExitConverged, runEndAttributes(result)...)
 
 	// The result is emitted on every path, converged or not. A pipeline needs
 	// to know what a run consumed and what it touched precisely when it did
