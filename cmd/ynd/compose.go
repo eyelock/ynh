@@ -127,7 +127,7 @@ func cmdCompose(args []string) error {
 }
 
 func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
-	structured := detectJSONFormat(args)
+	structured := composeIsJSON(args)
 	var (
 		source      string
 		profileName string
@@ -238,6 +238,20 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 		return printComposeText(stdout, out)
 	}
 	return nil
+}
+
+// composeIsJSON reports whether compose's output, and so its errors, will be
+// JSON. Unlike every other command, compose defaults to JSON, so only an
+// explicit --format other than json turns the envelope off. The last
+// --format wins, as it does when the flags are parsed.
+func composeIsJSON(args []string) bool {
+	structured := true
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == "--format" {
+			structured = args[i+1] == "json"
+		}
+	}
+	return structured
 }
 
 func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.ResolveResult) composeOutput {

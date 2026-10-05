@@ -10,16 +10,17 @@ import (
 )
 
 func cmdFocus(args []string) error {
-	return cmdFocusTo(args, os.Stdout)
+	return cmdFocusTo(args, os.Stdout, os.Stderr)
 }
 
-func cmdFocusTo(args []string, stdout io.Writer) error {
+func cmdFocusTo(args []string, stdout, stderr io.Writer) error {
+	structured := detectJSONFormat(args)
 	if len(args) == 0 {
-		return fmt.Errorf("usage: ynh focus <ls|add|remove|update>")
+		return cliError(stderr, structured, errCodeInvalidInput, "usage: ynh focus <ls|add|remove|update>")
 	}
 	switch args[0] {
 	case "ls", "list":
-		return cmdFocusLs(args[1:], stdout, os.Stderr)
+		return cmdFocusLs(args[1:], stdout, stderr)
 	case "add":
 		return cmdFocusAdd(args[1:], stdout)
 	case "remove":
@@ -27,7 +28,8 @@ func cmdFocusTo(args []string, stdout io.Writer) error {
 	case "update":
 		return cmdFocusUpdate(args[1:], stdout)
 	default:
-		return fmt.Errorf("unknown focus subcommand: %s\nUsage: ynh focus <ls|add|remove|update>", args[0])
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("unknown focus subcommand: %s\nUsage: ynh focus <ls|add|remove|update>", args[0]))
 	}
 }
 

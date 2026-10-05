@@ -136,7 +136,8 @@ Reports what the harness resolves to once includes, delegates and profiles
 are applied, with each artifact attributed to its source.
 
 Flags:
-  --format <text|json>   Output format
+  --format <text|json>   Output format (default json, so errors are the JSON
+                         envelope unless --format text is given)
   --profile <name>       Apply a named profile (falls back to $YNH_PROFILE)
   --harness <source>     Harness to resolve against (falls back to $YNH_HARNESS)`,
 

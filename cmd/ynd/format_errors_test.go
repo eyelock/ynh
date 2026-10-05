@@ -18,6 +18,9 @@ type formatErrorCase struct {
 	name   string
 	run    func(args []string, stdout, stderr io.Writer) error
 	prefix []string
+	// defaultJSON marks a command whose output is JSON when --format is not
+	// given, so its errors are the envelope then too.
+	defaultJSON bool
 }
 
 // formatErrorCases lists every ynd command with a text|json --format. A
@@ -25,7 +28,7 @@ type formatErrorCase struct {
 // TestFormatErrorContractCoversEveryFormatCommand.
 func formatErrorCases() []formatErrorCase {
 	return []formatErrorCase{
-		{name: "compose", run: cmdComposeTo, prefix: []string{"./nope"}},
+		{name: "compose", run: cmdComposeTo, prefix: []string{"./nope"}, defaultJSON: true},
 		{name: "version", run: cmdVersionTo},
 	}
 }
@@ -48,6 +51,9 @@ func TestFormatErrorContract(t *testing.T) {
 			orders := map[string][]string{
 				"json first": {"--format", "json", "--bogus"},
 				"json last":  {"--bogus", "--format", "json"},
+			}
+			if tc.defaultJSON {
+				orders["no format"] = []string{"--bogus"}
 			}
 			for order, tail := range orders {
 				t.Run(order, func(t *testing.T) {
@@ -87,7 +93,7 @@ func TestFormatErrorContract(t *testing.T) {
 
 			t.Run("text", func(t *testing.T) {
 				var out, errb bytes.Buffer
-				err := tc.run(append(append([]string{}, tc.prefix...), "--bogus"), &out, &errb)
+				err := tc.run(append(append([]string{}, tc.prefix...), "--format", "text", "--bogus"), &out, &errb)
 				if err == nil || errors.Is(err, errStructuredReported) {
 					t.Fatalf("err = %v, want a plain error\nstderr: %s", err, errb.String())
 				}
@@ -110,6 +116,43 @@ func TestFormatErrorContractCoversEveryFormatCommand(t *testing.T) {
 	for _, topic := range helpTopics() {
 		if strings.Contains(commandHelp[topic], "--format <text|json>") && !covered[topic] {
 			t.Errorf("ynd %s documents --format <text|json> but has no row in formatErrorCases", topic)
+		}
+	}
+}
+
+// Without --format, a command that defaults to text reports plain errors.
+func TestFormatErrorContractDefaultText(t *testing.T) {
+	for _, tc := range formatErrorCases() {
+		if tc.defaultJSON {
+			continue
+		}
+		t.Run(tc.name, func(t *testing.T) {
+			var out, errb bytes.Buffer
+			err := tc.run(append(append([]string{}, tc.prefix...), "--bogus"), &out, &errb)
+			if err == nil || errors.Is(err, errStructuredReported) || errb.Len() != 0 {
+				t.Fatalf("err = %v, stderr = %q; want a plain error", err, errb.String())
+			}
+		})
+	}
+}
+
+func TestComposeIsJSON(t *testing.T) {
+	cases := []struct {
+		args []string
+		want bool
+	}{
+		{nil, true},
+		{[]string{"./h"}, true},
+		{[]string{"--format", "json"}, true},
+		{[]string{"--format", "text"}, false},
+		{[]string{"--format", "yaml"}, false},
+		{[]string{"--format", "text", "--format", "json"}, true},
+		{[]string{"--format", "json", "--format", "text"}, false},
+		{[]string{"--format"}, true},
+	}
+	for _, c := range cases {
+		if got := composeIsJSON(c.args); got != c.want {
+			t.Errorf("composeIsJSON(%q) = %v, want %v", c.args, got, c.want)
 		}
 	}
 }

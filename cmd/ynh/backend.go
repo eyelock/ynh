@@ -18,8 +18,9 @@ func cmdBackend(args []string) error {
 }
 
 func cmdBackendTo(args []string, stdout, stderr io.Writer) error {
+	structured := detectJSONFormat(args)
 	if len(args) == 0 {
-		return fmt.Errorf("usage: ynh backend <add|list|remove> [args]")
+		return cliError(stderr, structured, errCodeInvalidInput, "usage: ynh backend <add|list|remove> [args]")
 	}
 
 	switch args[0] {
@@ -30,7 +31,8 @@ func cmdBackendTo(args []string, stdout, stderr io.Writer) error {
 	case "remove", "rm":
 		return cmdBackendRemove(args[1:])
 	default:
-		return fmt.Errorf("unknown backend subcommand: %s\nusage: ynh backend <add|list|remove>", args[0])
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("unknown backend subcommand: %s\nusage: ynh backend <add|list|remove>", args[0]))
 	}
 }
 

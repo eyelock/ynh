@@ -17,8 +17,9 @@ func cmdRegistry(args []string) error {
 }
 
 func cmdRegistryTo(args []string, stdout, stderr io.Writer) error {
+	structured := detectJSONFormat(args)
 	if len(args) == 0 {
-		return fmt.Errorf("usage: ynh registry <add|list|remove|update> [args]")
+		return cliError(stderr, structured, errCodeInvalidInput, "usage: ynh registry <add|list|remove|update> [args]")
 	}
 
 	switch args[0] {
@@ -31,7 +32,8 @@ func cmdRegistryTo(args []string, stdout, stderr io.Writer) error {
 	case "update":
 		return cmdRegistryUpdate()
 	default:
-		return fmt.Errorf("unknown registry subcommand: %s\nusage: ynh registry <add|list|remove|update>", args[0])
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("unknown registry subcommand: %s\nusage: ynh registry <add|list|remove|update>", args[0]))
 	}
 }
 

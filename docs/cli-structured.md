@@ -61,7 +61,12 @@ When a command invoked with `--format json` fails:
 
 This holds for every error the command reports, including a bad argument: `--format json` is recognised wherever it appears on the command line, so `ynh check --bogus --format json` reports the unknown flag as the envelope even though it comes first.
 
-When the same command is invoked without `--format json`, errors remain human-readable on `stderr` as they do today. The one exception is `ynh sensors run`, which has no text mode: its output is always JSON, so its errors are always the envelope.
+When the same command is invoked without `--format json`, errors remain human-readable on `stderr` as they do today. Errors follow the format the output would have had, so two commands differ:
+
+- `ynh sensors run` has no text mode: its output is always JSON, so its errors are always the envelope.
+- `ynd compose` defaults to JSON, so its errors are the envelope unless `--format text` is given.
+
+The same applies to an unknown subcommand of a command group that has a structured mode (`ynh sources bogus --format json`), and to `--json`, the older spelling of `--format json` that `ynh migrate` and `ynh quarantine list` still accept.
 
 `ynd export` and `ynd marketplace` also take `--format`, but there it names a package layout (`vendor`, `agent-plugin`), not an output format, and their errors are plain text.
 

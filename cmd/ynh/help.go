@@ -304,6 +304,9 @@ looking at.
   ynh trust show <harness>       Every command it will run, with provenance
   ynh trust accept <harness>     Record that you have read them
 
+Flags:
+  --format text|json   Output format (default text)
+
 States:
 
   unreviewed   Never accepted. Also the state of a harness installed before
@@ -374,11 +377,16 @@ Clean orphaned symlink installations and stale run directories.
 
 This deletes. Run "ynh status" first to see what is currently installed.`,
 
-	"migrate": `ynh migrate
+	"migrate": `ynh migrate [flags]
 
 Migrate the ynh home directory to the current schema version.
 
-Most commands migrate automatically on first use; this runs it explicitly.`,
+Most commands migrate automatically on first use; this runs it explicitly.
+
+Flags:
+  --dry-run            Report what would change without changing it
+  --skip-broken        Quarantine entries that fail to migrate and continue
+  --format text|json   Output format (default text; --json is the older spelling)`,
 
 	"quarantine": `ynh quarantine <list|restore|drop> [args]
 
@@ -386,7 +394,10 @@ Manage harnesses quarantined by a failed migration.
 
   ynh quarantine list             Show quarantined harnesses
   ynh quarantine restore <name>   Restore one from quarantine
-  ynh quarantine drop <name>      Delete one permanently`,
+  ynh quarantine drop <name>      Delete one permanently
+
+Flags (list):
+  --format text|json   Output format (default text; --json is the older spelling)`,
 
 	"version": `ynh version [flags]
 

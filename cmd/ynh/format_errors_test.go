@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -24,6 +25,9 @@ type formatErrorCase struct {
 	// jsonOnly marks a command with no text mode: it emits JSON whatever the
 	// flags say, so its errors are always the envelope.
 	jsonOnly bool
+	// jsonAlias marks a command that also accepts --json, the older spelling
+	// of --format json; it must turn the envelope on the same way.
+	jsonAlias bool
 }
 
 // formatErrorCases lists every ynh command that accepts --format. Adding a
@@ -58,8 +62,8 @@ func formatErrorCases() []formatErrorCase {
 			},
 			prefix: []string{"run", "--task", "t"},
 		},
-		{name: "migrate", run: cmdMigrateTo},
-		{name: "quarantine list", run: cmdQuarantineTo, prefix: []string{"list"}},
+		{name: "migrate", run: cmdMigrateTo, jsonAlias: true},
+		{name: "quarantine list", run: cmdQuarantineTo, prefix: []string{"list"}, jsonAlias: true},
 		{name: "trust ls", run: cmdTrustTo, prefix: []string{"ls"}},
 		{name: "trust show", run: cmdTrustTo, prefix: []string{"show", "local/nope"}},
 		{name: "trust accept", run: cmdTrustTo, prefix: []string{"accept", "local/nope"}},
@@ -91,6 +95,10 @@ func TestFormatErrorContract(t *testing.T) {
 			orders := map[string][]string{
 				"json first": {"--format", "json", "--bogus"},
 				"json last":  {"--bogus", "--format", "json"},
+			}
+			if tc.jsonAlias {
+				orders["alias first"] = []string{"--json", "--bogus"}
+				orders["alias last"] = []string{"--bogus", "--json"}
 			}
 			for order, tail := range orders {
 				t.Run(order, func(t *testing.T) {
@@ -177,6 +185,81 @@ func TestFormatErrorContractCoversEveryFormatCommand(t *testing.T) {
 	for _, topic := range helpTopics() {
 		if strings.Contains(commandHelp[topic], "--format") && !covered[topic] {
 			t.Errorf("ynh %s documents --format but has no row in formatErrorCases", topic)
+		}
+	}
+}
+
+// formatGroupCases lists every command group with at least one subcommand
+// that has a structured mode. An unknown subcommand under --format json must
+// be the envelope too: the caller asked for JSON before ynh knew the
+// subcommand was wrong.
+func formatGroupCases() []formatErrorCase {
+	return []formatErrorCase{
+		{name: "sources", run: cmdSourcesTo},
+		{name: "registry", run: cmdRegistryTo},
+		{name: "backend", run: cmdBackendTo},
+		{name: "focus", run: func(a []string, o, e io.Writer) error { return cmdFocusTo(a, o, e) }},
+		{name: "profile", run: func(a []string, o, e io.Writer) error { return cmdProfileTo(a, o, e) }},
+		{name: "sensors", run: cmdSensorsTo},
+		{name: "trust", run: cmdTrustTo},
+		{name: "quarantine", run: cmdQuarantineTo},
+		{name: "agent", run: func(a []string, o, e io.Writer) error {
+			return cmdAgentTo(a, o, e, strings.NewReader(""))
+		}},
+	}
+}
+
+func TestFormatErrorContractBadSubcommand(t *testing.T) {
+	schema, err := clischema.Get("error")
+	if err != nil {
+		t.Fatalf("Get error schema: %v", err)
+	}
+	for _, tc := range formatGroupCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("YNH_HOME", t.TempDir())
+			t.Chdir(t.TempDir())
+
+			t.Run("json", func(t *testing.T) {
+				var out, errb bytes.Buffer
+				err := tc.run([]string{"bogus", "--format", "json"}, &out, &errb)
+				if !errors.Is(err, errStructuredReported) {
+					t.Fatalf("err = %v, want errStructuredReported\nstderr: %s", err, errb.String())
+				}
+				if out.Len() != 0 {
+					t.Errorf("stdout must be empty, got: %s", out.String())
+				}
+				assertOneErrorEnvelope(t, schema, errb.Bytes(), errCodeInvalidInput, "subcommand: bogus")
+			})
+			t.Run("text", func(t *testing.T) {
+				var out, errb bytes.Buffer
+				err := tc.run([]string{"bogus"}, &out, &errb)
+				if err == nil || errors.Is(err, errStructuredReported) {
+					t.Fatalf("err = %v, want a plain error\nstderr: %s", err, errb.String())
+				}
+				if !strings.Contains(err.Error(), "subcommand: bogus") {
+					t.Errorf("err = %q, want it to name the subcommand", err)
+				}
+				if out.Len() != 0 || errb.Len() != 0 {
+					t.Errorf("text mode wrote output itself; stdout=%q stderr=%q", out.String(), errb.String())
+				}
+			})
+		})
+	}
+}
+
+// A command group whose help documents --format must have a row in
+// formatGroupCases. A group is a help topic whose first line names its
+// subcommands as <a|b|...> straight after its name.
+func TestFormatErrorContractCoversEveryFormatGroup(t *testing.T) {
+	covered := map[string]bool{}
+	for _, tc := range formatGroupCases() {
+		covered[tc.name] = true
+	}
+	group := regexp.MustCompile(`^ynh \S+ <[a-z]+(\|[a-z]+)+>`)
+	for _, topic := range helpTopics() {
+		help := commandHelp[topic]
+		if group.MatchString(help) && strings.Contains(help, "--format") && !covered[topic] {
+			t.Errorf("ynh %s has subcommands and documents --format but has no row in formatGroupCases", topic)
 		}
 	}
 }
