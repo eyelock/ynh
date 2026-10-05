@@ -93,12 +93,12 @@ jobs:
         with:
           go-version-file: go.mod
       # Until eyelock/ynr is public, the spoolexporter module is private.
-      # RELEASE_TOKEN reads it; a pull request from a fork has no secrets
+      # YNR_READ_PACKAGES reads it; a pull request from a fork has no secrets
       # and cannot build.
       - name: Allow the private ynr module
         env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-        run: git config --global url."https://x-access-token:${RELEASE_TOKEN}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
+          YNR_READ_PACKAGES: ${{ secrets.YNR_READ_PACKAGES }}
+        run: git config --global url."https://x-access-token:${YNR_READ_PACKAGES}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
       - run: make build
 
   test:
@@ -112,12 +112,12 @@ jobs:
         with:
           go-version-file: go.mod
       # Until eyelock/ynr is public, the spoolexporter module is private.
-      # RELEASE_TOKEN reads it; a pull request from a fork has no secrets
+      # YNR_READ_PACKAGES reads it; a pull request from a fork has no secrets
       # and cannot build.
       - name: Allow the private ynr module
         env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-        run: git config --global url."https://x-access-token:${RELEASE_TOKEN}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
+          YNR_READ_PACKAGES: ${{ secrets.YNR_READ_PACKAGES }}
+        run: git config --global url."https://x-access-token:${YNR_READ_PACKAGES}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
       - run: make test
 
       # A direct import marked `// indirect` — the state this repo was in on
@@ -137,12 +137,12 @@ jobs:
         with:
           go-version-file: go.mod
       # Until eyelock/ynr is public, the spoolexporter module is private.
-      # RELEASE_TOKEN reads it; a pull request from a fork has no secrets
+      # YNR_READ_PACKAGES reads it; a pull request from a fork has no secrets
       # and cannot build.
       - name: Allow the private ynr module
         env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-        run: git config --global url."https://x-access-token:${RELEASE_TOKEN}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
+          YNR_READ_PACKAGES: ${{ secrets.YNR_READ_PACKAGES }}
+        run: git config --global url."https://x-access-token:${YNR_READ_PACKAGES}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a  # v9
 
   format:
@@ -156,12 +156,12 @@ jobs:
         with:
           go-version-file: go.mod
       # Until eyelock/ynr is public, the spoolexporter module is private.
-      # RELEASE_TOKEN reads it; a pull request from a fork has no secrets
+      # YNR_READ_PACKAGES reads it; a pull request from a fork has no secrets
       # and cannot build.
       - name: Allow the private ynr module
         env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-        run: git config --global url."https://x-access-token:${RELEASE_TOKEN}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
+          YNR_READ_PACKAGES: ${{ secrets.YNR_READ_PACKAGES }}
+        run: git config --global url."https://x-access-token:${YNR_READ_PACKAGES}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
       - name: Install goimports
         run: go install golang.org/x/tools/cmd/goimports@latest
       - name: Check formatting
@@ -185,12 +185,12 @@ jobs:
         with:
           go-version-file: go.mod
       # Until eyelock/ynr is public, the spoolexporter module is private.
-      # RELEASE_TOKEN reads it; a pull request from a fork has no secrets
+      # YNR_READ_PACKAGES reads it; a pull request from a fork has no secrets
       # and cannot build.
       - name: Allow the private ynr module
         env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-        run: git config --global url."https://x-access-token:${RELEASE_TOKEN}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
+          YNR_READ_PACKAGES: ${{ secrets.YNR_READ_PACKAGES }}
+        run: git config --global url."https://x-access-token:${YNR_READ_PACKAGES}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
       - name: Validate and lint harness artifacts
         run: make check-artifacts
       # Asserts every vendor ynh reports is documented AND assembles the same
@@ -258,7 +258,7 @@ jobs:
       # the step that downloads modules, so no image layer holds it.
       - name: Build the container image
         env:
-          YNR_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          YNR_TOKEN: ${{ secrets.YNR_READ_PACKAGES }}
         run: docker buildx build --load --secret id=ynr_token,env=YNR_TOKEN --tag ynh:ci-check .
 
   all-clear:

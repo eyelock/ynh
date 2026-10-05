@@ -51,11 +51,11 @@ jobs:
         with:
           go-version-file: go.mod
       # Until eyelock/ynr is public, the spoolexporter module is private.
-      # RELEASE_TOKEN reads it; a pull request from a fork has no secrets
+      # YNR_READ_PACKAGES reads it; a pull request from a fork has no secrets
       # and cannot build.
       - name: Allow the private ynr module
         env:
-          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-        run: git config --global url."https://x-access-token:${RELEASE_TOKEN}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
+          YNR_READ_PACKAGES: ${{ secrets.YNR_READ_PACKAGES }}
+        run: git config --global url."https://x-access-token:${YNR_READ_PACKAGES}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
       - name: govulncheck
         run: make vulncheck
