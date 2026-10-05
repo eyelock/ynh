@@ -30,11 +30,11 @@ func TestRunSensor_MockReplacement(t *testing.T) {
 	original := runSensorFn
 	defer func() { runSensorFn = original }()
 
-	runSensorFn = func(ynh, harnessName, sensorName, cwd, overlayJSON string) (*SensorResult, error) {
+	runSensorFn = func(ynh, harnessName, sensorName, cwd, overlayJSON string, _ []string) (*SensorResult, error) {
 		return &SensorResult{Name: sensorName, Kind: "command", ExitCode: 0}, nil
 	}
 
-	result, err := RunSensor("ynh", "myharness", "build", "/tmp", "")
+	result, err := RunSensor("ynh", "myharness", "build", "/tmp", "", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

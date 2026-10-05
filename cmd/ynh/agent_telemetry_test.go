@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/eyelock/ynh/internal/agent"
+	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/telemetry"
 )
 
@@ -132,21 +133,31 @@ func normalisedResult(t *testing.T, stdout []byte) map[string]any {
 	if c, ok := m["consumed"].(map[string]any); ok {
 		delete(c, "wall_ms")
 	}
+	if ss, ok := m["sensors"].([]any); ok {
+		for _, s := range ss {
+			if sm, ok := s.(map[string]any); ok {
+				delete(sm, "duration_ms")
+			}
+		}
+	}
 	return m
 }
 
 // Telemetry never changes a run: the result, stderr and exit code are the
 // same with no destination, with a spool, with an unwritable spool and with
-// a spool too small for a record. With none, nothing is written anywhere and
-// the worker's environment carries no trace context.
+// a spool too small for a record. With none, nothing is written anywhere,
+// the worker's environment carries no trace context or spool, and the
+// sensor processes inherit ynh's environment untouched. With a spool, the
+// worker and each sensor process get the run's trace and the spool folder.
 func TestCmdAgentRun_TelemetryChangesNothing(t *testing.T) {
 	scenarios := []struct {
 		name     string
 		args     []string
 		worker   string // "converge" or "fail"
+		sensor   bool   // run against a harness whose sensor records its environment
 		wantCode int
 	}{
-		{name: "converges", args: []string{"--task", "t", "--no-plan"}, worker: "converge", wantCode: 0},
+		{name: "converges", args: []string{"--task", "t", "--no-plan", "--harness", "local/probe"}, worker: "converge", sensor: true, wantCode: 0},
 		{name: "worker error", args: []string{"--task", "t", "--no-plan"}, worker: "fail", wantCode: agent.ExitWorkerError},
 		{name: "refused", args: []string{"--task", "t", "--backend", "gemini"}, worker: "converge", wantCode: agent.ExitRefused},
 	}
@@ -158,8 +169,20 @@ func TestCmdAgentRun_TelemetryChangesNothing(t *testing.T) {
 			var baselineStderr string
 			for _, mode := range modes {
 				t.Run(mode, func(t *testing.T) {
-					t.Setenv("YNH_HOME", t.TempDir())
+					home := t.TempDir()
+					t.Setenv("YNH_HOME", home)
 					t.Setenv("YNH_AGENT_SESSION", "")
+					sensorEnvFile := filepath.Join(t.TempDir(), "sensor-env")
+					if sc.sensor {
+						// The loop's `ynh check` is this test binary, run as ynh.
+						t.Setenv(execMainEnv, "1")
+						// A real ynh process migrates an unstamped home first.
+						if err := migration.WriteSchemaVersion(home, migration.CurrentSchemaVersion); err != nil {
+							t.Fatal(err)
+						}
+						installListTestHarness(t, home, "probe", `{"name":"probe","version":"0.1.0","default_vendor":"claude",`+
+							`"sensors":{"probe":{"category":"maintainability","source":{"command":"env > '`+sensorEnvFile+`'"},"output":{"format":"text"}}}}`)
+					}
 					state := t.TempDir()
 					t.Setenv("XDG_STATE_HOME", state)
 					t.Setenv("TRACEPARENT", testTraceParent)
@@ -220,28 +243,44 @@ func TestCmdAgentRun_TelemetryChangesNothing(t *testing.T) {
 						}
 					}
 
-					var workerEnv string
+					var workerEnv, sensorEnv string
 					if envFile != "" {
 						if data, rerr := os.ReadFile(envFile); rerr == nil {
 							workerEnv = string(data)
 						}
+					}
+					if sc.sensor {
+						data, rerr := os.ReadFile(sensorEnvFile)
+						if rerr != nil {
+							t.Fatalf("the sensor never ran: %v", rerr)
+						}
+						sensorEnv = string(data)
 					}
 					switch mode {
 					case "absent":
 						if entries, _ := os.ReadDir(state); len(entries) != 0 {
 							t.Errorf("state home holds %v, want nothing written", entries)
 						}
-						if strings.Contains(workerEnv, "TRACEPARENT") {
-							t.Errorf("worker got trace context with telemetry off:\n%s", workerEnv)
+						if strings.Contains(workerEnv, "TRACEPARENT") || strings.Contains(workerEnv, "YNR_SPOOL") {
+							t.Errorf("worker got telemetry environment with telemetry off:\n%s", workerEnv)
+						}
+						// The sensor process inherits ynh's environment as it
+						// always has: the caller's own TRACEPARENT, unchanged,
+						// and nothing added.
+						if sc.sensor && (!strings.Contains(sensorEnv, "TRACEPARENT="+testTraceParent+"\n") || strings.Contains(sensorEnv, "YNR_SPOOL")) {
+							t.Errorf("sensor environment changed with telemetry off:\n%s", sensorEnv)
 						}
 					case "spool":
 						recs := readSpoolRecords(t, spoolDir)
-						var span *spoolRecord
+						var span, check *spoolRecord
 						names := map[string]bool{}
 						for i := range recs {
 							names[recs[i].name] = true
-							if recs[i].kind == "span" {
+							switch {
+							case recs[i].kind == "span" && recs[i].name == telemetry.SpanRun:
 								span = &recs[i]
+							case recs[i].kind == "span" && recs[i].name == telemetry.SpanCheck:
+								check = &recs[i]
 							}
 						}
 						if span == nil || !names[telemetry.EventRunStarted] || !names[telemetry.EventRunFinished] {
@@ -256,9 +295,20 @@ func TestCmdAgentRun_TelemetryChangesNothing(t *testing.T) {
 							t.Errorf("span attributes %v, want outcome %s and exit code %d", span.attrs, wantOutcome, sc.wantCode)
 						}
 						if envFile != "" && sc.wantCode == 0 {
-							want := "TRACEPARENT=00-" + span.traceID + "-" + span.spanID + "-01"
-							if !strings.Contains(workerEnv, want) {
-								t.Errorf("worker env lacks %s:\n%s", want, workerEnv)
+							for _, want := range []string{"TRACEPARENT=00-" + span.traceID + "-" + span.spanID + "-01", "YNR_SPOOL=" + spoolDir} {
+								if !strings.Contains(workerEnv, want+"\n") {
+									t.Errorf("worker env lacks %s:\n%s", want, workerEnv)
+								}
+							}
+						}
+						if sc.sensor {
+							if check == nil || check.parentID != span.spanID || check.traceID != span.traceID {
+								t.Fatalf("check span %+v, want a child of the run span", check)
+							}
+							for _, want := range []string{"TRACEPARENT=00-" + check.traceID + "-" + check.spanID + "-01", "YNR_SPOOL=" + spoolDir} {
+								if !strings.Contains(sensorEnv, want+"\n") {
+									t.Errorf("sensor env lacks %s:\n%s", want, sensorEnv)
+								}
 							}
 						}
 					}
@@ -477,5 +527,75 @@ func TestRunStartAttributes(t *testing.T) {
 				t.Errorf("got %s, want %s", gotJSON, wantJSON)
 			}
 		})
+	}
+}
+
+// A --resume is described by the identity its checkpoint restores: the
+// span and both events carry the restored harness, focus and profile.
+func TestCmdAgentRun_ResumeRecordsRestoredIdentity(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	t.Setenv("YNH_AGENT_SESSION", "")
+	vendorShims(t, "a refused run must not start a worker")
+	spoolDir := filepath.Join(t.TempDir(), "spool")
+	t.Setenv("YNR_SPOOL", spoolDir)
+	resume := t.TempDir()
+	writeAgentCheckpoint(t, resume, map[string]any{
+		"backend": "claude", "phase": "act", "plan_finalized": true, "pending_message": "go",
+		"harness_name": "local/absent", "profile": "ci", "focus": "review",
+	})
+
+	var stdout, stderr bytes.Buffer
+	err := cmdAgentRun([]string{"--format", "json", "--worktree", t.TempDir(), "--resume", resume},
+		&stdout, &stderr, strings.NewReader(""))
+	if processExitCode(err) != agent.ExitRefused {
+		t.Fatalf("err = %v, want the run refused (its harness is not installed)", err)
+	}
+	want := map[string]any{
+		string(telemetry.AttrHarnessName): "local/absent",
+		string(telemetry.AttrFocus):       "review",
+		string(telemetry.AttrProfile):     "ci",
+		string(telemetry.AttrResumed):     true,
+	}
+	found := 0
+	for _, r := range readSpoolRecords(t, spoolDir) {
+		if r.name != telemetry.SpanRun && r.name != telemetry.EventRunStarted && r.name != telemetry.EventRunFinished {
+			continue
+		}
+		found++
+		for k, v := range want {
+			if r.attrs[k] != v {
+				t.Errorf("%s: %s = %v, want %v", r.name, k, r.attrs[k], v)
+			}
+		}
+	}
+	if found != 3 {
+		t.Errorf("found %d of the run span and its two events", found)
+	}
+}
+
+// Each kind of call the loop makes gets its own span name, under the run.
+func TestRunTelemetry_CallSpans(t *testing.T) {
+	spoolDir := filepath.Join(t.TempDir(), "spool")
+	t.Setenv("YNR_SPOOL", spoolDir)
+	tel := telemetry.Setup("1.0.0", telemetry.Options{}, &bytes.Buffer{})
+	rt := runTelemetry{run: tel.StartRun()}
+	for _, c := range []struct{ kind, sensor string }{{agent.CallCheck, ""}, {agent.CallSensor, "verifier"}} {
+		_, end := rt.StartCall(c.kind, 2, c.sensor)
+		end("pass", true)
+	}
+	rt.run.Finish("converged", true)
+	tel.Shutdown()
+
+	got := map[string]map[string]any{}
+	for _, r := range readSpoolRecords(t, spoolDir) {
+		if r.kind == "span" {
+			got[r.name] = r.attrs
+		}
+	}
+	if a := got[telemetry.SpanCheck]; a == nil || a[string(telemetry.AttrTurn)] != "2" {
+		t.Errorf("check span attributes %v", a)
+	}
+	if a := got[telemetry.SpanSensorRun]; a == nil || a[string(telemetry.AttrSensorName)] != "verifier" {
+		t.Errorf("sensors run span attributes %v", a)
 	}
 }

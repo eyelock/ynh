@@ -26,6 +26,11 @@ const (
 	EventRunFinished = "ynh.run.finished"
 	// SpanRun is the one span per `ynh agent run`.
 	SpanRun = "ynh.run"
+	// SpanCheck is a child of the run for each `ynh check` between turns.
+	SpanCheck = "ynh.check"
+	// SpanSensorRun is a child of the run for each `ynh sensors run` of the
+	// convergence verifier.
+	SpanSensorRun = "ynh.sensors.run"
 	// ScopeName is the instrumentation scope of everything ynh emits.
 	ScopeName = "github.com/eyelock/ynh"
 )
@@ -46,6 +51,12 @@ const (
 	AttrHarnessName     attribute.Key = "ynh.harness.name"
 	AttrHarnessVersion  attribute.Key = "ynh.harness.version"
 	AttrHarnessCommit   attribute.Key = "ynh.harness.commit"
+	// On the spans for calls out: the turn they follow, the sensor a
+	// sensors run is for, and the call's outcome (the gate's verdict or the
+	// sensor's status word, or "error" when the call could not run).
+	AttrTurn        attribute.Key = "ynh.run.turn"
+	AttrSensorName  attribute.Key = "ynh.sensor.name"
+	AttrCallOutcome attribute.Key = "ynh.call.outcome"
 )
 
 // Standard attributes, from the pinned semantic conventions.

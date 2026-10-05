@@ -1,8 +1,9 @@
 # Telemetry
 
-`ynh agent run` emits OpenTelemetry: one span per run, and an event when the run
-starts and when it ends. A factory can then follow a run from the step that
-started it, through the run, into the vendor CLI.
+`ynh agent run` emits OpenTelemetry: one span per run with a child span for
+each sensor check, and an event when the run starts and when it ends. A factory
+can then follow a run from the step that started it, through the run, into the
+vendor CLI and the sensors.
 
 It is the only ynh command that does. Every other command launches the vendor
 CLI and gets out of the way, so none lives long enough to report.
@@ -13,7 +14,7 @@ without it.
 
 ## Where it goes
 
-ynh chooses once, when the run starts, in this order:
+ynh chooses when the run starts, in this order:
 
 1. **`OTEL_EXPORTER_OTLP_*`.** Any non-empty variable with this prefix means the
    operator chose an OTLP endpoint, and that choice wins. This version of ynh
@@ -25,6 +26,15 @@ ynh chooses once, when the run starts, in this order:
 3. **Nothing.** With neither, ynh uses OpenTelemetry's no-op providers: nothing
    is written, nothing is printed, and the vendor CLI's environment is exactly
    what it was before telemetry existed.
+
+A run that found nothing looks again for the spool folder once a minute, in
+the background, as a long-lived process should (ynr ADR-004): an agent run can
+last an hour, and a `ynr serve` started after it should still receive it. When
+the folder appears, ynh starts writing, and records the run from its real start
+time: the started event and the span carry the time the run began, not the time
+the spool appeared. A worker already running keeps the environment it started
+with; every process started after that gets the trace and the spool. An
+operator's `OTEL_EXPORTER_OTLP_*` stops the search, since that choice is theirs.
 
 ynh never creates the laptop default folder, and never starts anything because
 it found [ynr](https://github.com/eyelock/ynr). It creates a folder named by
@@ -66,10 +76,30 @@ A run joins the trace in `TRACEPARENT` and `TRACESTATE` (W3C trace context), so
 under a factory step it is the step's child. Run by hand, it starts its own
 trace.
 
-When telemetry is on, the vendor CLI receives `TRACEPARENT` (and `TRACESTATE`,
-if any) naming the run's span. It comes after the harness's `env_passthrough`,
-so a harness that passes the caller's `TRACEPARENT` through still gets the run
-as the parent. When telemetry is off, the vendor gets no trace context.
+When telemetry is on, every process the run starts gets the run's trace and
+its spool folder:
+
+| Process | Gets |
+|---|---|
+| the vendor CLI (the worker) | `TRACEPARENT` (and `TRACESTATE`, if any) naming the run's span, and `YNR_SPOOL` |
+| each `ynh check` between turns, and every sensor command it runs | `TRACEPARENT` naming a `ynh.check` span, a child of the run, and `YNR_SPOOL` |
+| the convergence verifier's `ynh sensors run` | `TRACEPARENT` naming a `ynh.sensors.run` span, and `YNR_SPOOL` |
+
+`YNR_SPOOL` is the folder ynh resolved, absolute, including the laptop default,
+so whatever those processes start that follows the same contract, such as an MCP
+server the vendor launches, writes beside the run.
+
+These variables are ynh's own, like `YNH_AGENT_SESSION`: the worker still
+receives none of the operator's environment beyond `env_passthrough`. They come
+after `env_passthrough`, so a harness that passes the caller's `TRACEPARENT`
+through still gets the run as the parent. Hooks run inside the vendor CLI and
+inherit its environment. The local `git` commands the run uses (to find the base
+commit, the changed files, and for `--auto-commit`) get nothing added: they make
+no network calls and emit nothing.
+
+When telemetry is off, the worker gets no trace context and no `YNR_SPOOL`, and
+`ynh check` and `ynh sensors run` inherit ynh's environment exactly as they
+always have, with nothing added or removed.
 
 ## What a run emits
 
@@ -77,6 +107,8 @@ as the parent. When telemetry is off, the vendor gets no trace context.
 |---|---|---|
 | `ynh.run.started` | event (log record) | the run begins, before any worker starts |
 | `ynh.run` | span | the run, from start to end |
+| `ynh.check` | span, child of `ynh.run` | each `ynh check` between turns |
+| `ynh.sensors.run` | span, child of `ynh.run` | each run of the convergence verifier |
 | `ynh.run.finished` | event (log record) | the run ends |
 
 A run refused before any worker starts still emits all three, with the outcome
@@ -117,6 +149,13 @@ zero.
 | `ynh.run.focus` | all | the `--focus` given |
 | `ynh.run.profile` | all | the `--profile` given |
 | `ynh.run.resumed` | all | `true` for a `--resume` |
+| `ynh.run.turn` | call spans | the turn the call follows |
+| `ynh.sensor.name` | `ynh.sensors.run` | the sensor run |
+| `ynh.call.outcome` | call spans | the gate's verdict (`pass`, `blocked`), the sensor's status word, or `error` when the call could not run; an `error` call has an error status |
+
+On a `--resume`, the harness, focus and profile are the ones the checkpoint
+restores where the command line gave none, by the same rule the run itself
+applies.
 
 `gen_ai.usage.input_tokens` follows the semantic conventions and includes cached
 tokens, so it is the run result's `input_tokens` plus `cache_read_tokens` and
@@ -155,8 +194,8 @@ These wait for ynr, whose repository is design documents only so far:
   with a note.
 - **The vendor CLI's own telemetry.** A `--telemetry-relay` setting will start
   `ynr relay` for the run and point Claude Code or Codex at it. Until then ynh
-  passes the vendor only `TRACEPARENT` and `TRACESTATE`, and turns on none of
-  the vendor's telemetry.
+  passes the vendor only `TRACEPARENT`, `TRACESTATE` and `YNR_SPOOL`, and turns
+  on none of the vendor's telemetry.
 - **The registry** and `ynh telemetry registry --format json`, which will
   replace the draft names above.
 - **Conformance** checks with `ynr conformance` in CI.

@@ -60,7 +60,7 @@ const blockedEnvelope = `{
 func TestRunCheck_BlockedIsNotAnError(t *testing.T) {
 	bin, _ := fakeYnh(t, blockedEnvelope, "", 1)
 
-	env, err := defaultRunCheck(bin, "demo", "", nil, nil)
+	env, err := defaultRunCheck(bin, "demo", "", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("exit 1 is a verdict, not a failure: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestRunCheck_BlockedIsNotAnError(t *testing.T) {
 func TestRunCheck_ExecFailureIsAnError(t *testing.T) {
 	bin, _ := fakeYnh(t, "", `harness "demo" not installed`, 2)
 
-	_, err := defaultRunCheck(bin, "demo", "", nil, nil)
+	_, err := defaultRunCheck(bin, "demo", "", nil, nil, nil)
 	if err == nil {
 		t.Fatal("exit 2 means the gate is broken and must not be silently absorbed")
 	}
@@ -90,7 +90,7 @@ func TestRunCheck_ExecFailureIsAnError(t *testing.T) {
 func TestRunCheck_PassParses(t *testing.T) {
 	bin, _ := fakeYnh(t, `{"verdict":"pass","harness":"demo","sensors":[]}`, "", 0)
 
-	env, err := defaultRunCheck(bin, "demo", "", nil, nil)
+	env, err := defaultRunCheck(bin, "demo", "", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestRunCheck_PassesOnlyAndOverlay(t *testing.T) {
 	bin, argsFile := fakeYnh(t, `{"verdict":"pass","sensors":[]}`, "", 0)
 
 	_, err := defaultRunCheck(bin, "demo", "/work", []string{"lint", "test"},
-		map[string]json.RawMessage{"lint": json.RawMessage(`{"source":{"command":"make fast"}}`)})
+		map[string]json.RawMessage{"lint": json.RawMessage(`{"source":{"command":"make fast"}}`)}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

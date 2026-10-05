@@ -125,10 +125,10 @@ type RunOptions struct {
 	// via --sensor-overlay-json so the merge happens inside ynh.
 	SensorOverlay map[string]json.RawMessage
 
-	// TraceEnv is the trace context for the worker, TRACEPARENT and
-	// TRACESTATE entries naming the run's span. It is set only when ynh's
-	// telemetry is on; empty, the worker's environment is unchanged.
-	TraceEnv []string
+	// Telemetry carries the run's trace context and spool folder to every
+	// process the loop starts. Nil, or a Telemetry that returns no
+	// environment, starts every process exactly as it would without one.
+	Telemetry Telemetry
 
 	// backendOverride is the resolved WorkerBackend; set by tests or left nil to auto-select.
 	backendOverride WorkerBackend
@@ -206,12 +206,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		// Restore the run's identity. A resume that omits --harness previously
 		// continued with no harness, therefore no sensors, and reported
 		// converged — the safety verdict was forgeable by leaving out a flag.
-		if opts.HarnessName == "" {
-			opts.HarnessName = resumeCP.HarnessName
-		}
-		if opts.Profile == "" {
-			opts.Profile = resumeCP.Profile
-		}
+		restoreIdentity(&opts, resumeCP)
 		if opts.ConvergenceSensor == "" {
 			opts.ConvergenceSensor = resumeCP.ConvergenceSensor
 		}
@@ -220,14 +215,6 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		}
 		if opts.MaxTokens == 0 {
 			opts.MaxTokens = resumeCP.MaxTokens
-		}
-		// A run interrupted while planning re-runs the plan, which needs the
-		// task. A focus is restored by name so its bound profile applies again.
-		if !taskGiven {
-			opts.Focus = resumeCP.Focus
-			if opts.Focus == "" {
-				opts.Task = resumeCP.Task
-			}
 		}
 		verificationExpected = true
 		// A checkpoint written before these fields existed has none to restore.
@@ -579,7 +566,9 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	}
 	// After the passthrough, so the run's own span is the vendor's parent
 	// even when a harness passes the caller's TRACEPARENT through.
-	workerEnv = append(workerEnv, opts.TraceEnv...)
+	if opts.Telemetry != nil {
+		workerEnv = append(workerEnv, opts.Telemetry.WorkerEnv()...)
+	}
 	// Record what actually reached the worker, names only. An agent that
 	// cannot authenticate because a variable was never declared is otherwise
 	// indistinguishable from one that is simply failing.
@@ -1010,7 +999,13 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			for _, name := range sensorNames {
 				_ = traj.Emit(KindSensorRun, turnN, name)
 			}
-			env, checkErr := RunCheck(ynh, opts.HarnessName, opts.WorktreeDir, sensorNames, opts.SensorOverlay)
+			callEnv, endCall := startCall(opts.Telemetry, CallCheck, turnN, "")
+			env, checkErr := RunCheck(ynh, opts.HarnessName, opts.WorktreeDir, sensorNames, opts.SensorOverlay, callEnv)
+			if checkErr != nil {
+				endCall("error", false)
+			} else {
+				endCall(env.Verdict, true)
+			}
 			if checkErr != nil {
 				// A gate that cannot run is an operator fault, not agent work.
 				// Degrading to "no sensor results" would keep sending the worker
@@ -1046,7 +1041,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		}
 
 		// ── Check convergence ─────────────────────────────────────────────────
-		converged, feedback, convergence := checkConvergence(checkEnv, convergenceSensor, ynh, opts.HarnessName, opts.WorktreeDir, traj, turnN, verificationExpected)
+		converged, feedback, convergence := checkConvergence(checkEnv, convergenceSensor, ynh, opts.HarnessName, opts.WorktreeDir, traj, opts.Telemetry, turnN, verificationExpected)
 		if convergence != nil {
 			result.Convergence = convergence
 		}
@@ -1136,6 +1131,7 @@ func checkConvergence(
 	env *gate.Envelope,
 	convergenceSensor, ynh, harnessName, cwd string,
 	traj *TrajectoryWriter,
+	tel Telemetry,
 	turnN int,
 	verificationExpected bool,
 ) (bool, string, *RunConvergence) {
@@ -1183,7 +1179,13 @@ func checkConvergence(
 	// which is why `ynh check` reports it as deferred rather than judging it.
 	if convergenceSensor != "" && ynh != "" && harnessName != "" {
 		_ = traj.Emit(KindSensorRun, turnN, convergenceSensor)
-		cvResult, err := RunSensor(ynh, harnessName, convergenceSensor, cwd, "")
+		callEnv, endCall := startCall(tel, CallSensor, turnN, convergenceSensor)
+		cvResult, err := RunSensor(ynh, harnessName, convergenceSensor, cwd, "", callEnv)
+		if err != nil {
+			endCall("error", false)
+		} else {
+			endCall(string(gate.StatusForKind(cvResult.Kind, cvResult.ExitCode)), true)
+		}
 		// Convergence is gate.StatusPass, not a locally invented verdict.
 		// #214 routed the gate through `ynh check` but left this call site
 		// deriving its own answer, and that answer said a files sensor had

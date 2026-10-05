@@ -367,7 +367,6 @@ func TestWriter_SyncAndCloseAreBounded(t *testing.T) {
 	dir := t.TempDir()
 	w := NewWriter(Options{Dir: dir, Service: "s", InstanceID: "i", SyncTimeout: 50 * time.Millisecond})
 	block := make(chan struct{})
-	t.Cleanup(func() { close(block) })
 	w.syncFile = func(*os.File) error {
 		<-block
 		return nil
@@ -386,6 +385,16 @@ func TestWriter_SyncAndCloseAreBounded(t *testing.T) {
 	}
 	if got := w.Stats().Errors; got != 2 {
 		t.Errorf("errors = %d, want both abandoned flushes counted", got)
+	}
+	// Let the abandoned Close finish, so it is not renaming the file while
+	// the temporary directory is removed.
+	close(block)
+	deadline := time.Now().Add(5 * time.Second)
+	for strings.HasSuffix(strings.Join(spoolFiles(t, dir), ","), ".open.jsonl") {
+		if time.Now().After(deadline) {
+			t.Fatal("the abandoned Close never finished")
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 

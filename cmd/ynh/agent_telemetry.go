@@ -113,3 +113,19 @@ func runEndAttributes(r *agent.RunResult) []attribute.KeyValue {
 	}
 	return attrs
 }
+
+// runTelemetry gives the agent loop the run's trace context and spool for
+// each process it starts, naming the spans from ynh's constants.
+type runTelemetry struct{ run *telemetry.Run }
+
+func (r runTelemetry) WorkerEnv() []string { return r.run.WorkerEnv() }
+
+func (r runTelemetry) StartCall(kind string, turn int, sensor string) ([]string, func(string, bool)) {
+	attrs := []attribute.KeyValue{telemetry.AttrTurn.Int(turn)}
+	name := telemetry.SpanCheck
+	if kind == agent.CallSensor {
+		name = telemetry.SpanSensorRun
+		attrs = append(attrs, telemetry.AttrSensorName.String(sensor))
+	}
+	return r.run.StartCall(name, attrs...)
+}

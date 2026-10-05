@@ -253,8 +253,10 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 	// not a run. With no destination this is a no-op and changes nothing.
 	tel := telemetry.Setup(config.Version, telemetryOptions, stderr)
 	defer tel.Shutdown()
-	run := tel.StartRun(runStartAttributes(opts)...)
-	opts.TraceEnv = run.WorkerEnv()
+	// On --resume the run is described by the identity its checkpoint
+	// restores, not only by the flags given.
+	run := tel.StartRun(runStartAttributes(agent.ResumedIdentity(opts))...)
+	opts.Telemetry = runTelemetry{run: run}
 
 	result, err := agent.RunLoop(opts)
 	run.Finish(runOutcome(result.ExitCode), result.ExitCode == agent.ExitConverged, runEndAttributes(result)...)

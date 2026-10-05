@@ -174,3 +174,41 @@ func sessionDirFromEmit(emit string) string {
 	}
 	return filepath.Dir(emit)
 }
+
+// restoreIdentity fills the harness, profile and focus a resume did not name
+// from its checkpoint. A run interrupted while planning re-runs the plan, which
+// needs the task, and a focus is restored by name so its bound profile applies
+// again; either is restored only when the resume named neither a task nor a
+// focus.
+func restoreIdentity(opts *RunOptions, cp *Checkpoint) {
+	taskGiven := opts.Task != "" || opts.Focus != ""
+	if opts.HarnessName == "" {
+		opts.HarnessName = cp.HarnessName
+	}
+	if opts.Profile == "" {
+		opts.Profile = cp.Profile
+	}
+	if !taskGiven {
+		opts.Focus = cp.Focus
+		if opts.Focus == "" {
+			opts.Task = cp.Task
+		}
+	}
+}
+
+// ResumedIdentity is opts with the harness, profile and focus a --resume
+// restores from its checkpoint, by the same rule RunLoop applies, so a caller
+// can describe the run before it starts. Without --resume, or when the
+// checkpoint cannot be read (RunLoop then refuses the run itself), opts is
+// returned unchanged.
+func ResumedIdentity(opts RunOptions) RunOptions {
+	if opts.Resume == "" {
+		return opts
+	}
+	cp, err := readCheckpoint(opts.Resume)
+	if err != nil {
+		return opts
+	}
+	restoreIdentity(&opts, cp)
+	return opts
+}

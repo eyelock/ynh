@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -37,6 +39,7 @@ type record struct {
 	status    map[string]any
 	attrs     map[string]any
 	resources map[string]any
+	start     time.Time
 }
 
 func flatten(list []any) map[string]any {
@@ -87,6 +90,9 @@ func readSpool(t *testing.T, dir string) []record {
 						r.spanID, _ = s["spanId"].(string)
 						r.parentID, _ = s["parentSpanId"].(string)
 						r.status, _ = s["status"].(map[string]any)
+						if ns, err := strconv.ParseInt(fmt.Sprint(s["startTimeUnixNano"]), 10, 64); err == nil {
+							r.start = time.Unix(0, ns)
+						}
 						attrs, _ := s["attributes"].([]any)
 						r.attrs = flatten(attrs)
 						out = append(out, r)
@@ -180,8 +186,8 @@ func TestSetup_OTLPNotSupported(t *testing.T) {
 	run := tel.StartRun()
 	run.Finish("converged", true)
 	tel.Shutdown()
-	if tel.Active() || tel.Destination != DestinationOTLP {
-		t.Errorf("active=%v destination=%q, want inactive otlp", tel.Active(), tel.Destination)
+	if tel.Active() || tel.Destination() != DestinationOTLP {
+		t.Errorf("active=%v destination=%q, want inactive otlp", tel.Active(), tel.Destination())
 	}
 	if n := strings.Count(stderr.String(), "\n"); n != 1 || !strings.Contains(stderr.String(), "OTEL_EXPORTER_OTLP_") {
 		t.Errorf("stderr = %q, want one note naming OTEL_EXPORTER_OTLP_*", stderr.String())
@@ -202,6 +208,11 @@ func TestSetup_NoDestinationIsNoOp(t *testing.T) {
 	run := tel.StartRun()
 	if env := run.WorkerEnv(); env != nil {
 		t.Errorf("WorkerEnv() = %v, want none", env)
+	}
+	env, end := run.StartCall(SpanCheck)
+	end("pass", true)
+	if env != nil {
+		t.Errorf("StartCall env = %v, want none", env)
 	}
 	run.Finish("converged", true)
 	tel.Shutdown()
@@ -245,8 +256,8 @@ func TestRun_SpoolRecords(t *testing.T) {
 
 			var stderr bytes.Buffer
 			tel := Setup("9.9.9", Options{}, &stderr)
-			if !tel.Active() || tel.Destination != DestinationSpool {
-				t.Fatalf("active=%v destination=%q, want the spool", tel.Active(), tel.Destination)
+			if !tel.Active() || tel.Destination() != DestinationSpool {
+				t.Fatalf("active=%v destination=%q, want the spool", tel.Active(), tel.Destination())
 			}
 			run := tel.StartRun(AttrFocus.String("review"))
 
@@ -282,8 +293,11 @@ func TestRun_SpoolRecords(t *testing.T) {
 			if len(env) == 0 || env[0] != wantEnv {
 				t.Errorf("WorkerEnv() = %v, want %s first", env, wantEnv)
 			}
-			if tt.tracestate != "" && (len(env) != 2 || env[1] != "TRACESTATE="+tt.tracestate) {
+			if tt.tracestate != "" && (len(env) < 2 || env[1] != "TRACESTATE="+tt.tracestate) {
 				t.Errorf("WorkerEnv() = %v, want the TRACESTATE passed on", env)
+			}
+			if env[len(env)-1] != "YNR_SPOOL="+spoolDir {
+				t.Errorf("WorkerEnv() = %v, want the spool folder last", env)
 			}
 			if span.status["code"] != tt.wantStatus {
 				t.Errorf("status = %v, want code %v", span.status, tt.wantStatus)
@@ -370,5 +384,129 @@ func TestNewInstanceID(t *testing.T) {
 	a, b := newInstanceID(), newInstanceID()
 	if a == b || len(a) != 36 || a[14] != '4' {
 		t.Errorf("ids %q, %q: want two distinct version-4 UUIDs", a, b)
+	}
+}
+
+// Each call out is a child span of the run, and the process it starts gets
+// that span's trace context and the spool folder, made absolute.
+func TestRun_StartCall(t *testing.T) {
+	clearTelemetryEnv(t)
+	t.Chdir(t.TempDir())
+	t.Setenv("YNR_SPOOL", "spool") // relative: children run elsewhere
+	spoolDir, err := filepath.Abs("spool")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TRACEPARENT", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+
+	tel := Setup("1.0.0", Options{}, &bytes.Buffer{})
+	run := tel.StartRun()
+	tests := []struct {
+		name       string
+		outcome    string
+		ok         bool
+		wantStatus float64
+	}{
+		{name: SpanCheck, outcome: "blocked", ok: true, wantStatus: 1},
+		{name: SpanSensorRun, outcome: "error", ok: false, wantStatus: 2},
+	}
+	envs := map[string][]string{}
+	for _, tt := range tests {
+		env, end := run.StartCall(tt.name, AttrTurn.Int(2))
+		envs[tt.name] = env
+		end(tt.outcome, tt.ok)
+	}
+	run.Finish("converged", true)
+	tel.Shutdown()
+
+	recs := readSpool(t, spoolDir)
+	runSpan := find(recs, "span", SpanRun)
+	if runSpan == nil {
+		t.Fatal("no run span")
+	}
+	for _, tt := range tests {
+		call := find(recs, "span", tt.name)
+		if call == nil {
+			t.Fatalf("no %s span", tt.name)
+		}
+		if call.traceID != runSpan.traceID || call.parentID != runSpan.spanID {
+			t.Errorf("%s: trace %s parent %s, want a child of the run span %s", tt.name, call.traceID, call.parentID, runSpan.spanID)
+		}
+		if call.attrs[string(AttrCallOutcome)] != tt.outcome || call.attrs[string(AttrTurn)] != "2" || call.status["code"] != tt.wantStatus {
+			t.Errorf("%s: attrs %v status %v", tt.name, call.attrs, call.status)
+		}
+		env := envs[tt.name]
+		want := []string{"TRACEPARENT=00-" + call.traceID + "-" + call.spanID + "-01", "YNR_SPOOL=" + spoolDir}
+		if strings.Join(env, " ") != strings.Join(want, " ") {
+			t.Errorf("%s env = %v, want %v", tt.name, env, want)
+		}
+	}
+}
+
+// A run that started with no destination finds the spool when it appears,
+// and records itself from its real start: the span's start time is the
+// run's, and the calls after it carry the trace.
+func TestRun_SpoolAppearsMidRun(t *testing.T) {
+	clearTelemetryEnv(t)
+	laptop := filepath.Join(os.Getenv("XDG_STATE_HOME"), "ynr", "spool", "local")
+
+	tel := Setup("1.0.0", Options{RecheckInterval: 10 * time.Millisecond}, &bytes.Buffer{})
+	before := time.Now()
+	run := tel.StartRun(AttrFocus.String("review"))
+	if tel.Active() {
+		t.Fatal("active with no destination")
+	}
+	if err := os.MkdirAll(laptop, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// The started event reaches the disk once the spool is found.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(laptop); err == nil && find(readSpool(t, laptop), "log", EventRunStarted) != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("ynh.run.started was never written after the spool appeared")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	env, end := run.StartCall(SpanCheck)
+	end("pass", true)
+	if len(env) != 2 || env[1] != "YNR_SPOOL="+laptop {
+		t.Errorf("call env = %v, want TRACEPARENT and the laptop spool", env)
+	}
+	run.Finish("converged", true)
+	tel.Shutdown()
+
+	recs := readSpool(t, laptop)
+	span := find(recs, "span", SpanRun)
+	if span == nil || find(recs, "log", EventRunFinished) == nil || find(recs, "span", SpanCheck) == nil {
+		t.Fatalf("records %+v, want the run span, the check span and both events", recs)
+	}
+	if span.attrs[string(AttrFocus)] != "review" {
+		t.Errorf("run span attributes %v, want the run's start attributes", span.attrs)
+	}
+	if span.start.After(before.Add(time.Second)) || span.start.Before(before.Add(-time.Second)) {
+		t.Errorf("run span starts at %v, want the run's start near %v", span.start, before)
+	}
+}
+
+// Shutdown stops the search: a spool that appears afterwards gets nothing.
+func TestSetup_ShutdownStopsRecheck(t *testing.T) {
+	clearTelemetryEnv(t)
+	laptop := filepath.Join(os.Getenv("XDG_STATE_HOME"), "ynr", "spool", "local")
+	tel := Setup("1.0.0", Options{RecheckInterval: 5 * time.Millisecond}, &bytes.Buffer{})
+	run := tel.StartRun()
+	run.Finish("converged", true)
+	tel.Shutdown()
+	if err := os.MkdirAll(laptop, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if tel.Active() {
+		t.Error("telemetry started after Shutdown")
+	}
+	if entries, _ := os.ReadDir(laptop); len(entries) != 0 {
+		t.Errorf("spool holds %d files after Shutdown", len(entries))
 	}
 }

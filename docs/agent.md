@@ -88,8 +88,10 @@ values. A worker that starts and cannot authenticate is otherwise
 indistinguishable from one that is simply failing.
 
 When [telemetry](telemetry.md) is on, the worker also receives `TRACEPARENT`
-(and `TRACESTATE`, if any) naming the run's span, so the vendor's own spans can
-join the run's trace. With telemetry off it receives neither.
+(and `TRACESTATE`, if any) naming the run's span, and `YNR_SPOOL` naming the
+spool folder, so the vendor's own spans can join the run's trace. These are
+ynh's own variables, like `YNH_AGENT_SESSION`, not the operator's. With
+telemetry off it receives none of them.
 
 ## Redaction
 
@@ -650,8 +652,10 @@ between a regression this run caused and debt it inherited.
 `ynh agent run` emits OpenTelemetry when it has somewhere to write it: a
 `ynh.run.started` event as the run begins, and one `ynh.run` span and a
 `ynh.run.finished` event as it ends, with the outcome, exit code, turns, tokens,
-cost, model and harness. It writes into a spool folder named by `YNR_SPOOL` or
-the laptop default, joins the trace in `TRACEPARENT`, and never carries the
+cost, model and harness, and a child span for each `ynh check` between turns.
+It writes into a spool folder named by `YNR_SPOOL` or the laptop default, joins
+the trace in `TRACEPARENT`, passes the trace and the spool on to the worker and
+the sensors, and never carries the
 task, the agent's output or a path. With no destination nothing is written and
 nothing changes. See [Telemetry](telemetry.md).
 
