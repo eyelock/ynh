@@ -186,6 +186,9 @@ func telemetryRelaySetting(flag bool, stderr io.Writer) bool {
 type runRelay struct {
 	tel    *telemetry.Telemetry
 	stderr io.Writer
+	// sandbox is the run's --sandbox. Under srt the worker cannot reach a
+	// loopback relay, so none is started.
+	sandbox string
 
 	once  sync.Once
 	relay *telemetry.Relay
@@ -214,6 +217,14 @@ func (r *runRelay) start(backend string) {
 	}
 	if !agent.SupportsTelemetryRelay(backend) {
 		skip("ynh does not configure " + backend + "'s telemetry yet")
+		return
+	}
+	// srt denies loopback unless its settings file allow-lists the
+	// address, and ynh does not hand srt a settings file: it passes flags
+	// that srt's current CLI does not read. Until ynh configures srt
+	// properly, the relay is skipped rather than started unreachable.
+	if r.sandbox == "srt" {
+		skip("--sandbox srt would block the worker from reaching it")
 		return
 	}
 	// Only into the spool. An operator's OTEL_EXPORTER_OTLP_* is their

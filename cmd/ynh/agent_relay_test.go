@@ -33,6 +33,9 @@ func claudeRelaySettings(endpoint string) []string {
 		"OTEL_LOGS_EXPORTER=otlp",
 		"OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf",
 		"OTEL_EXPORTER_OTLP_ENDPOINT=" + endpoint,
+		"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=" + endpoint + "/v1/traces",
+		"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=" + endpoint + "/v1/metrics",
+		"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=" + endpoint + "/v1/logs",
 		"CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1",
 		"OTEL_LOG_USER_PROMPTS=0",
 		"OTEL_LOG_ASSISTANT_RESPONSES=0",
@@ -195,6 +198,7 @@ func TestCmdAgentRun_TelemetryRelay(t *testing.T) {
 		{name: "no ynr", setting: "env", spool: "spool", note: "ynr is not on PATH"},
 		{name: "no spool", relay: "serve", setting: "env", spool: "none", note: "there is no spool folder"},
 		{name: "operator's OTLP", relay: "serve", setting: "env", spool: "otlp", note: "OTEL_EXPORTER_OTLP_* is set"},
+		{name: "srt", relay: "serve", setting: "env", spool: "spool", backend: "srt", note: "--sandbox srt would block the worker", code: agent.ExitWorkerError},
 		{name: "codex", relay: "serve", setting: "env", spool: "spool", backend: "codex", note: "does not configure codex's telemetry", code: agent.ExitWorkerError},
 		{name: "ynr exits at once", relay: "exit", setting: "env", spool: "spool", started: true, note: "relay: cannot open spool"},
 		{name: "ynr never prints its endpoint", relay: "silent", setting: "env", spool: "spool", started: true, note: "printed no endpoint within"},
@@ -221,7 +225,9 @@ func TestCmdAgentRun_TelemetryRelay(t *testing.T) {
 				`{"name":"relayprobe","version":"0.1.0","default_vendor":"claude","env_passthrough":["OTEL_LOG_USER_PROMPTS","OTEL_LOG_TOOL_CONTENT"]}`)
 
 			var envFile, argsFile string
-			if tt.backend == "codex" {
+			if tt.backend == "codex" || tt.backend == "srt" {
+				// srt is absent, so the worker fails to start either way.
+				hideFromPath(t, "srt")
 				vendorShims(t, "codex is a stub")
 			} else {
 				envFile, argsFile = recordingClaude(t)
@@ -240,7 +246,11 @@ func TestCmdAgentRun_TelemetryRelay(t *testing.T) {
 				t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector.example:4318")
 			}
 			args := []string{"--format", "json", "--worktree", t.TempDir(), "--task", "t", "--no-plan", "--harness", "local/relayprobe"}
-			if tt.backend != "" {
+			switch tt.backend {
+			case "srt":
+				args = append(args, "--sandbox", "srt")
+			case "":
+			default:
 				args = append(args, "--backend", tt.backend)
 			}
 			switch tt.setting {
@@ -501,19 +511,21 @@ func TestAgentRun_RelayStoppedOnInterrupt(t *testing.T) {
 const fakeClaudeEnv = "YNH_TEST_FAKE_CLAUDE"
 
 // fakeClaude is a claude that exports one span over OTLP/HTTP JSON, as a
-// child of the TRACEPARENT it was given, to OTEL_EXPORTER_OTLP_ENDPOINT, then
+// child of the TRACEPARENT it was given, to OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, then
 // answers each user message with one turn.
 func fakeClaude(record string) int {
 	var notes []string
 	notes = append(notes, os.Environ()...)
 	tp := strings.Split(os.Getenv("TRACEPARENT"), "-")
-	if endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); endpoint != "" && len(tp) == 4 {
+	// The traces endpoint ynh pins, with its full OTLP/HTTP path, as
+	// Claude Code would use it.
+	if endpoint := os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"); endpoint != "" && len(tp) == 4 {
 		now := time.Now().UnixNano()
 		body := fmt.Sprintf(`{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"claude-code-stub"}}]},`+
 			`"scopeSpans":[{"scope":{"name":"stub"},"spans":[{"traceId":%q,"spanId":"5ca1ab1e5ca1ab1e","parentSpanId":%q,`+
 			`"name":"claude_code.interaction","kind":1,"startTimeUnixNano":"%d","endTimeUnixNano":"%d"}]}]}]}`,
 			tp[1], tp[2], now-1000, now)
-		resp, err := http.Post(endpoint+"/v1/traces", "application/json", strings.NewReader(body))
+		resp, err := http.Post(endpoint, "application/json", strings.NewReader(body))
 		if err != nil {
 			notes = append(notes, "POST error "+err.Error())
 		} else {

@@ -29,6 +29,12 @@ func claudeTelemetrySettings(endpoint string) [][2]string {
 		{"OTEL_LOGS_EXPORTER", "otlp"},
 		{"OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf"},
 		{"OTEL_EXPORTER_OTLP_ENDPOINT", endpoint},
+		// Each signal pinned too, with its OTLP/HTTP path: a per-signal
+		// endpoint wins over the generic one, so one in the operator's
+		// user settings would otherwise send that signal elsewhere.
+		{"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", endpoint + "/v1/traces"},
+		{"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", endpoint + "/v1/metrics"},
+		{"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", endpoint + "/v1/logs"},
 		// Without it Claude Code sends no spans.
 		{"CLAUDE_CODE_ENHANCED_TELEMETRY_BETA", "1"},
 		// Content, off. Prompts and the system prompt, and the model's

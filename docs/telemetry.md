@@ -204,6 +204,9 @@ before the worker starts:
   means the vendor's telemetry is theirs to direct, so ynh leaves it alone,
   and with no spool there is nowhere to write
 - `ynr` is on `PATH`
+- the run is not under `--sandbox srt`: srt refuses loopback connections
+  unless its settings file allow-lists the address, and ynh does not yet give
+  srt a settings file
 
 When one does not hold, ynh prints one note on stderr and the run carries on
 without the vendor's telemetry. ynh never starts the relay because it found
@@ -231,8 +234,9 @@ result, output and exit code are the same as without the relay.
 
 ### What Claude Code receives
 
-With a relay running, the worker's environment carries, exactly, the settings
-recorded in ynr ADR-004 as verified with Claude Code 2.1.289:
+With a relay running, the worker's environment carries the settings recorded
+in ynr ADR-004 as verified with Claude Code 2.1.289, plus the per-signal
+endpoints:
 
 | Variable | Value |
 |---|---|
@@ -240,10 +244,16 @@ recorded in ynr ADR-004 as verified with Claude Code 2.1.289:
 | `OTEL_TRACES_EXPORTER`, `OTEL_METRICS_EXPORTER`, `OTEL_LOGS_EXPORTER` | `otlp` |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | the relay, such as `http://127.0.0.1:41234` |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `_METRICS_ENDPOINT`, `_LOGS_ENDPOINT` | the relay with each signal's OTLP/HTTP path: `/v1/traces`, `/v1/metrics`, `/v1/logs` |
 | `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA` | `1`; without it Claude Code sends no spans |
 | `TRACEPARENT` | the run's span, as for every run with telemetry on |
 
-and every content switch Claude Code documents, forced off:
+The per-signal endpoints repeat the generic one because Claude Code uses a
+per-signal endpoint "instead of the generic variable for that signal"
+([monitoring](https://code.claude.com/docs/en/monitoring-usage)): one set in
+the operator's user settings would otherwise send that signal elsewhere.
+
+It also carries every content switch Claude Code documents, forced off:
 
 | Variable | Value | What it would export |
 |---|---|---|

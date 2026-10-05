@@ -262,7 +262,7 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 	run := tel.StartRun(runStartAttributes(agent.ResumedIdentity(opts))...)
 	rt := runTelemetry{run: run}
 	if telemetryRelaySetting(relayFlag, stderr) {
-		rt.relay = &runRelay{tel: tel, stderr: stderr}
+		rt.relay = &runRelay{tel: tel, stderr: stderr, sandbox: opts.Sandbox}
 		// Also on a panic: a relay is never left running.
 		defer rt.relay.stop()
 	}
