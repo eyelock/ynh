@@ -53,3 +53,42 @@ func TestAgentRun_RefusalExitCodeMatchesResult(t *testing.T) {
 		t.Error("a refused resume wrote a checkpoint")
 	}
 }
+
+// An argument error with --format json exits 1 with the structured error
+// envelope on stderr and nothing on stdout, whether --format json comes
+// before or after the bad argument (#513).
+func TestAgentRun_ArgumentErrorEnvelope(t *testing.T) {
+	s := newSandbox(t)
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"unknown flag, json first", []string{"--format", "json", "--task", "t", "--bogus"}},
+		{"unknown flag, json last", []string{"--task", "t", "--bogus", "--format", "json"}},
+		{"task with focus, json last", []string{"--task", "t", "--focus", "f", "--format", "json"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stdout, stderr, err := s.runYnh(t, append([]string{"agent", "run"}, tt.args...)...)
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+				t.Fatalf("want exit 1, got %v\nstderr: %s", err, stderr)
+			}
+			if stdout != "" {
+				t.Errorf("stdout = %q, want empty", stdout)
+			}
+			var env struct {
+				Error struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			if jerr := json.Unmarshal([]byte(stderr), &env); jerr != nil {
+				t.Fatalf("stderr is not one envelope: %v\nstderr: %s", jerr, stderr)
+			}
+			if env.Error.Code != "invalid_input" || env.Error.Message == "" {
+				t.Errorf("envelope = %+v, want invalid_input with a message", env.Error)
+			}
+		})
+	}
+}

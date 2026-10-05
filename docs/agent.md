@@ -376,9 +376,17 @@ refusal as its `reason`. The result's `exit_code` is always the code the
 process exits with.
 
 The one exception is a command line that cannot be parsed at all: an unknown
-flag, a flag missing its value, `--task` with `--focus`, or neither of them.
-That is rejected before a run exists, so it prints an error on stderr, exits 1,
-and produces no result.
+flag, a flag missing its value, a value of the wrong type, `--task` with
+`--focus`, or neither of them. That is rejected before a run exists, so it
+exits 1 and produces no result. With `--format json`, wherever it appears on
+the command line, the error is the
+[error envelope](cli-structured.md#error-envelope) on stderr, with
+`invalid_input` as its code (`io_error` when a `--task @file` cannot be read),
+and stdout is empty:
+
+```json
+{"error":{"code":"invalid_input","message":"unknown flag: --bogus"}}
+```
 
 ```bash
 ynh agent run --harness demo --task "..." --format json
