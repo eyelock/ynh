@@ -28,7 +28,7 @@ import (
 // against live output, which is what turns a list of fingerprints into a list
 // of findings. That costs a run, so it is opt-in.
 func cmdBaseline(args []string, stdout, stderr io.Writer) error {
-	structured := false
+	structured := detectJSONFormat(args)
 	explain := false
 	cwd := ""
 	var harnessName string
@@ -57,9 +57,15 @@ func cmdBaseline(args []string, stdout, stderr io.Writer) error {
 			}
 			cwd = args[i]
 		default:
-			if harnessName == "" {
-				harnessName = args[i]
+			if strings.HasPrefix(args[i], "-") {
+				return cliError(stderr, structured, errCodeInvalidInput,
+					fmt.Sprintf("unknown flag: %s", args[i]))
 			}
+			if harnessName != "" {
+				return cliError(stderr, structured, errCodeInvalidInput,
+					fmt.Sprintf("unexpected argument: %s", args[i]))
+			}
+			harnessName = args[i]
 		}
 	}
 	if harnessName == "" {

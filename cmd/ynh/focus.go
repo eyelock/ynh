@@ -19,7 +19,7 @@ func cmdFocusTo(args []string, stdout io.Writer) error {
 	}
 	switch args[0] {
 	case "ls", "list":
-		return cmdFocusLs(args[1:], stdout)
+		return cmdFocusLs(args[1:], stdout, os.Stderr)
 	case "add":
 		return cmdFocusAdd(args[1:], stdout)
 	case "remove":

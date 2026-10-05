@@ -21,7 +21,7 @@ func cmdProfileTo(args []string, stdout io.Writer) error {
 	}
 	switch args[0] {
 	case "ls", "list":
-		return cmdProfileLs(args[1:], stdout)
+		return cmdProfileLs(args[1:], stdout, os.Stderr)
 	case "add":
 		return cmdProfileAdd(args[1:], stdout)
 	case "remove":

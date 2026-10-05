@@ -18,18 +18,19 @@ func cmdVersion(args []string) error {
 	return cmdVersionTo(args, os.Stdout, os.Stderr)
 }
 
-func cmdVersionTo(args []string, stdout, _ io.Writer) error {
+func cmdVersionTo(args []string, stdout, stderr io.Writer) error {
+	structured := detectJSONFormat(args)
 	format := "text"
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--format":
 			if i+1 >= len(args) {
-				return fmt.Errorf("--format requires a value")
+				return cliError(stderr, structured, errCodeInvalidInput, "--format requires a value")
 			}
 			i++
 			format = args[i]
 		default:
-			return fmt.Errorf("unknown flag: %s", args[i])
+			return cliError(stderr, structured, errCodeInvalidInput, fmt.Sprintf("unknown flag: %s", args[i]))
 		}
 	}
 
@@ -47,11 +48,12 @@ func cmdVersionTo(args []string, stdout, _ io.Writer) error {
 		}
 		data, err := json.MarshalIndent(payload, "", "  ")
 		if err != nil {
-			return fmt.Errorf("encoding version payload: %w", err)
+			return cliError(stderr, structured, errCodeIOError, fmt.Sprintf("encoding version payload: %v", err))
 		}
 		_, _ = fmt.Fprintln(stdout, string(data))
 		return nil
 	default:
-		return fmt.Errorf("invalid --format value %q (want text or json)", format)
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("invalid --format value %q (want text or json)", format))
 	}
 }

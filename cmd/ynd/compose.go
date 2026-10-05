@@ -127,6 +127,7 @@ func cmdCompose(args []string) error {
 }
 
 func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
+	structured := detectJSONFormat(args)
 	var (
 		source      string
 		profileName string
@@ -138,19 +139,19 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 		switch args[i] {
 		case "--harness":
 			if i+1 >= len(args) {
-				return fmt.Errorf("--harness requires a value")
+				return cliError(stderr, structured, errCodeInvalidInput, "--harness requires a value")
 			}
 			i++
 			source = args[i]
 		case "--profile":
 			if i+1 >= len(args) {
-				return fmt.Errorf("--profile requires a value")
+				return cliError(stderr, structured, errCodeInvalidInput, "--profile requires a value")
 			}
 			i++
 			profileName = args[i]
 		case "--format":
 			if i+1 >= len(args) {
-				return fmt.Errorf("--format requires a value")
+				return cliError(stderr, structured, errCodeInvalidInput, "--format requires a value")
 			}
 			i++
 			format = args[i]
@@ -158,10 +159,10 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 			return errHelp
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return fmt.Errorf("unknown flag: %s", args[i])
+				return cliError(stderr, structured, errCodeInvalidInput, fmt.Sprintf("unknown flag: %s", args[i]))
 			}
 			if source != "" {
-				return fmt.Errorf("unexpected argument: %s", args[i])
+				return cliError(stderr, structured, errCodeInvalidInput, fmt.Sprintf("unexpected argument: %s", args[i]))
 			}
 			source = args[i]
 		}
@@ -173,26 +174,28 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 		source = resolveHarnessEnv()
 	}
 	if source == "" {
-		return fmt.Errorf("usage: ynd compose <harness-dir> [--profile name] [--format text|json]")
+		return cliError(stderr, structured, errCodeInvalidInput,
+			"usage: ynd compose <harness-dir> [--profile name] [--format text|json]")
 	}
 
 	switch format {
 	case "json", "text":
 		// valid
 	default:
-		return fmt.Errorf("invalid --format value %q (want text or json)", format)
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("invalid --format value %q (want text or json)", format))
 	}
 
 	// Resolve source to local path
 	srcDir, err := resolveSource(source)
 	if err != nil {
-		return err
+		return cliError(stderr, structured, errCodeNotFound, err.Error())
 	}
 
 	// Load harness
 	h, workDir, err := loadHarnessForPreview(srcDir)
 	if err != nil {
-		return fmt.Errorf("loading harness: %w", err)
+		return cliError(stderr, structured, errCodeConfigError, fmt.Sprintf("loading harness: %v", err))
 	}
 	if workDir != "" {
 		defer func() { _ = os.RemoveAll(workDir) }()
@@ -206,7 +209,7 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 	if profileName != "" {
 		h, err = harness.ResolveProfile(h, profileName)
 		if err != nil {
-			return err
+			return cliError(stderr, structured, errCodeInvalidInput, err.Error())
 		}
 	}
 
@@ -219,7 +222,7 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 	// Resolve includes
 	resolved, err := resolver.Resolve(h, cfg)
 	if err != nil {
-		return fmt.Errorf("resolving includes: %w", err)
+		return cliError(stderr, structured, errCodeIOError, fmt.Sprintf("resolving includes: %v", err))
 	}
 
 	// Build the composed output
@@ -227,7 +230,10 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 
 	switch format {
 	case "json":
-		return printComposeJSON(stdout, out)
+		if err := printComposeJSON(stdout, out); err != nil {
+			return cliError(stderr, structured, errCodeIOError, err.Error())
+		}
+		return nil
 	case "text":
 		return printComposeText(stdout, out)
 	}

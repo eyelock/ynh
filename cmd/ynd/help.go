@@ -233,9 +233,12 @@ existing invocation validates against.
 Flags:
   --schema <name|path>   Published name (see: ynh schema --all) or a file`,
 
-	"version": `ynd version
+	"version": `ynd version [flags]
 
 Print the ynd version.
+
+Flags:
+  --format <text|json>   Output format (default text)
 
 Use --format json for the machine-readable form; it is the canonical
 wire-contract probe for consumers that gate on capabilities.`,

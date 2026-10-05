@@ -110,6 +110,10 @@ func main() {
 		// non-zero status is what tells a script the work did not happen.
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	case errors.Is(err, errStructuredReported):
+		// The command already wrote the JSON error envelope to stderr; a
+		// trailing "Error: ..." line would leave stderr unparseable.
+		os.Exit(1)
 	case err != nil:
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

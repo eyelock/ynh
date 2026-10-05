@@ -33,6 +33,10 @@ func cmdSearchTo(args []string, stdout, stderr io.Writer) error {
 			i++
 			format = args[i]
 		default:
+			if strings.HasPrefix(args[i], "-") {
+				return cliError(stderr, structured, errCodeInvalidInput,
+					fmt.Sprintf("unknown flag: %s", args[i]))
+			}
 			queryParts = append(queryParts, args[i])
 		}
 		i++

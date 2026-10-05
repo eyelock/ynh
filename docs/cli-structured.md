@@ -59,7 +59,11 @@ When a command invoked with `--format json` fails:
 - `message` is for humans; do not parse.
 - Additional fields may be added to the `error` object over time (additive-compat; see below).
 
-When the same command is invoked without `--format json`, errors remain human-readable on `stderr` as they do today.
+This holds for every error the command reports, including a bad argument: `--format json` is recognised wherever it appears on the command line, so `ynh check --bogus --format json` reports the unknown flag as the envelope even though it comes first.
+
+When the same command is invoked without `--format json`, errors remain human-readable on `stderr` as they do today. The one exception is `ynh sensors run`, which has no text mode: its output is always JSON, so its errors are always the envelope.
+
+`ynd export` and `ynd marketplace` also take `--format`, but there it names a package layout (`vendor`, `agent-plugin`), not an output format, and their errors are plain text.
 
 ## Compatibility policy
 
