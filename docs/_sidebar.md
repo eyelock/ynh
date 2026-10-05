@@ -16,6 +16,7 @@
   * [Focus](/focus.md)
   * [Sensors](/sensors.md)
   * [Agent Loop](/agent.md)
+  * [Telemetry](/telemetry.md)
   * [Namespacing](/namespacing.md)
   * [Vendor Support](/vendors.md)
 

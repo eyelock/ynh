@@ -162,7 +162,26 @@ func newSandbox(t *testing.T) *sandbox {
 		t.Fatalf("creating ynh home: %v", err)
 	}
 	t.Setenv("YNH_HOME", home)
+	isolateTelemetry(t)
 	return &sandbox{home: home}
+}
+
+// isolateTelemetry keeps `ynh agent run` from writing to this machine's
+// spool or an operator's collector: it clears every variable that names a
+// destination and points the laptop default spool into the test's own state
+// home.
+func isolateTelemetry(t *testing.T) {
+	t.Helper()
+	for _, kv := range os.Environ() {
+		name, _, _ := strings.Cut(kv, "=")
+		if strings.HasPrefix(name, "OTEL_") {
+			t.Setenv(name, "")
+		}
+	}
+	for _, name := range []string{"YNR_SPOOL", "TRACEPARENT", "TRACESTATE"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 }
 
 // runYnh executes the ynh binary with args inside the sandbox.
