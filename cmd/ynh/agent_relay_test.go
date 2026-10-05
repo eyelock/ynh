@@ -57,7 +57,7 @@ type stubRelay struct{ dir, args, pid, log string }
 // installStubYnr puts a shell `ynr` first on PATH that records its
 // arguments, pid and SIGTERM, and behaves as mode says:
 //
-//	serve     prints the endpoint and runs until SIGTERM
+//	serve     prints the endpoint and runs until SIGTERM or stdin closes
 //	stubborn  prints the endpoint and ignores SIGTERM
 //	die       prints the endpoint and exits at once
 //	exit      exits 3 without printing anything
@@ -72,7 +72,10 @@ func installStubYnr(t *testing.T, mode string) stubRelay {
 	s := stubRelay{dir: dir, args: filepath.Join(dir, "args"), pid: filepath.Join(dir, "pid"), log: filepath.Join(dir, "log")}
 	ready := `echo '{"endpoint":"` + relayStubEndpoint + `","pid":'$$'}'`
 	body := map[string]string{
-		"serve":    "trap 'echo term >> \"$D/log\"; exit 0' TERM\n" + ready + "\nwhile :; do sleep 0.05; done\n",
+		// As ynr relay --exit-on-stdin-eof: stdin closing stops it too.
+		// fd 3, because a background job's stdin is /dev/null.
+		"serve": "trap 'echo term >> \"$D/log\"; exit 0' TERM\nexec 3<&0\n" +
+			"( cat <&3 >/dev/null; echo eof >> \"$D/log\"; kill -TERM $$ ) &\n" + ready + "\nwhile :; do sleep 0.05; done\n",
 		"stubborn": "trap '' TERM\n" + ready + "\nwhile :; do sleep 0.05; done\n",
 		"die":      ready + "\necho 'relay: crashed' >&2\nexit 1\n",
 		"exit":     "echo 'relay: cannot open spool' >&2\nexit 3\n",
@@ -313,7 +316,7 @@ func TestCmdAgentRun_TelemetryRelay(t *testing.T) {
 				t.Fatalf("relay started = %v, want %v", stub.started(), tt.started)
 			}
 			if tt.started {
-				if got := readLines(t, stub.args); len(got) != 1 || got[0] != "relay --spool "+spoolDir+" --format json" {
+				if got := readLines(t, stub.args); len(got) != 1 || got[0] != "relay --spool "+spoolDir+" --format json --exit-on-stdin-eof" {
 					t.Errorf("relay args = %q", got)
 				}
 				pid := stub.pidValue(t)
@@ -430,15 +433,12 @@ func TestAgentRun_RelayStoppedOnInterrupt(t *testing.T) {
 	}{
 		{"SIGINT", syscall.SIGINT, agent.ExitInterrupted},
 		{"SIGTERM", syscall.SIGTERM, agent.ExitInterrupted},
-		// SIGKILL cannot be handled; Linux's parent-death signal stops the
-		// relay instead. macOS has none, which docs/telemetry.md says.
+		// SIGKILL cannot be handled: the relay's stdin closes with ynh,
+		// and that stops it, on every platform.
 		{"SIGKILL", syscall.SIGKILL, -1},
 	}
 	for _, s := range sigs {
 		t.Run(s.name, func(t *testing.T) {
-			if s.sig == syscall.SIGKILL && runtime.GOOS != "linux" {
-				t.Skip("only Linux has a parent-death signal")
-			}
 			stub := installStubYnr(t, "serve")
 			claudeDir := t.TempDir()
 			claudePid := filepath.Join(claudeDir, "pid")
@@ -501,6 +501,12 @@ func TestAgentRun_RelayStoppedOnInterrupt(t *testing.T) {
 			}
 			if !gone(relayPid, 5*time.Second) {
 				t.Errorf("relay %d left running after ynh got %s", relayPid, s.name)
+			}
+			// Killed outright, ynh stopped nothing itself: its end of the
+			// relay's stdin closed with it. The worker, still running,
+			// must not hold that pipe open.
+			if s.sig == syscall.SIGKILL && !slices.Contains(readLines(t, stub.log), "eof") {
+				t.Errorf("the relay did not see its stdin close: %q", readLines(t, stub.log))
 			}
 		})
 	}

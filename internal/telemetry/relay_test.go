@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -35,7 +36,8 @@ func TestMain(m *testing.M) {
 // fakeRelay behaves as `ynr relay` would, or as one that goes wrong:
 //
 //	serve     prints its endpoint, records each request, exits 0 on SIGTERM
-//	stubborn  prints its endpoint and ignores SIGTERM
+//	          or when stdin closes
+//	stubborn  prints its endpoint and ignores SIGTERM and stdin closing
 //	die       prints its endpoint, then exits 1 a moment later
 //	exit      exits 3 at once, printing nothing on stdout
 //	silent    never prints anything
@@ -51,14 +53,21 @@ func fakeRelay(mode, logPath string) int {
 		_ = f.Close()
 	}
 	logf("args %s", strings.Join(os.Args[1:], " "))
-	stdin, _ := io.ReadAll(os.Stdin)
-	logf("stdin %d", len(stdin))
-	term := make(chan os.Signal, 1)
-	switch mode {
-	case "stubborn":
+	// term is the stop: SIGTERM, or with --exit-on-stdin-eof, stdin
+	// closing, as the real relay does. A stubborn relay ignores both.
+	term := make(chan string, 2)
+	if mode != "stubborn" {
+		sigs := make(chan os.Signal, 1)
+		signal.Notify(sigs, syscall.SIGTERM)
+		go func() { <-sigs; term <- "sigterm" }()
+		if slices.Contains(os.Args, "--exit-on-stdin-eof") {
+			go func() {
+				n, _ := io.Copy(io.Discard, os.Stdin)
+				term <- fmt.Sprintf("stdin eof after %d bytes", n)
+			}()
+		}
+	} else {
 		signal.Ignore(syscall.SIGTERM)
-	default:
-		signal.Notify(term, syscall.SIGTERM)
 	}
 	switch mode {
 	case "exit":
@@ -97,8 +106,7 @@ func fakeRelay(mode, logPath string) int {
 	case "stubborn":
 		select {}
 	}
-	<-term
-	logf("sigterm")
+	logf("stopped by %s", <-term)
 	fmt.Fprintln(os.Stderr, "fake relay: 1 accepted")
 	return 0
 }
@@ -157,7 +165,7 @@ func TestStartRelay_StartsAndStops(t *testing.T) {
 		t.Errorf("relay %d still running after Stop", pid)
 	}
 	log := readLog(t, logPath)
-	for _, want := range []string{"args relay --spool ", " --format json", "stdin 0", "request POST /v1/traces 20", "sigterm"} {
+	for _, want := range []string{"args relay --spool ", " --format json --exit-on-stdin-eof", "request POST /v1/traces 20", "stopped by "} {
 		if !strings.Contains(log, want) {
 			t.Errorf("relay log lacks %q:\n%s", want, log)
 		}
@@ -285,5 +293,30 @@ func TestTailBuffer(t *testing.T) {
 	}
 	if got := truncate("ok", 4); got != "ok" {
 		t.Errorf("truncate short = %q", got)
+	}
+}
+
+// When ynh dies, by any means, the kernel closes the relay's stdin, and the
+// relay stops: closing it alone, with no signal, is that case. Nothing is
+// ever written to it.
+func TestRelay_StopsWhenStdinCloses(t *testing.T) {
+	r, logPath, err := startFake(t, "serve", 10*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid := r.cmd.Process.Pid
+	if err := r.stdin.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-r.done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("relay still running after its stdin closed")
+	}
+	if !processGone(pid) {
+		t.Errorf("relay %d still running", pid)
+	}
+	if log := readLog(t, logPath); !strings.Contains(log, "stopped by stdin eof after 0 bytes") {
+		t.Errorf("relay log:\n%s", log)
 	}
 }

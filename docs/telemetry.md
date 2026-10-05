@@ -214,18 +214,26 @@ without the vendor's telemetry. ynh never starts the relay because it found
 
 ### Its lifetime
 
-ynh runs `ynr relay --spool <the run's spool folder> --format json` and reads
-the endpoint from its first line of output, waiting at most 5 seconds. One
-relay serves the whole run. It gets no standard input, runs in its own process
-group, and its stderr is kept in a small buffer that ynh shows only if the
-relay fails.
+ynh runs `ynr relay --spool <the run's spool folder> --format json
+--exit-on-stdin-eof` and reads the endpoint from its first line of output,
+waiting at most 5 seconds. One relay serves the whole run. It runs in its own
+process group, and its stderr is kept in a small buffer that ynh shows only if
+the relay fails.
 
-When the worker has exited, ynh sends the relay `SIGTERM`, so it drains the
-requests in flight, flushes and closes its spool file, and waits up to 10
-seconds before killing it. The same happens when ynh itself is interrupted
-with `SIGINT` or `SIGTERM`, or a run ends in a panic. On Linux the relay also
-receives `SIGTERM` if ynh is killed outright (`SIGKILL`); macOS has no such
-signal, so there a `kill -9` of ynh leaves its relay running.
+The relay's standard input is a pipe that ynh holds open for the run and never
+writes to. No other process ynh starts, the worker included, holds it. With
+`--exit-on-stdin-eof` the relay treats that pipe closing as it treats
+`SIGTERM`: it drains, flushes and exits. So when ynh ends by any means, a
+`kill -9` included, the kernel closes the pipe and the relay ends with it, on
+Linux and macOS alike. This needs a `ynr` that has `--exit-on-stdin-eof`; an
+older one fails to start and the run carries on without it, with the note
+below.
+
+When the worker has exited, ynh closes the pipe and sends the relay `SIGTERM`
+(either one stops it), so it drains the requests in flight, flushes and closes
+its spool file, and waits up to 10 seconds before killing it. The same happens
+when ynh itself is interrupted with `SIGINT` or `SIGTERM`, or a run ends in a
+panic.
 
 A relay that fails to start (it exits, prints nothing within the bound, or
 prints something other than a loopback endpoint) or dies during the run costs

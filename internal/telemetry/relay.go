@@ -40,6 +40,7 @@ type Relay struct {
 	Endpoint string
 
 	cmd    *exec.Cmd
+	stdin  io.WriteCloser // held open for the run; closing it stops the relay
 	stderr *tailBuffer
 	done   chan struct{} // closed when the process has been reaped
 	err    error         // how it exited; read only after done
@@ -53,17 +54,24 @@ type relayReady struct {
 	PID      int    `json:"pid"`
 }
 
-// StartRelay runs `<bin> relay --spool <spoolDir> --format json` and waits,
-// for at most readyTimeout, for its first line: the endpoint. The relay gets
-// no stdin, and its stderr is kept in a bounded buffer for Stop to report
+// StartRelay runs `<bin> relay --spool <spoolDir> --format json
+// --exit-on-stdin-eof` and waits, for at most readyTimeout, for its first
+// line: the endpoint. Its stdin is a pipe ynh holds open until Stop, and its stderr is kept in a bounded buffer for Stop to report
 // if it fails. Anything other than a well-formed loopback endpoint in time
 // is a failure, and the process is killed before StartRelay returns, so a
 // relay that cannot be used is never left running.
 func StartRelay(bin, spoolDir string, readyTimeout time.Duration) (*Relay, error) {
-	cmd := exec.Command(bin, "relay", "--spool", spoolDir, "--format", "json")
-	// No stdin: os/exec connects a nil Stdin to the null device, so the
-	// relay can never read the operator's terminal or ynh's control channel.
-	cmd.Stdin = nil
+	cmd := exec.Command(bin, "relay", "--spool", spoolDir, "--format", "json", "--exit-on-stdin-eof")
+	// The relay's stdin is a pipe only ynh holds, and never writes to. When
+	// ynh exits, by any means, kill -9 included, the kernel closes it, and
+	// --exit-on-stdin-eof makes the relay drain and exit as on SIGTERM. So
+	// no relay outlives its run. It never reads the operator's terminal or
+	// ynh's control channel. Go opens the pipe close-on-exec, so no other
+	// child of ynh, such as the worker, holds it open.
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("relay stdin: %w", err)
+	}
 	tail := &tailBuffer{limit: relayStderrLimit}
 	cmd.Stderr = tail
 	cmd.SysProcAttr = relaySysProcAttr()
@@ -74,7 +82,7 @@ func StartRelay(bin, spoolDir string, readyTimeout time.Duration) (*Relay, error
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("starting relay: %w", err)
 	}
-	r := &Relay{cmd: cmd, stderr: tail, done: make(chan struct{})}
+	r := &Relay{cmd: cmd, stdin: stdin, stderr: tail, done: make(chan struct{})}
 
 	lines := make(chan string, 1)
 	go func() {
@@ -144,7 +152,7 @@ func (r *Relay) Exited() bool {
 	}
 }
 
-// Stop sends the relay SIGTERM, so it drains the requests in flight,
+// Stop closes the relay's stdin and sends it SIGTERM, so it drains the requests in flight,
 // flushes and closes its spool file, and waits at most timeout for it to
 // exit; past that it is killed. Stop is safe to call more than once.
 //
@@ -161,6 +169,9 @@ func (r *Relay) Stop(timeout time.Duration) error {
 			return
 		default:
 		}
+		// Either one makes the relay drain and exit; both, in case a
+		// signal is lost or stdin is not watched.
+		_ = r.stdin.Close()
 		_ = r.cmd.Process.Signal(syscall.SIGTERM)
 		timer := time.NewTimer(timeout)
 		defer timer.Stop()
@@ -179,6 +190,7 @@ func (r *Relay) Stop(timeout time.Duration) error {
 
 // kill ends the relay at once and waits for it to be reaped.
 func (r *Relay) kill() {
+	_ = r.stdin.Close()
 	_ = r.cmd.Process.Kill()
 	<-r.done
 }
