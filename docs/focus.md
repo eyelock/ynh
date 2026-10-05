@@ -80,7 +80,7 @@ This matches profile-not-found behaviour — a typo in a CI pipeline should fail
 - A focus referencing a missing profile fails validation with the focus name for context:
 
 ```
-Error: focus "audit": profile "security" not defined in harness manifest
+  - focus.audit: references unknown profile "security"
 ```
 
 Profile removal is also focus-aware: `ynh profile remove` refuses to delete a profile while any focus still references it, listing the blocking focuses.

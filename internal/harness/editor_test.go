@@ -529,6 +529,33 @@ func TestValidatePicks_Unknown(t *testing.T) {
 	}
 }
 
+// TestValidatePicks_AvailableSorted pins the order of the "Available:" list in
+// the unknown-pick error. It is built from a map and cut at ten entries, so
+// unsorted it showed a different ten names in a different order each run (#520).
+func TestValidatePicks_AvailableSorted(t *testing.T) {
+	dir := t.TempDir()
+	for _, n := range []string{"kilo", "alpha", "juliet", "echo", "bravo", "lima", "delta", "india", "charlie", "hotel", "golf", "foxtrot"} {
+		skillDir := filepath.Join(dir, "skills", n)
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# "+n), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := "Available: skills/alpha, skills/bravo, skills/charlie, skills/delta, skills/echo, " +
+		"skills/foxtrot, skills/golf, skills/hotel, skills/india, skills/juliet, … (2 more)\n"
+	for range 50 {
+		err := ValidatePicks(dir, []string{"skills/nonexistent"})
+		if err == nil {
+			t.Fatal("expected error for unknown pick")
+		}
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want it to contain %q", err.Error(), want)
+		}
+	}
+}
+
 func TestValidatePicks_Empty(t *testing.T) {
 	dir := t.TempDir()
 	if err := ValidatePicks(dir, nil); err != nil {

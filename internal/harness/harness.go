@@ -3,9 +3,11 @@ package harness
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -732,7 +734,12 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 
 	profile, ok := h.Profiles[profileName]
 	if !ok {
-		return nil, fmt.Errorf("profile %q not defined in harness manifest", profileName)
+		// Name what is declared, sorted so the list does not change order
+		// between calls (#520).
+		if len(h.Profiles) == 0 {
+			return nil, fmt.Errorf("profile %q not defined in harness manifest (the harness declares no profiles)", profileName)
+		}
+		return nil, fmt.Errorf("profile %q not defined in harness manifest (available: %v)", profileName, slices.Sorted(maps.Keys(h.Profiles)))
 	}
 
 	resolved := *h

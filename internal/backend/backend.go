@@ -14,10 +14,12 @@ package backend
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -58,10 +60,9 @@ func ParseSpec(spec string) (Spec, error) {
 func Lookup(cfg *config.Config, spec Spec) (config.BackendConnection, error) {
 	def, ok := cfg.Backends[spec.Backend]
 	if !ok {
-		var available []string
-		for k := range cfg.Backends {
-			available = append(available, k)
-		}
+		// Sorted: ranging over the map would list the names in a different
+		// order on every call (#520).
+		available := slices.Sorted(maps.Keys(cfg.Backends))
 		return config.BackendConnection{}, fmt.Errorf("unknown backend %q (available: %v)", spec.Backend, available)
 	}
 	conn, ok := def.Vendors[spec.Vendor]

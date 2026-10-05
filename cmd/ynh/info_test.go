@@ -474,6 +474,55 @@ func TestCmdInfoTextRichHarness(t *testing.T) {
 	}
 }
 
+// TestCmdInfoTextProfilesSorted pins the order of the Profiles section: the
+// profile names, and the hook events and MCP servers listed against each, all
+// come from maps, so unsorted they changed order between runs (#520).
+func TestCmdInfoTextProfilesSorted(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+
+	hj := `{
+		"name": "ordered",
+		"version": "1.0.0",
+		"default_vendor": "claude",
+		"profiles": {
+			"zulu": {},
+			"mike": {
+				"hooks": {
+					"on_stop": [{"command": "echo stop"}],
+					"after_tool": [{"command": "echo after"}],
+					"before_tool": [{"command": "echo before"}],
+					"before_prompt": [{"command": "echo prompt"}]
+				},
+				"mcp_servers": {
+					"yak": {"command": "yak"},
+					"bee": {"command": "bee"},
+					"mole": {"command": "mole"},
+					"ant": {"command": "ant"}
+				}
+			},
+			"alpha": {},
+			"kilo": {}
+		}
+	}`
+	installListTestHarness(t, home, "ordered", hj)
+
+	want := "Profiles:\n" +
+		"  alpha\n" +
+		"  kilo\n" +
+		"  mike    hooks: after_tool, before_prompt, before_tool, on_stop    mcp_servers: ant, bee, mole, yak\n" +
+		"  zulu\n"
+	for range 20 {
+		var stdout bytes.Buffer
+		if err := cmdInfoTo([]string{"local/ordered"}, &stdout, io.Discard); err != nil {
+			t.Fatalf("cmdInfoTo: %v", err)
+		}
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("info output:\n%s\nwant it to contain:\n%s", stdout.String(), want)
+		}
+	}
+}
+
 func TestCmdInfoTextNoProvenance(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)

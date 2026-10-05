@@ -64,6 +64,24 @@ func TestLookup(t *testing.T) {
 		}
 	})
 
+	// The backend names come from a config map, so the list in the error
+	// must be sorted or it changes order between calls (#520).
+	t.Run("unknown backend lists names sorted", func(t *testing.T) {
+		multi := &config.Config{Backends: map[string]config.BackendDef{
+			"zeta": {}, "alpha": {}, "mu": {}, "beta": {}, "omega": {},
+		}}
+		want := `unknown backend "nope" (available: [alpha beta mu omega zeta])`
+		for range 50 {
+			_, err := Lookup(multi, Spec{Backend: "nope", Vendor: "claude"})
+			if err == nil {
+				t.Fatal("expected error for unknown backend")
+			}
+			if err.Error() != want {
+				t.Fatalf("Lookup error = %q, want %q", err.Error(), want)
+			}
+		}
+	})
+
 	t.Run("unknown vendor for known backend", func(t *testing.T) {
 		if _, err := Lookup(cfg, Spec{Backend: "ollama", Vendor: "codex"}); err == nil {
 			t.Fatal("expected error for backend with no config for this vendor")

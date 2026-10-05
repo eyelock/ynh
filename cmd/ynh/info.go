@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
@@ -235,21 +237,16 @@ func printInfoText(w io.Writer, name string) error {
 	if len(p.Profiles) == 0 {
 		_, _ = fmt.Fprintln(w, "  (none)")
 	} else {
-		for pname, profile := range p.Profiles {
+		// Profiles, hook events and servers are all map keys: sorted, so the
+		// listing does not change order between runs (#520).
+		for _, pname := range slices.Sorted(maps.Keys(p.Profiles)) {
+			profile := p.Profiles[pname]
 			var parts []string
 			if len(profile.Hooks) > 0 {
-				var events []string
-				for event := range profile.Hooks {
-					events = append(events, event)
-				}
-				parts = append(parts, "hooks: "+strings.Join(events, ", "))
+				parts = append(parts, "hooks: "+strings.Join(slices.Sorted(maps.Keys(profile.Hooks)), ", "))
 			}
 			if len(profile.MCPServers) > 0 {
-				var servers []string
-				for sn := range profile.MCPServers {
-					servers = append(servers, sn)
-				}
-				parts = append(parts, "mcp_servers: "+strings.Join(servers, ", "))
+				parts = append(parts, "mcp_servers: "+strings.Join(slices.Sorted(maps.Keys(profile.MCPServers)), ", "))
 			}
 			if len(parts) == 0 {
 				_, _ = fmt.Fprintf(w, "  %s\n", pname)

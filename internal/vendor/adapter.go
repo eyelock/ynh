@@ -3,8 +3,9 @@ package vendor
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -274,11 +275,7 @@ func Register(a Adapter) {
 func Get(name string) (Adapter, error) {
 	a, ok := registry[name]
 	if !ok {
-		var available []string
-		for k := range registry {
-			available = append(available, k)
-		}
-		return nil, fmt.Errorf("%w %q (available: %v)", ErrUnknownVendor, name, available)
+		return nil, fmt.Errorf("%w %q (available: %v)", ErrUnknownVendor, name, Available())
 	}
 	return a, nil
 }
@@ -341,12 +338,9 @@ func pluginRootCommand(rootVar string) func(string) string {
 // keepHookCommand leaves a hook command exactly as the harness wrote it.
 func keepHookCommand(cmd string) string { return cmd }
 
-// Available returns all registered vendor names, sorted alphabetically.
+// Available returns all registered vendor names, sorted alphabetically. The
+// registry is a map, so every list of vendors shown to a user comes from here:
+// ranging over the map directly would change the order on every call (#520).
 func Available() []string {
-	var names []string
-	for k := range registry {
-		names = append(names, k)
-	}
-	sort.Strings(names)
-	return names
+	return slices.Sorted(maps.Keys(registry))
 }

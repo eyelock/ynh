@@ -2,6 +2,9 @@ package vendor
 
 import (
 	"errors"
+	"fmt"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -96,7 +99,33 @@ func TestGetUnknownVendor(t *testing.T) {
 	}
 }
 
+// TestGetUnknownVendorListsSorted pins the order of the vendor list in the
+// unknown-vendor error (#520). The registry is a map, so a list built by
+// ranging over it changes order between calls; repeating the call catches that.
+func TestGetUnknownVendorListsSorted(t *testing.T) {
+	want := fmt.Sprintf("unknown vendor %q (available: [%s])", "bogus", strings.Join(Available(), " "))
+	for range 50 {
+		_, err := Get("bogus")
+		if err == nil {
+			t.Fatal("expected error for unknown vendor")
+		}
+		if err.Error() != want {
+			t.Fatalf("Get(\"bogus\") error = %q, want %q", err.Error(), want)
+		}
+	}
+}
+
 func TestAvailable(t *testing.T) {
+	first := Available()
+	if !slices.IsSorted(first) {
+		t.Errorf("Available() = %v, want sorted", first)
+	}
+	for range 50 {
+		if got := Available(); !slices.Equal(got, first) {
+			t.Fatalf("Available() = %v, then %v: order is not stable", first, got)
+		}
+	}
+
 	names := Available()
 
 	expected := map[string]bool{"claude": false, "codex": false, "cursor": false}

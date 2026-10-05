@@ -2,7 +2,9 @@ package harness
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -287,10 +289,9 @@ func ValidatePicks(basePath string, picks []string) error {
 		}
 	}
 
-	available := make([]string, 0, len(known))
-	for n := range known {
-		available = append(available, n)
-	}
+	// Sorted: formatAvailable shows only the first ten, so an unsorted list
+	// named a different ten in a different order on every run (#520).
+	available := slices.Sorted(maps.Keys(known))
 
 	msg := fmt.Sprintf("unknown pick name(s): %s", strings.Join(unknown, ", "))
 	if len(suggestions) > 0 {
