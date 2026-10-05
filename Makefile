@@ -130,7 +130,7 @@ scan-artifacts: ## Security-scan the harness artifacts with SkillSpector
 check-marketplace: ## Assert the committed marketplace indexes match the plugin manifests
 	@./scripts/marketplace-consistency.sh
 
-check-vendor-parity: build ## Assert every vendor is documented and assembles the same artifacts
+check-vendor-parity: build ## Assert every vendor is documented, assembles the same artifacts and is stubbed in evals
 	@./scripts/vendor-parity.sh
 
 stamp-version: ## Stamp the harness version into every manifest (VERSION=X.Y.Z, or the latest tag)

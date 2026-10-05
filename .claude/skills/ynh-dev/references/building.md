@@ -29,7 +29,7 @@ Recipes reference `$(GOIMPORTS)` instead of bare `goimports`. This means `make f
 | `make format` | Run goimports + gofmt |
 | `make lint` | Run golangci-lint |
 | `make check-artifacts` | `ynd validate` + `ynd lint` over `skills/ agents/ rules/ .claude/` |
-| `make check-vendor-parity` | Every vendor documented and assembling the same artifacts (needs jq) |
+| `make check-vendor-parity` | Every vendor documented, assembling the same artifacts, and its CLI stubbed in `.claude/agents/evals.md` (needs jq) |
 | `make scan-artifacts` | SkillSpector security scan (needs Python; not part of `make check`) |
 | `make e2e` | E2E suite — release gate, not part of `make test` or `make check` |
 | `make clean` | Remove build artifacts and caches |

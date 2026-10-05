@@ -355,6 +355,9 @@ cat > /tmp/ynh-tutorial/with-bundled/.agents/harness/plugin.json << 'EOF'
 EOF
 
 ynh install /tmp/ynh-tutorial/with-bundled
+```
+
+```bash
 with-bundled "what skills do you have?"
 ```
 

@@ -120,6 +120,9 @@ any point to cross-check completeness — `grep -rli cursor --include="*.go" --i
   steps.
 - [ ] `.github/CONTRIBUTING.md` — the format-mapping tables in the "Vendor
   Adapters" section quote every vendor inline; add a column.
+- [ ] `.claude/agents/evals.md`: add the vendor's CLI binary to the `STUBS`
+  line and the stub table, so no eval can launch the real CLI.
+  `make check-vendor-parity` fails until you do.
 - [ ] `.claude/CLAUDE.md`, `.claude/agents/ynh-contributor.md`,
   `.claude/agents/evals.md`, `.claude/skills/ynh-dev/references/architecture.md`
   — project-level mentions of the vendor list.
