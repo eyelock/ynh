@@ -66,6 +66,11 @@ type StartOptions struct {
 	UsageBase *Usage
 	// Env holds additional environment variables to pass to the subprocess.
 	Env []string
+	// TelemetryEndpoint is the run's telemetry relay, or "" when there is
+	// none. A backend ynh can configure (SupportsTelemetryRelay) points its
+	// vendor CLI's telemetry there; its environment already carries the
+	// settings, and this is for what has to go on the command line.
+	TelemetryEndpoint string
 	// Stderr captures subprocess stderr if non-nil.
 	Stderr io.Writer
 }

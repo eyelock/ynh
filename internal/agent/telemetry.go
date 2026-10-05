@@ -21,6 +21,11 @@ const (
 type Telemetry interface {
 	// WorkerEnv is added to the worker's environment.
 	WorkerEnv() []string
+	// RelayEndpoint is the OTLP/HTTP endpoint of a relay running for this
+	// run, for the vendor CLI backend to export its own telemetry to, or ""
+	// when there is none. It is asked once, just before the worker starts,
+	// so the relay can be started only for a backend that can use it.
+	RelayEndpoint(backend string) string
 	// StartCall opens a span for one call of kind (CallCheck or CallSensor)
 	// on turn, naming sensor for CallSensor. It returns the environment for
 	// the process it starts, and a function that ends the span with the

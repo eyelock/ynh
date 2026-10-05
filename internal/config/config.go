@@ -96,6 +96,10 @@ type Config struct {
 	Registries           []RegistrySource      `json:"registries,omitempty"`
 	Sources              []Source              `json:"sources,omitempty"`
 	Backends             map[string]BackendDef `json:"backends,omitempty"`
+	// TelemetryRelay turns on the telemetry relay for every `ynh agent run`
+	// (docs/telemetry.md). --telemetry-relay and YNH_TELEMETRY_RELAY come
+	// first.
+	TelemetryRelay bool `json:"telemetry_relay,omitempty"`
 }
 
 // HomeDir returns the ynh home directory.

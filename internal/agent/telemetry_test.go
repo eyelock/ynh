@@ -15,10 +15,19 @@ import (
 type fakeTelemetry struct {
 	calls    []string
 	outcomes []string
+	// relay is the endpoint RelayEndpoint returns; asked records each
+	// backend it was asked for.
+	relay string
+	asked []string
 }
 
 func (f *fakeTelemetry) WorkerEnv() []string {
 	return []string{"TRACEPARENT=worker", "YNR_SPOOL=/spool"}
+}
+
+func (f *fakeTelemetry) RelayEndpoint(backend string) string {
+	f.asked = append(f.asked, backend)
+	return f.relay
 }
 
 func (f *fakeTelemetry) StartCall(kind string, turn int, sensor string) ([]string, func(string, bool)) {

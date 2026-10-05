@@ -248,6 +248,14 @@ func (t *Telemetry) Destination() Destination {
 	return t.dest
 }
 
+// SpoolDir is the spool folder telemetry writes to, absolute, or "" when
+// the destination is not the spool.
+func (t *Telemetry) SpoolDir() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.spoolDir
+}
+
 // Active reports whether anything is written.
 func (t *Telemetry) Active() bool {
 	t.mu.Lock()

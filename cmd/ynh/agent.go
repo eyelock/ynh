@@ -38,6 +38,7 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 	// still reported in the structured error envelope (#513).
 	structured := detectJSONFormat(args)
 	resultFormat := "text"
+	relayFlag := false
 	opts := agent.RunOptions{
 		Stdout: stdout,
 		Stderr: stderr,
@@ -169,6 +170,9 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 		case "--auto-commit":
 			opts.AutoCommit = true
 
+		case "--telemetry-relay":
+			relayFlag = true
+
 		case "--interactive":
 			opts.Interactive = true
 
@@ -256,9 +260,17 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 	// On --resume the run is described by the identity its checkpoint
 	// restores, not only by the flags given.
 	run := tel.StartRun(runStartAttributes(agent.ResumedIdentity(opts))...)
-	opts.Telemetry = runTelemetry{run: run}
+	rt := runTelemetry{run: run}
+	if telemetryRelaySetting(relayFlag, stderr) {
+		rt.relay = &runRelay{tel: tel, stderr: stderr}
+		// Also on a panic: a relay is never left running.
+		defer rt.relay.stop()
+	}
+	opts.Telemetry = rt
 
 	result, err := agent.RunLoop(opts)
+	// The vendor has exited: let the relay drain what it sent, then stop it.
+	rt.relay.stop()
 	run.Finish(runOutcome(result.ExitCode), result.ExitCode == agent.ExitConverged, runEndAttributes(result)...)
 
 	// The result is emitted on every path, converged or not. A pipeline needs

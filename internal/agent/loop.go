@@ -566,8 +566,17 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	}
 	// After the passthrough, so the run's own span is the vendor's parent
 	// even when a harness passes the caller's TRACEPARENT through.
+	var relayEndpoint string
 	if opts.Telemetry != nil {
 		workerEnv = append(workerEnv, opts.Telemetry.WorkerEnv()...)
+		// The vendor's own telemetry, pointed at the run's relay when there
+		// is one. Last, so its settings win over anything passed through.
+		relayEndpoint = opts.Telemetry.RelayEndpoint(wb.Name())
+		if relayEndpoint != "" && SupportsTelemetryRelay(wb.Name()) {
+			workerEnv = withRelayEnv(workerEnv, relayEndpoint)
+		} else {
+			relayEndpoint = ""
+		}
 	}
 	// Record what actually reached the worker, names only. An agent that
 	// cannot authenticate because a variable was never declared is otherwise
@@ -614,6 +623,8 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		UsageBase:   usageBase,
 		Env:         workerEnv,
 		Stderr:      opts.Stderr,
+
+		TelemetryEndpoint: relayEndpoint,
 	})
 	if err != nil {
 		_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})

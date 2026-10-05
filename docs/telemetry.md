@@ -84,6 +84,7 @@ its spool folder:
 | Process | Gets |
 |---|---|
 | the vendor CLI (the worker) | `TRACEPARENT` (and `TRACESTATE`, if any) naming the run's span, and `YNR_SPOOL` |
+| the vendor CLI, with the [relay](#vendor-telemetry-through-the-relay) on | also its telemetry settings, pointing at the relay |
 | each `ynh check` between turns, and every sensor command it runs | `TRACEPARENT` naming a `ynh.check` span, a child of the run, and `YNR_SPOOL` |
 | the convergence verifier's `ynh sensors run` | `TRACEPARENT` naming a `ynh.sensors.run` span, and `YNR_SPOOL` |
 
@@ -174,6 +175,139 @@ owns, with constants generated from it, and may change then. The standard names
 follow semantic conventions 1.41.0, the last version whose Go package carries
 the `gen_ai.*` names, which upstream still marks as in development.
 
+## Vendor telemetry through the relay
+
+Claude Code can report its own spans, metrics and events, but only over the
+network. The telemetry relay setting lets a run collect them into its spool
+too: ynh starts [`ynr relay`](https://github.com/eyelock/ynr), a small OTLP/HTTP
+receiver on a random loopback port, points the vendor CLI at it, and stops it
+when the run ends. The relay writes what it receives into the run's spool
+folder, beside ynh's own records and in the same trace.
+
+### Turning it on
+
+The setting is off by default. The first of these that says anything decides:
+
+1. `--telemetry-relay` on `ynh agent run` turns it on for that run.
+2. `YNH_TELEMETRY_RELAY`: `1`, `true`, `yes` or `on` turn it on; `0`, `false`,
+   `no` or `off` turn it off, including when the configuration turns it on.
+   Any other value is a note on stderr, and off. A factory lane turns the
+   relay on for its runs by setting this variable.
+3. `"telemetry_relay": true` in `~/.ynh/config.json` (`$YNH_HOME/config.json`)
+   turns it on for every run. An unreadable `config.json` leaves it off.
+
+With the setting on, ynh starts the relay only when all of these hold, just
+before the worker starts:
+
+- the backend is `claude` (see [Other vendors](#other-vendors))
+- the run's telemetry goes to the spool: an operator's `OTEL_EXPORTER_OTLP_*`
+  means the vendor's telemetry is theirs to direct, so ynh leaves it alone,
+  and with no spool there is nowhere to write
+- `ynr` is on `PATH`
+
+When one does not hold, ynh prints one note on stderr and the run carries on
+without the vendor's telemetry. ynh never starts the relay because it found
+`ynr`: only the setting does.
+
+### Its lifetime
+
+ynh runs `ynr relay --spool <the run's spool folder> --format json` and reads
+the endpoint from its first line of output, waiting at most 5 seconds. One
+relay serves the whole run. It gets no standard input, runs in its own process
+group, and its stderr is kept in a small buffer that ynh shows only if the
+relay fails.
+
+When the worker has exited, ynh sends the relay `SIGTERM`, so it drains the
+requests in flight, flushes and closes its spool file, and waits up to 10
+seconds before killing it. The same happens when ynh itself is interrupted
+with `SIGINT` or `SIGTERM`, or a run ends in a panic. On Linux the relay also
+receives `SIGTERM` if ynh is killed outright (`SIGKILL`); macOS has no such
+signal, so there a `kill -9` of ynh leaves its relay running.
+
+A relay that fails to start (it exits, prints nothing within the bound, or
+prints something other than a loopback endpoint) or dies during the run costs
+the run only the vendor's telemetry, with one note on stderr. The run's
+result, output and exit code are the same as without the relay.
+
+### What Claude Code receives
+
+With a relay running, the worker's environment carries, exactly, the settings
+recorded in ynr ADR-004 as verified with Claude Code 2.1.289:
+
+| Variable | Value |
+|---|---|
+| `CLAUDE_CODE_ENABLE_TELEMETRY` | `1` |
+| `OTEL_TRACES_EXPORTER`, `OTEL_METRICS_EXPORTER`, `OTEL_LOGS_EXPORTER` | `otlp` |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | the relay, such as `http://127.0.0.1:41234` |
+| `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA` | `1`; without it Claude Code sends no spans |
+| `TRACEPARENT` | the run's span, as for every run with telemetry on |
+
+and every content switch Claude Code documents, forced off:
+
+| Variable | Value | What it would export |
+|---|---|---|
+| `OTEL_LOG_USER_PROMPTS` | `0` | prompts, the system prompt, and model output under detailed tracing |
+| `OTEL_LOG_ASSISTANT_RESPONSES` | `0` | the model's responses |
+| `OTEL_LOG_TOOL_DETAILS` | `0` | Bash commands, tool arguments, error strings |
+| `OTEL_LOG_TOOL_CONTENT` | `0` | file contents, command output, fetched pages |
+| `OTEL_LOG_RAW_API_BODIES` | `0` | whole API requests and responses |
+| `OTEL_LOG_MANAGED_SETTINGS` | `0` | the organisation's managed settings, redacted |
+| `ENABLE_BETA_TRACING_DETAILED` | `0` | content attributes on spans |
+
+Before adding them, ynh removes every variable of these families that a
+harness's `env_passthrough` would otherwise pass: any `OTEL_EXPORTER_OTLP_*`,
+any `OTEL_LOG_*`, the exporter selectors, `BETA_TRACING_ENDPOINT` and both
+telemetry switches. A harness cannot turn content back on, or send the
+vendor's telemetry somewhere else, by passing a variable through.
+
+The same settings also go on the command line, as
+`claude --settings '{"env":{...}}'`, for the reason below.
+
+### Can a repository's settings override them?
+
+Claude Code's documentation answers this, as of October 2026:
+
+- **A repository cannot.** `.claude/settings.json` and
+  `.claude/settings.local.json` cannot set the telemetry switches, the exporter
+  selectors, the `OTEL_EXPORTER_OTLP_*` endpoints or the content switches:
+  Claude Code ignores them there. They may set only values that turn something
+  off (`none` for a selector, `0` for a content switch), and such a value does
+  not override one set in "the environment you start Claude Code from, a
+  `--settings` file, or managed settings"
+  ([settings reference, "Variables Claude Code ignores in `env`"](https://code.claude.com/docs/en/settings-reference#variables-claude-code-ignores-in-env);
+  [monitoring](https://code.claude.com/docs/en/monitoring-usage)). This needs
+  Claude Code 2.1.282 or later.
+- **The operator's user settings could.** An `env` block in
+  `~/.claude/settings.json` "overwrites the same variable exported in your
+  shell" ([settings reference, `env`](https://code.claude.com/docs/en/settings-reference#env)),
+  so on its own the environment would not stop a user's settings from turning
+  prompt logging on or moving the endpoint.
+- **`--settings` outranks every file but managed settings.** It "applies it
+  above your user, project, and local files and below managed settings", and
+  it can set `env` ([settings, "Settings precedence"](https://code.claude.com/docs/en/settings#settings-precedence)).
+  ynh therefore passes its settings both ways: in the environment, and as
+  `--settings`, the highest precedence it can set for one session.
+- **Managed settings win over both.** An organisation's managed settings are
+  its own policy, and ynh does not try to override them.
+
+The scheduled real-vendor check in ynr (ADR-008) is where this stays verified
+against a live Claude Code.
+
+Two things Claude Code does that ynh does not control, from the same pages:
+with tracing on, it sends a W3C `traceparent` header on its requests to the
+Anthropic API and to HTTP MCP servers; and it does not pass `OTEL_*` variables
+to the processes it starts (the Bash tool, hooks, MCP servers), so an MCP
+server such as ynm writes to the spool through `YNR_SPOOL` rather than to the
+relay.
+
+### Other vendors
+
+Nothing yet. Codex is configured through its `config.toml` rather than the
+environment, and whether it reads `TRACEPARENT` is unverified; Cursor is
+unexamined. With the setting on, a Codex or Cursor run starts no relay and
+prints one note.
+
 ## No content
 
 Telemetry carries ids, names, enums, counts and durations, never content. In
@@ -188,16 +322,14 @@ particular it never carries:
 
 ## Not yet
 
-These wait for ynr, whose repository is design documents only so far:
+These are still to come:
 
 - **Exporting over OTLP.** The standard OTLP exporters bring in gRPC and
   protobuf, about ninety modules; ynh does not take that on for an endpoint it
   cannot yet use. Until then an `OTEL_EXPORTER_OTLP_*` setting writes nothing,
   with a note.
-- **The vendor CLI's own telemetry.** A `--telemetry-relay` setting will start
-  `ynr relay` for the run and point Claude Code or Codex at it. Until then ynh
-  passes the vendor only `TRACEPARENT`, `TRACESTATE` and `YNR_SPOOL`, and turns
-  on none of the vendor's telemetry.
+- **Other vendors' telemetry** through the relay, starting with Codex once its
+  behaviour is verified.
 - **The registry** and `ynh telemetry registry --format json`, which will
   replace the draft names above.
 - **Conformance** checks with `ynr conformance` in CI.
