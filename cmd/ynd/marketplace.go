@@ -36,6 +36,7 @@ func cmdMarketplaceBuild(args []string, stderr io.Writer) error {
 		clean       bool
 		skipConfirm bool
 		configFile  string
+		format      string
 	)
 
 	i := 0
@@ -57,6 +58,12 @@ func cmdMarketplaceBuild(args []string, stderr io.Writer) error {
 			clean = true
 		case "-y", "--yes":
 			skipConfirm = true
+		case "--format":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--format requires a value")
+			}
+			i++
+			format = args[i]
 		case "-h", "--help":
 			return errHelp
 		default:
@@ -74,6 +81,14 @@ func cmdMarketplaceBuild(args []string, stderr io.Writer) error {
 	// Default config file
 	if configFile == "" {
 		configFile = "marketplace.json"
+	}
+	var agentPlugin bool
+	switch format {
+	case "", "vendor":
+	case "agent-plugin":
+		agentPlugin = true
+	default:
+		return fmt.Errorf("unknown --format %q (vendor, agent-plugin)", format)
 	}
 
 	// Load marketplace config
@@ -119,10 +134,11 @@ func cmdMarketplaceBuild(args []string, stderr io.Writer) error {
 	}
 
 	warnings, err := marketplace.Build(cfg, marketplace.BuildOptions{
-		ConfigDir: configDir,
-		OutputDir: outputDir,
-		Vendors:   vendorList,
-		Config:    globalCfg,
+		ConfigDir:   configDir,
+		OutputDir:   outputDir,
+		Vendors:     vendorList,
+		Config:      globalCfg,
+		AgentPlugin: agentPlugin,
 		// --clean runs only once Build has checked every entry. Nothing
 		// before Build writes, and Build creates the output only after this,
 		// so a refused build leaves -o exactly as it found it (#451).

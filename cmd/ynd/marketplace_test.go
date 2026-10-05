@@ -401,6 +401,10 @@ func TestCmdMarketplaceBuildRefusedLeavesOutputUntouched(t *testing.T) {
 			t.Setenv("YNH_HOME", t.TempDir())
 			return setupMarketplaceTest(t), []string{"-v", "bogus"}
 		}, "unknown vendor"},
+		{"unknown format", func(t *testing.T) (string, []string) {
+			t.Setenv("YNH_HOME", t.TempDir())
+			return setupMarketplaceTest(t), []string{"--format", "tarball", "--clean", "-y"}
+		}, `unknown --format "tarball"`},
 	}
 
 	for _, r := range refusals {
@@ -471,5 +475,22 @@ func TestCmdMarketplaceBuild_PrintsEntryWarnings(t *testing.T) {
 				t.Errorf("stderr = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestCmdMarketplaceBuild_FormatAgentPlugin(t *testing.T) {
+	configPath := setupMarketplaceTest(t)
+	outputDir := filepath.Join(t.TempDir(), "out")
+	if err := cmdMarketplace([]string{"build", configPath, "-o", outputDir, "--format", "agent-plugin"}); err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outputDir, "plugins", "export-test", "plugin.json")); err != nil {
+		t.Errorf("expected a portable manifest: %v", err)
+	}
+	if err := cmdMarketplace([]string{"build", configPath, "-o", outputDir, "--format", "tarball"}); err == nil || !strings.Contains(err.Error(), `unknown --format "tarball"`) {
+		t.Errorf("err = %v", err)
+	}
+	if err := cmdMarketplace([]string{"build", configPath, "-o", outputDir, "--format"}); err == nil || !strings.Contains(err.Error(), "requires a value") {
+		t.Errorf("err = %v", err)
 	}
 }

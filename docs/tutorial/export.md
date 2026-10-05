@@ -247,10 +247,10 @@ Exported Agent Plugin → /tmp/ynh-tutorial/agent-plugin (2 skills, 2 agents)
 ```
 
 ```bash
-find /tmp/ynh-tutorial/agent-plugin -type f | sort
+find /tmp/ynh-tutorial/agent-plugin -type f | LC_ALL=C sort
 ```
 
-Expected:
+Expected (`LC_ALL=C` pins the order, which otherwise depends on the locale):
 ```
 /tmp/ynh-tutorial/agent-plugin/.claude-plugin/plugin.json
 /tmp/ynh-tutorial/agent-plugin/AGENTS.md
