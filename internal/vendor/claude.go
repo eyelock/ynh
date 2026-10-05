@@ -398,6 +398,23 @@ func claudePluginManifest(hj *plugin.HarnessJSON, outputDir string) ([]byte, err
 
 func (c *Claude) ExportArtifactDirs() map[string]string { return nil }
 
+// AgentPluginLayout: Claude Code has not adopted Agent Plugins. It reads
+// .claude-plugin/plugin.json and agents/ and commands/ at the plugin root
+// (code.claude.com/docs/en/plugins-reference), none of which collide with the
+// portable files, so the package carries a compatibility layer at the root.
+// Its hooks and MCP servers go where its own plugin export puts them,
+// hooks/claude.json and mcp/claude.json, named by the manifest: never
+// hooks/hooks.json, which Claude always loads (#469), and never .mcp.json,
+// which Codex reads by default.
+func (c *Claude) AgentPluginLayout() AgentPluginLayout {
+	return AgentPluginLayout{
+		LoadsFormat: false,
+		ArtifactDir: ".",
+		Hooks:       filepath.ToSlash(pluginHookFile(c.Name())),
+		MCP:         filepath.ToSlash(claudePluginMCPFile),
+	}
+}
+
 func (c *Claude) SupportsExportDelegates() bool { return true }
 
 func (c *Claude) PluginManifestDir() string { return ".claude-plugin" }

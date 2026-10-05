@@ -272,6 +272,20 @@ func (c *Copilot) SupportsExportDelegates() bool { return true }
 // PluginManifestDir is the same as Claude: Copilot reads that manifest schema.
 func (c *Copilot) PluginManifestDir() string { return ".claude-plugin" }
 
+// AgentPluginLayout: Copilot loads the format natively and reads its own
+// components from com.github.copilot/ (agents/, commands/, rules/,
+// hooks/hooks.json), per docs.github.com/en/copilot/concepts/agents/about-plugins.
+// What goes there follows ExportArtifactDirs, the same subset the legacy
+// export ships.
+func (c *Copilot) AgentPluginLayout() AgentPluginLayout {
+	return AgentPluginLayout{
+		LoadsFormat: true,
+		Namespace:   "com.github.copilot",
+		ArtifactDir: "com.github.copilot",
+		Hooks:       "com.github.copilot/hooks/hooks.json",
+	}
+}
+
 func (c *Copilot) MarketplaceManifestDir() string { return filepath.Join(".github", "plugin") }
 
 // GenerateMarketplaceIndex is best-effort: Copilot's marketplace.json schema

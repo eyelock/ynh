@@ -264,6 +264,7 @@ ynd export ./my-harness                          # all vendors → ./dist/my-har
 ynd export ./my-harness -v claude,cursor          # specific vendors only
 ynd export ./my-harness -o ./out                  # custom output directory
 ynd export ./my-harness --merged                  # single dir with every vendor's manifest
+ynd export ./my-harness --format agent-plugin     # one portable Agent Plugins package
 ynd export ./my-harness --clean                   # remove output dir before export
 ynd export ./my-harness --profile strict          # export with a specific profile applied
 ynd export ./my-harness --focus review            # export with a focus applied (mutex with --profile)
@@ -279,6 +280,7 @@ ynd export github.com/user/repo --path harnesses/david  # from a monorepo
 | `--path <subdir>` | Subdirectory within source (for monorepos). Must be a relative path with no `..` traversal. |
 | `--profile <name>` | Profile to apply during assembly |
 | `--merged` | Single output dir with all vendor manifests (for CI/marketplace use) |
+| `--format <name>` | `vendor` (default) writes each vendor's own plugin layout; `agent-plugin` writes one portable [Agent Plugins](https://agent-plugins.org) package. Not combinable with `--merged` |
 | `--clean` | Remove entire output dir before export. Runs only once the source has loaded, so a refused export (a legacy tree, an unknown profile) neither creates nor empties `-o` |
 
 **Output structure** (per-vendor mode):
@@ -321,6 +323,60 @@ Key differences from runtime layout:
 - `--merged` produces one directory with all vendor manifests, Codex's included; Claude and Copilot share the same `.claude-plugin/plugin.json`, which both render identically. `ynd marketplace build` exports each harness entry this way. The shared tree keeps agents, rules and commands for the vendors that read them, and the Codex and Copilot warnings above are printed in merged mode too, because those vendors still do not load them
 - Hooks go to `hooks/<vendor>.json` at the plugin root, named by the `"hooks"` field of that vendor's manifest; there is no shared `hooks/hooks.json` (see [Hooks: Config File Locations](hooks.md#config-file-locations))
 - MCP servers go to each vendor's plugin file: `mcp/claude.json` (named by the `"mcpServers"` field of `.claude-plugin/plugin.json`), Codex's `.mcp.json` (named by its manifest), Cursor's `mcp.json` and Copilot's `.github/mcp.json`. No two share a path, and every manifest is written after the files it names (see [MCP Servers: Config File Locations](mcp.md#config-file-locations))
+
+**Output structure** (`--format agent-plugin`):
+
+Agent Plugins is the portable package format Codex, Copilot, VS Code and
+Cursor load directly. Its portable core is small: a root `plugin.json`,
+skills, and a typed `mcp.json`. Everything else is client-specific and
+travels only inside a namespace the client has published. `-v` therefore
+means something different here: it does not pick output trees, it picks
+which clients' namespaces and compatibility files join the one portable
+tree. The default is every vendor.
+
+```
+dist/my-harness/
+├── plugin.json                  # portable manifest ($schema, name, version, ...)
+├── skills/<name>/SKILL.md       # portable
+├── mcp.json                     # portable, every server carries its transport type
+├── AGENTS.md                    # ynh's instructions; not a portable component
+├── com.github.copilot/          # -v copilot: agents/ (and delegates)
+├── com.openai/hooks/hooks.json  # -v codex: hooks, pointed to from extensions.com.openai
+├── .claude-plugin/plugin.json   # -v claude: Claude Code has not adopted the format,
+├── mcp/claude.json              #   so it gets its own manifest, the MCP and hooks files
+├── hooks/claude.json            #   that manifest names, agents/, rules/, commands/ and
+├── agents/ rules/ commands/     #   CLAUDE.md at the root, which the spec calls a
+├── CLAUDE.md                    #   compatibility package
+└── scripts/                     # the scripts a hook runs, shipped once
+```
+
+The Claude Code files follow the same layout as a per-vendor export: hooks
+in `hooks/claude.json` and MCP servers in `mcp/claude.json`, each named by
+`.claude-plugin/plugin.json` only when the package carries it. Nothing goes
+to `hooks/hooks.json` or `.mcp.json`, the paths Codex discovers by default.
+Every hook file anchors a `./` script at the plugin root in its client's own
+variable (`${CLAUDE_PLUGIN_ROOT}` for Claude Code, `${PLUGIN_ROOT}` for
+Codex), and the script is copied into the package.
+
+What the format cannot carry is reported, not silently dropped:
+
+- Agents, rules, commands, delegates and hooks reach only the selected
+  vendors that load them from this package (Copilot's namespace, Codex's hooks
+  pointer, Claude Code's compatibility layer). Cursor has published no
+  namespace, so with `-v cursor` alone they are warned about and left out.
+- An MCP server the format cannot express is left out of `mcp.json` with the
+  reason: a `command` that is a shell string rather than one executable token,
+  an absolute or bare-relative command path, a plain `http` URL to a
+  non-loopback host. Claude Code's `mcp/claude.json` still carries every server.
+- A `${VAR}` reference in `env` or `headers` is kept literal, as every export
+  is, but Agent Plugins clients expand only `${PLUGIN_ROOT}` and
+  `${PLUGIN_DATA}`, so the server receives the text as written. The export
+  says so per server. Cursor expands neither placeholder.
+- A harness name outside the spec's rule (lowercase, digits, `-` and `.`) is
+  normalised and the change reported: `My_Harness` becomes `my-harness`.
+
+The package is validated against the specification before the command
+returns; `ynd validate <dir>` runs the same check on demand.
 
 See [Export](tutorial/export.md) for a guided walkthrough.
 

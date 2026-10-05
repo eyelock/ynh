@@ -26,6 +26,7 @@ func cmdExport(args []string) error {
 		clean       bool
 		skipConfirm bool
 		merged      bool
+		format      string
 		source      string
 	)
 
@@ -69,6 +70,12 @@ func cmdExport(args []string) error {
 			skipConfirm = true
 		case "--merged":
 			merged = true
+		case "--format":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--format requires a value")
+			}
+			i++
+			format = args[i]
 		case "--harness":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--harness requires a value")
@@ -127,6 +134,23 @@ func cmdExport(args []string) error {
 		}
 	}
 
+	// The layout is decided before anything else is read, so a bad
+	// combination is refused with nothing created (#451).
+	mode := exporter.ModePerVendor
+	if merged {
+		mode = exporter.ModeMerged
+	}
+	switch format {
+	case "", "vendor":
+	case "agent-plugin":
+		if merged {
+			return fmt.Errorf("--merged and --format agent-plugin are different layouts; choose one")
+		}
+		mode = exporter.ModeAgentPlugin
+	default:
+		return fmt.Errorf("unknown --format %q (vendor, agent-plugin)", format)
+	}
+
 	// Resolve focus from flag or env var
 	if focusName == "" {
 		focusName = os.Getenv("YNH_FOCUS")
@@ -177,11 +201,6 @@ func cmdExport(args []string) error {
 		cfg = &config.Config{}
 	}
 
-	mode := exporter.ModePerVendor
-	if merged {
-		mode = exporter.ModeMerged
-	}
-
 	results, err := exporter.Export(exporter.ExportOptions{
 		SourceDir: srcDir,
 		OutputDir: outputDir,
@@ -205,7 +224,11 @@ func cmdExport(args []string) error {
 
 	// Print results
 	for _, r := range results {
-		fmt.Printf("Exported for %s → %s (%d skills, %d agents)\n", r.Vendor, r.OutputDir, r.Skills, r.Agents)
+		if r.Vendor == exporter.AgentPluginVendor {
+			fmt.Printf("Exported Agent Plugin → %s (%d skills, %d agents)\n", r.OutputDir, r.Skills, r.Agents)
+		} else {
+			fmt.Printf("Exported for %s → %s (%d skills, %d agents)\n", r.Vendor, r.OutputDir, r.Skills, r.Agents)
+		}
 		for _, w := range r.Warnings {
 			fmt.Printf("  warning: %s\n", w)
 		}

@@ -114,6 +114,11 @@ Flags:
   --profile <name>       Apply a named profile (falls back to $YNH_PROFILE)
   --focus <name>         Apply a named focus
   --merged               Write one merged tree rather than per-vendor trees
+  --format <name>        vendor (default): the vendor's own plugin layout;
+                         agent-plugin: one portable Agent Plugins package
+                         (https://agent-plugins.org). With agent-plugin, -v
+                         selects which clients' namespaces and compatibility
+                         files are added to the portable core
   --path <subdir>        Export only this subdirectory of the source
   --harness <source>     Harness to resolve against (falls back to $YNH_HARNESS)
   --clean                Remove the output directory first

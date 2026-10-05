@@ -246,6 +246,14 @@ func (c *Cursor) SupportsExportDelegates() bool { return true }
 
 func (c *Cursor) PluginManifestDir() string { return ".cursor-plugin" }
 
+// AgentPluginLayout: Cursor loads the portable core and has published no
+// extension namespace (cursor.com/docs/plugins), so rules, agents, commands
+// and hooks cannot reach it through this package. Cursor also does not
+// expand ${PLUGIN_ROOT} or ${PLUGIN_DATA} in mcp.json.
+func (c *Cursor) AgentPluginLayout() AgentPluginLayout {
+	return AgentPluginLayout{LoadsFormat: true}
+}
+
 func (c *Cursor) MarketplaceManifestDir() string { return ".cursor-plugin" }
 
 // GenerateMarketplaceIndex writes Cursor's own index shape.

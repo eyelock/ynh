@@ -233,6 +233,70 @@ Exported for merged → /tmp/ynh-tutorial/export-merged-codex (2 skills, 1 agent
   warning: codex: skipping 1 agents (not supported)
 ```
 
+## Export as an Agent Plugin
+
+[Agent Plugins](https://agent-plugins.org) is the open package format that Codex, Copilot, VS Code and Cursor load directly: a root `plugin.json`, skills under `skills/`, MCP servers in `mcp.json`. Everything else is client-specific and travels in a namespace the client has published. `--format agent-plugin` writes one such package, and `-v` picks which clients' own files join it:
+
+```bash
+ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/agent-plugin --format agent-plugin
+```
+
+Expected output:
+```
+Exported Agent Plugin → /tmp/ynh-tutorial/agent-plugin (2 skills, 2 agents)
+```
+
+```bash
+find /tmp/ynh-tutorial/agent-plugin -type f | sort
+```
+
+Expected:
+```
+/tmp/ynh-tutorial/agent-plugin/.claude-plugin/plugin.json
+/tmp/ynh-tutorial/agent-plugin/AGENTS.md
+/tmp/ynh-tutorial/agent-plugin/CLAUDE.md
+/tmp/ynh-tutorial/agent-plugin/agents/checker.md
+/tmp/ynh-tutorial/agent-plugin/com.github.copilot/agents/checker.md
+/tmp/ynh-tutorial/agent-plugin/plugin.json
+/tmp/ynh-tutorial/agent-plugin/skills/review/SKILL.md
+/tmp/ynh-tutorial/agent-plugin/skills/take-a-moment/SKILL.md
+```
+
+Three layers in one directory. `plugin.json` and `skills/` are the portable core every client reads. `com.github.copilot/agents/` is Copilot's namespace, which other clients ignore. `.claude-plugin/plugin.json`, `agents/` and `CLAUDE.md` are there because Claude Code has not adopted the format and still reads its own layout; the spec calls this a compatibility package.
+
+```bash
+cat /tmp/ynh-tutorial/agent-plugin/plugin.json
+```
+
+Expected:
+```json
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "exportable",
+  "version": "1.0.0",
+  "description": "A harness designed for cross-vendor export"
+}
+```
+
+The package was checked against the specification as it was written; the same check is available on demand:
+
+```bash
+ynd validate /tmp/ynh-tutorial/agent-plugin
+# Expected: /tmp/ynh-tutorial/agent-plugin: valid (Agent Plugin 1.0.0)
+```
+
+Select only Cursor, which has published no namespace, and the agent has nowhere to go. The export says so rather than dropping it quietly:
+
+```bash
+ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/agent-plugin-cursor --format agent-plugin -v cursor
+```
+
+Expected output:
+```
+Exported Agent Plugin → /tmp/ynh-tutorial/agent-plugin-cursor (2 skills, 0 agents)
+  warning: 1 agents not portable: no selected vendor (cursor) carries them in an Agent Plugin
+```
+
 ## Export with --clean
 
 ```bash
@@ -304,6 +368,7 @@ rm -rf /tmp/ynh-tutorial
   - Cursor: `.cursor-plugin/plugin.json` + `.cursorrules`
   - Codex: `.codex-plugin/plugin.json` + `skills/` (agents, rules, commands excluded)
 - `--merged` produces a single dir with every selected vendor's manifest (marketplace-ready)
+- `--format agent-plugin` produces one portable Agent Plugins package; `-v` picks which clients' namespaces and compatibility files join the portable core, and whatever cannot travel is warned about
 - Remote includes are resolved and flattened into the export
 - Pick filtering carries through to the export
 - `AGENTS.md` is the universal instruction format (read by Codex, Cursor, Copilot, etc.)
