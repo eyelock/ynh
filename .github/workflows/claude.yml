@@ -39,12 +39,12 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # YNR_READ_PACKAGES is a read-only token: the agent below may run git,
+      # YNR_READ_REPO is a read-only token: the agent below may run git,
       # so it must never see a token that can write.
       - name: Allow the private ynr module
         env:
-          YNR_READ_PACKAGES: ${{ secrets.YNR_READ_PACKAGES }}
-        run: git config --global url."https://x-access-token:${YNR_READ_PACKAGES}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
+          YNR_READ_REPO: ${{ secrets.YNR_READ_REPO }}
+        run: git config --global url."https://x-access-token:${YNR_READ_REPO}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
 
       - uses: anthropics/claude-code-action@97c53473391bff1901034d4b454b5bac7ab7a029  # v1.0.239
         with:

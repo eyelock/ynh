@@ -205,7 +205,7 @@ through your git credentials (for example `gh auth login`), and
 `GOPRIVATE=github.com/eyelock/ynr`, so Go fetches it directly instead of
 through the public proxy. The Makefile sets `GOPRIVATE` for every `make`
 target; set it yourself for a raw `go` command. CI reads the module with the
-read-only `YNR_READ_PACKAGES` secret, so a pull request from a fork, which gets no secrets,
+read-only `YNR_READ_REPO` secret, so a pull request from a fork, which gets no secrets,
 cannot build in CI. A local `make docker-build` needs the token as a BuildKit
 secret: `YNR_TOKEN=$(gh auth token) make docker-build`.
 
