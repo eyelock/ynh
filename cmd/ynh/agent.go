@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -267,17 +266,26 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 	}
 
 	if err != nil {
-		var exitErr *agent.ExitError
-		if errors.As(err, &exitErr) {
-			if resultFormat != "json" {
-				_, _ = fmt.Fprintf(stderr, "Error: %v\n", exitErr)
-			}
-			os.Exit(exitErr.Code)
+		// The process exits with the code the result reports, so a consumer
+		// reading exit_code and one branching on $? never disagree (#509).
+		// With --format json the result already carries the reason.
+		if resultFormat != "json" {
+			_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		}
-		return err
+		return &exitCodeError{code: result.ExitCode, err: err}
 	}
 	return nil
 }
+
+// exitCodeError ends the process with code. Its message has already been
+// reported, so main prints nothing more.
+type exitCodeError struct {
+	code int
+	err  error
+}
+
+func (e *exitCodeError) Error() string { return e.err.Error() }
+func (e *exitCodeError) Unwrap() error { return e.err }
 
 // readTaskArg reads the task text from a flag value:
 //   - "-" reads from stdin

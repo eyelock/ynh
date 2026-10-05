@@ -176,7 +176,15 @@ type BudgetSource struct {
 
 // Exit codes for loop termination.
 const (
-	ExitConverged        = 0
+	ExitConverged = 0
+	// ExitRefused is the 1 every ynh command exits with on a user or
+	// configuration error. Here it almost always means the run was refused
+	// before any worker started: a flag or setting the backend cannot honour,
+	// a harness that cannot load, a project that chooses its own permission
+	// mode, a convergence verifier that can never pass. It also covers ynh
+	// failing to write its own trajectory. Distinct from ExitWorkerError, which
+	// is kept for a worker that was started and then failed.
+	ExitRefused          = 1
 	ExitIterationCap     = 10
 	ExitTokenBudget      = 11
 	ExitWallClock        = 12
