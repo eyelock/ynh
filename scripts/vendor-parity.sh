@@ -5,7 +5,7 @@
 # that. Copilot shipped as a working adapter and every skill still described
 # three vendors, because no check ever compared the vendor list against anything.
 #
-# Two assertions:
+# Three assertions:
 #
 #   A. Every vendor `ynh vendors` reports has a row in the vendor-adapters
 #      reference index. A new adapter that nobody documented fails here.
@@ -13,6 +13,12 @@
 #   B. Every vendor assembles the same artifact set from this repo's harness,
 #      compared after normalising the vendor-specific prefixes away. An adapter
 #      that silently drops skills or agents fails here.
+#
+#   C. The eval sandbox stubs every vendor CLI. An eval once launched the real
+#      Cursor CLI because the eval page named `cursor` and the binary is `agent`.
+#      Every `cli` that `ynh vendors` reports, and every program the Go source
+#      launches by name, must be in the STUBS line of .claude/agents/evals.md,
+#      unless it is a local tool an eval may run.
 #
 # Usage: scripts/vendor-parity.sh [path-to-harness]   (default: repo root)
 
@@ -124,6 +130,41 @@ while IFS=$'\t' read -r name _; do
 		echo "  ok       $REF == $name"
 	fi
 done < "$TMP/vendors.tsv"
+
+# --- C. the eval sandbox stubs every vendor CLI -----------------------------
+echo
+echo "== C. eval stubs =="
+EVALS="$ROOT/.claude/agents/evals.md"
+# Programs an eval may run for real: none of them is a vendor CLI or needs a
+# network or Docker.
+EVAL_LOCAL_TOOLS="git sh bash /bin/sh"
+stub_lines=$(grep -c '^STUBS="' "$EVALS" || true)
+if [ "$stub_lines" -ne 1 ]; then
+	echo "  FAIL     $(basename "$EVALS") must have exactly one STUBS=\"...\" line, found $stub_lines"
+	fail=1
+else
+	stubs=" $(sed -n 's/^STUBS="\([^"]*\)".*/\1/p' "$EVALS") "
+	jq -r 'if type == "array" then . else (.payload // .vendors // .data) end | .[].cli' \
+		"$TMP/vendors.json" | sort -u > "$TMP/clis.txt"
+	# Every program the Go source launches or looks up by a literal name.
+	grep -rhoE --include='*.go' --exclude='*_test.go' \
+		'exec\.(LookPath|Command|CommandContext)\((ctx, )?"[^"]+"' "$ROOT/cmd" "$ROOT/internal" \
+		| sed -E 's/.*"([^"]+)"$/\1/' | sort -u > "$TMP/launched.txt"
+	while read -r bin; do
+		case "$stubs" in *" $bin "*) echo "  ok       $bin (vendor CLI)" ;; *)
+			echo "  MISSING  $bin: a vendor CLI, not in STUBS in $(basename "$EVALS")"
+			fail=1 ;;
+		esac
+	done < "$TMP/clis.txt"
+	while read -r bin; do
+		case " $EVAL_LOCAL_TOOLS " in *" $bin "*) continue ;; esac
+		grep -qx "$bin" "$TMP/clis.txt" && continue
+		case "$stubs" in *" $bin "*) echo "  ok       $bin" ;; *)
+			echo "  MISSING  $bin: launched by ynh or ynd, not in STUBS in $(basename "$EVALS")"
+			fail=1 ;;
+		esac
+	done < "$TMP/launched.txt"
+fi
 
 echo
 if [ "$fail" -ne 0 ]; then

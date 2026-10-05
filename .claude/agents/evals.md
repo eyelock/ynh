@@ -31,9 +31,9 @@ Evaluate ALL tutorials. This is a release gate: the verdict must be PASS before 
    - **Use only the Bash tool.** Do not use Write/Edit for sandbox files (they trigger permission prompts), and never use them in the repo.
    - Execute each block that produces verifiable output.
    - Compare actual output against the expected output documented in the tutorial, with the tutorial's `/tmp/...` paths read as their sandbox equivalents.
-   - Skip blocks that need network access (git clone from GitHub, a remote include), a vendor CLI (claude, codex, cursor, copilot, or a harness launcher that starts one), Docker, or a path outside `/tmp` (such as a local checkout). **Skip the whole block**, never just the matching line, and name every skipped block in the report.
+   - Skip blocks that need network access (git clone from GitHub, a remote include), a vendor CLI (any binary in the [stub list](#vendor-cli-stubs), or a command that starts one: a harness launcher, `ynh run`, `ynh agent run`, `ynd compress`, `ynd inspect`), Docker (`ynh image`), or a path outside `/tmp` (such as a local checkout). **Skip the whole block**, never just the matching line, and name every skipped block in the report.
    - Run the tutorial's own cleanup, then check its workspace is empty and tear the sandbox down.
-4. Run the manual test plan (`docs/tutorial/manual-test-plan.md`): every E-numbered case and every S-numbered case, in one more sandbox with slug `manual-test-plan`. Skip its Prerequisites block: it runs `make install`.
+4. Run the manual test plan (`docs/tutorial/manual-test-plan.md`): every E-numbered case and every S-numbered case, in one more sandbox with slug `manual-test-plan`, then its "Clean up" block, which removes the `/tmp/ynh-edge` root. Skip its Prerequisites block: it runs `make install`.
 5. Record the same three listings as step 2 and compare. `git status --porcelain` must be identical. Report any entry that appeared in or vanished from `/tmp` or the user temp directory, unless it belongs to another process you can name.
 
 ## Sandbox isolation
@@ -48,6 +48,8 @@ So the sandbox carries its own environment. Each tutorial gets a deterministic r
   run.sh     runs one extracted block: bash run.sh 07
   blocks/    the tutorial's bash blocks, numbered, with paths rewritten
   home/      HOME; home/.ynh is YNH_HOME
+  stubs/     one stub per vendor CLI, first on PATH
+  stub-calls.log  one line per stub call, checked at teardown
   work/      where the tutorial's /tmp/... paths now point
   tmp/       TMPDIR and every mktemp
   state/     working directory and exports carried between blocks
@@ -60,12 +62,45 @@ If another eval may be running on the same machine, put a run tag in every root,
 - **Every tutorial path is rewritten into the sandbox.** `/tmp/ynh-tutorial/x` becomes `/tmp/ynh-eval-<slug>/work/ynh-tutorial/x`; the same for `/tmp/ynh-t20`, `/tmp/ynh-edge` and every other `/tmp` path.
 - **Never a bare `cd /tmp`, and no `cd` outside the sandbox.** A tutorial's `cd /` becomes `cd` to the sandbox root. The guard aborts any block that tries to leave, and any block whose `cd` fails, so its commands never run in the wrong directory.
 - **Skip the whole block** if any line in it is skipped. A skipped `cd` followed by a `git init` that did run is how an empty repository ended up at `/private/tmp/.git`.
-- **Never `rm` outside the sandbox.** The guard resolves every `rm` target and refuses anything that is not strictly inside the sandbox root, or that contains a `..` component. If a refusal fires, stop and report it; do not work around it.
+- **Never `rm` outside the sandbox.** The guard resolves every `rm` and `rmdir` target and refuses anything that is not strictly inside the sandbox root, or that contains a `..` component. If a refusal fires, stop and report it; do not work around it.
 - **`GIT_CEILING_DIRECTORIES=/private/tmp:/tmp`**, so git never walks up into a stray repository in `/tmp`.
 - **No git writes outside a directory the runner created.** The guard refuses `git init`, `add`, `commit`, `worktree` and the other writing subcommands unless the target is inside the sandbox.
 - **`mktemp -d` makes its directory inside the sandbox.** Every `mktemp -d` in a block is rewritten to `mktemp -d /tmp/ynh-eval-<slug>/tmp/tmp.XXXXXX`. Without a template, macOS puts it under `/var/folders`, where the tutorial's cleanup cannot see it. `TMPDIR` points at the same directory, so temporary directories ynh and ynd make for themselves land there too, and a leak shows up as a non-empty `tmp/`.
-- **The checkout's `bin/` comes first on `PATH`.** Verify `command -v ynh` prints `$YNH_REPO/bin/ynh` before the first block.
+- **Every vendor CLI is a stub.** See [Vendor CLI stubs](#vendor-cli-stubs). The stubs come first on `PATH`, then the checkout's `bin/`. Verify `command -v ynh` prints `$YNH_REPO/bin/ynh`, and every stubbed name resolves to its stub, before the first block.
 - **Never point ynh/ynd at the checkout's own files or `testdata/`.** The checkout has real `skills/`, `agents/`, `rules/` and `commands/` directories; a tutorial that reads or writes them pollutes the working tree. Tutorials create everything they use under `/tmp`, which the rewrite moves into the sandbox.
+
+### Vendor CLI stubs
+
+Skipping a block is a judgement, and one wrong judgement launches a real vendor
+CLI: an eval once started the real Cursor CLI, because the skip list said
+`cursor` and Cursor's binary is `agent`, installed at `~/.local/bin/agent`.
+Sandboxing `HOME` does not help, since `PATH` still reaches the real install.
+
+So the sandbox also shadows every program ynh or ynd can launch that an eval must
+never reach. Each name in `STUBS` gets a stub in `$SANDBOX/stubs/`, which comes
+first on `PATH`, ahead of `~/.local/bin`, Homebrew and every other real install.
+A stub runs nothing: it appends its name and arguments to
+`$SANDBOX/stub-calls.log`, says so on stderr and exits 1.
+
+| Stub | Launched by |
+|------|-------------|
+| `claude` | the Claude vendor adapter, `ynh agent run`, `ynd compress` and `ynd inspect` |
+| `codex` | the Codex vendor adapter, `ynh agent run`, `ynd compress` and `ynd inspect` |
+| `copilot` | the Copilot vendor adapter |
+| `agent` | the Cursor vendor adapter, `ynd compress` and `ynd inspect`: Cursor's CLI is named `agent` |
+| `cursor` | the Cursor backend of `ynh agent run` |
+| `srt` | the sandbox wrapper `ynh agent run --sandbox srt` puts around `claude` |
+| `gh` | GitHub sensors (network) |
+| `docker` | `ynh image` (Docker) |
+
+`make check-vendor-parity` fails if a vendor's CLI, as `ynh vendors` reports it,
+is missing from the `STUBS` line below, or if ynh or ynd source launches a program
+by name that is neither stubbed nor one of the local tools an eval may run (`git`,
+`sh`, `bash`). A new vendor or backend cannot be missed: add its binary to `STUBS`
+and to this table.
+
+Stubs also make `ynh vendors` deterministic: every vendor reports
+`available: true`, whatever is installed on the machine running the eval.
 
 ### Set up the sandbox
 
@@ -75,15 +110,21 @@ Once at tutorial start, in a single Bash invocation from the checkout. Fill in `
 YNH_REPO=$(git rev-parse --show-toplevel)
 SLUG=<slug>                                  # e.g. sensors for tutorial/sensors.md
 SANDBOX=/tmp/ynh-eval-$SLUG
+STUBS="claude codex copilot agent cursor srt gh docker"
 case $SANDBOX in /tmp/ynh-eval-?*) rm -rf "$SANDBOX" ;; *) echo "bad sandbox: $SANDBOX"; exit 1 ;; esac
-mkdir -p "$SANDBOX/home/.ynh/bin" "$SANDBOX/work" "$SANDBOX/tmp" "$SANDBOX/blocks" "$SANDBOX/state"
+mkdir -p "$SANDBOX/home/.ynh/bin" "$SANDBOX/work" "$SANDBOX/tmp" "$SANDBOX/blocks" "$SANDBOX/state" "$SANDBOX/stubs"
 cp "$YNH_REPO/bin/ynh" "$YNH_REPO/bin/ynd" "$SANDBOX/home/.ynh/bin/"   # what make install would put there
-printf 'SANDBOX=%s\nYNH_REPO=%s\n' "$SANDBOX" "$YNH_REPO" > "$SANDBOX/env.sh"
+for b in $STUBS; do
+  printf '#!/bin/sh\necho "%s $*" >> "%s/stub-calls.log"\necho "eval stub: %s called; no vendor CLI may run in an eval" >&2\nexit 1\n' \
+    "$b" "$SANDBOX" "$b" > "$SANDBOX/stubs/$b"
+  chmod +x "$SANDBOX/stubs/$b"
+done
+printf 'SANDBOX=%s\nYNH_REPO=%s\nSTUBS="%s"\n' "$SANDBOX" "$YNH_REPO" "$STUBS" > "$SANDBOX/env.sh"
 cat >> "$SANDBOX/env.sh" << 'EOF'
 export HOME="$SANDBOX/home"
 export YNH_HOME="$HOME/.ynh"
 export TMPDIR="$SANDBOX/tmp"
-export PATH="$YNH_REPO/bin:$YNH_HOME/bin:$PATH"
+export PATH="$SANDBOX/stubs:$YNH_REPO/bin:$YNH_HOME/bin:$PATH"
 export GIT_CEILING_DIRECTORIES=/private/tmp:/tmp
 export GIT_AUTHOR_NAME="ynh eval" GIT_COMMITTER_NAME="ynh eval"
 export GIT_AUTHOR_EMAIL=eval@example.invalid GIT_COMMITTER_EMAIL=eval@example.invalid
@@ -112,6 +153,15 @@ rm() {
     inside "$a" || { echo "eval guard: refused rm $a: outside $SANDBOX" >&2; return 1; }
   done
   command rm "$@"
+}
+
+rmdir() {
+  local a
+  for a in "$@"; do
+    case $a in -*) continue ;; esac
+    inside "$a" || { echo "eval guard: refused rmdir $a: outside $SANDBOX" >&2; return 1; }
+  done
+  command rmdir "$@"
 }
 
 cd() {
@@ -167,11 +217,12 @@ W="$SANDBOX/work" S="$SANDBOX" T="$SANDBOX/tmp" perl -pi -e '
   s{(?<![\w./-])cd /(?=\s|;|&|\)|$)}{cd $ENV{S}}g;
   s{mktemp -d(?!\s+\S*XXX)}{mktemp -d $ENV{T}/tmp.XXXXXX}g;
 ' "$SANDBOX"/blocks/*.sh
-bash -c '. "$1/env.sh"; command -v ynh; command -v ynd' _ "$SANDBOX"
+bash -c '. "$1/env.sh"; command -v ynh; command -v ynd
+  for b in $STUBS; do [ "$(command -v "$b")" = "$SANDBOX/stubs/$b" ] || echo "NOT STUBBED: $b -> $(command -v "$b")"; done' _ "$SANDBOX"
 ls "$SANDBOX/blocks"
 ```
 
-The last two lines must print `$YNH_REPO/bin/ynh`, `$YNH_REPO/bin/ynd` and the list of blocks. If `command -v` prints anything else, stop: the eval would test the wrong binaries.
+The last lines must print `$YNH_REPO/bin/ynh`, `$YNH_REPO/bin/ynd` and the list of blocks, and no `NOT STUBBED` line. If `command -v` prints anything else, stop: the eval would test the wrong binaries, or could launch a real vendor CLI.
 
 ### Run each block
 
@@ -196,7 +247,10 @@ If a block prints `eval guard: cd ... failed`, it relies on a directory that an 
 ls /tmp/ynh-eval-<slug>/home/.ynh/harnesses 2>/dev/null
 ls /tmp/ynh-eval-<slug>/home/.ynh/installed 2>/dev/null
 find /tmp/ynh-eval-<slug>/work /tmp/ynh-eval-<slug>/tmp -mindepth 1
+cat /tmp/ynh-eval-<slug>/stub-calls.log 2>/dev/null
 ```
+
+Each line the `cat` prints is a program a block tried to launch, which a real install would have run: a FAIL. Either the block should have been skipped, or the tutorial launches a vendor where it claims not to. One line is expected: `docker image inspect ...` from `ynh image --dry-run`, which reads the base image's labels without pulling or building, and treats a failure as "docker absent". The stub makes its output the same on every machine.
 
 If a tutorial used `ynh install`, its entry must have appeared under the sandbox's `.ynh` while the tutorial ran. If it never did, isolation failed: the install landed in the real `~/.ynh`. Stop and report; do not continue evaluating other tutorials in that state.
 
@@ -231,7 +285,7 @@ Many tutorials do not require network access or vendor CLIs and must be run:
 - **Include editing** (`include-editing.md`): Use a local-path include (not a git URL) with `ynh include add <dir> ./local-path`. The add/remove/update commands work on the manifest directly without network when the harness is path-referenced (not installed). Skip the installed-harness pre-fetch steps which require network.
 - **Namespacing and migration** (`namespacing-and-migration.md`): Create harnesses with the legacy `.harness.json` format in the sandbox, confirm `ynd validate` and `ynh install` refuse them with the `ynd migrate` fix and leave them untouched, then convert them with `ynd migrate -y`. Migration is fully local.
 
-Only skip a block if it literally shells out to `git clone`, launches `claude`/`codex`/`cursor`/`copilot`, runs Docker, or needs a path outside `/tmp`. "This tutorial is about git/network/vendor" is NOT sufficient reason to skip the whole tutorial: skip only the specific blocks that require those things.
+Only skip a block if it literally shells out to `git clone`, launches a vendor CLI (a binary in the [stub list](#vendor-cli-stubs), directly or through a launcher, `ynh run`, `ynh agent run`, `ynd compress` or `ynd inspect`), runs Docker (directly or through `ynh image`), or needs a path outside `/tmp`. "This tutorial is about git/network/vendor" is NOT sufficient reason to skip the whole tutorial: skip only the specific blocks that require those things.
 
 ## Pass/Fail Criteria
 
@@ -241,7 +295,8 @@ A step **FAILS** if:
 - An error message differs from what's documented
 - A JSON/TOML structure or field order differs from what's documented
 - A file that should exist is missing, or an unexpected file appears in a listing
-- A guard refuses a `cd`, `rm` or git write
+- A guard refuses a `cd`, `rm`, `rmdir` or git write
+- A stub records a call, other than the `docker image inspect` that `ynh image --dry-run` makes
 - The tutorial's cleanup leaves anything in its workspace
 
 A step **PASSES** if:

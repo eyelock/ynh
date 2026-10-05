@@ -371,8 +371,8 @@ directly in `/tmp`, and no case relies on files another case created, so any cas
 run on its own and two runs of different cases cannot collide. Cases that use
 `mktemp -d` for `YNH_HOME` remove exactly the directory `mktemp` gave them.
 
-When you have finished, `rmdir /tmp/ynh-edge` removes the root. It fails if a case left
-something behind, which is a bug in that case.
+When you have finished, the [last step](#clean-up) removes the root with `rmdir`. It
+fails if a case left something behind, which is a bug in that case.
 
 ### E1: Version output
 
@@ -941,6 +941,22 @@ Re-run S1 with a focus-source sensor and verify `ynh sensors run` returns the re
 ### S3: Validation rejects two-source declaration
 
 `source` with both `command` and `files` set must error: `sensor "X": source must have exactly one of files, command, focus, github_status, github_check`.
+
+---
+
+## Clean up
+
+Every case removes its own directory, which leaves the root they share. Remove it
+last. `rmdir` removes only an empty directory, so it doubles as the check that no
+case left anything behind.
+
+```bash
+cd /
+rmdir /tmp/ynh-edge
+ls -d /tmp/ynh-edge 2>/dev/null
+# Expected: no output. If rmdir fails with "Directory not empty", the directory
+# still inside the root names the case whose cleanup is broken.
+```
 
 ---
 
