@@ -311,6 +311,12 @@ to the processes it starts (the Bash tool, hooks, MCP servers), so an MCP
 server such as ynm writes to the spool through `YNR_SPOOL` rather than to the
 relay.
 
+The `traceparent` header is an accepted exception to the rule that trace
+context never goes to third parties. That rule binds ynh and its sibling
+tools; Claude Code's own requests are the vendor's behaviour, there is no
+documented switch to stop them short of turning spans off, and the header
+carries only random ids, never content.
+
 ### Other vendors
 
 Nothing yet. Codex is configured through its `config.toml` rather than the
