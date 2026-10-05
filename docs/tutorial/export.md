@@ -327,6 +327,73 @@ ls -a /tmp/ynh-tutorial/agent-plugin
 ynh uninstall local/exportable
 ```
 
+### Validate and install a package you did not write
+
+The same loader handles a package from anyone. The specification project
+publishes a reference package; validate it and install it exactly as above:
+
+```bash
+git clone https://github.com/agentplugins/agent-plugins-example /tmp/ynh-tutorial/agent-plugins-example
+ynd validate /tmp/ynh-tutorial/agent-plugins-example
+```
+
+Expected:
+```
+/tmp/ynh-tutorial/agent-plugins-example: valid (Agent Plugin 1.0.0)
+```
+
+```bash
+ynh install /tmp/ynh-tutorial/agent-plugins-example
+```
+
+Expected:
+```
+Installed harness "agent-plugins-example"
+  Location: /tmp/ynh-tutorial/agent-plugins-example
+  Launcher: /Users/<you>/.ynh/bin/agent-plugins-example
+```
+
+```bash
+ynh info local/agent-plugins-example
+```
+
+Expected output includes the package's one skill and no includes, since this
+package has no vendor namespace directory:
+```
+Artifacts:
+  skills:    migrate-agent-plugin
+
+Includes:
+  (none)
+```
+
+```bash
+ls -a /tmp/ynh-tutorial/agent-plugins-example
+# Expected: .git LICENSE README.md plugin.json skills; no .agents or .ynh-plugin
+ynh uninstall local/agent-plugins-example
+```
+
+### Test with GitHub Copilot
+
+Copilot CLI loads the Agent Plugins format natively. Its `--plugin-dir` flag
+mounts a local plugin for one invocation without changing your Copilot
+configuration, so this is a safe check that a real client accepts what ynh
+wrote:
+
+```bash
+copilot --plugin-dir /tmp/ynh-tutorial/agent-plugin plugin list
+```
+
+Expected:
+```
+External Plugins (via --plugin-dir):
+  • exportable
+```
+
+Copilot found the root `plugin.json`, read it as an Agent Plugins manifest,
+and took the package's name from it. The marketplace tutorial goes further and
+installs a ynh-built package through Copilot's marketplace flow.
+
 ## Export with --clean
 
 ```bash
@@ -399,7 +466,8 @@ rm -rf /tmp/ynh-tutorial
   - Codex: `.codex-plugin/plugin.json` + `skills/` (agents, rules, commands excluded)
 - `--merged` produces a single dir with every selected vendor's manifest (marketplace-ready)
 - `--format agent-plugin` produces one portable Agent Plugins package; `-v` picks which clients' namespaces and compatibility files join the portable core, and whatever cannot travel is warned about
-- An Agent Plugins package is itself a harness source: `ynh install` derives the harness at load time and never writes into the package
+- An Agent Plugins package is itself a harness source: `ynh install` derives the harness at load time and never writes into the package, whether ynh wrote the package or someone else did
+- Copilot CLI mounts an exported package with `--plugin-dir`, which confirms a real client reads it
 - Remote includes are resolved and flattened into the export
 - Pick filtering carries through to the export
 - `AGENTS.md` is the universal instruction format (read by Codex, Cursor, Copilot, etc.)
