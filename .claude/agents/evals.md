@@ -110,7 +110,7 @@ Once at tutorial start, in a single Bash invocation from the checkout. Fill in `
 YNH_REPO=$(git rev-parse --show-toplevel)
 SLUG=<slug>                                  # e.g. sensors for tutorial/sensors.md
 SANDBOX=/tmp/ynh-eval-$SLUG
-STUBS="claude codex copilot agent cursor srt gh docker"
+STUBS="claude codex copilot agent cursor srt gh docker ynr"
 case $SANDBOX in /tmp/ynh-eval-?*) rm -rf "$SANDBOX" ;; *) echo "bad sandbox: $SANDBOX"; exit 1 ;; esac
 mkdir -p "$SANDBOX/home/.ynh/bin" "$SANDBOX/work" "$SANDBOX/tmp" "$SANDBOX/blocks" "$SANDBOX/state" "$SANDBOX/stubs"
 cp "$YNH_REPO/bin/ynh" "$YNH_REPO/bin/ynd" "$SANDBOX/home/.ynh/bin/"   # what make install would put there
