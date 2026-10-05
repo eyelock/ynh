@@ -11,7 +11,6 @@ import (
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/namespace"
-	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
 )
@@ -188,11 +187,11 @@ func cmdExport(args []string) error {
 		if _, err := migration.FormatChain().Run(srcDir); err != nil {
 			return err
 		}
-		pj, err := plugin.LoadPluginJSON(srcDir)
+		p, err := harness.LoadDir(srcDir)
 		if err != nil {
-			return fmt.Errorf("loading plugin.json for name: %w", err)
+			return fmt.Errorf("loading harness for name: %w", err)
 		}
-		outputDir = filepath.Join(".", "dist", pj.Name)
+		outputDir = filepath.Join(".", "dist", p.Name)
 	}
 
 	// Load config for remote source checking

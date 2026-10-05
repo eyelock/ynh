@@ -12,6 +12,8 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
+
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 // Fixed locations (§6.1). The manifest cannot move them.
@@ -25,10 +27,10 @@ const (
 // Placeholders a client expands in MCP args, env values and cwd (§9.2), and
 // the environment variables it provides to every plugin subprocess (§9.1).
 const (
-	PlaceholderRoot = "${PLUGIN_ROOT}"
-	PlaceholderData = "${PLUGIN_DATA}"
-	EnvRoot         = "PLUGIN_ROOT"
-	EnvData         = "PLUGIN_DATA"
+	PlaceholderRoot = plugin.MCPPlaceholderRoot
+	PlaceholderData = plugin.MCPPlaceholderData
+	EnvRoot         = plugin.MCPEnvRoot
+	EnvData         = plugin.MCPEnvData
 )
 
 var schemaPrinter = message.NewPrinter(language.English)

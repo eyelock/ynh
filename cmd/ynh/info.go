@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/agentplugin"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/migration"
@@ -316,9 +317,15 @@ func printInfoJSON(stdout, stderr io.Writer, name string, checkUpdates bool) err
 	}
 
 	// Migration chain has run (harness.LoadQualified was called above), so the
-	// manifest is a plugin.json in one of the manifest directories.
-	manifestPath := plugin.PluginPath(p.Dir)
-	raw, err := os.ReadFile(manifestPath)
+	// manifest is a plugin.json in one of the manifest directories. A harness
+	// derived from an Agent Plugins package has no file to read; its manifest
+	// is the one the loader built.
+	var raw []byte
+	if p.Format == agentplugin.Format {
+		raw, err = json.Marshal(p.Manifest)
+	} else {
+		raw, err = os.ReadFile(plugin.PluginPath(p.Dir))
+	}
 	if err != nil {
 		return cliError(stderr, true, errCodeIOError,
 			fmt.Sprintf("reading manifest: %v", err))

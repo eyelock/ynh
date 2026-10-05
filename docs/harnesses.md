@@ -343,6 +343,47 @@ Profile-level includes use the same schema as top-level `includes` — either
 a remote Git source (`git`) or a local path (`local`), with optional
 `path`, `ref`, and `pick`.
 
+## Installing an Agent Plugin
+
+A directory whose root `plugin.json` declares the
+[Agent Plugins](https://agent-plugins.org) schema is a portable package, not
+a ynh harness, and `ynh install` takes it as one. ynh never writes into the
+package: the harness is derived from it in memory every time it is loaded,
+so the directory stays a clean Agent Plugin whether it sits in your own tree
+(a local install) or in ynh's copy (a git install). The install record notes
+`"format": "agent-plugin"`.
+
+What the derivation carries:
+
+| In the package | In the harness |
+|---|---|
+| `plugin.json` identity (`name`, `version`, `description`, `author`, `keywords`) | the same fields; a missing `version` reads as `0.0.0` |
+| `skills/<name>/SKILL.md` | skills, as for any harness |
+| `mcp.json` | `mcp_servers`, each server keeping its declared transport |
+| `com.github.copilot/` with `agents/`, `rules/` or `commands/` | a local include of that directory, so its artifacts assemble with source attribution |
+| `AGENTS.md` | instructions |
+
+What it does not: hooks, in any client's namespace or at the root, are that
+client's own shape and are not read as ynh's canonical events; the loader
+says so once, at install. `extensions` data is not interpreted, and
+`ynd export --format agent-plugin` of such a harness warns which namespaces
+it cannot reproduce. There is no `env_passthrough`: an Agent Plugins client
+expands only `${PLUGIN_ROOT}` and `${PLUGIN_DATA}`, so any other `${VAR}` in
+a server's `env` reaches the server literally, exactly as it would under
+Codex or Copilot. See [MCP servers](mcp.md#plugin-placeholders) for what ynh
+resolves at assembly time.
+
+A derived harness cannot be edited with `ynh mcp`, `ynh include` and the
+other manifest editors, because there is no manifest file to edit and
+writing one would change what the package is. Edit its `plugin.json` and
+`mcp.json` directly, or export it as a harness.
+
+The loader applies the specification's own failure boundaries: a fatal
+manifest violation rejects the package, an invalid top-level `mcp.json`
+disables MCP for it, and an invalid skill or server entry is skipped and
+reported while the rest loads. `ynd validate <dir>` shows the same findings
+before you install.
+
 ## Editing an Installed Harness
 
 After a harness is installed, use `ynh include` to add, remove, or update its Git includes from the CLI — no manual JSON editing required.
