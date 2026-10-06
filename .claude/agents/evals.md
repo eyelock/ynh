@@ -31,8 +31,8 @@ Evaluate ALL tutorials. This is a release gate: the verdict must be PASS before 
    - **Use only the Bash tool.** Do not use Write/Edit for sandbox files (they trigger permission prompts), and never use them in the repo.
    - Execute each block that produces verifiable output.
    - Compare actual output against the expected output documented in the tutorial, with the tutorial's `/tmp/...` paths read as their sandbox equivalents.
-   - Run blocks that launch a vendor through ynh or ynd (a harness launcher, `ynh run`, `ynh agent run`, `ynd compress`, `ynd inspect`): they reach a stub, and `run.sh` checks the call against the block's [launch marker](#launch-blocks).
-   - Skip blocks that need network access (git clone from GitHub, a remote include), that call a [stubbed program](#vendor-cli-stubs) directly rather than through ynh or ynd (`claude plugin validate`, `copilot plugin ...`, `docker ...`), that run Docker through `ynh image` (other than `--dry-run`), that are marked `needs-model`, or that need a path outside `/tmp` (such as a local checkout). **Skip the whole block**, never just the matching line, and name every skipped block in the report.
+   - Run blocks that launch a vendor through ynh or ynd (a harness launcher, `ynh run`, `ynh agent run`, `ynd compress`, `ynd inspect`): they reach a stub, and `run.sh` checks the call against the block's [launch line](#launch-blocks).
+   - Skip blocks that need network access (git clone from GitHub, a remote include), that call a [stubbed program](#vendor-cli-stubs) directly rather than through ynh or ynd (`claude plugin validate`, `copilot plugin ...`, `docker ...`), that run Docker through `ynh image` (other than `--dry-run`), that sit under the line "Your output will differ", or that need a path outside `/tmp` (such as a local checkout). **Skip the whole block**, never just the matching line, and name every skipped block in the report.
    - Run the tutorial's own cleanup, then check its workspace is empty and tear the sandbox down.
 4. Run the manual test plan (`docs/tutorial/manual-test-plan.md`): every E-numbered case and every S-numbered case, in one more sandbox with slug `manual-test-plan`, then its "Clean up" block, which removes the `/tmp/ynh-edge` root. Skip its Prerequisites block: it runs `make install`.
 5. Record the same three listings as step 2 and compare. `git status --porcelain` must be identical. Report any entry that appeared in or vanished from `/tmp` or the user temp directory, unless it belongs to another process you can name.
@@ -51,7 +51,7 @@ So the sandbox carries its own environment. Each tutorial gets a deterministic r
   home/      HOME; home/.ynh is YNH_HOME
   stubs/     one stub per vendor CLI, first on PATH
   stub-calls.log  one line per stub call
-  launch-checks.log  one line per stub call run.sh matched to a launch marker
+  launch-checks.log  one line per stub call run.sh matched to a launch line
   work/      where the tutorial's /tmp/... paths now point
   tmp/       TMPDIR and every mktemp
   state/     working directory, exports and variables carried between blocks
@@ -116,49 +116,57 @@ tutorial shows as the vendor's own output or result (a model's reply, `exit=0`
 from a converged loop, files the agent edited) is not compared, and neither is
 the launch's exit status or the stub's stderr line.
 
-A tutorial marks such a block with an HTML comment on the line directly above its
-fence, one per stub call the block makes, in order:
+A tutorial tells the reader what each launch hands the vendor, in a line of its
+own above the block, one line per launch, in order. The line reads
+`*This launches:*` followed by the command in a code span, and the eval uses it
+as the block's expected call. In `first-harness.md` it reads:
 
 ```markdown
-<!-- eval: launch claude --plugin-dir ~/.ynh/run/local--my-harness/.claude --add-dir ~/.ynh/run/local--my-harness --append-system-prompt * -p what are you? -->
+*This launches:* `claude --plugin-dir ~/.ynh/run/local--my-harness/.claude --add-dir ~/.ynh/run/local--my-harness --append-system-prompt You are a tutorial test harness. ... -p what are you?`
 ```
 
-The text after `launch` is a shell glob matched against the stub's log line
-(the program name, then its arguments joined by single spaces, a newline inside
-an argument shown as `\n`). `~/` is the sandbox `HOME`, `/tmp` paths are
-rewritten like the block's, and `*` stands for what varies between runs or is
-too long to spell out (an instruction file, a session id, a temporary
-directory). Readers never see the comment.
+The command is the program name, then its arguments joined by single spaces,
+without shell quoting, which is how the stub logs a call (a newline inside an
+argument is logged as `\n`). `~/` is the home directory, the sandbox `HOME`
+in an eval; `/tmp` paths are rewritten like the block's; and `...` stands for
+text that varies between runs or is too long to show (an instruction file, a
+session id, a temporary directory). The eval turns `...` into a shell `*` and
+matches the line as a glob.
 
 `run.sh` does the checking, so no step relies on judgement. After every block,
 including one that aborts, it pairs the stub calls the block made with the
-block's markers:
+block's launch lines:
 
-- each call matching its marker prints `eval launch: ok block NN: <call>`;
-- a marker with no call, a call that does not match its marker, and **a stub
-  call from a block with no marker for it** each print `eval launch: FAIL ...`
+- each call matching its line prints `eval launch: ok block NN: <call>`;
+- a launch line with no call, a call that does not match its line, and **a stub
+  call from a block with no launch line for it** each print `eval launch: FAIL ...`
   and make `run.sh` exit 98.
 
-The marker cannot rot silently in either direction: a launch that stops happening
-fails its marker, and a launch nobody marked fails as a stray call. The second
-is the strict rule the stubs exist for: an unmarked block that reaches a stub
-would have run a real vendor CLI.
+The line cannot rot silently in either direction: a launch that stops happening
+fails its line, and a launch nobody wrote down fails as a stray call. The
+second is the strict rule the stubs exist for: an unmarked block that reaches a
+stub would have run a real vendor CLI.
 
-Two other markers sit in the same place:
+Two other lines have a fixed form the eval reads:
 
-- `<!-- eval: needs-model -->` on a block whose output is what a real model did
-  (the file an agent edited, a trajectory, a backup of a compressed file). `run.sh`
-  skips it and says so. Use it only where a launch cannot stand in, and report
-  the block as skipped.
-- `<!-- eval: substitute <from> <to> -->`, anywhere in the file, replaces `<from>`
-  with `<to>` in every block before the `/tmp` rewrite. It is the documented
-  substitution for a placeholder the reader fills in themselves, such as the
-  harness they pin in `shadow-mode.md`. `<to>` may be shell, evaluated when the
-  block runs.
+- `*Your output will differ: it shows what the model did.*`, above a block whose
+  output is what a real model did (the file an agent edited, a trajectory, a
+  backup of a compressed file). `run.sh` skips the block and says so. Use it
+  only where a launch line cannot stand in, and report the block as skipped.
+- `` *Replace `<from>` with <what the reader uses> (here: `<to>`).* ``, anywhere in
+  the tutorial, names a value the reader supplies and the one the example uses.
+  The eval replaces `<from>` with `<to>` in every block before the `/tmp`
+  rewrite. `<to>` may be shell, evaluated when the block runs. In
+  `shadow-mode.md`:
+  `` *Replace `<pinned-harness>` with the harness you pin (here: `shadow-pin`).* ``
 
-`make check-vendor-parity` checks every marker in `docs/tutorial/`: it sits on
-the line before a `bash` fence (or before another marker that does), it is one of
-these three, and a `launch` names a program in `STUBS`.
+Each is a whole line, in italics, written for the reader; the launch and
+output lines sit directly above the block's fence, with only blank lines or
+other such lines between. `make check-vendor-parity` checks every one in
+`docs/tutorial/`: it has exactly one of these forms, a launch or output line is
+followed by a `bash` fence, and a launch names a program in `STUBS`. It also
+fails on any HTML comment in the docs that carries an eval directive: nothing
+the eval reads is hidden from the reader.
 
 A block that calls a stubbed program directly, such as `claude plugin validate`
 or `copilot plugin list`, tests the vendor's own behaviour, not ynh's; it is
@@ -277,12 +285,12 @@ OLDPWD=$(cat "$SANDBOX/state/oldpwd" 2>/dev/null || echo "$SANDBOX/work")   # ne
 _EVAL_BLOCK=$1
 _EVAL_SPEC=$SANDBOX/blocks/$1.eval
 if grep -qx needs-model "$_EVAL_SPEC" 2>/dev/null; then
-  echo "eval launch: block $1 skipped: marked needs-model, its output is what a real model did"
+  echo "eval launch: block $1 skipped: its output is what a real model did"
   exit 0
 fi
 _EVAL_CALLS=$(wc -l < "$SANDBOX/stub-calls.log")
-# Every stub call this block makes must match, in order, one launch marker on the block,
-# and every launch marker must be met by a call. Runs on exit too, so a block that aborts is checked.
+# Every stub call this block makes must match, in order, one launch line on the block,
+# and every launch line must be met by a call. Runs on exit too, so a block that aborts is checked.
 eval_check_launches() {
   local status=$? line i fail=0
   local -a want=() got=()
@@ -292,14 +300,14 @@ eval_check_launches() {
   while IFS= read -r line; do got+=("$line"); done < <(tail -n "+$((_EVAL_CALLS + 1))" "$SANDBOX/stub-calls.log")
   for ((i = 0; i < ${#want[@]} || i < ${#got[@]}; i++)); do
     if [ "$i" -ge "${#got[@]}" ]; then
-      echo "eval launch: FAIL block $_EVAL_BLOCK: no stub call for marker: ${want[i]}"; fail=1
+      echo "eval launch: FAIL block $_EVAL_BLOCK: no stub call for launch line: ${want[i]}"; fail=1
     elif [ "$i" -ge "${#want[@]}" ]; then
-      echo "eval launch: FAIL block $_EVAL_BLOCK: stub call from a block with no marker for it: ${got[i]}"; fail=1
+      echo "eval launch: FAIL block $_EVAL_BLOCK: stub call from a block with no launch line for it: ${got[i]}"; fail=1
     elif [[ ${got[i]} == ${want[i]} ]]; then
       echo "eval launch: ok block $_EVAL_BLOCK: ${got[i]}"
       echo "ok $_EVAL_BLOCK ${got[i]}" >> "$SANDBOX/launch-checks.log"
     else
-      printf 'eval launch: FAIL block %s: stub call does not match its marker\n  want: %s\n  got:  %s\n' \
+      printf 'eval launch: FAIL block %s: stub call does not match its launch line\n  want: %s\n  got:  %s\n' \
         "$_EVAL_BLOCK" "${want[i]}" "${got[i]}"; fail=1
     fi
   done
@@ -320,14 +328,19 @@ done > "$SANDBOX/state/vars" 2>/dev/null
 exit "$_EVAL_STATUS"
 EOF
 awk -v dir="$SANDBOX/blocks" '
-  /^<!-- eval: substitute .* -->$/ { s = $0; sub(/^<!-- eval: substitute /, "", s); sub(/ -->$/, "", s); print s > (dir "/substitutions"); next }
-  /^<!-- eval: .* -->$/ { s = $0; sub(/^<!-- eval: /, "", s); sub(/ -->$/, "", s); spec = spec s "\n"; next }
+  /^\*Replace `[^`]+` with .* \(here: `.*`\)\.\*$/ {
+    s = $0; sub(/^\*Replace `/, "", s); from = s; sub(/`.*/, "", from)
+    to = s; sub(/.* \(here: `/, "", to); sub(/`\)\.\*$/, "", to)
+    print from " " to > (dir "/substitutions"); next }
+  /^\*This launches:\* `.*`$/ { s = $0; sub(/^\*This launches:\* `/, "", s); sub(/`$/, "", s)
+    gsub(/\.\.\./, "*", s); spec = spec "launch " s "\n"; next }
+  /^\*Your output will differ: it shows what the model did\.\*$/ { spec = spec "needs-model\n"; next }
   /^```bash$/ { n++; f = sprintf("%s/%02d.sh", dir, n); inblock = 1
                 if (spec != "") { printf "%s", spec > sprintf("%s/%02d.eval", dir, n); spec = "" }
                 next }
   inblock && /^```$/ { inblock = 0; close(f); next }
   inblock { print > f; next }
-  spec != "" && !/^[[:space:]]*$/ { printf "eval marker not followed by a bash block: %s", spec; spec = "" }
+  spec != "" && !/^[[:space:]]*$/ { printf "eval launch or output line not followed by a bash block: %s", spec; spec = "" }
 ' "$YNH_REPO/docs/tutorial/$SLUG.md"
 [ -f "$SANDBOX/blocks/substitutions" ] && while read -r from to; do
   F=$from T=$to perl -pi -e 's/\Q$ENV{F}\E/$ENV{T}/g' "$SANDBOX"/blocks/*.sh
@@ -375,7 +388,7 @@ grep '^FAIL ' /tmp/ynh-eval-<slug>/launch-checks.log 2>/dev/null
 cat /tmp/ynh-eval-<slug>/stub-calls.log 2>/dev/null
 ```
 
-The first two counts must be equal: every launch marker in the tutorial was met by a checked call. A smaller second count means a launch block was skipped or aborted; name it. That is a FAIL unless the block was skipped because a block it depends on needs the network. The `grep '^FAIL '` must print nothing. Every line the `cat` prints was checked by `run.sh` at the block that made it, so the log is for the report, not a second verdict.
+The first two counts must be equal: every launch line in the tutorial was met by a checked call. A smaller second count means a launch block was skipped or aborted; name it. That is a FAIL unless the block was skipped because a block it depends on needs the network. The `grep '^FAIL '` must print nothing. Every line the `cat` prints was checked by `run.sh` at the block that made it, so the log is for the report, not a second verdict.
 
 If a tutorial used `ynh install`, its entry must have appeared under the sandbox's `.ynh` while the tutorial ran. If it never did, isolation failed: the install landed in the real `~/.ynh`. Stop and report; do not continue evaluating other tutorials in that state.
 
@@ -410,7 +423,7 @@ Many tutorials do not require network access or vendor CLIs and must be run:
 - **Include editing** (`include-editing.md`): Use a local-path include (not a git URL) with `ynh include add <dir> ./local-path`. The add/remove/update commands work on the manifest directly without network when the harness is path-referenced (not installed). Skip the installed-harness pre-fetch steps which require network.
 - **Namespacing and migration** (`namespacing-and-migration.md`): Create harnesses with the legacy `.harness.json` format in the sandbox, confirm `ynd validate` and `ynh install` refuse them with the `ynd migrate` fix and leave them untouched, then convert them with `ynd migrate -y`. Migration is fully local.
 
-Only skip a block if it literally shells out to `git clone` or needs another network source, calls a stubbed program directly rather than through ynh or ynd, runs Docker (directly or through `ynh image` other than `--dry-run`), is marked `needs-model`, or needs a path outside `/tmp`. A block that launches a vendor through ynh or ynd is not skipped: it runs against the stub, as [Launch blocks](#launch-blocks) describes. "This tutorial is about git/network/vendor" is NOT sufficient reason to skip the whole tutorial: skip only the specific blocks that require those things.
+Only skip a block if it literally shells out to `git clone` or needs another network source, calls a stubbed program directly rather than through ynh or ynd, runs Docker (directly or through `ynh image` other than `--dry-run`), sits under the line "Your output will differ", or needs a path outside `/tmp`. A block that launches a vendor through ynh or ynd is not skipped: it runs against the stub, as [Launch blocks](#launch-blocks) describes. "This tutorial is about git/network/vendor" is NOT sufficient reason to skip the whole tutorial: skip only the specific blocks that require those things.
 
 ## Pass/Fail Criteria
 
@@ -421,8 +434,8 @@ A step **FAILS** if:
 - A JSON/TOML structure or field order differs from what's documented
 - A file that should exist is missing, or an unexpected file appears in a listing
 - A guard refuses a `cd`, `rm`, `rmdir` or git write
-- `run.sh` prints `eval launch: FAIL`: a stub call from a block with no launch marker for it, a call that does not match its marker, or a marker with no call
-- A launch marker is never checked, because its block was skipped or aborted for any reason but a network dependency
+- `run.sh` prints `eval launch: FAIL`: a stub call from a block with no launch line for it, a call that does not match its launch line, or a launch line with no call
+- A launch line is never checked, because its block was skipped or aborted for any reason but a network dependency
 - The tutorial's cleanup leaves anything in its workspace
 
 A step **PASSES** if:

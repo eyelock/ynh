@@ -20,9 +20,10 @@
 #      launches by name, must be in the STUBS line of .claude/agents/evals.md,
 #      unless it is a local tool an eval may run.
 #
-#   D. Every eval marker in docs/tutorial/ (`<!-- eval: launch ... -->`,
-#      `needs-model`, `substitute`) is well formed, sits directly above a bash
-#      block, and a launch names a stubbed program. run.sh checks the calls.
+#   D. Every eval line in docs/tutorial/ (`*This launches:* ...`, the
+#      model-output line, `*Replace ...*`) is well formed, a launch or output
+#      line sits directly above a bash block, a launch names a stubbed program,
+#      and no HTML comment carries an eval directive. run.sh checks the calls.
 #
 # Usage: scripts/vendor-parity.sh [path-to-harness]   (default: repo root)
 
@@ -170,39 +171,51 @@ else
 	done < "$TMP/launched.txt"
 fi
 
-# --- D. tutorial eval markers are well formed --------------------------------
-# A launch block carries `<!-- eval: launch <stub> <argv glob> -->` above its
-# fence, and run.sh checks the stub call against it. A marker that drifted off
-# its block, or names a program that is not stubbed, would be read by nobody.
+# --- D. tutorial eval lines are well formed -------------------------------
+# A tutorial says what each launch hands the vendor in a visible line above the
+# block, `*This launches:* `<command>``, and run.sh checks the stub call against
+# it. Model-dependent output and reader-supplied values have their own fixed
+# lines. A line that drifted off its block, is misspelt, or names a program
+# that is not stubbed would be read by nobody, so all three are checked here.
+# Nothing the eval reads may be hidden: an HTML comment carrying a directive fails.
 echo
-echo "== D. tutorial eval markers =="
+echo "== D. tutorial eval lines =="
 markers=0
 for md in "$ROOT"/docs/tutorial/*.md; do
 	out=$(awk -v stubs="${stubs:-}" -v file="$(basename "$md")" '
 		function bad(msg) { printf "  BAD      %s:%d: %s\n", file, NR, msg; nbad++ }
-		/^<!-- eval: / {
-			if ($0 !~ / -->$/) { bad("marker must end with \" -->\" on the same line"); next }
-			m = $0; sub(/^<!-- eval: /, "", m); sub(/ -->$/, "", m)
-			n++
-			if (m ~ /^substitute [^ ]+ ./) next
-			if (m == "needs-model") { pending = NR; next }
-			if (m ~ /^launch /) {
-				split(m, w, " ")
-				if (index(stubs, " " w[2] " ") == 0) bad("launch names \"" w[2] "\", which is not in STUBS")
-				pending = NR; next
-			}
-			bad("unknown marker: " m); next
+		/^```/ { infence = !infence }
+		infence && !/^```bash$/ { next }
+		/^\*Replace `/ {
+			if ($0 !~ /^\*Replace `[^`]+` with .* \(here: `.*`\)\.\*$/) bad("expected *Replace `<from>` with ... (here: `<to>`).*")
+			n++; next
+		}
+		/^\*Your output will differ/ {
+			if ($0 != "*Your output will differ: it shows what the model did.*") bad("expected *Your output will differ: it shows what the model did.*")
+			n++; pending = NR; next
+		}
+		/^\*This launches/ {
+			if ($0 !~ /^\*This launches:\* `[^`]+`$/) { bad("expected *This launches:* `<command>`"); n++; next }
+			m = $0; sub(/^\*This launches:\* `/, "", m); sub(/`$/, "", m); split(m, w, " ")
+			if (index(stubs, " " w[1] " ") == 0) bad("launches \"" w[1] "\", which is not in STUBS")
+			n++; pending = NR; next
 		}
 		pending && /^```bash$/ { pending = 0; next }
-		pending { bad("marker on line " pending " is not directly above a ```bash fence"); pending = 0 }
-		END { if (pending) bad("marker on line " pending " is not directly above a ```bash fence"); printf "COUNT %d %d\n", n, nbad }
+		pending && /^[[:space:]]*$/ { next }
+		pending { bad("line " pending " is not followed by a ```bash block"); pending = 0 }
+		END { if (pending) bad("line " pending " is not followed by a ```bash block"); printf "COUNT %d %d\n", n, nbad }
 	' "$md")
 	printf '%s\n' "$out" | grep -v '^COUNT ' || true
 	set -- $(printf '%s\n' "$out" | sed -n 's/^COUNT //p')
 	markers=$((markers + $1))
 	[ "$2" -eq 0 ] || fail=1
 done
-echo "  $markers markers checked"
+hidden=$(grep -rn '<!-- *eval' "$ROOT/docs" "$ROOT/.claude" 2>/dev/null || true)
+if [ -n "$hidden" ]; then
+	printf '%s\n' "$hidden" | sed "s|^$ROOT/|  HIDDEN   |"
+	fail=1
+fi
+echo "  $markers eval lines checked"
 
 echo
 if [ "$fail" -ne 0 ]; then

@@ -66,7 +66,7 @@ Exit code `1`.
 
 ## Run the loop
 
-<!-- eval: launch claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir */ynh-agent-*/.claude --add-dir */ynh-agent-* --session-id * -->
+*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --add-dir .../ynh-agent-... --session-id ...`
 ```bash
 ynh agent run --harness local/demo --focus tidy --max-turns 5 --max-wall 4m --emit-jsonl run.jsonl
 echo "exit=$?"
@@ -81,7 +81,7 @@ no banner. This is deliberate and [Exit codes](#exit-codes) explains why.
 
 The work did happen:
 
-<!-- eval: needs-model -->
+*Your output will differ: it shows what the model did.*
 ```bash
 cat notes.txt
 ```
@@ -177,7 +177,7 @@ Error: starting worker: starting claude: chdir /nope/nothing: no such file or di
 
 `--emit-jsonl <file>` writes one JSON object per event. From the run in [Run the loop](#run-the-loop):
 
-<!-- eval: needs-model -->
+*Your output will differ: it shows what the model did.*
 ```bash
 python3 -c "
 import json
@@ -247,7 +247,7 @@ result says little; this one, trimmed to the fields discussed below, is from a
 larger harness that declares a `reviewer` convergence verifier and stopped
 without converging:
 
-<!-- eval: needs-model -->
+*Your output will differ: it shows what the model did.*
 ```bash
 ynh agent run --harness local/api --focus add-handler --max-wall 60m --format json
 ```
@@ -340,7 +340,7 @@ That folder is the session directory. Here it is `/tmp/loop-demo`, because
 
 Resume by pointing at the directory that holds it:
 
-<!-- eval: launch claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir */ynh-agent-*/.claude --add-dir */ynh-agent-* --resume * -->
+*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --add-dir .../ynh-agent-... --resume ...`
 ```bash
 ynh agent run --resume /tmp/loop-demo
 ```

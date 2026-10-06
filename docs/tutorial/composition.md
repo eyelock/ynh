@@ -319,7 +319,7 @@ ynh install /tmp/ynh-tutorial/local-ref
 
 Run it, then verify:
 
-<!-- eval: launch claude --plugin-dir ~/.ynh/run/local--local-ref/.claude --add-dir ~/.ynh/run/local--local-ref -p what skills do you have? -->
+*This launches:* `claude --plugin-dir ~/.ynh/run/local--local-ref/.claude --add-dir ~/.ynh/run/local--local-ref -p what skills do you have?`
 ```bash
 local-ref "what skills do you have?"
 ```
@@ -358,7 +358,7 @@ EOF
 ynh install /tmp/ynh-tutorial/with-bundled
 ```
 
-<!-- eval: launch claude --plugin-dir ~/.ynh/run/local--with-bundled/.claude --add-dir ~/.ynh/run/local--with-bundled -p what skills do you have? -->
+*This launches:* `claude --plugin-dir ~/.ynh/run/local--with-bundled/.claude --add-dir ~/.ynh/run/local--with-bundled -p what skills do you have?`
 ```bash
 with-bundled "what skills do you have?"
 ```
@@ -532,7 +532,7 @@ local-ref "hello" 2>&1
 
 The message says "source" rather than "remote source", and names the entry to add. Add it:
 
-<!-- eval: launch claude --plugin-dir ~/.ynh/run/local--local-ref/.claude --add-dir ~/.ynh/run/local--local-ref -p what skills do you have? -->
+*This launches:* `claude --plugin-dir ~/.ynh/run/local--local-ref/.claude --add-dir ~/.ynh/run/local--local-ref -p what skills do you have?`
 ```bash
 cat > ~/.ynh/config.json << 'EOF'
 {

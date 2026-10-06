@@ -46,6 +46,20 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 | [Docker Images](docker-image.md) | Build harness appliance images for CI/CD |
 | [Namespacing & Migration](namespacing-and-migration.md) | Resolve name collisions across registries and migrate legacy installs |
 
+## Reading the examples
+
+Some commands start an AI assistant. Above such a block, a line in italics that
+begins *This launches:* shows what ynh hands the vendor CLI, one line per launch
+and in order: the program, then its arguments separated by spaces and without
+shell quoting. `~` is your home directory, and `...` stands for text that
+varies between runs or is too long to show, such as an instructions file or a
+session id.
+
+A line reading *Your output will differ: it shows what the model did.* marks
+output that depends on the model, so yours will not match it word for word. A
+line beginning *Replace* names a value you supply, followed in brackets by the
+one the example uses.
+
 ## Manual Test Plan
 
 The [Manual Test Plan](manual-test-plan.md) covers every feature across both binaries. Use it to verify a release or validate your development build.
@@ -97,5 +111,6 @@ You also need at least one AI coding assistant CLI installed:
 | Claude Code | `claude` | `npm install -g @anthropic-ai/claude-code` |
 | OpenAI Codex | `codex` | `npm install -g @openai/codex` |
 | Cursor | `agent` | Bundled with [Cursor](https://cursor.com) |
+| GitHub Copilot CLI | `copilot` | `npm install -g @github/copilot` |
 
 Claude Code is used in most tutorial examples. Codex and Cursor are needed for [Vendors & Symlinks](vendors-and-symlinks.md) and [Export](export.md).

@@ -72,8 +72,9 @@ mkdir -p /tmp/ynh-tutorial/switch
 cd /tmp/ynh-tutorial/switch
 ```
 
-<!-- eval: launch codex -->
-<!-- eval: launch agent -->
+*This launches:* `codex`
+
+*This launches:* `agent`
 ```bash
 my-harness -v codex
 my-harness -v cursor
@@ -103,7 +104,7 @@ mkdir -p /tmp/ynh-tutorial/project
 cd /tmp/ynh-tutorial/project
 ```
 
-<!-- eval: launch agent -->
+*This launches:* `agent`
 ```bash
 my-harness -v cursor
 ```

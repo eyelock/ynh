@@ -106,11 +106,11 @@ Skip this section if you are working in a ynh checkout or your own repository.
 Otherwise, build a small repository that reproduces the case this page follows:
 three closed fixes, the `#173` one among them, and a guide harness that at the
 fix's parent still kept its manifest in `.ynh-plugin/` and declared no sensors.
-The commits get their own hashes, so where the page says `8382382`, use the
-hash of the `#173` fix that `git log` shows you.
+The commits get their own hashes, so the page's `8382382` is a different hash
+here:
 
-<!-- eval: substitute 8382382 $(git log --all -1 --format=%h --grep='(#173)') -->
-<!-- eval: substitute <pinned-harness> shadow-pin -->
+*Replace `8382382` with the hash of the fix you picked (here: `$(git log --all -1 --format=%h --grep='(#173)')`).*
+
 ```bash
 mkdir -p /tmp/shadow/repo && cd /tmp/shadow/repo
 git init -q
@@ -190,8 +190,9 @@ EOF
 ynh install /tmp/shadow/pinned
 ```
 
-Where the page says `<pinned-harness>`, this one is `shadow-pin`. Run the rest
-of the page from `/tmp/shadow/repo`.
+*Replace `<pinned-harness>` with the harness you pin (here: `shadow-pin`).*
+
+Run the rest of the page from `/tmp/shadow/repo`.
 
 ## Select candidates
 
@@ -318,7 +319,7 @@ nothing" is the wrong conclusion, and it is the one the numbers invite.
 
 ## Run the loop against the base state
 
-<!-- eval: launch claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir */ynh-agent-*/.claude --add-dir */ynh-agent-* --session-id * -->
+*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --add-dir .../ynh-agent-... --session-id ...`
 ```bash
 ynh agent run \
   --harness local/<pinned-harness> \
@@ -417,7 +418,7 @@ cp /tmp/shadow/task-173.txt /tmp/shadow/task-8382382.txt
 Each historical tree gets its own worktree, and `--cwd` points the "before"
 check at it:
 
-<!-- eval: launch claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir */ynh-agent-*/.claude --add-dir */ynh-agent-* --session-id * -->
+*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --add-dir .../ynh-agent-... --session-id ...`
 ```bash
 for FIX in $(cat /tmp/shadow/candidates.txt); do
   W=/tmp/shadow/$FIX
