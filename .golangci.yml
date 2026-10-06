@@ -1,5 +1,10 @@
 version: "2"
 
+run:
+  # test/e2e carries //go:build e2e, so without this tag lint never sees it.
+  build-tags:
+    - e2e
+
 linters:
   default: none
   enable:
