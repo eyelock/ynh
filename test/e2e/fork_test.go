@@ -11,7 +11,7 @@ import (
 // harness's provenance in the new harness's installed.json.forked_from.
 func TestFork_BasicProvenance(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
+	clone := newFixtureRepo(t).Clone
 	srcPath := filepath.Join(clone, "e2e-fixtures", "fork-source")
 
 	s.mustRunYnh(t, "install", srcPath)
@@ -40,7 +40,7 @@ func TestFork_BasicProvenance(t *testing.T) {
 // of "this came from there" survives re-installation.
 func TestFork_CarryForward(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
+	clone := newFixtureRepo(t).Clone
 	srcPath := filepath.Join(clone, "e2e-fixtures", "fork-source")
 
 	s.mustRunYnh(t, "install", srcPath)

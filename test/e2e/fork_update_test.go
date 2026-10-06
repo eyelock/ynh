@@ -16,7 +16,7 @@ import (
 // "fork" in the failure mode.
 func TestFork_UpdateRejected(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
+	clone := newFixtureRepo(t).Clone
 	srcPath := filepath.Join(clone, "e2e-fixtures", "fork-source")
 
 	s.mustRunYnh(t, "install", srcPath)

@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -18,11 +19,20 @@ var productionSmokeHarnesses = []string{
 	"ynh/ynh-dev",
 }
 
+// liveEnv opts in to the tests that need the network. They are skipped
+// without it, so `make e2e` passes offline and a flaky connection cannot
+// fail it (#531).
+const liveEnv = "YNH_E2E_LIVE"
+
 // TestSmoke_LiveAssistants installs each production harness against the
-// current HEAD of eyelock/assistants:develop. Runs at release-promotion
-// time; if upstream is broken the gate blocks, surfacing the issue
-// before goreleaser publishes.
+// current HEAD of eyelock/assistants:develop. It is the one test that must
+// reach GitHub, because the live repository is what it checks, so it runs
+// only when YNH_E2E_LIVE=1. The release workflow sets it: if upstream is
+// broken the gate blocks, surfacing the issue before goreleaser publishes.
 func TestSmoke_LiveAssistants(t *testing.T) {
+	if os.Getenv(liveEnv) != "1" {
+		t.Skipf("needs the network: set %s=1 to install from github.com/eyelock/assistants", liveEnv)
+	}
 	for _, path := range productionSmokeHarnesses {
 		t.Run(path, func(t *testing.T) {
 			s := newSandbox(t)

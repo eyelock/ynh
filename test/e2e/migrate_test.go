@@ -15,7 +15,7 @@ import (
 // The schema-2 wire contract for fresh installs starts canonical from day one.
 func TestMigrate_NoOp_OnFreshHome(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
+	clone := newFixtureRepo(t).Clone
 	s.mustRunYnh(t, "install", filepath.Join(clone, "e2e-fixtures", "minimal"))
 
 	out, _ := s.mustRunYnh(t, "migrate", "--format", "json")

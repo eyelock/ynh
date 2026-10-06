@@ -54,7 +54,7 @@ var sha40 = regexp.MustCompile(`^[0-9a-f]{40}$`)
 // with source_type=local.
 func TestInstall_Local_Minimal(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
+	clone := newFixtureRepo(t).Clone
 	fixturePath := filepath.Join(clone, "e2e-fixtures", "minimal")
 
 	out, _ := s.mustRunYnh(t, "install", fixturePath)
@@ -88,28 +88,29 @@ func TestInstall_Local_Minimal(t *testing.T) {
 }
 
 // TestInstall_Git_Minimal exercises the git install path with --ref
-// pinning to AssistantsFixturesSHA. Asserts source_type=git, the
-// recorded SHA matches the pin, and --path is preserved.
+// pinning to the fixture commit. Asserts source_type=git, the recorded SHA
+// matches the pin, and --path is preserved.
 func TestInstall_Git_Minimal(t *testing.T) {
 	s := newSandbox(t)
+	repo := newFixtureRepo(t)
 	out, _ := s.mustRunYnh(t,
-		"install", "https://github.com/eyelock/assistants",
+		"install", repo.URL,
 		"--path", "e2e-fixtures/minimal",
-		"--ref", AssistantsFixturesSHA,
+		"--ref", repo.SHA,
 	)
 	if !strings.Contains(out, `Installed harness "minimal"`) {
 		t.Errorf("install stdout missing success line:\n%s", out)
 	}
 
-	harnessDir := filepath.Join(s.home, "harnesses", "github.com--eyelock--assistants--minimal")
-	got := readInstalledJSON(t, harnessDir)
+	// A file:// URL has no host to namespace by, so the install is local.
+	got := readInstalledRecord(t, s.home, "local/minimal")
 
 	assertEqual(t, "source_type", got.SourceType, "git")
-	assertEqual(t, "source", got.Source, "https://github.com/eyelock/assistants")
+	assertEqual(t, "source", got.Source, repo.URL)
 	assertEqual(t, "path", got.Path, "e2e-fixtures/minimal")
 	// Ref records the symbolic ref (branch/tag); for SHA-pinned installs
 	// the SHA already lives in SHA so Ref stays empty.
-	assertEqual(t, "sha", got.SHA, AssistantsFixturesSHA)
+	assertEqual(t, "sha", got.SHA, repo.SHA)
 	if !sha40.MatchString(got.SHA) {
 		t.Errorf("sha %q is not 40-char hex", got.SHA)
 	}
@@ -120,8 +121,8 @@ func TestInstall_Git_Minimal(t *testing.T) {
 // installed.json.resolved[].
 func TestInstall_FloatingInclude(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
-	fixturePath := filepath.Join(clone, "e2e-fixtures", "with-floating-include")
+	repo := newFixtureRepo(t)
+	fixturePath := filepath.Join(repo.Clone, "e2e-fixtures", "with-floating-include")
 
 	s.mustRunYnh(t, "install", fixturePath)
 	got := readInstalledRecord(t, s.home, "local/with-floating-include")
@@ -130,25 +131,20 @@ func TestInstall_FloatingInclude(t *testing.T) {
 		t.Fatalf("expected 1 resolved entry, got %d: %+v", len(got.Resolved), got.Resolved)
 	}
 	r := got.Resolved[0]
-	assertEqual(t, "resolved[0].git", r.Git, "https://github.com/eyelock/assistants")
-	// Floating include: develop now records the resolved branch name (e.g.
-	// "develop") in Ref alongside the concrete SHA. Just confirm Ref is
-	// populated — the exact branch name varies with upstream HEAD.
-	if r.Ref == "" {
-		t.Errorf("expected resolved[0].ref to carry the resolved branch name, got empty")
-	}
+	assertEqual(t, "resolved[0].git", r.Git, repo.URL)
+	// A floating include records the branch it resolved through alongside
+	// the concrete SHA: the fixture repository's main, at its head.
+	assertEqual(t, "resolved[0].ref", r.Ref, "main")
 	assertEqual(t, "resolved[0].path", r.Path, "e2e-fixtures/included-skill")
-	if !sha40.MatchString(r.SHA) {
-		t.Errorf("resolved[0].sha %q is not 40-char hex", r.SHA)
-	}
+	assertEqual(t, "resolved[0].sha", r.SHA, repo.SHA)
 }
 
 // TestInstall_PinnedInclude verifies that a SHA-pinned include records
 // exactly the pinned commit in installed.json.resolved[].
 func TestInstall_PinnedInclude(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
-	fixturePath := filepath.Join(clone, "e2e-fixtures", "with-pinned-include")
+	repo := newFixtureRepo(t)
+	fixturePath := filepath.Join(repo.Clone, "e2e-fixtures", "with-pinned-include")
 
 	s.mustRunYnh(t, "install", fixturePath)
 	got := readInstalledRecord(t, s.home, "local/with-pinned-include")
@@ -156,19 +152,20 @@ func TestInstall_PinnedInclude(t *testing.T) {
 	if len(got.Resolved) != 1 {
 		t.Fatalf("expected 1 resolved entry, got %d", len(got.Resolved))
 	}
-	const pinnedSHA = "8713efacdee8a2b05bdb70fee83be73b66222cc4"
 	r := got.Resolved[0]
 	// Ref holds the symbolic ref (branch/tag); SHA-only includes leave it
-	// empty since the SHA fully identifies the commit.
-	assertEqual(t, "resolved[0].sha", r.SHA, pinnedSHA)
+	// empty since the SHA fully identifies the commit. The pin is the older
+	// of the fixture commits, so a resolver that followed the branch head
+	// instead would record a different SHA.
+	assertEqual(t, "resolved[0].sha", r.SHA, repo.TagSHA)
 }
 
 // TestInstall_TagInclude verifies that a tag-pinned include resolves
 // the tag to a concrete commit SHA at install time.
 func TestInstall_TagInclude(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
-	fixturePath := filepath.Join(clone, "e2e-fixtures", "with-tag-include")
+	repo := newFixtureRepo(t)
+	fixturePath := filepath.Join(repo.Clone, "e2e-fixtures", "with-tag-include")
 
 	s.mustRunYnh(t, "install", fixturePath)
 	got := readInstalledRecord(t, s.home, "local/with-tag-include")
@@ -177,14 +174,10 @@ func TestInstall_TagInclude(t *testing.T) {
 		t.Fatalf("expected 1 resolved entry, got %d", len(got.Resolved))
 	}
 	r := got.Resolved[0]
-	assertEqual(t, "resolved[0].ref", r.Ref, AssistantsFixturesV1Tag)
-	if !sha40.MatchString(r.SHA) {
-		t.Errorf("resolved[0].sha %q is not 40-char hex (tag did not resolve)", r.SHA)
-	}
-	// The tag points at the initial-fixture commit (8713efa…). Verify exact match
-	// to catch regressions in tag resolution.
-	const tagCommitSHA = "8713efacdee8a2b05bdb70fee83be73b66222cc4"
-	assertEqual(t, "resolved[0].sha", r.SHA, tagCommitSHA)
+	assertEqual(t, "resolved[0].ref", r.Ref, fixtureTag)
+	// The tag names the older fixture commit, not the head of main. Verify
+	// the exact match to catch regressions in tag resolution.
+	assertEqual(t, "resolved[0].sha", r.SHA, repo.TagSHA)
 }
 
 // TestInstall_InvalidSchema_Rejected verifies that ynh refuses a harness

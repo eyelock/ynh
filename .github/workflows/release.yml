@@ -37,7 +37,12 @@ jobs:
         env:
           YNR_READ_REPO: ${{ secrets.YNR_READ_REPO }}
         run: git config --global url."https://x-access-token:${YNR_READ_REPO}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
+      # The live smoke test installs from github.com/eyelock/assistants and
+      # is skipped without this; a release should not ship if upstream
+      # harnesses no longer install.
       - run: make e2e
+        env:
+          YNH_E2E_LIVE: "1"
 
   release:
     name: Release
