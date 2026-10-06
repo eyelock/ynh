@@ -23,16 +23,17 @@ func cmdPrune() error {
 		return err
 	}
 
+	// Report the orphans only once the log no longer records them, so a
+	// failed save does not leave behind a line claiming they were removed.
 	orphans := log.Prune()
-	for _, inst := range orphans {
-		fmt.Printf("Removing orphaned installation: %s (%s) in %s\n", inst.Harness, inst.Vendor, inst.Project)
-	}
-
 	if len(orphans) > 0 {
 		log.RemoveOrphans(orphans)
 		if err := log.Save(); err != nil {
 			return err
 		}
+	}
+	for _, inst := range orphans {
+		fmt.Printf("Removed orphaned installation: %s (%s) in %s\n", inst.Harness, inst.Vendor, inst.Project)
 	}
 
 	// Scan for orphan pointer files: pointer exists but its source tree is
@@ -40,6 +41,9 @@ func cmdPrune() error {
 	// uninstalling first. Removing the pointer is a metadata operation, so
 	// we can do it without consent prompts.
 	orphanPointers := 0
+	// unremoved counts what prune found but could not remove, so the final
+	// "nothing found" line is not printed over a warning that says otherwise.
+	unremoved := 0
 	if pointers, err := harness.ListPointers(); err == nil {
 		for _, e := range pointers {
 			if _, err := os.Stat(e.Dir); err == nil {
@@ -49,6 +53,7 @@ func cmdPrune() error {
 			}
 			if err := harness.RemovePointer(e.Name); err != nil {
 				fmt.Fprintf(os.Stderr, "warning: removing pointer %q: %v\n", e.Name, err)
+				unremoved++
 				continue
 			}
 			fmt.Printf("Removed orphan pointer: %s (source missing: %s)\n", e.Name, e.Dir)
@@ -96,7 +101,11 @@ func cmdPrune() error {
 			if !strings.Contains(string(data), "exec ynh run") {
 				continue
 			}
-			_ = os.Remove(launcherPath)
+			if err := os.Remove(launcherPath); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: removing stale launcher %s: %v\n", launcherPath, err)
+				unremoved++
+				continue
+			}
 			fmt.Printf("Removed stale launcher: %s\n", launcherPath)
 			staleLaunchers++
 		}
@@ -113,13 +122,17 @@ func cmdPrune() error {
 				continue
 			}
 			staleRun := filepath.Join(runDir, name)
-			_ = os.RemoveAll(staleRun)
+			if err := os.RemoveAll(staleRun); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: removing stale run dir %s: %v\n", staleRun, err)
+				unremoved++
+				continue
+			}
 			fmt.Printf("Removed stale run dir: %s\n", staleRun)
 			staleRuns++
 		}
 	}
 
-	if len(orphans) == 0 && orphanPointers == 0 && staleLaunchers == 0 && staleRuns == 0 {
+	if len(orphans) == 0 && orphanPointers == 0 && staleLaunchers == 0 && staleRuns == 0 && unremoved == 0 {
 		fmt.Println("No orphaned installations found.")
 	}
 

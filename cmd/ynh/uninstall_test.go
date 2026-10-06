@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 // Every path these tests hand to cmdUninstall lives under t.TempDir(): the
@@ -208,5 +210,100 @@ func TestConfigCommands_NoOpLeavesNoConfig(t *testing.T) {
 				t.Errorf("config.json written by a no-op (stat err=%v)", err)
 			}
 		})
+	}
+}
+
+// TestCmdUninstall_SourceTreeMessage covers #533: uninstalling a pointer
+// install used to report its source tree as "left in place" even when the
+// tree was already gone. The line must appear only when a directory is there.
+// Uninstalling a pointer never deletes its source; every path here is still
+// under t.TempDir().
+func TestCmdUninstall_SourceTreeMessage(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func(t *testing.T, src string) // creates whatever is at src
+		wantLine bool
+	}{
+		{
+			name:     "tree present",
+			setup:    func(t *testing.T, src string) { mkdirAll(t, src) },
+			wantLine: true,
+		},
+		{
+			name:  "tree absent",
+			setup: func(t *testing.T, src string) {},
+		},
+		{
+			name: "path is a regular file",
+			setup: func(t *testing.T, src string) {
+				if err := os.WriteFile(src, []byte("x"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name: "path is a symlink to a tree",
+			setup: func(t *testing.T, src string) {
+				real := filepath.Join(filepath.Dir(src), "real")
+				mkdirAll(t, real)
+				if err := os.Symlink(real, src); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantLine: true,
+		},
+		{
+			name: "path is a dangling symlink",
+			setup: func(t *testing.T, src string) {
+				if err := os.Symlink(filepath.Join(filepath.Dir(src), "missing"), src); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("YNH_HOME", t.TempDir())
+			src := filepath.Join(t.TempDir(), "fork")
+			tt.setup(t, src)
+			if err := harness.SavePointer(&harness.Pointer{
+				Name: "fork",
+				InstalledJSON: plugin.InstalledJSON{
+					SourceType:  "local",
+					Source:      src,
+					InstalledAt: "2026-10-06T00:00:00Z",
+				},
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			var out bytes.Buffer
+			var err error
+			captureStdout(t, &out, func() { err = cmdUninstall([]string{"local/fork"}) })
+			if err != nil {
+				t.Fatalf("cmdUninstall failed: %v", err)
+			}
+
+			if !strings.Contains(out.String(), `Uninstalled harness "fork"`) {
+				t.Errorf("missing confirmation in output:\n%s", out.String())
+			}
+			gotLine := strings.Contains(out.String(), "Source tree left in place")
+			if gotLine != tt.wantLine {
+				t.Errorf("source-tree line printed = %v, want %v; output:\n%s", gotLine, tt.wantLine, out.String())
+			}
+			if tt.wantLine {
+				if fi, err := os.Stat(src); err != nil || !fi.IsDir() {
+					t.Errorf("source tree reported left in place but is not there: err=%v", err)
+				}
+			}
+		})
+	}
+}
+
+func mkdirAll(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
 	}
 }

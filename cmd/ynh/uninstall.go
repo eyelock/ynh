@@ -203,8 +203,19 @@ func (t uninstallTarget) remove() error {
 	if launcherNote != "" {
 		fmt.Printf("  %s\n", launcherNote)
 	}
-	if pointerSource != "" {
+	if pointerSource != "" && sourceTreeExists(pointerSource) {
 		fmt.Printf("  Source tree left in place: %s\n", pointerSource)
 	}
 	return nil
+}
+
+// sourceTreeExists reports whether path is a directory, following a symlink.
+// Uninstall reports a pointer's source tree as left in place only when there
+// is one: the common reason to uninstall a fork is that its tree was already
+// deleted, and naming a missing path as "left in place" describes something
+// that is not there (#533). A regular file at the path is not a source tree
+// either. It only reads.
+func sourceTreeExists(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && fi.IsDir()
 }
