@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/agentplugin"
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // setupAgentPluginMarketplace adds a plugin entry that is already an Agent
@@ -169,5 +170,26 @@ func TestMarketplaceAgentPluginNormalisedName(t *testing.T) {
 	}
 	if len(idx.Plugins) != 1 || idx.Plugins[0].Name != "odd-name" || idx.Plugins[0].Source.Path != "./plugins/odd-name" {
 		t.Errorf("codex index = %s", raw)
+	}
+}
+
+// With no vendors named, a build writes the index of every registered
+// vendor, taken from the registry rather than a list kept here (#524).
+func TestBuildDefaultsToEveryRegisteredVendor(t *testing.T) {
+	configPath, configDir := setupAgentPluginMarketplace(t)
+	outputDir := t.TempDir()
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Build(cfg, BuildOptions{ConfigDir: configDir, OutputDir: outputDir}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, name := range vendor.Available() {
+		adapter, err := vendor.Get(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertFileExists(t, filepath.Join(outputDir, adapter.MarketplaceManifestDir(), "marketplace.json"))
 	}
 }

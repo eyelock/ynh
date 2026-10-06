@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // dispatchedCommands reads the command names out of main's dispatch switch.
@@ -286,5 +288,19 @@ func TestEveryDispatchedCommandAppearsInUsage(t *testing.T) {
 		if !re.MatchString(usage) {
 			t.Errorf("command %q is dispatched but never listed in `ynh help`", name)
 		}
+	}
+}
+
+// The -v help in `ynh help` and `ynh run --help` lists every registered
+// vendor, from the registry rather than a copy that can drift (#524).
+func TestVendorHelpListsEveryVendor(t *testing.T) {
+	var usage bytes.Buffer
+	printUsageTo(&usage)
+	want := "Override vendor (" + strings.Join(vendor.Available(), ", ") + ")"
+	if !strings.Contains(usage.String(), want) {
+		t.Errorf("ynh help lacks %q", want)
+	}
+	if !strings.Contains(commandHelp["run"], want) {
+		t.Errorf("ynh run --help lacks %q", want)
 	}
 }

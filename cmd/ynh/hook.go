@@ -101,8 +101,8 @@ func cmdHookRemove(args []string, stdout io.Writer) error {
 // hookExportTargets maps the --target value to the project-relative settings
 // file Claude Code auto-loads in a plain session.
 var hookExportTargets = map[string]string{
-	"settings": filepath.Join(".claude", "settings.json"),       // committed, team-wide
-	"local":    filepath.Join(".claude", "settings.local.json"), // gitignored, personal
+	"settings": filepath.Join((&vendor.Claude{}).ConfigDir(), "settings.json"),       // committed, team-wide
+	"local":    filepath.Join((&vendor.Claude{}).ConfigDir(), "settings.local.json"), // gitignored, personal
 }
 
 func cmdHookExport(args []string, stdout io.Writer) error {

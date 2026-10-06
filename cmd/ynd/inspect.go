@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 func cmdInspect(args []string) error {
@@ -216,16 +218,25 @@ func discoverExistingAgents(root string) []string {
 	return agents
 }
 
-// supportedVendors lists the vendor CLI names whose config dirs we search.
-var supportedVendors = []string{"claude", "cursor", "codex", "copilot"}
+// vendorConfigDirs returns every vendor's config directory under root, as
+// its adapter names it. Spelling the list here would let it drift from the
+// adapters (#524).
+func vendorConfigDirs(root string) []string {
+	var dirs []string
+	for _, name := range vendor.Available() {
+		adapter, err := vendor.Get(name)
+		if err != nil {
+			continue
+		}
+		dirs = append(dirs, filepath.Join(root, adapter.ConfigDir()))
+	}
+	return dirs
+}
 
 // discoverExistingSkillsAll finds SKILL.md files in skills/ at the project root
 // and inside each supported vendor config directory (e.g. .claude/skills/).
 func discoverExistingSkillsAll(root string) []string {
-	dirs := []string{root}
-	for _, v := range supportedVendors {
-		dirs = append(dirs, filepath.Join(root, "."+v))
-	}
+	dirs := append([]string{root}, vendorConfigDirs(root)...)
 	seen := make(map[string]bool)
 	var all []string
 	for _, dir := range dirs {
@@ -246,10 +257,7 @@ func discoverExistingSkillsAll(root string) []string {
 // discoverExistingAgentsAll finds agent .md files in agents/ at the project root
 // and inside each supported vendor config directory (e.g. .claude/agents/).
 func discoverExistingAgentsAll(root string) []string {
-	dirs := []string{root}
-	for _, v := range supportedVendors {
-		dirs = append(dirs, filepath.Join(root, "."+v))
-	}
+	dirs := append([]string{root}, vendorConfigDirs(root)...)
 	seen := make(map[string]bool)
 	var all []string
 	for _, dir := range dirs {

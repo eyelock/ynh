@@ -158,7 +158,7 @@ type BuildOptions struct {
 	ConfigDir string
 	// OutputDir is where to write the marketplace output.
 	OutputDir string
-	// Vendors lists target vendors (default: claude, cursor, codex, copilot).
+	// Vendors lists target vendors (default: every registered vendor).
 	Vendors []string
 	// Config provides remote source checking.
 	Config *config.Config
@@ -181,7 +181,7 @@ type BuildOptions struct {
 func Build(cfg *MarketplaceConfig, opts BuildOptions) ([]string, error) {
 	vendors := opts.Vendors
 	if len(vendors) == 0 {
-		vendors = []string{"claude", "cursor", "codex", "copilot"}
+		vendors = vendor.Available()
 	}
 
 	// Read and check every entry before writing anything, so a refused entry
@@ -415,7 +415,7 @@ func loadPluginManifest(dir string) (pluginInfo, error) {
 		}
 		return pluginInfo{Name: m.Name, Description: m.Description, Version: m.Version}, nil
 	}
-	path := filepath.Join(dir, ".claude-plugin", "plugin.json")
+	path := filepath.Join(dir, (&vendor.Claude{}).PluginManifestDir(), "plugin.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return pluginInfo{}, fmt.Errorf("reading %s: %w", path, err)

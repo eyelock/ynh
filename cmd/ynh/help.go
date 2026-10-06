@@ -5,6 +5,8 @@ import (
 	"io"
 	"sort"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // Per-command help.
@@ -79,7 +81,7 @@ whose only manifest is a legacy .harness.json is refused with the
 'ynd migrate' fix.
 
 Flags:
-  -v <vendor>              Override vendor (claude, codex, cursor, copilot), or
+  -v <vendor>              Override vendor (` + strings.Join(vendor.Available(), ", ") + `), or
                            "<backend>/<vendor>[/<model>]" to redirect at a local
                            model backend (see: ynh backend)
   --focus <name>           Load a named focus (sets prompt and profile; implies

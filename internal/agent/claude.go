@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // ClaudeBackend implements WorkerBackend for Claude Code CLI.
@@ -143,7 +145,7 @@ func buildClaudeStreamArgs(opts StartOptions) []string {
 	}
 
 	if opts.ConfigPath != "" {
-		pluginDir := filepath.Join(opts.ConfigPath, ".claude")
+		pluginDir := filepath.Join(opts.ConfigPath, (&vendor.Claude{}).ConfigDir())
 		args = append(args, "--plugin-dir", pluginDir, "--add-dir", opts.ConfigPath)
 
 		instructionsPath := filepath.Join(opts.ConfigPath, "CLAUDE.md")
