@@ -1,6 +1,7 @@
 package vendor
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -467,14 +468,40 @@ func projectCopilotInstructions(configPath, projectDir string) error {
 		return nil
 	}
 
-	var body []byte
-	body = append(body, []byte("---\napplyTo: \"**/*\"\n---\n")...)
-	body = append(body, content...)
-	if body[len(body)-1] != '\n' {
-		body = append(body, '\n')
-	}
+	return writeCopilotProjectFile(projectDir, copilotInstructionsRelPath, copilotInstructions(content))
+}
 
-	return writeCopilotProjectFile(projectDir, copilotInstructionsRelPath, body)
+// copilotInstructions renders the harness instructions as an always-on
+// Copilot instructions file with exactly one frontmatter block (#532). When
+// the instructions open with their own block, its fields are kept and
+// applyTo: "**/*" is put in front of them; a source applyTo is dropped,
+// because this file must apply everywhere to deliver the harness at all.
+func copilotInstructions(content []byte) []byte {
+	var b bytes.Buffer
+	b.WriteString("---\napplyTo: \"**/*\"\n")
+	body := content
+	if lines, rest, ok := splitFrontmatter(content); ok {
+		for _, e := range frontmatterEntries(lines) {
+			if e.key == "applyTo" {
+				continue
+			}
+			for _, l := range e.raw {
+				b.WriteString(l)
+				b.WriteByte('\n')
+			}
+		}
+		b.WriteString("---\n")
+		if body = bytes.TrimLeft(rest, "\r\n"); len(body) > 0 {
+			b.WriteByte('\n')
+		}
+	} else {
+		b.WriteString("---\n")
+	}
+	b.Write(body)
+	if len(body) > 0 && body[len(body)-1] != '\n' {
+		b.WriteByte('\n')
+	}
+	return b.Bytes()
 }
 
 // projectCopilotMCPConfig reads the assembled MCP config from the staging

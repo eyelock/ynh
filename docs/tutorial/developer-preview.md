@@ -134,10 +134,30 @@ Expected output structure:
 
 Note the differences from Claude:
 - Instructions go to `.cursorrules` instead of `CLAUDE.md`
-- Rules are rendered as `.mdc` files (`.cursor/rules/safety.mdc`)
+- Rules are rendered as `.mdc` files (`.cursor/rules/safety.mdc`) with a single frontmatter block, merged from the rule's own (see below)
 - Hooks go to `.cursor/hooks.json` instead of `.claude/hooks/hooks.json`. That is the only project file Cursor reads hooks from; an export writes the plugin's `hooks/cursor.json` instead, named by the plugin manifest (see [Hooks: Config File Locations](../hooks.md#config-file-locations))
 - MCP config goes to `.cursor/mcp.json` instead of `.claude/.mcp.json`. That is the only project file Cursor reads MCP servers from; an export writes the plugin's root `mcp.json` instead (see [MCP Servers: Config File Locations](../mcp.md#config-file-locations))
 - Artifacts are under `.cursor/` instead of `.claude/`
+
+In the preview output, the `safety.mdc` entry reads:
+
+```
+---
+description: Production safety rules
+alwaysApply: true
+---
+
+Never deploy to production without running the test suite first.
+Always create a rollback plan before deploying.
+```
+
+There is one frontmatter block, not Cursor's followed by the rule's. The
+rule's `description` replaces the default taken from the file name, and its
+`name` is dropped because Cursor does not read it. Cursor reads only
+`description`, `globs` and `alwaysApply`; a rule that sets `globs`, or
+Claude Code's `paths`, comes out scoped to those files with
+`alwaysApply: false`. [Artifacts: Rules](../artifacts.md#rules) has the full
+mapping.
 
 ## Compare Claude vs Cursor output
 

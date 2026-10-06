@@ -323,3 +323,104 @@ func TestCursorApplyRuntimeInstructions_NoExistingFile(t *testing.T) {
 		t.Errorf(".cursorrules missing injected instructions")
 	}
 }
+
+// A source rule that carries its own frontmatter must come out with exactly
+// one block: Cursor's fields merged from the source's, never two (#532).
+func TestCursorTransformArtifact_MergesSourceFrontmatter(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "no frontmatter keeps the defaults",
+			src:  "Never deploy on Friday.\n",
+			want: "---\ndescription: Safety\nalwaysApply: true\n---\n\nNever deploy on Friday.\n",
+		},
+		{
+			name: "description replaces the humanised name, name is dropped",
+			src:  "---\nname: safety\ndescription: Production safety rules\n---\n\nNever deploy on Friday.\n",
+			want: "---\ndescription: Production safety rules\nalwaysApply: true\n---\n\nNever deploy on Friday.\n",
+		},
+		{
+			name: "quoted description is unquoted",
+			src:  "---\ndescription: \"Safety: production\"\n---\nbody\n",
+			want: "---\ndescription: Safety: production\nalwaysApply: true\n---\n\nbody\n",
+		},
+		{
+			name: "folded description becomes one line",
+			src:  "---\ndescription: >\n  Production\n  safety rules\n---\nbody\n",
+			want: "---\ndescription: Production safety rules\nalwaysApply: true\n---\n\nbody\n",
+		},
+		{
+			name: "empty frontmatter keeps the defaults and is removed",
+			src:  "---\n---\nbody\n",
+			want: "---\ndescription: Safety\nalwaysApply: true\n---\n\nbody\n",
+		},
+		{
+			name: "Claude paths block list becomes scoped globs",
+			src:  "---\npaths:\n  - \"src/**/*.ts\"\n  - lib/**\n---\nbody\n",
+			want: "---\ndescription: Safety\nglobs: src/**/*.ts,lib/**\nalwaysApply: false\n---\n\nbody\n",
+		},
+		{
+			name: "paths flow list keeps braces whole",
+			src:  "---\npaths: [\"src/**/*.{ts,tsx}\", docs/**]\n---\nbody\n",
+			want: "---\ndescription: Safety\nglobs: src/**/*.{ts,tsx},docs/**\nalwaysApply: false\n---\n\nbody\n",
+		},
+		{
+			name: "Cursor globs scalar passes through verbatim and wins over paths",
+			src:  "---\npaths:\n  - other/**\nglobs: src/**/*.{ts,tsx},lib/**\n---\nbody\n",
+			want: "---\ndescription: Safety\nglobs: src/**/*.{ts,tsx},lib/**\nalwaysApply: false\n---\n\nbody\n",
+		},
+		{
+			name: "explicit alwaysApply is honoured",
+			src:  "---\nglobs: src/**\nalwaysApply: true\n---\nbody\n",
+			want: "---\ndescription: Safety\nglobs: src/**\nalwaysApply: true\n---\n\nbody\n",
+		},
+		{
+			name: "explicit alwaysApply false without globs",
+			src:  "---\ndescription: Use when deploying\nalwaysApply: false\n---\nbody\n",
+			want: "---\ndescription: Use when deploying\nalwaysApply: false\n---\n\nbody\n",
+		},
+		{
+			name: "unparseable alwaysApply falls back to the default",
+			src:  "---\nalwaysApply: sometimes\n---\nbody\n",
+			want: "---\ndescription: Safety\nalwaysApply: true\n---\n\nbody\n",
+		},
+		{
+			name: "malformed lines inside a closed block are skipped",
+			src:  "---\nnot yaml at all\n: no key\ndescription: Kept\n---\nbody\n",
+			want: "---\ndescription: Kept\nalwaysApply: true\n---\n\nbody\n",
+		},
+		{
+			name: "unclosed block is body, not frontmatter",
+			src:  "---\ndescription: never closed\nbody\n",
+			want: "---\ndescription: Safety\nalwaysApply: true\n---\n\n---\ndescription: never closed\nbody\n",
+		},
+		{
+			name: "CRLF and BOM are recognised",
+			src:  "\ufeff---\r\ndescription: Windows rule\r\n---\r\nbody\r\n",
+			want: "---\ndescription: Windows rule\nalwaysApply: true\n---\n\nbody\r\n",
+		},
+		{
+			name: "a thematic break later in the body is left alone",
+			src:  "intro\n\n---\n\nmore\n",
+			want: "---\ndescription: Safety\nalwaysApply: true\n---\n\nintro\n\n---\n\nmore\n",
+		},
+	}
+	c := &Cursor{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			name, got := c.TransformArtifact("rules", "safety.md", []byte(tt.src))
+			if name != "safety.mdc" {
+				t.Errorf("name = %q, want safety.mdc", name)
+			}
+			if string(got) != tt.want {
+				t.Errorf("got:\n%q\nwant:\n%q", got, tt.want)
+			}
+			if n := strings.Count(string(got), "alwaysApply:"); n != 1 {
+				t.Errorf("want exactly one frontmatter block, alwaysApply appears %d times:\n%s", n, got)
+			}
+		})
+	}
+}

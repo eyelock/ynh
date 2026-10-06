@@ -1,12 +1,14 @@
 package vendor
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -386,25 +388,76 @@ type cursorMCPServer struct {
 }
 
 // TransformArtifact rewrites Cursor rule files to the .mdc format Cursor
-// requires: renamed from .md to .mdc with injected frontmatter. Plain .md
+// requires: renamed from .md to .mdc with Cursor's frontmatter. Plain .md
 // files under .cursor/rules are silently ignored by Cursor. Other artifact
 // types pass through unchanged.
 func (c *Cursor) TransformArtifact(artifactType, name string, data []byte) (string, []byte) {
 	if artifactType != "rules" || !strings.HasSuffix(name, ".md") {
 		return name, data
 	}
+	stem := strings.TrimSuffix(name, ".md")
+	return stem + ".mdc", cursorRule(stem, data)
+}
 
-	newName := strings.TrimSuffix(name, ".md") + ".mdc"
-	description := humanizeRuleName(strings.TrimSuffix(name, ".md"))
+// cursorRule renders a rule as an .mdc file with exactly one frontmatter
+// block (#532). Cursor reads three fields, description, globs and
+// alwaysApply (cursor.com/docs/context/rules), so a source rule's own
+// frontmatter is merged into them rather than left in the body as a second
+// block:
+//
+//   - description: the source's, else the humanised file name.
+//   - globs: the source's globs, else its paths (Claude Code's rule scoping),
+//     comma-joined the way Cursor writes them. A globs scalar is already
+//     Cursor's form and is kept verbatim.
+//   - alwaysApply: the source's when it is a valid boolean; otherwise false
+//     for a rule with globs, which Cursor would ignore under alwaysApply:
+//     true, and true for one without.
+//
+// Every other source field (name, for one) is dropped: Cursor does not read
+// it, and the .mdc is a rendering for Cursor alone. A source with no closed
+// frontmatter block is all body.
+func cursorRule(stem string, data []byte) []byte {
+	description := humanizeRuleName(stem)
+	var globs, paths []string
+	alwaysApply, explicit := true, false
+	body := data
 
-	var b strings.Builder
+	if lines, rest, ok := splitFrontmatter(data); ok {
+		body = bytes.TrimLeft(rest, "\r\n")
+		for _, e := range frontmatterEntries(lines) {
+			switch e.key {
+			case "description":
+				if d := strings.Join(strings.Fields(e.scalar()), " "); d != "" {
+					description = d
+				}
+			case "globs":
+				globs = e.list()
+			case "paths":
+				paths = e.list()
+			case "alwaysApply":
+				if v, err := strconv.ParseBool(e.scalar()); err == nil {
+					alwaysApply, explicit = v, true
+				}
+			}
+		}
+	}
+	if len(globs) == 0 {
+		globs = paths
+	}
+	if len(globs) > 0 && !explicit {
+		alwaysApply = false
+	}
+
+	var b bytes.Buffer
 	b.WriteString("---\n")
 	fmt.Fprintf(&b, "description: %s\n", description)
-	b.WriteString("alwaysApply: true\n")
+	if len(globs) > 0 {
+		fmt.Fprintf(&b, "globs: %s\n", strings.Join(globs, ","))
+	}
+	fmt.Fprintf(&b, "alwaysApply: %t\n", alwaysApply)
 	b.WriteString("---\n\n")
-	b.Write(data)
-
-	return newName, []byte(b.String())
+	b.Write(body)
+	return b.Bytes()
 }
 
 // humanizeRuleName turns a rule filename stem (e.g. "artifact-authoring")

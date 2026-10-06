@@ -181,7 +181,7 @@ These come from Ollama's own docs, not ynh:
 
 **Cursor Agent** - Full interactive and non-interactive support. Uses symlink-based artifact installation. Requires `agent` CLI installed (`curl https://cursor.com/install -fsS | bash`). Uses `-p` for non-interactive prompts. See [cursor.com/cli](https://cursor.com/cli).
 
-**GitHub Copilot CLI** - Full interactive and non-interactive support. Uses `--plugin-dir` for artifact loading, like Claude. Requires `copilot` CLI installed. Non-interactive runs need `--allow-all-tools` (added automatically). Harness instructions and MCP servers are projected into the calling project's `.github/instructions/ynh-harness.instructions.md` and `.github/mcp.json` — Copilot doesn't read plugin-bundled `AGENTS.md`/`.mcp.json` via `--plugin-dir`. **Hooks are not supported**: Copilot silently no-ops hooks in folders it hasn't marked as trusted, and no CLI flag exists to grant that trust per-invocation, so `ynh`-managed hook config would silently fail rather than run. See [github.com/features/copilot/cli](https://github.com/features/copilot/cli).
+**GitHub Copilot CLI** - Full interactive and non-interactive support. Uses `--plugin-dir` for artifact loading, like Claude. Requires `copilot` CLI installed. Non-interactive runs need `--allow-all-tools` (added automatically). Harness instructions and MCP servers are projected into the calling project's `.github/instructions/ynh-harness.instructions.md` and `.github/mcp.json`, because Copilot doesn't read plugin-bundled `AGENTS.md`/`.mcp.json` via `--plugin-dir`. The instructions file gets one frontmatter block, `applyTo: "**/*"` so it is always on, followed by any fields of the harness instructions' own frontmatter except `applyTo`. **Hooks are not supported**: Copilot silently no-ops hooks in folders it hasn't marked as trusted, and no CLI flag exists to grant that trust per-invocation, so `ynh`-managed hook config would silently fail rather than run. See [github.com/features/copilot/cli](https://github.com/features/copilot/cli).
 
 ## Export Output by Vendor
 
@@ -192,7 +192,7 @@ These come from Ollama's own docs, not ynh:
 | **Manifest** | `.claude-plugin/plugin.json` | `.cursor-plugin/plugin.json` | `.codex-plugin/plugin.json` | `.claude-plugin/plugin.json` |
 | **Skills** | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` |
 | **Agents** | `agents/<name>.md` | `agents/<name>.md` | *excluded* | `agents/<name>.md` |
-| **Rules** | `rules/<name>.md` | `rules/<name>.md` | *excluded* | *excluded* |
+| **Rules** | `rules/<name>.md` | `rules/<name>.mdc` | *excluded* | *excluded* |
 | **Commands** | `commands/<name>.md` | `commands/<name>.md` | *excluded* | *excluded* |
 | **Instructions** | `AGENTS.md` | `.cursorrules` + `AGENTS.md` | `AGENTS.md` | `AGENTS.md` |
 | **Hooks** | `hooks/claude.json` | `hooks/cursor.json` | `hooks/codex.json` | *none* |
