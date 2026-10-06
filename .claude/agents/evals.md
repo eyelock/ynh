@@ -32,7 +32,7 @@ Evaluate ALL tutorials. This is a release gate: the verdict must be PASS before 
    - Execute each block that produces verifiable output.
    - Compare actual output against the expected output documented in the tutorial, with the tutorial's `/tmp/...` paths read as their sandbox equivalents.
    - Run blocks that launch a vendor through ynh or ynd (a harness launcher, `ynh run`, `ynh agent run`, `ynd compress`, `ynd inspect`): they reach a stub, and `run.sh` checks the call against the block's [launch line](#launch-blocks).
-   - Skip blocks that need network access (git clone from GitHub, a remote include), that call a [stubbed program](#vendor-cli-stubs) directly rather than through ynh or ynd (`claude plugin validate`, `copilot plugin ...`, `docker ...`), that run Docker through `ynh image` (other than `--dry-run`), that sit under the line "Your output will differ", or that need a path outside `/tmp` (such as a local checkout). **Skip the whole block**, never just the matching line, and name every skipped block in the report.
+   - Skip blocks that need network access beyond the [GitHub repositories the sandbox serves](#github-repositories-served-offline), that call a [stubbed program](#vendor-cli-stubs) directly rather than through ynh or ynd (`claude plugin validate`, `copilot plugin ...`, `docker ...`), that run Docker through `ynh image` (other than `--dry-run`), that sit under the line "Your output will differ", or that need a path outside `/tmp` (such as a local checkout). **Skip the whole block**, never just the matching line, and name every skipped block in the report.
    - Run the tutorial's own cleanup, then check its workspace is empty and tear the sandbox down.
 4. Run the manual test plan (`docs/tutorial/manual-test-plan.md`): every E-numbered case and every S-numbered case, in one more sandbox with slug `manual-test-plan`, then its "Clean up" block, which removes the `/tmp/ynh-edge` root. Skip its Prerequisites block: it runs `make install`.
 5. Record the same three listings as step 2 and compare. `git status --porcelain` must be identical. Report any entry that appeared in or vanished from `/tmp` or the user temp directory, unless it belongs to another process you can name.
@@ -67,6 +67,7 @@ If another eval may be running on the same machine, put a run tag in every root,
 - **Never `rm` outside the sandbox.** The guard resolves every `rm` and `rmdir` target and refuses anything that is not strictly inside the sandbox root, or that contains a `..` component. If a refusal fires, stop and report it; do not work around it.
 - **`GIT_CEILING_DIRECTORIES=/private/tmp:/tmp`**, so git never walks up into a stray repository in `/tmp`.
 - **`GIT_ALLOW_PROTOCOL=file`**, so git refuses `https`, `ssh` and `git` transports. A block that should have been skipped for needing the network fails with `transport ... not allowed` instead of reaching it. ynh reaches remote sources only through git.
+- **GitHub is a local fixture.** The few repositories the tutorials fetch are served from the sandbox, so those blocks run. See [GitHub repositories served offline](#github-repositories-served-offline).
 - **No git writes outside a directory the runner created.** The guard refuses `git init`, `add`, `commit`, `worktree` and the other writing subcommands unless the target is inside the sandbox.
 - **`mktemp -d` makes its directory inside the sandbox.** Every `mktemp -d` in a block is rewritten to `mktemp -d /tmp/ynh-eval-<slug>/tmp/tmp.XXXXXX`. Without a template, macOS puts it under `/var/folders`, where the tutorial's cleanup cannot see it. `TMPDIR` points at the same directory, so temporary directories ynh and ynd make for themselves land there too, and a leak shows up as a non-empty `tmp/`.
 - **Every vendor CLI is a stub.** See [Vendor CLI stubs](#vendor-cli-stubs). The stubs come first on `PATH`, then the checkout's `bin/`. Verify `command -v ynh` prints `$YNH_REPO/bin/ynh`, and every stubbed name resolves to its stub, before the first block.
@@ -354,9 +355,44 @@ W="$SANDBOX/work" S="$SANDBOX" T="$SANDBOX/tmp" perl -pi -e '
 bash -c '. "$1/env.sh"; command -v ynh; command -v ynd
   for b in $STUBS; do [ "$(command -v "$b")" = "$SANDBOX/stubs/$b" ] || echo "NOT STUBBED: $b -> $(command -v "$b")"; done' _ "$SANDBOX"
 ls "$SANDBOX/blocks"
+[ "$SLUG" = manual-test-plan ] || bash "$YNH_REPO/scripts/eval-remotes.sh" "$SANDBOX"
 ```
 
-The last lines must print `$YNH_REPO/bin/ynh`, `$YNH_REPO/bin/ynd` and the list of blocks, and no `NOT STUBBED` line. If `command -v` prints anything else, stop: the eval would test the wrong binaries, or could launch a real vendor CLI.
+The last lines must print `$YNH_REPO/bin/ynh`, `$YNH_REPO/bin/ynd`, the list of blocks, and, for a tutorial, `eval-remotes: serving 4 repositories`, with no `NOT STUBBED` line. If `command -v` prints anything else, stop: the eval would test the wrong binaries, or could launch a real vendor CLI.
+
+### GitHub repositories served offline
+
+Several tutorials install harnesses from, include skills from, or delegate to
+`github.com/eyelock/assistants` and a few other repositories. A tutorial shows
+the reader exactly those commands, and an eval runs exactly those commands:
+nothing is substituted in the blocks. Instead the last line of the setup block
+runs `scripts/eval-remotes.sh`, which builds a local bare repository for each
+repository below inside the sandbox (`$SANDBOX/remotes/`) and writes the
+sandbox's `~/.gitconfig` so that git serves them in place of GitHub, through
+`url.<local repository>.insteadOf` entries for both the `git@github.com:` form
+ynh clones with and the `https://github.com/` form. Because only the transport
+changes, the ids ynh derives (`github.com/eyelock/assistants/david`), the
+allow-list checks and every line of output are what a reader sees.
+`GIT_ALLOW_PROTOCOL=file` still refuses any other repository, so a command that
+would reach GitHub for something not served here fails instead of connecting.
+
+A tutorial block that rewrote the address instead (a `*Replace ...*` line) would
+change the canonical ids and the allow-list messages the tutorial is teaching,
+which is why this is done below the commands and not in them.
+
+| Repository | What the tutorials take from it |
+|------------|---------------------------------|
+| `eyelock/assistants` | `skills/<category>/skills/<name>` (`dev` has seven, `tech` three, `infra` two, `pause` two), the harnesses `ynh/david` (four includes), `ynh/planner`, `ynh/tester` and `ynh/researcher`, and `plugins/media-management`. Branch `main` and tag `v1.0.0` |
+| `anthropics/skills` | `skills/frontend-design`, `skills/pdf`, `skills/docx` |
+| `vercel-labs/skills` | `skills/find-skills`, `skills/vercel-deploy` |
+| `agentplugins/agent-plugins-example` | A stand-in for the specification project's reference package: a root `plugin.json`, one skill (`migrate-agent-plugin`), `README.md` and `LICENSE` |
+
+The fixtures hold the minimum each tutorial needs, under the real layout. When a
+tutorial starts using more of a repository, add it to `scripts/eval-remotes.sh`.
+When it names a new repository, add that there too: `make check-vendor-parity`
+fails on a `github.com/<org>/<repo>` in a tutorial command that nothing serves
+(check E), and builds the fixtures once to prove the script works. The manual
+test plan does not use the fixtures, and its sandbox does not serve them.
 
 ### Run each block
 
@@ -364,8 +400,13 @@ Read a block, decide whether it runs, then run it through `run.sh`:
 
 ```bash
 cat /tmp/ynh-eval-<slug>/blocks/07.sh
-bash /tmp/ynh-eval-<slug>/run.sh 07
+bash /tmp/ynh-eval-<slug>/run.sh 07 < /dev/null
 ```
+
+Give every block `/dev/null` as its standard input. A block that asks a question
+(`ynd marketplace build --clean` without `-y`) then reads end of file and takes
+the safe default, as the tutorial describes; left attached to the tool's input
+it waits forever.
 
 Run blocks in order. `run.sh` carries the working directory, the previous directory (for `cd -`) and exported variables from one block to the next, so a tutorial that does `cd` or `export` in one block and relies on it in the next behaves as it does in a reader's terminal. Before running a block, check it has no path outside the sandbox: the rewrite covers `/tmp`, not a path like `/Users/...`. A block that needs one is skipped whole.
 
@@ -421,10 +462,11 @@ Many tutorials do not require network access or vendor CLIs and must be run:
 - **Profiles** (`profiles.md`): Create harness with profiles, run `ynd preview --profile <name>`, and verify merged output. Fully local.
 - **Focus** (`focus.md`): Create harness with focus entries, run `ynd preview --focus <name>`, and verify prompt + profile. Fully local.
 - **Project-local config** (`project-local-config.md`): Create a `.agents/harness/plugin.json` in the sandbox, run `ynd preview` from that directory. Also creates a `.ynh-plugin/plugin.json` project to prove the fallback location still reads. No network.
-- **Include editing** (`include-editing.md`): Use a local-path include (not a git URL) with `ynh include add <dir> ./local-path`. The add/remove/update commands work on the manifest directly without network when the harness is path-referenced (not installed). Skip the installed-harness pre-fetch steps which require network.
+- **Include editing** (`include-editing.md`): The add/remove/update commands work on the manifest directly when the harness is path-referenced, and for an installed harness `ynh include add` pre-fetches the include, which the [served repositories](#github-repositories-served-offline) cover. Run every block.
+- **Tutorials that fetch from GitHub** (`composition.md`, `delegation.md`, `export.md`, `marketplace.md`, `registry-and-discovery.md`, `namespacing-and-migration.md`, `include-editing.md`): installs, includes, delegates, `ynd export` from a Git URL and registry entries all resolve against the served repositories. Run their blocks; skip only a block that calls a stubbed program directly, such as `claude plugin validate` or `copilot ...`.
 - **Namespacing and migration** (`namespacing-and-migration.md`): Create harnesses with the legacy `.harness.json` format in the sandbox, confirm `ynd validate` and `ynh install` refuse them with the `ynd migrate` fix and leave them untouched, then convert them with `ynd migrate -y`. Migration is fully local.
 
-Only skip a block if it literally shells out to `git clone` or needs another network source, calls a stubbed program directly rather than through ynh or ynd, runs Docker (directly or through `ynh image` other than `--dry-run`), sits under the line "Your output will differ", or needs a path outside `/tmp`. A block that launches a vendor through ynh or ynd is not skipped: it runs against the stub, as [Launch blocks](#launch-blocks) describes. "This tutorial is about git/network/vendor" is NOT sufficient reason to skip the whole tutorial: skip only the specific blocks that require those things.
+Only skip a block if it needs a network source the sandbox does not serve (a `git clone` or include from a repository outside the [served list](#github-repositories-served-offline), a live API), calls a stubbed program directly rather than through ynh or ynd, runs Docker (directly or through `ynh image` other than `--dry-run`), sits under the line "Your output will differ", or needs a path outside `/tmp`. A block that launches a vendor through ynh or ynd is not skipped: it runs against the stub, as [Launch blocks](#launch-blocks) describes. "This tutorial is about git/network/vendor" is NOT sufficient reason to skip the whole tutorial: skip only the specific blocks that require those things.
 
 ## Pass/Fail Criteria
 

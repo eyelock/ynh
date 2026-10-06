@@ -273,7 +273,7 @@ Requires Docker installed and running.
 | Update a path value | [Update a path value](include-editing.md#update-a-path-value) |
 | Remove an include | [Remove an include](include-editing.md#remove-an-include) |
 | Disambiguating a monorepo | [Disambiguating a monorepo](include-editing.md#disambiguating-a-monorepo) |
-| Installed harnesses — name-based targeting (network required) | [Installed harnesses — name-based targeting (network required)](include-editing.md#installed-harnesses-name-based-targeting-network-required) |
+| Installed harnesses: name-based targeting | [Installed harnesses: name-based targeting](include-editing.md#installed-harnesses-name-based-targeting) |
 | Path resolution — id vs path | [Path resolution — id vs path](include-editing.md#path-resolution-id-vs-path) |
 | Clean up | [Clean up](include-editing.md#clean-up) |
 
