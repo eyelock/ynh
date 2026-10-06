@@ -38,12 +38,15 @@ func init() {
 	Register(&Claude{})
 }
 
+// claudeCLI is Claude Code's binary: see CLIName in adapter.go.
+const claudeCLI = "claude"
+
 // Claude implements the Adapter interface for Claude Code CLI.
 type Claude struct{}
 
 func (c *Claude) Name() string        { return "claude" }
 func (c *Claude) DisplayName() string { return "Claude Code" }
-func (c *Claude) CLIName() string     { return "claude" }
+func (c *Claude) CLIName() string     { return claudeCLI }
 
 func (c *Claude) ConfigDir() string {
 	return ".claude"
@@ -170,7 +173,7 @@ func (c *Claude) ApplyRuntimeInstructions(runDir, text string) ([]string, error)
 // initialPrompt, when non-empty, is placed first so it precedes --add-dir;
 // --add-dir suppresses any positional arg that follows it.
 func buildClaudeArgs(configPath string, initialPrompt string, extraArgs []string) []string {
-	args := []string{"claude"}
+	args := []string{claudeCLI}
 
 	// Positional prompt must come before --add-dir; --add-dir suppresses any
 	// positional arg that follows it in the args list.
@@ -540,7 +543,7 @@ func claudeMCPDocument(servers map[string]plugin.MCPServer) ([]byte, error) {
 }
 
 func launchClaude(configPath string, initialPrompt string, extraArgs []string) error {
-	claudeBin, err := exec.LookPath("claude")
+	claudeBin, err := exec.LookPath(claudeCLI)
 	if err != nil {
 		return err
 	}

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 func TestParseInspectArgs_VendorFlag(t *testing.T) {
@@ -1062,7 +1064,7 @@ func TestCmdInspect_VendorNotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing vendor")
 	}
-	if !strings.Contains(err.Error(), "not found on PATH") {
+	if !strings.Contains(err.Error(), "unsupported vendor") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -1746,5 +1748,29 @@ func TestWriteArtifact_AlreadyExists(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "already exists") {
 		t.Errorf("expected 'already exists' error, got %v", err)
+	}
+}
+
+// Inspect looks for existing skills and agents in every vendor's config
+// directory, as each adapter names it, not in a list kept here (#524).
+func TestDiscoverExistingAll_SearchesEveryVendorConfigDir(t *testing.T) {
+	dir := t.TempDir()
+	names := vendor.Available()
+	for _, name := range names {
+		adapter, err := vendor.Get(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg := filepath.Join(dir, adapter.ConfigDir())
+		mkdirAll(t, filepath.Join(cfg, "skills", "s-"+name))
+		writeFile(t, filepath.Join(cfg, "skills", "s-"+name, "SKILL.md"), []byte("---\nname: s-"+name+"\n---\n"))
+		mkdirAll(t, filepath.Join(cfg, "agents"))
+		writeFile(t, filepath.Join(cfg, "agents", "a-"+name+".md"), []byte("---\nname: a-"+name+"\n---\n"))
+	}
+	if got := discoverExistingSkillsAll(dir); len(got) != len(names) {
+		t.Errorf("found %d skills %q, want one per vendor (%d)", len(got), got, len(names))
+	}
+	if got := discoverExistingAgentsAll(dir); len(got) != len(names) {
+		t.Errorf("found %d agents %q, want one per vendor (%d)", len(got), got, len(names))
 	}
 }

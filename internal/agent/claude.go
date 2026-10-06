@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // ClaudeBackend implements WorkerBackend for Claude Code CLI.
@@ -23,9 +25,9 @@ func (b *ClaudeBackend) Name() string { return "claude" }
 
 // Start spawns a claude subprocess in stream-json mode.
 func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSession, error) {
-	claudeBin, err := exec.LookPath("claude")
+	claudeBin, err := lookWorkerCLI(b.Name())
 	if err != nil {
-		return nil, fmt.Errorf("claude not found on PATH: %w", err)
+		return nil, err
 	}
 
 	args := buildClaudeStreamArgs(opts)
@@ -143,7 +145,7 @@ func buildClaudeStreamArgs(opts StartOptions) []string {
 	}
 
 	if opts.ConfigPath != "" {
-		pluginDir := filepath.Join(opts.ConfigPath, ".claude")
+		pluginDir := filepath.Join(opts.ConfigPath, (&vendor.Claude{}).ConfigDir())
 		args = append(args, "--plugin-dir", pluginDir, "--add-dir", opts.ConfigPath)
 
 		instructionsPath := filepath.Join(opts.ConfigPath, "CLAUDE.md")

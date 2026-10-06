@@ -18,6 +18,9 @@ func init() {
 	Register(&Copilot{})
 }
 
+// copilotCLI is GitHub Copilot CLI's binary: see CLIName in adapter.go.
+const copilotCLI = "copilot"
+
 // Copilot implements the Adapter interface for GitHub Copilot CLI.
 //
 // Launch strategy mirrors Claude: --plugin-dir for native plugin loading,
@@ -34,7 +37,7 @@ type Copilot struct{}
 
 func (c *Copilot) Name() string        { return "copilot" }
 func (c *Copilot) DisplayName() string { return "GitHub Copilot CLI" }
-func (c *Copilot) CLIName() string     { return "copilot" }
+func (c *Copilot) CLIName() string     { return copilotCLI }
 
 func (c *Copilot) ConfigDir() string {
 	return ".copilot"
@@ -504,7 +507,7 @@ func projectCopilotMCPConfig(configPath, projectDir string) error {
 // (syscall.Exec), so there is no opportunity to retry after such a restart;
 // the update must simply not happen mid-launch.
 func buildCopilotArgs(configPath string, initialPrompt string, extraArgs []string) ([]string, error) {
-	args := []string{"copilot", "--no-auto-update"}
+	args := []string{copilotCLI, "--no-auto-update"}
 
 	if initialPrompt != "" {
 		args = append(args, "-i", initialPrompt)
@@ -528,7 +531,7 @@ func buildCopilotArgs(configPath string, initialPrompt string, extraArgs []strin
 }
 
 func launchCopilot(configPath string, initialPrompt string, extraArgs []string) error {
-	copilotBin, err := exec.LookPath("copilot")
+	copilotBin, err := exec.LookPath(copilotCLI)
 	if err != nil {
 		return err
 	}

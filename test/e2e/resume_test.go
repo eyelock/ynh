@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // Resume e2e: drives the production binary with fake vendor CLIs on PATH that
@@ -73,11 +75,26 @@ func newResumeEnv(t *testing.T) *resumeEnv {
 		env.resolvedProject = resolved
 	}
 
-	// One shim per vendor binary. "agent" is Cursor's CLI name.
+	// One shim per vendor CLI, named by its adapter (Cursor's is "agent"),
+	// so the list cannot drift from what ynh launches (#524). "cursor", the
+	// editor's launcher, and "cursor-agent", the CLI's older alias, fail
+	// loudly instead: ynh must never run them, and with the real PATH behind
+	// the shims, nothing a lookup misses may reach a real install.
 	shim := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$ARGV_OUT\"\nexit 0\n"
-	for _, bin := range []string{"claude", "copilot", "codex", "agent"} {
+	bins := map[string]string{
+		"cursor":       "#!/bin/sh\necho 'resume e2e: cursor must not run' >&2\nexit 97\n",
+		"cursor-agent": "#!/bin/sh\necho 'resume e2e: cursor-agent must not run' >&2\nexit 97\n",
+	}
+	for _, name := range vendor.Available() {
+		adapter, err := vendor.Get(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		bins[adapter.CLIName()] = shim
+	}
+	for bin, script := range bins {
 		path := filepath.Join(env.shimDir, bin)
-		if err := os.WriteFile(path, []byte(shim), 0o755); err != nil {
+		if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 			t.Fatalf("writing shim %s: %v", bin, err)
 		}
 	}

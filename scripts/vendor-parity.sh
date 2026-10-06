@@ -18,7 +18,9 @@
 #      Cursor CLI because the eval page named `cursor` and the binary is `agent`.
 #      Every `cli` that `ynh vendors` reports, and every program the Go source
 #      launches by name, must be in the STUBS line of .claude/agents/evals.md,
-#      unless it is a local tool an eval may run.
+#      unless it is a local tool an eval may run. A vendor CLI's name is spelled
+#      only in its adapter's CLIName, which `ynh vendors` reports as `cli`, so
+#      the first list covers every vendor CLI ynh or ynd runs (#524).
 #
 # Usage: scripts/vendor-parity.sh [path-to-harness]   (default: repo root)
 

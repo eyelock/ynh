@@ -23,9 +23,9 @@ func (b *CursorBackend) Name() string { return "cursor" }
 // Start allocates a new session with a fresh chat ID.
 // The first subprocess is not spawned until Send+Next are called.
 func (b *CursorBackend) Start(_ context.Context, opts StartOptions) (WorkerSession, error) {
-	cursorBin, err := exec.LookPath("cursor")
+	cursorBin, err := lookWorkerCLI(b.Name())
 	if err != nil {
-		return nil, fmt.Errorf("cursor not found on PATH: %w", err)
+		return nil, err
 	}
 
 	// Resume token = cursor chatId. cursor already persists chats on disk and
@@ -112,10 +112,13 @@ func (s *cursorSession) Next() (Turn, error) {
 	return turn, nil
 }
 
-// buildCursorArgs constructs the arguments for one cursor agent turn.
+// buildCursorArgs constructs the arguments for one turn of Cursor's CLI, in
+// its documented headless form (cursor.com/docs/cli/headless and
+// cursor.com/docs/cli/reference/parameters). The binary is the CLI itself, so
+// there is no leading "agent" subcommand: that is the editor launcher's
+// "cursor agent" form.
 func buildCursorArgs(opts StartOptions, chatID string, firstTurn bool, msg string) []string {
 	args := []string{
-		"agent",
 		"--print",
 		"--output-format", "stream-json",
 		"--trust",

@@ -94,6 +94,14 @@ any point to cross-check completeness — `grep -rli cursor --include="*.go" --i
   `claude.go` for the three existing resume strategies — they differ
   significantly, don't assume one pattern fits).
 - [ ] `internal/agent/loop.go` — register in `selectBackend`.
+- [ ] Find the CLI with `lookWorkerCLI(b.Name())`, never a literal: the
+  binary's name is the adapter's `CLIName`, the only place it is spelled
+  (#524). Run the CLI itself, with no leading subcommand left over from some
+  other launcher.
+- [ ] `cmd/ynd/llm.go`: add the vendor to `llmVendors` if its CLI can take a
+  one-shot prompt on stdin and print the answer as text, so `ynd compress`
+  and `ynd inspect` can use it. Arguments only; the binary comes from the
+  adapter.
 - [ ] This is a **separate surface from `vendor.Adapter`** — a vendor can have
   one without the other, but if the CLI supports non-interactive prompting at
   all, prefer adding both in the same PR since they share research.

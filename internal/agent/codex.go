@@ -27,9 +27,9 @@ func (b *CodexBackend) Name() string { return "codex" }
 
 // Start prepares a codex session. No process runs until Send and Next.
 func (b *CodexBackend) Start(ctx context.Context, opts StartOptions) (WorkerSession, error) {
-	codexBin, err := exec.LookPath("codex")
+	codexBin, err := lookWorkerCLI(b.Name())
 	if err != nil {
-		return nil, fmt.Errorf("codex not found on PATH: %w", err)
+		return nil, err
 	}
 	s := &codexSession{
 		ctx:      ctx,

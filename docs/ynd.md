@@ -169,7 +169,7 @@ ynd fmt --harness ./my-harness   # explicit harness flag
 
 ### compress
 
-Compress prompt/instruction text using LLM-powered SudoLang-style techniques. Requires `claude` or `codex` CLI on PATH.
+Compress prompt/instruction text using LLM-powered SudoLang-style techniques. Requires a vendor CLI on PATH: `claude`, `codex`, Cursor's `agent` or `copilot`, tried in that order unless `-v` names the vendor.
 
 A backup of every file is saved to `~/.ynd/backups/` before overwriting. Use `--restore` and `--list-backups` to manage backups.
 

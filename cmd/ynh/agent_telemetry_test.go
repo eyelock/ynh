@@ -45,6 +45,7 @@ func convergingClaude(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	shadowVendorCLIs(t, dir)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return envFile
 }
@@ -353,6 +354,7 @@ func TestAgentRun_KilledRunKeepsStartedEvent(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(stubDir, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	shadowVendorCLIs(t, stubDir)
 	t.Cleanup(func() {
 		if data, err := os.ReadFile(pidFile); err == nil {
 			if pid, perr := strconv.Atoi(strings.TrimSpace(string(data))); perr == nil {
