@@ -122,7 +122,7 @@ Expected: `specialist.md` and `researcher.md` — generated agent files with the
 cat ~/.ynh/run/local--team-lead/.claude/agents/specialist.md
 ```
 
-Expected: frontmatter with name/description, then sections for Instructions, Rules, and Available Skills — all pulled from the specialist harness.
+Expected: frontmatter with name/description, then an Instructions section and an Available Skills section, pulled from the specialist harness. A Rules section appears too when the delegate has rules; this one has none.
 
 ## Test delegation
 

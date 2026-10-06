@@ -402,11 +402,9 @@ Expected:
 }
 ```
 
-## Installed harnesses — name-based targeting (network required)
+## Installed harnesses: name-based targeting
 
-> **Skip in evals** — requires network access for the pre-fetch.
-
-For installed harnesses, use the harness name instead of a path:
+For installed harnesses, use the harness id instead of a path. Adding a Git include to one fetches it straight away, so this step reaches the include's host:
 
 ```bash
 # Install a harness first

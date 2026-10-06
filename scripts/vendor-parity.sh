@@ -5,7 +5,7 @@
 # that. Copilot shipped as a working adapter and every skill still described
 # three vendors, because no check ever compared the vendor list against anything.
 #
-# Four assertions:
+# Five assertions:
 #
 #   A. Every vendor `ynh vendors` reports has a row in the vendor-adapters
 #      reference index. A new adapter that nobody documented fails here.
@@ -26,6 +26,12 @@
 #      model-output line, `*Replace ...*`) is well formed, a launch or output
 #      line sits directly above a bash block, a launch names a stubbed program,
 #      and no HTML comment carries an eval directive. run.sh checks the calls.
+#
+#   E. Every github.com repository a tutorial command names is one the eval
+#      serves from a local fixture (scripts/eval-remotes.sh), so its blocks run
+#      offline instead of being skipped (#534). A tutorial that reaches a new
+#      repository fails here until a fixture exists for it. It also builds the
+#      fixtures once, so a broken fixture script fails here too.
 #
 # Usage: scripts/vendor-parity.sh [path-to-harness]   (default: repo root)
 
@@ -218,6 +224,45 @@ if [ -n "$hidden" ]; then
 	fail=1
 fi
 echo "  $markers eval lines checked"
+
+# --- E. tutorial remotes are served by the eval fixtures --------------------
+# An eval sandbox points git at local copies of the repositories the tutorials
+# fetch (scripts/eval-remotes.sh). A repository named in a tutorial command and
+# missing there would be fetched from GitHub: the sandbox refuses that, and the
+# block fails or, worse, gets skipped again. Comment lines in a block, and the
+# README and manual test plan (which the eval handles itself), are not commands.
+echo
+echo "== E. tutorial remotes =="
+SB=$(mktemp -d /tmp/ynh-eval-parity.XXXXXX)
+mkdir -p "$SB/home"
+if ! "$ROOT/scripts/eval-remotes.sh" "$SB" > "$TMP/remotes.log" 2>&1; then
+	sed 's/^/  /' "$TMP/remotes.log"
+	echo "  FAIL     scripts/eval-remotes.sh did not build the fixtures"
+	fail=1
+fi
+sed -n 's|^[[:space:]]*insteadOf = https://github.com/||p' "$SB/remotes/gitconfig" | sort -u > "$TMP/served.txt"
+case $SB in /tmp/ynh-eval-parity.?*) rm -rf "$SB" ;; esac
+# Named in a tutorial command but never fetched: `ynh include add` on a harness
+# directory only edits its manifest, so the repository is a name, not a source.
+NEVER_FETCHED="acme/tools"
+for md in "$ROOT"/docs/tutorial/*.md; do
+	case "$(basename "$md")" in README.md|manual-test-plan.md) continue ;; esac
+	awk -v file="$(basename "$md")" '
+		/^```/ { if (open) { open = 0; bash = 0 } else { open = 1; bash = ($0 == "```bash") } next }
+		open && bash && $0 !~ /^[[:space:]]*#/ { print }
+	' "$md" | grep -oE 'github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+' \
+		| sed -E 's|^github\.com/||; s|\.git$||; s|\.+$||' | sort -u \
+		| sed "s|\$|\t$(basename "$md")|" || true
+done > "$TMP/named.tsv"
+named=0
+while IFS=$'\t' read -r repo file; do
+	named=$((named + 1))
+	case " $NEVER_FETCHED " in *" $repo "*) continue ;; esac
+	grep -qx "$repo" "$TMP/served.txt" && continue
+	echo "  MISSING  github.com/$repo, named in $file, has no fixture in scripts/eval-remotes.sh"
+	fail=1
+done < "$TMP/named.tsv"
+echo "  $(wc -l < "$TMP/served.txt" | tr -d ' ') repositories served, $named named in tutorial commands"
 
 echo
 if [ "$fail" -ne 0 ]; then
