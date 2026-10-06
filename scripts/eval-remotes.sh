@@ -57,12 +57,14 @@ This is the $3 skill."
 }
 
 # harness <repo> <dir> <name> <description> [includes-json]: write a harness manifest.
+# The live eyelock/assistants still keeps its manifests in .ynh-plugin/, so these do too:
+# ynh prints its deprecation warning for them, as a reader sees.
 harness() {
 	local inc=""
 	[ -n "${5:-}" ] && inc=",
   \"includes\": [$5
   ]"
-	file "$1" "$2/.agents/harness/plugin.json" "{
+	file "$1" "$2/.ynh-plugin/plugin.json" "{
   \"\$schema\": \"https://eyelock.github.io/ynh/schema/plugin.schema.json\",
   \"name\": \"$3\",
   \"version\": \"0.1.0\",

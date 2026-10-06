@@ -303,6 +303,24 @@ By default `ynh ls` and `ynh info` are **offline** — they read installed manif
 ynh ls --format json --check-updates | jq '.harnesses[0]'
 ```
 
+`my-harness` is a local install, so that call adds nothing for it: there is no upstream to ask. Install one from a Git URL and the probe has something to compare against:
+
+```bash
+ynh install github.com/eyelock/assistants --path ynh/tester
+ynh ls --format json --check-updates | jq '.harnesses[] | select(.name == "tester") | {ref_installed, ref_available}'
+ynh uninstall github.com/eyelock/assistants/tester
+```
+
+Expected (the SHAs are the repository's head, so yours differ; right after an install the two are equal):
+```json
+{
+  "ref_installed": "<sha>",
+  "ref_available": "<sha>"
+}
+```
+
+Once the repository gains a commit, `ref_available` shows the new SHA while `ref_installed` stays put.
+
 The flag adds two optional fields per harness and per include:
 
 - `version_available` — the latest version known upstream (registry-installed harnesses only)
@@ -316,7 +334,7 @@ The fields are **omitted entirely** when:
 
 This is the "unknown" arm of a three-state contract — consumers must distinguish *unknown* from *up-to-date* (field present and equal to `*_installed`) from *update available* (field present and different).
 
-> Note: `--check-updates` does network I/O. Probes run concurrently with a bounded fan-out and per-probe failures degrade silently — the command never errors on probe failure. Default calls (without the flag) stay fast and deterministic.
+> Note: `--check-updates` contacts each source's Git remote (`git ls-remote`), and a registry's repository for `version_available`. Probes run concurrently with a bounded fan-out and per-probe failures degrade silently: the command never errors on probe failure. Default calls (without the flag) stay fast and deterministic.
 
 ## YNH_HOME override
 

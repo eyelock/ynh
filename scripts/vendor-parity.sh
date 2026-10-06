@@ -49,7 +49,9 @@ done
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+SB=""
+# SB is check E's fixture sandbox; remove it however the script ends, but only a path it made.
+trap 'rm -rf "$TMP"; case $SB in /tmp/ynh-eval-parity.?*) rm -rf "$SB" ;; esac' EXIT
 
 # `ynh vendors --format json` is the authority on which vendors exist. Reading
 # it rather than hardcoding is the entire point: a hardcoded list is what let
@@ -241,7 +243,6 @@ if ! "$ROOT/scripts/eval-remotes.sh" "$SB" > "$TMP/remotes.log" 2>&1; then
 	fail=1
 fi
 sed -n 's|^[[:space:]]*insteadOf = https://github.com/||p' "$SB/remotes/gitconfig" | sort -u > "$TMP/served.txt"
-case $SB in /tmp/ynh-eval-parity.?*) rm -rf "$SB" ;; esac
 # Named in a tutorial command but never fetched: `ynh include add` on a harness
 # directory only edits its manifest, so the repository is a name, not a source.
 NEVER_FETCHED="acme/tools"
