@@ -449,3 +449,55 @@ func TestCopilotInstallCleanNoop(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Harness instructions that open with their own frontmatter must not give
+// the projected instructions file a second block (#532): ynh's applyTo is
+// merged into the source's, and a source applyTo cannot narrow it.
+func TestBuildCopilotArgs_InstructionsFrontmatterMerged(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{
+			name: "source keys kept, applyTo owned by ynh",
+			src:  "---\ndescription: DevOps harness\napplyTo: \"src/**\"\n---\n\nYou are a helpful harness.",
+			want: "---\napplyTo: \"**/*\"\ndescription: DevOps harness\n---\n\nYou are a helpful harness.\n",
+		},
+		{
+			name: "multi-line source applyTo is removed whole",
+			src:  "---\napplyTo:\n  - src/**\nexcludeAgent: code-review\n---\nBody",
+			want: "---\napplyTo: \"**/*\"\nexcludeAgent: code-review\n---\n\nBody\n",
+		},
+		{
+			name: "no source frontmatter is unchanged",
+			src:  "Body",
+			want: "---\napplyTo: \"**/*\"\n---\nBody\n",
+		},
+		{
+			name: "frontmatter only",
+			src:  "---\ndescription: x\n---\n",
+			want: "---\napplyTo: \"**/*\"\ndescription: x\n---\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configPath := t.TempDir()
+			projectDir := t.TempDir()
+			t.Chdir(projectDir)
+			if err := os.WriteFile(filepath.Join(configPath, "AGENTS.md"), []byte(tt.src), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := buildCopilotArgs(configPath, "", nil); err != nil {
+				t.Fatal(err)
+			}
+			got, err := os.ReadFile(filepath.Join(projectDir, copilotInstructionsRelPath))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != tt.want {
+				t.Errorf("got:\n%q\nwant:\n%q", got, tt.want)
+			}
+		})
+	}
+}

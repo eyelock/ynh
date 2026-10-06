@@ -188,10 +188,13 @@ alwaysApply: true
 Frontmatter fields: `description`, `globs` (file pattern), `alwaysApply` (boolean).
 CONFIRMED (cursor.com/docs/advanced/rules): plain `.md` files in `.cursor/rules` are
 silently ignored. ynh's Cursor adapter (`internal/vendor/cursor.go`,
-`Cursor.TransformArtifact`) renames `.md` → `.mdc` and injects
-`description`/`alwaysApply: true` frontmatter at copy time (both `ynh run` staging and
-`ynh export`). No `globs` is emitted — ynh has no per-rule glob metadata to source it
-from.
+`Cursor.TransformArtifact`) renames `.md` → `.mdc` and writes one frontmatter block
+at copy time (both `ynh run` staging and `ynh export`). A source rule's own
+frontmatter is merged into that block, never left in the body as a second one
+(#532): `description` from the source, else the humanised file name; `globs` from
+the source's `globs`, else its `paths` (Claude Code's rule scoping), comma-joined;
+`alwaysApply` from the source when it is a boolean, else `false` with globs and
+`true` without. Other source fields are dropped. See `docs/artifacts.md#rules`.
 
 ## Key CLI Details
 

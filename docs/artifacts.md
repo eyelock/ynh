@@ -106,6 +106,22 @@ Always write tests for new code. Prefer test-driven development.
 Run tests before committing. Aim for high coverage on business logic.
 ```
 
+A rule may open with YAML frontmatter. Claude Code reads `paths` to scope a
+rule to matching files. Cursor ignores plain `.md` files in `.cursor/rules/`, so
+for Cursor ynh renders each rule as `<name>.mdc` with a single frontmatter
+block holding the three fields [Cursor reads](https://cursor.com/docs/context/rules),
+merged from the rule's own:
+
+| Cursor field | Taken from |
+|---|---|
+| `description` | the rule's `description`, else its file name (`always-test` becomes `Always Test`) |
+| `globs` | the rule's `globs`, else its `paths`, comma-joined; omitted when it has neither |
+| `alwaysApply` | the rule's `alwaysApply` when it is `true` or `false`; otherwise `false` when there are globs (Cursor ignores globs on an always-on rule) and `true` when there are none |
+
+Any other field, such as `name`, is dropped from the `.mdc`, because Cursor does
+not read it. A file whose opening `---` is never closed has no frontmatter and
+is kept whole as the rule's body.
+
 ## Commands
 
 A command defines a reusable action. Commands are vendor-specific markdown files.
