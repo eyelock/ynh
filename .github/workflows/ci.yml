@@ -123,7 +123,7 @@ jobs:
       # pinned commit; move the pin when the relay's contract changes.
       - name: Install ynr for the relay test
         run: |
-          GOBIN="$RUNNER_TEMP/ynr" go install github.com/eyelock/ynr/cmd/ynr@v0.0.0-20261005200718-b391a994995a
+          GOBIN="$RUNNER_TEMP/ynr" go install github.com/eyelock/ynr/cmd/ynr@v0.1.1
           echo "$RUNNER_TEMP/ynr" >> "$GITHUB_PATH"
       - run: make test
 
