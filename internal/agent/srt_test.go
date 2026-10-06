@@ -17,7 +17,7 @@ import (
 func startSandboxedClaude(t *testing.T, opts StartOptions) []string {
 	t.Helper()
 	fakeVendor(t, "claude", "", "", 0)
-	srtArgs := fakeVendor(t, "srt", "", "", 0)
+	srtArgs := fakeProgram(t, "srt", "", "", 0)
 	opts.Sandbox = "srt"
 	sess, err := (&ClaudeBackend{}).Start(context.Background(), opts)
 	if err != nil {
@@ -99,7 +99,7 @@ func TestClaudeBackend_SrtSettingsWithoutSessionDir(t *testing.T) {
 // run under srt's defaults or no sandbox at all.
 func TestClaudeBackend_SrtRefusesWhenSettingsUnwritable(t *testing.T) {
 	fakeVendor(t, "claude", "", "", 0)
-	srtArgs := fakeVendor(t, "srt", "", "", 0)
+	srtArgs := fakeProgram(t, "srt", "", "", 0)
 	notADir := filepath.Join(t.TempDir(), "file")
 	if err := os.WriteFile(notADir, nil, 0o600); err != nil {
 		t.Fatal(err)

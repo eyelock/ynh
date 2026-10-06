@@ -343,7 +343,18 @@ func fakeVendor(t *testing.T, backend, stdout, stderrText string, code int) (arg
 	if err != nil {
 		t.Fatal(err)
 	}
-	name := adapter.CLIName()
+	return fakeProgram(t, adapter.CLIName(), stdout, stderrText, code)
+}
+
+// fakeProgram puts a stub named name first on PATH, in front of failing stubs
+// for every vendor CLI, and returns the file its arguments are written to. Use
+// it for a program that is not a vendor CLI, such as srt; fakeVendor resolves a
+// vendor's binary through its adapter and calls it.
+func fakeProgram(t *testing.T, name, stdout, stderrText string, code int) (argsFile string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stub is POSIX-only")
+	}
 	dir := t.TempDir()
 	argsFile = filepath.Join(dir, "args")
 	script := "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > " + argsFile + "\n"
