@@ -1,9 +1,17 @@
 package resolver
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// missingRepo returns a file:// URL for a repository that does not exist, so
+// an ls-remote that gets past the guard fails at once, without the network.
+func missingRepo(t *testing.T) string {
+	t.Helper()
+	return "file://" + filepath.Join(t.TempDir(), "missing.git")
+}
 
 // A ref beginning with "-" is read by git as an option rather than a ref, so
 // "--upload-pack=..." would run a command of the caller's choosing. The URL
@@ -19,7 +27,7 @@ func TestLsRemote_RejectsOptionLikeRef(t *testing.T) {
 		"-o",
 	} {
 		t.Run(ref, func(t *testing.T) {
-			_, err := LsRemoteFunc("https://example.invalid/org/repo", ref)
+			_, err := LsRemoteFunc(missingRepo(t), ref)
 			if err == nil {
 				t.Fatalf("ref %q was accepted", ref)
 			}
@@ -30,11 +38,12 @@ func TestLsRemote_RejectsOptionLikeRef(t *testing.T) {
 	}
 }
 
-// An ordinary ref must still be attempted. The call fails on the unreachable
-// host, which is the point: it got past the guard to the network.
+// An ordinary ref must still be attempted. The call fails on the missing
+// repository, which is the point: it got past the guard to git.
 func TestLsRemote_AllowsAnOrdinaryRef(t *testing.T) {
+	url := missingRepo(t)
 	for _, ref := range []string{"main", "v1.2.0", "refs/heads/main", ""} {
-		_, err := LsRemoteFunc("https://example.invalid/org/repo", ref)
+		_, err := LsRemoteFunc(url, ref)
 		if err != nil && strings.Contains(err.Error(), "may not begin with") {
 			t.Errorf("ordinary ref %q was rejected by the guard: %v", ref, err)
 		}

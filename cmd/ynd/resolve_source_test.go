@@ -62,11 +62,15 @@ func TestResolveSource_CanonicalIDResolvesToInstalledPointer(t *testing.T) {
 func TestResolveSource_CanonicalIDFallsThroughWhenNotInstalled(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
+	// The id must look canonical, which makes it a github.com SSH URL once
+	// it falls through. Allowing git only the file transport makes the clone
+	// fail before it connects, so the test never reaches the network.
+	t.Setenv("GIT_ALLOW_PROTOCOL", "file")
 
-	// No pointer installed for this id. The Git resolver will reject it
-	// (no real network in tests), so we expect an error — but specifically
-	// NOT a "harness not found" error, which would indicate the lookup
-	// short-circuited rather than falling through.
+	// No pointer installed for this id. The Git resolver will reject it,
+	// so we expect an error, but specifically NOT a "harness not found"
+	// error, which would indicate the lookup short-circuited rather than
+	// falling through.
 	_, err := resolveSource("github.com/nonexistent/repo/sub")
 	if err == nil {
 		t.Fatal("expected resolveSource to fail on unresolvable id, got nil")

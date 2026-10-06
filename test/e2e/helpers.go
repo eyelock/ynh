@@ -3,7 +3,8 @@
 // Package e2e contains the ynh end-to-end test suite.
 //
 // These tests exercise real install/update/fork/delegate flows against
-// hand-crafted fixtures pinned by SHA in eyelock/assistants:e2e-fixtures/.
+// fixtures each test builds in its own temp dir (see fixtures.go), served
+// from local repositories over file://, so the suite needs no network.
 // They build the production binary via `make build` and assert deep
 // filesystem state in temp directories. They never touch the developer's
 // real ~/.ynh.
@@ -23,43 +24,12 @@ import (
 	"testing"
 )
 
-// manifestDirs is the lookup order ynh uses for a harness's manifest
-// directory. The suite treats the binary as a black box and does not import
-// internal/plugin, so the order is mirrored here.
-var manifestDirs = []string{".agents/harness", ".ynh-plugin"}
-
-// manifestFile returns the path of file under the first manifest directory
-// of harnessDir that holds it, or the canonical path when none does.
-//
-// Fixtures in eyelock/assistants are pinned by SHA and still carry
-// .ynh-plugin, while everything this suite writes uses .agents/harness. A
-// read must accept both, exactly as ynh does; a test that hard-codes one
-// directory is asserting the fixture's layout, not the binary's behaviour.
+// manifestFile returns the path of file in harnessDir's manifest directory,
+// .agents/harness. The suite treats the binary as a black box and does not
+// import internal/plugin, so the location is spelled out here.
 func manifestFile(harnessDir, file string) string {
-	for _, md := range manifestDirs {
-		p := filepath.Join(harnessDir, md, file)
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	return filepath.Join(harnessDir, manifestDirs[0], file)
+	return filepath.Join(harnessDir, ".agents", "harness", file)
 }
-
-// AssistantsRepo is the upstream repository hosting the E2E fixtures.
-const AssistantsRepo = "https://github.com/eyelock/assistants.git"
-
-// AssistantsFixturesSHA pins the commit of eyelock/assistants whose
-// e2e-fixtures/ tree the suite tests against. Bump intentionally when
-// fixtures evolve (see eyelock/assistants:e2e-fixtures/README.md).
-//
-// Pinned to the squash-merge of eyelock/assistants#16 on develop —
-// the commit that landed all Phases 2–4 fixtures.
-const AssistantsFixturesSHA = "cbc4730433a640905454fa3b5aa5a7185f0d899f"
-
-// AssistantsFixturesV1Tag is a stable git tag in eyelock/assistants used
-// by the with-tag-include fixture to verify tag-to-SHA resolution.
-// Currently points at the initial fixture commit (8713efa).
-const AssistantsFixturesV1Tag = "e2e-fixtures-v1"
 
 // repoRoot resolves the ynh repo root from this source file's location.
 // Stable across test working directories and CI runners.
@@ -230,43 +200,6 @@ func mustRunYnhInDir(t *testing.T, s *sandbox, dir string, args ...string) (stdo
 		t.Fatalf("ynh %s in %s failed: %v\nstdout:\n%s\nstderr:\n%s", strings.Join(args, " "), dir, err, out, errOut)
 	}
 	return out, errOut
-}
-
-// cloneAssistantsAtSHA returns the absolute path of an eyelock/assistants
-// working tree at AssistantsFixturesSHA. By default it clones into a
-// tempdir over HTTPS — slow but deterministic, and the only mode CI can use.
-//
-// Local override: set YNH_E2E_ASSISTANTS_PATH to an existing worktree to
-// skip the clone. The worktree's HEAD must match AssistantsFixturesSHA, or
-// the test fails fast (so you cannot accidentally pass tests locally with
-// a fixture state that CI doesn't share). Set YNH_E2E_FIXTURES_LOOSE=1 to
-// bypass the SHA check while iterating on fixtures.
-func cloneAssistantsAtSHA(t *testing.T) string {
-	t.Helper()
-
-	if local := os.Getenv("YNH_E2E_ASSISTANTS_PATH"); local != "" {
-		if _, err := os.Stat(filepath.Join(local, ".git")); err != nil {
-			t.Fatalf("YNH_E2E_ASSISTANTS_PATH=%s is not a git working tree: %v", local, err)
-		}
-		if os.Getenv("YNH_E2E_FIXTURES_LOOSE") == "" {
-			out, err := exec.Command("git", "-C", local, "rev-parse", "HEAD").Output()
-			if err != nil {
-				t.Fatalf("reading HEAD of YNH_E2E_ASSISTANTS_PATH=%s: %v", local, err)
-			}
-			head := strings.TrimSpace(string(out))
-			if head != AssistantsFixturesSHA {
-				t.Fatalf("YNH_E2E_ASSISTANTS_PATH=%s HEAD %s does not match pinned SHA %s — "+
-					"checkout the pinned SHA or set YNH_E2E_FIXTURES_LOOSE=1 to bypass",
-					local, head, AssistantsFixturesSHA)
-			}
-		}
-		return local
-	}
-
-	dir := filepath.Join(t.TempDir(), "assistants")
-	mustGit(t, "", "clone", "--quiet", AssistantsRepo, dir)
-	mustGit(t, dir, "checkout", "--quiet", AssistantsFixturesSHA)
-	return dir
 }
 
 // mustGit runs `git <args...>` in dir (or cwd if dir is empty) and

@@ -13,7 +13,7 @@ import (
 // documented in docs/focus.md.
 func TestFocus_UpdateClearProfile_LocalInstall(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
+	clone := newFixtureRepo(t).Clone
 	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
 
 	s.mustRunYnh(t, "install", sourceDir)

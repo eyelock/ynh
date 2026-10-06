@@ -43,7 +43,7 @@ type envelopeInfo struct {
 
 func TestLs_JSON_Shape(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
+	clone := newFixtureRepo(t).Clone
 	s.mustRunYnh(t, "install", filepath.Join(clone, "e2e-fixtures", "minimal"))
 
 	out, _ := s.mustRunYnh(t, "ls", "--format", "json")
@@ -75,7 +75,7 @@ func TestLs_JSON_Shape(t *testing.T) {
 
 func TestInfo_JSON_Shape(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
+	clone := newFixtureRepo(t).Clone
 	s.mustRunYnh(t, "install", filepath.Join(clone, "e2e-fixtures", "minimal"))
 
 	out, _ := s.mustRunYnh(t, "info", "local/minimal", "--format", "json")
@@ -114,7 +114,7 @@ func TestInfo_JSON_Shape(t *testing.T) {
 // (ls, info) have a non-empty result to validate against.
 func TestStructuredOutput_TopLevelShape(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
+	clone := newFixtureRepo(t).Clone
 	s.mustRunYnh(t, "install", filepath.Join(clone, "e2e-fixtures", "minimal"))
 
 	cases := []struct {

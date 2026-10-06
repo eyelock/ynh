@@ -238,7 +238,7 @@ make e2e
 
 ### E2E test suite
 
-`make e2e` runs an end-to-end test suite (~100 tests, ~1m wallclock) that exercises both binaries against SHA-pinned fixtures in [eyelock/assistants:e2e-fixtures/](https://github.com/eyelock/assistants/tree/develop/e2e-fixtures). Tests live in `test/e2e/` behind the `e2e` build tag and are **not** part of `make check` or `make test`.
+`make e2e` runs an end-to-end test suite (~150 tests, ~30s wallclock) that exercises both binaries against fixtures each test builds in its own temp dir. Tests live in `test/e2e/` behind the `e2e` build tag and are **not** part of `make check` or `make test`.
 
 **What the suite locks:**
 
@@ -258,15 +258,13 @@ The suite is the release gate, not a per-PR gate:
 | Manual `workflow_dispatch` | Ad-hoc "is develop healthy?" check before opening release PR |
 | PR targeting `develop` | Not triggered — feature work stays fast |
 
-Tests clone `eyelock/assistants` over the network and exercise the production binary built via `make build`. Fixture SHAs are pinned in `test/e2e/helpers.go`. When ynh's harness schema legitimately evolves, the same PR that changes the schema must update the affected fixtures in `eyelock/assistants:e2e-fixtures/` and bump the SHA constants.
+The suite needs no network. Harness fixtures are written into a git repository in the test's temp dir (`test/e2e/fixtures.go`) and served from a bare copy over `file://`, so includes, delegates and git installs fetch from it and a flaky connection cannot fail the run. A test that needs another commit adds one to that repository.
 
-**Local fixture iteration.** If you have an `eyelock/assistants` worktree checked out at the pinned SHA, point the suite at it to skip the per-test clone:
+**Live smoke test.** `TestSmoke_LiveAssistants` installs real harnesses from `github.com/eyelock/assistants`, so it is the one test that has to reach GitHub. It is skipped unless `YNH_E2E_LIVE=1` is set; the release workflow sets it, so a broken upstream still blocks a release:
 
 ```bash
-YNH_E2E_ASSISTANTS_PATH=/path/to/assistants/worktree make e2e
+YNH_E2E_LIVE=1 make e2e
 ```
-
-The worktree's HEAD must match `AssistantsFixturesSHA` in `helpers.go` — otherwise the suite fails fast (so you can't accidentally pass tests locally with a fixture state CI doesn't share). Iterating on fixtures? Set `YNH_E2E_FIXTURES_LOOSE=1` to bypass the SHA check while you work, but bump the pinned SHA before pushing.
 
 See `.claude/plans/e2e-test-suite.md` for the architecture and coverage matrix.
 

@@ -206,11 +206,17 @@ func TestCmdRegistryListJSON(t *testing.T) {
 	if err := config.EnsureDirs(); err != nil {
 		t.Fatal(err)
 	}
+	// list tries to fetch each registry to describe it. These URLs name
+	// repositories that do not exist on this machine, so the fetch fails at
+	// once instead of going out to the network, and the listing is still
+	// expected to carry both entries.
+	regA := "file://" + filepath.Join(t.TempDir(), "registry-a")
+	regB := "file://" + filepath.Join(t.TempDir(), "registry-b")
 	cfg := &config.Config{
 		DefaultVendor: "claude",
 		Registries: []config.RegistrySource{
-			{URL: "github.com/org/registry-a"},
-			{URL: "github.com/org/registry-b", Ref: "v2"},
+			{URL: regA},
+			{URL: regB, Ref: "v2"},
 		},
 	}
 	if err := cfg.Save(); err != nil {
@@ -230,10 +236,10 @@ func TestCmdRegistryListJSON(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("got %d entries, want 2", len(got))
 	}
-	if got[0].URL != "github.com/org/registry-a" {
+	if got[0].URL != regA {
 		t.Errorf("entry 0 url = %q", got[0].URL)
 	}
-	if got[1].URL != "github.com/org/registry-b" || got[1].Ref != "v2" {
+	if got[1].URL != regB || got[1].Ref != "v2" {
 		t.Errorf("entry 1 = %+v", got[1])
 	}
 }
