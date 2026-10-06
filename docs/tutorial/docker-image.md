@@ -179,6 +179,7 @@ docker run --rm -v $(pwd):/workspace -e OPENAI_API_KEY \
 
 Preview the generated Dockerfile without building:
 
+<!-- eval: launch docker image inspect --format {{json .Config.Labels}} ghcr.io/eyelock/ynh:latest -->
 ```bash
 ynh image local/docker-demo --dry-run
 ```

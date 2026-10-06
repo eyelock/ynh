@@ -5,7 +5,7 @@
 # that. Copilot shipped as a working adapter and every skill still described
 # three vendors, because no check ever compared the vendor list against anything.
 #
-# Three assertions:
+# Four assertions:
 #
 #   A. Every vendor `ynh vendors` reports has a row in the vendor-adapters
 #      reference index. A new adapter that nobody documented fails here.
@@ -19,6 +19,10 @@
 #      Every `cli` that `ynh vendors` reports, and every program the Go source
 #      launches by name, must be in the STUBS line of .claude/agents/evals.md,
 #      unless it is a local tool an eval may run.
+#
+#   D. Every eval marker in docs/tutorial/ (`<!-- eval: launch ... -->`,
+#      `needs-model`, `substitute`) is well formed, sits directly above a bash
+#      block, and a launch names a stubbed program. run.sh checks the calls.
 #
 # Usage: scripts/vendor-parity.sh [path-to-harness]   (default: repo root)
 
@@ -165,6 +169,40 @@ else
 		esac
 	done < "$TMP/launched.txt"
 fi
+
+# --- D. tutorial eval markers are well formed --------------------------------
+# A launch block carries `<!-- eval: launch <stub> <argv glob> -->` above its
+# fence, and run.sh checks the stub call against it. A marker that drifted off
+# its block, or names a program that is not stubbed, would be read by nobody.
+echo
+echo "== D. tutorial eval markers =="
+markers=0
+for md in "$ROOT"/docs/tutorial/*.md; do
+	out=$(awk -v stubs="${stubs:-}" -v file="$(basename "$md")" '
+		function bad(msg) { printf "  BAD      %s:%d: %s\n", file, NR, msg; nbad++ }
+		/^<!-- eval: / {
+			if ($0 !~ / -->$/) { bad("marker must end with \" -->\" on the same line"); next }
+			m = $0; sub(/^<!-- eval: /, "", m); sub(/ -->$/, "", m)
+			n++
+			if (m ~ /^substitute [^ ]+ ./) next
+			if (m == "needs-model") { pending = NR; next }
+			if (m ~ /^launch /) {
+				split(m, w, " ")
+				if (index(stubs, " " w[2] " ") == 0) bad("launch names \"" w[2] "\", which is not in STUBS")
+				pending = NR; next
+			}
+			bad("unknown marker: " m); next
+		}
+		pending && /^```bash$/ { pending = 0; next }
+		pending { bad("marker on line " pending " is not directly above a ```bash fence"); pending = 0 }
+		END { if (pending) bad("marker on line " pending " is not directly above a ```bash fence"); printf "COUNT %d %d\n", n, nbad }
+	' "$md")
+	printf '%s\n' "$out" | grep -v '^COUNT ' || true
+	set -- $(printf '%s\n' "$out" | sed -n 's/^COUNT //p')
+	markers=$((markers + $1))
+	[ "$2" -eq 0 ] || fail=1
+done
+echo "  $markers markers checked"
 
 echo
 if [ "$fail" -ne 0 ]; then

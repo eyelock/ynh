@@ -15,6 +15,9 @@ routing around.
 
 **Prerequisites.** [The Agent Loop](agent-loop.md), a repository with
 history, and a harness whose sensors cover the class of fix you are sampling.
+The examples use ynh's own history, run from a ynh checkout; the [practice
+repository](#a-practice-repository) stands in for both if you want to rehearse
+the rig first.
 
 **Not every sensor has a corpus, and the good ones often have none.** A sensor
 wrapping a check that already gates CI cannot have failing states in history
@@ -96,12 +99,106 @@ answer is withheld from the agent that has to reproduce it:
 <text x="14" y="310" font-size="9.5" opacity=".75">Every graded unit is also one labelled example for evaluating a judge — obtained as a by-product rather than as a research project.</text>
 </g></svg>
 
+## A practice repository
+
+Skip this section if you are working in a ynh checkout or your own repository.
+
+Otherwise, build a small repository that reproduces the case this page follows:
+three closed fixes, the `#173` one among them, and a guide harness that at the
+fix's parent still kept its manifest in `.ynh-plugin/` and declared no sensors.
+The commits get their own hashes, so where the page says `8382382`, use the
+hash of the `#173` fix that `git log` shows you.
+
+<!-- eval: substitute 8382382 $(git log --all -1 --format=%h --grep='(#173)') -->
+<!-- eval: substitute <pinned-harness> shadow-pin -->
+```bash
+mkdir -p /tmp/shadow/repo && cd /tmp/shadow/repo
+git init -q
+mkdir -p .ynh-plugin
+echo '{"name": "ynh-guide", "version": "0.1.0"}' > .ynh-plugin/plugin.json
+cat > uninstall.sh << 'EOF'
+#!/bin/sh
+# uninstall.sh <install> <resource>: remove an install's resource
+rm -f "resources/$2" "claims/$2"
+EOF
+git add -A && git commit -qm "feat: guide harness and uninstall"
+cat > uninstall.sh << 'EOF'
+#!/bin/sh
+# uninstall.sh <install> <resource>: remove a resource unless another install claims it
+claim=$(cat "claims/$2" 2>/dev/null)
+[ -n "$claim" ] && [ "$claim" != "$1" ] && exit 0
+rm -f "resources/$2" "claims/$2"
+EOF
+git commit -qam "fix(uninstall): preserve bare-name resources claimed by another install (#173)"
+echo "A root .mcp.json is read when the manifest declares no MCP servers." > NOTES.md
+git add -A && git commit -qm "fix(plugin): ingest root .mcp.json as MCP server fallback (#179)"
+echo "Cursor rules are written as .mdc with frontmatter." >> NOTES.md
+git commit -qam "fix(cursor): write rules as .mdc with frontmatter, not plain .md (#201)"
+mkdir -p .agents/harness && git mv .ynh-plugin/plugin.json .agents/harness/plugin.json
+cat > .agents/harness/plugin.json << 'EOF'
+{
+  "name": "ynh-guide",
+  "version": "0.2.0",
+  "sensors": {
+    "harness-valid": {
+      "category": "maintainability",
+      "role": "gate",
+      "tolerance": "blocking",
+      "source": { "command": "ynd validate ." },
+      "output": { "format": "text" }
+    }
+  }
+}
+EOF
+git commit -qam "feat(sensors): declare harness-valid"
+```
+
+The harness you pin is a separate one. This one carries a sensor that checks the
+behaviour `#173` fixed, against whatever tree it runs in:
+
+```bash
+mkdir -p /tmp/shadow/pinned/.agents/harness
+cat > /tmp/shadow/pinned/.agents/harness/plugin.json << 'EOF'
+{
+  "name": "shadow-pin",
+  "version": "0.1.0",
+  "sensors": {
+    "claims": {
+      "category": "behaviour",
+      "role": "gate",
+      "tolerance": "blocking",
+      "source": { "command": "sh \"$YNH_HARNESS_DIR/check-claims.sh\"" },
+      "output": { "format": "text" }
+    }
+  }
+}
+EOF
+cat > /tmp/shadow/pinned/check-claims.sh << 'EOF'
+#!/bin/sh
+# A resource that another install still claims must survive an uninstall.
+script=$PWD/uninstall.sh
+t=$(mktemp -d) || exit 2
+mkdir "$t/resources" "$t/claims"
+echo data > "$t/resources/shared"
+echo other > "$t/claims/shared"
+(cd "$t" && sh "$script" mine shared)
+status=0
+[ -f "$t/resources/shared" ] || { echo "uninstall.sh removed resources/shared, which another install claims"; status=1; }
+rm -rf "$t"
+exit "$status"
+EOF
+ynh install /tmp/shadow/pinned
+```
+
+Where the page says `<pinned-harness>`, this one is `shadow-pin`. Run the rest
+of the page from `/tmp/shadow/repo`.
+
 ## Select candidates
 
 Find closed fixes:
 
 ```bash
-git log --format='%H %s' | grep -E '^[0-9a-f]+ fix(\([^)]*\))?!?: ' | head -15
+git log --format='%h %s' | grep -E '^[0-9a-f]+ fix(\([^)]*\))?!?: ' | head -15
 ```
 
 **Not `git log --grep='^fix'`.** `--grep` matches per line, so `^fix` also matches
@@ -113,9 +210,9 @@ fixes, and the padding survives right up until triage throws them out, which is
 after you have decided the sample is large enough.
 
 ```
-8382382 fix(uninstall): preserve bare-name resources claimed by another install (#173)
-f79758b fix(plugin): ingest root .mcp.json as MCP server fallback (#179)
 c6d7f99 fix(cursor): write rules as .mdc with frontmatter, not plain .md (#201)
+f79758b fix(plugin): ingest root .mcp.json as MCP server fallback (#179)
+8382382 fix(uninstall): preserve bare-name resources claimed by another install (#173)
 ```
 
 **Reconstruct the task from what was available at the time** — the issue text,
@@ -126,7 +223,17 @@ repair.
 
 For `8382382` the honest prompt is the issue title (`#173`) and the failing
 behaviour. Not "preserve bare-name resources claimed by another install", which
-tells the agent both the diagnosis and the strategy.
+tells the agent both the diagnosis and the strategy. Write it down where the run
+can read it:
+
+```bash
+mkdir -p /tmp/shadow
+cat > /tmp/shadow/task-173.txt << 'EOF'
+Uninstalling one harness deletes a resource that another installed harness
+still uses. Reproduce: two installs claim the resource "shared"; uninstall one;
+resources/shared is gone, and the other install is broken.
+EOF
+```
 
 ## Build the base state
 
@@ -155,12 +262,7 @@ ynh check local/ynh-guide --only harness-valid --format json
 ```
 
 ```json
-{
-    "error": {
-        "code": "not_found",
-        "message": "sensor \"harness-valid\" not declared in harness \"ynh-guide\""
-    }
-}
+{"error":{"code":"not_found","message":"sensor \"harness-valid\" not declared in harness \"ynh-guide\""}}
 ```
 
 Both commands also print a warning on stderr that the base commit keeps its
@@ -216,6 +318,7 @@ nothing" is the wrong conclusion, and it is the one the numbers invite.
 
 ## Run the loop against the base state
 
+<!-- eval: launch claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir */ynh-agent-*/.claude --add-dir */ynh-agent-* --session-id * -->
 ```bash
 ynh agent run \
   --harness local/<pinned-harness> \
@@ -302,11 +405,24 @@ the case where one repository carries the whole result.
 
 ## Aggregate
 
+The loop reads the fixes to sample from `/tmp/shadow/candidates.txt`, one hash
+per line, and each fix's task from `/tmp/shadow/task-<hash>.txt`. For the one
+fix followed so far:
+
+```bash
+echo 8382382 > /tmp/shadow/candidates.txt
+cp /tmp/shadow/task-173.txt /tmp/shadow/task-8382382.txt
+```
+
+Each historical tree gets its own worktree, and `--cwd` points the "before"
+check at it:
+
+<!-- eval: launch claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir */ynh-agent-*/.claude --add-dir */ynh-agent-* --session-id * -->
 ```bash
 for FIX in $(cat /tmp/shadow/candidates.txt); do
   W=/tmp/shadow/$FIX
   git worktree add -q --detach "$W" "$FIX^"
-  ynh check local/<pinned-harness> --format json > "$W.before.json"
+  ynh check local/<pinned-harness> --cwd "$W" --format json > "$W.before.json"
   ynh agent run --harness local/<pinned-harness> \
       --task "$(cat /tmp/shadow/task-$FIX.txt)" \
       --worktree "$W" --max-turns 15 --emit-jsonl "$W.jsonl"
@@ -317,18 +433,26 @@ done
 
 Clean up when finished. Remove every worktree the rig added, the base state from
 [Build the base state](#build-the-base-state) included, then the scratch directory.
-Run it from your own checkout, the one the worktrees were added to:
+Run it from your own checkout, the one the worktrees were added to; `cd -`
+returns there from the base state:
 
 ```bash
+cd -
 git worktree remove --force /tmp/shadow/base
 for FIX in $(cat /tmp/shadow/candidates.txt); do
   git worktree remove --force "/tmp/shadow/$FIX"
 done
+cd /
 rm -rf /tmp/shadow
 ```
 
 `local/ynh-guide` was uninstalled when it had made its point, and the pinned
-harness is yours to keep, so nothing else is left installed.
+harness is yours to keep, so nothing else is left installed. The practice
+harness has nothing left to pin for, so if you built it, uninstall it:
+
+```bash
+ynh uninstall local/shadow-pin
+```
 
 That loop is the whole rig. What it produces is a defensible `y`, its confidence
 interval, and a pile of graded patches. Compare `y` against the `y* = r/h` you
