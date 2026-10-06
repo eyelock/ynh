@@ -243,7 +243,7 @@ make e2e
 **What the suite locks:**
 
 - Every documented entry point on `ynh` and `ynd` (init, install, uninstall, update, run, ls, info, installed, schema, vendors, sources, paths, status, search, registry, backend, delegate, fork, include, focus, profile, hook, doctor, mcp, sensors, check, agent, image, prune, migrate, quarantine; create, lint, validate, fmt, compress, inspect, export, compose, preview, diff, marketplace, migrate, validate-output)
-- All three vendor adapters (Claude, Codex, Cursor) end-to-end: instructions files, hooks (with matchers + per-vendor event remapping), MCP servers (command + URL forms, env passthrough)
+- The Claude, Codex and Cursor adapters end-to-end (Copilot only for its exported MCP file and `--resume`): instructions files, hooks (with matchers + per-vendor event remapping), MCP servers (command + URL forms, env passthrough)
 - Profile + focus resolution (hook replace + inherit, MCP deep-merge, mutex/unknown errors)
 - Schema/security guards (path traversal, --ref + local, fork update, duplicate sources)
 - JSON error envelope, override semantics (harness AGENTS.md beats include's), symlink stability across reinstall

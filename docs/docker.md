@@ -64,7 +64,7 @@ newer than every release. The warning never stops the build or changes the
 Dockerfile; pass `--base <image>` to build on a newer ynh image. A base that is not
 pulled is not checked, so the check never pulls or runs anything.
 
-The harness image pre-assembles vendor layouts for all three vendors at build time. At runtime, `ynh run` detects the pre-assembled layout and skips assembly entirely.
+The harness image pre-assembles vendor layouts for all four vendors (Claude, Codex, Cursor and Copilot) at build time. At runtime, `ynh run` detects the pre-assembled layout and skips assembly entirely.
 
 ### Running Harness Images
 
