@@ -45,6 +45,10 @@ type StartOptions struct {
 	ConfigPath string
 	// Sandbox is "srt" or "none".
 	Sandbox string
+	// SessionDir is the run's session directory (beside its trajectory),
+	// or "" when the run has none. Under srt the sandbox's settings file is
+	// written there.
+	SessionDir string
 	// AutoApprove is "", "edits" or "all": the --auto-approve level, already
 	// validated for this backend. Empty passes no permission flag at all.
 	AutoApprove string

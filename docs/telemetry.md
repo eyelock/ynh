@@ -204,9 +204,14 @@ before the worker starts:
   means the vendor's telemetry is theirs to direct, so ynh leaves it alone,
   and with no spool there is nowhere to write
 - `ynr` is on `PATH`
-- the run is not under `--sandbox srt`: srt refuses loopback connections
-  unless its settings file allow-lists the address, and ynh does not yet give
-  srt a settings file
+- the run is not under `--sandbox srt`. srt's settings can allow the relay's
+  `127.0.0.1:<port>`, but that entry governs only what goes through srt's
+  proxy, and srt sets `NO_PROXY` to cover `127.0.0.1` and `localhost` inside
+  the sandbox, so a client that honours it dials the relay directly and the
+  sandbox refuses the connection. srt's one direct opening,
+  `network.allowLocalBinding`, opens every loopback port on macOS rather than
+  the relay's, and none on Linux, where the worker has its own network
+  namespace
 
 When one does not hold, ynh prints one note on stderr and the run carries on
 without the vendor's telemetry. ynh never starts the relay because it found

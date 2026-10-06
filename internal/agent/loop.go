@@ -616,6 +616,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		WorktreeDir: opts.WorktreeDir,
 		ConfigPath:  configPath,
 		Sandbox:     opts.Sandbox,
+		SessionDir:  sessionDir,
 		AutoApprove: opts.AutoApprove,
 		Model:       opts.Model,
 		Effort:      opts.Effort,

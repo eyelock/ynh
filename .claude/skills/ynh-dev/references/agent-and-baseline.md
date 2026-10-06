@@ -159,6 +159,14 @@ configuration stays out and must be declared by the harness.
 error naming the alternatives rather than silently downgrading. Silently running
 unsandboxed when sandboxing was asked for is the failure it prevents.
 
+`srt.go` configures srt the only way its CLI reads configuration: a settings
+file passed with `--settings`, written per run (`buildSrtSettings`, from the
+backend's `srtPolicy` of hosts and state paths). srt accepts options it does not
+have without reading them, so a flag ynh invents is silently ignored; that is
+how #528 ran the worker under srt's defaults. Keep the `--` before the vendor
+binary: srt parses its own options anywhere on the line until one, and claude's
+`--settings` would otherwise be taken for srt's.
+
 `autoapprove.go` holds `--auto-approve` the same way. `validateAutoApprove`
 refuses a level a backend cannot honour exactly (codex and cursor have no
 edits-only mode), and `projectPermissionSetting` is a pure function over the
