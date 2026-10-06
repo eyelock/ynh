@@ -158,6 +158,7 @@ func recordingClaude(t *testing.T) (envFile, argsFile string) {
 	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	shadowVendorCLIs(t, dir)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return envFile, argsFile
 }
@@ -446,6 +447,7 @@ func TestAgentRun_RelayStoppedOnInterrupt(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(claudeDir, "claude"), []byte(script), 0o755); err != nil {
 				t.Fatal(err)
 			}
+			shadowVendorCLIs(t, claudeDir)
 			t.Cleanup(func() {
 				for _, f := range []string{claudePid, stub.pid} {
 					if data, err := os.ReadFile(f); err == nil {
@@ -570,6 +572,7 @@ func TestAgentRun_RealRelayJoinsRunTrace(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	shadowVendorCLIs(t, dir)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	spoolDir := filepath.Join(t.TempDir(), "spool")
 	t.Setenv("YNR_SPOOL", spoolDir)

@@ -23,9 +23,9 @@ func (b *ClaudeBackend) Name() string { return "claude" }
 
 // Start spawns a claude subprocess in stream-json mode.
 func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSession, error) {
-	claudeBin, err := exec.LookPath("claude")
+	claudeBin, err := lookWorkerCLI(b.Name())
 	if err != nil {
-		return nil, fmt.Errorf("claude not found on PATH: %w", err)
+		return nil, err
 	}
 
 	args := buildClaudeStreamArgs(opts)

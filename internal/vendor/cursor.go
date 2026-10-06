@@ -28,13 +28,21 @@ func init() {
 	Register(&Cursor{})
 }
 
+// cursorCLI is Cursor's CLI, which is not the editor's "cursor" launcher:
+// see CLIName in adapter.go. Cursor's docs install it as "agent" and name
+// "cursor-agent" only as an alias kept for older scripts
+// (cursor.com/docs/cli/installation; the 8 Jan 2026 release notes: "The new
+// primary entrypoint is agent (cursor-agent still works as an alias)"), so an
+// install that has the alias also has "agent", and one name is enough.
+const cursorCLI = "agent"
+
 // Cursor implements the Adapter interface for Cursor Agent CLI.
 // Uses .cursor/rules/ for rules and .cursorrules at project root.
 type Cursor struct{}
 
 func (c *Cursor) Name() string        { return "cursor" }
 func (c *Cursor) DisplayName() string { return "Cursor" }
-func (c *Cursor) CLIName() string     { return "agent" }
+func (c *Cursor) CLIName() string     { return cursorCLI }
 
 func (c *Cursor) ConfigDir() string {
 	return ".cursor"
@@ -413,7 +421,7 @@ func humanizeRuleName(stem string) string {
 }
 
 func launchCursor(configPath string, extraArgs []string) error {
-	agentBin, err := exec.LookPath("agent")
+	agentBin, err := exec.LookPath(cursorCLI)
 	if err != nil {
 		return err
 	}

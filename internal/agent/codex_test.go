@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // The codex fixtures in testdata:
@@ -345,10 +347,15 @@ func codexStub(t *testing.T, fixtureDir string) string {
 		script += "case \" $* \" in *' resume '*) cat " + fixtureDir + "/codex-resumed-turn.jsonl ;; " +
 			"*) cat " + fixtureDir + "/codex-turn.jsonl ;; esac\n"
 	}
-	bin := t.TempDir()
-	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte(script), 0o755); err != nil {
+	adapter, err := vendor.Get("codex")
+	if err != nil {
 		t.Fatal(err)
 	}
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, adapter.CLIName()), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	shadowVendorCLIs(t, bin)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return dir
 }

@@ -157,7 +157,7 @@ ynd fmt
 
 ## Compress
 
-Requires an LLM CLI on PATH (`claude`, `codex`, or `agent`). Uses LLM-powered SudoLang techniques to reduce prompt size while preserving semantics.
+Requires an LLM CLI on PATH (`claude`, `codex`, Cursor's `agent`, or `copilot`). Uses LLM-powered SudoLang techniques to reduce prompt size while preserving semantics.
 
 ```bash
 # Compress with auto-apply
@@ -194,7 +194,7 @@ ynd compress --restore --pick 2 skills/code-review/SKILL.md
 
 ## Inspect
 
-Requires an LLM CLI on PATH (`claude`, `codex`, or `agent`). Interactive codebase walkthrough that generates skills and agents from project analysis.
+Requires an LLM CLI on PATH (`claude`, `codex`, Cursor's `agent`, or `copilot`). Interactive codebase walkthrough that generates skills and agents from project analysis.
 
 ```bash
 # Set up a project to inspect

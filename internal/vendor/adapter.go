@@ -55,6 +55,13 @@ type Adapter interface {
 	DisplayName() string
 
 	// CLIName returns the CLI binary name (e.g. "claude", "codex", "agent").
+	//
+	// It is the only place a vendor's binary is spelled. Everything that
+	// finds or runs a vendor CLI asks the adapter: the launchers here, the
+	// `ynh agent run` workers (internal/agent), `ynh vendors`, and ynd's
+	// compress and inspect. When those kept their own copies, the agent
+	// worker drifted to "cursor", the Cursor editor's launcher, while the
+	// adapter ran "agent", Cursor's CLI (#524).
 	CLIName() string
 
 	// ConfigDir returns the vendor's config directory name (e.g. ".claude").

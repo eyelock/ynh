@@ -302,7 +302,7 @@ Both are built by `make build`, installed by `make install`, and released via go
 
 ynd is self-contained in `cmd/ynd/` with its own command routing, file discovery, and signal scanning. Key patterns:
 
-- **LLM integration** (`llm.go`): Compress and inspect shell out to vendor CLIs (`claude`, `codex`) via `queryLLM()`. Auto-detection tries each CLI on PATH.
+- **LLM integration** (`llm.go`): Compress and inspect shell out to vendor CLIs (claude, codex, cursor, copilot) via `queryLLM()`. `llmVendors` holds each vendor's one-shot arguments; the binary is the vendor adapter's `CLIName`, never a literal. Auto-detection tries each vendor's CLI on PATH in that order.
 - **Signal scanning** (`inspect.go`): Discovers project files by category (build, test, CI, lint, config) to provide context for LLM analysis.
 - **Backup system** (`compress.go`): Backups are stored in `~/.ynd/backups/` mirroring the absolute file path. Override with `YND_BACKUP_DIR` env var (used in tests).
 - **Vendor-aware output** (`inspect.go`): Inspect writes artifacts to `.{vendor}/` by default (e.g., `.claude/skills/`). Override with `-o`. Discovery searches both project root and all vendor dirs.

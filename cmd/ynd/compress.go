@@ -64,19 +64,12 @@ func cmdCompress(args []string) error {
 	if opts.vendor == "" {
 		opts.vendor = detectVendorCLI()
 		if opts.vendor == "" {
-			fmt.Fprintln(os.Stderr, "No supported LLM CLI found (checked: claude, codex).")
-			fmt.Fprintln(os.Stderr, "Compression requires an LLM to perform semantic optimization.")
-			fmt.Fprintln(os.Stderr)
-			fmt.Fprintln(os.Stderr, "Install one of:")
-			fmt.Fprintln(os.Stderr, "  claude  → https://docs.anthropic.com/claude-code")
-			fmt.Fprintln(os.Stderr, "  codex   → https://openai.com/codex")
-			fmt.Fprintln(os.Stderr)
-			fmt.Fprintln(os.Stderr, "Or specify one explicitly: ynd compress -v claude")
+			printNoLLMCLI(os.Stderr, "Compression requires an LLM to perform semantic optimization.", "compress")
 			return nil
 		}
 	} else {
-		if _, err := lookPathFunc(opts.vendor); err != nil {
-			return fmt.Errorf("vendor CLI %q not found on PATH", opts.vendor)
+		if err := checkLLMCLI(opts.vendor); err != nil {
+			return err
 		}
 	}
 

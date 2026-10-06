@@ -9,12 +9,49 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
-// vendorShims puts fake claude, codex and cursor CLIs first on PATH. Each one
-// records that it was started, writes failure to stderr and exits 1, which is
-// what a vendor that refuses to start looks like. It returns the file the
-// starts are recorded in.
+// vendorCLINames lists every program a vendor CLI may be installed as: each
+// vendor adapter's CLIName, plus "cursor", the Cursor editor's launcher, and
+// "cursor-agent", the Cursor CLI's older alias.
+func vendorCLINames(t *testing.T) []string {
+	t.Helper()
+	names := []string{"cursor", "cursor-agent"}
+	for _, v := range vendor.Available() {
+		adapter, err := vendor.Get(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, adapter.CLIName())
+	}
+	return names
+}
+
+// shadowVendorCLIs writes, into dir, a failing stub for every vendor CLI that
+// dir does not already hold a stub for, so a test that puts dir first on PATH
+// cannot fall through to a real install, which would run on the developer's
+// account. A stub named for the wrong binary is otherwise silently skipped
+// (#524).
+func shadowVendorCLIs(t *testing.T, dir string) {
+	t.Helper()
+	for _, name := range vendorCLINames(t) {
+		path := filepath.Join(dir, name)
+		if _, err := os.Stat(path); err == nil {
+			continue
+		}
+		script := "#!/bin/sh\necho 'test stub: " + name + " is a vendor CLI and must not run here' >&2\nexit 97\n"
+		if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// vendorShims puts a fake of every vendor CLI first on PATH. Each one records
+// that it was started, writes failure to stderr and exits 1, which is what a
+// vendor that refuses to start looks like. It returns the file the starts are
+// recorded in.
 func vendorShims(t *testing.T, failure string) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -22,7 +59,7 @@ func vendorShims(t *testing.T, failure string) string {
 	}
 	dir := t.TempDir()
 	starts := filepath.Join(dir, "starts")
-	for _, name := range []string{"claude", "codex", "cursor"} {
+	for _, name := range vendorCLINames(t) {
 		script := "#!/bin/sh\necho " + name + " >> '" + starts + "'\necho '" + failure + "' >&2\nexit 1\n"
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755); err != nil {
 			t.Fatal(err)

@@ -26,19 +26,12 @@ func cmdInspect(args []string) error {
 	if vendor == "" {
 		vendor = detectVendorCLI()
 		if vendor == "" {
-			fmt.Fprintln(os.Stderr, "No supported LLM CLI found (checked: claude, codex).")
-			fmt.Fprintln(os.Stderr, "Inspect requires an LLM to analyze your codebase.")
-			fmt.Fprintln(os.Stderr)
-			fmt.Fprintln(os.Stderr, "Install one of:")
-			fmt.Fprintln(os.Stderr, "  claude  → https://docs.anthropic.com/claude-code")
-			fmt.Fprintln(os.Stderr, "  codex   → https://openai.com/codex")
-			fmt.Fprintln(os.Stderr)
-			fmt.Fprintln(os.Stderr, "Or specify one explicitly: ynd inspect -v claude")
+			printNoLLMCLI(os.Stderr, "Inspect requires an LLM to analyze your codebase.", "inspect")
 			return nil
 		}
 	} else {
-		if _, err := lookPathFunc(vendor); err != nil {
-			return fmt.Errorf("vendor CLI %q not found on PATH", vendor)
+		if err := checkLLMCLI(vendor); err != nil {
+			return err
 		}
 	}
 

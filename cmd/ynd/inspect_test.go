@@ -1062,7 +1062,7 @@ func TestCmdInspect_VendorNotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing vendor")
 	}
-	if !strings.Contains(err.Error(), "not found on PATH") {
+	if !strings.Contains(err.Error(), "unsupported vendor") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }

@@ -30,12 +30,15 @@ func init() {
 	Register(&Codex{})
 }
 
+// codexCLI is OpenAI Codex's binary: see CLIName in adapter.go.
+const codexCLI = "codex"
+
 // Codex implements the Adapter interface for OpenAI Codex CLI.
 type Codex struct{}
 
 func (c *Codex) Name() string        { return "codex" }
 func (c *Codex) DisplayName() string { return "OpenAI Codex" }
-func (c *Codex) CLIName() string     { return "codex" }
+func (c *Codex) CLIName() string     { return codexCLI }
 
 func (c *Codex) ConfigDir() string {
 	return ".codex"
@@ -383,7 +386,7 @@ func (c *Codex) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[stri
 }
 
 func launchCodex(configPath string, extraArgs []string) error {
-	codexBin, err := exec.LookPath("codex")
+	codexBin, err := exec.LookPath(codexCLI)
 	if err != nil {
 		return err
 	}

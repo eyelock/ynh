@@ -8,7 +8,25 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
+
+// lookWorkerCLI finds the CLI the named backend drives. The binary's name is
+// the vendor adapter's CLIName, the one place each vendor's binary is spelled,
+// so a worker runs the program `ynh run -v <backend>` launches. A copy kept
+// here once drifted to "cursor", the Cursor editor's launcher (#524).
+func lookWorkerCLI(backend string) (string, error) {
+	adapter, err := vendor.Get(backend)
+	if err != nil {
+		return "", err
+	}
+	bin, err := exec.LookPath(adapter.CLIName())
+	if err != nil {
+		return "", fmt.Errorf("%s CLI %q not found on PATH: %w", backend, adapter.CLIName(), err)
+	}
+	return bin, nil
+}
 
 // WorkerBackend abstracts over different vendor agent CLIs.
 // All wire-format details (NDJSON protocol, message shapes) live inside
