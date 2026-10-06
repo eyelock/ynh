@@ -276,7 +276,7 @@ The `is_pinned` rule is the same on harnesses and includes:
 
 **`--name <new>`** registers the fork under a different name without uninstalling the source — the common case where a user wants to keep the upstream installed and fork a copy alongside it. The fork tree's `.agents/harness/plugin.json` is rewritten so its `name` field matches the registration; upstream identity survives in `installed_from.forked_from`. The new name is validated against the same regex as harness names (`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`). If `--to` is omitted, the default destination uses the new name (`<cwd>/<new>`).
 
-`ynh uninstall <name>` for a fork removes the pointer file (and launcher, run dir, sources entry) but leaves the source tree on disk — the user owns it. To delete the tree as well, remove the directory after uninstalling.
+`ynh uninstall <name>` for a fork removes the pointer file (and launcher, run dir, sources entry) but leaves the source tree on disk: the user owns it. To delete the tree as well, remove the directory after uninstalling. The confirmation names the tree as `Source tree left in place: <path>` only when a directory is still there; if it was already deleted, that line is omitted.
 
 If the source path recorded in a pointer no longer exists when the fork is loaded, `ynh` prints an actionable error directing the user to either restore the directory or run `ynh uninstall <name>`. There is no auto-relocate in this version.
 

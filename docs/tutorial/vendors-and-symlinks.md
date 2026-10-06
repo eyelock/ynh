@@ -222,7 +222,7 @@ ynh prune
 
 Expected:
 ```
-Removing orphaned installation: my-harness (cursor) in /tmp/ynh-tutorial/project
+Removed orphaned installation: my-harness (cursor) in /tmp/ynh-tutorial/project
 ```
 
 Verify the orphan was removed:
