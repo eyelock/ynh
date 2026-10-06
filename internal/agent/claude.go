@@ -44,17 +44,13 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 	}
 
 	var cmd *exec.Cmd
+	cleanup := func() {}
 	if opts.Sandbox == "srt" {
-		srtBin, err := exec.LookPath("srt")
+		policy := claudeSrtPolicy(workerEnvFor(opts.Env))
+		cmd, cleanup, err = srtCommand(ctx, opts, policy, claudeBin, args)
 		if err != nil {
-			return nil, fmt.Errorf("srt not found on PATH: %w", err)
+			return nil, err
 		}
-		srtArgs := append([]string{
-			"--profile", "workspace",
-			"--network-allow", ".anthropic.com,.openai.com",
-			"--", claudeBin,
-		}, args...)
-		cmd = exec.CommandContext(ctx, srtBin, srtArgs...)
 	} else {
 		cmd = exec.CommandContext(ctx, claudeBin, args...)
 	}
@@ -68,14 +64,17 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
+		cleanup()
 		return nil, fmt.Errorf("creating stdin pipe: %w", err)
 	}
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
+		cleanup()
 		return nil, fmt.Errorf("creating stdout pipe: %w", err)
 	}
 
 	if err := cmd.Start(); err != nil {
+		cleanup()
 		return nil, fmt.Errorf("starting claude: %w", err)
 	}
 
@@ -89,6 +88,7 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 		sessionID: sessionID,
 		stderr:    tail,
 		wantMode:  claudePermissionMode(opts.AutoApprove),
+		cleanup:   cleanup,
 		// A fresh session's running cost starts at zero. A resumed one may
 		// continue from the total its transcript saved, so it is asked.
 		costBaseKnown: opts.ResumeToken == "",
@@ -186,8 +186,12 @@ type claudeSession struct {
 	stderr *stderrTail
 	// wantMode is the --permission-mode this session asked for, or "".
 	wantMode string
-	waited   bool
-	waitErr  error
+	// cleanup removes what starting the session left behind for the
+	// process (srt's settings, when they had no session directory), once
+	// the process has exited.
+	cleanup func()
+	waited  bool
+	waitErr error
 
 	// effort is the reasoning effort claude reports it applies, once its
 	// get_settings answer arrives. Init does not carry it.
@@ -212,6 +216,9 @@ func (s *claudeSession) wait() error {
 	if !s.waited {
 		s.waitErr = s.cmd.Wait()
 		s.waited = true
+		if s.cleanup != nil {
+			s.cleanup()
+		}
 	}
 	return s.waitErr
 }

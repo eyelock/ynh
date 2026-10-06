@@ -219,10 +219,14 @@ func (r *runRelay) start(backend string) {
 		skip("ynh does not configure " + backend + "'s telemetry yet")
 		return
 	}
-	// srt denies loopback unless its settings file allow-lists the
-	// address, and ynh does not hand srt a settings file: it passes flags
-	// that srt's current CLI does not read. Until ynh configures srt
-	// properly, the relay is skipped rather than started unreachable.
+	// srt's settings can allow the relay's 127.0.0.1:<port>, but only for
+	// what goes through srt's proxy, and srt sets NO_PROXY to cover
+	// 127.0.0.1 and localhost inside the sandbox. A client that honours it
+	// dials the relay directly, which the sandbox refuses (seatbelt on
+	// macOS, a network namespace on Linux). The one direct opening,
+	// network.allowLocalBinding, opens every loopback port on macOS and
+	// none on Linux. So the relay is skipped rather than started
+	// unreachable (see docs/telemetry.md).
 	if r.sandbox == "srt" {
 		skip("--sandbox srt would block the worker from reaching it")
 		return

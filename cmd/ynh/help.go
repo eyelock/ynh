@@ -354,7 +354,8 @@ Flags:
   --max-plan-iterations <n>   Cap plan revision rounds
   --no-plan                   Skip the planning phase
   --interactive               Stay in session
-  --sandbox                   Run inside the harness's image
+  --sandbox none|srt          Wrap the worker in srt with ynh's network and
+                              write allowlist (claude only); none by default
   --auto-approve edits|all    Approve the worker's file edits, or everything,
                               without prompting (off by default; claude,
                               codex, cursor). Only for runs inside containment
