@@ -5,7 +5,7 @@
 # that. Copilot shipped as a working adapter and every skill still described
 # three vendors, because no check ever compared the vendor list against anything.
 #
-# Three assertions:
+# Four assertions:
 #
 #   A. Every vendor `ynh vendors` reports has a row in the vendor-adapters
 #      reference index. A new adapter that nobody documented fails here.
@@ -21,6 +21,11 @@
 #      unless it is a local tool an eval may run. A vendor CLI's name is spelled
 #      only in its adapter's CLIName, which `ynh vendors` reports as `cli`, so
 #      the first list covers every vendor CLI ynh or ynd runs (#524).
+#
+#   D. Every eval line in docs/tutorial/ (`*This launches:* ...`, the
+#      model-output line, `*Replace ...*`) is well formed, a launch or output
+#      line sits directly above a bash block, a launch names a stubbed program,
+#      and no HTML comment carries an eval directive. run.sh checks the calls.
 #
 # Usage: scripts/vendor-parity.sh [path-to-harness]   (default: repo root)
 
@@ -167,6 +172,52 @@ else
 		esac
 	done < "$TMP/launched.txt"
 fi
+
+# --- D. tutorial eval lines are well formed -------------------------------
+# A tutorial says what each launch hands the vendor in a visible line above the
+# block, `*This launches:* `<command>``, and run.sh checks the stub call against
+# it. Model-dependent output and reader-supplied values have their own fixed
+# lines. A line that drifted off its block, is misspelt, or names a program
+# that is not stubbed would be read by nobody, so all three are checked here.
+# Nothing the eval reads may be hidden: an HTML comment carrying a directive fails.
+echo
+echo "== D. tutorial eval lines =="
+markers=0
+for md in "$ROOT"/docs/tutorial/*.md; do
+	out=$(awk -v stubs="${stubs:-}" -v file="$(basename "$md")" '
+		function bad(msg) { printf "  BAD      %s:%d: %s\n", file, NR, msg; nbad++ }
+		/^```/ { infence = !infence }
+		infence && !/^```bash$/ { next }
+		/^\*Replace `/ {
+			if ($0 !~ /^\*Replace `[^`]+` with .* \(here: `.*`\)\.\*$/) bad("expected *Replace `<from>` with ... (here: `<to>`).*")
+			n++; next
+		}
+		/^\*Your output will differ/ {
+			if ($0 != "*Your output will differ: it shows what the model did.*") bad("expected *Your output will differ: it shows what the model did.*")
+			n++; pending = NR; next
+		}
+		/^\*This launches/ {
+			if ($0 !~ /^\*This launches:\* `[^`]+`$/) { bad("expected *This launches:* `<command>`"); n++; next }
+			m = $0; sub(/^\*This launches:\* `/, "", m); sub(/`$/, "", m); split(m, w, " ")
+			if (index(stubs, " " w[1] " ") == 0) bad("launches \"" w[1] "\", which is not in STUBS")
+			n++; pending = NR; next
+		}
+		pending && /^```bash$/ { pending = 0; next }
+		pending && /^[[:space:]]*$/ { next }
+		pending { bad("line " pending " is not followed by a ```bash block"); pending = 0 }
+		END { if (pending) bad("line " pending " is not followed by a ```bash block"); printf "COUNT %d %d\n", n, nbad }
+	' "$md")
+	printf '%s\n' "$out" | grep -v '^COUNT ' || true
+	set -- $(printf '%s\n' "$out" | sed -n 's/^COUNT //p')
+	markers=$((markers + $1))
+	[ "$2" -eq 0 ] || fail=1
+done
+hidden=$(grep -rn '<!-- *eval' "$ROOT/docs" "$ROOT/.claude" 2>/dev/null || true)
+if [ -n "$hidden" ]; then
+	printf '%s\n' "$hidden" | sed "s|^$ROOT/|  HIDDEN   |"
+	fail=1
+fi
+echo "  $markers eval lines checked"
 
 echo
 if [ "$fail" -ne 0 ]; then

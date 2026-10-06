@@ -255,8 +255,9 @@ marks as app-managed.
 
 - `before_tool` → `preToolUse`
 - `after_tool` → **both** `postToolUse` and `postToolUseFailure`. Copilot splits
-  by outcome what the other three vendors combine; fanning out to both loses
-  less than picking one.
+  by outcome, where the other adapters map `after_tool` to one event (Claude and
+  Codex `PostToolUse`, Cursor `afterFileEdit`); fanning out to both loses less
+  than picking one.
 - `before_prompt` → `userPromptSubmitted` (not `userPromptTransformed`, which
   fires later on already-rewritten content)
 - `on_stop` → `agentStop`

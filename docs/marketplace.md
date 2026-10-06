@@ -554,9 +554,9 @@ For the architectural rationale and contributor-facing rules, see [`.github/CONT
 
 ### Design Decisions
 
-**Why two marketplace.json files?** Vendor formats reject unknown fields. Claude Code requires `.claude-plugin/marketplace.json`, Cursor requires `.cursor-plugin/marketplace.json`. ynh generates both from the same source config, producing one physical plugin directory that serves both vendors.
+**Why one marketplace.json per vendor?** Vendor formats reject unknown fields. Claude Code requires `.claude-plugin/marketplace.json`, Cursor `.cursor-plugin/marketplace.json` and Copilot `.github/plugin/marketplace.json`. ynh generates each from the same source config, producing one physical plugin directory that serves every vendor.
 
-**Why does Codex get its own index format?** Codex's marketplace schema uses `source`/`policy` objects rather than the Claude/Cursor plugin-directory convention, so it can't share a marketplace.json with the other two vendors. `ynd marketplace build` generates a third index at `.agents/plugins/marketplace.json` alongside the Claude and Cursor ones, using Codex's native format. Codex's artifact support is still limited to skills (no agents, rules, or commands), so plugins in a Codex-consumed marketplace are skills-only regardless of what the harness defines for the other vendors.
+**Why does Codex get its own index format?** Codex's marketplace schema uses `source`/`policy` objects rather than the Claude/Cursor plugin-directory convention, so it can't share the Claude and Cursor index shape. `ynd marketplace build` generates its index at `.agents/plugins/marketplace.json` alongside the other vendors' ones, using Codex's native format. Codex's artifact support is still limited to skills (no agents, rules, or commands), so plugins in a Codex-consumed marketplace are skills-only regardless of what the harness defines for the other vendors.
 
 **Why auto-init Git?** Claude Code's plugin loader resolves relative `source` paths (e.g., `./plugins/formatter`) within the Git working tree. A marketplace directory that isn't a Git repo causes path resolution failures at install time.
 

@@ -187,7 +187,7 @@ Codex uses `.mcp.json` at the plugin root with the same JSON format as Claude:
 
 ### Copilot Format
 
-Copilot requires an explicit `"type"` field per server (`"local"` for a `command`-based server, `"http"` for a `url`-based one) — unlike the other three vendors, which infer the server kind from which fields are present:
+Copilot requires an explicit `"type"` field on every server (`"local"` for a `command`-based server, `"http"` for a `url`-based one, `"sse"` for the legacy transport). Claude Code and Codex carry `"type"` only on a remote server and treat an entry without one as stdio; Cursor has no `"type"` field and infers the transport from which fields are present:
 
 ```json
 {

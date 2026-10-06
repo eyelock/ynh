@@ -142,6 +142,7 @@ ynh install /tmp/ynh-tutorial/profile-harness
 
 Launch interactively with the `ci` profile:
 
+*This launches:* `claude --plugin-dir ~/.ynh/run/local--profile-demo/.claude --add-dir ~/.ynh/run/local--profile-demo --append-system-prompt You are a deployment assistant. ... procedures for all environments.`
 ```bash
 profile-demo --profile ci
 ```

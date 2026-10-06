@@ -105,6 +105,7 @@ local/team-lead  local  claude  /tmp/ynh-tutorial/team-lead  0          0       
 
 Delegate repos are fetched at install time and cached locally. Agent files are generated at runtime from the cached repos. Run the harness to trigger assembly:
 
+*This launches:* `claude --plugin-dir ~/.ynh/run/local--team-lead/.claude --add-dir ~/.ynh/run/local--team-lead --append-system-prompt You are a team lead. ... -p list your available agents`
 ```bash
 team-lead "list your available agents"
 ```
@@ -125,12 +126,14 @@ Expected: frontmatter with name/description, then sections for Instructions, Rul
 
 ## Test delegation
 
+*This launches:* `claude --plugin-dir ~/.ynh/run/local--team-lead/.claude --add-dir ~/.ynh/run/local--team-lead --append-system-prompt You are a team lead. ... -p delegate to the specialist agent and ask it to analyze this project's main.go`
 ```bash
 team-lead "delegate to the specialist agent and ask it to analyze this project's main.go"
 ```
 
 The specialist's `instructions.md` says to provide detailed technical analysis with file paths. If you see that style of response, delegation is working.
 
+*This launches:* `claude --plugin-dir ~/.ynh/run/local--team-lead/.claude --add-dir ~/.ynh/run/local--team-lead --append-system-prompt You are a team lead. ... -p ask the researcher delegate to review the project structure`
 ```bash
 team-lead "ask the researcher delegate to review the project structure"
 ```

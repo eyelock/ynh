@@ -331,7 +331,7 @@ If an included harness needs hooks, copy its hook declarations into the root har
 When writing hook scripts for use across vendors:
 
 1. **Output correct JSON for the event type** — Claude expects `{"type": "command"}` wrapper; Cursor and Codex do not. Your *script output* (blocking messages) should be plain text or simple JSON that any vendor can display.
-2. **Use exit code 2 for blocking** — all three vendors recognize exit code 2 as "block this action."
+2. **Use exit code 2 for blocking**: Claude Code, Codex and Cursor treat exit code 2 as "block this action" on the events that can block. Copilot CLI does so only for `preToolUse` and `permissionRequest`; on its other events exit 2 is a warning, and a hook blocks through its JSON output instead.
 3. **Include remediation instructions** — tell the agent how to fix the problem, not just that there is one.
 4. **Keep scripts idempotent** — hooks may fire multiple times per session.
 5. **Make command paths cwd-independent**: hooks run in the agent's current working directory, not the project root, and that cwd changes as the agent navigates. A relative command (`./tools/hooks/foo.sh`) breaks after any `cd`. Anchor to the vendor's project-root variable (`$CLAUDE_PROJECT_DIR` on Claude Code) or use an absolute path. For a session or a plugin export, ynh anchors a `./` script for you and ships the script alongside the hooks; see [Hook script paths](#hook-script-paths).

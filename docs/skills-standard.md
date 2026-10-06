@@ -75,7 +75,7 @@ Write clear, actionable steps. Reference supporting files from SKILL.md so the a
 
 ## Progressive Disclosure
 
-All three major platforms implement three-tier loading:
+Claude Code, Cursor and Codex all implement three-tier loading:
 
 1. **Catalog** — skill name + description only (~50–100 tokens per skill). Always in context.
 2. **Instructions** — full SKILL.md body (< 5,000 tokens recommended). Loaded when the agent decides the skill is relevant or the user invokes `/skill-name`.

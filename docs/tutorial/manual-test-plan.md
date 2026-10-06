@@ -507,9 +507,14 @@ if [ -f ~/.ynh/config.json.bak ]; then mv ~/.ynh/config.json.bak ~/.ynh/config.j
 
 ### E12: SSH URL not confused with registry
 
+What this case tests is where the address goes: to git, not to a registry
+lookup. It needs no network to show that. `GIT_ALLOW_PROTOCOL=file` lets git
+parse the SSH address and then refuse the `ssh` transport before it connects.
+
 ```bash
-ynh install git@github.com:eyelock/nonexistent.git 2>&1 | head -1
-# Expected: git clone error, NOT a registry lookup error
+GIT_ALLOW_PROTOCOL=file ynh install git@github.com:eyelock/nonexistent.git 2>&1 | head -1
+# Expected: Error: resolving git@github.com:eyelock/nonexistent.git: git clone git@github.com:eyelock/nonexistent.git: exit status 128
+# (a git clone error, NOT a registry lookup error)
 ```
 
 ### E13: Create duplicate scaffold

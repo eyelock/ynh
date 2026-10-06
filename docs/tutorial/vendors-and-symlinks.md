@@ -72,6 +72,9 @@ mkdir -p /tmp/ynh-tutorial/switch
 cd /tmp/ynh-tutorial/switch
 ```
 
+*This launches:* `codex`
+
+*This launches:* `agent`
 ```bash
 my-harness -v codex
 my-harness -v cursor
@@ -101,6 +104,7 @@ mkdir -p /tmp/ynh-tutorial/project
 cd /tmp/ynh-tutorial/project
 ```
 
+*This launches:* `agent`
 ```bash
 my-harness -v cursor
 ```
@@ -281,7 +285,7 @@ rm -rf /tmp/ynh-tutorial
 
 ## What you learned
 
-- ynh supports three vendors: Claude, Codex, Cursor
+- ynh supports four vendors: Claude, Codex, Copilot, Cursor
 - Claude uses `--plugin-dir` (no symlinks needed)
 - Codex and Cursor need symlinks from the project directory to ynh's staging area
 - ynh **automatically prompts** to install symlinks on first run in a project
