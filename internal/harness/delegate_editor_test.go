@@ -23,7 +23,7 @@ func TestAddDelegate_New(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
 
-	err := AddDelegate(dir, "github.com/acme/agent", DelegateAddOptions{Ref: "main"})
+	err := AddDelegate(dir, "github.com/example-org/agent", DelegateAddOptions{Ref: "main"})
 	if err != nil {
 		t.Fatalf("AddDelegate: %v", err)
 	}
@@ -32,7 +32,7 @@ func TestAddDelegate_New(t *testing.T) {
 	if len(dels) != 1 {
 		t.Fatalf("expected 1 delegate, got %d", len(dels))
 	}
-	if dels[0].Git != "github.com/acme/agent" || dels[0].Ref != "main" {
+	if dels[0].Git != "github.com/example-org/agent" || dels[0].Ref != "main" {
 		t.Errorf("unexpected delegate: %+v", dels[0])
 	}
 }
@@ -42,10 +42,10 @@ func TestAddDelegate_DuplicateErrors(t *testing.T) {
 	writeTestHarness(t, dir, "h")
 
 	opts := DelegateAddOptions{}
-	if err := AddDelegate(dir, "github.com/acme/agent", opts); err != nil {
+	if err := AddDelegate(dir, "github.com/example-org/agent", opts); err != nil {
 		t.Fatalf("first add: %v", err)
 	}
-	err := AddDelegate(dir, "github.com/acme/agent", opts)
+	err := AddDelegate(dir, "github.com/example-org/agent", opts)
 	if err == nil {
 		t.Fatal("expected error on duplicate add")
 	}
@@ -58,10 +58,10 @@ func TestAddDelegate_SameURLDifferentPath(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
 
-	if err := AddDelegate(dir, "github.com/acme/mono", DelegateAddOptions{Path: "agents/a"}); err != nil {
+	if err := AddDelegate(dir, "github.com/example-org/mono", DelegateAddOptions{Path: "agents/a"}); err != nil {
 		t.Fatalf("add a: %v", err)
 	}
-	if err := AddDelegate(dir, "github.com/acme/mono", DelegateAddOptions{Path: "agents/b"}); err != nil {
+	if err := AddDelegate(dir, "github.com/example-org/mono", DelegateAddOptions{Path: "agents/b"}); err != nil {
 		t.Fatalf("add b: %v", err)
 	}
 
@@ -75,7 +75,7 @@ func TestAddDelegate_WithPath(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
 
-	if err := AddDelegate(dir, "github.com/acme/mono", DelegateAddOptions{Path: "sub", Ref: "v1"}); err != nil {
+	if err := AddDelegate(dir, "github.com/example-org/mono", DelegateAddOptions{Path: "sub", Ref: "v1"}); err != nil {
 		t.Fatalf("AddDelegate: %v", err)
 	}
 
@@ -90,11 +90,11 @@ func TestAddDelegate_WithPath(t *testing.T) {
 func TestRemoveDelegate_Removes(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddDelegate(dir, "github.com/acme/agent", DelegateAddOptions{}); err != nil {
+	if err := AddDelegate(dir, "github.com/example-org/agent", DelegateAddOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := RemoveDelegate(dir, "github.com/acme/agent", DelegateRemoveOptions{}); err != nil {
+	if err := RemoveDelegate(dir, "github.com/example-org/agent", DelegateRemoveOptions{}); err != nil {
 		t.Fatalf("RemoveDelegate: %v", err)
 	}
 
@@ -108,7 +108,7 @@ func TestRemoveDelegate_NotFound(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
 
-	err := RemoveDelegate(dir, "github.com/acme/agent", DelegateRemoveOptions{})
+	err := RemoveDelegate(dir, "github.com/example-org/agent", DelegateRemoveOptions{})
 	if err == nil {
 		t.Fatal("expected error for missing delegate")
 	}
@@ -120,14 +120,14 @@ func TestRemoveDelegate_NotFound(t *testing.T) {
 func TestRemoveDelegate_AmbiguousRequiresPath(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddDelegate(dir, "github.com/acme/mono", DelegateAddOptions{Path: "a"}); err != nil {
+	if err := AddDelegate(dir, "github.com/example-org/mono", DelegateAddOptions{Path: "a"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := AddDelegate(dir, "github.com/acme/mono", DelegateAddOptions{Path: "b"}); err != nil {
+	if err := AddDelegate(dir, "github.com/example-org/mono", DelegateAddOptions{Path: "b"}); err != nil {
 		t.Fatal(err)
 	}
 
-	err := RemoveDelegate(dir, "github.com/acme/mono", DelegateRemoveOptions{})
+	err := RemoveDelegate(dir, "github.com/example-org/mono", DelegateRemoveOptions{})
 	if err == nil {
 		t.Fatal("expected error for ambiguous URL without path")
 	}
@@ -139,14 +139,14 @@ func TestRemoveDelegate_AmbiguousRequiresPath(t *testing.T) {
 func TestRemoveDelegate_WithPath(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddDelegate(dir, "github.com/acme/mono", DelegateAddOptions{Path: "a"}); err != nil {
+	if err := AddDelegate(dir, "github.com/example-org/mono", DelegateAddOptions{Path: "a"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := AddDelegate(dir, "github.com/acme/mono", DelegateAddOptions{Path: "b"}); err != nil {
+	if err := AddDelegate(dir, "github.com/example-org/mono", DelegateAddOptions{Path: "b"}); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := RemoveDelegate(dir, "github.com/acme/mono", DelegateRemoveOptions{Path: "a"}); err != nil {
+	if err := RemoveDelegate(dir, "github.com/example-org/mono", DelegateRemoveOptions{Path: "a"}); err != nil {
 		t.Fatalf("RemoveDelegate with path: %v", err)
 	}
 
@@ -161,12 +161,12 @@ func TestRemoveDelegate_WithPath(t *testing.T) {
 func TestUpdateDelegate_Ref(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddDelegate(dir, "github.com/acme/agent", DelegateAddOptions{Ref: "v1"}); err != nil {
+	if err := AddDelegate(dir, "github.com/example-org/agent", DelegateAddOptions{Ref: "v1"}); err != nil {
 		t.Fatal(err)
 	}
 
 	newRef := "v2"
-	if err := UpdateDelegate(dir, "github.com/acme/agent", DelegateUpdateOptions{Ref: &newRef}); err != nil {
+	if err := UpdateDelegate(dir, "github.com/example-org/agent", DelegateUpdateOptions{Ref: &newRef}); err != nil {
 		t.Fatalf("UpdateDelegate: %v", err)
 	}
 
@@ -179,12 +179,12 @@ func TestUpdateDelegate_Ref(t *testing.T) {
 func TestUpdateDelegate_Path(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddDelegate(dir, "github.com/acme/agent", DelegateAddOptions{Path: "old"}); err != nil {
+	if err := AddDelegate(dir, "github.com/example-org/agent", DelegateAddOptions{Path: "old"}); err != nil {
 		t.Fatal(err)
 	}
 
 	newPath := "new"
-	if err := UpdateDelegate(dir, "github.com/acme/agent", DelegateUpdateOptions{NewPath: &newPath}); err != nil {
+	if err := UpdateDelegate(dir, "github.com/example-org/agent", DelegateUpdateOptions{NewPath: &newPath}); err != nil {
 		t.Fatalf("UpdateDelegate: %v", err)
 	}
 
@@ -197,12 +197,12 @@ func TestUpdateDelegate_Path(t *testing.T) {
 func TestUpdateDelegate_OmittedFieldsUnchanged(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddDelegate(dir, "github.com/acme/agent", DelegateAddOptions{Ref: "v1", Path: "p"}); err != nil {
+	if err := AddDelegate(dir, "github.com/example-org/agent", DelegateAddOptions{Ref: "v1", Path: "p"}); err != nil {
 		t.Fatal(err)
 	}
 
 	newRef := "v2"
-	if err := UpdateDelegate(dir, "github.com/acme/agent", DelegateUpdateOptions{Ref: &newRef}); err != nil {
+	if err := UpdateDelegate(dir, "github.com/example-org/agent", DelegateUpdateOptions{Ref: &newRef}); err != nil {
 		t.Fatalf("UpdateDelegate: %v", err)
 	}
 
@@ -220,7 +220,7 @@ func TestUpdateDelegate_NotFound(t *testing.T) {
 	writeTestHarness(t, dir, "h")
 
 	newRef := "v2"
-	err := UpdateDelegate(dir, "github.com/acme/agent", DelegateUpdateOptions{Ref: &newRef})
+	err := UpdateDelegate(dir, "github.com/example-org/agent", DelegateUpdateOptions{Ref: &newRef})
 	if err == nil {
 		t.Fatal("expected error for missing delegate")
 	}
@@ -232,15 +232,15 @@ func TestUpdateDelegate_NotFound(t *testing.T) {
 func TestUpdateDelegate_AmbiguousRequiresFromPath(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddDelegate(dir, "github.com/acme/mono", DelegateAddOptions{Path: "a"}); err != nil {
+	if err := AddDelegate(dir, "github.com/example-org/mono", DelegateAddOptions{Path: "a"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := AddDelegate(dir, "github.com/acme/mono", DelegateAddOptions{Path: "b"}); err != nil {
+	if err := AddDelegate(dir, "github.com/example-org/mono", DelegateAddOptions{Path: "b"}); err != nil {
 		t.Fatal(err)
 	}
 
 	newRef := "v2"
-	err := UpdateDelegate(dir, "github.com/acme/mono", DelegateUpdateOptions{Ref: &newRef})
+	err := UpdateDelegate(dir, "github.com/example-org/mono", DelegateUpdateOptions{Ref: &newRef})
 	if err == nil {
 		t.Fatal("expected error for ambiguous URL without --from-path")
 	}
@@ -252,15 +252,15 @@ func TestUpdateDelegate_AmbiguousRequiresFromPath(t *testing.T) {
 func TestUpdateDelegate_FromPath(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddDelegate(dir, "github.com/acme/mono", DelegateAddOptions{Path: "a", Ref: "v1"}); err != nil {
+	if err := AddDelegate(dir, "github.com/example-org/mono", DelegateAddOptions{Path: "a", Ref: "v1"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := AddDelegate(dir, "github.com/acme/mono", DelegateAddOptions{Path: "b", Ref: "v1"}); err != nil {
+	if err := AddDelegate(dir, "github.com/example-org/mono", DelegateAddOptions{Path: "b", Ref: "v1"}); err != nil {
 		t.Fatal(err)
 	}
 
 	newRef := "v2"
-	if err := UpdateDelegate(dir, "github.com/acme/mono", DelegateUpdateOptions{FromPath: "a", Ref: &newRef}); err != nil {
+	if err := UpdateDelegate(dir, "github.com/example-org/mono", DelegateUpdateOptions{FromPath: "a", Ref: &newRef}); err != nil {
 		t.Fatalf("UpdateDelegate with from-path: %v", err)
 	}
 
@@ -282,13 +282,13 @@ func TestUpdateDelegate_FromPath(t *testing.T) {
 func TestFindDelegateUpdateTarget_ComputesFinalState(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddDelegate(dir, "github.com/acme/agent", DelegateAddOptions{Ref: "v1", Path: "old"}); err != nil {
+	if err := AddDelegate(dir, "github.com/example-org/agent", DelegateAddOptions{Ref: "v1", Path: "old"}); err != nil {
 		t.Fatal(err)
 	}
 
 	newPath := "new"
 	newRef := "v2"
-	del, err := FindDelegateUpdateTarget(dir, "github.com/acme/agent", DelegateUpdateOptions{NewPath: &newPath, Ref: &newRef})
+	del, err := FindDelegateUpdateTarget(dir, "github.com/example-org/agent", DelegateUpdateOptions{NewPath: &newPath, Ref: &newRef})
 	if err != nil {
 		t.Fatalf("FindDelegateUpdateTarget: %v", err)
 	}

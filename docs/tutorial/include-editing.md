@@ -455,14 +455,14 @@ The `<harness>` argument is classified lexically:
 
 ```bash
 # Filesystem path (must contain .agents/harness/plugin.json)
-ynh include add ./my-harness github.com/acme/tools
-ynh include add /tmp/ynh-tutorial-includes/my-harness github.com/acme/tools
+ynh include add ./my-harness github.com/example-org/tools
+ynh include add /tmp/ynh-tutorial-includes/my-harness github.com/example-org/tools
 
 # Canonical id (must be installed)
-ynh include add local/my-harness github.com/acme/tools
+ynh include add local/my-harness github.com/example-org/tools
 
 # Bare name — rejected
-ynh include add my-harness github.com/acme/tools
+ynh include add my-harness github.com/example-org/tools
 # Error: "my-harness" is not a valid harness id. Use a canonical id...
 ```
 

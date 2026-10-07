@@ -683,6 +683,12 @@ ynh-guide
 
 Inside the session, `/ynh-create-harness` walks you through creating your own harness. The development-focused skills (`ynh-dev`, `vendor-adapters`, etc.) live in `.claude/` and are loaded natively by Claude — they're not part of the installable harness.
 
+## Repository Settings
+
+The repository's GitHub settings (rulesets, security features, labels, and the names of
+its secrets, never their values) live in [`infra/github`](../infra/github/README.md) and
+are applied with Terraform. Change them there, in a pull request, not in the settings page.
+
 ## Submitting Changes
 
 1. Fork the repo

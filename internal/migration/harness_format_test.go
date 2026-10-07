@@ -188,7 +188,7 @@ func TestHarnessFormatMigrator_SourceTreeRefusedOutsideMigrateChain(t *testing.T
 func TestLegacyHarnessManifest_CachedClone(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
-	dir := filepath.Join(home, "cache", "github.com--acme--repo")
+	dir := filepath.Join(home, "cache", "github.com--example-org--repo")
 	writeFile(t, filepath.Join(dir, plugin.HarnessFile), `{"name":"x","version":"0.1.0"}`)
 
 	err := LegacyHarnessManifest(dir)

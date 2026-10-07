@@ -25,11 +25,11 @@ func TestAddProfileInclude_New(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := AddProfileInclude(dir, "ci", "github.com/acme/x", AddOptions{Ref: "v1"}); err != nil {
+	if err := AddProfileInclude(dir, "ci", "github.com/example-org/x", AddOptions{Ref: "v1"}); err != nil {
 		t.Fatalf("AddProfileInclude: %v", err)
 	}
 	incs := loadProfileIncludes(t, dir, "ci")
-	if len(incs) != 1 || incs[0].Git != "github.com/acme/x" || incs[0].Ref != "v1" {
+	if len(incs) != 1 || incs[0].Git != "github.com/example-org/x" || incs[0].Ref != "v1" {
 		t.Errorf("unexpected: %+v", incs)
 	}
 }

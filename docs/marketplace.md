@@ -511,7 +511,7 @@ Three legitimate combinations on a registry or marketplace entry:
 | `"v1.0"` | `"abc123…"` | Fetches `v1.0`, then verifies the fetched commit equals `abc123…`. Aborts on mismatch. Recommended for published releases. |
 | `"abc123…"` | _empty_ | Fetches the commit directly. Immutable; will never drift. |
 
-**`ref` is primary. `sha` is opt-in.** A user who installs `acme-tools --ref v1.0` is saying "give me 1.0, including future patches of 1.0." Auto-converting that to a SHA pin downstream means they'll never receive those patches even though their original install would. The "safe" default ends up subtly wrong — defaulting to the SHA throws away the user's symbolic tracking intent.
+**`ref` is primary. `sha` is opt-in.** A user who installs `example-tools --ref v1.0` is saying "give me 1.0, including future patches of 1.0." Auto-converting that to a SHA pin downstream means they'll never receive those patches even though their original install would. The "safe" default ends up subtly wrong: defaulting to the SHA throws away the user's symbolic tracking intent.
 
 > **Note:** The `harnesses[].version` field in ynh's `marketplace.json` is a cosmetic display label, not a resolution input. Tracking "version 1.0" is done by setting `"ref": "v1.0"`, not by the `version` field. Downstream consumers should not rely on `version` for pinning decisions.
 

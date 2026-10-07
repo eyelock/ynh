@@ -40,7 +40,7 @@ func exists(path string) bool {
 }
 
 const legacyPlugin = `{"name":"old","version":"0.1.0"}`
-const legacyInstalled = `{"source_type":"git","source":"https://github.com/acme/repo","installed_at":"2026-01-01T00:00:00Z","sha":"abc123"}`
+const legacyInstalled = `{"source_type":"git","source":"https://github.com/example-org/repo","installed_at":"2026-01-01T00:00:00Z","sha":"abc123"}`
 
 // legacyTree writes a harness at root/name with its manifest in .ynh-plugin.
 func legacyTree(t *testing.T, root, name string, withInstalled bool) string {
@@ -240,7 +240,7 @@ func TestManifestDirMigrator_InstalledTreeMovesOnLoad(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
 	harnesses := filepath.Join(home, "harnesses")
-	dir := legacyTree(t, harnesses, "github.com--acme--repo--old", true)
+	dir := legacyTree(t, harnesses, "github.com--example-org--repo--old", true)
 
 	if !(ManifestDirMigrator{}).Applies(dir) {
 		t.Fatal("the load-time migrator must apply to an install")
@@ -257,7 +257,7 @@ func TestManifestDirMigrator_InstalledTreeMovesOnLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ins.Source != "https://github.com/acme/repo" || ins.SHA != "abc123" || ins.InstalledAt == "" {
+	if ins.Source != "https://github.com/example-org/repo" || ins.SHA != "abc123" || ins.InstalledAt == "" {
 		t.Errorf("provenance lost in the move: %+v", ins)
 	}
 	if exists(filepath.Join(dir, plugin.LegacyPluginDir)) {
@@ -412,7 +412,7 @@ func TestAdoptRefreshedManifest(t *testing.T) {
 	src := legacyTree(t, t.TempDir(), "upstream", false)
 	writeFile(t, filepath.Join(src, plugin.LegacyPluginDir, plugin.PluginFile), `{"name":"old","version":"0.2.0"}`)
 
-	dst := filepath.Join(home, "harnesses", "github.com--acme--repo--old")
+	dst := filepath.Join(home, "harnesses", "github.com--example-org--repo--old")
 	writeFile(t, filepath.Join(dst, plugin.PluginDir, plugin.PluginFile), legacyPlugin)
 	writeFile(t, filepath.Join(dst, plugin.PluginDir, plugin.InstalledFile), legacyInstalled)
 	// What the overlay leaves behind.

@@ -190,7 +190,7 @@ across machines should read `freshness_basis` and weigh the answer accordingly.
 ### Reading it
 
 ```console
-$ ynh check local/collective-dev --only e2e-status
+$ ynh check local/example-dev --only e2e-status
   ✗  e2e-status  absent  0ms
 
 e2e-status:

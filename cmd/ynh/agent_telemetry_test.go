@@ -450,7 +450,7 @@ func TestRunAttributes(t *testing.T) {
 		Effort:          "high",
 		EffortRequested: "medium",
 		BoundBy:         "tokens",
-		Harness:         &agent.RunHarness{Name: "github.com/acme/h/x", Version: "1.2.0", SHA: "deadbeef"},
+		Harness:         &agent.RunHarness{Name: "github.com/example-org/h/x", Version: "1.2.0", SHA: "deadbeef"},
 		Consumed: agent.RunConsumed{
 			Turns: 4, Tokens: 150, InputTokens: i64(100), OutputTokens: i64(50),
 			CacheReadTokens: i64(30), CacheCreationTokens: i64(20), CostUSD: f64(0.25), WallMS: 1000,
@@ -477,7 +477,7 @@ func TestRunAttributes(t *testing.T) {
 				"ynh.run.effort":                           "high",
 				"ynh.run.effort.requested":                 "medium",
 				"ynh.run.bound_by":                         "tokens",
-				"ynh.harness.name":                         "github.com/acme/h/x",
+				"ynh.harness.name":                         "github.com/example-org/h/x",
 				"ynh.harness.version":                      "1.2.0",
 				"ynh.harness.commit":                       "deadbeef",
 				"gen_ai.usage.input_tokens":                int64(150),

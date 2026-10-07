@@ -8,3 +8,6 @@
 # Build and CI
 /Makefile @eyelock
 /.github/workflows/ @eyelock
+
+# Repository settings as code
+/infra/ @eyelock

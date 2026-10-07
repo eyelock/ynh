@@ -97,7 +97,7 @@ func TestCheckSource_MatchesAllowed(t *testing.T) {
 	cfg := &Config{
 		AllowedRemoteSources: []string{
 			"github.com/eyelock/*",
-			"github.com/acme-corp/shared-skills",
+			"github.com/example-org/shared-skills",
 		},
 	}
 
@@ -109,8 +109,8 @@ func TestCheckSource_MatchesAllowed(t *testing.T) {
 		{"github.com/eyelock/other-repo", true},
 		{"git@github.com:eyelock/ynh.git", true},
 		{"https://github.com/eyelock/ynh.git", true},
-		{"github.com/acme-corp/shared-skills", true},
-		{"github.com/acme-corp/other-repo", false},
+		{"github.com/example-org/shared-skills", true},
+		{"github.com/example-org/other-repo", false},
 		{"github.com/untrusted/repo", false},
 		{"gitlab.com/eyelock/ynh", false},
 	}

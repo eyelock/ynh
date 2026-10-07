@@ -27,3 +27,29 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "deps"
+
+  # Keep the base images in the Dockerfile up to date
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps"
+
+  # Keep the image in docker-compose.yml up to date
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps"
+
+  # Keep Terraform providers up to date
+  - package-ecosystem: "terraform"
+    directories:
+      - "/terraform/*"
+      - "/infra/github"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps"
