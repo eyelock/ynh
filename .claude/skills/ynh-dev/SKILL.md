@@ -75,6 +75,7 @@ Tutorial filenames are descriptive, not numbered — do not cite them by number.
 | MCP servers | `mcp-servers.md` |
 | Profiles | `profiles.md` |
 | Focus | `focus.md` |
+| Composing tools across includes | `composing-tools.md` |
 | Project-local config | `project-local-config.md` |
 | `internal/clischema`, `internal/jsonschema` | `structured-output.md` |
 | `ynh include` editing | `include-editing.md` |
