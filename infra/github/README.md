@@ -6,7 +6,7 @@ and set up again from nothing.
 | File | What it manages |
 |---|---|
 | `repository.tf` | The repository: description, topics, homepage, visibility, features, merge options, secret scanning and push protection (public only), and the GitHub Pages site |
-| `branches.tf` | Gitflow: `develop` as the default branch, and a ruleset on each of `main` and `develop`: no deletion or force-push, a pull request with conversations resolved, "All Clear" green and up to date (plus "Verify PR source branch" into `main`), repository admins may bypass. Also removes the classic protection the rulesets replace |
+| `branches.tf` | Gitflow: `develop` as the default branch, and a ruleset on each of `main` and `develop`: no deletion or force-push, a pull request with conversations resolved, "All Clear" green and up to date (plus "Verify PR source branch" into `main`), repository admins may bypass |
 | `labels.tf` | Issue and PR labels, authoritatively: a label not listed is removed |
 | `actions.tf` | Actions permissions, the read-only default `GITHUB_TOKEN`, the `github-pages` environment, and that the Actions and Dependabot secrets exist (names only) |
 | `security.tf` | Dependabot alerts and security updates, and private vulnerability reporting |
@@ -29,17 +29,13 @@ lists of required checks, and they drift. Both require the one check **All Clear
 in `ci.yml`), strictly; `main` also requires **Verify PR source branch**, so it takes only
 `develop`, `release/*` and `hotfix/*`. Repository admins (role 5) can bypass.
 
-### Replacing the classic protection
+### The classic protection they replaced
 
-`main` and `develop` still carry classic protection that was set by hand and is in no state. The
-first `terraform apply` creates the rulesets and then deletes that protection in the same run
-(`terraform_data.remove_classic_protection`, which calls `gh api -X DELETE` once the rulesets
-exist). It is done that way because Terraform cannot import a resource and remove it in one plan:
-an `import` block needs its target in the configuration, and a `removed` block takes it out
-(`Configuration for import target does not exist`). The plan lists it as two resources to add; it
-does not show the deletion, which the apply log prints (`removed classic protection from main`).
-A branch with no classic protection is treated as done, so a repeat run changes nothing. Once
-applied, delete the `terraform_data.remove_classic_protection` resource from `branches.tf`.
+`main` and `develop` used to carry classic branch protection, set by hand and in no state. The
+first `terraform apply` (October 2026) created the rulesets and then deleted it with
+`gh api -X DELETE`, through a one-off `terraform_data` step, because Terraform cannot import a
+resource and remove it in one plan. That step is now a `removed` block in `branches.tf`, so later
+plans forget it without touching GitHub.
 
 ## Private vulnerability reporting
 

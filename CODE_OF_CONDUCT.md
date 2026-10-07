@@ -62,8 +62,8 @@ Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the community leaders responsible for enforcement by opening a
 private report through the repository's
 [Security tab](https://github.com/eyelock/ynh/security) ("Report a
-vulnerability"), or by contacting [@eyelock](https://github.com/eyelock) on
-GitHub. All complaints will be reviewed and investigated promptly and fairly.
+vulnerability"), by email to [support@eyelock.net](mailto:support@eyelock.net),
+or by contacting [@eyelock](https://github.com/eyelock) on GitHub. All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the
 reporter of any incident.
