@@ -234,7 +234,7 @@ Isolation is a launch setting. It changes how `ynh run` and `ynh agent run` star
 
 The warning is one line on stderr, prefixed `warning:`, and never fails the run. `ynh agent run` applies isolation on the Claude backend only and warns on the others.
 
-**Tool names change on Claude Code.** Without isolation a harness's servers are named `plugin:<harness>:<server>`; with it they are named `<server>`. A permission rule or hook matcher that names a tool by its server prefix must use the name for the mode the harness runs in.
+**Tool names change on Claude Code.** Without isolation a harness's servers are named `plugin:.claude:<server>` (ynh run loads the assembled `.claude/` directory as the plugin, and Claude names a plugin after its directory); with it they are named `<server>`. A permission rule or hook matcher that names a tool by its server prefix must use the name for the mode the harness runs in.
 
 ## Servers from Included Harnesses
 
@@ -333,6 +333,7 @@ See [reference.md](reference.md) for the complete flag matrix and [profiles.md](
 ## See Also
 
 - [MCP Servers](tutorial/mcp-servers.md) — step-by-step walkthrough
+- [Composing Tools Across Harnesses](tutorial/composing-tools.md): servers, profiles, focuses and hooks across includes
 - [Hooks](hooks.md) — lifecycle hooks that bridge guides to sensors
 - [Vendor Support](vendors.md) — vendor capabilities and differences
 
