@@ -835,7 +835,7 @@ sensor "security-scan": source.focus references undefined focus "infer-vulns"
 
 ### Includes — root-only
 
-Only the root harness's sensors are used. An included harness contributes `skills/`, `agents/`, `rules/` and `commands/`, which are files, and its MCP servers, and nothing else.
+Only the root harness's sensors are used. An included harness contributes `skills/`, `agents/`, `rules/` and `commands/`, which are files, its MCP servers, and its [hooks](hooks.md#hooks-from-included-harnesses) when its include says `"hooks": true`. Sensors are never carried.
 
 An included harness's manifest is opened, for its [MCP servers](mcp.md#servers-from-included-harnesses) and its own includes, but the resolver carries no sensor declarations out of it. Root-only is a property of what the resolver carries, not a filter applied afterwards.
 

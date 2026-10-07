@@ -436,6 +436,8 @@ func cmdProfileIncludeAdd(args []string, stdout io.Writer) error {
 			}
 			i++
 			opts.Ref = args[i]
+		case "--hooks":
+			opts.Hooks = true
 		case "--replace":
 			opts.Replace = true
 		default:
@@ -446,7 +448,7 @@ func cmdProfileIncludeAdd(args []string, stdout io.Writer) error {
 		}
 	}
 	if len(positional) != 3 {
-		return fmt.Errorf("usage: ynh profile include add <harness> <profile> <url> [--path <subdir>] [--ref <ref>] [--replace]")
+		return fmt.Errorf("usage: ynh profile include add <harness> <profile> <url> [--path <subdir>] [--ref <ref>] [--hooks] [--replace]")
 	}
 	harnessRef, profileName, url := positional[0], positional[1], positional[2]
 

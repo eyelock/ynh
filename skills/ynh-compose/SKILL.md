@@ -162,6 +162,10 @@ ynd preview <harness> --profile ci
   included one
 - **Sensors**: root-only. An included harness's sensors are never read, by
   design, so "what observes this repository" stays in one committed file
+- **Hooks**: an included harness's hooks run only if its include says
+  `"hooks": true` (`ynh include add --hooks`), at every link of a chain.
+  Without it a warning names them. Per event the included entries go first,
+  the root's last, and a `./` script is carried under `scripts/_include/<ns>/`
 - **MCP servers**: an included harness's servers are carried (and those of the
   harnesses it includes, unless the include uses `pick`). The root's server of
   the same name wins, and `null` in the root's or a profile's `mcp_servers`
