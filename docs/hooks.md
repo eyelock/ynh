@@ -4,7 +4,7 @@ Hooks are shell commands that vendors execute at specific lifecycle events durin
 
 A harness declares hooks in `.agents/harness/plugin.json` at the top level. At assembly time, ynh translates them into the vendor-native config format. A hook command is a regular shell command: a tool on the host machine, a script in the project, or a script the harness ships in its own tree. A command that starts with `./` names a script the harness ships; ynh carries it with the hooks and rewrites the path to reach it, in a session and in a plugin alike. See [Hook script paths](#hook-script-paths).
 
-> **Note:** Hooks can vary by [profile](harnesses.md#profiles). When a profile is selected, its `hooks` field replaces the top-level hooks entirely.
+> **Note:** Hooks can vary by [profile](harnesses.md#profiles). When a profile is selected, its `hooks` field is merged per event: an event the profile declares replaces the default for that event, and events it does not declare are inherited. See [Profiles](profiles.md#merge-semantics).
 
 ## Why Hooks Matter
 
@@ -141,26 +141,18 @@ Copilot's documentation does not say whether it expands `${CLAUDE_PLUGIN_ROOT}` 
 
 Where the copy goes follows where each vendor runs session hooks from:
 
-- **Claude Code** reads the session hooks from the `.claude/` directory `ynh run` passes as `--plugin-dir`. Claude loads a `--plugin-dir` plugin in place and sets `${CLAUDE_PLUGIN_ROOT}` to it for that plugin's hook commands ([code.claude.com/docs/en/plugins/loading](https://code.claude.com/docs/en/plugins/loading)), so the script is copied to `.claude/scripts/guard.sh` and the command is anchored there. `ynh run` still starts Claude in your project, so the command no longer depends on the agent's working directory. Whether Claude fires `--plugin-dir` hooks at all is covered under [Claude Code Runtime Limitation](#claude-code-runtime-limitation).
+- **Claude Code** reads the session hooks from the `.claude/` directory `ynh run` passes as `--plugin-dir`. Claude loads a `--plugin-dir` plugin in place and sets `${CLAUDE_PLUGIN_ROOT}` to it for that plugin's hook commands ([code.claude.com/docs/en/plugins/loading](https://code.claude.com/docs/en/plugins/loading)), so the script is copied to `.claude/scripts/guard.sh` and the command is anchored there. `ynh run` still starts Claude in your project, so the command no longer depends on the agent's working directory.
 - **Cursor** runs project hooks from the project root ([cursor.com/docs/hooks](https://cursor.com/docs/hooks)), and **Codex** runs hooks in the session's working directory ([developers.openai.com/codex/hooks](https://developers.openai.com/codex/hooks)). `ynh run` launches both with the run directory as their working directory, so the script is copied to the run directory's root and the bare `./scripts/guard.sh` reaches it.
 
 A `./` command therefore means the harness's script in a session too, not a file in your project. To run a script that belongs to the project, anchor it yourself (`$CLAUDE_PROJECT_DIR/scripts/x.sh` on Claude Code) or give an absolute path, and it is left alone. `ynh hook export`, which writes your project's own `.claude/settings.json`, is the exception: there the hooks belong to the project, and a `./` command is anchored to `$CLAUDE_PROJECT_DIR` (see [Running hooks in a plain Claude session](#running-hooks-in-a-plain-claude-session)).
 
-### Claude Code Runtime Limitation
-
-Claude Code's `--plugin-dir` flag (used by `ynh run` for Claude) only auto-activates **skills and commands** from plugins. Hooks and MCP servers in `--plugin-dir` plugins are **not activated** at runtime — they require the plugin to be formally installed via `/plugin install`. See [Claude Code plugin docs](https://code.claude.com/docs/en/plugins).
-
-This means hooks and MCP servers defined in `.agents/harness/plugin.json` are correctly **assembled and exported** by ynh, but are **not active during `ynh run` sessions** with Claude. They work correctly with Codex and Cursor (which use symlink-based installation into the project directory).
-
-Hooks and MCP servers in exported plugins (`ynd export`) work as expected when the plugin is installed via Claude Code's `/plugin install` command.
-
 ### Running hooks in a plain Claude session
 
-Because `--plugin-dir` hooks don't auto-activate, the way to make hooks — and the sensors that depend on them — fire when you simply open the repo in Claude Code is to declare them in the project's own `.claude/settings.json`, the file Claude auto-loads for every session in that directory. This is a separate deployment mode from `ynh run`:
+`ynh run` activates the harness's hooks through `--plugin-dir`, but that only covers sessions started by `ynh run`. To make hooks, and the sensors that depend on them, fire when you simply open the repo in Claude Code, declare them in the project's own `.claude/settings.json`, the file Claude auto-loads for every session in that directory. This is a separate deployment mode from `ynh run`:
 
 | Mode | Hooks come from | When hooks fire |
 |------|-----------------|-----------------|
-| `ynh run` (staging dir + `--plugin-dir`) | assembled `.claude/hooks/hooks.json` | only after `/plugin install` (Claude limitation); Codex/Cursor activate via symlink |
+| `ynh run` (staging dir + `--plugin-dir`) | assembled `.claude/hooks/hooks.json` | every `ynh run` session, no install step |
 | Plain `claude` in the project | project `.claude/settings.json` | every session, automatically |
 
 For an always-on, sensor-driven repo, declare the hooks once in `.agents/harness/plugin.json` (canonical names) and let ynh write them into the settings file:
@@ -185,7 +177,7 @@ If you hand-author the settings file instead, three rules:
 
 1. **Use Claude-native event names and the nested shape** — `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `Stop`, each `{ "matcher": …, "hooks": [ { "type": "command", "command": … } ] }`. The canonical names (`before_tool`, `on_stop`, …) are valid **only** in `.agents/harness/plugin.json`; Claude silently ignores them in `settings.json`. Don't copy the `plugin.json` shape into `settings.json`.
 2. **Anchor command paths to `$CLAUDE_PROJECT_DIR`** — `$CLAUDE_PROJECT_DIR/tools/hooks/foo.sh`. Claude runs each hook via `/bin/sh` in the **agent's current working directory**, not the project root, so a relative path like `./tools/hooks/foo.sh` silently breaks the moment the agent does `cd` into a subdirectory — and a *blocking* guard hook then fails open (stops guarding) without erroring. `$CLAUDE_PROJECT_DIR` is cwd-independent; it's also more portable than an absolute path, since `settings.json` is checked in and shared across machines.
-3. **Keep the canonical declarations in `plugin.json` too** if you also use `ynh run` or `ynd export` — they activate there via `/plugin install`, Codex, or Cursor.
+3. **Keep the canonical declarations in `plugin.json` too** if you also use `ynh run` or `ynd export`, since they activate there through `--plugin-dir` for Claude, and for Codex and Cursor.
 
 Example `.claude/settings.json` (what `hook export` produces):
 

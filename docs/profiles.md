@@ -47,7 +47,7 @@ The top-level `hooks` and `mcp_servers` are the defaults — used when no profil
 
 Profiles declare only what they change. Absent fields inherit from the top-level defaults.
 
-**MCP servers** use deep merge — profile keys win on collision, absent keys are inherited. Server `env` maps are also deep-merged. Set a server to `null` to remove an inherited entry.
+**MCP servers** use deep merge: profile keys win on collision, absent keys are inherited. Server `env` maps are also deep-merged. Within a server that exists in both, `command`, `args`, `url` and `headers` are replaced when the profile sets them, and only `env` is merged key by key. Set a server to `null` to remove an inherited entry.
 
 **Hooks** use per-event replace — if a profile declares `before_tool`, it replaces the default `before_tool`. Other events (like `after_tool`) are inherited.
 

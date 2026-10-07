@@ -147,14 +147,7 @@ Launch interactively with the `ci` profile:
 profile-demo --profile ci
 ```
 
-Inside the Claude session, enable the plugin and reload to activate hooks and MCP servers:
-
-```
-/plugin enable profile-demo
-/reload-plugins
-```
-
-Expected reload output includes: `3 hooks · 1 plugin MCP server` (or similar counts). Then ask:
+Claude activates the harness's hooks and MCP servers from `--plugin-dir` at launch, so no plugin install or reload step is needed. Inside the session, ask:
 
 ```
 what hooks and MCP servers are configured?
@@ -162,7 +155,7 @@ what hooks and MCP servers are configured?
 
 The `ci` profile's `before_tool` hook replaces the base, and the `ci-db` MCP server is added. The base `after_tool` hook is inherited since the profile doesn't declare it.
 
-> **Note:** Claude Code's `--plugin-dir` auto-activates skills and commands but not hooks or MCP servers. The `/plugin enable` + `/reload-plugins` step is needed to activate them. This is a Claude Code limitation — Codex and Cursor activate all plugin components automatically.
+> **Note:** These servers load alongside your own MCP servers (user config, claude.ai connectors). ynh does not isolate them yet (tracked in #548).
 
 ## Try --profile nonexistent
 
@@ -346,3 +339,141 @@ rm -rf /tmp/ynh-tutorial
 ## Next
 
 [Focus](focus.md) — bind a prompt and profile for repeatable, non-interactive runs.
+# Clean up from any previous run
+rm -rf /tmp/ynh-tutorial
+ynh uninstall local/profile-demo 2>/dev/null
+
+mkdir -p /tmp/ynh-tutorial
+mkdir -p /tmp/ynh-tutorial/profile-harness/skills/deploy
+mkdir -p /tmp/ynh-tutorial/profile-harness/rules
+
+mkdir -p /tmp/ynh-tutorial/profile-harness/.agents/harness
+cat > /tmp/ynh-tutorial/profile-harness/.agents/harness/plugin.json << 'EOF'
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "profile-demo",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "hooks": {
+    "after_tool": [
+      { "command": "/usr/local/bin/format-check.sh" }
+    ]
+  },
+  "profiles": {
+    "ci": {
+      "hooks": {
+        "before_tool": [
+          {
+            "matcher": "Bash",
+            "command": "/usr/local/bin/ci-guard.sh"
+          }
+        ]
+      },
+      "mcp_servers": {
+        "ci-db": {
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-sqlite", "/tmp/ci.db"]
+        }
+      }
+    },
+    "local": {
+      "mcp_servers": {
+        "dev-db": {
+          "command": "npx",
+          "args": ["-y", "@modelcontextprotocol/server-sqlite", "/tmp/dev.db"]
+        }
+      }
+    }
+  }
+}
+EOF
+
+cat > /tmp/ynh-tutorial/profile-harness/instructions.md << 'EOF'
+You are a deployment assistant. Follow safety procedures for all environments.
+EOF
+
+cat > /tmp/ynh-tutorial/profile-harness/skills/deploy/SKILL.md << 'EOF'
+---
+name: deploy
+description: Deploy to staging or production
+---
+
+Run the deployment pipeline for the target environment.
+EOF
+
+cat > /tmp/ynh-tutorial/profile-harness/rules/safety.md << 'EOF'
+Never deploy without running tests first.
+EOF
+ynd validate /tmp/ynh-tutorial/profile-harness
+ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile ci
+ynd preview /tmp/ynh-tutorial/profile-harness -v claude
+ynh install /tmp/ynh-tutorial/profile-harness
+profile-demo --profile ci
+ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile nonexistent
+YNH_PROFILE=ci ynd preview /tmp/ynh-tutorial/profile-harness -v claude
+YNH_PROFILE=local ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile ci
+ynd diff /tmp/ynh-tutorial/profile-harness claude cursor --profile ci
+ynd diff /tmp/ynh-tutorial/profile-harness claude cursor
+mkdir -p /tmp/ynh-tutorial/profile-harness/dev-extras/skills/deep-debug
+
+cat > /tmp/ynh-tutorial/profile-harness/dev-extras/skills/deep-debug/SKILL.md << 'EOF'
+---
+name: deep-debug
+description: Systematic debugging workflow for production incidents.
+---
+
+When invoked, walk through: reproduce, isolate, bisect, hypothesize, verify.
+EOF
+cat > /tmp/ynh-tutorial/profile-harness/.agents/harness/plugin.json << 'EOF'
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "profile-demo",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "profiles": {
+    "ci": {
+      "hooks": {
+        "before_tool": [
+          {
+            "matcher": "Bash",
+            "command": "/usr/local/bin/ci-guard.sh"
+          }
+        ]
+      }
+    },
+    "dev": {
+      "includes": [
+        {"local": "dev-extras"}
+      ]
+    }
+  }
+}
+EOF
+ynd preview /tmp/ynh-tutorial/profile-harness -v claude | grep SKILL
+# Expected: only skills declared at the harness root
+ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile dev | grep deep-debug
+# Expected: skills/deep-debug/SKILL.md shows up
+# Add a new profile (empty) and a hook inside it
+ynh profile add /tmp/ynh-tutorial/profile-harness staging
+ynh profile hook add /tmp/ynh-tutorial/profile-harness staging before_tool "echo staging guard"
+
+# Add an MCP server to the profile
+ynh profile mcp add /tmp/ynh-tutorial/profile-harness staging \
+    notes --command npx --arg -y --arg @modelcontextprotocol/server-memory
+
+# Verify it landed in the manifest
+ynd compose /tmp/ynh-tutorial/profile-harness --profile staging --format json | grep staging
+# Expected: profiles.staging present with the new hook and mcp_server
+
+# Update the MCP server
+ynh profile mcp update /tmp/ynh-tutorial/profile-harness staging \
+    notes --arg -y --arg @modelcontextprotocol/server-memory --arg --verbose
+
+# Remove individual entries
+ynh profile hook remove /tmp/ynh-tutorial/profile-harness staging before_tool 0
+ynh profile mcp remove /tmp/ynh-tutorial/profile-harness staging notes
+
+# Remove the profile itself (refused if any focus still references it)
+ynh profile remove /tmp/ynh-tutorial/profile-harness staging
+ynh uninstall local/profile-demo 2>/dev/null
+rm -rf /tmp/ynh-tutorial
