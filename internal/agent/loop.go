@@ -137,6 +137,9 @@ type RunOptions struct {
 	// testSensorNames overrides sensor collection from the harness.
 	// Set by tests that need sensor-loop behaviour without a real installed harness.
 	testSensorNames []string
+	// testPreRun runs once the harness is loaded and assembled, before the
+	// worker starts, so a test can interrupt the pre-run phase.
+	testPreRun func(ctx context.Context)
 }
 
 // RunLoop executes the agent loop. It returns an *ExitError on non-zero
@@ -183,6 +186,28 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	if opts.Stdin == nil {
 		opts.Stdin = os.Stdin
 	}
+	// ── Cancellable context + stop signals ────────────────────────────────────
+	// SIGINT/SIGTERM cancel the worker context so an in-flight Next() unblocks;
+	// the loop then exits with the last completed turn already checkpointed, so
+	// a later --resume continues from there. (A structured consumer sends an interrupt control
+	// message first, then SIGTERM after a grace period.)
+	//
+	// Installed before anything slow runs (loading and assembling the harness
+	// included), so an interrupt at any point of a run is caught and exits
+	// ExitInterrupted rather than killing the process by its default action.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+	go func() {
+		select {
+		case <-sigCh:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
 	// ── Resume state ──────────────────────────────────────────────────────────
 	var resumeCP *Checkpoint
 	resuming := opts.Resume != ""
@@ -367,6 +392,15 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		return result, fmt.Errorf("--focus and --profile require --harness")
 	}
 
+	if opts.testPreRun != nil {
+		opts.testPreRun(ctx)
+	}
+	// An interrupt during loading and assembly: nothing has run yet, so there
+	// is nothing to checkpoint, but it is still an interrupt.
+	if ctx.Err() != nil {
+		return result, &ExitError{Code: ExitInterrupted, Message: "interrupted (resumable)"}
+	}
+
 	if resuming {
 		if taskGiven {
 			if conflict := resumeTaskConflict(opts.Focus, opts.Task, resumeCP); conflict != "" {
@@ -471,24 +505,6 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			return result, &ExitError{Code: code, Message: reason}
 		}
 	}
-
-	// ── Cancellable context + stop signals ────────────────────────────────────
-	// SIGINT/SIGTERM cancel the worker context so an in-flight Next() unblocks;
-	// the loop then exits with the last completed turn already checkpointed, so
-	// a later --resume continues from there. (A structured consumer sends an interrupt control
-	// message first, then SIGTERM after a grace period.)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(sigCh)
-	go func() {
-		select {
-		case <-sigCh:
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
 
 	// ── Session start / resumed ───────────────────────────────────────────────
 	harnessName := reportedName
@@ -632,6 +648,17 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			CacheCreationTokens: resumeCP.Budget.CacheCreationTokens,
 		}
 	}
+	interruptExit := func(atTurn int) error {
+		const reason = "interrupted (resumable)"
+		_ = traj.Emit(KindSessionEnd, atTurn, SessionEndData{
+			ExitCode:    ExitInterrupted,
+			Reason:      reason,
+			TotalTurns:  budget.Turns(),
+			TotalTokens: budget.Tokens(),
+		})
+		return &ExitError{Code: ExitInterrupted, Message: reason}
+	}
+
 	sess, err := wb.Start(ctx, StartOptions{
 		WorktreeDir: opts.WorktreeDir,
 		ConfigPath:  configPath,
@@ -648,6 +675,9 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		TelemetryEndpoint: relayEndpoint,
 	})
 	if err != nil {
+		if ctx.Err() != nil {
+			return result, interruptExit(0)
+		}
 		_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
 		return result, &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("starting worker: %v", err)}
 	}
@@ -726,17 +756,6 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			_ = traj.Emit(KindWorkerModel, atTurn, WorkerModelData{Model: t.Model})
 		}
 	}
-	interruptExit := func(atTurn int) error {
-		const reason = "interrupted (resumable)"
-		_ = traj.Emit(KindSessionEnd, atTurn, SessionEndData{
-			ExitCode:    ExitInterrupted,
-			Reason:      reason,
-			TotalTurns:  budget.Turns(),
-			TotalTokens: budget.Tokens(),
-		})
-		return &ExitError{Code: ExitInterrupted, Message: reason}
-	}
-
 	// ── Collect sensors ───────────────────────────────────────────────────────
 	var sensorNames []string
 	var convergenceSensor string
@@ -810,10 +829,18 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 				}
 			}
 			if err := sess.Send(planMsg); err != nil {
+				// An interrupt closed the worker under this send: that is the
+				// interrupt, not a worker fault.
+				if ctx.Err() != nil {
+					return result, interruptExit(0)
+				}
 				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
 				return result, workerTurnExit(err, fmt.Sprintf("sending plan request: %v", err))
 			}
 			planTurn, err := sess.Next()
+			if ctx.Err() != nil {
+				return result, interruptExit(0)
+			}
 			if err == nil {
 				err = unmeteredTurn(wb.Name(), planTurn)
 			}
@@ -940,6 +967,11 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	}
 
 	if err := sess.Send(firstMsg); err != nil {
+		// An interrupt closed the worker under this send: that is the
+		// interrupt, not a worker fault.
+		if ctx.Err() != nil {
+			return result, interruptExit(0)
+		}
 		_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
 		return result, workerTurnExit(err, fmt.Sprintf("sending first message: %v", err))
 	}
@@ -1113,6 +1145,11 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 
 			_ = traj.Emit(KindFeedbackSent, turnN, feedback)
 			if err := sess.Send(feedback); err != nil {
+				// An interrupt closed the worker under this send: that is the
+				// interrupt, not a worker fault.
+				if ctx.Err() != nil {
+					return result, interruptExit(turnN)
+				}
 				_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
 				return result, workerTurnExit(err, fmt.Sprintf("sending feedback turn %d: %v", turnN, err))
 			}

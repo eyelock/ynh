@@ -1,12 +1,15 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/eyelock/ynh/internal/gate"
 	"github.com/eyelock/ynh/internal/plugin"
@@ -245,5 +248,49 @@ func TestRunLoop_VerifierCheckSeesIncludedSensors(t *testing.T) {
 	}
 	if len(mb.startOpts) != 0 {
 		t.Error("a worker started under a verifier that can never pass")
+	}
+}
+
+// An interrupt while the harness is being loaded and assembled, before any
+// worker exists, exits as an interrupt (31). The stop signals are caught from
+// the start of the run, so it is not the default action that ends the process.
+func TestRunLoop_InterruptDuringPreRunExits31(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	dir := writePathHarness(t, filepath.Join(t.TempDir(), "my-harness"))
+
+	mb := &mockBackend{name: "mock", turns: []Turn{{Content: "done"}}}
+	opts := resumeOpts(mb, t.TempDir())
+	opts.HarnessName = dir
+	opts.testPreRun = func(ctx context.Context) {
+		if err := syscall.Kill(os.Getpid(), syscall.SIGINT); err != nil {
+			t.Error(err)
+		}
+		select {
+		case <-ctx.Done():
+		case <-time.After(5 * time.Second):
+			t.Error("the interrupt never reached the run's context")
+		}
+	}
+	_, err := RunLoop(opts)
+	var ee *ExitError
+	if !asExitError(err, &ee) || ee.Code != ExitInterrupted {
+		t.Fatalf("want ExitInterrupted (%d), got %v", ExitInterrupted, err)
+	}
+	if len(mb.startOpts) != 0 {
+		t.Error("a worker started after the run was interrupted")
+	}
+}
+
+// An interrupt that lands after the worker starts but before the first
+// message is sent kills the worker under the send. The failed write is the
+// interrupt's doing, so the run exits 31, not 20 (worker error). Racy in
+// TestAgentRun_RelayStoppedOnInterrupt, deterministic here.
+func TestRunLoop_InterruptDuringFirstSendExits31(t *testing.T) {
+	mb := &mockBackend{name: "mock", turns: []Turn{{Content: "done"}}, interruptOnSend: true}
+	opts := resumeOpts(mb, t.TempDir())
+	_, err := RunLoop(opts)
+	var ee *ExitError
+	if !asExitError(err, &ee) || ee.Code != ExitInterrupted {
+		t.Fatalf("want ExitInterrupted (%d), got %v", ExitInterrupted, err)
 	}
 }

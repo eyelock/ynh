@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"os"
 	"strings"
 	"syscall"
 	"testing"
@@ -38,6 +40,11 @@ type mockBackend struct {
 	// onTurn runs as the worker produces turn N, for tests that need the
 	// worktree to change while a turn is in flight.
 	onTurn func(call int)
+
+	// interruptOnSend raises SIGINT during the first Send and fails it once the
+	// loop's context is cancelled, as a write to a worker killed by the
+	// interrupt does.
+	interruptOnSend bool
 }
 
 func (m *mockBackend) Name() string { return m.name }
@@ -56,6 +63,12 @@ func (s *mockSession) ResumeToken() string { return s.backend.resumeToken }
 
 func (s *mockSession) Send(msg string) error {
 	s.backend.sends = append(s.backend.sends, msg)
+	if s.backend.interruptOnSend {
+		s.backend.interruptOnSend = false
+		_ = syscall.Kill(os.Getpid(), syscall.SIGINT)
+		<-s.ctx.Done()
+		return errors.New("write |1: broken pipe")
+	}
 	return nil
 }
 
