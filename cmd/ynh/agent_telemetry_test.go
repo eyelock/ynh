@@ -495,6 +495,12 @@ func TestRunAttributes(t *testing.T) {
 				telemetry.AttrModel, telemetry.AttrHarnessName, telemetry.AttrBoundBy},
 		},
 		{
+			name:   "a harness given by path is reported by a name that is not an id, so it is left out",
+			result: &agent.RunResult{Harness: &agent.RunHarness{Name: "authoring", Version: "0.2.0"}},
+			want:   map[string]any{"ynh.harness.version": "0.2.0"},
+			absent: []attribute.Key{telemetry.AttrHarnessName},
+		},
+		{
 			name:   "input without cache counts",
 			result: &agent.RunResult{Consumed: agent.RunConsumed{InputTokens: i64(7), OutputTokens: i64(1)}},
 			want:   map[string]any{"gen_ai.usage.input_tokens": int64(7)},

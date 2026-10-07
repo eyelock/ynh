@@ -266,9 +266,12 @@ Manage a harness's top-level MCP servers.`,
 
 Inspect the sensors a harness declares.
 
-  ynh sensors ls <harness>          List declared sensors (supports --format json)
-  ynh sensors show <harness> <name> Resolve one sensor declaration
-  ynh sensors run <harness> <name>  Run a sensor and emit a JSON result`,
+  ynh sensors ls <harness-id|path>          List declared sensors (supports --format json)
+  ynh sensors show <harness-id|path> <name> Resolve one sensor declaration
+  ynh sensors run <harness-id|path> <name>  Run a sensor and emit a JSON result
+
+A harness is an installed id or a path to a harness directory, as ynh check
+takes it.`,
 
 	"check": `ynh check <harness-id|path> [flags]
 
@@ -338,7 +341,9 @@ Flags:
 Run an autonomous agent loop session.
 
 Flags:
-  --harness <name>            Harness to run under
+  --harness <id|path>         Harness to run under: an installed id or a
+                              path to a harness directory (".", "./my-harness"),
+                              as ynh check takes it
   --task <text|@file>         The task to work on
   --focus <name>              Load a named focus instead of a task
   --profile <name>            Apply a named profile overlay

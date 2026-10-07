@@ -166,3 +166,21 @@ func keys(m map[string]plugin.Sensor) []string {
 	}
 	return out
 }
+
+// WithIncludedSensors is the one fold every sensor command shares; a harness
+// with no include is returned as it was.
+func TestWithIncludedSensors(t *testing.T) {
+	h := consumerWith(t, nil, map[string]any{"go-vet": commandSensor("blocking")})
+	got, err := WithIncludedSensors(h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got.Sensors["go-vet"]; !ok {
+		t.Errorf("included sensor missing: %v", got.Sensors)
+	}
+
+	plain := &harness.Harness{Name: "plain", Dir: t.TempDir()}
+	if got, err := WithIncludedSensors(plain); err != nil || got != plain || got.Sensors != nil {
+		t.Errorf("a harness without includes must pass through untouched: %v %v", got, err)
+	}
+}

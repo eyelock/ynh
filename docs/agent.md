@@ -17,7 +17,7 @@ same manifest.
 ## Usage
 
 ```bash
-ynh agent run --harness <name> --task "<what to do>" [flags]
+ynh agent run --harness <id|path> --task "<what to do>" [flags]
 ynh agent run --resume <session-dir> [flags]
 ```
 
@@ -25,7 +25,7 @@ ynh agent run --resume <session-dir> [flags]
 
 | Flag | Meaning |
 |---|---|
-| `--harness <name>` | Harness whose sensors, artifacts and hooks drive the run |
+| `--harness <id\|path>` | Harness whose sensors, artifacts and hooks drive the run. Takes an installed id (`local/demo`) or a path to a harness directory (`.`, `./my-harness`, an absolute path), exactly as `ynh check` does. A path needs no prior install, which matters while you are still authoring the harness |
 | `--task "<text>"` | What the agent is being asked to do |
 | `--focus <name>` | Use a declared focus for the task and its profile |
 | `--profile <name>` | Apply a profile overlay |
@@ -316,6 +316,11 @@ Budgets carry across: consumption is restored alongside the caps, so resuming
 does not hand the run a fresh allowance. The wall-clock time already spent
 counts against `--max-wall`, but the cap itself comes from the flag, the
 harness or the default.
+
+A harness given as a path is checkpointed as its absolute path, so `--resume`
+finds the same harness from any directory. In the trajectory and the JSON
+result the harness is named by its manifest name rather than the path, and a
+path never reaches telemetry.
 
 If a checkpoint predates those fields and no `--harness` is given, the loop
 warns and continues, but cannot converge. It has no sensors to converge on.

@@ -78,12 +78,12 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh mcp add <harness> <name>` | `--command`, `--url`, `--type`, `--arg`, `--env`, `--cwd`, `--header`, top-level harness MCP server (no `--null`; harness-level entries cannot be null) |
 | `ynh mcp remove <harness> <name>` | top-level harness MCP server |
 | `ynh mcp update <harness> <name>` | `--command`, `--url`, `--type`, `--arg`, `--env`, `--cwd`, `--header`, `--clear-args`, `--clear-env`, `--clear-headers` |
-| `ynh sensors ls <harness>` | `--format <text\|json>` |
-| `ynh sensors show <harness> <name>` | `--format <text\|json>` |
-| `ynh sensors run <harness> <name>` | `--cwd <dir>`, `--no-content` |
+| `ynh sensors ls <harness-id\|path>` | `--format <text\|json>` |
+| `ynh sensors show <harness-id\|path> <name>` | `--format <text\|json>` |
+| `ynh sensors run <harness-id\|path> <name>` | `--cwd <dir>`, `--no-content` |
 | `ynh check <harness-id\|path>` | `--only <a,b>`, `--cwd <dir>`, `--update-baseline`, `--no-baseline`, `--sensor-overlay <json>`, `--format <text\|json>` |
 | `ynh trust [ls\|show\|accept] [harness]` | `--format <text\|json>` |
-| `ynh agent run` | `--harness`, `--task`, `--focus`, `--profile`, `--backend`, `--model`, `--effort`, `--convergence-sensor`, `--sensor-overlay`, `--worktree`, `--sandbox`, `--auto-approve`, `--auto-commit`, `--interactive`, `--no-plan`, `--max-turns`, `--max-tokens`, `--max-wall`, `--max-plan-iterations`, `--emit-jsonl`, `--resume`, `--telemetry-relay`. See [Agent Loop](agent.md) |
+| `ynh agent run` | `--harness <id\|path>`, `--task`, `--focus`, `--profile`, `--backend`, `--model`, `--effort`, `--convergence-sensor`, `--sensor-overlay`, `--worktree`, `--sandbox`, `--auto-approve`, `--auto-commit`, `--interactive`, `--no-plan`, `--max-turns`, `--max-tokens`, `--max-wall`, `--max-plan-iterations`, `--emit-jsonl`, `--resume`, `--telemetry-relay`. See [Agent Loop](agent.md) |
 | `ynh sources add <path>` | `--name`, `--description` |
 | `ynh sources list` | `--format <text\|json>` |
 | `ynh sources remove <name>` | |
@@ -125,11 +125,11 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 | Command | Structured fields |
 |---------|-------------------|
 | `ynd compose` | Composed harness: `name`, `version`, `description`, `default_vendor`, `artifacts` (with source), `includes`, `delegates_to`, `hooks`, `mcp_servers`, `profiles` (object keyed by name — see breaking change note below), `focuses`, `sensors`, `counts` |
-| `ynh sensors ls <harness>` | Array of sensor summaries: `name`, `category`, `role`, `source_kind`, `format`, `inline_focus` (bool) — see [Sensors](sensors.md) |
+| `ynh sensors ls <harness-id\|path>` | Array of sensor summaries: `name`, `category`, `role`, `source_kind`, `format`, `inline_focus` (bool), see [Sensors](sensors.md) |
 | `ynh focus ls <harness>` | Array of focus summaries: `name`, `profile` (when set), `prompt` in full — the text view abbreviates, JSON does not |
 | `ynh profile ls <harness>` | Array of profile summaries: `name` plus counts of `hooks`, `mcp_servers`, `includes`, `env_passthrough` — `ynh info` resolves one in full |
-| `ynh sensors show <harness> <name>` | Resolved sensor object with inline-focus expansion |
-| `ynh sensors run <harness> <name>` | Sensor run result: `kind`, `exit_code`, `duration_ms`, `output` (raw signal — no `passed` field; pass/fail is loop-driver policy) |
+| `ynh sensors show <harness-id\|path> <name>` | Resolved sensor object with inline-focus expansion |
+| `ynh sensors run <harness-id\|path> <name>` | Sensor run result: `kind`, `exit_code`, `duration_ms`, `output` (raw signal, no `passed` field; pass/fail is loop-driver policy) |
 | `ynh trust` | Array of harness trust states: `harness`, `source`, `sha`, `digest`, `executables`, `state`, `undeclared_env`. `ynh trust show <harness>` returns one object of the same shape. Reports what a harness will execute; it does not block. See [Sensors](sensors.md) |
 | `ynh doctor` | Setup diagnosis: `summary` (`checks`, `errors`, `warnings`) and `checks[]`, each with `name`, `title`, `status` and `findings[]` (`severity`, `subject`, `message`, `remedy`). Exit status is 0 regardless; gate on `summary.errors` |
 | `ynh agent run` | Run result: `exit_code`, `reason`, `converged`, `budgets`/`budget_sources`/`consumed` with `bound_by`, `convergence`, `sensors[]`, `changed_files` — see [Agent](agent.md#run-result) |
