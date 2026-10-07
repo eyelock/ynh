@@ -23,7 +23,7 @@ a PR into `main` unless its source is `develop`, `release/*` or `hotfix/*`.
 
 - Changes reach the branch through a pull request, with zero required approvals
 - All review conversations must be resolved
-- The branch must be up to date before merging (strict required status checks)
+- The branch need not be up to date before merging (required status checks are not strict)
 - Force pushes blocked
 - Branch deletion blocked
 - Repository admins can bypass in emergencies

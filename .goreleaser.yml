@@ -98,8 +98,6 @@ dockers:
     build_flag_templates:
       - "--platform=linux/amd64"
       - "--build-arg=VERSION={{ .Version }}"
-      # The private ynr module's token, from YNR_TOKEN, as a BuildKit secret.
-      - "--secret=id=ynr_token,env=YNR_TOKEN"
     goos: linux
     goarch: amd64
   - image_templates:
@@ -114,8 +112,6 @@ dockers:
     build_flag_templates:
       - "--platform=linux/arm64"
       - "--build-arg=VERSION={{ .Version }}"
-      # The private ynr module's token, from YNR_TOKEN, as a BuildKit secret.
-      - "--secret=id=ynr_token,env=YNR_TOKEN"
     goos: linux
     goarch: arm64
 

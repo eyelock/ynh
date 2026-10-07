@@ -15,11 +15,6 @@ on:
 permissions:
   contents: read
 
-# The spoolexporter module lives in the private eyelock/ynr repository:
-# fetch it directly, not through the public proxy and checksum database.
-env:
-  GOPRIVATE: github.com/eyelock/ynr
-
 jobs:
   changes:
     name: Detect Changes
@@ -92,13 +87,6 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
         with:
           go-version-file: go.mod
-      # Until eyelock/ynr is public, the spoolexporter module is private.
-      # YNR_READ_REPO reads it; a pull request from a fork has no secrets
-      # and cannot build.
-      - name: Allow the private ynr module
-        env:
-          YNR_READ_REPO: ${{ secrets.YNR_READ_REPO }}
-        run: git config --global url."https://x-access-token:${YNR_READ_REPO}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
       - run: make build
 
   test:
@@ -111,27 +99,19 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
         with:
           go-version-file: go.mod
-      # Until eyelock/ynr is public, the spoolexporter module is private.
-      # YNR_READ_REPO reads it; a pull request from a fork has no secrets
-      # and cannot build.
-      - name: Allow the private ynr module
-        env:
-          YNR_READ_REPO: ${{ secrets.YNR_READ_REPO }}
-        run: git config --global url."https://x-access-token:${YNR_READ_REPO}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
       # The telemetry relay test against the real ynr (TestAgentRun_RealRelayJoinsRunTrace)
       # skips without ynr on PATH. Install the released binary users get, checked
       # against the release's checksums; move YNR_VERSION when the relay's
       # contract changes.
       - name: Install ynr for the relay test
         env:
-          GH_TOKEN: ${{ secrets.YNR_READ_REPO }}
           YNR_VERSION: 0.2.0
         run: |
           dir="$RUNNER_TEMP/ynr"
           mkdir -p "$dir"
           asset="ynr_${YNR_VERSION}_linux_amd64.tar.gz"
-          gh release download "v${YNR_VERSION}" --repo eyelock/ynr --dir "$dir" \
-            --pattern "$asset" --pattern checksums.txt
+          base="https://github.com/eyelock/ynr/releases/download/v${YNR_VERSION}"
+          curl -fsSL --output-dir "$dir" -O "$base/$asset" -O "$base/checksums.txt"
           (cd "$dir" && grep " ${asset}\$" checksums.txt | sha256sum -c -)
           tar -xzf "$dir/$asset" -C "$dir" ynr
           "$dir/ynr" --version
@@ -154,13 +134,6 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
         with:
           go-version-file: go.mod
-      # Until eyelock/ynr is public, the spoolexporter module is private.
-      # YNR_READ_REPO reads it; a pull request from a fork has no secrets
-      # and cannot build.
-      - name: Allow the private ynr module
-        env:
-          YNR_READ_REPO: ${{ secrets.YNR_READ_REPO }}
-        run: git config --global url."https://x-access-token:${YNR_READ_REPO}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a  # v9
 
   format:
@@ -173,13 +146,6 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
         with:
           go-version-file: go.mod
-      # Until eyelock/ynr is public, the spoolexporter module is private.
-      # YNR_READ_REPO reads it; a pull request from a fork has no secrets
-      # and cannot build.
-      - name: Allow the private ynr module
-        env:
-          YNR_READ_REPO: ${{ secrets.YNR_READ_REPO }}
-        run: git config --global url."https://x-access-token:${YNR_READ_REPO}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
       - name: Install goimports
         run: go install golang.org/x/tools/cmd/goimports@latest
       - name: Check formatting
@@ -202,13 +168,6 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
         with:
           go-version-file: go.mod
-      # Until eyelock/ynr is public, the spoolexporter module is private.
-      # YNR_READ_REPO reads it; a pull request from a fork has no secrets
-      # and cannot build.
-      - name: Allow the private ynr module
-        env:
-          YNR_READ_REPO: ${{ secrets.YNR_READ_REPO }}
-        run: git config --global url."https://x-access-token:${YNR_READ_REPO}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
       - name: Validate and lint harness artifacts
         run: make check-artifacts
       # Asserts every vendor ynh reports is documented AND assembles the same
@@ -272,12 +231,8 @@ jobs:
 
       # The image is built nowhere else, so the base-image digest and the
       # installer checksum were unverified until somebody built it by hand.
-      # The token reaches the build as a BuildKit secret, mounted only for
-      # the step that downloads modules, so no image layer holds it.
       - name: Build the container image
-        env:
-          YNR_TOKEN: ${{ secrets.YNR_READ_REPO }}
-        run: docker buildx build --load --secret id=ynr_token,env=YNR_TOKEN --tag ynh:ci-check .
+        run: docker buildx build --load --tag ynh:ci-check .
 
   all-clear:
     name: All Clear

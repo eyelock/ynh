@@ -120,9 +120,7 @@ This applies to everything — code, docs, tutorials. Pushing a fix that hasn't 
   schemas would be worse), `golang.org/x/text`, and the OpenTelemetry Go SDK
   with ynr's spool exporter, `github.com/eyelock/ynr/spoolexporter` (ynr's
   instrumentation contract requires both for `ynh agent run` telemetry; not
-  the SDK's OTLP exporters, which bring in gRPC). Until ynr is public that
-  module is private: building needs read access to `eyelock/ynr` and
-  `GOPRIVATE=github.com/eyelock/ynr`, which the Makefile sets. **Do not add
+  the SDK's OTLP exporters, which bring in gRPC). **Do not add
   another without a reason of that weight**: no frameworks, no CLI libraries,
   no assertion packages. `go mod tidy -diff` is enforced in CI.
 - Errors returned, not panicked. Wrap: `fmt.Errorf("context: %w", err)`

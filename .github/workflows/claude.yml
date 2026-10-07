@@ -10,11 +10,6 @@ on:
   pull_request_review:
     types: [submitted]
 
-# Until eyelock/ynr is public, its spoolexporter module is private: fetch it
-# directly, not through the public proxy.
-env:
-  GOPRIVATE: github.com/eyelock/ynr
-
 jobs:
   claude:
     # Owner only. This job holds a token and contents: write on a public
@@ -41,13 +36,6 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
         with:
           go-version-file: go.mod
-
-      # YNR_READ_REPO is a read-only token: the agent below may run git,
-      # so it must never see a token that can write.
-      - name: Allow the private ynr module
-        env:
-          YNR_READ_REPO: ${{ secrets.YNR_READ_REPO }}
-        run: git config --global url."https://x-access-token:${YNR_READ_REPO}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
 
       - uses: anthropics/claude-code-action@cab360f6565aa35a51d6ce9e43f1f4287c0a32ea  # v1.0.241
         with:
