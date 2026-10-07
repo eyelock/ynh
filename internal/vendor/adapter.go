@@ -138,6 +138,14 @@ type Adapter interface {
 	// neither.
 	LaunchResume(configPath string, sessionID string, extraArgs []string) error
 
+	// IsolateMCP returns the extra launch arguments that restrict the vendor
+	// CLI to the harness's own MCP servers (the assembled config in
+	// configPath), and a one-line warning when the vendor cannot do that
+	// fully. Either may be empty. The arguments are safe to append after a
+	// positional prompt. It never fails a run: a vendor that cannot isolate
+	// says so in the warning and the run goes ahead.
+	IsolateMCP(configPath string) (args []string, warning string)
+
 	// GenerateSystemPrompt produces vendor-native instruction files from the
 	// harness instructions content. Returns a map of relative file paths to
 	// file contents. Always includes AGENTS.md (cross-vendor); vendors add
