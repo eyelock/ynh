@@ -49,8 +49,13 @@ pointing up.
 
 Files: `skills/`, `agents/`, `rules/`, `commands/`. When the included directory
 is a harness (it has a manifest), its **MCP servers** come with it too, and, unless
-the include uses `pick`, so do the harnesses it includes in turn. Its hooks,
-profiles, focuses and sensors do **not**.
+the include uses `pick`, so do the harnesses it includes in turn. Its hooks
+and sensors do **not**. Its profiles and focuses are carried only when asked
+for by namespace: `--profile github:ci` applies the included harness's `ci`
+profile to that harness alone, and `--focus github:triage` runs its focus. The
+namespace is the included harness's name, or an `as` alias on the include
+(`ynh include add <harness> <url> --as gh-work`). `--profile` repeats, once per
+harness: `--profile work --profile github:ci`.
 
 Included servers follow rules worth stating to a user: the root's server of the
 same name wins; `"name": null` in the root's `mcp_servers` (or in a profile)

@@ -82,6 +82,8 @@ type AddOptions struct {
 	Pick    []string
 	Ref     string
 	Replace bool
+	// As is the include's namespace alias; see plugin.IncludeMeta.
+	As string
 }
 
 // RemoveOptions controls ynh include remove behaviour.
@@ -102,6 +104,9 @@ type UpdateOptions struct {
 // If the URL+path already exists and Replace is false, it returns an error.
 // Network operations (pre-fetch, pick validation) are the caller's responsibility.
 func AddInclude(dir, url string, opts AddOptions) error {
+	if err := ValidateIncludeAlias(opts.As); err != nil {
+		return err
+	}
 	hj, err := loadManifest(dir)
 	if err != nil {
 		return err
@@ -116,9 +121,9 @@ func AddInclude(dir, url string, opts AddOptions) error {
 			}
 			return fmt.Errorf("%s.\nUse 'ynh include update' to change its options, or pass --replace to overwrite", msg)
 		}
-		hj.Includes[idx] = plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick}
+		hj.Includes[idx] = plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick, As: opts.As}
 	} else {
-		hj.Includes = append(hj.Includes, plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick})
+		hj.Includes = append(hj.Includes, plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick, As: opts.As})
 	}
 
 	return plugin.SavePluginJSON(dir, hj)

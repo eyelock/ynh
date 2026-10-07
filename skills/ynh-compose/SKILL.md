@@ -166,6 +166,10 @@ ynd preview <harness> --profile ci
   harnesses it includes, unless the include uses `pick`). The root's server of
   the same name wins, and `null` in the root's or a profile's `mcp_servers`
   removes an inherited one
+- **Profiles and focuses of included harnesses**: not applied unless selected as
+  `namespace:name` (`--profile github:ci`, `--focus github:triage`). The
+  namespace is the harness's name or the include's `as` alias, and `--profile`
+  may repeat once per harness
 
 ## Where to go next
 

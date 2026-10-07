@@ -31,6 +31,23 @@ func IsValidName(s string) bool {
 	return validName.MatchString(s)
 }
 
+// ValidateIncludeAlias checks the "as" of an include: empty (no alias), or a
+// valid harness name. A colon is refused by name because it is the separator
+// of a namespaced selection ("github:triage"), so an alias holding one could
+// never be addressed.
+func ValidateIncludeAlias(as string) error {
+	if as == "" {
+		return nil
+	}
+	if strings.Contains(as, ":") {
+		return fmt.Errorf("invalid include alias %q: must not contain \":\"", as)
+	}
+	if !validName.MatchString(as) {
+		return fmt.Errorf("invalid include alias %q: must match %s", as, validName.String())
+	}
+	return nil
+}
+
 // ValidNamePattern returns the regex source string used to validate
 // harness names. Useful for error messages that want to show the
 // permitted shape.
@@ -59,6 +76,9 @@ type Include struct {
 	// Sensors is the include's "sensors" flag. nil means true; see
 	// SensorsEnabled.
 	Sensors *bool
+	// As is the namespace an included harness's focuses and profiles are
+	// selected under, "as:name". Empty means the included harness's own name.
+	As string
 	// SHA is the resolved commit at install/update time, populated from
 	// installed.json's resolved slice. Empty for local-path includes and for
 	// pre-migration installs that predate SHA recording.
@@ -650,10 +670,14 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	}
 
 	for _, inc := range hj.Includes {
+		if err := ValidateIncludeAlias(inc.As); err != nil {
+			return nil, err
+		}
 		p.Includes = append(p.Includes, Include{
 			GitSource: GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
 			Pick:      inc.Pick,
 			Sensors:   inc.Sensors,
+			As:        inc.As,
 		})
 	}
 	for _, del := range hj.DelegatesTo {
@@ -892,6 +916,11 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 	// then profile entries, so a later profile pick can shadow a base pick
 	// when the assembler resolves collisions.
 	if len(profile.Includes) > 0 {
+		for _, inc := range profile.Includes {
+			if err := ValidateIncludeAlias(inc.As); err != nil {
+				return nil, fmt.Errorf("profile %q: %w", profileName, err)
+			}
+		}
 		merged := make([]Include, 0, len(h.Includes)+len(profile.Includes))
 		merged = append(merged, h.Includes...)
 		for _, inc := range profile.Includes {
@@ -904,6 +933,7 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 				},
 				Pick:    inc.Pick,
 				Sensors: inc.Sensors,
+				As:      inc.As,
 			})
 		}
 		resolved.Includes = merged
@@ -950,10 +980,14 @@ func LoadFile(path string) (*Harness, error) {
 	p.DefaultVendor = hj.DefaultVendor
 
 	for _, inc := range hj.Includes {
+		if err := ValidateIncludeAlias(inc.As); err != nil {
+			return nil, err
+		}
 		p.Includes = append(p.Includes, Include{
 			GitSource: GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
 			Pick:      inc.Pick,
 			Sensors:   inc.Sensors,
+			As:        inc.As,
 		})
 	}
 	for _, del := range hj.DelegatesTo {

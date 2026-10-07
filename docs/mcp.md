@@ -265,7 +265,9 @@ The rules:
 - **The root's `env_passthrough` is not widened.** An include's variables are visible to that include's servers only, and a variable only the root declares is not visible to an include's servers. The allow-list stays a containment boundary the root author controls.
 - **`pick` brings the servers but not the includes.** An include that names `pick` contributes the picked artifacts and its own MCP servers, and its own `includes` are not followed. To pull in an include's dependencies, include it without `pick`.
 - **Cycles are refused.** A harness that includes itself, directly or through others, fails with the chain: `include cycle: root -> eyelock/a -> eyelock/b -> root`. A harness reached by two routes contributes once.
-- **Hooks, focuses and profiles of an included harness are not carried; its sensors are.** Only the root's hooks, focuses and profiles are used (see [hooks](hooks.md#root-harness-only-rule)). Its sensors travel unless its include says `"sensors": false` (see [sensors](sensors.md#sensors-from-an-include)).
+- **An included harness's own `null` removes from its own dependencies.** A `null` in the `mcp_servers` of an included harness, or of the profile selected for it, drops that server from the harnesses it includes, as the root's `null` does for everything. The root's `null` still removes a server whichever harness declared it.
+- **Hooks of an included harness are not carried; its sensors are.** Only the root's hooks are used (see [hooks](hooks.md#root-harness-only-rule)). Its sensors travel unless its include says `"sensors": false` (see [sensors](sensors.md#sensors-from-an-include)).
+- **Profiles and focuses of an included harness are carried only when selected.** `--profile github:ci` applies the included harness's `ci` profile to that harness alone, and its `mcp_servers` and `includes` change accordingly. See [Profiles and focuses of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses).
 
 ### Exporting
 

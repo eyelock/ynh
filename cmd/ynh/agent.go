@@ -11,6 +11,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/agent"
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/telemetry"
 )
 
@@ -39,6 +40,7 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 	structured := detectJSONFormat(args)
 	resultFormat := "text"
 	relayFlag := false
+	var profileValues []string // --profile repeats, one per harness
 	opts := agent.RunOptions{
 		Stdout: stdout,
 		Stderr: stderr,
@@ -78,7 +80,7 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 			if i >= len(args) {
 				return cliError(stderr, structured, errCodeInvalidInput, "--profile requires a value")
 			}
-			opts.Profile = args[i]
+			profileValues = append(profileValues, args[i])
 
 		case "--focus":
 			i++
@@ -235,13 +237,19 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 		}
 	}
 
+	sel, selErr := harness.ParseSelection(profileValues, opts.Focus)
+	if selErr != nil {
+		return cliError(stderr, structured, errCodeInvalidInput, selErr.Error())
+	}
+	opts.Profile, opts.IncludedProfiles = sel.Profile, sel.Included
+
 	// Mutual exclusion guards mirror `ynh run`:
 	// focus already provides both prompt and bound profile.
 	if opts.Focus != "" && opts.Task != "" {
 		return cliError(stderr, structured, errCodeInvalidInput,
 			"cannot use --focus and --task together (focus includes a prompt)")
 	}
-	if opts.Focus != "" && opts.Profile != "" {
+	if opts.Focus != "" && len(profileValues) > 0 {
 		return cliError(stderr, structured, errCodeInvalidInput,
 			"cannot use --focus and --profile together (focus includes a profile)")
 	}

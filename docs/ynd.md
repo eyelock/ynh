@@ -220,8 +220,10 @@ ynd preview --harness ./my-harness          # explicit harness flag
 | `-v, --vendor <name>` | Vendor to assemble for. Default: `claude` |
 | `-o, --output <dir>` | Write output to directory instead of stdout |
 | `--harness <dir>` | Harness source directory (alternative to positional arg) |
-| `--profile <name>` | Profile to apply during assembly |
-| `--focus <name>` | Focus to apply during assembly (mutually exclusive with `--profile`) |
+| `--profile <name>` | Profile to apply during assembly. Repeatable: at most one unqualified value (the root's) and one `namespace:name` per included harness, such as `--profile work --profile github:ci` (see [Profiles of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses)) |
+| `--focus <name>` | Focus to apply during assembly (mutually exclusive with `--profile`). `namespace:name` takes a focus of an included harness |
+
+Preview lists the focuses and profiles an included harness offers, under "Focuses from included harnesses:" and "Profiles from included harnesses:", with the namespaced names to pass.
 
 When no `-o` flag is given, preview prints a tree with file contents to stdout. With `-o`, it writes the full assembled output to the specified directory.
 
@@ -278,7 +280,7 @@ ynd export github.com/user/repo --path harnesses/david  # from a monorepo
 | `-v, --vendor <names>` | Comma-separated vendors. Default: all registered (`claude,codex,copilot,cursor`) |
 | `--harness <dir>` | Harness source directory (alternative to positional arg) |
 | `--path <subdir>` | Subdirectory within source (for monorepos). Must be a relative path with no `..` traversal. |
-| `--profile <name>` | Profile to apply during assembly |
+| `--profile <name>` | Profile to apply during assembly. Repeatable, and `namespace:name` selects a profile of an included harness, as for `ynd preview` |
 | `--merged` | Single output dir with all vendor manifests (for CI/marketplace use) |
 | `--format <name>` | `vendor` (default) writes each vendor's own plugin layout; `agent-plugin` writes one portable [Agent Plugins](https://agent-plugins.org) package. Not combinable with `--merged` |
 | `--clean` | Remove entire output dir before export. Runs only once the source has loaded, so a refused export (a legacy tree, an unknown profile) neither creates nor empties `-o` |
@@ -478,8 +480,8 @@ Schemas are embedded in the binary — `ynh schema <name>` and `ynh schema --all
 | `--harness <dir>` | preview, diff, export, validate, lint, fmt | Harness source directory. Alternative to positional arg. Also honored via `YNH_HARNESS` env var. |
 | `--clean` | export, marketplace | Remove output directory before writing. Never the filesystem root, your home, the current directory or a git working copy, unless `ynd marketplace build` created that repository itself, in which case it is emptied and its `.git` kept. |
 | `--merged` | export | Single output dir with every selected vendor's manifest. |
-| `--profile <name>` | preview, diff, export | Profile to apply during assembly. Also honored via `YNH_PROFILE`. |
-| `--focus <name>` | preview, diff, export | Focus to apply (resolves its bound profile). Mutually exclusive with `--profile`. Also honored via `YNH_FOCUS`. |
+| `--profile <name>` | preview, diff, export, compose | Profile to apply during assembly. Repeatable: one unqualified value for the root and one `namespace:name` per included harness. Also honored via `YNH_PROFILE` (a single value). |
+| `--focus <name>` | preview, diff, export | Focus to apply (resolves its bound profile). `namespace:name` takes a focus of an included harness. Mutually exclusive with `--profile`. Also honored via `YNH_FOCUS`. |
 | `--path <subdir>` | export | Subdirectory within source (for monorepos). Must be a relative path with no `..` traversal. |
 | `--restore` | compress | Restore a file from its latest backup. |
 | `--list-backups` | compress | Show backup history for a file. |

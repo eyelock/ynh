@@ -395,3 +395,42 @@ func TestSplitPick(t *testing.T) {
 		}
 	}
 }
+
+func TestCmdIncludeAdd_As(t *testing.T) {
+	dir := t.TempDir()
+	writeIncludeTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	if err := cmdIncludeTo([]string{"add", dir, "github.com/acme/tools", "--as", "gh-work"}, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	incs := loadTestIncludes(t, dir)
+	if len(incs) != 1 || incs[0].As != "gh-work" {
+		t.Fatalf("includes = %+v, want one with as gh-work", incs)
+	}
+	if !strings.Contains(buf.String(), `as "gh-work"`) {
+		t.Errorf("output = %q, want the alias named", buf.String())
+	}
+}
+
+func TestCmdIncludeAdd_AsRejected(t *testing.T) {
+	for name, args := range map[string][]string{
+		"colon":    {"--as", "a:b"},
+		"bad name": {"--as", "-x"},
+		"no value": {"--as"},
+		"space":    {"--as", "has space"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeIncludeTestHarness(t, dir, "h")
+			var buf bytes.Buffer
+			err := cmdIncludeTo(append([]string{"add", dir, "github.com/acme/tools"}, args...), &buf)
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+			if incs := loadTestIncludes(t, dir); len(incs) != 0 {
+				t.Errorf("nothing should be written, got %+v", incs)
+			}
+		})
+	}
+}

@@ -103,8 +103,9 @@ type ExportOptions struct {
 	Mode ExportMode
 	// Config provides remote source checking for includes and delegates.
 	Config *config.Config
-	// Profile selects a named configuration variant. Empty means no profile.
-	Profile string
+	// Selection chooses the profile of the harness and the profiles and focus
+	// of the harnesses it includes. The zero value selects nothing.
+	Selection harness.Selection
 	// BeforeWrite, when set, runs once the source has loaded and its includes
 	// have resolved, before anything is written. The CLI runs --clean here, so
 	// a refused export does not empty the output directory first.
@@ -129,8 +130,8 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	}
 
 	// Apply profile if specified
-	if opts.Profile != "" {
-		p, err = harness.ResolveProfile(p, opts.Profile)
+	if opts.Selection.Profile != "" {
+		p, err = harness.ResolveProfile(p, opts.Selection.Profile)
 		if err != nil {
 			return nil, err
 		}
@@ -150,7 +151,7 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	}
 
 	// Resolve all remote includes
-	resolved, err := resolver.Resolve(p, opts.Config)
+	resolved, _, err := resolver.ResolveSelected(p, opts.Config, opts.Selection)
 	if err != nil {
 		return nil, fmt.Errorf("resolving includes: %w", err)
 	}
