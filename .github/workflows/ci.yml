@@ -125,7 +125,7 @@ jobs:
       - name: Install ynr for the relay test
         env:
           GH_TOKEN: ${{ secrets.YNR_READ_REPO }}
-          YNR_VERSION: 0.1.1
+          YNR_VERSION: 0.2.0
         run: |
           dir="$RUNNER_TEMP/ynr"
           mkdir -p "$dir"
