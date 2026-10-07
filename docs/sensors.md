@@ -849,7 +849,9 @@ A sensor can reference a top-level focus or inline its own. It cannot mutate a f
 
 ## CLI
 
-### `ynh sensors ls <harness>`
+### `ynh sensors ls <harness-id|path>`
+
+The harness is an installed id or a path to a harness directory, as `ynh check` takes it.
 
 List declared sensors with category, role, source kind, and format. Plain text by default; `--format json` for machine consumption.
 
@@ -874,7 +876,7 @@ JSON form returns an array of summary objects — the canonical machine-readable
 ]
 ```
 
-### `ynh sensors show <harness> <name>`
+### `ynh sensors show <harness-id|path> <name>`
 
 Print the fully-resolved sensor block as JSON. Inline focuses are kept inline; string-referenced focuses are expanded so the consumer gets a self-contained payload:
 
@@ -893,7 +895,7 @@ Print the fully-resolved sensor block as JSON. Inline focuses are kept inline; s
 }
 ```
 
-### `ynh sensors run <harness> <name>`
+### `ynh sensors run <harness-id|path> <name>`
 
 Mechanically execute a sensor and emit a JSON result. There is no `passed` boolean — ynh returns raw exit codes, output, and file contents. Pass/fail thresholds are loop-driver policy.
 

@@ -390,3 +390,32 @@ func TestRoleField_ValidatesAndSurfacesInLs(t *testing.T) {
 		t.Errorf("expected role=convergence-verifier in ls output: %+v", entries)
 	}
 }
+
+// ynh sensors ls, show and run take an installed id or a path, as ynh check
+// does, because `ynh agent run --harness <path>` hands its convergence
+// verifier to `ynh sensors run` (#560).
+func TestCmdSensors_TakeAPath(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	dir := filepath.Join(t.TempDir(), "authoring")
+	writeHarnessAt(t, dir, "authoring")
+
+	for _, args := range [][]string{
+		{"ls", dir, "--format", "json"},
+		{"show", dir, "green", "--format", "json"},
+		{"run", dir, "green", "--cwd", t.TempDir()},
+	} {
+		var stdout, stderr bytes.Buffer
+		if err := cmdSensorsTo(args, &stdout, &stderr); err != nil {
+			t.Errorf("%v: %v %s", args[0], err, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "green") {
+			t.Errorf("%v: output does not mention the sensor: %s", args[0], stdout.String())
+		}
+	}
+
+	var stderr bytes.Buffer
+	err := cmdSensorsTo([]string{"ls", "nosuch"}, io.Discard, &stderr)
+	if err == nil || !strings.Contains(err.Error()+stderr.String(), "is not a valid harness id") {
+		t.Errorf("a bad ref keeps the id-or-path hint, got %v %s", err, stderr.String())
+	}
+}

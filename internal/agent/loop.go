@@ -23,6 +23,7 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/gate"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
@@ -303,11 +304,24 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	// ── Load and assemble harness ─────────────────────────────────────────────
 	var configPath string
 	var harnessObj *harness.Harness
+	// reportedName is the harness as the trajectory and result name it: the
+	// id for an installed harness, the manifest name for one given by path,
+	// which keeps a filesystem path out of every report and telemetry.
+	reportedName := opts.HarnessName
 
 	if opts.HarnessName != "" {
-		harnessObj, err = harness.LoadQualified(opts.HarnessName)
+		// An installed id or a local harness directory, resolved exactly as
+		// `ynh run` and `ynh check` resolve theirs (#560).
+		harnessObj, err = harness.LoadIDOrPath(opts.HarnessName)
 		if err != nil {
 			return result, fmt.Errorf("loading harness %q: %w", opts.HarnessName, err)
+		}
+		// From here the run names a path by its absolute form: the checkpoint
+		// stores it so --resume finds the same harness from any directory, and
+		// the sensor gate (`ynh check`, run per turn) is handed it too.
+		if namespace.Classify(opts.HarnessName) == namespace.RefPath {
+			opts.HarnessName = harnessObj.Dir
+			reportedName = harnessObj.Name
 		}
 
 		// Resolve focus → prompt + bound profile. Mirrors `ynh run --focus`.
@@ -471,7 +485,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	}()
 
 	// ── Session start / resumed ───────────────────────────────────────────────
-	harnessName := opts.HarnessName
+	harnessName := reportedName
 	if harnessName == "" {
 		harnessName = "(none)"
 	}
@@ -527,11 +541,11 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	result.ModelRequested = opts.Model
 	result.EffortRequested = opts.Effort
 	result.AutoApprove = opts.AutoApprove
-	// opts.HarnessName, not harnessName: the latter is "(none)" for display in
+	// reportedName, not harnessName: the latter is "(none)" for display in
 	// the trajectory when no harness was given, and a structured consumer
 	// reading a harness literally named "(none)" would be worse served than by
 	// the field being absent, which is what "this run verified nothing" means.
-	result.Harness = harnessProvenance(opts.HarnessName, harnessObj)
+	result.Harness = harnessProvenance(reportedName, harnessObj)
 	result.ImageDigest = imageDigest()
 
 	// ── Start (or reconstruct) the worker ─────────────────────────────────────

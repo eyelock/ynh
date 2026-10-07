@@ -18,9 +18,6 @@ import (
 	"github.com/eyelock/ynh/internal/freshness"
 	"github.com/eyelock/ynh/internal/gate"
 	"github.com/eyelock/ynh/internal/harness"
-	"github.com/eyelock/ynh/internal/migration"
-	"github.com/eyelock/ynh/internal/namespace"
-	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 )
 
@@ -734,54 +731,11 @@ func plural(n int, word string) string {
 // loadHarnessRef resolves either a canonical id or a filesystem path, with
 // the sensors its includes declare folded in.
 func loadHarnessRef(ref string) (*harness.Harness, error) {
-	h, err := loadHarnessIDOrPath(ref)
+	h, err := harness.LoadIDOrPath(ref)
 	if err != nil {
 		return nil, err
 	}
 	return withIncludedSensors(h)
-}
-
-// loadHarnessIDOrPath resolves the harness argument of a command that takes
-// either an installed id or a local harness directory (`ynh check`, `ynh
-// run`), so both accept and refuse exactly the same refs.
-//
-// A path goes through the format chain, which refuses a tree whose manifest
-// ynh no longer reads (a legacy .harness.json) with the `ynd migrate` fix and
-// writes nothing. Anything that is neither an id nor a path gets the hint that
-// names both forms.
-func loadHarnessIDOrPath(ref string) (*harness.Harness, error) {
-	switch namespace.Classify(ref) {
-	case namespace.RefID:
-		return harness.LoadByID(ref)
-	case namespace.RefPath:
-		// Resolved below.
-	default:
-		return nil, harness.BadRefOrPathError(ref)
-	}
-
-	dir := ref
-	if strings.HasPrefix(dir, "~/") {
-		if home, hErr := os.UserHomeDir(); hErr == nil {
-			dir = filepath.Join(home, dir[2:])
-		}
-	}
-	abs, absErr := filepath.Abs(dir)
-	if absErr != nil {
-		return nil, fmt.Errorf("resolving harness path %q: %w", ref, absErr)
-	}
-	if _, statErr := os.Stat(abs); statErr != nil {
-		return nil, fmt.Errorf("no harness at %s: %w", abs, statErr)
-	}
-	if _, mErr := migration.FormatChain().Run(abs); mErr != nil {
-		return nil, mErr
-	}
-	if !harness.IsHarnessDir(abs) {
-		return nil, fmt.Errorf(
-			"no harness at %s: expected %s. Run `ynd create harness <name>` to make one, "+
-				"or pass an installed id (`ynh ls` lists them)",
-			abs, plugin.PluginFile)
-	}
-	return harness.LoadDir(abs)
 }
 
 // withIncludedSensors folds in the sensors an include declares, so a sensor

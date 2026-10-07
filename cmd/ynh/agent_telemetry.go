@@ -95,7 +95,11 @@ func runEndAttributes(r *agent.RunResult) []attribute.KeyValue {
 	add(telemetry.AttrEffortRequested, r.EffortRequested)
 	add(telemetry.AttrBoundBy, r.BoundBy)
 	if h := r.Harness; h != nil {
-		add(telemetry.AttrHarnessName, h.Name)
+		// The same rule as at the start: a harness given by path is reported
+		// by its manifest name, which is not an id, so it is left out.
+		if namespace.Classify(h.Name) == namespace.RefID {
+			add(telemetry.AttrHarnessName, h.Name)
+		}
 		add(telemetry.AttrHarnessVersion, h.Version)
 		add(telemetry.AttrHarnessCommit, h.SHA)
 	}
