@@ -36,11 +36,6 @@ on:
 permissions:
   contents: read
 
-# The spoolexporter module lives in the private eyelock/ynr repository:
-# fetch it directly, not through the public proxy and checksum database.
-env:
-  GOPRIVATE: github.com/eyelock/ynr
-
 jobs:
   govulncheck:
     name: govulncheck
@@ -50,12 +45,5 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
         with:
           go-version-file: go.mod
-      # Until eyelock/ynr is public, the spoolexporter module is private.
-      # YNR_READ_REPO reads it; a pull request from a fork has no secrets
-      # and cannot build.
-      - name: Allow the private ynr module
-        env:
-          YNR_READ_REPO: ${{ secrets.YNR_READ_REPO }}
-        run: git config --global url."https://x-access-token:${YNR_READ_REPO}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
       - name: govulncheck
         run: make vulncheck

@@ -62,10 +62,3 @@ import {
   to = github_actions_secret.this[each.key]
   id = "ynh:${each.key}"
 }
-
-import {
-  for_each = local.dependabot_secrets
-
-  to = github_dependabot_secret.this[each.key]
-  id = "ynh:${each.key}"
-}

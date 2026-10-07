@@ -30,26 +30,16 @@ resource "github_repository_environment_deployment_policy" "github_pages" {
 
 # Secrets are declared by name only. GitHub never returns a secret's value, so Terraform owns that
 # each secret exists and writes a value only when it creates one; after that the value is ignored.
-# Each is set with `gh secret set <NAME> -R eyelock/ynh` (add `--app dependabot` for a Dependabot
-# secret) and adopted by the import in imports.tf, so no value passes through Terraform or its
-# state. To rotate one, set it again with gh.
+# Each is set with `gh secret set <NAME> -R eyelock/ynh` and adopted by the import in imports.tf, so no value
+# passes through Terraform or its state. To rotate one, set it again with gh.
 locals {
   actions_secrets = toset([
     "CLAUDE_CODE_OAUTH_TOKEN",
     "RELEASE_TOKEN",
-    "YNR_READ_PACKAGES",
-    "YNR_READ_REPO",
   ])
-
-  # Dependabot reads its own copy of a secret, so a private module is fetched for its PRs too.
-  dependabot_secrets = toset(["YNR_READ_REPO"])
 }
 
 data "github_actions_secrets" "ynh" {
-  name = github_repository.ynh.name
-}
-
-data "github_dependabot_secrets" "ynh" {
   name = github_repository.ynh.name
 }
 
@@ -68,23 +58,6 @@ resource "github_actions_secret" "this" {
     precondition {
       condition     = contains(keys(var.secret_values), each.key) || contains(data.github_actions_secrets.ynh.secrets[*].name, each.key)
       error_message = "${each.key} does not exist yet: set it with `gh secret set ${each.key} -R eyelock/ynh` (see README.md), then plan again."
-    }
-  }
-}
-
-resource "github_dependabot_secret" "this" {
-  for_each = local.dependabot_secrets
-
-  repository  = github_repository.ynh.name
-  secret_name = each.key
-  value       = coalesce(lookup(var.secret_values, each.key, null), "unset")
-
-  lifecycle {
-    ignore_changes = [value]
-
-    precondition {
-      condition     = contains(keys(var.secret_values), each.key) || contains(data.github_dependabot_secrets.ynh.secrets[*].name, each.key)
-      error_message = "The Dependabot secret ${each.key} does not exist yet: set it with `gh secret set ${each.key} --app dependabot -R eyelock/ynh` (see README.md), then plan again."
     }
   }
 }

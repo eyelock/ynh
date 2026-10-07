@@ -7,23 +7,10 @@ RUN apk add --no-cache git
 
 WORKDIR /src
 
-# The spoolexporter module lives in the private eyelock/ynr repository until
-# that is public. Its token arrives as a BuildKit secret (id ynr_token) and is
-# handed to git through environment variables for this one RUN, so it is
-# never written to a file and no layer holds it. Without the secret the
-# download fails, as it does for anyone without read access to eyelock/ynr.
-ENV GOPRIVATE=github.com/eyelock/ynr
-
 # Copy module files first for layer caching: this avoids invalidating the
 # module cache when source changes.
 COPY go.mod go.sum ./
-RUN --mount=type=secret,id=ynr_token \
-    if [ -s /run/secrets/ynr_token ]; then \
-      export GIT_CONFIG_COUNT=1 \
-        GIT_CONFIG_KEY_0="url.https://x-access-token:$(cat /run/secrets/ynr_token)@github.com/eyelock/ynr.insteadOf" \
-        GIT_CONFIG_VALUE_0="https://github.com/eyelock/ynr"; \
-    fi; \
-    go mod download
+RUN go mod download
 
 COPY . .
 

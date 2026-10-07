@@ -6,7 +6,7 @@ and set up again from nothing.
 | File | What it manages |
 |---|---|
 | `repository.tf` | The repository: description, topics, homepage, visibility, features, merge options, secret scanning and push protection (public only), and the GitHub Pages site |
-| `branches.tf` | Gitflow: `develop` as the default branch, and a ruleset on each of `main` and `develop`: no deletion or force-push, a pull request with conversations resolved, "All Clear" green and up to date (plus "Verify PR source branch" into `main`), repository admins may bypass |
+| `branches.tf` | Gitflow: `develop` as the default branch, and a ruleset on each of `main` and `develop`: no deletion or force-push, a pull request with conversations resolved, "All Clear" green (plus "Verify PR source branch" into `main`), repository admins may bypass |
 | `labels.tf` | Issue and PR labels, authoritatively: a label not listed is removed |
 | `actions.tf` | Actions permissions, the read-only default `GITHUB_TOKEN`, the `github-pages` environment, and that the Actions and Dependabot secrets exist (names only) |
 | `security.tf` | Dependabot alerts and security updates, and private vulnerability reporting |
@@ -26,7 +26,7 @@ is off. Secret scanning and push protection are on while `visibility` is `public
 `develop` and `main` are protected by two repository rulesets, "Develop Branch Protection" and
 "Main Branch Protection", not by classic branch protection: with both, a merge must satisfy two
 lists of required checks, and they drift. Both require the one check **All Clear** (the final job
-in `ci.yml`), strictly; `main` also requires **Verify PR source branch**, so it takes only
+in `ci.yml`), not strictly: a pull request need not be up to date with its base; `main` also requires **Verify PR source branch**, so it takes only
 `develop`, `release/*` and `hotfix/*`. Repository admins (role 5) can bypass.
 
 ### The classic protection they replaced
@@ -52,17 +52,10 @@ holds a value. They are set with gh and adopted by the imports in `imports.tf`:
 |---|---|---|
 | `RELEASE_TOKEN` | Actions | Publishing the release and pushing the formula to `eyelock/homebrew-tap`: a fine-grained token limited to those repositories with **Contents: Read and write** |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Actions | The Claude Code workflow |
-| `YNR_READ_PACKAGES` | Actions | Reading the private `ynr` module |
-| `YNR_READ_REPO` | Actions | Reading the private `ynr` repository |
-| `YNR_READ_REPO` | Dependabot | The same, for Dependabot's own runs |
 
 ```bash
 gh secret set RELEASE_TOKEN -R eyelock/ynh
-gh secret set YNR_READ_REPO --app dependabot -R eyelock/ynh
 ```
-
-The last two go once `ynr` is public. Remove them from `local.actions_secrets` and
-`local.dependabot_secrets` in `actions.tf` and apply; that deletes the secrets from GitHub.
 
 ## Use
 
