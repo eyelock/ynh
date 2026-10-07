@@ -25,13 +25,13 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -v \
     -o /out/ynd ./cmd/ynd
 
 # Stage 2a: Claude Code CLI (parallel)
-FROM node:22-alpine AS claude-cli
+FROM node:26-alpine AS claude-cli
 ARG CLAUDE_CODE_VERSION=2.1.76
 RUN --mount=type=cache,target=/root/.npm \
     npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
 
 # Stage 2b: Codex CLI (parallel)
-FROM node:22-alpine AS codex-cli
+FROM node:26-alpine AS codex-cli
 ARG CODEX_VERSION=0.114.0
 RUN --mount=type=cache,target=/root/.npm \
     npm install -g --include=optional "@openai/codex@${CODEX_VERSION}"
@@ -73,7 +73,7 @@ RUN set -eu; \
     rm -rf /tmp/agent /tmp/agent.tar.gz
 
 # Stage 3: Runtime — assemble everything
-FROM node:22-alpine
+FROM node:26-alpine
 
 RUN apk add --no-cache git openssh-client tini bash curl
 
