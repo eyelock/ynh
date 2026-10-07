@@ -50,7 +50,7 @@ RUN --mount=type=cache,target=/root/.npm \
     npm install -g --include=optional "@openai/codex@${CODEX_VERSION}"
 
 # Stage 2c: Cursor Agent CLI (parallel)
-FROM alpine:3.23.5@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40 AS cursor-cli
+FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS cursor-cli
 RUN apk add --no-cache curl bash
 
 # The installer at cursor.com/install is regenerated per release: it embeds
