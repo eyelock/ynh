@@ -586,7 +586,7 @@ func TestPreviewNamespacedSelectionErrors(t *testing.T) {
 	}{
 		{"duplicate namespace", []string{"--profile", "github:ci", "--profile", "github:ci"}, `namespace "github"`},
 		{"duplicate root", []string{"--profile", "a", "--profile", "b"}, "at most one unqualified profile"},
-		{"focus with profile", []string{"--focus", "github:triage", "--profile", "github:ci"}, "cannot use --focus and --profile together"},
+		{"focus with profile", []string{"--focus", "github:triage", "--profile", "github:ci"}, "cannot use --focus and --profile together (focus includes a profile)"},
 		{"unknown namespace", []string{"--profile", "nope:ci"}, `no included harness has namespace "nope" (available: github)`},
 		{"unknown profile", []string{"--profile", "github:nope"}, `profile "nope" not defined in included harness "github" (available: [ci])`},
 		{"unknown focus", []string{"--focus", "github:nope"}, `focus "nope" not defined in included harness "github"`},
