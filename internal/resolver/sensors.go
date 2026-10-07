@@ -29,6 +29,25 @@ type IncludedSensor struct {
 	Source string
 }
 
+// WithIncludedSensors folds in the sensors an include declares, so a sensor
+// set can be published as an ordinary harness and adopted like any other.
+//
+// Every command that lists, runs or verifies against sensors goes through this
+// (`ynh check`, `ynh sensors`, the agent loop's convergence verifier), so they
+// all see the same set. It is not done in harness.LoadDir because LoadDir has
+// no business reaching for includes: `ynh ls` should not pay for it.
+func WithIncludedSensors(h *harness.Harness) (*harness.Harness, error) {
+	if len(h.Includes) == 0 && len(h.SensorOverrides) == 0 {
+		return h, nil
+	}
+	merged, err := MergeIncludedSensors(h, h.SensorOverrides)
+	if err != nil {
+		return nil, err
+	}
+	h.Sensors = merged
+	return h, nil
+}
+
 // MergeIncludedSensors returns the harness's own sensors plus those declared by
 // its includes, with overrides applied.
 //

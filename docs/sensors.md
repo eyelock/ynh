@@ -429,6 +429,10 @@ An include that declares no manifest contributes no sensors and is not an
 error: shipping artifacts by directory layout is a legitimate thing for an
 include to do.
 
+Every command that lists, runs or verifies against sensors sees the merged set:
+`ynh check`, `ynh sensors ls|show|run`, and the agent loop when it checks that
+its convergence verifier can decide.
+
 ### `github_status` and `github_check`
 
 Two sensors that observe a verdict reached somewhere else. A `command` sensor

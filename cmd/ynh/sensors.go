@@ -110,7 +110,7 @@ func cmdSensorsLs(args []string, stdout, stderr io.Writer) error {
 			"usage: ynh sensors ls <harness-id|path> [--format text|json]")
 	}
 
-	p, err := harness.LoadIDOrPath(harnessName)
+	p, err := loadHarnessRef(harnessName)
 	if err != nil {
 		return cliError(stderr, structured, errCodeNotFound, err.Error())
 	}
@@ -166,7 +166,7 @@ func cmdSensorsShow(args []string, stdout, stderr io.Writer) error {
 			"usage: ynh sensors show <harness-id|path> <sensor-name> [--format text|json]")
 	}
 
-	p, err := harness.LoadIDOrPath(harnessName)
+	p, err := loadHarnessRef(harnessName)
 	if err != nil {
 		return cliError(stderr, structured, errCodeNotFound, err.Error())
 	}
@@ -422,7 +422,7 @@ func cmdSensorsRun(args []string, stdout, stderr io.Writer) error {
 			"usage: ynh sensors run <harness-id|path> <sensor-name> [--cwd dir] [--no-content]")
 	}
 
-	p, err := harness.LoadIDOrPath(harnessName)
+	p, err := loadHarnessRef(harnessName)
 	if err != nil {
 		return cliError(stderr, structured, errCodeNotFound, err.Error())
 	}

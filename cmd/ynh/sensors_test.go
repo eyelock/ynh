@@ -419,3 +419,34 @@ func TestCmdSensors_TakeAPath(t *testing.T) {
 		t.Errorf("a bad ref keeps the id-or-path hint, got %v %s", err, stderr.String())
 	}
 }
+
+// A sensor an include declares is a sensor of the harness: `ynh sensors`
+// lists, shows and runs it, as `ynh check` does, whether the harness is given
+// by id or by path.
+func TestCmdSensors_SeeIncludedSensors(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	root := filepath.Join(t.TempDir(), "consumer")
+	writeHarnessAt(t, filepath.Join(root, "vendored", "up"), "up")
+	manifest := `{"name":"consumer","version":"0.1.0","default_vendor":"claude",
+  "includes":[{"local":"vendored/up"}]}`
+	if err := os.MkdirAll(filepath.Join(root, ".agents/harness"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".agents/harness/plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, args := range [][]string{
+		{"ls", root, "--format", "json"},
+		{"show", root, "green", "--format", "json"},
+		{"run", root, "green", "--cwd", t.TempDir()},
+	} {
+		var stdout, stderr bytes.Buffer
+		if err := cmdSensorsTo(args, &stdout, &stderr); err != nil {
+			t.Errorf("%v: %v %s", args[0], err, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "green") {
+			t.Errorf("%v: the included sensor is not seen: %s", args[0], stdout.String())
+		}
+	}
+}

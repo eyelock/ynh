@@ -346,6 +346,12 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			}
 		}
 
+		// The sensors an include declares count, as they do for `ynh check`.
+		// Done after the profile, which can add includes of its own.
+		if harnessObj, err = resolver.WithIncludedSensors(harnessObj); err != nil {
+			return result, fmt.Errorf("resolving included sensors: %w", err)
+		}
+
 		// Before the worker starts: a verifier that can never pass would
 		// spend the whole budget and end at the turn cap (#447).
 		if err := refuseConvergenceVerifier(harnessObj.Sensors, opts.ConvergenceSensor); err != nil {

@@ -735,23 +735,5 @@ func loadHarnessRef(ref string) (*harness.Harness, error) {
 	if err != nil {
 		return nil, err
 	}
-	return withIncludedSensors(h)
-}
-
-// withIncludedSensors folds in the sensors an include declares, so a sensor
-// set can be published as an ordinary harness and adopted like any other.
-//
-// Done here rather than in harness.LoadDir because every command that lists
-// or runs sensors goes through this function, and because LoadDir has no
-// business reaching for includes — `ynh ls` should not pay for it.
-func withIncludedSensors(h *harness.Harness) (*harness.Harness, error) {
-	if len(h.Includes) == 0 && len(h.SensorOverrides) == 0 {
-		return h, nil
-	}
-	merged, err := resolver.MergeIncludedSensors(h, h.SensorOverrides)
-	if err != nil {
-		return nil, err
-	}
-	h.Sensors = merged
-	return h, nil
+	return resolver.WithIncludedSensors(h)
 }

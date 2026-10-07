@@ -210,3 +210,40 @@ func TestRunLoop_ResumeOfPathStartedRun(t *testing.T) {
 		t.Errorf("resumed result harness = %+v, want the same harness", res.Harness)
 	}
 }
+
+// The convergence verifier is checked against the sensors `ynh check` will
+// run, included ones among them: a focus sensor an include brings in can never
+// decide, and the run is refused before a worker starts.
+func TestRunLoop_VerifierCheckSeesIncludedSensors(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	root := t.TempDir()
+	dir := filepath.Join(root, "consumer")
+	up := filepath.Join(dir, "vendored", "up")
+	if err := os.MkdirAll(filepath.Join(up, plugin.PluginDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	upManifest := `{"name":"up","version":"1.0.0","sensors":{"review":{
+  "role":"convergence-verifier","source":{"focus":"reviewer"},"output":{"format":"text"}}}}`
+	if err := os.WriteFile(filepath.Join(up, plugin.PluginDir, plugin.PluginFile), []byte(upManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, plugin.PluginDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"name":"consumer","version":"0.1.0","default_vendor":"claude",
+  "includes":[{"local":"vendored/up"}]}`
+	if err := os.WriteFile(filepath.Join(dir, plugin.PluginDir, plugin.PluginFile), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mb := &mockBackend{name: "mock", turns: []Turn{{Content: "done"}}}
+	opts := baseOpts(mb, io.Discard, io.Discard, strings.NewReader(""))
+	opts.HarnessName = dir
+	_, err := RunLoop(opts)
+	if err == nil || !strings.Contains(err.Error(), "a focus sensor is never resolved") {
+		t.Fatalf("want the verifier refused for an included focus sensor, got %v", err)
+	}
+	if len(mb.startOpts) != 0 {
+		t.Error("a worker started under a verifier that can never pass")
+	}
+}
