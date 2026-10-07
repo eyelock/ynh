@@ -218,8 +218,8 @@ converted only by `ynd migrate` and refused by every other command.
 | Hook types:       | command, http, prompt, agent     | command only                     | command, prompt, http, agent     |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | --plugin-dir      | Skills: YES                      | N/A (uses symlinks)              | N/A (uses symlinks)              |
-| auto-activation:  | Hooks: NO (need /plugin enable)  |                                  |                                  |
-|                   | MCP: NO (need /plugin enable)    |                                  |                                  |
+| auto-activation:  | Hooks: YES                       |                                  |                                  |
+|                   | MCP: YES                         |                                  |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 ```
 

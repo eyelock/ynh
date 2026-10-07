@@ -4,7 +4,7 @@ MCP (Model Context Protocol) servers provide tools and resources that AI coding 
 
 ynh treats MCP server declarations as part of the harness template. At assembly time, each vendor adapter translates the canonical format into the vendor's native MCP configuration.
 
-> **Note:** MCP servers can vary by [profile](harnesses.md#profiles). When a profile is selected, its `mcp_servers` field replaces the top-level MCP servers entirely.
+> **Note:** MCP servers can vary by [profile](harnesses.md#profiles). When a profile is selected, its `mcp_servers` field is deep-merged with the top-level servers: profile keys win on collision, absent keys are inherited, a server's `env` map is merged key by key, and setting a server to `null` removes an inherited one. See [Profiles](profiles.md#merge-semantics).
 
 ## Why Harnesses Declare MCP Servers
 
@@ -120,7 +120,7 @@ Each adapter spells the canonical transport in the vendor's own words:
 
 Claude Code rejects a `url` entry that carries no `type` and reads an untyped entry as stdio, so the `http` on a remote server is not cosmetic.
 
-> **Claude Code runtime limitation:** MCP servers in `--plugin-dir` plugins are not auto-activated during `ynh run` sessions. They work correctly when the plugin is installed via `/plugin install` or when using Codex/Cursor. See [Hooks](hooks.md#claude-code-runtime-limitation) for details.
+> **Claude Code:** `ynh run` passes the assembled `.claude/` directory as `--plugin-dir`, and Claude activates its MCP servers (and hooks) from there with no `/plugin install` step. They load alongside your own MCP servers (user config, claude.ai connectors); ynh does not isolate them yet (tracked in #548). Copilot is the exception: see [Copilot Format](#copilot-format).
 
 ### Claude Code Format
 
