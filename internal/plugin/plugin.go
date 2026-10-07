@@ -25,6 +25,11 @@ type HarnessJSON struct {
 	DelegatesTo   []DelegateMeta         `json:"delegates_to,omitempty"`
 	Hooks         map[string][]HookEntry `json:"hooks,omitempty"`
 	MCPServers    map[string]MCPServer   `json:"mcp_servers,omitempty"`
+	// MCPRemovals names the servers the manifest sets to null in
+	// mcp_servers: a server inherited from an included harness that this
+	// harness does not want. It is not a field of its own on the wire (see
+	// MarshalJSON and UnmarshalJSON), and MCPServers never holds those names.
+	MCPRemovals []string `json:"-"`
 	// MCPIsolation runs the harness with only its own MCP servers, instead of
 	// alongside the operator's configured servers. A launch concern: it
 	// changes how `ynh run` starts the vendor CLI, not what an export ships.
@@ -58,6 +63,58 @@ type HarnessJSON struct {
 	// `ynd lint` checks it.
 	Reads         map[string][]string `json:"reads,omitempty"`
 	InstalledFrom *ProvenanceMeta     `json:"installed_from,omitempty"`
+}
+
+// hjAlias has HarnessJSON's fields and none of its methods, so the JSON
+// methods below can reuse the default encoding without recursing.
+type hjAlias HarnessJSON
+
+// UnmarshalJSON decodes the manifest, unknown fields still rejected, and
+// reads a null entry in mcp_servers as the removal of that server (see
+// MCPRemovals) instead of as an empty server definition.
+func (h *HarnessJSON) UnmarshalJSON(data []byte) error {
+	aux := struct {
+		*hjAlias
+		MCPServers map[string]*MCPServer `json:"mcp_servers"`
+	}{hjAlias: (*hjAlias)(h)}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&aux); err != nil {
+		return err
+	}
+	h.MCPServers = nil
+	h.MCPRemovals = nil
+	for name, srv := range aux.MCPServers {
+		if srv == nil {
+			h.MCPRemovals = append(h.MCPRemovals, name)
+			continue
+		}
+		if h.MCPServers == nil {
+			h.MCPServers = make(map[string]MCPServer, len(aux.MCPServers))
+		}
+		h.MCPServers[name] = *srv
+	}
+	sort.Strings(h.MCPRemovals)
+	return nil
+}
+
+// MarshalJSON is the inverse of UnmarshalJSON: each removal is written back
+// as a null entry in mcp_servers.
+func (h HarnessJSON) MarshalJSON() ([]byte, error) {
+	if len(h.MCPRemovals) == 0 {
+		return json.Marshal(hjAlias(h))
+	}
+	servers := make(map[string]*MCPServer, len(h.MCPServers)+len(h.MCPRemovals))
+	for name, srv := range h.MCPServers {
+		servers[name] = &srv
+	}
+	for _, name := range h.MCPRemovals {
+		servers[name] = nil
+	}
+	return json.Marshal(struct {
+		hjAlias
+		MCPServers map[string]*MCPServer `json:"mcp_servers"`
+	}{hjAlias: hjAlias(h), MCPServers: servers})
 }
 
 // Sensor declares an observation surface — a feedforward signal a loop

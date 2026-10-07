@@ -879,7 +879,7 @@ sensor "security-scan": source.focus references undefined focus "infer-vulns"
 
 ### Includes
 
-An included harness's sensors travel with it; see [Sensors from an include](#sensors-from-an-include). The merge reads the manifest of each include directly and, like the rest of include resolution, does not recurse: an include's own includes are not read. Set `"sensors": false` on an include to take its files without its gate.
+An included harness's sensors travel with it; see [Sensors from an include](#sensors-from-an-include). Only the root's direct includes contribute sensors: an include's own includes contribute their skills, agents, rules, commands and [MCP servers](mcp.md#servers-from-included-harnesses), but not their sensors. Set `"sensors": false` on an include to take its files without its gate.
 
 ### Profiles — out of scope for v1
 

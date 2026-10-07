@@ -1642,3 +1642,17 @@ func TestSchemaPlugin_IncludeSensorsFlag(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateHarnessMCPServers_NullRemovesAnIncludedServer(t *testing.T) {
+	hj := map[string]any{"mcp_servers": map[string]any{
+		"gone": nil,
+		"ok":   map[string]any{"command": "c"},
+	}}
+	if issues := validateHarnessMCPServers(hj); len(issues) != 0 {
+		t.Errorf("null entry must be accepted, got %v", issues)
+	}
+	hj = map[string]any{"mcp_servers": map[string]any{"bad": "x"}}
+	if issues := validateHarnessMCPServers(hj); len(issues) != 1 || !strings.Contains(issues[0], "object or null") {
+		t.Errorf("issues = %v", issues)
+	}
+}

@@ -282,18 +282,17 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 	}
 
 	// Collect artifacts from resolved includes
-	for idx, r := range resolved {
-		// A local include has no Git URL, and ShortGitURL("") is "", so every
-		// artifact from one arrived unattributed. `local` is the low-friction
-		// adoption path the shipped ynh-adopt skill teaches, which makes this
-		// the attribution a new adopter hits first.
-		inc := h.Includes[idx]
-		incSource := resolver.ShortGitURL(inc.Git)
-		if inc.Git == "" && inc.Local != "" {
-			incSource = inc.Local
-		}
-		if inc.Path != "" {
-			incSource += "/" + inc.Path
+	for _, r := range resolved {
+		// r.Source names a local include by its path, and a git one by its
+		// short URL; a local include has no Git URL, so ShortGitURL would
+		// leave every artifact from one unattributed. `local` is the
+		// low-friction adoption path the shipped ynh-adopt skill teaches,
+		// which makes this the attribution a new adopter hits first. Results
+		// also include the includes of included harnesses, so they cannot be
+		// matched to h.Includes by position.
+		incSource := r.Source
+		if r.Path != "" {
+			incSource += "/" + r.Path
 		}
 
 		// Scan the resolved base path for artifacts
