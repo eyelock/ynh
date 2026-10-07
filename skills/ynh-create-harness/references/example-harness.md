@@ -10,7 +10,7 @@ a real project, actionable steps, no generic filler.
 ## Layout
 
 ```
-acme-api/
+example-api/
 ├── .agents/harness/
 │   └── plugin.json
 ├── AGENTS.md                    # optional project instructions
@@ -29,10 +29,10 @@ acme-api/
 ```json
 {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
-  "name": "acme-api",
+  "name": "example-api",
   "version": "0.1.0",
-  "description": "Harness for the Acme billing API — Go, Postgres, sqlc",
-  "author": { "name": "Acme Platform Team" },
+  "description": "Harness for the Example billing API: Go, Postgres, sqlc",
+  "author": { "name": "Example Platform Team" },
   "keywords": ["go", "postgres", "billing"],
   "default_vendor": "claude"
 }
@@ -98,7 +98,7 @@ description: Reviews Postgres migrations for lock risk, reversibility, and deplo
 tools: Read, Grep, Glob
 ---
 
-You review database migrations for the Acme billing API.
+You review database migrations for the Example billing API.
 
 ## Check each migration for
 
@@ -159,7 +159,7 @@ Optional, at the harness root. What each vendor receives is in
 write it once here.
 
 ```markdown
-# Acme Billing API
+# Example Billing API
 
 Go 1.25, Postgres 16, sqlc for the query layer. No ORM.
 
@@ -175,9 +175,9 @@ Run `make check` before pushing. Migrations need review from the
 ## Then
 
 ```bash
-ynd validate ./acme-api          # structure and frontmatter
-ynd lint ./acme-api              # formatting and shell syntax
-ynd preview ./acme-api -v claude # exactly what the vendor receives
-ynh install ./acme-api
-acme-api                         # launch it
+ynd validate ./example-api          # structure and frontmatter
+ynd lint ./example-api              # formatting and shell syntax
+ynd preview ./example-api -v claude # exactly what the vendor receives
+ynh install ./example-api
+example-api                         # launch it
 ```

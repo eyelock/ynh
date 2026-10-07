@@ -122,11 +122,12 @@ jobs:
             ynr_token=${{ secrets.YNR_READ_REPO }}
 
       - name: Create multi-arch manifest
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION=${{ steps.version.outputs.version }}
-          docker buildx imagetools create -t ghcr.io/eyelock/ynh:${VERSION} \
-            ghcr.io/eyelock/ynh:${VERSION}-amd64 \
-            ghcr.io/eyelock/ynh:${VERSION}-arm64
-          docker buildx imagetools create -t ghcr.io/eyelock/ynh:latest \
-            ghcr.io/eyelock/ynh:${VERSION}-amd64 \
-            ghcr.io/eyelock/ynh:${VERSION}-arm64
+          docker buildx imagetools create -t "ghcr.io/eyelock/ynh:${VERSION}" \
+            "ghcr.io/eyelock/ynh:${VERSION}-amd64" \
+            "ghcr.io/eyelock/ynh:${VERSION}-arm64"
+          docker buildx imagetools create -t "ghcr.io/eyelock/ynh:latest" \
+            "ghcr.io/eyelock/ynh:${VERSION}-amd64" \
+            "ghcr.io/eyelock/ynh:${VERSION}-arm64"

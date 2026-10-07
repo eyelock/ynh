@@ -37,12 +37,14 @@ jobs:
 
       - name: Find references to the closed issue
         id: scan
+        env:
+          NUMBER: ${{ github.event.issue.number }}
         run: |
           set -euo pipefail
-          hits=$(scripts/stale-claim-refs.sh "${{ github.event.issue.number }}")
+          hits=$(scripts/stale-claim-refs.sh "$NUMBER")
 
           if [ -z "$hits" ]; then
-            echo "no references to #${{ github.event.issue.number }} in the tracked tree"
+            echo "no references to #$NUMBER in the tracked tree"
             echo "found=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi

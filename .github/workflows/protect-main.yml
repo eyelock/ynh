@@ -10,8 +10,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check that PR targets main only from develop, hotfix/*, or release/*
+        # The branch name is attacker-controlled: it reaches the script as an
+        # environment variable, never interpolated into the shell source.
+        env:
+          SOURCE: ${{ github.head_ref }}
         run: |
-          SOURCE="${{ github.head_ref }}"
           echo "PR source branch: $SOURCE"
 
           if [[ "$SOURCE" == "develop" ]] || [[ "$SOURCE" == hotfix/* ]] || [[ "$SOURCE" == release/* ]]; then

@@ -62,7 +62,7 @@ Everyone includes the team harness; each person's own harness adds to it.
 ```json
 {
   "name": "david",
-  "includes": [ { "git": "github.com/acme/team-standards", "ref": "v3" } ],
+  "includes": [ { "git": "github.com/example-org/team-standards", "ref": "v3" } ],
   "default_vendor": "claude"
 }
 ```
@@ -100,7 +100,7 @@ vendor, so it costs no context.
       "hooks": { "on_stop": [ { "command": "make check" } ] }
     },
     "review": {
-      "includes": [ { "git": "github.com/acme/review-skills", "ref": "v1" } ]
+      "includes": [ { "git": "github.com/example-org/review-skills", "ref": "v1" } ]
     }
   }
 }

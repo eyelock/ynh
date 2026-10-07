@@ -343,13 +343,13 @@ func TestCmdProfileIncludeAdd_Basic(t *testing.T) {
 	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf, io.Discard)
 
 	if err := cmdProfileTo([]string{
-		"include", "add", dir, "p", "github.com/acme/tools",
+		"include", "add", dir, "p", "github.com/example-org/tools",
 	}, &buf, io.Discard); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := loadTestProfiles(t, dir)
 	incs := got["p"].Includes
-	if len(incs) != 1 || incs[0].Git != "github.com/acme/tools" {
+	if len(incs) != 1 || incs[0].Git != "github.com/example-org/tools" {
 		t.Errorf("expected one include, got %+v", incs)
 	}
 }
@@ -360,10 +360,10 @@ func TestCmdProfileIncludeRemove_Basic(t *testing.T) {
 
 	var buf bytes.Buffer
 	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf, io.Discard)
-	_ = cmdProfileTo([]string{"include", "add", dir, "p", "github.com/acme/tools"}, &buf, io.Discard)
+	_ = cmdProfileTo([]string{"include", "add", dir, "p", "github.com/example-org/tools"}, &buf, io.Discard)
 
 	if err := cmdProfileTo([]string{
-		"include", "remove", dir, "p", "github.com/acme/tools",
+		"include", "remove", dir, "p", "github.com/example-org/tools",
 	}, &buf, io.Discard); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -379,10 +379,10 @@ func TestCmdProfileIncludeUpdate_Ref(t *testing.T) {
 
 	var buf bytes.Buffer
 	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf, io.Discard)
-	_ = cmdProfileTo([]string{"include", "add", dir, "p", "github.com/acme/tools", "--ref", "v1"}, &buf, io.Discard)
+	_ = cmdProfileTo([]string{"include", "add", dir, "p", "github.com/example-org/tools", "--ref", "v1"}, &buf, io.Discard)
 
 	if err := cmdProfileTo([]string{
-		"include", "update", dir, "p", "github.com/acme/tools", "--ref", "v2",
+		"include", "update", dir, "p", "github.com/example-org/tools", "--ref", "v2",
 	}, &buf, io.Discard); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -398,9 +398,9 @@ func TestCmdProfileIncludeUpdate_NoFlags(t *testing.T) {
 
 	var buf bytes.Buffer
 	_ = cmdProfileTo([]string{"add", dir, "p"}, &buf, io.Discard)
-	_ = cmdProfileTo([]string{"include", "add", dir, "p", "github.com/acme/tools"}, &buf, io.Discard)
+	_ = cmdProfileTo([]string{"include", "add", dir, "p", "github.com/example-org/tools"}, &buf, io.Discard)
 
-	err := cmdProfileTo([]string{"include", "update", dir, "p", "github.com/acme/tools"}, &buf, io.Discard)
+	err := cmdProfileTo([]string{"include", "update", dir, "p", "github.com/example-org/tools"}, &buf, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "at least one") {
 		t.Errorf("expected at-least-one error, got: %v", err)
 	}

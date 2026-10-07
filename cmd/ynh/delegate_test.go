@@ -66,13 +66,13 @@ func TestCmdDelegateAdd_PathBased(t *testing.T) {
 	writeDelegateTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	err := cmdDelegateTo([]string{"add", dir, "github.com/acme/agent"}, &buf)
+	err := cmdDelegateTo([]string{"add", dir, "github.com/example-org/agent"}, &buf)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	dels := loadTestDelegates(t, dir)
-	if len(dels) != 1 || dels[0].Git != "github.com/acme/agent" {
+	if len(dels) != 1 || dels[0].Git != "github.com/example-org/agent" {
 		t.Errorf("expected 1 delegate, got %+v", dels)
 	}
 	if !strings.Contains(buf.String(), "Added") {
@@ -85,7 +85,7 @@ func TestCmdDelegateAdd_WithFlags(t *testing.T) {
 	writeDelegateTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	err := cmdDelegateTo([]string{"add", dir, "github.com/acme/agent",
+	err := cmdDelegateTo([]string{"add", dir, "github.com/example-org/agent",
 		"--path", "agents/coder",
 		"--ref", "v2",
 	}, &buf)
@@ -107,11 +107,11 @@ func TestCmdDelegateAdd_Duplicate(t *testing.T) {
 	writeDelegateTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	if err := cmdDelegateTo([]string{"add", dir, "github.com/acme/agent"}, &buf); err != nil {
+	if err := cmdDelegateTo([]string{"add", dir, "github.com/example-org/agent"}, &buf); err != nil {
 		t.Fatal(err)
 	}
 
-	err := cmdDelegateTo([]string{"add", dir, "github.com/acme/agent"}, &buf)
+	err := cmdDelegateTo([]string{"add", dir, "github.com/example-org/agent"}, &buf)
 	if err == nil || !strings.Contains(err.Error(), "already present") {
 		t.Errorf("expected already-present error, got: %v", err)
 	}
@@ -132,12 +132,12 @@ func TestCmdDelegateRemove_PathBased(t *testing.T) {
 	writeDelegateTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	if err := cmdDelegateTo([]string{"add", dir, "github.com/acme/agent"}, &buf); err != nil {
+	if err := cmdDelegateTo([]string{"add", dir, "github.com/example-org/agent"}, &buf); err != nil {
 		t.Fatal(err)
 	}
 
 	buf.Reset()
-	if err := cmdDelegateTo([]string{"remove", dir, "github.com/acme/agent"}, &buf); err != nil {
+	if err := cmdDelegateTo([]string{"remove", dir, "github.com/example-org/agent"}, &buf); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
 
@@ -155,7 +155,7 @@ func TestCmdDelegateRemove_NotFound(t *testing.T) {
 	writeDelegateTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	err := cmdDelegateTo([]string{"remove", dir, "github.com/acme/agent"}, &buf)
+	err := cmdDelegateTo([]string{"remove", dir, "github.com/example-org/agent"}, &buf)
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Errorf("expected not-found error, got: %v", err)
 	}
@@ -166,14 +166,14 @@ func TestCmdDelegateRemove_Ambiguous(t *testing.T) {
 	writeDelegateTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	if err := cmdDelegateTo([]string{"add", dir, "github.com/acme/mono", "--path", "a"}, &buf); err != nil {
+	if err := cmdDelegateTo([]string{"add", dir, "github.com/example-org/mono", "--path", "a"}, &buf); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmdDelegateTo([]string{"add", dir, "github.com/acme/mono", "--path", "b"}, &buf); err != nil {
+	if err := cmdDelegateTo([]string{"add", dir, "github.com/example-org/mono", "--path", "b"}, &buf); err != nil {
 		t.Fatal(err)
 	}
 
-	err := cmdDelegateTo([]string{"remove", dir, "github.com/acme/mono"}, &buf)
+	err := cmdDelegateTo([]string{"remove", dir, "github.com/example-org/mono"}, &buf)
 	if err == nil || !strings.Contains(err.Error(), "disambiguate") {
 		t.Errorf("expected disambiguate error, got: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestCmdDelegateUpdate_NoChangeFlags(t *testing.T) {
 	writeDelegateTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	err := cmdDelegateTo([]string{"update", dir, "github.com/acme/agent"}, &buf)
+	err := cmdDelegateTo([]string{"update", dir, "github.com/example-org/agent"}, &buf)
 	if err == nil || !strings.Contains(err.Error(), "at least one") {
 		t.Errorf("expected at-least-one error, got: %v", err)
 	}
@@ -205,12 +205,12 @@ func TestCmdDelegateUpdate_Ref(t *testing.T) {
 	writeDelegateTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	if err := cmdDelegateTo([]string{"add", dir, "github.com/acme/agent", "--ref", "v1"}, &buf); err != nil {
+	if err := cmdDelegateTo([]string{"add", dir, "github.com/example-org/agent", "--ref", "v1"}, &buf); err != nil {
 		t.Fatal(err)
 	}
 
 	buf.Reset()
-	if err := cmdDelegateTo([]string{"update", dir, "github.com/acme/agent", "--ref", "v2"}, &buf); err != nil {
+	if err := cmdDelegateTo([]string{"update", dir, "github.com/example-org/agent", "--ref", "v2"}, &buf); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 
@@ -228,10 +228,10 @@ func TestCmdDelegateUpdate_Path(t *testing.T) {
 	writeDelegateTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	if err := cmdDelegateTo([]string{"add", dir, "github.com/acme/agent", "--path", "old"}, &buf); err != nil {
+	if err := cmdDelegateTo([]string{"add", dir, "github.com/example-org/agent", "--path", "old"}, &buf); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmdDelegateTo([]string{"update", dir, "github.com/acme/agent", "--path", "new"}, &buf); err != nil {
+	if err := cmdDelegateTo([]string{"update", dir, "github.com/example-org/agent", "--path", "new"}, &buf); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 
@@ -260,7 +260,7 @@ func TestValidateDelegateTarget_RootIsHarness(t *testing.T) {
 	dir := t.TempDir()
 	writePluginManifest(t, dir)
 
-	got, err := validateDelegateTarget(dir, "github.com/acme/r", "")
+	got, err := validateDelegateTarget(dir, "github.com/example-org/r", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -274,7 +274,7 @@ func TestValidateDelegateTarget_SingleSubdir(t *testing.T) {
 	sub := filepath.Join(dir, "vendor-harness")
 	writePluginManifest(t, sub)
 
-	got, err := validateDelegateTarget(dir, "github.com/acme/r", "")
+	got, err := validateDelegateTarget(dir, "github.com/example-org/r", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestValidateDelegateTarget_Ambiguous(t *testing.T) {
 		writePluginManifest(t, filepath.Join(dir, name))
 	}
 
-	_, err := validateDelegateTarget(dir, "github.com/acme/r", "")
+	_, err := validateDelegateTarget(dir, "github.com/example-org/r", "")
 	if err == nil {
 		t.Fatal("expected ambiguous error")
 	}
@@ -310,7 +310,7 @@ func TestValidateDelegateTarget_NoManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := validateDelegateTarget(dir, "github.com/acme/r", "")
+	_, err := validateDelegateTarget(dir, "github.com/example-org/r", "")
 	if err == nil {
 		t.Fatal("expected no-manifest error")
 	}
@@ -323,11 +323,11 @@ func TestValidateDelegateTarget_GivenPathMissing(t *testing.T) {
 	dir := t.TempDir()
 	// basePath has no manifest; givenPath was non-empty so basePath is the
 	// already-resolved subdir → must not auto-resolve.
-	_, err := validateDelegateTarget(dir, "github.com/acme/r", "subdir")
+	_, err := validateDelegateTarget(dir, "github.com/example-org/r", "subdir")
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "github.com/acme/r/subdir") {
+	if !strings.Contains(err.Error(), "github.com/example-org/r/subdir") {
 		t.Errorf("expected resolved path in error, got: %v", err)
 	}
 }
@@ -337,13 +337,13 @@ func TestCmdDelegateUpdate_FromPath(t *testing.T) {
 	writeDelegateTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	if err := cmdDelegateTo([]string{"add", dir, "github.com/acme/mono", "--path", "a", "--ref", "v1"}, &buf); err != nil {
+	if err := cmdDelegateTo([]string{"add", dir, "github.com/example-org/mono", "--path", "a", "--ref", "v1"}, &buf); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmdDelegateTo([]string{"add", dir, "github.com/acme/mono", "--path", "b", "--ref", "v1"}, &buf); err != nil {
+	if err := cmdDelegateTo([]string{"add", dir, "github.com/example-org/mono", "--path", "b", "--ref", "v1"}, &buf); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmdDelegateTo([]string{"update", dir, "github.com/acme/mono", "--from-path", "a", "--ref", "v2"}, &buf); err != nil {
+	if err := cmdDelegateTo([]string{"update", dir, "github.com/example-org/mono", "--from-path", "a", "--ref", "v2"}, &buf); err != nil {
 		t.Fatalf("update with from-path: %v", err)
 	}
 

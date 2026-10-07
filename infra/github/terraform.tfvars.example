@@ -1,0 +1,4 @@
+# Copy to terraform.tfvars (gitignored) to override the defaults in variables.tf.
+# owner      = "eyelock"
+# repository = "ynh"
+# visibility = "public"

@@ -245,7 +245,7 @@ fi
 sed -n 's|^[[:space:]]*insteadOf = https://github.com/||p' "$SB/remotes/gitconfig" | sort -u > "$TMP/served.txt"
 # Named in a tutorial command but never fetched: `ynh include add` on a harness
 # directory only edits its manifest, so the repository is a name, not a source.
-NEVER_FETCHED="acme/tools"
+NEVER_FETCHED="example-org/tools"
 for md in "$ROOT"/docs/tutorial/*.md; do
 	case "$(basename "$md")" in README.md|manual-test-plan.md) continue ;; esac
 	awk -v file="$(basename "$md")" '

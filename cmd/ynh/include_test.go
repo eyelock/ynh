@@ -66,13 +66,13 @@ func TestCmdIncludeAdd_PathBased(t *testing.T) {
 	writeIncludeTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	err := cmdIncludeTo([]string{"add", dir, "github.com/acme/tools"}, &buf)
+	err := cmdIncludeTo([]string{"add", dir, "github.com/example-org/tools"}, &buf)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	incs := loadTestIncludes(t, dir)
-	if len(incs) != 1 || incs[0].Git != "github.com/acme/tools" {
+	if len(incs) != 1 || incs[0].Git != "github.com/example-org/tools" {
 		t.Errorf("expected 1 include, got %+v", incs)
 	}
 	if !strings.Contains(buf.String(), "Added") {
@@ -85,7 +85,7 @@ func TestCmdIncludeAdd_WithFlags(t *testing.T) {
 	writeIncludeTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	err := cmdIncludeTo([]string{"add", dir, "github.com/acme/tools",
+	err := cmdIncludeTo([]string{"add", dir, "github.com/example-org/tools",
 		"--path", "plugins/search",
 		"--ref", "v2",
 	}, &buf)
@@ -107,11 +107,11 @@ func TestCmdIncludeAdd_Duplicate(t *testing.T) {
 	writeIncludeTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	if err := cmdIncludeTo([]string{"add", dir, "github.com/acme/tools"}, &buf); err != nil {
+	if err := cmdIncludeTo([]string{"add", dir, "github.com/example-org/tools"}, &buf); err != nil {
 		t.Fatal(err)
 	}
 
-	err := cmdIncludeTo([]string{"add", dir, "github.com/acme/tools"}, &buf)
+	err := cmdIncludeTo([]string{"add", dir, "github.com/example-org/tools"}, &buf)
 	if err == nil || !strings.Contains(err.Error(), "already present") {
 		t.Errorf("expected already-present error, got: %v", err)
 	}
@@ -122,12 +122,12 @@ func TestCmdIncludeAdd_Replace(t *testing.T) {
 	writeIncludeTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	if err := cmdIncludeTo([]string{"add", dir, "github.com/acme/tools", "--ref", "v1"}, &buf); err != nil {
+	if err := cmdIncludeTo([]string{"add", dir, "github.com/example-org/tools", "--ref", "v1"}, &buf); err != nil {
 		t.Fatal(err)
 	}
 
 	buf.Reset()
-	if err := cmdIncludeTo([]string{"add", dir, "github.com/acme/tools", "--ref", "v2", "--replace"}, &buf); err != nil {
+	if err := cmdIncludeTo([]string{"add", dir, "github.com/example-org/tools", "--ref", "v2", "--replace"}, &buf); err != nil {
 		t.Fatalf("replace failed: %v", err)
 	}
 
@@ -155,12 +155,12 @@ func TestCmdIncludeRemove_PathBased(t *testing.T) {
 	writeIncludeTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	if err := cmdIncludeTo([]string{"add", dir, "github.com/acme/tools"}, &buf); err != nil {
+	if err := cmdIncludeTo([]string{"add", dir, "github.com/example-org/tools"}, &buf); err != nil {
 		t.Fatal(err)
 	}
 
 	buf.Reset()
-	if err := cmdIncludeTo([]string{"remove", dir, "github.com/acme/tools"}, &buf); err != nil {
+	if err := cmdIncludeTo([]string{"remove", dir, "github.com/example-org/tools"}, &buf); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
 
@@ -178,7 +178,7 @@ func TestCmdIncludeRemove_NotFound(t *testing.T) {
 	writeIncludeTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	err := cmdIncludeTo([]string{"remove", dir, "github.com/acme/tools"}, &buf)
+	err := cmdIncludeTo([]string{"remove", dir, "github.com/example-org/tools"}, &buf)
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Errorf("expected not-found error, got: %v", err)
 	}
@@ -189,14 +189,14 @@ func TestCmdIncludeRemove_Ambiguous(t *testing.T) {
 	writeIncludeTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	if err := cmdIncludeTo([]string{"add", dir, "github.com/acme/tools", "--path", "a"}, &buf); err != nil {
+	if err := cmdIncludeTo([]string{"add", dir, "github.com/example-org/tools", "--path", "a"}, &buf); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmdIncludeTo([]string{"add", dir, "github.com/acme/tools", "--path", "b"}, &buf); err != nil {
+	if err := cmdIncludeTo([]string{"add", dir, "github.com/example-org/tools", "--path", "b"}, &buf); err != nil {
 		t.Fatal(err)
 	}
 
-	err := cmdIncludeTo([]string{"remove", dir, "github.com/acme/tools"}, &buf)
+	err := cmdIncludeTo([]string{"remove", dir, "github.com/example-org/tools"}, &buf)
 	if err == nil || !strings.Contains(err.Error(), "disambiguate") {
 		t.Errorf("expected disambiguate error, got: %v", err)
 	}
@@ -217,7 +217,7 @@ func TestCmdIncludeUpdate_NoChangeFlags(t *testing.T) {
 	writeIncludeTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	err := cmdIncludeTo([]string{"update", dir, "github.com/acme/tools"}, &buf)
+	err := cmdIncludeTo([]string{"update", dir, "github.com/example-org/tools"}, &buf)
 	if err == nil || !strings.Contains(err.Error(), "at least one") {
 		t.Errorf("expected at-least-one error, got: %v", err)
 	}
@@ -228,12 +228,12 @@ func TestCmdIncludeUpdate_Ref(t *testing.T) {
 	writeIncludeTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	if err := cmdIncludeTo([]string{"add", dir, "github.com/acme/tools", "--ref", "v1"}, &buf); err != nil {
+	if err := cmdIncludeTo([]string{"add", dir, "github.com/example-org/tools", "--ref", "v1"}, &buf); err != nil {
 		t.Fatal(err)
 	}
 
 	buf.Reset()
-	if err := cmdIncludeTo([]string{"update", dir, "github.com/acme/tools", "--ref", "v2"}, &buf); err != nil {
+	if err := cmdIncludeTo([]string{"update", dir, "github.com/example-org/tools", "--ref", "v2"}, &buf); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 
@@ -251,10 +251,10 @@ func TestCmdIncludeUpdate_Path(t *testing.T) {
 	writeIncludeTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	if err := cmdIncludeTo([]string{"add", dir, "github.com/acme/tools", "--path", "old"}, &buf); err != nil {
+	if err := cmdIncludeTo([]string{"add", dir, "github.com/example-org/tools", "--path", "old"}, &buf); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmdIncludeTo([]string{"update", dir, "github.com/acme/tools", "--path", "new"}, &buf); err != nil {
+	if err := cmdIncludeTo([]string{"update", dir, "github.com/example-org/tools", "--path", "new"}, &buf); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 
@@ -269,13 +269,13 @@ func TestCmdIncludeUpdate_FromPath(t *testing.T) {
 	writeIncludeTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	if err := cmdIncludeTo([]string{"add", dir, "github.com/acme/tools", "--path", "a", "--ref", "v1"}, &buf); err != nil {
+	if err := cmdIncludeTo([]string{"add", dir, "github.com/example-org/tools", "--path", "a", "--ref", "v1"}, &buf); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmdIncludeTo([]string{"add", dir, "github.com/acme/tools", "--path", "b", "--ref", "v1"}, &buf); err != nil {
+	if err := cmdIncludeTo([]string{"add", dir, "github.com/example-org/tools", "--path", "b", "--ref", "v1"}, &buf); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmdIncludeTo([]string{"update", dir, "github.com/acme/tools", "--from-path", "a", "--ref", "v2"}, &buf); err != nil {
+	if err := cmdIncludeTo([]string{"update", dir, "github.com/example-org/tools", "--from-path", "a", "--ref", "v2"}, &buf); err != nil {
 		t.Fatalf("update with from-path: %v", err)
 	}
 

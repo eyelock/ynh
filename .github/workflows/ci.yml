@@ -295,6 +295,7 @@ jobs:
           echo "  format: ${{ needs.format.result }}"
           echo "  artifacts: ${{ needs.artifacts.result }}"
           echo "  skill-security: ${{ needs['skill-security'].result }}"
+          echo "  packaging: ${{ needs.packaging.result }}"
 
           if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
             echo "One or more required checks failed"

@@ -8,7 +8,7 @@ func TestNormalizeName(t *testing.T) {
 		ok  bool
 	}{
 		"my-plugin":      {"my-plugin", true},
-		"acme.tools":     {"acme.tools", true},
+		"example.tools":  {"example.tools", true},
 		"My_Harness":     {"my-harness", false},
 		"ynh-dev":        {"ynh-dev", true},
 		"Has__Double":    {"has-double", false},

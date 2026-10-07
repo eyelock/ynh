@@ -66,7 +66,7 @@ func TestParseManifest_SpecExamples(t *testing.T) {
 
 // §5.5 gives these lists.
 func TestParseManifest_NameRule(t *testing.T) {
-	for _, name := range []string{"my-plugin", "acme.tools", "lint3r", "a"} {
+	for _, name := range []string{"my-plugin", "example.tools", "lint3r", "a"} {
 		if _, _, err := ParseManifest([]byte(`{"$schema":"` + PluginSchemaID + `","name":"` + name + `"}`)); err != nil {
 			t.Errorf("name %q: unexpected error %v", name, err)
 		}

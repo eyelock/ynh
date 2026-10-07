@@ -196,8 +196,8 @@ By default, harnesses can pull skills and agents from any Git repo via `includes
   "default_vendor": "claude",
   "allowed_remote_sources": [
     "github.com/eyelock/*",
-    "github.com/acme-corp/assistants",
-    "github.com/acme-corp/monorepo/**/ai-config/*"
+    "github.com/example-org/assistants",
+    "github.com/example-org/monorepo/**/ai-config/*"
   ]
 }
 ```
@@ -239,7 +239,7 @@ List a local source by its absolute path. `*` and `**` work as for URLs:
 ```json
 {
   "allowed_remote_sources": [
-    "github.com/acme-corp/**",
+    "github.com/example-org/**",
     "/srv/shared/skills",
     "/Users/me/shared/**"
   ]

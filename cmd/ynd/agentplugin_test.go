@@ -93,7 +93,7 @@ func TestLint_AgentPluginManifestNotHeldToYnhRules(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	writeFile(t, filepath.Join(dir, "plugin.json"),
-		[]byte(`{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"acme.tools"}`))
+		[]byte(`{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"example.tools"}`))
 	var out bytes.Buffer
 	var err error
 	withStdout(t, &out, func() { err = cmdLint([]string{dir}) })
@@ -101,7 +101,7 @@ func TestLint_AgentPluginManifestNotHeldToYnhRules(t *testing.T) {
 		t.Errorf("lint failed on a conforming manifest: %v\n%s", err, out.String())
 	}
 	writeFile(t, filepath.Join(dir, "plugin.json"),
-		[]byte(`{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"acme.tools","author":{"name":"a","x":1}}`))
+		[]byte(`{"$schema":"https://agent-plugins.org/schemas/1.0.0/plugin.schema.json","name":"example.tools","author":{"name":"a","x":1}}`))
 	withStdout(t, &out, func() { err = cmdLint([]string{dir}) })
 	if err == nil {
 		t.Error("lint passed a manifest the spec rejects")

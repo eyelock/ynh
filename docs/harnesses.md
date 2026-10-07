@@ -425,7 +425,7 @@ When `--pick` is supplied, `ynh include add` and `ynh include update` validate t
 Includes are keyed by **URL + path**. When a URL matches multiple includes and no path is given, the command errors and lists the paths that would disambiguate:
 
 ```
-Error: include "github.com/acme/tools" matches multiple entries:
+Error: include "github.com/example-org/tools" matches multiple entries:
   skills/dev
   skills/tech
 Use --path (remove) or --from-path (update) to disambiguate
