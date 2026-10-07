@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -122,7 +123,7 @@ func cmdPreview(args []string) error {
 	}
 
 	// Assemble into temp dir
-	tmpDir, err := assembleForVendor(srcDir, vendorName, profileName)
+	tmpDir, mcpSources, err := assembleForVendorSources(srcDir, vendorName, profileName)
 	if err != nil {
 		return err
 	}
@@ -144,22 +145,50 @@ func cmdPreview(args []string) error {
 			return fmt.Errorf("printing tree: %w", err)
 		}
 	}
+	printMCPSources(os.Stdout, mcpSources)
 
 	return nil
 }
 
-// assembleForVendor loads a harness from srcDir and assembles vendor-native
-// output into a temp directory. Returns the temp dir path (caller must clean up).
+// printMCPSources lists the MCP servers that came from an included harness,
+// each with where it came from. Servers the root declares are not listed: the
+// MCP file already shows them, and there is nothing to attribute.
+func printMCPSources(w io.Writer, sources []harness.MCPProvenance) {
+	var lines []string
+	for _, s := range sources {
+		if s.Source != harness.MCPSourceRoot {
+			lines = append(lines, fmt.Sprintf("  %s (from %s)", s.Server, s.Source))
+		}
+	}
+	if len(lines) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "MCP servers from included harnesses:")
+	for _, l := range lines {
+		_, _ = fmt.Fprintln(w, l)
+	}
+}
+
+// assembleForVendor is assembleForVendorSources without the MCP provenance.
 func assembleForVendor(srcDir string, vendorName string, profileName string) (string, error) {
+	dir, _, err := assembleForVendorSources(srcDir, vendorName, profileName)
+	return dir, err
+}
+
+// assembleForVendorSources loads a harness from srcDir and assembles vendor-native
+// output into a temp directory. Returns the temp dir path (caller must clean up).
+// It also returns where each MCP server came from.
+func assembleForVendorSources(srcDir string, vendorName string, profileName string) (string, []harness.MCPProvenance, error) {
 	adapter, err := vendor.Get(vendorName)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	// Load harness — handle bare AGENTS.md by working on a temp copy
 	h, workDir, err := loadHarnessForPreview(srcDir)
 	if err != nil {
-		return "", fmt.Errorf("loading harness: %w", err)
+		return "", nil, fmt.Errorf("loading harness: %w", err)
 	}
 	if workDir != "" {
 		defer func() { _ = os.RemoveAll(workDir) }()
@@ -170,7 +199,7 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 	if profileName != "" {
 		h, err = harness.ResolveProfile(h, profileName)
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 	}
 
@@ -184,7 +213,7 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 	if cfg != nil {
 		for _, del := range h.DelegatesTo {
 			if err := cfg.CheckSource(del.Git, h.Dir); err != nil {
-				return "", fmt.Errorf("delegate %q: %w", del.Git, err)
+				return "", nil, fmt.Errorf("delegate %q: %w", del.Git, err)
 			}
 		}
 	}
@@ -192,7 +221,7 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 	// Resolve includes
 	resolved, err := resolver.Resolve(h, cfg)
 	if err != nil {
-		return "", fmt.Errorf("resolving includes: %w", err)
+		return "", nil, fmt.Errorf("resolving includes: %w", err)
 	}
 
 	// Build content list
@@ -207,7 +236,7 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 	// Create temp dir for assembly
 	tmpDir, err := os.MkdirTemp("", "ynd-preview-*")
 	if err != nil {
-		return "", fmt.Errorf("creating temp dir: %w", err)
+		return "", nil, fmt.Errorf("creating temp dir: %w", err)
 	}
 
 	// Clean up on failure
@@ -220,40 +249,40 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 
 	// Assemble artifacts
 	if err := assembler.AssembleTo(tmpDir, adapter, content); err != nil {
-		return "", fmt.Errorf("assembling: %w", err)
+		return "", nil, fmt.Errorf("assembling: %w", err)
 	}
 
 	// Assemble delegates
 	if err := assembler.AssembleDelegates(tmpDir, adapter, h.DelegatesTo, h.Dir); err != nil {
-		return "", fmt.Errorf("assembling delegates: %w", err)
+		return "", nil, fmt.Errorf("assembling delegates: %w", err)
 	}
 
 	// Generate hook config, and copy in the scripts those hooks run
 	if len(h.Hooks) > 0 {
 		warnings, err := assembler.WriteSessionHooks(tmpDir, adapter, h.Dir, h.Hooks)
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 		for _, w := range warnings {
 			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 		}
 	}
 
-	// Generate MCP config
-	if len(h.MCPServers) > 0 {
-		// Same client-side resolution as ynh run, against the same data
-		// directory, so the preview shows what a run would write. Preview
-		// does not create the directory: it launches nothing.
-		servers, expErr := harness.AssembleMCPServers(h, harness.PluginDataDir(h), os.LookupEnv)
-		if expErr != nil {
-			return "", expErr
-		}
+	// Generate MCP config: the harness's own servers and those of its included
+	// harnesses, composed. Same client-side resolution as ynh run, against the
+	// same data directory, so the preview shows what a run would write.
+	// Preview does not create the directory: it launches nothing.
+	servers, mcpSources, expErr := harness.ComposeMCPServers(h, resolver.IncludedHarnesses(resolved), harness.PluginDataDir(h), os.LookupEnv)
+	if expErr != nil {
+		return "", nil, expErr
+	}
+	if len(servers) > 0 {
 		mcpFiles, err := adapter.GenerateMCPConfig(servers)
 		if err != nil {
-			return "", fmt.Errorf("generating MCP config: %w", err)
+			return "", nil, fmt.Errorf("generating MCP config: %w", err)
 		}
 		if err := writeGeneratedFiles(tmpDir, mcpFiles); err != nil {
-			return "", fmt.Errorf("writing MCP config: %w", err)
+			return "", nil, fmt.Errorf("writing MCP config: %w", err)
 		}
 	}
 
@@ -270,14 +299,14 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 	}
 	manifestFiles, err := adapter.GeneratePluginManifest(pj, tmpDir)
 	if err != nil {
-		return "", fmt.Errorf("writing plugin manifest: %w", err)
+		return "", nil, fmt.Errorf("writing plugin manifest: %w", err)
 	}
 	if err := writeGeneratedFiles(tmpDir, manifestFiles); err != nil {
-		return "", fmt.Errorf("writing plugin manifest: %w", err)
+		return "", nil, fmt.Errorf("writing plugin manifest: %w", err)
 	}
 
 	success = true
-	return tmpDir, nil
+	return tmpDir, mcpSources, nil
 }
 
 // writeGeneratedFiles writes a map of relative paths to file contents into baseDir.

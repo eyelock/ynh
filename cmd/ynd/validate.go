@@ -658,6 +658,7 @@ func validateHarnessHooks(hj map[string]any) []string {
 }
 
 // validateHarnessMCPServers validates the mcp_servers section inside harness.json.
+// A null entry removes a server inherited from an include and is accepted.
 func validateHarnessMCPServers(hj map[string]any) []string {
 	var issues []string
 
@@ -672,9 +673,12 @@ func validateHarnessMCPServers(hj map[string]any) []string {
 	}
 
 	for name, entry := range serversMap {
+		if entry == nil {
+			continue // null = remove a server inherited from an include
+		}
 		serverMap, ok := entry.(map[string]any)
 		if !ok {
-			issues = append(issues, fmt.Sprintf("mcp_servers.%s must be an object", name))
+			issues = append(issues, fmt.Sprintf("mcp_servers.%s must be an object or null", name))
 			continue
 		}
 		cmd, _ := serverMap["command"].(string)

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/config"
@@ -30,6 +31,15 @@ type ResolveResult struct {
 	Path    string // subpath within repo, if any
 	Cloned  bool   // true if freshly cloned (first time)
 	Cached  bool   // true if already in cache (not first time)
+
+	// Harness is the harness the include resolved to, when its directory
+	// holds a manifest, and nil for a plain artifact package. Its MCP servers
+	// reach a run through harness.ComposeMCPServers.
+	Harness *harness.Harness
+	// Chain is where the include came from, for provenance: Source plus
+	// "//Path", and for an include reached through another harness the chain
+	// of includes that led to it, "eyelock/a > eyelock/b".
+	Chain string
 }
 
 // repoFunc is a function that fetches or looks up a Git repo.
@@ -123,56 +133,178 @@ func CheckLocalInclude(cfg *config.Config, inc harness.Include, harnessDir strin
 	return nil
 }
 
+// chainLink is one step on the include chain being resolved, kept to catch a
+// harness that includes itself, directly or through others.
+type chainLink struct {
+	id    string // identity, see includeIdentity
+	label string // display name for the error message
+}
+
+// includeResolver carries what resolving one harness's includes shares across
+// the recursion into included harnesses.
+type includeResolver struct {
+	cfg   *config.Config
+	fetch repoFunc
+	// done holds the identity of every harness include already resolved, so a
+	// harness reached by two routes (a diamond) contributes once.
+	done map[string]bool
+}
+
 // resolveWith fetches all includes using the given repo function.
+//
+// An include whose directory holds a harness manifest is loaded, and its own
+// includes are resolved in turn unless the include picks artifacts. The
+// result lists dependencies before the harness that includes them, and p's
+// own includes in order, so that later content keeps overriding earlier.
 func resolveWith(p *harness.Harness, cfg *config.Config, fetch repoFunc) ([]ResolveResult, error) {
+	r := &includeResolver{cfg: cfg, fetch: fetch, done: map[string]bool{}}
+	chain := []chainLink{{id: dirIdentity(p.Dir), label: "root"}}
+	return r.resolve(p, chain, "")
+}
+
+// resolve resolves p's includes. via is the display chain of the harness p was
+// reached through, empty for the root.
+func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via string) ([]ResolveResult, error) {
 	var results []ResolveResult
 
 	for _, inc := range p.Includes {
-		if inc.IsLocal() {
-			if err := CheckLocalInclude(cfg, inc, p.Dir); err != nil {
-				return nil, err
-			}
-			basePath, err := resolveLocalSource(inc.GitSource, p.Dir)
-			if err != nil {
-				return nil, err
-			}
-			results = append(results, ResolveResult{
-				Content: ResolvedContent{
-					BasePath: basePath,
-					Paths:    inc.Pick,
-				},
-				Source: inc.Local,
-				Path:   inc.Path,
-				Cloned: false,
-				Cached: true,
-			})
-			continue
-		}
-
-		if cfg != nil {
-			if err := cfg.CheckSource(inc.Git, p.Dir); err != nil {
-				return nil, fmt.Errorf("include %q: %w", inc.Git, err)
-			}
-		}
-
-		basePath, repoResult, err := resolveGitSourceWith(inc.GitSource, p.Dir, fetch)
+		res, id, err := r.resolveOne(p, inc)
 		if err != nil {
 			return nil, err
 		}
+		res.Chain = res.Source
+		if res.Path != "" {
+			res.Chain += "//" + res.Path
+		}
+		label := res.Chain
+		if via != "" {
+			res.Chain = via + " > " + res.Chain
+		}
 
-		results = append(results, ResolveResult{
+		if !harness.IsHarnessDir(res.Content.BasePath) {
+			results = append(results, res)
+			continue
+		}
+
+		inner, err := harness.LoadDir(res.Content.BasePath)
+		if err != nil {
+			return nil, fmt.Errorf("loading included harness %s: %w", res.Chain, err)
+		}
+		res.Harness = inner
+
+		if len(inc.Pick) > 0 {
+			// A picked include contributes its picked artifacts and its MCP
+			// servers; its own includes are not followed.
+			if key := id + pickKey(inc.Pick); !r.done[key] {
+				r.done[key] = true
+				results = append(results, res)
+			}
+			continue
+		}
+
+		for _, link := range chain {
+			if link.id == id {
+				return nil, fmt.Errorf("include cycle: %s -> %s", chainLabels(chain), link.label)
+			}
+		}
+		if r.done[id] {
+			continue
+		}
+		deps, err := r.resolve(inner, append(chain[:len(chain):len(chain)], chainLink{id: id, label: label}), res.Chain)
+		if err != nil {
+			return nil, err
+		}
+		r.done[id] = true
+		results = append(results, deps...)
+		results = append(results, res)
+	}
+
+	return results, nil
+}
+
+func chainLabels(chain []chainLink) string {
+	labels := make([]string, len(chain))
+	for i, l := range chain {
+		labels[i] = l.label
+	}
+	return strings.Join(labels, " -> ")
+}
+
+func pickKey(pick []string) string {
+	sorted := slices.Sorted(slices.Values(pick))
+	return "|" + strings.Join(sorted, ",")
+}
+
+// dirIdentity is the identity of a local directory: its absolute path with
+// symlinks resolved where the path exists.
+func dirIdentity(dir string) string {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		abs = filepath.Clean(dir)
+	}
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		return real
+	}
+	return abs
+}
+
+// resolveOne resolves a single include of p to a ResolveResult, applying the
+// allow-list, and returns the include's identity for cycle detection.
+func (r *includeResolver) resolveOne(p *harness.Harness, inc harness.Include) (ResolveResult, string, error) {
+	if inc.IsLocal() {
+		if err := CheckLocalInclude(r.cfg, inc, p.Dir); err != nil {
+			return ResolveResult{}, "", err
+		}
+		basePath, err := resolveLocalSource(inc.GitSource, p.Dir)
+		if err != nil {
+			return ResolveResult{}, "", err
+		}
+		return ResolveResult{
 			Content: ResolvedContent{
 				BasePath: basePath,
 				Paths:    inc.Pick,
 			},
-			Source: ShortGitURL(inc.Git),
+			Source: inc.Local,
 			Path:   inc.Path,
-			Cloned: repoResult.Cloned,
-			Cached: !repoResult.Cloned,
-		})
+			Cloned: false,
+			Cached: true,
+		}, dirIdentity(basePath), nil
 	}
 
-	return results, nil
+	if r.cfg != nil {
+		if err := r.cfg.CheckSource(inc.Git, p.Dir); err != nil {
+			return ResolveResult{}, "", fmt.Errorf("include %q: %w", inc.Git, err)
+		}
+	}
+
+	basePath, repoResult, err := resolveGitSourceWith(inc.GitSource, p.Dir, r.fetch)
+	if err != nil {
+		return ResolveResult{}, "", err
+	}
+
+	id := ShortGitURL(GitSourceURL(inc.Git, p.Dir)) + "@" + inc.Ref + "//" + inc.Path
+	return ResolveResult{
+		Content: ResolvedContent{
+			BasePath: basePath,
+			Paths:    inc.Pick,
+		},
+		Source: ShortGitURL(inc.Git),
+		Path:   inc.Path,
+		Cloned: repoResult.Cloned,
+		Cached: !repoResult.Cloned,
+	}, id, nil
+}
+
+// IncludedHarnesses lists the harnesses among resolved, in content order, for
+// harness.ComposeMCPServers and harness.ComposeMCPServersForExport.
+func IncludedHarnesses(resolved []ResolveResult) []harness.IncludedHarness {
+	var out []harness.IncludedHarness
+	for _, r := range resolved {
+		if r.Harness != nil {
+			out = append(out, harness.IncludedHarness{Harness: r.Harness, Source: r.Chain})
+		}
+	}
+	return out
 }
 
 // ResolveGitSource clones/updates a GitSource and returns the resolved base path,
