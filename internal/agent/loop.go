@@ -396,9 +396,9 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		opts.testPreRun(ctx)
 	}
 	// An interrupt during loading and assembly: nothing has run yet, so there
-	// is nothing to checkpoint, but it is still an interrupt.
+	// is no checkpoint and nothing to resume, but it is still an interrupt.
 	if ctx.Err() != nil {
-		return result, &ExitError{Code: ExitInterrupted, Message: "interrupted (resumable)"}
+		return result, &ExitError{Code: ExitInterrupted, Message: "interrupted before the run started"}
 	}
 
 	if resuming {

@@ -276,6 +276,9 @@ func TestRunLoop_InterruptDuringPreRunExits31(t *testing.T) {
 	if !asExitError(err, &ee) || ee.Code != ExitInterrupted {
 		t.Fatalf("want ExitInterrupted (%d), got %v", ExitInterrupted, err)
 	}
+	if ee.Message != "interrupted before the run started" {
+		t.Errorf("message = %q, want it to say the run never started, not that it is resumable", ee.Message)
+	}
 	if len(mb.startOpts) != 0 {
 		t.Error("a worker started after the run was interrupted")
 	}
