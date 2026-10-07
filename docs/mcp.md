@@ -120,7 +120,7 @@ Each adapter spells the canonical transport in the vendor's own words:
 
 Claude Code rejects a `url` entry that carries no `type` and reads an untyped entry as stdio, so the `http` on a remote server is not cosmetic.
 
-> **Claude Code:** `ynh run` passes the assembled `.claude/` directory as `--plugin-dir`, and Claude activates its MCP servers (and hooks) from there with no `/plugin install` step. They load alongside your own MCP servers (user config, claude.ai connectors); ynh does not isolate them yet (tracked in #548). Copilot is the exception: see [Copilot Format](#copilot-format).
+> **Claude Code:** `ynh run` passes the assembled `.claude/` directory as `--plugin-dir`, and Claude activates its MCP servers (and hooks) from there with no `/plugin install` step. They load alongside your own MCP servers (user config, claude.ai connectors) unless you isolate them: see [Running with only the harness's servers](#running-with-only-the-harness-s-servers). Copilot is the exception: see [Copilot Format](#copilot-format).
 
 ### Claude Code Format
 
@@ -203,6 +203,38 @@ Copilot requires an explicit `"type"` field on every server (`"local"` for a `co
 ```
 
 **Delivery is project-root, not plugin-dir.** Copilot does not read a plugin-bundled `.mcp.json` via `--plugin-dir` (confirmed by hand-testing), so `ynh run` projects the generated config directly into the calling project's `.github/mcp.json` instead: a file fully owned by ynh, distinct from anything the user might hand-author. `ynd export` writes the same document to `.github/mcp.json` at the plugin root, where an installed Copilot plugin reads it (untested by hand: a plugin loaded with `--plugin-dir` ignores it, as above). The manifest sits beside it at `.claude-plugin/plugin.json` in the plugin root, next to the exported skills, whatever other files the export holds.
+
+## Running with only the harness's servers
+
+By default a harness's MCP servers load alongside the servers you have already configured: your user config and, on Claude Code, your claude.ai connectors. To run with only the harness's own servers, isolate them.
+
+Two ways, which combine:
+
+- `mcp_isolation` in the manifest, a boolean that defaults to `false`. A profile may set it too, and a profile's value replaces the harness's when set, either way; a profile that leaves it out inherits.
+- `ynh run --isolated-mcp`, which turns isolation on for that run. It cannot turn isolation off: a harness that declares `"mcp_isolation": true` stays isolated.
+
+```json
+{
+  "mcp_servers": { "docs-api": { "url": "https://example.com/mcp" } },
+  "mcp_isolation": true,
+  "profiles": {
+    "open": { "mcp_isolation": false }
+  }
+}
+```
+
+Isolation is a launch setting. It changes how `ynh run` and `ynh agent run` start the vendor CLI; an export (`ynd export`, `ynd marketplace build`) and `ynd preview` are unchanged.
+
+| Vendor | Isolation |
+|--------|-----------|
+| Claude Code | Full. ynh adds `--strict-mcp-config` and, when the harness has servers, `--mcp-config=<run dir>/.claude/.mcp.json`; `--plugin-dir` stays, so hooks still fire. A harness with no servers gets none at all. |
+| Copilot | Partial. ynh adds `--disable-builtin-mcps` and warns: servers in `~/.copilot/mcp-config.json` still load. |
+| Codex | Not supported. ynh warns that your servers will load, and launches normally. |
+| Cursor | Not supported. ynh warns that your servers will load, and launches normally. |
+
+The warning is one line on stderr, prefixed `warning:`, and never fails the run. `ynh agent run` applies isolation on the Claude backend only and warns on the others.
+
+**Tool names change on Claude Code.** Without isolation a harness's servers are named `plugin:<harness>:<server>`; with it they are named `<server>`. A permission rule or hook matcher that names a tool by its server prefix must use the name for the mode the harness runs in.
 
 ## Root-Harness-Only Rule
 

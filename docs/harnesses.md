@@ -251,6 +251,10 @@ Lifecycle hooks. See [Hooks](hooks.md) for full reference.
 
 MCP server declarations. See [MCP Servers](mcp.md) for full reference.
 
+### mcp_isolation (optional)
+
+Boolean, default `false`. When `true`, `ynh run` launches the harness with only its own MCP servers, not alongside the ones you have configured. `ynh run --isolated-mcp` turns it on for one run. See [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
+
 ### profiles (optional)
 
 Named configuration variants. A profile can override `hooks`, override `mcp_servers`, and append additional `includes`. It cannot override identity fields (`name`, `version`, `description`), `delegates_to`, or `default_vendor`. See [Profiles](profiles.md) for full scope reference.

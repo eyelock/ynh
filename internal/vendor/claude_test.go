@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
@@ -469,5 +470,66 @@ func TestClaudeApplyRuntimeInstructions(t *testing.T) {
 	}
 	if args[1] != "PR #22 in eyelock/assistants" {
 		t.Errorf("args[1] = %q, want PR #22 in eyelock/assistants", args[1])
+	}
+}
+
+func TestClaudeIsolateMCP(t *testing.T) {
+	withServers := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(withServers, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mcpPath := filepath.Join(withServers, ".claude", ".mcp.json")
+	if err := os.WriteFile(mcpPath, []byte(`{"mcpServers":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	noServers := t.TempDir()
+
+	tests := []struct {
+		name string
+		dir  string
+		want []string
+	}{
+		{"with servers", withServers, []string{"--strict-mcp-config", "--mcp-config=" + mcpPath}},
+		{"without servers", noServers, []string{"--strict-mcp-config"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args, warning := (&Claude{}).IsolateMCP(tt.dir)
+			if warning != "" {
+				t.Errorf("unexpected warning %q", warning)
+			}
+			if !reflect.DeepEqual(args, tt.want) {
+				t.Errorf("args = %v, want %v", args, tt.want)
+			}
+		})
+	}
+}
+
+// Isolation arguments ride after a positional prompt and a non-interactive -p
+// prompt: the "=" spelling keeps variadic --mcp-config from swallowing them,
+// and without isolation the argv is unchanged.
+func TestBuildClaudeArgs_Isolation(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mcpPath := filepath.Join(dir, ".claude", ".mcp.json")
+	if err := os.WriteFile(mcpPath, []byte(`{"mcpServers":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pluginDir := filepath.Join(dir, ".claude")
+
+	plain := buildClaudeArgs(dir, "hello", nil)
+	wantPlain := []string{"claude", "hello", "--plugin-dir", pluginDir, "--add-dir", dir}
+	if !reflect.DeepEqual(plain, wantPlain) {
+		t.Errorf("plain argv = %v, want %v", plain, wantPlain)
+	}
+
+	iso, _ := (&Claude{}).IsolateMCP(dir)
+	got := buildClaudeArgs(dir, "hello", iso)
+	wantIso := []string{"claude", "hello", "--plugin-dir", pluginDir, "--add-dir", dir,
+		"--strict-mcp-config", "--mcp-config=" + mcpPath}
+	if !reflect.DeepEqual(got, wantIso) {
+		t.Errorf("isolated argv = %v, want %v", got, wantIso)
 	}
 }

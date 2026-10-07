@@ -382,6 +382,12 @@ func cmdRun(args []string) error {
 			}
 		}
 
+		// MCP isolation: the harness's own declaration, or --isolated-mcp,
+		// which can only turn it on.
+		if p.MCPIsolation || ra.IsolatedMCP {
+			vendorArgs = append(vendorArgs, isolationLaunchArgs(adapter, runDir, os.Stderr)...)
+		}
+
 		// Launch
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
 		if ra.Resume {
@@ -404,6 +410,16 @@ func cmdRun(args []string) error {
 		}
 		return adapter.LaunchInteractive(runDir, vendorArgs)
 	}
+}
+
+// isolationLaunchArgs returns the vendor arguments that isolate the run's MCP
+// servers, printing the vendor's warning when it cannot isolate fully.
+func isolationLaunchArgs(adapter vendor.Adapter, runDir string, stderr io.Writer) []string {
+	args, warning := adapter.IsolateMCP(runDir)
+	if warning != "" {
+		_, _ = fmt.Fprintf(stderr, "warning: %s\n", warning)
+	}
+	return args
 }
 
 // resolveResumeSession decides which session `--resume` should continue.
@@ -576,6 +592,7 @@ type runArgs struct {
 	VendorArgs   []string // passthrough args for vendor CLI
 	Action       string   // "install", "clean", or ""
 	Interactive  bool     // --interactive: stay in session after initial prompt
+	IsolatedMCP  bool     // --isolated-mcp: run with only the harness's MCP servers
 	Resume       bool     // --resume: continue a previous session
 	ResumeID     string   // --resume=<id>: continue one specific session
 }
@@ -631,6 +648,8 @@ func parseRunArgs(args []string) runArgs {
 			ra.Action = "clean"
 		case flagArgs[i] == "--interactive":
 			ra.Interactive = true
+		case flagArgs[i] == "--isolated-mcp":
+			ra.IsolatedMCP = true
 		case !strings.HasPrefix(flagArgs[i], "-"):
 			if firstPositional {
 				// First positional arg is the harness name

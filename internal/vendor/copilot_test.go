@@ -501,3 +501,25 @@ func TestBuildCopilotArgs_InstructionsFrontmatterMerged(t *testing.T) {
 		})
 	}
 }
+
+func TestIsolateMCP_PartialAndUnsupportedVendors(t *testing.T) {
+	dir := t.TempDir()
+
+	args, warning := (&Copilot{}).IsolateMCP(dir)
+	if len(args) != 1 || args[0] != "--disable-builtin-mcps" {
+		t.Errorf("copilot args = %v, want [--disable-builtin-mcps]", args)
+	}
+	if !strings.Contains(warning, "~/.copilot/mcp-config.json") {
+		t.Errorf("copilot warning = %q, want it to name ~/.copilot/mcp-config.json", warning)
+	}
+
+	for name, a := range map[string]Adapter{"codex": &Codex{}, "cursor": &Cursor{}} {
+		args, warning := a.IsolateMCP(dir)
+		if len(args) != 0 {
+			t.Errorf("%s args = %v, want none", name, args)
+		}
+		if !strings.Contains(warning, "not supported") || strings.Contains(warning, "\n") {
+			t.Errorf("%s warning = %q, want a one-line 'not supported' warning", name, warning)
+		}
+	}
+}

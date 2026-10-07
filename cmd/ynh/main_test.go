@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -1638,5 +1640,70 @@ func TestCmdUninstall_PointerByBareName(t *testing.T) {
 
 	if _, err := os.Stat(harness.PointerPath("my-fork")); !os.IsNotExist(err) {
 		t.Errorf("schema-1 pointer still exists after bare-name uninstall: err=%v", err)
+	}
+}
+
+func TestParseRunArgs_IsolatedMCP(t *testing.T) {
+	t.Setenv("YNH_FOCUS", "")
+	t.Setenv("YNH_HARNESS_FILE", "")
+
+	tests := []struct {
+		name       string
+		args       []string
+		want       bool
+		wantPrompt string
+		wantVendor []string
+	}{
+		{"absent", []string{"h"}, false, "", nil},
+		{"present", []string{"h", "--isolated-mcp"}, true, "", nil},
+		{"with prompt", []string{"h", "--isolated-mcp", "--", "go"}, true, "go", nil},
+		{"not forwarded to the vendor", []string{"h", "--isolated-mcp", "--verbose"}, true, "", []string{"--verbose"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ra := parseRunArgs(tt.args)
+			if ra.IsolatedMCP != tt.want {
+				t.Errorf("IsolatedMCP = %v, want %v", ra.IsolatedMCP, tt.want)
+			}
+			if ra.Prompt != tt.wantPrompt {
+				t.Errorf("Prompt = %q, want %q", ra.Prompt, tt.wantPrompt)
+			}
+			if !reflect.DeepEqual(ra.VendorArgs, tt.wantVendor) {
+				t.Errorf("VendorArgs = %v, want %v", ra.VendorArgs, tt.wantVendor)
+			}
+		})
+	}
+}
+
+func TestIsolationLaunchArgs_Warnings(t *testing.T) {
+	dir := t.TempDir()
+	for _, tt := range []struct {
+		vendor   string
+		wantArgs int
+		wantWarn bool
+	}{
+		{"claude", 1, false},
+		{"copilot", 1, true},
+		{"codex", 0, true},
+		{"cursor", 0, true},
+	} {
+		t.Run(tt.vendor, func(t *testing.T) {
+			adapter, err := vendor.Get(tt.vendor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var buf bytes.Buffer
+			args := isolationLaunchArgs(adapter, dir, &buf)
+			if len(args) != tt.wantArgs {
+				t.Errorf("args = %v, want %d", args, tt.wantArgs)
+			}
+			out := buf.String()
+			if tt.wantWarn != (out != "") {
+				t.Errorf("stderr = %q, want warning %v", out, tt.wantWarn)
+			}
+			if tt.wantWarn && (!strings.HasPrefix(out, "warning: ") || strings.Count(out, "\n") != 1) {
+				t.Errorf("warning %q is not a single 'warning: ' line", out)
+			}
+		})
 	}
 }
