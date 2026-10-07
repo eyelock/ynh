@@ -257,15 +257,14 @@ func cmdRun(args []string) error {
 		}
 
 		// Generate vendor-native hook config files, and copy in the scripts
-		// those hooks run from the harness
-		if len(p.Hooks) > 0 {
-			warnings, err := assembler.WriteSessionHooks(runDir, adapter, harnessDir, p.Hooks)
-			if err != nil {
-				return err
-			}
-			for _, w := range warnings {
-				fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-			}
+		// those hooks run from the harness. The hooks are the root's and
+		// those of the included harnesses that consented to them.
+		hookWarnings, err := assembler.WriteComposedSessionHooks(runDir, adapter, p, resolved)
+		if err != nil {
+			return err
+		}
+		for _, w := range hookWarnings {
+			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 		}
 
 		// Generate vendor-native MCP config files. The servers are the

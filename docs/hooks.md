@@ -2,7 +2,7 @@
 
 Hooks are shell commands that vendors execute at specific lifecycle events during an agent session. They bridge the **guide layer** (what ynh manages) to the **sensor layer** (linters, tests, validators) by declaring *when* a command should run, without embedding the tool itself.
 
-A harness declares hooks in `.agents/harness/plugin.json` at the top level. At assembly time, ynh translates them into the vendor-native config format. A hook command is a regular shell command: a tool on the host machine, a script in the project, or a script the harness ships in its own tree. A command that starts with `./` names a script the harness ships; ynh carries it with the hooks and rewrites the path to reach it, in a session and in a plugin alike. See [Hook script paths](#hook-script-paths).
+A harness declares hooks in `.agents/harness/plugin.json` at the top level. A harness it includes can contribute its own hooks too, if the include opts in; see [Hooks from Included Harnesses](#hooks-from-included-harnesses). At assembly time, ynh translates them into the vendor-native config format. A hook command is a regular shell command: a tool on the host machine, a script in the project, or a script the harness ships in its own tree. A command that starts with `./` names a script the harness ships; ynh carries it with the hooks and rewrites the path to reach it, in a session and in a plugin alike. See [Hook script paths](#hook-script-paths).
 
 > **Note:** Hooks can vary by [profile](harnesses.md#profiles). When a profile is selected, its `hooks` field is merged per event: an event the profile declares replaces the default for that event, and events it does not declare are inherited. See [Profiles](profiles.md#merge-semantics).
 
@@ -308,15 +308,60 @@ exit 0     # green → quiet, end normally
 
 Cursor's `stop` and Codex's `Stop` route output and guard against loops differently; verify per vendor before relying on this exact pattern elsewhere.
 
-## Root-Harness-Only Rule
+## Hooks from Included Harnesses
 
-Only the root harness's hooks are used. An included harness contributes `skills/`, `agents/`, `rules/` and `commands/`, which are files, and its MCP servers, and nothing else.
+An included harness's hooks are **opt-in, per include**. A hook is command execution on every lifecycle event, so an include that could contribute one silently would turn composed content into an execution surface the root author never declared. The root author says yes, include by include, with `"hooks": true`:
 
-An included harness's manifest is opened, for its [MCP servers](mcp.md#servers-from-included-harnesses) and its own includes, but nothing in it is read for hooks: the resolver hands the assembler files and MCP servers, never hook declarations. Root-only is a property of what the resolver carries, not a filter applied afterwards.
+```json
+{
+  "includes": [
+    { "local": "../guard", "hooks": true },
+    { "git": "github.com/acme/linters", "ref": "v1.2.0" }
+  ]
+}
+```
 
-That is deliberate. A hook is command execution on every lifecycle event, so an include that could contribute one would turn inert composed content into an execution surface the root author never declared.
+```bash
+ynh include add <harness> <url> --hooks     # sets "hooks": true
+ynh profile include add <harness> <profile> <url> --hooks
+```
 
-If an included harness needs hooks, copy its hook declarations into the root harness's `.agents/harness/plugin.json`. Merging that copy at authoring time — generated, labelled blocks with drift detection — is the agreed direction rather than resolving includes at run time.
+`hooks` defaults to false. `ynh include add --replace --hooks` changes an existing include.
+
+### What is carried
+
+- **Only with consent.** An included harness's `hooks` reach the session only when the include entry that brought it in says `"hooks": true`. A picked include (`pick`) brings its hooks too when it consents.
+- **At every link.** For a harness reached through another, consent must hold along the whole chain: the root's include of B says `"hooks": true`, and B's include of C says `"hooks": true`. If either link is missing, C's hooks are not carried.
+- **After its profile.** If a namespaced profile was selected for the included harness (`--profile guard:strict`), its hooks are the result of that profile: an event the profile declares replaces the harness's own entries for that event, and events it does not declare are inherited (see [Profiles](profiles.md#merge-semantics)). That result is what is carried.
+- **Merge order.** Per event, entries are appended: included harnesses first, in content order (dependencies before the harness that includes them), the root's own entries last. Nothing is de-duplicated: an identical entry from two sources runs twice.
+- **Sensors and delegates are not carried.** Only hooks are opt-in. See [sensors](sensors.md#includes-root-only).
+
+### Warning without consent
+
+When an included harness declares hooks and its include does not consent, ynh does not fail. It prints one warning per such harness on stderr, every time the harness is assembled (`ynh run`, `ynh agent run`, `ynd preview`, `ynd export`):
+
+```
+  warning: included harness guard declares hooks (before_tool, on_stop) that are not active; add "hooks": true to its include to run them
+```
+
+The events are listed sorted. The source is the include's name as shown elsewhere, with the chain (`eyelock/a > eyelock/b`) for a harness reached through another. `ynd preview` also lists them after the assembled tree, under "Hooks from included harnesses:" (active) and "Hooks from included harnesses, not active" (declined), each with the event and its source.
+
+### Script placement
+
+A `./` command from an included harness names a script inside **that harness's** directory. ynh copies each such script into the run or plugin under a per-include subdirectory, `scripts/_include/<namespace>/`, keeping the script's path inside its harness, and rewrites the command to `./scripts/_include/<namespace>/<path>`. The vendor then anchors that command exactly as it does a root script (see [Hook script paths](#hook-script-paths)), so an included `./scripts/mark.sh` on Claude Code becomes `"${CLAUDE_PLUGIN_ROOT}"/scripts/_include/guard/scripts/mark.sh`, with the script at `.claude/scripts/_include/guard/scripts/mark.sh` in a session.
+
+- `<namespace>` is the one [selection](profiles.md#profiles-and-focuses-of-included-harnesses) uses: the include's `as` alias, or the harness's name. When two harnesses that carry hooks share a namespace, each directory also carries a short hash of the include's chain, so `scripts/_include/guard-3fa9c01d/`; the hash depends only on where the harness came from, so it is the same on every run.
+- The root's own scripts are unaffected, so a root `scripts/mark.sh` and an included `scripts/mark.sh` never collide.
+- Only the command's first word is the script, and only a command starting with `./`. Absolute, variable-anchored (`$CLAUDE_PROJECT_DIR/x.sh`) and PATH-style commands are left exactly as declared.
+- A script that climbs out of the included harness (`./../x.sh`) is an error naming the include, and nothing is written. A script the include names but does not ship as a regular file gets the same warning as a root script, naming the include: `hook script ./scripts/gone.sh is not a file in included harness guard, so the session does not carry it`.
+
+### Export
+
+`ynd export` and `ynd marketplace build` carry consented include hooks the same way: they are merged into the vendor's plugin hook file (`hooks/<vendor>.json`), ahead of the root's, and each script is copied to `scripts/_include/<namespace>/...` in the plugin, where the vendor's plugin-root variable reaches it. An include without consent adds nothing to the plugin, and the warning above is printed once for the export.
+
+### `ynh hook export`
+
+`ynh hook export` writes the project's own `.claude/settings.json`, where a `./` command is anchored to `$CLAUDE_PROJECT_DIR`, the project. An included harness's script is not in the project and a settings file cannot reach into the include's directory, so the export includes consented include hooks that are plain commands (absolute, `$CLAUDE_PROJECT_DIR`-anchored or PATH-style) and refuses, naming the include and the script, when one runs a `./` script. Either anchor the command in the included harness, or run the harness with `ynh run`, which does carry the script. Includes are resolved only when one of them says `"hooks": true`, so exporting a harness's own hooks still needs no network. An include without consent is warned about, as above.
 
 ## Portable Hook Script Advice
 

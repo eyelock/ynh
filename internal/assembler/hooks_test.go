@@ -125,7 +125,7 @@ func TestWriteSessionHooks(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			warnings, err := WriteSessionHooks(runDir, adapter, harnessDir, hooks)
+			warnings, err := WriteSessionHooks(runDir, adapter, harnessDir, HookSet{Hooks: hooks})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -177,7 +177,7 @@ func TestWriteSessionHooks_Copilot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	warnings, err := WriteSessionHooks(runDir, adapter, harnessDir, hooks)
+	warnings, err := WriteSessionHooks(runDir, adapter, harnessDir, HookSet{Hooks: hooks})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,7 @@ func TestWriteSessionHooks_Warnings(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			warnings, err := WriteSessionHooks(runDir, adapter, harnessDir, hooks)
+			warnings, err := WriteSessionHooks(runDir, adapter, harnessDir, HookSet{Hooks: hooks})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -264,7 +264,7 @@ func TestCopyHookScripts_NoWriteThroughSymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	warnings, err := CopyHookScripts(harnessDir, destDir, hooks, "the session")
+	warnings, err := CopyHookScripts(harnessDir, destDir, HookSet{Hooks: hooks}, "the session")
 	if err != nil {
 		t.Fatal(err)
 	}
