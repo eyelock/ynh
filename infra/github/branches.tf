@@ -75,35 +75,13 @@ resource "github_repository_ruleset" "this" {
   }
 }
 
-# The classic branch protection on main and develop that the rulesets replace. It was set by hand
-# and is in no state, and Terraform cannot import a resource and remove it in the same plan (an
-# import block needs its target in the configuration, which a removed block takes out), so the
-# same apply deletes it through the API once the rulesets exist: the new rulesets are always in
-# force before the old protection goes. A branch with no protection is already as intended (404),
-# so this is safe to run again and does nothing after the first apply; delete it then.
-resource "terraform_data" "remove_classic_protection" {
-  for_each = local.protected_branches
+# The first apply (October 2026) deleted the hand-set classic branch protection that the rulesets
+# replace, through a one-off terraform_data step. It has done its job; this forgets it without
+# running anything against GitHub.
+removed {
+  from = terraform_data.remove_classic_protection
 
-  triggers_replace = [github_repository_ruleset.this[each.key].ruleset_id]
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      if out=$(gh api -X DELETE "repos/$OWNER/$REPOSITORY/branches/$BRANCH/protection" 2>&1); then
-        echo "removed classic protection from $BRANCH"
-      elif [[ "$out" == *"HTTP 404"* ]]; then
-        echo "$BRANCH has no classic protection"
-      else
-        echo "$out" >&2
-        exit 1
-      fi
-    EOT
-
-    interpreter = ["bash", "-c"]
-
-    environment = {
-      OWNER      = var.owner
-      REPOSITORY = github_repository.ynh.name
-      BRANCH     = each.key
-    }
+  lifecycle {
+    destroy = false
   }
 }

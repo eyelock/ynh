@@ -79,6 +79,22 @@ git commit -am "chore: stamp harness manifests at vX.Y.Z"
 caught by CI rather than by whoever installs the release. Run it on the release
 branch, before the PR, so `main` and the tag carry the right number.
 
+### Bring in `main`
+
+The "Main Branch Protection" ruleset requires a pull request's branch to be up to
+date with `main`. `main` carries commits `develop` never gets as commits (each
+release's own merge commit, and any hotfix), even though their content arrives
+through the back-merges, so a fresh release branch is always behind. Merge `main`
+in; the tree must not change, and if it does, stop: something on `main` never
+reached `develop`.
+
+```bash
+git fetch origin main
+before=$(git rev-parse HEAD^{tree})
+git merge --no-ff origin/main -m "Merge main into release/vX.Y.Z"
+[ "$(git rev-parse HEAD^{tree})" = "$before" ] && echo "tree unchanged"
+```
+
 ```bash
 git push -u origin release/vX.Y.Z
 gh pr create --base main --head release/vX.Y.Z \
