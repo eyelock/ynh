@@ -130,8 +130,9 @@ the two must be set.
 | `ref` | no | Git tag, branch, or commit (Git sources only) |
 | `path` | no | Subdirectory within the resolved source. Must be a relative path with no `..` traversal. |
 | `pick` | no | Specific artifact paths to include. If omitted, includes all. |
+| `as` | no | Namespace for the included harness's focuses and profiles, in place of its own name. A harness name: letters, digits, `.`, `_`, `-`, and no `:`. See [Profiles and focuses of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses). |
 
-If the resolved directory holds a harness manifest, the include is a harness: its `mcp_servers` come with it, and, unless `pick` is set, so do its own `includes`. Its hooks, focuses, profiles and sensors do not. See [Servers from Included Harnesses](mcp.md#servers-from-included-harnesses).
+If the resolved directory holds a harness manifest, the include is a harness: its `mcp_servers` come with it, and, unless `pick` is set, so do its own `includes`. Its hooks and sensors do not. Its focuses and profiles are not applied unless you select them by namespace (`--profile github:ci`, `--focus github:triage`). See [Servers from Included Harnesses](mcp.md#servers-from-included-harnesses) and [Profiles and focuses of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses).
 
 Local includes are useful when a harness ships bundled artifact directories
 **inside** its root, or when a profile needs to pull in an adjacent
@@ -410,8 +411,10 @@ After a harness is installed, use `ynh include` to add, remove, or update its Gi
 ### Add an include
 
 ```bash
-ynh include add <harness> <url> [--path <subdir>] [--pick <items>] [--ref <ref>] [--replace]
+ynh include add <harness> <url> [--path <subdir>] [--pick <items>] [--ref <ref>] [--as <alias>] [--replace]
 ```
+
+`--as <alias>` sets the include's `as`: the namespace its focuses and profiles are selected under. The alias must be a valid harness name and may not contain `:`.
 
 `<harness>` is the installed harness name **or** a filesystem path to a harness directory. Names resolve to `~/.ynh/harnesses/<name>`; a leading `/` or `.` forces path semantics.
 

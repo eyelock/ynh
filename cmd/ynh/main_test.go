@@ -33,6 +33,12 @@ func TestParseRunArgs(t *testing.T) {
 		wantAction  string
 	}{
 		{
+			name:        "repeated profile flags, one per harness",
+			args:        []string{"my-harness", "--profile", "work", "--profile", "github:ci"},
+			wantName:    "my-harness",
+			wantProfile: "work,github:ci",
+		},
+		{
 			name:     "harness name as first positional",
 			args:     []string{"my-harness"},
 			wantName: "my-harness",
@@ -178,8 +184,8 @@ func TestParseRunArgs(t *testing.T) {
 			if ra.VendorFlag != tt.wantVendor {
 				t.Errorf("VendorFlag = %q, want %q", ra.VendorFlag, tt.wantVendor)
 			}
-			if ra.ProfileFlag != tt.wantProfile {
-				t.Errorf("ProfileFlag = %q, want %q", ra.ProfileFlag, tt.wantProfile)
+			if got := strings.Join(ra.ProfileFlags, ","); got != tt.wantProfile {
+				t.Errorf("ProfileFlags = %q, want %q", got, tt.wantProfile)
 			}
 			if ra.FocusFlag != tt.wantFocus {
 				t.Errorf("FocusFlag = %q, want %q", ra.FocusFlag, tt.wantFocus)
@@ -1705,5 +1711,39 @@ func TestIsolationLaunchArgs_Warnings(t *testing.T) {
 				t.Errorf("warning %q is not a single 'warning: ' line", out)
 			}
 		})
+	}
+}
+
+func TestCmdRun_RepeatedProfileRules(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	t.Setenv("YNH_FOCUS", "")
+	t.Setenv("YNH_PROFILE", "")
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"duplicate root profile", []string{"h", "--profile", "a", "--profile", "b"}, "at most one unqualified profile"},
+		{"duplicate namespace", []string{"h", "--profile", "g:a", "--profile", "g:b"}, `namespace "g"`},
+		{"focus and namespaced profile", []string{"h", "--focus", "g:f", "--profile", "g:a"}, "cannot use --focus and --profile together"},
+		{"malformed value", []string{"h", "--profile", "a:b:c"}, "expected name or namespace:name"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := cmdRun(tt.args)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want containing %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCmdRun_EnvProfileMayBeNamespaced(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	t.Setenv("YNH_FOCUS", "")
+	t.Setenv("YNH_PROFILE", "a:b:c")
+	err := cmdRun([]string{"h"})
+	if err == nil || !strings.Contains(err.Error(), "expected name or namespace:name") {
+		t.Fatalf("YNH_PROFILE should be parsed as a selection, got: %v", err)
 	}
 }

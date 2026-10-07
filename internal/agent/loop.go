@@ -52,9 +52,14 @@ type RunOptions struct {
 	// Profile is an optional profile name to apply to the harness before
 	// assembly. Mirrors `ynh run --profile`. Mutually exclusive with Focus.
 	Profile string
+	// IncludedProfiles maps a namespace to the profile applied to the
+	// included harness that answers to it, from `--profile namespace:name`.
+	// The root is unaffected. Mutually exclusive with Focus.
+	IncludedProfiles map[string]string
 	// Focus is an optional focus name. The focus's prompt becomes the task
 	// and the focus's bound profile (if any) is applied. Mirrors
-	// `ynh run --focus`. Mutually exclusive with Task and Profile.
+	// `ynh run --focus`. "namespace:name" names a focus of an included
+	// harness. Mutually exclusive with Task and Profile.
 	Focus string
 	// Backend selects the worker backend ("claude", "codex" or "cursor").
 	// Defaults to "claude", or on a resume to the checkpoint's backend, which
@@ -350,8 +355,15 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		}
 
 		// Resolve focus → prompt + bound profile. Mirrors `ynh run --focus`.
-		profileName := opts.Profile
+		sel := harness.Selection{Profile: opts.Profile, Included: opts.IncludedProfiles}
 		if opts.Focus != "" {
+			var selErr error
+			if sel.FocusNS, sel.FocusName, selErr = harness.SplitQualified(opts.Focus); selErr != nil {
+				return result, selErr
+			}
+		}
+		profileName := opts.Profile
+		if opts.Focus != "" && sel.FocusNS == "" {
 			focus, ok := harnessObj.Focuses[opts.Focus]
 			if !ok {
 				return result, fmt.Errorf("focus %q not defined in harness", opts.Focus)
@@ -390,12 +402,16 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			return result, err
 		}
 
-		configPath, err = assembleHarness(harnessObj, opts.Backend)
+		var nsFocus *plugin.Focus
+		configPath, nsFocus, err = assembleHarness(harnessObj, opts.Backend, sel)
 		if err != nil {
 			return result, fmt.Errorf("assembling harness: %w", err)
 		}
+		if nsFocus != nil {
+			opts.Task = nsFocus.Prompt
+		}
 		defer func() { _ = os.RemoveAll(configPath) }()
-	} else if opts.Focus != "" || opts.Profile != "" {
+	} else if opts.Focus != "" || opts.Profile != "" || len(opts.IncludedProfiles) > 0 {
 		return result, fmt.Errorf("--focus and --profile require --harness")
 	}
 
@@ -724,6 +740,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		Focus:             opts.Focus,
 		HarnessName:       opts.HarnessName,
 		Profile:           opts.Profile,
+		IncludedProfiles:  opts.IncludedProfiles,
 		ConvergenceSensor: opts.ConvergenceSensor,
 		MaxTurns:          opts.MaxTurns,
 		MaxTokens:         opts.MaxTokens,
@@ -1489,29 +1506,33 @@ func fetchIncludes(h *harness.Harness) error {
 // assembleHarness assembles the harness for the named vendor backend into
 // a temporary directory. The caller is responsible for os.RemoveAll on the
 // returned path.
-func assembleHarness(h *harness.Harness, backendName string) (string, error) {
+//
+// sel carries the profiles and focus chosen for included harnesses. The focus
+// of an included harness comes back when sel names one, since only resolving
+// the includes finds it.
+func assembleHarness(h *harness.Harness, backendName string, sel harness.Selection) (string, *plugin.Focus, error) {
 	cfg, cfgErr := config.Load()
 	if cfgErr != nil {
-		return "", fmt.Errorf("loading config: %w", cfgErr)
+		return "", nil, fmt.Errorf("loading config: %w", cfgErr)
 	}
 	adapter, err := vendor.Get(backendName)
 	if err != nil {
-		return "", fmt.Errorf("vendor %q: %w", backendName, err)
+		return "", nil, fmt.Errorf("vendor %q: %w", backendName, err)
 	}
 
 	dir, err := os.MkdirTemp("", "ynh-agent-")
 	if err != nil {
-		return "", fmt.Errorf("creating temp dir: %w", err)
+		return "", nil, fmt.Errorf("creating temp dir: %w", err)
 	}
 
 	// Resolve includes exactly as `ynh run` does. Assembling from h.Dir alone
 	// silently dropped every base and profile include, so a harness composed
 	// from other repositories ran the loop with none of that content — and
 	// profile-level artifact swapping was a no-op.
-	resolved, resErr := resolver.Resolve(h, cfg)
+	resolved, nsFocus, resErr := resolver.ResolveSelected(h, cfg, sel)
 	if resErr != nil {
 		_ = os.RemoveAll(dir)
-		return "", fmt.Errorf("resolving includes: %w", resErr)
+		return "", nil, fmt.Errorf("resolving includes: %w", resErr)
 	}
 	var content []resolver.ResolvedContent
 	for _, r := range resolved {
@@ -1521,7 +1542,7 @@ func assembleHarness(h *harness.Harness, backendName string) (string, error) {
 
 	if err := assembler.AssembleTo(dir, adapter, content); err != nil {
 		_ = os.RemoveAll(dir)
-		return "", fmt.Errorf("assembling harness: %w", err)
+		return "", nil, fmt.Errorf("assembling harness: %w", err)
 	}
 
 	// Generate vendor-native hook config, and copy in the scripts those hooks
@@ -1530,7 +1551,7 @@ func assembleHarness(h *harness.Harness, backendName string) (string, error) {
 		warnings, err := assembler.WriteSessionHooks(dir, adapter, h.Dir, h.Hooks)
 		if err != nil {
 			_ = os.RemoveAll(dir)
-			return "", err
+			return "", nil, err
 		}
 		for _, w := range warnings {
 			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
@@ -1543,32 +1564,32 @@ func assembleHarness(h *harness.Harness, backendName string) (string, error) {
 	servers, _, expErr := harness.ComposeMCPServers(h, resolver.IncludedHarnesses(resolved), dataDir, os.LookupEnv)
 	if expErr != nil {
 		_ = os.RemoveAll(dir)
-		return "", expErr
+		return "", nil, expErr
 	}
 	if len(servers) > 0 {
 		if mkdirErr := os.MkdirAll(dataDir, 0o755); mkdirErr != nil {
 			_ = os.RemoveAll(dir)
-			return "", mkdirErr
+			return "", nil, mkdirErr
 		}
 		mcpFiles, err := adapter.GenerateMCPConfig(servers)
 		if err != nil {
 			_ = os.RemoveAll(dir)
-			return "", fmt.Errorf("generating MCP config: %w", err)
+			return "", nil, fmt.Errorf("generating MCP config: %w", err)
 		}
 		for relPath, data := range mcpFiles {
 			absPath := fmt.Sprintf("%s/%s", dir, relPath)
 			if mkdirErr := os.MkdirAll(dirOf(absPath), 0o755); mkdirErr != nil {
 				_ = os.RemoveAll(dir)
-				return "", mkdirErr
+				return "", nil, mkdirErr
 			}
 			if writeErr := os.WriteFile(absPath, data, 0o644); writeErr != nil {
 				_ = os.RemoveAll(dir)
-				return "", writeErr
+				return "", nil, writeErr
 			}
 		}
 	}
 
-	return dir, nil
+	return dir, nsFocus, nil
 }
 
 // gitAutoCommit runs `git add -A && git commit` in the given directory.
