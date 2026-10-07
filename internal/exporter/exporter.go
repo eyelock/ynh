@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
@@ -163,8 +164,15 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The hooks it carries are the root's and those of the included
+	// harnesses that consented to them, with their scripts.
+	hs, err := assembler.ComposeHooks(p.Hooks, resolved)
+	if err != nil {
+		return nil, err
+	}
 	exported := *p
 	exported.MCPServers = servers
+	exported.Hooks = hs.Hooks
 	p = &exported
 
 	// Extract ResolvedContent for assembly
@@ -193,16 +201,26 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 		}
 	}
 
+	var results []ExportResult
 	switch opts.Mode {
 	case ModeMerged:
-		return exportMerged(opts, hj, p, content, instructionsPath, vendors)
+		results, err = exportMerged(opts, hj, p, hs, content, instructionsPath, vendors)
 	case ModeAgentPlugin:
-		return exportAgentPlugin(opts, hj, p, content, instructionsPath, vendors)
+		results, err = exportAgentPlugin(opts, hj, p, hs, content, instructionsPath, vendors)
+	default:
+		results, err = exportPerVendor(opts, hj, p, hs, content, instructionsPath, vendors)
 	}
-	return exportPerVendor(opts, hj, p, content, instructionsPath, vendors)
+	if err != nil {
+		return nil, err
+	}
+	// Said once, whatever the number of vendors exported.
+	if len(results) > 0 {
+		results[0].Warnings = append(slices.Clone(hs.Inactive), results[0].Warnings...)
+	}
+	return results, nil
 }
 
-func exportPerVendor(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
+func exportPerVendor(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness, hs assembler.HookSet, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
 	var results []ExportResult
 
 	for _, v := range vendors {
@@ -216,7 +234,7 @@ func exportPerVendor(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harn
 			return nil, fmt.Errorf("creating %s output: %w", v, err)
 		}
 
-		result, err := exportForVendor(v, vendorDir, pj, p, content, instructionsPath)
+		result, err := exportForVendor(v, vendorDir, pj, p, hs, content, instructionsPath)
 		if err != nil {
 			return nil, fmt.Errorf("exporting for %s: %w", v, err)
 		}
@@ -226,7 +244,7 @@ func exportPerVendor(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harn
 	return results, nil
 }
 
-func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
+func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness, hs assembler.HookSet, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
 	outputDir := opts.OutputDir
 
 	// Clean and recreate output dir
@@ -281,7 +299,7 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 		result.Warnings = append(result.Warnings, skippedArtifactWarnings(v, adapter, p, content)...)
 	}
 	if wroteHooks {
-		warnings, err := assembler.CopyHookScripts(p.Dir, outputDir, p.Hooks, "the plugin")
+		warnings, err := assembler.CopyHookScripts(p.Dir, outputDir, hs, "the plugin")
 		if err != nil {
 			return nil, err
 		}
@@ -324,7 +342,7 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 	return []ExportResult{result}, nil
 }
 
-func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
+func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON, p *harness.Harness, hs assembler.HookSet, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
 	result := ExportResult{
 		Vendor:    vendorName,
 		OutputDir: outputDir,
@@ -371,7 +389,7 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 			return result, fmt.Errorf("writing hook config: %w", err)
 		}
 		if wrote {
-			warnings, err := assembler.CopyHookScripts(p.Dir, outputDir, p.Hooks, "the plugin")
+			warnings, err := assembler.CopyHookScripts(p.Dir, outputDir, hs, "the plugin")
 			if err != nil {
 				return result, err
 			}

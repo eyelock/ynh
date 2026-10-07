@@ -345,3 +345,76 @@ func TestMergeHookEntries_UnionDedupPreserve(t *testing.T) {
 		t.Errorf("re-merge added = %d, want 0", added2)
 	}
 }
+
+// writeHookExportInclude writes a project harness that includes "guard", whose
+// before_tool hook runs the given command, with the include's consent.
+func writeHookExportInclude(t *testing.T, proj, command string, consent bool) string {
+	t.Helper()
+	t.Setenv("YNH_HOME", t.TempDir())
+	guard := filepath.Join(proj, "h", "guard")
+	if err := plugin.SavePluginJSON(guard, &plugin.HarnessJSON{
+		Name: "guard", Version: "0.1.0",
+		Hooks: map[string][]plugin.HookEntry{"before_tool": {{Command: command}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	hdir := filepath.Join(proj, "h")
+	if err := plugin.SavePluginJSON(hdir, &plugin.HarnessJSON{
+		Name: "h", Version: "0.1.0",
+		Includes: []plugin.IncludeMeta{{Local: "guard", Hooks: consent}},
+		Hooks:    map[string][]plugin.HookEntry{"on_stop": {{Command: "make check"}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return hdir
+}
+
+func TestCmdHookExport_IncludedHooksWithConsent(t *testing.T) {
+	proj := t.TempDir()
+	t.Chdir(proj)
+	hdir := writeHookExportInclude(t, proj, "/usr/local/bin/guard.sh", true)
+
+	var buf bytes.Buffer
+	if err := cmdHookTo([]string{"export", hdir, "--target", "settings"}, &buf); err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	hooks := readSettingsHooks(t, filepath.Join(".claude", "settings.json"))
+	if _, ok := hooks["PreToolUse"]; !ok {
+		t.Errorf("the consenting include's hook is missing: %v", hooks)
+	}
+	if _, ok := hooks["Stop"]; !ok {
+		t.Errorf("the root's own hook is missing: %v", hooks)
+	}
+}
+
+func TestCmdHookExport_IncludedHooksWithoutConsent(t *testing.T) {
+	proj := t.TempDir()
+	t.Chdir(proj)
+	hdir := writeHookExportInclude(t, proj, "/usr/local/bin/guard.sh", false)
+
+	var buf bytes.Buffer
+	if err := cmdHookTo([]string{"export", hdir, "--target", "settings"}, &buf); err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	hooks := readSettingsHooks(t, filepath.Join(".claude", "settings.json"))
+	if _, ok := hooks["PreToolUse"]; ok {
+		t.Errorf("an unconsented include's hook was exported: %v", hooks)
+	}
+}
+
+// A settings file cannot reach a script in an included harness's directory,
+// so the export refuses, naming the include, rather than write a broken hook.
+func TestCmdHookExport_IncludedScriptRefused(t *testing.T) {
+	proj := t.TempDir()
+	t.Chdir(proj)
+	hdir := writeHookExportInclude(t, proj, "./scripts/guard.sh", true)
+
+	var buf bytes.Buffer
+	err := cmdHookTo([]string{"export", hdir, "--target", "settings"}, &buf)
+	if err == nil || !strings.Contains(err.Error(), "guard") || !strings.Contains(err.Error(), "./scripts/guard.sh") {
+		t.Fatalf("err = %v, want a refusal naming the include and the script", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(".claude", "settings.json")); !os.IsNotExist(statErr) {
+		t.Errorf("settings.json was written despite the refusal, stat err = %v", statErr)
+	}
+}

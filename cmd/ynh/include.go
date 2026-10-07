@@ -60,6 +60,8 @@ func cmdIncludeAdd(args []string, stdout io.Writer) error {
 			}
 			i++
 			opts.As = args[i]
+		case "--hooks":
+			opts.Hooks = true
 		case "--replace":
 			opts.Replace = true
 		default:
@@ -71,7 +73,7 @@ func cmdIncludeAdd(args []string, stdout io.Writer) error {
 	}
 
 	if len(positional) != 2 {
-		return fmt.Errorf("usage: ynh include add <harness> <url> [--path <subdir>] [--pick <items>] [--ref <ref>] [--as <alias>] [--replace]")
+		return fmt.Errorf("usage: ynh include add <harness> <url> [--path <subdir>] [--pick <items>] [--ref <ref>] [--as <alias>] [--hooks] [--replace]")
 	}
 
 	harnessRef, url := positional[0], positional[1]
@@ -115,6 +117,9 @@ func cmdIncludeAdd(args []string, stdout io.Writer) error {
 	}
 	if opts.As != "" {
 		msg += fmt.Sprintf(" as %q", opts.As)
+	}
+	if opts.Hooks {
+		msg += " with its hooks active"
 	}
 	_, _ = fmt.Fprintln(stdout, msg)
 	return nil
