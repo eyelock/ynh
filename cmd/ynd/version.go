@@ -40,11 +40,13 @@ func cmdVersionTo(args []string, stdout, stderr io.Writer) error {
 		return nil
 	case "json":
 		payload := struct {
-			Version      string `json:"version"`
-			Capabilities string `json:"capabilities"`
+			Version      string   `json:"version"`
+			Capabilities string   `json:"capabilities"`
+			Features     []string `json:"features,omitempty"`
 		}{
 			Version:      config.Version,
 			Capabilities: config.CapabilitiesVersion,
+			Features:     config.Features(),
 		}
 		data, err := json.MarshalIndent(payload, "", "  ")
 		if err != nil {
