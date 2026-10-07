@@ -310,9 +310,9 @@ Cursor's `stop` and Codex's `Stop` route output and guard against loops differen
 
 ## Root-Harness-Only Rule
 
-Only the root harness's hooks are used. An included harness contributes `skills/`, `agents/`, `rules/` and `commands/` — files — and nothing else.
+Only the root harness's hooks are used. An included harness contributes `skills/`, `agents/`, `rules/` and `commands/`, which are files, and its MCP servers, and nothing else.
 
-Nothing is *dropped*: `resolveWith` iterates includes flat, with no recursion, and returns file paths. **It never opens an included harness's `plugin.json`,** so a hook declared there is never read in the first place. Root-only is a property of the resolver, not a filter applied afterwards.
+An included harness's manifest is opened, for its [MCP servers](mcp.md#servers-from-included-harnesses) and its own includes, but nothing in it is read for hooks: the resolver hands the assembler files and MCP servers, never hook declarations. Root-only is a property of what the resolver carries, not a filter applied afterwards.
 
 That is deliberate. A hook is command execution on every lifecycle event, so an include that could contribute one would turn inert composed content into an execution surface the root author never declared.
 

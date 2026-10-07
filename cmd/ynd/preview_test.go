@@ -472,3 +472,47 @@ func TestCmdPreviewShipsHookScripts(t *testing.T) {
 		})
 	}
 }
+
+// A server declared by an included harness is carried into the preview's MCP
+// file, expanded in the include's own directory, and reported with where it
+// came from. The root's own servers are not listed as included.
+func TestPreviewCarriesMCPServersOfIncludedHarness(t *testing.T) {
+	root := t.TempDir()
+	inc := filepath.Join(root, "inc")
+	for dir, hj := range map[string]map[string]any{
+		root: {
+			"name": "root", "version": "1.0.0",
+			"includes":    []map[string]any{{"local": "inc"}},
+			"mcp_servers": map[string]any{"own": map[string]any{"command": "node"}},
+		},
+		inc: {
+			"name": "inc", "version": "1.0.0",
+			"mcp_servers": map[string]any{"db": map[string]any{"command": "./bin/db"}},
+		},
+	} {
+		data, _ := json.Marshal(hj)
+		if err := writePluginJSONFile(dir, data); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tmp, sources, err := assembleForVendorSources(root, "claude", "")
+	if err != nil {
+		t.Fatalf("assembleForVendorSources: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmp) }()
+
+	data, err := os.ReadFile(filepath.Join(tmp, ".claude", ".mcp.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), filepath.Join(inc, "bin", "db")) || !strings.Contains(string(data), `"own"`) {
+		t.Errorf("MCP file should carry both servers, the included one expanded against its directory:\n%s", data)
+	}
+
+	var out strings.Builder
+	printMCPSources(&out, sources)
+	if got := out.String(); !strings.Contains(got, "db (from inc)") || strings.Contains(got, "own") {
+		t.Errorf("sources listing = %q", got)
+	}
+}

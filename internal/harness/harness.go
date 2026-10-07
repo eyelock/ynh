@@ -121,15 +121,20 @@ type Harness struct {
 	// the source manifest declared. Without them a *Harness cannot reproduce
 	// its own plugin.json, and every path that assembles from one — `ynh run`
 	// and `ynd preview` — silently ships less than `ynd export` does.
-	Author          *plugin.AuthorInfo
-	Keywords        []string
-	DefaultVendor   string
-	Namespace       string // e.g. "eyelock/assistants"; empty for local/unqualified installs
-	Dir             string // absolute path to the harness directory — the base for relative local includes
-	Includes        []Include
-	DelegatesTo     []Delegate
-	Hooks           map[string][]plugin.HookEntry
-	MCPServers      map[string]plugin.MCPServer
+	Author        *plugin.AuthorInfo
+	Keywords      []string
+	DefaultVendor string
+	Namespace     string // e.g. "eyelock/assistants"; empty for local/unqualified installs
+	Dir           string // absolute path to the harness directory, the base for relative local includes
+	Includes      []Include
+	DelegatesTo   []Delegate
+	Hooks         map[string][]plugin.HookEntry
+	MCPServers    map[string]plugin.MCPServer
+	// MCPRemovals names servers inherited from included harnesses that this
+	// harness drops: the null entries of mcp_servers, and, once a profile is
+	// resolved, the nulls of the profile. ComposeMCPServers applies them after
+	// the includes' servers are merged in.
+	MCPRemovals     []string
 	EnvPassthrough  []string
 	MCPIsolation    bool // run with only this harness's MCP servers (mcp_isolation)
 	Agent           *plugin.AgentConfig
@@ -689,6 +694,7 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	} else if fallback, err := plugin.LoadMCPJSON(dir); err == nil && len(fallback) > 0 {
 		p.MCPServers = fallback
 	}
+	p.MCPRemovals = hj.MCPRemovals
 	// env_passthrough and agent are not MCP settings and must not be
 	// conditional on MCP servers existing. They were loaded inside that branch,
 	// so a harness declaring env_passthrough or agent budgets but no MCP server
@@ -813,46 +819,62 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 		resolved.MCPIsolation = *profile.MCPIsolation
 	}
 
-	// Merge MCP servers: deep merge, nil removes inherited
+	// Merge MCP servers: deep merge, nil removes inherited. A null also goes
+	// on the removal list, because the server it names may come from an
+	// included harness, which is only merged in after the profile is resolved.
 	if profile.MCPServers != nil {
 		merged := make(map[string]plugin.MCPServer)
 		for k, v := range h.MCPServers {
-			merged[k] = v
+			merged[k] = copyMCPServer(v)
 		}
-		for k, v := range profile.MCPServers {
+		removals := slices.Clone(h.MCPRemovals)
+		for _, k := range slices.Sorted(maps.Keys(profile.MCPServers)) {
+			v := profile.MCPServers[k]
+			if v != nil {
+				// A profile that declares a server again overrides a removal.
+				removals = slices.DeleteFunc(removals, func(r string) bool { return r == k })
+			}
 			if v == nil {
 				delete(merged, k)
-			} else {
-				existing, exists := merged[k]
-				if exists {
-					// Deep merge env maps
-					if v.Command != "" {
-						existing.Command = v.Command
-					}
-					if v.Args != nil {
-						existing.Args = v.Args
-					}
-					if v.URL != "" {
-						existing.URL = v.URL
-					}
-					if v.Headers != nil {
-						existing.Headers = v.Headers
-					}
-					if v.Env != nil {
-						if existing.Env == nil {
-							existing.Env = make(map[string]string)
-						}
-						for ek, ev := range v.Env {
-							existing.Env[ek] = ev
-						}
-					}
-					merged[k] = existing
-				} else {
-					merged[k] = *v
+				if !slices.Contains(removals, k) {
+					removals = append(removals, k)
 				}
+				continue
 			}
+			existing, exists := merged[k]
+			if !exists {
+				merged[k] = copyMCPServer(*v)
+				continue
+			}
+			// Deep merge: scalar fields replace when set, env merges per key.
+			if v.Type != "" {
+				existing.Type = v.Type
+			}
+			if v.Command != "" {
+				existing.Command = v.Command
+			}
+			if v.Args != nil {
+				existing.Args = slices.Clone(v.Args)
+			}
+			if v.Cwd != "" {
+				existing.Cwd = v.Cwd
+			}
+			if v.URL != "" {
+				existing.URL = v.URL
+			}
+			if v.Headers != nil {
+				existing.Headers = maps.Clone(v.Headers)
+			}
+			if v.Env != nil {
+				if existing.Env == nil {
+					existing.Env = make(map[string]string, len(v.Env))
+				}
+				maps.Copy(existing.Env, v.Env)
+			}
+			merged[k] = existing
 		}
 		resolved.MCPServers = merged
+		resolved.MCPRemovals = removals
 	}
 
 	// Append profile-level includes to the harness's base includes. Profile
@@ -933,6 +955,7 @@ func LoadFile(path string) (*Harness, error) {
 	if len(hj.MCPServers) > 0 {
 		p.MCPServers = hj.MCPServers
 	}
+	p.MCPRemovals = hj.MCPRemovals
 	// See above: neither of these is an MCP setting.
 	if len(hj.EnvPassthrough) > 0 {
 		p.EnvPassthrough = hj.EnvPassthrough

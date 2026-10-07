@@ -162,6 +162,10 @@ ynd preview <harness> --profile ci
   included one
 - **Sensors**: root-only. An included harness's sensors are never read, by
   design, so "what observes this repository" stays in one committed file
+- **MCP servers**: an included harness's servers are carried (and those of the
+  harnesses it includes, unless the include uses `pick`). The root's server of
+  the same name wins, and `null` in the root's or a profile's `mcp_servers`
+  removes an inherited one
 
 ## Where to go next
 
