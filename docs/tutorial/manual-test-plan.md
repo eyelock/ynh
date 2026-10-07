@@ -635,7 +635,7 @@ cat > some-harness/.agents/harness/plugin.json << 'EOF'
 EOF
 
 ynd preview /tmp/ynh-edge/e19/some-harness -v claude --focus review --profile ci
-# Expected (exit 1): Error: cannot use --focus and --profile together
+# Expected (exit 1): Error: cannot use --focus and --profile together (focus includes a profile)
 
 cd /
 rm -rf /tmp/ynh-edge/e19

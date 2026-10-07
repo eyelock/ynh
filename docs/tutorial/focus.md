@@ -147,7 +147,7 @@ ynd preview /tmp/ynh-tutorial/focus-harness -v claude --focus review --profile c
 
 Expected error:
 ```
-Error: cannot use --focus and --profile together
+Error: cannot use --focus and --profile together (focus includes a profile)
 ```
 
 A focus already includes a profile — specifying both is ambiguous.
