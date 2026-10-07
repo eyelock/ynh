@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/eyelock/ynh/internal/vendor"
 )
@@ -263,4 +265,42 @@ func exitedWorkerError(backend string, waitErr error, tail *stderrTail) error {
 		Backend: backend,
 		Message: firstNonBlank(stderr, "exited with "+exitErr.String()+" and no message"),
 	}
+}
+
+// How long a worker that was asked to stop gets before the next, harder
+// stop. Variables so tests can shorten them.
+var (
+	// workerExitGrace is the wait for a worker to exit on its own after its
+	// stdin closed.
+	workerExitGrace = 10 * time.Second
+	// workerTermGrace is the wait after SIGTERM before the worker is killed.
+	workerTermGrace = 3 * time.Second
+)
+
+// reapWorker waits for the worker's process to exit, stopping it if it does
+// not. With graceful set it first gives the process workerExitGrace to leave
+// on its own; otherwise, and when that grace runs out, it sends SIGTERM and,
+// after workerTermGrace, kills it. wait must be the session's own reaper, so
+// the process is waited on once.
+func reapWorker(cmd *exec.Cmd, wait func() error, graceful bool) error {
+	if cmd == nil || cmd.Process == nil {
+		return wait()
+	}
+	done := make(chan error, 1)
+	go func() { done <- wait() }()
+	if graceful {
+		select {
+		case err := <-done:
+			return err
+		case <-time.After(workerExitGrace):
+		}
+	}
+	_ = cmd.Process.Signal(syscall.SIGTERM)
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(workerTermGrace):
+	}
+	_ = cmd.Process.Kill()
+	return <-done
 }

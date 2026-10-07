@@ -71,6 +71,17 @@ came from** (`flag`, `manifest`, `default`). Aggregating a batch of runs, a cap
 nobody chose that fires is noise in the result and a chosen cap that fires is a
 finding — they have to be told apart.
 
+A cap is a cap on what the worker is asked to do, not only on what the loop
+records. The worker is **never sent a turn beyond a cap**: when the turn, token
+or wall-clock cap is spent, or the run is interrupted, the loop ends the run
+*before* it sends the next turn's feedback, so the tree is as the last counted
+turn left it and `feedback_sent` appears only for turns that were taken. The
+feedback it would have sent is kept in `checkpoint.json` as the pending message,
+so `--resume` with room left sends it. On any early exit the worker process is
+stopped rather than waited for: a worker with a turn in flight gets SIGTERM
+(then SIGKILL after a few seconds), so it cannot finish work the run has
+already given up on.
+
 ## What the agent can see
 
 The worker receives only the environment variables the harness declares in
@@ -668,7 +679,7 @@ a run without parsing terminal output.
 | `turn_start` | Act-phase turn begins |
 | `assistant_message` | Agent output for the turn |
 | `sensor_run` / `sensor_result` | A sensor is run, and its result |
-| `feedback_sent` | Sensor results sent back to the agent |
+| `feedback_sent` | Sensor results sent back to the agent, for a turn the run then takes; never emitted for a turn a cap or interrupt prevents |
 | `turn_approval_required` | Act phase is waiting for approval |
 | `stuck_detected` | A stuckness detector fired |
 | `tamper_detected` | The baseline moved during the run |
