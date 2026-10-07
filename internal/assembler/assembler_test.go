@@ -65,6 +65,7 @@ func (m *mockAdapter) MarketplaceManifestDir() string        { return ".mock-plu
 func (m *mockAdapter) GenerateMarketplaceIndex(cfg vendor.MarketplaceIndexConfig, plugins []vendor.MarketplacePluginInfo) ([]byte, error) {
 	return nil, nil
 }
+func (m *mockAdapter) IsolateMCP(configPath string) ([]string, string) { return nil, "" }
 func (m *mockAdapter) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
 	return nil, nil
 }

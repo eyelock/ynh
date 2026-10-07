@@ -666,6 +666,10 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		return &ExitError{Code: ExitInterrupted, Message: reason}
 	}
 
+	isolatedMCP := harnessObj != nil && harnessObj.MCPIsolation
+	if isolatedMCP && wb.Name() != "claude" {
+		_, _ = fmt.Fprintf(opts.Stderr, "warning: MCP isolation is only applied to the claude backend: %s will load your own MCP servers\n", wb.Name())
+	}
 	sess, err := wb.Start(ctx, StartOptions{
 		WorktreeDir: opts.WorktreeDir,
 		ConfigPath:  configPath,
@@ -674,6 +678,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		AutoApprove: opts.AutoApprove,
 		Model:       opts.Model,
 		Effort:      opts.Effort,
+		IsolatedMCP: isolatedMCP,
 		ResumeToken: resumeToken,
 		UsageBase:   usageBase,
 		Env:         workerEnv,

@@ -165,6 +165,32 @@ func (c *Claude) LaunchResume(configPath, sessionID string, extraArgs []string) 
 	return launchClaude(configPath, "", append(resumeArgs, extraArgs...))
 }
 
+// IsolateMCP restricts Claude to the harness's own servers. --strict-mcp-config
+// ignores every other source (user config, claude.ai connectors) and, with no
+// --mcp-config, loads none at all, which is the right answer for a harness
+// that declares no servers. --plugin-dir stays, so hooks and the rest of the
+// plugin still load. The harness's servers then arrive as <server> rather
+// than plugin:<harness>:<server>. The "=" spelling keeps --mcp-config, which
+// is variadic, from swallowing a positional that follows it.
+func (c *Claude) IsolateMCP(configPath string) ([]string, string) {
+	return claudeIsolationArgs(configPath), ""
+}
+
+// ClaudeIsolationArgs is IsolateMCP for callers that launch Claude without an
+// adapter in hand, such as the agent worker.
+func ClaudeIsolationArgs(configPath string) []string {
+	return claudeIsolationArgs(configPath)
+}
+
+func claudeIsolationArgs(configPath string) []string {
+	args := []string{"--strict-mcp-config"}
+	mcpPath := filepath.Join(configPath, ".claude", ".mcp.json")
+	if _, err := os.Stat(mcpPath); err == nil {
+		args = append(args, "--mcp-config="+mcpPath)
+	}
+	return args
+}
+
 func (c *Claude) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
 	return []string{"--append-system-prompt", text}, nil
 }

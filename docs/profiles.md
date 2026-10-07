@@ -120,6 +120,7 @@ Profiles can override or extend three fields:
 |-------|----------------------|
 | `hooks` | Per-event replace |
 | `mcp_servers` | Deep merge (null removes) |
+| `mcp_isolation` | Replace when set, either way; inherited when absent |
 | `includes` | Append (profile entries added after base entries) |
 | `name`, `version`, `description` | Fixed — identity fields |
 | `delegates_to` | Fixed — composition field |

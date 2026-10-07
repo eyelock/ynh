@@ -88,6 +88,8 @@ Flags:
                            non-interactive)
   --profile <name>         Apply a named profile overlay
   --interactive            Stay in session after a focus or prompt
+  --isolated-mcp           Run with only the harness's MCP servers (a harness can
+                           declare mcp_isolation; this flag can only turn it on)
   --instructions "<text>"  Inject per-invocation context after harness instructions
   --harness-file <path>    Load a harness from one manifest file, of any name
                            except a legacy .harness.json

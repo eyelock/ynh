@@ -190,6 +190,14 @@ func (c *Copilot) LaunchResume(configPath, sessionID string, extraArgs []string)
 	return launchCopilot(configPath, "", append(resumeArgs, extraArgs...))
 }
 
+// IsolateMCP is partial on Copilot: --disable-builtin-mcps drops the built-in
+// servers, but the servers in the user's own ~/.copilot/mcp-config.json still
+// load, and ynh has no flag that stops them.
+func (c *Copilot) IsolateMCP(configPath string) ([]string, string) {
+	return []string{"--disable-builtin-mcps"},
+		"MCP isolation is partial on Copilot: built-in servers are disabled, but servers in ~/.copilot/mcp-config.json still load"
+}
+
 // ApplyRuntimeInstructions appends per-invocation text to the assembled
 // AGENTS.md in runDir. buildCopilotArgs reads that same file later in this
 // invocation and projects it into the project's own instructions file, so
