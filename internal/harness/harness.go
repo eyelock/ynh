@@ -131,6 +131,7 @@ type Harness struct {
 	Hooks           map[string][]plugin.HookEntry
 	MCPServers      map[string]plugin.MCPServer
 	EnvPassthrough  []string
+	MCPIsolation    bool // run with only this harness's MCP servers (mcp_isolation)
 	Agent           *plugin.AgentConfig
 	Profiles        map[string]plugin.Profile
 	Focuses         map[string]plugin.Focus
@@ -696,6 +697,7 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	if len(hj.EnvPassthrough) > 0 {
 		p.EnvPassthrough = hj.EnvPassthrough
 	}
+	p.MCPIsolation = hj.MCPIsolation
 	if hj.Agent != nil {
 		p.Agent = hj.Agent
 	}
@@ -805,6 +807,10 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 	// widen, which is the wrong direction for a containment declaration.
 	if profile.EnvPassthrough != nil {
 		resolved.EnvPassthrough = profile.EnvPassthrough
+	}
+
+	if profile.MCPIsolation != nil {
+		resolved.MCPIsolation = *profile.MCPIsolation
 	}
 
 	// Merge MCP servers: deep merge, nil removes inherited
@@ -931,6 +937,7 @@ func LoadFile(path string) (*Harness, error) {
 	if len(hj.EnvPassthrough) > 0 {
 		p.EnvPassthrough = hj.EnvPassthrough
 	}
+	p.MCPIsolation = hj.MCPIsolation
 	if hj.Agent != nil {
 		p.Agent = hj.Agent
 	}

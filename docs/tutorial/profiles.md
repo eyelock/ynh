@@ -155,7 +155,7 @@ what hooks and MCP servers are configured?
 
 The `ci` profile's `before_tool` hook replaces the base, and the `ci-db` MCP server is added. The base `after_tool` hook is inherited since the profile doesn't declare it.
 
-> **Note:** These servers load alongside your own MCP servers (user config, claude.ai connectors). ynh does not isolate them yet (tracked in #548).
+> **Note:** These servers load alongside your own MCP servers (user config, claude.ai connectors). To run with only the harness's servers, set `mcp_isolation` in the manifest (a profile may set it too) or pass `--isolated-mcp`: see [Running with only the harness's servers](../mcp.md#running-with-only-the-harness-s-servers).
 
 ## Try --profile nonexistent
 
