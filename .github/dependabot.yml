@@ -1,4 +1,14 @@
 version: 2
+
+# Until eyelock/ynr is public, the spoolexporter module is a private git
+# repository; Dependabot reads it with the Dependabot secret YNR_READ_REPO.
+registries:
+  ynr:
+    type: git
+    url: https://github.com
+    username: x-access-token
+    password: ${{secrets.YNR_READ_REPO}}
+
 updates:
   # Keep GitHub Actions up to date
   - package-ecosystem: "github-actions"
@@ -11,6 +21,8 @@ updates:
   # Keep Go module dependencies up to date
   - package-ecosystem: "gomod"
     directory: "/"
+    registries:
+      - ynr
     schedule:
       interval: "weekly"
     commit-message:

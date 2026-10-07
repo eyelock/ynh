@@ -119,12 +119,23 @@ jobs:
           YNR_READ_REPO: ${{ secrets.YNR_READ_REPO }}
         run: git config --global url."https://x-access-token:${YNR_READ_REPO}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
       # The telemetry relay test against the real ynr (TestAgentRun_RealRelayJoinsRunTrace)
-      # skips without ynr on PATH. ynr has no release yet, so it is built from a
-      # pinned commit; move the pin when the relay's contract changes.
+      # skips without ynr on PATH. Install the released binary users get, checked
+      # against the release's checksums; move YNR_VERSION when the relay's
+      # contract changes.
       - name: Install ynr for the relay test
+        env:
+          GH_TOKEN: ${{ secrets.YNR_READ_REPO }}
+          YNR_VERSION: 0.2.0
         run: |
-          GOBIN="$RUNNER_TEMP/ynr" go install github.com/eyelock/ynr/cmd/ynr@v0.0.0-20261005200718-b391a994995a
-          echo "$RUNNER_TEMP/ynr" >> "$GITHUB_PATH"
+          dir="$RUNNER_TEMP/ynr"
+          mkdir -p "$dir"
+          asset="ynr_${YNR_VERSION}_linux_amd64.tar.gz"
+          gh release download "v${YNR_VERSION}" --repo eyelock/ynr --dir "$dir" \
+            --pattern "$asset" --pattern checksums.txt
+          (cd "$dir" && grep " ${asset}\$" checksums.txt | sha256sum -c -)
+          tar -xzf "$dir/$asset" -C "$dir" ynr
+          "$dir/ynr" --version
+          echo "$dir" >> "$GITHUB_PATH"
       - run: make test
 
       # A direct import marked `// indirect` — the state this repo was in on
