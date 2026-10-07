@@ -6,7 +6,8 @@ Please report security issues privately. Do not open a public issue or discussio
 
 Use GitHub private vulnerability reporting: go to the
 [Security tab](https://github.com/eyelock/ynh/security) of this repository and choose
-"Report a vulnerability". Include the version (`ynh version`), what you did, what you
+"Report a vulnerability". If you cannot use that, email
+[support@eyelock.net](mailto:support@eyelock.net). Include the version (`ynh version`), what you did, what you
 expected and what happened, and a proof of concept if you have one.
 
 You can expect an acknowledgement within a few days. Fixes are developed in a private
