@@ -64,6 +64,24 @@ func TestLookup(t *testing.T) {
 		}
 	})
 
+	// The backend names come from a config map, so the list in the error
+	// must be sorted or it changes order between calls (#520).
+	t.Run("unknown backend lists names sorted", func(t *testing.T) {
+		multi := &config.Config{Backends: map[string]config.BackendDef{
+			"zeta": {}, "alpha": {}, "mu": {}, "beta": {}, "omega": {},
+		}}
+		want := `unknown backend "nope" (available: [alpha beta mu omega zeta])`
+		for range 50 {
+			_, err := Lookup(multi, Spec{Backend: "nope", Vendor: "claude"})
+			if err == nil {
+				t.Fatal("expected error for unknown backend")
+			}
+			if err.Error() != want {
+				t.Fatalf("Lookup error = %q, want %q", err.Error(), want)
+			}
+		}
+	})
+
 	t.Run("unknown vendor for known backend", func(t *testing.T) {
 		if _, err := Lookup(cfg, Spec{Backend: "ollama", Vendor: "codex"}); err == nil {
 			t.Fatal("expected error for backend with no config for this vendor")
@@ -262,5 +280,29 @@ func TestApplyUnsupportedVendorErrors(t *testing.T) {
 	_, err := Apply("cursor", "ollama", config.BackendConnection{}, "")
 	if err == nil {
 		t.Fatal("expected error for unsupported vendor")
+	}
+}
+
+// A backend server is a third party: ynh's one HTTP call carries no trace
+// context, even when ynh itself runs inside a trace (ynr ADR-006, rule 4).
+func TestListModels_SendsNoTraceContext(t *testing.T) {
+	t.Setenv("TRACEPARENT", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+	t.Setenv("TRACESTATE", "vendor=value")
+	var got http.Header
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Clone()
+		_, _ = w.Write([]byte(`{"models":[]}`))
+	}))
+	defer server.Close()
+	cfg := &config.Config{Backends: map[string]config.BackendDef{
+		"ollama": {Type: "ollama", Vendors: map[string]config.BackendConnection{"claude": {BaseURL: server.URL}}},
+	}}
+	if _, err := ListModels(cfg, "ollama"); err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range []string{"Traceparent", "Tracestate", "Baggage"} {
+		if v := got.Get(h); v != "" {
+			t.Errorf("request carried %s: %q", h, v)
+		}
 	}
 }

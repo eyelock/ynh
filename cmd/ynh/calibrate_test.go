@@ -58,7 +58,7 @@ func calibrate(t *testing.T, args ...string) (gate.CalibrationEnvelope, error) {
 
 // The defect this exists for: a sensor whose command has quietly stopped
 // examining anything exits 0, and `ynh check` reports green. A live instance
-// was two harnesses both named collective-dev, one with seven sensors and one
+// was two harnesses both named example-dev, one with seven sensors and one
 // with none — the empty one was installed, and the gate passed.
 func TestCalibrate_CatchesASensorThatStoppedObserving(t *testing.T) {
 	calibrationHarness(t, `{

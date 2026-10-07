@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // Auto-approve levels for `ynh agent run --auto-approve`.
@@ -82,14 +84,14 @@ func projectPermissionSetting(dir, backend string) (string, error) {
 	switch backend {
 	case "claude":
 		for _, name := range []string{"settings.json", "settings.local.json"} {
-			reason, err := claudeDefaultMode(filepath.Join(dir, ".claude", name))
+			reason, err := claudeDefaultMode(filepath.Join(dir, (&vendor.Claude{}).ConfigDir(), name))
 			if reason != "" || err != nil {
 				return reason, err
 			}
 		}
 		return "", nil
 	case "codex":
-		return codexProjectPolicy(filepath.Join(dir, ".codex", "config.toml"))
+		return codexProjectPolicy(filepath.Join(dir, (&vendor.Codex{}).ConfigDir(), "config.toml"))
 	default:
 		// cursor's project file (.cursor/cli.json) carries only allow and
 		// deny lists, which cursor still applies under --force ("unless

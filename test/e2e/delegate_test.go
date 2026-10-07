@@ -32,14 +32,14 @@ type manifestSourceJSON struct {
 // and asserts the manifest and installed.json both reflect each step.
 func TestDelegate_AddRemove(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
-	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
+	repo := newFixtureRepo(t)
+	sourceDir := filepath.Join(repo.Clone, "e2e-fixtures", "minimal")
 	s.mustRunYnh(t, "install", sourceDir)
 
-	delegateURL := "https://github.com/eyelock/assistants"
+	delegateURL := repo.URL
 	s.mustRunYnh(t, "delegate", "add", "local/minimal", delegateURL,
 		"--path", "e2e-fixtures/fork-source",
-		"--ref", AssistantsFixturesSHA,
+		"--ref", repo.SHA,
 	)
 
 	mf := readManifest(t, sourceDir)
@@ -49,7 +49,7 @@ func TestDelegate_AddRemove(t *testing.T) {
 	d := mf.DelegatesTo[0]
 	assertEqual(t, "delegates_to[0].git", d.Git, delegateURL)
 	assertEqual(t, "delegates_to[0].path", d.Path, "e2e-fixtures/fork-source")
-	assertEqual(t, "delegates_to[0].ref", d.Ref, AssistantsFixturesSHA)
+	assertEqual(t, "delegates_to[0].ref", d.Ref, repo.SHA)
 
 	s.mustRunYnh(t, "delegate", "remove", "local/minimal", delegateURL, "--path", "e2e-fixtures/fork-source")
 
@@ -62,14 +62,14 @@ func TestDelegate_AddRemove(t *testing.T) {
 // TestInclude_AddRemove walks an include through add → resolved → remove.
 func TestInclude_AddRemove(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
-	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
+	repo := newFixtureRepo(t)
+	sourceDir := filepath.Join(repo.Clone, "e2e-fixtures", "minimal")
 	s.mustRunYnh(t, "install", sourceDir)
 
-	includeURL := "https://github.com/eyelock/assistants"
+	includeURL := repo.URL
 	s.mustRunYnh(t, "include", "add", "local/minimal", includeURL,
 		"--path", "e2e-fixtures/included-skill",
-		"--ref", AssistantsFixturesSHA,
+		"--ref", repo.SHA,
 	)
 
 	mf := readManifest(t, sourceDir)
@@ -79,7 +79,7 @@ func TestInclude_AddRemove(t *testing.T) {
 	i := mf.Includes[0]
 	assertEqual(t, "includes[0].git", i.Git, includeURL)
 	assertEqual(t, "includes[0].path", i.Path, "e2e-fixtures/included-skill")
-	assertEqual(t, "includes[0].ref", i.Ref, AssistantsFixturesSHA)
+	assertEqual(t, "includes[0].ref", i.Ref, repo.SHA)
 
 	s.mustRunYnh(t, "include", "remove", "local/minimal", includeURL, "--path", "e2e-fixtures/included-skill")
 
@@ -92,20 +92,19 @@ func TestInclude_AddRemove(t *testing.T) {
 // TestInclude_Update mutates an existing include's --path and asserts the
 // manifest reflects the change. Covers cmdIncludeUpdate (0% E2E previously).
 //
-// We mutate --path rather than --ref to keep the test SHA-stable: the
-// AssistantsFixturesSHA contains both `e2e-fixtures/minimal` and
-// `e2e-fixtures/included-skill` so the path can flip between them without
-// needing to advance the pinned ref.
+// We mutate --path rather than --ref: the fixture commit holds both
+// `e2e-fixtures/minimal` and `e2e-fixtures/included-skill`, so the path can
+// flip between them without advancing the ref.
 func TestInclude_Update(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
-	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
+	repo := newFixtureRepo(t)
+	sourceDir := filepath.Join(repo.Clone, "e2e-fixtures", "minimal")
 	s.mustRunYnh(t, "install", sourceDir)
 
-	includeURL := "https://github.com/eyelock/assistants"
+	includeURL := repo.URL
 	s.mustRunYnh(t, "include", "add", "local/minimal", includeURL,
 		"--path", "e2e-fixtures/minimal",
-		"--ref", AssistantsFixturesSHA,
+		"--ref", repo.SHA,
 	)
 
 	s.mustRunYnh(t, "include", "update", "local/minimal", includeURL,
@@ -118,34 +117,47 @@ func TestInclude_Update(t *testing.T) {
 		t.Fatalf("expected 1 include after update, got %d", len(mf.Includes))
 	}
 	assertEqual(t, "includes[0].path", mf.Includes[0].Path, "e2e-fixtures/included-skill")
-	assertEqual(t, "includes[0].ref unchanged", mf.Includes[0].Ref, AssistantsFixturesSHA)
+	assertEqual(t, "includes[0].ref unchanged", mf.Includes[0].Ref, repo.SHA)
 }
 
-// TestDelegate_Update mutates an existing delegate's --ref and asserts the
-// manifest reflects the new ref. Covers cmdDelegateUpdate (0% E2E previously).
+// TestDelegate_Update moves an existing delegate's --ref to a newer commit
+// and asserts both halves of the update: the manifest records the new ref,
+// and ynh fetched that commit, so the assembled delegate agent carries the
+// content the newer commit introduced.
+//
+// The delegate is served from a local repository, so the test exercises
+// ynh's update logic rather than whether GitHub is reachable (#531).
 func TestDelegate_Update(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
-	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
+	repo := newFixtureRepo(t)
+	sourceDir := filepath.Join(repo.Clone, "e2e-fixtures", "minimal")
 	s.mustRunYnh(t, "install", sourceDir)
 
-	delegateURL := "https://github.com/eyelock/assistants"
-	s.mustRunYnh(t, "delegate", "add", "local/minimal", delegateURL,
+	s.mustRunYnh(t, "delegate", "add", "local/minimal", repo.URL,
 		"--path", "e2e-fixtures/fork-source",
-		"--ref", AssistantsFixturesSHA,
+		"--ref", repo.SHA,
 	)
 
-	s.mustRunYnh(t, "delegate", "update", "local/minimal", delegateURL,
+	const updated = "E2E fixture: fork-source as of the second commit."
+	next := repo.commit(t, "fork-source/.agents/harness/plugin.json",
+		harnessManifest("fork-source", updated, ""))
+
+	s.mustRunYnh(t, "delegate", "update", "local/minimal", repo.URL,
 		"--from-path", "e2e-fixtures/fork-source",
-		"--ref", AssistantsFixturesV1Tag,
+		"--ref", next,
 	)
 
 	mf := readManifest(t, sourceDir)
 	if len(mf.DelegatesTo) != 1 {
 		t.Fatalf("expected 1 delegate after update, got %d", len(mf.DelegatesTo))
 	}
-	assertEqual(t, "delegates_to[0].ref", mf.DelegatesTo[0].Ref, AssistantsFixturesV1Tag)
+	assertEqual(t, "delegates_to[0].ref", mf.DelegatesTo[0].Ref, next)
 	assertEqual(t, "delegates_to[0].path", mf.DelegatesTo[0].Path, "e2e-fixtures/fork-source")
+
+	agent := assembledDelegateAgent(t, s, "fork-source")
+	if !strings.Contains(agent, "description: "+updated) {
+		t.Errorf("delegate agent was not assembled from the updated commit %s:\n%s", next, agent)
+	}
 }
 
 // TestInclude_LocalInstall_WritesToSource locks in the schema-3 read/write
@@ -163,16 +175,16 @@ func TestDelegate_Update(t *testing.T) {
 //   - Remove is symmetric on both halves.
 func TestInclude_LocalInstall_WritesToSource(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
-	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
+	repo := newFixtureRepo(t)
+	sourceDir := filepath.Join(repo.Clone, "e2e-fixtures", "minimal")
 	copyDir := filepath.Join(s.home, "harnesses", "local--minimal")
 
 	s.mustRunYnh(t, "install", sourceDir)
 
-	includeURL := "https://github.com/eyelock/assistants"
+	includeURL := repo.URL
 	s.mustRunYnh(t, "include", "add", "local/minimal", includeURL,
 		"--path", "e2e-fixtures/included-skill",
-		"--ref", AssistantsFixturesSHA,
+		"--ref", repo.SHA,
 	)
 
 	// Write path: the edit is in the user's source tree.
@@ -211,16 +223,16 @@ func TestInclude_LocalInstall_WritesToSource(t *testing.T) {
 // symmetry — the original bug surfaced through delegates too.
 func TestDelegate_LocalInstall_WritesToSource(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
-	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
+	repo := newFixtureRepo(t)
+	sourceDir := filepath.Join(repo.Clone, "e2e-fixtures", "minimal")
 	copyDir := filepath.Join(s.home, "harnesses", "local--minimal")
 
 	s.mustRunYnh(t, "install", sourceDir)
 
-	delegateURL := "https://github.com/eyelock/assistants"
+	delegateURL := repo.URL
 	s.mustRunYnh(t, "delegate", "add", "local/minimal", delegateURL,
 		"--path", "e2e-fixtures/fork-source",
-		"--ref", AssistantsFixturesSHA,
+		"--ref", repo.SHA,
 	)
 
 	srcMf := readManifest(t, sourceDir)
@@ -257,7 +269,7 @@ func TestDelegate_LocalInstall_WritesToSource(t *testing.T) {
 // original bug from the user's perspective.
 func TestLocalInstall_PluginEditVisibleToInfo(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
+	clone := newFixtureRepo(t).Clone
 	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
 
 	s.mustRunYnh(t, "install", sourceDir)
@@ -299,4 +311,18 @@ func readManifest(t *testing.T, harnessDir string) pluginManifest {
 		t.Fatalf("parsing plugin.json: %v\n%s", err, body)
 	}
 	return mf
+}
+
+// assembledDelegateAgent assembles local/minimal for Claude and returns the
+// agent file ynh generated for the named delegate. --install assembles the
+// run directory and stops: Claude loads plugins natively, so nothing is
+// linked and no vendor CLI starts.
+func assembledDelegateAgent(t *testing.T, s *sandbox, name string) string {
+	t.Helper()
+	mustRunYnhInDir(t, s, t.TempDir(), "run", "local/minimal", "-v", "claude", "--install")
+	body, err := os.ReadFile(filepath.Join(s.home, "run", "local--minimal", ".claude", "agents", name+".md"))
+	if err != nil {
+		t.Fatalf("reading assembled delegate agent: %v", err)
+	}
+	return string(body)
 }

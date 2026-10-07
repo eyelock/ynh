@@ -7,6 +7,14 @@ GO := go
 GOFLAGS := -v
 INSTALL_DIR := $(HOME)/.ynh/bin
 
+# The spoolexporter module lives in the private eyelock/ynr repository until
+# that is public: fetch it directly rather than through the public proxy and
+# checksum database. Added to any GOPRIVATE already set, never replacing it.
+comma := ,
+YNR_MODULE := github.com/eyelock/ynr
+GOPRIVATE := $(if $(findstring $(YNR_MODULE),$(GOPRIVATE)),$(GOPRIVATE),$(if $(GOPRIVATE),$(GOPRIVATE)$(comma))$(YNR_MODULE))
+export GOPRIVATE
+
 # Tool paths - use full paths so go-installed tools are found without PATH hacks
 GOBIN := $(shell go env GOPATH)/bin
 GOIMPORTS := $(GOBIN)/goimports
@@ -122,7 +130,7 @@ scan-artifacts: ## Security-scan the harness artifacts with SkillSpector
 check-marketplace: ## Assert the committed marketplace indexes match the plugin manifests
 	@./scripts/marketplace-consistency.sh
 
-check-vendor-parity: build ## Assert every vendor is documented and assembles the same artifacts
+check-vendor-parity: build ## Assert every vendor is documented, assembles the same artifacts and is stubbed in evals
 	@./scripts/vendor-parity.sh
 
 stamp-version: ## Stamp the harness version into every manifest (VERSION=X.Y.Z, or the latest tag)
@@ -148,7 +156,8 @@ DOCKER_IMAGE := ghcr.io/eyelock/ynh
 DOCKER_TAG := $(VERSION)
 
 docker-build: ## Build base Docker image
-	docker build --build-arg VERSION=$(VERSION) -t $(DOCKER_IMAGE):$(DOCKER_TAG) -t $(DOCKER_IMAGE):latest .
+	@# The private ynr module needs a token: YNR_TOKEN=$$(gh auth token) make docker-build
+	docker buildx build --load $(if $(YNR_TOKEN),--secret id=ynr_token$(comma)env=YNR_TOKEN) --build-arg VERSION=$(VERSION) -t $(DOCKER_IMAGE):$(DOCKER_TAG) -t $(DOCKER_IMAGE):latest .
 
 docker-push: ## Push base Docker image to GHCR
 	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)

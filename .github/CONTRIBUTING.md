@@ -43,6 +43,7 @@ internal/
   namespace/              @ syntax parsing, URL → namespace derivation, FS name encoding
   registry/               Registry discovery: fetch, search, lookup across Git-hosted indexes
   symlink/                Symlink transaction log (~/.ynh/symlinks.json)
+  telemetry/              OpenTelemetry for `ynh agent run`: destination, run span and events (docs/telemetry.md)
   vendor/                 Vendor adapter interface and implementations
     adapter.go            Interface definition + registry
     claude.go             Claude Code adapter (exec with --plugin-dir)
@@ -191,10 +192,22 @@ The user-facing version of this guidance lives in [`docs/marketplace.md` § Pinn
 ## Technologies
 
 - **Go 1.26+** - single binary, no runtime dependencies
+- **OpenTelemetry Go SDK** - telemetry from `ynh agent run` only (API, trace and log SDKs; no OTLP exporters), written to ynr's spool by `github.com/eyelock/ynr/spoolexporter`
 - **Git** - content resolution, caching, versioning
 - **JSON** - all configuration (harness manifests, global config)
 
 ## Development Setup
+
+**Building needs read access to `eyelock/ynr`, for now.** The spool exporter is
+the `github.com/eyelock/ynr/spoolexporter` module, and that repository is
+private until ynr is public. To build from source you need read access to it
+through your git credentials (for example `gh auth login`), and
+`GOPRIVATE=github.com/eyelock/ynr`, so Go fetches it directly instead of
+through the public proxy. The Makefile sets `GOPRIVATE` for every `make`
+target; set it yourself for a raw `go` command. CI reads the module with the
+read-only `YNR_READ_REPO` secret, so a pull request from a fork, which gets no secrets,
+cannot build in CI. A local `make docker-build` needs the token as a BuildKit
+secret: `YNR_TOKEN=$(gh auth token) make docker-build`.
 
 ```bash
 # Prerequisites + dev tools (Go, linter, formatter)
@@ -225,12 +238,12 @@ make e2e
 
 ### E2E test suite
 
-`make e2e` runs an end-to-end test suite (~100 tests, ~1m wallclock) that exercises both binaries against SHA-pinned fixtures in [eyelock/assistants:e2e-fixtures/](https://github.com/eyelock/assistants/tree/develop/e2e-fixtures). Tests live in `test/e2e/` behind the `e2e` build tag and are **not** part of `make check` or `make test`.
+`make e2e` runs an end-to-end test suite (~150 tests, ~30s wallclock) that exercises both binaries against fixtures each test builds in its own temp dir. Tests live in `test/e2e/` behind the `e2e` build tag and are **not** part of `make check` or `make test`.
 
 **What the suite locks:**
 
 - Every documented entry point on `ynh` and `ynd` (init, install, uninstall, update, run, ls, info, installed, schema, vendors, sources, paths, status, search, registry, backend, delegate, fork, include, focus, profile, hook, doctor, mcp, sensors, check, agent, image, prune, migrate, quarantine; create, lint, validate, fmt, compress, inspect, export, compose, preview, diff, marketplace, migrate, validate-output)
-- All three vendor adapters (Claude, Codex, Cursor) end-to-end: instructions files, hooks (with matchers + per-vendor event remapping), MCP servers (command + URL forms, env passthrough)
+- The Claude, Codex and Cursor adapters end-to-end (Copilot only for its exported MCP file and `--resume`): instructions files, hooks (with matchers + per-vendor event remapping), MCP servers (command + URL forms, env passthrough)
 - Profile + focus resolution (hook replace + inherit, MCP deep-merge, mutex/unknown errors)
 - Schema/security guards (path traversal, --ref + local, fork update, duplicate sources)
 - JSON error envelope, override semantics (harness AGENTS.md beats include's), symlink stability across reinstall
@@ -245,15 +258,13 @@ The suite is the release gate, not a per-PR gate:
 | Manual `workflow_dispatch` | Ad-hoc "is develop healthy?" check before opening release PR |
 | PR targeting `develop` | Not triggered — feature work stays fast |
 
-Tests clone `eyelock/assistants` over the network and exercise the production binary built via `make build`. Fixture SHAs are pinned in `test/e2e/helpers.go`. When ynh's harness schema legitimately evolves, the same PR that changes the schema must update the affected fixtures in `eyelock/assistants:e2e-fixtures/` and bump the SHA constants.
+The suite needs no network. Harness fixtures are written into a git repository in the test's temp dir (`test/e2e/fixtures.go`) and served from a bare copy over `file://`, so includes, delegates and git installs fetch from it and a flaky connection cannot fail the run. A test that needs another commit adds one to that repository.
 
-**Local fixture iteration.** If you have an `eyelock/assistants` worktree checked out at the pinned SHA, point the suite at it to skip the per-test clone:
+**Live smoke test.** `TestSmoke_LiveAssistants` installs real harnesses from `github.com/eyelock/assistants`, so it is the one test that has to reach GitHub. It is skipped unless `YNH_E2E_LIVE=1` is set; the release workflow sets it, so a broken upstream still blocks a release:
 
 ```bash
-YNH_E2E_ASSISTANTS_PATH=/path/to/assistants/worktree make e2e
+YNH_E2E_LIVE=1 make e2e
 ```
-
-The worktree's HEAD must match `AssistantsFixturesSHA` in `helpers.go` — otherwise the suite fails fast (so you can't accidentally pass tests locally with a fixture state CI doesn't share). Iterating on fixtures? Set `YNH_E2E_FIXTURES_LOOSE=1` to bypass the SHA check while you work, but bump the pinned SHA before pushing.
 
 See `.claude/plans/e2e-test-suite.md` for the architecture and coverage matrix.
 
@@ -289,7 +300,7 @@ Both are built by `make build`, installed by `make install`, and released via go
 
 ynd is self-contained in `cmd/ynd/` with its own command routing, file discovery, and signal scanning. Key patterns:
 
-- **LLM integration** (`llm.go`): Compress and inspect shell out to vendor CLIs (`claude`, `codex`) via `queryLLM()`. Auto-detection tries each CLI on PATH.
+- **LLM integration** (`llm.go`): Compress and inspect shell out to vendor CLIs (claude, codex, cursor, copilot) via `queryLLM()`. `llmVendors` holds each vendor's one-shot arguments; the binary is the vendor adapter's `CLIName`, never a literal. Auto-detection tries each vendor's CLI on PATH in that order.
 - **Signal scanning** (`inspect.go`): Discovers project files by category (build, test, CI, lint, config) to provide context for LLM analysis.
 - **Backup system** (`compress.go`): Backups are stored in `~/.ynd/backups/` mirroring the absolute file path. Override with `YND_BACKUP_DIR` env var (used in tests).
 - **Vendor-aware output** (`inspect.go`): Inspect writes artifacts to `.{vendor}/` by default (e.g., `.claude/skills/`). Override with `-o`. Discovery searches both project root and all vendor dirs.
@@ -671,6 +682,12 @@ ynh-guide
 ```
 
 Inside the session, `/ynh-create-harness` walks you through creating your own harness. The development-focused skills (`ynh-dev`, `vendor-adapters`, etc.) live in `.claude/` and are loaded natively by Claude — they're not part of the installable harness.
+
+## Repository Settings
+
+The repository's GitHub settings (rulesets, security features, labels, and the names of
+its secrets, never their values) live in [`infra/github`](../infra/github/README.md) and
+are applied with Terraform. Change them there, in a pull request, not in the settings page.
 
 ## Submitting Changes
 

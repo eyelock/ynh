@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/eyelock/ynh/internal/agentplugin"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/plugin"
 )
@@ -80,7 +81,14 @@ func loadMinimalHarness(dir string) (DiscoveredHarness, bool) {
 
 	data, err := os.ReadFile(plugin.PluginPath(dir))
 	if err != nil {
-		return DiscoveredHarness{}, false
+		// An Agent Plugins package is installable too; its identity fields
+		// have the same names at the root plugin.json.
+		if !agentplugin.IsPluginRoot(dir) {
+			return DiscoveredHarness{}, false
+		}
+		if data, err = os.ReadFile(filepath.Join(dir, agentplugin.ManifestFile)); err != nil {
+			return DiscoveredHarness{}, false
+		}
 	}
 
 	var manifest struct {

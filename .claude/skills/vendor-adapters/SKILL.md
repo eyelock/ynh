@@ -218,8 +218,8 @@ converted only by `ynd migrate` and refused by every other command.
 | Hook types:       | command, http, prompt, agent     | command only                     | command, prompt, http, agent     |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | --plugin-dir      | Skills: YES                      | N/A (uses symlinks)              | N/A (uses symlinks)              |
-| auto-activation:  | Hooks: NO (need /plugin enable)  |                                  |                                  |
-|                   | MCP: NO (need /plugin enable)    |                                  |                                  |
+| auto-activation:  | Hooks: YES                       |                                  |                                  |
+|                   | MCP: YES                         |                                  |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 ```
 
@@ -263,6 +263,19 @@ converted only by `ynd migrate` and refused by every other command.
 |                   |   official (GitHub)              |   (coming soon)                  |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 ```
+
+### Agent Plugins (agent-plugins.org)
+
+The portable package format Codex, Copilot, VS Code and Cursor load directly;
+Claude Code does not. Each adapter declares its place in such a package
+through `AgentPluginLayout()` in `internal/vendor/`: whether the client loads
+the format, its reverse-domain namespace, where its artifacts, hooks and MCP
+config go, and whether the manifest needs a hooks pointer. `ynd export
+--format agent-plugin` and `ynd marketplace build --format agent-plugin`
+read those declarations; `internal/agentplugin` holds the spec's reader and
+validator. Adding a vendor means declaring its layout there, and nothing
+else. Verified sources: the specification and the four vendors' plugin
+docs, 2026-09-25.
 
 ### GitHub Copilot CLI Mapping
 
@@ -320,15 +333,18 @@ Verified by writing `.mcp.json` and `.github/mcp.json` by hand and confirming
 }
 ```
 
-Key differences from ynh's existing `GenerateMCPConfig` output for
-Claude/Cursor (which just marshals `plugin.MCPServer` with no `type` field,
-inferring stdio-vs-remote from whether `command` or `url` is set):
+How this relates to the canonical model: `plugin.MCPServer` carries the
+Agent Plugins transport vocabulary (`stdio`, `streamable-http`, `sse`), with
+`Transport()` inferring `stdio` from `command` and `streamable-http` from
+`url` when `type` is not declared. Every adapter maps that to its own
+spelling rather than passing the struct through:
 
 - Copilot's schema **requires an explicit `"type"` field**: `"local"` for
-  stdio, `"http"` or `"sse"` for remote. The Copilot adapter's
-  `GenerateMCPConfig` must add this field — translate `command present →
-  "local"`, `url present → "http"` (default) unless the harness's own MCP
-  server declaration specifies SSE.
+  stdio, `"http"` for Streamable HTTP, `"sse"` for the legacy transport.
+- Claude Code and Codex share one `.mcp.json` shape: `"http"` or `"sse"` on a
+  remote entry, no type on a stdio entry (Claude Code rejects a `url` entry
+  without a type, so this is load-bearing).
+- Cursor's `mcp.json` defines no transport key; the adapter drops it.
 - `tools` defaults to `["*"]` if omitted when set via `copilot mcp add`, but
   wasn't tested for omission entirely from a hand-written file — include it
   explicitly (`["*"]`) to be safe rather than assuming a default applies to

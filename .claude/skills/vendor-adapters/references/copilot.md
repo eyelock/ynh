@@ -255,8 +255,9 @@ marks as app-managed.
 
 - `before_tool` → `preToolUse`
 - `after_tool` → **both** `postToolUse` and `postToolUseFailure`. Copilot splits
-  by outcome what the other three vendors combine; fanning out to both loses
-  less than picking one.
+  by outcome, where the other adapters map `after_tool` to one event (Claude and
+  Codex `PostToolUse`, Cursor `afterFileEdit`); fanning out to both loses less
+  than picking one.
 - `before_prompt` → `userPromptSubmitted` (not `userPromptTransformed`, which
   fires later on already-rewritten content)
 - `on_stop` → `agentStop`
@@ -288,7 +289,8 @@ mid-session. `~/.copilot/mcp-config.json` is user scope, lower precedence.
 ```
 
 - **`type` is required**: `local` for stdio, `http` or `sse` for remote.
-  Translate `command present → local`, `url present → http`.
+  The adapter maps the canonical transport: `stdio → local`,
+  `streamable-http → http`, `sse → sse`.
 - Set `tools` explicitly to `["*"]`. It defaults that way via `copilot mcp add`,
   but that was never verified for a hand-written file.
 - SSE is flagged legacy/deprecated by GitHub's own docs.

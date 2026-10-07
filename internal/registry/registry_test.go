@@ -41,7 +41,7 @@ func createTestRegistry(t *testing.T, name string, entries []Entry) string {
 func TestLoadFromDir_LegacyRegistryRefused(t *testing.T) {
 	t.Setenv("YNH_HOME", t.TempDir())
 	dir := t.TempDir()
-	body := `{"name":"old","entries":[{"name":"h","repo":"github.com/acme/h"}]}`
+	body := `{"name":"old","entries":[{"name":"h","repo":"github.com/example-org/h"}]}`
 	if err := os.WriteFile(filepath.Join(dir, "registry.json"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}

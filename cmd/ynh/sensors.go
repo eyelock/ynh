@@ -63,8 +63,9 @@ func cmdSensors(args []string) error {
 }
 
 func cmdSensorsTo(args []string, stdout, stderr io.Writer) error {
+	structured := detectJSONFormat(args)
 	if len(args) < 1 {
-		return cliError(stderr, false, errCodeInvalidInput,
+		return cliError(stderr, structured, errCodeInvalidInput,
 			"usage: ynh sensors <ls|show|run> [args]")
 	}
 	switch args[0] {
@@ -75,7 +76,7 @@ func cmdSensorsTo(args []string, stdout, stderr io.Writer) error {
 	case "run":
 		return cmdSensorsRun(args[1:], stdout, stderr)
 	default:
-		return cliError(stderr, false, errCodeInvalidInput,
+		return cliError(stderr, structured, errCodeInvalidInput,
 			fmt.Sprintf("unknown sensors subcommand: %s", args[0]))
 	}
 }

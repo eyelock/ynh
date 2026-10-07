@@ -63,8 +63,8 @@ all.
 
 ## 4. Flag parsing
 
-Hand-rolled, no framework — the project has zero external dependencies and that
-is deliberate.
+Hand-rolled, no framework: the project takes no CLI library, and that is
+deliberate (its few dependencies are listed in `.claude/CLAUDE.md`).
 
 ```go
 for i := 0; i < len(args); i++ {

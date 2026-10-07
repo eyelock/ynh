@@ -26,8 +26,8 @@ import (
 // claudeSettingsFiles are the project files Claude Code auto-loads in a plain
 // session. ynh doctor inspects them for hook-wiring mistakes that fail silently.
 var claudeSettingsFiles = []string{
-	filepath.Join(".claude", "settings.json"),
-	filepath.Join(".claude", "settings.local.json"),
+	filepath.Join((&vendor.Claude{}).ConfigDir(), "settings.json"),
+	filepath.Join((&vendor.Claude{}).ConfigDir(), "settings.local.json"),
 }
 
 // doctorReport is the `--format json` payload.

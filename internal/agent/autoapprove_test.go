@@ -13,6 +13,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 func TestValidateAutoApprove(t *testing.T) {
@@ -327,11 +329,28 @@ func TestRunLoop_AutoApproveRefusedBeforeTheWorkerStarts(t *testing.T) {
 	}
 }
 
-// fakeVendor puts an executable named name on PATH that records its
-// arguments, writes stderrText to stderr, prints stdout, and exits with code.
-// It never reads stdin, so a worker that writes to it may find it gone: the
-// same race a real vendor refusing to start produces.
-func fakeVendor(t *testing.T, name, stdout, stderrText string, code int) (argsFile string) {
+// fakeVendor puts the CLI of backend's vendor on PATH, as a stub that records
+// its arguments, writes stderrText to stderr, prints stdout, and exits with
+// code. It never reads stdin, so a worker that writes to it may find it gone:
+// the same race a real vendor refusing to start produces. The binary's name
+// is the vendor adapter's, and every other vendor CLI is shadowed.
+func fakeVendor(t *testing.T, backend, stdout, stderrText string, code int) (argsFile string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("shell stub is POSIX-only")
+	}
+	adapter, err := vendor.Get(backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fakeProgram(t, adapter.CLIName(), stdout, stderrText, code)
+}
+
+// fakeProgram puts a stub named name first on PATH, in front of failing stubs
+// for every vendor CLI, and returns the file its arguments are written to. Use
+// it for a program that is not a vendor CLI, such as srt; fakeVendor resolves a
+// vendor's binary through its adapter and calls it.
+func fakeProgram(t *testing.T, name, stdout, stderrText string, code int) (argsFile string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("shell stub is POSIX-only")
@@ -349,6 +368,7 @@ func fakeVendor(t *testing.T, name, stdout, stderrText string, code int) (argsFi
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	shadowVendorCLIs(t, dir)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return argsFile
 }

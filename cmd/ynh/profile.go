@@ -12,16 +12,17 @@ import (
 )
 
 func cmdProfile(args []string) error {
-	return cmdProfileTo(args, os.Stdout)
+	return cmdProfileTo(args, os.Stdout, os.Stderr)
 }
 
-func cmdProfileTo(args []string, stdout io.Writer) error {
+func cmdProfileTo(args []string, stdout, stderr io.Writer) error {
+	structured := detectJSONFormat(args)
 	if len(args) == 0 {
-		return fmt.Errorf("usage: ynh profile <ls|add|remove|hook|mcp|include>")
+		return cliError(stderr, structured, errCodeInvalidInput, "usage: ynh profile <ls|add|remove|hook|mcp|include>")
 	}
 	switch args[0] {
 	case "ls", "list":
-		return cmdProfileLs(args[1:], stdout)
+		return cmdProfileLs(args[1:], stdout, stderr)
 	case "add":
 		return cmdProfileAdd(args[1:], stdout)
 	case "remove":
@@ -33,7 +34,8 @@ func cmdProfileTo(args []string, stdout io.Writer) error {
 	case "include":
 		return cmdProfileInclude(args[1:], stdout)
 	default:
-		return fmt.Errorf("unknown profile subcommand: %s\nUsage: ynh profile <ls|add|remove|hook|mcp|include>", args[0])
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("unknown profile subcommand: %s\nUsage: ynh profile <ls|add|remove|hook|mcp|include>", args[0]))
 	}
 }
 
@@ -197,6 +199,18 @@ func cmdProfileMCPAdd(args []string, stdout io.Writer) error {
 	var positional []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--type":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--type requires a value")
+			}
+			i++
+			opts.Type = args[i]
+		case "--cwd":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--cwd requires a value")
+			}
+			i++
+			opts.Cwd = args[i]
 		case "--command":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--command requires a value")
@@ -251,7 +265,7 @@ func cmdProfileMCPAdd(args []string, stdout io.Writer) error {
 		}
 	}
 	if len(positional) != 3 {
-		return fmt.Errorf("usage: ynh profile mcp add <harness> <profile> <name> [--command <cmd> | --url <url> | --null] [--arg <v>...] [--env K=V...] [--header K=V...]")
+		return fmt.Errorf("usage: ynh profile mcp add <harness> <profile> <name> [--command <cmd> | --url <url> | --null] [--type <stdio|streamable-http|sse>] [--arg <v>...] [--env K=V...] [--cwd <dir>] [--header K=V...]")
 	}
 	harnessRef, profileName, serverName := positional[0], positional[1], positional[2]
 
@@ -295,6 +309,20 @@ func cmdProfileMCPUpdate(args []string, stdout io.Writer) error {
 	var positional []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case "--type":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--type requires a value")
+			}
+			i++
+			v := args[i]
+			opts.Type = &v
+		case "--cwd":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--cwd requires a value")
+			}
+			i++
+			v := args[i]
+			opts.Cwd = &v
 		case "--command":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--command requires a value")
@@ -358,7 +386,7 @@ func cmdProfileMCPUpdate(args []string, stdout io.Writer) error {
 		}
 	}
 	if len(positional) != 3 {
-		return fmt.Errorf("usage: ynh profile mcp update <harness> <profile> <name> [--command <cmd>] [--url <url>] [--arg <v>...] [--env K=V...] [--header K=V...] [--clear-args|--clear-env|--clear-headers]")
+		return fmt.Errorf("usage: ynh profile mcp update <harness> <profile> <name> [--command <cmd>] [--url <url>] [--type <t>] [--arg <v>...] [--env K=V...] [--cwd <dir>] [--header K=V...] [--clear-args|--clear-env|--clear-headers]")
 	}
 	harnessRef, profileName, serverName := positional[0], positional[1], positional[2]
 

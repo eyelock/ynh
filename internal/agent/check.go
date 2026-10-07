@@ -29,11 +29,13 @@ var runCheckFn = defaultRunCheck
 // Consuming the gate also inherits its tolerance policy and its verdict, so
 // the loop and `ynh check` can no longer reach opposite conclusions about one
 // manifest.
-func RunCheck(ynhPath, harnessName, cwd string, only []string, overlay map[string]json.RawMessage) (*gate.Envelope, error) {
-	return runCheckFn(ynhPath, harnessName, cwd, only, overlay)
+//
+// extraEnv is added to the inherited environment (see childEnv).
+func RunCheck(ynhPath, harnessName, cwd string, only []string, overlay map[string]json.RawMessage, extraEnv []string) (*gate.Envelope, error) {
+	return runCheckFn(ynhPath, harnessName, cwd, only, overlay, extraEnv)
 }
 
-func defaultRunCheck(ynhPath, harnessName, cwd string, only []string, overlay map[string]json.RawMessage) (*gate.Envelope, error) {
+func defaultRunCheck(ynhPath, harnessName, cwd string, only []string, overlay map[string]json.RawMessage, extraEnv []string) (*gate.Envelope, error) {
 	args := []string{"check", harnessName, "--format", "json"}
 	if cwd != "" {
 		args = append(args, "--cwd", cwd)
@@ -50,6 +52,7 @@ func defaultRunCheck(ynhPath, harnessName, cwd string, only []string, overlay ma
 	}
 
 	cmd := exec.Command(ynhPath, args...)
+	cmd.Env = childEnv(extraEnv)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

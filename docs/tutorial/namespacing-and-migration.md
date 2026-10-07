@@ -38,7 +38,7 @@ canonical ids differ:
 | Source                              | Canonical id                          |
 |-------------------------------------|---------------------------------------|
 | `github.com/eyelock/assistants`     | `github.com/eyelock/assistants/david` |
-| `github.com/acme/tools`             | `github.com/acme/tools/david`         |
+| `github.com/example-org/tools`      | `github.com/example-org/tools/david`  |
 
 ## Demo — two registries, two `david` harnesses
 
@@ -72,7 +72,7 @@ cat > /tmp/ynh-ns-tutorial/reg-a/.agents/harness/marketplace.json << 'EOF'
 EOF
 (cd /tmp/ynh-ns-tutorial/reg-a && git init -q && git add . && git commit -q -m init)
 
-# Registry B — points at a hypothetical github.com/acme/tools
+# Registry B: points at a hypothetical github.com/example-org/tools
 # (For this tutorial we re-use eyelock/assistants. The point is that the
 # canonical id is derived from the source repo, not the registry that listed
 # it.)
@@ -80,8 +80,8 @@ mkdir -p /tmp/ynh-ns-tutorial/reg-b/.agents/harness
 cat > /tmp/ynh-ns-tutorial/reg-b/.agents/harness/marketplace.json << 'EOF'
 {
   "$schema": "https://eyelock.github.io/ynh/schema/marketplace.schema.json",
-  "name": "acme-registry",
-  "owner": {"name": "acme-registry"},
+  "name": "example-registry",
+  "owner": {"name": "example-registry"},
   "harnesses": [
     {
       "name": "david",

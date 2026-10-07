@@ -68,7 +68,7 @@ func readExtendedManifest(t *testing.T, harnessDir string) extendedManifest {
 //   - focus remove drops it
 func TestFocus_LocalInstall_RoundTrip(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
+	clone := newFixtureRepo(t).Clone
 	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
 
 	s.mustRunYnh(t, "install", sourceDir)
@@ -101,7 +101,7 @@ func TestFocus_LocalInstall_RoundTrip(t *testing.T) {
 // nested hook and mcp editors on a pointer-form local install.
 func TestProfile_LocalInstall_HookAndMCP(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
+	clone := newFixtureRepo(t).Clone
 	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
 
 	s.mustRunYnh(t, "install", sourceDir)
@@ -146,7 +146,7 @@ func TestProfile_LocalInstall_HookAndMCP(t *testing.T) {
 // harness-level (not profile-nested) hook surface.
 func TestHook_HarnessLevel_LocalInstall(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
+	clone := newFixtureRepo(t).Clone
 	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
 
 	s.mustRunYnh(t, "install", sourceDir)
@@ -174,7 +174,7 @@ func TestHook_HarnessLevel_LocalInstall(t *testing.T) {
 // the add → update → remove lifecycle.
 func TestMCP_HarnessLevel_LocalInstall(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
+	clone := newFixtureRepo(t).Clone
 	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
 
 	s.mustRunYnh(t, "install", sourceDir)
@@ -211,7 +211,7 @@ func TestMCP_HarnessLevel_LocalInstall(t *testing.T) {
 // shape.
 func TestYndCompose_AcceptsCanonicalID(t *testing.T) {
 	s := newSandbox(t)
-	clone := cloneAssistantsAtSHA(t)
+	clone := newFixtureRepo(t).Clone
 	sourceDir := filepath.Join(clone, "e2e-fixtures", "minimal")
 
 	s.mustRunYnh(t, "install", sourceDir)

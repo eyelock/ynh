@@ -8,9 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/agentplugin"
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/exporter"
+	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/pathutil"
 	"github.com/eyelock/ynh/internal/plugin"
@@ -156,7 +158,7 @@ type BuildOptions struct {
 	ConfigDir string
 	// OutputDir is where to write the marketplace output.
 	OutputDir string
-	// Vendors lists target vendors (default: claude, cursor, codex, copilot).
+	// Vendors lists target vendors (default: every registered vendor).
 	Vendors []string
 	// Config provides remote source checking.
 	Config *config.Config
@@ -164,6 +166,12 @@ type BuildOptions struct {
 	// before anything is written. The CLI runs --clean here, so a refused
 	// build does not empty the output directory first.
 	BeforeWrite func() error
+	// AgentPlugin builds each harness entry as one portable Agent Plugins
+	// package (https://agent-plugins.org) instead of a merged vendor tree.
+	// The vendor indexes are written either way: every vendor's marketplace
+	// points at plugin directories, and the ones that load the format
+	// detect it from the root manifest.
+	AgentPlugin bool
 }
 
 // Build generates a vendor-native marketplace directory from a marketplace
@@ -173,7 +181,7 @@ type BuildOptions struct {
 func Build(cfg *MarketplaceConfig, opts BuildOptions) ([]string, error) {
 	vendors := opts.Vendors
 	if len(vendors) == 0 {
-		vendors = []string{"claude", "cursor", "codex", "copilot"}
+		vendors = vendor.Available()
 	}
 
 	// Read and check every entry before writing anything, so a refused entry
@@ -203,14 +211,18 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) ([]string, error) {
 
 		switch entry.Type {
 		case "harness":
-			if _, err := migration.FormatChain().Run(srcDir); err != nil {
-				return nil, fmt.Errorf("entry %q: %w", entry.Source, err)
-			}
-			hj, err := plugin.LoadPluginJSON(srcDir)
+			// harness.LoadDir runs the migration chain and also accepts an
+			// Agent Plugins package as the source, deriving its harness.
+			h, err := harness.LoadDir(srcDir)
 			if err != nil {
 				return nil, fmt.Errorf("entry %q: %w", entry.Source, err)
 			}
-			info = pluginInfo{Name: hj.Name, Description: hj.Description, Version: hj.Version}
+			info = pluginInfo{Name: h.Name, Description: h.Description, Version: h.Version}
+			if opts.AgentPlugin {
+				// The package carries the spec's name, which the export
+				// normalises; the directory and the indexes must agree with it.
+				info.Name, _ = agentplugin.NormalizeName(h.Name)
+			}
 		case "plugin":
 			if _, err := migration.FormatChain().Run(srcDir); err != nil {
 				return nil, fmt.Errorf("entry %q: %w", entry.Source, err)
@@ -245,7 +257,7 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) ([]string, error) {
 
 		switch p.kind {
 		case "harness":
-			entryWarnings, err := buildHarnessEntry(p.srcDir, pluginOutputDir, vendors, opts.Config)
+			entryWarnings, err := buildHarnessEntry(p.srcDir, pluginOutputDir, vendors, opts.Config, opts.AgentPlugin)
 			if err != nil {
 				return nil, fmt.Errorf("harness %q: %w", info.Name, err)
 			}
@@ -302,14 +314,19 @@ func Build(cfg *MarketplaceConfig, opts BuildOptions) ([]string, error) {
 	return warnings, nil
 }
 
-// buildHarnessEntry exports a harness using ModeMerged into the plugin output
-// dir and returns the export's warnings.
-func buildHarnessEntry(srcDir, outputDir string, vendors []string, cfg *config.Config) ([]string, error) {
+// buildHarnessEntry exports a harness into the plugin output dir, a merged
+// vendor tree or, when agentPlugin is set, one Agent Plugins package, and
+// returns the export's warnings.
+func buildHarnessEntry(srcDir, outputDir string, vendors []string, cfg *config.Config, agentPlugin bool) ([]string, error) {
+	mode := exporter.ModeMerged
+	if agentPlugin {
+		mode = exporter.ModeAgentPlugin
+	}
 	results, err := exporter.Export(exporter.ExportOptions{
 		SourceDir: srcDir,
 		OutputDir: outputDir,
 		Vendors:   vendors,
-		Mode:      exporter.ModeMerged,
+		Mode:      mode,
 		Config:    cfg,
 	})
 	if err != nil {
@@ -340,7 +357,7 @@ func buildPluginEntry(srcDir, outputDir string, vendors []string) error {
 	if hj == nil {
 		pi, piErr := loadPluginManifest(outputDir)
 		if piErr != nil {
-			return fmt.Errorf("no .agents/harness/plugin.json or .claude-plugin/plugin.json found: %w", piErr)
+			return fmt.Errorf("no .agents/harness/plugin.json, plugin.json (Agent Plugins) or .claude-plugin/plugin.json found: %w", piErr)
 		}
 		hj = &plugin.HarnessJSON{
 			Name:        pi.Name,
@@ -352,10 +369,18 @@ func buildPluginEntry(srcDir, outputDir string, vendors []string) error {
 		return err
 	}
 
-	// Generate missing vendor manifests
+	// Generate missing vendor manifests. An entry that is already an Agent
+	// Plugins package needs none for a client that loads the format: it
+	// detects the format from the root manifest, and a second manifest of
+	// that client's own would make the package ambiguous. Only a client
+	// outside the format (Claude Code) gets its compatibility manifest.
+	isAgentPlugin := agentplugin.IsPluginRoot(outputDir)
 	for _, v := range vendors {
 		adapter, err := vendor.Get(v)
 		if err != nil {
+			continue
+		}
+		if isAgentPlugin && adapter.AgentPluginLayout().LoadsFormat {
 			continue
 		}
 		manifestFiles, err := exporter.PluginManifest(adapter, hj, outputDir)
@@ -379,10 +404,18 @@ func buildPluginEntry(srcDir, outputDir string, vendors []string) error {
 	return nil
 }
 
-// loadPluginManifest reads name, description, and version from a vendor-native
-// plugin's .claude-plugin/plugin.json. Used for plugin entries that don't have harness.json.
+// loadPluginManifest reads name, description, and version from a plugin
+// entry that has no ynh manifest: an Agent Plugins root plugin.json, or a
+// vendor-native .claude-plugin/plugin.json.
 func loadPluginManifest(dir string) (pluginInfo, error) {
-	path := filepath.Join(dir, ".claude-plugin", "plugin.json")
+	if agentplugin.IsPluginRoot(dir) {
+		m, _, err := agentplugin.ReadManifest(dir)
+		if err != nil {
+			return pluginInfo{}, err
+		}
+		return pluginInfo{Name: m.Name, Description: m.Description, Version: m.Version}, nil
+	}
+	path := filepath.Join(dir, (&vendor.Claude{}).PluginManifestDir(), "plugin.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return pluginInfo{}, fmt.Errorf("reading %s: %w", path, err)

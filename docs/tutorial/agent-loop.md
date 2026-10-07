@@ -66,6 +66,7 @@ Exit code `1`.
 
 ## Run the loop
 
+*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --add-dir .../ynh-agent-... --session-id ...`
 ```bash
 ynh agent run --harness local/demo --focus tidy --max-turns 5 --max-wall 4m --emit-jsonl run.jsonl
 echo "exit=$?"
@@ -80,6 +81,7 @@ no banner. This is deliberate and [Exit codes](#exit-codes) explains why.
 
 The work did happen:
 
+*Your output will differ: it shows what the model did.*
 ```bash
 cat notes.txt
 ```
@@ -175,6 +177,7 @@ Error: starting worker: starting claude: chdir /nope/nothing: no such file or di
 
 `--emit-jsonl <file>` writes one JSON object per event. From the run in [Run the loop](#run-the-loop):
 
+*Your output will differ: it shows what the model did.*
 ```bash
 python3 -c "
 import json
@@ -244,6 +247,7 @@ result says little; this one, trimmed to the fields discussed below, is from a
 larger harness that declares a `reviewer` convergence verifier and stopped
 without converging:
 
+*Your output will differ: it shows what the model did.*
 ```bash
 ynh agent run --harness local/api --focus add-handler --max-wall 60m --format json
 ```
@@ -293,6 +297,7 @@ showed, a successful run has no output to parse.
 | Code | Meaning |
 |------|---------|
 | `0` | Converged — the gate passes |
+| `1` | Refused before any worker started |
 | `10` | Turn cap reached |
 | `11` | Token budget exhausted |
 | `12` | Wall-clock budget exhausted |
@@ -305,7 +310,9 @@ showed, a successful run has no output to parse.
 | `30` | Aborted by the user |
 | `31` | Interrupted |
 
-The bands carry meaning. `10`–`15` are the loop stopping itself as designed:
+The bands carry meaning. `1` is a run that never started: a flag or setting
+the backend cannot honour, or a harness that cannot load. Retrying it changes
+nothing. `10`–`15` are the loop stopping itself as designed:
 the run is over, nothing is broken. `20`–`22` are faults, and `22` in
 particular says the harness is broken rather than the agent — in a batch, every
 run will hit it, and it is the operator's fault not the model's.
@@ -333,6 +340,7 @@ That folder is the session directory. Here it is `/tmp/loop-demo`, because
 
 Resume by pointing at the directory that holds it:
 
+*This launches:* `claude --input-format stream-json --output-format stream-json --print --verbose --plugin-dir .../ynh-agent-.../.claude --add-dir .../ynh-agent-... --resume ...`
 ```bash
 ynh agent run --resume /tmp/loop-demo
 ```

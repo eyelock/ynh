@@ -64,6 +64,11 @@ Checks required files, frontmatter fields, directory layout, and JSON Schema
 conformance: plugin.json against plugin.schema.json, and any
 .agents/harness/marketplace.json against marketplace.schema.json.
 
+A directory whose root plugin.json declares the Agent Plugins schema
+(https://agent-plugins.org) is checked against that specification instead:
+manifest, skills/ discovery and mcp.json, with the spec's own failure
+boundaries.
+
 Flags:
   --harness <source>     Harness to resolve against (falls back to $YNH_HARNESS)`,
 
@@ -109,6 +114,11 @@ Flags:
   --profile <name>       Apply a named profile (falls back to $YNH_PROFILE)
   --focus <name>         Apply a named focus
   --merged               Write one merged tree rather than per-vendor trees
+  --format <name>        vendor (default): the vendor's own plugin layout;
+                         agent-plugin: one portable Agent Plugins package
+                         (https://agent-plugins.org). With agent-plugin, -v
+                         selects which clients' namespaces and compatibility
+                         files are added to the portable core
   --path <subdir>        Export only this subdirectory of the source
   --harness <source>     Harness to resolve against (falls back to $YNH_HARNESS)
   --clean                Remove the output directory first
@@ -126,7 +136,8 @@ Reports what the harness resolves to once includes, delegates and profiles
 are applied, with each artifact attributed to its source.
 
 Flags:
-  --format <text|json>   Output format
+  --format <text|json>   Output format (default json, so errors are the JSON
+                         envelope unless --format text is given)
   --profile <name>       Apply a named profile (falls back to $YNH_PROFILE)
   --harness <source>     Harness to resolve against (falls back to $YNH_HARNESS)`,
 
@@ -164,6 +175,10 @@ Build a vendor-native marketplace from marketplace.json.
 Flags:
   -o, --output <dir>     Destination directory
   -v, --vendor <vendor>  Target vendor (falls back to $YNH_VENDOR)
+  --format <name>        vendor (default): each harness entry as a merged
+                         vendor tree; agent-plugin: each harness entry as one
+                         portable Agent Plugins package. Indexes are written
+                         for every selected vendor either way
   --clean                Remove the output directory first
   -y, --yes              Skip the confirmation prompt (also $YNH_YES, or CI)
 
@@ -219,9 +234,12 @@ existing invocation validates against.
 Flags:
   --schema <name|path>   Published name (see: ynh schema --all) or a file`,
 
-	"version": `ynd version
+	"version": `ynd version [flags]
 
 Print the ynd version.
+
+Flags:
+  --format <text|json>   Output format (default text)
 
 Use --format json for the machine-readable form; it is the canonical
 wire-contract probe for consumers that gate on capabilities.`,

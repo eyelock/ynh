@@ -14,6 +14,12 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 | `YNH_YES` | _(none)_ | `ynd compress/inspect` | `-y` flag |
 | `CI` | _(none)_ | `ynd compress/inspect` | (lowest priority skip-confirm) |
 | `YND_BACKUP_DIR` | `~/.ynd/backups` | `ynd compress` | — |
+| `YNR_SPOOL` | _(none)_ | `ynh agent run` | telemetry spool folder ([Telemetry](telemetry.md)) |
+| `XDG_STATE_HOME` | `~/.local/state` | `ynh agent run` | telemetry goes to `$XDG_STATE_HOME/ynr/spool/local` when it exists |
+| `TRACEPARENT`, `TRACESTATE` | _(none)_ | `ynh agent run` | the trace a run joins |
+| `OTEL_EXPORTER_OTLP_*` | _(none)_ | `ynh agent run` | an OTLP endpoint, which wins over the spool; not exported yet |
+| `OTEL_RESOURCE_ATTRIBUTES` | _(none)_ | `ynh agent run` | extra telemetry resource attributes |
+| `YNH_TELEMETRY_RELAY` | _(off)_ | `ynh agent run` | `--telemetry-relay` flag; turns the [telemetry relay](telemetry.md#vendor-telemetry-through-the-relay) on or off |
 
 **Note:** `YNH_VENDOR` is not used by `ynd diff` — diff always compares across multiple vendors and a single vendor value is not meaningful. Use `-v` with a comma-separated list instead.
 
@@ -26,6 +32,7 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 | Focus | `--focus` flag > `YNH_FOCUS` > no focus (mutually exclusive with `--profile`) |
 | Harness source | `--harness` flag > `YNH_HARNESS` > positional arg > `.` (CWD) or error |
 | Non-interactive | `-y` flag > `YNH_YES` > `CI` |
+| Telemetry relay | `--telemetry-relay` flag > `YNH_TELEMETRY_RELAY` > `telemetry_relay` in `config.json` > off |
 
 The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For `preview`, `export`, and `diff` it is an error if no source is specified.
 
@@ -59,24 +66,24 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh profile remove <harness> <name>` | (refuses if any focus references it) |
 | `ynh profile hook add <harness> <profile> <event> <command>` | `--matcher` |
 | `ynh profile hook remove <harness> <profile> <event> <index>` | |
-| `ynh profile mcp add <harness> <profile> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header`, `--null` |
+| `ynh profile mcp add <harness> <profile> <name>` | `--command`, `--url`, `--type`, `--arg`, `--env`, `--cwd`, `--header`, `--null` |
 | `ynh profile mcp remove <harness> <profile> <name>` | |
-| `ynh profile mcp update <harness> <profile> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header`, `--clear-args`, `--clear-env`, `--clear-headers` |
+| `ynh profile mcp update <harness> <profile> <name>` | `--command`, `--url`, `--type`, `--arg`, `--env`, `--cwd`, `--header`, `--clear-args`, `--clear-env`, `--clear-headers` |
 | `ynh profile include add <harness> <profile> <url>` | `--path`, `--ref`, `--replace` |
 | `ynh profile include remove <harness> <profile> <url>` | `--path` |
 | `ynh profile include update <harness> <profile> <url>` | `--from-path`, `--path`, `--ref` |
 | `ynh hook add <harness> <event> <command>` | `--matcher` — top-level harness hook |
 | `ynh hook remove <harness> <event> <index>` | top-level harness hook |
 | `ynh hook export <harness>` | `--target <settings\|local>` (required), `-v <vendor>` (claude), `--dry-run` — write a harness's hooks into a Claude settings file ([why](hooks.md#running-hooks-in-a-plain-claude-session)) |
-| `ynh mcp add <harness> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header` — top-level harness MCP server (no `--null`; harness-level entries cannot be null) |
+| `ynh mcp add <harness> <name>` | `--command`, `--url`, `--type`, `--arg`, `--env`, `--cwd`, `--header`, top-level harness MCP server (no `--null`; harness-level entries cannot be null) |
 | `ynh mcp remove <harness> <name>` | top-level harness MCP server |
-| `ynh mcp update <harness> <name>` | `--command`, `--url`, `--arg`, `--env`, `--header`, `--clear-args`, `--clear-env`, `--clear-headers` |
+| `ynh mcp update <harness> <name>` | `--command`, `--url`, `--type`, `--arg`, `--env`, `--cwd`, `--header`, `--clear-args`, `--clear-env`, `--clear-headers` |
 | `ynh sensors ls <harness>` | `--format <text\|json>` |
 | `ynh sensors show <harness> <name>` | `--format <text\|json>` |
 | `ynh sensors run <harness> <name>` | `--cwd <dir>`, `--no-content` |
 | `ynh check <harness-id\|path>` | `--only <a,b>`, `--cwd <dir>`, `--update-baseline`, `--no-baseline`, `--sensor-overlay <json>`, `--format <text\|json>` |
 | `ynh trust [ls\|show\|accept] [harness]` | `--format <text\|json>` |
-| `ynh agent run` | `--harness`, `--task`, `--focus`, `--profile`, `--backend`, `--model`, `--effort`, `--convergence-sensor`, `--sensor-overlay`, `--worktree`, `--sandbox`, `--auto-approve`, `--auto-commit`, `--interactive`, `--no-plan`, `--max-turns`, `--max-tokens`, `--max-wall`, `--max-plan-iterations`, `--emit-jsonl`, `--resume`. See [Agent Loop](agent.md) |
+| `ynh agent run` | `--harness`, `--task`, `--focus`, `--profile`, `--backend`, `--model`, `--effort`, `--convergence-sensor`, `--sensor-overlay`, `--worktree`, `--sandbox`, `--auto-approve`, `--auto-commit`, `--interactive`, `--no-plan`, `--max-turns`, `--max-tokens`, `--max-wall`, `--max-plan-iterations`, `--emit-jsonl`, `--resume`, `--telemetry-relay`. See [Agent Loop](agent.md) |
 | `ynh sources add <path>` | `--name`, `--description` |
 | `ynh sources list` | `--format <text\|json>` |
 | `ynh sources remove <name>` | |
@@ -101,7 +108,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynd validate [path]` | `--harness` |
 | `ynd lint [path]` | `--harness` |
 | `ynd fmt [path]` | `--harness` |
-| `ynd compose <source>` | `--harness`, `--profile`, `--format <text\|json>` |
+| `ynd compose <source>` | `--harness`, `--profile`, `--format <text\|json>` (default `json`) |
 | `ynd compress [files...]` | `-v`, `-y`, `--restore`, `--list-backups`, `--pick` |
 | `ynd inspect` | `-v`, `-y`, `-o` |
 | `ynd preview <source>` | `-v`, `-o`, `--harness`, `--profile`, `--focus` |
@@ -269,7 +276,7 @@ The `is_pinned` rule is the same on harnesses and includes:
 
 **`--name <new>`** registers the fork under a different name without uninstalling the source — the common case where a user wants to keep the upstream installed and fork a copy alongside it. The fork tree's `.agents/harness/plugin.json` is rewritten so its `name` field matches the registration; upstream identity survives in `installed_from.forked_from`. The new name is validated against the same regex as harness names (`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`). If `--to` is omitted, the default destination uses the new name (`<cwd>/<new>`).
 
-`ynh uninstall <name>` for a fork removes the pointer file (and launcher, run dir, sources entry) but leaves the source tree on disk — the user owns it. To delete the tree as well, remove the directory after uninstalling.
+`ynh uninstall <name>` for a fork removes the pointer file (and launcher, run dir, sources entry) but leaves the source tree on disk: the user owns it. To delete the tree as well, remove the directory after uninstalling. The confirmation names the tree as `Source tree left in place: <path>` only when a directory is still there; if it was already deleted, that line is omitted.
 
 If the source path recorded in a pointer no longer exists when the fork is loaded, `ynh` prints an actionable error directing the user to either restore the directory or run `ynh uninstall <name>`. There is no auto-relocate in this version.
 

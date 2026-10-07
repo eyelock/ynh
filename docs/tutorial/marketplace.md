@@ -327,6 +327,107 @@ ynd marketplace build -o /tmp/ynh-tutorial/marketplace-claude -v claude
 # Plugins still get .claude-plugin/plugin.json only
 ```
 
+## Build as Agent Plugins
+
+`--format agent-plugin` builds each `harness` entry as one portable
+[Agent Plugins](https://agent-plugins.org) package, the format Codex, Copilot,
+VS Code and Cursor load directly. The indexes are written for every vendor
+as before; the clients that load the format detect it from each package's
+root manifest, and Claude Code finds its own manifest inside:
+
+```bash
+cd /tmp/ynh-tutorial/marketplace-src
+ynd marketplace build -o /tmp/ynh-tutorial/marketplace-portable --format agent-plugin
+find /tmp/ynh-tutorial/marketplace-portable -not -path '*/.git/*' -type f | LC_ALL=C sort
+```
+
+Expected (`.git/` excluded; `LC_ALL=C` pins the order):
+```
+/tmp/ynh-tutorial/marketplace-portable/.agents/plugins/marketplace.json
+/tmp/ynh-tutorial/marketplace-portable/.claude-plugin/marketplace.json
+/tmp/ynh-tutorial/marketplace-portable/.cursor-plugin/marketplace.json
+/tmp/ynh-tutorial/marketplace-portable/.github/plugin/marketplace.json
+/tmp/ynh-tutorial/marketplace-portable/.ynd-marketplace
+/tmp/ynh-tutorial/marketplace-portable/README.md
+/tmp/ynh-tutorial/marketplace-portable/plugins/formatter/.claude-plugin/plugin.json
+/tmp/ynh-tutorial/marketplace-portable/plugins/formatter/.codex-plugin/plugin.json
+/tmp/ynh-tutorial/marketplace-portable/plugins/formatter/.cursor-plugin/plugin.json
+/tmp/ynh-tutorial/marketplace-portable/plugins/formatter/skills/auto-format/SKILL.md
+/tmp/ynh-tutorial/marketplace-portable/plugins/reviewer/.claude-plugin/plugin.json
+/tmp/ynh-tutorial/marketplace-portable/plugins/reviewer/AGENTS.md
+/tmp/ynh-tutorial/marketplace-portable/plugins/reviewer/CLAUDE.md
+/tmp/ynh-tutorial/marketplace-portable/plugins/reviewer/plugin.json
+/tmp/ynh-tutorial/marketplace-portable/plugins/reviewer/skills/dev-quality/SKILL.md
+/tmp/ynh-tutorial/marketplace-portable/plugins/reviewer/skills/dev-review/SKILL.md
+```
+
+The `reviewer` harness became a package: `plugin.json` and `skills/` are the
+portable core, `.claude-plugin/plugin.json` and `CLAUDE.md` are Claude Code's
+compatibility layer. The `formatter` entry is a Claude Code plugin, not an
+Agent Plugin, so it is copied as-is with vendor manifests generated, exactly
+as in the vendor-format build.
+
+```bash
+ynd validate /tmp/ynh-tutorial/marketplace-portable/plugins/reviewer
+# Expected: /tmp/ynh-tutorial/marketplace-portable/plugins/reviewer: valid (Agent Plugin 1.0.0)
+```
+
+### Test with GitHub Copilot
+
+Copilot CLI registers a local marketplace directory and loads Agent Plugins
+from it natively. Unlike the Claude Code test above, no `git init` is needed
+(the build already did it, and Copilot does not require it). These commands
+change your Copilot configuration; the last two undo it.
+
+```bash
+copilot plugin marketplace add /tmp/ynh-tutorial/marketplace-portable
+copilot plugin marketplace browse tutorial-marketplace
+```
+
+Expected:
+```
+Marketplace "tutorial-marketplace" added successfully.
+Plugins in "tutorial-marketplace":
+  • formatter - Auto-format code on save
+  • reviewer - Code review with dev-quality and dev-review skills
+
+Install with: copilot plugin install <plugin-name>@tutorial-marketplace
+```
+
+```bash
+copilot plugin install reviewer@tutorial-marketplace
+```
+
+Expected output begins:
+```
+Plugin "reviewer" installed successfully. Installed 2 skills.
+```
+
+Copilot loads the package live from `/tmp/ynh-tutorial/marketplace-portable/plugins/reviewer` rather than copying it, so an edit to the built output takes effect on its next session.
+
+Both skills the harness pulled in from its remote include are now Copilot
+skills:
+
+```bash
+copilot skill list
+```
+
+Expected output includes a `Plugin skills:` section naming both (the project
+and built-in sections vary by machine):
+```
+Plugin skills:
+  dev-quality - ...
+  dev-review - ...
+```
+
+Undo the registration:
+
+```bash
+copilot plugin uninstall reviewer
+copilot plugin marketplace remove tutorial-marketplace
+# Expected: Marketplace "tutorial-marketplace" removed successfully.
+```
+
 ## Clean up
 
 ```bash
@@ -342,6 +443,8 @@ rm -rf /tmp/ynh-tutorial
 - Harnesses' remote includes are resolved and flattened during marketplace build
 - Pick filtering carries through from harness metadata to the marketplace output
 - Codex is included: each plugin gets a `.codex-plugin/plugin.json` that points only at its skills
+- `--format agent-plugin` builds each harness entry as one portable Agent Plugins package, with every vendor's index still written
+- Copilot CLI registers the built directory as a marketplace and installs a package from it with its skills, which is the end-to-end proof that a real client reads what ynh wrote
 
 ## Next
 

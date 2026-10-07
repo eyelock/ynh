@@ -38,12 +38,15 @@ func init() {
 	Register(&Claude{})
 }
 
+// claudeCLI is Claude Code's binary: see CLIName in adapter.go.
+const claudeCLI = "claude"
+
 // Claude implements the Adapter interface for Claude Code CLI.
 type Claude struct{}
 
 func (c *Claude) Name() string        { return "claude" }
 func (c *Claude) DisplayName() string { return "Claude Code" }
-func (c *Claude) CLIName() string     { return "claude" }
+func (c *Claude) CLIName() string     { return claudeCLI }
 
 func (c *Claude) ConfigDir() string {
 	return ".claude"
@@ -170,7 +173,7 @@ func (c *Claude) ApplyRuntimeInstructions(runDir, text string) ([]string, error)
 // initialPrompt, when non-empty, is placed first so it precedes --add-dir;
 // --add-dir suppresses any positional arg that follows it.
 func buildClaudeArgs(configPath string, initialPrompt string, extraArgs []string) []string {
-	args := []string{"claude"}
+	args := []string{claudeCLI}
 
 	// Positional prompt must come before --add-dir; --add-dir suppresses any
 	// positional arg that follows it in the args list.
@@ -398,6 +401,23 @@ func claudePluginManifest(hj *plugin.HarnessJSON, outputDir string) ([]byte, err
 
 func (c *Claude) ExportArtifactDirs() map[string]string { return nil }
 
+// AgentPluginLayout: Claude Code has not adopted Agent Plugins. It reads
+// .claude-plugin/plugin.json and agents/ and commands/ at the plugin root
+// (code.claude.com/docs/en/plugins-reference), none of which collide with the
+// portable files, so the package carries a compatibility layer at the root.
+// Its hooks and MCP servers go where its own plugin export puts them,
+// hooks/claude.json and mcp/claude.json, named by the manifest: never
+// hooks/hooks.json, which Claude always loads (#469), and never .mcp.json,
+// which Codex reads by default.
+func (c *Claude) AgentPluginLayout() AgentPluginLayout {
+	return AgentPluginLayout{
+		LoadsFormat: false,
+		ArtifactDir: ".",
+		Hooks:       filepath.ToSlash(pluginHookFile(c.Name())),
+		MCP:         filepath.ToSlash(claudePluginMCPFile),
+	}
+}
+
 func (c *Claude) SupportsExportDelegates() bool { return true }
 
 func (c *Claude) PluginManifestDir() string { return ".claude-plugin" }
@@ -444,6 +464,46 @@ func (c *Claude) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []
 	return data, nil
 }
 
+// claudeMCPServer is Claude Code's .mcp.json entry. Type is Claude's own
+// spelling: "http" for Streamable HTTP, "sse" for the legacy transport, and
+// absent for stdio, which is what an entry without a type has always meant
+// there. Claude Code rejects a url entry that carries no type
+// (code.claude.com/docs/en/mcp), so the remote case is the one that matters.
+type claudeMCPServer struct {
+	Type    string            `json:"type,omitempty"`
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
+	Cwd     string            `json:"cwd,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
+// claudeMCPServers maps the canonical servers to Claude Code's .mcp.json
+// shape. Codex reads the same shape (developers.openai.com/codex/mcp), so
+// its adapter shares this.
+func claudeMCPServers(servers map[string]plugin.MCPServer) map[string]claudeMCPServer {
+	out := make(map[string]claudeMCPServer, len(servers))
+	for name, s := range servers {
+		cs := claudeMCPServer{
+			Command: s.Command,
+			Args:    s.Args,
+			Env:     s.Env,
+			Cwd:     s.Cwd,
+			URL:     s.URL,
+			Headers: s.Headers,
+		}
+		switch s.Transport() {
+		case plugin.MCPTypeStreamableHTTP:
+			cs.Type = "http"
+		case plugin.MCPTypeSSE:
+			cs.Type = "sse"
+		}
+		out[name] = cs
+	}
+	return out
+}
+
 // GenerateMCPConfig writes the session MCP file, .claude/.mcp.json. `ynh run`
 // launches Claude with --plugin-dir pointed at the assembled .claude/
 // directory, so this is .mcp.json at that plugin's root, the default location
@@ -469,13 +529,13 @@ func (c *Claude) GeneratePluginMCPConfig(servers map[string]plugin.MCPServer) (m
 	return map[string][]byte{claudePluginMCPFile: data}, nil
 }
 
-// claudeMCPDocument renders MCP servers under Claude's "mcpServers" key, a
-// direct passthrough, or nil when there are none.
+// claudeMCPDocument renders MCP servers under Claude's "mcpServers" key, in
+// Claude's spelling, or nil when there are none.
 func claudeMCPDocument(servers map[string]plugin.MCPServer) ([]byte, error) {
 	if len(servers) == 0 {
 		return nil, nil
 	}
-	data, err := json.MarshalIndent(map[string]any{"mcpServers": servers}, "", "  ")
+	data, err := json.MarshalIndent(map[string]any{"mcpServers": claudeMCPServers(servers)}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshalling MCP config: %w", err)
 	}
@@ -483,7 +543,7 @@ func claudeMCPDocument(servers map[string]plugin.MCPServer) ([]byte, error) {
 }
 
 func launchClaude(configPath string, initialPrompt string, extraArgs []string) error {
-	claudeBin, err := exec.LookPath("claude")
+	claudeBin, err := exec.LookPath(claudeCLI)
 	if err != nil {
 		return err
 	}

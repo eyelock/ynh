@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -166,6 +167,9 @@ func TestCmdComposeJSONBasic(t *testing.T) {
 	if srv.Command != "node" {
 		t.Errorf("mcp command = %q, want node", srv.Command)
 	}
+	if srv.Type != "stdio" {
+		t.Errorf("mcp type = %q, want the effective transport stdio", srv.Type)
+	}
 
 	// Profiles
 	if len(got.Profiles) != 1 {
@@ -255,12 +259,14 @@ func TestCmdComposeTextFormat(t *testing.T) {
 }
 
 func TestCmdComposeNoArgs(t *testing.T) {
-	err := cmdComposeTo(nil, io.Discard, io.Discard)
-	if err == nil {
-		t.Fatal("expected error for no args")
+	// compose defaults to JSON, so the usage error is the envelope.
+	var errb bytes.Buffer
+	err := cmdComposeTo(nil, io.Discard, &errb)
+	if !errors.Is(err, errStructuredReported) {
+		t.Fatalf("expected the error envelope for no args, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "usage") {
-		t.Errorf("unexpected error: %v", err)
+	if !strings.Contains(errb.String(), "usage") {
+		t.Errorf("unexpected error: %s", errb.String())
 	}
 }
 
@@ -523,7 +529,7 @@ func TestCmdComposeHarnessFlag(t *testing.T) {
 
 func TestCmdComposeExtraArg(t *testing.T) {
 	srcDir := createComposeHarness(t)
-	err := cmdComposeTo([]string{srcDir, "extra"}, io.Discard, io.Discard)
+	err := cmdComposeTo([]string{srcDir, "extra", "--format", "text"}, io.Discard, io.Discard)
 	if err == nil {
 		t.Fatal("expected error for extra argument")
 	}

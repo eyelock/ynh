@@ -30,12 +30,15 @@ func init() {
 	Register(&Codex{})
 }
 
+// codexCLI is OpenAI Codex's binary: see CLIName in adapter.go.
+const codexCLI = "codex"
+
 // Codex implements the Adapter interface for OpenAI Codex CLI.
 type Codex struct{}
 
 func (c *Codex) Name() string        { return "codex" }
 func (c *Codex) DisplayName() string { return "OpenAI Codex" }
-func (c *Codex) CLIName() string     { return "codex" }
+func (c *Codex) CLIName() string     { return codexCLI }
 
 func (c *Codex) ConfigDir() string {
 	return ".codex"
@@ -294,6 +297,20 @@ func (c *Codex) SupportsExportDelegates() bool { return false }
 
 func (c *Codex) PluginManifestDir() string { return ".codex-plugin" }
 
+// AgentPluginLayout: Codex loads the format natively and keeps its own
+// settings under extensions.com.openai (developers.openai.com/plugins/build/plugins).
+// Its hooks pointer replaces the default hooks/hooks.json discovery, so the
+// Codex hook file lives in the namespace directory and is named in the
+// manifest; that keeps it apart from a Claude Code hook file at the root.
+func (c *Codex) AgentPluginLayout() AgentPluginLayout {
+	return AgentPluginLayout{
+		LoadsFormat:    true,
+		Namespace:      "com.openai",
+		Hooks:          "com.openai/hooks/hooks.json",
+		HooksExtension: true,
+	}
+}
+
 func (c *Codex) MarketplaceManifestDir() string { return filepath.Join(".agents", "plugins") }
 
 func (c *Codex) GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error) {
@@ -350,10 +367,11 @@ func (c *Codex) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[stri
 		return nil, nil
 	}
 
-	// Codex plugin format uses .mcp.json at plugin root (JSON, same as Claude).
-	// See https://developers.openai.com/codex/plugins/build
+	// Codex plugin format uses .mcp.json at plugin root, the same shape as
+	// Claude Code including "type": "http" for a remote server.
+	// See https://developers.openai.com/codex/mcp
 	config := map[string]any{
-		"mcpServers": servers,
+		"mcpServers": claudeMCPServers(servers),
 	}
 
 	data, err := json.MarshalIndent(config, "", "  ")
@@ -368,7 +386,7 @@ func (c *Codex) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[stri
 }
 
 func launchCodex(configPath string, extraArgs []string) error {
-	codexBin, err := exec.LookPath("codex")
+	codexBin, err := exec.LookPath(codexCLI)
 	if err != nil {
 		return err
 	}

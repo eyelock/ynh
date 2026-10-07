@@ -157,8 +157,9 @@ ynd fmt
 
 ## Compress
 
-Requires an LLM CLI on PATH (`claude`, `codex`, or `agent`). Uses LLM-powered SudoLang techniques to reduce prompt size while preserving semantics.
+Requires an LLM CLI on PATH (`claude`, `codex`, Cursor's `agent`, or `copilot`). Uses LLM-powered SudoLang techniques to reduce prompt size while preserving semantics.
 
+*This launches:* `claude -p - --output-format text`
 ```bash
 # Compress with auto-apply
 ynd compress -y skills/code-review/SKILL.md
@@ -171,6 +172,7 @@ ynd validate
 
 ### Backup management
 
+*Your output will differ: it shows what the model did.*
 ```bash
 # List backups
 ynd compress --list-backups skills/code-review/SKILL.md
@@ -194,8 +196,11 @@ ynd compress --restore --pick 2 skills/code-review/SKILL.md
 
 ## Inspect
 
-Requires an LLM CLI on PATH (`claude`, `codex`, or `agent`). Interactive codebase walkthrough that generates skills and agents from project analysis.
+Requires an LLM CLI on PATH (`claude`, `codex`, Cursor's `agent`, or `copilot`). Interactive codebase walkthrough that generates skills and agents from project analysis.
 
+*This launches:* `claude -p - --output-format text`
+
+*This launches:* `claude -p - --output-format text`
 ```bash
 # Set up a project to inspect
 cd /tmp/ynh-tutorial
@@ -221,6 +226,7 @@ rm -rf skills agents
 
 ### Vendor-specific output
 
+*This launches:* `agent -p -`
 ```bash
 ynd inspect -y -v cursor
 ls -R .cursor/skills/ 2>/dev/null

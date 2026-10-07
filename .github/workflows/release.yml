@@ -15,6 +15,11 @@ permissions:
   # Build provenance attestation.
   attestations: write
 
+# The spoolexporter module lives in the private eyelock/ynr repository:
+# fetch it directly, not through the public proxy and checksum database.
+env:
+  GOPRIVATE: github.com/eyelock/ynr
+
 jobs:
   e2e:
     name: E2E (release gate)
@@ -25,7 +30,19 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
         with:
           go-version-file: go.mod
+      # Until eyelock/ynr is public, the spoolexporter module is private.
+      # YNR_READ_REPO reads it; a pull request from a fork has no secrets
+      # and cannot build.
+      - name: Allow the private ynr module
+        env:
+          YNR_READ_REPO: ${{ secrets.YNR_READ_REPO }}
+        run: git config --global url."https://x-access-token:${YNR_READ_REPO}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
+      # The live smoke test installs from github.com/eyelock/assistants and
+      # is skipped without this; a release should not ship if upstream
+      # harnesses no longer install.
       - run: make e2e
+        env:
+          YNH_E2E_LIVE: "1"
 
   release:
     name: Release
@@ -39,12 +56,19 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
         with:
           go-version-file: go.mod
+      # Until eyelock/ynr is public, the spoolexporter module is private.
+      # YNR_READ_REPO reads it; a pull request from a fork has no secrets
+      # and cannot build.
+      - name: Allow the private ynr module
+        env:
+          YNR_READ_REPO: ${{ secrets.YNR_READ_REPO }}
+        run: git config --global url."https://x-access-token:${YNR_READ_REPO}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
 
       # goreleaser's signs: and sboms: blocks shell out to these. Without
       # them installed the release fails at tag time, which is a worse
       # outcome than the unsigned artifacts they replace.
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
-      - uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26  # v0.24.2
+      - uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c  # v0.24.3
 
       - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94  # v7
         with:
@@ -81,6 +105,9 @@ jobs:
           push: true
           tags: ghcr.io/eyelock/ynh:${{ steps.version.outputs.version }}-amd64
           build-args: VERSION=${{ steps.version.outputs.version }}
+          # Mounted only for the module download; never in a layer.
+          secrets: |
+            ynr_token=${{ secrets.YNR_READ_REPO }}
 
       - name: Build and push arm64
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7
@@ -90,13 +117,17 @@ jobs:
           push: true
           tags: ghcr.io/eyelock/ynh:${{ steps.version.outputs.version }}-arm64
           build-args: VERSION=${{ steps.version.outputs.version }}
+          # Mounted only for the module download; never in a layer.
+          secrets: |
+            ynr_token=${{ secrets.YNR_READ_REPO }}
 
       - name: Create multi-arch manifest
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION=${{ steps.version.outputs.version }}
-          docker buildx imagetools create -t ghcr.io/eyelock/ynh:${VERSION} \
-            ghcr.io/eyelock/ynh:${VERSION}-amd64 \
-            ghcr.io/eyelock/ynh:${VERSION}-arm64
-          docker buildx imagetools create -t ghcr.io/eyelock/ynh:latest \
-            ghcr.io/eyelock/ynh:${VERSION}-amd64 \
-            ghcr.io/eyelock/ynh:${VERSION}-arm64
+          docker buildx imagetools create -t "ghcr.io/eyelock/ynh:${VERSION}" \
+            "ghcr.io/eyelock/ynh:${VERSION}-amd64" \
+            "ghcr.io/eyelock/ynh:${VERSION}-arm64"
+          docker buildx imagetools create -t "ghcr.io/eyelock/ynh:latest" \
+            "ghcr.io/eyelock/ynh:${VERSION}-amd64" \
+            "ghcr.io/eyelock/ynh:${VERSION}-arm64"

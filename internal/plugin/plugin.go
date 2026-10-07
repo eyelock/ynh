@@ -601,8 +601,50 @@ type AuthorInfo struct {
 	URL   string `json:"url,omitempty"`
 }
 
+// MCP transport names. These are the Agent Plugins vocabulary
+// (https://agent-plugins.org/specification, §7.2.1), adopted as ynh's canonical
+// names so a harness declares a transport once and every adapter maps it to
+// the vendor's own spelling: Claude Code and Codex say "http", Copilot says
+// "local", Cursor infers from the fields present.
+const (
+	MCPTypeStdio          = "stdio"
+	MCPTypeStreamableHTTP = "streamable-http"
+	MCPTypeSSE            = "sse"
+)
+
+// Placeholders and environment names reserved by the Agent Plugins
+// specification (§9). A client expands the placeholders in a stdio server's
+// args, env values and cwd from the plugin root and a per-plugin data
+// directory it manages; they are never resolved from the environment, and
+// a manifest may not set the variables itself.
+const (
+	MCPPlaceholderRoot = "${PLUGIN_ROOT}"
+	MCPPlaceholderData = "${PLUGIN_DATA}"
+	MCPEnvRoot         = "PLUGIN_ROOT"
+	MCPEnvData         = "PLUGIN_DATA"
+)
+
+// reservedMCPEnv names the variables ExpandMCPEnv leaves alone: they are
+// placeholders for ExpandPluginPlaceholders, not credentials for the
+// env_passthrough allowlist.
+var reservedMCPEnv = map[string]bool{MCPEnvRoot: true, MCPEnvData: true}
+
+// ValidMCPTypes lists the transports a manifest may declare.
+var ValidMCPTypes = map[string]bool{
+	MCPTypeStdio:          true,
+	MCPTypeStreamableHTTP: true,
+	MCPTypeSSE:            true,
+}
+
 // MCPServer defines an MCP server dependency.
+//
+// Type is optional: a server with a command is stdio and a server with a url
+// is streamable-http unless it says otherwise. The field exists for the one
+// case the fields cannot express, a remote server that still speaks the
+// deprecated HTTP+SSE transport, and so that an imported Agent Plugin keeps
+// the transport it declared. Transport reports the effective value.
 type MCPServer struct {
+	Type    string            `json:"type,omitempty"`
 	Command string            `json:"command,omitempty"`
 	Args    []string          `json:"args,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
@@ -611,10 +653,32 @@ type MCPServer struct {
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
-// ValidateMCPServers checks that each MCP server has either Command or URL (not both, not neither).
+// Transport returns the effective transport: the declared Type, or the one
+// implied by the fields when Type is empty. A server that is invalid under
+// ValidateMCPServers (neither command nor url) reports stdio, which keeps the
+// caller's switch total; validation, not Transport, is where that is caught.
+func (s MCPServer) Transport() string {
+	if s.Type != "" {
+		return s.Type
+	}
+	if s.URL != "" {
+		return MCPTypeStreamableHTTP
+	}
+	return MCPTypeStdio
+}
+
+// ValidateMCPServers checks that each MCP server has either Command or URL
+// (not both, not neither) and that a declared Type is a known transport that
+// agrees with those fields.
 func ValidateMCPServers(servers map[string]MCPServer) []string {
 	var issues []string
-	for name, server := range servers {
+	names := make([]string, 0, len(servers))
+	for name := range servers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		server := servers[name]
 		hasCommand := server.Command != ""
 		hasURL := server.URL != ""
 		if !hasCommand && !hasURL {
@@ -623,8 +687,79 @@ func ValidateMCPServers(servers map[string]MCPServer) []string {
 		if hasCommand && hasURL {
 			issues = append(issues, fmt.Sprintf("mcp_servers.%s: must have command or url, not both", name))
 		}
+		switch server.Type {
+		case "":
+		case MCPTypeStdio:
+			if !hasCommand {
+				issues = append(issues, fmt.Sprintf("mcp_servers.%s: type stdio requires command", name))
+			}
+		case MCPTypeStreamableHTTP, MCPTypeSSE:
+			if !hasURL {
+				issues = append(issues, fmt.Sprintf("mcp_servers.%s: type %s requires url", name, server.Type))
+			}
+		default:
+			issues = append(issues, fmt.Sprintf("mcp_servers.%s: unknown type %q (valid: stdio, streamable-http, sse)", name, server.Type))
+		}
 	}
 	return issues
+}
+
+// ExpandPluginPlaceholders does what the Agent Plugins specification asks of
+// a client that launches a plugin's stdio servers (§7.2.1, §9): it replaces
+// ${PLUGIN_ROOT} and ${PLUGIN_DATA} in args, env values and cwd with root and
+// data, in one non-recursive pass; resolves a plugin-relative ./ command or
+// cwd against root when one is known, since the vendor CLI that launches
+// the server has no idea where the package is; and, when provideEnv is set, supplies
+// PLUGIN_ROOT and PLUGIN_DATA in each stdio server's env, last, so a
+// configured entry cannot override them. Remote servers are returned as
+// they are: the specification defines no expansion in url or headers.
+//
+// ynh does not launch the servers itself, so the environment reaches them
+// through the vendor's MCP config, which is why it is written into env.
+func ExpandPluginPlaceholders(servers map[string]MCPServer, root, data string, provideEnv bool) map[string]MCPServer {
+	if len(servers) == 0 {
+		return servers
+	}
+	expand := func(v string) string {
+		v = strings.ReplaceAll(v, MCPPlaceholderRoot, root)
+		return strings.ReplaceAll(v, MCPPlaceholderData, data)
+	}
+	out := make(map[string]MCPServer, len(servers))
+	for name, s := range servers {
+		if s.Transport() != MCPTypeStdio {
+			out[name] = s
+			continue
+		}
+		if root != "" && strings.HasPrefix(s.Command, "./") {
+			s.Command = filepath.Join(root, s.Command[2:])
+		}
+		if len(s.Args) > 0 {
+			args := make([]string, len(s.Args))
+			for i, a := range s.Args {
+				args[i] = expand(a)
+			}
+			s.Args = args
+		}
+		if len(s.Env) > 0 || provideEnv {
+			env := make(map[string]string, len(s.Env)+2)
+			for k, v := range s.Env {
+				env[k] = expand(v)
+			}
+			if provideEnv {
+				env[MCPEnvRoot] = root
+				env[MCPEnvData] = data
+			}
+			s.Env = env
+		}
+		if s.Cwd != "" {
+			s.Cwd = expand(s.Cwd)
+			if root != "" && strings.HasPrefix(s.Cwd, "./") {
+				s.Cwd = filepath.Join(root, s.Cwd[2:])
+			}
+		}
+		out[name] = s
+	}
+	return out
 }
 
 // HookEntry defines a single hook action.
@@ -966,6 +1101,11 @@ type InstalledJSON struct {
 	InstalledAt  string               `json:"installed_at"`
 	ForkedFrom   *ForkedFromJSON      `json:"forked_from,omitempty"`
 	Resolved     []ResolvedSourceJSON `json:"resolved,omitempty"`
+	// Format names a source format other than a ynh harness when the
+	// installed content is derived from one at load time rather than read
+	// from .ynh-plugin/plugin.json: "agent-plugin" for an Agent Plugins
+	// package. Empty for a ynh harness.
+	Format string `json:"format,omitempty"`
 }
 
 // ResolvedSourceJSON records the resolved commit SHA for an include or
@@ -1045,6 +1185,22 @@ func LoadMCPJSON(dir string) (map[string]MCPServer, error) {
 	}
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("invalid %s: %w", MCPJSONFile, err)
+	}
+
+	// Claude Code spells the transports "stdio", "http", "sse" and "ws";
+	// this file is its convention, so its spelling is what arrives here.
+	// "http" is the current Streamable HTTP transport under the canonical
+	// name. "ws" has no canonical equivalent and no adapter can emit it, so
+	// it is refused rather than silently rewritten into something else.
+	for name, s := range doc.MCPServers {
+		switch s.Type {
+		case "http":
+			s.Type = MCPTypeStreamableHTTP
+			doc.MCPServers[name] = s
+		case "", MCPTypeStdio, MCPTypeStreamableHTTP, MCPTypeSSE:
+		default:
+			return nil, fmt.Errorf("invalid %s: server %q: unsupported type %q", MCPJSONFile, name, s.Type)
+		}
 	}
 
 	return doc.MCPServers, nil
@@ -1247,7 +1403,7 @@ func UndeclaredMCPEnvRefs(servers map[string]MCPServer, allowed []string) []stri
 			sort.Strings(keys)
 			for _, k := range keys {
 				for _, match := range envRef.FindAllStringSubmatch(field.m[k], -1) {
-					if v := match[1]; !allow[v] {
+					if v := match[1]; !allow[v] && !reservedMCPEnv[v] {
 						issues = append(issues, fmt.Sprintf(
 							"mcp server %q: %s.%s references ${%s}, which is not in %s",
 							name, field.label, k, v, EnvPassthroughField))
@@ -1279,6 +1435,9 @@ func ExpandMCPEnv(servers map[string]MCPServer, allowed []string, lookup func(st
 				var bad error
 				res[k] = envRef.ReplaceAllStringFunc(v, func(match string) string {
 					varName := envRef.FindStringSubmatch(match)[1]
+					if reservedMCPEnv[varName] {
+						return match
+					}
 					if !allow[varName] {
 						bad = fmt.Errorf("mcp server %q: %s.%s references ${%s}, which is not in %s",
 							name, field, k, varName, EnvPassthroughField)

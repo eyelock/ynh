@@ -632,6 +632,43 @@ func TestResolveProfile_MissingProfile(t *testing.T) {
 	}
 }
 
+// TestResolveProfile_MissingProfileListsAvailable pins the unknown-profile
+// error: it names the profiles the harness does declare, sorted, so the
+// order does not change between calls (#520), and says so when there are none.
+func TestResolveProfile_MissingProfileListsAvailable(t *testing.T) {
+	tests := []struct {
+		name     string
+		profiles map[string]plugin.Profile
+		want     string
+	}{
+		{
+			name: "several profiles",
+			profiles: map[string]plugin.Profile{
+				"staging": {}, "ci": {}, "local": {}, "prod": {}, "dev": {},
+			},
+			want: `profile "nonexistent" not defined in harness manifest (available: [ci dev local prod staging])`,
+		},
+		{
+			name: "no profiles",
+			want: `profile "nonexistent" not defined in harness manifest (the harness declares no profiles)`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &Harness{Name: "test", Profiles: tt.profiles}
+			for range 50 {
+				_, err := ResolveProfile(h, "nonexistent")
+				if err == nil {
+					t.Fatal("expected error for missing profile")
+				}
+				if err.Error() != tt.want {
+					t.Fatalf("error = %q, want %q", err.Error(), tt.want)
+				}
+			}
+		})
+	}
+}
+
 func TestResolveProfile_EmptyName(t *testing.T) {
 	h := &Harness{Name: "test"}
 

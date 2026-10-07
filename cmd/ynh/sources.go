@@ -18,8 +18,9 @@ func cmdSources(args []string) error {
 }
 
 func cmdSourcesTo(args []string, stdout, stderr io.Writer) error {
+	structured := detectJSONFormat(args)
 	if len(args) == 0 {
-		return fmt.Errorf("usage: ynh sources <add|list|remove>")
+		return cliError(stderr, structured, errCodeInvalidInput, "usage: ynh sources <add|list|remove>")
 	}
 
 	switch args[0] {
@@ -30,7 +31,8 @@ func cmdSourcesTo(args []string, stdout, stderr io.Writer) error {
 	case "remove":
 		return cmdSourcesRemove(args[1:], stdout)
 	default:
-		return fmt.Errorf("unknown sources subcommand: %s\nUsage: ynh sources <add|list|remove>", args[0])
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("unknown sources subcommand: %s\nUsage: ynh sources <add|list|remove>", args[0]))
 	}
 }
 

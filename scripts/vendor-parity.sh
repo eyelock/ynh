@@ -5,7 +5,7 @@
 # that. Copilot shipped as a working adapter and every skill still described
 # three vendors, because no check ever compared the vendor list against anything.
 #
-# Two assertions:
+# Five assertions:
 #
 #   A. Every vendor `ynh vendors` reports has a row in the vendor-adapters
 #      reference index. A new adapter that nobody documented fails here.
@@ -13,6 +13,25 @@
 #   B. Every vendor assembles the same artifact set from this repo's harness,
 #      compared after normalising the vendor-specific prefixes away. An adapter
 #      that silently drops skills or agents fails here.
+#
+#   C. The eval sandbox stubs every vendor CLI. An eval once launched the real
+#      Cursor CLI because the eval page named `cursor` and the binary is `agent`.
+#      Every `cli` that `ynh vendors` reports, and every program the Go source
+#      launches by name, must be in the STUBS line of .claude/agents/evals.md,
+#      unless it is a local tool an eval may run. A vendor CLI's name is spelled
+#      only in its adapter's CLIName, which `ynh vendors` reports as `cli`, so
+#      the first list covers every vendor CLI ynh or ynd runs (#524).
+#
+#   D. Every eval line in docs/tutorial/ (`*This launches:* ...`, the
+#      model-output line, `*Replace ...*`) is well formed, a launch or output
+#      line sits directly above a bash block, a launch names a stubbed program,
+#      and no HTML comment carries an eval directive. run.sh checks the calls.
+#
+#   E. Every github.com repository a tutorial command names is one the eval
+#      serves from a local fixture (scripts/eval-remotes.sh), so its blocks run
+#      offline instead of being skipped (#534). A tutorial that reaches a new
+#      repository fails here until a fixture exists for it. It also builds the
+#      fixtures once, so a broken fixture script fails here too.
 #
 # Usage: scripts/vendor-parity.sh [path-to-harness]   (default: repo root)
 
@@ -30,7 +49,9 @@ done
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+SB=""
+# SB is check E's fixture sandbox; remove it however the script ends, but only a path it made.
+trap 'rm -rf "$TMP"; case $SB in /tmp/ynh-eval-parity.?*) rm -rf "$SB" ;; esac' EXIT
 
 # `ynh vendors --format json` is the authority on which vendors exist. Reading
 # it rather than hardcoding is the entire point: a hardcoded list is what let
@@ -124,6 +145,125 @@ while IFS=$'\t' read -r name _; do
 		echo "  ok       $REF == $name"
 	fi
 done < "$TMP/vendors.tsv"
+
+# --- C. the eval sandbox stubs every vendor CLI -----------------------------
+echo
+echo "== C. eval stubs =="
+EVALS="$ROOT/.claude/agents/evals.md"
+# Programs an eval may run for real: none of them is a vendor CLI or needs a
+# network or Docker.
+EVAL_LOCAL_TOOLS="git sh bash /bin/sh"
+stub_lines=$(grep -c '^STUBS="' "$EVALS" || true)
+if [ "$stub_lines" -ne 1 ]; then
+	echo "  FAIL     $(basename "$EVALS") must have exactly one STUBS=\"...\" line, found $stub_lines"
+	fail=1
+else
+	stubs=" $(sed -n 's/^STUBS="\([^"]*\)".*/\1/p' "$EVALS") "
+	jq -r 'if type == "array" then . else (.payload // .vendors // .data) end | .[].cli' \
+		"$TMP/vendors.json" | sort -u > "$TMP/clis.txt"
+	# Every program the Go source launches or looks up by a literal name.
+	grep -rhoE --include='*.go' --exclude='*_test.go' \
+		'exec\.(LookPath|Command|CommandContext)\((ctx, )?"[^"]+"' "$ROOT/cmd" "$ROOT/internal" \
+		| sed -E 's/.*"([^"]+)"$/\1/' | sort -u > "$TMP/launched.txt"
+	while read -r bin; do
+		case "$stubs" in *" $bin "*) echo "  ok       $bin (vendor CLI)" ;; *)
+			echo "  MISSING  $bin: a vendor CLI, not in STUBS in $(basename "$EVALS")"
+			fail=1 ;;
+		esac
+	done < "$TMP/clis.txt"
+	while read -r bin; do
+		case " $EVAL_LOCAL_TOOLS " in *" $bin "*) continue ;; esac
+		grep -qx "$bin" "$TMP/clis.txt" && continue
+		case "$stubs" in *" $bin "*) echo "  ok       $bin" ;; *)
+			echo "  MISSING  $bin: launched by ynh or ynd, not in STUBS in $(basename "$EVALS")"
+			fail=1 ;;
+		esac
+	done < "$TMP/launched.txt"
+fi
+
+# --- D. tutorial eval lines are well formed -------------------------------
+# A tutorial says what each launch hands the vendor in a visible line above the
+# block, `*This launches:* `<command>``, and run.sh checks the stub call against
+# it. Model-dependent output and reader-supplied values have their own fixed
+# lines. A line that drifted off its block, is misspelt, or names a program
+# that is not stubbed would be read by nobody, so all three are checked here.
+# Nothing the eval reads may be hidden: an HTML comment carrying a directive fails.
+echo
+echo "== D. tutorial eval lines =="
+markers=0
+for md in "$ROOT"/docs/tutorial/*.md; do
+	out=$(awk -v stubs="${stubs:-}" -v file="$(basename "$md")" '
+		function bad(msg) { printf "  BAD      %s:%d: %s\n", file, NR, msg; nbad++ }
+		/^```/ { infence = !infence }
+		infence && !/^```bash$/ { next }
+		/^\*Replace `/ {
+			if ($0 !~ /^\*Replace `[^`]+` with .* \(here: `.*`\)\.\*$/) bad("expected *Replace `<from>` with ... (here: `<to>`).*")
+			n++; next
+		}
+		/^\*Your output will differ/ {
+			if ($0 != "*Your output will differ: it shows what the model did.*") bad("expected *Your output will differ: it shows what the model did.*")
+			n++; pending = NR; next
+		}
+		/^\*This launches/ {
+			if ($0 !~ /^\*This launches:\* `[^`]+`$/) { bad("expected *This launches:* `<command>`"); n++; next }
+			m = $0; sub(/^\*This launches:\* `/, "", m); sub(/`$/, "", m); split(m, w, " ")
+			if (index(stubs, " " w[1] " ") == 0) bad("launches \"" w[1] "\", which is not in STUBS")
+			n++; pending = NR; next
+		}
+		pending && /^```bash$/ { pending = 0; next }
+		pending && /^[[:space:]]*$/ { next }
+		pending { bad("line " pending " is not followed by a ```bash block"); pending = 0 }
+		END { if (pending) bad("line " pending " is not followed by a ```bash block"); printf "COUNT %d %d\n", n, nbad }
+	' "$md")
+	printf '%s\n' "$out" | grep -v '^COUNT ' || true
+	set -- $(printf '%s\n' "$out" | sed -n 's/^COUNT //p')
+	markers=$((markers + $1))
+	[ "$2" -eq 0 ] || fail=1
+done
+hidden=$(grep -rn '<!-- *eval' "$ROOT/docs" "$ROOT/.claude" 2>/dev/null || true)
+if [ -n "$hidden" ]; then
+	printf '%s\n' "$hidden" | sed "s|^$ROOT/|  HIDDEN   |"
+	fail=1
+fi
+echo "  $markers eval lines checked"
+
+# --- E. tutorial remotes are served by the eval fixtures --------------------
+# An eval sandbox points git at local copies of the repositories the tutorials
+# fetch (scripts/eval-remotes.sh). A repository named in a tutorial command and
+# missing there would be fetched from GitHub: the sandbox refuses that, and the
+# block fails or, worse, gets skipped again. Comment lines in a block, and the
+# README and manual test plan (which the eval handles itself), are not commands.
+echo
+echo "== E. tutorial remotes =="
+SB=$(mktemp -d /tmp/ynh-eval-parity.XXXXXX)
+mkdir -p "$SB/home"
+if ! "$ROOT/scripts/eval-remotes.sh" "$SB" > "$TMP/remotes.log" 2>&1; then
+	sed 's/^/  /' "$TMP/remotes.log"
+	echo "  FAIL     scripts/eval-remotes.sh did not build the fixtures"
+	fail=1
+fi
+sed -n 's|^[[:space:]]*insteadOf = https://github.com/||p' "$SB/remotes/gitconfig" | sort -u > "$TMP/served.txt"
+# Named in a tutorial command but never fetched: `ynh include add` on a harness
+# directory only edits its manifest, so the repository is a name, not a source.
+NEVER_FETCHED="example-org/tools"
+for md in "$ROOT"/docs/tutorial/*.md; do
+	case "$(basename "$md")" in README.md|manual-test-plan.md) continue ;; esac
+	awk -v file="$(basename "$md")" '
+		/^```/ { if (open) { open = 0; bash = 0 } else { open = 1; bash = ($0 == "```bash") } next }
+		open && bash && $0 !~ /^[[:space:]]*#/ { print }
+	' "$md" | grep -oE 'github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+' \
+		| sed -E 's|^github\.com/||; s|\.git$||; s|\.+$||' | sort -u \
+		| sed "s|\$|\t$(basename "$md")|" || true
+done > "$TMP/named.tsv"
+named=0
+while IFS=$'\t' read -r repo file; do
+	named=$((named + 1))
+	case " $NEVER_FETCHED " in *" $repo "*) continue ;; esac
+	grep -qx "$repo" "$TMP/served.txt" && continue
+	echo "  MISSING  github.com/$repo, named in $file, has no fixture in scripts/eval-remotes.sh"
+	fail=1
+done < "$TMP/named.tsv"
+echo "  $(wc -l < "$TMP/served.txt" | tr -d ' ') repositories served, $named named in tutorial commands"
 
 echo
 if [ "$fail" -ne 0 ]; then

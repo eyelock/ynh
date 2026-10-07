@@ -4,7 +4,7 @@ MCP (Model Context Protocol) servers provide tools and resources that AI coding 
 
 ynh treats MCP server declarations as part of the harness template. At assembly time, each vendor adapter translates the canonical format into the vendor's native MCP configuration.
 
-> **Note:** MCP servers can vary by [profile](harnesses.md#profiles). When a profile is selected, its `mcp_servers` field replaces the top-level MCP servers entirely.
+> **Note:** MCP servers can vary by [profile](harnesses.md#profiles). When a profile is selected, its `mcp_servers` field is deep-merged with the top-level servers: profile keys win on collision, absent keys are inherited, a server's `env` map is merged key by key, and setting a server to `null` removes an inherited one. See [Profiles](profiles.md#merge-semantics).
 
 ## Why Harnesses Declare MCP Servers
 
@@ -12,7 +12,9 @@ Without harness-level MCP declarations, each developer must manually configure M
 
 ## Manifest Format
 
-MCP servers are declared under the top-level `mcp_servers` key in `.agents/harness/plugin.json`. Each key is the server name, and the value defines either a stdio server (with `command` + `args`) or an HTTP server (with `url`).
+MCP servers are declared under the top-level `mcp_servers` key in `.agents/harness/plugin.json`. Each key is the server name, and the value defines either a stdio server (with `command` + `args`) or a remote server (with `url`).
+
+The transport vocabulary is the one defined by the [Agent Plugins](https://agent-plugins.org/specification) specification: `stdio`, `streamable-http` and `sse`. A server may declare it with `type`; when it does not, `command` means `stdio` and `url` means `streamable-http`. The only case that needs the field is a remote server that still speaks the deprecated HTTP+SSE transport.
 
 ### Stdio Server
 
@@ -53,17 +55,34 @@ An HTTP server connects to a remote endpoint:
 }
 ```
 
+### Legacy SSE Server
+
+A remote server on the deprecated HTTP+SSE transport declares it, because nothing else in the entry can:
+
+```json
+{
+  "mcp_servers": {
+    "events": {
+      "type": "sse",
+      "url": "https://legacy.example.com/sse"
+    }
+  }
+}
+```
+
 ### Fields
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `type` | string | Transport: `stdio`, `streamable-http` or `sse`. Optional; inferred from `command` or `url` when absent |
 | `command` | string | Executable to launch (stdio servers) |
 | `args` | string[] | Arguments to pass to the command |
 | `env` | map | Environment variables for the subprocess |
-| `url` | string | Endpoint URL (HTTP servers) |
+| `cwd` | string | Working directory for the subprocess (stdio servers) |
+| `url` | string | Endpoint URL (remote servers) |
 | `headers` | map | HTTP headers for the connection |
 
-Each server must have either `command` or `url`, not both. Validation rejects servers with neither or both.
+Each server must have either `command` or `url`, not both. Validation rejects servers with neither or both, and a declared `type` that disagrees with those fields (`stdio` without `command`, `streamable-http` or `sse` without `url`).
 
 ## Vendor Translation
 
@@ -71,9 +90,9 @@ Each server must have either `command` or `url`, not both. Validation rejects se
 
 | Vendor | File | Format |
 |--------|------|--------|
-| Claude Code | `.claude/.mcp.json` in a session, `mcp/claude.json` in a plugin | JSON with `mcpServers` key |
-| Cursor | `.cursor/mcp.json` | JSON with `mcpServers` key |
-| Codex | `.mcp.json` | JSON with `mcpServers` key (at plugin root) |
+| Claude Code | `.claude/.mcp.json` in a session, `mcp/claude.json` in a plugin | JSON with `mcpServers` key; remote servers carry `"type": "http"` or `"sse"` |
+| Cursor | `.cursor/mcp.json` | JSON with `mcpServers` key; no transport field, Cursor infers it |
+| Codex | `.mcp.json` | JSON with `mcpServers` key (at plugin root), same shape as Claude Code |
 | Copilot | `.github/mcp.json` (project root) | JSON with `mcpServers` key, each server requires an explicit `"type": "local"|"http"` field |
 
 Claude, Cursor and Copilot read MCP servers from a different file depending on how the harness reaches them, and ynh writes each file only where it is read:
@@ -89,13 +108,23 @@ The document is identical in both places; only the path differs. A manifest name
 
 Every vendor in a merged package gets a file of its own. A Claude plugin reads `.mcp.json` at its root and then what its manifest's `mcpServers` names, but Codex keeps its `.mcp.json` at the root, so Claude's servers go in `mcp/claude.json` instead. Claude still loads that root file first; it holds the same document, so the merge changes nothing. Copilot also accepts `.mcp.json` at a plugin root, which is why its file is `.github/mcp.json`.
 
-Copilot reads `.claude-plugin/plugin.json`, the manifest Claude writes. In a Copilot-only export that manifest names no MCP file and Copilot reads `.github/mcp.json`, its default. In a package that also carries Claude, the manifest's `mcpServers` names `mcp/claude.json`, and Copilot's plugin reference lists that field beside `.mcp.json` and `.github/mcp.json` without saying how the three combine. `mcp/claude.json` is in Claude's format, without the `"type"` field Copilot's own file carries; which file an installed Copilot plugin loads from such a package has not been tested by hand ([#499](https://github.com/eyelock/ynh/issues/499)).
+Copilot reads `.claude-plugin/plugin.json`, the manifest Claude writes. In a Copilot-only export that manifest names no MCP file and Copilot reads `.github/mcp.json`, its default. In a package that also carries Claude, the manifest's `mcpServers` names `mcp/claude.json`, and Copilot's plugin reference lists that field beside `.mcp.json` and `.github/mcp.json` without saying how the three combine. `mcp/claude.json` is in Claude's format, which gives a stdio server no `"type"` where Copilot's own file says `"local"`; which file an installed Copilot plugin loads from such a package has not been tested by hand ([#499](https://github.com/eyelock/ynh/issues/499)).
 
-> **Claude Code runtime limitation:** MCP servers in `--plugin-dir` plugins are not auto-activated during `ynh run` sessions. They work correctly when the plugin is installed via `/plugin install` or when using Codex/Cursor. See [Hooks](hooks.md#claude-code-runtime-limitation) for details.
+Each adapter spells the canonical transport in the vendor's own words:
+
+| Canonical `type` | Claude Code | Codex | Cursor | Copilot |
+|---|---|---|---|---|
+| `stdio` | _(omitted)_ | _(omitted)_ | _(omitted)_ | `local` |
+| `streamable-http` | `http` | `http` | _(omitted)_ | `http` |
+| `sse` | `sse` | `sse` | _(omitted)_ | `sse` |
+
+Claude Code rejects a `url` entry that carries no `type` and reads an untyped entry as stdio, so the `http` on a remote server is not cosmetic.
+
+> **Claude Code:** `ynh run` passes the assembled `.claude/` directory as `--plugin-dir`, and Claude activates its MCP servers (and hooks) from there with no `/plugin install` step. They load alongside your own MCP servers (user config, claude.ai connectors); ynh does not isolate them yet (tracked in #548). Copilot is the exception: see [Copilot Format](#copilot-format).
 
 ### Claude Code Format
 
-Claude uses the same document in `.claude/.mcp.json` (a session) and `mcp/claude.json` (a plugin), with direct passthrough of the server definition:
+Claude uses the same document in `.claude/.mcp.json` (a session) and `mcp/claude.json` (a plugin), with the canonical fields as they are, plus Claude's spelling of the transport on a remote server:
 
 ```json
 {
@@ -105,6 +134,13 @@ Claude uses the same document in `.claude/.mcp.json` (a session) and `mcp/claude
       "args": ["-y", "@modelcontextprotocol/server-sqlite", "/path/to/db.sqlite"],
       "env": {
         "NODE_ENV": "production"
+      }
+    },
+    "docs-api": {
+      "type": "http",
+      "url": "https://docs.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DOCS_API_KEY}"
       }
     }
   }
@@ -151,7 +187,7 @@ Codex uses `.mcp.json` at the plugin root with the same JSON format as Claude:
 
 ### Copilot Format
 
-Copilot requires an explicit `"type"` field per server (`"local"` for a `command`-based server, `"http"` for a `url`-based one) — unlike the other three vendors, which infer the server kind from which fields are present:
+Copilot requires an explicit `"type"` field on every server (`"local"` for a `command`-based server, `"http"` for a `url`-based one, `"sse"` for the legacy transport). Claude Code and Codex carry `"type"` only on a remote server and treat an entry without one as stdio; Cursor has no `"type"` field and infers the transport from which fields are present:
 
 ```json
 {
@@ -174,9 +210,31 @@ MCP server declarations in **included harnesses** (via `includes`) are dropped d
 
 If an included harness requires an MCP server, add the server declaration to the root harness's `.agents/harness/plugin.json`.
 
-## Future
+## Plugin Placeholders
 
-The [Agentic AI Foundation (AAIF)](https://www.linuxfoundation.org/press/linux-foundation-announces-the-formation-of-the-agentic-ai-foundation) is working on standardizing MCP configuration across vendors. When a standard format emerges, ynh will adopt it as the canonical format and translate to any vendor that has not yet adopted the standard.
+The Agent Plugins specification reserves two placeholders for a stdio
+server's `args`, `env` values and `cwd`: `${PLUGIN_ROOT}`, the package's own
+directory, and `${PLUGIN_DATA}`, a writable directory the client keeps for
+that plugin across updates. A `command` or `cwd` beginning with `./` is
+relative to the package. ynh does what the specification asks of a client
+whenever it assembles a run (`ynh run`, `ynd preview`, `ynh agent run`):
+
+- both placeholders are replaced, in one pass, with the harness directory and
+  `~/.ynh/plugin-data/<id>/`, which `ynh run` creates before launching;
+- a `./` command or working directory is made absolute against the harness
+  directory, since the vendor CLI that launches the server has no idea where
+  the package is;
+- for a harness [installed from an Agent Plugin](harnesses.md#installing-an-agent-plugin),
+  `PLUGIN_ROOT` and `PLUGIN_DATA` are also supplied in each stdio server's
+  `env`, last, so a configured entry cannot override them.
+
+The two names are never credentials: `env_passthrough` neither admits nor
+refuses them, and `ynd validate` does not report them as undeclared. A ynh
+harness that uses them assembles and exports the same way.
+
+## The Portable Format
+
+The [Agent Plugins](https://agent-plugins.org) specification defines a portable `mcp.json` (`$schema`, `mcpServers`, and a mandatory `type` per server) that Codex, Copilot, Cursor and others load directly. ynh's transport names are that specification's, so a harness declaration carries over without translation; the remaining differences (the `$schema` line, `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` placeholders, one-token `command` values) are the export's job. `ynd validate` checks a directory holding a root `plugin.json` with the Agent Plugins schema against that specification.
 
 ## CLI Editing
 
@@ -184,8 +242,8 @@ MCP servers can be added, updated, and removed from the command line. The CLI di
 
 ```bash
 # Top-level harness MCP servers
-ynh mcp add <harness> <name> --command <cmd> [--arg <v>...] [--env K=V...]
-ynh mcp add <harness> <name> --url <url> [--header K=V...]
+ynh mcp add <harness> <name> --command <cmd> [--arg <v>...] [--env K=V...] [--cwd <dir>]
+ynh mcp add <harness> <name> --url <url> [--header K=V...] [--type sse]
 ynh mcp update <harness> <name> [flags] [--clear-args|--clear-env|--clear-headers]
 ynh mcp remove <harness> <name>
 
@@ -195,7 +253,7 @@ ynh profile mcp update <harness> <profile> <name> [flags] [--clear-args|--clear-
 ynh profile mcp remove <harness> <profile> <name>
 ```
 
-`--command` and `--url` are mutually exclusive; at least one is required at add time. `--arg` builds the args array in declaration order; `--env K=V` and `--header K=V` are repeatable.
+`--command` and `--url` are mutually exclusive; at least one is required at add time. `--arg` builds the args array in declaration order; `--env K=V` and `--header K=V` are repeatable. `--type` sets the transport and is refused when it disagrees with the fields; `--cwd` sets the subprocess working directory, and `--cwd ""` on update clears it.
 
 **`--null` is profile-only.** A profile MCP entry can be a JSON null to suppress an inherited harness-level server when the profile is active — there is no harness-level analogue because there is nothing to inherit from. Passing `--null` to `ynh mcp add` is rejected.
 

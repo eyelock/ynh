@@ -177,8 +177,9 @@ docker run --rm -v $(pwd):/workspace -e OPENAI_API_KEY \
 
 ## Inspect with --dry-run
 
-Preview the generated Dockerfile without building:
+Preview the generated Dockerfile without building. ynh only reads the base image's labels, if the image is present:
 
+*This launches:* `docker image inspect --format {{json .Config.Labels}} ghcr.io/eyelock/ynh:latest`
 ```bash
 ynh image local/docker-demo --dry-run
 ```

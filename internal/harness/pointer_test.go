@@ -326,7 +326,13 @@ func TestListAll_ForkAndRegistryInstallSameLeafName(t *testing.T) {
 		t.Errorf("ListAll missing github.com/eyelock/assistants/demo-dev; got %+v", ids)
 	}
 	if len(entries) != 2 {
-		t.Errorf("expected 2 entries, got %d: %+v", len(entries), entries)
+		t.Fatalf("expected 2 entries, got %d: %+v", len(entries), entries)
+	}
+	// Entries sort by namespace, then name, so the order is fixed: the local
+	// fork (empty namespace) before the registry install. manual-test-plan
+	// E25 documents this order.
+	if entries[0].Namespace != "" || entries[1].Namespace != "github.com/eyelock/assistants" {
+		t.Errorf("ListAll order = [%q, %q], want the local entry first", entries[0].Namespace, entries[1].Namespace)
 	}
 }
 

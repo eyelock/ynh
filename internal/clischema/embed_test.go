@@ -24,6 +24,22 @@ func TestSchemasCompile(t *testing.T) {
 	}
 }
 
+// TestNamesSorted pins the order of Names, which ynd validate-output prints
+// when a schema name is unknown. The schemas live in a map, so a list built by
+// ranging over it changes order between calls (#520).
+func TestNamesSorted(t *testing.T) {
+	first := Names()
+	if !sort.StringsAreSorted(first) {
+		t.Errorf("Names() = %v, want sorted", first)
+	}
+	for range 50 {
+		got := Names()
+		if strings.Join(got, ",") != strings.Join(first, ",") {
+			t.Fatalf("Names() = %v, then %v: order is not stable", first, got)
+		}
+	}
+}
+
 // TestSingleSchemaTree guards the invariant that replaced the old
 // embed-vs-docs parity test: there is exactly one copy of every schema, at
 // docs/schema, embedded from there by docs/schema/embed.go.
@@ -71,6 +87,14 @@ func TestSingleSchemaTree(t *testing.T) {
 		// than waved through.
 		if strings.Contains(path, filepath.Join("tools", "sensors", "fixtures")+string(filepath.Separator)) {
 			fixtureSchemas = append(fixtureSchemas, path)
+			return nil
+		}
+		// The Agent Plugins schemas are not ynh's: their $id is
+		// agent-plugins.org, the specification forbids fetching them at load
+		// time, and the copy under internal/agentplugin/schema is a verbatim
+		// vendoring of a published release. This rule is about ynh's own
+		// schemas having one copy, and that one has none here.
+		if strings.Contains(path, filepath.Join("internal", "agentplugin", "schema")+string(filepath.Separator)) {
 			return nil
 		}
 		rel, _ := filepath.Rel(root, path)

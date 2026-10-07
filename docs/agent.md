@@ -47,6 +47,7 @@ ynh agent run --resume <session-dir> [flags]
 | `--max-plan-iterations <n>` | Cap on plan revisions before acting |
 | `--emit-jsonl <path>` | Write the trajectory; `-` for stdout |
 | `--resume <dir>` | Continue a previous session from its directory (the `--emit-jsonl` file's folder) |
+| `--telemetry-relay` | Start `ynr relay` for the run and send the vendor's own telemetry into the spool (claude only). Also `YNH_TELEMETRY_RELAY`, or `"telemetry_relay": true` in `config.json`. See [Telemetry](telemetry.md#vendor-telemetry-through-the-relay) |
 
 ### Budgets
 
@@ -87,6 +88,18 @@ was declared, and which declared variables were **not set** — names only, neve
 values. A worker that starts and cannot authenticate is otherwise
 indistinguishable from one that is simply failing.
 
+When [telemetry](telemetry.md) is on, the worker also receives `TRACEPARENT`
+(and `TRACESTATE`, if any) naming the run's span, and `YNR_SPOOL` naming the
+spool folder, so the vendor's own spans can join the run's trace. These are
+ynh's own variables, like `YNH_AGENT_SESSION`, not the operator's. With
+telemetry off it receives none of them.
+
+With the [telemetry relay](telemetry.md#vendor-telemetry-through-the-relay)
+on, a `claude` worker also receives Claude Code's telemetry settings pointing
+at the run's relay, with every content switch forced off, and the same
+settings as `--settings`. Those settings replace any of the same family the
+harness passes through.
+
 ## Redaction
 
 Trajectories are redacted **by value**. At startup ynh takes the values of
@@ -114,6 +127,29 @@ and how a profile narrows it.
 `codex` or `cursor` is an **error**, not a warning — a containment control that
 silently does not apply is worse than an absent one, because it gets relied
 upon. ynh does not provide isolation; it runs inside one you configured.
+
+### What `--sandbox srt` allows
+
+[srt](https://github.com/anthropic-experimental/sandbox-runtime) (`npm install
+-g @anthropic-ai/sandbox-runtime`) reads its rules from a settings file, so ynh
+writes one for each run and starts the worker as
+`srt --settings <file> -- claude ...`. The file is `srt-settings.json` in the
+session directory (beside the `--emit-jsonl` file), mode 0600. A run with no
+session directory gets it in a private directory under `$YNH_HOME/run/`,
+removed when the worker exits. If the file cannot be written the run stops
+before the worker starts; srt itself refuses to run when a `--settings` file is
+missing or invalid. Neither falls back to running unsandboxed.
+
+| | Allowed | Everything else |
+|---|---|---|
+| Network | `api.anthropic.com`, `claude.ai`, `platform.claude.com`: the API, and signing in and refreshing a claude.ai or Console login | refused by srt's proxy, including Claude Code's optional hosts (operational telemetry, error reports, updates, plugin downloads, claude.ai connectors) and loopback |
+| Writes | the worktree; Claude Code's own state: `~/.claude/`, `~/.claude.json` and its `.backup` and `.lock` beside it, or `$CLAUDE_CONFIG_DIR` when the harness passes it through; srt's own temporary directory (`TMPDIR` is set to `/tmp/claude`) | refused; so is the settings file itself, and srt's always-protected paths inside the worktree (`.git/hooks`, `.git/config`, shell rc files, `.claude/commands`, `.claude/agents` and others) |
+| Reads | everywhere, srt's default | |
+
+The network list is the worker's only way out: a task that needs `github.com`
+or a package registry fails under `--sandbox srt`. The telemetry relay is not
+reachable from inside srt and is skipped; see
+[telemetry](telemetry.md#turning-it-on).
 
 ## Permissions and `--auto-approve`
 
@@ -181,7 +217,7 @@ when its verdict is `pass`.
   `focus` sensor needs an agent runtime to resolve, so ynh reports it
   `deferred`; a `files` sensor reports freshness, which is `reported`. Neither
   is ever `pass`, so either would spend the whole budget and end at the turn
-  cap. `ynh agent run` exits with an error before any worker starts, saying the
+  cap. `ynh agent run` exits 1 before any worker starts, saying the
   verifier requires a command source, and `ynd validate` reports the same
   sensor. See [`convergence-verifier` needs a source that can decide](sensors.md#convergence-verifier-needs-a-source-that-can-decide).
 - **A run that expected verification and produced no sensor results does not
@@ -289,6 +325,7 @@ warns and continues, but cannot converge. It has no sensors to converge on.
 | Code | Meaning |
 |---|---|
 | 0 | converged |
+| 1 | refused before any worker started |
 | 10 | turn cap reached |
 | 11 | token budget exceeded |
 | 12 | wall-clock limit reached |
@@ -302,8 +339,24 @@ warns and continues, but cannot converge. It has no sensors to converge on.
 | 31 | interrupted |
 
 Anything non-zero means the loop stopped without the sensors agreeing the work
-was done. Codes 10–12 are budgets, 13–15 are the loop deciding to stop, 20–22
-are failures to run, and 30–31 are external interruption.
+was done. Code 1 is a run that never started, 10–12 are budgets, 13–15 are the
+loop deciding to stop, 20–22 are failures to run, and 30–31 are external
+interruption.
+
+Code 1 is the code every ynh command exits with on a user or configuration
+error. Here it means `ynh agent run` refused before starting a worker: an
+unknown backend, a `--sandbox`, `--auto-approve` or `--effort` setting the
+backend cannot honour (including the harness's `agent.effort`), a project that
+[chooses its own permission mode](#permissions-and-auto-approve), a harness,
+focus or profile that cannot be loaded, or a [convergence verifier that can
+never pass](#convergence). ynh failing to write the trajectory also exits 1. A
+refused resume is code 21 instead. Nothing ran, so fix the invocation or the
+harness rather than retrying: every run with the same flags is refused the same
+way.
+
+Earlier releases exited 1 on such a refusal while the `--format json` result
+said `exit_code: 20`. The two now agree, and 20 always means ynh got as far as
+starting a worker (a vendor CLI missing from `PATH` included).
 
 Code 14 is the one a pipeline must **escalate rather than retry**. It means the
 gate's own reference point moved while the run was in progress: the
@@ -353,7 +406,23 @@ worker error: claude: --dangerously-skip-permissions cannot be used with root/su
 
 `--format json` prints one object when the run ends, on **every** path —
 converged or not. A run that did not converge is the one worth investigating,
-so it still reports what it consumed and what it touched.
+so it still reports what it consumed and what it touched. A run refused before
+a worker started gets one too, with `exit_code` 1 (or 21 for a resume) and the
+refusal as its `reason`. The result's `exit_code` is always the code the
+process exits with.
+
+The one exception is a command line that cannot be parsed at all: an unknown
+flag, a flag missing its value, a value of the wrong type, `--task` with
+`--focus`, or neither of them. That is rejected before a run exists, so it
+exits 1 and produces no result. With `--format json`, wherever it appears on
+the command line, the error is the
+[error envelope](cli-structured.md#error-envelope) on stderr, with
+`invalid_input` as its code (`io_error` when a `--task @file` cannot be read),
+and stdout is empty:
+
+```json
+{"error":{"code":"invalid_input","message":"unknown flag: --bogus"}}
+```
 
 ```bash
 ynh agent run --harness demo --task "..." --format json
@@ -608,6 +677,18 @@ a run without parsing terminal output.
 "failing, but every failure is already recorded" — which is the difference
 between a regression this run caused and debt it inherited.
 
+## Telemetry
+
+`ynh agent run` emits OpenTelemetry when it has somewhere to write it: a
+`ynh.run.started` event as the run begins, and one `ynh.run` span and a
+`ynh.run.finished` event as it ends, with the outcome, exit code, turns, tokens,
+cost, model and harness, and a child span for each `ynh check` between turns.
+It writes into a spool folder named by `YNR_SPOOL` or the laptop default, joins
+the trace in `TRACEPARENT`, passes the trace and the spool on to the worker and
+the sensors, and never carries the
+task, the agent's output or a path. With no destination nothing is written and
+nothing changes. See [Telemetry](telemetry.md).
+
 ## Relationship to `ynh check`
 
 They apply the same policy to the same declarations and differ in who drives:
@@ -635,3 +716,4 @@ point.
 - [Sensors](sensors.md) — declaring what the loop observes
 - [Gating with `ynh check`](tutorial/check.md) — the gate, and baselines
 - [Harness Engineering](harness-engineering.md) — where the loop sits
+- [Telemetry](telemetry.md): what a run emits, and where

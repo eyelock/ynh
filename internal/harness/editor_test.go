@@ -217,7 +217,7 @@ func TestAddInclude_New(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
 
-	err := AddInclude(dir, "github.com/acme/tools", AddOptions{Path: "plugins/search", Pick: []string{"web"}})
+	err := AddInclude(dir, "github.com/example-org/tools", AddOptions{Path: "plugins/search", Pick: []string{"web"}})
 	if err != nil {
 		t.Fatalf("AddInclude: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestAddInclude_New(t *testing.T) {
 	if len(incs) != 1 {
 		t.Fatalf("expected 1 include, got %d", len(incs))
 	}
-	if incs[0].Git != "github.com/acme/tools" || incs[0].Path != "plugins/search" {
+	if incs[0].Git != "github.com/example-org/tools" || incs[0].Path != "plugins/search" {
 		t.Errorf("unexpected include: %+v", incs[0])
 	}
 }
@@ -236,10 +236,10 @@ func TestAddInclude_DuplicateErrors(t *testing.T) {
 	writeTestHarness(t, dir, "h")
 
 	opts := AddOptions{Path: "plugins/search"}
-	if err := AddInclude(dir, "github.com/acme/tools", opts); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", opts); err != nil {
 		t.Fatalf("first add: %v", err)
 	}
-	err := AddInclude(dir, "github.com/acme/tools", opts)
+	err := AddInclude(dir, "github.com/example-org/tools", opts)
 	if err == nil {
 		t.Fatal("expected error on duplicate add")
 	}
@@ -252,10 +252,10 @@ func TestAddInclude_Replace(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
 
-	if err := AddInclude(dir, "github.com/acme/tools", AddOptions{Ref: "v1"}); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", AddOptions{Ref: "v1"}); err != nil {
 		t.Fatalf("first add: %v", err)
 	}
-	if err := AddInclude(dir, "github.com/acme/tools", AddOptions{Ref: "v2", Replace: true}); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", AddOptions{Ref: "v2", Replace: true}); err != nil {
 		t.Fatalf("replace: %v", err)
 	}
 
@@ -272,10 +272,10 @@ func TestAddInclude_SameURLDifferentPath(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
 
-	if err := AddInclude(dir, "github.com/acme/tools", AddOptions{Path: "a"}); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", AddOptions{Path: "a"}); err != nil {
 		t.Fatalf("add a: %v", err)
 	}
-	if err := AddInclude(dir, "github.com/acme/tools", AddOptions{Path: "b"}); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", AddOptions{Path: "b"}); err != nil {
 		t.Fatalf("add b: %v", err)
 	}
 
@@ -290,11 +290,11 @@ func TestAddInclude_SameURLDifferentPath(t *testing.T) {
 func TestRemoveInclude_Removes(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddInclude(dir, "github.com/acme/tools", AddOptions{}); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", AddOptions{}); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := RemoveInclude(dir, "github.com/acme/tools", RemoveOptions{}); err != nil {
+	if err := RemoveInclude(dir, "github.com/example-org/tools", RemoveOptions{}); err != nil {
 		t.Fatalf("RemoveInclude: %v", err)
 	}
 
@@ -308,7 +308,7 @@ func TestRemoveInclude_NotFound(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
 
-	err := RemoveInclude(dir, "github.com/acme/tools", RemoveOptions{})
+	err := RemoveInclude(dir, "github.com/example-org/tools", RemoveOptions{})
 	if err == nil {
 		t.Fatal("expected error for missing include")
 	}
@@ -317,14 +317,14 @@ func TestRemoveInclude_NotFound(t *testing.T) {
 func TestRemoveInclude_AmbiguousRequiresPath(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddInclude(dir, "github.com/acme/tools", AddOptions{Path: "a"}); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", AddOptions{Path: "a"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := AddInclude(dir, "github.com/acme/tools", AddOptions{Path: "b"}); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", AddOptions{Path: "b"}); err != nil {
 		t.Fatal(err)
 	}
 
-	err := RemoveInclude(dir, "github.com/acme/tools", RemoveOptions{})
+	err := RemoveInclude(dir, "github.com/example-org/tools", RemoveOptions{})
 	if err == nil {
 		t.Fatal("expected error for ambiguous URL without path")
 	}
@@ -336,14 +336,14 @@ func TestRemoveInclude_AmbiguousRequiresPath(t *testing.T) {
 func TestRemoveInclude_WithPath(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddInclude(dir, "github.com/acme/tools", AddOptions{Path: "a"}); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", AddOptions{Path: "a"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := AddInclude(dir, "github.com/acme/tools", AddOptions{Path: "b"}); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", AddOptions{Path: "b"}); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := RemoveInclude(dir, "github.com/acme/tools", RemoveOptions{Path: "a"}); err != nil {
+	if err := RemoveInclude(dir, "github.com/example-org/tools", RemoveOptions{Path: "a"}); err != nil {
 		t.Fatalf("RemoveInclude with path: %v", err)
 	}
 
@@ -358,12 +358,12 @@ func TestRemoveInclude_WithPath(t *testing.T) {
 func TestUpdateInclude_Ref(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddInclude(dir, "github.com/acme/tools", AddOptions{Ref: "v1"}); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", AddOptions{Ref: "v1"}); err != nil {
 		t.Fatal(err)
 	}
 
 	newRef := "v2"
-	if err := UpdateInclude(dir, "github.com/acme/tools", UpdateOptions{Ref: &newRef}); err != nil {
+	if err := UpdateInclude(dir, "github.com/example-org/tools", UpdateOptions{Ref: &newRef}); err != nil {
 		t.Fatalf("UpdateInclude: %v", err)
 	}
 
@@ -376,12 +376,12 @@ func TestUpdateInclude_Ref(t *testing.T) {
 func TestUpdateInclude_Path(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddInclude(dir, "github.com/acme/tools", AddOptions{Path: "old"}); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", AddOptions{Path: "old"}); err != nil {
 		t.Fatal(err)
 	}
 
 	newPath := "new"
-	if err := UpdateInclude(dir, "github.com/acme/tools", UpdateOptions{NewPath: &newPath}); err != nil {
+	if err := UpdateInclude(dir, "github.com/example-org/tools", UpdateOptions{NewPath: &newPath}); err != nil {
 		t.Fatalf("UpdateInclude: %v", err)
 	}
 
@@ -394,11 +394,11 @@ func TestUpdateInclude_Path(t *testing.T) {
 func TestUpdateInclude_Pick(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddInclude(dir, "github.com/acme/tools", AddOptions{Pick: []string{"a"}}); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", AddOptions{Pick: []string{"a"}}); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := UpdateInclude(dir, "github.com/acme/tools", UpdateOptions{Pick: []string{"b", "c"}, SetPick: true}); err != nil {
+	if err := UpdateInclude(dir, "github.com/example-org/tools", UpdateOptions{Pick: []string{"b", "c"}, SetPick: true}); err != nil {
 		t.Fatalf("UpdateInclude: %v", err)
 	}
 
@@ -411,12 +411,12 @@ func TestUpdateInclude_Pick(t *testing.T) {
 func TestUpdateInclude_OmittedFieldsUnchanged(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddInclude(dir, "github.com/acme/tools", AddOptions{Ref: "v1", Path: "p", Pick: []string{"x"}}); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", AddOptions{Ref: "v1", Path: "p", Pick: []string{"x"}}); err != nil {
 		t.Fatal(err)
 	}
 
 	newRef := "v2"
-	if err := UpdateInclude(dir, "github.com/acme/tools", UpdateOptions{Ref: &newRef}); err != nil {
+	if err := UpdateInclude(dir, "github.com/example-org/tools", UpdateOptions{Ref: &newRef}); err != nil {
 		t.Fatalf("UpdateInclude: %v", err)
 	}
 
@@ -435,15 +435,15 @@ func TestUpdateInclude_OmittedFieldsUnchanged(t *testing.T) {
 func TestUpdateInclude_AmbiguousRequiresFromPath(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddInclude(dir, "github.com/acme/tools", AddOptions{Path: "a"}); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", AddOptions{Path: "a"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := AddInclude(dir, "github.com/acme/tools", AddOptions{Path: "b"}); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", AddOptions{Path: "b"}); err != nil {
 		t.Fatal(err)
 	}
 
 	newRef := "v2"
-	err := UpdateInclude(dir, "github.com/acme/tools", UpdateOptions{Ref: &newRef})
+	err := UpdateInclude(dir, "github.com/example-org/tools", UpdateOptions{Ref: &newRef})
 	if err == nil {
 		t.Fatal("expected error for ambiguous URL without --from-path")
 	}
@@ -455,15 +455,15 @@ func TestUpdateInclude_AmbiguousRequiresFromPath(t *testing.T) {
 func TestUpdateInclude_FromPath(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddInclude(dir, "github.com/acme/tools", AddOptions{Path: "a", Ref: "v1"}); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", AddOptions{Path: "a", Ref: "v1"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := AddInclude(dir, "github.com/acme/tools", AddOptions{Path: "b", Ref: "v1"}); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", AddOptions{Path: "b", Ref: "v1"}); err != nil {
 		t.Fatal(err)
 	}
 
 	newRef := "v2"
-	if err := UpdateInclude(dir, "github.com/acme/tools", UpdateOptions{FromPath: "a", Ref: &newRef}); err != nil {
+	if err := UpdateInclude(dir, "github.com/example-org/tools", UpdateOptions{FromPath: "a", Ref: &newRef}); err != nil {
 		t.Fatalf("UpdateInclude with from-path: %v", err)
 	}
 
@@ -529,6 +529,33 @@ func TestValidatePicks_Unknown(t *testing.T) {
 	}
 }
 
+// TestValidatePicks_AvailableSorted pins the order of the "Available:" list in
+// the unknown-pick error. It is built from a map and cut at ten entries, so
+// unsorted it showed a different ten names in a different order each run (#520).
+func TestValidatePicks_AvailableSorted(t *testing.T) {
+	dir := t.TempDir()
+	for _, n := range []string{"kilo", "alpha", "juliet", "echo", "bravo", "lima", "delta", "india", "charlie", "hotel", "golf", "foxtrot"} {
+		skillDir := filepath.Join(dir, "skills", n)
+		if err := os.MkdirAll(skillDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# "+n), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := "Available: skills/alpha, skills/bravo, skills/charlie, skills/delta, skills/echo, " +
+		"skills/foxtrot, skills/golf, skills/hotel, skills/india, skills/juliet, … (2 more)\n"
+	for range 50 {
+		err := ValidatePicks(dir, []string{"skills/nonexistent"})
+		if err == nil {
+			t.Fatal("expected error for unknown pick")
+		}
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want it to contain %q", err.Error(), want)
+		}
+	}
+}
+
 func TestValidatePicks_Empty(t *testing.T) {
 	dir := t.TempDir()
 	if err := ValidatePicks(dir, nil); err != nil {
@@ -585,13 +612,13 @@ func TestValidatePicks_BasenameClash(t *testing.T) {
 func TestFindUpdateTarget_ComputesFinalState(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
-	if err := AddInclude(dir, "github.com/acme/tools", AddOptions{Ref: "v1", Path: "old"}); err != nil {
+	if err := AddInclude(dir, "github.com/example-org/tools", AddOptions{Ref: "v1", Path: "old"}); err != nil {
 		t.Fatal(err)
 	}
 
 	newPath := "new"
 	newRef := "v2"
-	inc, err := FindUpdateTarget(dir, "github.com/acme/tools", UpdateOptions{NewPath: &newPath, Ref: &newRef})
+	inc, err := FindUpdateTarget(dir, "github.com/example-org/tools", UpdateOptions{NewPath: &newPath, Ref: &newRef})
 	if err != nil {
 		t.Fatalf("FindUpdateTarget: %v", err)
 	}

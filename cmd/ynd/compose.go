@@ -95,9 +95,11 @@ type composeHook struct {
 }
 
 type composeMCP struct {
+	Type    string            `json:"type"`
 	Command string            `json:"command,omitempty"`
 	Args    []string          `json:"args,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
+	Cwd     string            `json:"cwd,omitempty"`
 	URL     string            `json:"url,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
 }
@@ -125,6 +127,7 @@ func cmdCompose(args []string) error {
 }
 
 func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
+	structured := composeIsJSON(args)
 	var (
 		source      string
 		profileName string
@@ -136,19 +139,19 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 		switch args[i] {
 		case "--harness":
 			if i+1 >= len(args) {
-				return fmt.Errorf("--harness requires a value")
+				return cliError(stderr, structured, errCodeInvalidInput, "--harness requires a value")
 			}
 			i++
 			source = args[i]
 		case "--profile":
 			if i+1 >= len(args) {
-				return fmt.Errorf("--profile requires a value")
+				return cliError(stderr, structured, errCodeInvalidInput, "--profile requires a value")
 			}
 			i++
 			profileName = args[i]
 		case "--format":
 			if i+1 >= len(args) {
-				return fmt.Errorf("--format requires a value")
+				return cliError(stderr, structured, errCodeInvalidInput, "--format requires a value")
 			}
 			i++
 			format = args[i]
@@ -156,10 +159,10 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 			return errHelp
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				return fmt.Errorf("unknown flag: %s", args[i])
+				return cliError(stderr, structured, errCodeInvalidInput, fmt.Sprintf("unknown flag: %s", args[i]))
 			}
 			if source != "" {
-				return fmt.Errorf("unexpected argument: %s", args[i])
+				return cliError(stderr, structured, errCodeInvalidInput, fmt.Sprintf("unexpected argument: %s", args[i]))
 			}
 			source = args[i]
 		}
@@ -171,26 +174,28 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 		source = resolveHarnessEnv()
 	}
 	if source == "" {
-		return fmt.Errorf("usage: ynd compose <harness-dir> [--profile name] [--format text|json]")
+		return cliError(stderr, structured, errCodeInvalidInput,
+			"usage: ynd compose <harness-dir> [--profile name] [--format text|json]")
 	}
 
 	switch format {
 	case "json", "text":
 		// valid
 	default:
-		return fmt.Errorf("invalid --format value %q (want text or json)", format)
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("invalid --format value %q (want text or json)", format))
 	}
 
 	// Resolve source to local path
 	srcDir, err := resolveSource(source)
 	if err != nil {
-		return err
+		return cliError(stderr, structured, errCodeNotFound, err.Error())
 	}
 
 	// Load harness
 	h, workDir, err := loadHarnessForPreview(srcDir)
 	if err != nil {
-		return fmt.Errorf("loading harness: %w", err)
+		return cliError(stderr, structured, errCodeConfigError, fmt.Sprintf("loading harness: %v", err))
 	}
 	if workDir != "" {
 		defer func() { _ = os.RemoveAll(workDir) }()
@@ -204,7 +209,7 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 	if profileName != "" {
 		h, err = harness.ResolveProfile(h, profileName)
 		if err != nil {
-			return err
+			return cliError(stderr, structured, errCodeInvalidInput, err.Error())
 		}
 	}
 
@@ -217,7 +222,7 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 	// Resolve includes
 	resolved, err := resolver.Resolve(h, cfg)
 	if err != nil {
-		return fmt.Errorf("resolving includes: %w", err)
+		return cliError(stderr, structured, errCodeIOError, fmt.Sprintf("resolving includes: %v", err))
 	}
 
 	// Build the composed output
@@ -225,11 +230,28 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 
 	switch format {
 	case "json":
-		return printComposeJSON(stdout, out)
+		if err := printComposeJSON(stdout, out); err != nil {
+			return cliError(stderr, structured, errCodeIOError, err.Error())
+		}
+		return nil
 	case "text":
 		return printComposeText(stdout, out)
 	}
 	return nil
+}
+
+// composeIsJSON reports whether compose's output, and so its errors, will be
+// JSON. Unlike every other command, compose defaults to JSON, so only an
+// explicit --format other than json turns the envelope off. The last
+// --format wins, as it does when the flags are parsed.
+func composeIsJSON(args []string) bool {
+	structured := true
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == "--format" {
+			structured = args[i+1] == "json"
+		}
+	}
+	return structured
 }
 
 func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.ResolveResult) composeOutput {
@@ -379,9 +401,11 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 		servers := make(map[string]composeMCP)
 		for name, srv := range h.MCPServers {
 			servers[name] = composeMCP{
+				Type:    srv.Transport(),
 				Command: srv.Command,
 				Args:    srv.Args,
 				Env:     srv.Env,
+				Cwd:     srv.Cwd,
 				URL:     srv.URL,
 				Headers: srv.Headers,
 			}
@@ -413,9 +437,11 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 					continue
 				}
 				cp.MCPServers[sName] = &composeMCP{
+					Type:    srv.Transport(),
 					Command: srv.Command,
 					Args:    srv.Args,
 					Env:     srv.Env,
+					Cwd:     srv.Cwd,
 					URL:     srv.URL,
 					Headers: srv.Headers,
 				}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"os"
@@ -41,7 +42,7 @@ func TestCmdRegistryAddAndList(t *testing.T) {
 	}
 
 	// List should work
-	err = cmdRegistryList(nil)
+	err = cmdRegistryList(nil, io.Discard, io.Discard)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -165,7 +166,7 @@ func TestCmdRegistryListEmpty(t *testing.T) {
 	}
 
 	// Should not error, just print message
-	err := cmdRegistryList(nil)
+	err := cmdRegistryList(nil, io.Discard, io.Discard)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -205,37 +206,28 @@ func TestCmdRegistryListJSON(t *testing.T) {
 	if err := config.EnsureDirs(); err != nil {
 		t.Fatal(err)
 	}
+	// list tries to fetch each registry to describe it. These URLs name
+	// repositories that do not exist on this machine, so the fetch fails at
+	// once instead of going out to the network, and the listing is still
+	// expected to carry both entries.
+	regA := "file://" + filepath.Join(t.TempDir(), "registry-a")
+	regB := "file://" + filepath.Join(t.TempDir(), "registry-b")
 	cfg := &config.Config{
 		DefaultVendor: "claude",
 		Registries: []config.RegistrySource{
-			{URL: "github.com/org/registry-a"},
-			{URL: "github.com/org/registry-b", Ref: "v2"},
+			{URL: regA},
+			{URL: regB, Ref: "v2"},
 		},
 	}
 	if err := cfg.Save(); err != nil {
 		t.Fatal(err)
 	}
 
-	// Capture stdout
-	r, w, _ := os.Pipe()
-	old := os.Stdout
-	os.Stdout = w
-
-	err := cmdRegistryList([]string{"--format", "json"})
-
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-	os.Stdout = old
-
-	if err != nil {
+	var buf bytes.Buffer
+	if err := cmdRegistryList([]string{"--format", "json"}, &buf, io.Discard); err != nil {
 		t.Fatalf("list --format json: %v", err)
 	}
-
-	out, err2 := io.ReadAll(r)
-	if err2 != nil {
-		t.Fatal(err2)
-	}
+	out := buf.Bytes()
 
 	var got []registryListEntry
 	if err := json.Unmarshal(out, &got); err != nil {
@@ -244,10 +236,10 @@ func TestCmdRegistryListJSON(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("got %d entries, want 2", len(got))
 	}
-	if got[0].URL != "github.com/org/registry-a" {
+	if got[0].URL != regA {
 		t.Errorf("entry 0 url = %q", got[0].URL)
 	}
-	if got[1].URL != "github.com/org/registry-b" || got[1].Ref != "v2" {
+	if got[1].URL != regB || got[1].Ref != "v2" {
 		t.Errorf("entry 1 = %+v", got[1])
 	}
 }
@@ -263,25 +255,11 @@ func TestCmdRegistryListJSONEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r, w, _ := os.Pipe()
-	old := os.Stdout
-	os.Stdout = w
-
-	err := cmdRegistryList([]string{"--format", "json"})
-
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-	os.Stdout = old
-
-	if err != nil {
+	var buf bytes.Buffer
+	if err := cmdRegistryList([]string{"--format", "json"}, &buf, io.Discard); err != nil {
 		t.Fatalf("list --format json empty: %v", err)
 	}
-
-	out, err2 := io.ReadAll(r)
-	if err2 != nil {
-		t.Fatal(err2)
-	}
+	out := buf.Bytes()
 
 	var got []registryListEntry
 	if err := json.Unmarshal(out, &got); err != nil {
@@ -302,7 +280,7 @@ func TestCmdRegistryListInvalidFormat(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := cmdRegistryList([]string{"--format", "yaml"})
+	err := cmdRegistryList([]string{"--format", "yaml"}, io.Discard, io.Discard)
 	if err == nil {
 		t.Fatal("expected error for invalid format")
 	}

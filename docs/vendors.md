@@ -181,7 +181,7 @@ These come from Ollama's own docs, not ynh:
 
 **Cursor Agent** - Full interactive and non-interactive support. Uses symlink-based artifact installation. Requires `agent` CLI installed (`curl https://cursor.com/install -fsS | bash`). Uses `-p` for non-interactive prompts. See [cursor.com/cli](https://cursor.com/cli).
 
-**GitHub Copilot CLI** - Full interactive and non-interactive support. Uses `--plugin-dir` for artifact loading, like Claude. Requires `copilot` CLI installed. Non-interactive runs need `--allow-all-tools` (added automatically). Harness instructions and MCP servers are projected into the calling project's `.github/instructions/ynh-harness.instructions.md` and `.github/mcp.json` — Copilot doesn't read plugin-bundled `AGENTS.md`/`.mcp.json` via `--plugin-dir`. **Hooks are not supported**: Copilot silently no-ops hooks in folders it hasn't marked as trusted, and no CLI flag exists to grant that trust per-invocation, so `ynh`-managed hook config would silently fail rather than run. See [github.com/features/copilot/cli](https://github.com/features/copilot/cli).
+**GitHub Copilot CLI** - Full interactive and non-interactive support. Uses `--plugin-dir` for artifact loading, like Claude. Requires `copilot` CLI installed. Non-interactive runs need `--allow-all-tools` (added automatically). Harness instructions and MCP servers are projected into the calling project's `.github/instructions/ynh-harness.instructions.md` and `.github/mcp.json`, because Copilot doesn't read plugin-bundled `AGENTS.md`/`.mcp.json` via `--plugin-dir`. The instructions file gets one frontmatter block, `applyTo: "**/*"` so it is always on, followed by any fields of the harness instructions' own frontmatter except `applyTo`. **Hooks are not supported**: Copilot silently no-ops hooks in folders it hasn't marked as trusted, and no CLI flag exists to grant that trust per-invocation, so `ynh`-managed hook config would silently fail rather than run. See [github.com/features/copilot/cli](https://github.com/features/copilot/cli).
 
 ## Export Output by Vendor
 
@@ -192,7 +192,7 @@ These come from Ollama's own docs, not ynh:
 | **Manifest** | `.claude-plugin/plugin.json` | `.cursor-plugin/plugin.json` | `.codex-plugin/plugin.json` | `.claude-plugin/plugin.json` |
 | **Skills** | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` |
 | **Agents** | `agents/<name>.md` | `agents/<name>.md` | *excluded* | `agents/<name>.md` |
-| **Rules** | `rules/<name>.md` | `rules/<name>.md` | *excluded* | *excluded* |
+| **Rules** | `rules/<name>.md` | `rules/<name>.mdc` | *excluded* | *excluded* |
 | **Commands** | `commands/<name>.md` | `commands/<name>.md` | *excluded* | *excluded* |
 | **Instructions** | `AGENTS.md` | `.cursorrules` + `AGENTS.md` | `AGENTS.md` | `AGENTS.md` |
 | **Hooks** | `hooks/claude.json` | `hooks/cursor.json` | `hooks/codex.json` | *none* |
@@ -212,6 +212,25 @@ Key differences between runtime and export:
 - Copilot uses Claude's plugin manifest format (`.claude-plugin/plugin.json`), since Copilot's own plugin loader reads the same schema. At runtime the manifest and MCP config nest under `.copilot/`, the `--plugin-dir` target; an export always puts the manifest at the plugin root beside the skills, and MCP config at `.github/mcp.json` there. In a package that also carries Claude, the shared manifest's `"mcpServers"` names Claude's `mcp/claude.json`; see [MCP Servers: Config File Locations](mcp.md#config-file-locations) for what that means for Copilot
 
 See [ynd export](ynd.md#export) for full command reference.
+
+## Agent Plugins Export
+
+`ynd export --format agent-plugin` writes one package in the
+[Agent Plugins](https://agent-plugins.org) open format instead of a tree per
+vendor. The portable core (root `plugin.json`, `skills/`, `mcp.json`) is the
+same whichever vendors are selected; `-v` chooses which clients' own files
+join it, each where that client documents reading them:
+
+| | Loads the format | What `-v` adds to the package |
+|---|---|---|
+| Codex | yes | `com.openai/hooks/hooks.json`, named under `extensions.com.openai` |
+| Copilot / VS Code | yes | `com.github.copilot/agents/` (same subset as the vendor export) |
+| Cursor | yes, core only | nothing: Cursor has published no extension namespace, and does not expand `${PLUGIN_ROOT}` or `${PLUGIN_DATA}` |
+| Claude Code | no | `.claude-plugin/plugin.json`, `mcp/claude.json` and `hooks/claude.json` (named by that manifest, as in its own plugin export), `agents/`, `rules/`, `commands/`, `CLAUDE.md` at the root: a compatibility package, as the spec's migration guide describes |
+
+Anything the selected vendors cannot receive is reported as a warning rather
+than dropped in silence. See [ynd export](ynd.md#export) for the rules the
+portable `mcp.json` applies to each server.
 
 ## Vendor Spec Tracking
 

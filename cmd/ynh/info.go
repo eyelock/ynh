@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/agentplugin"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/migration"
@@ -234,21 +237,16 @@ func printInfoText(w io.Writer, name string) error {
 	if len(p.Profiles) == 0 {
 		_, _ = fmt.Fprintln(w, "  (none)")
 	} else {
-		for pname, profile := range p.Profiles {
+		// Profiles, hook events and servers are all map keys: sorted, so the
+		// listing does not change order between runs (#520).
+		for _, pname := range slices.Sorted(maps.Keys(p.Profiles)) {
+			profile := p.Profiles[pname]
 			var parts []string
 			if len(profile.Hooks) > 0 {
-				var events []string
-				for event := range profile.Hooks {
-					events = append(events, event)
-				}
-				parts = append(parts, "hooks: "+strings.Join(events, ", "))
+				parts = append(parts, "hooks: "+strings.Join(slices.Sorted(maps.Keys(profile.Hooks)), ", "))
 			}
 			if len(profile.MCPServers) > 0 {
-				var servers []string
-				for sn := range profile.MCPServers {
-					servers = append(servers, sn)
-				}
-				parts = append(parts, "mcp_servers: "+strings.Join(servers, ", "))
+				parts = append(parts, "mcp_servers: "+strings.Join(slices.Sorted(maps.Keys(profile.MCPServers)), ", "))
 			}
 			if len(parts) == 0 {
 				_, _ = fmt.Fprintf(w, "  %s\n", pname)
@@ -316,9 +314,15 @@ func printInfoJSON(stdout, stderr io.Writer, name string, checkUpdates bool) err
 	}
 
 	// Migration chain has run (harness.LoadQualified was called above), so the
-	// manifest is a plugin.json in one of the manifest directories.
-	manifestPath := plugin.PluginPath(p.Dir)
-	raw, err := os.ReadFile(manifestPath)
+	// manifest is a plugin.json in one of the manifest directories. A harness
+	// derived from an Agent Plugins package has no file to read; its manifest
+	// is the one the loader built.
+	var raw []byte
+	if p.Format == agentplugin.Format {
+		raw, err = json.Marshal(p.Manifest)
+	} else {
+		raw, err = os.ReadFile(plugin.PluginPath(p.Dir))
+	}
 	if err != nil {
 		return cliError(stderr, true, errCodeIOError,
 			fmt.Sprintf("reading manifest: %v", err))

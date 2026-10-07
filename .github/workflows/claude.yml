@@ -10,13 +10,21 @@ on:
   pull_request_review:
     types: [submitted]
 
+# Until eyelock/ynr is public, its spoolexporter module is private: fetch it
+# directly, not through the public proxy.
+env:
+  GOPRIVATE: github.com/eyelock/ynr
+
 jobs:
   claude:
+    # Owner only. This job holds a token and contents: write on a public
+    # repository, so anyone else's comment, review or issue must never start it.
+    # author_association is OWNER for the repository owner and nobody else.
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      (github.event_name == 'issue_comment' && github.event.comment.author_association == 'OWNER' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && github.event.comment.author_association == 'OWNER' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && github.event.review.author_association == 'OWNER' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && github.event.issue.author_association == 'OWNER' && github.event.sender.login == github.repository_owner && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -34,7 +42,14 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - uses: anthropics/claude-code-action@97c53473391bff1901034d4b454b5bac7ab7a029  # v1.0.239
+      # YNR_READ_REPO is a read-only token: the agent below may run git,
+      # so it must never see a token that can write.
+      - name: Allow the private ynr module
+        env:
+          YNR_READ_REPO: ${{ secrets.YNR_READ_REPO }}
+        run: git config --global url."https://x-access-token:${YNR_READ_REPO}@github.com/eyelock/ynr".insteadOf "https://github.com/eyelock/ynr"
+
+      - uses: anthropics/claude-code-action@cab360f6565aa35a51d6ce9e43f1f4287c0a32ea  # v1.0.241
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           additional_permissions: |

@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 func printUsage() {
@@ -80,7 +82,7 @@ Run 'ynh <command> --help' for one command's detail, and 'ynh schema --all'
 for the published JSON shape of every command that emits structured output.
 
 Run flags:
-  -v <vendor>                  Override vendor (claude, codex, cursor, copilot), or "<backend>/<vendor>[/<model>]" to redirect at a local model backend (see: ynh backend)
+  -v <vendor>                  Override vendor (%s), or "<backend>/<vendor>[/<model>]" to redirect at a local model backend (see: ynh backend)
   --focus <name>               Load a named focus (sets prompt and profile; implies non-interactive)
   --profile <name>             Apply a named profile overlay (with a prompt, implies non-interactive)
   --interactive                Override non-interactive default — stay in session after focus or prompt
@@ -117,5 +119,5 @@ Examples:
   ynh registry add github.com/org/registry
   ynh install david
   ynh install david@my-registry
-`, config.Version)
+`, config.Version, strings.Join(vendor.Available(), ", "))
 }

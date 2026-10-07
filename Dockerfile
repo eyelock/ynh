@@ -1,16 +1,29 @@
 # syntax=docker/dockerfile:1
 
 # Stage 1: Build ynh and ynd
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS builder
 
 RUN apk add --no-cache git
 
 WORKDIR /src
 
-# Copy module files first for layer caching (currently zero deps, but
-# this avoids invalidating the module cache when source changes)
+# The spoolexporter module lives in the private eyelock/ynr repository until
+# that is public. Its token arrives as a BuildKit secret (id ynr_token) and is
+# handed to git through environment variables for this one RUN, so it is
+# never written to a file and no layer holds it. Without the secret the
+# download fails, as it does for anyone without read access to eyelock/ynr.
+ENV GOPRIVATE=github.com/eyelock/ynr
+
+# Copy module files first for layer caching: this avoids invalidating the
+# module cache when source changes.
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=secret,id=ynr_token \
+    if [ -s /run/secrets/ynr_token ]; then \
+      export GIT_CONFIG_COUNT=1 \
+        GIT_CONFIG_KEY_0="url.https://x-access-token:$(cat /run/secrets/ynr_token)@github.com/eyelock/ynr.insteadOf" \
+        GIT_CONFIG_VALUE_0="https://github.com/eyelock/ynr"; \
+    fi; \
+    go mod download
 
 COPY . .
 
@@ -37,7 +50,7 @@ RUN --mount=type=cache,target=/root/.npm \
     npm install -g --include=optional "@openai/codex@${CODEX_VERSION}"
 
 # Stage 2c: Cursor Agent CLI (parallel)
-FROM alpine:3.23.5@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40 AS cursor-cli
+FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS cursor-cli
 RUN apk add --no-cache curl bash
 
 # The installer at cursor.com/install is regenerated per release: it embeds

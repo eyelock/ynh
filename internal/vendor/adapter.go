@@ -3,8 +3,9 @@ package vendor
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -54,6 +55,13 @@ type Adapter interface {
 	DisplayName() string
 
 	// CLIName returns the CLI binary name (e.g. "claude", "codex", "agent").
+	//
+	// It is the only place a vendor's binary is spelled. Everything that
+	// finds or runs a vendor CLI asks the adapter: the launchers here, the
+	// `ynh agent run` workers (internal/agent), `ynh vendors`, and ynd's
+	// compress and inspect. When those kept their own copies, the agent
+	// worker drifted to "cursor", the Cursor editor's launcher, while the
+	// adapter ran "agent", Cursor's CLI (#524).
 	CLIName() string
 
 	// ConfigDir returns the vendor's config directory name (e.g. ".claude").
@@ -194,6 +202,55 @@ type Adapter interface {
 	// GenerateMarketplaceIndex produces vendor-native marketplace index content.
 	// Returns nil if the vendor has no marketplace system.
 	GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error)
+
+	// AgentPluginLayout describes where this vendor's client-specific
+	// components sit inside a portable Agent Plugins package
+	// (https://agent-plugins.org, §8). The portable core, skills/ and
+	// mcp.json, is the same for every vendor and is not described here.
+	AgentPluginLayout() AgentPluginLayout
+}
+
+// AgentPluginLayout is a vendor's answer to "what do you read from an Agent
+// Plugins package beyond the portable core, and where". The specification
+// leaves agents, rules, commands and hooks to each client, under a
+// reverse-domain namespace the client documents. A client that has not
+// adopted the format at all is reached through its own legacy manifest and
+// layout at the plugin root instead, which the specification's migration
+// guide calls a compatibility package.
+//
+// Every path is relative to the plugin root, slash-separated.
+type AgentPluginLayout struct {
+	// LoadsFormat is false for a client that does not read root plugin.json
+	// as an Agent Plugins manifest. Such a client gets its own
+	// GeneratePluginManifest output and GenerateSystemPrompt files at the
+	// root, alongside the portable ones.
+	LoadsFormat bool
+
+	// Namespace is the reverse-domain identifier the client has published
+	// for its extension data and directory, or "" when it has none.
+	Namespace string
+
+	// ArtifactDir is where the vendor's non-portable artifacts (agents,
+	// rules, commands, per ExportArtifactDirs) and delegate agents go: "."
+	// for the plugin root, the namespace directory, or "" when the client
+	// cannot receive them from this package at all.
+	ArtifactDir string
+
+	// Hooks is the file the vendor's plugin hook config is written to
+	// (GeneratePluginHookConfig where the vendor has one, so commands are
+	// anchored at the plugin root), or "" when the client does not load
+	// hooks from this package.
+	Hooks string
+
+	// HooksExtension, when true, records the Hooks path under
+	// extensions.<Namespace>.hooks in the portable manifest, for a client
+	// whose manifest pointer replaces its default hook discovery.
+	HooksExtension bool
+
+	// MCP is the file the vendor's plugin MCP config is written to
+	// (GeneratePluginMCPConfig where the vendor has one), or "" when the
+	// client reads the portable mcp.json.
+	MCP string
 }
 
 // MarketplaceIndexConfig holds marketplace identity for index generation.
@@ -225,11 +282,7 @@ func Register(a Adapter) {
 func Get(name string) (Adapter, error) {
 	a, ok := registry[name]
 	if !ok {
-		var available []string
-		for k := range registry {
-			available = append(available, k)
-		}
-		return nil, fmt.Errorf("%w %q (available: %v)", ErrUnknownVendor, name, available)
+		return nil, fmt.Errorf("%w %q (available: %v)", ErrUnknownVendor, name, Available())
 	}
 	return a, nil
 }
@@ -292,12 +345,9 @@ func pluginRootCommand(rootVar string) func(string) string {
 // keepHookCommand leaves a hook command exactly as the harness wrote it.
 func keepHookCommand(cmd string) string { return cmd }
 
-// Available returns all registered vendor names, sorted alphabetically.
+// Available returns all registered vendor names, sorted alphabetically. The
+// registry is a map, so every list of vendors shown to a user comes from here:
+// ranging over the map directly would change the order on every call (#520).
 func Available() []string {
-	var names []string
-	for k := range registry {
-		names = append(names, k)
-	}
-	sort.Strings(names)
-	return names
+	return slices.Sorted(maps.Keys(registry))
 }

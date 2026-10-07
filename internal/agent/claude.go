@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // ClaudeBackend implements WorkerBackend for Claude Code CLI.
@@ -23,9 +25,9 @@ func (b *ClaudeBackend) Name() string { return "claude" }
 
 // Start spawns a claude subprocess in stream-json mode.
 func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSession, error) {
-	claudeBin, err := exec.LookPath("claude")
+	claudeBin, err := lookWorkerCLI(b.Name())
 	if err != nil {
-		return nil, fmt.Errorf("claude not found on PATH: %w", err)
+		return nil, err
 	}
 
 	args := buildClaudeStreamArgs(opts)
@@ -44,17 +46,13 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 	}
 
 	var cmd *exec.Cmd
+	cleanup := func() {}
 	if opts.Sandbox == "srt" {
-		srtBin, err := exec.LookPath("srt")
+		policy := claudeSrtPolicy(workerEnvFor(opts.Env))
+		cmd, cleanup, err = srtCommand(ctx, opts, policy, claudeBin, args)
 		if err != nil {
-			return nil, fmt.Errorf("srt not found on PATH: %w", err)
+			return nil, err
 		}
-		srtArgs := append([]string{
-			"--profile", "workspace",
-			"--network-allow", ".anthropic.com,.openai.com",
-			"--", claudeBin,
-		}, args...)
-		cmd = exec.CommandContext(ctx, srtBin, srtArgs...)
 	} else {
 		cmd = exec.CommandContext(ctx, claudeBin, args...)
 	}
@@ -68,14 +66,17 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
+		cleanup()
 		return nil, fmt.Errorf("creating stdin pipe: %w", err)
 	}
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
+		cleanup()
 		return nil, fmt.Errorf("creating stdout pipe: %w", err)
 	}
 
 	if err := cmd.Start(); err != nil {
+		cleanup()
 		return nil, fmt.Errorf("starting claude: %w", err)
 	}
 
@@ -89,6 +90,7 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 		sessionID: sessionID,
 		stderr:    tail,
 		wantMode:  claudePermissionMode(opts.AutoApprove),
+		cleanup:   cleanup,
 		// A fresh session's running cost starts at zero. A resumed one may
 		// continue from the total its transcript saved, so it is asked.
 		costBaseKnown: opts.ResumeToken == "",
@@ -143,7 +145,7 @@ func buildClaudeStreamArgs(opts StartOptions) []string {
 	}
 
 	if opts.ConfigPath != "" {
-		pluginDir := filepath.Join(opts.ConfigPath, ".claude")
+		pluginDir := filepath.Join(opts.ConfigPath, (&vendor.Claude{}).ConfigDir())
 		args = append(args, "--plugin-dir", pluginDir, "--add-dir", opts.ConfigPath)
 
 		instructionsPath := filepath.Join(opts.ConfigPath, "CLAUDE.md")
@@ -166,6 +168,13 @@ func buildClaudeStreamArgs(opts StartOptions) []string {
 		args = append(args, "--permission-mode", mode)
 	}
 
+	// The relay's settings again, at the highest precedence ynh can set
+	// for one session, so no settings file but the organisation's managed
+	// settings can turn content on or move the endpoint.
+	if opts.TelemetryEndpoint != "" {
+		args = append(args, "--settings", claudeSettingsArg(opts.TelemetryEndpoint))
+	}
+
 	return args
 }
 
@@ -179,8 +188,12 @@ type claudeSession struct {
 	stderr *stderrTail
 	// wantMode is the --permission-mode this session asked for, or "".
 	wantMode string
-	waited   bool
-	waitErr  error
+	// cleanup removes what starting the session left behind for the
+	// process (srt's settings, when they had no session directory), once
+	// the process has exited.
+	cleanup func()
+	waited  bool
+	waitErr error
 
 	// effort is the reasoning effort claude reports it applies, once its
 	// get_settings answer arrives. Init does not carry it.
@@ -205,6 +218,9 @@ func (s *claudeSession) wait() error {
 	if !s.waited {
 		s.waitErr = s.cmd.Wait()
 		s.waited = true
+		if s.cleanup != nil {
+			s.cleanup()
+		}
 	}
 	return s.waitErr
 }

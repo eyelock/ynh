@@ -273,7 +273,7 @@ Requires Docker installed and running.
 | Update a path value | [Update a path value](include-editing.md#update-a-path-value) |
 | Remove an include | [Remove an include](include-editing.md#remove-an-include) |
 | Disambiguating a monorepo | [Disambiguating a monorepo](include-editing.md#disambiguating-a-monorepo) |
-| Installed harnesses — name-based targeting (network required) | [Installed harnesses — name-based targeting (network required)](include-editing.md#installed-harnesses-name-based-targeting-network-required) |
+| Installed harnesses: name-based targeting | [Installed harnesses: name-based targeting](include-editing.md#installed-harnesses-name-based-targeting) |
 | Path resolution — id vs path | [Path resolution — id vs path](include-editing.md#path-resolution-id-vs-path) |
 | Clean up | [Clean up](include-editing.md#clean-up) |
 
@@ -371,8 +371,8 @@ directly in `/tmp`, and no case relies on files another case created, so any cas
 run on its own and two runs of different cases cannot collide. Cases that use
 `mktemp -d` for `YNH_HOME` remove exactly the directory `mktemp` gave them.
 
-When you have finished, `rmdir /tmp/ynh-edge` removes the root. It fails if a case left
-something behind, which is a bug in that case.
+When you have finished, the [last step](#clean-up) removes the root with `rmdir`. It
+fails if a case left something behind, which is a bug in that case.
 
 ### E1: Version output
 
@@ -449,7 +449,7 @@ mkdir -p repo/.agents/harness
 echo '{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"edge","version":"0.1.0"}' > repo/.agents/harness/plugin.json
 
 ynd export /tmp/ynh-edge/e7/repo -v fakevend
-# Expected: Error: unknown vendor "fakevend" (available: [... order varies ...])
+# Expected: Error: unknown vendor "fakevend" (available: [claude codex copilot cursor])
 
 cd /
 rm -rf /tmp/ynh-edge/e7
@@ -507,9 +507,14 @@ if [ -f ~/.ynh/config.json.bak ]; then mv ~/.ynh/config.json.bak ~/.ynh/config.j
 
 ### E12: SSH URL not confused with registry
 
+What this case tests is where the address goes: to git, not to a registry
+lookup. It needs no network to show that. `GIT_ALLOW_PROTOCOL=file` lets git
+parse the SSH address and then refuse the `ssh` transport before it connects.
+
 ```bash
-ynh install git@github.com:eyelock/nonexistent.git 2>&1 | head -1
-# Expected: git clone error, NOT a registry lookup error
+GIT_ALLOW_PROTOCOL=file ynh install git@github.com:eyelock/nonexistent.git 2>&1 | head -1
+# Expected: Error: resolving git@github.com:eyelock/nonexistent.git: git clone git@github.com:eyelock/nonexistent.git: exit status 128
+# (a git clone error, NOT a registry lookup error)
 ```
 
 ### E13: Create duplicate scaffold
@@ -763,7 +768,7 @@ cat > "$YNH_HOME/installed/shared.json" << 'EOF'
 EOF
 
 ynh ls --format json | jq '[.harnesses[] | select(.name=="shared") | .id]'
-# Expected (both ids present, order may vary):
+# Expected (both ids, local first: entries sort by namespace, then name):
 # [
 #   "local/shared",
 #   "github.com/eyelock/assistants/shared"
@@ -941,6 +946,22 @@ Re-run S1 with a focus-source sensor and verify `ynh sensors run` returns the re
 ### S3: Validation rejects two-source declaration
 
 `source` with both `command` and `files` set must error: `sensor "X": source must have exactly one of files, command, focus, github_status, github_check`.
+
+---
+
+## Clean up
+
+Every case removes its own directory, which leaves the root they share. Remove it
+last. `rmdir` removes only an empty directory, so it doubles as the check that no
+case left anything behind.
+
+```bash
+cd /
+rmdir /tmp/ynh-edge
+ls -d /tmp/ynh-edge 2>/dev/null
+# Expected: no output. If rmdir fails with "Directory not empty", the directory
+# still inside the root names the case whose cleanup is broken.
+```
 
 ---
 

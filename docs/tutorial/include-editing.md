@@ -402,11 +402,9 @@ Expected:
 }
 ```
 
-## Installed harnesses — name-based targeting (network required)
+## Installed harnesses: name-based targeting
 
-> **Skip in evals** — requires network access for the pre-fetch.
-
-For installed harnesses, use the harness name instead of a path:
+For installed harnesses, use the harness id instead of a path. Adding a Git include to one fetches it straight away, so this step reaches the include's host:
 
 ```bash
 # Install a harness first
@@ -457,14 +455,14 @@ The `<harness>` argument is classified lexically:
 
 ```bash
 # Filesystem path (must contain .agents/harness/plugin.json)
-ynh include add ./my-harness github.com/acme/tools
-ynh include add /tmp/ynh-tutorial-includes/my-harness github.com/acme/tools
+ynh include add ./my-harness github.com/example-org/tools
+ynh include add /tmp/ynh-tutorial-includes/my-harness github.com/example-org/tools
 
 # Canonical id (must be installed)
-ynh include add local/my-harness github.com/acme/tools
+ynh include add local/my-harness github.com/example-org/tools
 
 # Bare name — rejected
-ynh include add my-harness github.com/acme/tools
+ynh include add my-harness github.com/example-org/tools
 # Error: "my-harness" is not a valid harness id. Use a canonical id...
 ```
 

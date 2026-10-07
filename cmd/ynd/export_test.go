@@ -331,6 +331,8 @@ func TestCmdExportRefusedLeavesOutputUntouched(t *testing.T) {
 		{"undefined focus", []string{good, "--focus", "nope"}, "focus \"nope\" not defined"},
 		{"undefined profile", []string{good, "--profile", "nope"}, "nope"},
 		{"undefined profile with clean", []string{good, "--profile", "nope", "--clean", "-y"}, "nope"},
+		{"merged and agent-plugin", []string{good, "--merged", "--format", "agent-plugin", "--clean", "-y"}, "different layouts"},
+		{"unknown format", []string{good, "--format", "zip", "--clean", "-y"}, `unknown --format "zip"`},
 	}
 
 	for _, r := range refusals {
@@ -381,5 +383,37 @@ func writeLegacyHarnessJSON(t *testing.T, dir string) {
 	legacy := `{"$schema":"https://eyelock.github.io/ynh/schema/harness.schema.json","name":"legacy","version":"0.1.0"}`
 	if err := os.WriteFile(filepath.Join(dir, ".harness.json"), []byte(legacy), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCmdExportFormatAgentPlugin(t *testing.T) {
+	outputDir := filepath.Join(t.TempDir(), "pkg")
+	if err := cmdExport([]string{testdataExportDir(), "-o", outputDir, "--format", "agent-plugin", "-v", "claude,copilot"}); err != nil {
+		t.Fatalf("cmdExport failed: %v", err)
+	}
+	for _, rel := range []string{"plugin.json", "skills/dev-project/SKILL.md", ".claude-plugin/plugin.json", "com.github.copilot/agents/planner.md", "agents/planner.md"} {
+		if _, err := os.Stat(filepath.Join(outputDir, filepath.FromSlash(rel))); err != nil {
+			t.Errorf("expected %s: %v", rel, err)
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(outputDir, "plugin.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"`) || !strings.Contains(string(data), `"name": "export-test"`) {
+		t.Errorf("plugin.json = %s", data)
+	}
+}
+
+func TestCmdExportFormatFlagErrors(t *testing.T) {
+	out := t.TempDir()
+	if err := cmdExport([]string{testdataExportDir(), "-o", out, "--format", "agent-plugin", "--merged"}); err == nil || !strings.Contains(err.Error(), "different layouts") {
+		t.Errorf("merged+agent-plugin: err = %v", err)
+	}
+	if err := cmdExport([]string{testdataExportDir(), "-o", out, "--format", "zip"}); err == nil || !strings.Contains(err.Error(), `unknown --format "zip"`) {
+		t.Errorf("unknown format: err = %v", err)
+	}
+	if err := cmdExport([]string{testdataExportDir(), "-o", out, "--format"}); err == nil || !strings.Contains(err.Error(), "requires a value") {
+		t.Errorf("missing value: err = %v", err)
 	}
 }

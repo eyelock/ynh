@@ -86,12 +86,13 @@ var runSensorFn = defaultRunSensor
 // RunSensor executes `ynh sensors run <harness> <name>` and returns the
 // parsed result. overlayJSON is an optional partial sensor JSON (e.g.
 // `{"source":{"command":"make fast"}}`) merged over the base declaration
-// by the ynh binary before execution. Pass "" for no overlay.
-func RunSensor(ynhPath, harnessName, sensorName, cwd, overlayJSON string) (*SensorResult, error) {
-	return runSensorFn(ynhPath, harnessName, sensorName, cwd, overlayJSON)
+// by the ynh binary before execution. Pass "" for no overlay. extraEnv is
+// added to the inherited environment (see childEnv).
+func RunSensor(ynhPath, harnessName, sensorName, cwd, overlayJSON string, extraEnv []string) (*SensorResult, error) {
+	return runSensorFn(ynhPath, harnessName, sensorName, cwd, overlayJSON, extraEnv)
 }
 
-func defaultRunSensor(ynhPath, harnessName, sensorName, cwd, overlayJSON string) (*SensorResult, error) {
+func defaultRunSensor(ynhPath, harnessName, sensorName, cwd, overlayJSON string, extraEnv []string) (*SensorResult, error) {
 	args := []string{"sensors", "run", harnessName, sensorName, "--format", "json"}
 	if cwd != "" {
 		args = append(args, "--cwd", cwd)
@@ -101,6 +102,7 @@ func defaultRunSensor(ynhPath, harnessName, sensorName, cwd, overlayJSON string)
 	}
 
 	cmd := exec.Command(ynhPath, args...)
+	cmd.Env = childEnv(extraEnv)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

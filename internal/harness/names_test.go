@@ -80,7 +80,7 @@ func TestLoadQualified_NotInstalled(t *testing.T) {
 
 func TestLoadNS_NotFound(t *testing.T) {
 	overrideHarnessesDir(t)
-	_, err := LoadNS("github.com--acme", "missing")
+	_, err := LoadNS("github.com--example-org", "missing")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -90,15 +90,15 @@ func TestLoadNS_NotFound(t *testing.T) {
 }
 
 func TestInstalledDirNS_NamespacedDir_Match(t *testing.T) {
-	a := InstalledDirNS("github.com/acme/x", "foo")
-	b := NamespacedDir("github.com/acme/x", "foo")
+	a := InstalledDirNS("github.com/example-org/x", "foo")
+	b := NamespacedDir("github.com/example-org/x", "foo")
 	if a != b {
 		t.Errorf("InstalledDirNS != NamespacedDir: %q vs %q", a, b)
 	}
 }
 
 func TestInstalledDirNS_UsesFSName(t *testing.T) {
-	got := InstalledDirNS("github.com/acme/x", "foo")
+	got := InstalledDirNS("github.com/example-org/x", "foo")
 	// Slashes in namespace are flattened to "--" for filesystem safety.
 	if strings.Contains(filepath.Base(filepath.Dir(got)), "/") {
 		t.Errorf("namespace not sanitized for filesystem: %q", got)

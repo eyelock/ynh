@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 
@@ -44,7 +45,7 @@ func TestCmdFocusAdd_Basic(t *testing.T) {
 	writeFocusTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	if err := cmdFocusTo([]string{"add", dir, "review", "review this code"}, &buf); err != nil {
+	if err := cmdFocusTo([]string{"add", dir, "review", "review this code"}, &buf, io.Discard); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := loadTestFocuses(t, dir)
@@ -68,7 +69,7 @@ func TestCmdFocusAdd_WithProfile(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := cmdFocusTo([]string{"add", dir, "deep", "audit this", "--profile", "thorough"}, &buf); err != nil {
+	if err := cmdFocusTo([]string{"add", dir, "deep", "audit this", "--profile", "thorough"}, &buf, io.Discard); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := loadTestFocuses(t, dir)
@@ -82,7 +83,7 @@ func TestCmdFocusAdd_UnknownProfile(t *testing.T) {
 	writeFocusTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	err := cmdFocusTo([]string{"add", dir, "deep", "audit", "--profile", "nope"}, &buf)
+	err := cmdFocusTo([]string{"add", dir, "deep", "audit", "--profile", "nope"}, &buf, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "unknown profile") {
 		t.Errorf("expected unknown profile error, got: %v", err)
 	}
@@ -93,10 +94,10 @@ func TestCmdFocusAdd_Duplicate(t *testing.T) {
 	writeFocusTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	if err := cmdFocusTo([]string{"add", dir, "f", "p"}, &buf); err != nil {
+	if err := cmdFocusTo([]string{"add", dir, "f", "p"}, &buf, io.Discard); err != nil {
 		t.Fatal(err)
 	}
-	err := cmdFocusTo([]string{"add", dir, "f", "p2"}, &buf)
+	err := cmdFocusTo([]string{"add", dir, "f", "p2"}, &buf, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "already exists") {
 		t.Errorf("expected already-exists error, got: %v", err)
 	}
@@ -107,7 +108,7 @@ func TestCmdFocusAdd_EmptyPrompt(t *testing.T) {
 	writeFocusTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	err := cmdFocusTo([]string{"add", dir, "f", ""}, &buf)
+	err := cmdFocusTo([]string{"add", dir, "f", ""}, &buf, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "prompt must not be empty") {
 		t.Errorf("expected empty-prompt error, got: %v", err)
 	}
@@ -118,11 +119,11 @@ func TestCmdFocusRemove_Basic(t *testing.T) {
 	writeFocusTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	if err := cmdFocusTo([]string{"add", dir, "f", "p"}, &buf); err != nil {
+	if err := cmdFocusTo([]string{"add", dir, "f", "p"}, &buf, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	buf.Reset()
-	if err := cmdFocusTo([]string{"remove", dir, "f"}, &buf); err != nil {
+	if err := cmdFocusTo([]string{"remove", dir, "f"}, &buf, io.Discard); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(loadTestFocuses(t, dir)) != 0 {
@@ -135,7 +136,7 @@ func TestCmdFocusRemove_NotFound(t *testing.T) {
 	writeFocusTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	err := cmdFocusTo([]string{"remove", dir, "f"}, &buf)
+	err := cmdFocusTo([]string{"remove", dir, "f"}, &buf, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Errorf("expected not-found error, got: %v", err)
 	}
@@ -146,10 +147,10 @@ func TestCmdFocusUpdate_Prompt(t *testing.T) {
 	writeFocusTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	_ = cmdFocusTo([]string{"add", dir, "f", "old"}, &buf)
+	_ = cmdFocusTo([]string{"add", dir, "f", "old"}, &buf, io.Discard)
 	buf.Reset()
 
-	if err := cmdFocusTo([]string{"update", dir, "f", "--prompt", "new"}, &buf); err != nil {
+	if err := cmdFocusTo([]string{"update", dir, "f", "--prompt", "new"}, &buf, io.Discard); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := loadTestFocuses(t, dir)
@@ -170,7 +171,7 @@ func TestCmdFocusUpdate_ClearProfile(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := cmdFocusTo([]string{"update", dir, "f", "--clear-profile"}, &buf); err != nil {
+	if err := cmdFocusTo([]string{"update", dir, "f", "--clear-profile"}, &buf, io.Discard); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := loadTestFocuses(t, dir)
@@ -184,9 +185,9 @@ func TestCmdFocusUpdate_ProfileAndClearMutex(t *testing.T) {
 	writeFocusTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	_ = cmdFocusTo([]string{"add", dir, "f", "p"}, &buf)
+	_ = cmdFocusTo([]string{"add", dir, "f", "p"}, &buf, io.Discard)
 
-	err := cmdFocusTo([]string{"update", dir, "f", "--profile", "x", "--clear-profile"}, &buf)
+	err := cmdFocusTo([]string{"update", dir, "f", "--profile", "x", "--clear-profile"}, &buf, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
 		t.Errorf("expected mutually-exclusive error, got: %v", err)
 	}
@@ -197,9 +198,9 @@ func TestCmdFocusUpdate_NoFlags(t *testing.T) {
 	writeFocusTestHarness(t, dir, "h")
 
 	var buf bytes.Buffer
-	_ = cmdFocusTo([]string{"add", dir, "f", "p"}, &buf)
+	_ = cmdFocusTo([]string{"add", dir, "f", "p"}, &buf, io.Discard)
 
-	err := cmdFocusTo([]string{"update", dir, "f"}, &buf)
+	err := cmdFocusTo([]string{"update", dir, "f"}, &buf, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "at least one of") {
 		t.Errorf("expected required-flag error, got: %v", err)
 	}

@@ -8,7 +8,25 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
+
+// lookWorkerCLI finds the CLI the named backend drives. The binary's name is
+// the vendor adapter's CLIName, the one place each vendor's binary is spelled,
+// so a worker runs the program `ynh run -v <backend>` launches. A copy kept
+// here once drifted to "cursor", the Cursor editor's launcher (#524).
+func lookWorkerCLI(backend string) (string, error) {
+	adapter, err := vendor.Get(backend)
+	if err != nil {
+		return "", err
+	}
+	bin, err := exec.LookPath(adapter.CLIName())
+	if err != nil {
+		return "", fmt.Errorf("%s CLI %q not found on PATH: %w", backend, adapter.CLIName(), err)
+	}
+	return bin, nil
+}
 
 // WorkerBackend abstracts over different vendor agent CLIs.
 // All wire-format details (NDJSON protocol, message shapes) live inside
@@ -45,6 +63,10 @@ type StartOptions struct {
 	ConfigPath string
 	// Sandbox is "srt" or "none".
 	Sandbox string
+	// SessionDir is the run's session directory (beside its trajectory),
+	// or "" when the run has none. Under srt the sandbox's settings file is
+	// written there.
+	SessionDir string
 	// AutoApprove is "", "edits" or "all": the --auto-approve level, already
 	// validated for this backend. Empty passes no permission flag at all.
 	AutoApprove string
@@ -66,6 +88,11 @@ type StartOptions struct {
 	UsageBase *Usage
 	// Env holds additional environment variables to pass to the subprocess.
 	Env []string
+	// TelemetryEndpoint is the run's telemetry relay, or "" when there is
+	// none. A backend ynh can configure (SupportsTelemetryRelay) points its
+	// vendor CLI's telemetry there; its environment already carries the
+	// settings, and this is for what has to go on the command line.
+	TelemetryEndpoint string
 	// Stderr captures subprocess stderr if non-nil.
 	Stderr io.Writer
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -13,19 +14,25 @@ import (
 )
 
 func cmdBackend(args []string) error {
+	return cmdBackendTo(args, os.Stdout, os.Stderr)
+}
+
+func cmdBackendTo(args []string, stdout, stderr io.Writer) error {
+	structured := detectJSONFormat(args)
 	if len(args) == 0 {
-		return fmt.Errorf("usage: ynh backend <add|list|remove> [args]")
+		return cliError(stderr, structured, errCodeInvalidInput, "usage: ynh backend <add|list|remove> [args]")
 	}
 
 	switch args[0] {
 	case "add":
 		return cmdBackendAdd(args[1:])
 	case "list", "ls":
-		return cmdBackendList(args[1:])
+		return cmdBackendList(args[1:], stdout, stderr)
 	case "remove", "rm":
 		return cmdBackendRemove(args[1:])
 	default:
-		return fmt.Errorf("unknown backend subcommand: %s\nusage: ynh backend <add|list|remove>", args[0])
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("unknown backend subcommand: %s\nusage: ynh backend <add|list|remove>", args[0]))
 	}
 }
 
@@ -129,24 +136,29 @@ type backendListEntry struct {
 	Models       []string `json:"models,omitempty"`
 }
 
-func cmdBackendList(args []string) error {
+func cmdBackendList(args []string, stdout, stderr io.Writer) error {
+	structured := detectJSONFormat(args)
 	format := "text"
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--format":
 			if i+1 >= len(args) {
-				return fmt.Errorf("--format requires a value")
+				return cliError(stderr, structured, errCodeInvalidInput, "--format requires a value")
 			}
 			i++
 			format = args[i]
 		default:
-			return fmt.Errorf("unknown flag: %s", args[i])
+			return cliError(stderr, structured, errCodeInvalidInput, fmt.Sprintf("unknown flag: %s", args[i]))
 		}
+	}
+	if format != "text" && format != "json" {
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("invalid --format value %q (want text or json)", format))
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
+		return cliError(stderr, structured, errCodeConfigError, fmt.Sprintf("loading config: %v", err))
 	}
 
 	var backendNames []string
@@ -180,39 +192,39 @@ func cmdBackendList(args []string) error {
 		}
 	}
 
-	switch format {
-	case "json":
+	if format == "json" {
 		if entries == nil {
 			entries = []backendListEntry{}
 		}
 		data, err := json.MarshalIndent(entries, "", "  ")
 		if err != nil {
-			return fmt.Errorf("encoding json: %w", err)
+			return cliError(stderr, structured, errCodeIOError, fmt.Sprintf("encoding json: %v", err))
 		}
-		_, err = fmt.Fprintf(os.Stdout, "%s\n", data)
+		_, err = fmt.Fprintf(stdout, "%s\n", data)
 		return err
-	case "text":
-		if len(entries) == 0 {
-			fmt.Println("No backends configured.")
-			fmt.Println("Add one with: ynh backend add <name> <vendor> --base-url <url>")
-			return nil
-		}
-		for _, e := range entries {
-			spec := e.Backend + "/" + e.Vendor
-			typ := e.Type
-			if typ == "" {
-				typ = "-"
-			}
-			if len(e.Models) > 0 {
-				fmt.Printf("  %-30s type=%-8s base_url=%-35s %d model(s) installed\n", spec, typ, e.BaseURL, len(e.Models))
-			} else {
-				fmt.Printf("  %-30s type=%-8s base_url=%s\n", spec, typ, e.BaseURL)
-			}
-		}
-		return nil
-	default:
-		return fmt.Errorf("invalid --format value %q (want text or json)", format)
 	}
+
+	if len(entries) == 0 {
+		_, _ = fmt.Fprintln(stdout, "No backends configured.")
+		_, err := fmt.Fprintln(stdout, "Add one with: ynh backend add <name> <vendor> --base-url <url>")
+		return err
+	}
+	for _, e := range entries {
+		spec := e.Backend + "/" + e.Vendor
+		typ := e.Type
+		if typ == "" {
+			typ = "-"
+		}
+		if len(e.Models) > 0 {
+			_, err = fmt.Fprintf(stdout, "  %-30s type=%-8s base_url=%-35s %d model(s) installed\n", spec, typ, e.BaseURL, len(e.Models))
+		} else {
+			_, err = fmt.Fprintf(stdout, "  %-30s type=%-8s base_url=%s\n", spec, typ, e.BaseURL)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func cmdBackendRemove(args []string) error {

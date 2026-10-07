@@ -414,8 +414,8 @@ ynh's `marketplace.json` is a build config — it describes *what* to include in
 
 ### Entry Types
 
-- **`plugin`** — a self-contained plugin directory (already has `.claude-plugin/plugin.json`). Copied as-is with missing vendor manifests generated.
-- **`harness`**: a ynh harness (has `.agents/harness/plugin.json` with includes). Fully exported: remote includes resolved, pick filtering applied, delegates generated, every vendor's manifest written.
+- **`plugin`**: a self-contained plugin directory, either a Claude Code plugin (`.claude-plugin/plugin.json`) or an [Agent Plugins](https://agent-plugins.org) package (root `plugin.json` with the spec's `$schema`). Copied as-is with missing vendor manifests generated. An Agent Plugins package gets only Claude Code's compatibility manifest: the clients that load the format detect it from the root manifest, and a second manifest of their own would make the package ambiguous.
+- **`harness`**: a ynh harness (has `.agents/harness/plugin.json` with includes), or an Agent Plugins package ynh [derives a harness from](harnesses.md#installing-an-agent-plugin). Fully exported: remote includes resolved, pick filtering applied, delegates generated, every vendor's manifest written.
 
 ### Output Structure
 
@@ -438,6 +438,35 @@ dist/
 └── README.md                          # auto-generated
 ```
 
+### Agent Plugins Output
+
+`--format agent-plugin` builds each `harness` entry as one portable
+[Agent Plugins](https://agent-plugins.org) package instead of a merged
+vendor tree, the same package `ynd export --format agent-plugin` writes.
+Every selected vendor's index is still written, because every vendor's
+marketplace points at plugin directories and the ones that load the format
+(Codex, Copilot, VS Code, Cursor) detect it from the root manifest. Claude
+Code, which does not, finds its compatibility manifest inside the package.
+A harness name outside the spec's rule is normalised, and the directory and
+every index use the normalised name.
+
+```
+dist/
+├── plugins/
+│   └── reviewer/
+│       ├── plugin.json                  # portable manifest
+│       ├── skills/...                   # portable
+│       ├── mcp.json                     # portable, when the harness declares servers
+│       ├── com.github.copilot/agents/   # Copilot's namespace
+│       ├── .claude-plugin/plugin.json   # Claude Code compatibility
+│       ├── agents/  CLAUDE.md  AGENTS.md
+│       └── ...
+├── .agents/plugins/marketplace.json     # Codex index
+├── .claude-plugin/marketplace.json      # Claude Code index
+├── .cursor-plugin/marketplace.json      # Cursor index
+└── .github/plugin/marketplace.json      # Copilot index
+```
+
 ### CLI Usage
 
 ```bash
@@ -446,6 +475,9 @@ ynd marketplace build
 
 # Custom config, output, and vendor targeting
 ynd marketplace build config/marketplace.json -o ./dist -v claude,cursor
+
+# Each harness entry as a portable Agent Plugins package
+ynd marketplace build --format agent-plugin
 
 # Clean rebuild
 ynd marketplace build --clean
@@ -479,7 +511,7 @@ Three legitimate combinations on a registry or marketplace entry:
 | `"v1.0"` | `"abc123…"` | Fetches `v1.0`, then verifies the fetched commit equals `abc123…`. Aborts on mismatch. Recommended for published releases. |
 | `"abc123…"` | _empty_ | Fetches the commit directly. Immutable; will never drift. |
 
-**`ref` is primary. `sha` is opt-in.** A user who installs `acme-tools --ref v1.0` is saying "give me 1.0, including future patches of 1.0." Auto-converting that to a SHA pin downstream means they'll never receive those patches even though their original install would. The "safe" default ends up subtly wrong — defaulting to the SHA throws away the user's symbolic tracking intent.
+**`ref` is primary. `sha` is opt-in.** A user who installs `example-tools --ref v1.0` is saying "give me 1.0, including future patches of 1.0." Auto-converting that to a SHA pin downstream means they'll never receive those patches even though their original install would. The "safe" default ends up subtly wrong: defaulting to the SHA throws away the user's symbolic tracking intent.
 
 > **Note:** The `harnesses[].version` field in ynh's `marketplace.json` is a cosmetic display label, not a resolution input. Tracking "version 1.0" is done by setting `"ref": "v1.0"`, not by the `version` field. Downstream consumers should not rely on `version` for pinning decisions.
 
@@ -522,9 +554,9 @@ For the architectural rationale and contributor-facing rules, see [`.github/CONT
 
 ### Design Decisions
 
-**Why two marketplace.json files?** Vendor formats reject unknown fields. Claude Code requires `.claude-plugin/marketplace.json`, Cursor requires `.cursor-plugin/marketplace.json`. ynh generates both from the same source config, producing one physical plugin directory that serves both vendors.
+**Why one marketplace.json per vendor?** Vendor formats reject unknown fields. Claude Code requires `.claude-plugin/marketplace.json`, Cursor `.cursor-plugin/marketplace.json` and Copilot `.github/plugin/marketplace.json`. ynh generates each from the same source config, producing one physical plugin directory that serves every vendor.
 
-**Why does Codex get its own index format?** Codex's marketplace schema uses `source`/`policy` objects rather than the Claude/Cursor plugin-directory convention, so it can't share a marketplace.json with the other two vendors. `ynd marketplace build` generates a third index at `.agents/plugins/marketplace.json` alongside the Claude and Cursor ones, using Codex's native format. Codex's artifact support is still limited to skills (no agents, rules, or commands), so plugins in a Codex-consumed marketplace are skills-only regardless of what the harness defines for the other vendors.
+**Why does Codex get its own index format?** Codex's marketplace schema uses `source`/`policy` objects rather than the Claude/Cursor plugin-directory convention, so it can't share the Claude and Cursor index shape. `ynd marketplace build` generates its index at `.agents/plugins/marketplace.json` alongside the other vendors' ones, using Codex's native format. Codex's artifact support is still limited to skills (no agents, rules, or commands), so plugins in a Codex-consumed marketplace are skills-only regardless of what the harness defines for the other vendors.
 
 **Why auto-init Git?** Claude Code's plugin loader resolves relative `source` paths (e.g., `./plugins/formatter`) within the Git working tree. A marketplace directory that isn't a Git repo causes path resolution failures at install time.
 
@@ -541,6 +573,7 @@ For the architectural rationale and contributor-facing rules, see [`.github/CONT
 | Marketplace index | .claude-plugin/marketplace.json | .cursor-plugin/marketplace.json | .agents/plugins/marketplace.json | .github/plugin/marketplace.json (best-effort) |
 | Delegates | Yes (subagent) | Yes (subagent) | No | Yes (subagent) |
 | Merged export | Yes | Yes | Yes | Yes — shares Claude's `.claude-plugin/plugin.json` path, harmlessly (identical schema) |
+| Agent Plugins package | Compatibility layer at the root (does not load the format) | Portable core only (no published namespace) | Portable core + `extensions.com.openai` hooks | Portable core + `com.github.copilot/` |
 
 ## References
 

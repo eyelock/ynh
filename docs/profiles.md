@@ -47,7 +47,7 @@ The top-level `hooks` and `mcp_servers` are the defaults — used when no profil
 
 Profiles declare only what they change. Absent fields inherit from the top-level defaults.
 
-**MCP servers** use deep merge — profile keys win on collision, absent keys are inherited. Server `env` maps are also deep-merged. Set a server to `null` to remove an inherited entry.
+**MCP servers** use deep merge: profile keys win on collision, absent keys are inherited. Server `env` maps are also deep-merged. Within a server that exists in both, `command`, `args`, `url` and `headers` are replaced when the profile sets them, and only `env` is merged key by key. Set a server to `null` to remove an inherited entry.
 
 **Hooks** use per-event replace — if a profile declares `before_tool`, it replaces the default `before_tool`. Other events (like `after_tool`) are inherited.
 
@@ -104,8 +104,11 @@ When both the flag and the environment variable are set, the flag wins. When nei
 Selecting a profile that does not exist in `.agents/harness/plugin.json` is a hard error:
 
 ```
-Error: profile "staging" not defined in harness manifest
+Error: profile "staging" not defined in harness manifest (available: [ci local])
 ```
+
+The error names the profiles the harness does declare, sorted by name. A harness
+with no profiles says `(the harness declares no profiles)` instead.
 
 This is intentional — a typo in a CI pipeline should fail loudly rather than silently falling back to defaults.
 

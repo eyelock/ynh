@@ -1,6 +1,7 @@
 package vendor
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -18,6 +19,9 @@ func init() {
 	Register(&Copilot{})
 }
 
+// copilotCLI is GitHub Copilot CLI's binary: see CLIName in adapter.go.
+const copilotCLI = "copilot"
+
 // Copilot implements the Adapter interface for GitHub Copilot CLI.
 //
 // Launch strategy mirrors Claude: --plugin-dir for native plugin loading,
@@ -34,7 +38,7 @@ type Copilot struct{}
 
 func (c *Copilot) Name() string        { return "copilot" }
 func (c *Copilot) DisplayName() string { return "GitHub Copilot CLI" }
-func (c *Copilot) CLIName() string     { return "copilot" }
+func (c *Copilot) CLIName() string     { return copilotCLI }
 
 func (c *Copilot) ConfigDir() string {
 	return ".copilot"
@@ -272,6 +276,20 @@ func (c *Copilot) SupportsExportDelegates() bool { return true }
 // PluginManifestDir is the same as Claude: Copilot reads that manifest schema.
 func (c *Copilot) PluginManifestDir() string { return ".claude-plugin" }
 
+// AgentPluginLayout: Copilot loads the format natively and reads its own
+// components from com.github.copilot/ (agents/, commands/, rules/,
+// hooks/hooks.json), per docs.github.com/en/copilot/concepts/agents/about-plugins.
+// What goes there follows ExportArtifactDirs, the same subset the legacy
+// export ships.
+func (c *Copilot) AgentPluginLayout() AgentPluginLayout {
+	return AgentPluginLayout{
+		LoadsFormat: true,
+		Namespace:   "com.github.copilot",
+		ArtifactDir: "com.github.copilot",
+		Hooks:       "com.github.copilot/hooks/hooks.json",
+	}
+}
+
 func (c *Copilot) MarketplaceManifestDir() string { return filepath.Join(".github", "plugin") }
 
 // GenerateMarketplaceIndex is best-effort: Copilot's marketplace.json schema
@@ -390,9 +408,15 @@ func copilotMCPDocument(servers map[string]plugin.MCPServer) ([]byte, error) {
 			Headers: s.Headers,
 			Tools:   []string{"*"},
 		}
-		if s.Command != "" {
+		// Copilot's vocabulary: "local" for stdio, "http" for Streamable
+		// HTTP, "sse" for the legacy transport (see the vendor-adapters
+		// skill, references/copilot.md).
+		switch s.Transport() {
+		case plugin.MCPTypeStdio:
 			cs.Type = "local"
-		} else {
+		case plugin.MCPTypeSSE:
+			cs.Type = "sse"
+		default:
 			cs.Type = "http"
 		}
 		out[name] = cs
@@ -444,14 +468,40 @@ func projectCopilotInstructions(configPath, projectDir string) error {
 		return nil
 	}
 
-	var body []byte
-	body = append(body, []byte("---\napplyTo: \"**/*\"\n---\n")...)
-	body = append(body, content...)
-	if body[len(body)-1] != '\n' {
-		body = append(body, '\n')
-	}
+	return writeCopilotProjectFile(projectDir, copilotInstructionsRelPath, copilotInstructions(content))
+}
 
-	return writeCopilotProjectFile(projectDir, copilotInstructionsRelPath, body)
+// copilotInstructions renders the harness instructions as an always-on
+// Copilot instructions file with exactly one frontmatter block (#532). When
+// the instructions open with their own block, its fields are kept and
+// applyTo: "**/*" is put in front of them; a source applyTo is dropped,
+// because this file must apply everywhere to deliver the harness at all.
+func copilotInstructions(content []byte) []byte {
+	var b bytes.Buffer
+	b.WriteString("---\napplyTo: \"**/*\"\n")
+	body := content
+	if lines, rest, ok := splitFrontmatter(content); ok {
+		for _, e := range frontmatterEntries(lines) {
+			if e.key == "applyTo" {
+				continue
+			}
+			for _, l := range e.raw {
+				b.WriteString(l)
+				b.WriteByte('\n')
+			}
+		}
+		b.WriteString("---\n")
+		if body = bytes.TrimLeft(rest, "\r\n"); len(body) > 0 {
+			b.WriteByte('\n')
+		}
+	} else {
+		b.WriteString("---\n")
+	}
+	b.Write(body)
+	if len(body) > 0 && body[len(body)-1] != '\n' {
+		b.WriteByte('\n')
+	}
+	return b.Bytes()
 }
 
 // projectCopilotMCPConfig reads the assembled MCP config from the staging
@@ -484,7 +534,7 @@ func projectCopilotMCPConfig(configPath, projectDir string) error {
 // (syscall.Exec), so there is no opportunity to retry after such a restart;
 // the update must simply not happen mid-launch.
 func buildCopilotArgs(configPath string, initialPrompt string, extraArgs []string) ([]string, error) {
-	args := []string{"copilot", "--no-auto-update"}
+	args := []string{copilotCLI, "--no-auto-update"}
 
 	if initialPrompt != "" {
 		args = append(args, "-i", initialPrompt)
@@ -508,7 +558,7 @@ func buildCopilotArgs(configPath string, initialPrompt string, extraArgs []strin
 }
 
 func launchCopilot(configPath string, initialPrompt string, extraArgs []string) error {
-	copilotBin, err := exec.LookPath("copilot")
+	copilotBin, err := exec.LookPath(copilotCLI)
 	if err != nil {
 		return err
 	}

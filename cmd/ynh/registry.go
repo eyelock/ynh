@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/registry"
@@ -11,21 +13,27 @@ import (
 )
 
 func cmdRegistry(args []string) error {
+	return cmdRegistryTo(args, os.Stdout, os.Stderr)
+}
+
+func cmdRegistryTo(args []string, stdout, stderr io.Writer) error {
+	structured := detectJSONFormat(args)
 	if len(args) == 0 {
-		return fmt.Errorf("usage: ynh registry <add|list|remove|update> [args]")
+		return cliError(stderr, structured, errCodeInvalidInput, "usage: ynh registry <add|list|remove|update> [args]")
 	}
 
 	switch args[0] {
 	case "add":
 		return cmdRegistryAdd(args[1:])
 	case "list", "ls":
-		return cmdRegistryList(args[1:])
+		return cmdRegistryList(args[1:], stdout, stderr)
 	case "remove", "rm":
 		return cmdRegistryRemove(args[1:])
 	case "update":
 		return cmdRegistryUpdate()
 	default:
-		return fmt.Errorf("unknown registry subcommand: %s\nusage: ynh registry <add|list|remove|update>", args[0])
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("unknown registry subcommand: %s\nusage: ynh registry <add|list|remove|update>", args[0]))
 	}
 }
 
@@ -64,26 +72,37 @@ type registryListEntry struct {
 	Description string `json:"description,omitempty"`
 }
 
-func cmdRegistryList(args []string) error {
+func cmdRegistryList(args []string, stdout, stderr io.Writer) error {
+	structured := detectJSONFormat(args)
 	format := "text"
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--format":
 			if i+1 >= len(args) {
-				return fmt.Errorf("--format requires a value")
+				return cliError(stderr, structured, errCodeInvalidInput, "--format requires a value")
 			}
 			i++
 			format = args[i]
+		default:
+			if strings.HasPrefix(args[i], "-") {
+				return cliError(stderr, structured, errCodeInvalidInput,
+					fmt.Sprintf("unknown flag: %s", args[i]))
+			}
+			return cliError(stderr, structured, errCodeInvalidInput,
+				fmt.Sprintf("unexpected argument: %s", args[i]))
 		}
+	}
+	if format != "text" && format != "json" {
+		return cliError(stderr, structured, errCodeInvalidInput,
+			fmt.Sprintf("invalid --format value %q (want text or json)", format))
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
+		return cliError(stderr, structured, errCodeConfigError, fmt.Sprintf("loading config: %v", err))
 	}
 
-	switch format {
-	case "json":
+	if format == "json" {
 		entries := make([]registryListEntry, len(cfg.Registries))
 		for i, r := range cfg.Registries {
 			e := registryListEntry{URL: r.URL, Ref: r.Ref}
@@ -98,27 +117,28 @@ func cmdRegistryList(args []string) error {
 		}
 		data, err := json.MarshalIndent(entries, "", "  ")
 		if err != nil {
-			return fmt.Errorf("encoding json: %w", err)
+			return cliError(stderr, structured, errCodeIOError, fmt.Sprintf("encoding json: %v", err))
 		}
-		_, err = fmt.Fprintf(os.Stdout, "%s\n", data)
+		_, err = fmt.Fprintf(stdout, "%s\n", data)
 		return err
-	case "text":
-		if len(cfg.Registries) == 0 {
-			fmt.Println("No registries configured.")
-			fmt.Println("Add one with: ynh registry add <url>")
-			return nil
-		}
-		for _, r := range cfg.Registries {
-			if r.Ref != "" {
-				fmt.Printf("  %s (ref: %s)\n", r.URL, r.Ref)
-			} else {
-				fmt.Printf("  %s\n", r.URL)
-			}
-		}
-		return nil
-	default:
-		return fmt.Errorf("invalid --format value %q (want text or json)", format)
 	}
+
+	if len(cfg.Registries) == 0 {
+		_, _ = fmt.Fprintln(stdout, "No registries configured.")
+		_, err := fmt.Fprintln(stdout, "Add one with: ynh registry add <url>")
+		return err
+	}
+	for _, r := range cfg.Registries {
+		if r.Ref != "" {
+			_, err = fmt.Fprintf(stdout, "  %s (ref: %s)\n", r.URL, r.Ref)
+		} else {
+			_, err = fmt.Fprintf(stdout, "  %s\n", r.URL)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func cmdRegistryRemove(args []string) error {

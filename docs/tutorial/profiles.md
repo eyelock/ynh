@@ -142,18 +142,12 @@ ynh install /tmp/ynh-tutorial/profile-harness
 
 Launch interactively with the `ci` profile:
 
+*This launches:* `claude --plugin-dir ~/.ynh/run/local--profile-demo/.claude --add-dir ~/.ynh/run/local--profile-demo --append-system-prompt You are a deployment assistant. ... procedures for all environments.`
 ```bash
 profile-demo --profile ci
 ```
 
-Inside the Claude session, enable the plugin and reload to activate hooks and MCP servers:
-
-```
-/plugin enable profile-demo
-/reload-plugins
-```
-
-Expected reload output includes: `3 hooks · 1 plugin MCP server` (or similar counts). Then ask:
+Claude activates the harness's hooks and MCP servers from `--plugin-dir` at launch, so no plugin install or reload step is needed. Inside the session, ask:
 
 ```
 what hooks and MCP servers are configured?
@@ -161,7 +155,7 @@ what hooks and MCP servers are configured?
 
 The `ci` profile's `before_tool` hook replaces the base, and the `ci-db` MCP server is added. The base `after_tool` hook is inherited since the profile doesn't declare it.
 
-> **Note:** Claude Code's `--plugin-dir` auto-activates skills and commands but not hooks or MCP servers. The `/plugin enable` + `/reload-plugins` step is needed to activate them. This is a Claude Code limitation — Codex and Cursor activate all plugin components automatically.
+> **Note:** These servers load alongside your own MCP servers (user config, claude.ai connectors). ynh does not isolate them yet (tracked in #548).
 
 ## Try --profile nonexistent
 
@@ -171,7 +165,7 @@ ynd preview /tmp/ynh-tutorial/profile-harness -v claude --profile nonexistent
 
 Expected error:
 ```
-Error: profile "nonexistent" not defined in harness manifest
+Error: profile "nonexistent" not defined in harness manifest (available: [ci local])
 ```
 
 ## Use YNH_PROFILE env var

@@ -1,12 +1,14 @@
 package vendor
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,13 +30,21 @@ func init() {
 	Register(&Cursor{})
 }
 
+// cursorCLI is Cursor's CLI, which is not the editor's "cursor" launcher:
+// see CLIName in adapter.go. Cursor's docs install it as "agent" and name
+// "cursor-agent" only as an alias kept for older scripts
+// (cursor.com/docs/cli/installation; the 8 Jan 2026 release notes: "The new
+// primary entrypoint is agent (cursor-agent still works as an alias)"), so an
+// install that has the alias also has "agent", and one name is enough.
+const cursorCLI = "agent"
+
 // Cursor implements the Adapter interface for Cursor Agent CLI.
 // Uses .cursor/rules/ for rules and .cursorrules at project root.
 type Cursor struct{}
 
 func (c *Cursor) Name() string        { return "cursor" }
 func (c *Cursor) DisplayName() string { return "Cursor" }
-func (c *Cursor) CLIName() string     { return "agent" }
+func (c *Cursor) CLIName() string     { return cursorCLI }
 
 func (c *Cursor) ConfigDir() string {
 	return ".cursor"
@@ -246,6 +256,14 @@ func (c *Cursor) SupportsExportDelegates() bool { return true }
 
 func (c *Cursor) PluginManifestDir() string { return ".cursor-plugin" }
 
+// AgentPluginLayout: Cursor loads the portable core and has published no
+// extension namespace (cursor.com/docs/plugins), so rules, agents, commands
+// and hooks cannot reach it through this package. Cursor also does not
+// expand ${PLUGIN_ROOT} or ${PLUGIN_DATA} in mcp.json.
+func (c *Cursor) AgentPluginLayout() AgentPluginLayout {
+	return AgentPluginLayout{LoadsFormat: true}
+}
+
 func (c *Cursor) MarketplaceManifestDir() string { return ".cursor-plugin" }
 
 // GenerateMarketplaceIndex writes Cursor's own index shape.
@@ -337,33 +355,109 @@ func cursorMCPDocument(servers map[string]plugin.MCPServer) ([]byte, error) {
 	if len(servers) == 0 {
 		return nil, nil
 	}
-	data, err := json.MarshalIndent(map[string]any{"mcpServers": servers}, "", "  ")
+	// Cursor's mcp.json has no transport field: a command is stdio and a
+	// url is auto-detected (cursor.com/docs/mcp), so the canonical type is
+	// dropped rather than passed through as a key Cursor does not define.
+	out := make(map[string]cursorMCPServer, len(servers))
+	for name, s := range servers {
+		out[name] = cursorMCPServer{
+			Command: s.Command,
+			Args:    s.Args,
+			Env:     s.Env,
+			Cwd:     s.Cwd,
+			URL:     s.URL,
+			Headers: s.Headers,
+		}
+	}
+	data, err := json.MarshalIndent(map[string]any{"mcpServers": out}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshalling MCP config: %w", err)
 	}
 	return append(data, '\n'), nil
 }
 
+// cursorMCPServer is Cursor's mcp.json entry: the canonical fields minus
+// the transport, which Cursor infers.
+type cursorMCPServer struct {
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
+	Cwd     string            `json:"cwd,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
 // TransformArtifact rewrites Cursor rule files to the .mdc format Cursor
-// requires: renamed from .md to .mdc with injected frontmatter. Plain .md
+// requires: renamed from .md to .mdc with Cursor's frontmatter. Plain .md
 // files under .cursor/rules are silently ignored by Cursor. Other artifact
 // types pass through unchanged.
 func (c *Cursor) TransformArtifact(artifactType, name string, data []byte) (string, []byte) {
 	if artifactType != "rules" || !strings.HasSuffix(name, ".md") {
 		return name, data
 	}
+	stem := strings.TrimSuffix(name, ".md")
+	return stem + ".mdc", cursorRule(stem, data)
+}
 
-	newName := strings.TrimSuffix(name, ".md") + ".mdc"
-	description := humanizeRuleName(strings.TrimSuffix(name, ".md"))
+// cursorRule renders a rule as an .mdc file with exactly one frontmatter
+// block (#532). Cursor reads three fields, description, globs and
+// alwaysApply (cursor.com/docs/context/rules), so a source rule's own
+// frontmatter is merged into them rather than left in the body as a second
+// block:
+//
+//   - description: the source's, else the humanised file name.
+//   - globs: the source's globs, else its paths (Claude Code's rule scoping),
+//     comma-joined the way Cursor writes them. A globs scalar is already
+//     Cursor's form and is kept verbatim.
+//   - alwaysApply: the source's when it is a valid boolean; otherwise false
+//     for a rule with globs, which Cursor would ignore under alwaysApply:
+//     true, and true for one without.
+//
+// Every other source field (name, for one) is dropped: Cursor does not read
+// it, and the .mdc is a rendering for Cursor alone. A source with no closed
+// frontmatter block is all body.
+func cursorRule(stem string, data []byte) []byte {
+	description := humanizeRuleName(stem)
+	var globs, paths []string
+	alwaysApply, explicit := true, false
+	body := data
 
-	var b strings.Builder
+	if lines, rest, ok := splitFrontmatter(data); ok {
+		body = bytes.TrimLeft(rest, "\r\n")
+		for _, e := range frontmatterEntries(lines) {
+			switch e.key {
+			case "description":
+				if d := strings.Join(strings.Fields(e.scalar()), " "); d != "" {
+					description = d
+				}
+			case "globs":
+				globs = e.list()
+			case "paths":
+				paths = e.list()
+			case "alwaysApply":
+				if v, err := strconv.ParseBool(e.scalar()); err == nil {
+					alwaysApply, explicit = v, true
+				}
+			}
+		}
+	}
+	if len(globs) == 0 {
+		globs = paths
+	}
+	if len(globs) > 0 && !explicit {
+		alwaysApply = false
+	}
+
+	var b bytes.Buffer
 	b.WriteString("---\n")
 	fmt.Fprintf(&b, "description: %s\n", description)
-	b.WriteString("alwaysApply: true\n")
+	if len(globs) > 0 {
+		fmt.Fprintf(&b, "globs: %s\n", strings.Join(globs, ","))
+	}
+	fmt.Fprintf(&b, "alwaysApply: %t\n", alwaysApply)
 	b.WriteString("---\n\n")
-	b.Write(data)
-
-	return newName, []byte(b.String())
+	b.Write(body)
+	return b.Bytes()
 }
 
 // humanizeRuleName turns a rule filename stem (e.g. "artifact-authoring")
@@ -380,7 +474,7 @@ func humanizeRuleName(stem string) string {
 }
 
 func launchCursor(configPath string, extraArgs []string) error {
-	agentBin, err := exec.LookPath("agent")
+	agentBin, err := exec.LookPath(cursorCLI)
 	if err != nil {
 		return err
 	}

@@ -5,6 +5,8 @@ import (
 	"io"
 	"sort"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // Per-command help.
@@ -79,7 +81,7 @@ whose only manifest is a legacy .harness.json is refused with the
 'ynd migrate' fix.
 
 Flags:
-  -v <vendor>              Override vendor (claude, codex, cursor, copilot), or
+  -v <vendor>              Override vendor (` + strings.Join(vendor.Available(), ", ") + `), or
                            "<backend>/<vendor>[/<model>]" to redirect at a local
                            model backend (see: ynh backend)
   --focus <name>           Load a named focus (sets prompt and profile; implies
@@ -304,6 +306,9 @@ looking at.
   ynh trust show <harness>       Every command it will run, with provenance
   ynh trust accept <harness>     Record that you have read them
 
+Flags:
+  --format text|json   Output format (default text)
+
 States:
 
   unreviewed   Never accepted. Also the state of a harness installed before
@@ -351,7 +356,8 @@ Flags:
   --max-plan-iterations <n>   Cap plan revision rounds
   --no-plan                   Skip the planning phase
   --interactive               Stay in session
-  --sandbox                   Run inside the harness's image
+  --sandbox none|srt          Wrap the worker in srt with ynh's network and
+                              write allowlist (claude only); none by default
   --auto-approve edits|all    Approve the worker's file edits, or everything,
                               without prompting (off by default; claude,
                               codex, cursor). Only for runs inside containment
@@ -362,6 +368,10 @@ Flags:
   --emit-jsonl <path>         Write the trajectory as NDJSON
   --auto-commit               Commit the result (opt-in; off by default)
   --resume <dir>              Continue a run from its --emit-jsonl folder
+  --telemetry-relay           Start ynr relay for the run and send the
+                              vendor's own telemetry to the spool (claude
+                              only). Also YNH_TELEMETRY_RELAY, or
+                              "telemetry_relay": true in config.json
   --format text|json          Output format (default text)`,
 
 	"image": `ynh image <name> [flags]
@@ -374,11 +384,16 @@ Clean orphaned symlink installations and stale run directories.
 
 This deletes. Run "ynh status" first to see what is currently installed.`,
 
-	"migrate": `ynh migrate
+	"migrate": `ynh migrate [flags]
 
 Migrate the ynh home directory to the current schema version.
 
-Most commands migrate automatically on first use; this runs it explicitly.`,
+Most commands migrate automatically on first use; this runs it explicitly.
+
+Flags:
+  --dry-run            Report what would change without changing it
+  --skip-broken        Quarantine entries that fail to migrate and continue
+  --format text|json   Output format (default text; --json is the older spelling)`,
 
 	"quarantine": `ynh quarantine <list|restore|drop> [args]
 
@@ -386,7 +401,10 @@ Manage harnesses quarantined by a failed migration.
 
   ynh quarantine list             Show quarantined harnesses
   ynh quarantine restore <name>   Restore one from quarantine
-  ynh quarantine drop <name>      Delete one permanently`,
+  ynh quarantine drop <name>      Delete one permanently
+
+Flags (list):
+  --format text|json   Output format (default text; --json is the older spelling)`,
 
 	"version": `ynh version [flags]
 
