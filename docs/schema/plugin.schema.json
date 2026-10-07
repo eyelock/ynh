@@ -657,6 +657,11 @@
               "type": "string",
               "pattern": "^(skills/[^/]+|(agents|rules|commands)/[^/]+\\.md)$"
             }
+          },
+          "as": {
+            "type": "string",
+            "description": "Namespace for the focuses and profiles of the harness this include resolves to, selected as as:name (for example --profile github:ci). Defaults to the included harness's own name. A harness name: no colon.",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
           }
         },
         "oneOf": [

@@ -903,13 +903,16 @@ type ProvenanceMeta struct {
 // IncludeMeta is the JSON representation of an include source. Exactly one
 // of `git` (remote) or `local` (path-based) must be set. For both forms
 // `path` scopes into a subdirectory of the source and `pick` filters paths.
-// `ref` is Git-only.
+// `ref` is Git-only. `as` names the namespace an included harness's focuses
+// and profiles are selected under ("alias:name"); it defaults to the included
+// harness's own name.
 type IncludeMeta struct {
 	Git   string   `json:"git,omitempty"`
 	Local string   `json:"local,omitempty"`
 	Ref   string   `json:"ref,omitempty"`
 	Path  string   `json:"path,omitempty"`
 	Pick  []string `json:"pick,omitempty"`
+	As    string   `json:"as,omitempty"`
 }
 
 // DelegateMeta is the JSON representation of a delegate reference.

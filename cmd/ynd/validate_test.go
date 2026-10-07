@@ -1629,3 +1629,14 @@ func TestValidateHarnessMCPServers_NullRemovesAnIncludedServer(t *testing.T) {
 		t.Errorf("issues = %v", issues)
 	}
 }
+
+func TestValidateHarnessIncludes_Alias(t *testing.T) {
+	for as, wantIssue := range map[string]bool{"gh-work": false, "a:b": true, "-x": true} {
+		issues := validateHarnessIncludes(map[string]any{
+			"includes": []any{map[string]any{"local": "inc", "as": as}},
+		})
+		if got := len(issues) > 0; got != wantIssue {
+			t.Errorf("as %q: issues = %v, want an issue: %v", as, issues, wantIssue)
+		}
+	}
+}

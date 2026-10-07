@@ -3,6 +3,7 @@ package resolver
 import (
 	"crypto/sha256"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/pathutil"
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 // ResolvedContent represents files extracted from a Git source.
@@ -40,6 +42,10 @@ type ResolveResult struct {
 	// "//Path", and for an include reached through another harness the chain
 	// of includes that led to it, "eyelock/a > eyelock/b".
 	Chain string
+	// Namespace is what the harness's focuses and profiles are selected
+	// under: the "as" alias of the include, or the harness's own name. Empty
+	// for a plain artifact package.
+	Namespace string
 }
 
 // repoFunc is a function that fetches or looks up a Git repo.
@@ -148,6 +154,25 @@ type includeResolver struct {
 	// done holds the identity of every harness include already resolved, so a
 	// harness reached by two routes (a diamond) contributes once.
 	done map[string]bool
+	// selected holds the namespaces a --profile or --focus named: the value
+	// is the profile applied to that included harness, empty when the
+	// namespace is only used for its focus.
+	selected map[string]string
+	// seen records every harness include met, by namespace, with the
+	// identity and display chain of each distinct harness, so a namespace
+	// two harnesses share is caught when something uses it.
+	seen map[string][]seenHarness
+	// profileErr holds a failed profile lookup per namespace. It is raised
+	// by check, after ambiguity, since a namespace two harnesses share fails
+	// as ambiguous whichever of them lacked the profile.
+	profileErr map[string]error
+}
+
+// seenHarness is one harness met under a namespace.
+type seenHarness struct {
+	id      string
+	chain   string
+	harness *harness.Harness
 }
 
 // resolveWith fetches all includes using the given repo function.
@@ -157,9 +182,151 @@ type includeResolver struct {
 // result lists dependencies before the harness that includes them, and p's
 // own includes in order, so that later content keeps overriding earlier.
 func resolveWith(p *harness.Harness, cfg *config.Config, fetch repoFunc) ([]ResolveResult, error) {
-	r := &includeResolver{cfg: cfg, fetch: fetch, done: map[string]bool{}}
+	results, _, err := resolveSelected(p, cfg, fetch, harness.Selection{})
+	return results, err
+}
+
+// resolveSelected is resolveWith with the profiles and focus of sel applied
+// to the included harnesses they name. A namespaced focus is returned: its
+// profile, if it has one, is applied to its harness, which is only known
+// once the graph has been walked, so the walk runs again with the profile.
+func resolveSelected(p *harness.Harness, cfg *config.Config, fetch repoFunc, sel harness.Selection) ([]ResolveResult, *plugin.Focus, error) {
+	selected := make(map[string]string, len(sel.Included)+1)
+	for ns, profile := range sel.Included {
+		selected[ns] = profile
+	}
+	if sel.FocusNS != "" {
+		if _, ok := selected[sel.FocusNS]; !ok {
+			selected[sel.FocusNS] = ""
+		}
+	}
+
+	results, r, err := walkIncludes(p, cfg, fetch, selected)
+	if err != nil {
+		return nil, nil, err
+	}
+	if sel.FocusNS == "" {
+		return results, nil, nil
+	}
+
+	inner := r.seen[sel.FocusNS][0].harness
+	focus, ok := inner.Focuses[sel.FocusName]
+	if !ok {
+		return nil, nil, fmt.Errorf("focus %q not defined in included harness %q (%s)", sel.FocusName, sel.FocusNS, availableNames(inner.Focuses, "focuses"))
+	}
+	if focus.Profile != "" && selected[sel.FocusNS] != focus.Profile {
+		selected[sel.FocusNS] = focus.Profile
+		if results, _, err = walkIncludes(p, cfg, fetch, selected); err != nil {
+			return nil, nil, err
+		}
+	}
+	return results, &focus, nil
+}
+
+func walkIncludes(p *harness.Harness, cfg *config.Config, fetch repoFunc, selected map[string]string) ([]ResolveResult, *includeResolver, error) {
+	r := &includeResolver{
+		cfg: cfg, fetch: fetch, done: map[string]bool{},
+		selected: selected, seen: map[string][]seenHarness{}, profileErr: map[string]error{},
+	}
 	chain := []chainLink{{id: dirIdentity(p.Dir), label: "root"}}
-	return r.resolve(p, chain, "")
+	results, err := r.resolve(p, chain, "")
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := r.check(); err != nil {
+		return nil, nil, err
+	}
+	return results, r, nil
+}
+
+// availableNames words the names a map declares for an error message.
+func availableNames[V any](m map[string]V, what string) string {
+	if len(m) == 0 {
+		return "the harness declares no " + what
+	}
+	return fmt.Sprintf("available: %v", slices.Sorted(maps.Keys(m)))
+}
+
+// register records a harness met under namespace ns. A harness reached twice
+// is the same harness and is recorded once.
+func (r *includeResolver) register(ns, id, chain string, h *harness.Harness) {
+	if slices.ContainsFunc(r.seen[ns], func(s seenHarness) bool { return s.id == id }) {
+		return
+	}
+	r.seen[ns] = append(r.seen[ns], seenHarness{id: id, chain: chain, harness: h})
+}
+
+// applyProfile resolves the profile selected for namespace ns on an included
+// harness. An undefined profile is held in profileErr, not returned: see
+// check.
+func (r *includeResolver) applyProfile(ns string, inner *harness.Harness) *harness.Harness {
+	profile := r.selected[ns]
+	if profile == "" {
+		return inner
+	}
+	if _, ok := inner.Profiles[profile]; !ok {
+		if _, held := r.profileErr[ns]; !held {
+			r.profileErr[ns] = fmt.Errorf("profile %q not defined in included harness %q (%s)", profile, ns, availableNames(inner.Profiles, "profiles"))
+		}
+		return inner
+	}
+	resolved, err := harness.ResolveProfile(inner, profile)
+	if err != nil {
+		if _, held := r.profileErr[ns]; !held {
+			r.profileErr[ns] = fmt.Errorf("profile %q of included harness %q: %w", profile, ns, err)
+		}
+		return inner
+	}
+	return resolved
+}
+
+// check reports what a namespaced --profile or --focus got wrong once the
+// whole graph is known: a namespace no harness answers to, one that more
+// than one does, or a profile its harness does not define. A namespace that
+// nothing selected is never an error, however many harnesses share it.
+func (r *includeResolver) check() error {
+	for _, ns := range slices.Sorted(maps.Keys(r.selected)) {
+		switch found := r.seen[ns]; {
+		case len(found) == 0:
+			if len(r.seen) == 0 {
+				return fmt.Errorf("no included harness has namespace %q (the harness includes no other harnesses)", ns)
+			}
+			return fmt.Errorf("no included harness has namespace %q (available: %s)", ns, strings.Join(slices.Sorted(maps.Keys(r.seen)), ", "))
+		case len(found) > 1:
+			chains := make([]string, len(found))
+			for i, f := range found {
+				chains[i] = f.chain
+			}
+			return fmt.Errorf("namespace %q is ambiguous: %s; give one include an \"as\" alias", ns, strings.Join(chains, " and "))
+		}
+		if err := r.profileErr[ns]; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// withoutMCPServers applies an included harness's removals to the harnesses
+// it includes: a null in its mcp_servers drops the server whichever of its
+// dependencies declared it, as it does for the root.
+func withoutMCPServers(deps []ResolveResult, removals []string) {
+	if len(removals) == 0 {
+		return
+	}
+	for i := range deps {
+		h := deps[i].Harness
+		if h == nil {
+			continue
+		}
+		view := *h
+		view.MCPServers = make(map[string]plugin.MCPServer, len(h.MCPServers))
+		for name, s := range h.MCPServers {
+			if !slices.Contains(removals, name) {
+				view.MCPServers[name] = s
+			}
+		}
+		deps[i].Harness = &view
+	}
 }
 
 // resolve resolves p's includes. via is the display chain of the harness p was
@@ -190,6 +357,14 @@ func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via str
 		if err != nil {
 			return nil, fmt.Errorf("loading included harness %s: %w", res.Chain, err)
 		}
+
+		ns := inc.As
+		if ns == "" {
+			ns = inner.Name
+		}
+		res.Namespace = ns
+		r.register(ns, id, res.Chain, inner)
+		inner = r.applyProfile(ns, inner)
 		res.Harness = inner
 
 		if len(inc.Pick) > 0 {
@@ -215,6 +390,7 @@ func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via str
 			return nil, err
 		}
 		r.done[id] = true
+		withoutMCPServers(deps, inner.MCPRemovals)
 		results = append(results, deps...)
 		results = append(results, res)
 	}
@@ -513,6 +689,20 @@ func ResolveGitSourceFromCache(gs harness.GitSource, harnessDir string) (string,
 // access when the cache is warm. Falls back to a network fetch on cache miss.
 func ResolveFromCache(p *harness.Harness, cfg *config.Config) ([]ResolveResult, error) {
 	return resolveWith(p, cfg, CacheOnlyRepo)
+}
+
+// ResolveSelected is Resolve with the selections of sel applied to the
+// included harnesses: each namespaced profile to the harness it names, and a
+// namespaced focus's profile likewise. The focus itself comes back as well,
+// nil when sel names none.
+func ResolveSelected(p *harness.Harness, cfg *config.Config, sel harness.Selection) ([]ResolveResult, *plugin.Focus, error) {
+	return resolveSelected(p, cfg, EnsureRepo, sel)
+}
+
+// ResolveSelectedFromCache is ResolveSelected over the cache, as
+// ResolveFromCache is to Resolve.
+func ResolveSelectedFromCache(p *harness.Harness, cfg *config.Config, sel harness.Selection) ([]ResolveResult, *plugin.Focus, error) {
+	return resolveSelected(p, cfg, CacheOnlyRepo, sel)
 }
 
 // gitHead returns the short HEAD SHA for a repo, or empty string on error.
