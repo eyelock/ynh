@@ -976,21 +976,44 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		return result, workerTurnExit(err, fmt.Sprintf("sending first message: %v", err))
 	}
 
-	for {
-		// ── Interrupt check ───────────────────────────────────────────────────
-		// An interrupt/SIGTERM that arrived between turns (e.g. a cursor turn
-		// that ran to completion before the cancel took effect). The last
-		// completed turn is already checkpointed, so --resume continues from it.
+	// stopRun reports why the run must end before another worker turn, or nil
+	// when one is allowed: an interrupt that arrived between turns (the last
+	// completed turn is already checkpointed, so --resume continues from it),
+	// or a spent turn, token or wall-clock budget. It is the one place those
+	// are decided, asked at the top of an iteration and again before any
+	// message is sent, because a message sent is a turn taken: the worker acts
+	// on it as soon as it reads it, whatever the loop does next.
+	stopRun := func() error {
 		if ctx.Err() != nil {
-			return result, interruptExit(budget.Turns())
+			return interruptExit(budget.Turns())
 		}
-
-		// ── Budget check ──────────────────────────────────────────────────────
 		if reason, budgetKind, code := budget.Exceeded(); reason != "" {
 			result.BoundBy = string(budgetKind)
 			_ = traj.Emit(KindBudgetExceeded, budget.Turns(), BudgetExceededData{Budget: budgetKind, Reason: reason})
 			_ = traj.Emit(KindSessionEnd, budget.Turns(), SessionEndData{ExitCode: code, Reason: reason, TotalTurns: budget.Turns(), TotalTokens: budget.Tokens()})
-			return result, &ExitError{Code: code, Message: reason}
+			return &ExitError{Code: code, Message: reason}
+		}
+		return nil
+	}
+
+	// stopBeforeSend is stopRun for a turn's feedback that has not been sent.
+	// When the run ends there the feedback is kept in the checkpoint as the
+	// pending message, so a --resume with room left sends it, and nothing is
+	// written to the worker.
+	stopBeforeSend := func(turnN int, feedback string) error {
+		err := stopRun()
+		if err != nil {
+			cp.Phase = PhaseAct
+			cp.LastCompletedTurn = turnN
+			cp.PendingMessage = feedback
+			saveCheckpoint()
+		}
+		return err
+	}
+
+	for {
+		if err := stopRun(); err != nil {
+			return result, err
 		}
 
 		turnN := budget.Turns() + 1
@@ -1127,6 +1150,14 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 				return result, &ExitError{Code: ExitStuck, Message: "stuck: " + reason}
 			}
 
+			// ── Is another turn allowed? ───────────────────────────────────────
+			// Before the operator is asked to approve a turn, and before the
+			// worker is sent one: a run that ends here must not have asked for
+			// work it will not take.
+			if err := stopBeforeSend(turnN, feedback); err != nil {
+				return result, err
+			}
+
 			// ── Interactive approval ───────────────────────────────────────────
 			if opts.Interactive {
 				if emitErr := traj.Emit(KindTurnApprovalRequired, turnN, TurnApprovalData{SynthesizedFeedback: feedback}); emitErr != nil {
@@ -1140,6 +1171,13 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 				}
 				if replacement != "" {
 					feedback = replacement
+				}
+			}
+
+			// The approval wait counts against the wall clock, so ask again.
+			if opts.Interactive {
+				if err := stopBeforeSend(turnN, feedback); err != nil {
+					return result, err
 				}
 			}
 
