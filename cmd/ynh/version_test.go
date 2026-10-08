@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -103,5 +104,37 @@ func TestCmdVersion_JSONSchemaRoundTrip(t *testing.T) {
 	}
 	if err := schema.Validate(v); err != nil {
 		t.Errorf("live version JSON does not validate against schema: %v\noutput: %s", err, out.String())
+	}
+}
+
+// The features a consumer can gate on ride in the version JSON, validate
+// against the published schema, and include the two shipped so far. Text
+// output is unchanged.
+func TestCmdVersion_JSONFeatures(t *testing.T) {
+	var out, errb bytes.Buffer
+	if err := cmdVersionTo([]string{"--format", "json"}, &out, &errb); err != nil {
+		t.Fatal(err)
+	}
+	var v any
+	if err := json.Unmarshal(out.Bytes(), &v); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := clischema.Get("version")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := schema.Validate(v); err != nil {
+		t.Fatalf("version JSON with features does not validate: %v\n%s", err, out.String())
+	}
+	var payload struct {
+		Features []string `json:"features"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"agent-run-harness-path", "agent-run-fetches-includes"} {
+		if !slices.Contains(payload.Features, want) {
+			t.Errorf("features %v is missing %q", payload.Features, want)
+		}
 	}
 }

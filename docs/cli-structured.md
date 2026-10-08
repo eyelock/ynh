@@ -123,7 +123,8 @@ Both `ynh version --format json` and `ynd version --format json` emit:
 ```json
 {
   "version": "0.5.0",
-  "capabilities": "0.6.0"
+  "capabilities": "0.6.0",
+  "features": ["agent-run-fetches-includes", "agent-run-harness-path"]
 }
 ```
 
@@ -131,6 +132,8 @@ Both `ynh version --format json` and `ynd version --format json` emit:
 - `capabilities` — the **wire-contract version**: a semantic version consumers gate on when they depend on specific JSON shapes, command names, or manifest fields exposed by this ynh build.
 
 `capabilities` is a source constant (`internal/config.CapabilitiesVersion`), so developer builds report the contract they actually support — not whatever tag the repo was last released at. Bumped when consumer-visible contracts change; additive fields older clients can ignore do **not** bump it.
+
+- `features`: optional array of strings naming capabilities a consumer can gate on without comparing versions, for example `agent-run-harness-path` (`ynh agent run --harness` takes a path) and `agent-run-fetches-includes` (a run fetches its git includes at setup). Names are stable, kebab-case and **only ever added**: a name that shipped is never renamed or removed. Consumers must tolerate names they do not know. The list is sorted and declared in one place, `internal/config.Features`. Adding a name is additive and does not bump `capabilities`.
 
 Downstream tooling (for example) reads `capabilities` and refuses to run against an older ynh than it requires.
 

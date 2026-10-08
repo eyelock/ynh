@@ -44,6 +44,7 @@ func cmdVersionTo(args []string, stdout, stderr io.Writer) error {
 		payload := versionPayload{
 			Version:      config.Version,
 			Capabilities: config.CapabilitiesVersion,
+			Features:     config.Features(),
 		}
 		data, err := json.MarshalIndent(payload, "", "  ")
 		if err != nil {
@@ -62,4 +63,6 @@ func cmdVersionTo(args []string, stdout, stderr io.Writer) error {
 type versionPayload struct {
 	Version      string `json:"version"`
 	Capabilities string `json:"capabilities"`
+	// Features lists capabilities a consumer can gate on. See config.Features.
+	Features []string `json:"features,omitempty"`
 }

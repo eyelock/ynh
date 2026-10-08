@@ -16,6 +16,11 @@
         "capabilities": {
           "type": "string",
           "description": "Wire-protocol version. See CLAUDE.md capability-bump rule."
+        },
+        "features": {
+          "type": "array",
+          "description": "Capabilities a consumer can gate on, sorted. Names are stable kebab-case strings that are only ever added; consumers must tolerate names they do not know.",
+          "items": {"type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"}
         }
       },
       "required": ["version", "capabilities"]

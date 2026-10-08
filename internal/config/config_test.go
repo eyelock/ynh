@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"testing"
 )
 
@@ -216,5 +218,32 @@ func TestSaveAndLoadWithYNHHome(t *testing.T) {
 
 	if loaded.DefaultVendor != "cursor" {
 		t.Errorf("DefaultVendor = %q, want %q", loaded.DefaultVendor, "cursor")
+	}
+}
+
+// Feature names are stable kebab-case strings, sorted and unique, so a consumer
+// can gate on them and the list reads the same on every build.
+func TestFeatures(t *testing.T) {
+	got := Features()
+	if len(got) == 0 {
+		t.Fatal("no features declared")
+	}
+	if !slices.IsSorted(got) {
+		t.Errorf("features are not sorted: %v", got)
+	}
+	kebab := regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+	seen := map[string]bool{}
+	for _, f := range got {
+		if !kebab.MatchString(f) {
+			t.Errorf("feature %q is not kebab-case", f)
+		}
+		if seen[f] {
+			t.Errorf("feature %q is listed twice", f)
+		}
+		seen[f] = true
+	}
+	got[0] = "mutated"
+	if Features()[0] == "mutated" {
+		t.Error("Features must return a copy")
 	}
 }

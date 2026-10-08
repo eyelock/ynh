@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -69,6 +70,24 @@ func TestCmdVersion_JSONShapeStability(t *testing.T) {
 	for _, key := range []string{"version", "capabilities"} {
 		if _, ok := raw[key]; !ok {
 			t.Errorf("missing required key %q in version JSON", key)
+		}
+	}
+}
+
+func TestCmdVersion_JSONFeatures(t *testing.T) {
+	var out, errb bytes.Buffer
+	if err := cmdVersionTo([]string{"--format", "json"}, &out, &errb); err != nil {
+		t.Fatal(err)
+	}
+	var payload struct {
+		Features []string `json:"features"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"agent-run-harness-path", "agent-run-fetches-includes"} {
+		if !slices.Contains(payload.Features, want) {
+			t.Errorf("features %v is missing %q", payload.Features, want)
 		}
 	}
 }

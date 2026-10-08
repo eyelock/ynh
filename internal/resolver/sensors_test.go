@@ -184,3 +184,51 @@ func TestWithIncludedSensors(t *testing.T) {
 		t.Errorf("a harness without includes must pass through untouched: %v %v", got, err)
 	}
 }
+
+// Sensor merging never reaches the network (`ynh check` must not): a git
+// include missing from the cache is an error naming `ynh update`, and nothing
+// is cloned. A run fetches its includes before it merges (ynf #130), after
+// which the same merge reads the warm cache even with the remote gone.
+func TestWithIncludedSensors_GitIncludeIsCacheOnly(t *testing.T) {
+	src := t.TempDir()
+	writeHarness(t, src, "up", map[string]any{"go-vet": commandSensor("blocking")})
+	runGit(t, src, "init")
+	runGit(t, src, "config", "user.email", "test@test.com")
+	runGit(t, src, "config", "user.name", "Test")
+	runGit(t, src, "add", ".")
+	runGit(t, src, "commit", "-m", "init")
+
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+	newConsumer := func() *harness.Harness {
+		return &harness.Harness{
+			Name: "consumer",
+			Dir:  t.TempDir(),
+			Includes: []harness.Include{
+				{GitSource: harness.GitSource{Git: src}},
+			},
+		}
+	}
+
+	_, err := WithIncludedSensors(newConsumer())
+	if err == nil || !strings.Contains(err.Error(), "ynh update") {
+		t.Fatalf("a cold cache must refuse and name `ynh update`, got %v", err)
+	}
+	if _, ok := LookupCache(src, ""); ok {
+		t.Fatal("merging sensors must not populate the cache")
+	}
+
+	if _, err := ResolveFromCache(newConsumer(), nil); err != nil {
+		t.Fatalf("fetching the include: %v", err)
+	}
+	if err := os.RemoveAll(filepath.Join(src, ".git")); err != nil {
+		t.Fatal(err)
+	}
+	got, err := WithIncludedSensors(newConsumer())
+	if err != nil {
+		t.Fatalf("a warm cache must merge: %v", err)
+	}
+	if _, ok := got.Sensors["go-vet"]; !ok {
+		t.Errorf("included sensor missing: %v", got.Sensors)
+	}
+}

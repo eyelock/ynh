@@ -82,6 +82,20 @@ stopped rather than waited for: a worker with a turn in flight gets SIGTERM
 (then SIGKILL after a few seconds), so it cannot finish work the run has
 already given up on.
 
+## Includes are fetched at setup
+
+A run fetches the git includes of its harness, and of the profile it applies,
+before it reads the sensors they declare. This holds for a harness given by
+path, which needs no install, and for an installed one whose include cache was
+cleared. The fetch honours `allowed_remote_sources` and the refs the includes
+pin, and it reaches only the hosts the includes name, so **a lane's egress must
+allow those hosts**. A fetch that fails stops the run before any worker starts,
+with exit 1 and an error that begins `fetching includes` and names the include.
+
+`ynh check` and `ynh sensors` never fetch. On a cold cache they refuse and name
+`ynh update`. The loop runs `ynh check` between turns, which finds the cache
+warm because the run fetched first.
+
 ## What the agent can see
 
 The worker receives only the environment variables the harness declares in

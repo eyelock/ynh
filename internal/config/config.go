@@ -25,6 +25,23 @@ var Version = "dev"
 // features on it with their own `minimumYNHCapabilities` constant.
 const CapabilitiesVersion = "0.9.0"
 
+// features names the capabilities a consumer can gate on without parsing a
+// version, reported by `ynh version --format json` and `ynd version --format
+// json`. The list is the only place a feature is declared. Keep it sorted.
+//
+// Names are stable, kebab-case and only ever added: a name that shipped is
+// never renamed or removed, and consumers tolerate names they do not know.
+// Adding one is additive and does not bump CapabilitiesVersion.
+var features = []string{
+	"agent-run-fetches-includes", // a run fetches its git includes at setup (ynf #130)
+	"agent-run-harness-path",     // `ynh agent run --harness` takes a path (#564)
+}
+
+// Features returns a copy of the feature names, sorted.
+func Features() []string {
+	return append([]string(nil), features...)
+}
+
 // SchemaVersion declares the on-disk format version of the YNH home
 // directory (~/.ynh). Distinct from CapabilitiesVersion: capabilities is
 // the wire-contract version (what JSON shapes / commands this binary

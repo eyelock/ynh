@@ -371,8 +371,15 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			}
 		}
 
+		// A run is where the network is allowed, and the sensor merge below
+		// reads includes from the cache only, so fetch the ones the cache
+		// lacks first (ynf #130). Done after the profile, which can add
+		// includes of its own. A failure stops the run before any worker.
+		if err := fetchIncludes(harnessObj); err != nil {
+			return result, err
+		}
+
 		// The sensors an include declares count, as they do for `ynh check`.
-		// Done after the profile, which can add includes of its own.
 		if harnessObj, err = resolver.WithIncludedSensors(harnessObj); err != nil {
 			return result, fmt.Errorf("resolving included sensors: %w", err)
 		}
@@ -1449,6 +1456,29 @@ func waitForApproval(ctrl *ControlReader, approveAction, rejectAction ControlAct
 	}
 	// Control channel closed (stdin EOF) — treat as interrupt.
 	return ActionInterrupt, "", true
+}
+
+// fetchIncludes makes sure every include of h is in the include cache,
+// fetching the ones that are not, honouring allowed_remote_sources and the
+// refs the includes pin. It reaches only the hosts the includes name.
+//
+// It exists because the sensor merge that follows is cache-only by design
+// (`ynh check` must not reach the network), so a run on a cold cache, a path
+// harness never installed or an installed one whose cache was cleared, would
+// otherwise fail on its first include. Like every pre-run refusal, a failure
+// exits with ExitRefused before any worker starts.
+func fetchIncludes(h *harness.Harness) error {
+	if len(h.Includes) == 0 {
+		return nil
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+	if _, err := resolver.ResolveFromCache(h, cfg); err != nil {
+		return fmt.Errorf("fetching includes: %w", err)
+	}
+	return nil
 }
 
 // assembleHarness assembles the harness for the named vendor backend into
