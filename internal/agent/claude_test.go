@@ -1,6 +1,9 @@
 package agent
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -69,5 +72,49 @@ func TestBuildClaudeStreamArgs_ConfigPath(t *testing.T) {
 	}
 	if !hasAddDir {
 		t.Error("expected --add-dir with ConfigPath set")
+	}
+}
+
+func TestBuildClaudeStreamArgs_Isolation(t *testing.T) {
+	withServers := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(withServers, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mcpPath := filepath.Join(withServers, ".claude", ".mcp.json")
+	if err := os.WriteFile(mcpPath, []byte(`{"mcpServers":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	noServers := t.TempDir()
+
+	tests := []struct {
+		name       string
+		dir        string
+		isolated   bool
+		wantStrict bool
+		wantConfig string
+	}{
+		{"off", withServers, false, false, ""},
+		{"on with servers", withServers, true, true, "--mcp-config=" + mcpPath},
+		{"on without servers", noServers, true, true, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := buildClaudeStreamArgs(StartOptions{ConfigPath: tt.dir, IsolatedMCP: tt.isolated})
+			var strict, config string
+			for _, a := range args {
+				if a == "--strict-mcp-config" {
+					strict = a
+				}
+				if strings.HasPrefix(a, "--mcp-config") {
+					config = a
+				}
+			}
+			if (strict != "") != tt.wantStrict {
+				t.Errorf("--strict-mcp-config present = %v, want %v in %v", strict != "", tt.wantStrict, args)
+			}
+			if config != tt.wantConfig {
+				t.Errorf("mcp-config = %q, want %q", config, tt.wantConfig)
+			}
+		})
 	}
 }
