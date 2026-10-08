@@ -126,6 +126,7 @@ func cmdPreview(args []string) error {
 		}
 	}
 	printMCPSources(os.Stdout, report.mcp)
+	printDelegateMCP(os.Stdout, report.delegate)
 	printIncludedSelectables(os.Stdout, report.included)
 	printIncludedHooks(os.Stdout, report.included)
 
@@ -179,6 +180,24 @@ func printMCPSources(w io.Writer, sources []harness.MCPProvenance) {
 	}
 }
 
+// printDelegateMCP lists the MCP servers each delegate declares, with where
+// the delegate got them. They are not the session's servers: the vendor
+// connects them to the delegate's subagent alone.
+func printDelegateMCP(w io.Writer, servers []assembler.DelegateMCP) {
+	if len(servers) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "MCP servers of delegates:")
+	for _, s := range servers {
+		source := "its own"
+		if s.Source != harness.MCPSourceRoot {
+			source = "from " + s.Source
+		}
+		_, _ = fmt.Fprintf(w, "  %s: %s (%s)\n", s.Delegate, s.Server, source)
+	}
+}
+
 // printIncludedSelectables lists the focuses and profiles of the included
 // harnesses under the namespaced names --focus and --profile take.
 func printIncludedSelectables(w io.Writer, included []resolver.ResolveResult) {
@@ -216,6 +235,7 @@ func printIncludedSelectables(w io.Writer, included []resolver.ResolveResult) {
 // each MCP server came from, and the harnesses the includes resolved to.
 type previewReport struct {
 	mcp      []harness.MCPProvenance
+	delegate []assembler.DelegateMCP
 	included []resolver.ResolveResult
 }
 
@@ -302,7 +322,8 @@ func assembleForVendorSources(srcDir string, vendorName string, sel harness.Sele
 	}
 
 	// Assemble delegates
-	if err := assembler.AssembleDelegates(tmpDir, adapter, h.DelegatesTo, h.Dir); err != nil {
+	delegateMCP, err := assembler.AssembleDelegates(tmpDir, adapter, h.DelegatesTo, h.Dir, assembler.DelegateOptions{Config: cfg})
+	if err != nil {
 		return "", previewReport{}, fmt.Errorf("assembling delegates: %w", err)
 	}
 
@@ -353,7 +374,7 @@ func assembleForVendorSources(srcDir string, vendorName string, sel harness.Sele
 	}
 
 	success = true
-	return tmpDir, previewReport{mcp: mcpSources, included: resolved}, nil
+	return tmpDir, previewReport{mcp: mcpSources, delegate: delegateMCP, included: resolved}, nil
 }
 
 // writeGeneratedFiles writes a map of relative paths to file contents into baseDir.

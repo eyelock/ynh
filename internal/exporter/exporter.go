@@ -111,6 +111,9 @@ type ExportOptions struct {
 	// have resolved, before anything is written. The CLI runs --clean here, so
 	// a refused export does not empty the output directory first.
 	BeforeWrite func() error
+
+	// delegates are the delegates resolved for export, set by Export.
+	delegates []ExportDelegate
 }
 
 // ExportResult describes the output for one vendor.
@@ -195,6 +198,18 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 		vendors = vendor.Available()
 	}
 
+	// Each delegate is resolved as a harness, so that a delegate that cannot
+	// be exported is an error before anything is written. A vendor that
+	// carries no delegates in an export leaves them out, with a warning.
+	for _, v := range vendors {
+		if a, aerr := vendor.Get(v); aerr == nil && a.SupportsExportDelegates() {
+			if opts.delegates, err = ResolveExportDelegates(p.DelegatesTo, p.Dir, opts.Config); err != nil {
+				return nil, err
+			}
+			break
+		}
+	}
+
 	if opts.BeforeWrite != nil {
 		if err := opts.BeforeWrite(); err != nil {
 			return nil, err
@@ -234,7 +249,7 @@ func exportPerVendor(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harn
 			return nil, fmt.Errorf("creating %s output: %w", v, err)
 		}
 
-		result, err := exportForVendor(v, vendorDir, pj, p, hs, content, instructionsPath)
+		result, err := exportForVendor(v, vendorDir, pj, p, hs, content, instructionsPath, opts.delegates)
 		if err != nil {
 			return nil, fmt.Errorf("exporting for %s: %w", v, err)
 		}
@@ -328,9 +343,20 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 	}
 
 	// Delegates land in the shared agents/, read by every vendor whose
-	// manifest does not restrict it to skills.
-	if len(p.DelegatesTo) > 0 {
-		if err := ExportDelegates(outputDir, p.DelegatesTo, p.Dir); err != nil {
+	// manifest does not restrict it to skills. Claude's subagent frontmatter
+	// carries a delegate's MCP servers; the shared file is the one place to
+	// put them, so they are written whenever Claude is among the vendors.
+	if len(opts.delegates) > 0 {
+		var carrier assembler.DelegateMCPCarrier
+		for _, v := range vendors {
+			if a, err := vendor.Get(v); err == nil {
+				if c := delegateCarrier(a); c != nil {
+					carrier = c
+				}
+				result.Warnings = append(result.Warnings, DelegateMCPWarnings(opts.delegates, a)...)
+			}
+		}
+		if err := WriteDelegates(outputDir, opts.delegates, carrier); err != nil {
 			return nil, fmt.Errorf("exporting delegates: %w", err)
 		}
 		// Recount agents after delegate generation
@@ -342,7 +368,7 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 	return []ExportResult{result}, nil
 }
 
-func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON, p *harness.Harness, hs assembler.HookSet, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
+func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON, p *harness.Harness, hs assembler.HookSet, content []resolver.ResolvedContent, instructionsPath string, delegates []ExportDelegate) (ExportResult, error) {
 	result := ExportResult{
 		Vendor:    vendorName,
 		OutputDir: outputDir,
@@ -376,10 +402,11 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 	}
 
 	// Delegates
-	if len(p.DelegatesTo) > 0 && adapter.SupportsExportDelegates() {
-		if err := ExportDelegates(outputDir, p.DelegatesTo, p.Dir); err != nil {
+	if len(delegates) > 0 && adapter.SupportsExportDelegates() {
+		if err := WriteDelegates(outputDir, delegates, delegateCarrier(adapter)); err != nil {
 			return result, fmt.Errorf("exporting delegates: %w", err)
 		}
+		result.Warnings = append(result.Warnings, DelegateMCPWarnings(delegates, adapter)...)
 	}
 
 	// Hook config, and the scripts its hooks run
