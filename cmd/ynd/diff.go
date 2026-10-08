@@ -12,10 +12,10 @@ import (
 
 func cmdDiff(args []string) error {
 	var (
-		source      string
-		profileName string
-		focusName   string
-		vendors     []string
+		source    string
+		profiles  []string
+		focusName string
+		vendors   []string
 	)
 
 	// Parse: source is first positional, remaining positional args are vendor names
@@ -40,7 +40,7 @@ func cmdDiff(args []string) error {
 				return fmt.Errorf("--profile requires a value")
 			}
 			i++
-			profileName = args[i]
+			profiles = append(profiles, args[i])
 		case "--focus":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--focus requires a value")
@@ -73,17 +73,6 @@ func cmdDiff(args []string) error {
 	if focusName == "" {
 		focusName = os.Getenv("YNH_FOCUS")
 	}
-	if focusName != "" && profileName != "" {
-		return fmt.Errorf("cannot use --focus and --profile together")
-	}
-
-	// Resolve profile from flag or env var
-	if profileName == "" {
-		profileName = os.Getenv("YNH_PROFILE")
-	}
-	if focusName != "" && profileName != "" {
-		return fmt.Errorf("cannot use --focus and --profile together (focus includes a profile)")
-	}
 
 	// Resolve source
 	srcDir, err := resolveSource(source)
@@ -91,19 +80,9 @@ func cmdDiff(args []string) error {
 		return err
 	}
 
-	// Resolve focus → profile
-	if focusName != "" {
-		h, _, loadErr := loadHarnessForPreview(srcDir)
-		if loadErr != nil {
-			return fmt.Errorf("loading harness for focus resolution: %w", loadErr)
-		}
-		focus, ok := h.Focuses[focusName]
-		if !ok {
-			return fmt.Errorf("focus %q not defined in harness", focusName)
-		}
-		if focus.Profile != "" {
-			profileName = focus.Profile
-		}
+	sel, err := resolveSelection(srcDir, profiles, focusName)
+	if err != nil {
+		return err
 	}
 
 	// Default to all vendors
@@ -136,7 +115,7 @@ func cmdDiff(args []string) error {
 	}()
 
 	for _, v := range vendors {
-		tmpDir, err := assembleForVendor(srcDir, v, profileName)
+		tmpDir, err := assembleForVendor(srcDir, v, sel)
 		if err != nil {
 			return fmt.Errorf("assembling for %s: %w", v, err)
 		}

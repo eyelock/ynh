@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/agentplugin"
+	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/marketplace"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/pathutil"
@@ -1068,6 +1069,14 @@ func validateHarnessIncludes(hj map[string]any) []string {
 		if sub, ok := obj["path"].(string); ok && sub != "" {
 			if err := pathutil.CheckSubpath(sub); err != nil {
 				issues = append(issues, fmt.Sprintf("includes[%d].path: %v", i, err))
+			}
+		}
+		// The alias is the namespace of the include's focuses and profiles,
+		// so it is held to the harness-name rule, and may not hold the ":"
+		// that separates namespace from name.
+		if as, ok := obj["as"].(string); ok {
+			if err := harness.ValidateIncludeAlias(as); err != nil {
+				issues = append(issues, fmt.Sprintf("includes[%d].as: %v", i, err))
 			}
 		}
 	}

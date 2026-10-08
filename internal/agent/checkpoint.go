@@ -84,6 +84,9 @@ type Checkpoint struct {
 	HarnessName       string `json:"harness_name,omitempty"`
 	Profile           string `json:"profile,omitempty"`
 	ConvergenceSensor string `json:"convergence_sensor,omitempty"`
+	// IncludedProfiles are the namespaced profiles ("namespace:name") the run
+	// applied to included harnesses, restored on a resume like Profile.
+	IncludedProfiles map[string]string `json:"included_profiles,omitempty"`
 	// MaxTurns and MaxTokens are the caps, not the counters. Budget carries
 	// consumption; without the caps a resume silently re-derives them from
 	// defaults and can run far past what the original invocation allowed.
@@ -187,6 +190,9 @@ func restoreIdentity(opts *RunOptions, cp *Checkpoint) {
 	}
 	if opts.Profile == "" {
 		opts.Profile = cp.Profile
+	}
+	if len(opts.IncludedProfiles) == 0 {
+		opts.IncludedProfiles = cp.IncludedProfiles
 	}
 	if !taskGiven {
 		opts.Focus = cp.Focus

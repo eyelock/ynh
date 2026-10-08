@@ -54,6 +54,12 @@ func cmdIncludeAdd(args []string, stdout io.Writer) error {
 			}
 			i++
 			opts.Ref = args[i]
+		case "--as":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--as requires a value")
+			}
+			i++
+			opts.As = args[i]
 		case "--replace":
 			opts.Replace = true
 		default:
@@ -65,10 +71,15 @@ func cmdIncludeAdd(args []string, stdout io.Writer) error {
 	}
 
 	if len(positional) != 2 {
-		return fmt.Errorf("usage: ynh include add <harness> <url> [--path <subdir>] [--pick <items>] [--ref <ref>] [--replace]")
+		return fmt.Errorf("usage: ynh include add <harness> <url> [--path <subdir>] [--pick <items>] [--ref <ref>] [--as <alias>] [--replace]")
 	}
 
 	harnessRef, url := positional[0], positional[1]
+
+	// Before any fetch: a bad alias is a usage error, not a network one.
+	if err := harness.ValidateIncludeAlias(opts.As); err != nil {
+		return err
+	}
 
 	dir, installed, err := harness.ResolveEditTarget(harnessRef)
 	if err != nil {
@@ -101,6 +112,9 @@ func cmdIncludeAdd(args []string, stdout io.Writer) error {
 	msg := fmt.Sprintf("%s include %q", action, url)
 	if opts.Path != "" {
 		msg += fmt.Sprintf(" (path: %q)", opts.Path)
+	}
+	if opts.As != "" {
+		msg += fmt.Sprintf(" as %q", opts.As)
 	}
 	_, _ = fmt.Fprintln(stdout, msg)
 	return nil

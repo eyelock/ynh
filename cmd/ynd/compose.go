@@ -129,9 +129,9 @@ func cmdCompose(args []string) error {
 func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 	structured := composeIsJSON(args)
 	var (
-		source      string
-		profileName string
-		format      = "json"
+		source   string
+		profiles []string
+		format   = "json"
 	)
 
 	i := 0
@@ -148,7 +148,7 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 				return cliError(stderr, structured, errCodeInvalidInput, "--profile requires a value")
 			}
 			i++
-			profileName = args[i]
+			profiles = append(profiles, args[i])
 		case "--format":
 			if i+1 >= len(args) {
 				return cliError(stderr, structured, errCodeInvalidInput, "--format requires a value")
@@ -202,12 +202,14 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 		srcDir = workDir
 	}
 
-	// Apply profile if specified
-	if profileName == "" {
-		profileName = os.Getenv("YNH_PROFILE")
+	// Apply profile if specified. A profile of an included harness is applied
+	// as the includes resolve.
+	sel, err := resolveSelection(srcDir, profiles, "")
+	if err != nil {
+		return cliError(stderr, structured, errCodeInvalidInput, err.Error())
 	}
-	if profileName != "" {
-		h, err = harness.ResolveProfile(h, profileName)
+	if sel.Profile != "" {
+		h, err = harness.ResolveProfile(h, sel.Profile)
 		if err != nil {
 			return cliError(stderr, structured, errCodeInvalidInput, err.Error())
 		}
@@ -220,7 +222,7 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 	}
 
 	// Resolve includes
-	resolved, err := resolver.Resolve(h, cfg)
+	resolved, _, err := resolver.ResolveSelected(h, cfg, sel)
 	if err != nil {
 		return cliError(stderr, structured, errCodeIOError, fmt.Sprintf("resolving includes: %v", err))
 	}

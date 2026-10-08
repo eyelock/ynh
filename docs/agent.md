@@ -27,8 +27,8 @@ ynh agent run --resume <session-dir> [flags]
 |---|---|
 | `--harness <id\|path>` | Harness whose sensors, artifacts and hooks drive the run. Takes an installed id (`local/demo`) or a path to a harness directory (`.`, `./my-harness`, an absolute path), exactly as `ynh check` does. A path needs no prior install, which matters while you are still authoring the harness |
 | `--task "<text>"` | What the agent is being asked to do |
-| `--focus <name>` | Use a declared focus for the task and its profile |
-| `--profile <name>` | Apply a profile overlay |
+| `--focus <name>` | Use a declared focus for the task and its profile. `namespace:name` takes a focus of an included harness |
+| `--profile <name>` | Apply a profile overlay. Repeatable: one unqualified value for the harness and one `namespace:name` per included harness (see [Profiles of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses)) |
 | `--backend <name>` | Backend to drive: `claude`, `codex` or `cursor` (default: `claude`; on `--resume`, the session's own) |
 | `--model <name>` | Model override passed to the backend |
 | `--effort <low\|medium\|high>` | Reasoning effort, mapped to the backend's own setting; overrides the harness's `agent.effort`. See [Effort](#effort) |
@@ -310,7 +310,7 @@ same `checkpoint.json`, and the last one to write wins.
 The checkpoint records the run's identity (backend, task or focus, harness,
 profile, convergence sensor, and the turn and token caps) as well as its
 counters, so a resume restores the run it is actually resuming. For the
-harness, profile, convergence sensor and caps, flags passed on the resume take
+harness, profile (including namespaced profiles of included harnesses), convergence sensor and caps, flags passed on the resume take
 precedence and anything omitted comes from the checkpoint.
 
 The backend, task and focus cannot be changed on a resume, only repeated:

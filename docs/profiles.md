@@ -99,6 +99,51 @@ The `--profile` flag is supported on `ynh run`, `ynd preview`, `ynd diff`, and `
 
 When both the flag and the environment variable are set, the flag wins. When neither is set, the top-level `hooks` and `mcp_servers` are used as-is.
 
+Pass `--profile` more than once to choose a profile for the root and for included harnesses in the same run: `--profile work --profile github:ci`. At most one value may be unqualified (the root's) and at most one per namespace; a repeat is an error. See [Profiles and focuses of included harnesses](#profiles-and-focuses-of-included-harnesses). `YNH_PROFILE` stays a single value, which may itself be namespaced.
+
+## Profiles and focuses of included harnesses
+
+An include that resolves to a harness (see [Servers from Included Harnesses](mcp.md#servers-from-included-harnesses)) brings its profiles and focuses into scope, under a namespace. The namespace is the included harness's `name`, or the `as` alias on the include entry:
+
+```json
+{
+  "includes": [
+    { "git": "github.com/eyelock/assistants", "path": "ynh/github" },
+    { "git": "github.com/eyelock/assistants", "path": "ynh/github", "ref": "v2", "as": "gh-v2" }
+  ]
+}
+```
+
+A value of the form `namespace:name` selects from that harness:
+
+```bash
+ynh run my-harness --profile github:ci                  # github's "ci" profile, for github only
+ynh run my-harness --profile work --profile github:ci   # the root's "work" plus github's "ci"
+ynh run my-harness --focus github:triage                # github's focus: its prompt, and its profile
+```
+
+An unqualified value is the root's, exactly as before, so nothing that exists changes. The separator is `:` because harness names may contain dots but never colons, so a value with one colon is unambiguous.
+
+What the selection does:
+
+- **Only that include changes.** The profile is applied to the included harness while the graph is resolved, before its own `includes` are followed. Its `mcp_servers` (including `null` removals), `includes` and `env_passthrough` take effect for that harness; the profile's includes are resolved like any other. The root and the other includes are untouched. An included profile's `mcp_isolation` is ignored: isolation is a launch decision of the root. Its `hooks` are not carried (see [hooks](hooks.md#root-harness-only-rule)).
+- **A focus brings its profile.** `--focus github:triage` uses the focus's prompt as the run's prompt, and applies the focus's `profile`, if it has one, to `github`. `--focus` and `--profile` still exclude each other, qualified or not.
+- **Repeat `--profile`, once per harness.** At most one unqualified value and one per namespace; `--profile github:a --profile github:b` is an error.
+- **Transitive harnesses have namespaces too.** A harness reached through another include is addressed by its own name or alias, wherever it sits in the graph.
+
+Errors:
+
+```
+Error: no included harness has namespace "x" (available: github, db)
+Error: profile "nope" not defined in included harness "github" (available: [ci local])
+Error: focus "nope" not defined in included harness "github" (available: [triage])
+Error: namespace "github" is ambiguous: eyelock/a//ynh/github and eyelock/b//github; give one include an "as" alias
+```
+
+Two distinct harnesses may share a namespace; that is an error only when a `namespace:name` value uses it. Give one of the includes an `as` alias to tell them apart.
+
+The same commands accept namespaced values: `ynh run`, `ynh agent run`, `ynd preview`, `ynd export`, `ynd diff` and `ynd compose` (profiles only, compose has no `--focus`). `ynd preview` lists what an include offers under "Focuses from included harnesses:" and "Profiles from included harnesses:". `ynh focus ls` and `ynh profile ls` list only the harness's own entries, which are the ones you can edit.
+
 ## Missing Profile Behavior
 
 Selecting a profile that does not exist in `.agents/harness/plugin.json` is a hard error:

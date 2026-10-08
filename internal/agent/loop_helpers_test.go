@@ -100,7 +100,7 @@ func TestNewSessionID_NonEmptyAndUnique(t *testing.T) {
 
 func TestAssembleHarness_UnknownBackend(t *testing.T) {
 	h := &harness.Harness{Name: "x", Dir: t.TempDir()}
-	_, err := assembleHarness(h, "no-such-vendor")
+	_, _, err := assembleHarness(h, "no-such-vendor", harness.Selection{})
 	if err == nil {
 		t.Fatal("expected error")
 	}

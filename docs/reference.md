@@ -28,8 +28,8 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 | Setting | Resolution Order |
 |---------|-----------------|
 | Vendor | `-v` flag > `YNH_VENDOR` > harness `default_vendor` > global config. Any of these also accepts a backend-redirected spec (`<backend>/<vendor>` or `<backend>/<vendor>/<model>`) — see [Local Model Backends](vendors.md#local-model-backends). |
-| Profile | `--profile` flag > `YNH_PROFILE` > no profile (top-level) |
-| Focus | `--focus` flag > `YNH_FOCUS` > no focus (mutually exclusive with `--profile`) |
+| Profile | `--profile` flag > `YNH_PROFILE` > no profile (top-level). `--profile` may repeat: at most one unqualified (the root's) and one `namespace:name` per included harness, for example `--profile work --profile github:ci`. `YNH_PROFILE` is a single value. See [Profiles of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses) |
+| Focus | `--focus` flag > `YNH_FOCUS` > no focus (mutually exclusive with `--profile`). `--focus namespace:name` selects a focus of an included harness |
 | Harness source | `--harness` flag > `YNH_HARNESS` > positional arg > `.` (CWD) or error |
 | Non-interactive | `-y` flag > `YNH_YES` > `CI` |
 | Telemetry relay | `--telemetry-relay` flag > `YNH_TELEMETRY_RELAY` > `telemetry_relay` in `config.json` > off |
@@ -54,7 +54,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh delegate add <harness> <url>` | `--ref`, `--path` — `<url>` must be a git URL; local paths are not supported (see CONTRIBUTING.md "Delegates: remote-only") |
 | `ynh delegate remove <harness> <url>` | `--path` |
 | `ynh delegate update <harness> <url>` | `--from-path`, `--path`, `--ref` |
-| `ynh include add <harness> <url>` | `--path`, `--pick`, `--ref`, `--replace` |
+| `ynh include add <harness> <url>` | `--path`, `--pick`, `--ref`, `--as <alias>`, `--replace` |
 | `ynh include remove <harness> <url>` | `--path` |
 | `ynh include update <harness> <url>` | `--from-path`, `--path`, `--pick`, `--ref` |
 | `ynh focus ls <harness>` | `--format <text\|json>` |
@@ -108,7 +108,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynd validate [path]` | `--harness` |
 | `ynd lint [path]` | `--harness` |
 | `ynd fmt [path]` | `--harness` |
-| `ynd compose <source>` | `--harness`, `--profile`, `--format <text\|json>` (default `json`) |
+| `ynd compose <source>` | `--harness`, `--profile` (repeatable), `--format <text\|json>` (default `json`) |
 | `ynd compress [files...]` | `-v`, `-y`, `--restore`, `--list-backups`, `--pick` |
 | `ynd inspect` | `-v`, `-y`, `-o` |
 | `ynd preview <source>` | `-v`, `-o`, `--harness`, `--profile`, `--focus` |

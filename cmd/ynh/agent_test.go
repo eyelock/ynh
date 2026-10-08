@@ -221,3 +221,24 @@ func TestCmdAgent_SubcommandErrorHonoursFormatJSON(t *testing.T) {
 		t.Errorf("stderr = %q, want an invalid_input envelope (%v)", stderr.String(), jerr)
 	}
 }
+
+func TestCmdAgentRun_RepeatedProfileRules(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"duplicate root", []string{"--harness", "x", "--task", "t", "--profile", "a", "--profile", "b"}, "at most one unqualified profile"},
+		{"duplicate namespace", []string{"--harness", "x", "--task", "t", "--profile", "g:a", "--profile", "g:b"}, `namespace "g"`},
+		{"focus with namespaced profile", []string{"--harness", "x", "--focus", "g:f", "--profile", "g:a"}, "--focus and --profile"},
+		{"malformed focus", []string{"--harness", "x", "--focus", "g:"}, "expected name or namespace:name"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := cmdAgentRunTo(t, tt.args)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want containing %q", err, tt.want)
+			}
+		})
+	}
+}
