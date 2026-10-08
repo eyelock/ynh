@@ -1545,6 +1545,19 @@ func assembleHarness(h *harness.Harness, backendName string, sel harness.Selecti
 		return "", nil, fmt.Errorf("assembling harness: %w", err)
 	}
 
+	// Assemble the delegates as agent files, as `ynh run` does, each with
+	// its own includes' skills and MCP servers.
+	for _, del := range h.DelegatesTo {
+		if chkErr := cfg.CheckSource(del.Git, h.Dir); chkErr != nil {
+			_ = os.RemoveAll(dir)
+			return "", nil, fmt.Errorf("delegate %q: %w", del.Git, chkErr)
+		}
+	}
+	if _, delErr := assembler.AssembleDelegates(dir, adapter, h.DelegatesTo, h.Dir, assembler.DelegateOptions{Config: cfg, Launch: true}); delErr != nil {
+		_ = os.RemoveAll(dir)
+		return "", nil, fmt.Errorf("assembling delegates: %w", delErr)
+	}
+
 	// Generate vendor-native hook config, and copy in the scripts those hooks
 	// run from the harness, and from the included harnesses that consented to
 	// their hooks.

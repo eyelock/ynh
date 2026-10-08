@@ -105,6 +105,10 @@ func main() {
 		err = cmdDoctor(os.Args[2:])
 	case "mcp":
 		err = cmdMCP(os.Args[2:])
+	case "mcp-exec":
+		err = cmdMCPExec(os.Args[2:])
+	case "mcp-headers":
+		err = cmdMCPHeaders(os.Args[2:], os.Stdout)
 	case "sensors":
 		err = cmdSensors(os.Args[2:])
 	case "trust":

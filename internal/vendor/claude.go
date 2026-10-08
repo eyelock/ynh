@@ -1,17 +1,21 @@
 package vendor
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/eyelock/ynh/internal/mcpexec"
 	"github.com/eyelock/ynh/internal/plugin"
 )
 
@@ -219,6 +223,8 @@ func buildClaudeArgs(configPath string, initialPrompt string, extraArgs []string
 	if data, err := os.ReadFile(instructionsPath); err == nil && len(data) > 0 {
 		args = append(args, "--append-system-prompt", string(data))
 	}
+
+	args = append(args, ClaudeDelegateAgentArgs(configPath)...)
 
 	args = append(args, extraArgs...)
 	return args
@@ -503,6 +509,11 @@ type claudeMCPServer struct {
 	Cwd     string            `json:"cwd,omitempty"`
 	URL     string            `json:"url,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
+
+	// HeadersHelper is a command whose stdout is a JSON object of headers
+	// (code.claude.com/docs/en/mcp). Only a launch sets it: it carries the
+	// headers that reference a secret, so the value is never in an argument.
+	HeadersHelper string `json:"headersHelper,omitempty"`
 }
 
 // claudeMCPServers maps the canonical servers to Claude Code's .mcp.json
@@ -553,6 +564,122 @@ func (c *Claude) GeneratePluginMCPConfig(servers map[string]plugin.MCPServer) (m
 		return nil, err
 	}
 	return map[string][]byte{claudePluginMCPFile: data}, nil
+}
+
+// DelegateMCPFrontmatter returns the "mcpServers" frontmatter line that gives
+// a Claude Code subagent its own MCP servers: the same per-server shape as
+// .mcp.json, as a one-line YAML flow mapping (JSON is valid YAML). Claude
+// connects them when the subagent starts and disconnects them when it
+// finishes (code.claude.com/docs/en/sub-agents).
+func (c *Claude) DelegateMCPFrontmatter(servers map[string]plugin.MCPServer) (string, error) {
+	data, err := marshalFlat(claudeSubagentMCP(servers))
+	if err != nil {
+		return "", fmt.Errorf("marshalling subagent MCP servers: %w", err)
+	}
+	return "mcpServers: " + data, nil
+}
+
+// claudeSubagentMCP is the servers as a subagent's "mcpServers" takes them: a
+// list, each entry a one-key map of the server's name to its definition (a
+// plain name would refer to a server already configured). A map is rejected.
+func claudeSubagentMCP(servers map[string]plugin.MCPServer) []map[string]claudeMCPServer {
+	defs := claudeMCPServers(servers)
+	out := make([]map[string]claudeMCPServer, 0, len(defs))
+	for _, name := range slices.Sorted(maps.Keys(defs)) {
+		out = append(out, map[string]claudeMCPServer{name: defs[name]})
+	}
+	return out
+}
+
+// marshalFlat renders v as single-line JSON, which is also valid YAML, with
+// no HTML escaping so a URL or a command reads as written.
+func marshalFlat(v any) (string, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(buf.String(), "\n"), nil
+}
+
+// DelegateLaunchAgent is a delegate that declares MCP servers, as a launch
+// passes it to the vendor CLI.
+//
+// Servers keep their ${VAR} references literal. Those named in Wrapped are
+// started through the launcher with EnvFile, which holds the values, so the
+// command line carries none of them.
+type DelegateLaunchAgent struct {
+	Name        string
+	Description string
+	Prompt      string
+	Servers     map[string]plugin.MCPServer
+	EnvFile     string
+	Wrapped     map[string]bool
+}
+
+// ClaudeDelegateAgentsFile is the file in a run directory that holds the
+// delegates declaring MCP servers, as the JSON `claude --agents` takes.
+const ClaudeDelegateAgentsFile = ".ynh-delegate-agents.json"
+
+// DelegateLaunchFile returns ClaudeDelegateAgentsFile and its content. Claude
+// Code ignores "mcpServers" in a plugin's subagents, and ynh run loads the
+// assembled directory as a plugin, so the delegates that declare servers are
+// passed with --agents, which honours them and outranks the plugin's agent of
+// the same name. --strict-mcp-config does not filter servers given this way
+// (code.claude.com/docs/en/sub-agents).
+//
+// Claude does not expand ${VAR} in those servers, and the argument is visible
+// to every local process, so a server that references a variable is started
+// through `ynh mcp-exec` (stdio) or gets its headers from `ynh mcp-headers`
+// (remote), both of which read the values from the delegate's env file.
+func (c *Claude) DelegateLaunchFile(agents []DelegateLaunchAgent) (string, []byte, error) {
+	defs := make(map[string]map[string]any, len(agents))
+	for _, a := range agents {
+		defs[a.Name] = map[string]any{
+			"description": a.Description,
+			"prompt":      a.Prompt,
+			"mcpServers":  claudeLaunchMCP(a),
+		}
+	}
+	data, err := marshalFlat(defs)
+	if err != nil {
+		return "", nil, fmt.Errorf("marshalling delegate agents: %w", err)
+	}
+	return ClaudeDelegateAgentsFile, []byte(data), nil
+}
+
+// claudeLaunchMCP is claudeSubagentMCP for a launch, routing the servers in
+// a.Wrapped through the launcher.
+func claudeLaunchMCP(a DelegateLaunchAgent) []map[string]claudeMCPServer {
+	out := make([]map[string]claudeMCPServer, 0, len(a.Servers))
+	for _, name := range slices.Sorted(maps.Keys(a.Servers)) {
+		s := a.Servers[name]
+		var helper string
+		if a.Wrapped[name] {
+			if s.Transport() == plugin.MCPTypeStdio {
+				s = mcpexec.WrapStdio(s, a.EnvFile)
+			} else {
+				var templated map[string]string
+				templated, s.Headers = mcpexec.SplitHeaders(s.Headers)
+				helper = mcpexec.HeadersCommand(templated, a.EnvFile)
+			}
+		}
+		cs := claudeMCPServers(map[string]plugin.MCPServer{name: s})[name]
+		cs.HeadersHelper = helper
+		out = append(out, map[string]claudeMCPServer{name: cs})
+	}
+	return out
+}
+
+// ClaudeDelegateAgentArgs returns the --agents argument for the delegates an
+// assembly left in configPath, or nil when it left none.
+func ClaudeDelegateAgentArgs(configPath string) []string {
+	data, err := os.ReadFile(filepath.Join(configPath, ClaudeDelegateAgentsFile))
+	if err != nil || len(data) == 0 {
+		return nil
+	}
+	return []string{"--agents", string(data)}
 }
 
 // claudeMCPDocument renders MCP servers under Claude's "mcpServers" key, in

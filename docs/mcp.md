@@ -279,6 +279,71 @@ Error: included MCP server "db" from eyelock/assistants//ynh/db uses a path insi
 
 Declare that server in the root harness, or set it to `null` in the root. An included server with no such reference, such as `npx` or a remote `url`, exports normally, and its `${VAR}` references stay literal as for any exported server.
 
+## MCP Servers of Delegates
+
+A delegate (`delegates_to`) is a harness, and the MCP servers it declares are its own. They are not the session's: the parent harness's run does not list them, and the delegate's subagent is the only one that connects to them. ynh resolves the delegate the way it resolves any harness. Its `includes` are followed (transitively, with `pick`, the cycle guard and the allow-list, against the delegate's own directory), and its servers are composed from its included harnesses' and its own under the rules of [Servers from Included Harnesses](#servers-from-included-harnesses). Each server expands in its own harness's context, so `${VAR}` references resolve against the delegate's `env_passthrough`, not the parent's. The skills of the delegate's includes are listed in its agent file with its own. A delegate's own delegates are not followed.
+
+```
+$ ynd preview ./team-lead
+...
+MCP servers of delegates:
+  probe: probe-srv (its own)
+  probe: db (from eyelock/assistants//ynh/db)
+```
+
+| Vendor | Delegate servers |
+|--------|------------------|
+| Claude Code | Carried. The generated agent has an `mcpServers` frontmatter field and a run hands the agent to Claude with `--agents`; see below. |
+| Cursor, Copilot, Codex | Not carried. ynh warns once per delegate on stderr and writes the agent without them. |
+
+The warning reads:
+
+```
+  warning: delegate probe declares MCP servers (db, probe-srv) that Cursor subagents cannot carry; they are not available to it
+```
+
+No documented per-agent MCP field exists for the other vendors. Copilot's references document MCP only at the project and user level (`.github/mcp.json`, `~/.copilot/mcp-config.json`), so ynh does not guess at a custom-agent field it has not verified. Codex has no agents directory in a run, so its delegates are not assembled at all.
+
+### How Claude Code gets them
+
+Claude Code subagents accept an `mcpServers` frontmatter field: a list whose entries are a one-key map from the server name to its definition, in the same per-server shape as `.mcp.json`. The servers connect when the subagent starts and disconnect when it finishes. ynh writes the field into the agent file:
+
+```markdown
+---
+name: probe
+description: Probe agent with a ping tool
+mcpServers: [{"probe-srv":{"command":"python3","args":["/opt/probe/server.py"]}}]
+---
+```
+
+The tools appear to the subagent as `mcp__<server>__<tool>`.
+
+**Claude ignores that field in a plugin's agents** ("For security reasons, plugin subagents don't support the `hooks`, `mcpServers`, or `permissionMode` frontmatter fields", code.claude.com/docs/en/sub-agents), and `ynh run` loads the assembled directory as a plugin with `--plugin-dir`. Checked against Claude Code 2.1.293: with the field alone, the subagent had no `probe_ping` tool. So for each delegate that declares servers, ynh also writes `<run dir>/.ynh-delegate-agents.json` (mode 0600) and launches Claude with `--agents <that JSON>` (in `ynh run` and `ynh agent run`). An agent passed that way is a session-level definition, which outranks the plugin's agent of the same name and which Claude honours `mcpServers` for. With that, the subagent called `mcp__probe-srv__probe_ping` and got its answer, and the main session's `init` event did not list the server.
+
+### Secrets: `.env.ynh` and `ynh mcp-exec`
+
+A server's `${VAR}` references are resolved from the delegate's own `env_passthrough`, as for any harness: an undeclared reference, or a declared variable that is not set, fails the run with the usual error naming the server and the field. But the `--agents` JSON is a command-line argument, and any local process can read a command line (`ps -axww`). Claude does not expand `${VAR}` inside `--agents` either (the server received the text `${PROBE_TOKEN}`). So ynh does not put the values there. Instead:
+
+- For each delegate with servers that reference a variable, ynh writes `<run dir>/delegates/<delegate>/.env.ynh`, mode 0600 in a 0700 directory, regenerated on every run. It holds exactly the variables that delegate's servers reference, as `NAME="value"` lines. The value is a double-quoted string with Go escapes (`\n`, `\"`, `\\`, `\xNN`), so any value, including `=`, quotes, newlines and arbitrary bytes, stays on one line and reads back exactly. Blank lines and `#` comments are skipped.
+- A **stdio** server that references a variable is passed to Claude as `ynh mcp-exec --env-file <abs path to .env.ynh> -- <command> <args...>`. The `args` and `env` keep `${VAR}` literal. `ynh mcp-exec` is an internal command (it is not in `ynh help`): it reads the file, expands `${VAR}` in the arguments and in its own environment values using only the file's variables (an unknown reference is an error naming it, on stderr, with a non-zero exit and nothing on stdout, which is the MCP channel), and then replaces itself with the command, so stdin and stdout are the server's. `ynh` is found through `PATH`, like every other tool of the family.
+- A **remote** (`http`, `sse`) server whose `headers` reference a variable keeps its `url` and its other headers as they are, and gets a `headersHelper`: `ynh mcp-headers --env-file <path> -- 'Authorization: Bearer ${TOKEN}'`. Claude runs that command and reads a JSON object of headers from its stdout (checked against Claude Code 2.1.294: a `headersHelper` in a server passed with `--agents` is honoured, and its headers arrive alongside the static ones). The command line carries the template, never the value. A `${VAR}` in the `url` itself is an error that tells you to move the secret to a header.
+- A server with no `${VAR}` reference is passed unchanged, with no launcher.
+- `${PLUGIN_ROOT}`, `${PLUGIN_DATA}` and plugin-relative `./` paths are not secrets; ynh expands them as it always has. A `${VAR}` in a server's `cwd` is not expanded by anything.
+
+Checked against Claude Code 2.1.294 with `PROBE_TOKEN=s3cret-xyz`: the subagent's tool returned `pong:s3cret-xyz`, and sampling `ps -axww -o args` through the whole run never showed the value in the `claude` process's arguments.
+
+`.env.ynh` matches common `.env.*` ignore patterns, which is the intent, but ynh only ever writes it under its own run directory. It is never written by `ynd export`, `ynd preview` or `ynh image`. In `ynh agent run` the run directory is the loop's temporary config directory, which is removed when the run ends; the launcher reads the file, so the worker's environment (built from the root harness's `env_passthrough` only) does not need the delegate's variables. A baked image (`ynh image`) is assembled without secrets, so its delegates' servers are not carried on Claude; run the harness from source to get them.
+
+The field stays in the agent file as well: it is what `ynd export` ships, and it works once the file is copied into `.claude/agents/`.
+
+### Isolation
+
+A delegate's servers are the delegate's own declaration, so isolation (`mcp_isolation`, `--isolated-mcp`) keeps them. `--strict-mcp-config` restricts the session's servers and the servers of subagent frontmatter, but not servers passed inline with `--agents`, which Claude treats as explicit caller input. Checked: an isolated run's `init` event listed no MCP servers, and the delegate's subagent still called `mcp__probe-srv__probe_ping` and got `pong`.
+
+### Exporting delegates
+
+`ynd export` writes delegate agents too, with the servers unexpanded: `${VAR}` is left literal for the consumer, as for any exported server. Claude Code does not honour `mcpServers` in a plugin's subagents, so in an installed plugin the field is there for whoever copies the agent into `.claude/agents/`. The export says so, with a warning in its result: `delegate probe declares MCP servers (probe-srv); Claude Code ignores mcpServers in plugin agents, so they will not load when this plugin is installed`. A delegate server that points into the delegate's own directory (a `./` command or `cwd`, or a `${PLUGIN_ROOT}` reference), or into one of its includes, cannot be exported, because the plugin carries the agent file and not the delegate's directory. The export stops with an error naming the delegate and the server. Other vendors get a warning in the export result, as above.
+
 ## Plugin Placeholders
 
 The Agent Plugins specification reserves two placeholders for a stdio
