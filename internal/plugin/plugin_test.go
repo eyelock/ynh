@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -698,5 +699,48 @@ func TestEffectiveRatchet(t *testing.T) {
 	}
 	if got := (Sensor{Ratchet: "count"}).EffectiveRatchet(); got != "count" {
 		t.Errorf("got %q", got)
+	}
+}
+
+func TestHarnessJSON_NullMCPServerRoundTrips(t *testing.T) {
+	in := `{"name":"h","version":"1","mcp_servers":{"gone":null,"mine":{"command":"c"}}}`
+	var hj HarnessJSON
+	if err := json.Unmarshal([]byte(in), &hj); err != nil {
+		t.Fatal(err)
+	}
+	if len(hj.MCPRemovals) != 1 || hj.MCPRemovals[0] != "gone" || len(hj.MCPServers) != 1 {
+		t.Fatalf("decoded %+v", hj)
+	}
+	out, err := json.Marshal(hj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(out, &raw); err != nil {
+		t.Fatal(err)
+	}
+	servers, _ := raw["mcp_servers"].(map[string]any)
+	if v, ok := servers["gone"]; !ok || v != nil {
+		t.Errorf("removal not written back as null: %s", out)
+	}
+	if _, ok := servers["mine"]; !ok {
+		t.Errorf("server lost: %s", out)
+	}
+}
+
+func TestHarnessJSON_UnknownFieldStillRejected(t *testing.T) {
+	var hj HarnessJSON
+	if err := json.Unmarshal([]byte(`{"name":"h","bogus":1}`), &hj); err == nil {
+		t.Fatal("unknown field must be rejected")
+	}
+}
+
+func TestHarnessJSON_MarshalWithoutRemovalsKeepsFieldOrder(t *testing.T) {
+	out, err := json.Marshal(HarnessJSON{Name: "h", Version: "1", MCPServers: map[string]MCPServer{"a": {Command: "c"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"name":"h","version":"1","mcp_servers":{"a":{"command":"c"}}}`; string(out) != want {
+		t.Errorf("got %s, want %s", out, want)
 	}
 }

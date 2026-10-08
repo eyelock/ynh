@@ -835,9 +835,9 @@ sensor "security-scan": source.focus references undefined focus "infer-vulns"
 
 ### Includes — root-only
 
-Only the root harness's sensors are used. An included harness contributes `skills/`, `agents/`, `rules/` and `commands/` — files — and nothing else.
+Only the root harness's sensors are used. An included harness contributes `skills/`, `agents/`, `rules/` and `commands/`, which are files, and its MCP servers, and nothing else.
 
-Nothing is *dropped*: `resolveWith` iterates includes flat, with no recursion, and returns file paths. **It never opens an included harness's `plugin.json`,** so a sensor declared there is never read in the first place. Root-only is a property of the resolver, not a filter applied afterwards.
+An included harness's manifest is opened, for its [MCP servers](mcp.md#servers-from-included-harnesses) and its own includes, but the resolver carries no sensor declarations out of it. Root-only is a property of what the resolver carries, not a filter applied afterwards.
 
 That is deliberate. It keeps the answer to "what observes this repository" in one committed file a reviewer can read, and stops a composed harness turning inert included content into an execution surface the root author never declared.
 

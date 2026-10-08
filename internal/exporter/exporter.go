@@ -155,6 +155,17 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 		return nil, fmt.Errorf("resolving includes: %w", err)
 	}
 
+	// The servers the export carries are the root's and those of its included
+	// harnesses, composed. Work on a copy so the caller's harness is left as
+	// it was loaded.
+	servers, err := harness.ComposeMCPServersForExport(p, resolver.IncludedHarnesses(resolved))
+	if err != nil {
+		return nil, err
+	}
+	exported := *p
+	exported.MCPServers = servers
+	p = &exported
+
 	// Extract ResolvedContent for assembly
 	var content []resolver.ResolvedContent
 	for _, r := range resolved {

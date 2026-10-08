@@ -1537,17 +1537,18 @@ func assembleHarness(h *harness.Harness, backendName string) (string, error) {
 		}
 	}
 
-	// Generate vendor-native MCP config.
-	if len(h.MCPServers) > 0 {
-		dataDir := harness.PluginDataDir(h)
+	// Generate vendor-native MCP config: the harness's own servers and those
+	// of its included harnesses, composed.
+	dataDir := harness.PluginDataDir(h)
+	servers, _, expErr := harness.ComposeMCPServers(h, resolver.IncludedHarnesses(resolved), dataDir, os.LookupEnv)
+	if expErr != nil {
+		_ = os.RemoveAll(dir)
+		return "", expErr
+	}
+	if len(servers) > 0 {
 		if mkdirErr := os.MkdirAll(dataDir, 0o755); mkdirErr != nil {
 			_ = os.RemoveAll(dir)
 			return "", mkdirErr
-		}
-		servers, expErr := harness.AssembleMCPServers(h, dataDir, os.LookupEnv)
-		if expErr != nil {
-			_ = os.RemoveAll(dir)
-			return "", expErr
 		}
 		mcpFiles, err := adapter.GenerateMCPConfig(servers)
 		if err != nil {
