@@ -4,15 +4,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/assembler"
+	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
 )
 
@@ -158,13 +163,17 @@ func cmdHookExport(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if len(hj.Hooks) == 0 {
+	hooks, err := exportableHooks(dir, hj.Hooks)
+	if err != nil {
+		return err
+	}
+	if len(hooks) == 0 {
 		return fmt.Errorf("harness %q declares no hooks to export", harnessRef)
 	}
 
 	// ClaudeSettingsHooks emits a single {"hooks": {...}} document; pull out
 	// the translated hooks object to merge into the target settings file.
-	gen, err := vendor.ClaudeSettingsHooks(hj.Hooks)
+	gen, err := vendor.ClaudeSettingsHooks(hooks)
 	if err != nil {
 		return err
 	}
@@ -216,6 +225,44 @@ func cmdHookExport(args []string, stdout io.Writer) error {
 	}
 	_, _ = fmt.Fprintf(stdout, "%s %s (%d new hook group(s) from %s)\n", verb, relFile, added, hj.Name)
 	return nil
+}
+
+// exportableHooks adds to a harness's own hooks those of the included
+// harnesses that consented to them ("hooks": true on the include, at every
+// link). Includes are only resolved when one of the harness's includes
+// consents, so exporting a harness's own hooks needs no network. A settings
+// file belongs to the project and cannot reach into an included harness's
+// directory, so an included hook that runs a "./" script is an error naming
+// the include: write the command absolute or anchored to $CLAUDE_PROJECT_DIR
+// in the included harness, or run it through `ynh run`.
+func exportableHooks(dir string, own map[string][]plugin.HookEntry) (map[string][]plugin.HookEntry, error) {
+	h, err := harness.LoadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	if !slices.ContainsFunc(h.Includes, func(inc harness.Include) bool { return inc.Hooks }) {
+		return own, nil
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+	resolved, err := resolver.Resolve(h, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("resolving includes: %w", err)
+	}
+	hs, err := assembler.ComposeHooks(own, resolved)
+	if err != nil {
+		return nil, err
+	}
+	for _, w := range hs.Inactive {
+		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
+	}
+	if len(hs.Scripts) > 0 {
+		origin := hs.Scripts[slices.Sorted(maps.Keys(hs.Scripts))[0]]
+		return nil, fmt.Errorf("included harness %s runs the script %s from its own directory, which a project settings file cannot reach; use an absolute or $CLAUDE_PROJECT_DIR command in that harness, or run it through ynh run", origin.Source, origin.Script)
+	}
+	return hs.Hooks, nil
 }
 
 // mergeHookEntries unions the generated per-event hook groups into the

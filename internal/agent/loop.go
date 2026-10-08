@@ -1546,16 +1546,15 @@ func assembleHarness(h *harness.Harness, backendName string, sel harness.Selecti
 	}
 
 	// Generate vendor-native hook config, and copy in the scripts those hooks
-	// run from the harness.
-	if len(h.Hooks) > 0 {
-		warnings, err := assembler.WriteSessionHooks(dir, adapter, h.Dir, h.Hooks)
-		if err != nil {
-			_ = os.RemoveAll(dir)
-			return "", nil, err
-		}
-		for _, w := range warnings {
-			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-		}
+	// run from the harness, and from the included harnesses that consented to
+	// their hooks.
+	hookWarnings, hookErr := assembler.WriteComposedSessionHooks(dir, adapter, h, resolved)
+	if hookErr != nil {
+		_ = os.RemoveAll(dir)
+		return "", nil, hookErr
+	}
+	for _, w := range hookWarnings {
+		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 	}
 
 	// Generate vendor-native MCP config: the harness's own servers and those

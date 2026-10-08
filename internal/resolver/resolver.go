@@ -46,6 +46,10 @@ type ResolveResult struct {
 	// under: the "as" alias of the include, or the harness's own name. Empty
 	// for a plain artifact package.
 	Namespace string
+	// HooksActive is whether the harness's hooks may run: every include on
+	// the way to it, from the root's, says "hooks": true. Without it the
+	// hooks are declared but not carried.
+	HooksActive bool
 }
 
 // repoFunc is a function that fetches or looks up a Git repo.
@@ -229,7 +233,7 @@ func walkIncludes(p *harness.Harness, cfg *config.Config, fetch repoFunc, select
 		selected: selected, seen: map[string][]seenHarness{}, profileErr: map[string]error{},
 	}
 	chain := []chainLink{{id: dirIdentity(p.Dir), label: "root"}}
-	results, err := r.resolve(p, chain, "")
+	results, err := r.resolve(p, chain, "", true)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -330,8 +334,9 @@ func withoutMCPServers(deps []ResolveResult, removals []string) {
 }
 
 // resolve resolves p's includes. via is the display chain of the harness p was
-// reached through, empty for the root.
-func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via string) ([]ResolveResult, error) {
+// reached through, empty for the root. consent is whether every include on the
+// way to p consented to hooks, true for the root itself.
+func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via string, consent bool) ([]ResolveResult, error) {
 	var results []ResolveResult
 
 	for _, inc := range p.Includes {
@@ -363,6 +368,8 @@ func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via str
 			ns = inner.Name
 		}
 		res.Namespace = ns
+		hooksConsent := consent && inc.Hooks
+		res.HooksActive = hooksConsent
 		r.register(ns, id, res.Chain, inner)
 		inner = r.applyProfile(ns, inner)
 		res.Harness = inner
@@ -385,7 +392,7 @@ func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via str
 		if r.done[id] {
 			continue
 		}
-		deps, err := r.resolve(inner, append(chain[:len(chain):len(chain)], chainLink{id: id, label: label}), res.Chain)
+		deps, err := r.resolve(inner, append(chain[:len(chain):len(chain)], chainLink{id: id, label: label}), res.Chain, hooksConsent)
 		if err != nil {
 			return nil, err
 		}

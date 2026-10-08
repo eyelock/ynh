@@ -905,7 +905,9 @@ type ProvenanceMeta struct {
 // `path` scopes into a subdirectory of the source and `pick` filters paths.
 // `ref` is Git-only. `as` names the namespace an included harness's focuses
 // and profiles are selected under ("alias:name"); it defaults to the included
-// harness's own name.
+// harness's own name. `hooks` consents to the included harness's hooks
+// running in the session; it is false unless set, because a hook is command
+// execution the root author has not written.
 type IncludeMeta struct {
 	Git   string   `json:"git,omitempty"`
 	Local string   `json:"local,omitempty"`
@@ -913,6 +915,7 @@ type IncludeMeta struct {
 	Path  string   `json:"path,omitempty"`
 	Pick  []string `json:"pick,omitempty"`
 	As    string   `json:"as,omitempty"`
+	Hooks bool     `json:"hooks,omitempty"`
 }
 
 // DelegateMeta is the JSON representation of a delegate reference.

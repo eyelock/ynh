@@ -84,6 +84,8 @@ type AddOptions struct {
 	Replace bool
 	// As is the include's namespace alias; see plugin.IncludeMeta.
 	As string
+	// Hooks consents to the included harness's hooks running in the session.
+	Hooks bool
 }
 
 // RemoveOptions controls ynh include remove behaviour.
@@ -121,9 +123,9 @@ func AddInclude(dir, url string, opts AddOptions) error {
 			}
 			return fmt.Errorf("%s.\nUse 'ynh include update' to change its options, or pass --replace to overwrite", msg)
 		}
-		hj.Includes[idx] = plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick, As: opts.As}
+		hj.Includes[idx] = plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick, As: opts.As, Hooks: opts.Hooks}
 	} else {
-		hj.Includes = append(hj.Includes, plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick, As: opts.As})
+		hj.Includes = append(hj.Includes, plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick, As: opts.As, Hooks: opts.Hooks})
 	}
 
 	return plugin.SavePluginJSON(dir, hj)
@@ -1082,9 +1084,9 @@ func AddProfileInclude(dir, profileName, url string, opts AddOptions) error {
 			}
 			return fmt.Errorf("%s.\nUse 'ynh profile include update' to change its options, or pass --replace to overwrite", msg)
 		}
-		p.Includes[idx] = plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick}
+		p.Includes[idx] = plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick, Hooks: opts.Hooks}
 	} else {
-		p.Includes = append(p.Includes, plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick})
+		p.Includes = append(p.Includes, plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick, Hooks: opts.Hooks})
 	}
 	hj.Profiles[profileName] = p
 	return plugin.SavePluginJSON(dir, hj)

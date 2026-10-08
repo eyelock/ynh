@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -432,5 +434,41 @@ func TestCmdIncludeAdd_AsRejected(t *testing.T) {
 				t.Errorf("nothing should be written, got %+v", incs)
 			}
 		})
+	}
+}
+
+func TestCmdIncludeAdd_Hooks(t *testing.T) {
+	dir := t.TempDir()
+	writeIncludeTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	if err := cmdIncludeTo([]string{"add", dir, "github.com/acme/tools", "--hooks"}, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	incs := loadTestIncludes(t, dir)
+	if len(incs) != 1 || !incs[0].Hooks {
+		t.Fatalf("includes = %+v, want one with hooks true", incs)
+	}
+	if !strings.Contains(buf.String(), "hooks active") {
+		t.Errorf("output = %q, want the consent named", buf.String())
+	}
+}
+
+func TestCmdIncludeAdd_HooksDefaultsOff(t *testing.T) {
+	dir := t.TempDir()
+	writeIncludeTestHarness(t, dir, "h")
+	var buf bytes.Buffer
+	if err := cmdIncludeTo([]string{"add", dir, "github.com/acme/tools"}, &buf); err != nil {
+		t.Fatal(err)
+	}
+	if incs := loadTestIncludes(t, dir); len(incs) != 1 || incs[0].Hooks {
+		t.Fatalf("includes = %+v, want hooks false", incs)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, plugin.PluginDir, plugin.PluginFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), `"hooks"`) {
+		t.Errorf("manifest should not mention hooks when off:\n%s", data)
 	}
 }

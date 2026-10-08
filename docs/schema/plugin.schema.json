@@ -662,6 +662,11 @@
             "type": "string",
             "description": "Namespace for the focuses and profiles of the harness this include resolves to, selected as as:name (for example --profile github:ci). Defaults to the included harness's own name. A harness name: no colon.",
             "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+          },
+          "hooks": {
+            "type": "boolean",
+            "description": "Consent to the hooks of the harness this include resolves to. When true they run in the session, ahead of the root's own hooks for each event. Default false: the hooks are not active and a warning names them. A hook is command execution, so the root author opts in per include, and for a harness reached through another, at every link.",
+            "default": false
           }
         },
         "oneOf": [

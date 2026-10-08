@@ -1079,6 +1079,11 @@ func validateHarnessIncludes(hj map[string]any) []string {
 				issues = append(issues, fmt.Sprintf("includes[%d].as: %v", i, err))
 			}
 		}
+		if hooks, ok := obj["hooks"]; ok {
+			if _, isBool := hooks.(bool); !isBool {
+				issues = append(issues, fmt.Sprintf("includes[%d].hooks must be true or false", i))
+			}
+		}
 	}
 	return issues
 }

@@ -54,7 +54,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh delegate add <harness> <url>` | `--ref`, `--path` — `<url>` must be a git URL; local paths are not supported (see CONTRIBUTING.md "Delegates: remote-only") |
 | `ynh delegate remove <harness> <url>` | `--path` |
 | `ynh delegate update <harness> <url>` | `--from-path`, `--path`, `--ref` |
-| `ynh include add <harness> <url>` | `--path`, `--pick`, `--ref`, `--as <alias>`, `--replace` |
+| `ynh include add <harness> <url>` | `--path`, `--pick`, `--ref`, `--as <alias>`, `--hooks`, `--replace` |
 | `ynh include remove <harness> <url>` | `--path` |
 | `ynh include update <harness> <url>` | `--from-path`, `--path`, `--pick`, `--ref` |
 | `ynh focus ls <harness>` | `--format <text\|json>` |
