@@ -9,6 +9,7 @@ never a click in the settings page.
 |---------|--------|---------|
 | Develop Branch Protection | `develop` | Where feature and fix work lands (the default branch) |
 | Main Branch Protection | `main` | Moves only by release: PRs from `develop`, `release/*` or `hotfix/*` |
+| Never Delete Main or Develop | `main`, `develop` | Neither branch can be deleted or force-pushed, by anyone: it has no bypass, so admins included |
 
 ## Required checks
 
