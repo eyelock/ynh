@@ -16,6 +16,7 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 | [MCP Servers](mcp-servers.md) | Declare MCP server dependencies per harness |
 | [Profiles](profiles.md) | Environment-specific overrides with profiles |
 | [Focus](focus.md) | Bind a prompt and profile for repeatable, non-interactive runs |
+| [Composing Tools](composing-tools.md) | Carry MCP servers, profiles, focuses and hooks across includes |
 | [Project-Local Config](project-local-config.md) | Zero-install `.agents/harness/plugin.json` in your project root |
 
 ### Refine

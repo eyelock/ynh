@@ -48,9 +48,12 @@ jobs:
               # docs/schema/ — embedded into the binary by docs/schema/embed.go
               #              (//go:embed all:cli all:shared *.schema.json), and
               #              internal/clischema validates the goldens against it.
+              # docs/:     internal/docs checks every link, anchor, sidebar
+              #              entry and tutorial Next link, and cmd/ynd reads
+              #              the tutorials; a docs-only PR must run them.
               - 'testdata/**'
               - 'test/**'
-              - 'docs/schema/**'
+              - 'docs/**'
             # The harness artifacts this repo ships and uses on itself. Before
             # this filter existed, a PR touching only skills/ or agents/ matched
             # no filter, skipped every job, and All Clear went green having run
