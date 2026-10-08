@@ -2,7 +2,7 @@
 
 Build a small team harness out of two harnesses it includes, and watch what comes along: MCP servers, profiles, focuses and hooks. Each travels by its own rule. The servers come with the include. The profiles and focuses come only when you ask for them by name. The hooks come only when you say they may.
 
-You will build three harnesses, each shipping a copy of one tiny MCP server:
+You will build three harnesses, each shipping a copy of one tiny MCP server, and later a fourth as a delegate:
 
 ```
 my-team          the root: declares its own server, drops one it does not want
@@ -17,7 +17,7 @@ Everything here runs offline. No model is called until the steps marked as real 
 ```bash
 # Clean up from any previous run
 rm -rf /tmp/ynh-tutorial/composing-tools
-unset TRACKER_TOKEN
+unset TRACKER_TOKEN PAGER_TOKEN
 
 mkdir -p /tmp/ynh-tutorial/composing-tools
 cd /tmp/ynh-tutorial/composing-tools
@@ -849,13 +849,182 @@ present
 
 The hook ran when the session started, from the copy in the run directory, and left its marker. Run the same thing with the include's `"hooks": true` taken out and the marker never appears.
 
+## Give a delegate its own tools
+
+A delegate (`delegates_to`) is a harness that runs as a subagent, and the MCP servers it declares are its own. The main session never connects to them; only the delegate's subagent does. Make an `ops` harness that ships the same server as `pager`, with a token of its own. A delegate must be a Git repository, so commit it:
+
+```bash
+mkdir -p ops/.agents/harness
+cp server.py ops/
+
+cat > ops/.agents/harness/plugin.json << 'EOF'
+{
+  "name": "ops",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "mcp_servers": {
+    "pager": {
+      "command": "python3",
+      "args": ["${PLUGIN_ROOT}/server.py"],
+      "env": { "SERVER_NAME": "pager", "TOKEN": "${PAGER_TOKEN}" }
+    }
+  },
+  "env_passthrough": ["PAGER_TOKEN"]
+}
+EOF
+
+cat > ops/instructions.md << 'EOF'
+You are the on-call assistant. Use the pager server to answer.
+EOF
+
+git -C ops init -q
+git -C ops add .
+git -C ops commit -q -m "init"
+```
+
+Add it to `my-team` as a delegate, keeping the hook consent from the last section:
+
+```bash
+cat > my-team/.agents/harness/plugin.json << 'EOF'
+{
+  "name": "my-team",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "includes": [
+    { "local": "/tmp/ynh-tutorial/composing-tools/github-lite", "hooks": true }
+  ],
+  "delegates_to": [
+    { "git": "/tmp/ynh-tutorial/composing-tools/ops" }
+  ],
+  "mcp_servers": {
+    "team": {
+      "command": "python3",
+      "args": ["${PLUGIN_ROOT}/server.py"],
+      "env": { "SERVER_NAME": "team" }
+    },
+    "noisy": null
+  }
+}
+EOF
+```
+
+`pager` reads `${PAGER_TOKEN}`, which nothing sets yet. As for any harness, an unset variable is an error, and it names the delegate:
+
+```bash
+ynd preview my-team -v claude -o out/delegate 2>&1
+```
+
+Expected output:
+
+```
+Error: assembling delegates: delegate ops: mcp server "pager": env.TOKEN references ${PAGER_TOKEN}, which is not set
+```
+
+Set it and preview again:
+
+```bash
+export PAGER_TOKEN=demo-pager-token
+ynd preview my-team -v claude -o out/delegate 2>&1
+```
+
+Expected output:
+
+```
+Preview written to out/delegate
+
+MCP servers from included harnesses:
+  notes (from /tmp/ynh-tutorial/composing-tools/github-lite > /tmp/ynh-tutorial/composing-tools/notes)
+  tracker (from /tmp/ynh-tutorial/composing-tools/github-lite)
+
+MCP servers of delegates:
+  ops: pager (its own)
+
+Focuses from included harnesses:
+  github-lite:triage
+
+Profiles from included harnesses:
+  github-lite:readonly
+
+Hooks from included harnesses:
+  on_session_start (from /tmp/ynh-tutorial/composing-tools/github-lite)
+```
+
+The delegate's server has its own section. It is not in the root's MCP config, and the agent file written for `ops` carries it instead:
+
+```bash
+python3 servers.py out/delegate/.claude/.mcp.json
+sed -n '1,5p' out/delegate/.claude/agents/ops.md | sed -E 's#"/[^"]*/server.py"#"<cache>/server.py"#'
+```
+
+Expected output:
+
+```
+notes -> notes
+team -> team
+tracker -> tracker
+---
+name: ops
+description: Delegate harness "ops".
+mcpServers: [{"pager":{"command":"python3","args":["<cache>/server.py"],"env":{"SERVER_NAME":"pager","TOKEN":"${PAGER_TOKEN}"}}}]
+---
+```
+
+There is no `pager` in the root's servers. In the agent file `${PAGER_TOKEN}` is still the literal text: the preview resolved the variable to check it, and kept the value out of what it wrote. `<cache>` stands for the delegate's cached copy under `~/.ynh/cache/`.
+
+Only Claude Code can give a subagent its own servers. Another vendor gets the agent without them, and says so:
+
+```bash
+ynd preview my-team -v cursor -o out/delegate-cursor 2>&1 >/dev/null
+```
+
+Expected output:
+
+```
+  warning: delegate ops declares MCP servers (pager) that Cursor subagents cannot carry; they are not available to it
+```
+
+Now launch it. Claude Code ignores `mcpServers` in a plugin's agents, so `ynh run` hands the delegate to Claude with `--agents`. A command line is visible to every process on the machine, and Claude does not expand `${VAR}` inside `--agents`, so the token cannot go there. The server is wrapped in `ynh mcp-exec`, which reads the variables from a file in the run directory and starts the real server. The `...` below stands for text that varies between runs or is too long to show:
+
+*This launches:* `claude --plugin-dir ~/.ynh/run/_inline-.../.claude --add-dir ~/.ynh/run/_inline-... --append-system-prompt You are a team assistant. ... --agents ...mcp-exec","--env-file","~/.ynh/run/_inline-.../delegates/ops/.env.ynh","--",... -p Ask the ops agent to call its whoami tool --strict-mcp-config --mcp-config=~/.ynh/run/_inline-.../.claude/.mcp.json`
+```bash
+ynh run ./my-team --isolated-mcp "Ask the ops agent to call its whoami tool"
+```
+
+The arguments name `mcp-exec` and the file, and no token. `--isolated-mcp` keeps the delegate's server: it limits the session's servers, not the ones passed with `--agents`. The token lives only in `.env.ynh`, which ynh writes for this run, mode 0600 in a private directory:
+
+```bash
+(cd ~/.ynh/run/_inline-*/delegates/ops && ls -l .env.ynh | awk '{print substr($1, 2, 9), $NF}' && cat .env.ynh)
+```
+
+Expected output:
+
+```
+rw------- .env.ynh
+PAGER_TOKEN="demo-pager-token"
+```
+
+With a real model, ask the delegate for its tool. The tool is `mcp__pager__whoami`; name it in `--allowedTools`:
+
+*Your output will differ: it shows what the model did.*
+```bash
+ynh run ./my-team "Use the ops agent to call its whoami tool and report exactly what it returned" --allowedTools mcp__pager__whoami
+```
+
+An illustrative answer:
+
+```
+The ops agent called whoami and it returned: "pager answering; token present: yes"
+```
+
+The main session has no `pager` server of its own: ask it to list its servers and `pager` is not among them. The delegate has it, with the token, and the token never appeared on a command line.
+
 ## Clean up
 
 ```bash
 cd ~
 rm -rf /tmp/ynh-tutorial/composing-tools
 rmdir /tmp/ynh-tutorial 2>/dev/null
-unset TRACKER_TOKEN
+unset TRACKER_TOKEN PAGER_TOKEN
 ```
 
 ## What You Learned
@@ -869,6 +1038,7 @@ unset TRACKER_TOKEN
 - Profiles and focuses of an include apply only when selected as `namespace:name`, to that include alone; `--profile` repeats once per namespace
 - A name shared by two includes is ambiguous only when selected, and an `as` alias on an include settles it
 - An included harness's hooks are declared but inactive, with a warning, until the include says `"hooks": true`; its scripts are then placed under `scripts/_include/<namespace>/`
+- A delegate's MCP servers are its own: they reach its subagent through `--agents`, the main session never sees them, and its secrets travel in a private `.env.ynh` read by `ynh mcp-exec`, never on a command line
 
 ## Next
 
