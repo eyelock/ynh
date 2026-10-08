@@ -57,6 +57,7 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 		cmd = exec.CommandContext(ctx, claudeBin, args...)
 	}
 
+	confineWorker(cmd)
 	if opts.WorktreeDir != "" {
 		cmd.Dir = opts.WorktreeDir
 	}
@@ -75,7 +76,7 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 		return nil, fmt.Errorf("creating stdout pipe: %w", err)
 	}
 
-	if err := cmd.Start(); err != nil {
+	if err := startWorker(cmd); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("starting claude: %w", err)
 	}

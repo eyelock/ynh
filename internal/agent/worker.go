@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -277,30 +279,88 @@ var (
 	workerTermGrace = 3 * time.Second
 )
 
+// confineWorker puts the worker in its own process group and makes a
+// cancelled context stop the whole group the way Close does: SIGTERM, then
+// SIGKILL after workerTermGrace. A worker is often a wrapper (srt around
+// claude), and killing only the process ynh started would leave its child
+// running. The group is the worker's alone, never ynh's or the relay's, which
+// has its own.
+func confineWorker(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		stopGroup(cmd)
+		return nil
+	}
+	// Bounds the wait if a grandchild still holds the output pipes.
+	cmd.WaitDelay = workerTermGrace + time.Second
+}
+
+// startWorker starts a worker confined by confineWorker. Setting the process
+// attributes costs os/exec its check of the working directory, which names the
+// missing directory instead of the program, so it is made here.
+func startWorker(cmd *exec.Cmd) error {
+	if cmd.Dir != "" {
+		if _, err := os.Stat(cmd.Dir); err != nil {
+			var pe *fs.PathError
+			if errors.As(err, &pe) {
+				pe.Op = "chdir"
+			}
+			return err
+		}
+	}
+	return cmd.Start()
+}
+
+// signalGroup sends sig to the worker's process group. It refuses any group
+// that is not one the worker was started as the leader of: a process that was
+// never started, or one in ynh's own group.
+func signalGroup(cmd *exec.Cmd, sig syscall.Signal) {
+	if cmd == nil || cmd.Process == nil || cmd.SysProcAttr == nil || !cmd.SysProcAttr.Setpgid {
+		return
+	}
+	pid := cmd.Process.Pid
+	if pid <= 1 || pid == syscall.Getpgrp() {
+		return
+	}
+	_ = syscall.Kill(-pid, sig)
+}
+
+// stopGroup asks the group to stop and, if any member is still there after
+// workerTermGrace, kills it.
+func stopGroup(cmd *exec.Cmd) {
+	signalGroup(cmd, syscall.SIGTERM)
+	time.AfterFunc(workerTermGrace, func() { signalGroup(cmd, syscall.SIGKILL) })
+}
+
 // reapWorker waits for the worker's process to exit, stopping it if it does
 // not. With graceful set it first gives the process workerExitGrace to leave
-// on its own; otherwise, and when that grace runs out, it sends SIGTERM and,
-// after workerTermGrace, kills it. wait must be the session's own reaper, so
-// the process is waited on once.
+// on its own; otherwise, and when that grace runs out, it sends SIGTERM to the
+// worker's group and, after workerTermGrace, kills the group. Whatever the
+// worker left behind in the group is killed once it has exited. wait must be
+// the session's own reaper, so the process is waited on once.
 func reapWorker(cmd *exec.Cmd, wait func() error, graceful bool) error {
 	if cmd == nil || cmd.Process == nil {
 		return wait()
 	}
 	done := make(chan error, 1)
 	go func() { done <- wait() }()
-	if graceful {
+	err := func() error {
+		if graceful {
+			select {
+			case err := <-done:
+				return err
+			case <-time.After(workerExitGrace):
+			}
+		}
+		signalGroup(cmd, syscall.SIGTERM)
 		select {
 		case err := <-done:
 			return err
-		case <-time.After(workerExitGrace):
+		case <-time.After(workerTermGrace):
 		}
-	}
-	_ = cmd.Process.Signal(syscall.SIGTERM)
-	select {
-	case err := <-done:
-		return err
-	case <-time.After(workerTermGrace):
-	}
-	_ = cmd.Process.Kill()
-	return <-done
+		signalGroup(cmd, syscall.SIGKILL)
+		return <-done
+	}()
+	signalGroup(cmd, syscall.SIGKILL)
+	return err
 }

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -154,7 +155,8 @@ func startShell(t *testing.T, script string) *claudeSession {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell stub is POSIX-only")
 	}
-	cmd := exec.Command("sh", "-c", script)
+	cmd := exec.CommandContext(context.Background(), "sh", "-c", script)
+	confineWorker(cmd)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatal(err)
