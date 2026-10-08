@@ -1410,6 +1410,39 @@ const EnvPassthroughField = "env_passthrough"
 // credential mechanism should not depend on guessing intent.
 var envRef = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
+// EnvRefNames returns the names of the ${VAR} references in v, in order of
+// appearance and with repeats kept. It is the grammar ExpandMCPEnv uses.
+func EnvRefNames(v string) []string {
+	var names []string
+	for _, m := range envRef.FindAllStringSubmatch(v, -1) {
+		names = append(names, m[1])
+	}
+	return names
+}
+
+// ExpandEnvRefs replaces every ${VAR} reference in v with what resolve
+// returns for its name. The first error resolve returns stops the expansion.
+// The result is not scanned again, so a value that itself contains ${...} is
+// left as it is.
+func ExpandEnvRefs(v string, resolve func(name string) (string, error)) (string, error) {
+	var firstErr error
+	out := envRef.ReplaceAllStringFunc(v, func(match string) string {
+		if firstErr != nil {
+			return ""
+		}
+		val, err := resolve(envRef.FindStringSubmatch(match)[1])
+		if err != nil {
+			firstErr = err
+			return ""
+		}
+		return val
+	})
+	if firstErr != nil {
+		return "", firstErr
+	}
+	return out, nil
+}
+
 // ExpandMCPEnv resolves ${VAR} references in every server's env values and
 // headers, drawing only from allowed.
 //

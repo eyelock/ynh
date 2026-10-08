@@ -237,7 +237,10 @@ At runtime, ynh generates a vendor-native agent file for each delegate containin
 - **Description** from the delegate's `.agents/harness/plugin.json` (helps the AI route to the right delegate)
 - **Instructions** from the delegate's `AGENTS.md` (gives the delegate its identity)
 - **Rules** inlined from the delegate's `rules/` directory
-- **Skills** listed from the delegate's `skills/` directory
+- **Skills** listed from the delegate's `skills/` directory, and from the harnesses it includes
+- **MCP servers** the delegate declares, and those of the harnesses it includes, carried by the subagent alone; see [MCP servers of delegates](mcp.md#mcp-servers-of-delegates)
+
+A delegate is resolved as a harness: its own `includes` are followed, against its own directory and the same allow-list. Delegates of delegates are not followed.
 
 ## Embedded vs External Artifacts
 

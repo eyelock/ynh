@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
@@ -531,5 +532,22 @@ func TestBuildClaudeArgs_Isolation(t *testing.T) {
 		"--strict-mcp-config", "--mcp-config=" + mcpPath}
 	if !reflect.DeepEqual(got, wantIso) {
 		t.Errorf("isolated argv = %v, want %v", got, wantIso)
+	}
+}
+
+// Delegates that declare MCP servers reach the CLI as --agents, because Claude
+// ignores the field in a plugin's agents.
+func TestBuildClaudeArgs_DelegateAgents(t *testing.T) {
+	dir := t.TempDir()
+	if args := buildClaudeArgs(dir, "", nil); slices.Contains(args, "--agents") {
+		t.Errorf("no launch file, no --agents: %v", args)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ClaudeDelegateAgentsFile), []byte(`{"probe":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	args := buildClaudeArgs(dir, "", nil)
+	i := slices.Index(args, "--agents")
+	if i < 0 || args[i+1] != `{"probe":{}}` {
+		t.Errorf("--agents missing or wrong: %v", args)
 	}
 }

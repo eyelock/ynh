@@ -31,6 +31,21 @@ import (
 // TestEveryDispatchedCommandHasHelp, which is what stops this drifting the way
 // printUsage did when `migrate` and `quarantine` were added without it.
 var commandHelp = map[string]string{
+	"mcp-exec": `ynh mcp-exec --env-file <path> -- <command> [args...]
+
+Internal. Start an MCP server with its secrets filled in from an env file.
+
+ynh writes server definitions that call this; it is not meant to be typed. It
+reads the env file, replaces ${VAR} in the command's arguments and in its own
+environment values with the file's variables only (an unknown reference is an
+error), then becomes the command, so stdin and stdout are the server's.`,
+
+	"mcp-headers": `ynh mcp-headers --env-file <path> -- "Name: value" ...
+
+Internal. Print the headers of a remote MCP server as a JSON object, with
+${VAR} in each value replaced from an env file. It is the headersHelper ynh
+writes for a delegate's remote server, so a token is never on a command line.`,
+
 	"init": `ynh init
 
 Show the resolved ynh home path and setup instructions.

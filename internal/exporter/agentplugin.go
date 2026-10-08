@@ -103,10 +103,11 @@ func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Ha
 			for t := range dirs {
 				carried[t] = true
 			}
-			if len(p.DelegatesTo) > 0 && a.SupportsExportDelegates() {
-				if err := ExportDelegates(target, p.DelegatesTo, p.Dir); err != nil {
+			if len(opts.delegates) > 0 && a.SupportsExportDelegates() {
+				if err := WriteDelegates(target, opts.delegates, delegateCarrier(a)); err != nil {
 					return nil, fmt.Errorf("%s delegates: %w", name, err)
 				}
+				result.Warnings = append(result.Warnings, DelegateMCPWarnings(opts.delegates, a)...)
 				carried["delegates"] = true
 			}
 			result.Agents += countDir(filepath.Join(target, "agents"))
