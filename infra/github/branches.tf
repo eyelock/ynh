@@ -85,3 +85,25 @@ removed {
     destroy = false
   }
 }
+
+# main and develop can never be deleted or force-pushed, by anyone: no bypass actors, so not even
+# repository admins (who can bypass the two rulesets above). Created by hand and adopted through
+# imports.tf.
+resource "github_repository_ruleset" "never_delete_main_or_develop" {
+  repository  = github_repository.ynh.name
+  name        = "Never Delete Main or Develop"
+  target      = "branch"
+  enforcement = "active"
+
+  conditions {
+    ref_name {
+      include = ["refs/heads/main", "refs/heads/develop"]
+      exclude = []
+    }
+  }
+
+  rules {
+    deletion         = true
+    non_fast_forward = true
+  }
+}
