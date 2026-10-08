@@ -198,17 +198,6 @@ The user-facing version of this guidance lives in [`docs/marketplace.md` § Pinn
 
 ## Development Setup
 
-**Building needs read access to `eyelock/ynr`, for now.** The spool exporter is
-the `github.com/eyelock/ynr/spoolexporter` module, and that repository is
-private until ynr is public. To build from source you need read access to it
-through your git credentials (for example `gh auth login`), and
-`GOPRIVATE=github.com/eyelock/ynr`, so Go fetches it directly instead of
-through the public proxy. The Makefile sets `GOPRIVATE` for every `make`
-target; set it yourself for a raw `go` command. CI reads the module with the
-read-only `YNR_READ_REPO` secret, so a pull request from a fork, which gets no secrets,
-cannot build in CI. A local `make docker-build` needs the token as a BuildKit
-secret: `YNR_TOKEN=$(gh auth token) make docker-build`.
-
 ```bash
 # Prerequisites + dev tools (Go, linter, formatter)
 make deps

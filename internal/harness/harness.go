@@ -270,6 +270,50 @@ func LoadQualified(ref string) (*Harness, error) {
 	return LoadByID(ref)
 }
 
+// LoadIDOrPath resolves the harness argument of a command that takes either
+// an installed id or a local harness directory (`ynh check`, `ynh run`, `ynh
+// agent run`), so all of them accept and refuse exactly the same refs.
+//
+// A path needs no prior install. It goes through the format chain, which
+// refuses a tree whose manifest ynh no longer reads (a legacy .harness.json)
+// with the `ynd migrate` fix and writes nothing. Anything that is neither an
+// id nor a path gets the hint that names both forms. The returned harness's
+// Dir is absolute for a path.
+func LoadIDOrPath(ref string) (*Harness, error) {
+	switch namespace.Classify(ref) {
+	case namespace.RefID:
+		return LoadByID(ref)
+	case namespace.RefPath:
+		// Resolved below.
+	default:
+		return nil, BadRefOrPathError(ref)
+	}
+
+	dir := ref
+	if strings.HasPrefix(dir, "~/") {
+		if home, hErr := os.UserHomeDir(); hErr == nil {
+			dir = filepath.Join(home, dir[2:])
+		}
+	}
+	abs, absErr := filepath.Abs(dir)
+	if absErr != nil {
+		return nil, fmt.Errorf("resolving harness path %q: %w", ref, absErr)
+	}
+	if _, statErr := os.Stat(abs); statErr != nil {
+		return nil, fmt.Errorf("no harness at %s: %w", abs, statErr)
+	}
+	if _, mErr := migration.FormatChain().Run(abs); mErr != nil {
+		return nil, mErr
+	}
+	if !IsHarnessDir(abs) {
+		return nil, fmt.Errorf(
+			"no harness at %s: expected %s. Run `ynd create harness <name>` to make one, "+
+				"or pass an installed id (`ynh ls` lists them)",
+			abs, plugin.PluginFile)
+	}
+	return LoadDir(abs)
+}
+
 // BadRefError formats the rejection message for a ref that is not a valid
 // canonical id, for a command that takes only an installed id. Its hint
 // lists only the forms such a command accepts: a command that also takes a

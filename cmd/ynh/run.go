@@ -60,7 +60,7 @@ func cmdRun(args []string) error {
 	case ra.HarnessName != "":
 		// An installed id or a local harness directory, resolved exactly as
 		// `ynh check` resolves its argument (#448).
-		p, err = loadHarnessIDOrPath(ra.HarnessName)
+		p, err = harness.LoadIDOrPath(ra.HarnessName)
 		if err != nil {
 			return err
 		}

@@ -7,14 +7,6 @@ GO := go
 GOFLAGS := -v
 INSTALL_DIR := $(HOME)/.ynh/bin
 
-# The spoolexporter module lives in the private eyelock/ynr repository until
-# that is public: fetch it directly rather than through the public proxy and
-# checksum database. Added to any GOPRIVATE already set, never replacing it.
-comma := ,
-YNR_MODULE := github.com/eyelock/ynr
-GOPRIVATE := $(if $(findstring $(YNR_MODULE),$(GOPRIVATE)),$(GOPRIVATE),$(if $(GOPRIVATE),$(GOPRIVATE)$(comma))$(YNR_MODULE))
-export GOPRIVATE
-
 # Tool paths - use full paths so go-installed tools are found without PATH hacks
 GOBIN := $(shell go env GOPATH)/bin
 GOIMPORTS := $(GOBIN)/goimports
@@ -156,8 +148,7 @@ DOCKER_IMAGE := ghcr.io/eyelock/ynh
 DOCKER_TAG := $(VERSION)
 
 docker-build: ## Build base Docker image
-	@# The private ynr module needs a token: YNR_TOKEN=$$(gh auth token) make docker-build
-	docker buildx build --load $(if $(YNR_TOKEN),--secret id=ynr_token$(comma)env=YNR_TOKEN) --build-arg VERSION=$(VERSION) -t $(DOCKER_IMAGE):$(DOCKER_TAG) -t $(DOCKER_IMAGE):latest .
+	docker buildx build --load --build-arg VERSION=$(VERSION) -t $(DOCKER_IMAGE):$(DOCKER_TAG) -t $(DOCKER_IMAGE):latest .
 
 docker-push: ## Push base Docker image to GHCR
 	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)

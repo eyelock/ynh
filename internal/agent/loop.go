@@ -23,6 +23,7 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/gate"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 	"github.com/eyelock/ynh/internal/vendor"
@@ -136,6 +137,9 @@ type RunOptions struct {
 	// testSensorNames overrides sensor collection from the harness.
 	// Set by tests that need sensor-loop behaviour without a real installed harness.
 	testSensorNames []string
+	// testPreRun runs once the harness is loaded and assembled, before the
+	// worker starts, so a test can interrupt the pre-run phase.
+	testPreRun func(ctx context.Context)
 }
 
 // RunLoop executes the agent loop. It returns an *ExitError on non-zero
@@ -182,6 +186,28 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	if opts.Stdin == nil {
 		opts.Stdin = os.Stdin
 	}
+	// ── Cancellable context + stop signals ────────────────────────────────────
+	// SIGINT/SIGTERM cancel the worker context so an in-flight Next() unblocks;
+	// the loop then exits with the last completed turn already checkpointed, so
+	// a later --resume continues from there. (A structured consumer sends an interrupt control
+	// message first, then SIGTERM after a grace period.)
+	//
+	// Installed before anything slow runs (loading and assembling the harness
+	// included), so an interrupt at any point of a run is caught and exits
+	// ExitInterrupted rather than killing the process by its default action.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+	go func() {
+		select {
+		case <-sigCh:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
 	// ── Resume state ──────────────────────────────────────────────────────────
 	var resumeCP *Checkpoint
 	resuming := opts.Resume != ""
@@ -303,11 +329,24 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	// ── Load and assemble harness ─────────────────────────────────────────────
 	var configPath string
 	var harnessObj *harness.Harness
+	// reportedName is the harness as the trajectory and result name it: the
+	// id for an installed harness, the manifest name for one given by path,
+	// which keeps a filesystem path out of every report and telemetry.
+	reportedName := opts.HarnessName
 
 	if opts.HarnessName != "" {
-		harnessObj, err = harness.LoadQualified(opts.HarnessName)
+		// An installed id or a local harness directory, resolved exactly as
+		// `ynh run` and `ynh check` resolve theirs (#560).
+		harnessObj, err = harness.LoadIDOrPath(opts.HarnessName)
 		if err != nil {
 			return result, fmt.Errorf("loading harness %q: %w", opts.HarnessName, err)
+		}
+		// From here the run names a path by its absolute form: the checkpoint
+		// stores it so --resume finds the same harness from any directory, and
+		// the sensor gate (`ynh check`, run per turn) is handed it too.
+		if namespace.Classify(opts.HarnessName) == namespace.RefPath {
+			opts.HarnessName = harnessObj.Dir
+			reportedName = harnessObj.Name
 		}
 
 		// Resolve focus → prompt + bound profile. Mirrors `ynh run --focus`.
@@ -332,6 +371,12 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			}
 		}
 
+		// The sensors an include declares count, as they do for `ynh check`.
+		// Done after the profile, which can add includes of its own.
+		if harnessObj, err = resolver.WithIncludedSensors(harnessObj); err != nil {
+			return result, fmt.Errorf("resolving included sensors: %w", err)
+		}
+
 		// Before the worker starts: a verifier that can never pass would
 		// spend the whole budget and end at the turn cap (#447).
 		if err := refuseConvergenceVerifier(harnessObj.Sensors, opts.ConvergenceSensor); err != nil {
@@ -345,6 +390,15 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		defer func() { _ = os.RemoveAll(configPath) }()
 	} else if opts.Focus != "" || opts.Profile != "" {
 		return result, fmt.Errorf("--focus and --profile require --harness")
+	}
+
+	if opts.testPreRun != nil {
+		opts.testPreRun(ctx)
+	}
+	// An interrupt during loading and assembly: nothing has run yet, so there
+	// is no checkpoint and nothing to resume, but it is still an interrupt.
+	if ctx.Err() != nil {
+		return result, &ExitError{Code: ExitInterrupted, Message: "interrupted before the run started"}
 	}
 
 	if resuming {
@@ -452,26 +506,8 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		}
 	}
 
-	// ── Cancellable context + stop signals ────────────────────────────────────
-	// SIGINT/SIGTERM cancel the worker context so an in-flight Next() unblocks;
-	// the loop then exits with the last completed turn already checkpointed, so
-	// a later --resume continues from there. (A structured consumer sends an interrupt control
-	// message first, then SIGTERM after a grace period.)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(sigCh)
-	go func() {
-		select {
-		case <-sigCh:
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
-
 	// ── Session start / resumed ───────────────────────────────────────────────
-	harnessName := opts.HarnessName
+	harnessName := reportedName
 	if harnessName == "" {
 		harnessName = "(none)"
 	}
@@ -527,11 +563,11 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	result.ModelRequested = opts.Model
 	result.EffortRequested = opts.Effort
 	result.AutoApprove = opts.AutoApprove
-	// opts.HarnessName, not harnessName: the latter is "(none)" for display in
+	// reportedName, not harnessName: the latter is "(none)" for display in
 	// the trajectory when no harness was given, and a structured consumer
 	// reading a harness literally named "(none)" would be worse served than by
 	// the field being absent, which is what "this run verified nothing" means.
-	result.Harness = harnessProvenance(opts.HarnessName, harnessObj)
+	result.Harness = harnessProvenance(reportedName, harnessObj)
 	result.ImageDigest = imageDigest()
 
 	// ── Start (or reconstruct) the worker ─────────────────────────────────────
@@ -612,6 +648,17 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			CacheCreationTokens: resumeCP.Budget.CacheCreationTokens,
 		}
 	}
+	interruptExit := func(atTurn int) error {
+		const reason = "interrupted (resumable)"
+		_ = traj.Emit(KindSessionEnd, atTurn, SessionEndData{
+			ExitCode:    ExitInterrupted,
+			Reason:      reason,
+			TotalTurns:  budget.Turns(),
+			TotalTokens: budget.Tokens(),
+		})
+		return &ExitError{Code: ExitInterrupted, Message: reason}
+	}
+
 	sess, err := wb.Start(ctx, StartOptions{
 		WorktreeDir: opts.WorktreeDir,
 		ConfigPath:  configPath,
@@ -628,6 +675,9 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		TelemetryEndpoint: relayEndpoint,
 	})
 	if err != nil {
+		if ctx.Err() != nil {
+			return result, interruptExit(0)
+		}
 		_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
 		return result, &ExitError{Code: ExitWorkerError, Message: fmt.Sprintf("starting worker: %v", err)}
 	}
@@ -706,17 +756,6 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			_ = traj.Emit(KindWorkerModel, atTurn, WorkerModelData{Model: t.Model})
 		}
 	}
-	interruptExit := func(atTurn int) error {
-		const reason = "interrupted (resumable)"
-		_ = traj.Emit(KindSessionEnd, atTurn, SessionEndData{
-			ExitCode:    ExitInterrupted,
-			Reason:      reason,
-			TotalTurns:  budget.Turns(),
-			TotalTokens: budget.Tokens(),
-		})
-		return &ExitError{Code: ExitInterrupted, Message: reason}
-	}
-
 	// ── Collect sensors ───────────────────────────────────────────────────────
 	var sensorNames []string
 	var convergenceSensor string
@@ -790,10 +829,18 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 				}
 			}
 			if err := sess.Send(planMsg); err != nil {
+				// An interrupt closed the worker under this send: that is the
+				// interrupt, not a worker fault.
+				if ctx.Err() != nil {
+					return result, interruptExit(0)
+				}
 				_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
 				return result, workerTurnExit(err, fmt.Sprintf("sending plan request: %v", err))
 			}
 			planTurn, err := sess.Next()
+			if ctx.Err() != nil {
+				return result, interruptExit(0)
+			}
 			if err == nil {
 				err = unmeteredTurn(wb.Name(), planTurn)
 			}
@@ -920,6 +967,11 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	}
 
 	if err := sess.Send(firstMsg); err != nil {
+		// An interrupt closed the worker under this send: that is the
+		// interrupt, not a worker fault.
+		if ctx.Err() != nil {
+			return result, interruptExit(0)
+		}
 		_ = traj.Emit(KindSessionEnd, 0, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
 		return result, workerTurnExit(err, fmt.Sprintf("sending first message: %v", err))
 	}
@@ -1093,6 +1145,11 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 
 			_ = traj.Emit(KindFeedbackSent, turnN, feedback)
 			if err := sess.Send(feedback); err != nil {
+				// An interrupt closed the worker under this send: that is the
+				// interrupt, not a worker fault.
+				if ctx.Err() != nil {
+					return result, interruptExit(turnN)
+				}
 				_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitWorkerError, Reason: err.Error()})
 				return result, workerTurnExit(err, fmt.Sprintf("sending feedback turn %d: %v", turnN, err))
 			}
