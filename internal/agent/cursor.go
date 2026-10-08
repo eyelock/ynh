@@ -22,7 +22,7 @@ func (b *CursorBackend) Name() string { return "cursor" }
 
 // Start allocates a new session with a fresh chat ID.
 // The first subprocess is not spawned until Send+Next are called.
-func (b *CursorBackend) Start(_ context.Context, opts StartOptions) (WorkerSession, error) {
+func (b *CursorBackend) Start(ctx context.Context, opts StartOptions) (WorkerSession, error) {
 	cursorBin, err := lookWorkerCLI(b.Name())
 	if err != nil {
 		return nil, err
@@ -44,6 +44,7 @@ func (b *CursorBackend) Start(_ context.Context, opts StartOptions) (WorkerSessi
 	}
 
 	return &cursorSession{
+		ctx:       ctx,
 		cursorBin: cursorBin,
 		chatID:    chatID,
 		opts:      opts,
@@ -53,6 +54,8 @@ func (b *CursorBackend) Start(_ context.Context, opts StartOptions) (WorkerSessi
 
 // cursorSession holds the resumable chat state across per-turn subprocesses.
 type cursorSession struct {
+	// ctx ends the run: cancelling it stops the turn in flight.
+	ctx       context.Context
 	cursorBin string
 	chatID    string
 	opts      StartOptions
@@ -82,7 +85,8 @@ func (s *cursorSession) Next() (Turn, error) {
 	args := buildCursorArgs(s.opts, s.chatID, s.firstTurn, msg)
 	s.firstTurn = false
 
-	cmd := exec.Command(s.cursorBin, args...)
+	cmd := exec.CommandContext(s.ctx, s.cursorBin, args...)
+	confineWorker(cmd)
 	if s.opts.WorktreeDir != "" {
 		cmd.Dir = s.opts.WorktreeDir
 	}
@@ -94,7 +98,7 @@ func (s *cursorSession) Next() (Turn, error) {
 	if err != nil {
 		return Turn{}, fmt.Errorf("cursor stdout pipe: %w", err)
 	}
-	if err := cmd.Start(); err != nil {
+	if err := startWorker(cmd); err != nil {
 		return Turn{}, fmt.Errorf("starting cursor: %w", err)
 	}
 

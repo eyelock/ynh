@@ -57,6 +57,7 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 		cmd = exec.CommandContext(ctx, claudeBin, args...)
 	}
 
+	confineWorker(cmd)
 	if opts.WorktreeDir != "" {
 		cmd.Dir = opts.WorktreeDir
 	}
@@ -75,7 +76,7 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 		return nil, fmt.Errorf("creating stdout pipe: %w", err)
 	}
 
-	if err := cmd.Start(); err != nil {
+	if err := startWorker(cmd); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("starting claude: %w", err)
 	}
@@ -194,6 +195,10 @@ type claudeSession struct {
 	cleanup func()
 	waited  bool
 	waitErr error
+	// turnOpen is true from a message sent to claude until its result is
+	// read: claude may be working on, or have queued, a turn nobody will
+	// read. Close must not wait for one.
+	turnOpen bool
 
 	// effort is the reasoning effort claude reports it applies, once its
 	// get_settings answer arrives. Init does not carry it.
@@ -397,6 +402,7 @@ func (s *claudeSession) Send(msg string) error {
 	if err != nil {
 		return err
 	}
+	s.turnOpen = true
 	return s.writeLine(append(data, '\n'))
 }
 
@@ -547,6 +553,7 @@ func (s *claudeSession) Next() (Turn, error) {
 					turn.Usage = addUsage(turn.Usage, u)
 				}
 			}
+			s.turnOpen = false
 			turn.Content = contentBuf.String()
 			if err := claudeTurnError(ev, apiError, turn); err != nil {
 				return Turn{}, err
@@ -617,17 +624,20 @@ func claudeModeMismatch(ev claudeOutputEvent, want string) error {
 	}
 }
 
-// Close terminates the claude subprocess cleanly.
+// Close ends the claude subprocess. With no turn open it closes stdin and
+// lets claude exit, as it does on EOF. With a turn open (a message was sent
+// and its result never read) claude would finish that turn before it read the
+// EOF, acting on a request the run has already given up on, so it is
+// terminated instead.
 func (s *claudeSession) Close() error {
 	if s.waited {
 		// Next already reaped the process and reported how it ended.
 		return nil
 	}
-	// Closing stdin signals the subprocess to exit.
-	if err := s.stdin.Close(); err != nil {
-		_ = s.cmd.Process.Kill()
-		_ = s.wait()
-		return err
+	closeErr := s.stdin.Close()
+	err := reapWorker(s.cmd, s.wait, closeErr == nil && !s.turnOpen)
+	if closeErr != nil {
+		return closeErr
 	}
-	return s.wait()
+	return err
 }

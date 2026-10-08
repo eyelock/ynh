@@ -371,8 +371,15 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			}
 		}
 
+		// A run is where the network is allowed, and the sensor merge below
+		// reads includes from the cache only, so fetch the ones the cache
+		// lacks first (ynf #130). Done after the profile, which can add
+		// includes of its own. A failure stops the run before any worker.
+		if err := fetchIncludes(harnessObj); err != nil {
+			return result, err
+		}
+
 		// The sensors an include declares count, as they do for `ynh check`.
-		// Done after the profile, which can add includes of its own.
 		if harnessObj, err = resolver.WithIncludedSensors(harnessObj); err != nil {
 			return result, fmt.Errorf("resolving included sensors: %w", err)
 		}
@@ -976,21 +983,44 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		return result, workerTurnExit(err, fmt.Sprintf("sending first message: %v", err))
 	}
 
-	for {
-		// ── Interrupt check ───────────────────────────────────────────────────
-		// An interrupt/SIGTERM that arrived between turns (e.g. a cursor turn
-		// that ran to completion before the cancel took effect). The last
-		// completed turn is already checkpointed, so --resume continues from it.
+	// stopRun reports why the run must end before another worker turn, or nil
+	// when one is allowed: an interrupt that arrived between turns (the last
+	// completed turn is already checkpointed, so --resume continues from it),
+	// or a spent turn, token or wall-clock budget. It is the one place those
+	// are decided, asked at the top of an iteration and again before any
+	// message is sent, because a message sent is a turn taken: the worker acts
+	// on it as soon as it reads it, whatever the loop does next.
+	stopRun := func() error {
 		if ctx.Err() != nil {
-			return result, interruptExit(budget.Turns())
+			return interruptExit(budget.Turns())
 		}
-
-		// ── Budget check ──────────────────────────────────────────────────────
 		if reason, budgetKind, code := budget.Exceeded(); reason != "" {
 			result.BoundBy = string(budgetKind)
 			_ = traj.Emit(KindBudgetExceeded, budget.Turns(), BudgetExceededData{Budget: budgetKind, Reason: reason})
 			_ = traj.Emit(KindSessionEnd, budget.Turns(), SessionEndData{ExitCode: code, Reason: reason, TotalTurns: budget.Turns(), TotalTokens: budget.Tokens()})
-			return result, &ExitError{Code: code, Message: reason}
+			return &ExitError{Code: code, Message: reason}
+		}
+		return nil
+	}
+
+	// stopBeforeSend is stopRun for a turn's feedback that has not been sent.
+	// When the run ends there the feedback is kept in the checkpoint as the
+	// pending message, so a --resume with room left sends it, and nothing is
+	// written to the worker.
+	stopBeforeSend := func(turnN int, feedback string) error {
+		err := stopRun()
+		if err != nil {
+			cp.Phase = PhaseAct
+			cp.LastCompletedTurn = turnN
+			cp.PendingMessage = feedback
+			saveCheckpoint()
+		}
+		return err
+	}
+
+	for {
+		if err := stopRun(); err != nil {
+			return result, err
 		}
 
 		turnN := budget.Turns() + 1
@@ -1127,6 +1157,14 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 				return result, &ExitError{Code: ExitStuck, Message: "stuck: " + reason}
 			}
 
+			// ── Is another turn allowed? ───────────────────────────────────────
+			// Before the operator is asked to approve a turn, and before the
+			// worker is sent one: a run that ends here must not have asked for
+			// work it will not take.
+			if err := stopBeforeSend(turnN, feedback); err != nil {
+				return result, err
+			}
+
 			// ── Interactive approval ───────────────────────────────────────────
 			if opts.Interactive {
 				if emitErr := traj.Emit(KindTurnApprovalRequired, turnN, TurnApprovalData{SynthesizedFeedback: feedback}); emitErr != nil {
@@ -1140,6 +1178,13 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 				}
 				if replacement != "" {
 					feedback = replacement
+				}
+			}
+
+			// The approval wait counts against the wall clock, so ask again.
+			if opts.Interactive {
+				if err := stopBeforeSend(turnN, feedback); err != nil {
+					return result, err
 				}
 			}
 
@@ -1411,6 +1456,29 @@ func waitForApproval(ctrl *ControlReader, approveAction, rejectAction ControlAct
 	}
 	// Control channel closed (stdin EOF) — treat as interrupt.
 	return ActionInterrupt, "", true
+}
+
+// fetchIncludes makes sure every include of h is in the include cache,
+// fetching the ones that are not, honouring allowed_remote_sources and the
+// refs the includes pin. It reaches only the hosts the includes name.
+//
+// It exists because the sensor merge that follows is cache-only by design
+// (`ynh check` must not reach the network), so a run on a cold cache, a path
+// harness never installed or an installed one whose cache was cleared, would
+// otherwise fail on its first include. Like every pre-run refusal, a failure
+// exits with ExitRefused before any worker starts.
+func fetchIncludes(h *harness.Harness) error {
+	if len(h.Includes) == 0 {
+		return nil
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+	if _, err := resolver.ResolveFromCache(h, cfg); err != nil {
+		return fmt.Errorf("fetching includes: %w", err)
+	}
+	return nil
 }
 
 // assembleHarness assembles the harness for the named vendor backend into

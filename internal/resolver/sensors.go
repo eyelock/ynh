@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -148,8 +149,22 @@ func collectIncludedSensors(p *harness.Harness) ([]IncludedSensor, error) {
 	return out, nil
 }
 
+// errNotCached is what lookupOnlyRepo reports for a cache miss.
+var errNotCached = errors.New("not in the include cache")
+
+// lookupOnlyRepo is a repoFunc that never reaches the network: a cache miss is
+// an error. (CacheOnlyRepo, by contrast, falls back to a fetch on a miss.)
+func lookupOnlyRepo(gitURL, ref string) (RepoResult, error) {
+	res, ok := LookupCache(gitURL, ref)
+	if !ok {
+		return RepoResult{}, errNotCached
+	}
+	return res, nil
+}
+
 // includeBase resolves one include to a directory on disk without touching the
-// network.
+// network. A run fetches its includes before it merges sensors, so by then
+// the cache is warm; `ynh check` and `ynh sensors` never fetch.
 func includeBase(p *harness.Harness, inc harness.Include) (base, source string, err error) {
 	if inc.IsLocal() {
 		b, err := resolveLocalSource(inc.GitSource, p.Dir)
@@ -158,7 +173,7 @@ func includeBase(p *harness.Harness, inc harness.Include) (base, source string, 
 		}
 		return b, "include " + inc.Local, nil
 	}
-	b, _, err := ResolveGitSourceFromCache(inc.GitSource, p.Dir)
+	b, _, err := resolveGitSourceWith(inc.GitSource, p.Dir, lookupOnlyRepo)
 	if err != nil {
 		return "", "", fmt.Errorf(
 			"include %s is not in the cache, so its sensors cannot be read: %w\nrun `ynh update` (checking a gate must not reach the network)",

@@ -260,6 +260,7 @@ func (s *codexSession) Next() (Turn, error) {
 	s.pending, s.hasMsg = "", false
 
 	cmd := exec.CommandContext(s.ctx, s.codexBin, buildCodexArgs(s.opts, s.threadID)...)
+	confineWorker(cmd)
 	if s.opts.WorktreeDir != "" {
 		cmd.Dir = s.opts.WorktreeDir
 	}
@@ -272,7 +273,7 @@ func (s *codexSession) Next() (Turn, error) {
 	if err != nil {
 		return Turn{}, fmt.Errorf("codex stdout pipe: %w", err)
 	}
-	if err := cmd.Start(); err != nil {
+	if err := startWorker(cmd); err != nil {
 		return Turn{}, fmt.Errorf("starting codex: %w", err)
 	}
 	run, parseErr := parseCodexOutput(stdoutPipe)
