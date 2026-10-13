@@ -94,6 +94,7 @@ Each server must have either `command` or `url`, not both. Validation rejects se
 | Cursor | `.cursor/mcp.json` | JSON with `mcpServers` key; no transport field, Cursor infers it |
 | Codex | `.mcp.json` | JSON with `mcpServers` key (at plugin root), same shape as Claude Code |
 | Copilot | `.github/mcp.json` (project root) | JSON with `mcpServers` key, each server requires an explicit `"type": "local"|"http"` field |
+| OpenCode | `.opencode/opencode.json` (in the `OPENCODE_CONFIG_DIR` bundle) | JSON with servers under `mcp.servers`; `"type": "local"` with `command` as an array, or `"type": "remote"` with `url` |
 
 Claude, Cursor and Copilot read MCP servers from a different file depending on how the harness reaches them, and ynh writes each file only where it is read:
 
@@ -102,6 +103,7 @@ Claude, Cursor and Copilot read MCP servers from a different file depending on h
 | Claude Code | `.claude/.mcp.json`: `.mcp.json` at the root of the `.claude/` plugin directory the session loads | `mcp/claude.json`, named by the `mcpServers` field of `.claude-plugin/plugin.json` ([plugin reference](https://code.claude.com/docs/en/plugins-reference)) |
 | Codex | `.mcp.json` | `.mcp.json` at the plugin root, named by the `mcpServers` field of `.codex-plugin/plugin.json` |
 | Cursor | `.cursor/mcp.json`, the only project-level path Cursor reads ([cursor.com/docs/context/mcp](https://cursor.com/docs/context/mcp)) | `mcp.json` (no dot) at the plugin root, which a Cursor plugin discovers automatically ([cursor.com/docs/reference/plugins](https://cursor.com/docs/reference/plugins)) |
+| OpenCode | `.opencode/opencode.json` in the run directory, the config bundle OpenCode launches with | `.opencode/opencode.json`, the same document; nothing loads it as a plugin, since OpenCode has no plugin manifest |
 | Copilot | `.copilot/.mcp.json` in the run directory, projected into the calling project's `.github/mcp.json` at launch (see [Copilot Format](#copilot-format)) | `.github/mcp.json` at the plugin root, a default MCP path for a Copilot plugin ([Copilot CLI plugin reference](https://docs.github.com/en/copilot/reference/cli-plugin-reference)) |
 
 The document is identical in both places; only the path differs. A manifest names a file only when the plugin carries it.
@@ -112,11 +114,11 @@ Copilot reads `.claude-plugin/plugin.json`, the manifest Claude writes. In a Cop
 
 Each adapter spells the canonical transport in the vendor's own words:
 
-| Canonical `type` | Claude Code | Codex | Cursor | Copilot |
-|---|---|---|---|---|
-| `stdio` | _(omitted)_ | _(omitted)_ | _(omitted)_ | `local` |
-| `streamable-http` | `http` | `http` | _(omitted)_ | `http` |
-| `sse` | `sse` | `sse` | _(omitted)_ | `sse` |
+| Canonical `type` | Claude Code | Codex | Cursor | Copilot | OpenCode |
+|---|---|---|---|---|---|
+| `stdio` | _(omitted)_ | _(omitted)_ | _(omitted)_ | `local` | `local` |
+| `streamable-http` | `http` | `http` | _(omitted)_ | `http` | `remote` |
+| `sse` | `sse` | `sse` | _(omitted)_ | `sse` | `remote` |
 
 Claude Code rejects a `url` entry that carries no `type` and reads an untyped entry as stdio, so the `http` on a remote server is not cosmetic.
 
@@ -203,6 +205,29 @@ Copilot requires an explicit `"type"` field on every server (`"local"` for a `co
 ```
 
 **Delivery is project-root, not plugin-dir.** Copilot does not read a plugin-bundled `.mcp.json` via `--plugin-dir` (confirmed by hand-testing), so `ynh run` projects the generated config directly into the calling project's `.github/mcp.json` instead: a file fully owned by ynh, distinct from anything the user might hand-author. `ynd export` writes the same document to `.github/mcp.json` at the plugin root, where an installed Copilot plugin reads it (a plugin loaded with `--plugin-dir` ignores it, as above; an installed plugin reads it, CONFIRMED on Copilot CLI 1.0.105). The manifest sits beside it at `.claude-plugin/plugin.json` in the plugin root, next to the exported skills, whatever other files the export holds.
+
+### OpenCode Format
+
+OpenCode 2 reads MCP servers from the `mcp.servers` key of `opencode.json`, not a top-level `mcpServers`. A local server's `command` is one array holding the executable and its arguments, and `env` becomes `environment`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "sqlite": {
+        "type": "local",
+        "command": ["npx", "-y", "@modelcontextprotocol/server-sqlite", "/path/to/db.sqlite"],
+        "environment": { "DB_KEY": "{env:DB_KEY}" }
+      }
+    }
+  }
+}
+```
+
+A `url` server becomes `"type": "remote"` with `url` and `headers`; ynh writes `"oauth": false` on it. OpenCode expands environment variables as `{env:NAME}` only (`$NAME` and `${NAME}` are not expanded in JSON strings), so ynh rewrites `${NAME}` references to that form.
+
+A local stdio server was confirmed to connect and its tool to be callable by hand-testing; remote servers were not connected to. OpenCode reaches MCP tools through its Code Mode by default: the model sees one `execute` tool and calls `tools.<server>.<tool>(...)` inside it, so an MCP call is not visible to a `before_tool` hook as a tool of its own.
 
 ## Root-Harness-Only Rule
 

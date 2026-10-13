@@ -91,6 +91,7 @@ A stub runs nothing: it appends its name and arguments to
 | `claude` | the Claude vendor adapter, `ynh agent run`, `ynd compress` and `ynd inspect` |
 | `codex` | the Codex vendor adapter, `ynh agent run`, `ynd compress` and `ynd inspect` |
 | `copilot` | the Copilot vendor adapter, `ynd compress` and `ynd inspect` |
+| `opencode` | the OpenCode vendor adapter, the OpenCode backend of `ynh agent run`, `ynd compress` and `ynd inspect` |
 | `agent` | the Cursor vendor adapter, the Cursor backend of `ynh agent run`, `ynd compress` and `ynd inspect`: Cursor's CLI is named `agent` |
 | `cursor` | nothing: it is the Cursor editor's launcher, which the `ynh agent run` backend once ran by mistake (#524). Stubbed so a regression cannot open the editor |
 | `cursor-agent` | nothing: the older name of Cursor's CLI, still installed as an alias of `agent`. Stubbed so it cannot be reached instead |
@@ -182,7 +183,7 @@ Once at tutorial start, in a single Bash invocation from the checkout. Fill in `
 YNH_REPO=$(git rev-parse --show-toplevel)
 SLUG=<slug>                                  # e.g. sensors for tutorial/sensors.md
 SANDBOX=/tmp/ynh-eval-$SLUG
-STUBS="claude codex copilot agent cursor cursor-agent srt gh docker ynr"
+STUBS="claude codex copilot opencode agent cursor cursor-agent srt gh docker ynr"
 case $SANDBOX in /tmp/ynh-eval-?*) rm -rf "$SANDBOX" ;; *) echo "bad sandbox: $SANDBOX"; exit 1 ;; esac
 mkdir -p "$SANDBOX/home/.ynh/bin" "$SANDBOX/work" "$SANDBOX/tmp" "$SANDBOX/blocks" "$SANDBOX/state" "$SANDBOX/stubs"
 cp "$YNH_REPO/bin/ynh" "$YNH_REPO/bin/ynd" "$SANDBOX/home/.ynh/bin/"   # what make install would put there

@@ -29,7 +29,7 @@ ynh agent run --resume <session-dir> [flags]
 | `--task "<text>"` | What the agent is being asked to do |
 | `--focus <name>` | Use a declared focus for the task and its profile |
 | `--profile <name>` | Apply a profile overlay, including its [sensor overrides](sensors.md#profiles-change-severity-not-observation); the gate between turns gets the same profile (also via a `--focus` bound to one) |
-| `--backend <name>` | Backend to drive: `claude`, `codex` or `cursor` (default: `claude`; on `--resume`, the session's own) |
+| `--backend <name>` | Backend to drive: `claude`, `codex`, `cursor` or `opencode` (default: `claude`; on `--resume`, the session's own) |
 | `--model <name>` | Model override passed to the backend |
 | `--effort <low\|medium\|high>` | Reasoning effort, mapped to the backend's own setting; overrides the harness's `agent.effort`. See [Effort](#effort) |
 | `--convergence-sensor <name>` | Sensor added to the convergence verifiers, consulted once all blocking sensors pass |
@@ -160,7 +160,7 @@ not a default anyone chose. See [MCP credentials](mcp.md) for the declaration
 and how a profile narrows it.
 
 `--sandbox srt` is honoured by the `claude` backend only. Requesting it with
-`codex` or `cursor` is an **error**, not a warning — a containment control that
+`codex`, `cursor` or `opencode` is an **error**, not a warning — a containment control that
 silently does not apply is worse than an absent one, because it gets relied
 upon. ynh does not provide isolation; it runs inside one you configured.
 
@@ -196,16 +196,16 @@ writes.
 
 `--auto-approve` grants more, for one run:
 
-| Level | Approves | claude | codex | cursor |
-|---|---|---|---|---|
-| `edits` | file edits; commands still need approval | `--permission-mode acceptEdits` | error | error |
-| `all` | everything the worker asks to do | `--permission-mode bypassPermissions` | `--dangerously-bypass-approvals-and-sandbox` | `--force` |
+| Level | Approves | claude | codex | cursor | opencode |
+|---|---|---|---|---|---|
+| `edits` | file edits; commands still need approval | `--permission-mode acceptEdits` | error | error | error |
+| `all` | everything the worker asks to do | `--permission-mode bypassPermissions` | `--dangerously-bypass-approvals-and-sandbox` | `--force` | `--auto` |
 
 It exists for runs inside containment you own: a container, an egress policy,
 a diff gate, human review of what lands. Outside that, it hands an unattended
 agent your credentials.
 
-- **Levels are exact or refused.** codex and cursor have no mode that approves
+- **Levels are exact or refused.** codex, cursor and opencode have no mode that approves
   edits while still withholding commands, so `edits` is an error on them rather
   than something wider. Any other backend, or an unknown level, fails before
   the run starts.
@@ -341,7 +341,7 @@ precedence and anything omitted comes from the checkpoint.
 The backend, task and focus cannot be changed on a resume, only repeated:
 
 - **Backend.** A resume drives the backend the run started on. The resume token
-  belongs to that backend (a codex thread id, a claude or cursor session id) and
+  belongs to that backend (a codex thread id, a claude, cursor or opencode session id) and
   means nothing to another, so `--backend` naming a different one is refused
   with exit 21. A checkpoint that records no backend predates recording it and
   resumes on `claude`.
@@ -646,11 +646,11 @@ The backends offer more levels than these (Claude Code's `xhigh` and `max`,
 Codex's `minimal`, `xhigh` and above), which ynh does not expose, so a level
 means the same thing whichever backend runs it.
 
-| ynh | `claude` | `codex` | `cursor` |
-|---|---|---|---|
-| `low` | `--effort low` | `-c model_reasoning_effort="low"` | refused |
-| `medium` | `--effort medium` | `-c model_reasoning_effort="medium"` | refused |
-| `high` | `--effort high` | `-c model_reasoning_effort="high"` | refused |
+| ynh | `claude` | `codex` | `cursor` | `opencode` |
+|---|---|---|---|---|
+| `low` | `--effort low` | `-c model_reasoning_effort="low"` | refused | refused |
+| `medium` | `--effort medium` | `-c model_reasoning_effort="medium"` | refused | refused |
+| `high` | `--effort high` | `-c model_reasoning_effort="high"` | refused | refused |
 
 Sources:
 [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference)
@@ -661,11 +661,11 @@ model"); the Codex
 accepts (`codex-rs/utils/cli/src/config_override.rs`); and `cursor-agent
 --help` (2026.10.01), which has no effort flag. Some Cursor models take an
 effort inside the model name (`'<model>[effort=high]'`), which is per model,
-so it is yours to pass with `--model`, not something ynh can map.
+so it is yours to pass with `--model`, not something ynh can map. OpenCode is the same: it has no effort flag, and a model variant is written into the model id (`--model provider/model#variant`), with names that are the provider's own rather than low, medium and high.
 
-A level the backend cannot honour, or any level on `cursor`, is **refused
+A level the backend cannot honour, or any level on `cursor` or `opencode`, is **refused
 before the run starts**, not ignored, whether it came from the flag or the
-harness. A harness that sets `agent.effort` therefore cannot run on `cursor`;
+harness. A harness that sets `agent.effort` therefore cannot run on `cursor` or `opencode`;
 `ynd validate` rejects a level other than the three.
 
 The result keeps the request apart from what ran, as it does for the model:
