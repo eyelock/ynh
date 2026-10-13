@@ -13,7 +13,7 @@ See [Harness Engineering §"Design Stance"](../docs/harness-engineering.md#desig
 
 ## Architecture
 
-ynh is a packaging and distribution tool. It has no runtime component - the AI vendor CLI (Claude, Codex, Cursor) handles all interaction. ynh's job is to resolve, assemble, and launch.
+ynh is a packaging and distribution tool. It has no runtime component - the AI vendor CLI (Claude, Codex, Cursor, Copilot, OpenCode) handles all interaction. ynh's job is to resolve, assemble, and launch.
 
 ### Core Flow
 
@@ -50,6 +50,7 @@ internal/
     codex.go              OpenAI Codex adapter (child process + symlinks)
     copilot.go            GitHub Copilot CLI adapter (exec with --plugin-dir)
     cursor.go             Cursor adapter (child process + symlinks)
+    opencode.go           OpenCode 2.x adapter (exec of `opencode --standalone` with OPENCODE_CONFIG_DIR)
     symlinks.go           Shared symlink install/clean helpers
     process.go            Child process management with signal forwarding
     toml.go               Minimal TOML emitter for Codex MCP config
@@ -67,7 +68,7 @@ docs/                     User guide (GitHub Pages)
 
 **Harnesses compose from any source.** A harness can embed its own artifacts and pull from any number of Git repos. The `path` field supports monorepos.
 
-**Vendor-adaptive launch.** Each vendor gets the strategy that matches its capabilities. Claude supports `--plugin-dir`, so ynh does a clean `exec` with no running process. Codex and Cursor lack native plugin loading, so ynh installs symlinks and manages a child process with signal forwarding. This pragmatic split avoids forcing a lowest-common-denominator approach.
+**Vendor-adaptive launch.** Each vendor gets the strategy that matches its capabilities. Claude supports `--plugin-dir`, and OpenCode loads a config directory named by `OPENCODE_CONFIG_DIR`, so ynh does a clean `exec` with no running process. Codex and Cursor lack native plugin loading, so ynh installs symlinks and manages a child process with signal forwarding. This pragmatic split avoids forcing a lowest-common-denominator approach.
 
 **Single manifest.** Harnesses use a single `plugin.json` inside `.agents/harness/` as their manifest: all config (identity, includes, hooks, MCP servers, profiles) lives in one place. The directory was `.ynh-plugin/` before it moved under `.agents/`; that location is deprecated (#404): still read, second to `.agents/harness/`, and a manifest found there is edited in place, but nothing creates `.ynh-plugin/` any more. Every read from it goes through `plugin.SetLegacyManifestDirNotice`, which the two `main` functions point at a stderr warning (`migration.ManifestDirNotice`), once per harness per process; library code never prints it. `migration.ManifestDirMigrator` renames it to `.agents/harness/`: in `FormatChain` only for installs under `~/.ynh/harnesses/`, and in a source tree only under `ynd migrate` (`MigrateChain`), never as a side effect of reading (#406). `ynh update` overlays upstream onto an install, so `migration.AdoptRefreshedManifest` keeps a still-legacy upstream's fresh `plugin.json` from being shadowed by the moved one. The lookup order lives in `internal/plugin` (`PluginDir`, `LegacyPluginDir`). The manifest directory is resolved once per harness, from where `plugin.json` is (`ManifestDir`), and `installed.json` and `marketplace.json` are read and written beside it, so a harness never has its manifest split across the two; `ynd validate` reports a tree that is (`MisplacedManifestFiles`). Every reader and writer goes through the path helpers (`PluginPath`, `InstalledPath`, `MarketplacePath`, `HarnessRoot`) rather than joining the directory name by hand. Do not confuse `LegacyPluginDir` with `IsClaudePluginDir`, which detects the unsupported `.claude-plugin/plugin.json` layout.
 
@@ -232,7 +233,7 @@ make e2e
 **What the suite locks:**
 
 - Every documented entry point on `ynh` and `ynd` (init, install, uninstall, update, run, ls, info, installed, schema, vendors, sources, paths, status, search, registry, backend, delegate, fork, include, focus, profile, hook, doctor, mcp, sensors, check, agent, image, prune, migrate, quarantine; create, lint, validate, fmt, compress, inspect, export, compose, preview, diff, marketplace, migrate, validate-output)
-- The Claude, Codex and Cursor adapters end-to-end (Copilot only for its exported MCP file and `--resume`): instructions files, hooks (with matchers + per-vendor event remapping), MCP servers (command + URL forms, env passthrough)
+- The Claude, Codex and Cursor adapters end-to-end (Copilot only for its exported MCP file and `--resume`; OpenCode is not in the matrix yet): instructions files, hooks (with matchers + per-vendor event remapping), MCP servers (command + URL forms, env passthrough)
 - Profile + focus resolution (hook replace + inherit, MCP deep-merge, mutex/unknown errors)
 - Schema/security guards (path traversal, --ref + local, fork update, duplicate sources)
 - JSON error envelope, override semantics (harness AGENTS.md beats include's), symlink stability across reinstall
@@ -289,7 +290,7 @@ Both are built by `make build`, installed by `make install`, and released via go
 
 ynd is self-contained in `cmd/ynd/` with its own command routing, file discovery, and signal scanning. Key patterns:
 
-- **LLM integration** (`llm.go`): Compress and inspect shell out to vendor CLIs (claude, codex, cursor, copilot) via `queryLLM()`. `llmVendors` holds each vendor's one-shot arguments; the binary is the vendor adapter's `CLIName`, never a literal. Auto-detection tries each vendor's CLI on PATH in that order.
+- **LLM integration** (`llm.go`): Compress and inspect shell out to vendor CLIs (claude, codex, cursor, copilot) via `queryLLM()`; OpenCode is deliberately absent, since no argument turns its tools off. `llmVendors` holds each vendor's one-shot arguments; the binary is the vendor adapter's `CLIName`, never a literal. Auto-detection tries each vendor's CLI on PATH in that order.
 - **Signal scanning** (`inspect.go`): Discovers project files by category (build, test, CI, lint, config) to provide context for LLM analysis.
 - **Backup system** (`compress.go`): Backups are stored in `~/.ynd/backups/` mirroring the absolute file path. Override with `YND_BACKUP_DIR` env var (used in tests).
 - **Vendor-aware output** (`inspect.go`): Inspect writes artifacts to `.{vendor}/` by default (e.g., `.claude/skills/`). Override with `-o`. Discovery searches both project root and all vendor dirs.
@@ -419,7 +420,7 @@ func launchMyVendor(configPath string, extraArgs []string) error {
 }
 ```
 
-The `init()` function registers the adapter automatically via Go's init mechanism. See `internal/vendor/claude.go`, `codex.go`, `copilot.go`, and `cursor.go` for working examples.
+The `init()` function registers the adapter automatically via Go's init mechanism. See `internal/vendor/claude.go`, `codex.go`, `copilot.go`, `cursor.go` and `opencode.go` for working examples.
 
 ### Resolver
 

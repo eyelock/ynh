@@ -61,6 +61,13 @@ func TestPluginManifestPaths(t *testing.T) {
 			t.Errorf("%s: export manifest: %v", name, err)
 			continue
 		}
+		if _, ok := want[name]; !ok && a.PluginManifestDir() == "" {
+			// A vendor with no manifest format (OpenCode) writes none.
+			if len(files) != 0 {
+				t.Errorf("%s: has no manifest dir but wrote %v", name, keysOf(files))
+			}
+			continue
+		}
 		got := keysOf(files)
 		if len(got) != 1 {
 			t.Errorf("%s: expected exactly one manifest, got %v", name, got)
@@ -85,7 +92,11 @@ func TestPluginManifestDirMatchesGeneratedManifest(t *testing.T) {
 	for name, a := range allAdapters(t) {
 		md := a.PluginManifestDir()
 		if md == "" {
-			t.Errorf("%s: PluginManifestDir is empty but the vendor writes a manifest", name)
+			// No manifest format: it must also write none, in either layout.
+			files, err := a.GeneratePluginManifest(hj, t.TempDir())
+			if err != nil || len(files) != 0 {
+				t.Errorf("%s: PluginManifestDir is empty but the vendor writes a manifest: %v, %v", name, keysOf(files), err)
+			}
 			continue
 		}
 		atRoot := filepath.Join(md, "plugin.json")
@@ -374,6 +385,11 @@ func TestVendorDeclarativeContract(t *testing.T) {
 		exportArtifacts map[string]string
 	}
 	want := map[string]contract{
+		"opencode": {
+			displayName: "OpenCode", configDir: ".opencode",
+			needsSymlinks: false, exportDelegates: false, initialPrompt: true,
+			supportsResume: true, pluginDir: "", marketplaceDir: "",
+		},
 		"claude": {
 			displayName: "Claude Code", configDir: ".claude",
 			needsSymlinks: false, exportDelegates: true, initialPrompt: true,

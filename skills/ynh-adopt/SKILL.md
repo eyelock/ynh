@@ -67,7 +67,8 @@ that appears to work and has no instructions at all.
 
 **Rename it to `AGENTS.md`.** That is the cross-vendor form; ynh adapts it per
 vendor — `CLAUDE.md` for Claude, `codex.md` for Codex, `.cursorrules` for
-Cursor, and a projected instructions file for Copilot.
+Cursor, a projected instructions file for Copilot, and `.opencode/AGENTS.md`
+for OpenCode.
 
 If they have *several* instruction files — `CLAUDE.md` and `.cursorrules` and
 `copilot-instructions.md` — that is usually the same content drifting apart.
@@ -98,7 +99,7 @@ include pulls `.claude/skills/` and `.claude/agents/` into the assembled output.
 
 Best when the config is genuinely project-specific and only this repo needs it.
 The immediate payoff is vendor portability — the same artifacts now assemble for
-Codex, Cursor and Copilot with `-v`.
+Codex, Cursor, Copilot and OpenCode with `-v`.
 
 ### B. Move into a harness — config becomes reusable
 

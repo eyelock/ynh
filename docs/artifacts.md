@@ -89,6 +89,7 @@ Provide actionable feedback, not just observations.
 Refer to your vendor's documentation for agent format details:
 - [Claude Code sub-agents](https://docs.anthropic.com/en/docs/claude-code/sub-agents)
 - [Codex agents](https://github.com/openai/codex)
+- [OpenCode agents](https://opencode.ai/v2/docs): ynh translates an agent's frontmatter for OpenCode 2, which silently drops an agent with a comma-string `tools:`, a bare model alias such as `sonnet`, or a `color:`. It keeps `description` (derived from the file name when missing), `mode`, `permissions` and a `provider/model` model, and turns a Claude `tools:` allow-list into deny-by-default permissions
 
 ## Rules
 
@@ -121,6 +122,8 @@ merged from the rule's own:
 Any other field, such as `name`, is dropped from the `.mdc`, because Cursor does
 not read it. A file whose opening `---` is never closed has no frontmatter and
 is kept whole as the rule's body.
+
+OpenCode has no concept of rules. For OpenCode ynh strips a rule's frontmatter and concatenates the bodies into `.opencode/AGENTS.md` at launch, after the harness instructions.
 
 ## Commands
 
@@ -159,6 +162,7 @@ the vendor's own file — there is no `AGENTS.md` to import, and no import.
 | Codex | Yes | `codex.md` | `AGENTS.md` |
 | Cursor | Yes | `.cursorrules` | `AGENTS.md` |
 | Copilot | Yes | `AGENTS.md` | `AGENTS.md` |
+| OpenCode | Yes (`AGENTS.md` only; its `instructions` key is ignored) | `.opencode/AGENTS.md`, composed at launch from the instructions, the rules and the runtime context | `AGENTS.md` |
 
 Verified by running both commands per vendor, not read from the adapters.
 

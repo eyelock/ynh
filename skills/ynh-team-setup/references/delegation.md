@@ -56,6 +56,7 @@ ynh delegates to the local `git` binary. If `git clone <url>` works on the machi
 | Codex | `codex` | `.codex` | `codex.md` |
 | Cursor | `agent` | `.cursor` | `.cursorrules` |
 | Copilot | `copilot` | `.copilot` | `AGENTS.md` |
+| OpenCode | `opencode` | `.opencode` | `AGENTS.md` |
 
 Run `ynh vendors` for the live list — it reflects the adapters actually
 compiled in, which this table cannot.
