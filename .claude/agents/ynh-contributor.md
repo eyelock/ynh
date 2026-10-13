@@ -43,7 +43,7 @@ Read the "Vendor Adapters" section in `.github/CONTRIBUTING.md`. It has the full
   unattended relaunch waiting for a keypress. That warning is invisible if you
   work from a summary of the interface rather than the declaration.
 - Self-registers via `init()`
-- Two launch patterns: `syscall.Exec` for vendors with native plugin support (Claude), child process with signal forwarding for symlink-based vendors (Codex, Cursor, Copilot)
+- Two launch patterns: `syscall.Exec` for vendors with native plugin or config-directory loading (Claude, Copilot, OpenCode), child process with signal forwarding for symlink-based vendors (Codex, Cursor)
 
 See `internal/vendor/claude.go`, `codex.go`, `cursor.go` for working examples.
 

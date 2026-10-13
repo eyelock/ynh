@@ -9,6 +9,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // manifestJSON is used to unmarshal the vendor-specific plugin.json output.
@@ -83,8 +84,8 @@ func TestExportAllVendors(t *testing.T) {
 		t.Fatalf("Export failed: %v", err)
 	}
 
-	if len(results) != 4 {
-		t.Fatalf("expected 4 results, got %d", len(results))
+	if want := len(vendor.Available()); len(results) != want {
+		t.Fatalf("expected %d results (one per registered vendor), got %d", want, len(results))
 	}
 
 	// Each vendor should have its own directory

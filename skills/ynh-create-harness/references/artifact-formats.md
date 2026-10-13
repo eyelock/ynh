@@ -74,13 +74,13 @@ make format && make lint && make test
 appears when you *distribute* — `ynd export`, or publishing to a marketplace —
 because the vendors' plugin formats differ in what they can carry.
 
-| | Claude | Cursor | Codex | Copilot |
-|---|---|---|---|---|
-| skills | yes | yes | yes | yes |
-| agents | yes | yes | **no** | yes |
-| rules | yes | yes, renamed `.mdc` | **no** | **no** |
-| commands | yes | yes | **no** | **no** |
-| manifest | `.claude-plugin/` | `.cursor-plugin/` | `.codex-plugin/` | `.claude-plugin/` |
+| | Claude | Cursor | Codex | Copilot | OpenCode |
+|---|---|---|---|---|---|
+| skills | yes | yes | yes | yes | yes |
+| agents | yes | yes | **no** | yes | yes |
+| rules | yes | yes, renamed `.mdc` | **no** | **no** | yes, as files in an export |
+| commands | yes | yes | **no** | **no** | yes |
+| manifest | `.claude-plugin/` | `.cursor-plugin/` | `.codex-plugin/` | `.claude-plugin/` | none: not a plugin |
 
 Measured with `ynd export` against a harness carrying all four, not read off a
 table. Two details that surprise people:
@@ -89,6 +89,9 @@ table. Two details that surprise people:
   content, a different file, which is what Cursor reads.
 - **Copilot uses Claude's manifest directory**, `.claude-plugin/plugin.json`. A
   documented compatibility path, not a mistake.
+- **OpenCode has no plugin format**, so there is no manifest, no marketplace
+  and no Agent Plugins support. An export is a config-directory layout that
+  nothing installs as a plugin; deliver to OpenCode through `ynh run`.
 
 ### What this means when authoring
 
@@ -126,6 +129,7 @@ redistributable plugin directory.
 | Codex  | `codex.md` | `AGENTS.md` |
 | Cursor | `.cursorrules` | `.cursorrules` + `AGENTS.md` |
 | Copilot | `AGENTS.md` in the staging dir, which `ynh run` projects into the project as `.github/instructions/ynh-harness.instructions.md` (a plugin's bundled `AGENTS.md` is not read) | `AGENTS.md` |
+| OpenCode | `.opencode/AGENTS.md`, composed at launch from the instructions, the rules and the runtime context (OpenCode 2 reads `AGENTS.md` only) | `AGENTS.md` |
 
 The `@AGENTS.md` import is an export-path artifact only. If you preview a Claude
 harness and look for it, you will not find it — the instructions are already in
