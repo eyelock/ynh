@@ -347,11 +347,13 @@ Flags:
   --task <text|@file>         The task to work on
   --focus <name>              Load a named focus instead of a task
   --profile <name>            Apply a named profile overlay
-  --backend <name>            Worker backend: claude (default), codex, cursor.
+  --backend <name>            Worker backend: claude (default), codex, cursor,
+                              opencode.
                               On --resume, the session's backend
   --model <name>              Model override
   --effort low|medium|high    Reasoning effort, mapped to the backend's own
-                              setting (claude, codex; refused on cursor).
+                              setting (claude, codex; refused on cursor and
+                              opencode).
                               Overrides the harness's agent.effort. Not
                               restored on --resume.
   --worktree <path>          Run against a specific worktree
@@ -365,9 +367,9 @@ Flags:
                               write allowlist (claude only); none by default
   --auto-approve edits|all    Approve the worker's file edits, or everything,
                               without prompting (off by default; claude,
-                              codex, cursor). Only for runs inside containment
-                              you own; refused if the project sets its own
-                              permission mode. Not restored on --resume.
+                              codex, cursor, opencode). Only for runs inside
+                              containment you own; refused if the project sets
+                              its own permission mode. Not restored on --resume.
   --convergence-sensor <name> Sensor that decides the run is done
   --sensor-overlay <json>     Substitute sensor declarations
   --emit-jsonl <path>         Write the trajectory as NDJSON

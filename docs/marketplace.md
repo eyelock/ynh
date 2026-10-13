@@ -95,17 +95,17 @@ formats have no equivalent for.
 
 ## The Landscape
 
-AI coding assistants are converging on a plugin/marketplace model for distributing skills, agents, and configuration. All four vendors ynh supports have marketplace systems, though they differ significantly in maturity, openness, and format.
+AI coding assistants are converging on a plugin/marketplace model for distributing skills, agents, and configuration. Four of the five vendors ynh supports have marketplace systems, though they differ significantly in maturity, openness, and format. OpenCode is the exception: it has no plugin manifest and no marketplace format, so ynh generates neither for it (see [OpenCode](#opencode)).
 
-| | Claude Code | Cursor | Codex | Copilot |
-|---|---|---|---|---|
-| **Status** | GA | GA (Feb 2026) | Beta (Mar 2026) | Unverified — schema not hand-confirmed |
-| **Model** | Open — anyone hosts a marketplace | Curated — official + team | Curated — official catalog | Unknown |
-| **Plugin format** | `.claude-plugin/plugin.json` | `.cursor-plugin/plugin.json` | `.codex-plugin/plugin.json` | `.claude-plugin/plugin.json` (Copilot reads Claude's manifest schema) |
-| **Marketplace index** | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` | `.agents/plugins/marketplace.json` | `.github/plugin/marketplace.json` (best-effort) |
-| **Install mechanism** | TUI: `/plugin install`. CLI: `--plugin-dir` (direct load) | IDE one-click / CLI | CLI / Plugin Directory | `--plugin-dir` (direct load, same as Claude) |
-| **Private marketplaces** | Yes (any Git repo) | Yes (Teams/Enterprise) | Yes (repo or personal) | Unknown |
-| **Ecosystem size** | Large (40+ marketplaces, 800+ plugins) | Growing (30+ curated plugins) | Growing (official directory coming soon) | Unknown |
+| | Claude Code | Cursor | Codex | Copilot | OpenCode |
+|---|---|---|---|---|---|
+| **Status** | GA | GA (Feb 2026) | Beta (Mar 2026) | Unverified — schema not hand-confirmed | Not supported |
+| **Model** | Open — anyone hosts a marketplace | Curated — official + team | Curated — official catalog | Unknown | Not supported |
+| **Plugin format** | `.claude-plugin/plugin.json` | `.cursor-plugin/plugin.json` | `.codex-plugin/plugin.json` | `.claude-plugin/plugin.json` (Copilot reads Claude's manifest schema) | None |
+| **Marketplace index** | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` | `.agents/plugins/marketplace.json` | `.github/plugin/marketplace.json` (best-effort) | None |
+| **Install mechanism** | TUI: `/plugin install`. CLI: `--plugin-dir` (direct load) | IDE one-click / CLI | CLI / Plugin Directory | `--plugin-dir` (direct load, same as Claude) | `opencode --standalone` with `OPENCODE_CONFIG_DIR` (what `ynh run` does); no install step |
+| **Private marketplaces** | Yes (any Git repo) | Yes (Teams/Enterprise) | Yes (repo or personal) | Unknown | Not supported |
+| **Ecosystem size** | Large (40+ marketplaces, 800+ plugins) | Growing (30+ curated plugins) | Growing (official directory coming soon) | Unknown | Not supported |
 
 ## Claude Code
 
@@ -348,9 +348,17 @@ Copilot's plugin loader (`--plugin-dir`) reads the same `.claude-plugin/plugin.j
 
 - **Copilot CLI:** [github.com/features/copilot/cli](https://github.com/features/copilot/cli)
 
+## OpenCode
+
+OpenCode 2 loads a config directory (`OPENCODE_CONFIG_DIR`) and plugins by npm name or local path, but it defines no plugin manifest format and no marketplace, and it does not read Agent Plugins packages. ynh therefore writes no OpenCode manifest or marketplace index (`GeneratePluginManifest` and `GenerateMarketplaceIndex` return nothing). A merged tree therefore carries no OpenCode manifest, only the `.opencode/opencode.json` and `.opencode/plugins/ynh-hooks.ts` files when the harness declares MCP servers or hooks, and nothing loads them as a plugin. Use `ynh install` and `ynh run -v opencode` to deliver a harness to OpenCode.
+
+### Official Resources
+
+- **OpenCode 2:** [opencode.ai/v2/docs](https://opencode.ai/v2/docs)
+
 ## ynh and Marketplaces
 
-ynh acts as the translation layer between your harness definition and vendor-native distribution formats. The `ynd marketplace build` command takes a `marketplace.json` config, resolves all harness includes, and produces a Git-ready directory with vendor indexes for Claude Code, Cursor, and Codex.
+ynh acts as the translation layer between your harness definition and vendor-native distribution formats. The `ynd marketplace build` command takes a `marketplace.json` config, resolves all harness includes, and produces a Git-ready directory with vendor indexes for Claude Code, Cursor, Codex and Copilot (OpenCode has no marketplace format, so it gets none).
 
 ### What ynh Does
 
@@ -562,18 +570,18 @@ For the architectural rationale and contributor-facing rules, see [`.github/CONT
 
 ## Cross-Vendor Compatibility Matrix
 
-| Feature | Claude Code | Cursor | Codex | Copilot |
-|---------|------------|--------|-------|---------|
-| Skills | Yes | Yes | Yes | Yes |
-| Agents | Yes | Yes | No | Yes |
-| Rules | Yes | Yes | No | No |
-| Commands | Yes | Yes | No | No |
-| Instructions | AGENTS.md | .cursorrules + AGENTS.md | AGENTS.md | AGENTS.md (projected to `.github/instructions/`, see [MCP/Instructions delivery](vendors.md#vendor-notes)) |
-| Plugin manifest | .claude-plugin/ | .cursor-plugin/ | .codex-plugin/ | .claude-plugin/ |
-| Marketplace index | .claude-plugin/marketplace.json | .cursor-plugin/marketplace.json | .agents/plugins/marketplace.json | .github/plugin/marketplace.json (best-effort) |
-| Delegates | Yes (subagent) | Yes (subagent) | No | Yes (subagent) |
-| Merged export | Yes | Yes | Yes | Yes — shares Claude's `.claude-plugin/plugin.json` path, harmlessly (identical schema) |
-| Agent Plugins package | Compatibility layer at the root (does not load the format) | Portable core only (no published namespace) | Portable core + `extensions.com.openai` hooks | Portable core + `com.github.copilot/` |
+| Feature | Claude Code | Cursor | Codex | Copilot | OpenCode |
+|---------|------------|--------|-------|---------|----------|
+| Skills | Yes | Yes | Yes | Yes | Yes |
+| Agents | Yes | Yes | No | Yes | Yes |
+| Rules | Yes | Yes | No | No | Composed into `.opencode/AGENTS.md` at launch (no native concept) |
+| Commands | Yes | Yes | No | No | Yes (bundle slash commands unconfirmed under `opencode run`) |
+| Instructions | AGENTS.md | .cursorrules + AGENTS.md | AGENTS.md | AGENTS.md (projected to `.github/instructions/`, see [MCP/Instructions delivery](vendors.md#vendor-notes)) | AGENTS.md (`.opencode/AGENTS.md`, composed at launch) |
+| Plugin manifest | .claude-plugin/ | .cursor-plugin/ | .codex-plugin/ | .claude-plugin/ | None |
+| Marketplace index | .claude-plugin/marketplace.json | .cursor-plugin/marketplace.json | .agents/plugins/marketplace.json | .github/plugin/marketplace.json (best-effort) | None |
+| Delegates | Yes (subagent) | Yes (subagent) | No | Yes (subagent) | No |
+| Merged export | Yes | Yes | Yes | Yes — shares Claude's `.claude-plugin/plugin.json` path, harmlessly (identical schema) | No manifest to merge |
+| Agent Plugins package | Compatibility layer at the root (does not load the format) | Portable core only (no published namespace) | Portable core + `extensions.com.openai` hooks | Portable core + `com.github.copilot/` | Not supported |
 
 ## References
 

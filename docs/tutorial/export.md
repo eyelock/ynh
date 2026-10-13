@@ -74,6 +74,7 @@ Exported for codex → /tmp/ynh-tutorial/export-output/codex (2 skills, 0 agents
   warning: codex: skipping 1 agents (not supported)
 Exported for copilot → /tmp/ynh-tutorial/export-output/copilot (2 skills, 1 agents)
 Exported for cursor → /tmp/ynh-tutorial/export-output/cursor (2 skills, 1 agents)
+Exported for opencode → /tmp/ynh-tutorial/export-output/opencode (2 skills, 1 agents)
 ```
 
 ## Verify Claude export
@@ -192,7 +193,7 @@ ls /tmp/ynh-tutorial/export-claude/
 
 ## Export in merged mode
 
-Merged mode produces one directory with every selected vendor's manifest, useful for CI pipelines and marketplace-ready plugins. Without `-v` that is all four vendors, Codex included; this example selects Claude and Cursor:
+Merged mode produces one directory with every selected vendor's manifest, useful for CI pipelines and marketplace-ready plugins. Without `-v` that is every registered vendor, Codex included; this example selects Claude and Cursor:
 
 ```bash
 ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/export-merged --merged -v claude,cursor
@@ -403,9 +404,9 @@ ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/clean-test
 # Second export adds a new vendor dir from a different run
 ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/clean-test -v claude
 
-# Old codex/, copilot/, cursor/ dirs still exist from first run
+# Old codex/, copilot/, cursor/, opencode/ dirs still exist from first run
 ls /tmp/ynh-tutorial/clean-test/
-# Expected: claude/ codex/ copilot/ cursor/
+# Expected: claude/ codex/ copilot/ cursor/ opencode/
 
 # --clean removes entire output first. It asks before deleting; -y skips the prompt
 ynd export /tmp/ynh-tutorial/exportable -o /tmp/ynh-tutorial/clean-test -v claude --clean -y

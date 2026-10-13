@@ -9,10 +9,10 @@ import "fmt"
 // and beyond) are deliberately not exposed, so a level means the same thing
 // whichever backend runs it.
 //
-//	ynh      claude (--effort)   codex (-c model_reasoning_effort=)   cursor
-//	low      low                 low                                  refused
-//	medium   medium              medium                               refused
-//	high     high                high                                 refused
+//	ynh      claude (--effort)   codex (-c model_reasoning_effort=)   cursor    opencode
+//	low      low                 low                                  refused   refused
+//	medium   medium              medium                               refused   refused
+//	high     high                high                                 refused   refused
 //
 // Which levels a model accepts is the vendor's to decide: Claude Code and
 // Codex both say their levels depend on the model. ynh passes the level and
@@ -44,6 +44,15 @@ func validateEffort(level, backend string) error {
 		// is per model and so is the operator's to pass with --model.
 		return fmt.Errorf("cursor has no reasoning effort setting, so effort %q cannot be honoured; "+
 			"run without an effort, choose a model with --model, or use a different backend", level)
+	case "opencode":
+		// OpenCode has no effort flag: effort is a model variant written
+		// into the model id ('-m provider/model#variant'). Variants are per
+		// model and their names are the provider's, not a neutral low,
+		// medium and high, so mapping a level onto '#low' would invent a
+		// variant that most models do not have. The operator who wants one
+		// passes it with --model.
+		return fmt.Errorf("opencode has no reasoning effort setting, so effort %q cannot be honoured; "+
+			"run without an effort, pick a model variant with --model (provider/model#variant), or use a different backend", level)
 	default:
 		return fmt.Errorf("effort is not supported by the %s backend (supported: claude, codex)", backend)
 	}

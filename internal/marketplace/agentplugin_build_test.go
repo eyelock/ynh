@@ -190,6 +190,9 @@ func TestBuildDefaultsToEveryRegisteredVendor(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if adapter.MarketplaceManifestDir() == "" {
+			continue // no marketplace format (OpenCode), so no index
+		}
 		assertFileExists(t, filepath.Join(outputDir, adapter.MarketplaceManifestDir(), "marketplace.json"))
 	}
 }
