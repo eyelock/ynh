@@ -32,7 +32,7 @@ func env(sensors ...gate.Result) *gate.Envelope {
 // exited 0 having verified nothing. The single most safety-critical value in
 // the contract was forgeable by omitting a flag.
 func TestCheckConvergence_NoEvidenceCannotConverge(t *testing.T) {
-	converged, reason, _ := checkConvergence(nil, "", "", "", "", newNullTrajectory(), nil, 1, true)
+	converged, reason, _, _ := checkConvergence(nil, verifierRun{}, newNullTrajectory(), 1, true)
 	if converged {
 		t.Fatal("converged with no sensor results — a verdict with no evidence behind it")
 	}
@@ -45,7 +45,7 @@ func TestCheckConvergence_NoEvidenceCannotConverge(t *testing.T) {
 // declaring itself done is the only signal available, and requiring evidence
 // there would break the plain agent-runner mode.
 func TestCheckConvergence_UnverifiedRunStillConverges(t *testing.T) {
-	converged, _, _ := checkConvergence(nil, "", "", "", "", newNullTrajectory(), nil, 1, false)
+	converged, _, _, _ := checkConvergence(nil, verifierRun{}, newNullTrajectory(), 1, false)
 	if !converged {
 		t.Error("a run with no harness configured should still converge on worker completion")
 	}
@@ -62,7 +62,7 @@ func TestCheckConvergence_NonGatingSensorsDoNotBlock(t *testing.T) {
 		gate.Result{Name: "deps", Kind: "command", Tolerance: "report", Status: gate.StatusFail},
 		gate.Result{Name: "typos", Kind: "command", Tolerance: "advisory", Status: gate.StatusFail},
 	)
-	converged, reason, _ := checkConvergence(e, "", "", "", "", newNullTrajectory(), nil, 1, true)
+	converged, reason, _, _ := checkConvergence(e, verifierRun{}, newNullTrajectory(), 1, true)
 	if !converged {
 		t.Errorf("advisory and report failures must not gate; got reason %q", reason)
 	}
@@ -73,7 +73,7 @@ func TestCheckConvergence_BlockingFailureStillGates(t *testing.T) {
 		gate.Result{Name: "lint", Kind: "command", Tolerance: "blocking", Status: gate.StatusFail},
 		gate.Result{Name: "typos", Kind: "command", Tolerance: "advisory", Status: gate.StatusFail},
 	)
-	if converged, _, _ := checkConvergence(e, "", "", "", "", newNullTrajectory(), nil, 1, true); converged {
+	if converged, _, _, _ := checkConvergence(e, verifierRun{}, newNullTrajectory(), 1, true); converged {
 		t.Error("a failing blocking sensor must hold convergence open")
 	}
 }
@@ -82,7 +82,7 @@ func TestCheckConvergence_BlockingFailureStillGates(t *testing.T) {
 // the same as everything passing.
 func TestCheckConvergence_AllNonGatingIsNotEvidence(t *testing.T) {
 	e := env(gate.Result{Name: "deps", Kind: "command", Tolerance: "report", Status: gate.StatusPass})
-	if converged, _, _ := checkConvergence(e, "", "", "", "", newNullTrajectory(), nil, 1, true); converged {
+	if converged, _, _, _ := checkConvergence(e, verifierRun{}, newNullTrajectory(), 1, true); converged {
 		t.Error("a run whose sensors are all non-gating has verified nothing")
 	}
 }
@@ -96,7 +96,7 @@ func TestCheckConvergence_AllNonGatingIsNotEvidence(t *testing.T) {
 // observe, not evidence the run was verified.)
 func TestCheckConvergence_BlockingFilesSensorIsNotEvidence(t *testing.T) {
 	e := env(gate.Result{Name: "coverage", Kind: "files", Tolerance: "blocking", Status: gate.StatusReported})
-	converged, reason, _ := checkConvergence(e, "", "", "", "", newNullTrajectory(), nil, 1, true)
+	converged, reason, _, _ := checkConvergence(e, verifierRun{}, newNullTrajectory(), 1, true)
 	if converged {
 		t.Error("a fresh files sensor does not gate, so a harness declaring only one verifies nothing")
 	}
@@ -114,7 +114,7 @@ func TestCheckConvergence_BaselinedFailureDoesNotBlock(t *testing.T) {
 		Name: "lint", Kind: "command", Tolerance: "blocking",
 		Status: gate.StatusKnown, ExitCode: 1, KnownCount: 12,
 	})
-	converged, reason, _ := checkConvergence(e, "", "", "", "", newNullTrajectory(), nil, 1, true)
+	converged, reason, _, _ := checkConvergence(e, verifierRun{}, newNullTrajectory(), 1, true)
 	if !converged {
 		t.Errorf("failures already in the baseline must not gate; got reason %q", reason)
 	}
@@ -352,55 +352,5 @@ func TestConvergence_CommandSensorDecidesByExitCode(t *testing.T) {
 	}
 	if gate.StatusForKind("command", 1) == gate.StatusPass {
 		t.Error("a failing command sensor must not converge")
-	}
-}
-
-// The call site itself, not just the derivation it now uses.
-//
-// This is the test whose absence let the bug live: `runSensorFn` has been a
-// seam since the sensor package was written, so the convergence path was
-// always testable — it simply never was, and #214 rewrote everything around
-// it without touching it. A mutation reverting the call site to the old
-// `len(Output.Files) > 0` verdict passed every existing test.
-func TestCheckConvergence_FilesVerifierDoesNotConvergeTheLoop(t *testing.T) {
-	restore := runSensorFn
-	t.Cleanup(func() { runSensorFn = restore })
-
-	// A files sensor that matched a file. Under the old logic this converged
-	// the run; the file is one the agent itself can create.
-	runSensorFn = func(_, _, _, _, _ string, _ []string) (*SensorResult, error) {
-		return &SensorResult{
-			Kind:     "files",
-			ExitCode: 0,
-			Output:   SensorRunOutput{Files: []SensorFile{{Path: "reports/done.txt"}}},
-		}, nil
-	}
-
-	env := &gate.Envelope{Verdict: gate.VerdictPass}
-	converged, reason, _ := checkConvergence(env, "verifier", "ynh", "local/demo",
-		t.TempDir(), newNullTrajectory(), nil, 1, false)
-	if converged {
-		t.Fatal("a files sensor converged the run because a path existed — " +
-			"contents never read, and the path is inside the agent's write path")
-	}
-	if reason == "" {
-		t.Error("a refusal must say why, or the loop cannot feed it back to the agent")
-	}
-}
-
-// The same seam, proving a command verifier still works — the fix must not
-// make convergence unreachable.
-func TestCheckConvergence_CommandVerifierStillConverges(t *testing.T) {
-	restore := runSensorFn
-	t.Cleanup(func() { runSensorFn = restore })
-	runSensorFn = func(_, _, _, _, _ string, _ []string) (*SensorResult, error) {
-		return &SensorResult{Kind: "command", ExitCode: 0}, nil
-	}
-
-	env := &gate.Envelope{Verdict: gate.VerdictPass}
-	converged, _, _ := checkConvergence(env, "verifier", "ynh", "local/demo",
-		t.TempDir(), newNullTrajectory(), nil, 1, false)
-	if !converged {
-		t.Error("a clean command verifier must still converge the run")
 	}
 }

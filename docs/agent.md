@@ -32,7 +32,7 @@ ynh agent run --resume <session-dir> [flags]
 | `--backend <name>` | Backend to drive: `claude`, `codex` or `cursor` (default: `claude`; on `--resume`, the session's own) |
 | `--model <name>` | Model override passed to the backend |
 | `--effort <low\|medium\|high>` | Reasoning effort, mapped to the backend's own setting; overrides the harness's `agent.effort`. See [Effort](#effort) |
-| `--convergence-sensor <name>` | Sensor consulted once all blocking sensors pass |
+| `--convergence-sensor <name>` | Sensor added to the convergence verifiers, consulted once all blocking sensors pass |
 | `--sensor-overlay <json>` | Per-run sensor overrides |
 | `--worktree <dir>` | Directory the agent works in and sensors run against |
 | `--format <text\|json>` | `json` prints the run result as one object when the run ends |
@@ -234,10 +234,24 @@ when its verdict is `pass`.
   the loop treats it as debt the run inherited rather than work it owes. Only
   the lines a turn actually introduced are fed back, so the agent is not asked
   to clean a repository it was pointed at.
-- When the gate is green and a convergence verifier is declared (a sensor with
-  `role: convergence-verifier`, or one named by `--convergence-sensor`), that
-  sensor is consulted as the final say, through a direct `ynh sensors run`, and
-  the run converges only on `pass`.
+- When the gate is green and convergence verifiers are declared (any number of
+  sensors with `role: convergence-verifier`, plus the one named by
+  `--convergence-sensor`), they are consulted as the final say. All of them run,
+  in name order, in one more `ynh check` call, so the same
+  [baseline](sensors.md#baseline-inheriting-a-repo-that-already-fails),
+  tolerance and ratchet that judge the regular sensors judge them. The run
+  converges only if that check's verdict is not `blocked` and every verifier
+  reached a verdict: a verifier that was skipped, or that only reported or
+  deferred, does not let the run converge. A verifier with failures already in
+  the baseline can therefore pass. When any verifier fails, the worker is told
+  the regular sensors passed and the verifiers did not, with the same feedback
+  a failing gate produces. If that check cannot run at all (a missing tool,
+  a broken script), the run ends with the gate-error exit code, as it does when
+  the per-turn gate cannot run: that is an operator fault, not agent work, and
+  the result's `convergence.verifiers` shows what failed. If the
+  wall-clock cap is already spent when the gate goes green, the run ends there,
+  as it would at a turn boundary, without running the verifiers. A spent turn or
+  token cap does not stop them: the last turn the caps allow can still converge.
 - **A verifier that can never pass is refused before the run starts.** A
   `focus` sensor needs an agent runtime to resolve, so ynh reports it
   `deferred`; a `files` sensor reports freshness, which is `reported`. Neither
@@ -460,7 +474,8 @@ ynh agent run --harness demo --task "..." --format json
 
 It carries the exit code and reason, the caps in force **and where each came
 from**, what was actually consumed and **which cap bound the run**, the
-convergence verifier's last word, the final gate result, and the files the run
+convergence verifiers' last word (with each verifier's kind and status under
+`verifiers`), the final gate result, and the files the run
 changed relative to the commit it started from.
 
 `--emit-jsonl` remains an event *stream*. Reconstructing a result by tailing
@@ -706,6 +721,11 @@ a run without parsing terminal output.
 `known_count` when a baseline is in play. `passed` alone cannot express
 "failing, but every failure is already recorded" — which is the difference
 between a regression this run caused and debt it inherited.
+
+A convergence verifier's `sensor_result` has the same shape, with
+`role: "convergence-verifier"` and its real `kind`. It used to say
+`kind: "focus"` whatever the sensor was, which was wrong; identify verifiers by
+`role`, not by `kind`.
 
 ## Telemetry
 

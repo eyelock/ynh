@@ -213,7 +213,7 @@
         "sensor",
         "passed"
       ],
-      "description": "The convergence-verifier's last word. Absent means none was declared, which is different from one that ran and disagreed.",
+      "description": "The convergence verifiers' last word. `sensor`, `passed` and `summary` speak for the first verifier, by name, that did not pass, or for the first verifier when all passed. Absent means none was declared, which is different from one that ran and disagreed.",
       "properties": {
         "sensor": {
           "type": "string"
@@ -223,6 +223,39 @@
         },
         "summary": {
           "type": "string"
+        },
+        "verifiers": {
+          "type": "array",
+          "description": "Every convergence verifier, in name order. Optional.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "sensor",
+              "status",
+              "passed"
+            ],
+            "properties": {
+              "sensor": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "description": "The sensor's kind. Absent when the verifiers' check could not run."
+              },
+              "status": {
+                "type": "string",
+                "description": "The verifier's `ynh check` status (`pass`, `fail`, `known`, `reported`, `deferred`), or `skipped` when it did not run. Open set."
+              },
+              "passed": {
+                "type": "boolean",
+                "description": "Whether this verifier let the run converge: it ran, reached a verdict, and did not gate."
+              },
+              "summary": {
+                "type": "string"
+              }
+            }
+          }
         }
       }
     },

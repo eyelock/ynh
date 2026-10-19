@@ -140,14 +140,8 @@ func (r runTelemetry) WorkerEnv() []string { return r.run.WorkerEnv() }
 
 func (r runTelemetry) RelayEndpoint(backend string) string { return r.relay.endpoint(backend) }
 
-func (r runTelemetry) StartCall(kind string, turn int, sensor string) ([]string, func(string, bool)) {
-	attrs := []attribute.KeyValue{telemetry.AttrTurn.Int(turn)}
-	name := telemetry.SpanCheck
-	if kind == agent.CallSensor {
-		name = telemetry.SpanSensorRun
-		attrs = append(attrs, telemetry.AttrSensorName.String(sensor))
-	}
-	return r.run.StartCall(name, attrs...)
+func (r runTelemetry) StartCall(_ string, turn int) ([]string, func(string, bool)) {
+	return r.run.StartCall(telemetry.SpanCheck, telemetry.AttrTurn.Int(turn))
 }
 
 // The relay's bounds. Tests shorten them.
