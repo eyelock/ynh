@@ -78,17 +78,19 @@ lint: ## Lint code
 # malformed on purpose, so `ynd lint .` at the repo root can never be green.
 ARTIFACT_DIRS := skills agents rules .claude
 
-# NVIDIA SkillSpector — security scanner for agent skills. Pinned: an unpinned
-# git install would let an upstream push change what gates our merges, which is
-# the exact supply-chain risk the scanner exists to catch.
-SKILLSPECTOR ?= skillspector
-SKILLSPECTOR_VERSION := v2.11.0
-SKILLSPECTOR_BASELINE := .skillspector-baseline.yaml
+# NVIDIA SkillSpector — security scanner for agent skills — run through the
+# eyelock/actions/skillspector gate image, the same gate CI runs. Pinned by
+# digest: an upstream push must not change what gates our merges, which is the
+# exact supply-chain risk the scanner exists to catch. The image records the
+# SkillSpector release it carries (`docker run IMAGE --version`).
+SKILLSPECTOR_IMAGE := ghcr.io/eyelock/skillspector:1.1.0@sha256:729992e6f4e82c269330affe6e3f189a1395ae15022e60a50fe70e4fd6d7b31c
+# Skills are found wherever a SKILL.md is; these are scanned as one unit each.
+# Keep in step with the Skill Security job in .github/workflows/ci.yml.
+SKILLSPECTOR_ARGS := --include agents --include rules --include .claude --exclude 'testdata/*'
 
 # govulncheck. Pinned so a toolchain-side change cannot silently alter what
 # gates a merge, the same reasoning as the SkillSpector pin above.
 GOVULNCHECK_VERSION := v1.7.0
-SARIF_DIR := .skillspector-sarif
 
 vulncheck: ## Scan the Go code and its dependencies for known vulnerabilities
 	@# Deliberately NOT part of `make check`, for the same reason as
@@ -104,20 +106,8 @@ vulncheck: ## Scan the Go code and its dependencies for known vulnerabilities
 	@# only vulnerabilities the code genuinely reaches.
 	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
-scan-artifacts: ## Security-scan the harness artifacts with SkillSpector
-	@command -v $(SKILLSPECTOR) >/dev/null 2>&1 || { \
-		echo "skillspector not found. Install with:"; \
-		echo "  pip install 'git+https://github.com/NVIDIA/SkillSpector.git@$(SKILLSPECTOR_VERSION)'"; \
-		exit 1; }
-	@rm -rf $(SARIF_DIR) && mkdir -p $(SARIF_DIR)
-	@for d in $(ARTIFACT_DIRS); do \
-		echo "==> skillspector scan $$d"; \
-		$(SKILLSPECTOR) scan ./$$d --no-llm --baseline $(SKILLSPECTOR_BASELINE) \
-			-f sarif -o $(SARIF_DIR)/`echo $$d | tr -d .`.sarif || exit 1; \
-	done
-	@# `skillspector scan` exits 0 whatever it finds, so the verdict comes from
-	@# the SARIF rather than the exit code. See the script header.
-	@scripts/skillspector-findings.sh $(SARIF_DIR)
+scan-artifacts: ## Security-scan the harness artifacts with SkillSpector (needs Docker)
+	@scripts/scan-artifacts.sh $(SKILLSPECTOR_IMAGE) $(SKILLSPECTOR_ARGS)
 
 check-marketplace: ## Assert the committed marketplace indexes match the plugin manifests
 	@./scripts/marketplace-consistency.sh

@@ -62,3 +62,9 @@ import {
   to = github_actions_secret.this[each.key]
   id = "ynh:${each.key}"
 }
+
+# Created by hand in every YN repository (2026-10-08); this adopts it without recreating it.
+import {
+  to = github_repository_ruleset.never_delete_main_or_develop
+  id = "ynh:24699968"
+}

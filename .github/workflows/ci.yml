@@ -189,25 +189,32 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
-        with:
-          python-version: '3.13'
-      # Pinned to a tag on purpose. SkillSpector is not on PyPI, so this is a
-      # git install; unpinned, an upstream push would silently change what
-      # gates our merges — the supply-chain risk the scanner exists to catch.
-      - name: Install SkillSpector
-        run: pip install "git+https://github.com/NVIDIA/SkillSpector.git@v2.11.0"
+      # The same gate `make scan-artifacts` runs. Pinned by commit, so the
+      # action builds its scanner image from that commit's Dockerfile, which
+      # pins SkillSpector itself by commit: an upstream push cannot change
+      # what gates our merges, the supply-chain risk the scanner exists to
+      # catch. On a pull request only the changed skills and included
+      # directories are scanned; a baseline change scans everything.
+      # Keep include/exclude in step with SKILLSPECTOR_ARGS in the Makefile.
       - name: Scan harness artifacts
-        run: make scan-artifacts
-      # Advisory upload: the gate is the scan's exit code above. A code
-      # scanning misconfiguration must not mask a real finding, nor block a
-      # merge on its own.
-      - name: Upload SARIF to code scanning
-        if: always()
-        continue-on-error: true
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2  # v4.38.2
+        id: scan
+        uses: eyelock/actions/skillspector@2b4b0eafc45da186506a6fd72774482b636d55aa  # skillspector-v1.1.0
         with:
-          sarif_file: .skillspector-sarif
+          include: |
+            agents
+            rules
+            .claude
+          exclude: |
+            testdata/*
+      # Advisory upload: the gate is the scan step above. A code scanning
+      # misconfiguration must not mask a real finding, nor block a merge on
+      # its own.
+      - name: Upload SARIF to code scanning
+        if: always() && steps.scan.outputs.sarif != ''
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee  # v4.39.0
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif }}
           category: skillspector
 
   packaging:

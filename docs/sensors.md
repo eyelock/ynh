@@ -57,7 +57,7 @@ Sensors live under the top-level `sensors` key in `.agents/harness/plugin.json`.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `category` | enum | No | Fowler bucket: `maintainability`, `architecture`, `behaviour`. Free metadata for loop-driver triage. |
-| `role` | enum | No | Role hint: `regular` (default), `convergence-verifier`, `stuck-recovery`. Loop drivers filter sensors by role to discover which one is the loop's done-check or the recovery sensor. ynh enforces one rule: a `convergence-verifier` needs a source that can return `pass`, so `files` and `focus` are refused. See [`convergence-verifier` needs a source that can decide](#convergence-verifier-needs-a-source-that-can-decide). |
+| `role` | enum | No | Role hint: `regular` (default), `convergence-verifier`, `stuck-recovery`. Loop drivers filter sensors by role to discover which one is the loop's done-check or the recovery sensor. Any number of sensors may carry `convergence-verifier`; `ynh agent run` runs all of them after the gate goes green. ynh enforces one rule: a `convergence-verifier` needs a source that can return `pass`, so `files` and `focus` are refused. See [`convergence-verifier` needs a source that can decide](#convergence-verifier-needs-a-source-that-can-decide). |
 | `tolerance` | enum | No | How `ynh check` treats a failure: `blocking` (default), `advisory`, `report`. See [Tolerance](#tolerance). |
 | `observes` | string[] | No | For `files` sensors: the paths the artifact depends on. Empty means the whole tracked tree. See [Freshness](#freshness-is-this-artifact-still-true). |
 | `source` | object | **Yes** | Strict one-of: `files` \| `command` \| `focus`. Discriminates the sensor type. |
@@ -771,8 +771,15 @@ did not, `2` ynh could not run the calibration. Shape:
 
 ### `convergence-verifier` needs a source that can decide
 
-A sensor with `role: convergence-verifier` tells the loop the run is finished,
-and a run ends only when it reports `status: pass`. A source that can never
+A sensor with `role: convergence-verifier` tells the loop the run is finished.
+A harness may declare any number of them, and `--convergence-sensor` adds one
+more. Once the regular sensors pass, `ynh agent run` runs every verifier, in name
+order, in a single `ynh check` call, and ends the run only if that check's
+verdict is not `blocked` and each verifier reached a verdict. They are judged by
+`ynh check`, so the [baseline](#baseline-inheriting-a-repo-that-already-fails),
+tolerance and ratchet apply: a verifier whose failures are all recorded reports
+`known` and does not hold the run open. `ynh check` runs these sensors like any
+other, so a human can run the same question by hand. A source that can never
 report `pass` would hold every run open until its turn cap, with nothing saying
 why. Two sources are like that, and both are refused: `ynd validate` reports
 the sensor as an issue, and `ynh agent run` refuses to start, before any worker

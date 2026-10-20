@@ -29,6 +29,10 @@ lists of required checks, and they drift. Both require the one check **All Clear
 in `ci.yml`), not strictly: a pull request need not be up to date with its base; `main` also requires **Verify PR source branch**, so it takes only
 `develop`, `release/*` and `hotfix/*`. Repository admins (role 5) can bypass.
 
+A third ruleset, "Never Delete Main or Develop", forbids deleting or force-pushing either branch.
+It has no bypass actors, so it binds admins too, who can bypass the other two. It was created by
+hand in every YN repository and is adopted through `imports.tf`.
+
 ### The classic protection they replaced
 
 `main` and `develop` used to carry classic branch protection, set by hand and in no state. The

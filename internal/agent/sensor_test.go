@@ -8,41 +8,6 @@ import (
 	"github.com/eyelock/ynh/internal/gate"
 )
 
-func TestSensorResult_Summary_Command(t *testing.T) {
-	passing := &SensorResult{Kind: "command", ExitCode: 0}
-	if passing.Summary() != "passed" {
-		t.Errorf("expected 'passed', got %q", passing.Summary())
-	}
-
-	failing := &SensorResult{
-		Kind:     "command",
-		ExitCode: 1,
-		Output:   SensorRunOutput{Stdout: "line1\nline2\nline3\nline4\nline5"},
-	}
-	summary := failing.Summary()
-	// Should truncate to 3 lines with ellipsis.
-	if summary == "" {
-		t.Error("failing sensor should have non-empty summary")
-	}
-}
-
-func TestRunSensor_MockReplacement(t *testing.T) {
-	original := runSensorFn
-	defer func() { runSensorFn = original }()
-
-	runSensorFn = func(ynh, harnessName, sensorName, cwd, overlayJSON string, _ []string) (*SensorResult, error) {
-		return &SensorResult{Name: sensorName, Kind: "command", ExitCode: 0}, nil
-	}
-
-	result, err := RunSensor("ynh", "myharness", "build", "/tmp", "", nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Name != "build" || result.ExitCode != 0 {
-		t.Errorf("unexpected result: %+v", result)
-	}
-}
-
 func TestSensorHash_Deterministic(t *testing.T) {
 	e := env(
 		gate.Result{Name: "build", Status: gate.StatusPass},
