@@ -205,6 +205,16 @@ ran, since the header is written before the worker reports one.
 ([#443](https://github.com/eyelock/ynh/issues/443)). See
 [Agent](agent.md#the-model).
 
+A convergence verifier's `sensor_result` in the trajectory used to carry
+`kind: "focus"` whatever the sensor was. That was wrong, and it now carries the
+sensor's real kind (a verifier is a command sensor), a `status`, and the rest of
+what any `sensor_result` carries. Identify verifiers by `role:
+"convergence-verifier"`, not by `kind`. Every verifier now runs, not just one,
+and the `agent run` result's `convergence` gains an optional `verifiers` array
+listing each with its `sensor`, `kind`, `status`, `passed` and `summary`;
+`convergence.sensor` is the first verifier that failed, or the first when all
+passed. See [Agent](agent.md#convergence).
+
 `effort_requested` in the `agent run` result, and on the trajectory's
 `session_start` and `session_resumed`, is the effort `--effort` or the
 harness's `agent.effort` asked for: `low`, `medium` or `high`. It sits beside

@@ -187,8 +187,7 @@ type SensorResultData struct {
 	// Status is `ynh check`'s verdict word — pass, fail, known, reported,
 	// deferred. Passed alone cannot express "failing, but every failure is
 	// already in the baseline", which is the difference between a regression
-	// this run caused and debt it inherited. Empty for the convergence
-	// verifier, which does not go through the gate.
+	// this run caused and debt it inherited.
 	Status string `json:"status,omitempty"`
 	// ToolVersion is the version of the tool that produced this result, when
 	// the sensor declares a version_command.

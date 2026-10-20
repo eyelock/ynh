@@ -765,7 +765,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	}
 	// ── Collect sensors ───────────────────────────────────────────────────────
 	var sensorNames []string
-	var convergenceSensor string
+	var convergenceVerifiers []string
 
 	if opts.testSensorNames != nil {
 		// Test injection: use the provided names, skip harness-based collection.
@@ -773,9 +773,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	} else if harnessObj != nil {
 		for name, s := range harnessObj.Sensors {
 			if s.Role == "convergence-verifier" || name == opts.ConvergenceSensor {
-				if convergenceSensor == "" {
-					convergenceSensor = name
-				}
+				convergenceVerifiers = append(convergenceVerifiers, name)
 				continue
 			}
 			if s.Role != "stuck-recovery" {
@@ -785,6 +783,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		// Sorted only so --only and the trajectory are deterministic. Execution
 		// order is `ynh check`'s to decide now that it runs them.
 		sort.Strings(sensorNames)
+		sort.Strings(convergenceVerifiers)
 	} // end else if harnessObj != nil
 
 	// ── Plan phase ────────────────────────────────────────────────────────────
@@ -1003,6 +1002,18 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		return nil
 	}
 
+	// stopForWall is stopRun narrowed to the wall clock, asked before the
+	// convergence verifiers run. They are the one slow call a converging turn
+	// still has to make, so a spent wall clock ends the run before them. A
+	// spent turn or token cap does not: the final turn the caps allow is
+	// still entitled to converge.
+	stopForWall := func() error {
+		if _, kind, _ := budget.Exceeded(); kind == BudgetWallClock {
+			return stopRun()
+		}
+		return nil
+	}
+
 	// stopBeforeSend is stopRun for a turn's feedback that has not been sent.
 	// When the run ends there the feedback is kept in the checkpoint as the
 	// pending message, so a --resume with room left sends it, and nothing is
@@ -1093,7 +1104,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			for _, name := range sensorNames {
 				_ = traj.Emit(KindSensorRun, turnN, name)
 			}
-			callEnv, endCall := startCall(opts.Telemetry, CallCheck, turnN, "")
+			callEnv, endCall := startCall(opts.Telemetry, CallCheck, turnN)
 			env, checkErr := RunCheck(ynh, opts.HarnessName, opts.WorktreeDir, sensorNames, opts.SensorOverlay, callEnv)
 			if checkErr != nil {
 				endCall("error", false)
@@ -1135,9 +1146,20 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		}
 
 		// ── Check convergence ─────────────────────────────────────────────────
-		converged, feedback, convergence := checkConvergence(checkEnv, convergenceSensor, ynh, opts.HarnessName, opts.WorktreeDir, traj, opts.Telemetry, turnN, verificationExpected)
+		converged, feedback, convergence, stopErr := checkConvergence(checkEnv, verifierRun{
+			names:   convergenceVerifiers,
+			ynh:     ynh,
+			harness: opts.HarnessName,
+			cwd:     opts.WorktreeDir,
+			overlay: opts.SensorOverlay,
+			tel:     opts.Telemetry,
+			stop:    stopForWall,
+		}, traj, turnN, verificationExpected)
 		if convergence != nil {
 			result.Convergence = convergence
+		}
+		if stopErr != nil {
+			return result, stopErr
 		}
 		if converged {
 			_ = traj.Emit(KindConverged, turnN, nil)
@@ -1211,8 +1233,8 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 }
 
 // refuseConvergenceVerifier rejects a run whose convergence verifier could
-// never return pass. Every sensor the collection below might pick is checked,
-// in name order, because it picks among them in map order.
+// never return pass. Every sensor the collection treats as a verifier is
+// checked, in name order.
 func refuseConvergenceVerifier(sensors map[string]plugin.Sensor, flagName string) error {
 	names := make([]string, 0, len(sensors))
 	for name := range sensors {
@@ -1231,27 +1253,45 @@ func refuseConvergenceVerifier(sensors map[string]plugin.Sensor, flagName string
 	return nil
 }
 
+// verifierRun is what checkConvergence needs to run the convergence verifiers
+// once the regular gate is green: which sensors, and how to call `ynh check`
+// for them.
+type verifierRun struct {
+	names   []string // sorted; empty when the harness declares none
+	ynh     string
+	harness string
+	cwd     string
+	overlay map[string]json.RawMessage
+	tel     Telemetry
+	// stop is asked before the verifiers run and ends the run when it returns
+	// an error. Nil asks nothing.
+	stop func() error
+}
+
 // checkConvergence decides whether the turn's gate result means done.
 //
-// The verdict is `ynh check`'s, not the loop's. What blocks — tolerance,
-// baseline forgiveness, the pass/fail rule for each sensor kind — is settled
+// The verdict is `ynh check`'s, not the loop's. What blocks: tolerance,
+// baseline forgiveness, the pass/fail rule for each sensor kind, is settled
 // there, so a run and a human at a terminal cannot reach opposite conclusions
-// about the same manifest.
+// about the same manifest. That holds for the convergence verifiers too: they
+// run through `ynh check`, so a verifier with pre-existing failures in the
+// baseline can still pass.
 //
 // Returns (converged=false, feedback=<synthesized feedback>) when work remains.
-// verificationExpected is true when the run was configured to verify itself —
+// verificationExpected is true when the run was configured to verify itself:
 // a harness was named, or this is a resume that should have restored one.
+// The error is non-nil only when the run must end here: v.stop ended it before
+// the verifiers, or their check could not run (ExitGateError).
 func checkConvergence(
 	env *gate.Envelope,
-	convergenceSensor, ynh, harnessName, cwd string,
+	v verifierRun,
 	traj *TrajectoryWriter,
-	tel Telemetry,
 	turnN int,
 	verificationExpected bool,
-) (bool, string, *RunConvergence) {
+) (bool, string, *RunConvergence, error) {
 	// Convergence needs evidence when verification was asked for. An empty
 	// result set made allPassed vacuously true, so a run whose harness went
-	// missing — which is what --resume without --harness produced — reported
+	// missing, which is what --resume without --harness produced, reported
 	// converged and exited 0 after one turn, having verified nothing.
 	//
 	// The distinction matters: a run started with no harness never asked to be
@@ -1278,64 +1318,133 @@ func checkConvergence(
 		}
 	}
 	if verificationExpected && ran == 0 {
-		return false, "verification was expected but no sensors ran, so convergence cannot be confirmed", nil
+		return false, "verification was expected but no sensors ran, so convergence cannot be confirmed", nil, nil
 	}
 	if verificationExpected && ran > 0 && canGate == 0 {
-		return false, "no blocking command sensor ran, so nothing gates convergence", nil
+		return false, "no blocking command sensor ran, so nothing gates convergence", nil, nil
 	}
 
 	if env != nil && env.Verdict == gate.VerdictBlocked {
-		return false, synthesizeFeedback(env), nil
+		return false, synthesizeFeedback(env), nil, nil
 	}
 
-	// Gate green — consult convergence-verifier if declared. It stays a
-	// direct sensor run: resolving a focus sensor needs an agent runtime,
-	// which is why `ynh check` reports it as deferred rather than judging it.
-	if convergenceSensor != "" && ynh != "" && harnessName != "" {
-		_ = traj.Emit(KindSensorRun, turnN, convergenceSensor)
-		callEnv, endCall := startCall(tel, CallSensor, turnN, convergenceSensor)
-		cvResult, err := RunSensor(ynh, harnessName, convergenceSensor, cwd, "", callEnv)
-		if err != nil {
-			endCall("error", false)
-		} else {
-			endCall(string(gate.StatusForKind(cvResult.Kind, cvResult.ExitCode)), true)
+	if len(v.names) == 0 || v.ynh == "" || v.harness == "" {
+		return true, "", nil, nil
+	}
+	return runVerifiers(v, traj, turnN)
+}
+
+// runVerifiers runs every convergence verifier in one `ynh check` call, after
+// the regular gate went green, and judges them by that call's envelope.
+//
+// They are not folded into the per-turn gate call because they are the slow,
+// expensive final say, run only for a turn that would otherwise converge.
+//
+// Converged means the check ran, its verdict is not blocked, and every
+// verifier reached a decision. A verifier that was skipped, or that only
+// reported or deferred (a files or focus sensor, which `ynh check` cannot
+// judge), is not a pass, so the run does not converge on its say-so.
+func runVerifiers(v verifierRun, traj *TrajectoryWriter, turnN int) (bool, string, *RunConvergence, error) {
+	if v.stop != nil {
+		if err := v.stop(); err != nil {
+			return false, "", nil, err
 		}
-		// Convergence is gate.StatusPass, not a locally invented verdict.
-		// #214 routed the gate through `ynh check` but left this call site
-		// deriving its own answer, and that answer said a files sensor had
-		// converged because a path existed — contents never read, and the
-		// path inside the agent's own write path. A files sensor now yields
-		// StatusReported, which is not StatusPass, so it cannot converge:
-		// the refusal falls out of existing doctrine rather than adding a rule.
-		converged := err == nil &&
-			gate.StatusForKind(cvResult.Kind, cvResult.ExitCode) == gate.StatusPass
-		if !converged {
-			var summary string
-			if err != nil {
-				summary = err.Error()
-			} else {
-				summary = cvResult.Summary()
-			}
+	}
+	for _, name := range v.names {
+		_ = traj.Emit(KindSensorRun, turnN, name)
+	}
+	callEnv, endCall := startCall(v.tel, CallCheck, turnN)
+	venv, err := RunCheck(v.ynh, v.harness, v.cwd, v.names, v.overlay, callEnv)
+	if err != nil {
+		// As for the per-turn gate, a check that cannot run is an operator
+		// fault, not agent work: a broken verifier command would otherwise
+		// spend turns until a budget cap and be reported as the agent's
+		// failure. The result still shows what failed.
+		endCall("error", false)
+		summary := err.Error()
+		msg := fmt.Sprintf("convergence verifiers (%s) on turn %d: %v", strings.Join(v.names, ", "), turnN, err)
+		_ = traj.Emit(KindSessionEnd, turnN, SessionEndData{ExitCode: ExitGateError, Reason: msg})
+		return false, "", &RunConvergence{
+			Sensor: v.names[0], Passed: false, Summary: summary,
+			Verifiers: failedVerifiers(v.names, summary),
+		}, &ExitError{Code: ExitGateError, Message: msg}
+	}
+	endCall(venv.Verdict, true)
+
+	byName := make(map[string]gate.Result, len(venv.Sensors))
+	for _, r := range venv.Sensors {
+		byName[r.Name] = r
+	}
+
+	verifiers := make([]VerifierResult, 0, len(v.names))
+	allOK := true
+	first := -1 // index of the first verifier that did not pass
+	for i, name := range v.names {
+		r, found := byName[name]
+		vr := VerifierResult{Sensor: name, Status: gate.StatusSkipped, Summary: "did not run"}
+		if found && r.Ran() {
+			vr.Kind = r.Kind
+			vr.Status = r.Status
+			vr.Summary = resultSummary(r)
 			_ = traj.Emit(KindSensorResult, turnN, SensorResultData{
-				Name:    convergenceSensor,
-				Kind:    "focus",
-				Role:    "convergence-verifier",
-				Passed:  false,
-				Summary: summary,
+				Name:        r.Name,
+				Kind:        r.Kind,
+				Status:      r.Status,
+				ExitCode:    r.ExitCode,
+				DurationMS:  r.DurationMS,
+				Tolerance:   r.Tolerance,
+				ToolVersion: r.ToolVersion,
+				KnownCount:  r.KnownCount,
+				NewCount:    r.NewCount,
+				Role:        "convergence-verifier",
+				Passed:      r.Status != gate.StatusFail,
+				Summary:     vr.Summary,
 			})
-			return false, "All sensors passed but convergence verifier says: " + summary,
-				&RunConvergence{Sensor: convergenceSensor, Passed: false, Summary: summary}
 		}
-		_ = traj.Emit(KindSensorResult, turnN, SensorResultData{
-			Name:   convergenceSensor,
-			Kind:   "focus",
-			Role:   "convergence-verifier",
-			Passed: true,
-		})
-		return true, "", &RunConvergence{Sensor: convergenceSensor, Passed: true}
+		vr.Passed = found && verifierDecided(r) && !r.Gating()
+		if !vr.Passed {
+			allOK = false
+			if first < 0 {
+				first = i
+			}
+		}
+		verifiers = append(verifiers, vr)
 	}
 
-	return true, "", nil
+	if venv.Verdict != gate.VerdictBlocked && allOK {
+		return true, "", &RunConvergence{
+			Sensor: v.names[0], Passed: true, Verifiers: verifiers,
+		}, nil
+	}
+
+	failing := verifiers[0]
+	if first >= 0 {
+		failing = verifiers[first]
+	}
+	feedback := "The regular sensors passed, but the convergence verifiers did not.\n\n" + synthesizeFeedback(venv)
+	return false, feedback, &RunConvergence{
+		Sensor: failing.Sensor, Passed: false, Summary: failing.Summary, Verifiers: verifiers,
+	}, nil
+}
+
+// verifierDecided reports whether a verifier's result is a verdict at all. A
+// files sensor reports and a focus sensor defers: neither says pass, so
+// neither may converge the run.
+func verifierDecided(r gate.Result) bool {
+	switch r.Status {
+	case gate.StatusSkipped, gate.StatusReported, gate.StatusDeferred:
+		return false
+	}
+	return true
+}
+
+// failedVerifiers is the verifier list for a check that could not run at all.
+func failedVerifiers(names []string, summary string) []VerifierResult {
+	out := make([]VerifierResult, 0, len(names))
+	for _, name := range names {
+		out = append(out, VerifierResult{Sensor: name, Status: gate.StatusSkipped, Summary: summary})
+	}
+	return out
 }
 
 // maxFeedbackLines caps how much of one sensor's output reaches the worker.

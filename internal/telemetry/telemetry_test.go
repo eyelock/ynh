@@ -411,7 +411,6 @@ func TestRun_StartCall(t *testing.T) {
 		wantStatus float64
 	}{
 		{name: SpanCheck, outcome: "blocked", ok: true, wantStatus: 1},
-		{name: SpanSensorRun, outcome: "error", ok: false, wantStatus: 2},
 	}
 	envs := map[string][]string{}
 	for _, tt := range tests {

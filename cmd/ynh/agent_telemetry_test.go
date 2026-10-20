@@ -604,16 +604,14 @@ func TestCmdAgentRun_ResumeRecordsRestoredIdentity(t *testing.T) {
 	}
 }
 
-// Each kind of call the loop makes gets its own span name, under the run.
+// A call the loop makes gets a check span, under the run.
 func TestRunTelemetry_CallSpans(t *testing.T) {
 	spoolDir := filepath.Join(t.TempDir(), "spool")
 	t.Setenv("YNR_SPOOL", spoolDir)
 	tel := telemetry.Setup("1.0.0", telemetry.Options{}, &bytes.Buffer{})
 	rt := runTelemetry{run: tel.StartRun()}
-	for _, c := range []struct{ kind, sensor string }{{agent.CallCheck, ""}, {agent.CallSensor, "verifier"}} {
-		_, end := rt.StartCall(c.kind, 2, c.sensor)
-		end("pass", true)
-	}
+	_, end := rt.StartCall(agent.CallCheck, 2)
+	end("pass", true)
 	rt.run.Finish("converged", true)
 	tel.Shutdown()
 
@@ -625,8 +623,5 @@ func TestRunTelemetry_CallSpans(t *testing.T) {
 	}
 	if a := got[telemetry.SpanCheck]; a == nil || a[string(telemetry.AttrTurn)] != "2" {
 		t.Errorf("check span attributes %v", a)
-	}
-	if a := got[telemetry.SpanSensorRun]; a == nil || a[string(telemetry.AttrSensorName)] != "verifier" {
-		t.Errorf("sensors run span attributes %v", a)
 	}
 }

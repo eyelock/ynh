@@ -168,9 +168,24 @@ type RunConsumed struct {
 	PlanIter            int      `json:"plan_iterations,omitempty"`
 }
 
-// RunConvergence is the convergence-verifier's verdict.
+// RunConvergence is the convergence verifiers' verdict.
+//
+// Sensor, Passed and Summary speak for the first verifier, by name, that did
+// not pass, or for the first verifier when all passed. Verifiers lists every
+// one.
 type RunConvergence struct {
-	Sensor  string `json:"sensor"`
+	Sensor    string           `json:"sensor"`
+	Passed    bool             `json:"passed"`
+	Summary   string           `json:"summary,omitempty"`
+	Verifiers []VerifierResult `json:"verifiers,omitempty"`
+}
+
+// VerifierResult is one convergence verifier's part in the verdict.
+type VerifierResult struct {
+	Sensor string `json:"sensor"`
+	Kind   string `json:"kind,omitempty"`
+	// Status is the sensor's `ynh check` status; "skipped" when it did not run.
+	Status  string `json:"status"`
 	Passed  bool   `json:"passed"`
 	Summary string `json:"summary,omitempty"`
 }

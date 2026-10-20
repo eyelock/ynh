@@ -41,7 +41,16 @@
   "convergence": {
     "sensor": "reviewer",
     "passed": false,
-    "summary": "the new handler has no test covering the error branch"
+    "summary": "the new handler has no test covering the error branch",
+    "verifiers": [
+      {
+        "sensor": "reviewer",
+        "kind": "command",
+        "status": "fail",
+        "passed": false,
+        "summary": "the new handler has no test covering the error branch"
+      }
+    ]
   },
   "sensors": [
     {
