@@ -28,26 +28,24 @@ make clean              # remove build artifacts and caches
 make clean && make build  # fresh build (use when binary seems stale)
 make check-artifacts    # ynd validate + ynd lint over skills/ agents/ rules/ .claude/
 make check-vendor-parity # every vendor documented, assembles the same artifacts, stubbed in evals (needs jq)
-make scan-artifacts     # SkillSpector security scan of the same dirs (needs Python)
+make scan-artifacts     # SkillSpector security scan of the same dirs (needs Docker)
 make vulncheck          # govulncheck over the Go code (needs network)
 ```
 
-`scan-artifacts` is deliberately NOT part of `make check` — it needs SkillSpector
-installed from Python, and a missing optional tool should not fail a contributor's
-build. CI runs it on every change to the harness artifacts. Install it with:
-
-```bash
-pip install 'git+https://github.com/NVIDIA/SkillSpector.git@v2.11.0'
-```
+`scan-artifacts` is deliberately NOT part of `make check` — it needs Docker, and a
+missing optional tool should not fail a contributor's build. CI runs the same gate
+([eyelock/actions/skillspector](https://github.com/eyelock/actions/tree/develop/skillspector))
+on every change to the harness artifacts. It scans every skill, plus `agents/`,
+`rules/` and `.claude/` as units, from a pinned image (`SKILLSPECTOR_IMAGE`).
 
 Findings are triaged by hand into `.skillspector-baseline.yaml`. Every suppression
 needs a scoped `path:` and a written `reason:` — never a bare rule id, which would
 silence the whole rule family repo-wide.
 
-`skillspector scan` exits 0 whatever it finds, so the verdict comes from the
-SARIF rather than the exit code (`scripts/skillspector-findings.sh`). An absent
-or empty SARIF directory fails too: a scan that produced nothing must not read
-as a scan that found nothing.
+`skillspector scan` exits 0 for anything scoring 50 or below, whatever it found,
+so the gate takes its verdict from the SARIF: any finding the baseline does not
+suppress fails, and a scan that did not complete fails too. A full scan warns
+about baseline rules that no longer suppress anything; delete those.
 
 `make vulncheck` is also outside `make check`, for a different reason: it
 queries a live vulnerability database, so an unchanged tree can pass today and

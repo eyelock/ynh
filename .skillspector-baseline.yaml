@@ -22,17 +22,13 @@ version: 2
 rules:
   # --- AS3 · Agent Snooping / Skill Enumeration ---------------------------
   # Fires on instructions to read or list other skills' files. That is what a
-  # harness manager does: ynd compress rewrites skill files, ynh-create-harness
-  # scaffolds them, add-vendor-adapter walks them to build an adapter. Scoped
-  # per file so a skill that starts reading skills for no reason still fires.
+  # harness manager does: ynd compress rewrites skill files, add-vendor-adapter
+  # walks them to build an adapter. Scoped per file so a skill that starts
+  # reading skills for no reason still fires.
 
   - id: "AS3"
     path: "*ynd-compress/SKILL.md"
     reason: "ynd compress operates ON skill and prompt files by design — reading them is the feature, not reconnaissance."
-
-  - id: "AS3"
-    path: "*ynh-create-harness/SKILL.md"
-    reason: "Scaffolds skills/ and agents/ for a new harness; must enumerate the layout it is creating."
 
   - id: "AS3"
     path: "*add-vendor-adapter/SKILL.md"
@@ -72,15 +68,11 @@ rules:
     reason: "Matches the per-tutorial sandbox (/tmp/ynh-eval-<slug>) and its run.sh, which carries the working directory and exports from one block of a tutorial to the next. The sandbox exists to CONTAIN the eval run and is torn down after each tutorial; nothing persists across sessions."
 
   # --- TM1 · Tool Misuse / Tool Parameter Abuse ---------------------------
-  # Scoped to two files on purpose. `rm -rf` in an agent instruction is a real
+  # Scoped to one file on purpose. `rm -rf` in an agent instruction is a real
   # risk class and this repo has the scar to prove it — see
-  # .claude/rules/destructive-operations.md. These two occurrences are bounded
-  # to a /tmp sandbox path the agent itself created. An unscoped rm -rf in any
-  # other file must still fail the scan.
-
-  - id: "TM1"
-    path: "*agents/evals.md"
-    reason: "rm -rf is bounded to /tmp/ynh-eval-<slug>, a sandbox the eval agent creates and tears down, and every other rm in a tutorial block goes through a guard that refuses any target outside it. Scoped to this file only: see .claude/rules/destructive-operations.md for why a blanket rm -rf suppression is not acceptable here."
+  # .claude/rules/destructive-operations.md. An unscoped rm -rf in any file
+  # must still fail the scan. (The agents/evals.md entry for its /tmp sandbox
+  # was removed at SkillSpector 2.13.0, which no longer reports it.)
 
   - id: "TM1"
     path: "*rules/branching.md"
@@ -128,3 +120,33 @@ rules:
   - id: "RP1"
     path: "*ynh-sensors/references/starter-sets.md"
     reason: "Misfire on two counts. These are sensor commands (npx prettier --check, npx eslint, npx tsc --noEmit), not MCP server references. And pinning them would be wrong: npx in a project that lists the tool in devDependencies resolves to that project's own pinned copy, whereas npx tool@version bypasses it and fetches from the registry. The starter set deliberately defers to the consuming project's lockfile."
+
+  # ---------------------------------------------------------------------------
+  # Added at SkillSpector 2.13.0, when the scan moved to eyelock/actions.
+  # ---------------------------------------------------------------------------
+
+  # --- AE1 · Referenced artifact not completely inspected -----------------
+  # A coverage note, not a finding: SkillSpector stops parsing an expression
+  # past a span limit (static_parse_limit) and reports the referencing skill
+  # as partially inspected. Scoped by message to the exact reference, so a
+  # new gap in another file still fails.
+
+  - id: "AE1"
+    path: "*vendor-adapters/SKILL.md"
+    message: "*references/anthropic.md*"
+    reason: "static_parse_limit on a long vendor reference page; coverage gap only."
+
+  - id: "AE1"
+    path: "*vendor-adapters/SKILL.md"
+    message: "*references/codex.md*"
+    reason: "static_parse_limit on a long vendor reference page; coverage gap only."
+
+  - id: "AE1"
+    path: "*vendor-adapters/SKILL.md"
+    message: "*references/cursor.md*"
+    reason: "static_parse_limit on a long vendor reference page; coverage gap only."
+
+  - id: "AE1"
+    path: "*ynh-dev/SKILL.md"
+    message: "*references/building.md*"
+    reason: "static_parse_limit on the contributor build reference; coverage gap only."
