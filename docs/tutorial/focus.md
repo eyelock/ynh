@@ -233,4 +233,4 @@ rm -rf /tmp/ynh-tutorial
 
 ## Next
 
-[Project-Local Config](project-local-config.md) — use `.agents/harness/plugin.json` in your project root for zero-install configuration.
+[Composing Tools Across Harnesses](composing-tools.md): carry MCP servers, profiles, focuses and hooks across includes.
