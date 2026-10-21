@@ -31,7 +31,7 @@ func TestBuildDelegateAgent(t *testing.T) {
 		DefaultVendor: "claude",
 	}
 
-	content := BuildDelegateAgent(p, dir)
+	content := BuildDelegateAgent(p, dir, nil, "")
 
 	// Check frontmatter
 	if !strings.Contains(content, "name: team-dev") {
@@ -61,7 +61,7 @@ func TestBuildDelegateAgent_NoRulesNoSkills(t *testing.T) {
 		Name: "minimal",
 	}
 
-	content := BuildDelegateAgent(p, dir)
+	content := BuildDelegateAgent(p, dir, nil, "")
 
 	if !strings.Contains(content, "name: minimal") {
 		t.Error("missing name")
@@ -112,7 +112,7 @@ func TestAssembleDelegates_WithLocalRepo(t *testing.T) {
 		{GitSource: harness.GitSource{Git: delegateDir}},
 	}
 
-	if err := AssembleDelegates(workDir, adapter, delegates, ""); err != nil {
+	if _, err := AssembleDelegates(workDir, adapter, delegates, "", DelegateOptions{}); err != nil {
 		t.Fatalf("AssembleDelegates failed: %v", err)
 	}
 
@@ -156,7 +156,7 @@ func TestAssembleDelegates_RelativeSourceUsesHarnessDir(t *testing.T) {
 	workDir := t.TempDir()
 	adapter := &mockAdapter{}
 	delegates := []harness.Delegate{{GitSource: harness.GitSource{Git: "./team"}}}
-	if err := AssembleDelegates(workDir, adapter, delegates, harnessDir); err != nil {
+	if _, err := AssembleDelegates(workDir, adapter, delegates, harnessDir, DelegateOptions{}); err != nil {
 		t.Fatalf("AssembleDelegates failed: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(workDir, adapter.ConfigDir(), "agents", "team-rel.md")); err != nil {
@@ -169,10 +169,10 @@ func TestAssembleDelegates_Empty(t *testing.T) {
 	adapter := &mockAdapter{}
 
 	// Should be a no-op
-	if err := AssembleDelegates(workDir, adapter, nil, ""); err != nil {
+	if _, err := AssembleDelegates(workDir, adapter, nil, "", DelegateOptions{}); err != nil {
 		t.Fatalf("AssembleDelegates with nil delegates failed: %v", err)
 	}
-	if err := AssembleDelegates(workDir, adapter, []harness.Delegate{}, ""); err != nil {
+	if _, err := AssembleDelegates(workDir, adapter, []harness.Delegate{}, "", DelegateOptions{}); err != nil {
 		t.Fatalf("AssembleDelegates with empty delegates failed: %v", err)
 	}
 }

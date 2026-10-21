@@ -88,6 +88,24 @@ func ComposeMCPServersForExport(root *Harness, includes []IncludedHarness) (map[
 	return servers, nil
 }
 
+// ComposeDelegateMCPServersForExport is ComposeMCPServersForExport for a
+// delegate: the delegate's own servers are held to the same portability rule
+// as its includes', because the exported plugin carries the delegate's agent
+// file and not its directory. A server that points into the delegate's or an
+// include's directory is an error naming it.
+func ComposeDelegateMCPServersForExport(del *Harness, includes []IncludedHarness) (map[string]plugin.MCPServer, error) {
+	servers, err := ComposeMCPServersForExport(del, includes)
+	if err != nil {
+		return nil, fmt.Errorf("delegate %s: %w", del.Name, err)
+	}
+	for _, name := range slices.Sorted(maps.Keys(servers)) {
+		if _, own := del.MCPServers[name]; own && mcpUsesOwnDir(servers[name]) {
+			return nil, fmt.Errorf("delegate %s: MCP server %q uses a path inside the delegate and cannot be exported; declare it with an absolute command or a URL", del.Name, name)
+		}
+	}
+	return servers, nil
+}
+
 // mcpUsesOwnDir reports whether a stdio server names a path inside its
 // harness's directory: a ${PLUGIN_ROOT} reference or a plugin-relative ./
 // command or cwd.

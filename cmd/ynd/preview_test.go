@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/harness"
 )
 
@@ -667,5 +668,21 @@ func TestPreviewListsHooksOfIncludedHarnesses(t *testing.T) {
 				t.Errorf("no consent: a hook file was written: %s", hooksFile)
 			}
 		}
+	}
+}
+
+func TestPrintDelegateMCP(t *testing.T) {
+	var out strings.Builder
+	printDelegateMCP(&out, nil)
+	if out.Len() != 0 {
+		t.Errorf("nothing to list, got %q", out.String())
+	}
+	printDelegateMCP(&out, []assembler.DelegateMCP{
+		{Delegate: "probe", Server: "own", Source: harness.MCPSourceRoot},
+		{Delegate: "probe", Server: "db", Source: "eyelock/db"},
+	})
+	want := "\nMCP servers of delegates:\n  probe: own (its own)\n  probe: db (from eyelock/db)\n"
+	if out.String() != want {
+		t.Errorf("listing = %q, want %q", out.String(), want)
 	}
 }
