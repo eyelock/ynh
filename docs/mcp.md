@@ -236,11 +236,46 @@ The warning is one line on stderr, prefixed `warning:`, and never fails the run.
 
 **Tool names change on Claude Code.** Without isolation a harness's servers are named `plugin:<harness>:<server>`; with it they are named `<server>`. A permission rule or hook matcher that names a tool by its server prefix must use the name for the mode the harness runs in.
 
-## Root-Harness-Only Rule
+## Servers from Included Harnesses
 
-MCP server declarations in **included harnesses** (via `includes`) are dropped during assembly. Only the root harness's MCP servers are configured. This prevents composed harnesses from silently adding tool dependencies.
+An include whose directory holds a harness manifest (`.agents/harness/plugin.json`, or an Agent Plugins package) is a harness, not just a folder of artifacts. Its `mcp_servers` are carried into the composed harness along with its skills, agents, rules and commands. An include with no manifest behaves as it always has: artifacts only.
 
-If an included harness requires an MCP server, add the server declaration to the root harness's `.agents/harness/plugin.json`.
+```json
+{
+  "includes": [
+    { "git": "github.com/eyelock/assistants", "path": "ynh/github" }
+  ]
+}
+```
+
+If `ynh/github` declares a `github` server, a run of this harness carries it. `ynd preview` lists each such server with where it came from:
+
+```
+MCP servers from included harnesses:
+  github (from eyelock/assistants//ynh/github)
+```
+
+The rules:
+
+- **Transitive.** An included harness's own `includes` are followed, so what it composes comes with it. Dependencies are assembled before the harness that includes them, and the root last, so later sources keep overriding earlier ones. Relative sources in an included harness resolve against that harness's directory, and the allow-list (`allowed_remote_sources`) applies to every include in the chain.
+- **The root wins.** A server the root declares replaces an included server of the same name entirely: nothing is merged field by field.
+- **`null` removes.** Set a top-level server to `null` in the root's `mcp_servers` to drop one inherited from an include. A profile can do the same with `null` in its own `mcp_servers`, which removes the server only while that profile is active. Removing a name that no include declares is not an error.
+- **Conflicts are errors.** Two includes that declare the same server name must declare it identically, once expanded, or the run stops with an error naming the server and both includes. Declare the server in the root to choose one, or set it to `null` and declare nothing.
+- **Each server expands in its own include's context.** `${PLUGIN_ROOT}` and a leading `./` resolve against the include's directory, and `${VAR}` references resolve against the include's own `env_passthrough`. An unset variable fails the run, exactly as it does for the root.
+- **The root's `env_passthrough` is not widened.** An include's variables are visible to that include's servers only, and a variable only the root declares is not visible to an include's servers. The allow-list stays a containment boundary the root author controls.
+- **`pick` brings the servers but not the includes.** An include that names `pick` contributes the picked artifacts and its own MCP servers, and its own `includes` are not followed. To pull in an include's dependencies, include it without `pick`.
+- **Cycles are refused.** A harness that includes itself, directly or through others, fails with the chain: `include cycle: root -> eyelock/a -> eyelock/b -> root`. A harness reached by two routes contributes once.
+- **Hooks, focuses, profiles and sensors of an included harness are not carried.** Only the root's are used (see [hooks](hooks.md#root-harness-only-rule) and [sensors](sensors.md#includes-root-only)).
+
+### Exporting
+
+`ynd export` and `ynd marketplace build` ship a plugin that does not contain an include's directory. An included server that points into it (a command or `cwd` starting with `./`, or a `${PLUGIN_ROOT}` reference in its command, args, env or cwd) cannot work there, so the export stops:
+
+```
+Error: included MCP server "db" from eyelock/assistants//ynh/db uses a path inside the include and cannot be exported; declare it in the root harness
+```
+
+Declare that server in the root harness, or set it to `null` in the root. An included server with no such reference, such as `npx` or a remote `url`, exports normally, and its `${VAR}` references stay literal as for any exported server.
 
 ## Plugin Placeholders
 
@@ -287,7 +322,7 @@ ynh profile mcp remove <harness> <profile> <name>
 
 `--command` and `--url` are mutually exclusive; at least one is required at add time. `--arg` builds the args array in declaration order; `--env K=V` and `--header K=V` are repeatable. `--type` sets the transport and is refused when it disagrees with the fields; `--cwd` sets the subprocess working directory, and `--cwd ""` on update clears it.
 
-**`--null` is profile-only.** A profile MCP entry can be a JSON null to suppress an inherited harness-level server when the profile is active — there is no harness-level analogue because there is nothing to inherit from. Passing `--null` to `ynh mcp add` is rejected.
+**`--null` is profile-only.** A profile MCP entry can be a JSON null to suppress an inherited server when the profile is active. A harness can also null a server inherited from an [included harness](#servers-from-included-harnesses), but that is written in the manifest by hand: passing `--null` to `ynh mcp add` is rejected.
 
 `mcp update` requires at least one flag. The `--clear-*` flags zero out a collection (args, env, headers) without supplying replacement content — useful for "remove all args" without writing the empty list out manually.
 

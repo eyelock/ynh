@@ -131,6 +131,8 @@ the two must be set.
 | `path` | no | Subdirectory within the resolved source. Must be a relative path with no `..` traversal. |
 | `pick` | no | Specific artifact paths to include. If omitted, includes all. |
 
+If the resolved directory holds a harness manifest, the include is a harness: its `mcp_servers` come with it, and, unless `pick` is set, so do its own `includes`. Its hooks, focuses, profiles and sensors do not. See [Servers from Included Harnesses](mcp.md#servers-from-included-harnesses).
+
 Local includes are useful when a harness ships bundled artifact directories
 **inside** its root, or when a profile needs to pull in an adjacent
 directory (see [Profiles](#profiles) for profile-level includes).
@@ -250,6 +252,19 @@ Lifecycle hooks. See [Hooks](hooks.md) for full reference.
 ### mcp_servers (optional)
 
 MCP server declarations. See [MCP Servers](mcp.md) for full reference.
+
+A server set to `null` removes a server of that name inherited from an included harness, which is how a harness drops one it does not want:
+
+```json
+{
+  "mcp_servers": {
+    "github": null,
+    "docs": { "url": "https://docs.example.com/mcp" }
+  }
+}
+```
+
+The servers of an included harness are carried into the including harness; see [Servers from Included Harnesses](mcp.md#servers-from-included-harnesses).
 
 ### mcp_isolation (optional)
 

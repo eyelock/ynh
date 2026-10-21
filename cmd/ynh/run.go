@@ -254,20 +254,22 @@ func cmdRun(args []string) error {
 			}
 		}
 
-		// Generate vendor-native MCP config files
-		if len(p.MCPServers) > 0 {
-			// ynh is the client here in the Agent Plugins sense: it resolves
-			// the plugin's placeholders and ./ paths against where the package
-			// really is, and gives the package a data directory that outlives
-			// this run. The vendor CLI that launches the server sees only
-			// absolute paths.
-			dataDir := harness.PluginDataDir(p)
+		// Generate vendor-native MCP config files. The servers are the
+		// root's and those of every included harness, composed.
+		//
+		// ynh is the client here in the Agent Plugins sense: it resolves
+		// the plugin's placeholders and ./ paths against where the package
+		// really is, and gives the package a data directory that outlives
+		// this run. The vendor CLI that launches the server sees only
+		// absolute paths.
+		dataDir := harness.PluginDataDir(p)
+		servers, _, expErr := harness.ComposeMCPServers(p, resolver.IncludedHarnesses(resolved), dataDir, os.LookupEnv)
+		if expErr != nil {
+			return expErr
+		}
+		if len(servers) > 0 {
 			if err := os.MkdirAll(dataDir, 0o755); err != nil {
 				return fmt.Errorf("creating plugin data dir: %w", err)
-			}
-			servers, expErr := harness.AssembleMCPServers(p, dataDir, os.LookupEnv)
-			if expErr != nil {
-				return expErr
 			}
 			mcpFiles, err := adapter.GenerateMCPConfig(servers)
 			if err != nil {

@@ -47,11 +47,19 @@ pointing up.
 
 ### What an include brings
 
-Files only: `skills/`, `agents/`, `rules/`, `commands/`. An included harness's
-manifest is never opened, so its hooks, MCP servers, profiles, focuses and
-sensors do **not** come with it.
+Files: `skills/`, `agents/`, `rules/`, `commands/`. When the included directory
+is a harness (it has a manifest), its **MCP servers** come with it too, and, unless
+the include uses `pick`, so do the harnesses it includes in turn. Its hooks,
+profiles, focuses and sensors do **not**.
 
-That is deliberate for sensors: it keeps "what observes this repository" in one
+Included servers follow rules worth stating to a user: the root's server of the
+same name wins; `"name": null` in the root's `mcp_servers` (or in a profile)
+removes an inherited one; two includes declaring the same name differently is an
+error; each server expands against its own include's directory and
+`env_passthrough`, never widening the root's; a cycle of includes is refused. A
+path-relative included server cannot be exported. See `docs/mcp.md`.
+
+Hooks and sensors stay root-only on purpose. For sensors: it keeps "what observes this repository" in one
 committed file a reviewer can read, and stops a composed harness turning
 included content into an execution surface the root author never declared.
 
@@ -168,6 +176,7 @@ to diverge; use an include when you want to track.
 | Vendor | `-v` flag > harness `default_vendor` > `~/.ynh/config.json` |
 | Instructions | last source wins — the harness's own `AGENTS.md` beats an included one |
 | Sensors | root harness only; includes contribute none |
+| MCP servers | included harnesses' servers are carried; the root's wins on a name clash |
 | Profiles | overlay the base manifest; `--profile` selects |
 
 ## Reading the result
