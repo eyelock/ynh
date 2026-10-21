@@ -25,6 +25,10 @@ type HarnessJSON struct {
 	DelegatesTo   []DelegateMeta         `json:"delegates_to,omitempty"`
 	Hooks         map[string][]HookEntry `json:"hooks,omitempty"`
 	MCPServers    map[string]MCPServer   `json:"mcp_servers,omitempty"`
+	// MCPIsolation runs the harness with only its own MCP servers, instead of
+	// alongside the operator's configured servers. A launch concern: it
+	// changes how `ynh run` starts the vendor CLI, not what an export ships.
+	MCPIsolation bool `json:"mcp_isolation,omitempty"`
 	// Agent carries loop defaults a harness can set once rather than every
 	// caller passing flags.
 	Agent *AgentConfig `json:"agent,omitempty"`
@@ -581,6 +585,9 @@ type Profile struct {
 	// editing the base manifest. Replacement rather than union: a profile
 	// meant to restrict must be able to.
 	EnvPassthrough []string `json:"env_passthrough,omitempty"`
+	// MCPIsolation overrides the harness-level mcp_isolation when set, either
+	// way. A pointer so that unset (inherit) and false (opt out) differ.
+	MCPIsolation *bool `json:"mcp_isolation,omitempty"`
 }
 
 // AgentConfig holds harness-level defaults for `ynh agent run`. Flags win over

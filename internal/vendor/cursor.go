@@ -117,6 +117,12 @@ func (c *Cursor) LaunchResume(configPath, sessionID string, extraArgs []string) 
 	return launchCursor(configPath, append(resumeArgs, extraArgs...))
 }
 
+// IsolateMCP cannot isolate on Cursor: ynh knows no way to keep the user's
+// configured servers out, so it says so and launches normally.
+func (c *Cursor) IsolateMCP(configPath string) ([]string, string) {
+	return nil, "MCP isolation is not supported by Cursor: servers in your Cursor config will still load"
+}
+
 func (c *Cursor) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
 	cursorrules := filepath.Join(runDir, ".cursorrules")
 	f, err := os.OpenFile(cursorrules, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)

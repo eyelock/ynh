@@ -153,6 +153,10 @@ func buildClaudeStreamArgs(opts StartOptions) []string {
 		if data, err := os.ReadFile(instructionsPath); err == nil && len(data) > 0 {
 			args = append(args, "--append-system-prompt", string(data))
 		}
+
+		if opts.IsolatedMCP {
+			args = append(args, vendor.ClaudeIsolationArgs(opts.ConfigPath)...)
+		}
 	}
 
 	if opts.Model != "" {

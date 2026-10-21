@@ -101,6 +101,10 @@
     "mcp_servers": {
       "$ref": "#/$defs/mcp_servers"
     },
+    "mcp_isolation": {
+      "description": "Run this harness with only its own MCP servers, instead of alongside the operator's configured servers and connectors. Default false. A launch-time setting: it changes how `ynh run` starts the vendor CLI and does not change an export. Fully supported on Claude Code; partial on Copilot; Codex and Cursor cannot isolate and ynh warns.",
+      "type": "boolean"
+    },
     "profiles": {
       "description": "Named configuration variants. Merge semantics: mcp_servers are deep-merged (profile keys win), hooks use per-event replace (profile event replaces default, absent events inherited), includes are appended to the base harness's includes when the profile is active. Set a server to null to remove it.",
       "type": "object",
@@ -116,6 +120,10 @@
           },
           "includes": {
             "$ref": "#/$defs/includes"
+          },
+          "mcp_isolation": {
+            "description": "Overrides the harness-level mcp_isolation when this profile is selected, either way. Absent inherits.",
+            "type": "boolean"
           },
           "env_passthrough": {
             "description": "Replaces the harness-level env_passthrough when this profile is selected. Replacement rather than union: a profile that exists to restrict what an agent can see has to be able to, and a union could only ever widen.",
