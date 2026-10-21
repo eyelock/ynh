@@ -105,6 +105,7 @@ The `.claude/` layout is the common case, but the same logic holds:
 | **Cursor** | `.cursor/rules/*.mdc` → `rules/`. ynh writes `.mdc` back out with frontmatter, so nothing is lost round-tripping. `.cursorrules` is deprecated upstream; fold it into `AGENTS.md`. |
 | **Codex** | Already reads `AGENTS.md` natively, so instructions usually need no change. Skills in `.agents/skills/` move to `skills/`. |
 | **Copilot** | `.github/copilot-instructions.md` → `AGENTS.md`. Custom agents are `.agent.md` files under `.github/agents/`; the frontmatter is compatible, the extension is not — rename to `<name>.md` under `agents/`. |
+| **OpenCode** | Reads `AGENTS.md` only (its `instructions` key is ignored), so instructions move there as for Codex. Skills in `.opencode/skills/`, agents in `.opencode/agents/` and commands in `.opencode/commands/` move to the top-level `skills/`, `agents/` and `commands/`. OpenCode has no rules; ynh composes them into `.opencode/AGENTS.md` at launch. |
 
 ## After adoption: the check that proves it
 
@@ -119,11 +120,11 @@ inventory and not in the preview did not adopt.
 Then the payoff, which is worth demonstrating rather than describing:
 
 ```bash
-for v in claude codex cursor copilot; do
+for v in claude codex cursor copilot opencode; do
   echo "== $v"; ynd preview . -v "$v" -o "/tmp/adopt-$v" >/dev/null && \
     find "/tmp/adopt-$v" -type f | sed "s|/tmp/adopt-$v/||" | sort
 done
 ```
 
-Same artifacts, four vendor layouts. That is the argument for adopting, and it
+Same artifacts, five vendor layouts. That is the argument for adopting, and it
 is more convincing run than explained.

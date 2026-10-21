@@ -169,7 +169,7 @@ ynd fmt --harness ./my-harness   # explicit harness flag
 
 ### compress
 
-Compress prompt/instruction text using LLM-powered SudoLang-style techniques. Requires a vendor CLI on PATH: `claude`, `codex`, Cursor's `agent` or `copilot`, tried in that order unless `-v` names the vendor.
+Compress prompt/instruction text using LLM-powered SudoLang-style techniques. Requires a vendor CLI on PATH: `claude`, `codex`, Cursor's `agent` or `copilot`, tried in that order unless `-v` names the vendor. OpenCode is deliberately not one of them: it has no argument that turns its tools off, and `ynd` sends file content as the prompt, so a model that may run commands on it is not a text answer.
 
 A backup of every file is saved to `~/.ynd/backups/` before overwriting. Use `--restore` and `--list-backups` to manage backups.
 
@@ -234,7 +234,7 @@ See [Developer Preview](tutorial/developer-preview.md) for a guided walkthrough.
 Compare assembled harness output across two or more vendors. Shows which files are unique to each vendor, which have different content, and which are identical.
 
 ```bash
-ynd diff ./my-harness                       # compare all vendors (claude, codex, copilot, cursor)
+ynd diff ./my-harness                       # compare all vendors (claude, codex, copilot, cursor, opencode)
 ynd diff ./my-harness claude cursor         # compare specific vendors (positional)
 ynd diff ./my-harness -v claude,cursor      # compare specific vendors (flag)
 ynd diff ./my-harness claude cursor codex   # three-way comparison
@@ -275,7 +275,7 @@ ynd export github.com/user/repo --path harnesses/david  # from a monorepo
 | Flag | Description |
 |------|-------------|
 | `-o, --output <dir>` | Output directory. Default: `./dist/<harness-name>/` |
-| `-v, --vendor <names>` | Comma-separated vendors. Default: all registered (`claude,codex,copilot,cursor`) |
+| `-v, --vendor <names>` | Comma-separated vendors. Default: all registered (`claude,codex,copilot,cursor,opencode`) |
 | `--harness <dir>` | Harness source directory (alternative to positional arg) |
 | `--path <subdir>` | Subdirectory within source (for monorepos). Must be a relative path with no `..` traversal. |
 | `--profile <name>` | Profile to apply during assembly |
@@ -306,10 +306,18 @@ dist/my-harness/
 │   ├── .codex-plugin/plugin.json
 │   ├── skills/<name>/SKILL.md
 │   └── AGENTS.md
-└── copilot/
-    ├── .claude-plugin/plugin.json
+├── copilot/
+│   ├── .claude-plugin/plugin.json
+│   ├── skills/<name>/SKILL.md
+│   ├── agents/<name>.md
+│   └── AGENTS.md
+└── opencode/
     ├── skills/<name>/SKILL.md
     ├── agents/<name>.md
+    ├── rules/<name>.md
+    ├── commands/<name>.md
+    ├── .opencode/opencode.json
+    ├── .opencode/plugins/ynh-hooks.ts
     └── AGENTS.md
 ```
 
@@ -320,6 +328,7 @@ Key differences from runtime layout:
 - Codex is limited to skills only — agents, rules, commands, and delegates are excluded with warnings
 - Copilot is limited to skills and agents — rules and commands are excluded with warnings
 - Copilot reuses Claude's `.claude-plugin/plugin.json` schema (Copilot's plugin loader reads the same format)
+- OpenCode has no plugin manifest and no Agent Plugins support, so its export is the run-directory layout without a manifest: nothing installs it as a plugin. MCP servers go to `.opencode/opencode.json` and hooks to the generated `.opencode/plugins/ynh-hooks.ts`. Rules are written as files, not composed into `AGENTS.md`, which ynh does only at launch
 - `--merged` produces one directory with all vendor manifests, Codex's included; Claude and Copilot share the same `.claude-plugin/plugin.json`, which both render identically. `ynd marketplace build` exports each harness entry this way. The shared tree keeps agents, rules and commands for the vendors that read them, and the Codex and Copilot warnings above are printed in merged mode too, because those vendors still do not load them
 - Hooks go to `hooks/<vendor>.json` at the plugin root, named by the `"hooks"` field of that vendor's manifest; there is no shared `hooks/hooks.json` (see [Hooks: Config File Locations](hooks.md#config-file-locations))
 - MCP servers go to each vendor's plugin file: `mcp/claude.json` (named by the `"mcpServers"` field of `.claude-plugin/plugin.json`), Codex's `.mcp.json` (named by its manifest), Cursor's `mcp.json` and Copilot's `.github/mcp.json`. No two share a path, and every manifest is written after the files it names (see [MCP Servers: Config File Locations](mcp.md#config-file-locations))
@@ -382,7 +391,7 @@ See [Export](tutorial/export.md) for a guided walkthrough.
 
 ### marketplace build
 
-Build a marketplace from a collection of harnesses and pre-built plugins. Each entry is exported with vendor manifests for Claude Code, Cursor, Codex, and Copilot, and indexed for all four.
+Build a marketplace from a collection of harnesses and pre-built plugins. Each entry is exported with vendor manifests for Claude Code, Cursor, Codex, and Copilot, and indexed for all four. OpenCode has no manifest or marketplace format, so a merged entry carries no OpenCode manifest (only `.opencode/opencode.json` and the hooks plugin when the harness declares MCP servers or hooks) and no OpenCode index is written.
 
 ```bash
 ynd marketplace build                             # uses ./marketplace.json
@@ -395,7 +404,7 @@ ynd marketplace build --clean                     # empty the output dir before 
 | Flag | Description |
 |------|-------------|
 | `-o, --output <dir>` | Output directory. Default: `./dist` |
-| `-v, --vendor <names>` | Comma-separated vendors. Default: `claude,cursor,codex,copilot` |
+| `-v, --vendor <names>` | Comma-separated vendors. Default: every registered vendor (`claude,cursor,codex,copilot,opencode`) |
 | `--clean` | Empty the output dir before building. Refuses the filesystem root, your home, the current directory and any git working copy, except the repository a previous `ynd marketplace build` created in that directory: that one is emptied but keeps its `.git`, so the rebuild commits on top and the history survives. Asks before deleting a non-empty directory unless `-y`, `YNH_YES` or `CI` is set. Runs only once every entry has been checked, so a refused build neither creates nor empties `-o`. |
 
 **Config format** (`marketplace.json`):

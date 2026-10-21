@@ -112,5 +112,6 @@ You also need at least one AI coding assistant CLI installed:
 | OpenAI Codex | `codex` | `npm install -g @openai/codex` |
 | Cursor | `agent` | Bundled with [Cursor](https://cursor.com) |
 | GitHub Copilot CLI | `copilot` | `npm install -g @github/copilot` |
+| OpenCode (2.x only) | `opencode` | `brew install anomalyco/tap/opencode-v2` |
 
 Claude Code is used in most tutorial examples. Codex and Cursor are needed for [Vendors & Symlinks](vendors-and-symlinks.md) and [Export](export.md).

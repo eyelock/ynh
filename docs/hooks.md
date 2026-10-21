@@ -66,13 +66,15 @@ Each vendor uses different event names and config file formats. **GitHub Copilot
 
 ### Event Name Mapping
 
-| Canonical | Claude Code | Cursor | Codex |
-|-----------|-------------|--------|-------|
-| `before_tool` | `PreToolUse` | `beforeShellExecution` | `PreToolUse` |
-| `after_tool` | `PostToolUse` | `afterFileEdit` | `PostToolUse` |
-| `before_prompt` | `UserPromptSubmit` | `beforeSubmitPrompt` | `UserPromptSubmit` |
-| `on_stop` | `Stop` | `stop` | `Stop` |
-| `on_session_start` | `SessionStart` | `sessionStart` | `SessionStart` |
+| Canonical | Claude Code | Cursor | Codex | OpenCode |
+|-----------|-------------|--------|-------|----------|
+| `before_tool` | `PreToolUse` | `beforeShellExecution` | `PreToolUse` | `tool` hook `execute.before` |
+| `after_tool` | `PostToolUse` | `afterFileEdit` | `PostToolUse` | `tool` hook `execute.after` |
+| `before_prompt` | `UserPromptSubmit` | `beforeSubmitPrompt` | `UserPromptSubmit` | `session` hook `prompt` |
+| `on_stop` | `Stop` | `stop` | `Stop` | event `session.execution.succeeded` / `session.execution.failed` |
+| `on_session_start` | `SessionStart` | `sessionStart` | `SessionStart` | event `session.created` |
+
+OpenCode's entries are hooks and events of a generated plugin, not config keys; see [OpenCode hooks are a generated plugin](#opencode-hooks-are-a-generated-plugin).
 
 ### Config File Locations
 
@@ -81,6 +83,7 @@ Each vendor uses different event names and config file formats. **GitHub Copilot
 | Claude Code | Three-level nesting: event > matcher group > hook array |
 | Cursor | Flat: event > hook array (with `"version": 1` required) |
 | Codex | Three-level nesting: event > matcher group > hook array (same structure as Claude) |
+| OpenCode | No config format: a generated TypeScript plugin that runs each hook command |
 
 Each vendor reads hooks from a different file depending on how the harness reaches it: a session in a project directory, or an installed plugin. ynh writes each file only where that vendor reads it:
 
@@ -89,6 +92,7 @@ Each vendor reads hooks from a different file depending on how the harness reach
 | Claude Code | `.claude/hooks/hooks.json`: `ynh run` passes `.claude/` as `--plugin-dir`, so this is `hooks/hooks.json` at that plugin's root | `hooks/claude.json`, named by `"hooks"` in `.claude-plugin/plugin.json` |
 | Cursor | `.cursor/hooks.json`, the only project-level path Cursor reads ([cursor.com/docs/hooks](https://cursor.com/docs/hooks)) | `hooks/cursor.json`, named by `"hooks"` in `.cursor-plugin/plugin.json` |
 | Codex | `.codex/hooks.json`, read from a trusted project's `.codex/` layer ([developers.openai.com/codex/hooks](https://developers.openai.com/codex/hooks)) | `hooks/codex.json`, named by `"hooks"` in `.codex-plugin/plugin.json` |
+| OpenCode | `.opencode/plugins/ynh-hooks.ts`, auto-discovered from the `OPENCODE_CONFIG_DIR` bundle `ynh run` launches with | none: OpenCode has no plugin manifest, so an export carries the same generated file but nothing loads it as a plugin |
 | Copilot | none (see [Vendor Translation](#vendor-translation)) | none of its own; see below |
 
 The document is the same in a vendor's session file and its plugin file except, on Cursor and Codex, for commands that start with `./`, which reach the harness's script from a different root in each (see [Hook script paths](#hook-script-paths)). A plugin never reads a session path, so an export does not carry `.claude/hooks/`, `.cursor/hooks.json` or `.codex/hooks.json`, and a session assembly does not carry `hooks/<vendor>.json`.
@@ -110,6 +114,22 @@ A single-vendor export uses the same layout, so every plugin ynh writes follows 
 
 Copilot has no manifest of its own: it reads `.claude-plugin/plugin.json`, the file Claude writes, and ynh emits no Copilot hooks. A Copilot-only export therefore carries no hooks. In a merged package that also targets Claude, Copilot reads the same manifest, so it finds `hooks/claude.json`; Copilot accepts hooks in Claude's format, with PascalCase event names and Claude's matcher semantics ([docs.github.com: hooks configuration](https://docs.github.com/en/copilot/reference/hooks-configuration)).
 
+### OpenCode hooks are a generated plugin
+
+OpenCode 2 has no declarative hook config, so ynh generates `.opencode/plugins/ynh-hooks.ts` in the run directory and OpenCode discovers it. The plugin runs each hook command with Claude-shaped JSON on stdin; edits to it are overwritten on the next run. The mapping:
+
+| ynh event | Behaviour on OpenCode |
+|-----------|-----------------------|
+| `before_tool` | Exit code 2 throws, which blocks the call; the hook's stderr is the tool error the model sees. The tool does not run |
+| `after_tool` | Runs after the call and cannot reject the result. The payload carries Claude's `file_path`, `old_string` and `new_string` beside OpenCode's own input keys |
+| `before_prompt` | Exit code 2 does block, before the model is called, but OpenCode surfaces only an opaque `UnexpectedStatus: 500`, not the hook's message. Prefer logging in a prompt hook over blocking |
+| `on_session_start` | Comes from the event stream (`session.created`). Cannot block; a matcher is ignored |
+| `on_stop` | Comes from the event stream (`session.execution.succeeded` / `.failed`), once per turn. Cannot block; a matcher is ignored |
+
+Matchers on `before_tool` and `after_tool` are written with Claude's tool names and mapped to OpenCode's ids, so `Bash` fires on OpenCode's `shell`, `Edit` on `edit`, and a native id such as `shell` works too. A matcher is an anchored regex tested against the OpenCode id and every Claude name that maps to it.
+
+`on_session_start` and `on_stop` ride OpenCode's event stream rather than a documented hook, so they are the most likely to change in a later OpenCode release. OpenCode reaches MCP tools through its Code Mode (one `execute` tool), so a `before_tool` matcher does not see an MCP call as its own tool.
+
 ### Hook script paths
 
 A command such as `./scripts/guard.sh` names a script relative to the harness that declares it: `scripts/guard.sh` in the harness's own tree. Wherever the hooks end up, in a session's run directory or an installed plugin, the harness tree is not there, so ynh copies the script alongside the hooks and makes the command reach the copy. It does this for a command whose first characters are `./`, and only those; an absolute path (`/usr/local/bin/lint.sh`), a command already anchored to a variable (`$CLAUDE_PROJECT_DIR/x.sh`) and a PATH-style command (`make check`) are written exactly as declared.
@@ -119,6 +139,7 @@ A command such as `./scripts/guard.sh` names a script relative to the harness th
 | Claude Code | `"${CLAUDE_PLUGIN_ROOT}"/scripts/guard.sh`, script copied to `.claude/scripts/guard.sh`: the `--plugin-dir` plugin root | `"${CLAUDE_PLUGIN_ROOT}"/scripts/guard.sh`: the installed plugin ([code.claude.com/docs/en/plugins-reference](https://code.claude.com/docs/en/plugins-reference)) |
 | Cursor | `./scripts/guard.sh`, unchanged, script copied to `scripts/guard.sh` in the run directory | `"${CURSOR_PLUGIN_ROOT}"/scripts/guard.sh`, which Cursor expands in a plugin hook command ([cursor.com/docs/reference/plugins](https://cursor.com/docs/reference/plugins)) |
 | Codex | `./scripts/guard.sh`, unchanged, script copied to `scripts/guard.sh` in the run directory | `"${PLUGIN_ROOT}"/scripts/guard.sh`; Codex exports `PLUGIN_ROOT` to plugin hook commands ([developers.openai.com/codex/plugins/build](https://developers.openai.com/codex/plugins/build)) |
+| OpenCode | `./scripts/guard.sh`, script copied to `.opencode/scripts/guard.sh`; the generated plugin anchors the command to its own location (`YNH_HOOK_ROOT`), not the working directory | none: no OpenCode plugin export |
 | Copilot | no hooks | none of its own; in a merged package it reads `hooks/claude.json`, with Claude's `${CLAUDE_PLUGIN_ROOT}` (see below) |
 
 The variable is quoted so an install path with spaces stays one word, as Claude Code's reference recommends.
@@ -323,7 +344,7 @@ If an included harness needs hooks, copy its hook declarations into the root har
 When writing hook scripts for use across vendors:
 
 1. **Output correct JSON for the event type** — Claude expects `{"type": "command"}` wrapper; Cursor and Codex do not. Your *script output* (blocking messages) should be plain text or simple JSON that any vendor can display.
-2. **Use exit code 2 for blocking**: Claude Code, Codex and Cursor treat exit code 2 as "block this action" on the events that can block. Copilot CLI does so only for `preToolUse` and `permissionRequest`; on its other events exit 2 is a warning, and a hook blocks through its JSON output instead.
+2. **Use exit code 2 for blocking**: Claude Code, Codex, Cursor and OpenCode (on `before_tool`) treat exit code 2 as "block this action" on the events that can block. Copilot CLI does so only for `preToolUse` and `permissionRequest`; on its other events exit 2 is a warning, and a hook blocks through its JSON output instead.
 3. **Include remediation instructions** — tell the agent how to fix the problem, not just that there is one.
 4. **Keep scripts idempotent** — hooks may fire multiple times per session.
 5. **Make command paths cwd-independent**: hooks run in the agent's current working directory, not the project root, and that cwd changes as the agent navigates. A relative command (`./tools/hooks/foo.sh`) breaks after any `cd`. Anchor to the vendor's project-root variable (`$CLAUDE_PROJECT_DIR` on Claude Code) or use an absolute path. For a session or a plugin export, ynh anchors a `./` script for you and ships the script alongside the hooks; see [Hook script paths](#hook-script-paths).
