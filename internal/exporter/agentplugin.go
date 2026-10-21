@@ -35,7 +35,7 @@ const AgentPluginVendor = "agent-plugin"
 // The output is validated against the specification before this returns.
 // A fatal finding is an error: ynh must not publish a package it would
 // itself refuse to load.
-func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
+func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Harness, hs assembler.HookSet, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
 	out := opts.OutputDir
 	result := ExportResult{Vendor: AgentPluginVendor, OutputDir: out}
 
@@ -178,7 +178,7 @@ func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Ha
 	// The scripts the hooks run ship with the package, once: every vendor's
 	// hook file anchors them at the same plugin root (#498).
 	if hooksCarried {
-		warnings, err := assembler.CopyHookScripts(p.Dir, out, p.Hooks, "the plugin")
+		warnings, err := assembler.CopyHookScripts(p.Dir, out, hs, "the plugin")
 		if err != nil {
 			return nil, err
 		}

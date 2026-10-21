@@ -623,3 +623,49 @@ func TestPreviewListsFocusesAndProfilesOfIncludedHarnesses(t *testing.T) {
 		t.Errorf("no included harnesses should print nothing, got %q", none.String())
 	}
 }
+
+func TestPreviewListsHooksOfIncludedHarnesses(t *testing.T) {
+	for _, consent := range []bool{true, false} {
+		root := t.TempDir()
+		for dir, hj := range map[string]map[string]any{
+			root: {
+				"name": "root", "version": "1.0.0",
+				"includes": []map[string]any{{"local": "guard", "hooks": consent}},
+			},
+			filepath.Join(root, "guard"): {
+				"name": "guard", "version": "1.0.0",
+				"hooks": map[string]any{"on_stop": []map[string]any{{"command": "echo hi"}}},
+			},
+		} {
+			data, _ := json.Marshal(hj)
+			if err := writePluginJSONFile(dir, data); err != nil {
+				t.Fatal(err)
+			}
+		}
+		tmp, report, err := assembleForVendorSources(root, "claude", harness.Selection{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out strings.Builder
+		printIncludedHooks(&out, report.included)
+		hooksFile, readErr := os.ReadFile(filepath.Join(tmp, ".claude", "hooks", "hooks.json"))
+		_ = os.RemoveAll(tmp)
+
+		got := out.String()
+		if consent {
+			if !strings.Contains(got, "Hooks from included harnesses:\n  on_stop (from guard)\n") || strings.Contains(got, "not active") {
+				t.Errorf("consent: listing = %q", got)
+			}
+			if readErr != nil || !strings.Contains(string(hooksFile), "echo hi") {
+				t.Errorf("consent: hook file = %q, %v", hooksFile, readErr)
+			}
+		} else {
+			if !strings.Contains(got, "not active") || !strings.Contains(got, "  on_stop (from guard)\n") || strings.Contains(got, "Hooks from included harnesses:\n") {
+				t.Errorf("no consent: listing = %q", got)
+			}
+			if readErr == nil {
+				t.Errorf("no consent: a hook file was written: %s", hooksFile)
+			}
+		}
+	}
+}

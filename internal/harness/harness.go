@@ -76,6 +76,9 @@ type Include struct {
 	// As is the namespace an included harness's focuses and profiles are
 	// selected under, "as:name". Empty means the included harness's own name.
 	As string
+	// Hooks is the root author's consent to the included harness's hooks
+	// running in the session. False unless the include says "hooks": true.
+	Hooks bool
 	// SHA is the resolved commit at install/update time, populated from
 	// installed.json's resolved slice. Empty for local-path includes and for
 	// pre-migration installs that predate SHA recording.
@@ -668,6 +671,7 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 			GitSource: GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
 			Pick:      inc.Pick,
 			As:        inc.As,
+			Hooks:     inc.Hooks,
 		})
 	}
 	for _, del := range hj.DelegatesTo {
@@ -921,8 +925,9 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 					Ref:   inc.Ref,
 					Path:  inc.Path,
 				},
-				Pick: inc.Pick,
-				As:   inc.As,
+				Pick:  inc.Pick,
+				As:    inc.As,
+				Hooks: inc.Hooks,
 			})
 		}
 		resolved.Includes = merged
@@ -976,6 +981,7 @@ func LoadFile(path string) (*Harness, error) {
 			GitSource: GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
 			Pick:      inc.Pick,
 			As:        inc.As,
+			Hooks:     inc.Hooks,
 		})
 	}
 	for _, del := range hj.DelegatesTo {

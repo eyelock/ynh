@@ -1640,3 +1640,17 @@ func TestValidateHarnessIncludes_Alias(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateHarnessIncludes_HooksConsent(t *testing.T) {
+	for name, tc := range map[string]struct {
+		hooks any
+		issue bool
+	}{"true": {true, false}, "false": {false, false}, "string": {"yes", true}, "number": {1.0, true}} {
+		issues := validateHarnessIncludes(map[string]any{
+			"includes": []any{map[string]any{"local": "inc", "hooks": tc.hooks}},
+		})
+		if got := len(issues) > 0; got != tc.issue {
+			t.Errorf("%s: issues = %v, want an issue: %v", name, issues, tc.issue)
+		}
+	}
+}

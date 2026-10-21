@@ -127,8 +127,36 @@ func cmdPreview(args []string) error {
 	}
 	printMCPSources(os.Stdout, report.mcp)
 	printIncludedSelectables(os.Stdout, report.included)
+	printIncludedHooks(os.Stdout, report.included)
 
 	return nil
+}
+
+// printIncludedHooks lists the hooks that came from included harnesses, each
+// with the include it came from, and those that did not because the include
+// does not say "hooks": true. The not-active ones are what the warning on
+// stderr is about.
+func printIncludedHooks(w io.Writer, included []resolver.ResolveResult) {
+	hs, err := assembler.ComposeHooks(nil, included)
+	if err != nil {
+		return
+	}
+	for _, list := range []struct {
+		title   string
+		origins []assembler.HookOrigin
+	}{
+		{"Hooks from included harnesses:", hs.FromIncludes},
+		{"Hooks from included harnesses, not active (add \"hooks\": true to the include):", hs.NotActive},
+	} {
+		if len(list.origins) == 0 {
+			continue
+		}
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, list.title)
+		for _, o := range list.origins {
+			_, _ = fmt.Fprintf(w, "  %s (from %s)\n", o.Event, o.Source)
+		}
+	}
 }
 
 // printMCPSources lists the MCP servers that came from an included harness,
@@ -279,14 +307,12 @@ func assembleForVendorSources(srcDir string, vendorName string, sel harness.Sele
 	}
 
 	// Generate hook config, and copy in the scripts those hooks run
-	if len(h.Hooks) > 0 {
-		warnings, err := assembler.WriteSessionHooks(tmpDir, adapter, h.Dir, h.Hooks)
-		if err != nil {
-			return "", previewReport{}, err
-		}
-		for _, w := range warnings {
-			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-		}
+	hookWarnings, err := assembler.WriteComposedSessionHooks(tmpDir, adapter, h, resolved)
+	if err != nil {
+		return "", previewReport{}, err
+	}
+	for _, w := range hookWarnings {
+		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 	}
 
 	// Generate MCP config: the harness's own servers and those of its included

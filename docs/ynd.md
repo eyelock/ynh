@@ -223,7 +223,7 @@ ynd preview --harness ./my-harness          # explicit harness flag
 | `--profile <name>` | Profile to apply during assembly. Repeatable: at most one unqualified value (the root's) and one `namespace:name` per included harness, such as `--profile work --profile github:ci` (see [Profiles of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses)) |
 | `--focus <name>` | Focus to apply during assembly (mutually exclusive with `--profile`). `namespace:name` takes a focus of an included harness |
 
-Preview lists the focuses and profiles an included harness offers, under "Focuses from included harnesses:" and "Profiles from included harnesses:", with the namespaced names to pass.
+Preview lists the focuses and profiles an included harness offers, under "Focuses from included harnesses:" and "Profiles from included harnesses:", with the namespaced names to pass. It also lists the hooks that came from included harnesses ("Hooks from included harnesses:") and those declined for want of `"hooks": true`, each with its source, and warns about the declined ones on stderr.
 
 When no `-o` flag is given, preview prints a tree with file contents to stdout. With `-o`, it writes the full assembled output to the specified directory.
 

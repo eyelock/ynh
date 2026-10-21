@@ -49,8 +49,10 @@ pointing up.
 
 Files: `skills/`, `agents/`, `rules/`, `commands/`. When the included directory
 is a harness (it has a manifest), its **MCP servers** come with it too, and, unless
-the include uses `pick`, so do the harnesses it includes in turn. Its hooks
-and sensors do **not**. Its profiles and focuses are carried only when asked
+the include uses `pick`, so do the harnesses it includes in turn. Its sensors
+do **not**, and its hooks only when the include says `"hooks": true` (at every
+link of a chain; `ynh include add --hooks`), with a stderr warning when it
+declines them. Its profiles and focuses are carried only when asked
 for by namespace: `--profile github:ci` applies the included harness's `ci`
 profile to that harness alone, and `--focus github:triage` runs its focus. The
 namespace is the included harness's name, or an `as` alias on the include
@@ -181,6 +183,7 @@ to diverge; use an include when you want to track.
 | Vendor | `-v` flag > harness `default_vendor` > `~/.ynh/config.json` |
 | Instructions | last source wins — the harness's own `AGENTS.md` beats an included one |
 | Sensors | root harness only; includes contribute none |
+| Hooks | root's, plus an included harness's when its include says `"hooks": true` (every link); included first, root last |
 | MCP servers | included harnesses' servers are carried; the root's wins on a name clash |
 | Profiles | overlay the base manifest; `--profile` selects |
 
