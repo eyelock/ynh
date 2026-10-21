@@ -42,6 +42,16 @@ Focus is selected through a flag or environment variable:
 
 The `--focus` flag is supported on `ynh run`, `ynd preview`, `ynd diff`, and `ynd export`. When both the flag and the environment variable are set, the flag wins.
 
+## Focuses of Included Harnesses
+
+A focus of an included harness is selected as `namespace:name`, where the namespace is the included harness's name or the `as` alias on the include:
+
+```bash
+ynh run my-harness --focus github:triage
+```
+
+The focus's prompt is the run's prompt, and its `profile`, if any, is applied to that included harness only. The root's configuration is unchanged. The namespace, the `:` separator and the ambiguity rule are described in [Profiles and focuses of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses).
+
 ## Mutual Exclusivity
 
 `--focus` and `--profile` are mutually exclusive. A focus already names a profile (or names "no profile" by omission); accepting `--profile` alongside it would create ambiguity over which profile wins.

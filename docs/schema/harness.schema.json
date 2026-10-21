@@ -139,7 +139,8 @@
           "git": { "type": "string" },
           "ref": { "type": "string" },
           "path": { "type": "string" },
-          "pick": { "type": "array", "items": { "type": "string" } }
+          "pick": { "type": "array", "items": { "type": "string" } },
+          "as": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$" }
         }
       }
     },

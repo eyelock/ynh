@@ -37,13 +37,22 @@ func cmdRun(args []string) error {
 	}
 
 	// Mutual exclusivity: --focus + --profile
-	profileName := ra.ProfileFlag
-	if profileName == "" {
-		profileName = os.Getenv("YNH_PROFILE")
+	// --profile may repeat, one per harness (see harness.Selection). YNH_PROFILE
+	// is a single value, used only when no flag was given.
+	profileValues := ra.ProfileFlags
+	if len(profileValues) == 0 {
+		if env := os.Getenv("YNH_PROFILE"); env != "" {
+			profileValues = []string{env}
+		}
 	}
-	if ra.FocusFlag != "" && profileName != "" {
+	if ra.FocusFlag != "" && len(profileValues) > 0 {
 		return fmt.Errorf("cannot use --focus and --profile together (focus includes a profile)")
 	}
+	sel, selErr := harness.ParseSelection(profileValues, ra.FocusFlag)
+	if selErr != nil {
+		return selErr
+	}
+	profileName := sel.Profile
 
 	// Mutual exclusivity: --focus + trailing prompt
 	if ra.FocusFlag != "" && ra.Prompt != "" {
@@ -102,7 +111,7 @@ func cmdRun(args []string) error {
 	}
 
 	// Resolve focus → profile + prompt
-	if ra.FocusFlag != "" {
+	if ra.FocusFlag != "" && sel.FocusNS == "" {
 		focus, ok := p.Focuses[ra.FocusFlag]
 		if !ok {
 			return fmt.Errorf("focus %q not defined in harness", ra.FocusFlag)
@@ -169,9 +178,14 @@ func cmdRun(args []string) error {
 	if len(p.Includes) > 0 {
 		fmt.Fprintf(os.Stderr, "Resolving %d include(s)...\n", len(p.Includes))
 	}
-	resolved, err := resolver.ResolveFromCache(p, cfg)
+	resolved, nsFocus, err := resolver.ResolveSelectedFromCache(p, cfg, sel)
 	if err != nil {
 		return fmt.Errorf("resolving includes: %w", err)
+	}
+	if nsFocus != nil {
+		// A focus of an included harness: its prompt is the run's prompt, and
+		// its profile has been applied to that harness during resolution.
+		prompt = nsFocus.Prompt
 	}
 
 	// Print per-source status
@@ -586,7 +600,7 @@ type runArgs struct {
 	HarnessName  string   // positional name, if given
 	HarnessFile  string   // --harness-file or YNH_HARNESS_FILE
 	VendorFlag   string   // -v or YNH_VENDOR
-	ProfileFlag  string   // --profile or YNH_PROFILE
+	ProfileFlags []string // --profile, repeatable; YNH_PROFILE is read by cmdRun
 	FocusFlag    string   // --focus or YNH_FOCUS
 	SessionName  string   // --session-name: consumed by ynh, not forwarded to vendor
 	Instructions string   // --instructions: per-invocation context injected into vendor pipeline
@@ -622,7 +636,7 @@ func parseRunArgs(args []string) runArgs {
 			ra.VendorFlag = flagArgs[i+1]
 			i++
 		case flagArgs[i] == "--profile" && i+1 < len(flagArgs):
-			ra.ProfileFlag = flagArgs[i+1]
+			ra.ProfileFlags = append(ra.ProfileFlags, flagArgs[i+1])
 			i++
 		case flagArgs[i] == "--focus" && i+1 < len(flagArgs):
 			ra.FocusFlag = flagArgs[i+1]

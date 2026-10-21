@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/harness"
 )
 
 func createPreviewHarness(t *testing.T) string {
@@ -496,7 +498,7 @@ func TestPreviewCarriesMCPServersOfIncludedHarness(t *testing.T) {
 		}
 	}
 
-	tmp, sources, err := assembleForVendorSources(root, "claude", "")
+	tmp, report, err := assembleForVendorSources(root, "claude", harness.Selection{})
 	if err != nil {
 		t.Fatalf("assembleForVendorSources: %v", err)
 	}
@@ -511,8 +513,113 @@ func TestPreviewCarriesMCPServersOfIncludedHarness(t *testing.T) {
 	}
 
 	var out strings.Builder
-	printMCPSources(&out, sources)
+	printMCPSources(&out, report.mcp)
 	if got := out.String(); !strings.Contains(got, "db (from inc)") || strings.Contains(got, "own") {
 		t.Errorf("sources listing = %q", got)
+	}
+}
+
+// namespaceFixture writes a root that includes a harness named "github",
+// which declares a profile, a focus bound to it, and a server of its own.
+func namespaceFixture(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	for dir, hj := range map[string]map[string]any{
+		root: {
+			"name": "root", "version": "1.0.0",
+			"includes": []map[string]any{{"local": "gh"}},
+		},
+		filepath.Join(root, "gh"): {
+			"name": "github", "version": "1.0.0",
+			"mcp_servers": map[string]any{"base": map[string]any{"command": "node"}},
+			"profiles": map[string]any{"ci": map[string]any{
+				"mcp_servers": map[string]any{"ci-only": map[string]any{"command": "node"}},
+			}},
+			"focuses": map[string]any{"triage": map[string]any{"profile": "ci", "prompt": "triage"}},
+		},
+	} {
+		data, _ := json.Marshal(hj)
+		if err := writePluginJSONFile(dir, data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
+func TestPreviewNamespacedProfileAndFocus(t *testing.T) {
+	root := namespaceFixture(t)
+	t.Setenv("YNH_PROFILE", "")
+	t.Setenv("YNH_FOCUS", "")
+
+	mcpFile := func(t *testing.T, args ...string) string {
+		t.Helper()
+		out := filepath.Join(t.TempDir(), "out")
+		if err := cmdPreview(append([]string{root, "-v", "claude", "-o", out}, args...)); err != nil {
+			t.Fatalf("cmdPreview %v: %v", args, err)
+		}
+		data, err := os.ReadFile(filepath.Join(out, ".claude", ".mcp.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+
+	if got := mcpFile(t); strings.Contains(got, "ci-only") {
+		t.Errorf("no selection should not apply the include's profile:\n%s", got)
+	}
+	if got := mcpFile(t, "--profile", "github:ci"); !strings.Contains(got, "ci-only") || !strings.Contains(got, "base") {
+		t.Errorf("--profile github:ci should add its server:\n%s", got)
+	}
+	if got := mcpFile(t, "--focus", "github:triage"); !strings.Contains(got, "ci-only") {
+		t.Errorf("--focus github:triage should apply the focus's profile:\n%s", got)
+	}
+}
+
+func TestPreviewNamespacedSelectionErrors(t *testing.T) {
+	root := namespaceFixture(t)
+	t.Setenv("YNH_PROFILE", "")
+	t.Setenv("YNH_FOCUS", "")
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"duplicate namespace", []string{"--profile", "github:ci", "--profile", "github:ci"}, `namespace "github"`},
+		{"duplicate root", []string{"--profile", "a", "--profile", "b"}, "at most one unqualified profile"},
+		{"focus with profile", []string{"--focus", "github:triage", "--profile", "github:ci"}, "cannot use --focus and --profile together (focus includes a profile)"},
+		{"unknown namespace", []string{"--profile", "nope:ci"}, `no included harness has namespace "nope" (available: github)`},
+		{"unknown profile", []string{"--profile", "github:nope"}, `profile "nope" not defined in included harness "github" (available: [ci])`},
+		{"unknown focus", []string{"--focus", "github:nope"}, `focus "nope" not defined in included harness "github"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := cmdPreview(append([]string{root, "-v", "claude", "-o", filepath.Join(t.TempDir(), "out")}, tt.args...))
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want containing %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestPreviewListsFocusesAndProfilesOfIncludedHarnesses(t *testing.T) {
+	root := namespaceFixture(t)
+	tmp, report, err := assembleForVendorSources(root, "claude", harness.Selection{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(tmp) }()
+
+	var out strings.Builder
+	printIncludedSelectables(&out, report.included)
+	for _, want := range []string{"Focuses from included harnesses:\n  github:triage\n", "Profiles from included harnesses:\n  github:ci\n"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("listing = %q, want containing %q", out.String(), want)
+		}
+	}
+
+	var none strings.Builder
+	printIncludedSelectables(&none, nil)
+	if none.Len() != 0 {
+		t.Errorf("no included harnesses should print nothing, got %q", none.String())
 	}
 }
