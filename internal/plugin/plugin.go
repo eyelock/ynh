@@ -87,6 +87,11 @@ type Sensor struct {
 	// the loop converges on their verdicts, and any yield figure derives from
 	// them.
 	Reference *SensorReference `json:"reference,omitempty"`
+	// HarnessDir is the directory of the harness that published this sensor,
+	// set only when it came from an include. It is never serialised: it is a
+	// fact about where the sensor was loaded from, not part of the manifest.
+	// Empty means the sensor belongs to the harness being run. See Dir.
+	HarnessDir string `json:"-"`
 	// Ratchet selects how the baseline forgives this sensor's failures.
 	//
 	// "fingerprint" (the default) matches individual findings, so a fixed one
@@ -278,6 +283,16 @@ var ValidGitHubStatusStates = map[string]bool{
 var ValidGitHubCheckConclusions = map[string]bool{
 	"success": true, "failure": true, "neutral": true, "cancelled": true,
 	"timed_out": true, "action_required": true, "stale": true, "skipped": true,
+}
+
+// Dir returns the directory $YNH_HARNESS_DIR and reference.path resolve
+// against: the harness that published the sensor if it came from an include,
+// otherwise fallback, the harness being run.
+func (s Sensor) Dir(fallback string) string {
+	if s.HarnessDir != "" {
+		return s.HarnessDir
+	}
+	return fallback
 }
 
 // SensorOverride is what a consumer may change about a sensor that came from
@@ -846,6 +861,9 @@ type IncludeMeta struct {
 	Ref   string   `json:"ref,omitempty"`
 	Path  string   `json:"path,omitempty"`
 	Pick  []string `json:"pick,omitempty"`
+	// Sensors, when false, drops the sensors the include declares. Absent
+	// means true: sensors travel with the include.
+	Sensors *bool `json:"sensors,omitempty"`
 }
 
 // DelegateMeta is the JSON representation of a delegate reference.

@@ -3,7 +3,6 @@ package resolver
 import (
 	"errors"
 	"fmt"
-	"path/filepath"
 	"sort"
 
 	"github.com/eyelock/ynh/internal/harness"
@@ -28,6 +27,8 @@ type IncludedSensor struct {
 	Name   string
 	Sensor plugin.Sensor
 	Source string
+	// Dir is the directory the manifest was read from.
+	Dir string
 }
 
 // WithIncludedSensors folds in the sensors an include declares, so a sensor
@@ -87,6 +88,9 @@ func MergeIncludedSensors(p *harness.Harness, overrides map[string]plugin.Sensor
 				"sensor %q is declared by both %s and %s: rename one, or drop the include",
 				in.Name, origin[in.Name], in.Source)
 		}
+		// The sensor resolves its command and fixture against the harness
+		// that published it, not the consumer.
+		in.Sensor.HarnessDir = in.Dir
 		merged[in.Name] = in.Sensor
 		origin[in.Name] = in.Source
 	}
@@ -124,6 +128,11 @@ func MergeIncludedSensors(p *harness.Harness, overrides map[string]plugin.Sensor
 func collectIncludedSensors(p *harness.Harness) ([]IncludedSensor, error) {
 	var out []IncludedSensor
 	for _, inc := range p.Includes {
+		// Checked before the include is resolved: an include whose sensors
+		// are ignored anyway must not fail a gate for not being cached.
+		if !inc.SensorsEnabled() {
+			continue
+		}
 		base, source, err := includeBase(p, inc)
 		if err != nil {
 			return nil, err
@@ -131,10 +140,8 @@ func collectIncludedSensors(p *harness.Harness) ([]IncludedSensor, error) {
 		if base == "" {
 			continue
 		}
+		// includeBase has already applied inc.Path.
 		dir := base
-		if inc.Path != "" {
-			dir = filepath.Join(base, inc.Path)
-		}
 		hj, err := plugin.LoadPluginJSON(dir)
 		if err != nil {
 			// An include with no manifest contributes artifacts by directory
@@ -143,7 +150,7 @@ func collectIncludedSensors(p *harness.Harness) ([]IncludedSensor, error) {
 			continue
 		}
 		for name, s := range hj.Sensors {
-			out = append(out, IncludedSensor{Name: name, Sensor: s, Source: source})
+			out = append(out, IncludedSensor{Name: name, Sensor: s, Source: source, Dir: dir})
 		}
 	}
 	return out, nil

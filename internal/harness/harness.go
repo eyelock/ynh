@@ -56,6 +56,9 @@ func (g GitSource) IsLocal() bool { return g.Local != "" && g.Git == "" }
 type Include struct {
 	GitSource
 	Pick []string
+	// Sensors is the include's "sensors" flag. nil means true; see
+	// SensorsEnabled.
+	Sensors *bool
 	// SHA is the resolved commit at install/update time, populated from
 	// installed.json's resolved slice. Empty for local-path includes and for
 	// pre-migration installs that predate SHA recording.
@@ -66,6 +69,12 @@ type Include struct {
 	// captured at clone time. Used by --check-updates so probe targets the
 	// same ref that ynh update tracks. Empty for pre-migration installs.
 	ResolvedRef string
+}
+
+// SensorsEnabled reports whether the sensors this include declares travel into
+// the consumer. They do unless the include says "sensors": false.
+func (i Include) SensorsEnabled() bool {
+	return i.Sensors == nil || *i.Sensors
 }
 
 type Delegate struct {
@@ -638,6 +647,7 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 		p.Includes = append(p.Includes, Include{
 			GitSource: GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
 			Pick:      inc.Pick,
+			Sensors:   inc.Sensors,
 		})
 	}
 	for _, del := range hj.DelegatesTo {
@@ -864,7 +874,8 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 					Ref:   inc.Ref,
 					Path:  inc.Path,
 				},
-				Pick: inc.Pick,
+				Pick:    inc.Pick,
+				Sensors: inc.Sensors,
 			})
 		}
 		resolved.Includes = merged
@@ -914,6 +925,7 @@ func LoadFile(path string) (*Harness, error) {
 		p.Includes = append(p.Includes, Include{
 			GitSource: GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
 			Pick:      inc.Pick,
+			Sensors:   inc.Sensors,
 		})
 	}
 	for _, del := range hj.DelegatesTo {

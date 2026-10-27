@@ -232,3 +232,106 @@ func TestWithIncludedSensors_GitIncludeIsCacheOnly(t *testing.T) {
 		t.Errorf("included sensor missing: %v", got.Sensors)
 	}
 }
+
+func TestIncludedSensorRecordsItsOwnHarnessDir(t *testing.T) {
+	own := map[string]plugin.Sensor{"mine": {Tolerance: "blocking"}}
+	h := consumerWith(t, own, map[string]any{"go-vet": commandSensor("blocking")})
+	merged, err := MergeIncludedSensors(h, nil)
+	if err != nil {
+		t.Fatalf("merge: %v", err)
+	}
+	want := filepath.Join(h.Dir, "vendored", "up")
+	if got := merged["go-vet"].HarnessDir; got != want {
+		t.Errorf("included HarnessDir = %q, want %q", got, want)
+	}
+	if got := merged["go-vet"].Dir(h.Dir); got != want {
+		t.Errorf("included Dir = %q, want %q", got, want)
+	}
+	if got := merged["mine"].HarnessDir; got != "" {
+		t.Errorf("own sensor HarnessDir = %q, want empty", got)
+	}
+	if got := merged["mine"].Dir(h.Dir); got != h.Dir {
+		t.Errorf("own sensor Dir = %q, want the fallback %q", got, h.Dir)
+	}
+}
+
+func TestIncludedSensorDirHonoursIncludePath(t *testing.T) {
+	root := t.TempDir()
+	writeHarness(t, filepath.Join(root, "vendored", "mono", "sub"), "sub", map[string]any{"s": commandSensor("blocking")})
+	h := &harness.Harness{
+		Name: "consumer",
+		Dir:  root,
+		Includes: []harness.Include{{GitSource: harness.GitSource{
+			Local: "vendored/mono", Path: "sub",
+		}}},
+	}
+	merged, err := MergeIncludedSensors(h, nil)
+	if err != nil {
+		t.Fatalf("merge: %v", err)
+	}
+	want := filepath.Join(root, "vendored", "mono", "sub")
+	if got := merged["s"].HarnessDir; got != want {
+		t.Errorf("HarnessDir = %q, want %q", got, want)
+	}
+}
+
+func TestIncludeWithSensorsFalseContributesNone(t *testing.T) {
+	f := false
+	tr := true
+	tests := []struct {
+		name    string
+		sensors *bool
+		want    bool
+	}{
+		{"absent travels", nil, true},
+		{"true travels", &tr, true},
+		{"false is dropped", &f, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := consumerWith(t, nil, map[string]any{"go-vet": commandSensor("blocking")})
+			h.Includes[0].Sensors = tt.sensors
+			merged, err := MergeIncludedSensors(h, nil)
+			if err != nil {
+				t.Fatalf("merge: %v", err)
+			}
+			if _, ok := merged["go-vet"]; ok != tt.want {
+				t.Errorf("sensor present = %v, want %v", ok, tt.want)
+			}
+			if len(h.Includes) != 1 {
+				t.Errorf("the include itself must remain")
+			}
+		})
+	}
+}
+
+func TestOverrideOfAnOptedOutSensorIsRefused(t *testing.T) {
+	f := false
+	h := consumerWith(t, nil, map[string]any{"go-vet": commandSensor("blocking")})
+	h.Includes[0].Sensors = &f
+	_, err := MergeIncludedSensors(h, map[string]plugin.SensorOverride{"go-vet": {Tolerance: "advisory"}})
+	if err == nil || !strings.Contains(err.Error(), "no include or this harness declares") {
+		t.Errorf("expected the unknown-sensor refusal, got: %v", err)
+	}
+}
+
+// A gate must not fail for an include it would ignore anyway.
+func TestOptedOutGitIncludeNeedsNoCache(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	f := false
+	h := &harness.Harness{
+		Name: "consumer",
+		Dir:  t.TempDir(),
+		Includes: []harness.Include{{
+			GitSource: harness.GitSource{Git: "github.com/example/not-cached"},
+			Sensors:   &f,
+		}},
+	}
+	if _, err := MergeIncludedSensors(h, nil); err != nil {
+		t.Errorf("an opted-out include must not need the cache: %v", err)
+	}
+	h.Includes[0].Sensors = nil
+	if _, err := MergeIncludedSensors(h, nil); err == nil {
+		t.Error("control: a sensor-bearing uncached include should still error")
+	}
+}

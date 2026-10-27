@@ -489,14 +489,17 @@ func runSensor(p *harness.Harness, name string, s plugin.Sensor, cwd string, inc
 		// against yesterday's code.
 		//
 		// reference.path already resolves against the harness
-		// (calibrate.go joins it to p.Dir). This gives commands the same
+		// (calibrate.go joins it to the same directory). This gives commands the same
 		// reach without changing where they run:
 		//
 		//   "command": "$YNH_HARNESS_DIR/tools/sensors/lint.sh"
 		//
+		// A sensor that came from an include resolves against the harness
+		// that published it, so its scripts and fixtures travel with it.
+		//
 		// Additive. A command that does not mention it behaves exactly as
 		// before.
-		cmd.Env = append(os.Environ(), "YNH_HARNESS_DIR="+p.Dir)
+		cmd.Env = append(os.Environ(), "YNH_HARNESS_DIR="+s.Dir(p.Dir))
 		cmd.Stdout = &stdoutBuf
 		cmd.Stderr = &stderrBuf
 		runErr := cmd.Run()
@@ -602,5 +605,8 @@ func mergeSensorOverlay(base plugin.Sensor, overlayJSON []byte) (plugin.Sensor, 
 	if err := json.Unmarshal(merged, &result); err != nil {
 		return base, fmt.Errorf("applying overlay: %w", err)
 	}
+	// Not serialised, so the round trip above dropped it. An overlay changes
+	// policy, never where the sensor's command and fixture live.
+	result.HarnessDir = base.HarnessDir
 	return result, nil
 }
