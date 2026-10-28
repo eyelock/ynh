@@ -67,7 +67,7 @@ func runCalibration(p *harness.Harness, wanted map[string]bool, stdout, stderr i
 		res.Reference = s.Reference.Path
 		res.Expected = s.Reference.Expect
 
-		fixture := filepath.Join(p.Dir, s.Reference.Path)
+		fixture := filepath.Join(s.Dir(p.Dir), s.Reference.Path)
 		if fi, err := os.Stat(fixture); err != nil || !fi.IsDir() {
 			res.Status = gate.CalibError
 			res.Note = fmt.Sprintf("reference fixture not found at %s", fixture)
@@ -100,8 +100,8 @@ func runCalibration(p *harness.Harness, wanted map[string]bool, stdout, stderr i
 		if s.Source.Kind() == "command" {
 			probeDir, tmpErr := os.MkdirTemp("", "ynh-portability-*")
 			if tmpErr == nil {
-				inFixture := resolveCommandProgram(s.Source.Command, fixture, p.Dir)
-				elsewhere := resolveCommandProgram(s.Source.Command, probeDir, p.Dir)
+				inFixture := resolveCommandProgram(s.Source.Command, fixture, s.Dir(p.Dir))
+				elsewhere := resolveCommandProgram(s.Source.Command, probeDir, s.Dir(p.Dir))
 				_ = os.RemoveAll(probeDir)
 
 				portable := inFixture != "" && inFixture == elsewhere

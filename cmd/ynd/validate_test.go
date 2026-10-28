@@ -1615,3 +1615,30 @@ func TestValidateHarnessSensors_ConvergenceVerifierSource(t *testing.T) {
 		})
 	}
 }
+
+func TestSchemaPlugin_IncludeSensorsFlag(t *testing.T) {
+	cases := []struct {
+		name      string
+		value     string
+		wantIssue bool
+	}{
+		{"false", `false`, false},
+		{"true", `true`, false},
+		{"string", `"false"`, true},
+		{"number", `0`, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			src := `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"h","version":"0.1.0","includes":[{"git":"github.com/x/y","sensors":` + c.value + `}]}`
+			path := filepath.Join(t.TempDir(), "plugin.json")
+			writeFile(t, path, []byte(src))
+			issues := lintHarnessJSON(path)
+			if c.wantIssue && len(issues) == 0 {
+				t.Errorf("expected an issue for sensors: %s", c.value)
+			}
+			if !c.wantIssue && len(issues) > 0 {
+				t.Errorf("unexpected issues for sensors: %s: %v", c.value, issues)
+			}
+		})
+	}
+}

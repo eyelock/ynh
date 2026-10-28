@@ -410,6 +410,43 @@ So an included sensor's **observation** belongs to whoever published it, and
 its **severity** belongs to whoever adopted it. Anything more than that is a
 fork, and forking a set is a reasonable thing to do.
 
+### Where an included sensor looks
+
+An included sensor's `$YNH_HARNESS_DIR` and `reference.path` resolve against
+the harness that published it, not the one that adopted it. Its scripts and
+fixtures therefore travel with it:
+
+```json
+"schema-conformance": {
+  "source": { "command": "$YNH_HARNESS_DIR/tools/sensors/schema-conformance.sh" },
+  "reference": { "path": "tools/sensors/fixtures/schema-drift", "expect": "fail" }
+}
+```
+
+This applies to the command, to `version_command` and to calibration. For a git
+include the directory is the cache checkout. The working directory is
+unchanged: the command still runs in, and measures, the tree under test. A
+sensor the harness declares itself resolves against the harness, as before.
+
+### Taking an include without its sensors
+
+An include can opt out of its sensors with `"sensors": false`:
+
+```json
+"includes": [
+  { "git": "github.com/myorg/assistants", "sensors": false }
+]
+```
+
+The include's skills, agents, rules and commands still come through; none of
+its sensors do. The default is `true`. Use it to adopt a harness's skills
+without inheriting its gate, for example when its sensors need tooling your
+repository does not have. An opted-out include is not read for sensors at all,
+so it does not have to be in the include cache for `ynh check` to run.
+
+A `sensor_overrides` entry naming a sensor that only an opted-out include
+declares is refused like any other override of an unknown sensor.
+
 ### Three refusals
 
 | Situation | Why it is refused rather than resolved |
@@ -840,15 +877,9 @@ sensor "security-scan": source.focus references undefined focus "infer-vulns"
 
 ## Composition
 
-### Includes — root-only
+### Includes
 
-Only the root harness's sensors are used. An included harness contributes `skills/`, `agents/`, `rules/` and `commands/` — files — and nothing else.
-
-Nothing is *dropped*: `resolveWith` iterates includes flat, with no recursion, and returns file paths. **It never opens an included harness's `plugin.json`,** so a sensor declared there is never read in the first place. Root-only is a property of the resolver, not a filter applied afterwards.
-
-That is deliberate. It keeps the answer to "what observes this repository" in one committed file a reviewer can read, and stops a composed harness turning inert included content into an execution surface the root author never declared.
-
-If an included harness needs a sensor, copy its declaration into the root harness's `plugin.json`. Merging that copy at authoring time — generated, labelled blocks with drift detection — is the agreed direction rather than resolving includes at run time.
+An included harness's sensors travel with it; see [Sensors from an include](#sensors-from-an-include). The merge reads the manifest of each include directly and, like the rest of include resolution, does not recurse: an include's own includes are not read. Set `"sensors": false` on an include to take its files without its gate.
 
 ### Profiles — out of scope for v1
 
