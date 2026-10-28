@@ -265,7 +265,7 @@ The rules:
 - **The root's `env_passthrough` is not widened.** An include's variables are visible to that include's servers only, and a variable only the root declares is not visible to an include's servers. The allow-list stays a containment boundary the root author controls.
 - **`pick` brings the servers but not the includes.** An include that names `pick` contributes the picked artifacts and its own MCP servers, and its own `includes` are not followed. To pull in an include's dependencies, include it without `pick`.
 - **Cycles are refused.** A harness that includes itself, directly or through others, fails with the chain: `include cycle: root -> eyelock/a -> eyelock/b -> root`. A harness reached by two routes contributes once.
-- **Hooks, focuses, profiles and sensors of an included harness are not carried.** Only the root's are used (see [hooks](hooks.md#root-harness-only-rule) and [sensors](sensors.md#includes-root-only)).
+- **Hooks, focuses and profiles of an included harness are not carried; its sensors are.** Only the root's hooks, focuses and profiles are used (see [hooks](hooks.md#root-harness-only-rule)). Its sensors travel unless its include says `"sensors": false` (see [sensors](sensors.md#sensors-from-an-include)).
 
 ### Exporting
 
