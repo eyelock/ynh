@@ -160,8 +160,8 @@ ynd preview <harness> --profile ci
 - **Vendor**: `-v` flag > harness `default_vendor` > global config
 - **Instructions**: last source wins — the harness's own `AGENTS.md` beats an
   included one
-- **Sensors**: root-only. An included harness's sensors are never read, by
-  design, so "what observes this repository" stays in one committed file
+- **Sensors**: a direct include's sensors travel with it and run from its own
+  directory; `"sensors": false` on the include takes its files without its gate
 - **Hooks**: an included harness's hooks run only if its include says
   `"hooks": true` (`ynh include add --hooks`), at every link of a chain.
   Without it a warning names them. Per event the included entries go first,

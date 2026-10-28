@@ -334,7 +334,7 @@ ynh profile include add <harness> <profile> <url> --hooks
 - **At every link.** For a harness reached through another, consent must hold along the whole chain: the root's include of B says `"hooks": true`, and B's include of C says `"hooks": true`. If either link is missing, C's hooks are not carried.
 - **After its profile.** If a namespaced profile was selected for the included harness (`--profile guard:strict`), its hooks are the result of that profile: an event the profile declares replaces the harness's own entries for that event, and events it does not declare are inherited (see [Profiles](profiles.md#merge-semantics)). That result is what is carried.
 - **Merge order.** Per event, entries are appended: included harnesses first, in content order (dependencies before the harness that includes them), the root's own entries last. Nothing is de-duplicated: an identical entry from two sources runs twice.
-- **Sensors and delegates are not carried.** Only hooks are opt-in. See [sensors](sensors.md#includes-root-only).
+- **Delegates are not carried, and sensors are not governed by this flag.** An included harness's sensors travel unless its include says `"sensors": false`; see [sensors](sensors.md#sensors-from-an-include).
 
 ### Warning without consent
 
