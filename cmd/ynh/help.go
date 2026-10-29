@@ -341,6 +341,10 @@ from a Git URL into ~/.ynh/harnesses/ and its sensors run against a tree
 somewhere else, so the code that executes is nowhere near the directory you are
 looking at.
 
+Hooks and MCP servers execute too, through the vendor CLI with your
+environment, and so do sensors the harness's includes contribute. All of them
+are shown and covered by what you accept.
+
   ynh trust                      State of every installed harness
   ynh trust show <harness>       Every command it will run, with provenance
   ynh trust accept <harness>     Record that you have read them
