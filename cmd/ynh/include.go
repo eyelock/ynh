@@ -93,26 +93,11 @@ func cmdIncludeAdd(args []string, stdout io.Writer) error {
 
 	// A filesystem path is a local include, recorded as such; a Git URL is
 	// fetched. --git keeps a path a Git source (a repository on disk).
-	if !forceGit && looksLikeLocalPath(url, dir) {
-		stored, abs, err := localIncludeForm(url, dir)
-		if err != nil {
-			return err
-		}
-		if opts.Ref != "" {
-			return fmt.Errorf("--ref applies to Git includes only; %q is a local path (use --git to treat it as a repository)", url)
-		}
-		base := abs
-		if opts.Path != "" {
-			base = filepath.Join(abs, opts.Path)
-		}
-		if info, statErr := os.Stat(base); statErr != nil || !info.IsDir() {
-			return fmt.Errorf("local include %q: %s is not a directory", url, base)
-		}
-		if len(opts.Pick) > 0 {
-			if err := harness.ValidatePicks(base, opts.Pick); err != nil {
-				return err
-			}
-		}
+	stored, local, err := prepareLocalInclude(url, dir, forceGit, opts)
+	if err != nil {
+		return err
+	}
+	if local {
 		url, opts.Local = stored, true
 	} else {
 		// Fetch before writing so pick validation happens before any mutation.
@@ -392,7 +377,13 @@ func localIncludeForm(arg, harnessDir string) (stored, abs string, err error) {
 // manifest holds. An argument the manifest already lists is used as written;
 // a path is otherwise put in the form `include add` would have recorded.
 func includeArgAsStored(dir, arg string) string {
-	if sources, err := harness.IncludeSources(dir); err == nil && slices.Contains(sources, arg) {
+	sources, err := harness.IncludeSources(dir)
+	return storedIncludeArg(dir, arg, sources, err)
+}
+
+// storedIncludeArg is includeArgAsStored given the manifest's sources.
+func storedIncludeArg(dir, arg string, sources []string, srcErr error) string {
+	if srcErr == nil && slices.Contains(sources, arg) {
 		return arg
 	}
 	if looksLikeLocalPath(arg, dir) {
@@ -401,4 +392,34 @@ func includeArgAsStored(dir, arg string) string {
 		}
 	}
 	return arg
+}
+
+// prepareLocalInclude decides how `include add` records arg. For a filesystem
+// path it validates the directory and picks, and returns the form to store with
+// local true; for a Git URL (or with forceGit) it returns arg unchanged and
+// local false, leaving the fetch to the caller.
+func prepareLocalInclude(arg, dir string, forceGit bool, opts harness.AddOptions) (stored string, local bool, err error) {
+	if forceGit || !looksLikeLocalPath(arg, dir) {
+		return arg, false, nil
+	}
+	stored, abs, err := localIncludeForm(arg, dir)
+	if err != nil {
+		return "", false, err
+	}
+	if opts.Ref != "" {
+		return "", false, fmt.Errorf("--ref applies to Git includes only; %q is a local path (use --git to treat it as a repository)", arg)
+	}
+	base := abs
+	if opts.Path != "" {
+		base = filepath.Join(abs, opts.Path)
+	}
+	if info, statErr := os.Stat(base); statErr != nil || !info.IsDir() {
+		return "", false, fmt.Errorf("local include %q: %s is not a directory", arg, base)
+	}
+	if len(opts.Pick) > 0 {
+		if err := harness.ValidatePicks(base, opts.Pick); err != nil {
+			return "", false, err
+		}
+	}
+	return stored, true, nil
 }

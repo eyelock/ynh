@@ -207,10 +207,10 @@ var subcommandHelp = map[string]subHelp{
 		Parsers: []string{"cmdProfileMCPUpdate"},
 	},
 	"profile include add": {
-		Usage:   "ynh profile include add <harness> <profile> <url> [flags]",
-		Summary: "Add a Git include to a profile.",
-		Args:    []argHelp{harnessArg, profileArg, urlArg},
-		Flags:   []flagHelp{pathFlag, refFlag, {"--replace", "Replace an existing include of the same url and path"}},
+		Usage:   "ynh profile include add <harness> <profile> <url|path> [flags]",
+		Summary: "Add an include to a profile: a Git URL, or a path to a directory on disk (recorded as a local include).",
+		Args:    []argHelp{harnessArg, profileArg, {"<url|path>", "Git URL of the source, or a filesystem path (absolute, ./, ../, ~/, or an existing directory)"}},
+		Flags:   []flagHelp{pathFlag, refFlag, {"--git", "Treat a path as a Git repository on disk instead of a local include"}, {"--replace", "Replace an existing include of the same url and path"}},
 		Parsers: []string{"cmdProfileIncludeAdd"},
 	},
 	"profile include remove": {
