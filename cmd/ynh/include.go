@@ -374,19 +374,21 @@ func localIncludeForm(arg, harnessDir string) (stored, abs string, err error) {
 		p = filepath.Join(base, p)
 	}
 	abs = filepath.Clean(p)
-	root, rerr := filepath.Abs(harnessDir)
 	// /tmp is /private/tmp on macOS: compare real paths, or an include inside
-	// the harness reads as outside it.
-	if real, err := filepath.EvalSymlinks(abs); err == nil {
-		abs = real
+	// the harness reads as outside it. The path is recorded as typed, so
+	// `include remove` and --replace find it by the same spelling.
+	real, root := abs, harnessDir
+	if r, err := filepath.EvalSymlinks(abs); err == nil {
+		real = r
 	}
-	if real, err := filepath.EvalSymlinks(root); err == nil {
-		root = real
+	if r, err := filepath.Abs(root); err == nil {
+		root = r
 	}
-	if rerr == nil {
-		if rel, relErr := filepath.Rel(root, abs); relErr == nil && rel != "." && !strings.HasPrefix(rel, "..") {
-			return filepath.ToSlash(rel), abs, nil
-		}
+	if r, err := filepath.EvalSymlinks(root); err == nil {
+		root = r
+	}
+	if rel, err := filepath.Rel(root, real); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
+		return filepath.ToSlash(rel), abs, nil
 	}
 	return abs, abs, nil
 }
