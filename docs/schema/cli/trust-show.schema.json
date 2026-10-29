@@ -97,6 +97,10 @@
         "name": {
           "type": "string"
         },
+        "source": {
+          "type": "string",
+          "description": "The included harness that supplied the server, as the include chain reads (a > b when reached through another harness). Absent for a server of the harness itself."
+        },
         "transport": {
           "type": "string",
           "description": "Effective transport, e.g. stdio or streamable-http. Open set."
@@ -185,7 +189,7 @@
       "items": {
         "$ref": "#/$defs/MCPServer"
       },
-      "description": "MCP servers as resolved for a run. Omitted when there are none. Includes contribute none today."
+      "description": "MCP servers as resolved for a run. Omitted when there are none. Includes contribute theirs, transitively, with the supplying harness in source."
     },
     "legacy_digest": {
       "type": "boolean",

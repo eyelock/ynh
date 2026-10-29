@@ -353,14 +353,15 @@ ynh trust accept <harness>   # record that you have read them
 
 Everything is shown as resolved for a run: the harness's own, then whatever
 each profile adds or changes (an entry identical to the harness's own is not
-repeated). Includes contribute sensors today; when they contribute hooks and
-MCP servers, those are covered too.
+repeated). Includes contribute their sensors and their MCP servers, the
+latter from every harness the includes reach.
 
 Reading an include never reaches the network, as with `ynh check`. If an
 include is not cached, the set is incomplete, so `ynh trust` reports
 `unavailable` rather than digesting part of it, `ynh trust accept` refuses, and
-`ynh check` warns if you had accepted the harness. An include with
-`"sensors": false` contributes nothing and needs no cache.
+`ynh check` warns if you had accepted the harness. `"sensors": false` drops an
+include's sensors but not its MCP servers, so such an include still has to be
+readable.
 
 It also prints the source and commit the harness was installed from, and the
 environment variables those commands inherit that the harness never declared in

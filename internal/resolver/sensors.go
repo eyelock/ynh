@@ -256,3 +256,18 @@ func includeBase(p *harness.Harness, inc harness.Include) (base, source string, 
 	}
 	return b, "include " + inc.Git, nil
 }
+
+// ResolveIncludesLocal resolves the includes of p, and of every harness they
+// reach, without touching the network: a git include that is not cached is an
+// error, as it is for the sensors. The harness's own repo is the exception
+// (IsOwnRepoSource), refreshed as a run refreshes it. `ynh trust` reads what a
+// run would carry through it.
+func ResolveIncludesLocal(p *harness.Harness) ([]ResolveResult, error) {
+	return resolveWith(p, nil, func(gs harness.GitSource, dir string) (string, *RepoResult, error) {
+		fetch := repoFunc(lookupOnlyRepo)
+		if IsOwnRepoSource(gs, dir) {
+			fetch = EnsureRepo
+		}
+		return resolveGitSourceWith(gs, dir, fetch)
+	})
+}

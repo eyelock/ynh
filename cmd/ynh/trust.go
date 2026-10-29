@@ -158,8 +158,11 @@ type mcpValue struct {
 
 // mcpExec is one MCP server as the vendor CLI would launch or contact it.
 type mcpExec struct {
-	Profile   string     `json:"profile,omitempty"`
-	Name      string     `json:"name"`
+	Profile string `json:"profile,omitempty"`
+	Name    string `json:"name"`
+	// Source names the included harness that supplied the server. Empty for
+	// the harness's own.
+	Source    string     `json:"source,omitempty"`
 	Transport string     `json:"transport"`
 	Command   string     `json:"command,omitempty"`
 	Args      []string   `json:"args,omitempty"`
@@ -208,15 +211,19 @@ func mcpValues(m map[string]string) []mcpValue {
 type runView struct {
 	Profile string
 	H       *harness.Harness
+	// MCPSources maps each MCP server of H to the harness that supplied it
+	// (harness.MCPSourceRoot, or the include's display name).
+	MCPSources map[string]string
 }
 
 // runViews is the single place that says which resolved views of a harness
 // can execute, and it resolves them the way a run does: the profile merge,
-// then the include merge (resolver.WithIncludedSensors), lookup-only. Sensors
-// from includes arrive in H.Sensors through it. Includes contribute no hooks
-// or MCP servers yet. When they do (#565 hooks, #562 MCP servers), fold them
-// into H here, and collectHooks, collectMCP, the digest, the listing and
-// `trust show` follow.
+// then the include merge, lookup-only. Sensors from includes arrive in
+// H.Sensors (resolver.WithIncludedSensors) and MCP servers, from every harness
+// the includes reach, in H.MCPServers (harness.ComposeMCPServersRaw), with
+// their sources in MCPSources. Hooks from includes (#565) are folded into H
+// here too when that lands, and collectHooks, collectMCP, the digest, the
+// listing and `trust show` follow.
 //
 // Anything that cannot be resolved is returned as a problem rather than
 // skipped, so the caller can refuse to call a partial set complete.
@@ -234,7 +241,25 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 			problems = append(problems, fmt.Sprintf("%s: %v", label, err))
 			return
 		}
-		views = append(views, runView{Profile: profile, H: merged})
+		sources := map[string]string{}
+		if len(merged.Includes) > 0 {
+			resolved, err := resolver.ResolveIncludesLocal(merged)
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("%s: includes: %v", label, err))
+				return
+			}
+			servers, provenance, err := harness.ComposeMCPServersRaw(merged, resolver.IncludedHarnesses(resolved))
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("%s: %v", label, err))
+				return
+			}
+			// merged is the copy above, so replacing the map leaves p alone.
+			merged.MCPServers = servers
+			for _, pr := range provenance {
+				sources[pr.Server] = pr.Source
+			}
+		}
+		views = append(views, runView{Profile: profile, H: merged, MCPSources: sources})
 	}
 	add("", p)
 	for _, name := range slices.Sorted(maps.Keys(p.Profiles)) {
@@ -306,9 +331,9 @@ func collectHooks(profile string, v *harness.Harness, base map[string]bool) []ho
 	return out
 }
 
-func mcpFromServer(profile, name string, s plugin.MCPServer) mcpExec {
+func mcpFromServer(profile, name, source string, s plugin.MCPServer) mcpExec {
 	return mcpExec{
-		Profile: profile, Name: name, Transport: s.Transport(),
+		Profile: profile, Name: name, Source: source, Transport: s.Transport(),
 		Command: s.Command, Args: s.Args, URL: s.URL, Cwd: s.Cwd,
 		Env: mcpValues(s.Env), Headers: mcpValues(s.Headers),
 	}
@@ -323,10 +348,14 @@ func mcpKey(m mcpExec) string {
 
 // collectMCP lists the MCP servers of one resolved view, with the same
 // profile-delta rule as collectHooks.
-func collectMCP(profile string, v *harness.Harness, base map[string]bool) []mcpExec {
+func collectMCP(profile string, v *harness.Harness, sources map[string]string, base map[string]bool) []mcpExec {
 	var out []mcpExec
 	for _, name := range slices.Sorted(maps.Keys(v.MCPServers)) {
-		m := mcpFromServer(profile, name, v.MCPServers[name])
+		src := sources[name]
+		if src == harness.MCPSourceRoot {
+			src = ""
+		}
+		m := mcpFromServer(profile, name, src, v.MCPServers[name])
 		if profile != "" && base[mcpKey(m)] {
 			continue
 		}
@@ -351,7 +380,7 @@ func harnessExecutables(p *harness.Harness) trustSet {
 	for _, v := range views {
 		set.Sensors = append(set.Sensors, collectSensors(v.Profile, v.H, baseSensors, p.Dir)...)
 		set.Hooks = append(set.Hooks, collectHooks(v.Profile, v.H, baseHooks)...)
-		set.MCPServers = append(set.MCPServers, collectMCP(v.Profile, v.H, baseMCP)...)
+		set.MCPServers = append(set.MCPServers, collectMCP(v.Profile, v.H, v.MCPSources, baseMCP)...)
 		if v.Profile != "" {
 			continue
 		}
@@ -373,7 +402,7 @@ func harnessExecutables(p *harness.Harness) trustSet {
 func field(w io.Writer, s string) { _, _ = fmt.Fprintf(w, "%d:%s\x00", len(s), s) }
 
 func writeMCP(w io.Writer, m mcpExec) {
-	for _, s := range []string{m.Profile, m.Name, m.Transport, m.Command, m.URL, m.Cwd} {
+	for _, s := range []string{m.Profile, m.Name, m.Source, m.Transport, m.Command, m.URL, m.Cwd} {
 		field(w, s)
 	}
 	field(w, fmt.Sprint(len(m.Args)))
@@ -468,6 +497,14 @@ func unavailableMessage(id string, problems []string) string {
 	return fmt.Sprintf("%s cannot be reviewed yet: what it executes could not be read in full.\n  %s\n"+
 		"Run 'ynh update %s' to fetch its includes, then review it again.",
 		id, strings.Join(problems, "\n  "), id)
+}
+
+// fromSuffix labels a server an include supplied.
+func fromSuffix(source string) string {
+	if source == "" {
+		return ""
+	}
+	return " from " + source
 }
 
 // scopeSuffix labels a hook or server that only a profile adds or changes.
@@ -817,7 +854,7 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 	if len(s.MCPServers) > 0 {
 		_, _ = fmt.Fprintf(w, "\nMCP servers, launched or contacted by the vendor CLI:\n\n")
 		for _, m := range s.MCPServers {
-			_, _ = fmt.Fprintf(w, "  %s (%s)%s\n", m.Name, m.Transport, scopeSuffix(m.Profile))
+			_, _ = fmt.Fprintf(w, "  %s (%s)%s%s\n", m.Name, m.Transport, fromSuffix(m.Source), scopeSuffix(m.Profile))
 			if m.Command != "" {
 				_, _ = fmt.Fprintf(w, "    command: %s\n", strings.Join(append([]string{m.Command}, m.Args...), " "))
 			}
