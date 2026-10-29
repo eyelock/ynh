@@ -107,6 +107,12 @@ The worker receives only the environment variables the harness declares in
 `env_passthrough`, plus the process minimum (`PATH`, `HOME`, `USER`, `SHELL`,
 `TMPDIR`, `TZ`, `LANG`, `TERM`, `LC_*`) — not the operator's environment.
 
+This applies to tools the worker runs as well as to the worker. A tool
+configured through its own variable (`YNM_HOME` for `ynm`, say) does not see
+it unless the harness declares it, and falls back to its default without any
+error. If a tool inside a run behaves as if it were unconfigured, check
+`env_passthrough` first.
+
 Those few are process mechanics rather than configuration: without `PATH` the
 vendor binary cannot be found and without `HOME` it cannot locate its own
 credentials. Anything that is policy stays out, **proxy settings included** — a

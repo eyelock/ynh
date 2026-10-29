@@ -92,6 +92,10 @@ type Sensor struct {
 	// fact about where the sensor was loaded from, not part of the manifest.
 	// Empty means the sensor belongs to the harness being run. See Dir.
 	HarnessDir string `json:"-"`
+	// Origin names the include the sensor came from ("include <source>"),
+	// set with HarnessDir and likewise never serialised. Empty for the
+	// harness's own sensors.
+	Origin string `json:"-"`
 	// ToleranceSource records which layer last changed Tolerance: "" for the
 	// declaration, "include" for an include-level sensor_overrides entry,
 	// "profile" for a profile's, "overlay" for --sensor-overlay. Like

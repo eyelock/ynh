@@ -96,6 +96,7 @@ func MergeIncludedSensors(p *harness.Harness, overrides map[string]plugin.Sensor
 		// The sensor resolves its command and fixture against the harness
 		// that published it, not the consumer.
 		in.Sensor.HarnessDir = in.Dir
+		in.Sensor.Origin = in.Source
 		merged[in.Name] = in.Sensor
 		origin[in.Name] = in.Source
 	}
