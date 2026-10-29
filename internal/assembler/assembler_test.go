@@ -42,7 +42,7 @@ func (m *mockAdapter) SupportsResume() bool { return false }
 func (m *mockAdapter) ResolveLastSession(cwd string, notBefore time.Time) (string, error) {
 	return "", vendor.ErrSessionLookupUnavailable
 }
-func (m *mockAdapter) LaunchResume(configPath, sessionID string, extraArgs []string) error {
+func (m *mockAdapter) LaunchResume(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
 	return nil
 }
 func (m *mockAdapter) GenerateSystemPrompt(content []byte) map[string][]byte {

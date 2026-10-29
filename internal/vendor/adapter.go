@@ -24,6 +24,12 @@ var ErrInitialPromptNotSupported = errors.New("vendor does not support interacti
 // no mechanism to continue a previous interactive session.
 var ErrResumeNotSupported = errors.New("vendor does not support resuming sessions")
 
+// ErrResumePromptNotSupported is returned by LaunchResume when a prompt was
+// supplied but the vendor's CLI has no documented way to send one to a resumed
+// session in the requested mode. Callers surface it as a refusal naming the
+// vendor; the prompt is never dropped silently.
+var ErrResumePromptNotSupported = errors.New("vendor cannot resume a session with a prompt")
+
 // ErrNoResumableSession is returned by ResolveLastSession when the vendor's
 // session store was readable but holds nothing for the given directory.
 // Callers treat this as "launch cold", not as a failure: there is genuinely no
@@ -136,7 +142,15 @@ type Adapter interface {
 	// a keypress. Emit an explicit id, or the vendor's continue-last form
 	// (claude --continue, codex resume --last, cursor --continue) — never
 	// neither.
-	LaunchResume(configPath string, sessionID string, extraArgs []string) error
+	//
+	// prompt, when non-empty, is delivered to the resumed session. With
+	// interactive true the session stays open after the prompt is answered
+	// (the prompt is the first message sent into it); with interactive false
+	// it is a one-shot run, mirroring LaunchNonInteractive. A vendor with no
+	// documented way to do the requested combination returns
+	// ErrResumePromptNotSupported before launching anything. An empty prompt
+	// always resumes interactively and ignores interactive.
+	LaunchResume(configPath string, sessionID string, prompt string, interactive bool, extraArgs []string) error
 
 	// GenerateSystemPrompt produces vendor-native instruction files from the
 	// harness instructions content. Returns a map of relative file paths to

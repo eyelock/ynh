@@ -101,6 +101,11 @@ func cmdRun(args []string) error {
 		harnessDir = cwd
 	}
 
+	// A resume continues a task, so only a prompt typed on the command line
+	// travels with it; a focus prompt starts one. Captured before the focus
+	// overwrites ra.Prompt. (--focus and a trailing prompt are exclusive.)
+	explicitPrompt := ra.Prompt
+
 	// Resolve focus → profile + prompt
 	if ra.FocusFlag != "" {
 		focus, ok := p.Focuses[ra.FocusFlag]
@@ -384,26 +389,47 @@ func cmdRun(args []string) error {
 
 		// Launch
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
-		if ra.Resume {
-			if !adapter.SupportsResume() {
-				return fmt.Errorf("%s does not support resuming sessions", adapter.Name())
-			}
-			sessionID, resumed := resolveResumeSession(adapter, ra.ResumeID, os.Stderr)
-			if resumed {
-				return adapter.LaunchResume(runDir, sessionID, vendorArgs)
-			}
-			// Nothing to resume: fall through to a normal cold launch rather
-			// than failing. A card relaunching for the first time must still
-			// start.
-		}
-		if prompt != "" {
-			if ra.Interactive {
-				return adapter.LaunchWithInitialPrompt(runDir, prompt, vendorArgs)
-			}
-			return adapter.LaunchNonInteractive(runDir, prompt, vendorArgs)
-		}
-		return adapter.LaunchInteractive(runDir, vendorArgs)
+		return launchSession(adapter, runDir, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
 	}
+}
+
+// launchSession starts the vendor CLI: a resume when ra.Resume finds a session,
+// otherwise a cold launch.
+//
+// prompt is what a cold launch sends (the trailing prompt or the focus prompt).
+// explicitPrompt is only the trailing prompt, and is all a resume sends: a
+// focus prompt starts a task, and a caller that re-sends its stored command
+// with --resume (TermQ reopening a card) must not repeat it into a continued
+// session. Whichever prompt is in play, it is never dropped silently: a vendor
+// that cannot resume with one refuses before anything launches.
+func launchSession(adapter vendor.Adapter, runDir string, ra runArgs, prompt, explicitPrompt string, vendorArgs []string, stderr io.Writer) error {
+	if ra.Resume {
+		if !adapter.SupportsResume() {
+			return fmt.Errorf("%s does not support resuming sessions", adapter.Name())
+		}
+		sessionID, resumed := resolveResumeSession(adapter, ra.ResumeID, stderr)
+		if resumed {
+			err := adapter.LaunchResume(runDir, sessionID, explicitPrompt, ra.Interactive, vendorArgs)
+			if errors.Is(err, vendor.ErrResumePromptNotSupported) {
+				mode := ""
+				if ra.Interactive {
+					mode = " interactively"
+				}
+				return fmt.Errorf("%s cannot resume a session%s with a prompt; drop --resume or the prompt", adapter.Name(), mode)
+			}
+			return err
+		}
+		// Nothing to resume: fall through to a normal cold launch rather
+		// than failing. A card relaunching for the first time must still
+		// start, and it is a new session, so the focus prompt applies.
+	}
+	if prompt != "" {
+		if ra.Interactive {
+			return adapter.LaunchWithInitialPrompt(runDir, prompt, vendorArgs)
+		}
+		return adapter.LaunchNonInteractive(runDir, prompt, vendorArgs)
+	}
+	return adapter.LaunchInteractive(runDir, vendorArgs)
 }
 
 // resolveResumeSession decides which session `--resume` should continue.

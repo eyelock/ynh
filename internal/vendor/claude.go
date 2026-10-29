@@ -155,14 +155,28 @@ func claudeProjectSlug(dir string) string {
 // back to --continue, which Claude documents as "the most recent conversation
 // in the current directory" — directory-scoped, so it stays bound to this
 // project. A bare --resume is never emitted: it opens the session picker.
-func (c *Claude) LaunchResume(configPath, sessionID string, extraArgs []string) error {
+//
+// A prompt is delivered as Claude's positional prompt, which starts an
+// interactive session with that first message, or with -p for a one-shot run
+// (`claude -p --resume <id> "<prompt>"` is the documented headless resume).
+func (c *Claude) LaunchResume(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
+	initial, args := claudeResumeArgs(sessionID, prompt, interactive, extraArgs)
+	return launchClaude(configPath, initial, args)
+}
+
+// claudeResumeArgs returns the initial prompt for buildClaudeArgs and the
+// extra args, with the resume selector in front of the caller's own.
+func claudeResumeArgs(sessionID, prompt string, interactive bool, extraArgs []string) (string, []string) {
 	var resumeArgs []string
 	if sessionID != "" {
 		resumeArgs = []string{"--resume", sessionID}
 	} else {
 		resumeArgs = []string{"--continue"}
 	}
-	return launchClaude(configPath, "", append(resumeArgs, extraArgs...))
+	if prompt != "" && !interactive {
+		return "", append(append([]string{"-p", prompt}, resumeArgs...), extraArgs...)
+	}
+	return prompt, append(resumeArgs, extraArgs...)
 }
 
 func (c *Claude) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
