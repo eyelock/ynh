@@ -43,7 +43,7 @@ func recordCheck(t *testing.T, result string) *[]string {
 	orig := runCheckFn
 	t.Cleanup(func() { runCheckFn = orig })
 	var seen []string
-	runCheckFn = func(_, harnessName, _ string, only []string, _ map[string]json.RawMessage, _ []string) (*gate.Envelope, error) {
+	runCheckFn = func(_, harnessName, _, _ string, only []string, _ map[string]json.RawMessage, _ []string) (*gate.Envelope, error) {
 		seen = append(seen, harnessName)
 		rs := make([]gate.Result, 0, len(only))
 		for _, n := range only {

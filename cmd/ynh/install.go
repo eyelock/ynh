@@ -256,7 +256,7 @@ func cmdInstall(args []string) error {
 			if err := os.MkdirAll(installDir, 0o755); err != nil {
 				return fmt.Errorf("creating install directory: %w", err)
 			}
-			if err := assembler.CopyDir(srcDir, installDir); err != nil {
+			if err := assembler.CopyTree(srcDir, installDir); err != nil {
 				return fmt.Errorf("copying harness to install directory: %w", err)
 			}
 		}

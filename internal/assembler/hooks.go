@@ -225,7 +225,9 @@ func ComposeHooks(root map[string][]plugin.HookEntry, resolved []resolver.Resolv
 	for _, r := range active {
 		dirName := r.Namespace
 		if shared[r.Namespace] > 1 {
-			dirName += fmt.Sprintf("-%x", sha256.Sum256([]byte(r.Chain)))[:9]
+			// Chain names a local harness by its name, so two of them can read
+			// alike; the include as the manifest wrote it tells them apart.
+			dirName += fmt.Sprintf("-%x", sha256.Sum256([]byte(r.Chain+"\x00"+r.Source+"\x00"+r.Path)))[:9]
 		}
 		for _, event := range sortedEvents(r.Harness.Hooks) {
 			if len(r.Harness.Hooks[event]) > 0 {

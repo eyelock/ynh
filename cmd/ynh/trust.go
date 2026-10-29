@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -15,6 +18,8 @@ import (
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/resolver"
 )
 
 // A sensor's `command` and `version_command` are handed to `/bin/sh -c` with
@@ -45,13 +50,18 @@ const trustFile = "trust.json"
 
 // trustRecord is one accepted harness.
 type trustRecord struct {
-	// Digest covers every string this harness can get executed. It is the
+	// Digest covers every string this harness can get executed: sensor commands,
+	// hook commands and MCP servers, at the top level and in every profile. It is the
 	// whole point of the record: comparing it is how a changed command is
 	// noticed.
 	Digest string `json:"digest"`
 	// Commands is how many executable strings the digest covered, so the
 	// report can say "12 commands" without re-reading the manifest.
 	Commands int `json:"commands"`
+	// Scheme is which digest scheme Digest was computed under. Absent (0) is
+	// the original scheme, which covered sensor commands only; a record in it
+	// is reported as changed with an explanation, never silently accepted.
+	Scheme int `json:"scheme,omitempty"`
 	// Source, Ref and SHA are copied from provenance at acceptance time.
 	// Copied rather than referenced: the point is what the operator was
 	// looking at when they accepted, which an update would otherwise rewrite.
@@ -108,32 +118,191 @@ func saveTrustStore(s trustStore) error {
 	return nil
 }
 
-// executable is one string a harness can get run through a shell.
+// trustScheme is the digest scheme. 1 (recorded as absent) covered sensor
+// commands only; 2 adds hook commands and MCP servers. A digest from an older
+// scheme can never equal a current one, because the current input is prefixed
+// with the scheme, so an old acceptance fails closed as "changed".
+const trustScheme = 2
+
+// executable is one sensor string a harness can get run through a shell.
 type executable struct {
-	Sensor string `json:"sensor"`
-	Field  string `json:"field"` // "command" or "version_command"
-	Value  string `json:"value"`
+	// Profile is set when only that profile contributes the sensor, through a
+	// profile-level include.
+	Profile string `json:"profile,omitempty"`
+	Sensor  string `json:"sensor"`
+	Field   string `json:"field"` // "command" or "version_command"
+	Value   string `json:"value"`
+	// Source and HarnessDir are set for a sensor an include contributes: where
+	// it came from, and the directory $YNH_HARNESS_DIR resolves to when it
+	// runs, which is the publishing harness and not this one.
+	Source     string `json:"source,omitempty"`
+	HarnessDir string `json:"harness_dir,omitempty"`
 }
 
-// harnessExecutables lists every string the harness can get executed, sorted.
+// hookExec is one hook command. Profile is empty for the harness's own hooks,
+// and names the profile for a hook that only that profile adds or changes.
+type hookExec struct {
+	Profile string `json:"profile,omitempty"`
+	Event   string `json:"event"`
+	Matcher string `json:"matcher,omitempty"`
+	Command string `json:"command"`
+}
+
+// mcpValue is an env or header entry of an MCP server. The raw value feeds the
+// digest and is never serialised; Value is what a person may be shown.
+type mcpValue struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+	raw   string
+}
+
+// mcpExec is one MCP server as the vendor CLI would launch or contact it.
+type mcpExec struct {
+	Profile string `json:"profile,omitempty"`
+	Name    string `json:"name"`
+	// Source names the included harness that supplied the server. Empty for
+	// the harness's own.
+	Source    string     `json:"source,omitempty"`
+	Transport string     `json:"transport"`
+	Command   string     `json:"command,omitempty"`
+	Args      []string   `json:"args,omitempty"`
+	URL       string     `json:"url,omitempty"`
+	Cwd       string     `json:"cwd,omitempty"`
+	Env       []mcpValue `json:"env,omitempty"`
+	Headers   []mcpValue `json:"headers,omitempty"`
+}
+
+// trustSet is everything the operator is asked to review, grouped by kind.
+type trustSet struct {
+	Sensors    []executable
+	Hooks      []hookExec
+	MCPServers []mcpExec
+	// Problems is why the set could not be read completely: an include that
+	// is not cached, a merge that refuses. A set with problems is partial, and
+	// a partial set must never be digested or reported as the whole.
+	Problems []string
+}
+
+func (t trustSet) count() int { return len(t.Sensors) + len(t.Hooks) + len(t.MCPServers) }
+
+var envRefRe = regexp.MustCompile(`^\$\{[A-Za-z_][A-Za-z0-9_]*\}$`)
+
+// shownValue is what may be printed for an env or header value. A whole-value
+// ${VAR} reference is a pointer to a credential, not the credential, and shows
+// as written. Anything else may be the secret itself, so it is not shown at
+// all; the digest still covers it, so a change to it is noticed.
+func shownValue(v string) string {
+	if envRefRe.MatchString(v) {
+		return v
+	}
+	return "(literal, not shown)"
+}
+
+func mcpValues(m map[string]string) []mcpValue {
+	var out []mcpValue
+	for _, k := range slices.Sorted(maps.Keys(m)) {
+		out = append(out, mcpValue{Name: k, Value: shownValue(m[k]), raw: m[k]})
+	}
+	return out
+}
+
+// runView is one resolved view of a harness: the harness itself (Profile
+// empty) or a profile as `ynh run --profile` would resolve it.
+type runView struct {
+	Profile string
+	H       *harness.Harness
+	// MCPSources maps each MCP server of H to the harness that supplied it
+	// (harness.MCPSourceRoot, or the include's display name).
+	MCPSources map[string]string
+}
+
+// runViews is the single place that says which resolved views of a harness
+// can execute, and it resolves them the way a run does: the profile merge,
+// then the include merge, lookup-only. Sensors from includes arrive in
+// H.Sensors (resolver.WithIncludedSensors) and MCP servers, from every harness
+// the includes reach, in H.MCPServers (harness.ComposeMCPServersRaw), with
+// their sources in MCPSources. Hooks from includes (#565) are folded into H
+// here too when that lands, and collectHooks, collectMCP, the digest, the
+// listing and `trust show` follow.
 //
-// Sorted so the digest does not depend on Go's map iteration order, which is
-// randomised: an unsorted digest would differ between two runs over an
-// unchanged harness and report drift that is not there.
-func harnessExecutables(p *harness.Harness) []executable {
-	// Never nil. A nil slice marshals to null, and a consumer iterating the
-	// JSON then has to special-case it. `ynh doctor` shipped exactly this bug
-	// with its findings array (#328); the published schema caught it here.
-	out := make([]executable, 0, len(p.Sensors))
+// Anything that cannot be resolved is returned as a problem rather than
+// skipped, so the caller can refuse to call a partial set complete.
+func runViews(p *harness.Harness) (views []runView, problems []string) {
+	add := func(profile string, h *harness.Harness) {
+		label := "the harness"
+		if profile != "" {
+			label = "profile " + profile
+		}
+		// A copy: the include merge assigns Sensors, and a view must not
+		// change the harness it was made from.
+		c := *h
+		merged, err := resolver.WithIncludedSensors(&c)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("%s: %v", label, err))
+			return
+		}
+		sources := map[string]string{}
+		if len(merged.Includes) > 0 {
+			resolved, err := resolver.ResolveIncludesLocal(merged)
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("%s: includes: %v", label, err))
+				return
+			}
+			servers, provenance, err := harness.ComposeMCPServersRaw(merged, resolver.IncludedHarnesses(resolved))
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("%s: %v", label, err))
+				return
+			}
+			// merged is the copy above, so replacing the map leaves p alone.
+			merged.MCPServers = servers
+			for _, pr := range provenance {
+				sources[pr.Server] = pr.Source
+			}
+		}
+		views = append(views, runView{Profile: profile, H: merged, MCPSources: sources})
+	}
+	add("", p)
+	for _, name := range slices.Sorted(maps.Keys(p.Profiles)) {
+		r, err := harness.ResolveProfile(p, name)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("profile %s: %v", name, err))
+			continue
+		}
+		add(name, r)
+	}
+	return views, problems
+}
+
+func sensorKey(e executable) string {
+	return e.Sensor + "\x00" + e.Field + "\x00" + e.Value + "\x00" + e.Source
+}
+
+// collectSensors lists the sensor commands of one view, with the same
+// profile-delta rule as collectHooks.
+func collectSensors(profile string, p *harness.Harness, base map[string]bool, fallbackDir string) []executable {
+	var out []executable
+	add := func(name, field, value string, s plugin.Sensor) {
+		e := executable{Profile: profile, Sensor: name, Field: field, Value: value, Source: s.Origin}
+		if s.Origin != "" {
+			e.HarnessDir = s.Dir(fallbackDir)
+		}
+		if profile != "" && base[sensorKey(e)] {
+			return
+		}
+		out = append(out, e)
+	}
 	for name, s := range p.Sensors {
 		if s.Source.Kind() == "command" && strings.TrimSpace(s.Source.Command) != "" {
-			out = append(out, executable{Sensor: name, Field: "command", Value: s.Source.Command})
+			add(name, "command", s.Source.Command, s)
 		}
 		if strings.TrimSpace(s.VersionCommand) != "" {
-			out = append(out, executable{Sensor: name, Field: "version_command", Value: s.VersionCommand})
+			add(name, "version_command", s.VersionCommand, s)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
+		if out[i].Profile != out[j].Profile {
+			return out[i].Profile < out[j].Profile
+		}
 		if out[i].Sensor != out[j].Sensor {
 			return out[i].Sensor < out[j].Sensor
 		}
@@ -142,16 +311,143 @@ func harnessExecutables(p *harness.Harness) []executable {
 	return out
 }
 
-// executablesDigest fingerprints the command set.
-//
-// The sensor name and field are included, not just the command text: moving the
-// same command onto a different sensor changes when it runs and what its
-// failure gates, which the operator reviewed and should be asked about again.
-func executablesDigest(exes []executable) string {
+func hookKey(h hookExec) string { return h.Event + "\x00" + h.Matcher + "\x00" + h.Command }
+
+// collectHooks lists the hook commands of one resolved view. A profile view
+// lists only entries the harness's own hooks do not already carry: the rest
+// are reviewed once, at the top level, and repeating them per profile would
+// bury what a profile actually adds.
+func collectHooks(profile string, v *harness.Harness, base map[string]bool) []hookExec {
+	var out []hookExec
+	for _, event := range slices.Sorted(maps.Keys(v.Hooks)) {
+		for _, e := range v.Hooks[event] {
+			h := hookExec{Profile: profile, Event: event, Matcher: e.Matcher, Command: e.Command}
+			if profile != "" && base[hookKey(h)] {
+				continue
+			}
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+func mcpFromServer(profile, name, source string, s plugin.MCPServer) mcpExec {
+	return mcpExec{
+		Profile: profile, Name: name, Source: source, Transport: s.Transport(),
+		Command: s.Command, Args: s.Args, URL: s.URL, Cwd: s.Cwd,
+		Env: mcpValues(s.Env), Headers: mcpValues(s.Headers),
+	}
+}
+
+func mcpKey(m mcpExec) string {
+	m.Profile = ""
 	h := sha256.New()
-	for _, e := range exes {
-		// hash.Hash's Write never returns an error, by its own contract.
-		_, _ = fmt.Fprintf(h, "%s\x00%s\x00%s\x00", e.Sensor, e.Field, e.Value)
+	writeMCP(h, m)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// collectMCP lists the MCP servers of one resolved view, with the same
+// profile-delta rule as collectHooks.
+func collectMCP(profile string, v *harness.Harness, sources map[string]string, base map[string]bool) []mcpExec {
+	var out []mcpExec
+	for _, name := range slices.Sorted(maps.Keys(v.MCPServers)) {
+		src := sources[name]
+		if src == harness.MCPSourceRoot {
+			src = ""
+		}
+		m := mcpFromServer(profile, name, src, v.MCPServers[name])
+		if profile != "" && base[mcpKey(m)] {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// harnessExecutables lists everything the harness can get executed, grouped by
+// kind and sorted so the digest does not depend on Go's randomised map order:
+// an unsorted digest would differ between two runs over an unchanged harness
+// and report drift that is not there.
+func harnessExecutables(p *harness.Harness) trustSet {
+	// Sensors is never nil. A nil slice marshals to null, and a consumer
+	// iterating the JSON then has to special-case it. `ynh doctor` shipped
+	// exactly this bug with its findings array (#328); the published schema
+	// caught it here.
+	set := trustSet{Sensors: []executable{}}
+	views, problems := runViews(p)
+	set.Problems = problems
+	baseSensors, baseHooks, baseMCP := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	for _, v := range views {
+		set.Sensors = append(set.Sensors, collectSensors(v.Profile, v.H, baseSensors, p.Dir)...)
+		set.Hooks = append(set.Hooks, collectHooks(v.Profile, v.H, baseHooks)...)
+		set.MCPServers = append(set.MCPServers, collectMCP(v.Profile, v.H, v.MCPSources, baseMCP)...)
+		if v.Profile != "" {
+			continue
+		}
+		for _, e := range set.Sensors {
+			baseSensors[sensorKey(e)] = true
+		}
+		for _, h := range set.Hooks {
+			baseHooks[hookKey(h)] = true
+		}
+		for _, m := range set.MCPServers {
+			baseMCP[mcpKey(m)] = true
+		}
+	}
+	return set
+}
+
+// field writes one length-prefixed field, so no value can masquerade as the
+// boundary between two.
+func field(w io.Writer, s string) { _, _ = fmt.Fprintf(w, "%d:%s\x00", len(s), s) }
+
+func writeMCP(w io.Writer, m mcpExec) {
+	for _, s := range []string{m.Profile, m.Name, m.Source, m.Transport, m.Command, m.URL, m.Cwd} {
+		field(w, s)
+	}
+	field(w, fmt.Sprint(len(m.Args)))
+	for _, a := range m.Args {
+		field(w, a)
+	}
+	for _, group := range [][]mcpValue{m.Env, m.Headers} {
+		field(w, fmt.Sprint(len(group)))
+		for _, e := range group {
+			// The raw value, not the shown one: an env value can change what
+			// runs (NODE_OPTIONS, LD_PRELOAD, PATH) without any printed text
+			// changing. Only the digest sees it, and the digest is a hash.
+			field(w, e.Name)
+			field(w, e.raw)
+		}
+	}
+}
+
+// executablesDigest fingerprints everything the operator reviews.
+//
+// Names and fields are included, not just the command text: moving the same
+// command onto a different sensor changes when it runs and what its failure
+// gates, which the operator reviewed and should be asked about again. Each kind
+// is tagged, so a hook command cannot collide with a sensor command.
+func executablesDigest(set trustSet) string {
+	h := sha256.New()
+	field(h, fmt.Sprintf("ynh-trust/%d", trustScheme))
+	for _, e := range set.Sensors {
+		field(h, "sensor")
+		field(h, e.Profile)
+		field(h, e.Source)
+		field(h, e.Sensor)
+		field(h, e.Field)
+		field(h, e.Value)
+	}
+	for _, e := range set.Hooks {
+		field(h, "hook")
+		field(h, e.Profile)
+		field(h, e.Event)
+		field(h, e.Matcher)
+		field(h, e.Command)
+	}
+	for _, m := range set.MCPServers {
+		field(h, "mcp_server")
+		writeMCP(h, m)
 	}
 	return "sha256:" + hex.EncodeToString(h.Sum(nil))[:16]
 }
@@ -196,6 +492,37 @@ var processEnvBaseline = []string{
 	"PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TZ", "LANG", "TERM",
 }
 
+// unavailableMessage says why a harness cannot be reviewed and what to do.
+func unavailableMessage(id string, problems []string) string {
+	return fmt.Sprintf("%s cannot be reviewed yet: what it executes could not be read in full.\n  %s\n"+
+		"Run 'ynh update %s' to fetch its includes, then review it again.",
+		id, strings.Join(problems, "\n  "), id)
+}
+
+// fromSuffix labels a server an include supplied.
+func fromSuffix(source string) string {
+	if source == "" {
+		return ""
+	}
+	return " from " + source
+}
+
+// scopeSuffix labels a hook or server that only a profile adds or changes.
+func scopeSuffix(profile string) string {
+	if profile == "" {
+		return ""
+	}
+	return " (profile " + profile + ")"
+}
+
+// legacyDigestNote explains the one-time "changed" on a record accepted before
+// the digest covered hooks and MCP servers. Those records are not auto-accepted:
+// the operator never saw the hooks and servers, so the acceptance does not
+// cover them.
+const legacyDigestNote = "Your acceptance predates the digest covering hooks and MCP servers (it covered\n" +
+	"sensor commands only), so this harness reads as changed even if nothing in it\n" +
+	"has. Review the hooks and MCP servers above, then accept again."
+
 // trustStatus is the report for one harness.
 type trustStatus struct {
 	Harness     string       `json:"harness"`
@@ -205,11 +532,22 @@ type trustStatus struct {
 	SHA         string       `json:"sha,omitempty"`
 	Digest      string       `json:"digest"`
 	Executables []executable `json:"executables"`
+	// Hooks and MCPServers are the other things a harness can get executed,
+	// as resolved for a run. They are covered by Digest like Executables.
+	Hooks      []hookExec `json:"hooks,omitempty"`
+	MCPServers []mcpExec  `json:"mcp_servers,omitempty"`
 	// State is "unreviewed", "accepted", or "changed".
 	State string `json:"state"`
 	// AcceptedDigest and AcceptedAt are populated when a record exists.
 	AcceptedDigest string `json:"accepted_digest,omitempty"`
 	AcceptedAt     string `json:"accepted_at,omitempty"`
+	// Problems is why the set could not be read completely. When present the
+	// state is "unavailable" and Digest is empty: a digest of a partial set
+	// would read as the whole.
+	Problems []string `json:"problems,omitempty"`
+	// LegacyDigest is true when the accepted digest predates hooks and MCP
+	// servers being covered, which is why the state is "changed".
+	LegacyDigest bool `json:"legacy_digest,omitempty"`
 	// UndeclaredEnv names variables the sensors inherit but the harness never
 	// declared. Names only.
 	UndeclaredEnv []string `json:"undeclared_env,omitempty"`
@@ -225,23 +563,34 @@ const (
 	// "unreviewed" would put a warning on it forever. Most installed
 	// harnesses are in this state.
 	trustNoCommands = "no-commands"
+	// trustUnavailable means what the harness executes could not be read in
+	// full, typically an include that is not cached. It is neither accepted
+	// nor "no-commands": the operator cannot review what is not there.
+	trustUnavailable = "unavailable"
 )
 
 // trustStatusFor builds the report without deciding anything about it.
 func trustStatusFor(id string, p *harness.Harness, store trustStore, environ []string) trustStatus {
-	exes := harnessExecutables(p)
+	set := harnessExecutables(p)
 	st := trustStatus{
 		Harness:       id,
-		Digest:        executablesDigest(exes),
-		Executables:   exes,
+		Digest:        executablesDigest(set),
+		Executables:   set.Sensors,
+		Hooks:         set.Hooks,
+		MCPServers:    set.MCPServers,
 		State:         trustUnreviewed,
 		UndeclaredEnv: undeclaredEnvNames(p, environ),
 	}
 	if pr := p.InstalledFrom; pr != nil {
 		st.Source, st.SourceType, st.Ref, st.SHA = pr.Source, pr.SourceType, pr.Ref, pr.SHA
 	}
+	if len(set.Problems) > 0 {
+		st.Digest, st.State, st.Problems = "", trustUnavailable, set.Problems
+		return st
+	}
 	if rec, ok := store.Harnesses[id]; ok {
 		st.AcceptedDigest, st.AcceptedAt = rec.Digest, rec.AcceptedAt
+		st.LegacyDigest = rec.Scheme < trustScheme
 		if rec.Digest == st.Digest {
 			st.State = trustAccepted
 		} else {
@@ -251,7 +600,7 @@ func trustStatusFor(id string, p *harness.Harness, store trustStore, environ []s
 	// Nothing to review outranks "never reviewed": a harness that executes
 	// nothing cannot be a risk, and flagging it forever would train people to
 	// ignore the state column that matters.
-	if len(exes) == 0 && st.State == trustUnreviewed {
+	if set.count() == 0 && st.State == trustUnreviewed {
 		st.State = trustNoCommands
 	}
 	return st
@@ -392,10 +741,16 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 		return cliError(stderr, structured, errCodeIOError, err.Error())
 	}
 
-	exes := harnessExecutables(p)
+	set := harnessExecutables(p)
+	if len(set.Problems) > 0 {
+		// Accepting a partial set would record "I reviewed it" for commands
+		// the operator was never shown.
+		return cliError(stderr, structured, errCodeConfigError, unavailableMessage(name, set.Problems))
+	}
 	rec := trustRecord{
-		Digest:     executablesDigest(exes),
-		Commands:   len(exes),
+		Digest:     executablesDigest(set),
+		Commands:   set.count(),
+		Scheme:     trustScheme,
 		AcceptedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 	if pr := p.InstalledFrom; pr != nil {
@@ -434,7 +789,7 @@ func printTrustList(w io.Writer, statuses []trustStatus) error {
 		if src == "" {
 			src = "(local)"
 		}
-		if _, err := fmt.Fprintf(tw, "%s\t%s\t%d\t%s\n", s.Harness, s.State, len(s.Executables), src); err != nil {
+		if _, err := fmt.Fprintf(tw, "%s\t%s\t%d\t%s\n", s.Harness, s.State, len(s.Executables)+len(s.Hooks)+len(s.MCPServers), src); err != nil {
 			return err
 		}
 	}
@@ -463,19 +818,59 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 		_, _ = fmt.Fprintf(w, "  source:   (local)\n")
 	}
 	_, _ = fmt.Fprintf(w, "  state:    %s\n", s.State)
+	if s.State == trustUnavailable {
+		_, _ = fmt.Fprintf(w, "\n%s\n", unavailableMessage(s.Harness, s.Problems))
+		return nil
+	}
 	_, _ = fmt.Fprintf(w, "  digest:   %s\n", s.Digest)
 	if s.State == trustChanged {
 		_, _ = fmt.Fprintf(w, "  accepted: %s on %s\n", s.AcceptedDigest, s.AcceptedAt)
 	}
 
-	if len(s.Executables) == 0 {
+	if len(s.Executables)+len(s.Hooks)+len(s.MCPServers) == 0 {
 		_, _ = fmt.Fprintln(w, "\nThis harness declares no commands.")
 		return nil
 	}
 
-	_, _ = fmt.Fprintf(w, "\nWill execute via /bin/sh -c, in the tree being measured:\n\n")
-	for _, e := range s.Executables {
-		_, _ = fmt.Fprintf(w, "  %s (%s)\n    %s\n", e.Sensor, e.Field, e.Value)
+	if len(s.Executables) > 0 {
+		_, _ = fmt.Fprintf(w, "\nSensors, executed via /bin/sh -c in the tree being measured:\n\n")
+		for _, e := range s.Executables {
+			_, _ = fmt.Fprintf(w, "  %s (%s)%s\n    %s\n", e.Sensor, e.Field, scopeSuffix(e.Profile), e.Value)
+			if e.Source != "" {
+				_, _ = fmt.Fprintf(w, "    from %s; $YNH_HARNESS_DIR is %s\n", e.Source, e.HarnessDir)
+			}
+		}
+	}
+	if len(s.Hooks) > 0 {
+		_, _ = fmt.Fprintf(w, "\nHooks, executed by the vendor CLI with your environment:\n\n")
+		for _, h := range s.Hooks {
+			m := ""
+			if h.Matcher != "" {
+				m = " [" + h.Matcher + "]"
+			}
+			_, _ = fmt.Fprintf(w, "  %s%s%s\n    %s\n", h.Event, m, scopeSuffix(h.Profile), h.Command)
+		}
+	}
+	if len(s.MCPServers) > 0 {
+		_, _ = fmt.Fprintf(w, "\nMCP servers, launched or contacted by the vendor CLI:\n\n")
+		for _, m := range s.MCPServers {
+			_, _ = fmt.Fprintf(w, "  %s (%s)%s%s\n", m.Name, m.Transport, fromSuffix(m.Source), scopeSuffix(m.Profile))
+			if m.Command != "" {
+				_, _ = fmt.Fprintf(w, "    command: %s\n", strings.Join(append([]string{m.Command}, m.Args...), " "))
+			}
+			if m.URL != "" {
+				_, _ = fmt.Fprintf(w, "    url:     %s\n", m.URL)
+			}
+			if m.Cwd != "" {
+				_, _ = fmt.Fprintf(w, "    cwd:     %s\n", m.Cwd)
+			}
+			for _, e := range m.Env {
+				_, _ = fmt.Fprintf(w, "    env:     %s=%s\n", e.Name, e.Value)
+			}
+			for _, e := range m.Headers {
+				_, _ = fmt.Fprintf(w, "    header:  %s=%s\n", e.Name, e.Value)
+			}
+		}
 	}
 
 	if len(s.UndeclaredEnv) > 0 {
@@ -488,6 +883,9 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 	case trustUnreviewed:
 		_, _ = fmt.Fprintf(w, "\nNot yet reviewed. 'ynh trust accept %s' records that you have read the above.\n", s.Harness)
 	case trustChanged:
+		if s.LegacyDigest {
+			_, _ = fmt.Fprintf(w, "\n%s\n", legacyDigestNote)
+		}
 		_, _ = fmt.Fprintf(w, "\nThese commands have changed since you accepted them.\n"+
 			"'ynh trust accept %s' records the new set.\n", s.Harness)
 	}
@@ -518,7 +916,14 @@ func warnIfTrustChanged(stderr io.Writer, id string, p *harness.Harness) {
 	if !ok {
 		return
 	}
-	digest := executablesDigest(harnessExecutables(p))
+	set := harnessExecutables(p)
+	if len(set.Problems) > 0 {
+		_, _ = fmt.Fprintf(stderr,
+			"warning: %s cannot be checked against what you accepted on %s: its includes could not be read.\n"+
+				"  Run 'ynh update %s'.\n", id, rec.AcceptedAt, id)
+		return
+	}
+	digest := executablesDigest(set)
 	if digest == rec.Digest {
 		return
 	}
@@ -526,4 +931,7 @@ func warnIfTrustChanged(stderr io.Writer, id string, p *harness.Harness) {
 		"warning: %s declares different commands than you accepted on %s.\n"+
 			"  accepted %s, now %s. Review with 'ynh trust show %s'.\n",
 		id, rec.AcceptedAt, rec.Digest, digest, id)
+	if rec.Scheme < trustScheme {
+		_, _ = fmt.Fprintf(stderr, "  %s\n", strings.ReplaceAll(legacyDigestNote, "\n", "\n  "))
+	}
 }

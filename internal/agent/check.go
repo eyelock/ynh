@@ -30,15 +30,21 @@ var runCheckFn = defaultRunCheck
 // the loop and `ynh check` can no longer reach opposite conclusions about one
 // manifest.
 //
+// profile, when set, is passed as `--profile`, so the gate applies the profile's
+// sensor_overrides: the run and its gate must agree on severity.
+//
 // extraEnv is added to the inherited environment (see childEnv).
-func RunCheck(ynhPath, harnessName, cwd string, only []string, overlay map[string]json.RawMessage, extraEnv []string) (*gate.Envelope, error) {
-	return runCheckFn(ynhPath, harnessName, cwd, only, overlay, extraEnv)
+func RunCheck(ynhPath, harnessName, cwd, profile string, only []string, overlay map[string]json.RawMessage, extraEnv []string) (*gate.Envelope, error) {
+	return runCheckFn(ynhPath, harnessName, cwd, profile, only, overlay, extraEnv)
 }
 
-func defaultRunCheck(ynhPath, harnessName, cwd string, only []string, overlay map[string]json.RawMessage, extraEnv []string) (*gate.Envelope, error) {
+func defaultRunCheck(ynhPath, harnessName, cwd, profile string, only []string, overlay map[string]json.RawMessage, extraEnv []string) (*gate.Envelope, error) {
 	args := []string{"check", harnessName, "--format", "json"}
 	if cwd != "" {
 		args = append(args, "--cwd", cwd)
+	}
+	if profile != "" {
+		args = append(args, "--profile", profile)
 	}
 	if len(only) > 0 {
 		args = append(args, "--only", strings.Join(only, ","))

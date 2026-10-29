@@ -31,7 +31,7 @@ func main() {
 	// It also precedes auto-migration deliberately. Reading help must not
 	// rewrite the user's home directory.
 	if len(os.Args) > 2 && wantsHelp(os.Args[2:]) {
-		if printCommandHelp(os.Stdout, os.Args[1]) {
+		if printHelpFor(os.Stdout, os.Args[1:]) {
 			os.Exit(0)
 		}
 		fmt.Fprintf(os.Stderr, "Error: %s\n", helpForUnknown(os.Args[1]))

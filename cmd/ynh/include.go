@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/harness"
@@ -33,6 +35,7 @@ func cmdIncludeTo(args []string, stdout io.Writer) error {
 func cmdIncludeAdd(args []string, stdout io.Writer) error {
 	var opts harness.AddOptions
 	var positional []string
+	var forceGit bool
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -64,6 +67,8 @@ func cmdIncludeAdd(args []string, stdout io.Writer) error {
 			opts.Hooks = true
 		case "--replace":
 			opts.Replace = true
+		case "--git":
+			forceGit = true
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return fmt.Errorf("unknown flag: %s", args[i])
@@ -73,7 +78,7 @@ func cmdIncludeAdd(args []string, stdout io.Writer) error {
 	}
 
 	if len(positional) != 2 {
-		return fmt.Errorf("usage: ynh include add <harness> <url> [--path <subdir>] [--pick <items>] [--ref <ref>] [--as <alias>] [--hooks] [--replace]")
+		return fmt.Errorf("usage: ynh include add <harness> <url|path> [--path <subdir>] [--pick <items>] [--ref <ref>] [--as <alias>] [--git] [--hooks] [--replace]")
 	}
 
 	harnessRef, url := positional[0], positional[1]
@@ -88,17 +93,42 @@ func cmdIncludeAdd(args []string, stdout io.Writer) error {
 		return err
 	}
 
-	// Fetch before writing so pick validation happens before any mutation.
-	needFetch := installed || len(opts.Pick) > 0
-	if needFetch {
-		gs := harness.GitSource{Git: url, Ref: opts.Ref, Path: opts.Path}
-		basePath, _, fetchErr := resolver.ResolveGitSource(gs, dir)
-		if fetchErr != nil {
-			return fmt.Errorf("fetching include: %w", fetchErr)
+	// A filesystem path is a local include, recorded as such; a Git URL is
+	// fetched. --git keeps a path a Git source (a repository on disk).
+	if !forceGit && looksLikeLocalPath(url, dir) {
+		stored, abs, err := localIncludeForm(url, dir)
+		if err != nil {
+			return err
+		}
+		if opts.Ref != "" {
+			return fmt.Errorf("--ref applies to Git includes only; %q is a local path (use --git to treat it as a repository)", url)
+		}
+		base := abs
+		if opts.Path != "" {
+			base = filepath.Join(abs, opts.Path)
+		}
+		if info, statErr := os.Stat(base); statErr != nil || !info.IsDir() {
+			return fmt.Errorf("local include %q: %s is not a directory", url, base)
 		}
 		if len(opts.Pick) > 0 {
-			if err := harness.ValidatePicks(basePath, opts.Pick); err != nil {
+			if err := harness.ValidatePicks(base, opts.Pick); err != nil {
 				return err
+			}
+		}
+		url, opts.Local = stored, true
+	} else {
+		// Fetch before writing so pick validation happens before any mutation.
+		needFetch := installed || len(opts.Pick) > 0
+		if needFetch {
+			gs := harness.GitSource{Git: url, Ref: opts.Ref, Path: opts.Path}
+			basePath, _, fetchErr := resolver.ResolveGitSource(gs, dir)
+			if fetchErr != nil {
+				return fmt.Errorf("fetching include: %w", fetchErr)
+			}
+			if len(opts.Pick) > 0 {
+				if err := harness.ValidatePicks(basePath, opts.Pick); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -155,6 +185,7 @@ func cmdIncludeRemove(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	url = includeArgAsStored(dir, url)
 
 	if err := harness.RemoveInclude(dir, url, opts); err != nil {
 		return err
@@ -224,10 +255,31 @@ func cmdIncludeUpdate(args []string, stdout io.Writer) error {
 		return err
 	}
 
+	url = includeArgAsStored(dir, url)
+
 	// Compute the final include state to know what to fetch/validate.
 	finalInc, err := harness.FindUpdateTarget(dir, url, opts)
 	if err != nil {
 		return err
+	}
+
+	// A local include is read from disk: nothing to fetch, and picks are
+	// checked against the directory.
+	if finalInc.Local != "" {
+		if opts.SetPick && len(opts.Pick) > 0 {
+			base := finalInc.Local
+			if !filepath.IsAbs(base) {
+				base = filepath.Join(dir, base)
+			}
+			if err := harness.ValidatePicks(filepath.Join(base, finalInc.Path), opts.Pick); err != nil {
+				return err
+			}
+		}
+		if err := harness.UpdateInclude(dir, url, opts); err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintf(stdout, "Updated include %q\n", url)
+		return nil
 	}
 
 	needFetch := installed || (opts.SetPick && len(opts.Pick) > 0)
@@ -262,4 +314,94 @@ func splitPick(s string) []string {
 		}
 	}
 	return out
+}
+
+// looksLikeLocalPath reports whether an include argument names a place on the
+// filesystem rather than a Git URL. An explicit path (absolute, ./, ../, ~/,
+// or . and ..) always does; anything else does only when it is not
+// URL-shaped and is a directory that exists, so github.com/org/repo is never
+// mistaken for a path.
+func looksLikeLocalPath(arg, harnessDir string) bool {
+	switch {
+	case arg == "." || arg == "..",
+		strings.HasPrefix(arg, "/"), strings.HasPrefix(arg, "./"),
+		strings.HasPrefix(arg, "../"), strings.HasPrefix(arg, "~/"):
+		return true
+	case strings.Contains(arg, "://"), strings.Contains(arg, "@"):
+		return false
+	}
+	for _, base := range []string{"", harnessDir} {
+		p := arg
+		if base != "" {
+			p = filepath.Join(base, arg)
+		}
+		if info, err := os.Stat(p); err == nil && info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+// localIncludeForm returns how a local path is recorded in the manifest and
+// the absolute directory it names. A bare relative path that exists under the
+// harness is taken as relative to the harness, as the manifest reads it; any
+// other relative path is relative to where the command ran. A path inside the
+// harness is recorded relative to it, so the harness stays portable; one
+// outside is recorded absolute, which the source allow-list governs.
+func localIncludeForm(arg, harnessDir string) (stored, abs string, err error) {
+	p := arg
+	if arg == "~" || strings.HasPrefix(arg, "~/") {
+		home, herr := os.UserHomeDir()
+		if herr != nil {
+			return "", "", fmt.Errorf("local include %q: %w", arg, herr)
+		}
+		p = filepath.Join(home, strings.TrimPrefix(arg, "~"))
+	}
+	if !filepath.IsAbs(p) {
+		base := ""
+		if !strings.HasPrefix(arg, ".") {
+			if _, statErr := os.Stat(filepath.Join(harnessDir, p)); statErr == nil {
+				base = harnessDir
+			}
+		}
+		if base == "" {
+			cwd, cerr := os.Getwd()
+			if cerr != nil {
+				return "", "", fmt.Errorf("local include %q: %w", arg, cerr)
+			}
+			base = cwd
+		}
+		p = filepath.Join(base, p)
+	}
+	abs = filepath.Clean(p)
+	root, rerr := filepath.Abs(harnessDir)
+	// /tmp is /private/tmp on macOS: compare real paths, or an include inside
+	// the harness reads as outside it.
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = real
+	}
+	if real, err := filepath.EvalSymlinks(root); err == nil {
+		root = real
+	}
+	if rerr == nil {
+		if rel, relErr := filepath.Rel(root, abs); relErr == nil && rel != "." && !strings.HasPrefix(rel, "..") {
+			return filepath.ToSlash(rel), abs, nil
+		}
+	}
+	return abs, abs, nil
+}
+
+// includeArgAsStored maps the source named on the command line to the one the
+// manifest holds. An argument the manifest already lists is used as written;
+// a path is otherwise put in the form `include add` would have recorded.
+func includeArgAsStored(dir, arg string) string {
+	if sources, err := harness.IncludeSources(dir); err == nil && slices.Contains(sources, arg) {
+		return arg
+	}
+	if looksLikeLocalPath(arg, dir) {
+		if stored, _, err := localIncludeForm(arg, dir); err == nil {
+			return stored
+		}
+	}
+	return arg
 }

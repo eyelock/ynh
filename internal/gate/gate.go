@@ -36,13 +36,15 @@ const (
 
 // Envelope is the `ynh check --format json` payload.
 type Envelope struct {
-	Capabilities string        `json:"capabilities"`
-	YnhVersion   string        `json:"ynh_version"`
-	Harness      string        `json:"harness"`
-	Verdict      string        `json:"verdict"` // pass | blocked
-	Summary      Summary       `json:"summary"`
-	Sensors      []Result      `json:"sensors"`
-	Baseline     *BaselineInfo `json:"baseline,omitempty"`
+	Capabilities string `json:"capabilities"`
+	YnhVersion   string `json:"ynh_version"`
+	Harness      string `json:"harness"`
+	// Profile is the profile whose sensor_overrides were applied, if any.
+	Profile  string        `json:"profile,omitempty"`
+	Verdict  string        `json:"verdict"` // pass | blocked
+	Summary  Summary       `json:"summary"`
+	Sensors  []Result      `json:"sensors"`
+	Baseline *BaselineInfo `json:"baseline,omitempty"`
 }
 
 // BaselineInfo tells a consumer whether a ratchet is in play and whether it
@@ -73,7 +75,12 @@ type Result struct {
 	Kind      string `json:"kind"`
 	Category  string `json:"category,omitempty"`
 	Tolerance string `json:"tolerance"`
-	Status    string `json:"status"`
+	// ToleranceSource says where Tolerance came from when it is not the one
+	// the sensor declares: "include" (the harness's sensor_overrides),
+	// "profile" (the active profile's) or "overlay" (--sensor-overlay).
+	// Omitted means declared, so a softened gate is never silent.
+	ToleranceSource string `json:"tolerance_source,omitempty"`
+	Status          string `json:"status"`
 	// ToolVersion is what the sensor's declared version_command printed.
 	// Empty when none was declared or the probe failed — a corpus graded over
 	// weeks needs to tell a change in findings from a change in the tool, and
