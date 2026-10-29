@@ -140,7 +140,7 @@ func TestLaunchSession(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := tt.adapter
-			err := launchSession(&a, t.TempDir(), tt.ra, tt.prompt, tt.explicitPrompt, nil, io.Discard)
+			err := launchSession(&a, t.TempDir(), "h", tt.ra, tt.prompt, tt.explicitPrompt, nil, io.Discard)
 			if tt.wantErr == "" && err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

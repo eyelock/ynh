@@ -91,7 +91,8 @@ Flags:
   --instructions "<text>"  Inject per-invocation context after harness instructions
   --harness-file <path>    Load a harness from one manifest file, of any name
                            except a legacy .harness.json
-  --session-name <name>    Session label, recorded by ynh and not forwarded
+  --session-name <name>    Claude: bind --resume to this name's session (a fresh
+                           launch starts a new one). Other vendors: a label
   --resume                 Continue the previous session in this directory
   --resume=<id>            Continue one specific session by id
                            A trailing prompt is sent to the resumed session,

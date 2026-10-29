@@ -85,6 +85,27 @@ Where a vendor refuses, ynh stops before launching with an error naming it
 (for example `codex cannot resume a session interactively with a prompt; drop
 --resume or the prompt`). The prompt is never dropped silently.
 
+### Binding a resume to a session name
+
+Without `--session-name`, `--resume` continues the newest session in the
+directory, which may be another caller's. For Claude, `--session-name <name>`
+binds the resume to that name instead:
+
+- A launch without `--resume` starts a new session under an id ynh chooses
+  (`claude --session-id <uuid>`) and records it for the name, the harness and
+  the directory in `$YNH_HOME/sessions/`, replacing any earlier record.
+- `--resume` continues the recorded session. If nothing is recorded, or Claude
+  no longer has that session, ynh says so on stderr and starts a new one. It
+  never falls back to the newest session in the directory.
+- `--resume=<id>` continues that session, and the name follows it if Claude
+  has it.
+- If `--session-id`, `--resume`, `-r`, `--continue` or `-c` is passed straight
+  to Claude, ynh adds none of its own and binds nothing.
+
+Two names in one directory keep separate sessions. Codex, Copilot and Cursor
+are unchanged: `--session-name` is only a label there, and `--resume` still
+continues the newest session in the directory.
+
 ## Missing Focus Behavior
 
 Selecting a focus that is not defined is a hard error:
