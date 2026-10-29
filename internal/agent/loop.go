@@ -1627,7 +1627,12 @@ func assembleHarness(h *harness.Harness, backendName string) (string, error) {
 	// silently dropped every base and profile include, so a harness composed
 	// from other repositories ran the loop with none of that content — and
 	// profile-level artifact swapping was a no-op.
-	resolved, resErr := resolver.Resolve(h, cfg)
+	//
+	// From the cache, as `ynh run` does: fetchIncludes has just filled it, and
+	// a baked image carries its includes there with an origin that may be
+	// unreachable (private, or a relative path), where a refresh would fail
+	// and discard the entry.
+	resolved, resErr := resolver.ResolveFromCache(h, cfg)
 	if resErr != nil {
 		_ = os.RemoveAll(dir)
 		return "", fmt.Errorf("resolving includes: %w", resErr)
