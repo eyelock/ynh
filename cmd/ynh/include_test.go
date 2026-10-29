@@ -547,12 +547,15 @@ func TestCmdIncludeAdd_LocalPathOutsideHarnessIsAbsolute(t *testing.T) {
 	if err := cmdIncludeTo([]string{"add", dir, other}, &bytes.Buffer{}); err != nil {
 		t.Fatal(err)
 	}
-	real, err := filepath.EvalSymlinks(other)
-	if err != nil {
-		t.Fatal(err)
+	// As typed, not symlink-resolved, so the same spelling finds it again.
+	if incs := loadTestIncludes(t, dir); len(incs) != 1 || incs[0].Local != other {
+		t.Errorf("includes = %+v, want local %q", incs, other)
 	}
-	if incs := loadTestIncludes(t, dir); len(incs) != 1 || incs[0].Local != real {
-		t.Errorf("includes = %+v, want local %q", incs, real)
+	if err := cmdIncludeTo([]string{"add", dir, other, "--as", "o", "--replace"}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("--replace did not find the include by its typed path: %v", err)
+	}
+	if incs := loadTestIncludes(t, dir); len(incs) != 1 || incs[0].As != "o" {
+		t.Errorf("after --replace: %+v", incs)
 	}
 }
 
