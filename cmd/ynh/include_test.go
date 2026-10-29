@@ -472,3 +472,102 @@ func TestCmdIncludeAdd_HooksDefaultsOff(t *testing.T) {
 		t.Errorf("manifest should not mention hooks when off:\n%s", data)
 	}
 }
+
+// ---- local paths -----------------------------------------------
+
+func mkIncludeSource(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(dir, "skills", "s"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "skills", "s", "SKILL.md"), []byte("---\nname: s\ndescription: d\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLooksLikeLocalPath(t *testing.T) {
+	harnessDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(harnessDir, "vendored", "up"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for arg, want := range map[string]bool{
+		"/abs/path":                     true,
+		"./x":                           true,
+		"../x":                          true,
+		"~/x":                           true,
+		".":                             true,
+		"vendored/up":                   true, // exists under the harness
+		"github.com/eyelock/assistants": false,
+		"https://github.com/eyelock/a":  false,
+		"git@github.com:eyelock/a.git":  false,
+		"file:///tmp/repo":              false,
+		"not/a/dir/anywhere":            false,
+	} {
+		if got := looksLikeLocalPath(arg, harnessDir); got != want {
+			t.Errorf("looksLikeLocalPath(%q) = %v, want %v", arg, got, want)
+		}
+	}
+}
+
+// A path is recorded as a local include, so --as and the rest apply to it and
+// nothing tries to clone it.
+func TestCmdIncludeAdd_LocalPathWritesLocal(t *testing.T) {
+	dir := t.TempDir()
+	writeIncludeTestHarness(t, dir, "h")
+	mkIncludeSource(t, filepath.Join(dir, "vendored", "up"))
+
+	var buf bytes.Buffer
+	if err := cmdIncludeTo([]string{"add", dir, filepath.Join(dir, "vendored", "up"), "--as", "up", "--pick", "skills/s"}, &buf); err != nil {
+		t.Fatal(err)
+	}
+	incs := loadTestIncludes(t, dir)
+	if len(incs) != 1 || incs[0].Local != "vendored/up" || incs[0].Git != "" || incs[0].As != "up" {
+		t.Fatalf("includes = %+v, want one local vendored/up as up", incs)
+	}
+
+	// Remove and update find it by the path as typed.
+	if err := cmdIncludeTo([]string{"update", dir, filepath.Join(dir, "vendored", "up"), "--pick", "skills/s"}, &buf); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if err := cmdIncludeTo([]string{"remove", dir, "vendored/up"}, &buf); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if incs := loadTestIncludes(t, dir); len(incs) != 0 {
+		t.Errorf("not removed: %+v", incs)
+	}
+}
+
+// Outside the harness the path is recorded absolute, for the allow-list.
+func TestCmdIncludeAdd_LocalPathOutsideHarnessIsAbsolute(t *testing.T) {
+	dir := t.TempDir()
+	writeIncludeTestHarness(t, dir, "h")
+	other := t.TempDir()
+	mkIncludeSource(t, other)
+
+	if err := cmdIncludeTo([]string{"add", dir, other}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	real, err := filepath.EvalSymlinks(other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if incs := loadTestIncludes(t, dir); len(incs) != 1 || incs[0].Local != real {
+		t.Errorf("includes = %+v, want local %q", incs, real)
+	}
+}
+
+func TestCmdIncludeAdd_LocalPathErrors(t *testing.T) {
+	dir := t.TempDir()
+	writeIncludeTestHarness(t, dir, "h")
+	if err := cmdIncludeTo([]string{"add", dir, "./nope"}, &bytes.Buffer{}); err == nil {
+		t.Error("a path that is not a directory must be refused")
+	}
+	mkIncludeSource(t, filepath.Join(dir, "up"))
+	err := cmdIncludeTo([]string{"add", dir, filepath.Join(dir, "up"), "--ref", "v1"}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "--ref") {
+		t.Errorf("--ref on a local include: %v", err)
+	}
+	if incs := loadTestIncludes(t, dir); len(incs) != 0 {
+		t.Errorf("a refused add wrote %+v", incs)
+	}
+}

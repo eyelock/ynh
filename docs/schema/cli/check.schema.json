@@ -22,6 +22,10 @@
           "type": "string",
           "description": "Name of the harness whose sensors were run."
         },
+        "profile": {
+          "type": "string",
+          "description": "The profile whose sensor_overrides were applied (`--profile`). Omitted when none was selected."
+        },
         "verdict": {
           "type": "string",
           "enum": [
@@ -128,6 +132,10 @@
             "report"
           ],
           "description": "Effective tolerance \u2014 the default (blocking) is materialised here rather than omitted."
+        },
+        "tolerance_source": {
+          "type": "string",
+          "description": "Where `tolerance` came from when it is not the one the sensor declares: `include` (the harness's sensor_overrides), `profile` (the selected profile's, named by the top-level `profile`) or `overlay` (--sensor-overlay). Open set: tolerate unknown values. Omitted means declared."
         },
         "status": {
           "type": "string",

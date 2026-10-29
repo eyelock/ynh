@@ -216,7 +216,7 @@ func stubCheck(t *testing.T, result func(call int, name string) gate.Result) {
 	orig := runCheckFn
 	t.Cleanup(func() { runCheckFn = orig })
 	call := 0
-	runCheckFn = func(_, _, _ string, only []string, _ map[string]json.RawMessage, _ []string) (*gate.Envelope, error) {
+	runCheckFn = func(_, _, _, _ string, only []string, _ map[string]json.RawMessage, _ []string) (*gate.Envelope, error) {
 		call++
 		rs := make([]gate.Result, 0, len(only))
 		for _, n := range only {
@@ -233,7 +233,7 @@ func stubCheck(t *testing.T, result func(call int, name string) gate.Result) {
 func TestRunLoop_GateErrorIsNotAgentFailure(t *testing.T) {
 	orig := runCheckFn
 	t.Cleanup(func() { runCheckFn = orig })
-	runCheckFn = func(_, _, _ string, _ []string, _ map[string]json.RawMessage, _ []string) (*gate.Envelope, error) {
+	runCheckFn = func(_, _, _, _ string, _ []string, _ map[string]json.RawMessage, _ []string) (*gate.Envelope, error) {
 		return nil, errors.New("harness \"demo\" not installed")
 	}
 

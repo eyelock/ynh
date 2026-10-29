@@ -157,7 +157,7 @@ func TestResolve_CycleIsAnError(t *testing.T) {
 
 	p := &harness.Harness{Name: "root", Dir: root, Includes: []harness.Include{localInc("a")}}
 	_, err := Resolve(p, nil)
-	want := "include cycle: root -> a -> " + b + " -> root"
+	want := "include cycle: root -> a -> b -> root"
 	if err == nil || err.Error() != want {
 		t.Fatalf("error = %v, want %q", err, want)
 	}
@@ -204,5 +204,28 @@ func TestResolve_IncludedHarnessIncludesAreCheckedAgainstAllowList(t *testing.T)
 	_, err := Resolve(p, &config.Config{AllowedRemoteSources: []string{"github.com/eyelock/**"}})
 	if err == nil {
 		t.Fatal("expected the absolute include of an included harness to be refused")
+	}
+}
+
+// A local include that holds a harness is named by the harness, not by the
+// path, which differs per machine; a transitive one reads "outer > inner".
+func TestResolve_LocalHarnessIncludeIsNamedByTheHarness(t *testing.T) {
+	root := t.TempDir()
+	outer := filepath.Join(root, "dirs", "x1")
+	writeIncludedHarness(t, outer, "github-lite", []map[string]any{localMeta("y2")}, nil)
+	writeIncludedHarness(t, filepath.Join(outer, "y2"), "notes", nil, map[string]any{"s": map[string]any{"command": "c"}})
+	abs := filepath.Join(root, "dirs", "x1")
+	p := &harness.Harness{Name: "h", Dir: root, Includes: []harness.Include{localInc(abs)}}
+
+	results, err := Resolve(p, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var chains []string
+	for _, r := range results {
+		chains = append(chains, r.Chain)
+	}
+	if want := []string{"github-lite > notes", "github-lite"}; !slices.Equal(chains, want) {
+		t.Errorf("chains = %q, want %q", chains, want)
 	}
 }
