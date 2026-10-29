@@ -234,10 +234,12 @@ ynh profile mcp add <harness> <profile> <name> --null         # suppress an inhe
 ynh profile mcp update <harness> <profile> <name> [flags] [--clear-args|--clear-env|--clear-headers]
 ynh profile mcp remove <harness> <profile> <name>
 
-# Profile-level Git includes (no --pick; whole include is merged in)
-ynh profile include add <harness> <profile> <url> [--path <subdir>] [--ref <ref>] [--replace]
-ynh profile include remove <harness> <profile> <url> [--path <subdir>]
-ynh profile include update <harness> <profile> <url> [--from-path <subdir>] [--path <subdir>] [--ref <ref>]
+# Profile-level includes (no --pick; whole include is merged in).
+# A path argument is recorded as a local include, as with `ynh include add`;
+# --git keeps it a Git source, and --ref is Git-only.
+ynh profile include add <harness> <profile> <url|path> [--path <subdir>] [--ref <ref>] [--git] [--replace]
+ynh profile include remove <harness> <profile> <url|path> [--path <subdir>]
+ynh profile include update <harness> <profile> <url|path> [--from-path <subdir>] [--path <subdir>] [--ref <ref>]
 ```
 
 `<harness>` is a canonical id from `ynh ls` (e.g. `local/my-harness` or `github.com/<org>/<repo>/<name>`). For tree-form (registry/git) installs the edits land in the install copy; for pointer-form (local source) installs they land in your source tree.
