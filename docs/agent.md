@@ -28,7 +28,7 @@ ynh agent run --resume <session-dir> [flags]
 | `--harness <id\|path>` | Harness whose sensors, artifacts and hooks drive the run. Takes an installed id (`local/demo`) or a path to a harness directory (`.`, `./my-harness`, an absolute path), exactly as `ynh check` does. A path needs no prior install, which matters while you are still authoring the harness |
 | `--task "<text>"` | What the agent is being asked to do |
 | `--focus <name>` | Use a declared focus for the task and its profile |
-| `--profile <name>` | Apply a profile overlay |
+| `--profile <name>` | Apply a profile overlay, including its [sensor overrides](sensors.md#profiles-change-severity-not-observation); the gate between turns gets the same profile (also via a `--focus` bound to one) |
 | `--backend <name>` | Backend to drive: `claude`, `codex` or `cursor` (default: `claude`; on `--resume`, the session's own) |
 | `--model <name>` | Model override passed to the backend |
 | `--effort <low\|medium\|high>` | Reasoning effort, mapped to the backend's own setting; overrides the harness's `agent.effort`. See [Effort](#effort) |
@@ -91,6 +91,11 @@ cleared. The fetch honours `allowed_remote_sources` and the refs the includes
 pin, and it reaches only the hosts the includes name, so **a lane's egress must
 allow those hosts**. A fetch that fails stops the run before any worker starts,
 with exit 1 and an error that begins `fetching includes` and names the include.
+
+An include already in the cache is used as it is, as `ynh run` uses it: a run
+does not pull newer commits from its origin, so a run is pinned to what the
+cache holds until `ynh update` refreshes it. The one exception is the harness's
+own repo, which is refreshed on every run.
 
 `ynh check` and `ynh sensors` never fetch. On a cold cache they refuse and name
 `ynh update`. The loop runs `ynh check` between turns, which finds the cache

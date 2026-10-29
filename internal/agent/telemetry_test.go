@@ -60,7 +60,7 @@ func TestRunLoop_TelemetryEnvReachesEveryProcess(t *testing.T) {
 			orig := runCheckFn
 			t.Cleanup(func() { runCheckFn = orig })
 			var gotCheck [][]string
-			runCheckFn = func(_, _, _ string, only []string, _ map[string]json.RawMessage, extra []string) (*gate.Envelope, error) {
+			runCheckFn = func(_, _, _, _ string, only []string, _ map[string]json.RawMessage, extra []string) (*gate.Envelope, error) {
 				gotCheck = append(gotCheck, extra)
 				return env(gate.Result{Name: only[0], Kind: "command", Status: gate.StatusPass}), nil
 			}
@@ -100,7 +100,7 @@ func TestCheckConvergence_VerifierCallGetsTelemetryEnv(t *testing.T) {
 	restore := runCheckFn
 	t.Cleanup(func() { runCheckFn = restore })
 	var got []string
-	runCheckFn = func(_, _, _ string, _ []string, _ map[string]json.RawMessage, extra []string) (*gate.Envelope, error) {
+	runCheckFn = func(_, _, _, _ string, _ []string, _ map[string]json.RawMessage, extra []string) (*gate.Envelope, error) {
 		got = extra
 		return env(gate.Result{Name: "verifier", Kind: "command", Tolerance: "blocking", Status: gate.StatusPass}), nil
 	}

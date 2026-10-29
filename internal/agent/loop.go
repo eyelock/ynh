@@ -333,6 +333,11 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	// id for an installed harness, the manifest name for one given by path,
 	// which keeps a filesystem path out of every report and telemetry.
 	reportedName := opts.HarnessName
+	// gateProfile is the profile the run resolved, from --profile or from the
+	// focus's. The sensor gate (`ynh check`) is handed it so it judges with
+	// the same severities the run was assembled under; without it a sensor a
+	// profile softened would block the loop it was softened for.
+	var gateProfile string
 
 	if opts.HarnessName != "" {
 		// An installed id or a local harness directory, resolved exactly as
@@ -362,6 +367,8 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			opts.Task = focus.Prompt
 		}
 
+		gateProfile = profileName
+
 		// Apply profile overlay before assembly so includes/hooks/MCP layered
 		// in by the profile are baked into the assembled harness.
 		if profileName != "" {
@@ -382,6 +389,12 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		// The sensors an include declares count, as they do for `ynh check`.
 		if harnessObj, err = resolver.WithIncludedSensors(harnessObj); err != nil {
 			return result, fmt.Errorf("resolving included sensors: %w", err)
+		}
+
+		// A convergence verifier named by --convergence-sensor has no role in
+		// the manifest, so the resolver cannot tell; the same rule applies.
+		if _, ok := harnessObj.ProfileSensorOverrides[opts.ConvergenceSensor]; ok && opts.ConvergenceSensor != "" {
+			return result, fmt.Errorf("profile %q: sensor_overrides names %q, a convergence verifier: it decides when a run is done, so a profile may not change its tolerance", gateProfile, opts.ConvergenceSensor)
 		}
 
 		// Before the worker starts: a verifier that can never pass would
@@ -1105,7 +1118,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 				_ = traj.Emit(KindSensorRun, turnN, name)
 			}
 			callEnv, endCall := startCall(opts.Telemetry, CallCheck, turnN)
-			env, checkErr := RunCheck(ynh, opts.HarnessName, opts.WorktreeDir, sensorNames, opts.SensorOverlay, callEnv)
+			env, checkErr := RunCheck(ynh, opts.HarnessName, opts.WorktreeDir, gateProfile, sensorNames, opts.SensorOverlay, callEnv)
 			if checkErr != nil {
 				endCall("error", false)
 			} else {
@@ -1151,6 +1164,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			ynh:     ynh,
 			harness: opts.HarnessName,
 			cwd:     opts.WorktreeDir,
+			profile: gateProfile,
 			overlay: opts.SensorOverlay,
 			tel:     opts.Telemetry,
 			stop:    stopForWall,
@@ -1261,6 +1275,7 @@ type verifierRun struct {
 	ynh     string
 	harness string
 	cwd     string
+	profile string // passed to `ynh check --profile`, so verifiers see the run's severities
 	overlay map[string]json.RawMessage
 	tel     Telemetry
 	// stop is asked before the verifiers run and ends the run when it returns
@@ -1354,7 +1369,7 @@ func runVerifiers(v verifierRun, traj *TrajectoryWriter, turnN int) (bool, strin
 		_ = traj.Emit(KindSensorRun, turnN, name)
 	}
 	callEnv, endCall := startCall(v.tel, CallCheck, turnN)
-	venv, err := RunCheck(v.ynh, v.harness, v.cwd, v.names, v.overlay, callEnv)
+	venv, err := RunCheck(v.ynh, v.harness, v.cwd, v.profile, v.names, v.overlay, callEnv)
 	if err != nil {
 		// As for the per-turn gate, a check that cannot run is an operator
 		// fault, not agent work: a broken verifier command would otherwise
@@ -1612,7 +1627,12 @@ func assembleHarness(h *harness.Harness, backendName string) (string, error) {
 	// silently dropped every base and profile include, so a harness composed
 	// from other repositories ran the loop with none of that content — and
 	// profile-level artifact swapping was a no-op.
-	resolved, resErr := resolver.Resolve(h, cfg)
+	//
+	// From the cache, as `ynh run` does: fetchIncludes has just filled it, and
+	// a baked image carries its includes there with an origin that may be
+	// unreachable (private, or a relative path), where a refresh would fail
+	// and discard the entry.
+	resolved, resErr := resolver.ResolveFromCache(h, cfg)
 	if resErr != nil {
 		_ = os.RemoveAll(dir)
 		return "", fmt.Errorf("resolving includes: %w", resErr)

@@ -70,7 +70,7 @@ func resolveGitSourceWith(gs harness.GitSource, harnessDir string, fetch repoFun
 		}
 		basePath = filepath.Join(result.Path, gs.Path)
 		if _, err := os.Stat(basePath); os.IsNotExist(err) {
-			return "", nil, fmt.Errorf("path %q not found in %s", gs.Path, gs.Git)
+			return "", nil, &missingPathError{path: gs.Path, git: gs.Git}
 		}
 	}
 
@@ -123,8 +123,11 @@ func CheckLocalInclude(cfg *config.Config, inc harness.Include, harnessDir strin
 	return nil
 }
 
-// resolveWith fetches all includes using the given repo function.
-func resolveWith(p *harness.Harness, cfg *config.Config, fetch repoFunc) ([]ResolveResult, error) {
+// sourceResolver resolves one git source to a directory on disk.
+type sourceResolver func(gs harness.GitSource, harnessDir string) (string, *RepoResult, error)
+
+// resolveWith resolves all includes using the given source resolver.
+func resolveWith(p *harness.Harness, cfg *config.Config, resolve sourceResolver) ([]ResolveResult, error) {
 	var results []ResolveResult
 
 	for _, inc := range p.Includes {
@@ -155,7 +158,7 @@ func resolveWith(p *harness.Harness, cfg *config.Config, fetch repoFunc) ([]Reso
 			}
 		}
 
-		basePath, repoResult, err := resolveGitSourceWith(inc.GitSource, p.Dir, fetch)
+		basePath, repoResult, err := resolve(inc.GitSource, p.Dir)
 		if err != nil {
 			return nil, err
 		}
@@ -186,7 +189,7 @@ func ResolveGitSource(gs harness.GitSource, harnessDir string) (string, *RepoRes
 // with resolution metadata (cloned vs cached).
 // If cfg is non-nil, remote sources are checked against the allowed sources list.
 func Resolve(p *harness.Harness, cfg *config.Config) ([]ResolveResult, error) {
-	return resolveWith(p, cfg, EnsureRepo)
+	return resolveWith(p, cfg, ResolveGitSource)
 }
 
 // ShortGitURL abbreviates a git URL for display: the host, scheme, user and
@@ -379,8 +382,10 @@ func ResolveGitSourceFromCache(gs harness.GitSource, harnessDir string) (string,
 
 // ResolveFromCache is like Resolve but uses CacheOnlyRepo to avoid network
 // access when the cache is warm. Falls back to a network fetch on cache miss.
+// The harness's own repo is the exception: it is refreshed (see
+// ResolveSourceForRun).
 func ResolveFromCache(p *harness.Harness, cfg *config.Config) ([]ResolveResult, error) {
-	return resolveWith(p, cfg, CacheOnlyRepo)
+	return resolveWith(p, cfg, ResolveSourceForRun)
 }
 
 // gitHead returns the short HEAD SHA for a repo, or empty string on error.
@@ -654,6 +659,12 @@ func NormalizeGitURL(url string) string {
 	// Fallback: treat as HTTPS
 	return "https://" + url + ".git"
 }
+
+// CacheEntryName returns the name of the cache directory for (gitURL, ref),
+// the key LookupCache computes. gitURL is the URL after GitSourceURL has made a
+// relative source absolute. Exported so `ynh image` can bake a cache entry under
+// the name the image's own lookup will compute.
+func CacheEntryName(gitURL, ref string) string { return repoDirName(gitURL, ref) }
 
 // repoDirName creates a deterministic cache directory name from a Git URL and ref.
 // Format: org--repo--<hash> with double hyphens for parsibility.

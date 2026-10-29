@@ -720,8 +720,68 @@ func validateHarnessProfiles(hj map[string]any) []string {
 		for _, issue := range validateProfileMCPServers(profileMap) {
 			issues = append(issues, fmt.Sprintf("profile %q: %s", name, issue))
 		}
+		issues = append(issues, validateProfileSensorOverrides(hj, name, profileMap)...)
 	}
 
+	return issues
+}
+
+// validateProfileSensorOverrides checks a profile's sensor_overrides as far as
+// the manifest alone allows. The shape (tolerance, no ratchet) is always
+// decidable. Whether a named sensor exists is decidable only when nothing can
+// add sensors to the harness: an include may declare the sensor, and resolving
+// it needs the include cache, which validation does not read. `ynh check
+// --profile` and `ynh agent run --profile` refuse the rest at run time.
+// The harness's own convergence verifiers are always known.
+func validateProfileSensorOverrides(hj map[string]any, profile string, profileMap map[string]any) []string {
+	raw, ok := profileMap["sensor_overrides"]
+	if !ok {
+		return nil
+	}
+	overrides, ok := raw.(map[string]any)
+	if !ok {
+		return []string{fmt.Sprintf("profile %q: 'sensor_overrides' must be an object", profile)}
+	}
+	own, _ := hj["sensors"].(map[string]any)
+	baseIncludes, _ := hj["includes"].([]any)
+	profileIncludes, _ := profileMap["includes"].([]any)
+	canGainSensors := len(baseIncludes) > 0 || len(profileIncludes) > 0
+
+	names := make([]string, 0, len(overrides))
+	for n := range overrides {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+
+	var issues []string
+	for _, name := range names {
+		prefix := fmt.Sprintf("profile %q: sensor_overrides.%s:", profile, name)
+		ov, ok := overrides[name].(map[string]any)
+		if !ok {
+			issues = append(issues, prefix+" must be an object")
+			continue
+		}
+		if _, has := ov["ratchet"]; has {
+			issues = append(issues, prefix+" "+plugin.ProfileRatchetRefusal)
+		}
+		tol, _ := ov["tolerance"].(string)
+		if tol == "" {
+			if _, has := ov["ratchet"]; !has {
+				issues = append(issues, prefix+" tolerance is required")
+			}
+		} else if !plugin.ValidSensorTolerances[tol] {
+			issues = append(issues, fmt.Sprintf("%s tolerance %q must be one of blocking, advisory, report", prefix, tol))
+		}
+		sensor, declared := own[name].(map[string]any)
+		switch {
+		case declared:
+			if role, _ := sensor["role"].(string); role == "convergence-verifier" {
+				issues = append(issues, prefix+" a convergence verifier decides when a run is done, so a profile may not change its tolerance")
+			}
+		case !canGainSensors:
+			issues = append(issues, prefix+" no sensor of that name is declared, and the harness has no includes that could bring one")
+		}
+	}
 	return issues
 }
 

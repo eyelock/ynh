@@ -91,9 +91,12 @@ Flags:
   --instructions "<text>"  Inject per-invocation context after harness instructions
   --harness-file <path>    Load a harness from one manifest file, of any name
                            except a legacy .harness.json
-  --session-name <name>    Session label, recorded by ynh and not forwarded
+  --session-name <name>    Claude: bind --resume to this name's session (a fresh
+                           launch starts a new one). Other vendors: a label
   --resume                 Continue the previous session in this directory
   --resume=<id>            Continue one specific session by id
+                           A trailing prompt is sent to the resumed session,
+                           a --focus prompt is not; some vendors refuse it
   --install                Install symlinks for the vendor in this project
   --clean                  Remove symlinks for the vendor in this project
 
@@ -283,6 +286,8 @@ matters while you are still authoring the harness.
 
 Flags:
   --only a,b            Run only the named sensors
+  --profile <name>      Apply the profile's sensor_overrides (flag only, not
+                        YNH_PROFILE: a profile can soften the gate)
   --cwd <dir>           Run against a directory other than the current one
   --update-baseline     Accept current failures so only new ones gate
   --no-baseline         Ignore the baseline for this run

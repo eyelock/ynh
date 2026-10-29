@@ -180,7 +180,14 @@ func readCopilotWorkspace(path string) (id string, cwd string, err error) {
 // qualifier, so it can resume a session belonging to an entirely different
 // worktree. Prefer an explicit id. A bare --resume is never emitted — Copilot's
 // own help describes it as "using session picker".
-func (c *Copilot) LaunchResume(configPath, sessionID string, extraArgs []string) error {
+//
+// A prompt is refused: Copilot documents -i and --resume separately and no
+// page confirms the pair together
+// (docs.github.com/en/copilot/reference/cli-command-reference).
+func (c *Copilot) LaunchResume(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
+	if prompt != "" {
+		return ErrResumePromptNotSupported
+	}
 	var resumeArgs []string
 	if sessionID != "" {
 		resumeArgs = []string{"--resume=" + sessionID}

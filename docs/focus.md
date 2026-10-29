@@ -60,6 +60,52 @@ Error: cannot use --focus and a trailing prompt together (focus includes a promp
 
 Specifying `--focus` implies non-interactive mode by default — the focus prompt is fed to the vendor CLI as the initial instruction and execution proceeds without further user input. Pass `--interactive` alongside `--focus` to override and keep the session interactive after the focus prompt is delivered.
 
+## Resuming a Session
+
+`ynh run <harness> --resume` (or `--resume=<id>`) continues a previous session
+instead of starting one. What reaches the resumed session:
+
+- **A trailing prompt** (`-- "<prompt>"`) is delivered to it. With
+  `--interactive` the session stays open with the prompt as its next message;
+  without, it is a one-shot run, as on a cold launch.
+- **A focus prompt is not delivered.** `--resume --focus <name>` still applies
+  the focus's profile, but a focus prompt starts a task and a resume continues
+  one, so a caller that re-sends a stored command with `--resume` does not
+  repeat the task. If there is nothing to resume and ynh falls back to a cold
+  launch, the focus prompt is used as normal, because that is a new session.
+
+| Vendor | Resume with a prompt |
+|--------|----------------------|
+| Claude | Supported, interactive and one-shot |
+| Codex | One-shot only (`codex exec resume`); refused with `--interactive` |
+| Copilot | Refused: no documented form |
+| Cursor | Refused: no documented form |
+
+Where a vendor refuses, ynh stops before launching with an error naming it
+(for example `codex cannot resume a session interactively with a prompt; drop
+--resume or the prompt`). The prompt is never dropped silently.
+
+### Binding a resume to a session name
+
+Without `--session-name`, `--resume` continues the newest session in the
+directory, which may be another caller's. For Claude, `--session-name <name>`
+binds the resume to that name instead:
+
+- A launch without `--resume` starts a new session under an id ynh chooses
+  (`claude --session-id <uuid>`) and records it for the name, the harness and
+  the directory in `$YNH_HOME/sessions/`, replacing any earlier record.
+- `--resume` continues the recorded session. If nothing is recorded, or Claude
+  no longer has that session, ynh says so on stderr and starts a new one. It
+  never falls back to the newest session in the directory.
+- `--resume=<id>` continues that session, and the name follows it if Claude
+  has it.
+- If `--session-id`, `--resume`, `-r`, `--continue` or `-c` is passed straight
+  to Claude, ynh adds none of its own and binds nothing.
+
+Two names in one directory keep separate sessions. Codex, Copilot and Cursor
+are unchanged: `--session-name` is only a label there, and `--resume` still
+continues the newest session in the directory.
+
 ## Missing Focus Behavior
 
 Selecting a focus that is not defined is a hard error:

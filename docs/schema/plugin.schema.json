@@ -124,6 +124,27 @@
               "type": "string",
               "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
             }
+          },
+          "sensor_overrides": {
+            "description": "Change the tolerance of sensors while this profile is selected, whether the harness declares them or an include does. Tolerance only: a ratchet decides how the committed baseline is recorded, and the baseline belongs to the repository, not to a context. Naming a sensor nothing declares, or a convergence-verifier, is an error.",
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "tolerance"
+              ],
+              "properties": {
+                "tolerance": {
+                  "type": "string",
+                  "enum": [
+                    "blocking",
+                    "advisory",
+                    "report"
+                  ]
+                }
+              }
+            }
           }
         }
       }
@@ -641,6 +662,10 @@
               "type": "string",
               "pattern": "^(skills/[^/]+|(agents|rules|commands)/[^/]+\\.md)$"
             }
+          },
+          "sensors": {
+            "type": "boolean",
+            "description": "Whether the sensors this include declares travel into the consumer. Defaults to true. false adopts the include's skills, agents, rules and commands without its gate."
           }
         },
         "oneOf": [
