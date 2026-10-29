@@ -261,7 +261,7 @@ MCP server declarations. See [MCP Servers](mcp.md) for full reference.
 
 ### profiles (optional)
 
-Named configuration variants. A profile can override `hooks`, override `mcp_servers`, and append additional `includes`. It cannot override identity fields (`name`, `version`, `description`), `delegates_to`, or `default_vendor`. See [Profiles](profiles.md) for full scope reference.
+Named configuration variants. A profile can override `hooks`, override `mcp_servers`, append additional `includes`, and change the `tolerance` of sensors through `sensor_overrides`. It cannot override identity fields (`name`, `version`, `description`), `delegates_to`, or `default_vendor`. See [Profiles](profiles.md) for full scope reference.
 
 ## Profiles
 

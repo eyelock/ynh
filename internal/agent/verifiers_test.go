@@ -25,7 +25,7 @@ func stubVerifierCheck(t *testing.T, results []gate.Result, err error) *[]checkC
 	orig := runCheckFn
 	t.Cleanup(func() { runCheckFn = orig })
 	var calls []checkCall
-	runCheckFn = func(_, _, _ string, only []string, overlay map[string]json.RawMessage, _ []string) (*gate.Envelope, error) {
+	runCheckFn = func(_, _, _, _ string, only []string, overlay map[string]json.RawMessage, _ []string) (*gate.Envelope, error) {
 		calls = append(calls, checkCall{only: only, overlay: overlay})
 		if err != nil {
 			return nil, err
@@ -244,7 +244,7 @@ func verifierLoop(t *testing.T, mb *mockBackend, verifierResults []gate.Result, 
 	orig := runCheckFn
 	t.Cleanup(func() { runCheckFn = orig })
 	var calls []checkCall
-	runCheckFn = func(_, _, _ string, only []string, overlay map[string]json.RawMessage, _ []string) (*gate.Envelope, error) {
+	runCheckFn = func(_, _, _, _ string, only []string, overlay map[string]json.RawMessage, _ []string) (*gate.Envelope, error) {
 		calls = append(calls, checkCall{only: only, overlay: overlay})
 		if len(only) == 1 && only[0] == "build" {
 			return env(cmdResult("build", gate.StatusPass)), nil
@@ -302,7 +302,7 @@ func TestRunLoop_FailingVerifierFeedbackReachesWorker(t *testing.T) {
 	res, _, _, err := verifierLoop(t, mb, nil, func(o *RunOptions) {
 		o.MaxTurns = 2
 		// The first verifier call fails, the second passes.
-		runCheckFn = func(_, _, _ string, only []string, _ map[string]json.RawMessage, _ []string) (*gate.Envelope, error) {
+		runCheckFn = func(_, _, _, _ string, only []string, _ map[string]json.RawMessage, _ []string) (*gate.Envelope, error) {
 			if len(only) == 1 && only[0] == "build" {
 				return env(cmdResult("build", gate.StatusPass)), nil
 			}
@@ -383,7 +383,7 @@ func TestCheckConvergence_VerifierCheckErrorEndsRun(t *testing.T) {
 func TestRunLoop_VerifierCheckErrorEndsWithGateError(t *testing.T) {
 	mb := &mockBackend{name: "mock", turns: []Turn{{Content: "one"}, {Content: "two"}}}
 	res, _, out, err := verifierLoop(t, mb, nil, func(o *RunOptions) {
-		runCheckFn = func(_, _, _ string, only []string, _ map[string]json.RawMessage, _ []string) (*gate.Envelope, error) {
+		runCheckFn = func(_, _, _, _ string, only []string, _ map[string]json.RawMessage, _ []string) (*gate.Envelope, error) {
 			if len(only) == 1 && only[0] == "build" {
 				return env(cmdResult("build", gate.StatusPass)), nil
 			}

@@ -285,6 +285,8 @@ matters while you are still authoring the harness.
 
 Flags:
   --only a,b            Run only the named sensors
+  --profile <name>      Apply the profile's sensor_overrides (flag only, not
+                        YNH_PROFILE: a profile can soften the gate)
   --cwd <dir>           Run against a directory other than the current one
   --update-baseline     Accept current failures so only new ones gate
   --no-baseline         Ignore the baseline for this run
