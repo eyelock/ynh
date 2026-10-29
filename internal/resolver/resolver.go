@@ -372,6 +372,19 @@ func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via str
 		inner = r.applyProfile(ns, inner)
 		res.Harness = inner
 
+		// A local include is known by the harness it holds, as a Git one is by
+		// its repository, rather than by a path that differs per machine.
+		if inc.IsLocal() && inner.Name != "" {
+			label = inner.Name
+			if res.Path != "" {
+				label += "//" + res.Path
+			}
+			res.Chain = label
+			if via != "" {
+				res.Chain = via + " > " + label
+			}
+		}
+
 		if len(inc.Pick) > 0 {
 			// A picked include contributes its picked artifacts and its MCP
 			// servers; its own includes are not followed.

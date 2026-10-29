@@ -451,6 +451,23 @@ func (c *Claude) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string
 	}, nil
 }
 
+// GenerateSessionPluginManifest writes the manifest inside the plugin folder
+// `ynh run` hands to --plugin-dir (<run>/.claude). GeneratePluginManifest
+// writes at the run root, which Claude never reads as the plugin, so without
+// this the plugin has no manifest and Claude names it after its directory.
+// Pointers to hook and MCP files are judged against that folder, since it is
+// the plugin root.
+func (c *Claude) GenerateSessionPluginManifest(hj *plugin.HarnessJSON, runDir string) (map[string][]byte, error) {
+	pluginDir := filepath.Join(runDir, ".claude")
+	data, err := claudePluginManifest(hj, pluginDir)
+	if err != nil {
+		return nil, err
+	}
+	return map[string][]byte{
+		filepath.Join(".claude", c.PluginManifestDir(), "plugin.json"): data,
+	}, nil
+}
+
 // claudePluginManifest renders .claude-plugin/plugin.json. Copilot reads the
 // same file, so both adapters render it here and a merged package gets the
 // same bytes whichever vendor writes it last. The "hooks" field names Claude's
