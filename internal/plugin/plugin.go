@@ -92,6 +92,12 @@ type Sensor struct {
 	// fact about where the sensor was loaded from, not part of the manifest.
 	// Empty means the sensor belongs to the harness being run. See Dir.
 	HarnessDir string `json:"-"`
+	// ToleranceSource records which layer last changed Tolerance: "" for the
+	// declaration, "include" for an include-level sensor_overrides entry,
+	// "profile" for a profile's, "overlay" for --sensor-overlay. Like
+	// HarnessDir it is a fact about how the sensor was resolved, never
+	// serialised, so a gate can say a severity is not the one declared.
+	ToleranceSource string `json:"-"`
 	// Ratchet selects how the baseline forgives this sensor's failures.
 	//
 	// "fingerprint" (the default) matches individual findings, so a fixed one
@@ -596,6 +602,11 @@ type Profile struct {
 	// editing the base manifest. Replacement rather than union: a profile
 	// meant to restrict must be able to.
 	EnvPassthrough []string `json:"env_passthrough,omitempty"`
+	// SensorOverrides softens or hardens sensors while this profile is
+	// selected. Tolerance only: a ratchet decides how the committed baseline
+	// is recorded, and the baseline belongs to the repository, not to a
+	// context. See ValidateProfileSensorOverrides.
+	SensorOverrides map[string]SensorOverride `json:"sensor_overrides,omitempty"`
 }
 
 // AgentConfig holds harness-level defaults for `ynh agent run`. Flags win over
@@ -808,6 +819,42 @@ func ValidateHooks(hooks map[string][]HookEntry) []string {
 	return issues
 }
 
+// ProfileRatchetRefusal is why a profile's sensor override may not carry a
+// ratchet. One sentence, shared by `ynd validate` and the runtime.
+const ProfileRatchetRefusal = "ratchet cannot be set by a profile: the ratchet decides how the committed " +
+	"baseline is recorded, and the baseline belongs to the repository, not to a context"
+
+// ValidateProfileSensorOverrides checks the shape of one profile's
+// sensor_overrides: tolerance must be a known value and ratchet is refused.
+// Whether the named sensors exist, and what role they play, needs the merged
+// sensor set, so that half is the resolver's.
+func ValidateProfileSensorOverrides(profile string, overrides map[string]SensorOverride) []string {
+	var issues []string
+	for _, name := range sortedOverrideNames(overrides) {
+		ov := overrides[name]
+		if ov.Ratchet != "" {
+			issues = append(issues, fmt.Sprintf("profile %q: sensor_overrides.%s: %s", profile, name, ProfileRatchetRefusal))
+		}
+		if ov.Tolerance == "" {
+			if ov.Ratchet == "" {
+				issues = append(issues, fmt.Sprintf("profile %q: sensor_overrides.%s: tolerance is required", profile, name))
+			}
+		} else if !ValidSensorTolerances[ov.Tolerance] {
+			issues = append(issues, fmt.Sprintf("profile %q: sensor_overrides.%s: tolerance %q must be one of blocking, advisory, report", profile, name, ov.Tolerance))
+		}
+	}
+	return issues
+}
+
+func sortedOverrideNames(m map[string]SensorOverride) []string {
+	names := make([]string, 0, len(m))
+	for n := range m {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // ValidateProfiles validates hooks and mcp_servers within each profile.
 // Nil MCPServer entries (JSON null) are skipped — they signal removal of
 // an inherited server during profile merge.
@@ -827,6 +874,7 @@ func ValidateProfiles(profiles map[string]Profile) []string {
 		for _, issue := range ValidateMCPServers(servers) {
 			issues = append(issues, fmt.Sprintf("profile %q: %s", name, issue))
 		}
+		issues = append(issues, ValidateProfileSensorOverrides(name, profile.SensorOverrides)...)
 	}
 	return issues
 }

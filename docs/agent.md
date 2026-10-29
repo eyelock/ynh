@@ -28,7 +28,7 @@ ynh agent run --resume <session-dir> [flags]
 | `--harness <id\|path>` | Harness whose sensors, artifacts and hooks drive the run. Takes an installed id (`local/demo`) or a path to a harness directory (`.`, `./my-harness`, an absolute path), exactly as `ynh check` does. A path needs no prior install, which matters while you are still authoring the harness |
 | `--task "<text>"` | What the agent is being asked to do |
 | `--focus <name>` | Use a declared focus for the task and its profile |
-| `--profile <name>` | Apply a profile overlay |
+| `--profile <name>` | Apply a profile overlay, including its [sensor overrides](sensors.md#profiles-change-severity-not-observation); the gate between turns gets the same profile (also via a `--focus` bound to one) |
 | `--backend <name>` | Backend to drive: `claude`, `codex` or `cursor` (default: `claude`; on `--resume`, the session's own) |
 | `--model <name>` | Model override passed to the backend |
 | `--effort <low\|medium\|high>` | Reasoning effort, mapped to the backend's own setting; overrides the harness's `agent.effort`. See [Effort](#effort) |
