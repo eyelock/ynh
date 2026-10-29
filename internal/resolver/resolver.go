@@ -80,7 +80,7 @@ func resolveGitSourceWith(gs harness.GitSource, harnessDir string, fetch repoFun
 		}
 		basePath = filepath.Join(result.Path, gs.Path)
 		if _, err := os.Stat(basePath); os.IsNotExist(err) {
-			return "", nil, fmt.Errorf("path %q not found in %s", gs.Path, gs.Git)
+			return "", nil, &missingPathError{path: gs.Path, git: gs.Git}
 		}
 	}
 
@@ -143,21 +143,26 @@ type chainLink struct {
 // includeResolver carries what resolving one harness's includes shares across
 // the recursion into included harnesses.
 type includeResolver struct {
-	cfg   *config.Config
-	fetch repoFunc
+	cfg     *config.Config
+	resolve sourceResolver
 	// done holds the identity of every harness include already resolved, so a
 	// harness reached by two routes (a diamond) contributes once.
 	done map[string]bool
 }
 
-// resolveWith fetches all includes using the given repo function.
+// sourceResolver resolves one git source to a directory on disk.
+type sourceResolver func(gs harness.GitSource, harnessDir string) (string, *RepoResult, error)
+
+// resolveWith resolves all includes using the given source resolver, at every
+// depth: an included harness's own includes follow the same own-repo and cache
+// rules as the root's.
 //
 // An include whose directory holds a harness manifest is loaded, and its own
 // includes are resolved in turn unless the include picks artifacts. The
 // result lists dependencies before the harness that includes them, and p's
 // own includes in order, so that later content keeps overriding earlier.
-func resolveWith(p *harness.Harness, cfg *config.Config, fetch repoFunc) ([]ResolveResult, error) {
-	r := &includeResolver{cfg: cfg, fetch: fetch, done: map[string]bool{}}
+func resolveWith(p *harness.Harness, cfg *config.Config, resolve sourceResolver) ([]ResolveResult, error) {
+	r := &includeResolver{cfg: cfg, resolve: resolve, done: map[string]bool{}}
 	chain := []chainLink{{id: dirIdentity(p.Dir), label: "root"}}
 	return r.resolve(p, chain, "")
 }
@@ -277,7 +282,7 @@ func (r *includeResolver) resolveOne(p *harness.Harness, inc harness.Include) (R
 		}
 	}
 
-	basePath, repoResult, err := resolveGitSourceWith(inc.GitSource, p.Dir, r.fetch)
+	basePath, repoResult, err := r.resolve(inc.GitSource, p.Dir)
 	if err != nil {
 		return ResolveResult{}, "", err
 	}
@@ -318,7 +323,7 @@ func ResolveGitSource(gs harness.GitSource, harnessDir string) (string, *RepoRes
 // with resolution metadata (cloned vs cached).
 // If cfg is non-nil, remote sources are checked against the allowed sources list.
 func Resolve(p *harness.Harness, cfg *config.Config) ([]ResolveResult, error) {
-	return resolveWith(p, cfg, EnsureRepo)
+	return resolveWith(p, cfg, ResolveGitSource)
 }
 
 // ShortGitURL abbreviates a git URL for display: the host, scheme, user and
@@ -511,8 +516,10 @@ func ResolveGitSourceFromCache(gs harness.GitSource, harnessDir string) (string,
 
 // ResolveFromCache is like Resolve but uses CacheOnlyRepo to avoid network
 // access when the cache is warm. Falls back to a network fetch on cache miss.
+// The harness's own repo is the exception: it is refreshed (see
+// ResolveSourceForRun).
 func ResolveFromCache(p *harness.Harness, cfg *config.Config) ([]ResolveResult, error) {
-	return resolveWith(p, cfg, CacheOnlyRepo)
+	return resolveWith(p, cfg, ResolveSourceForRun)
 }
 
 // gitHead returns the short HEAD SHA for a repo, or empty string on error.
@@ -786,6 +793,12 @@ func NormalizeGitURL(url string) string {
 	// Fallback: treat as HTTPS
 	return "https://" + url + ".git"
 }
+
+// CacheEntryName returns the name of the cache directory for (gitURL, ref),
+// the key LookupCache computes. gitURL is the URL after GitSourceURL has made a
+// relative source absolute. Exported so `ynh image` can bake a cache entry under
+// the name the image's own lookup will compute.
+func CacheEntryName(gitURL, ref string) string { return repoDirName(gitURL, ref) }
 
 // repoDirName creates a deterministic cache directory name from a Git URL and ref.
 // Format: org--repo--<hash> with double hyphens for parsibility.

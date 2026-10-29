@@ -107,7 +107,14 @@ func (c *Cursor) ResolveLastSession(cwd string, notBefore time.Time) (string, er
 // LaunchResume continues a prior Cursor chat. An empty sessionID uses
 // --continue ("Continue previous session"). A bare --resume is never emitted:
 // Cursor documents it as "Select a session to resume", i.e. a picker.
-func (c *Cursor) LaunchResume(configPath, sessionID string, extraArgs []string) error {
+//
+// A prompt is refused: Cursor's CLI reference lists --resume, --continue and
+// the positional prompt separately and documents no combination of them
+// (cursor.com/docs/cli/reference/parameters).
+func (c *Cursor) LaunchResume(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
+	if prompt != "" {
+		return ErrResumePromptNotSupported
+	}
 	var resumeArgs []string
 	if sessionID != "" {
 		resumeArgs = []string{"--resume", sessionID}

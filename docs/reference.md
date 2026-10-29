@@ -28,7 +28,7 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 | Setting | Resolution Order |
 |---------|-----------------|
 | Vendor | `-v` flag > `YNH_VENDOR` > harness `default_vendor` > global config. Any of these also accepts a backend-redirected spec (`<backend>/<vendor>` or `<backend>/<vendor>/<model>`) — see [Local Model Backends](vendors.md#local-model-backends). |
-| Profile | `--profile` flag > `YNH_PROFILE` > no profile (top-level) |
+| Profile | `--profile` flag > `YNH_PROFILE` > no profile (top-level). `ynh check` takes the flag only |
 | Focus | `--focus` flag > `YNH_FOCUS` > no focus (mutually exclusive with `--profile`) |
 | Harness source | `--harness` flag > `YNH_HARNESS` > positional arg > `.` (CWD) or error |
 | Non-interactive | `-y` flag > `YNH_YES` > `CI` |
@@ -41,7 +41,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | Command | Key Flags |
 |---------|-----------|
 | `ynh install <source>` | `--path`, `-v` |
-| `ynh run [harness-id\|path]` | `-v`, `--profile`, `--focus`, `--harness-file <file>`, `--isolated-mcp`, `--install`, `--clean` |
+| `ynh run [harness-id\|path]` | `-v`, `--profile`, `--focus`, `--harness-file <file>`, `--isolated-mcp`, `--install`, `--clean`, `--resume[=<id>]`, `--session-name <name>` (see [Resuming a Session](focus.md#resuming-a-session); on Claude the name binds `--resume` to that name's session) |
 | `ynh uninstall <harness>...` | |
 | `ynh update [harness]` | |
 | `ynh fork <name>` | `--to <path>`, `--name <new>`, `--format <text\|json>` |
@@ -81,7 +81,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh sensors ls <harness-id\|path>` | `--format <text\|json>` |
 | `ynh sensors show <harness-id\|path> <name>` | `--format <text\|json>` |
 | `ynh sensors run <harness-id\|path> <name>` | `--cwd <dir>`, `--no-content` |
-| `ynh check <harness-id\|path>` | `--only <a,b>`, `--cwd <dir>`, `--update-baseline`, `--no-baseline`, `--sensor-overlay <json>`, `--format <text\|json>` |
+| `ynh check <harness-id\|path>` | `--only <a,b>`, `--profile <name>` (flag only; `YNH_PROFILE` is not read), `--cwd <dir>`, `--update-baseline`, `--no-baseline`, `--sensor-overlay <json>`, `--format <text\|json>` |
 | `ynh trust [ls\|show\|accept] [harness]` | `--format <text\|json>` |
 | `ynh agent run` | `--harness <id\|path>`, `--task`, `--focus`, `--profile`, `--backend`, `--model`, `--effort`, `--convergence-sensor`, `--sensor-overlay`, `--worktree`, `--sandbox`, `--auto-approve`, `--auto-commit`, `--interactive`, `--no-plan`, `--max-turns`, `--max-tokens`, `--max-wall`, `--max-plan-iterations`, `--emit-jsonl`, `--resume`, `--telemetry-relay`. See [Agent Loop](agent.md) |
 | `ynh sources add <path>` | `--name`, `--description` |
@@ -135,7 +135,7 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 | `ynh agent run` | Run result: `exit_code`, `reason`, `converged`, `budgets`/`budget_sources`/`consumed` with `bound_by`, `convergence`, `sensors[]`, `changed_files` — see [Agent](agent.md#run-result) |
 | `ynh baseline <harness>` | What the ratchet forgives: per-sensor `recorded`, `recorded_at`, `forgiven`, and under `--explain` the `findings` themselves — see [Sensors](sensors.md#reading-the-ratchet) |
 | `ynh check <harness> --calibrate` | Calibration result: `verdict` (`calibrated`\|`broken`), per-sensor `status` (`calibrated`\|`failed`\|`uncalibrated`\|`error`) with `expected`/`observed` — see [Sensors](sensors.md#reference-proving-a-sensor-still-observes) |
-| `ynh check <harness>` | Gate result: `verdict` (`pass`\|`blocked`), `summary` counts, `sensors[]` with `status`, `tolerance`, `new_count`/`known_count`, and `baseline` when a ratchet is in play — see [Sensors](sensors.md#tolerance) |
+| `ynh check <harness>` | Gate result: `verdict` (`pass`\|`blocked`), `summary` counts, `profile` (when `--profile` was given), `sensors[]` with `status`, `tolerance`, `tolerance_source` (when not the declared one), `new_count`/`known_count`, and `baseline` when a ratchet is in play; see [Sensors](sensors.md#tolerance) |
 | `ynh fork <name>` | Envelope (`capabilities`, `ynh_version`, `name`, `path`, `installed_from`) — see [ynh fork output](#ynh-fork-output) below |
 | `ynh info <name>` | Envelope (`capabilities`, `ynh_version`, `harness`) wrapping a single harness object — see [Envelope and harness fields](#envelope-and-harness-fields) below |
 | `ynh installed <name>` | Envelope (`capabilities`, `ynh_version`, `id`, `installed`) where `installed` mirrors the on-disk `.agents/harness/installed.json` (including `resolved[]` commit SHAs). Schema: `cli/installed.schema.json` |

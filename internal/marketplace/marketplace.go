@@ -343,7 +343,7 @@ func buildHarnessEntry(srcDir, outputDir string, vendors []string, cfg *config.C
 // generating missing vendor manifests. Build has already refused a manifest
 // ynh no longer reads, against the source rather than the copy (#406).
 func buildPluginEntry(srcDir, outputDir string, vendors []string) error {
-	if err := assembler.CopyDir(srcDir, outputDir); err != nil {
+	if err := assembler.CopyDirDeref(srcDir, outputDir); err != nil {
 		return fmt.Errorf("copying plugin: %w", err)
 	}
 

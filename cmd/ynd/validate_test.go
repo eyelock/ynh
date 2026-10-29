@@ -1656,3 +1656,86 @@ func TestValidateHarnessMCPServers_NullRemovesAnIncludedServer(t *testing.T) {
 		t.Errorf("issues = %v", issues)
 	}
 }
+
+func TestValidateHarnessProfiles_SensorOverrides(t *testing.T) {
+	out := map[string]any{"format": "text"}
+	own := map[string]any{
+		"e2e-status": map[string]any{"source": map[string]any{"command": "true"}, "output": out},
+		"verify":     map[string]any{"role": "convergence-verifier", "source": map[string]any{"command": "true"}, "output": out},
+	}
+	ov := func(m map[string]any) map[string]any {
+		return map[string]any{"sensor_overrides": m}
+	}
+	cases := []struct {
+		name     string
+		hj       map[string]any
+		wantSub  string // "" means no issue
+		wantFrom string // extra substring
+	}{
+		{"softening an own sensor is fine",
+			map[string]any{"sensors": own, "profiles": map[string]any{"factory": ov(map[string]any{"e2e-status": map[string]any{"tolerance": "advisory"}})}},
+			"", ""},
+		{"ratchet refused",
+			map[string]any{"sensors": own, "profiles": map[string]any{"factory": ov(map[string]any{"e2e-status": map[string]any{"tolerance": "advisory", "ratchet": "count"}})}},
+			"ratchet cannot be set by a profile", `profile "factory"`},
+		{"bad tolerance",
+			map[string]any{"sensors": own, "profiles": map[string]any{"factory": ov(map[string]any{"e2e-status": map[string]any{"tolerance": "loud"}})}},
+			"must be one of blocking, advisory, report", ""},
+		{"verifier refused, even as blocking",
+			map[string]any{"sensors": own, "profiles": map[string]any{"factory": ov(map[string]any{"verify": map[string]any{"tolerance": "blocking"}})}},
+			"convergence verifier", "verify"},
+		{"unknown sensor with no includes",
+			map[string]any{"sensors": own, "profiles": map[string]any{"factory": ov(map[string]any{"ghost": map[string]any{"tolerance": "advisory"}})}},
+			"no sensor of that name is declared", "ghost"},
+		{"unknown sensor is undecidable when an include may bring it",
+			map[string]any{"sensors": own, "includes": []any{map[string]any{"git": "github.com/x/y"}},
+				"profiles": map[string]any{"factory": ov(map[string]any{"ghost": map[string]any{"tolerance": "advisory"}})}},
+			"", ""},
+		{"unknown sensor is undecidable when the profile adds an include",
+			map[string]any{"sensors": own, "profiles": map[string]any{"factory": map[string]any{
+				"includes":         []any{map[string]any{"git": "github.com/x/y"}},
+				"sensor_overrides": map[string]any{"ghost": map[string]any{"tolerance": "advisory"}}}}},
+			"", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			issues := validateHarnessProfiles(c.hj)
+			joined := strings.Join(issues, "\n")
+			if c.wantSub == "" {
+				if len(issues) != 0 {
+					t.Fatalf("unexpected issues: %v", issues)
+				}
+				return
+			}
+			if !strings.Contains(joined, c.wantSub) || !strings.Contains(joined, c.wantFrom) {
+				t.Errorf("issues %q should contain %q and %q", joined, c.wantSub, c.wantFrom)
+			}
+		})
+	}
+}
+
+// The published schema rejects a ratchet in a profile override too, so the
+// refusal does not depend on the cross-field check running.
+func TestSchemaPlugin_ProfileSensorOverrides(t *testing.T) {
+	cases := []struct {
+		name      string
+		override  string
+		wantIssue bool
+	}{
+		{"tolerance", `{"tolerance":"advisory"}`, false},
+		{"ratchet", `{"tolerance":"advisory","ratchet":"count"}`, true},
+		{"ratchet alone", `{"ratchet":"count"}`, true},
+		{"bad tolerance", `{"tolerance":"loud"}`, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			src := `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"h","version":"0.1.0","profiles":{"factory":{"sensor_overrides":{"s":` + c.override + `}}}}`
+			path := filepath.Join(t.TempDir(), "plugin.json")
+			writeFile(t, path, []byte(src))
+			issues := lintHarnessJSON(path)
+			if c.wantIssue != (len(issues) > 0) {
+				t.Errorf("issues = %v, wantIssue %v", issues, c.wantIssue)
+			}
+		})
+	}
+}

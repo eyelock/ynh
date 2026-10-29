@@ -335,3 +335,196 @@ func TestOptedOutGitIncludeNeedsNoCache(t *testing.T) {
 		t.Error("control: a sensor-bearing uncached include should still error")
 	}
 }
+
+// profiled returns a consumer with own sensors "mine" and "gate-v" (a
+// convergence verifier), one included sensor "go-vet", and the given overrides
+// applied as the active profile "factory".
+func profiled(t *testing.T, include, profile map[string]plugin.SensorOverride) *harness.Harness {
+	t.Helper()
+	own := map[string]plugin.Sensor{
+		"mine":   {Tolerance: "blocking"},
+		"gate-v": {Role: "convergence-verifier"},
+	}
+	h := consumerWith(t, own, map[string]any{"go-vet": commandSensor("blocking")})
+	h.SensorOverrides = include
+	h.ActiveProfile = "factory"
+	h.ProfileSensorOverrides = profile
+	return h
+}
+
+func TestProfileOverridesApplyToOwnAndIncludedSensors(t *testing.T) {
+	h := profiled(t, nil, map[string]plugin.SensorOverride{
+		"mine":   {Tolerance: "advisory"},
+		"go-vet": {Tolerance: "report"},
+	})
+	got, err := WithIncludedSensors(h)
+	if err != nil {
+		t.Fatalf("WithIncludedSensors: %v", err)
+	}
+	for name, want := range map[string]string{"mine": "advisory", "go-vet": "report"} {
+		s := got.Sensors[name]
+		if s.Tolerance != want || s.ToleranceSource != "profile" {
+			t.Errorf("%s: tolerance %q source %q, want %q from profile", name, s.Tolerance, s.ToleranceSource, want)
+		}
+	}
+}
+
+// Declaration, then the harness's include-level override, then the profile's:
+// the later layer wins and is the one named as the source.
+func TestProfileOverrideComesLastInTheMergeOrder(t *testing.T) {
+	cases := []struct {
+		name          string
+		include       map[string]plugin.SensorOverride
+		profile       map[string]plugin.SensorOverride
+		wantTolerance string
+		wantSource    string
+	}{
+		{"declared only", nil, nil, "blocking", ""},
+		{"include override only", map[string]plugin.SensorOverride{"go-vet": {Tolerance: "advisory"}}, nil, "advisory", "include"},
+		{"profile beats include", map[string]plugin.SensorOverride{"go-vet": {Tolerance: "advisory"}},
+			map[string]plugin.SensorOverride{"go-vet": {Tolerance: "report"}}, "report", "profile"},
+		{"profile hardens what include softened", map[string]plugin.SensorOverride{"go-vet": {Tolerance: "advisory"}},
+			map[string]plugin.SensorOverride{"go-vet": {Tolerance: "blocking"}}, "blocking", "profile"},
+		{"profile restating the declaration changes nothing", nil,
+			map[string]plugin.SensorOverride{"go-vet": {Tolerance: "blocking"}}, "blocking", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := WithIncludedSensors(profiled(t, c.include, c.profile))
+			if err != nil {
+				t.Fatalf("WithIncludedSensors: %v", err)
+			}
+			s := got.Sensors["go-vet"]
+			if s.EffectiveTolerance() != c.wantTolerance || s.ToleranceSource != c.wantSource {
+				t.Errorf("got %q from %q, want %q from %q", s.EffectiveTolerance(), s.ToleranceSource, c.wantTolerance, c.wantSource)
+			}
+		})
+	}
+}
+
+// A sensor committed to the harness's own repo after the first resolution is
+// seen without an update, because that repo is on disk and is refreshed. Any
+// other repo stays on the lookup-only path (#596).
+func TestWithIncludedSensors_OwnRepoIsRefreshed(t *testing.T) {
+	tests := []struct {
+		name        string
+		git         string
+		otherRepo   bool
+		wantRefresh bool
+	}{
+		{"own repo", ".", false, true},
+		{"sibling repo", "../other", true, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isolate(t)
+			parent, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			h := newRepoAt(t, filepath.Join(parent, "h"), "keep")
+			other := newRepoAt(t, filepath.Join(parent, "other"), "keep")
+			source := h
+			if tt.otherRepo {
+				source = other
+			}
+			commit := func(sensors map[string]any) {
+				t.Helper()
+				writeHarness(t, filepath.Join(source, "up"), "up", sensors)
+				runGit(t, source, "add", ".")
+				runGit(t, source, "commit", "-m", "sensors")
+			}
+			consumer := func() *harness.Harness {
+				return &harness.Harness{Name: "consumer", Dir: h, Includes: []harness.Include{
+					{GitSource: harness.GitSource{Git: tt.git, Path: "up"}},
+				}}
+			}
+
+			commit(map[string]any{"first": commandSensor("blocking")})
+			if _, err := ResolveFromCache(consumer(), nil); err != nil {
+				t.Fatalf("first run: %v", err)
+			}
+			commit(map[string]any{"first": commandSensor("blocking"), "second": commandSensor("blocking")})
+
+			got, err := WithIncludedSensors(consumer())
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, sawSecond := got.Sensors["second"]
+			if sawSecond != tt.wantRefresh {
+				t.Errorf("sensor added after the first run seen = %v, want %v", sawSecond, tt.wantRefresh)
+			}
+			if _, ok := got.Sensors["first"]; !ok {
+				t.Error("first sensor missing")
+			}
+		})
+	}
+}
+
+func TestProfileOverrideRefusals(t *testing.T) {
+	cases := []struct {
+		name    string
+		profile map[string]plugin.SensorOverride
+		want    []string
+	}{
+		{"unknown sensor", map[string]plugin.SensorOverride{"ghost": {Tolerance: "advisory"}},
+			[]string{`profile "factory"`, `"ghost"`, "declares"}},
+		{"ratchet", map[string]plugin.SensorOverride{"mine": {Ratchet: "count"}},
+			[]string{`profile "factory"`, `"mine"`, "ratchet", "baseline belongs to the repository"}},
+		{"ratchet alongside tolerance", map[string]plugin.SensorOverride{"mine": {Tolerance: "advisory", Ratchet: "count"}},
+			[]string{`"mine"`, "ratchet"}},
+		{"verifier softened", map[string]plugin.SensorOverride{"gate-v": {Tolerance: "advisory"}},
+			[]string{`profile "factory"`, `"gate-v"`, "convergence verifier"}},
+		{"verifier restated as blocking", map[string]plugin.SensorOverride{"gate-v": {Tolerance: "blocking"}},
+			[]string{`"gate-v"`, "convergence verifier"}},
+		{"invalid tolerance", map[string]plugin.SensorOverride{"mine": {Tolerance: "loud"}},
+			[]string{`profile "factory"`, `"mine"`, "must be one of"}},
+		{"empty override", map[string]plugin.SensorOverride{"mine": {}},
+			[]string{`"mine"`, "no tolerance"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := WithIncludedSensors(profiled(t, nil, c.profile))
+			if err == nil {
+				t.Fatal("want a refusal")
+			}
+			for _, w := range c.want {
+				if !strings.Contains(err.Error(), w) {
+					t.Errorf("error %q missing %q", err, w)
+				}
+			}
+		})
+	}
+}
+
+// An include that opted out with "sensors": false contributes none, so a
+// profile naming one of its sensors is stale, as for include-level overrides.
+func TestProfileOverrideOfAnOptedOutSensorIsRefused(t *testing.T) {
+	h := profiled(t, nil, map[string]plugin.SensorOverride{"go-vet": {Tolerance: "advisory"}})
+	off := false
+	h.Includes[0].Sensors = &off
+	if _, err := WithIncludedSensors(h); err == nil || !strings.Contains(err.Error(), `"go-vet"`) {
+		t.Fatalf("want go-vet refused as undeclared, got %v", err)
+	}
+}
+
+// ResolveProfile hands the profile's overrides to the sensor merge.
+func TestResolveProfileCarriesSensorOverrides(t *testing.T) {
+	h := &harness.Harness{Profiles: map[string]plugin.Profile{
+		"factory": {SensorOverrides: map[string]plugin.SensorOverride{"mine": {Tolerance: "advisory"}}},
+	}, Sensors: map[string]plugin.Sensor{"mine": {}}}
+	got, err := harness.ResolveProfile(h, "factory")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err = WithIncludedSensors(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Sensors["mine"].Tolerance != "advisory" {
+		t.Errorf("tolerance = %q, want advisory", got.Sensors["mine"].Tolerance)
+	}
+	if h.Sensors["mine"].Tolerance != "" {
+		t.Error("the original harness was mutated")
+	}
+}
