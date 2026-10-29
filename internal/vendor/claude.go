@@ -139,6 +139,44 @@ func (c *Claude) ResolveLastSession(cwd string, notBefore time.Time) (string, er
 	return newestCandidate(candidates, notBefore)
 }
 
+// SessionExists reports whether Claude's store holds sessionID for cwd, trying
+// every form of the directory ResolveLastSession does. An id that is not a
+// plain file stem never exists, so a caller-supplied value cannot walk out of
+// the store.
+func (c *Claude) SessionExists(cwd, sessionID string) bool {
+	if sessionID == "" || sessionID != filepath.Base(sessionID) || sessionID == "." || sessionID == ".." {
+		return false
+	}
+	home, err := vendorHomeDir()
+	if err != nil {
+		return false
+	}
+	for _, dir := range dirCandidates(cwd) {
+		path := filepath.Join(home, ".claude", "projects", claudeProjectSlug(dir), sessionID+".jsonl")
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+// LaunchWithSessionID starts a new Claude conversation under a chosen id.
+// Claude documents --session-id as "Use a specific session ID for the
+// conversation (must be a valid UUID)"
+// (code.claude.com/docs/en/cli-reference).
+func (c *Claude) LaunchWithSessionID(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
+	initial, args := claudeSessionIDArgs(sessionID, prompt, interactive, extraArgs)
+	return launchClaude(configPath, initial, args)
+}
+
+func claudeSessionIDArgs(sessionID, prompt string, interactive bool, extraArgs []string) (string, []string) {
+	idArgs := []string{"--session-id", sessionID}
+	if prompt != "" && !interactive {
+		return "", append(append([]string{"-p", prompt}, idArgs...), extraArgs...)
+	}
+	return prompt, append(idArgs, extraArgs...)
+}
+
 // claudeProjectSlug converts an absolute path into the directory name Claude
 // uses under ~/.claude/projects. Every "/" and "." becomes "-", so a leading
 // slash yields a leading dash and "/foo/.worktrees" yields "-foo--worktrees".

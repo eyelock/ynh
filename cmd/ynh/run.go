@@ -20,6 +20,7 @@ import (
 	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
+	"github.com/eyelock/ynh/internal/sessions"
 	"github.com/eyelock/ynh/internal/symlink"
 	"github.com/eyelock/ynh/internal/vendor"
 )
@@ -389,7 +390,7 @@ func cmdRun(args []string) error {
 
 		// Launch
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
-		return launchSession(adapter, runDir, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
+		return launchSession(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
 	}
 }
 
@@ -402,22 +403,25 @@ func cmdRun(args []string) error {
 // with --resume (TermQ reopening a card) must not repeat it into a continued
 // session. Whichever prompt is in play, it is never dropped silently: a vendor
 // that cannot resume with one refuses before anything launches.
-func launchSession(adapter vendor.Adapter, runDir string, ra runArgs, prompt, explicitPrompt string, vendorArgs []string, stderr io.Writer) error {
+//
+// harnessKey identifies the harness for session binding: with --session-name on
+// a vendor that supports it, the session is bound to (harnessKey, directory,
+// name) rather than to the newest session in the directory.
+func launchSession(adapter vendor.Adapter, runDir, harnessKey string, ra runArgs, prompt, explicitPrompt string, vendorArgs []string, stderr io.Writer) error {
+	if binder, ok := adapter.(vendor.SessionBinder); ok && ra.SessionName != "" {
+		if flag := conflictingSessionFlag(vendorArgs); flag != "" {
+			_, _ = fmt.Fprintf(stderr, "session: %s was passed to %s directly, so --session-name %q does not bind a session\n", flag, adapter.Name(), ra.SessionName)
+		} else {
+			return launchBound(adapter, binder, runDir, harnessKey, ra, prompt, explicitPrompt, vendorArgs, stderr)
+		}
+	}
 	if ra.Resume {
 		if !adapter.SupportsResume() {
 			return fmt.Errorf("%s does not support resuming sessions", adapter.Name())
 		}
 		sessionID, resumed := resolveResumeSession(adapter, ra.ResumeID, stderr)
 		if resumed {
-			err := adapter.LaunchResume(runDir, sessionID, explicitPrompt, ra.Interactive, vendorArgs)
-			if errors.Is(err, vendor.ErrResumePromptNotSupported) {
-				mode := ""
-				if ra.Interactive {
-					mode = " interactively"
-				}
-				return fmt.Errorf("%s cannot resume a session%s with a prompt; drop --resume or the prompt", adapter.Name(), mode)
-			}
-			return err
+			return launchResume(adapter, runDir, sessionID, explicitPrompt, ra.Interactive, vendorArgs)
 		}
 		// Nothing to resume: fall through to a normal cold launch rather
 		// than failing. A card relaunching for the first time must still
@@ -430,6 +434,91 @@ func launchSession(adapter vendor.Adapter, runDir string, ra runArgs, prompt, ex
 		return adapter.LaunchNonInteractive(runDir, prompt, vendorArgs)
 	}
 	return adapter.LaunchInteractive(runDir, vendorArgs)
+}
+
+// launchResume continues sessionID, naming the vendor when it refuses the
+// prompt.
+func launchResume(adapter vendor.Adapter, runDir, sessionID, prompt string, interactive bool, vendorArgs []string) error {
+	err := adapter.LaunchResume(runDir, sessionID, prompt, interactive, vendorArgs)
+	if errors.Is(err, vendor.ErrResumePromptNotSupported) {
+		mode := ""
+		if interactive {
+			mode = " interactively"
+		}
+		return fmt.Errorf("%s cannot resume a session%s with a prompt; drop --resume or the prompt", adapter.Name(), mode)
+	}
+	return err
+}
+
+// newSessionID is a seam so tests can pin the id a cold launch chooses.
+var newSessionID = sessions.NewID
+
+// conflictingSessionFlag returns the first session-selecting flag in the
+// caller's own vendor args, or "". When one is present ynh adds none of its
+// own: two selectors on one command line would contradict each other.
+func conflictingSessionFlag(vendorArgs []string) string {
+	for _, a := range vendorArgs {
+		name, _, _ := strings.Cut(a, "=")
+		switch name {
+		case "--session-id", "--resume", "-r", "--continue", "-c":
+			return name
+		}
+	}
+	return ""
+}
+
+// launchBound launches a vendor that can be given a session id, binding the
+// session to ra.SessionName (#601). The record is written before the launch
+// because the vendor replaces this process.
+//
+//   - fresh launch: new id, recorded, replacing any earlier record, so a
+//     caller that starts over resumes the new session next time;
+//   - --resume: the recorded session if the vendor still has it, otherwise a
+//     cold start with a new id. Never the newest session in the directory,
+//     which may belong to someone else;
+//   - --resume=<id>: that session, and the name follows it if the vendor has it.
+func launchBound(adapter vendor.Adapter, binder vendor.SessionBinder, runDir, harnessKey string, ra runArgs, prompt, explicitPrompt string, vendorArgs []string, stderr io.Writer) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("session %q: cannot determine working directory: %w", ra.SessionName, err)
+	}
+	if abs, aerr := filepath.EvalSymlinks(cwd); aerr == nil {
+		cwd = abs
+	}
+	key := sessions.Key(harnessKey, cwd, ra.SessionName)
+	bind := func(id string) {
+		b := sessions.Binding{SessionID: id, Name: ra.SessionName, Cwd: cwd, Harness: harnessKey}
+		if err := sessions.Save(key, b); err != nil {
+			_, _ = fmt.Fprintf(stderr, "session: could not record %q (%v); a later --resume will start a new session\n", ra.SessionName, err)
+		}
+	}
+
+	if ra.Resume {
+		if ra.ResumeID != "" {
+			if binder.SessionExists(cwd, ra.ResumeID) {
+				bind(ra.ResumeID)
+			}
+			return launchResume(adapter, runDir, ra.ResumeID, explicitPrompt, ra.Interactive, vendorArgs)
+		}
+		rec, found, err := sessions.Load(key)
+		switch {
+		case err != nil:
+			_, _ = fmt.Fprintf(stderr, "resume: could not read the record for session %q (%v); starting a new session\n", ra.SessionName, err)
+		case !found:
+			_, _ = fmt.Fprintf(stderr, "resume: no session recorded for %q in %s; starting a new session\n", ra.SessionName, cwd)
+		case !binder.SessionExists(cwd, rec.SessionID):
+			_, _ = fmt.Fprintf(stderr, "resume: session %s for %q is no longer in the vendor's history; starting a new session\n", rec.SessionID, ra.SessionName)
+		default:
+			return launchResume(adapter, runDir, rec.SessionID, explicitPrompt, ra.Interactive, vendorArgs)
+		}
+	}
+
+	id, err := newSessionID()
+	if err != nil {
+		return err
+	}
+	bind(id)
+	return binder.LaunchWithSessionID(runDir, id, prompt, ra.Interactive, vendorArgs)
 }
 
 // resolveResumeSession decides which session `--resume` should continue.
@@ -596,7 +685,7 @@ type runArgs struct {
 	VendorFlag   string   // -v or YNH_VENDOR
 	ProfileFlag  string   // --profile or YNH_PROFILE
 	FocusFlag    string   // --focus or YNH_FOCUS
-	SessionName  string   // --session-name: consumed by ynh, not forwarded to vendor
+	SessionName  string   // --session-name: binds --resume to this name where the vendor allows; not forwarded
 	Instructions string   // --instructions: per-invocation context injected into vendor pipeline
 	Prompt       string   // trailing prompt after --
 	VendorArgs   []string // passthrough args for vendor CLI
