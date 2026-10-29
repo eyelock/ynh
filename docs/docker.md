@@ -64,6 +64,17 @@ newer than every release. The warning never stops the build or changes the
 Dockerfile; pass `--base <image>` to build on a newer ynh image. A base that is not
 pulled is not checked, so the check never pulls or runs anything.
 
+### What goes into the image
+
+The harness source is copied into the build context the way git sees it: tracked
+files plus untracked files that are not ignored. `node_modules`, build output and
+a gitignored `.env` stay out of the image, while a new uncommitted harness file
+still goes in. A source that is not in a git working tree is copied whole, except
+`.git`. Symlinks, including the links to directories that pnpm and npm workspaces
+leave in `node_modules`, are recreated as symlinks and never followed.
+
+The same rule applies to `ynh install` from a local path and to `ynh update`.
+
 The harness image pre-assembles vendor layouts for all four vendors (Claude, Codex, Cursor and Copilot) at build time. At runtime, `ynh run` detects the pre-assembled layout and skips assembly entirely.
 
 ### Running Harness Images

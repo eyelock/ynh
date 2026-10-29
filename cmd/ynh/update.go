@@ -90,7 +90,7 @@ func cmdUpdate(args []string) error {
 					newSrcDir = filepath.Join(result.Path, p.InstalledFrom.Path)
 				}
 				if _, statErr := os.Stat(newSrcDir); statErr == nil {
-					if err := assembler.CopyDir(newSrcDir, p.Dir); err != nil {
+					if err := assembler.CopyTree(newSrcDir, p.Dir); err != nil {
 						fmt.Fprintf(os.Stderr, "  Warning: copying refreshed harness: %v\n", err)
 					} else if err := migration.AdoptRefreshedManifest(newSrcDir, p.Dir); err != nil {
 						// An install already moved to .agents/harness must not keep
