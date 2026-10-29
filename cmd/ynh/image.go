@@ -6,7 +6,9 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
+	"sort"
 	"text/template"
 
 	"github.com/eyelock/ynh/internal/assembler"
@@ -58,7 +60,8 @@ COPY --chown=ynh:ynh vendors/copilot/ /home/ynh/.ynh/run/local--{{.Name}}/copilo
 # Harness source (metadata for ynh run)
 COPY --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--{{.Name}}/
 
-# Schema version of the layout above, so ynh does not try to migrate it
+# Schema version of the layout above, so ynh does not try to migrate it, and
+# the include cache (cache/), so included sensors are read from the build
 COPY --chown=ynh:ynh home/ /home/ynh/.ynh/
 
 # Default vendor (override: docker run -e YNH_VENDOR=codex)
@@ -78,6 +81,111 @@ LABEL dev.ynh.harness="{{.Name}}" \
       dev.ynh.entrypoint="{{.Entrypoint}}" \
       dev.ynh.assembled-by="{{.YnhVersion}}"
 `))
+
+// imageHome is ynh's home inside the image, where the Dockerfile template puts
+// everything it bakes.
+const imageHome = "/home/ynh/.ynh"
+
+// imageHarnessDir is where the Dockerfile puts the harness source inside the
+// image. It is the directory a relative include resolves against at runtime.
+func imageHarnessDir(name string) string {
+	return path.Join(imageHome, "harnesses", "local--"+name)
+}
+
+// profileOnlyIncludes returns the includes that profiles add to the harness's
+// own, so a run with --profile finds them baked too. Profile includes only ever
+// add to the base ones, so the base ones are dropped from each resolved profile.
+func profileOnlyIncludes(p *harness.Harness) ([]harness.Include, error) {
+	names := make([]string, 0, len(p.Profiles))
+	for n := range p.Profiles {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	var out []harness.Include
+	for _, n := range names {
+		rp, err := harness.ResolveProfile(p, n)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rp.Includes[len(p.Includes):]...)
+	}
+	return out, nil
+}
+
+// bakeIncludeCache copies the cached clone of every git include into
+// homeDir/cache, under the name the image's own lookup will compute.
+//
+// The name is not the build-time one. The cache key is the source URL, and a
+// relative source ("." or "../..") is joined to the directory of the harness
+// that names it. In the image that directory is runtimeHarnessDir, so the key
+// is computed from there. A remote URL is the same in both places.
+//
+// Every git include is baked, including one with "sensors": false. Its
+// artifacts are already assembled, but a run still resolves every include
+// through the cache and a miss there is a network fetch. Local includes need
+// nothing: they are read from the harness directory, which is baked.
+//
+// Delegates are not baked: they are assembled into the vendor layouts at build
+// time, and nothing reads them from the cache at runtime.
+//
+// The clone is copied with its .git, which assembler.CopyDir skips: the cache
+// lookup requires it, and a shallow clone keeps it small.
+func bakeIncludeCache(p *harness.Harness, includes []harness.Include, homeDir, runtimeHarnessDir string) error {
+	baked := map[string]string{}
+	for _, inc := range includes {
+		if inc.IsLocal() || inc.Git == "" {
+			continue
+		}
+		src, ok := resolver.LookupCache(resolver.GitSourceURL(inc.Git, p.Dir), inc.Ref)
+		if !ok {
+			return fmt.Errorf("include %s is not in the cache after resolving", inc.Git)
+		}
+		name := resolver.CacheEntryName(resolver.GitSourceURL(inc.Git, runtimeHarnessDir), inc.Ref)
+		if prev, dup := baked[name]; dup {
+			if prev != src.Path {
+				return fmt.Errorf("includes %s and %s would share one cache entry in the image", prev, src.Path)
+			}
+			continue
+		}
+		baked[name] = src.Path
+		if err := copyTreeWithGit(src.Path, filepath.Join(homeDir, "cache", name)); err != nil {
+			return fmt.Errorf("baking include %s: %w", inc.Git, err)
+		}
+	}
+	return nil
+}
+
+// copyTreeWithGit copies src to dst, .git included. Files stay writable so the
+// build context can be removed.
+func copyTreeWithGit(src, dst string) error {
+	return filepath.Walk(src, func(p string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, p)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		switch {
+		case info.IsDir():
+			return os.MkdirAll(target, 0o755)
+		case info.Mode()&os.ModeSymlink != 0:
+			link, err := os.Readlink(p)
+			if err != nil {
+				return err
+			}
+			return os.Symlink(link, target)
+		case info.Mode().IsRegular():
+			data, err := os.ReadFile(p)
+			if err != nil {
+				return err
+			}
+			return os.WriteFile(target, data, info.Mode().Perm()|0o200)
+		}
+		return nil
+	})
+}
 
 // imageArgs holds parsed flags for the image command.
 type imageArgs struct {
@@ -274,6 +382,18 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 		}
 	}
 
+	// Includes a profile adds are not in the resolve above. Fetch them too, so
+	// they are in the cache to bake.
+	profileIncs, err := profileOnlyIncludes(p)
+	if err != nil {
+		return err
+	}
+	if len(profileIncs) > 0 {
+		if _, err := resolver.Resolve(&harness.Harness{Dir: p.Dir, Includes: profileIncs}, cfg); err != nil {
+			return fmt.Errorf("resolving profile includes: %w", err)
+		}
+	}
+
 	// Extract ResolvedContent
 	var content []resolver.ResolvedContent
 	for _, r := range resolved {
@@ -306,6 +426,12 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 	homeDir := filepath.Join(tmpDir, "home")
 	if err := migration.WriteSchemaVersion(homeDir, migration.CurrentSchemaVersion); err != nil {
 		return fmt.Errorf("stamping schema version: %w", err)
+	}
+
+	// Bake the include cache, so included sensors are read from what the image
+	// was built from and nothing is fetched at run time.
+	if err := bakeIncludeCache(p, append(append([]harness.Include{}, p.Includes...), profileIncs...), homeDir, imageHarnessDir(p.Name)); err != nil {
+		return err
 	}
 
 	// Determine default vendor

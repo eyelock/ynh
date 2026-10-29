@@ -466,6 +466,10 @@ order to discover what it is gating on fails when GitHub is slow, and the
 sensors it could not fetch would silently not run, which is the worst outcome
 available. A cache miss is an error naming the fix (`ynh update`), not a fetch.
 
+A harness image carries its includes in that cache, baked at build time, so the
+same rule holds inside the container with no network and no credentials. See
+[Includes in the image](docker.md#includes-in-the-image).
+
 An include that declares no manifest contributes no sensors and is not an
 error: shipping artifacts by directory layout is a legitimate thing for an
 include to do.

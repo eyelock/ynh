@@ -660,6 +660,12 @@ func NormalizeGitURL(url string) string {
 	return "https://" + url + ".git"
 }
 
+// CacheEntryName returns the name of the cache directory for (gitURL, ref),
+// the key LookupCache computes. gitURL is the URL after GitSourceURL has made a
+// relative source absolute. Exported so `ynh image` can bake a cache entry under
+// the name the image's own lookup will compute.
+func CacheEntryName(gitURL, ref string) string { return repoDirName(gitURL, ref) }
+
 // repoDirName creates a deterministic cache directory name from a Git URL and ref.
 // Format: org--repo--<hash> with double hyphens for parsibility.
 // Including the ref ensures that the same repo at different versions gets separate cache entries.

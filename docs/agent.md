@@ -92,6 +92,11 @@ pin, and it reaches only the hosts the includes name, so **a lane's egress must
 allow those hosts**. A fetch that fails stops the run before any worker starts,
 with exit 1 and an error that begins `fetching includes` and names the include.
 
+An include already in the cache is used as it is, as `ynh run` uses it: a run
+does not pull newer commits from its origin, so a run is pinned to what the
+cache holds until `ynh update` refreshes it. The one exception is the harness's
+own repo, which is refreshed on every run.
+
 `ynh check` and `ynh sensors` never fetch. On a cold cache they refuse and name
 `ynh update`. The loop runs `ynh check` between turns, which finds the cache
 warm because the run fetched first.

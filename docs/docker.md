@@ -77,6 +77,31 @@ The same rule applies to `ynh install` from a local path and to `ynh update`.
 
 The harness image pre-assembles vendor layouts for all four vendors (Claude, Codex, Cursor and Copilot) at build time. At runtime, `ynh run` detects the pre-assembled layout and skips assembly entirely.
 
+### Includes in the image
+
+The image carries the include cache. Every git include the harness resolves, and
+every include a profile adds, is copied into `~/.ynh/cache/` inside the image,
+so `ynh check`, `ynh sensors` and `ynh agent run` read included sensors from
+what the image was built from. Nothing is fetched at run time, so a private
+include needs no credentials in the container, and the `dev.ynh.harness.sha`
+label pins the included sensors as well as the harness's own.
+
+Each entry is stored under the key the image itself will look up, not the one
+the build used. For a remote URL the two are the same. A relative source
+(`"git": "../.."` or `"."`) is joined to the harness directory, which in the
+image is `/home/ynh/.ynh/harnesses/local--<name>`, so it is baked under that
+path's key.
+
+An include with `"sensors": false` is baked too: its artifacts are already
+assembled, but a run still resolves every include through the cache, and a miss
+is a network fetch. Delegates are not baked. They are assembled into the vendor
+layouts at build time and nothing reads them from the cache afterwards. An
+absolute `local` include is not baked either: it names a path on the build
+machine, which the image does not have.
+
+Each baked include is a shallow clone, with its `.git`, so includes add to the
+size of the image.
+
 ### Running Harness Images
 
 ```bash
