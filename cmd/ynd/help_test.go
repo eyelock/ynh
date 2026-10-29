@@ -225,3 +225,47 @@ func TestEveryDispatchedCommandAppearsInUsage(t *testing.T) {
 		}
 	}
 }
+
+// TestLintHelpFlagsAreAccepted guards #545: `ynd lint --help` advertised -n,
+// which the parser rejected. Lint never rewrites (ynd fmt is the fixer), so the
+// flag has no meaning and must not be listed. Every flag the help does list
+// must be one the parser accepts.
+func TestLintHelpFlagsAreAccepted(t *testing.T) {
+	text := commandHelp["lint"]
+
+	for _, line := range strings.Split(text, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "-n") {
+			t.Errorf("lint help must not list -n: %q", line)
+		}
+	}
+
+	flagRe := regexp.MustCompile(`^  (-[A-Za-z], )?(--?[A-Za-z][A-Za-z-]*)( <[a-z]+>)?\s`)
+	inFlags := false
+	checked := 0
+	for _, line := range strings.Split(text, "\n") {
+		if line == "Flags:" {
+			inFlags = true
+			continue
+		}
+		if !inFlags {
+			continue
+		}
+		m := flagRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		args := []string{m[2]}
+		if m[3] != "" {
+			args = append(args, t.TempDir())
+		}
+		t.Chdir(t.TempDir())
+		err := cmdLint(args)
+		if err != nil && strings.Contains(err.Error(), "unknown flag") {
+			t.Errorf("lint help lists %s but the parser rejects it: %v", m[2], err)
+		}
+		checked++
+	}
+	if checked == 0 {
+		t.Fatal("found no flags in lint help; the test parser is wrong, not the code")
+	}
+}
