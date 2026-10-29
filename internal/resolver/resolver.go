@@ -143,8 +143,8 @@ type chainLink struct {
 // includeResolver carries what resolving one harness's includes shares across
 // the recursion into included harnesses.
 type includeResolver struct {
-	cfg     *config.Config
-	resolve sourceResolver
+	cfg    *config.Config
+	source sourceResolver
 	// done holds the identity of every harness include already resolved, so a
 	// harness reached by two routes (a diamond) contributes once.
 	done map[string]bool
@@ -162,7 +162,7 @@ type sourceResolver func(gs harness.GitSource, harnessDir string) (string, *Repo
 // result lists dependencies before the harness that includes them, and p's
 // own includes in order, so that later content keeps overriding earlier.
 func resolveWith(p *harness.Harness, cfg *config.Config, resolve sourceResolver) ([]ResolveResult, error) {
-	r := &includeResolver{cfg: cfg, resolve: resolve, done: map[string]bool{}}
+	r := &includeResolver{cfg: cfg, source: resolve, done: map[string]bool{}}
 	chain := []chainLink{{id: dirIdentity(p.Dir), label: "root"}}
 	return r.resolve(p, chain, "")
 }
@@ -282,7 +282,7 @@ func (r *includeResolver) resolveOne(p *harness.Harness, inc harness.Include) (R
 		}
 	}
 
-	basePath, repoResult, err := r.resolve(inc.GitSource, p.Dir)
+	basePath, repoResult, err := r.source(inc.GitSource, p.Dir)
 	if err != nil {
 		return ResolveResult{}, "", err
 	}
