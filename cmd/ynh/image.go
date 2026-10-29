@@ -365,7 +365,7 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 
 	// Copy harness source into build context
 	harnessDst := filepath.Join(tmpDir, "harness")
-	if err := assembler.CopyDir(harnessSrcDir, harnessDst); err != nil {
+	if err := assembler.CopyTree(harnessSrcDir, harnessDst); err != nil {
 		return fmt.Errorf("copying harness source: %w", err)
 	}
 

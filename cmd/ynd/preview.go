@@ -134,7 +134,7 @@ func cmdPreview(args []string) error {
 		if err := os.MkdirAll(outputDir, 0o755); err != nil {
 			return fmt.Errorf("creating output dir: %w", err)
 		}
-		if err := assembler.CopyDir(tmpDir, outputDir); err != nil {
+		if err := assembler.CopyDirDeref(tmpDir, outputDir); err != nil {
 			return fmt.Errorf("copying to output: %w", err)
 		}
 		fmt.Printf("Preview written to %s\n", outputDir)
@@ -330,7 +330,7 @@ func loadHarnessForPreview(dir string) (*harness.Harness, string, error) {
 		}
 	}()
 
-	if err := assembler.CopyDir(dir, tmpDir); err != nil {
+	if err := assembler.CopyDirDeref(dir, tmpDir); err != nil {
 		return nil, "", fmt.Errorf("copying source: %w", err)
 	}
 
