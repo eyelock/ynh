@@ -63,6 +63,17 @@ type SessionBinder interface {
 	LaunchWithSessionID(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error
 }
 
+// SessionPluginNamer is an optional capability for vendors that load the run
+// directory's vendor folder as a plugin and name it from a manifest inside
+// that folder. Claude does: `--plugin-dir <run>/.claude`, and a plugin with no
+// manifest of its own is named after its directory (".claude"), which turned
+// every MCP tool into plugin:.claude:<server>. Check with a type assertion.
+type SessionPluginNamer interface {
+	// GenerateSessionPluginManifest returns the manifest, keyed by its path
+	// relative to runDir, that gives the loaded plugin the harness's name.
+	GenerateSessionPluginManifest(hj *plugin.HarnessJSON, runDir string) (map[string][]byte, error)
+}
+
 // SymlinkEntry records a single symlink created during Install.
 type SymlinkEntry struct {
 	Target string `json:"target"` // Where the symlink points (staging dir)

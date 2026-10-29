@@ -234,7 +234,7 @@ Isolation is a launch setting. It changes how `ynh run` and `ynh agent run` star
 
 The warning is one line on stderr, prefixed `warning:`, and never fails the run. `ynh agent run` applies isolation on the Claude backend only and warns on the others.
 
-**Tool names change on Claude Code.** Without isolation a harness's servers are named `plugin:<harness>:<server>`; with it they are named `<server>`. A permission rule or hook matcher that names a tool by its server prefix must use the name for the mode the harness runs in.
+**Tool names change on Claude Code.** Without isolation a harness's servers are named `plugin:<harness>:<server>` (`ynh run` writes a plugin manifest carrying the harness's name into the plugin directory, because Claude Code names a plugin without one after its directory); with it they are named `<server>`. A permission rule or hook matcher that names a tool by its server prefix must use the name for the mode the harness runs in.
 
 ## Root-Harness-Only Rule
 
