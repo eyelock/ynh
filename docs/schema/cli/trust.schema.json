@@ -62,6 +62,10 @@
         "command": {
           "type": "string",
           "description": "The shell command, as declared and unexpanded."
+        },
+        "source": {
+          "type": "string",
+          "description": "The included harness that supplied the hook, which consented to it with hooks: true on its include. A \"./\" script is shown as placed in the session, under scripts/_include. Absent for a hook of the harness itself."
         }
       },
       "required": [
@@ -184,7 +188,7 @@
         "items": {
           "$ref": "#/$defs/Hook"
         },
-        "description": "Hook commands as resolved for a run. Omitted when there are none. Sorted by profile, event, then declaration order."
+        "description": "Hook commands as resolved for a run, including those of included harnesses that were given consent to run them. Omitted when there are none. Sorted by profile, event, then declaration order."
       },
       "mcp_servers": {
         "type": "array",

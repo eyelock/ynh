@@ -347,7 +347,10 @@ ynh trust accept <harness>   # record that you have read them
   include contributes (see [Sensors from an include](#sensors-from-an-include)).
   An included sensor shows the include it came from and the directory
   `$YNH_HARNESS_DIR` will be when it runs, which is the publishing harness.
-- **Hooks**: each hook command, with its event and matcher.
+- **Hooks**: each hook command, with its event and matcher. Hooks of an
+  included harness are covered, with the include that supplied them, when its
+  include consented with `"hooks": true`; without consent they do not run and
+  are not listed.
 - **MCP servers**: the `command` with its `args`, or the `url`, plus `cwd`, and
   the names of the `env` entries and `headers`.
 

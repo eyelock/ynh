@@ -17,6 +17,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/plugin"
@@ -147,6 +148,9 @@ type hookExec struct {
 	Event   string `json:"event"`
 	Matcher string `json:"matcher,omitempty"`
 	Command string `json:"command"`
+	// Source names the included harness that supplied the hook, which has to
+	// have consented to it with "hooks": true. Empty for the harness's own.
+	Source string `json:"source,omitempty"`
 }
 
 // mcpValue is an env or header entry of an MCP server. The raw value feeds the
@@ -215,42 +219,60 @@ type runView struct {
 	// MCPSources maps each MCP server of H to the harness that supplied it
 	// (harness.MCPSourceRoot, or the include's display name).
 	MCPSources map[string]string
+	// HookSources maps each event of H.Hooks to the include chain that
+	// supplied each entry, "" for the harness's own.
+	HookSources map[string][]string
 }
 
 // runViews is the single place that says which resolved views of a harness
 // can execute, and it resolves them the way a run does: the profile merge,
 // then the include merge, lookup-only. Sensors from includes arrive in
-// H.Sensors (resolver.WithIncludedSensors) and MCP servers, from every harness
-// the includes reach, in H.MCPServers (harness.ComposeMCPServersRaw), with
-// their sources in MCPSources. Hooks from includes (#565) are folded into H
-// here too when that lands, and collectHooks, collectMCP, the digest, the
-// listing and `trust show` follow.
+// H.Sensors (resolver.WithIncludedSensors); MCP servers, from every harness
+// the includes reach, in H.MCPServers (harness.ComposeMCPServersRaw); and the
+// hooks of included harnesses whose includes consented to them
+// ("hooks": true) in H.Hooks (assembler.ComposeHooks), each with its source.
+// collectSensors, collectHooks, collectMCP, the digest, the listing and
+// `trust show` follow from H.
 //
 // Anything that cannot be resolved is returned as a problem rather than
 // skipped, so the caller can refuse to call a partial set complete.
+// runSources is where the servers and hooks of a view came from.
+type runSources struct {
+	mcp   map[string]string
+	hooks map[string][]string
+}
+
 func runViews(p *harness.Harness) (views []runView, problems []string) {
 	// fold returns a copy of h carrying what the includes bring under sel: the
 	// MCP servers of every harness they reach, composed as a run composes them,
 	// with their sources. h itself is not changed.
-	fold := func(h *harness.Harness, sel harness.Selection) (*harness.Harness, map[string]string, []resolver.ResolveResult, error) {
-		sources := map[string]string{}
+	fold := func(h *harness.Harness, sel harness.Selection) (*harness.Harness, runSources, []resolver.ResolveResult, error) {
+		src := runSources{mcp: map[string]string{}}
 		if len(h.Includes) == 0 {
-			return h, sources, nil, nil
+			return h, src, nil, nil
 		}
 		resolved, err := resolver.ResolveIncludesLocal(h, sel)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("includes: %w", err)
+			return nil, src, nil, fmt.Errorf("includes: %w", err)
 		}
 		servers, provenance, err := harness.ComposeMCPServersRaw(h, resolver.IncludedHarnesses(resolved))
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, src, nil, err
+		}
+		// Hooks of an included harness run only with its include's consent;
+		// ComposeHooks keeps the ones that have it.
+		hs, err := assembler.ComposeHooks(h.Hooks, resolved)
+		if err != nil {
+			return nil, src, nil, err
 		}
 		c := *h
 		c.MCPServers = servers
+		c.Hooks = hs.Hooks
+		src.hooks = hs.Sources
 		for _, pr := range provenance {
-			sources[pr.Server] = pr.Source
+			src.mcp[pr.Server] = pr.Source
 		}
-		return &c, sources, resolved, nil
+		return &c, src, resolved, nil
 	}
 	add := func(profile string, h *harness.Harness) {
 		label := "the harness"
@@ -265,12 +287,12 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 			problems = append(problems, fmt.Sprintf("%s: %v", label, err))
 			return
 		}
-		merged, sources, resolved, err := fold(withSensors, harness.Selection{})
+		merged, src, resolved, err := fold(withSensors, harness.Selection{})
 		if err != nil {
 			problems = append(problems, fmt.Sprintf("%s: %v", label, err))
 			return
 		}
-		views = append(views, runView{Profile: profile, H: merged, MCPSources: sources})
+		views = append(views, runView{Profile: profile, H: merged, MCPSources: src.mcp, HookSources: src.hooks})
 		if profile != "" {
 			return
 		}
@@ -289,7 +311,7 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 					continue
 				}
 				seen[qualified] = true
-				v, vSources, _, err := fold(withSensors, harness.Selection{Included: map[string]string{r.Namespace: name}})
+				v, vSrc, _, err := fold(withSensors, harness.Selection{Included: map[string]string{r.Namespace: name}})
 				var ambiguous *resolver.AmbiguousNamespaceError
 				if errors.As(err, &ambiguous) {
 					// Two harnesses answer to the namespace, so a run cannot
@@ -300,7 +322,7 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 					problems = append(problems, fmt.Sprintf("profile %s: %v", qualified, err))
 					continue
 				}
-				views = append(views, runView{Profile: qualified, H: v, MCPSources: vSources})
+				views = append(views, runView{Profile: qualified, H: v, MCPSources: vSrc.mcp, HookSources: vSrc.hooks})
 			}
 		}
 	}
@@ -360,11 +382,14 @@ func hookKey(h hookExec) string { return h.Event + "\x00" + h.Matcher + "\x00" +
 // lists only entries the harness's own hooks do not already carry: the rest
 // are reviewed once, at the top level, and repeating them per profile would
 // bury what a profile actually adds.
-func collectHooks(profile string, v *harness.Harness, base map[string]bool) []hookExec {
+func collectHooks(profile string, v *harness.Harness, sources map[string][]string, base map[string]bool) []hookExec {
 	var out []hookExec
 	for _, event := range slices.Sorted(maps.Keys(v.Hooks)) {
-		for _, e := range v.Hooks[event] {
+		for i, e := range v.Hooks[event] {
 			h := hookExec{Profile: profile, Event: event, Matcher: e.Matcher, Command: e.Command}
+			if i < len(sources[event]) {
+				h.Source = sources[event][i]
+			}
 			if profile != "" && base[hookKey(h)] {
 				continue
 			}
@@ -422,7 +447,7 @@ func harnessExecutables(p *harness.Harness) trustSet {
 	baseSensors, baseHooks, baseMCP := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, v := range views {
 		set.Sensors = append(set.Sensors, collectSensors(v.Profile, v.H, baseSensors, p.Dir)...)
-		set.Hooks = append(set.Hooks, collectHooks(v.Profile, v.H, baseHooks)...)
+		set.Hooks = append(set.Hooks, collectHooks(v.Profile, v.H, v.HookSources, baseHooks)...)
 		set.MCPServers = append(set.MCPServers, collectMCP(v.Profile, v.H, v.MCPSources, baseMCP)...)
 		if v.Profile != "" {
 			continue
@@ -445,7 +470,7 @@ func harnessExecutables(p *harness.Harness) trustSet {
 func field(w io.Writer, s string) { _, _ = fmt.Fprintf(w, "%d:%s\x00", len(s), s) }
 
 func writeMCP(w io.Writer, m mcpExec) {
-	for _, s := range []string{m.Profile, m.Name, m.Source, m.Transport, m.Command, m.URL, m.Cwd} {
+	for _, s := range []string{m.Profile, m.Name, m.Transport, m.Command, m.URL, m.Cwd} {
 		field(w, s)
 	}
 	field(w, fmt.Sprint(len(m.Args)))
@@ -461,6 +486,12 @@ func writeMCP(w io.Writer, m mcpExec) {
 			field(w, e.Name)
 			field(w, e.raw)
 		}
+	}
+	// Only when set, so a harness without includes keeps the digest an
+	// earlier ynh recorded for it.
+	if m.Source != "" {
+		field(w, "from")
+		field(w, m.Source)
 	}
 }
 
@@ -487,6 +518,12 @@ func executablesDigest(set trustSet) string {
 		field(h, e.Event)
 		field(h, e.Matcher)
 		field(h, e.Command)
+		// Only when set, so a harness without includes keeps the digest an
+		// earlier ynh recorded for it.
+		if e.Source != "" {
+			field(h, "from")
+			field(h, e.Source)
+		}
 	}
 	for _, m := range set.MCPServers {
 		field(h, "mcp_server")
@@ -891,7 +928,7 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 			if h.Matcher != "" {
 				m = " [" + h.Matcher + "]"
 			}
-			_, _ = fmt.Fprintf(w, "  %s%s%s\n    %s\n", h.Event, m, scopeSuffix(h.Profile), h.Command)
+			_, _ = fmt.Fprintf(w, "  %s%s%s%s\n    %s\n", h.Event, m, fromSuffix(h.Source), scopeSuffix(h.Profile), h.Command)
 		}
 	}
 	if len(s.MCPServers) > 0 {

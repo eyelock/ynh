@@ -162,6 +162,10 @@ type HookSet struct {
 	// Inactive holds one warning per included harness that declares hooks
 	// without consent to run them.
 	Inactive []string
+	// Sources runs parallel to Hooks: for each event, the include chain that
+	// supplied each entry, "" for the root's own. Nil when no included harness
+	// contributes.
+	Sources map[string][]string
 	// FromIncludes lists, per event, each included harness's hooks that are
 	// in Hooks, and NotActive those that are not, for a report of where the
 	// hooks came from.
@@ -221,6 +225,7 @@ func ComposeHooks(root map[string][]plugin.HookEntry, resolved []resolver.Resolv
 		shared[r.Namespace]++
 	}
 	merged := make(map[string][]plugin.HookEntry, len(root))
+	hs.Sources = map[string][]string{}
 	hs.Scripts = map[string]ScriptOrigin{}
 	for _, r := range active {
 		dirName := r.Namespace
@@ -245,11 +250,13 @@ func ComposeHooks(root map[string][]plugin.HookEntry, resolved []resolver.Resolv
 					hs.Scripts[placed] = ScriptOrigin{Dir: r.Harness.Dir, Script: script, Source: r.Chain}
 				}
 				merged[event] = append(merged[event], entry)
+				hs.Sources[event] = append(hs.Sources[event], r.Chain)
 			}
 		}
 	}
 	for event, entries := range root {
 		merged[event] = append(merged[event], entries...)
+		hs.Sources[event] = append(hs.Sources[event], make([]string, len(entries))...)
 	}
 	hs.Hooks = merged
 	return hs, nil
