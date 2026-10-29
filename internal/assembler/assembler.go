@@ -165,13 +165,62 @@ func CopyPicked(repoBase string, picked string, targetBaseDir string, artifactDi
 
 	info, err := os.Stat(src)
 	if err != nil {
-		return fmt.Errorf("pick path not found: %s (%w)", picked, err)
+		return fmt.Errorf("pick path not found: %s (%w)%s", picked, err, pickHint(repoBase, picked))
 	}
 
 	if info.IsDir() {
 		return CopyDirDeref(src, filepath.Join(targetBaseDir, targetDir, parts[1]))
 	}
 	return copyArtifactFile(artifactType, src, targetBaseDir, targetDir, parts[1], transform)
+}
+
+// pickMaxDepth bounds how far pickHint looks below the include root. Artifact
+// trees are shallow; a deeper search only finds vendored copies.
+const pickMaxDepth = 6
+
+// pickHint explains a missing pick when the same-named entry exists elsewhere
+// in the include, which is the usual cause: the include's `path` points at the
+// wrong directory. It returns "" when there is nothing useful to say, and
+// otherwise a leading newline followed by where the entry is and, when the
+// pick is a suffix of that location, the --path that would make it resolve.
+func pickHint(repoBase, picked string) string {
+	sep := string(filepath.Separator)
+	base := filepath.Base(filepath.FromSlash(picked))
+	suffix := sep + filepath.FromSlash(picked)
+	var first, suffixed string
+	_ = filepath.WalkDir(repoBase, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		rel, rerr := filepath.Rel(repoBase, p)
+		if rerr != nil || rel == "." {
+			return nil
+		}
+		if d.IsDir() && (d.Name() == ".git" || d.Name() == "node_modules" ||
+			strings.Count(rel, sep) >= pickMaxDepth) {
+			return filepath.SkipDir
+		}
+		if d.Name() != base {
+			return nil
+		}
+		if first == "" {
+			first = rel
+		}
+		if suffixed == "" && strings.HasSuffix(sep+rel, suffix) {
+			suffixed = rel
+		}
+		return nil
+	})
+	if first == "" {
+		return ""
+	}
+	if suffixed != "" {
+		path := strings.TrimPrefix(strings.TrimSuffix(sep+suffixed, suffix), sep)
+		return fmt.Sprintf("\n%q exists at %q inside this include; if the include's path is wrong, run:\n"+
+			"  ynh include update <harness> <url> --path %s", base, filepath.ToSlash(suffixed), filepath.ToSlash(path))
+	}
+	return fmt.Sprintf("\n%q exists at %q inside this include; the pick must be relative to the include's path",
+		base, filepath.ToSlash(first))
 }
 
 // CopyAllArtifacts scans the repo for known artifact type directories and copies them.
