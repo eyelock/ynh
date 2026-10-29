@@ -608,5 +608,10 @@ func mergeSensorOverlay(base plugin.Sensor, overlayJSON []byte) (plugin.Sensor, 
 	// Not serialised, so the round trip above dropped it. An overlay changes
 	// policy, never where the sensor's command and fixture live.
 	result.HarnessDir = base.HarnessDir
+	// Likewise for where the tolerance came from, unless the overlay moved it.
+	result.ToleranceSource = base.ToleranceSource
+	if result.Tolerance != base.Tolerance {
+		result.ToleranceSource = "overlay"
+	}
 	return result, nil
 }

@@ -441,7 +441,7 @@ converted on load.
 
 | Flag | Description |
 |------|-------------|
-| `--dry-run` | List what would be migrated and change nothing. |
+| `-n, --dry-run` | List what would be migrated and change nothing. |
 | `-y, --yes` | Skip the confirmation. Also honoured via `YNH_YES` or `CI`. |
 | `-h, --help` | Show help |
 

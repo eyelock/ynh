@@ -341,9 +341,43 @@ ynh trust show <harness>     # every command it will run, with provenance
 ynh trust accept <harness>   # record that you have read them
 ```
 
-`ynh trust show` prints each `command` and `version_command`, the source and
-commit the harness was installed from, and the environment variables those
-commands inherit that the harness never declared in `env_passthrough`.
+`ynh trust show` prints, grouped by kind:
+
+- **Sensors**: each `command` and `version_command`, including those an
+  include contributes (see [Sensors from an include](#sensors-from-an-include)).
+  An included sensor shows the include it came from and the directory
+  `$YNH_HARNESS_DIR` will be when it runs, which is the publishing harness.
+- **Hooks**: each hook command, with its event and matcher.
+- **MCP servers**: the `command` with its `args`, or the `url`, plus `cwd`, and
+  the names of the `env` entries and `headers`.
+
+Everything is shown as resolved for a run: the harness's own, then whatever
+each profile adds or changes (an entry identical to the harness's own is not
+repeated). Includes contribute their sensors and their MCP servers, the
+latter from every harness the includes reach.
+
+Reading an include never reaches the network, as with `ynh check`. If an
+include is not cached, the set is incomplete, so `ynh trust` reports
+`unavailable` rather than digesting part of it, `ynh trust accept` refuses, and
+`ynh check` warns if you had accepted the harness. `"sensors": false` drops an
+include's sensors but not its MCP servers, so such an include still has to be
+readable.
+
+It also prints the source and commit the harness was installed from, and the
+environment variables those commands inherit that the harness never declared in
+`env_passthrough`.
+
+The digest covers all of it. An `env` or header value can change what runs
+(`NODE_OPTIONS`, `LD_PRELOAD`, `PATH`), so the values are in the digest. They
+are not in the output: a `${VAR}` reference is shown as written, and any other
+value is printed as `(literal, not shown)`, because a literal may be a
+credential. Read the manifest in the harness directory to see one.
+
+**Upgrading.** Until hooks and MCP servers were covered (#577), the digest covered sensor commands only. A harness
+you accepted then shows `changed` once, even if nothing in it has, and says so.
+That is intended: you were never shown its hooks and MCP servers, so the old
+acceptance does not cover them. Review them with `ynh trust show`, then
+`ynh trust accept`. Old records are never accepted on your behalf.
 
 | State | Meaning |
 |-------|---------|
@@ -351,6 +385,7 @@ commands inherit that the harness never declared in `env_passthrough`.
 | `accepted` | The commands match what you accepted. |
 | `changed` | The commands differ from what you accepted. |
 | `no-commands` | The harness executes nothing. Most harnesses. |
+| `unavailable` | What the harness executes could not be read in full, because an include is not in the cache. Nothing can be accepted; run `ynh update`. |
 
 **This reports; it does not block.** Nothing refuses to run because a harness is
 unreviewed, and `ynh check` warns only on `changed`, never on `unreviewed`: a
@@ -410,6 +445,10 @@ So an included sensor's **observation** belongs to whoever published it, and
 its **severity** belongs to whoever adopted it. Anything more than that is a
 fork, and forking a set is a reasonable thing to do.
 
+A profile can change the tolerance too, for one context, and reaches the
+harness's own sensors as well as included ones: see
+[Profiles](#profiles-change-severity-not-observation).
+
 ### Where an included sensor looks
 
 An included sensor's `$YNH_HARNESS_DIR` and `reference.path` resolve against
@@ -461,6 +500,10 @@ Reading an included set never reaches the network. A gate that fetches in
 order to discover what it is gating on fails when GitHub is slow, and the
 sensors it could not fetch would silently not run, which is the worst outcome
 available. A cache miss is an error naming the fix (`ynh update`), not a fetch.
+
+A harness image carries its includes in that cache, baked at build time, so the
+same rule holds inside the container with no network and no credentials. See
+[Includes in the image](docker.md#includes-in-the-image).
 
 An include that declares no manifest contributes no sensors and is not an
 error: shipping artifacts by directory layout is a legitimate thing for an
@@ -847,6 +890,9 @@ alternative; refusing the combination is the smaller and honest one. A loop
 driver of your own that does resolve focus sensors can still pick its done-check
 by name; it just cannot use the `convergence-verifier` role for it.
 
+A verifier's tolerance is not open to a profile: a profile's `sensor_overrides`
+may not name one.
+
 Use a command source that exits non-zero until the work is done. A
 `github_status` or `github_check` source also returns a verdict and is
 accepted.
@@ -866,6 +912,8 @@ accepted.
 - `category`, if set, is one of the three Fowler enum values.
 - `role`, if set, is one of `regular`, `convergence-verifier`, `stuck-recovery`.
 - A `convergence-verifier` does not have a `files` or `focus` source.
+- A profile's `sensor_overrides` sets a valid `tolerance` and no `ratchet`, and names no
+  convergence-verifier of the harness; see [Profiles](#profiles-change-severity-not-observation).
 - Unknown fields inside a sensor are rejected.
 
 Errors are prefixed with the sensor name:
@@ -881,9 +929,75 @@ sensor "security-scan": source.focus references undefined focus "infer-vulns"
 
 An included harness's sensors travel with it; see [Sensors from an include](#sensors-from-an-include). Only the root's direct includes contribute sensors: an include's own includes contribute their skills, agents, rules, commands and [MCP servers](mcp.md#servers-from-included-harnesses), but not their sensors. Set `"sensors": false` on an include to take its files without its gate.
 
-### Profiles — out of scope for v1
+### Profiles: change severity, not observation
 
-Profiles do **not** override or add sensors in v1. Sensors are observation declarations, not runtime context. If a real use case emerges, it will be revisited in a follow-up.
+A profile can change a sensor's **tolerance** while it is selected. It cannot
+add a sensor, change what one observes, or touch its ratchet. The use case: a
+sensor that blocks at a desk but must only advise in a containerised factory
+run, where the thing it checks (a status file written by a later stage, say)
+cannot be fresh yet.
+
+```json
+{
+  "sensors": {
+    "e2e-status": {
+      "source": {"files": ["reports/e2e-status.json"]},
+      "output": {"format": "json"}
+    }
+  },
+  "profiles": {
+    "factory": {
+      "sensor_overrides": {
+        "e2e-status": {"tolerance": "advisory"}
+      }
+    }
+  }
+}
+```
+
+`ynh check local/demo` still blocks on a stale `e2e-status`.
+`ynh check local/demo --profile factory` reports it as
+`(advisory, profile factory)` and exits 0. `ynh agent run --profile factory`
+(or `--focus` naming a focus bound to that profile) passes the profile to the
+gate it runs between turns, so the loop and a human running the same command
+see the same severity.
+
+**Scope.** Unlike an include-level `sensor_overrides`, which refuses the
+harness's own sensors, a profile override applies to both the harness's own
+sensors and included ones. A profile is a context, not an edit: the declaration
+stays as written and the profile changes how it is judged.
+
+**Order.** Declaration, then the harness's include-level `sensor_overrides`, then
+the active profile's. The last layer to change the tolerance is the one named in
+the output.
+
+**Refusals.** Each names the profile and the sensor:
+
+| Situation | Why |
+|---|---|
+| The override names a sensor nothing declares, after includes are merged (an include with `"sensors": false` contributes none) | Same as for include-level overrides: a renamed sensor would silently stop being softened and the gate would start blocking for reasons nobody changed |
+| The override sets `ratchet` | The ratchet decides how the committed baseline is recorded, and the baseline belongs to the repository, not to a context |
+| The override names a sensor with `role: convergence-verifier` (or one given to `ynh agent run` as `--convergence-sensor`) | A verifier decides when a run is done, so no context may change how seriously its verdict is taken. Even `blocking`, which would soften nothing, is refused: an entry that cannot do anything is noise a reader must reason about, and one rule is easier to state than two |
+
+`ynd validate` reports what the manifest alone decides: a `ratchet`, a bad
+tolerance, an override of one of the harness's own verifiers, and a sensor no
+one declares when the harness has no includes (in the base or in that profile)
+that could bring it. A sensor that might come from an include is checked when
+the profile is used, by `ynh check --profile` and `ynh agent run`.
+
+**Never silent.** A tolerance that is not the declared one is marked in text
+output on every sensor that has one, passing or failing, as
+`(advisory, profile factory)`. In JSON each sensor result carries an optional
+`tolerance_source` (`include`, `profile` or `overlay`; omitted means declared)
+and the report names the profile in a top-level `profile` field.
+
+**`--profile` on `ynh check` is a flag only.** It does not read `YNH_PROFILE`,
+which `ynh run` does: an environment variable left in a shell would quietly make
+every interactive check advisory.
+
+**`--update-baseline` with `--profile` is allowed.** Recording writes a failing
+sensor's output whatever its tolerance, and a profile cannot change the ratchet,
+so it records exactly what the plain run records.
 
 ### Focus — referenced, not modified
 
@@ -1159,7 +1273,12 @@ Runs every declared sensor and returns a gate verdict.
 ynh check local/demo                      # run all sensors, text report
 ynh check local/demo --only fmt,vet       # filter — the edit-time loop
 ynh check local/demo --format json        # machine-readable, for CI and consumers
+ynh check local/demo --profile factory    # apply the profile's sensor_overrides
 ```
+
+`--profile <name>` applies that profile's
+[`sensor_overrides`](#profiles-change-severity-not-observation). An unknown
+profile is an error (exit 2). It is flag only; `YNH_PROFILE` is not read.
 
 `--sensor-overlay '{"test":{"source":{"command":"go test -short ./..."}}}'`
 substitutes a command for a declared sensor for one run. It exists so an inner

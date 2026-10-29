@@ -111,14 +111,38 @@ func (c *Codex) ResolveLastSession(cwd string, notBefore time.Time) (string, err
 // than a flag, so it is prepended the same way LaunchNonInteractive prepends
 // `exec`. A bare `resume` is never emitted: Codex documents it as
 // "picker by default; use --last to continue the most recent".
-func (c *Codex) LaunchResume(configPath, sessionID string, extraArgs []string) error {
+//
+// A prompt is sent only one-shot, through `codex exec resume`, whose PROMPT is
+// documented as an "optional follow-up instruction sent immediately after
+// resuming" (learn.chatgpt.com/docs/developer-commands). The interactive
+// `codex resume` documents no prompt argument, so that combination is refused
+// rather than guessed at.
+func (c *Codex) LaunchResume(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
+	args, err := codexResumeArgs(sessionID, prompt, interactive, extraArgs)
+	if err != nil {
+		return err
+	}
+	return launchCodex(configPath, args)
+}
+
+func codexResumeArgs(sessionID, prompt string, interactive bool, extraArgs []string) ([]string, error) {
+	if prompt != "" && interactive {
+		return nil, ErrResumePromptNotSupported
+	}
 	args := []string{"resume"}
+	if prompt != "" {
+		args = []string{"exec", "resume"}
+	}
 	if sessionID != "" {
 		args = append(args, sessionID)
 	} else {
 		args = append(args, "--last")
 	}
-	return launchCodex(configPath, append(args, extraArgs...))
+	args = append(args, extraArgs...)
+	if prompt != "" {
+		args = append(args, prompt)
+	}
+	return args, nil
 }
 
 // IsolateMCP cannot isolate on Codex: ynh knows no way to keep the user's

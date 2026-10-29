@@ -505,6 +505,47 @@ func TestClaudeIsolateMCP(t *testing.T) {
 	}
 }
 
+func TestClaudeSessionExists(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cwd := t.TempDir()
+	dir := filepath.Join(home, ".claude", "projects", claudeProjectSlug(cwd))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "abc.jsonl"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &Claude{}
+	for id, want := range map[string]bool{"abc": true, "nope": false, "": false, "..": false, "../abc": false} {
+		if got := c.SessionExists(cwd, id); got != want {
+			t.Errorf("SessionExists(%q) = %v, want %v", id, got, want)
+		}
+	}
+}
+
+func TestClaudeSessionIDArgs(t *testing.T) {
+	tests := []struct {
+		name        string
+		prompt      string
+		interactive bool
+		wantInitial string
+		wantArgs    []string
+	}{
+		{"no prompt", "", false, "", []string{"--session-id", "u", "--x"}},
+		{"one-shot", "hi", false, "", []string{"-p", "hi", "--session-id", "u", "--x"}},
+		{"interactive", "hi", true, "hi", []string{"--session-id", "u", "--x"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initial, args := claudeSessionIDArgs("u", tt.prompt, tt.interactive, []string{"--x"})
+			if initial != tt.wantInitial || !reflect.DeepEqual(args, tt.wantArgs) {
+				t.Errorf("got %q %q", initial, args)
+			}
+		})
+	}
+}
+
 // Isolation arguments ride after a positional prompt and a non-interactive -p
 // prompt: the "=" spelling keeps variadic --mcp-config from swallowing them,
 // and without isolation the argv is unchanged.

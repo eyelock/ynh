@@ -154,7 +154,7 @@ rm -rf /tmp/ynh-tutorial
 - ynh generates vendor-native agent files from delegate harnesses at runtime
 - Agent files inline the delegate's instructions, rules, and skill list
 - Delegate repos are fetched at install time and cached — `ynh run` works offline
-- Use `ynh update` to refresh cached delegate repos
+- Use `ynh update` to refresh cached delegate repos (a delegate in the harness's own repo, `"git": "."`, is refreshed on every run)
 
 ## Next
 

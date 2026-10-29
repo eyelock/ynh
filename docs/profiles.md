@@ -95,7 +95,9 @@ Profiles are selected through a flag or environment variable:
 | `YNH_PROFILE` env var | `YNH_PROFILE=ci ynh run` | Middle |
 | _(none)_ | `ynh run` | Lowest — uses top-level values |
 
-The `--profile` flag is supported on `ynh run`, `ynd preview`, `ynd diff`, and `ynd export`. It can be combined with the `--harness` flag for explicit harness source selection.
+The `--profile` flag is supported on `ynh run`, `ynh check`, `ynh agent run`, `ynd preview`, `ynd diff`, and `ynd export`. It can be combined with the `--harness` flag for explicit harness source selection.
+
+`ynh check` is the exception to the environment variable: it takes `--profile` only.
 
 When both the flag and the environment variable are set, the flag wins. When neither is set, the top-level `hooks` and `mcp_servers` are used as-is.
 
@@ -157,9 +159,27 @@ with no profiles says `(the harness declares no profiles)` instead.
 
 This is intentional — a typo in a CI pipeline should fail loudly rather than silently falling back to defaults.
 
+## Sensor Overrides
+
+A profile can change the `tolerance` of sensors, the harness's own and included ones, while it is selected:
+
+```json
+{
+  "profiles": {
+    "factory": {
+      "sensor_overrides": {"e2e-status": {"tolerance": "advisory"}}
+    }
+  }
+}
+```
+
+Apply it with `ynh check <harness> --profile factory`, or with `ynh agent run --profile factory`, which hands the profile to its gate. Tolerance only: a `ratchet` is refused, as is any override of a convergence verifier and any sensor nothing declares. The output marks every sensor whose severity the profile changed. See [Sensors](sensors.md#profiles-change-severity-not-observation) for the rules and the order against include-level overrides.
+
+`ynh check` takes the profile from `--profile` only. It ignores `YNH_PROFILE`, because a profile there can soften a gate.
+
 ## Scope
 
-Profiles can override or extend three fields:
+Profiles can override or extend these fields:
 
 | Field | Profile behaviour |
 |-------|----------------------|
@@ -167,6 +187,7 @@ Profiles can override or extend three fields:
 | `mcp_servers` | Deep merge (null removes) |
 | `mcp_isolation` | Replace when set, either way; inherited when absent |
 | `includes` | Append (profile entries added after base entries) |
+| `sensor_overrides` | Per-sensor tolerance change (no ratchet; see [Sensor Overrides](#sensor-overrides)) |
 | `name`, `version`, `description` | Fixed — identity fields |
 | `delegates_to` | Fixed — composition field |
 | `default_vendor` | Fixed |
@@ -189,7 +210,9 @@ Validation runs across all profiles in one pass, reporting errors with the profi
 Error: profile "ci": hooks.before_tool[0]: missing "command" field
 ```
 
-A profile cannot override or add sensors — sensors are observation declarations, not runtime context, and live only at the top level. An [inline focus inside a sensor](sensors.md#focus) can name a profile, but the sensor itself is profile-independent.
+A profile's `sensor_overrides` are checked too: tolerance only, no `ratchet`, no convergence verifier, and a sensor must exist (see [Sensors](sensors.md#profiles-change-severity-not-observation)).
+
+A profile cannot add sensors or change what one observes, only its severity. An [inline focus inside a sensor](sensors.md#focus) can name a profile, but the sensor's source is profile-independent.
 
 ## CLI Editing
 

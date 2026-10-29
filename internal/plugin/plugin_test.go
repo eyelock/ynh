@@ -744,3 +744,28 @@ func TestHarnessJSON_MarshalWithoutRemovalsKeepsFieldOrder(t *testing.T) {
 		t.Errorf("got %s, want %s", out, want)
 	}
 }
+
+func TestValidateProfileSensorOverrides(t *testing.T) {
+	cases := []struct {
+		name string
+		in   map[string]SensorOverride
+		want string // "" means valid
+	}{
+		{"tolerance", map[string]SensorOverride{"s": {Tolerance: "advisory"}}, ""},
+		{"ratchet", map[string]SensorOverride{"s": {Tolerance: "advisory", Ratchet: "count"}}, "ratchet cannot be set by a profile"},
+		{"bad tolerance", map[string]SensorOverride{"s": {Tolerance: "loud"}}, "must be one of"},
+		{"empty", map[string]SensorOverride{"s": {}}, "tolerance is required"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			issues := ValidateProfiles(map[string]Profile{"factory": {SensorOverrides: c.in}})
+			joined := strings.Join(issues, "\n")
+			if c.want == "" && len(issues) != 0 {
+				t.Fatalf("unexpected: %v", issues)
+			}
+			if c.want != "" && (!strings.Contains(joined, c.want) || !strings.Contains(joined, `profile "factory"`)) {
+				t.Errorf("issues %q should contain %q and the profile", joined, c.want)
+			}
+		})
+	}
+}
