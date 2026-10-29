@@ -102,6 +102,24 @@ func newIncludeMeta(source string, opts AddOptions) plugin.IncludeMeta {
 	return m
 }
 
+// ProfileIncludeSources lists the sources of the includes of one profile of the
+// harness at dir, in declaration order.
+func ProfileIncludeSources(dir, profile string) ([]string, error) {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return nil, err
+	}
+	p, ok := hj.Profiles[profile]
+	if !ok {
+		return nil, fmt.Errorf("profile %q not found in harness %q", profile, hj.Name)
+	}
+	out := make([]string, len(p.Includes))
+	for i, inc := range p.Includes {
+		out[i] = includeSource(inc)
+	}
+	return out, nil
+}
+
 // includeSource is what an include is named by on the command line: its local
 // path when it has one, otherwise its Git URL.
 func includeSource(m plugin.IncludeMeta) string {
