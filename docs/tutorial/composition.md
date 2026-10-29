@@ -612,7 +612,7 @@ rm -rf /tmp/ynh-tutorial
 - **Mixing sources:** Combine your own skills, third-party skills, local sibling dirs, and embedded skills in one harness
 - **Offline-ready:** All includes are fetched at install time — `ynh run` works offline
 - `ref` pins to branches, tags, or commits
-- `ynh update` refreshes cached repos
+- `ynh update` refreshes cached repos (an include from the harness's own repo, `"git": "."`, is refreshed on every run)
 - `allowed_remote_sources` restricts which sources are permitted, local paths included (enforced at both install and run time)
 
 ## Next

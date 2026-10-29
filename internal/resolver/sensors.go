@@ -39,11 +39,16 @@ type IncludedSensor struct {
 // all see the same set. It is not done in harness.LoadDir because LoadDir has
 // no business reaching for includes: `ynh ls` should not pay for it.
 func WithIncludedSensors(h *harness.Harness) (*harness.Harness, error) {
-	if len(h.Includes) == 0 && len(h.SensorOverrides) == 0 {
+	if len(h.Includes) == 0 && len(h.SensorOverrides) == 0 && len(h.ProfileSensorOverrides) == 0 {
 		return h, nil
 	}
 	merged, err := MergeIncludedSensors(h, h.SensorOverrides)
 	if err != nil {
+		return nil, err
+	}
+	// Last, so the order is declaration, then the harness's include-level
+	// overrides, then the active profile's.
+	if err := applyProfileSensorOverrides(merged, h.ActiveProfile, h.ProfileSensorOverrides); err != nil {
 		return nil, err
 	}
 	h.Sensors = merged
@@ -91,6 +96,7 @@ func MergeIncludedSensors(p *harness.Harness, overrides map[string]plugin.Sensor
 		// The sensor resolves its command and fixture against the harness
 		// that published it, not the consumer.
 		in.Sensor.HarnessDir = in.Dir
+		in.Sensor.Origin = in.Source
 		merged[in.Name] = in.Sensor
 		origin[in.Name] = in.Source
 	}
@@ -113,6 +119,9 @@ func MergeIncludedSensors(p *harness.Harness, overrides map[string]plugin.Sensor
 			if !plugin.ValidSensorTolerances[ov.Tolerance] {
 				return nil, fmt.Errorf("override for %q: tolerance %q must be one of blocking, advisory, report", name, ov.Tolerance)
 			}
+			if ov.Tolerance != s.EffectiveTolerance() {
+				s.ToleranceSource = "include"
+			}
 			s.Tolerance = ov.Tolerance
 		}
 		if ov.Ratchet != "" {
@@ -122,6 +131,58 @@ func MergeIncludedSensors(p *harness.Harness, overrides map[string]plugin.Sensor
 	}
 
 	return merged, nil
+}
+
+// applyProfileSensorOverrides applies the active profile's sensor_overrides to
+// the merged set, the harness's own sensors and included ones alike. Unlike an
+// include-level override, which refuses the harness's own sensors because they
+// can be edited directly, a profile is a context and the declaration must stay
+// as written.
+//
+// Three refusals, each naming the profile and the sensor:
+//   - a sensor nothing declares. Same reasoning as the include-level rule: a
+//     renamed sensor would stop being softened and the gate would start
+//     blocking for reasons nobody changed;
+//   - a ratchet, which is the baseline's business and the repository's;
+//   - any override of a convergence verifier. A verifier decides when a run is
+//     done, so no context may change how seriously its verdict is taken.
+//     Refusing "blocking" too, which would soften nothing, is deliberate: an
+//     entry that cannot do anything is noise a reader must reason about, and
+//     there is one rule to state rather than two.
+//
+// The map is walked in sorted order so the same manifest reports the same
+// refusal every run.
+func applyProfileSensorOverrides(merged map[string]plugin.Sensor, profile string, overrides map[string]plugin.SensorOverride) error {
+	names := make([]string, 0, len(overrides))
+	for n := range overrides {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		ov := overrides[name]
+		s, ok := merged[name]
+		if !ok {
+			return fmt.Errorf("profile %q: sensor_overrides names sensor %q, which neither this harness nor any include declares", profile, name)
+		}
+		if s.Role == "convergence-verifier" {
+			return fmt.Errorf("profile %q: sensor_overrides names %q, a convergence verifier: it decides when a run is done, so a profile may not change its tolerance", profile, name)
+		}
+		if ov.Ratchet != "" {
+			return fmt.Errorf("profile %q: sensor_overrides for %q: %s", profile, name, plugin.ProfileRatchetRefusal)
+		}
+		if ov.Tolerance == "" {
+			return fmt.Errorf("profile %q: sensor_overrides for %q sets no tolerance", profile, name)
+		}
+		if !plugin.ValidSensorTolerances[ov.Tolerance] {
+			return fmt.Errorf("profile %q: sensor_overrides for %q: tolerance %q must be one of blocking, advisory, report", profile, name, ov.Tolerance)
+		}
+		if ov.Tolerance != s.EffectiveTolerance() {
+			s.ToleranceSource = "profile"
+		}
+		s.Tolerance = ov.Tolerance
+		merged[name] = s
+	}
+	return nil
 }
 
 // collectIncludedSensors reads the sensors declared by each include.
@@ -171,7 +232,10 @@ func lookupOnlyRepo(gitURL, ref string) (RepoResult, error) {
 
 // includeBase resolves one include to a directory on disk without touching the
 // network. A run fetches its includes before it merges sensors, so by then
-// the cache is warm; `ynh check` and `ynh sensors` never fetch.
+// the cache is warm; `ynh check` and `ynh sensors` never fetch from a remote.
+// The one exception is the harness's own repo (IsOwnRepoSource): it is on
+// disk, so it is refreshed here too, and a sensor committed to it is seen
+// without an update.
 func includeBase(p *harness.Harness, inc harness.Include) (base, source string, err error) {
 	if inc.IsLocal() {
 		b, err := resolveLocalSource(inc.GitSource, p.Dir)
@@ -180,11 +244,32 @@ func includeBase(p *harness.Harness, inc harness.Include) (base, source string, 
 		}
 		return b, "include " + inc.Local, nil
 	}
-	b, _, err := resolveGitSourceWith(inc.GitSource, p.Dir, lookupOnlyRepo)
+	fetch := repoFunc(lookupOnlyRepo)
+	if IsOwnRepoSource(inc.GitSource, p.Dir) {
+		fetch = EnsureRepo
+	}
+	b, _, err := resolveGitSourceWith(inc.GitSource, p.Dir, fetch)
 	if err != nil {
 		return "", "", fmt.Errorf(
 			"include %s is not in the cache, so its sensors cannot be read: %w\nrun `ynh update` (checking a gate must not reach the network)",
 			inc.Git, err)
 	}
 	return b, "include " + inc.Git, nil
+}
+
+// ResolveIncludesLocal resolves the includes of p, and of every harness they
+// reach, without touching the network: a git include that is not cached is an
+// error, as it is for the sensors. The harness's own repo is the exception
+// (IsOwnRepoSource), refreshed as a run refreshes it. sel applies the
+// profiles of included harnesses a run could select (--profile ns:name).
+// `ynh trust` reads what a run would carry through it.
+func ResolveIncludesLocal(p *harness.Harness, sel harness.Selection) ([]ResolveResult, error) {
+	results, _, err := resolveSelected(p, nil, func(gs harness.GitSource, dir string) (string, *RepoResult, error) {
+		fetch := repoFunc(lookupOnlyRepo)
+		if IsOwnRepoSource(gs, dir) {
+			fetch = EnsureRepo
+		}
+		return resolveGitSourceWith(gs, dir, fetch)
+	}, sel)
+	return results, err
 }

@@ -262,7 +262,7 @@ ynd preview my-team -v claude -o out/claude 2>&1
 Expected output:
 
 ```
-  warning: included harness /tmp/ynh-tutorial/composing-tools/github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
+  warning: included harness github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
 Error: MCP servers of included harness /tmp/ynh-tutorial/composing-tools/github-lite: mcp server "tracker": env.TOKEN references ${TRACKER_TOKEN}, which is not set
 ```
 
@@ -276,12 +276,12 @@ ynd preview my-team -v claude -o out/claude 2>&1
 Expected output:
 
 ```
-  warning: included harness /tmp/ynh-tutorial/composing-tools/github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
+  warning: included harness github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
 Preview written to out/claude
 
 MCP servers from included harnesses:
-  notes (from /tmp/ynh-tutorial/composing-tools/github-lite > /tmp/ynh-tutorial/composing-tools/notes)
-  tracker (from /tmp/ynh-tutorial/composing-tools/github-lite)
+  notes (from github-lite > notes)
+  tracker (from github-lite)
 
 Focuses from included harnesses:
   github-lite:triage
@@ -290,7 +290,7 @@ Profiles from included harnesses:
   github-lite:readonly
 
 Hooks from included harnesses, not active (add "hooks": true to the include):
-  on_session_start (from /tmp/ynh-tutorial/composing-tools/github-lite)
+  on_session_start (from github-lite)
 ```
 
 Four things to read here:
@@ -447,8 +447,8 @@ ynd preview my-team -v claude -o out/conflict 2>&1
 Expected output:
 
 ```
-  warning: included harness /tmp/ynh-tutorial/composing-tools/github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
-Error: MCP server "tracker" is defined differently by /tmp/ynh-tutorial/composing-tools/github-lite and /tmp/ynh-tutorial/composing-tools/other; declare it in the root harness to choose one
+  warning: included harness github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
+Error: MCP server "tracker" is defined differently by github-lite and other; declare it in the root harness to choose one
 ```
 
 Two includes may declare the same server only if they declare it identically. Different declarations are a conflict, and ynh will not pick one for you. Declaring the server in the root is the choice, as the override above showed; setting it to `null` and declaring nothing is the other.
@@ -493,7 +493,7 @@ ynd preview my-team -v claude -o out/cycle 2>&1
 Expected output:
 
 ```
-Error: resolving includes: include cycle: root -> /tmp/ynh-tutorial/composing-tools/github-lite -> /tmp/ynh-tutorial/composing-tools/notes -> root
+Error: resolving includes: include cycle: root -> github-lite -> notes -> root
 ```
 
 The error names the whole chain. Put `notes` back:
@@ -540,7 +540,7 @@ I have three MCP servers, and called whoami on each:
 - tracker: "tracker answering; token present: yes"
 ```
 
-Only `tracker` was given a token. Without `--isolated-mcp` the list would also include whatever servers your own Claude Code configuration carries, and the harness's servers would be named `plugin:.claude:notes` and so on, so the tool names in `--allowedTools` would change with them.
+Only `tracker` was given a token. Without `--isolated-mcp` the list would also include whatever servers your own Claude Code configuration carries, and the harness's servers would be named `plugin:my-team:notes` and so on (the plugin carries the harness's name), so the tool names in `--allowedTools` would change with them.
 
 ## Select a profile or a focus from an include
 
@@ -683,10 +683,10 @@ ynd preview my-team -v claude --profile notes:draft -o out/ambiguous 2>&1
 Expected output:
 
 ```
-Error: resolving includes: namespace "notes" is ambiguous: /tmp/ynh-tutorial/composing-tools/github-lite > /tmp/ynh-tutorial/composing-tools/notes and /tmp/ynh-tutorial/composing-tools/notes-v2; give one include an "as" alias
+Error: resolving includes: namespace "notes" is ambiguous: github-lite > notes and notes; give one include an "as" alias
 ```
 
-Give the second include an `as` alias, which becomes its namespace. On a Git include, `ynh include add <harness> <url> --as notes-v2` writes the same field; for a local include, you write it:
+Give the second include an `as` alias, which becomes its namespace. `ynh include add <harness> <url-or-path> --as notes-v2` writes the same field, for a Git include and for a local one alike (`--replace` if the include already exists). The manifest below has the same includes that `ynh include add my-team /tmp/ynh-tutorial/composing-tools/notes-v2 --as notes-v2 --replace` would leave; it is written out in full so that the rest of the file is on the page:
 
 ```bash
 cat > my-team/.agents/harness/plugin.json << 'EOF'
@@ -747,7 +747,7 @@ EOF
 
 ## Turn the hook on
 
-The warning has been there since the first preview: `github-lite` declares an `on_session_start` hook, and `my-team` has not agreed to run it. Consent is per include and is set with `"hooks": true`. On a Git include, `ynh include add <harness> <url> --hooks` (with `--replace` for one that exists) writes it; for a local include you write it:
+The warning has been there since the first preview: `github-lite` declares an `on_session_start` hook, and `my-team` has not agreed to run it. Consent is per include and is set with `"hooks": true`. `ynh include add <harness> <url-or-path> --hooks` (with `--replace` for one that exists) writes it, for a Git include and for a local one alike. The manifest below is written out in full so that the rest of the file is on the page:
 
 ```bash
 cat > my-team/.agents/harness/plugin.json << 'EOF'
@@ -778,8 +778,8 @@ Expected output:
 Preview written to out/active
 
 MCP servers from included harnesses:
-  notes (from /tmp/ynh-tutorial/composing-tools/github-lite > /tmp/ynh-tutorial/composing-tools/notes)
-  tracker (from /tmp/ynh-tutorial/composing-tools/github-lite)
+  notes (from github-lite > notes)
+  tracker (from github-lite)
 
 Focuses from included harnesses:
   github-lite:triage
@@ -788,7 +788,7 @@ Profiles from included harnesses:
   github-lite:readonly
 
 Hooks from included harnesses:
-  on_session_start (from /tmp/ynh-tutorial/composing-tools/github-lite)
+  on_session_start (from github-lite)
 ```
 
 The warning is gone and the hook is listed as active. See what it produced:

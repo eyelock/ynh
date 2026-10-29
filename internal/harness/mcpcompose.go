@@ -74,11 +74,13 @@ func ComposeMCPServers(root *Harness, includes []IncludedHarness, dataDir string
 // the include's own directory cannot be exported, because the plugin does not
 // contain that directory, and is an error.
 func ComposeMCPServersForExport(root *Harness, includes []IncludedHarness) (map[string]plugin.MCPServer, error) {
-	servers, sources, err := composeMCP(root, includes, func(h *Harness) (map[string]plugin.MCPServer, error) {
-		return h.MCPServers, nil
-	})
+	servers, provenance, err := ComposeMCPServersRaw(root, includes)
 	if err != nil {
 		return nil, err
+	}
+	sources := make(map[string]string, len(provenance))
+	for _, pr := range provenance {
+		sources[pr.Server] = pr.Source
 	}
 	for _, name := range slices.Sorted(maps.Keys(servers)) {
 		if src := sources[name]; src != MCPSourceRoot && mcpUsesOwnDir(servers[name]) {
@@ -104,6 +106,20 @@ func ComposeDelegateMCPServersForExport(del *Harness, includes []IncludedHarness
 		}
 	}
 	return servers, nil
+}
+
+// ComposeMCPServersRaw is ComposeMCPServers with nothing expanded and no
+// environment read: the merge a run performs, as written. `ynh trust` digests
+// it, so the digest does not move with the operator's environment, and a run
+// that expands ${VAR} still launches exactly the servers listed here.
+func ComposeMCPServersRaw(root *Harness, includes []IncludedHarness) (map[string]plugin.MCPServer, []MCPProvenance, error) {
+	servers, sources, err := composeMCP(root, includes, func(h *Harness) (map[string]plugin.MCPServer, error) {
+		return h.MCPServers, nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return servers, provenanceList(sources), nil
 }
 
 // mcpUsesOwnDir reports whether a stdio server names a path inside its

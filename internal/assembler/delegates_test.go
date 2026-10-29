@@ -186,3 +186,48 @@ func runGit(t *testing.T, dir string, args ...string) {
 		t.Fatalf("git %v failed: %v\n%s", args, err, out)
 	}
 }
+
+// A delegate committed to the harness's own repo after the first run is found
+// on the next run without an update (#596).
+func TestAssembleDelegates_OwnRepoDelegateAddedLater(t *testing.T) {
+	harnessDir := t.TempDir()
+	runGit(t, harnessDir, "init")
+	runGit(t, harnessDir, "config", "user.email", "test@test.com")
+	runGit(t, harnessDir, "config", "user.name", "Test")
+
+	commitDelegate := func(name string) {
+		t.Helper()
+		dir := filepath.Join(harnessDir, "harnesses", name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := writePluginJSONFile(dir, []byte(`{"name":"`+name+`","version":"0.1.0"}`)); err != nil {
+			t.Fatal(err)
+		}
+		runGit(t, harnessDir, "add", ".")
+		runGit(t, harnessDir, "commit", "-m", "add "+name)
+	}
+
+	t.Setenv("YNH_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+
+	assemble := func(name string) error {
+		adapter := &mockAdapter{}
+		workDir := t.TempDir()
+		delegates := []harness.Delegate{{GitSource: harness.GitSource{Git: ".", Path: "harnesses/" + name}}}
+		if err := AssembleDelegates(workDir, adapter, delegates, harnessDir); err != nil {
+			return err
+		}
+		_, err := os.Stat(filepath.Join(workDir, adapter.ConfigDir(), "agents", name+".md"))
+		return err
+	}
+
+	commitDelegate("alpha")
+	if err := assemble("alpha"); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	commitDelegate("beta")
+	if err := assemble("beta"); err != nil {
+		t.Fatalf("delegate committed after the first run must be found: %v", err)
+	}
+}

@@ -60,7 +60,7 @@ const blockedEnvelope = `{
 func TestRunCheck_BlockedIsNotAnError(t *testing.T) {
 	bin, _ := fakeYnh(t, blockedEnvelope, "", 1)
 
-	env, err := defaultRunCheck(bin, "demo", "", nil, nil, nil)
+	env, err := defaultRunCheck(bin, "demo", "", "", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("exit 1 is a verdict, not a failure: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestRunCheck_BlockedIsNotAnError(t *testing.T) {
 func TestRunCheck_ExecFailureIsAnError(t *testing.T) {
 	bin, _ := fakeYnh(t, "", `harness "demo" not installed`, 2)
 
-	_, err := defaultRunCheck(bin, "demo", "", nil, nil, nil)
+	_, err := defaultRunCheck(bin, "demo", "", "", nil, nil, nil)
 	if err == nil {
 		t.Fatal("exit 2 means the gate is broken and must not be silently absorbed")
 	}
@@ -90,7 +90,7 @@ func TestRunCheck_ExecFailureIsAnError(t *testing.T) {
 func TestRunCheck_PassParses(t *testing.T) {
 	bin, _ := fakeYnh(t, `{"verdict":"pass","harness":"demo","sensors":[]}`, "", 0)
 
-	env, err := defaultRunCheck(bin, "demo", "", nil, nil, nil)
+	env, err := defaultRunCheck(bin, "demo", "", "", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestRunCheck_PassParses(t *testing.T) {
 func TestRunCheck_PassesOnlyAndOverlay(t *testing.T) {
 	bin, argsFile := fakeYnh(t, `{"verdict":"pass","sensors":[]}`, "", 0)
 
-	_, err := defaultRunCheck(bin, "demo", "/work", []string{"lint", "test"},
+	_, err := defaultRunCheck(bin, "demo", "/work", "", []string{"lint", "test"},
 		map[string]json.RawMessage{"lint": json.RawMessage(`{"source":{"command":"make fast"}}`)}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -120,5 +120,28 @@ func TestRunCheck_PassesOnlyAndOverlay(t *testing.T) {
 		if !strings.Contains(args, want) {
 			t.Errorf("args %q missing %q", args, want)
 		}
+	}
+}
+
+// The gate must judge with the severities the run was assembled under, so the
+// run's profile reaches `ynh check` as --profile, and only when there is one.
+func TestRunCheck_PassesProfile(t *testing.T) {
+	for _, tc := range []struct {
+		name, profile string
+		want          bool
+	}{
+		{"with a profile", "factory", true},
+		{"without", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			bin, argsFile := fakeYnh(t, `{"verdict":"pass","sensors":[]}`, "", 0)
+			if _, err := defaultRunCheck(bin, "demo", "/work", tc.profile, nil, nil, nil); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			got, _ := os.ReadFile(argsFile)
+			if has := strings.Contains(string(got), "--profile factory"); has != tc.want {
+				t.Errorf("args %q: --profile present = %v, want %v", got, has, tc.want)
+			}
+		})
 	}
 }

@@ -506,6 +506,47 @@ func TestClaudeIsolateMCP(t *testing.T) {
 	}
 }
 
+func TestClaudeSessionExists(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cwd := t.TempDir()
+	dir := filepath.Join(home, ".claude", "projects", claudeProjectSlug(cwd))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "abc.jsonl"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &Claude{}
+	for id, want := range map[string]bool{"abc": true, "nope": false, "": false, "..": false, "../abc": false} {
+		if got := c.SessionExists(cwd, id); got != want {
+			t.Errorf("SessionExists(%q) = %v, want %v", id, got, want)
+		}
+	}
+}
+
+func TestClaudeSessionIDArgs(t *testing.T) {
+	tests := []struct {
+		name        string
+		prompt      string
+		interactive bool
+		wantInitial string
+		wantArgs    []string
+	}{
+		{"no prompt", "", false, "", []string{"--session-id", "u", "--x"}},
+		{"one-shot", "hi", false, "", []string{"-p", "hi", "--session-id", "u", "--x"}},
+		{"interactive", "hi", true, "hi", []string{"--session-id", "u", "--x"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initial, args := claudeSessionIDArgs("u", tt.prompt, tt.interactive, []string{"--x"})
+			if initial != tt.wantInitial || !reflect.DeepEqual(args, tt.wantArgs) {
+				t.Errorf("got %q %q", initial, args)
+			}
+		})
+	}
+}
+
 // Isolation arguments ride after a positional prompt and a non-interactive -p
 // prompt: the "=" spelling keeps variadic --mcp-config from swallowing them,
 // and without isolation the argv is unchanged.
@@ -550,4 +591,32 @@ func TestBuildClaudeArgs_DelegateAgents(t *testing.T) {
 	if i < 0 || args[i+1] != `{"probe":{}}` {
 		t.Errorf("--agents missing or wrong: %v", args)
 	}
+}
+
+// The plugin ynh hands to --plugin-dir is <run>/.claude, so its manifest must
+// be inside it: a plugin with none is named after the directory, and every MCP
+// tool came out as plugin:.claude:<server>.
+func TestClaudeGenerateSessionPluginManifest(t *testing.T) {
+	run := t.TempDir()
+	files, err := (&Claude{}).GenerateSessionPluginManifest(&plugin.HarnessJSON{Name: "myharness", Version: "1.0.0"}, run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rel := filepath.Join(".claude", ".claude-plugin", "plugin.json")
+	data, ok := files[rel]
+	if !ok || len(files) != 1 {
+		t.Fatalf("files = %v, want only %s", files, rel)
+	}
+	var got struct {
+		Name       string `json:"name"`
+		Hooks      string `json:"hooks"`
+		MCPServers string `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != "myharness" || got.Hooks != "" || got.MCPServers != "" {
+		t.Errorf("manifest = %+v", got)
+	}
+	var _ SessionPluginNamer = &Claude{}
 }

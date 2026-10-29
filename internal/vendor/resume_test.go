@@ -342,3 +342,117 @@ func TestDirCandidates(t *testing.T) {
 		t.Errorf("second candidate = %q, want the literal path %q", got[1], link)
 	}
 }
+
+func TestClaudeResumeArgsWithPrompt(t *testing.T) {
+	configPath := t.TempDir()
+
+	tests := []struct {
+		name        string
+		sessionID   string
+		prompt      string
+		interactive bool
+		wantFirst   string // first argument after the binary, "" to skip
+		wantPairs   [][2]string
+		wantFlags   []string
+		wantNoPrmpt bool
+	}{
+		{"id, interactive", "abc", "go", true, "go", [][2]string{{"--resume", "abc"}}, nil, false},
+		{"continue, interactive", "", "go", true, "go", nil, []string{"--continue"}, false},
+		{"id, one-shot", "abc", "go", false, "", [][2]string{{"-p", "go"}, {"--resume", "abc"}}, nil, false},
+		{"continue, one-shot", "", "go", false, "", [][2]string{{"-p", "go"}}, []string{"--continue"}, false},
+		{"no prompt", "abc", "", true, "", [][2]string{{"--resume", "abc"}}, nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initial, extra := claudeResumeArgs(tt.sessionID, tt.prompt, tt.interactive, []string{"--model", "opus"})
+			args := buildClaudeArgs(configPath, initial, extra)
+
+			// The positional prompt must precede --add-dir, which suppresses
+			// any positional that follows it.
+			if tt.wantFirst != "" && args[1] != tt.wantFirst {
+				t.Errorf("args %v: first argument = %q, want the prompt %q", args, args[1], tt.wantFirst)
+			}
+			if tt.wantNoPrmpt && args[1] != "--plugin-dir" {
+				t.Errorf("args %v: no prompt expected", args)
+			}
+			for _, pr := range tt.wantPairs {
+				if !containsPair(args, pr[0], pr[1]) {
+					t.Errorf("args %v missing %s %s", args, pr[0], pr[1])
+				}
+			}
+			for _, f := range tt.wantFlags {
+				if !contains(args, f) {
+					t.Errorf("args %v missing %s", args, f)
+				}
+			}
+			if tt.sessionID == "" && contains(args, "--resume") {
+				t.Errorf("args %v must not contain a bare --resume", args)
+			}
+			if !containsPair(args, "--model", "opus") {
+				t.Errorf("args %v lost the caller's extra args", args)
+			}
+		})
+	}
+}
+
+func TestCodexResumeArgsWithPrompt(t *testing.T) {
+	tests := []struct {
+		name        string
+		sessionID   string
+		prompt      string
+		interactive bool
+		want        []string
+		wantErr     error
+	}{
+		{"no prompt, id", "abc", "", false, []string{"resume", "abc"}, nil},
+		{"no prompt, last", "", "", false, []string{"resume", "--last"}, nil},
+		{"prompt one-shot, id", "abc", "go", false, []string{"exec", "resume", "abc", "-c", "x=1", "go"}, nil},
+		{"prompt one-shot, last", "", "go", false, []string{"exec", "resume", "--last", "-c", "x=1", "go"}, nil},
+		{"prompt interactive is refused", "abc", "go", true, nil, ErrResumePromptNotSupported},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := codexResumeArgs(tt.sessionID, tt.prompt, tt.interactive, extraFor(tt.prompt))
+			if err != tt.wantErr {
+				t.Fatalf("err = %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantErr == nil && !equalArgs(got, tt.want) {
+				t.Errorf("args = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// extraFor passes extra args only when a prompt is present, so the no-prompt
+// rows keep their short expected form.
+func extraFor(prompt string) []string {
+	if prompt == "" {
+		return nil
+	}
+	return []string{"-c", "x=1"}
+}
+
+func equalArgs(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// Copilot and Cursor document no resume-with-prompt form, so they refuse before
+// reaching the code that execs the CLI.
+func TestResumeWithPromptRefused(t *testing.T) {
+	for name, a := range map[string]Adapter{"copilot": &Copilot{}, "cursor": &Cursor{}} {
+		for _, interactive := range []bool{false, true} {
+			err := a.LaunchResume(t.TempDir(), "abc", "go", interactive, nil)
+			if err != ErrResumePromptNotSupported {
+				t.Errorf("%s interactive=%v: err = %v, want ErrResumePromptNotSupported", name, interactive, err)
+			}
+		}
+	}
+}

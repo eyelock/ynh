@@ -84,7 +84,7 @@ type Adapter interface {
 	LaunchWithInitialPrompt(configPath string, prompt string, extraArgs []string) error
 	SupportsResume() bool
 	ResolveLastSession(cwd string, notBefore time.Time) (string, error)
-	LaunchResume(configPath string, sessionID string, extraArgs []string) error
+	LaunchResume(configPath string, sessionID string, prompt string, interactive bool, extraArgs []string) error
 	GenerateSystemPrompt(content []byte) map[string][]byte
 	ApplyRuntimeInstructions(runDir, text string) ([]string, error)
 	GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)

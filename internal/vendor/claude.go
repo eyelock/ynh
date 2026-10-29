@@ -143,6 +143,44 @@ func (c *Claude) ResolveLastSession(cwd string, notBefore time.Time) (string, er
 	return newestCandidate(candidates, notBefore)
 }
 
+// SessionExists reports whether Claude's store holds sessionID for cwd, trying
+// every form of the directory ResolveLastSession does. An id that is not a
+// plain file stem never exists, so a caller-supplied value cannot walk out of
+// the store.
+func (c *Claude) SessionExists(cwd, sessionID string) bool {
+	if sessionID == "" || sessionID != filepath.Base(sessionID) || sessionID == "." || sessionID == ".." {
+		return false
+	}
+	home, err := vendorHomeDir()
+	if err != nil {
+		return false
+	}
+	for _, dir := range dirCandidates(cwd) {
+		path := filepath.Join(home, ".claude", "projects", claudeProjectSlug(dir), sessionID+".jsonl")
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+// LaunchWithSessionID starts a new Claude conversation under a chosen id.
+// Claude documents --session-id as "Use a specific session ID for the
+// conversation (must be a valid UUID)"
+// (code.claude.com/docs/en/cli-reference).
+func (c *Claude) LaunchWithSessionID(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
+	initial, args := claudeSessionIDArgs(sessionID, prompt, interactive, extraArgs)
+	return launchClaude(configPath, initial, args)
+}
+
+func claudeSessionIDArgs(sessionID, prompt string, interactive bool, extraArgs []string) (string, []string) {
+	idArgs := []string{"--session-id", sessionID}
+	if prompt != "" && !interactive {
+		return "", append(append([]string{"-p", prompt}, idArgs...), extraArgs...)
+	}
+	return prompt, append(idArgs, extraArgs...)
+}
+
 // claudeProjectSlug converts an absolute path into the directory name Claude
 // uses under ~/.claude/projects. Every "/" and "." becomes "-", so a leading
 // slash yields a leading dash and "/foo/.worktrees" yields "-foo--worktrees".
@@ -159,14 +197,28 @@ func claudeProjectSlug(dir string) string {
 // back to --continue, which Claude documents as "the most recent conversation
 // in the current directory" — directory-scoped, so it stays bound to this
 // project. A bare --resume is never emitted: it opens the session picker.
-func (c *Claude) LaunchResume(configPath, sessionID string, extraArgs []string) error {
+//
+// A prompt is delivered as Claude's positional prompt, which starts an
+// interactive session with that first message, or with -p for a one-shot run
+// (`claude -p --resume <id> "<prompt>"` is the documented headless resume).
+func (c *Claude) LaunchResume(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
+	initial, args := claudeResumeArgs(sessionID, prompt, interactive, extraArgs)
+	return launchClaude(configPath, initial, args)
+}
+
+// claudeResumeArgs returns the initial prompt for buildClaudeArgs and the
+// extra args, with the resume selector in front of the caller's own.
+func claudeResumeArgs(sessionID, prompt string, interactive bool, extraArgs []string) (string, []string) {
 	var resumeArgs []string
 	if sessionID != "" {
 		resumeArgs = []string{"--resume", sessionID}
 	} else {
 		resumeArgs = []string{"--continue"}
 	}
-	return launchClaude(configPath, "", append(resumeArgs, extraArgs...))
+	if prompt != "" && !interactive {
+		return "", append(append([]string{"-p", prompt}, resumeArgs...), extraArgs...)
+	}
+	return prompt, append(resumeArgs, extraArgs...)
 }
 
 // IsolateMCP restricts Claude to the harness's own servers. --strict-mcp-config
@@ -402,6 +454,23 @@ func (c *Claude) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir string
 	}
 	return map[string][]byte{
 		filepath.Join(c.PluginManifestDir(), "plugin.json"): data,
+	}, nil
+}
+
+// GenerateSessionPluginManifest writes the manifest inside the plugin folder
+// `ynh run` hands to --plugin-dir (<run>/.claude). GeneratePluginManifest
+// writes at the run root, which Claude never reads as the plugin, so without
+// this the plugin has no manifest and Claude names it after its directory.
+// Pointers to hook and MCP files are judged against that folder, since it is
+// the plugin root.
+func (c *Claude) GenerateSessionPluginManifest(hj *plugin.HarnessJSON, runDir string) (map[string][]byte, error) {
+	pluginDir := filepath.Join(runDir, ".claude")
+	data, err := claudePluginManifest(hj, pluginDir)
+	if err != nil {
+		return nil, err
+	}
+	return map[string][]byte{
+		filepath.Join(".claude", c.PluginManifestDir(), "plugin.json"): data,
 	}, nil
 }
 

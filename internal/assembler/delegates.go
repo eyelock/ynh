@@ -228,7 +228,7 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 	var declared []DelegateMCP
 	var launch []vendor.DelegateLaunchAgent
 	for _, del := range delegates {
-		basePath, _, err := resolver.ResolveGitSourceFromCache(del.GitSource, harnessDir)
+		basePath, _, err := resolver.ResolveSourceForRun(del.GitSource, harnessDir)
 		if err != nil {
 			return nil, fmt.Errorf("delegate: %w", err)
 		}

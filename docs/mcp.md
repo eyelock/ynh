@@ -234,7 +234,7 @@ Isolation is a launch setting. It changes how `ynh run` and `ynh agent run` star
 
 The warning is one line on stderr, prefixed `warning:`, and never fails the run. `ynh agent run` applies isolation on the Claude backend only and warns on the others.
 
-**Tool names change on Claude Code.** Without isolation a harness's servers are named `plugin:.claude:<server>` (ynh run loads the assembled `.claude/` directory as the plugin, and Claude names a plugin after its directory); with it they are named `<server>`. A permission rule or hook matcher that names a tool by its server prefix must use the name for the mode the harness runs in.
+**Tool names change on Claude Code.** Without isolation a harness's servers are named `plugin:<harness>:<server>` (`ynh run` writes a plugin manifest carrying the harness's name into the plugin directory, because Claude Code names a plugin without one after its directory); with it they are named `<server>`. A permission rule or hook matcher that names a tool by its server prefix must use the name for the mode the harness runs in.
 
 ## Servers from Included Harnesses
 
@@ -424,6 +424,10 @@ references resolved from the environment at assembly time:
 which variables a `${VAR}` reference may resolve, and which variables reach an
 agent worker's process under [`ynh agent run`](agent.md). One declaration, one
 place to review.
+
+The same list is all a worker is given, so a server (or any tool) configured
+through its own variable, such as `YNM_HOME`, silently falls back to its default
+unless that variable is listed. Nothing reports the omission.
 
 Two rules keep the mechanism from becoming a hole of its own:
 

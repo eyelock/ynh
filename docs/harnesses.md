@@ -170,6 +170,13 @@ checks the same absolute path, and the clone is cached under it, so two
 harnesses that each name `./inc` get their own repos. The same applies to
 `delegates_to`.
 
+An include or delegate whose source is the harness's own repo (`"git": "."`,
+or `./sub` of it) is refreshed from that repo on every run, so one committed
+after the first run is found without `ynh update`. Uncommitted work is not
+picked up. Every other source, including another repo on disk, is served from
+the cache until `ynh update`; if a delegate or include `path` is missing from
+it, the error says the cached copy may be out of date and suggests `ynh update`.
+
 The resolved path is what `ynh install` prints:
 
 ```
@@ -247,7 +254,7 @@ A delegate is resolved as a harness: its own `includes` are followed, against it
 
 **Embedded** artifacts live directly in the harness directory. They're always included.
 
-**External** artifacts are pulled from Git repos via `includes`. They're fetched at install time and cached locally. At runtime, cached repos are used without network access (with a fallback fetch on cache miss).
+**External** artifacts are pulled from Git repos via `includes`. They're fetched at install time and cached locally. At runtime, cached repos are used without network access (with a fallback fetch on cache miss); the harness's own repo is the exception and is refreshed on every run.
 
 Both are assembled into the same vendor config. Use embedded for harness-specific customizations, external for shared libraries.
 
@@ -278,7 +285,7 @@ Boolean, default `false`. When `true`, `ynh run` launches the harness with only 
 
 ### profiles (optional)
 
-Named configuration variants. A profile can override `hooks`, override `mcp_servers`, and append additional `includes`. It cannot override identity fields (`name`, `version`, `description`), `delegates_to`, or `default_vendor`. See [Profiles](profiles.md) for full scope reference.
+Named configuration variants. A profile can override `hooks`, override `mcp_servers`, append additional `includes`, and change the `tolerance` of sensors through `sensor_overrides`. It cannot override identity fields (`name`, `version`, `description`), `delegates_to`, or `default_vendor`. See [Profiles](profiles.md) for full scope reference.
 
 ## Profiles
 
@@ -416,8 +423,10 @@ After a harness is installed, use `ynh include` to add, remove, or update its Gi
 ### Add an include
 
 ```bash
-ynh include add <harness> <url> [--path <subdir>] [--pick <items>] [--ref <ref>] [--as <alias>] [--hooks] [--replace]
+ynh include add <harness> <url|path> [--path <subdir>] [--pick <items>] [--ref <ref>] [--as <alias>] [--git] [--hooks] [--replace]
 ```
+
+The source is a Git URL, or a path to a directory on disk: absolute, starting `./`, `../` or `~/`, or an existing directory. A path is recorded as a `local` include, so `--as`, `--pick` and the rest apply to it and nothing is cloned. A path inside the harness is stored relative to it; one outside is stored absolute, and the source allow-list governs it. `--ref` is Git-only. `--git` keeps a path a Git source (a repository on disk, such as `.` for the harness's own repo). `remove` and `update` find a local include by the path as typed.
 
 `--as <alias>` sets the include's `as`: the namespace its focuses and profiles are selected under. The alias must be a valid harness name and may not contain `:`.
 
