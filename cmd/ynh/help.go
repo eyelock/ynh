@@ -323,6 +323,7 @@ Flags:
   --update-baseline     Accept current failures so only new ones gate
   --no-baseline         Ignore the baseline for this run
   --calibrate           Run each sensor against its reference fixture instead
+                        (not with --profile, --sensor-overlay or baseline flags)
   --sensor-overlay <j>  Substitute sensor declarations from a JSON object
   --format text|json    Output format (default text)
 
