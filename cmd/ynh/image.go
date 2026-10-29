@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"text/template"
 
 	"github.com/eyelock/ynh/internal/assembler"
@@ -131,25 +132,72 @@ func profileOnlyIncludes(p *harness.Harness) ([]harness.Include, error) {
 // The clone is copied with its .git, which assembler.CopyDir skips: the cache
 // lookup requires it, and a shallow clone keeps it small.
 func bakeIncludeCache(p *harness.Harness, includes []harness.Include, homeDir, runtimeHarnessDir string) error {
-	baked := map[string]string{}
+	b := &includeBaker{homeDir: homeDir, baked: map[string]string{}, seen: map[string]bool{}}
+	return b.bake(p.Dir, runtimeHarnessDir, includes)
+}
+
+// includeBaker walks the includes of a harness and, through every included
+// harness that follows its own includes, theirs: a run resolves them
+// transitively, so an image that baked only the first level would fetch the
+// rest at run time.
+type includeBaker struct {
+	homeDir string
+	baked   map[string]string // cache entry name -> source clone
+	seen    map[string]bool   // harness dirs already walked, which also stops a cycle
+}
+
+// bake copies the clones of includes, which belong to the harness at buildDir
+// (runtimeDir is where that harness lives in the image), then descends into the
+// included harnesses. An include that picks artifacts does not follow its own
+// includes, so the walk does not either.
+func (b *includeBaker) bake(buildDir, runtimeDir string, includes []harness.Include) error {
 	for _, inc := range includes {
-		if inc.IsLocal() || inc.Git == "" {
-			continue
-		}
-		src, ok := resolver.LookupCache(resolver.GitSourceURL(inc.Git, p.Dir), inc.Ref)
-		if !ok {
-			return fmt.Errorf("include %s is not in the cache after resolving", inc.Git)
-		}
-		name := resolver.CacheEntryName(resolver.GitSourceURL(inc.Git, runtimeHarnessDir), inc.Ref)
-		if prev, dup := baked[name]; dup {
-			if prev != src.Path {
-				return fmt.Errorf("includes %s and %s would share one cache entry in the image", prev, src.Path)
+		var innerBuild, innerRuntime string
+		switch {
+		case inc.IsLocal():
+			dir := inc.Local
+			if !filepath.IsAbs(dir) {
+				dir = filepath.Join(buildDir, dir)
 			}
+			innerBuild = filepath.Join(dir, inc.Path)
+			rel, err := filepath.Rel(buildDir, innerBuild)
+			if err != nil || strings.HasPrefix(rel, "..") {
+				// Outside the harness, so outside the baked copy: nothing to
+				// walk into, and nothing the image could read.
+				continue
+			}
+			innerRuntime = path.Join(runtimeDir, filepath.ToSlash(rel))
+		case inc.Git != "":
+			src, ok := resolver.LookupCache(resolver.GitSourceURL(inc.Git, buildDir), inc.Ref)
+			if !ok {
+				return fmt.Errorf("include %s is not in the cache after resolving", inc.Git)
+			}
+			name := resolver.CacheEntryName(resolver.GitSourceURL(inc.Git, runtimeDir), inc.Ref)
+			if prev, dup := b.baked[name]; dup {
+				if prev != src.Path {
+					return fmt.Errorf("includes %s and %s would share one cache entry in the image", prev, src.Path)
+				}
+			} else {
+				b.baked[name] = src.Path
+				if err := copyTreeWithGit(src.Path, filepath.Join(b.homeDir, "cache", name)); err != nil {
+					return fmt.Errorf("baking include %s: %w", inc.Git, err)
+				}
+			}
+			innerBuild = filepath.Join(src.Path, inc.Path)
+			innerRuntime = path.Join(imageHome, "cache", name, filepath.ToSlash(inc.Path))
+		default:
 			continue
 		}
-		baked[name] = src.Path
-		if err := copyTreeWithGit(src.Path, filepath.Join(homeDir, "cache", name)); err != nil {
-			return fmt.Errorf("baking include %s: %w", inc.Git, err)
+		if len(inc.Pick) > 0 || !harness.IsHarnessDir(innerBuild) || b.seen[innerBuild] {
+			continue
+		}
+		b.seen[innerBuild] = true
+		inner, err := harness.LoadDir(innerBuild)
+		if err != nil {
+			return fmt.Errorf("loading included harness %s: %w", innerBuild, err)
+		}
+		if err := b.bake(innerBuild, innerRuntime, inner.Includes); err != nil {
+			return err
 		}
 	}
 	return nil
