@@ -419,8 +419,10 @@ After a harness is installed, use `ynh include` to add, remove, or update its Gi
 ### Add an include
 
 ```bash
-ynh include add <harness> <url> [--path <subdir>] [--pick <items>] [--ref <ref>] [--as <alias>] [--replace]
+ynh include add <harness> <url|path> [--path <subdir>] [--pick <items>] [--ref <ref>] [--as <alias>] [--git] [--replace]
 ```
+
+The source is a Git URL, or a path to a directory on disk: absolute, starting `./`, `../` or `~/`, or an existing directory. A path is recorded as a `local` include, so `--as`, `--pick` and the rest apply to it and nothing is cloned. A path inside the harness is stored relative to it; one outside is stored absolute, and the source allow-list governs it. `--ref` is Git-only. `--git` keeps a path a Git source (a repository on disk, such as `.` for the harness's own repo). `remove` and `update` find a local include by the path as typed.
 
 `--as <alias>` sets the include's `as`: the namespace its focuses and profiles are selected under. The alias must be a valid harness name and may not contain `:`.
 

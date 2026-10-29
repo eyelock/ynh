@@ -72,13 +72,15 @@ var (
 // canonical subcommand names (ls, not list; except where list is canonical).
 var subcommandHelp = map[string]subHelp{
 	"include add": {
-		Usage:   "ynh include add <harness> <url> [flags]",
-		Summary: "Add a Git include to a harness. With --pick, the picks are checked against the fetched content before anything is written.",
-		Args:    []argHelp{harnessArg, urlArg},
+		Usage:   "ynh include add <harness> <url|path> [flags]",
+		Summary: "Add an include to a harness: a Git URL, or a path to a directory on disk (recorded as a local include). With --pick, the picks are checked against the content before anything is written.",
+		Args:    []argHelp{harnessArg, {"<url|path>", "Git URL of the source, or a filesystem path (absolute, ./, ../, ~/, or an existing directory)"}},
 		Flags: []flagHelp{
 			pathFlag,
 			{"--pick <items>", "Comma-separated artifacts to take, e.g. skills/commit,agents/reviewer.md"},
 			refFlag,
+			{"--as <alias>", "Namespace for the included harness's focuses and profiles (alias:name)"},
+			{"--git", "Treat a path as a Git repository on disk instead of a local include"},
 			{"--replace", "Replace an existing include of the same url and path"},
 		},
 		Parsers: []string{"cmdIncludeAdd"},

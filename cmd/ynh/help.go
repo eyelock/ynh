@@ -226,7 +226,7 @@ Flags:
 
 Manage a harness's Git includes.
 
-  ynh include add <harness> <url>      Add an include
+  ynh include add <harness> <url|path> Add an include (Git URL or local path)
   ynh include remove <harness> <url>   Remove an include
   ynh include update <harness> <url>   Change an include's path, picks or ref
 

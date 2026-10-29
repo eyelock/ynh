@@ -84,6 +84,43 @@ type AddOptions struct {
 	Replace bool
 	// As is the include's namespace alias; see plugin.IncludeMeta.
 	As string
+	// Local records the include as a filesystem path ("local") instead of a
+	// Git source ("git"). The caller decides, see cmd/ynh.
+	Local bool
+}
+
+// newIncludeMeta builds the manifest entry for source under opts.
+func newIncludeMeta(source string, opts AddOptions) plugin.IncludeMeta {
+	m := plugin.IncludeMeta{Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick, As: opts.As}
+	if opts.Local {
+		m.Local = source
+	} else {
+		m.Git = source
+	}
+	return m
+}
+
+// includeSource is what an include is named by on the command line: its local
+// path when it has one, otherwise its Git URL.
+func includeSource(m plugin.IncludeMeta) string {
+	if m.Local != "" {
+		return m.Local
+	}
+	return m.Git
+}
+
+// IncludeSources lists the sources (Git URLs and local paths) of the harness
+// at dir's includes, in declaration order.
+func IncludeSources(dir string) ([]string, error) {
+	hj, err := loadManifest(dir)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, len(hj.Includes))
+	for i, inc := range hj.Includes {
+		out[i] = includeSource(inc)
+	}
+	return out, nil
 }
 
 // RemoveOptions controls ynh include remove behaviour.
@@ -121,9 +158,9 @@ func AddInclude(dir, url string, opts AddOptions) error {
 			}
 			return fmt.Errorf("%s.\nUse 'ynh include update' to change its options, or pass --replace to overwrite", msg)
 		}
-		hj.Includes[idx] = plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick, As: opts.As}
+		hj.Includes[idx] = newIncludeMeta(url, opts)
 	} else {
-		hj.Includes = append(hj.Includes, plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick, As: opts.As})
+		hj.Includes = append(hj.Includes, newIncludeMeta(url, opts))
 	}
 
 	return plugin.SavePluginJSON(dir, hj)
@@ -149,7 +186,7 @@ func RemoveInclude(dir, url string, opts RemoveOptions) error {
 
 	keep := hj.Includes[:0]
 	for _, inc := range hj.Includes {
-		if inc.Git == url && (opts.Path == "" || inc.Path == opts.Path) {
+		if includeSource(inc) == url && (opts.Path == "" || inc.Path == opts.Path) {
 			continue
 		}
 		keep = append(keep, inc)
@@ -320,7 +357,7 @@ func suggestionsFor(bad string, byBasename map[string][]string) []string {
 
 func findInclude(includes []plugin.IncludeMeta, url, path string) int {
 	for i, inc := range includes {
-		if inc.Git == url && inc.Path == path {
+		if includeSource(inc) == url && inc.Path == path {
 			return i
 		}
 	}
@@ -330,7 +367,7 @@ func findInclude(includes []plugin.IncludeMeta, url, path string) int {
 func findAllIncludes(includes []plugin.IncludeMeta, url string) []int {
 	var out []int
 	for i, inc := range includes {
-		if inc.Git == url {
+		if includeSource(inc) == url {
 			out = append(out, i)
 		}
 	}
@@ -1082,9 +1119,9 @@ func AddProfileInclude(dir, profileName, url string, opts AddOptions) error {
 			}
 			return fmt.Errorf("%s.\nUse 'ynh profile include update' to change its options, or pass --replace to overwrite", msg)
 		}
-		p.Includes[idx] = plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick}
+		p.Includes[idx] = newIncludeMeta(url, opts)
 	} else {
-		p.Includes = append(p.Includes, plugin.IncludeMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Pick: opts.Pick})
+		p.Includes = append(p.Includes, newIncludeMeta(url, opts))
 	}
 	hj.Profiles[profileName] = p
 	return plugin.SavePluginJSON(dir, hj)
@@ -1109,7 +1146,7 @@ func RemoveProfileInclude(dir, profileName, url string, opts RemoveOptions) erro
 	}
 	keep := p.Includes[:0]
 	for _, inc := range p.Includes {
-		if inc.Git == url && (opts.Path == "" || inc.Path == opts.Path) {
+		if includeSource(inc) == url && (opts.Path == "" || inc.Path == opts.Path) {
 			continue
 		}
 		keep = append(keep, inc)
