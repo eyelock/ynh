@@ -69,7 +69,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh profile mcp add <harness> <profile> <name>` | `--command`, `--url`, `--type`, `--arg`, `--env`, `--cwd`, `--header`, `--null` |
 | `ynh profile mcp remove <harness> <profile> <name>` | |
 | `ynh profile mcp update <harness> <profile> <name>` | `--command`, `--url`, `--type`, `--arg`, `--env`, `--cwd`, `--header`, `--clear-args`, `--clear-env`, `--clear-headers` |
-| `ynh profile include add <harness> <profile> <url>` | `--path`, `--ref`, `--replace` |
+| `ynh profile include add <harness> <profile> <url\|path>` | `--path`, `--ref`, `--git`, `--replace` |
 | `ynh profile include remove <harness> <profile> <url>` | `--path` |
 | `ynh profile include update <harness> <profile> <url>` | `--from-path`, `--path`, `--ref` |
 | `ynh hook add <harness> <event> <command>` | `--matcher` — top-level harness hook |
