@@ -574,3 +574,31 @@ func TestBuildClaudeArgs_Isolation(t *testing.T) {
 		t.Errorf("isolated argv = %v, want %v", got, wantIso)
 	}
 }
+
+// The plugin ynh hands to --plugin-dir is <run>/.claude, so its manifest must
+// be inside it: a plugin with none is named after the directory, and every MCP
+// tool came out as plugin:.claude:<server>.
+func TestClaudeGenerateSessionPluginManifest(t *testing.T) {
+	run := t.TempDir()
+	files, err := (&Claude{}).GenerateSessionPluginManifest(&plugin.HarnessJSON{Name: "myharness", Version: "1.0.0"}, run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rel := filepath.Join(".claude", ".claude-plugin", "plugin.json")
+	data, ok := files[rel]
+	if !ok || len(files) != 1 {
+		t.Fatalf("files = %v, want only %s", files, rel)
+	}
+	var got struct {
+		Name       string `json:"name"`
+		Hooks      string `json:"hooks"`
+		MCPServers string `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != "myharness" || got.Hooks != "" || got.MCPServers != "" {
+		t.Errorf("manifest = %+v", got)
+	}
+	var _ SessionPluginNamer = &Claude{}
+}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -306,6 +307,16 @@ func cmdRun(args []string) error {
 		manifestFiles, mErr := adapter.GeneratePluginManifest(pj, runDir)
 		if mErr != nil {
 			return fmt.Errorf("writing plugin manifest: %w", mErr)
+		}
+		// The plugin the vendor loads is named from its own manifest. Without
+		// one the vendor falls back to the directory name, and the harness's
+		// MCP tools come out as plugin:.claude:<server>.
+		if namer, ok := adapter.(vendor.SessionPluginNamer); ok {
+			extra, nErr := namer.GenerateSessionPluginManifest(pj, runDir)
+			if nErr != nil {
+				return fmt.Errorf("writing plugin manifest: %w", nErr)
+			}
+			maps.Copy(manifestFiles, extra)
 		}
 		for relPath, content := range manifestFiles {
 			absPath := filepath.Join(runDir, relPath)
