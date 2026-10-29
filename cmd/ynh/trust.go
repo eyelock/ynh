@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -228,6 +229,29 @@ type runView struct {
 // Anything that cannot be resolved is returned as a problem rather than
 // skipped, so the caller can refuse to call a partial set complete.
 func runViews(p *harness.Harness) (views []runView, problems []string) {
+	// fold returns a copy of h carrying what the includes bring under sel: the
+	// MCP servers of every harness they reach, composed as a run composes them,
+	// with their sources. h itself is not changed.
+	fold := func(h *harness.Harness, sel harness.Selection) (*harness.Harness, map[string]string, []resolver.ResolveResult, error) {
+		sources := map[string]string{}
+		if len(h.Includes) == 0 {
+			return h, sources, nil, nil
+		}
+		resolved, err := resolver.ResolveIncludesLocal(h, sel)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("includes: %w", err)
+		}
+		servers, provenance, err := harness.ComposeMCPServersRaw(h, resolver.IncludedHarnesses(resolved))
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		c := *h
+		c.MCPServers = servers
+		for _, pr := range provenance {
+			sources[pr.Server] = pr.Source
+		}
+		return &c, sources, resolved, nil
+	}
 	add := func(profile string, h *harness.Harness) {
 		label := "the harness"
 		if profile != "" {
@@ -236,30 +260,49 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 		// A copy: the include merge assigns Sensors, and a view must not
 		// change the harness it was made from.
 		c := *h
-		merged, err := resolver.WithIncludedSensors(&c)
+		withSensors, err := resolver.WithIncludedSensors(&c)
 		if err != nil {
 			problems = append(problems, fmt.Sprintf("%s: %v", label, err))
 			return
 		}
-		sources := map[string]string{}
-		if len(merged.Includes) > 0 {
-			resolved, err := resolver.ResolveIncludesLocal(merged)
-			if err != nil {
-				problems = append(problems, fmt.Sprintf("%s: includes: %v", label, err))
-				return
-			}
-			servers, provenance, err := harness.ComposeMCPServersRaw(merged, resolver.IncludedHarnesses(resolved))
-			if err != nil {
-				problems = append(problems, fmt.Sprintf("%s: %v", label, err))
-				return
-			}
-			// merged is the copy above, so replacing the map leaves p alone.
-			merged.MCPServers = servers
-			for _, pr := range provenance {
-				sources[pr.Server] = pr.Source
-			}
+		merged, sources, resolved, err := fold(withSensors, harness.Selection{})
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("%s: %v", label, err))
+			return
 		}
 		views = append(views, runView{Profile: profile, H: merged, MCPSources: sources})
+		if profile != "" {
+			return
+		}
+
+		// `--profile ns:name` applies a profile to an included harness alone,
+		// and that profile can add servers the harness does not otherwise
+		// carry. Each one is a view, listed as what it adds to the harness's.
+		seen := map[string]bool{}
+		for _, r := range resolved {
+			if r.Harness == nil || r.Namespace == "" {
+				continue
+			}
+			for _, name := range slices.Sorted(maps.Keys(r.Harness.Profiles)) {
+				qualified := r.Namespace + ":" + name
+				if seen[qualified] {
+					continue
+				}
+				seen[qualified] = true
+				v, vSources, _, err := fold(withSensors, harness.Selection{Included: map[string]string{r.Namespace: name}})
+				var ambiguous *resolver.AmbiguousNamespaceError
+				if errors.As(err, &ambiguous) {
+					// Two harnesses answer to the namespace, so a run cannot
+					// select it either.
+					continue
+				}
+				if err != nil {
+					problems = append(problems, fmt.Sprintf("profile %s: %v", qualified, err))
+					continue
+				}
+				views = append(views, runView{Profile: qualified, H: v, MCPSources: vSources})
+			}
+		}
 	}
 	add("", p)
 	for _, name := range slices.Sorted(maps.Keys(p.Profiles)) {

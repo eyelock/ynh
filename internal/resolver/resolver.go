@@ -248,6 +248,15 @@ func walkIncludes(p *harness.Harness, cfg *config.Config, resolve sourceResolver
 	return results, r, nil
 }
 
+// AmbiguousNamespaceError is returned when a selection names a namespace that
+// more than one included harness answers to.
+type AmbiguousNamespaceError struct {
+	Namespace string
+	msg       string
+}
+
+func (e *AmbiguousNamespaceError) Error() string { return e.msg }
+
 // availableNames words the names a map declares for an error message.
 func availableNames[V any](m map[string]V, what string) string {
 	if len(m) == 0 {
@@ -306,7 +315,7 @@ func (r *includeResolver) check() error {
 			for i, f := range found {
 				chains[i] = f.chain
 			}
-			return fmt.Errorf("namespace %q is ambiguous: %s; give one include an \"as\" alias", ns, strings.Join(chains, " and "))
+			return &AmbiguousNamespaceError{Namespace: ns, msg: fmt.Sprintf("namespace %q is ambiguous: %s; give one include an \"as\" alias", ns, strings.Join(chains, " and "))}
 		}
 		if err := r.profileErr[ns]; err != nil {
 			return err

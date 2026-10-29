@@ -749,3 +749,49 @@ func TestUnreadableIncludeForMCPFailsClosed(t *testing.T) {
 		})
 	}
 }
+
+// `--profile up:ci` applies a profile of an included harness, which can add a
+// server the harness does not carry otherwise, so each such profile is a view.
+func TestIncludedHarnessProfileMCPServersAreCovered(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	root := t.TempDir()
+	profile := func(command string) string {
+		return mcpFields("base") + `,"profiles":{"ci":{"mcp_servers":{"extra":{"command":` + strconv.Quote(command) + `}}}}`
+	}
+	writeIncludedHarness(t, root, "up", profile("extra-v1"))
+	h := &harness.Harness{Name: "consumer", Dir: root, Includes: []harness.Include{{GitSource: harness.GitSource{Local: "up"}}}}
+
+	st := trustStatusFor("id", h, trustStore{Harnesses: map[string]trustRecord{}}, nil)
+	if len(st.Problems) != 0 {
+		t.Fatalf("problems: %v", st.Problems)
+	}
+	var extra *mcpExec
+	for i, m := range st.MCPServers {
+		if m.Name == "extra" {
+			extra = &st.MCPServers[i]
+		}
+	}
+	if len(st.MCPServers) != 2 || extra == nil || extra.Profile != "up:ci" || extra.Command != "extra-v1" {
+		t.Fatalf("servers = %+v, want base plus extra under up:ci", st.MCPServers)
+	}
+	writeIncludedHarness(t, root, "up", profile("extra-v2"))
+	if trustStatusFor("id", h, trustStore{Harnesses: map[string]trustRecord{}}, nil).Digest == st.Digest {
+		t.Error("a change to an included harness's profile did not move the digest")
+	}
+}
+
+// Two included harnesses sharing a namespace cannot be selected, so a profile
+// of either is not a view and does not make the set unavailable.
+func TestAmbiguousNamespaceIsNotAProblem(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	root := t.TempDir()
+	writeIncludedHarness(t, root, "one", mcpFields("a")+`,"profiles":{"ci":{}}`)
+	two := filepath.Join(root, "sub")
+	writeIncludedHarness(t, two, "one", mcpFields("a"))
+	h := &harness.Harness{Name: "consumer", Dir: root, Includes: []harness.Include{
+		{GitSource: harness.GitSource{Local: "one"}}, {GitSource: harness.GitSource{Local: "sub/one"}},
+	}}
+	if set := harnessExecutables(h); len(set.Problems) != 0 {
+		t.Errorf("problems: %v", set.Problems)
+	}
+}

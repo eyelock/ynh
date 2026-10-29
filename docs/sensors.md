@@ -355,6 +355,8 @@ Everything is shown as resolved for a run: the harness's own, then whatever
 each profile adds or changes (an entry identical to the harness's own is not
 repeated). Includes contribute their sensors and their MCP servers, the
 latter from every harness the includes reach.
+A profile of an included harness (`--profile ns:name`) can add servers of its
+own, so each is listed as its own view, named `ns:name`.
 
 Reading an include never reaches the network, as with `ynh check`. If an
 include is not cached, the set is incomplete, so `ynh trust` reports
