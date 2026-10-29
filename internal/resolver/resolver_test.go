@@ -528,7 +528,9 @@ func TestResolve_RelativeGitSourceUsesHarnessDir(t *testing.T) {
 			{GitSource: harness.GitSource{Git: "https://github.com/eyelock/assistants"}},
 		},
 	}
-	if _, err := resolveWith(p, nil, fetch); err != nil {
+	if _, err := resolveWith(p, nil, func(gs harness.GitSource, dir string) (string, *RepoResult, error) {
+		return resolveGitSourceWith(gs, dir, fetch)
+	}); err != nil {
 		t.Fatalf("resolveWith: %v", err)
 	}
 	want := []string{

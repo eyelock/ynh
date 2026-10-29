@@ -90,6 +90,8 @@ Run flags:
   --session-name <name>        Session label (recorded by ynh, not forwarded to vendor CLI)
   --resume                     Continue the previous session in this directory
   --resume=<id>                Continue one specific session by id
+                               A trailing prompt is sent to the resumed session
+                               (not a --focus prompt); some vendors refuse it
   --install                    Install symlinks for the vendor in current project
   --clean                      Remove symlinks for the vendor in current project
   All other flags are passed through to the vendor CLI.

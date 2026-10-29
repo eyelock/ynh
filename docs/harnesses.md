@@ -166,6 +166,13 @@ checks the same absolute path, and the clone is cached under it, so two
 harnesses that each name `./inc` get their own repos. The same applies to
 `delegates_to`.
 
+An include or delegate whose source is the harness's own repo (`"git": "."`,
+or `./sub` of it) is refreshed from that repo on every run, so one committed
+after the first run is found without `ynh update`. Uncommitted work is not
+picked up. Every other source, including another repo on disk, is served from
+the cache until `ynh update`; if a delegate or include `path` is missing from
+it, the error says the cached copy may be out of date and suggests `ynh update`.
+
 The resolved path is what `ynh install` prints:
 
 ```
@@ -240,7 +247,7 @@ At runtime, ynh generates a vendor-native agent file for each delegate containin
 
 **Embedded** artifacts live directly in the harness directory. They're always included.
 
-**External** artifacts are pulled from Git repos via `includes`. They're fetched at install time and cached locally. At runtime, cached repos are used without network access (with a fallback fetch on cache miss).
+**External** artifacts are pulled from Git repos via `includes`. They're fetched at install time and cached locally. At runtime, cached repos are used without network access (with a fallback fetch on cache miss); the harness's own repo is the exception and is refreshed on every run.
 
 Both are assembled into the same vendor config. Use embedded for harness-specific customizations, external for shared libraries.
 

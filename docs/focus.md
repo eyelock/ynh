@@ -60,6 +60,31 @@ Error: cannot use --focus and a trailing prompt together (focus includes a promp
 
 Specifying `--focus` implies non-interactive mode by default — the focus prompt is fed to the vendor CLI as the initial instruction and execution proceeds without further user input. Pass `--interactive` alongside `--focus` to override and keep the session interactive after the focus prompt is delivered.
 
+## Resuming a Session
+
+`ynh run <harness> --resume` (or `--resume=<id>`) continues a previous session
+instead of starting one. What reaches the resumed session:
+
+- **A trailing prompt** (`-- "<prompt>"`) is delivered to it. With
+  `--interactive` the session stays open with the prompt as its next message;
+  without, it is a one-shot run, as on a cold launch.
+- **A focus prompt is not delivered.** `--resume --focus <name>` still applies
+  the focus's profile, but a focus prompt starts a task and a resume continues
+  one, so a caller that re-sends a stored command with `--resume` does not
+  repeat the task. If there is nothing to resume and ynh falls back to a cold
+  launch, the focus prompt is used as normal, because that is a new session.
+
+| Vendor | Resume with a prompt |
+|--------|----------------------|
+| Claude | Supported, interactive and one-shot |
+| Codex | One-shot only (`codex exec resume`); refused with `--interactive` |
+| Copilot | Refused: no documented form |
+| Cursor | Refused: no documented form |
+
+Where a vendor refuses, ynh stops before launching with an error naming it
+(for example `codex cannot resume a session interactively with a prompt; drop
+--resume or the prompt`). The prompt is never dropped silently.
+
 ## Missing Focus Behavior
 
 Selecting a focus that is not defined is a hard error:

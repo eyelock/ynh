@@ -402,6 +402,65 @@ func TestProfileOverrideComesLastInTheMergeOrder(t *testing.T) {
 	}
 }
 
+// A sensor committed to the harness's own repo after the first resolution is
+// seen without an update, because that repo is on disk and is refreshed. Any
+// other repo stays on the lookup-only path (#596).
+func TestWithIncludedSensors_OwnRepoIsRefreshed(t *testing.T) {
+	tests := []struct {
+		name        string
+		git         string
+		otherRepo   bool
+		wantRefresh bool
+	}{
+		{"own repo", ".", false, true},
+		{"sibling repo", "../other", true, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isolate(t)
+			parent, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			h := newRepoAt(t, filepath.Join(parent, "h"), "keep")
+			other := newRepoAt(t, filepath.Join(parent, "other"), "keep")
+			source := h
+			if tt.otherRepo {
+				source = other
+			}
+			commit := func(sensors map[string]any) {
+				t.Helper()
+				writeHarness(t, filepath.Join(source, "up"), "up", sensors)
+				runGit(t, source, "add", ".")
+				runGit(t, source, "commit", "-m", "sensors")
+			}
+			consumer := func() *harness.Harness {
+				return &harness.Harness{Name: "consumer", Dir: h, Includes: []harness.Include{
+					{GitSource: harness.GitSource{Git: tt.git, Path: "up"}},
+				}}
+			}
+
+			commit(map[string]any{"first": commandSensor("blocking")})
+			if _, err := ResolveFromCache(consumer(), nil); err != nil {
+				t.Fatalf("first run: %v", err)
+			}
+			commit(map[string]any{"first": commandSensor("blocking"), "second": commandSensor("blocking")})
+
+			got, err := WithIncludedSensors(consumer())
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, sawSecond := got.Sensors["second"]
+			if sawSecond != tt.wantRefresh {
+				t.Errorf("sensor added after the first run seen = %v, want %v", sawSecond, tt.wantRefresh)
+			}
+			if _, ok := got.Sensors["first"]; !ok {
+				t.Error("first sensor missing")
+			}
+		})
+	}
+}
+
 func TestProfileOverrideRefusals(t *testing.T) {
 	cases := []struct {
 		name    string

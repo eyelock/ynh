@@ -231,7 +231,10 @@ func lookupOnlyRepo(gitURL, ref string) (RepoResult, error) {
 
 // includeBase resolves one include to a directory on disk without touching the
 // network. A run fetches its includes before it merges sensors, so by then
-// the cache is warm; `ynh check` and `ynh sensors` never fetch.
+// the cache is warm; `ynh check` and `ynh sensors` never fetch from a remote.
+// The one exception is the harness's own repo (IsOwnRepoSource): it is on
+// disk, so it is refreshed here too, and a sensor committed to it is seen
+// without an update.
 func includeBase(p *harness.Harness, inc harness.Include) (base, source string, err error) {
 	if inc.IsLocal() {
 		b, err := resolveLocalSource(inc.GitSource, p.Dir)
@@ -240,7 +243,11 @@ func includeBase(p *harness.Harness, inc harness.Include) (base, source string, 
 		}
 		return b, "include " + inc.Local, nil
 	}
-	b, _, err := resolveGitSourceWith(inc.GitSource, p.Dir, lookupOnlyRepo)
+	fetch := repoFunc(lookupOnlyRepo)
+	if IsOwnRepoSource(inc.GitSource, p.Dir) {
+		fetch = EnsureRepo
+	}
+	b, _, err := resolveGitSourceWith(inc.GitSource, p.Dir, fetch)
 	if err != nil {
 		return "", "", fmt.Errorf(
 			"include %s is not in the cache, so its sensors cannot be read: %w\nrun `ynh update` (checking a gate must not reach the network)",
