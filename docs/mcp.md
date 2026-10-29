@@ -322,6 +322,10 @@ which variables a `${VAR}` reference may resolve, and which variables reach an
 agent worker's process under [`ynh agent run`](agent.md). One declaration, one
 place to review.
 
+The same list is all a worker is given, so a server (or any tool) configured
+through its own variable, such as `YNM_HOME`, silently falls back to its default
+unless that variable is listed. Nothing reports the omission.
+
 Two rules keep the mechanism from becoming a hole of its own:
 
 - **A reference to a variable outside the allowlist is an error.** Otherwise any

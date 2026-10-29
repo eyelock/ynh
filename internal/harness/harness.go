@@ -146,7 +146,12 @@ type Harness struct {
 	Focuses         map[string]plugin.Focus
 	Sensors         map[string]plugin.Sensor
 	SensorOverrides map[string]plugin.SensorOverride
-	InstalledFrom   *Provenance
+	// ActiveProfile and ProfileSensorOverrides are set by ResolveProfile and
+	// applied last by resolver.WithIncludedSensors, after the include merge,
+	// because they may name sensors only that merge produces.
+	ActiveProfile          string
+	ProfileSensorOverrides map[string]plugin.SensorOverride
+	InstalledFrom          *Provenance
 
 	// Manifest is the manifest this harness was loaded from: the parsed
 	// .ynh-plugin/plugin.json, or the one derived in memory from an Agent
@@ -799,6 +804,8 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 	}
 
 	resolved := *h
+	resolved.ActiveProfile = profileName
+	resolved.ProfileSensorOverrides = profile.SensorOverrides
 
 	// Merge hooks: per-event replace, inherit absent events
 	if profile.Hooks != nil {
