@@ -273,3 +273,15 @@ func ResolveIncludesLocal(p *harness.Harness, sel harness.Selection) ([]ResolveR
 	}, sel)
 	return results, err
 }
+
+// ResolveDelegateLocal resolves a delegate's source to its directory without
+// touching the network, as ResolveIncludesLocal does for includes: a delegate
+// that is not cached is an error, and the harness's own repo is refreshed.
+func ResolveDelegateLocal(gs harness.GitSource, harnessDir string) (string, error) {
+	fetch := repoFunc(lookupOnlyRepo)
+	if IsOwnRepoSource(gs, harnessDir) {
+		fetch = EnsureRepo
+	}
+	base, _, err := resolveGitSourceWith(gs, harnessDir, fetch)
+	return base, err
+}

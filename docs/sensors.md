@@ -353,6 +353,10 @@ ynh trust accept <harness>   # record that you have read them
   are not listed.
 - **MCP servers**: the `command` with its `args`, or the `url`, plus `cwd`, and
   the names of the `env` entries and `headers`.
+  Servers a delegate carries on its own are
+  listed against the delegate, and its own includes' servers with them. They are
+  connected only while that delegate runs, but they run with your credentials
+  all the same.
 
 Everything is shown as resolved for a run: the harness's own, then whatever
 each profile adds or changes (an entry identical to the harness's own is not

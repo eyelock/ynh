@@ -105,6 +105,10 @@
           "type": "string",
           "description": "The included harness that supplied the server, as the include chain reads (a > b when reached through another harness). Absent for a server of the harness itself."
         },
+        "delegate": {
+          "type": "string",
+          "description": "The delegate harness that carries the server. A delegate's servers are connected only while that delegate runs, and are not the session's. Absent for a server of the session."
+        },
         "transport": {
           "type": "string",
           "description": "Effective transport, e.g. stdio or streamable-http. Open set."
@@ -193,7 +197,7 @@
       "items": {
         "$ref": "#/$defs/MCPServer"
       },
-      "description": "MCP servers as resolved for a run. Omitted when there are none. Includes contribute theirs, transitively, with the supplying harness in source."
+      "description": "MCP servers as resolved for a run. Omitted when there are none. Includes contribute theirs, transitively, with the supplying harness in source. Delegates contribute the servers they carry, named in delegate."
     },
     "legacy_digest": {
       "type": "boolean",

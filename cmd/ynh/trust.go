@@ -167,7 +167,10 @@ type mcpExec struct {
 	Name    string `json:"name"`
 	// Source names the included harness that supplied the server. Empty for
 	// the harness's own.
-	Source    string     `json:"source,omitempty"`
+	Source string `json:"source,omitempty"`
+	// Delegate names the delegate harness that carries the server, which is
+	// connected only while that delegate runs. Empty for the session's own.
+	Delegate  string     `json:"delegate,omitempty"`
 	Transport string     `json:"transport"`
 	Command   string     `json:"command,omitempty"`
 	Args      []string   `json:"args,omitempty"`
@@ -219,6 +222,10 @@ type runView struct {
 	// MCPSources maps each MCP server of H to the harness that supplied it
 	// (harness.MCPSourceRoot, or the include's display name).
 	MCPSources map[string]string
+	// Delegates holds the MCP servers each delegate harness carries on its
+	// own, which are not the session's: they are connected only while that
+	// delegate runs.
+	Delegates []delegateView
 	// HookSources maps each event of H.Hooks to the include chain that
 	// supplied each entry, "" for the harness's own.
 	HookSources map[string][]string
@@ -236,10 +243,18 @@ type runView struct {
 //
 // Anything that cannot be resolved is returned as a problem rather than
 // skipped, so the caller can refuse to call a partial set complete.
+// delegateView is one delegate's own MCP servers, with their sources.
+type delegateView struct {
+	Name    string
+	Servers map[string]plugin.MCPServer
+	Sources map[string]string
+}
+
 // runSources is where the servers and hooks of a view came from.
 type runSources struct {
-	mcp   map[string]string
-	hooks map[string][]string
+	mcp       map[string]string
+	hooks     map[string][]string
+	delegates []delegateView
 }
 
 func runViews(p *harness.Harness) (views []runView, problems []string) {
@@ -248,6 +263,11 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 	// with their sources. h itself is not changed.
 	fold := func(h *harness.Harness, sel harness.Selection) (*harness.Harness, runSources, []resolver.ResolveResult, error) {
 		src := runSources{mcp: map[string]string{}}
+		delegates, err := delegateViews(h)
+		if err != nil {
+			return nil, src, nil, err
+		}
+		src.delegates = delegates
 		if len(h.Includes) == 0 {
 			return h, src, nil, nil
 		}
@@ -292,7 +312,7 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 			problems = append(problems, fmt.Sprintf("%s: %v", label, err))
 			return
 		}
-		views = append(views, runView{Profile: profile, H: merged, MCPSources: src.mcp, HookSources: src.hooks})
+		views = append(views, runView{Profile: profile, H: merged, MCPSources: src.mcp, HookSources: src.hooks, Delegates: src.delegates})
 		if profile != "" {
 			return
 		}
@@ -322,7 +342,7 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 					problems = append(problems, fmt.Sprintf("profile %s: %v", qualified, err))
 					continue
 				}
-				views = append(views, runView{Profile: qualified, H: v, MCPSources: vSrc.mcp, HookSources: vSrc.hooks})
+				views = append(views, runView{Profile: qualified, H: v, MCPSources: vSrc.mcp, HookSources: vSrc.hooks, Delegates: vSrc.delegates})
 			}
 		}
 	}
@@ -336,6 +356,42 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 		add(name, r)
 	}
 	return views, problems
+}
+
+// delegateViews reads the MCP servers each delegate of h carries on its own,
+// the way a run composes them: the delegate's includes (resolved against its
+// own directory, from the cache), then its own servers. Anything unreadable is
+// an error, so the set is never reported complete without it.
+func delegateViews(h *harness.Harness) ([]delegateView, error) {
+	var out []delegateView
+	for _, del := range h.DelegatesTo {
+		base, err := resolver.ResolveDelegateLocal(del.GitSource, h.Dir)
+		if err != nil {
+			return nil, fmt.Errorf("delegate %s: %w", del.Git, err)
+		}
+		dh, err := harness.LoadDir(base)
+		if err != nil {
+			return nil, fmt.Errorf("delegate %s: %w", del.Git, err)
+		}
+		var included []harness.IncludedHarness
+		if len(dh.Includes) > 0 {
+			resolved, err := resolver.ResolveIncludesLocal(dh, harness.Selection{})
+			if err != nil {
+				return nil, fmt.Errorf("delegate %s: includes: %w", dh.Name, err)
+			}
+			included = resolver.IncludedHarnesses(resolved)
+		}
+		servers, provenance, err := harness.ComposeMCPServersRaw(dh, included)
+		if err != nil {
+			return nil, fmt.Errorf("delegate %s: %w", dh.Name, err)
+		}
+		dv := delegateView{Name: dh.Name, Servers: servers, Sources: map[string]string{}}
+		for _, pr := range provenance {
+			dv.Sources[pr.Server] = pr.Source
+		}
+		out = append(out, dv)
+	}
+	return out, nil
 }
 
 func sensorKey(e executable) string {
@@ -432,6 +488,27 @@ func collectMCP(profile string, v *harness.Harness, sources map[string]string, b
 	return out
 }
 
+// collectDelegateMCP lists the servers the delegates of one view carry, with
+// the same profile-delta rule as collectMCP.
+func collectDelegateMCP(profile string, delegates []delegateView, base map[string]bool) []mcpExec {
+	var out []mcpExec
+	for _, d := range delegates {
+		for _, name := range slices.Sorted(maps.Keys(d.Servers)) {
+			src := d.Sources[name]
+			if src == harness.MCPSourceRoot {
+				src = ""
+			}
+			m := mcpFromServer(profile, name, src, d.Servers[name])
+			m.Delegate = d.Name
+			if profile != "" && base[mcpKey(m)] {
+				continue
+			}
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
 // harnessExecutables lists everything the harness can get executed, grouped by
 // kind and sorted so the digest does not depend on Go's randomised map order:
 // an unsorted digest would differ between two runs over an unchanged harness
@@ -449,6 +526,7 @@ func harnessExecutables(p *harness.Harness) trustSet {
 		set.Sensors = append(set.Sensors, collectSensors(v.Profile, v.H, baseSensors, p.Dir)...)
 		set.Hooks = append(set.Hooks, collectHooks(v.Profile, v.H, v.HookSources, baseHooks)...)
 		set.MCPServers = append(set.MCPServers, collectMCP(v.Profile, v.H, v.MCPSources, baseMCP)...)
+		set.MCPServers = append(set.MCPServers, collectDelegateMCP(v.Profile, v.Delegates, baseMCP)...)
 		if v.Profile != "" {
 			continue
 		}
@@ -492,6 +570,10 @@ func writeMCP(w io.Writer, m mcpExec) {
 	if m.Source != "" {
 		field(w, "from")
 		field(w, m.Source)
+	}
+	if m.Delegate != "" {
+		field(w, "delegate")
+		field(w, m.Delegate)
 	}
 }
 
@@ -585,6 +667,14 @@ func fromSuffix(source string) string {
 		return ""
 	}
 	return " from " + source
+}
+
+// delegateSuffix labels a server that only a delegate carries.
+func delegateSuffix(delegate string) string {
+	if delegate == "" {
+		return ""
+	}
+	return " of delegate " + delegate
 }
 
 // scopeSuffix labels a hook or server that only a profile adds or changes.
@@ -934,7 +1024,7 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 	if len(s.MCPServers) > 0 {
 		_, _ = fmt.Fprintf(w, "\nMCP servers, launched or contacted by the vendor CLI:\n\n")
 		for _, m := range s.MCPServers {
-			_, _ = fmt.Fprintf(w, "  %s (%s)%s%s\n", m.Name, m.Transport, fromSuffix(m.Source), scopeSuffix(m.Profile))
+			_, _ = fmt.Fprintf(w, "  %s (%s)%s%s\n", m.Name, m.Transport, delegateSuffix(m.Delegate)+fromSuffix(m.Source), scopeSuffix(m.Profile))
 			if m.Command != "" {
 				_, _ = fmt.Fprintf(w, "    command: %s\n", strings.Join(append([]string{m.Command}, m.Args...), " "))
 			}
