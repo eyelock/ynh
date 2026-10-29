@@ -215,7 +215,7 @@ func TestAssembleDelegates_OwnRepoDelegateAddedLater(t *testing.T) {
 		adapter := &mockAdapter{}
 		workDir := t.TempDir()
 		delegates := []harness.Delegate{{GitSource: harness.GitSource{Git: ".", Path: "harnesses/" + name}}}
-		if err := AssembleDelegates(workDir, adapter, delegates, harnessDir); err != nil {
+		if _, err := AssembleDelegates(workDir, adapter, delegates, harnessDir, DelegateOptions{}); err != nil {
 			return err
 		}
 		_, err := os.Stat(filepath.Join(workDir, adapter.ConfigDir(), "agents", name+".md"))
