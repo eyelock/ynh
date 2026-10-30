@@ -615,7 +615,8 @@ type opencodeHookEntry struct {
 //     60s by default) lets the
 //     call proceed, but is reported on stderr with its command, as is any exit
 //     other than 0 and 2. `opencode run` shows that stderr only with both
-//     --standalone and --print-logs (CONFIRMED v2.2.3)
+//     --standalone and --print-logs (CONFIRMED v2.2.3); ynh already passes
+//     --standalone, so a user adds --print-logs
 //   - a matcher is an anchored JavaScript regex, checked here at generate
 //     time (see validateOpencodeMatcher); a bad one is an error naming it
 //   - MCP tools fire the tool hooks under the id "<server>_<tool>" (CONFIRMED:
