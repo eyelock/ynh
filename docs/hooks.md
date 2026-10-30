@@ -516,7 +516,7 @@ When an included harness declares hooks and its include does not consent, ynh do
   warning: included harness guard declares hooks (before_tool, on_stop) that are not active; add "hooks": true to its include to run them
 ```
 
-The events are listed sorted. The source is the include's name as shown elsewhere, with the chain (`eyelock/a > eyelock/b`) for a harness reached through another. `ynd preview` also lists them after the assembled tree, under "Hooks from included harnesses:" (active) and "Hooks from included harnesses, not active" (declined), each with the event and its source.
+The events are listed sorted. The source is the include's name as shown elsewhere, with the chain (`eyelock/a > eyelock/b`) for a harness reached through another. `ynd preview` also lists them after the assembled tree, under "Hooks from included harnesses:" (active) and "Hooks from included harnesses, not active" (declined), each with the event and its source. `ynd compose` shows the same: its hooks are those a run carries, an included one marked with its source (`source` in JSON, `(from ...)` in text), and the declined ones are in `hooks_not_active`.
 
 ### Script placement
 
