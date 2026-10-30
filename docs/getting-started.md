@@ -113,14 +113,31 @@ ynh install ./david
 
 ## Passing Vendor Flags
 
-All flags except `-v`, `--install`, and `--clean` are passed through to the vendor CLI. Use `--` to separate vendor flags from the prompt:
+Every flag that is not one of `ynh run`'s own (`ynh run --help` lists them) is passed through to the vendor CLI, in order. ynh does not know which vendor flags take a value, so it reads a bare word by where it stands: a word right after a passed-through flag stays with that flag as its value, and the last bare word is the prompt.
+
+```bash
+david --model opus --max-turns 1 "fix this bug"   # --model opus --max-turns 1, prompt "fix this bug"
+david --verbose "fix this bug"                    # --verbose, prompt "fix this bug"
+david --verbose "fix this bug" --model=opus       # --verbose --model=opus, prompt "fix this bug"
+```
+
+Put the prompt after `--`, or write a value with `=`, whenever the last word would otherwise be read the wrong way. Before `--`, a word right after a passed-through flag is always that flag's value:
 
 ```bash
 david --model opus -- "fix this bug"
+david --model=opus                                # no prompt: "--model opus" would make opus the prompt
+david --model opus --                             # no prompt, the same as --model=opus
+david --verbose --model opus -- "fix this bug"    # "--verbose 'fix this bug' --model opus" would make opus the prompt
 david -v codex -- "refactor auth"
 ```
 
-When there are no vendor flags, the prompt can be a plain argument:
+Claude's own CLI is usually written with the prompt first, `claude -p "say ok" --model haiku`. Through ynh, write it with `--`, and leave out `-p`: ynh passes the prompt to Claude itself.
+
+```bash
+david --model haiku -- "say ok"
+```
+
+With no flags at all, the prompt is simply the word after the harness name:
 
 ```bash
 david "explain this function"
