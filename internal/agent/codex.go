@@ -68,6 +68,7 @@ func buildCodexArgs(opts StartOptions, threadID string) []string {
 		args = append(args, "resume", threadID)
 	}
 	args = append(args, "--json")
+	args = append(args, workspaceArgs(vendorCodex, opts.Workspace)...)
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}

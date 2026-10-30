@@ -522,3 +522,122 @@ func TestExportMerged_CopilotRootHooksOnlyWithoutClaude(t *testing.T) {
 		}
 	}
 }
+
+// Copilot runs a plugin hook from the plugin folder unless the entry carries
+// "cwd": "." (CONFIRMED live, Copilot CLI 1.0.105, 2026-10-30), so every
+// Copilot hook file ynh writes carries it. Claude's hooks/claude.json, which
+// Copilot also reads in a merged package, must not: Claude's handler fields do
+// not document "cwd". A relative command in that package gets a warning.
+func TestExport_CopilotHooksCarryCwd(t *testing.T) {
+	srcDir := t.TempDir()
+	writeJSON(t, filepath.Join(srcDir, plugin.PluginDir, plugin.PluginFile), map[string]any{
+		"name":    "plugin-hooks",
+		"version": "0.1.0",
+		"hooks": map[string]any{
+			"before_tool": []any{
+				map[string]string{"matcher": "Bash", "command": "bash scripts/wake.sh"},
+				map[string]string{"command": "./scripts/guard.sh"},
+			},
+		},
+	})
+	writeTree(t, srcDir, map[string]string{"scripts/guard.sh": "#!/bin/sh\n"})
+
+	read := func(out, rel string) string {
+		data, err := os.ReadFile(filepath.Join(out, rel))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+
+	for _, tc := range []struct {
+		name    string
+		vendors []string
+		mode    ExportMode
+		file    string
+	}{
+		{"copilot-only export", []string{"copilot"}, ModeMerged, "hooks.json"},
+		{"agent plugin", []string{"copilot"}, ModeAgentPlugin, "com.github.copilot/hooks/hooks.json"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "o")
+			if _, err := Export(ExportOptions{SourceDir: srcDir, OutputDir: out, Vendors: tc.vendors, Mode: tc.mode}); err != nil {
+				t.Fatal(err)
+			}
+			got := read(out, tc.file)
+			if n := strings.Count(got, `"cwd": "."`); n != 2 {
+				t.Errorf("want cwd on both entries, got %d:\n%s", n, got)
+			}
+			if !strings.Contains(got, `"\"${PLUGIN_ROOT}\"/scripts/guard.sh"`) {
+				t.Errorf("./ script not anchored:\n%s", got)
+			}
+		})
+	}
+
+	t.Run("merged with Claude", func(t *testing.T) {
+		out := filepath.Join(t.TempDir(), "o")
+		res, err := Export(ExportOptions{SourceDir: srcDir, OutputDir: out, Vendors: []string{"claude", "copilot"}, Mode: ModeMerged})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := strings.Count(read(out, "hooks/claude.json"), `"cwd": "."`); n != 2 {
+			t.Errorf("hooks/claude.json: want cwd on both handlers, got %d", n)
+		}
+		for _, r := range res {
+			if slices.ContainsFunc(r.Warnings, func(w string) bool { return strings.Contains(w, "plugin folder") }) {
+				t.Errorf("unexpected warning: %v", r.Warnings)
+			}
+		}
+	})
+
+	t.Run("Claude only", func(t *testing.T) {
+		out := filepath.Join(t.TempDir(), "o")
+		if _, err := Export(ExportOptions{SourceDir: srcDir, OutputDir: out, Vendors: []string{"claude"}, Mode: ModeMerged}); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(read(out, "hooks/claude.json"), `"cwd"`) {
+			t.Error("a Claude-only export must not carry cwd")
+		}
+	})
+}
+
+// An on_session_start hook reaches the model on Copilot and Cursor only through
+// a JSON field, so their exports carry the wrapper that supplies it, and a
+// merged package with Claude and Copilot carries it for the file they share.
+// Claude and Codex read plain stdout and ship no wrapper.
+func TestExport_SessionStartWrapper(t *testing.T) {
+	srcDir := t.TempDir()
+	writeJSON(t, filepath.Join(srcDir, plugin.PluginDir, plugin.PluginFile), map[string]any{
+		"name":    "wake",
+		"version": "0.1.0",
+		"hooks": map[string]any{
+			"on_session_start": []any{map[string]string{"command": "echo wake"}},
+		},
+	})
+	want := map[string]bool{"claude": false, "codex": false, "copilot": true, "cursor": true}
+	for vendor, wrapped := range want {
+		t.Run(vendor, func(t *testing.T) {
+			outputDir := t.TempDir()
+			if _, err := Export(ExportOptions{SourceDir: srcDir, OutputDir: outputDir, Vendors: []string{vendor}, Mode: ModePerVendor}); err != nil {
+				t.Fatal(err)
+			}
+			_, err := os.Stat(filepath.Join(outputDir, vendor, "hooks", "ynh-session-context.sh"))
+			if wrapped != (err == nil) {
+				t.Errorf("wrapper present = %v, want %v (%v)", err == nil, wrapped, err)
+			}
+		})
+	}
+	t.Run("merged claude and copilot", func(t *testing.T) {
+		outputDir := filepath.Join(t.TempDir(), "merged")
+		if _, err := Export(ExportOptions{SourceDir: srcDir, OutputDir: outputDir, Vendors: []string{"claude", "copilot"}, Mode: ModeMerged}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(filepath.Join(outputDir, "hooks", "ynh-session-context.sh")); err != nil {
+			t.Errorf("merged package lacks the wrapper: %v", err)
+		}
+		data, err := os.ReadFile(filepath.Join(outputDir, "hooks", "claude.json"))
+		if err != nil || !strings.Contains(string(data), "claude+copilot") {
+			t.Errorf("shared hook file must run the wrapper in both-shapes mode: %v\n%s", err, data)
+		}
+	})
+}

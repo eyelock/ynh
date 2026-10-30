@@ -27,6 +27,30 @@ ynh defines six canonical hook events. Each vendor translates these to its nativ
 
 `on_stop` and `on_session_end` are different events: a session of ten turns runs `on_stop` ten times and `on_session_end` once, if the vendor gets to run it at all.
 
+### on_session_start output becomes model context
+
+On every vendor, what an `on_session_start` hook prints reaches the model. **Write plain text to stdout**; ynh does the rest. A hook that prints a line of orientation, today's tasks or a wake block works the same on Claude Code, Codex, Copilot and Cursor.
+
+The vendors do not agree on how the output is read. Verified on 2026-10-30 with a hook printing a unique token and a one-shot prompt asking the model to repeat any token in its context:
+
+| Vendor | Plain stdout reaches the model? | The field that does | ynh |
+|--------|---------------------------------|---------------------|-----|
+| Claude Code | Yes | also `hookSpecificOutput.additionalContext` | writes the command as declared |
+| Codex | Per its docs ("Plain text on stdout is added as extra developer context"); **not verified live** | also `hookSpecificOutput.additionalContext` | writes the command as declared |
+| Copilot CLI 1.0.105 | No | `{"additionalContext": "..."}` | wraps the command |
+| Cursor (cursor-agent 2026.10.01) | No | `{"additional_context": "..."}` | wraps the command |
+
+On Copilot and Cursor ynh writes the hook as `sh <root>/hooks/ynh-session-context.sh <field> '<your command>'`. The wrapper is a small generated POSIX `sh` and `awk` script shipped inside the session layout and inside every exported package (`hooks/ynh-session-context.sh`), so it works on a machine where ynh is not installed, with no python or jq. It:
+
+- passes the hook payload on stdin to your command, keeps its stderr, and exits with its exit status;
+- turns your stdout into `{"<field>": "<stdout>"}`, escaping quotes, backslashes, newlines, tabs and control characters (UTF-8 passes through);
+- passes stdout through unchanged when it is already a JSON object, so a hook can still choose its own output;
+- emits nothing when your command prints nothing.
+
+In a package that Claude Code and Copilot share one hook file for, the wrapper emits both shapes at once. Other events are untouched.
+
+Each vendor declares how it delivers this as `<vendor>SessionStartContext` in its adapter (`plain`, `json-field:<name>` or `unsupported:<reason>`), and `make check-vendor-parity` requires it. A vendor that declares `unsupported` makes `ynd validate`, `ynd lint` and assembly warn that the hook's output does not reach the model there.
+
 ### on_session_end semantics
 
 `on_session_end` is for cleanup and bookkeeping that is worth doing and safe to lose: flush a log, write a summary, remove a scratch file. Do not put anything on it that must happen.
@@ -182,7 +206,7 @@ Copilot accepts the same events in camelCase (`preToolUse`, `agentStop`, `userPr
 | Claude Code | Three-level nesting: event > matcher group > hook array |
 | Cursor | Flat: event > hook array (with `"version": 1` required) |
 | Codex | Three-level nesting: event > matcher group > hook array (same structure as Claude) |
-| Copilot | Flat: event > array of `{"type": "command", "command": ..., "matcher": ...}` entries, with `"version": 1` |
+| Copilot | Flat: event > array of `{"type": "command", "command": ..., "cwd": ".", "matcher": ...}` entries, with `"version": 1` |
 
 Each vendor reads hooks from a different file depending on how the harness reaches it: a session in a project directory, or an installed plugin. ynh writes each file only where that vendor reads it:
 
@@ -382,7 +406,8 @@ Copilot uses a flat structure with `"version": 1`, like Cursor, and PascalCase e
 
 - All six events fire from `.copilot/hooks/hooks.json` loaded by `--plugin-dir`, **in an untrusted folder**. Plugin hooks do not need folder trust.
 - `PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `COPILOT_PLUGIN_ROOT` are all set to the plugin directory, so `"${PLUGIN_ROOT}"/...` expands (#497).
-- **A hook script runs with the plugin directory as its working directory**, not the project. The project directory is the `cwd` field of the payload on stdin. A script that needs the project must read `cwd` from the payload.
+- **Without `cwd`, a hook runs in the plugin directory**, not the project. ynh writes `"cwd": "."` on every Copilot hook entry, which Copilot resolves against the repository root ([Copilot hooks reference](https://docs.github.com/en/copilot/reference/hooks-configuration): "Working directory for the command (relative to repository root or absolute)"). So Copilot hooks run from the repository root, like the other vendors, and a relative command such as `bash scripts/wake.sh` finds the project's script (CONFIRMED live, Copilot CLI 1.0.105, 2026-10-30). For a session started in a repository subfolder the root is the repository root, whereas Claude Code runs a hook in the agent's current working directory. ynh's own `./` scripts are anchored with `"${PLUGIN_ROOT}"` and are unaffected.
+- **A merged package with Claude** is covered too. Copilot loads Claude's `hooks/claude.json` there, so ynh writes `"cwd": "."` on those handlers as well, only when the package also targets Copilot. Claude Code tolerates the extra field and runs hooks in its current directory regardless, so it is a no-op for Claude (CONFIRMED live, Claude Code, 2026-10-30). A Claude-only export is unchanged.
 - The payload is Claude-shaped: `tool_name` is `Bash` for a shell call, and `SessionEnd` carries `reason: "complete"` in a `-p` run.
 - A `Bash` matcher fires on both `PreToolUse` and `PostToolUse`; an `Edit` matcher did not fire for a shell call.
 - Each export layout fires each hook exactly once when loaded with `--plugin-dir`: the Copilot-only export, the merged package and the Agent Plugins export (table above). In a merged package Copilot loads `hooks/claude.json` and ignores the root `hooks.json`.

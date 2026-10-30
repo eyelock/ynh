@@ -8,6 +8,7 @@ Define named focus entries that combine a profile with a prompt for repeatable, 
 # Clean up from any previous run
 rm -rf /tmp/ynh-tutorial
 ynh uninstall local/focus-demo 2>/dev/null
+ynh uninstall local/wake-demo 2>/dev/null
 
 mkdir -p /tmp/ynh-tutorial
 ```
@@ -213,10 +214,115 @@ ynh focus remove /tmp/ynh-tutorial/focus-harness security
 
 The first positional argument is either a filesystem path (as above, while authoring) or a canonical id (`local/focus-demo`, `github.com/<org>/<repo>/<name>`) once the harness is installed.
 
+## Launch focus: a harness that wakes with a job
+
+A harness can name the focus it always wakes with. Add `launch_focus` beside the focus it names:
+
+```bash
+mkdir -p /tmp/ynh-tutorial/wake-harness/.agents/harness
+cat > /tmp/ynh-tutorial/wake-harness/.agents/harness/plugin.json << 'EOF'
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "wake-demo",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "profiles": {
+    "live": { "hooks": { "on_stop": [{ "command": "echo live-profile-marker" }] } }
+  },
+  "focuses": {
+    "wake": { "prompt": "Begin: act on your wake block", "profile": "live" },
+    "next": { "prompt": "Take the next task" }
+  },
+  "launch_focus": "wake"
+}
+EOF
+ynd validate /tmp/ynh-tutorial/wake-harness | head -1
+ynh install /tmp/ynh-tutorial/wake-harness
+```
+
+Expected first line:
+```
+/tmp/ynh-tutorial/wake-harness: valid
+```
+
+A bare launch, with no `--focus` and no prompt, runs `--focus wake --interactive`: the session stays open, the focus prompt is its first message, and the focus's profile is applied. ynh says so on stderr.
+
+*This launches:* `claude Begin: act on your wake block --plugin-dir ~/.ynh/run/local--wake-demo/.claude --add-dir ~/.ynh/run/local--wake-demo`
+```bash
+ynh run local/wake-demo
+```
+
+Expected on stderr:
+```
+Using launch_focus "wake" (pass --focus or a prompt to run something else)
+Launching claude...
+```
+
+The profile's hook is in the assembled session:
+
+```bash
+grep -c live-profile-marker ~/.ynh/run/local--wake-demo/.claude/hooks/hooks.json
+```
+
+Expected:
+```
+1
+```
+
+An explicit `--focus` is unchanged: it runs that focus one-shot, and the launch focus (its prompt, its profile, its interactive session) is not involved. A scheduler that runs `worker --focus next` still gets a one-shot run that exits.
+
+*This launches:* `claude --plugin-dir ~/.ynh/run/local--wake-demo/.claude --add-dir ~/.ynh/run/local--wake-demo -p Take the next task`
+```bash
+ynh run local/wake-demo --focus next
+```
+
+The `live` profile is not applied to it:
+
+```bash
+grep -c live-profile-marker ~/.ynh/run/local--wake-demo/.claude/hooks/hooks.json 2>/dev/null || echo 0
+```
+
+Expected:
+```
+0
+```
+
+An explicit prompt replaces the wake prompt but keeps the launch focus's profile. Whether the session is interactive is up to you, as it always was: one-shot unless you pass `--interactive`.
+
+*This launches:* `claude --plugin-dir ~/.ynh/run/local--wake-demo/.claude --add-dir ~/.ynh/run/local--wake-demo -p summarise the repository`
+```bash
+ynh run local/wake-demo -- "summarise the repository"
+```
+
+```bash
+grep -c live-profile-marker ~/.ynh/run/local--wake-demo/.claude/hooks/hooks.json
+```
+
+Expected:
+```
+1
+```
+
+There is no switch to turn the launch focus off: a prompt is how you get a session that does not wake with it. `ynd validate` rejects a `launch_focus` that names a focus that is not there:
+
+```bash
+mkdir -p /tmp/ynh-tutorial/bad-wake/.agents/harness
+sed 's/"launch_focus": "wake"/"launch_focus": "sleep"/' /tmp/ynh-tutorial/wake-harness/.agents/harness/plugin.json > /tmp/ynh-tutorial/bad-wake/.agents/harness/plugin.json
+ynd validate /tmp/ynh-tutorial/bad-wake 2>&1 | grep launch_focus
+```
+
+Expected:
+```
+  - launch_focus references undefined focus "sleep"
+```
+
+Because the launch focus's prompt steers every session, `ynh trust show local/wake-demo` lists it, and the trust digest covers it. See [Focus: Launch focus](../focus.md#launch-focus).
+
 ## Clean up
 
 ```bash
 ynh uninstall local/focus-demo 2>/dev/null
+ynh uninstall local/wake-demo 2>/dev/null
 rm -rf /tmp/ynh-tutorial
 ```
 
@@ -229,6 +335,7 @@ rm -rf /tmp/ynh-tutorial
 - `--focus` and `--profile` are mutually exclusive — focus already includes a profile
 - Focus entries that reference a non-existent profile are caught by `ynd validate`
 - `ynh info` displays focus entries and profiles
+- `launch_focus` names the focus a bare `ynh run` wakes with: interactive, its prompt first, its profile applied; an explicit `--focus` or prompt overrides it
 - Focuses can be edited with `ynh focus add/remove/update` — the same surface a GUI consumer drives
 
 ## Next

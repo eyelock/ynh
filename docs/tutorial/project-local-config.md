@@ -184,4 +184,4 @@ The project-local config pattern works well with focus entries ([Focus](focus.md
 
 ## Next
 
-[Developer Tools](developer-tools.md) — scaffold, lint, validate, format, compress, inspect with ynd.
+[Workspace Folders](workspace.md): request sibling folders and see how an allow-list or trust grants them.

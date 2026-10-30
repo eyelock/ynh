@@ -107,6 +107,12 @@ command, http, prompt, agent
 }
 ```
 
+A hook handler's `cwd` is not a documented field (`cwd` is only the stdin payload's current
+directory). **CONFIRMED live (Claude Code, 2026-10-30):** an extra `"cwd": "."` on a handler
+is tolerated, with no error or warning, and changes nothing, since Claude runs hooks in its
+current directory. ynh writes it into `hooks/claude.json` only for a merged package that also
+targets Copilot, which loads that file (`Claude.GeneratePluginHookConfigForCopilot`).
+
 ## MCP Format (.mcp.json at plugin root or project root)
 
 ynh writes this document to `.claude/.mcp.json` for a session (`ynh run` passes

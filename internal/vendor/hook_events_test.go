@@ -116,7 +116,16 @@ func TestHookEventsAllSixPerVendor(t *testing.T) {
 					}
 					cmd = e.Command
 				}
-				if want := allCanonicalHooks()[ev][0].Command; cmd != want {
+				want := allCanonicalHooks()[ev][0].Command
+				// Copilot and Cursor read session-start context from a JSON
+				// field, so ynh runs that one command through its wrapper.
+				if ev == "on_session_start" && (tc.vendor == "copilot" || tc.vendor == "cursor") {
+					if !strings.Contains(cmd, "ynh-session-context.sh") || !strings.HasSuffix(cmd, "'"+want+"'") {
+						t.Errorf("%s: command = %q, want the wrapper around %q", native, cmd, want)
+					}
+					continue
+				}
+				if cmd != want {
 					t.Errorf("%s: command = %q, want %q", native, cmd, want)
 				}
 			}
@@ -156,19 +165,22 @@ func TestCopilotGenerateHookConfig(t *testing.T) {
       {
         "type": "command",
         "command": "\"${PLUGIN_ROOT}\"/scripts/guard.sh --strict",
+        "cwd": ".",
         "matcher": "Bash"
       }
     ],
     "SessionEnd": [
       {
         "type": "command",
-        "command": "\"${PLUGIN_ROOT}\"/scripts/bye.sh"
+        "command": "\"${PLUGIN_ROOT}\"/scripts/bye.sh",
+        "cwd": "."
       }
     ],
     "Stop": [
       {
         "type": "command",
-        "command": "/usr/local/bin/done.sh"
+        "command": "/usr/local/bin/done.sh",
+        "cwd": "."
       }
     ]
   },

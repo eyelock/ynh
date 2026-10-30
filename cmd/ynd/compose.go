@@ -27,6 +27,7 @@ type composeOutput struct {
 	MCPServers    map[string]composeMCP     `json:"mcp_servers,omitempty"`
 	Profiles      map[string]composeProfile `json:"profiles"`
 	Focuses       map[string]composeFocus   `json:"focuses,omitempty"`
+	LaunchFocus   string                    `json:"launch_focus,omitempty"`
 	Sensors       map[string]composeSensor  `json:"sensors,omitempty"`
 	Counts        composeCounts             `json:"counts"`
 }
@@ -472,6 +473,7 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 			}
 		}
 		out.Focuses = focuses
+		out.LaunchFocus = h.LaunchFocus
 	}
 
 	// Sensors — root harness only (included harnesses' sensors are dropped by design)
@@ -632,6 +634,9 @@ func printComposeText(w io.Writer, out composeOutput) error {
 				profileLabel = "profile=" + f.Profile
 			}
 			_, _ = fmt.Fprintf(w, "  %s    %s    %q\n", name, profileLabel, f.Prompt)
+		}
+		if out.LaunchFocus != "" {
+			_, _ = fmt.Fprintf(w, "  launch focus: %s\n", out.LaunchFocus)
 		}
 	}
 

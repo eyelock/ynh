@@ -38,7 +38,7 @@ func HookWarnings(vendorName string, hooks map[string][]plugin.HookEntry) []stri
 	if !ok {
 		return nil
 	}
-	var warnings []string
+	warnings := sessionContextWarnings(vendorName, hooks)
 	for _, event := range slices.Sorted(maps.Keys(hooks)) {
 		if len(hooks[event]) == 0 || !plugin.ValidHookEvents[event] {
 			continue

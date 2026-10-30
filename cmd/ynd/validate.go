@@ -15,6 +15,7 @@ import (
 	"github.com/eyelock/ynh/internal/pathutil"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
+	"github.com/eyelock/ynh/internal/workspace"
 )
 
 func cmdValidate(args []string) error {
@@ -318,12 +319,16 @@ func validateHarness(dir string) error {
 			issues = append(issues, validateHarnessMCPServers(hj)...)
 			issues = append(issues, validateHarnessProfiles(hj)...)
 			issues = append(issues, validateHarnessFocus(hj)...)
+			issues = append(issues, validateHarnessLaunchFocus(hj)...)
 			issues = append(issues, validateHarnessSensors(hj)...)
 			issues = append(issues, validateHarnessIncludes(hj)...)
+			wsIssues, wsNotes := validateHarnessWorkspace(dir, hj)
+			issues = append(issues, wsIssues...)
+			notes = append(notes, wsNotes...)
 			issues = append(issues, validateSensorDetails(dir, data)...)
 			soIssues, soNotes := validateIncludeSensorOverrides(dir, hj, data)
 			issues = append(issues, soIssues...)
-			notes = soNotes
+			notes = append(notes, soNotes...)
 			issues = append(issues, validateMCPEnvDeclarations(data)...)
 		}
 	}
@@ -686,6 +691,52 @@ func validateHarnessHooks(hj map[string]any) []string {
 	return issues
 }
 
+// validateHarnessWorkspace checks the workspace request: its shape, and each
+// entry against the hard refusals ynh applies at launch (internal/workspace),
+// which no allow-list or trust can override: the filesystem root, the home
+// directory, and any directory that contains the harness. Those are errors.
+//
+// A folder that does not exist here is a note, not an error. The request
+// names sibling checkouts, and a CI job validating one harness in isolation
+// does not have them; ynh refuses a missing folder at launch regardless. The
+// project directory is not known to validate, so "contains the project" is a
+// launch-time refusal only.
+//
+// Whether the harness may be granted anything depends on where it is
+// installed from, which validate cannot see: a harness installed from a remote
+// source is never granted a folder.
+func validateHarnessWorkspace(dir string, hj map[string]any) (issues, notes []string) {
+	raw, ok := hj["workspace"]
+	if !ok {
+		return nil, nil
+	}
+	list, ok := raw.([]any)
+	if !ok {
+		return []string{"'workspace' must be an array of strings"}, nil
+	}
+	home, _ := os.UserHomeDir()
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		abs = dir
+	}
+	for i, item := range list {
+		entry, ok := item.(string)
+		if !ok || strings.TrimSpace(entry) == "" {
+			issues = append(issues, fmt.Sprintf("workspace[%d] must be a non-empty string", i))
+			continue
+		}
+		why := workspace.Refusal(workspace.Expand(entry, abs, home), abs, "", home)
+		switch why {
+		case "":
+		case "does not exist":
+			notes = append(notes, fmt.Sprintf("workspace %q does not exist here (ynh refuses a missing folder at launch)", entry))
+		default:
+			issues = append(issues, fmt.Sprintf("workspace %q is never granted: %s", entry, why))
+		}
+	}
+	return issues, notes
+}
+
 // validateHarnessMCPServers validates the mcp_servers section inside harness.json.
 func validateHarnessMCPServers(hj map[string]any) []string {
 	var issues []string
@@ -851,6 +902,31 @@ func validateProfileMCPServers(profile map[string]any) []string {
 	}
 
 	return issues
+}
+
+// validateHarnessLaunchFocus checks launch_focus: it must name a focus that
+// exists and has a prompt, because a bare `ynh run` sends that prompt as the
+// first message and a missing one would fail every launch.
+func validateHarnessLaunchFocus(hj map[string]any) []string {
+	raw, ok := hj["launch_focus"]
+	if !ok {
+		return nil
+	}
+	name, ok := raw.(string)
+	if !ok || name == "" {
+		return []string{"'launch_focus' must be a non-empty string naming a focus"}
+	}
+	focuses, _ := hj["focuses"].(map[string]any)
+	entry, found := focuses[name]
+	if !found {
+		return []string{fmt.Sprintf("launch_focus references undefined focus %q", name)}
+	}
+	if m, _ := entry.(map[string]any); m != nil {
+		if prompt, _ := m["prompt"].(string); prompt == "" {
+			return []string{fmt.Sprintf("launch_focus %q: the focus has no prompt to send", name)}
+		}
+	}
+	return nil
 }
 
 // validateHarnessFocus validates focus entries inside plugin.json.

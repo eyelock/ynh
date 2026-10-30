@@ -17,6 +17,7 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 | [Profiles](profiles.md) | Environment-specific overrides with profiles |
 | [Focus](focus.md) | Bind a prompt and profile for repeatable, non-interactive runs |
 | [Project-Local Config](project-local-config.md) | Zero-install `.agents/harness/plugin.json` in your project root |
+| [Workspace Folders](workspace.md) | Request sibling folders; grant them with an allow-list or trust; see what is never granted |
 
 ### Refine
 
