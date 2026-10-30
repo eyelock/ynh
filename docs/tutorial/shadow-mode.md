@@ -261,7 +261,12 @@ ynh install ./
 ynh check local/ynh-guide --only harness-valid --format json
 ```
 
-```json
+Expected: the install succeeds, and the check finds no such sensor (exit 2):
+
+```
+Installed harness "ynh-guide"
+  Location: /tmp/shadow/base
+  Launcher: /Users/<you>/.ynh/bin/ynh-guide
 {"error":{"code":"not_found","message":"sensor \"harness-valid\" not declared in harness \"ynh-guide\""}}
 ```
 
