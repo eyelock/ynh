@@ -262,6 +262,11 @@ var claudeHookEventMap = map[string]string{
 	"on_session_end":   "SessionEnd",
 }
 
+// How on_session_start output reaches the model: CONFIRMED live (Claude
+// Code, 2026-10-30): plain stdout of a SessionStart hook reaches the model;
+// hookSpecificOutput.additionalContext does too.
+var claudeSessionStartContext = "plain"
+
 // claudeUnsupportedHookEvents names the canonical events Claude Code cannot
 // express, each with the reason. Empty: every canonical event maps. Declared
 // anyway so scripts/hook-event-parity.sh can tell "forgotten" from "refused".
@@ -312,7 +317,7 @@ func ClaudeHookEvent(canonical string) (string, bool) {
 // SessionHookScriptDir, #495). An exported plugin uses
 // GeneratePluginHookConfig instead.
 func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
-	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"), "")
+	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"), "", "")
 	if err != nil || data == nil {
 		return nil, err
 	}
@@ -329,7 +334,7 @@ func (c *Claude) SessionHookScriptDir() string { return c.ConfigDir() }
 // belongs to the project, so a "./" command is anchored to $CLAUDE_PROJECT_DIR
 // (see anchorHookCommand). It returns nil when no hook maps to a Claude event.
 func ClaudeSettingsHooks(hooks map[string][]plugin.HookEntry) ([]byte, error) {
-	return claudeHookDocument(hooks, anchorHookCommand, "")
+	return claudeHookDocument(hooks, anchorHookCommand, "", "")
 }
 
 // GeneratePluginHookConfig writes the plugin hook file, hooks/claude.json at
@@ -339,7 +344,7 @@ func ClaudeSettingsHooks(hooks map[string][]plugin.HookEntry) ([]byte, error) {
 // command names a script shipped in the plugin and is anchored to
 // ${CLAUDE_PLUGIN_ROOT} (#483).
 func (c *Claude) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
-	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"), "")
+	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"), "", "")
 	if err != nil || data == nil {
 		return nil, err
 	}
@@ -349,7 +354,9 @@ func (c *Claude) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (
 // claudeHookDocument renders canonical hooks in Claude Code's format, or nil
 // when none of them maps to a Claude event. anchor rewrites each command for
 // where the file is read. cwd is written to each handler when not empty.
-func claudeHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string) string, cwd string) ([]byte, error) {
+// contextMode wraps on_session_start commands (see sessionCommand); Claude's
+// own files pass "" because plain stdout is already context.
+func claudeHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string) string, cwd, contextMode string) ([]byte, error) {
 	if len(hooks) == 0 {
 		return nil, nil
 	}
@@ -406,7 +413,7 @@ func claudeHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string)
 		for _, g := range groups {
 			var inner []claudeInnerHook
 			for _, e := range g.entries {
-				inner = append(inner, claudeInnerHook{Type: "command", Command: anchor(e.Command), Cwd: cwd, Timeout: hookTimeoutValue("claude", event, e.Timeout)})
+				inner = append(inner, claudeInnerHook{Type: "command", Command: sessionCommand(contextMode, event, e.Command, anchor), Cwd: cwd, Timeout: hookTimeoutValue("claude", event, e.Timeout)})
 			}
 			hookGroups = append(hookGroups, claudeHookGroup{
 				Matcher: g.matcher,
@@ -645,9 +652,11 @@ var claudeWorkspaceUnsupported = ""
 // tolerates the extra field and runs hooks in its current directory regardless
 // (CONFIRMED live, Claude Code, 2026-10-30).
 func (c *Claude) GeneratePluginHookConfigForCopilot(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
-	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"), ".")
+	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"), ".", sessionContextBoth)
 	if err != nil || data == nil {
 		return nil, err
 	}
-	return map[string][]byte{pluginHookFile(c.Name()): data}, nil
+	files := map[string][]byte{pluginHookFile(c.Name()): data}
+	sessionContextFiles(files, SessionContextScript, sessionContextBoth, hooks)
+	return files, nil
 }

@@ -263,6 +263,10 @@ MCP server declarations. See [MCP Servers](mcp.md) for full reference.
 
 Extra folders the vendor CLI should be able to reach, such as sibling repositories: `"workspace": ["../ynh", "~/code/shared"]`. A request, not a grant. The operator's allow-list (`workspace_roots`, `YNH_WORKSPACE_ROOTS`) or `ynh trust accept` grants it, and some paths are never granted. See [Workspace Folders](workspace.md).
 
+### launch_focus (optional)
+
+The name of the focus a bare `ynh run` wakes with: interactive, the focus prompt as the first message, the focus's profile applied. It must name a key of `focuses` whose prompt is not empty. An explicit `--focus` or prompt overrides it, and `ynh agent run` and delegation ignore it. See [Focus: Launch focus](focus.md#launch-focus).
+
 ### profiles (optional)
 
 Named configuration variants. A profile can override `hooks`, override `mcp_servers`, append additional `includes`, and change the `tolerance` of sensors through `sensor_overrides`. It cannot override identity fields (`name`, `version`, `description`), `delegates_to`, or `default_vendor`. See [Profiles](profiles.md) for full scope reference.

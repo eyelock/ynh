@@ -1957,3 +1957,49 @@ func TestValidateSensorDetails(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateHarness_LaunchFocus(t *testing.T) {
+	const head = `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"lf","version":"0.1.0",`
+	tests := []struct {
+		name    string
+		body    string
+		wantErr string // "" passes
+	}{
+		{"valid", `"focuses":{"wake":{"prompt":"Begin"}},"launch_focus":"wake"}`, ""},
+		{"valid with profile", `"profiles":{"live":{}},"focuses":{"wake":{"prompt":"Begin","profile":"live"}},"launch_focus":"wake"}`, ""},
+		{"names a focus that does not exist", `"focuses":{"wake":{"prompt":"Begin"}},"launch_focus":"sleep"}`, `launch_focus references undefined focus "sleep"`},
+		{"no focuses at all", `"launch_focus":"wake"}`, `undefined focus "wake"`},
+		{"focus without a prompt", `"focuses":{"wake":{"profile":"live"}},"profiles":{"live":{}},"launch_focus":"wake"}`, "prompt"},
+		{"focus with an empty prompt", `"focuses":{"wake":{"prompt":""}},"launch_focus":"wake"}`, "prompt"},
+		{"empty name", `"focuses":{"wake":{"prompt":"Begin"}},"launch_focus":""}`, "launch_focus"},
+		{"not a string", `"focuses":{"wake":{"prompt":"Begin"}},"launch_focus":3}`, "launch_focus"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+			hr := filepath.Join(dir, "lf")
+			mkdirAll(t, hr)
+			writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"), []byte(head+tc.body))
+			err := validateHarness(hr)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("want pass, got %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("want a validation failure mentioning %q", tc.wantErr)
+			}
+			// The failure's text is printed; the issues themselves come from the helper.
+			var hj map[string]any
+			if jerr := json.Unmarshal([]byte(head+tc.body), &hj); jerr != nil {
+				t.Fatal(jerr)
+			}
+			issues := strings.Join(validateHarnessLaunchFocus(hj), "\n")
+			if !strings.Contains(issues, tc.wantErr) {
+				t.Errorf("issues = %q, want %q", issues, tc.wantErr)
+			}
+		})
+	}
+}

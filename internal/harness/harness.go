@@ -151,10 +151,13 @@ type Harness struct {
 	MCPServers     map[string]plugin.MCPServer
 	EnvPassthrough []string
 	// Workspace is the manifest's requested workspace folders, as written.
-	Workspace       []string
-	Agent           *plugin.AgentConfig
-	Profiles        map[string]plugin.Profile
-	Focuses         map[string]plugin.Focus
+	Workspace []string
+	Agent     *plugin.AgentConfig
+	Profiles  map[string]plugin.Profile
+	Focuses   map[string]plugin.Focus
+	// LaunchFocus is the manifest's launch_focus: the focus a bare `ynh run`
+	// wakes with. Only cmdRun reads it.
+	LaunchFocus     string
 	Sensors         map[string]plugin.Sensor
 	SensorOverrides map[string]plugin.SensorOverride
 	// ActiveProfile and ProfileSensorOverrides are set by ResolveProfile and
@@ -736,6 +739,7 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	if len(hj.Focuses) > 0 {
 		p.Focuses = hj.Focuses
 	}
+	p.LaunchFocus = hj.LaunchFocus
 	if len(hj.Sensors) > 0 {
 		p.Sensors = hj.Sensors
 	}
@@ -980,6 +984,7 @@ func LoadFile(path string) (*Harness, error) {
 	if len(hj.Focuses) > 0 {
 		p.Focuses = hj.Focuses
 	}
+	p.LaunchFocus = hj.LaunchFocus
 	if len(hj.Sensors) > 0 {
 		p.Sensors = hj.Sensors
 	}
