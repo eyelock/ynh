@@ -263,7 +263,7 @@ Expected output:
 
 ```
   warning: included harness github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
-Error: MCP servers of included harness /tmp/ynh-tutorial/composing-tools/github-lite: mcp server "tracker": env.TOKEN references ${TRACKER_TOKEN}, which is not set
+Error: MCP servers of included harness github-lite: mcp server "tracker": env.TOKEN references ${TRACKER_TOKEN}, which is not set
 ```
 
 An unset variable is an error for an included server exactly as it is for the root's own. Set it and preview again:
