@@ -21,6 +21,13 @@ type ResolvedContent struct {
 	// Paths are the specific files/dirs requested via pick.
 	// If empty, the entire repo is included.
 	Paths []string
+	// Label names the include for the heading of its section in the composed
+	// instructions. Empty marks the harness's own content, which comes first
+	// and carries no heading.
+	Label string
+	// NoInstructions leaves this content's instructions file out of the
+	// composed instructions ("instructions": false on the include).
+	NoInstructions bool
 }
 
 // ResolveResult pairs a ResolvedContent with metadata about how it was resolved.
@@ -126,6 +133,15 @@ func CheckLocalInclude(cfg *config.Config, inc harness.Include, harnessDir strin
 // sourceResolver resolves one git source to a directory on disk.
 type sourceResolver func(gs harness.GitSource, harnessDir string) (string, *RepoResult, error)
 
+// sectionLabel names an include in the heading of its instructions section:
+// its source, with the subpath appended when the include is scoped to one.
+func sectionLabel(source, path string) string {
+	if path == "" {
+		return source
+	}
+	return source + "/" + strings.Trim(path, "/")
+}
+
 // resolveWith resolves all includes using the given source resolver.
 func resolveWith(p *harness.Harness, cfg *config.Config, resolve sourceResolver) ([]ResolveResult, error) {
 	var results []ResolveResult
@@ -141,8 +157,10 @@ func resolveWith(p *harness.Harness, cfg *config.Config, resolve sourceResolver)
 			}
 			results = append(results, ResolveResult{
 				Content: ResolvedContent{
-					BasePath: basePath,
-					Paths:    inc.Pick,
+					BasePath:       basePath,
+					Paths:          inc.Pick,
+					Label:          sectionLabel(inc.Local, inc.Path),
+					NoInstructions: !inc.InstructionsEnabled(),
 				},
 				Source: inc.Local,
 				Path:   inc.Path,
@@ -165,8 +183,10 @@ func resolveWith(p *harness.Harness, cfg *config.Config, resolve sourceResolver)
 
 		results = append(results, ResolveResult{
 			Content: ResolvedContent{
-				BasePath: basePath,
-				Paths:    inc.Pick,
+				BasePath:       basePath,
+				Paths:          inc.Pick,
+				Label:          sectionLabel(ShortGitURL(inc.Git), inc.Path),
+				NoInstructions: !inc.InstructionsEnabled(),
 			},
 			Source: ShortGitURL(inc.Git),
 			Path:   inc.Path,
