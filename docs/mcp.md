@@ -265,6 +265,8 @@ MCP Servers:
 
 It reads includes from disk and the cache only, never the network; an include that is not cached yet is named instead, and `ynh update` fills the cache. With `--format json` the same list is the harness's `mcp_servers` (see [reference](reference.md#envelope-and-harness-fields)).
 
+`ynd compose <dir> --format text` shows the same list for a harness you are developing, and `ynd compose` (JSON) gives each server in `mcp_servers` a `source`: `root`, or the include chain that supplied it. When two includes define a server differently, both commands show the harness's own servers and say why the rest are missing (`mcp_servers_error` in compose's JSON).
+
 The rules:
 
 - **Transitive.** An included harness's own `includes` are followed, so what it composes comes with it. Dependencies are assembled before the harness that includes them, and the root last, so later sources keep overriding earlier ones. Relative sources in an included harness resolve against that harness's directory, and the allow-list (`allowed_remote_sources`) applies to every include in the chain.
