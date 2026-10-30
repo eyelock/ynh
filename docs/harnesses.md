@@ -285,7 +285,7 @@ Extra folders the vendor CLI should be able to reach, such as sibling repositori
 
 ### launch_focus (optional)
 
-The name of the focus a bare `ynh run` wakes with: interactive, the focus prompt as the first message, the focus's profile applied. It must name a key of `focuses` whose prompt is not empty. An explicit `--focus` or prompt overrides it, and `ynh agent run` and delegation ignore it. See [Focus: Launch focus](focus.md#launch-focus).
+The name of the focus a bare `ynh run` wakes with: interactive, the focus prompt as the first message, the focus's profile applied. It must name a key of the harness's own `focuses` whose prompt is not empty: never an included harness's `namespace:name` focus or a delegate's focus. `ynd validate` errors on any other value and `ynh run` refuses it; run an included harness's focus with `--focus namespace:name` instead. An explicit `--focus` or prompt overrides it, and `ynh agent run` and delegation ignore it. See [Focus: Launch focus](focus.md#launch-focus).
 
 ### profiles (optional)
 

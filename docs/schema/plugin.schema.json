@@ -166,7 +166,7 @@
       }
     },
     "launch_focus": {
-      "description": "Name of the focus a bare `ynh run` (no --focus, no prompt) wakes with: interactive, the focus prompt as the first message, the focus's profile applied. Must name a key of focuses whose prompt is non-empty. Ignored by explicit --focus runs, delegation and `ynh agent run`.",
+      "description": "Name of the focus a bare `ynh run` (no --focus, no prompt) wakes with: interactive, the focus prompt as the first message, the focus's profile applied. Must name a key of the harness's own focuses whose prompt is non-empty; an included harness's namespace:name focus or a delegate's focus is not allowed, and ynd validate and ynh run refuse it (use --focus namespace:name to run one). Ignored by explicit --focus runs, delegation and `ynh agent run`.",
       "type": "string",
       "minLength": 1
     },
