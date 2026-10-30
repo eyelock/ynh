@@ -75,11 +75,18 @@ genuinely differs in that way; each doc comment names the vendor that needed it.
 The fastest completeness check is the last vendor added. At any point:
 
 ```bash
-grep -rli copilot --include="*.go" --include="*.md" --include="*.json" . | grep -v '^./.git/'
+grep -rli copilot --include="*.go" --include="*.md" --include="*.json" \
+  --include="*.sh" --include="*.yaml" . | grep -v '^./.git/'
 ```
 
 Every hit is a candidate. Most need the new vendor added; a few are about
-Copilot alone.
+Copilot alone. The grep misses prose that counts vendors rather than naming
+them, so also look for spelled-out counts:
+
+```bash
+grep -rniE "all (four|five|six) |(four|five|six) vendors" \
+  --include="*.go" --include="*.md" --include="*.sh" . | grep -v '^./.git/'
+```
 
 ### Core adapter
 
@@ -90,6 +97,17 @@ Copilot alone.
   matching the depth of `internal/vendor/copilot_test.go`. The shared contract
   tests in `adapter_contract_test.go` run over every registered adapter, so
   read their failures first.
+- [ ] `internal/vendor/adapter_contract_test.go`: add the vendor's row to
+  `want` in `TestVendorDeclarativeContract`. A vendor with no plugin manifest
+  or no marketplace format also has to relax the tests that assume one:
+  `TestPluginManifestPaths` and `TestPluginManifestDirMatchesGeneratedManifest`
+  (an empty `PluginManifestDir` must write no manifest, rather than fail), and
+  `TestBuildDefaultsToEveryRegisteredVendor` in
+  `internal/marketplace/agentplugin_build_test.go` (skip a vendor with an empty
+  `MarketplaceManifestDir`). OpenCode (#580) needed all three.
+- [ ] Tests that count or list vendors: `TestExportAllVendors`
+  (`internal/exporter/exporter_test.go`) checks the number of export results,
+  and `cmd/ynh/image_test.go` lists every vendor's `COPY` line.
 - [ ] Symlink vendors reuse `installSymlinks` / `cleanSymlinks`
   (`internal/vendor/symlinks.go`). Managed child processes reuse
   `runChildProcess` (`internal/vendor/process.go`).
@@ -203,6 +221,9 @@ both in the same PR since they share research.
   can honour. Refuse a level it cannot enforce; never widen it silently.
 - [ ] The `Backend` doc comments in `worker.go` and `loop.go` that list the
   backends.
+- [ ] `cmd/ynh/help.go`: the `ynh agent run` help lists the backends under
+  `--backend`, says which accept `--effort`, and which honour
+  `--auto-approve`. Update all three.
 
 ### ynd
 
@@ -223,7 +244,11 @@ both in the same PR since they share research.
 - [ ] `make check-vendor-parity` (`scripts/vendor-parity.sh`). It is **not**
   part of `make check`, but CI runs it. Its checks:
   - A: the vendor has a row in the reference index.
-  - B: every vendor assembles the same artifact set.
+  - B: every vendor assembles the same artifact set, `plugin/` manifest
+    included. A vendor with no plugin manifest format goes in
+    `NO_MANIFEST_VENDORS` in the script (added for OpenCode in #580), which
+    compares it on everything else and fails if it writes `plugin/` anyway. Name it there explicitly;
+    the list is not inferred, so a broken manifest cannot exempt itself.
   - C: every vendor CLI ynh or ynd launches is stubbed in evals.
   - D: tutorial eval lines (`*This launches:* ...`) are well formed and name
     a stubbed program. Any tutorial block you add for the vendor needs them.
@@ -242,14 +267,17 @@ writing these were:
 
 - [ ] Reference: `docs/vendors.md`, `docs/hooks.md`, `docs/mcp.md`,
   `docs/marketplace.md`, `docs/artifacts.md`, `docs/skills-standard.md`,
-  `docs/harnesses.md`, `docs/docker.md`, `docs/ynd.md`,
-  `docs/factory-pattern.md`.
-- [ ] Entry points: `README.md`, `AGENTS.md`, `docs/getting-started.md`,
+  `docs/docker.md`, `docs/ynd.md`, and `docs/agent.md` (the `ynh agent run`
+  backends, and the `--auto-approve` table, which has a column per backend).
+- [ ] Entry points: `README.md`, `AGENTS.md`, `docs/getting-started.md`
+  (switching vendors, and symlink installation for a symlink vendor),
   `docs/harness-engineering.md`.
 - [ ] Tutorials: `docs/tutorial/README.md`, `vendors-and-symlinks.md`,
-  `export.md`, `marketplace.md`, `mcp-servers.md`, `docker-image.md`,
-  `developer-tools.md`, and `manual-test-plan.md` (add vendor-specific manual
-  steps).
+  `export.md`, `hooks.md` (how each vendor's hook file is carried in an
+  export), `marketplace.md` (the per-vendor manifests and indexes a build
+  writes), `mcp-servers.md`, `docker-image.md`, `developer-tools.md` (the LLM
+  CLIs `ynd compress` and `ynd inspect` accept), and `manual-test-plan.md`
+  (add vendor-specific manual steps).
 - [ ] Contributor docs: `.github/CONTRIBUTING.md` (format-mapping tables quote
   every vendor; add a column), `.claude/CLAUDE.md`,
   `.claude/agents/ynh-contributor.md`,
@@ -257,6 +285,12 @@ writing these were:
 - [ ] Shipped artifacts that teach users about vendors: `skills/ynh-*/`
   (create-harness, adopt, team-setup, troubleshoot, ynd-inspect) and
   `agents/ynh-harness-reviewer.md`.
+- [ ] `.skillspector-baseline.yaml`: the new
+  `.claude/skills/vendor-adapters/references/<vendor>.md` is scanned by
+  `make scan-artifacts`, and a reference that documents a vendor's
+  auto-approve flag or permission rules can trip it (#580 needed `EA2` and
+  `PE1` for OpenCode). Add a rule scoped by `path:` to that one file, with a
+  `reason:`, only for a finding you have triaged as a false positive.
 
 ### Tests
 
@@ -276,7 +310,7 @@ writing these were:
    Agent Plugins layout, docker image.
 4. `ynh agent run` backend and `llmVendors`, if applicable.
 5. Evals stubs, then every documentation touch point.
-6. `make check` and `make check-vendor-parity`.
+6. `make check`, `make check-vendor-parity` and `make scan-artifacts`.
 7. Manual smoke test: `make install`, create a throwaway harness in `/tmp/`,
    `ynh run -v <name>` against the real CLI, and confirm launch, skills,
    instructions, MCP and hooks actually take effect.
