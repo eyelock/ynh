@@ -291,25 +291,6 @@ func TestInstallAgreesWithNeedsSymlinks(t *testing.T) {
 	}
 }
 
-// Copilot's hooks are confirmed to silently never fire, so ynh emits no hook
-// config for it. A config that looks wired and does nothing is worse than an
-// honest gap, and this asserts the gap stays deliberate.
-func TestCopilotEmitsNoHookConfig(t *testing.T) {
-	a, err := Get("copilot")
-	if err != nil {
-		t.Fatal(err)
-	}
-	files, err := a.GenerateHookConfig(map[string][]plugin.HookEntry{
-		"before_tool": {{Command: "guard.sh"}},
-	})
-	if err != nil {
-		t.Fatalf("GenerateHookConfig: %v", err)
-	}
-	if len(files) != 0 {
-		t.Errorf("copilot must emit no hook config while its hooks do not fire, got %v", keysOf(files))
-	}
-}
-
 // ClaudeHookEvent maps ynh's canonical names to Claude's, and reports whether
 // the name was canonical at all. `ynh doctor` relies on the second return to
 // spot a canonical name leaking into a vendor-native settings file.
@@ -323,6 +304,7 @@ func TestClaudeHookEvent(t *testing.T) {
 		{"after_tool", "PostToolUse", true},
 		{"on_session_start", "SessionStart", true},
 		{"on_stop", "Stop", true},
+		{"on_session_end", "SessionEnd", true},
 		{"PreToolUse", "", false},
 		{"not_an_event", "", false},
 	}

@@ -47,7 +47,7 @@ func TestMarketplaceHarnessPluginHooks(t *testing.T) {
 	}{
 		{".claude-plugin/plugin.json", "hooks/claude.json", "PreToolUse"},
 		{".codex-plugin/plugin.json", "hooks/codex.json", "PreToolUse"},
-		{".cursor-plugin/plugin.json", "hooks/cursor.json", "beforeShellExecution"},
+		{".cursor-plugin/plugin.json", "hooks/cursor.json", "preToolUse"},
 	} {
 		var m struct {
 			Hooks string `json:"hooks"`

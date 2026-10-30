@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
-	"github.com/eyelock/ynh/internal/resolver"
 )
 
 // manifestJSON is used to unmarshal the vendor-specific plugin.json output.
@@ -195,37 +194,6 @@ func TestExportNoInstructions(t *testing.T) {
 
 	if results[0].Skills != 1 {
 		t.Errorf("expected 1 skill, got %d", results[0].Skills)
-	}
-}
-
-func TestExportInstructionDiscovery(t *testing.T) {
-	// Create two content sources with instructions.md — last one should win
-	src1 := t.TempDir()
-	if err := os.WriteFile(filepath.Join(src1, "instructions.md"), []byte("First instructions"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	src2 := t.TempDir()
-	if err := os.WriteFile(filepath.Join(src2, "instructions.md"), []byte("Second instructions wins"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	content := []resolver.ResolvedContent{
-		{BasePath: src1},
-		{BasePath: src2},
-	}
-
-	found := DiscoverInstructions(content)
-	if found == "" {
-		t.Fatal("expected to find instructions.md")
-	}
-
-	data, err := os.ReadFile(found)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(data) != "Second instructions wins" {
-		t.Errorf("expected last instructions.md to win, got: %s", string(data))
 	}
 }
 
@@ -439,4 +407,107 @@ func TestExportBeforeWrite(t *testing.T) {
 			}
 		})
 	}
+}
+
+// writeTree writes files (relative path to body) under dir.
+func writeTree(t *testing.T, dir string, files map[string]string) {
+	t.Helper()
+	for name, body := range files {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestExportComposesIncludedInstructions(t *testing.T) {
+	tests := []struct {
+		name         string
+		rootFiles    map[string]string
+		skipSecond   bool
+		wantContains []string
+		wantMissing  []string
+	}{
+		{
+			name:      "root first then each include, headed",
+			rootFiles: map[string]string{"instructions.md": "ROOT-RULES\n"},
+			wantContains: []string{
+				"ROOT-RULES\n\n## Instructions from ./inc-one\n\nONE-RULES\n\n## Instructions from ./inc-two\n\nTWO-RULES\n",
+			},
+		},
+		{
+			name:        "instructions false leaves an include out",
+			rootFiles:   map[string]string{"instructions.md": "ROOT-RULES\n"},
+			skipSecond:  true,
+			wantMissing: []string{"TWO-RULES"},
+			wantContains: []string{
+				"ROOT-RULES\n\n## Instructions from ./inc-one\n\nONE-RULES\n",
+			},
+		},
+		{
+			name:         "a root without instructions leaves the include sections",
+			rootFiles:    nil,
+			wantContains: []string{"## Instructions from ./inc-one\n\nONE-RULES\n\n## Instructions from ./inc-two\n\nTWO-RULES\n"},
+			wantMissing:  []string{"ROOT-RULES"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := t.TempDir()
+			writeTree(t, src, tt.rootFiles)
+			writeTree(t, filepath.Join(src, "inc-one"), map[string]string{"instructions.md": "ONE-RULES\n"})
+			writeTree(t, filepath.Join(src, "inc-two"), map[string]string{"AGENTS.md": "TWO-RULES\n"})
+			second := map[string]any{"local": "./inc-two"}
+			if tt.skipSecond {
+				second["instructions"] = false
+			}
+			writeJSON(t, filepath.Join(src, plugin.PluginDir, plugin.PluginFile), map[string]any{
+				"name":           "compose-test",
+				"version":        "0.1.0",
+				"default_vendor": "claude",
+				"includes":       []any{map[string]any{"local": "./inc-one"}, second},
+			})
+			out := t.TempDir()
+			if _, err := Export(ExportOptions{SourceDir: src, OutputDir: out, Vendors: []string{"codex"}}); err != nil {
+				t.Fatalf("Export: %v", err)
+			}
+			data, err := os.ReadFile(filepath.Join(out, "codex", "AGENTS.md"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, w := range tt.wantContains {
+				if !strings.Contains(string(data), w) {
+					t.Errorf("AGENTS.md missing %q, got:\n%s", w, data)
+				}
+			}
+			for _, w := range tt.wantMissing {
+				if strings.Contains(string(data), w) {
+					t.Errorf("AGENTS.md should not contain %q, got:\n%s", w, data)
+				}
+			}
+		})
+	}
+}
+
+func TestExportSkipsSkillEvals(t *testing.T) {
+	src := t.TempDir()
+	writeTree(t, src, map[string]string{
+		"skills/s/SKILL.md":         "skill",
+		"skills/s/scripts/run.sh":   "#!/bin/sh",
+		"skills/s/evals/evals.json": "{}",
+	})
+	writeJSON(t, filepath.Join(src, plugin.PluginDir, plugin.PluginFile), map[string]any{
+		"name": "evals-test", "version": "0.1.0", "default_vendor": "claude",
+	})
+	out := t.TempDir()
+	if _, err := Export(ExportOptions{SourceDir: src, OutputDir: out, Vendors: []string{"claude"}}); err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	skill := filepath.Join(out, "claude", "skills", "s")
+	assertFileExists(t, filepath.Join(skill, "SKILL.md"))
+	assertFileExists(t, filepath.Join(skill, "scripts", "run.sh"))
+	assertFileNotExists(t, filepath.Join(skill, "evals"))
 }

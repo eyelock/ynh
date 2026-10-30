@@ -78,6 +78,9 @@ func (c *Cursor) LaunchInteractive(configPath string, extraArgs []string) error 
 }
 
 func (c *Cursor) LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error {
+	for _, w := range CursorPrintModeWarnings(configPath) {
+		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
+	}
 	args := append([]string{"-p", prompt}, extraArgs...)
 	return launchCursor(configPath, args)
 }
@@ -146,18 +149,47 @@ func (c *Cursor) ApplyRuntimeInstructions(runDir, text string) ([]string, error)
 	return nil, nil
 }
 
-// cursorHookEventMap maps canonical event names to Cursor hook events.
-// Cursor supports: beforeSubmitPrompt, beforeShellExecution, beforeMCPExecution,
-// beforeReadFile, afterFileEdit, stop, sessionStart, and more (see
-// cursor.com/docs/hooks for the full list). There is no afterShellExecution
-// event mapped to before_tool/after_tool — see cursor.md reference doc.
+// cursorHookEventMap maps canonical event names to Cursor hook events
+// (cursor.com/docs/hooks lists 18 agent events plus Tab and app-lifecycle
+// ones). before_tool and after_tool map to preToolUse and postToolUse, which
+// fire for any tool (Shell, Read, Write, Grep, Delete, Task, MCP), so they
+// mean what they mean on Claude Code and Codex. They used to map to
+// beforeShellExecution and afterFileEdit, which cover shell commands and file
+// edits only. sessionEnd is tied to the IDE composer session: Cursor does not
+// run it for cloud agents, and the docs do not say whether the CLI does.
 var cursorHookEventMap = map[string]string{
-	"before_tool":      "beforeShellExecution",
-	"after_tool":       "afterFileEdit",
+	"before_tool":      "preToolUse",
+	"after_tool":       "postToolUse",
 	"before_prompt":    "beforeSubmitPrompt",
 	"on_stop":          "stop",
 	"on_session_start": "sessionStart",
+	"on_session_end":   "sessionEnd",
 }
+
+// How on_session_start output reaches the model: CONFIRMED live (cursor-
+// agent 2026.10.01, 2026-10-30): plain stdout does NOT reach the model;
+// {"additional_context": "..."} does (cursor.com/docs/hooks). ynh wraps the
+// hook.
+var cursorSessionStartContext = "json-field:additional_context"
+
+// cursorUnsupportedHookEvents names the canonical events Cursor cannot
+// express, each with the reason. Empty: every canonical event maps.
+var cursorUnsupportedHookEvents = map[string]string{}
+
+// Per-script timeout, in seconds, written as "timeout" (cursor.com/docs/hooks,
+// "Command format": per-script options include "timeout (seconds, default is
+// platform-dependent)"). The page documents no maximum.
+var cursorHookTimeoutField = "timeout"
+var cursorHookTimeoutUnsupported = ""
+
+var cursorHookTimeoutCaps = map[string]int{}
+
+// cursorMatcherEvents are the native events whose matcher Cursor documents for
+// a canonical hook: preToolUse and postToolUse match the tool type (Shell,
+// Read, Write, Grep, Delete, Task, MCP:<tool>) as a regex. Cursor documents no
+// matcher for sessionStart or sessionEnd, and stop, beforeSubmitPrompt match a
+// fixed word (Stop, UserPromptSubmit) so a canonical matcher is meaningless.
+var cursorMatcherEvents = map[string]bool{"preToolUse": true, "postToolUse": true}
 
 // GenerateHookConfig writes the project hook file, .cursor/hooks.json, the
 // only project-level path Cursor reads (cursor.com/docs/hooks). It serves
@@ -169,7 +201,9 @@ func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[st
 	if err != nil || data == nil {
 		return nil, err
 	}
-	return map[string][]byte{filepath.Join(".cursor", "hooks.json"): data}, nil
+	files := map[string][]byte{filepath.Join(".cursor", "hooks.json"): data}
+	sessionContextFiles(files, SessionContextScript, sessionContextMode("cursor"), hooks)
+	return files, nil
 }
 
 // GeneratePluginHookConfig writes the plugin hook file, hooks/cursor.json at
@@ -187,7 +221,9 @@ func (c *Cursor) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (
 	if err != nil || data == nil {
 		return nil, err
 	}
-	return map[string][]byte{pluginHookFile(c.Name()): data}, nil
+	files := map[string][]byte{pluginHookFile(c.Name()): data}
+	sessionContextFiles(files, SessionContextScript, sessionContextMode("cursor"), hooks)
+	return files, nil
 }
 
 // cursorHookDocument renders canonical hooks in Cursor's flat format, or nil
@@ -198,9 +234,11 @@ func cursorHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string)
 		return nil, nil
 	}
 
-	// Cursor flat format: { "hooks": { "beforeShellExecution": [ { "command": "..." } ] } }
+	// Cursor flat format: { "hooks": { "preToolUse": [ { "command": "...", "matcher": "Shell" } ] } }
 	type cursorHookEntry struct {
 		Command string `json:"command"`
+		Matcher string `json:"matcher,omitempty"`
+		Timeout int    `json:"timeout,omitempty"`
 	}
 
 	allEvents := make(map[string][]cursorHookEntry)
@@ -220,7 +258,11 @@ func cursorHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string)
 
 		var hookEntries []cursorHookEntry
 		for _, entry := range entries {
-			hookEntries = append(hookEntries, cursorHookEntry{Command: anchor(entry.Command)})
+			e := cursorHookEntry{Command: sessionCommand(sessionContextMode("cursor"), event, entry.Command, anchor), Timeout: hookTimeoutValue("cursor", event, entry.Timeout)}
+			if cursorMatcherEvents[cursorEvent] {
+				e.Matcher = entry.Matcher
+			}
+			hookEntries = append(hookEntries, e)
 		}
 
 		allEvents[cursorEvent] = hookEntries
@@ -499,3 +541,12 @@ func launchCursor(configPath string, extraArgs []string) error {
 	cmd.Dir = configPath
 	return runChildProcess(cmd)
 }
+
+// Workspace folders: Cursor's CLI has no flag that adds a directory. Its
+// documented global options (cursor.com/docs/cli/reference/parameters) hold
+// --workspace <path>, which names the one workspace directory, and
+// `sandbox run --allow-paths`, which belongs to a different command. Neither
+// grants an extra folder to an agent session, so a requested folder is
+// refused with a warning rather than dropped.
+var cursorWorkspaceFlag = ""
+var cursorWorkspaceUnsupported = "the Cursor CLI has no flag that adds a directory to a session (--workspace names the single workspace)"

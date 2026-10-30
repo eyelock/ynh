@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -15,6 +14,8 @@ import (
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/pathutil"
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/resolver"
+	"github.com/eyelock/ynh/internal/workspace"
 )
 
 func cmdValidate(args []string) error {
@@ -68,6 +69,14 @@ func cmdValidate(args []string) error {
 
 	// Directory: find harness roots and validate them
 	harnesses, agentPlugins := findHarnessRoots(root)
+	// Same .yndignore as lint and fmt, so the three walk the same set.
+	var ignoreErr error
+	if harnesses, ignoreErr = filterYndIgnored(root, harnesses); ignoreErr != nil {
+		return ignoreErr
+	}
+	if agentPlugins, ignoreErr = filterYndIgnored(root, agentPlugins); ignoreErr != nil {
+		return ignoreErr
+	}
 	if len(harnesses) == 0 && len(agentPlugins) == 0 {
 		// Maybe we're inside a harness directory
 		if isHarnessRoot(root) {
@@ -79,7 +88,7 @@ func cmdValidate(args []string) error {
 			return fmt.Errorf("validation failed")
 		}
 		fmt.Println("No harness directories found.")
-		fmt.Println("A harness requires .agents/harness/plugin.json (or the deprecated .ynh-plugin/plugin.json, which ynd migrate moves).")
+		fmt.Println("A harness requires .agents/harness/plugin.json.")
 		return nil
 	}
 
@@ -166,11 +175,14 @@ func validateFile(path string) error {
 }
 
 // isHarnessRoot reports whether dir is a harness, including one whose only
-// manifest is the legacy .harness.json: validateHarness reports that as an
-// issue rather than skipping the tree as manifest-less. Read only: validate
-// never converts a tree (#406).
+// manifest is the legacy .harness.json or whose manifest directory is the
+// legacy .ynh-plugin/: validateHarness reports that as an issue rather than
+// skipping the tree as manifest-less. Read only: validate never converts a
+// tree (#406).
 func isHarnessRoot(dir string) bool {
-	return plugin.IsPluginDir(dir) || migration.LegacyHarnessManifest(dir) != nil
+	return plugin.IsPluginDir(dir) ||
+		migration.LegacyHarnessManifest(dir) != nil ||
+		migration.LegacyManifestDir(dir) != nil
 }
 
 // harnessManifestPath returns the path to dir's plugin.json, or "" if it has
@@ -185,27 +197,6 @@ func harnessManifestPath(dir string) string {
 func isLegacyHarnessRoot(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, ".claude-plugin", "plugin.json"))
 	return err == nil
-}
-
-// misplacedManifestIssues reports each manifest file that sits outside the
-// directory holding plugin.json. A second plugin.json is shadowed and
-// ignored; any other file belongs beside the plugin.json that wins.
-func misplacedManifestIssues(dir string) []string {
-	md, ok := plugin.ManifestDir(dir)
-	if !ok {
-		return nil
-	}
-	var issues []string
-	for _, f := range plugin.MisplacedManifestFiles(dir) {
-		if path.Base(f) == plugin.PluginFile {
-			issues = append(issues, fmt.Sprintf("both %s/%s and %s exist; %s wins and %s is ignored, so remove it",
-				md, plugin.PluginFile, f, md, f))
-			continue
-		}
-		issues = append(issues, fmt.Sprintf("%s is split from %s/%s; move it to %s/%s",
-			f, md, plugin.PluginFile, md, path.Base(f)))
-	}
-	return issues
 }
 
 // findHarnessRoots walks root for ynh harnesses and Agent Plugins. Either
@@ -288,12 +279,17 @@ func validateHarness(dir string) error {
 	}
 
 	var issues []string
+	// notes are checks that could not run. They do not fail validation, but a
+	// check that was skipped must never read as one that passed.
+	var notes []string
 
 	// Check for legacy format
 	if isLegacyHarnessRoot(dir) && !isHarnessRoot(dir) {
 		issues = append(issues, "legacy format detected: migrate .claude-plugin/plugin.json and metadata.json to .agents/harness/plugin.json")
 	}
-	issues = append(issues, misplacedManifestIssues(dir)...)
+	if legacy := migration.LegacyManifestDir(dir); legacy != nil {
+		issues = append(issues, legacy.Error())
+	}
 
 	manifestPath := harnessManifestPath(dir)
 	const manifestLabel = ".agents/harness/plugin.json"
@@ -323,8 +319,16 @@ func validateHarness(dir string) error {
 			issues = append(issues, validateHarnessMCPServers(hj)...)
 			issues = append(issues, validateHarnessProfiles(hj)...)
 			issues = append(issues, validateHarnessFocus(hj)...)
+			issues = append(issues, validateHarnessLaunchFocus(hj)...)
 			issues = append(issues, validateHarnessSensors(hj)...)
 			issues = append(issues, validateHarnessIncludes(hj)...)
+			wsIssues, wsNotes := validateHarnessWorkspace(dir, hj)
+			issues = append(issues, wsIssues...)
+			notes = append(notes, wsNotes...)
+			issues = append(issues, validateSensorDetails(dir, data)...)
+			soIssues, soNotes := validateIncludeSensorOverrides(dir, hj, data)
+			issues = append(issues, soIssues...)
+			notes = append(notes, soNotes...)
 			issues = append(issues, validateMCPEnvDeclarations(data)...)
 		}
 	}
@@ -418,19 +422,38 @@ func validateHarness(dir string) error {
 		}
 	}
 
+	// Hooks a targeted vendor cannot carry are warnings: the manifest is valid.
+	var warnings []string
+	var hjw map[string]any
+	if data != nil && json.Unmarshal(data, &hjw) == nil {
+		warnings = hookVendorWarnings(hjw)
+	}
+
 	checked := describeHarnessChecks(dir, manifestPath, data)
+	for _, n := range notes {
+		checked = append(checked, "not checked: "+n)
+	}
 	if len(issues) > 0 {
 		fmt.Printf("%s: INVALID\n", rel)
 		for _, issue := range issues {
 			fmt.Printf("  - %s\n", issue)
 		}
+		printWarnings(warnings)
 		printChecked(checked)
 		return fmt.Errorf("harness %q has %d issue(s)", rel, len(issues))
 	}
 
 	fmt.Printf("%s: valid\n", rel)
+	printWarnings(warnings)
 	printChecked(checked)
 	return nil
+}
+
+// printWarnings lists findings that do not fail validation.
+func printWarnings(warnings []string) {
+	for _, w := range warnings {
+		fmt.Printf("  warning: %s\n", w)
+	}
 }
 
 // printChecked lists what validation looked at, so "valid" is never a claim the reader has to
@@ -608,6 +631,10 @@ var vendorHookEventNames = map[string]string{
 	"beforeSubmitPrompt":   "before_prompt",
 	"stop":                 "on_stop",
 	"sessionStart":         "on_session_start",
+	"SessionEnd":           "on_session_end",
+	"sessionEnd":           "on_session_end",
+	"preToolUse":           "before_tool",
+	"postToolUse":          "after_tool",
 }
 
 // hookEventMessage returns the validation message for an invalid hook event,
@@ -616,7 +643,7 @@ func hookEventMessage(event string) string {
 	if canonical, ok := vendorHookEventNames[event]; ok {
 		return fmt.Sprintf("event %q is a vendor-native name — plugin.json uses canonical events; use %q (ynh translates it per vendor)", event, canonical)
 	}
-	return fmt.Sprintf("unknown event %q (valid: before_tool, after_tool, before_prompt, on_stop, on_session_start)", event)
+	return fmt.Sprintf("unknown event %q (valid: before_tool, after_tool, before_prompt, on_stop, on_session_start, on_session_end)", event)
 }
 
 // validateHarnessHooks validates the hooks section inside harness.json.
@@ -652,10 +679,62 @@ func validateHarnessHooks(hj map[string]any) []string {
 			if cmd == "" {
 				issues = append(issues, fmt.Sprintf("hooks.%s[%d]: command must not be empty", event, i))
 			}
+			if t, present := entry["timeout"]; present {
+				n, isNum := t.(float64)
+				if !isNum || n != float64(int(n)) || n < 1 || n > float64(plugin.MaxHookTimeout) {
+					issues = append(issues, fmt.Sprintf("hooks.%s[%d]: timeout must be a whole number of seconds from 1 to %d", event, i, plugin.MaxHookTimeout))
+				}
+			}
 		}
 	}
 
 	return issues
+}
+
+// validateHarnessWorkspace checks the workspace request: its shape, and each
+// entry against the hard refusals ynh applies at launch (internal/workspace),
+// which no allow-list or trust can override: the filesystem root, the home
+// directory, and any directory that contains the harness. Those are errors.
+//
+// A folder that does not exist here is a note, not an error. The request
+// names sibling checkouts, and a CI job validating one harness in isolation
+// does not have them; ynh refuses a missing folder at launch regardless. The
+// project directory is not known to validate, so "contains the project" is a
+// launch-time refusal only.
+//
+// Whether the harness may be granted anything depends on where it is
+// installed from, which validate cannot see: a harness installed from a remote
+// source is never granted a folder.
+func validateHarnessWorkspace(dir string, hj map[string]any) (issues, notes []string) {
+	raw, ok := hj["workspace"]
+	if !ok {
+		return nil, nil
+	}
+	list, ok := raw.([]any)
+	if !ok {
+		return []string{"'workspace' must be an array of strings"}, nil
+	}
+	home, _ := os.UserHomeDir()
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		abs = dir
+	}
+	for i, item := range list {
+		entry, ok := item.(string)
+		if !ok || strings.TrimSpace(entry) == "" {
+			issues = append(issues, fmt.Sprintf("workspace[%d] must be a non-empty string", i))
+			continue
+		}
+		why := workspace.Refusal(workspace.Expand(entry, abs, home), abs, "", home)
+		switch why {
+		case "":
+		case "does not exist":
+			notes = append(notes, fmt.Sprintf("workspace %q does not exist here (ynh refuses a missing folder at launch)", entry))
+		default:
+			issues = append(issues, fmt.Sprintf("workspace %q is never granted: %s", entry, why))
+		}
+	}
+	return issues, notes
 }
 
 // validateHarnessMCPServers validates the mcp_servers section inside harness.json.
@@ -829,6 +908,31 @@ func validateProfileMCPServers(profile map[string]any) []string {
 	return issues
 }
 
+// validateHarnessLaunchFocus checks launch_focus: it must name a focus that
+// exists and has a prompt, because a bare `ynh run` sends that prompt as the
+// first message and a missing one would fail every launch.
+func validateHarnessLaunchFocus(hj map[string]any) []string {
+	raw, ok := hj["launch_focus"]
+	if !ok {
+		return nil
+	}
+	name, ok := raw.(string)
+	if !ok || name == "" {
+		return []string{"'launch_focus' must be a non-empty string naming a focus"}
+	}
+	focuses, _ := hj["focuses"].(map[string]any)
+	entry, found := focuses[name]
+	if !found {
+		return []string{fmt.Sprintf("launch_focus references undefined focus %q", name)}
+	}
+	if m, _ := entry.(map[string]any); m != nil {
+		if prompt, _ := m["prompt"].(string); prompt == "" {
+			return []string{fmt.Sprintf("launch_focus %q: the focus has no prompt to send", name)}
+		}
+	}
+	return nil
+}
+
 // validateHarnessFocus validates focus entries inside plugin.json.
 func validateHarnessFocus(hj map[string]any) []string {
 	var issues []string
@@ -968,8 +1072,8 @@ func validateHarnessSensors(hj map[string]any) []string {
 		// only a command sensor's verdict is an exit code about the tree it
 		// was pointed at.
 		//
-		// plugin.ValidateSensors has always held this rule and has no
-		// production caller, so nothing enforced it here. The result was not
+		// This rule was once held only by a validator nothing
+		// called, so nothing enforced it here. The result was not
 		// inert: --calibrate ran such a sensor anyway and reported "the sensor
 		// passed a fixture built to trip it — it is no longer observing",
 		// failing the run with a false accusation about a healthy sensor.
@@ -992,8 +1096,8 @@ func validateHarnessSensors(hj map[string]any) []string {
 		if count != 1 {
 			issues = append(issues, fmt.Sprintf("%s source must have exactly one of files, command, focus, github_status, github_check", prefix))
 		} else if role, _ := entry["role"].(string); role == "convergence-verifier" {
-			// plugin.ValidateSensors held the files half of this rule with no
-			// production caller, so `ynd validate` accepted a verifier that
+			// The files half of this rule was held by a validator nothing
+			// called, so `ynd validate` accepted a verifier that
 			// could never end a run (#447).
 			kind := ""
 			switch {
@@ -1138,6 +1242,179 @@ func validateHarnessIncludes(hj map[string]any) []string {
 			if err := harness.ValidateIncludeAlias(as); err != nil {
 				issues = append(issues, fmt.Sprintf("includes[%d].as: %v", i, err))
 			}
+		}
+	}
+	return issues
+}
+
+// validateIncludeSensorOverrides checks the harness's top-level
+// sensor_overrides, which tune the sensors its includes bring. The runtime
+// (resolver.MergeIncludedSensors) refuses these at `ynh check` time; this
+// reports them at authoring time, with the runtime's wording.
+//
+// Always decidable from the manifest: the shape, the tolerance and ratchet
+// values, and an override naming one of this harness's own sensors.
+//
+// Whether a name is declared by some include needs the includes read. Local
+// includes and git includes already in the cache are read; nothing is
+// fetched. If any include that could declare a sensor cannot be read, an
+// unmatched name is not an error, because the missing include may declare it.
+// It comes back as a note instead, naming the include, so the check is never
+// silently passed. Includes with "sensors": false contribute nothing, as at
+// run time.
+func validateIncludeSensorOverrides(dir string, hj map[string]any, data []byte) (issues, notes []string) {
+	raw, ok := hj["sensor_overrides"]
+	if !ok {
+		return nil, nil
+	}
+	overrides, ok := raw.(map[string]any)
+	if !ok {
+		return []string{"'sensor_overrides' must be an object"}, nil
+	}
+	names := make([]string, 0, len(overrides))
+	for n := range overrides {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+
+	own, _ := hj["sensors"].(map[string]any)
+
+	// Shape and values first; these need no includes.
+	var candidates []string // names still to look for in the includes
+	for _, name := range names {
+		prefix := fmt.Sprintf("sensor_overrides.%s:", name)
+		ov, ok := overrides[name].(map[string]any)
+		if !ok {
+			issues = append(issues, prefix+" must be an object")
+			continue
+		}
+		if v, has := ov["tolerance"]; has {
+			tol, isStr := v.(string)
+			if !isStr || !plugin.ValidSensorTolerances[tol] {
+				issues = append(issues, fmt.Sprintf("%s tolerance %v must be one of blocking, advisory, report", prefix, quoteIfString(v)))
+			}
+		}
+		if v, has := ov["ratchet"]; has {
+			rat, isStr := v.(string)
+			if !isStr || !plugin.ValidSensorRatchets[rat] {
+				issues = append(issues, fmt.Sprintf("%s ratchet %v must be one of fingerprint, count", prefix, quoteIfString(v)))
+			}
+		}
+		for k := range ov {
+			if k != "tolerance" && k != "ratchet" {
+				issues = append(issues, fmt.Sprintf("%s %q cannot be overridden: only tolerance and ratchet can, anything else is a fork", prefix, k))
+			}
+		}
+		if _, isOwn := own[name]; isOwn {
+			issues = append(issues, fmt.Sprintf(
+				"%s sensor %q is declared by this harness, so edit it directly rather than overriding it", prefix, name))
+			continue
+		}
+		candidates = append(candidates, name)
+	}
+	if len(candidates) == 0 {
+		return issues, nil
+	}
+
+	// Which includes could declare a sensor, and what do they declare?
+	var meta plugin.HarnessJSON
+	var includes []plugin.IncludeMeta
+	if err := json.Unmarshal(data, &meta); err == nil {
+		includes = meta.Includes
+	}
+	declared := map[string]bool{}
+	var unread []string
+	for _, im := range includes {
+		inc := harness.Include{
+			GitSource: harness.GitSource{Git: im.Git, Local: im.Local, Ref: im.Ref, Path: im.Path},
+			Sensors:   im.Sensors,
+		}
+		if !inc.SensorsEnabled() {
+			continue
+		}
+		label := im.Git
+		if inc.IsLocal() {
+			label = im.Local
+		}
+		sensors, err := resolver.ReadIncludeSensors(dir, inc)
+		if err != nil {
+			unread = append(unread, fmt.Sprintf("include %s could not be read (%v)", label, err))
+			continue
+		}
+		for n := range sensors {
+			declared[n] = true
+		}
+	}
+
+	for _, name := range candidates {
+		if declared[name] {
+			continue
+		}
+		if len(unread) == 0 {
+			issues = append(issues, fmt.Sprintf(
+				"sensor_overrides.%s: override names sensor %q, which no include or this harness declares", name, name))
+			continue
+		}
+		notes = append(notes, fmt.Sprintf(
+			"sensor_overrides.%s is declared by no include that could be read; %s", name, strings.Join(unread, "; ")))
+	}
+	return issues, notes
+}
+
+func quoteIfString(v any) any {
+	if s, ok := v.(string); ok {
+		return fmt.Sprintf("%q", s)
+	}
+	return fmt.Sprintf("%v", v)
+}
+
+// validateSensorDetails holds the sensor rules neither the schema nor
+// validateHarnessSensors express, found by decoding the manifest to its typed
+// form. They are the ones a validator in internal/plugin held and nothing
+// called (#367), since removed: a set is published to be included by other harnesses, so a
+// defect here fails in every consumer's `ynh check`, not just the author's.
+//
+//   - ratchet "count" needs a command source: only a command produces
+//     countable findings;
+//   - an output.match that does not compile would silently select nothing,
+//     turning the sensor's whole output into accepted debt;
+//   - a reference fixture must be a relative path inside the harness, and must
+//     exist: a calibration that cannot find its fixture cannot prove the sensor
+//     still observes, and an included sensor's fixture travels with it.
+func validateSensorDetails(dir string, data []byte) []string {
+	var hj plugin.HarnessJSON
+	if err := json.Unmarshal(data, &hj); err != nil {
+		return nil // malformed JSON is already reported by the caller
+	}
+	names := make([]string, 0, len(hj.Sensors))
+	for n := range hj.Sensors {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+
+	var issues []string
+	for _, name := range names {
+		s := hj.Sensors[name]
+		prefix := fmt.Sprintf("sensor %q:", name)
+		if s.Ratchet == "count" && s.Source.Kind() != "" && s.Source.Kind() != "command" {
+			issues = append(issues, fmt.Sprintf(
+				"%s ratchet count requires a command source: only a command sensor produces countable findings", prefix))
+		}
+		if _, err := s.OutputMatcher(); err != nil {
+			issues = append(issues, fmt.Sprintf("%s %v", prefix, err))
+		}
+		if s.Reference == nil || s.Reference.Path == "" {
+			continue
+		}
+		ref := s.Reference.Path
+		if err := pathutil.CheckSubpath(ref); err != nil || filepath.IsAbs(ref) {
+			issues = append(issues, fmt.Sprintf(
+				"%s reference.path %q must be a relative path inside the harness", prefix, ref))
+			continue
+		}
+		if info, err := os.Stat(filepath.Join(dir, ref)); err != nil || !info.IsDir() {
+			issues = append(issues, fmt.Sprintf(
+				"%s reference.path %q is not a directory in the harness: calibration has no fixture to run against", prefix, ref))
 		}
 	}
 	return issues

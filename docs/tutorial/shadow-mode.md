@@ -105,7 +105,7 @@ Skip this section if you are working in a ynh checkout or your own repository.
 
 Otherwise, build a small repository that reproduces the case this page follows:
 three closed fixes, the `#173` one among them, and a guide harness that at the
-fix's parent still kept its manifest in `.ynh-plugin/` and declared no sensors.
+fix's parent declared no sensors.
 The commits get their own hashes, so the page's `8382382` is a different hash
 here:
 
@@ -114,8 +114,8 @@ here:
 ```bash
 mkdir -p /tmp/shadow/repo && cd /tmp/shadow/repo
 git init -q
-mkdir -p .ynh-plugin
-echo '{"name": "ynh-guide", "version": "0.1.0"}' > .ynh-plugin/plugin.json
+mkdir -p .agents/harness
+echo '{"name": "ynh-guide", "version": "0.1.0"}' > .agents/harness/plugin.json
 cat > uninstall.sh << 'EOF'
 #!/bin/sh
 # uninstall.sh <install> <resource>: remove an install's resource
@@ -134,7 +134,6 @@ echo "A root .mcp.json is read when the manifest declares no MCP servers." > NOT
 git add -A && git commit -qm "fix(plugin): ingest root .mcp.json as MCP server fallback (#179)"
 echo "Cursor rules are written as .mdc with frontmatter." >> NOTES.md
 git commit -qam "fix(cursor): write rules as .mdc with frontmatter, not plain .md (#201)"
-mkdir -p .agents/harness && git mv .ynh-plugin/plugin.json .agents/harness/plugin.json
 cat > .agents/harness/plugin.json << 'EOF'
 {
   "name": "ynh-guide",
@@ -265,10 +264,6 @@ ynh check local/ynh-guide --only harness-valid --format json
 ```json
 {"error":{"code":"not_found","message":"sensor \"harness-valid\" not declared in harness \"ynh-guide\""}}
 ```
-
-Both commands also print a warning on stderr that the base commit keeps its
-manifest in `.ynh-plugin/`, which is deprecated. It does not affect the result:
-an old commit is read as it is, and nothing is written back to it.
 
 That install was only to show the problem, so remove it before going on:
 

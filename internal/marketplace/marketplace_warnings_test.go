@@ -21,7 +21,7 @@ func writeHookedHarness(t *testing.T, dir, name, command string) string {
 		"name":    name,
 		"version": "0.1.0",
 		"hooks": map[string]any{
-			"before_tool": []any{map[string]string{"matcher": "Bash", "command": command}},
+			"before_tool": []any{map[string]string{"command": command}},
 		},
 	})
 	return "./harnesses/" + name

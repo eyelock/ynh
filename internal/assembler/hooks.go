@@ -8,11 +8,13 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // SessionHookGenerator is what WriteSessionHooks needs from a vendor: its
 // session hook files and its config directory.
 type SessionHookGenerator interface {
+	Name() string
 	ConfigDir() string
 	GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)
 }
@@ -31,15 +33,16 @@ type SessionHookScriptDirer interface {
 // directory of `ynh run`, `ynd preview` or the agent loop, and copies in each
 // script those hooks run by a "./" path, from the harness at harnessDir, to
 // where the session's hook commands reach it (#495). It returns a warning for
-// each script it could not carry. A vendor that writes no hooks (Copilot) needs
-// none of their scripts.
+// each script it could not carry, and one for each hook the vendor cannot
+// express (vendor.HookWarnings), so no event is dropped silently.
 func WriteSessionHooks(dir string, adapter SessionHookGenerator, harnessDir string, hooks map[string][]plugin.HookEntry) ([]string, error) {
 	files, err := adapter.GenerateHookConfig(hooks)
 	if err != nil {
 		return nil, fmt.Errorf("generating hook config: %w", err)
 	}
+	warnings := vendor.HookWarnings(adapter.Name(), hooks)
 	if len(files) == 0 {
-		return nil, nil
+		return warnings, nil
 	}
 	for relPath, content := range files {
 		absPath := filepath.Join(dir, relPath)
@@ -54,11 +57,11 @@ func WriteSessionHooks(dir string, adapter SessionHookGenerator, harnessDir stri
 	if d, ok := adapter.(SessionHookScriptDirer); ok {
 		scriptDir = filepath.Join(dir, d.SessionHookScriptDir())
 	}
-	warnings, err := CopyHookScripts(harnessDir, scriptDir, hooks, "the session")
+	copyWarnings, err := CopyHookScripts(harnessDir, scriptDir, hooks, "the session")
 	if err != nil {
 		return nil, err
 	}
-	return warnings, nil
+	return append(warnings, copyWarnings...), nil
 }
 
 // CopyHookScripts copies into destDir each script the hooks run by a "./"
@@ -80,33 +83,64 @@ func CopyHookScripts(harnessDir, destDir string, hooks map[string][]plugin.HookE
 	}
 	sort.Strings(events)
 
-	var warnings []string
-	seen := map[string]bool{}
+	var scripts []string
 	for _, event := range events {
 		for _, entry := range hooks[event] {
-			script, ok := hookScript(entry.Command)
-			if !ok || seen[script] {
-				continue
+			if script, ok := hookScript(entry.Command); ok {
+				scripts = append(scripts, script)
 			}
-			seen[script] = true
-			rel := filepath.Clean(filepath.FromSlash(strings.TrimPrefix(script, "./")))
-			if !filepath.IsLocal(rel) {
-				warnings = append(warnings, fmt.Sprintf("hook script %s is outside the harness, so %s cannot carry it", script, carrier))
-				continue
-			}
-			src := filepath.Join(harnessDir, rel)
-			if info, err := os.Lstat(src); err != nil || !info.Mode().IsRegular() {
-				warnings = append(warnings, fmt.Sprintf("hook script %s is not a file in the harness, so %s does not carry it", script, carrier))
-				continue
-			}
-			dst := filepath.Join(destDir, rel)
-			if info, err := os.Lstat(dst); err == nil && !info.Mode().IsRegular() {
-				warnings = append(warnings, fmt.Sprintf("hook script %s would replace something that is not a file, so %s does not carry it", script, carrier))
-				continue
-			}
-			if err := CopyFile(src, dst); err != nil {
-				return nil, fmt.Errorf("copying hook script %s: %w", script, err)
-			}
+		}
+	}
+	return copyScripts(harnessDir, destDir, scripts, "hook script", carrier)
+}
+
+// CopyMCPScripts does for MCP servers what CopyHookScripts does for hooks: it
+// copies into destDir each script a stdio server runs by a "./" command, so
+// an exported package contains the file its MCP config names. Same rules and
+// warnings as CopyHookScripts, with "mcp script" in the message.
+func CopyMCPScripts(harnessDir, destDir string, servers map[string]plugin.MCPServer, carrier string) ([]string, error) {
+	names := make([]string, 0, len(servers))
+	for n := range servers {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+
+	var scripts []string
+	for _, n := range names {
+		s := servers[n]
+		if s.Transport() == plugin.MCPTypeStdio && strings.HasPrefix(s.Command, "./") {
+			scripts = append(scripts, s.Command)
+		}
+	}
+	return copyScripts(harnessDir, destDir, scripts, "mcp script", carrier)
+}
+
+// copyScripts copies each "./" script, in order, once.
+func copyScripts(harnessDir, destDir string, scripts []string, label, carrier string) ([]string, error) {
+	var warnings []string
+	seen := map[string]bool{}
+	for _, script := range scripts {
+		if seen[script] {
+			continue
+		}
+		seen[script] = true
+		rel := filepath.Clean(filepath.FromSlash(strings.TrimPrefix(script, "./")))
+		if !filepath.IsLocal(rel) {
+			warnings = append(warnings, fmt.Sprintf("%s %s is outside the harness, so %s cannot carry it", label, script, carrier))
+			continue
+		}
+		src := filepath.Join(harnessDir, rel)
+		if info, err := os.Lstat(src); err != nil || !info.Mode().IsRegular() {
+			warnings = append(warnings, fmt.Sprintf("%s %s is not a file in the harness, so %s does not carry it", label, script, carrier))
+			continue
+		}
+		dst := filepath.Join(destDir, rel)
+		if info, err := os.Lstat(dst); err == nil && !info.Mode().IsRegular() {
+			warnings = append(warnings, fmt.Sprintf("%s %s would replace something that is not a file, so %s does not carry it", label, script, carrier))
+			continue
+		}
+		if err := CopyFile(src, dst); err != nil {
+			return nil, fmt.Errorf("copying %s %s: %w", label, script, err)
 		}
 	}
 	return warnings, nil

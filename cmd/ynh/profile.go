@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 )
 
@@ -116,6 +117,16 @@ func cmdProfileHookAdd(args []string, stdout io.Writer) error {
 			}
 			i++
 			opts.Matcher = args[i]
+		case "--timeout":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--timeout requires a value")
+			}
+			i++
+			secs, err := strconv.Atoi(args[i])
+			if err != nil || secs < 1 || secs > plugin.MaxHookTimeout {
+				return fmt.Errorf("--timeout must be a whole number of seconds from 1 to %d, got %q", plugin.MaxHookTimeout, args[i])
+			}
+			opts.Timeout = secs
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return fmt.Errorf("unknown flag: %s", args[i])
@@ -124,7 +135,7 @@ func cmdProfileHookAdd(args []string, stdout io.Writer) error {
 		}
 	}
 	if len(positional) != 4 {
-		return fmt.Errorf("usage: ynh profile hook add <harness> <profile> <event> <command> [--matcher <pattern>]")
+		return fmt.Errorf("usage: ynh profile hook add <harness> <profile> <event> <command> [--matcher <pattern>] [--timeout <seconds>]")
 	}
 	harnessRef, profileName, event, command := positional[0], positional[1], positional[2], positional[3]
 

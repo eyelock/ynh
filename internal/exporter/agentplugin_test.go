@@ -127,6 +127,7 @@ func TestAgentPlugin_AllVendorsLayout(t *testing.T) {
 		"CLAUDE.md",
 		"agents/checker.md", // Claude Code reads agents/ at the root
 		"com.github.copilot/agents/checker.md",
+		"com.github.copilot/hooks/hooks.json",
 		"com.openai/hooks/hooks.json",
 		"commands/check.md",
 		"hooks/claude.json", // Claude Code's hook file, named by its manifest
@@ -285,12 +286,12 @@ func TestAgentPlugin_CodexOnly(t *testing.T) {
 func TestAgentPlugin_CopilotNamespace(t *testing.T) {
 	src := writePortableSource(t, portableManifest)
 	out, r := exportPortable(t, src, "copilot")
-	want := []string{"AGENTS.md", "com.github.copilot/agents/checker.md", "mcp.json", "plugin.json", "skills/hello/SKILL.md"}
+	want := []string{"AGENTS.md", "com.github.copilot/agents/checker.md", "com.github.copilot/hooks/hooks.json", "mcp.json", "plugin.json", "scripts/guard.sh", "skills/hello/SKILL.md"}
 	if got := listFiles(t, out); strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Errorf("files = %v, want %v", got, want)
 	}
 	// Copilot's legacy export excludes rules and commands; the namespace follows it.
-	if !hasWarning(r, "1 rules not portable") || !hasWarning(r, "1 commands not portable") || !hasWarning(r, "hooks not portable") {
+	if !hasWarning(r, "1 rules not portable") || !hasWarning(r, "1 commands not portable") || hasWarning(r, "hooks not portable") {
 		t.Errorf("warnings = %v", r.Warnings)
 	}
 	if r.Agents != 1 {

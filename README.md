@@ -67,7 +67,7 @@ ynh manages the **guide layer** of that harness: the proactive steering that hap
 
 ## What you can do
 
-**Build** — Create harnesses with skills, agents, rules, and commands. Pull artifacts from any Git repo with cherry-picking (`pick`). Declare hooks, MCP servers, environment-specific profiles, [focuses](docs/focus.md) — named prompt-and-profile bindings for repeatable runs — and [sensors](docs/sensors.md) — observation surfaces that loop drivers consume between agent turns.
+**Build**: create harnesses with skills, agents, rules, and commands. Pull artifacts from any Git repo with cherry-picking (`pick`). Declare hooks, MCP servers, environment-specific profiles, [focuses](docs/focus.md) (named prompt-and-profile bindings for repeatable runs) and [sensors](docs/sensors.md), the observation surfaces that loop drivers consume between agent turns. Let a harness request sibling [workspace folders](docs/workspace.md) that you grant with an allow-list or `ynh trust accept`.
 
 **Refine** — Scaffold with `ynd create`, lint and validate with `ynd lint`/`ynd validate`, compress prompts with `ynd compress`, preview assembled output with `ynd preview`, diff across vendors with `ynd diff`. Edit focuses, profiles, hooks, MCP servers, includes, and delegates from the CLI with `ynh focus`/`profile`/`hook`/`mcp`/`include`/`delegate` — the same surface a GUI consumer drives.
 

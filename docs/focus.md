@@ -38,7 +38,7 @@ Focus is selected through a flag or environment variable:
 |--------|---------|------------|
 | `--focus` flag | `ynh run my-harness --focus audit` | Highest |
 | `YNH_FOCUS` env var | `YNH_FOCUS=audit ynh run my-harness` | Middle |
-| _(none)_ | `ynh run my-harness` | Lowest — interactive, top-level config |
+| _(none)_ | `ynh run my-harness` | Lowest: interactive, top-level config (or the harness's [launch focus](#launch-focus), if it declares one) |
 
 The `--focus` flag is supported on `ynh run`, `ynd preview`, `ynd diff`, and `ynd export`. When both the flag and the environment variable are set, the flag wins.
 
@@ -69,6 +69,35 @@ Error: cannot use --focus and a trailing prompt together (focus includes a promp
 ## Non-Interactive Implication
 
 Specifying `--focus` implies non-interactive mode by default — the focus prompt is fed to the vendor CLI as the initial instruction and execution proceeds without further user input. Pass `--interactive` alongside `--focus` to override and keep the session interactive after the focus prompt is delivered.
+
+## Launch Focus
+
+A harness can declare the focus it always wakes with, so launching it with no arguments starts a useful session instead of an empty one:
+
+```json
+{
+  "focuses": { "wake": { "prompt": "Begin: act on your wake block", "profile": "live" } },
+  "launch_focus": "wake"
+}
+```
+
+`launch_focus` is the name of one of the harness's own `focuses`. It is read by `ynh run` and nothing else.
+
+| You run | What happens |
+|---------|--------------|
+| `ynh run h` (no `--focus`, no prompt) | Same as `--focus wake --interactive`: an interactive session, the focus prompt as the first message, the focus's profile applied. ynh prints one stderr line saying it is using `launch_focus` `wake`. The generated launcher (`exec ynh run "local/<name>" "$@"`) with no arguments is this case. |
+| `ynh run h --focus other` | Unchanged: that focus, one-shot unless `--interactive`. The launch focus is not involved: not its prompt, not its profile, and its interactive session does not leak in. A dispatcher running `worker --focus next` still gets a run that exits. |
+| `ynh run h -- "text"` | Your prompt replaces the launch focus's prompt, but the launch focus's profile still applies. Interactivity is as it always was: one-shot unless `--interactive`. |
+| `ynh run h --resume` | The launch focus's profile applies. Its prompt is not sent, for the same reason a focus prompt is not: a resume continues a task. If there is nothing to resume and ynh starts a new session, that session is a bare launch and the prompt is sent. |
+| `ynh agent run`, delegation | Not applied: no wake prompt, no forced interactive session. Neither goes through `ynh run`, and nothing on their paths reads the field. |
+
+There is no off switch. An explicit prompt is how you get a session that does not wake with the launch focus. A `--profile` (or `YNH_PROFILE`) you pass wins over the launch focus's profile.
+
+On a vendor that cannot start an interactive session with a first message, ynh warns, naming the vendor, that the launch focus prompt cannot be sent, and starts the session bare with the profile only. It never drops the prompt silently.
+
+Because the launch focus's prompt steers every session of the harness, `ynh trust show` lists it and the trust digest covers it. A harness without `launch_focus` keeps the digest it had.
+
+`ynd validate` errors when `launch_focus` names a focus that does not exist, or one that has no prompt. It also warns, for the vendors the harness targets, when a vendor has no way to deliver `on_session_start` output to the model (see [Hooks](hooks.md#on-session-start-output-becomes-model-context)), since a wake prompt that relies on that output would find nothing.
 
 ## Resuming a Session
 

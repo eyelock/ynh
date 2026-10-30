@@ -3,6 +3,7 @@
   "capabilities": "0.9.0",
   "features": [
     "agent-run-fetches-includes",
-    "agent-run-harness-path"
+    "agent-run-harness-path",
+    "workspace-folders"
   ]
 }
