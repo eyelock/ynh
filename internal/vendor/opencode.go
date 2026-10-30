@@ -652,14 +652,13 @@ func (o *OpenCode) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[
 
 // validateOpencodeMatcher rejects a tool matcher that is not a valid regular
 // expression, at generate time. The plugin tests it as an anchored JavaScript
-// regex. RE2 rejects what JavaScript adds (lookaround, backreferences), but it
-// also accepts groups JavaScript rejects with "Invalid group": inline flags
-// such as (?i) and (?s:...), and Go's (?P<name>...). So a matcher must also
-// pass RE2 with no "(?" group other than the plain (?:...). RE2 syntax that
-// JavaScript reads differently without throwing ([[:alpha:]], \z, \Q...\E)
-// is not caught here; the plugin compiles every matcher once at setup, so one
-// that throws there is reported and matches nothing rather than blocking
-// every tool.
+// regex (no flags). RE2 rejects what JavaScript adds (lookaround,
+// backreferences), but it also accepts syntax JavaScript either rejects or,
+// worse, reads differently without throwing. So a matcher must pass RE2 and
+// also keep to the syntax both read the same way (see opencodeMatcherNotJS).
+// The plugin also compiles every matcher once at setup, so one that throws
+// there anyway is reported and matches nothing rather than blocking every
+// tool.
 func validateOpencodeMatcher(m string) error {
 	if m == "" || m == "*" {
 		return nil
@@ -667,41 +666,84 @@ func validateOpencodeMatcher(m string) error {
 	if _, err := regexp.Compile("^(?:" + m + ")$"); err != nil {
 		return fmt.Errorf("invalid matcher %q: %w", m, err)
 	}
-	if i := opencodeSpecialGroup(m); i >= 0 {
-		return fmt.Errorf("invalid matcher %q: the group at offset %d is not JavaScript; only (?:...) is allowed", m, i)
+	if i, why := opencodeMatcherNotJS(m); i >= 0 {
+		return fmt.Errorf("invalid matcher %q: at offset %d, %s", m, i, why)
 	}
 	return nil
 }
 
-// opencodeSpecialGroup returns the offset of the first "(?" group in m that is
-// not "(?:", or -1. An escaped "\(" and a "(" inside a character class are
-// literals, not groups. m has already compiled as RE2, so it is well formed.
-func opencodeSpecialGroup(m string) int {
+// opencodeSameEscapes are the letters that, escaped, mean the same in RE2 and
+// in a JavaScript regex without the u flag. Escaped punctuation is a literal in
+// both. Every other escape RE2 accepts means something else in JavaScript,
+// which reads an unknown escaped letter as the letter itself: \A, \z (text
+// anchors), \Q...\E (quoting), \a (bell), \pL and \p{Greek} (Unicode
+// classes), octal \01, and \x{41}, where JavaScript reads "x" and then the
+// quantifier {41}.
+const opencodeSameEscapes = "dDsSwWfnrtv"
+
+// opencodeMatcherNotJS returns the offset of the first syntax in m that
+// JavaScript rejects or reads differently from RE2, and why; or -1. m has
+// already compiled as RE2, so it is well formed. It rejects:
+//   - a "(?" group other than "(?:": inline flags such as (?i), and Go's
+//     (?P<name>...), throw "Invalid group" in JavaScript;
+//   - an escape outside opencodeSameEscapes and punctuation, except \b and \B
+//     outside a class, and \x with two hex digits;
+//   - a POSIX class such as [[:alpha:]]: JavaScript reads "[[:alph]" and then
+//     a literal "]";
+//   - a "]" first in a class, as in []a] or [^]a]: RE2 reads it as a literal,
+//     JavaScript as the end of an empty class ([] matches nothing, [^] matches
+//     anything).
+func opencodeMatcherNotJS(m string) (int, string) {
 	inClass := false
 	for i := 0; i < len(m); i++ {
 		switch c := m[i]; {
 		case c == '\\':
-			i++ // the escaped byte is a literal
+			if i+1 >= len(m) {
+				return -1, ""
+			}
+			e := m[i+1]
+			switch {
+			case !isASCIIAlnum(e),
+				strings.IndexByte(opencodeSameEscapes, e) >= 0,
+				!inClass && (e == 'b' || e == 'B'):
+			case e == 'x' && i+3 < len(m) && isHex(m[i+2]) && isHex(m[i+3]):
+				i += 2
+			default:
+				return i, fmt.Sprintf("the escape \\%c means something else in JavaScript", e)
+			}
+			i++ // the escaped byte
 		case inClass:
-			if c == ']' {
+			switch {
+			case c == ']':
 				inClass = false
+			case c == '[' && i+1 < len(m) && m[i+1] == ':':
+				return i, "a POSIX class such as [:alpha:] is not JavaScript; write the range, such as [a-zA-Z]"
 			}
 		case c == '[':
 			inClass = true
-			// A "]" first in the class (after an optional "^") is a literal.
-			if i+1 < len(m) && m[i+1] == '^' {
-				i++
+			j := i + 1
+			if j < len(m) && m[j] == '^' {
+				j++
 			}
-			if i+1 < len(m) && m[i+1] == ']' {
-				i++
+			if j < len(m) && m[j] == ']' {
+				return i, `a "]" first in a class ends an empty class in JavaScript; write \]`
 			}
+			i = j - 1
 		case c == '(' && i+1 < len(m) && m[i+1] == '?':
 			if i+2 >= len(m) || m[i+2] != ':' {
-				return i
+				return i, "the group is not JavaScript; only (?:...) is allowed"
 			}
 		}
 	}
-	return -1
+	return -1, ""
+}
+
+func isASCIIAlnum(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
+}
+
+func isHex(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
 }
 
 // SessionHookScriptDir puts a hook's "./" script in .opencode/, beside the

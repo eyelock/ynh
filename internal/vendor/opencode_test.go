@@ -603,8 +603,13 @@ func TestOpenCodeTransformArtifactRefusesInlinePermissionsWithToolLists(t *testi
 }
 
 func TestOpenCodeGenerateHookConfigRejectsBadMatcher(t *testing.T) {
-	// RE2 accepts the last five, but JavaScript throws "Invalid group" on them.
-	for _, m := range []string{"Bash(", "[", "*x(", "a**", "(?i)bash", "(?P<x>a)", "(?s:a)", "Bash|(?i)edit", "(?<x>a)"} {
+	// RE2 rejects the first four. JavaScript throws "Invalid group" on the next
+	// five. The rest JavaScript compiles but reads differently from RE2.
+	for _, m := range []string{"Bash(", "[", "*x(", "a**",
+		"(?i)bash", "(?P<x>a)", "(?s:a)", "Bash|(?i)edit", "(?<x>a)",
+		"[[:alpha:]]+", "[a[:digit:]]", "[[:^space:]]", `Bash\z`, `\ABash`, `\QBash\E`,
+		`\a`, `\pL+`, `\p{Greek}`, `\PL`, `\x{41}`, `\01`, `[\pL]`,
+		"[]a]", "[^]a]", "Edit|[]]"} {
 		_, err := (&OpenCode{}).GenerateHookConfig(map[string][]plugin.HookEntry{
 			"before_tool": {{Matcher: m, Command: "c"}},
 		})
@@ -617,7 +622,9 @@ func TestOpenCodeGenerateHookConfigRejectsBadMatcher(t *testing.T) {
 	if _, err := (&OpenCode{}).GenerateHookConfig(map[string][]plugin.HookEntry{
 		"before_tool": {{Matcher: "*", Command: "c"}, {Command: "c"}, {Matcher: "Edit|Write", Command: "c"},
 			// Escaped and bracketed "(?" are literals, not groups.
-			{Matcher: "(?:Edit|Write)", Command: "c"}, {Matcher: `\(?i`, Command: "c"}, {Matcher: "[(?]i", Command: "c"}, {Matcher: "[]](?:a)", Command: "c"}},
+			{Matcher: "(?:Edit|Write)", Command: "c"}, {Matcher: `\(?i`, Command: "c"}, {Matcher: "[(?]i", Command: "c"}, {Matcher: `[\]](?:a)`, Command: "c"},
+			// Escapes that mean the same in RE2 and JavaScript.
+			{Matcher: `\bBash\b|\d+\s\w\D\S\W|[\d\w\-.]|\x41|\.\*\\|\[:alpha:\]|[\t\n\r\f\v]`, Command: "c"}},
 		"on_session_start": {{Matcher: "startup(", Command: "c"}},
 	}); err != nil {
 		t.Errorf("valid matchers rejected: %v", err)
