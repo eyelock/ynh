@@ -166,8 +166,8 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 		BasePath: opts.SourceDir,
 	})
 
-	// Discover instructions.md (last one wins)
-	instructionsPath := DiscoverInstructions(content)
+	// Compose the instructions of the harness and its includes
+	instructions := assembler.ComposeInstructions(content)
 
 	// Determine target vendors
 	vendors := opts.Vendors
@@ -183,14 +183,14 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 
 	switch opts.Mode {
 	case ModeMerged:
-		return exportMerged(opts, hj, p, content, instructionsPath, vendors)
+		return exportMerged(opts, hj, p, content, instructions, vendors)
 	case ModeAgentPlugin:
-		return exportAgentPlugin(opts, hj, p, content, instructionsPath, vendors)
+		return exportAgentPlugin(opts, hj, p, content, instructions, vendors)
 	}
-	return exportPerVendor(opts, hj, p, content, instructionsPath, vendors)
+	return exportPerVendor(opts, hj, p, content, instructions, vendors)
 }
 
-func exportPerVendor(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
+func exportPerVendor(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructions []byte, vendors []string) ([]ExportResult, error) {
 	var results []ExportResult
 
 	for _, v := range vendors {
@@ -204,7 +204,7 @@ func exportPerVendor(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harn
 			return nil, fmt.Errorf("creating %s output: %w", v, err)
 		}
 
-		result, err := exportForVendor(v, vendorDir, pj, p, content, instructionsPath)
+		result, err := exportForVendor(v, vendorDir, pj, p, content, instructions)
 		if err != nil {
 			return nil, fmt.Errorf("exporting for %s: %w", v, err)
 		}
@@ -214,7 +214,7 @@ func exportPerVendor(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harn
 	return results, nil
 }
 
-func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
+func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructions []byte, vendors []string) ([]ExportResult, error) {
 	outputDir := opts.OutputDir
 
 	// Clean and recreate output dir
@@ -291,8 +291,8 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 	}
 
 	// Instructions
-	if instructionsPath != "" {
-		if err := WriteMergedSystemPrompt(instructionsPath, outputDir, vendors); err != nil {
+	if len(instructions) > 0 {
+		if err := WriteMergedSystemPrompt(instructions, outputDir, vendors); err != nil {
 			return nil, err
 		}
 	}
@@ -312,7 +312,7 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 	return []ExportResult{result}, nil
 }
 
-func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string) (ExportResult, error) {
+func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructions []byte) (ExportResult, error) {
 	result := ExportResult{
 		Vendor:    vendorName,
 		OutputDir: outputDir,
@@ -339,8 +339,8 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 	result.Warnings = skippedArtifactWarnings(vendorName, adapter, p, content)
 
 	// Instructions
-	if instructionsPath != "" {
-		if err := WriteSystemPrompt(instructionsPath, outputDir, adapter); err != nil {
+	if len(instructions) > 0 {
+		if err := WriteSystemPrompt(instructions, outputDir, adapter); err != nil {
 			return result, err
 		}
 	}

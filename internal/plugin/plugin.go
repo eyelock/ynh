@@ -916,6 +916,10 @@ type IncludeMeta struct {
 	// Sensors, when false, drops the sensors the include declares. Absent
 	// means true: sensors travel with the include.
 	Sensors *bool `json:"sensors,omitempty"`
+	// Instructions, when false, leaves out the include's instructions file
+	// (instructions.md / AGENTS.md) when instructions are composed. Absent
+	// means true: the include contributes a section.
+	Instructions *bool `json:"instructions,omitempty"`
 }
 
 // DelegateMeta is the JSON representation of a delegate reference.

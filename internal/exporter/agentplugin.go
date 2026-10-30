@@ -35,7 +35,7 @@ const AgentPluginVendor = "agent-plugin"
 // The output is validated against the specification before this returns.
 // A fatal finding is an error: ynh must not publish a package it would
 // itself refuse to load.
-func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructionsPath string, vendors []string) ([]ExportResult, error) {
+func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructions []byte, vendors []string) ([]ExportResult, error) {
 	out := opts.OutputDir
 	result := ExportResult{Vendor: AgentPluginVendor, OutputDir: out}
 
@@ -56,12 +56,7 @@ func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Ha
 
 	// AGENTS.md is not a portable component, but it is how ynh carries
 	// instructions and what ynh reads back on import.
-	var instructions []byte
-	if instructionsPath != "" {
-		var err error
-		if instructions, err = os.ReadFile(instructionsPath); err != nil {
-			return nil, fmt.Errorf("reading instructions: %w", err)
-		}
+	if len(instructions) > 0 {
 		if err := os.WriteFile(filepath.Join(out, "AGENTS.md"), instructions, 0o644); err != nil {
 			return nil, fmt.Errorf("writing AGENTS.md: %w", err)
 		}
