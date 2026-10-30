@@ -755,7 +755,7 @@ func resolveVendor(flag string, p *harness.Harness, cfg *config.Config) (string,
 //	ynh run david -v codex -- "deploy it"
 //	ynh run david -v cursor --install
 //
-// Without --, ynh cannot know which vendor flags take a value, so it reads a
+// ynh does not know which vendor flags take a value, so without -- it reads a
 // bare word by where it stands. After the harness name, a bare word that
 // directly follows a passed-through flag (one without "=") stays with that
 // flag as its value only if a later bare word exists to be the prompt: the
@@ -763,9 +763,13 @@ func resolveVendor(flag string, p *harness.Harness, cfg *config.Config) (string,
 // none yet. So "--model opus --max-turns 1 'fix it'" forwards
 // "--model opus --max-turns 1" and prompts "fix it", "--verbose 'fix it'
 // --model=opus" prompts "fix it", while "--model opus" on its own makes "opus"
-// the prompt. Position alone cannot tell a boolean flag from one that takes a
-// value, so "--verbose 'fix it' --model opus" prompts "opus" (ynw-sbo.2).
-// Write "--model=opus", or end the flags with --, to be unambiguous.
+// the prompt, and so does "--verbose 'fix it' --model opus": position alone
+// cannot tell a boolean flag from one that takes a value.
+//
+// With --, the prompt is the word after it, so a bare word before -- that
+// directly follows a passed-through flag is always that flag's value:
+// "--model opus --" forwards "--model opus" with no prompt. Write
+// "--model=opus", or put the prompt after --, to be unambiguous.
 // runArgs holds parsed arguments for ynh run.
 type runArgs struct {
 	HarnessName  string   // positional name, if given
@@ -796,8 +800,10 @@ func parseRunArgs(args []string) runArgs {
 	flagArgs := args
 
 	// First pass: find -- separator and extract prompt
+	separated := false
 	for i, arg := range args {
 		if arg == "--" {
+			separated = true
 			flagArgs = args[:i]
 			if i+1 < len(args) {
 				ra.Prompt = args[i+1]
@@ -869,9 +875,10 @@ func parseRunArgs(args []string) runArgs {
 				// First positional arg is the harness name
 				ra.HarnessName = flagArgs[i]
 				firstPositional = false
-			case prevPassthrough && i < lastBare:
+			case prevPassthrough && (separated || i < lastBare):
 				// The value of the vendor flag before it ("--model haiku"),
-				// not the prompt: a later bare word is the prompt.
+				// not the prompt: the prompt follows --, or is a later bare
+				// word.
 				ra.VendorArgs = append(ra.VendorArgs, flagArgs[i])
 			case ra.Prompt == "":
 				ra.Prompt = flagArgs[i]

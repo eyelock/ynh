@@ -223,13 +223,12 @@ func TestParseRunArgs(t *testing.T) {
 			wantPrompt: "fix it",
 			wantArgs:   []string{"--verbose"},
 		},
-		// Known ambiguity, pinned until ynw-sbo.2 decides how ynh tells a
-		// boolean vendor flag from one that takes a value. By position this
-		// is the same shape as "--model haiku -p 'say ok'", so the last bare
-		// word "opus" is the prompt and "fix it" goes with --verbose. Users
-		// write "--model=opus" or -- to get "fix it".
+		// ynh never interprets vendor flags, so by position this is the same
+		// shape as "--model haiku -p 'say ok'": the last bare word "opus" is
+		// the prompt and "fix it" goes with --verbose. Users write
+		// "--model=opus", or put the prompt after --, to get "fix it".
 		{
-			name:       "prompt after boolean flag, before space-separated flag (ynw-sbo.2)",
+			name:       "last bare word is the prompt, even after a space-separated flag",
 			args:       []string{"david", "--verbose", "fix it", "--model", "opus"},
 			wantName:   "david",
 			wantPrompt: "opus",
@@ -247,6 +246,31 @@ func TestParseRunArgs(t *testing.T) {
 			args:     []string{"my-harness", "--model=opus"},
 			wantName: "my-harness",
 			wantArgs: []string{"--model=opus"},
+		},
+		{
+			name:     "space-separated value then separator with no prompt",
+			args:     []string{"my-harness", "--model", "opus", "--"},
+			wantName: "my-harness",
+			wantArgs: []string{"--model", "opus"},
+		},
+		{
+			name:     "boolean flag, value and separator with no prompt",
+			args:     []string{"my-harness", "--verbose", "--model", "opus", "--"},
+			wantName: "my-harness",
+			wantArgs: []string{"--verbose", "--model", "opus"},
+		},
+		{
+			name:       "claude's own order written with separator",
+			args:       []string{"my-harness", "--verbose", "--model", "haiku", "--", "say ok"},
+			wantName:   "my-harness",
+			wantPrompt: "say ok",
+			wantArgs:   []string{"--verbose", "--model", "haiku"},
+		},
+		{
+			name:       "bare word not after a flag, then separator with no prompt",
+			args:       []string{"my-harness", "fix it", "--"},
+			wantName:   "my-harness",
+			wantPrompt: "fix it",
 		},
 		{
 			name:       "space-separated values with prompt via separator",

@@ -95,8 +95,9 @@ Run flags:
   --no-workspace               Grant none of the harness's requested workspace folders for this run
   --install                    Install symlinks for the vendor in current project
   --clean                      Remove symlinks for the vendor in current project
-  All other flags are passed through to the vendor CLI.
-  Use -- to separate vendor flags from the prompt.
+  All other flags are passed through to the vendor CLI. The last bare word is
+  the prompt: write vendor values with = (--model=haiku), or put the prompt
+  after -- (see: ynh run --help).
 
 Examples:
   ynh init
@@ -106,6 +107,7 @@ Examples:
   ynh install github.com/org/repo --ref v1.2.0
   ynh run david
   ynh run david "review this PR"
+  ynh run david --model haiku -- "say ok"
   ynh run david --focus code-review
   ynh run david --focus code-review --interactive
   ynh run david --profile thorough -- "audit this module"

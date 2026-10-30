@@ -116,10 +116,10 @@ docker run --rm -v $(pwd):/workspace -e OPENAI_API_KEY \
 
 ### Passing Vendor Flags
 
-Everything after the image name becomes arguments to `ynh run <harness>`. Unrecognised flags pass through to the vendor CLI:
+Everything after the image name becomes arguments to `ynh run <harness>`. Unrecognised flags pass through to the vendor CLI. Put the prompt after `--`, or write a flag's value with `=` (`--model=haiku`): see [Passing Vendor Flags](getting-started.md#passing-vendor-flags).
 
 ```bash
-# Model override
+# Model override (Claude's own "claude -p 'fix this' --model ...", written with --)
 docker run --rm -v $(pwd):/workspace -e ANTHROPIC_API_KEY \
   harness-david:latest --model claude-sonnet-4-5-20250514 -- "fix this"
 
