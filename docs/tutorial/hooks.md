@@ -327,7 +327,7 @@ A preview is a session layout. An exported plugin carries hooks where each vendo
 
 ```bash
 ynd export /tmp/ynh-tutorial/hook-harness -v claude,cursor,codex -o /tmp/ynh-tutorial/hook-export
-find /tmp/ynh-tutorial/hook-export -path '*hooks*' -type f | sort
+find /tmp/ynh-tutorial/hook-export -path '*/hook-export/*hooks*' -type f | sort
 cat /tmp/ynh-tutorial/hook-export/claude/.claude-plugin/plugin.json
 ```
 
