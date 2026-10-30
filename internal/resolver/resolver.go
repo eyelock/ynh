@@ -53,6 +53,10 @@ type ResolveResult struct {
 	// under: the "as" alias of the include, or the harness's own name. Empty
 	// for a plain artifact package.
 	Namespace string
+
+	// node is the include's identity in the include graph (see
+	// includeResolver.parents), empty for a plain artifact package.
+	node string
 }
 
 // repoFunc is a function that fetches or looks up a Git repo.
@@ -173,6 +177,15 @@ type includeResolver struct {
 	// by check, after ambiguity, since a namespace two harnesses share fails
 	// as ambiguous whichever of them lacked the profile.
 	profileErr map[string]error
+	// parents records, for every harness include met, the identity of the
+	// harness that includes it, once per route, including the routes the
+	// walk skips because the harness was already resolved. The root is
+	// rootID.
+	parents map[string][]string
+	// removals holds the MCP servers each walked harness sets to null, by
+	// identity.
+	removals map[string][]string
+	rootID   string
 }
 
 // seenHarness is one harness met under a namespace.
@@ -276,12 +289,14 @@ func walkIncludes(p *harness.Harness, cfg *config.Config, resolve sourceResolver
 	r := &includeResolver{
 		cfg: cfg, source: resolve, done: map[string]bool{},
 		selected: selected, seen: map[string][]seenHarness{}, profileErr: map[string]error{},
+		parents: map[string][]string{}, removals: map[string][]string{}, rootID: dirIdentity(p.Dir),
 	}
-	chain := []chainLink{{id: dirIdentity(p.Dir), label: "root"}}
+	chain := []chainLink{{id: r.rootID, label: "root"}}
 	results, err := r.resolve(p, chain, "")
 	if err != nil {
 		return nil, nil, err
 	}
+	r.applyRemovals(results)
 	if err := r.check(); err != nil {
 		return nil, nil, err
 	}
@@ -364,16 +379,51 @@ func (r *includeResolver) check() error {
 	return nil
 }
 
-// withoutMCPServers applies an included harness's removals to the harnesses
-// it includes: a null in its mcp_servers drops the server whichever of its
-// dependencies declared it, as it does for the root.
-func withoutMCPServers(deps []ResolveResult, removals []string) {
-	if len(removals) == 0 {
-		return
+// removedFrom returns the servers that included harnesses' nulls remove
+// from the include with identity id. A null in an included harness drops the
+// server from what reaches the root through that harness, so a route removes
+// what any harness along it sets to null. An include reached by more than one
+// route loses a server only when every route removes it: a route that keeps
+// it, such as a direct include by the root, wins. The outcome does not depend
+// on the order the includes are listed in. The root's own nulls are applied
+// later, by harness.ComposeMCPServers, and are not counted here.
+func (r *includeResolver) removedFrom(id string, memo map[string][]string) []string {
+	if id == r.rootID {
+		return nil
 	}
-	for i := range deps {
-		h := deps[i].Harness
+	if got, ok := memo[id]; ok {
+		return got
+	}
+	memo[id] = nil // cycles are refused by the walk; this only guards the recursion
+	var common []string
+	for i, parent := range r.parents[id] {
+		route := slices.Clone(r.removedFrom(parent, memo))
+		if parent != r.rootID {
+			route = append(route, r.removals[parent]...)
+		}
+		if i == 0 {
+			common = route
+			continue
+		}
+		common = slices.DeleteFunc(common, func(name string) bool { return !slices.Contains(route, name) })
+	}
+	slices.Sort(common)
+	common = slices.Compact(common)
+	memo[id] = common
+	return common
+}
+
+// applyRemovals drops from each included harness the servers that every
+// route to it removes (see removedFrom).
+func (r *includeResolver) applyRemovals(results []ResolveResult) {
+	memo := map[string][]string{}
+	for i := range results {
+		h := results[i].Harness
 		if h == nil {
+			continue
+		}
+		removals := r.removedFrom(results[i].node, memo)
+		if len(removals) == 0 {
 			continue
 		}
 		view := *h
@@ -383,7 +433,7 @@ func withoutMCPServers(deps []ResolveResult, removals []string) {
 				view.MCPServers[name] = s
 			}
 		}
-		deps[i].Harness = &view
+		results[i].Harness = &view
 	}
 }
 
@@ -391,6 +441,7 @@ func withoutMCPServers(deps []ResolveResult, removals []string) {
 // reached through, empty for the root.
 func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via string) ([]ResolveResult, error) {
 	var results []ResolveResult
+	parent := chain[len(chain)-1].id
 
 	for _, inc := range p.Includes {
 		res, id, err := r.resolveOne(p, inc)
@@ -441,8 +492,11 @@ func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via str
 		if len(inc.Pick) > 0 {
 			// A picked include contributes its picked artifacts and its MCP
 			// servers; its own includes are not followed.
-			if key := id + pickKey(inc.Pick); !r.done[key] {
+			key := id + pickKey(inc.Pick)
+			r.parents[key] = append(r.parents[key], parent)
+			if !r.done[key] {
 				r.done[key] = true
+				res.node = key
 				results = append(results, res)
 			}
 			continue
@@ -453,15 +507,17 @@ func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via str
 				return nil, fmt.Errorf("include cycle: %s -> %s", chainLabels(chain), link.label)
 			}
 		}
+		r.parents[id] = append(r.parents[id], parent)
 		if r.done[id] {
 			continue
 		}
+		r.removals[id] = inner.MCPRemovals
+		res.node = id
 		deps, err := r.resolve(inner, append(chain[:len(chain):len(chain)], chainLink{id: id, label: label}), res.Chain)
 		if err != nil {
 			return nil, err
 		}
 		r.done[id] = true
-		withoutMCPServers(deps, inner.MCPRemovals)
 		results = append(results, deps...)
 		results = append(results, res)
 	}
