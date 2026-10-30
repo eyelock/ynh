@@ -725,3 +725,12 @@ func launchCopilot(configPath string, initialPrompt string, extraArgs []string) 
 	}
 	return syscall.Exec(copilotBin, args, os.Environ())
 }
+
+// Workspace folders: Copilot CLI's /add-dir command is documented as "Allow
+// file access to a directory and load its .github/skills and .github/agents as
+// trusted configurations" (docs.github.com/en/copilot/reference/cli-command-reference).
+// The launch flag --add-dir is the one this adapter already passes for the
+// staging directory. A granted folder's agent configuration is therefore
+// loaded as trusted, which is a wider grant than file access alone.
+var copilotWorkspaceFlag = "--add-dir"
+var copilotWorkspaceUnsupported = ""

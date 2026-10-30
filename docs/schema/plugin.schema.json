@@ -98,6 +98,14 @@
         "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
       }
     },
+    "workspace": {
+      "description": "Extra folders the vendor CLI should be able to reach, e.g. sibling repositories. A request, not a grant: ynh grants a folder only when the operator's allow-list (workspace_roots in config.json, YNH_WORKSPACE_ROOTS) covers it, or, with no allow-list, when the harness has been accepted with 'ynh trust accept'. Relative paths resolve against the harness's own directory; absolute paths and '~/' are allowed. Never granted: the filesystem root, the home directory, a directory containing the harness or the project, a path that does not exist, or anything from a harness installed from a remote source. Not carried into exports.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
     "mcp_servers": {
       "$ref": "#/$defs/mcp_servers"
     },

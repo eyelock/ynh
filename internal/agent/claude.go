@@ -172,6 +172,8 @@ func buildClaudeStreamArgs(opts StartOptions) []string {
 		}
 	}
 
+	args = append(args, workspaceArgs(vendorClaude, opts.Workspace)...)
+
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}

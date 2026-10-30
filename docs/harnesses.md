@@ -259,6 +259,10 @@ Lifecycle hooks. See [Hooks](hooks.md) for full reference.
 
 MCP server declarations. See [MCP Servers](mcp.md) for full reference.
 
+### workspace (optional)
+
+Extra folders the vendor CLI should be able to reach, such as sibling repositories: `"workspace": ["../ynh", "~/code/shared"]`. A request, not a grant. The operator's allow-list (`workspace_roots`, `YNH_WORKSPACE_ROOTS`) or `ynh trust accept` grants it, and some paths are never granted. See [Workspace Folders](workspace.md).
+
 ### profiles (optional)
 
 Named configuration variants. A profile can override `hooks`, override `mcp_servers`, append additional `includes`, and change the `tolerance` of sensors through `sensor_overrides`. It cannot override identity fields (`name`, `version`, `description`), `delegates_to`, or `default_vendor`. See [Profiles](profiles.md) for full scope reference.

@@ -628,3 +628,11 @@ func launchClaude(configPath string, initialPrompt string, extraArgs []string) e
 	}
 	return syscall.Exec(claudeBin, args, append(env, extra...))
 }
+
+// Workspace folders: the flag that grants a directory beside the project
+// (code.claude.com/docs/en/cli-reference, "--add-dir": "Add additional working
+// directories for Claude to read and edit files"). It is variadic and repeats;
+// ynh emits one flag per folder. Claude Code does not discover most .claude/
+// configuration from an added directory, so this grants file access only.
+var claudeWorkspaceFlag = "--add-dir"
+var claudeWorkspaceUnsupported = ""

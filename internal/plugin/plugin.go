@@ -32,10 +32,15 @@ type HarnessJSON struct {
 	// variables reach an agent worker's process. Empty means none — a worker
 	// inheriting the operator's whole environment holds every credential the
 	// operator holds, which is not a default anyone chose.
-	EnvPassthrough []string           `json:"env_passthrough,omitempty"`
-	Profiles       map[string]Profile `json:"profiles,omitempty"`
-	Focuses        map[string]Focus   `json:"focuses,omitempty"`
-	Sensors        map[string]Sensor  `json:"sensors,omitempty"`
+	EnvPassthrough []string `json:"env_passthrough,omitempty"`
+	// Workspace requests extra folders for the vendor CLI to reach. A request
+	// grants nothing: the operator's allow-list or `ynh trust accept` does
+	// (docs/workspace.md). Relative entries resolve against the harness's own
+	// directory.
+	Workspace []string           `json:"workspace,omitempty"`
+	Profiles  map[string]Profile `json:"profiles,omitempty"`
+	Focuses   map[string]Focus   `json:"focuses,omitempty"`
+	Sensors   map[string]Sensor  `json:"sensors,omitempty"`
 
 	// SensorOverrides tunes sensors obtained from includes. Tolerance and
 	// ratchet only: an included sensor's observation belongs to whoever
