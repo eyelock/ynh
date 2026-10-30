@@ -107,7 +107,8 @@ deny` blocks `echo SHELLRAN` with the tool error `Permission denied: shell`
 (`state.status: "error"`, `executed: false`), while the same deny followed by
 an allow lets it run. Actions: `read`, `edit` (edit, write, patch), `glob`,
 `grep`, `shell`, `webfetch`, `websearch`, `subagent`, `skill`, `question`,
-`execute` (Code Mode, hence MCP), `external_directory`.
+`execute` (Code Mode's wrapper; MCP tools do not need it, see below),
+`external_directory`.
 
 Claude's `tools:` allow-list is therefore translated to `* * deny` followed
 by an `allow` per mapped action (Read read, Write/Edit/MultiEdit edit, Bash
@@ -120,8 +121,24 @@ that shell runs. Caveat: an agent that denies `shell` (including `* deny`
 without a shell allow) cannot be run on the `opencode/*-free` models at all:
 the request fails `403 FreeTierError: OpenCode's free tier can only be used
 from within OpenCode`, apparently because the free tier insists on the usual
-tool set. The shell tool being withdrawn is visible in that failure, but a
-live "tools: Read cannot run shell" check needs a paid provider.
+tool set. On v2.2.3 the free tier went further and refused every agent whose
+rules start with `* * deny`, even one that allows `shell`, reporting it as
+`Free usage limit reached` (an agent with no rules, run just before and after
+on the same model, worked). A paid provider (`anthropic/*`, below) runs them.
+
+**Granted MCP tools (CONFIRMED v2.2.3, `anthropic/claude-haiku-4-5`,
+ynw-kst.7):** the generated rules work as written. A `tools: Bash,
+mcp__echo__ynh_ping` agent (`* * deny`, `allow shell`, `allow echo_ynh_ping`)
+called `echo_ynh_ping` and the stub server received it; `ynh_other`, not
+granted, was not in its tool list. `execute` does not need an allow: with
+`execute` denied, Code Mode is off for the agent and its granted MCP tools are
+ordinary tools named `<server>_<tool>`. With `execute` allowed as well, the
+same grant puts only `tools.echo.ynh_ping` in the Code Mode catalog and the
+model calls it through `execute`. Either way, MCP tools are often missing from
+the model's tool list on its first step, while the local server is still
+connecting, with or without any rules: an unrestricted agent told to call the
+tool as its very first action did not see it. Once the model has made any
+other call (a `shell` command, `list_mcp_resources`) the tools are there.
 
 ## Skills
 
@@ -138,7 +155,9 @@ takes extra directories or URLs.
 **CONFIRMED:** a local stdio server written to the bundle's `opencode.json`
 connects and its tool is callable. OpenCode 2 exposes MCP tools through "Code
 Mode" by default (`codemode: true`): the model sees one `execute` tool and
-calls `tools.<server>.<tool>({})` inside it. Each MCP tool it calls still
+calls `tools.<server>.<tool>({})` inside it. Code Mode is on only for an agent
+that may use `execute`; an agent with a Claude `tools:` list is denied it, so
+its granted MCP tools are ordinary tools (see "Granted MCP tools" above). Each MCP tool it calls still
 fires the `tool` hooks under its own id, `<server>_<tool>` (see "MCP tools and
 `tool` hooks" below). Local fields: `type`, `command` (array),
 `cwd`, `environment`, `disabled`, `codemode`, `timeout`. Remote fields:
@@ -190,6 +209,28 @@ Tool names differ from Claude's. **CONFIRMED** ids (from `x.tool` in a
 is unprobed. Matchers need a mapping table, and the generated plugin tests a
 matcher (as an anchored regex) against the OpenCode id and its Claude names.
 
+The matcher is a **JavaScript** regex: the plugin builds it with
+`new RegExp("^(?:" + matcher + ")$")`. The other vendors' matchers are RE2,
+so ynh holds an OpenCode matcher to the syntax both read the same.
+`validateOpencodeMatcher` (`internal/vendor/opencode.go`) runs at generate
+time: it compiles the matcher as RE2, then `opencodeMatcherNotJS` refuses
+anything JavaScript rejects or reads differently: any `(?` group but `(?:`
+(`(?i)`, `(?P<name>...)`), a POSIX class (`[[:alpha:]]`), a `]` first in a
+class (`[]a]`, `[^]a]`), and any escape of a letter or digit other than these
+it allows: `\d \D \s \S \w \W \f \n \r \t \v`, `\xHH` with two hex digits,
+and `\b`/`\B` outside a class. So `\A`, `\z`, `\Q...\E`, `\pL`, `\x{41}`,
+octal, and `\b`/`\B` inside a class are refused; escaped punctuation (`\.`,
+`\[`) is always allowed. Why: a matcher JavaScript rejects used
+to throw inside `execute.before` and block every tool call (ynw-kst.2). The
+plugin now compiles each matcher once in a `try`/`catch` and a bad one matches
+nothing (its hook never runs, reported on stderr), and syntax JavaScript reads
+differently without throwing would silently match the wrong tools; so the
+check refuses both kinds before the plugin is written. It is over-strict in
+one known case: any `[:` inside a class is taken for a POSIX class, so `[[:]`
+(the set of `[` and `:`, the same in both dialects) is refused; write `[\[:]`.
+Keep the check, `opencodeSameEscapes` and the user doc (`docs/hooks.md`) in
+step when changing one of them.
+
 Further **CONFIRMED** behaviour of the generated plugin (v2.0.27):
 
 - `before_tool` with `exit 2` throws; the model sees the hook's stderr as the
@@ -216,6 +257,9 @@ Contract declarations (read by `make check-vendor-parity`):
 - Timeout: `opencodeHookTimeoutField = "timeout"`. Each hook's timeout, in
   seconds, rides in the plugin's `HOOKS` table and is passed to `spawnSync`;
   60 s when none is set. No caps: the plugin enforces it, not OpenCode.
+  CONFIRMED live on v2.2.3 (ynw-kst.7): a `before_tool` hook that sleeps 8 s
+  and exits 2 was killed after its `timeout: 3` and the shell call went
+  ahead; with `timeout: 15` it ran to the end and blocked the call.
 - Session-start context: `unsupported:`. `on_session_start` runs from an
   event-stream subscriber, which cannot add context; its stdout is discarded.
 - Matchers: honoured on `execute.before` / `execute.after` only
@@ -264,7 +308,12 @@ opencode run [--standalone] [-c] [-s <id>] [--fork] [-m provider/model#variant]
 `opencode/*-free` models work with no login. The free list changes
 (`exo-free`, once the default, is deprecated), so always pin `-m`. The
 Anthropic provider takes an API key; Anthropic prohibits using a Claude
-Pro/Max subscription through OpenCode.
+Pro/Max subscription through OpenCode. CONFIRMED (v2.2.3): with
+`ANTHROPIC_API_KEY` exported, `ynh run ... -v opencode -m
+anthropic/claude-haiku-4-5` works with no `opencode auth`, as ynh launches
+OpenCode standalone. A bare `opencode models` asks the shared background
+service, which does not see the key and lists no `anthropic/*` model;
+`opencode models --standalone` does.
 
 ## Known gaps
 
@@ -272,11 +321,8 @@ Pro/Max subscription through OpenCode.
 - Remote MCP servers were not connected to; only local stdio was.
 - A Claude `tools:` list becomes deny-by-default `permissions`. The live
   check that a `tools: Read` agent cannot run `shell` needs a paid provider:
-  the free models refuse any agent without `shell` (403 FreeTierError).
-- A granted MCP tool (`tools: [..., mcp__srv__x]`) gets `allow srv_x` after
-  `* * deny`. That the tool is then callable was not confirmed live (the free
-  tier's usage limit was hit): Code Mode's own `execute` tool also falls under
-  `* * deny`, and whether it must be allowed too is unprobed.
+  the free models refuse any agent with `* * deny` rules. It was not run
+  with Anthropic in ynw-kst.7, which probed only the MCP grant.
 - No edits-only auto-approve.
 - `on_session_start` and `on_stop` ride the event stream, not a documented
   hook, so they are the most likely to move.
@@ -300,7 +346,12 @@ Pro/Max subscription through OpenCode.
   never `execute`; the matcher blocked `echo_ynh_ping` before the stub server
   received it; an unmatched `echo_ynh_other` reached the server. The block
   throws inside the `execute` code, so a later call in the same code
-  (`ynh_other` after `ynh_ping`) did not run either. The hook payload's
+  (`ynh_other` after `ynh_ping`) did not run either. With Code Mode off, the
+  same matcher still blocks: on v2.2.3 with `anthropic/claude-haiku-4-5`
+  (ynw-kst.10), a `tools: Bash, mcp__echo__ynh_ping` agent called
+  `echo_ynh_ping` as an ordinary tool, no `execute` call appeared, the hook
+  ran and the model got its message, and the stub server logged no call; with
+  the hook removed, the same agent's call reached the server. The hook payload's
   `tool_name` is the OpenCode id `echo_ynh_ping`, not Claude's
   `mcp__echo__ynh_ping`.
 - **`--` works in `opencode run`:** `run --standalone -m x --format json --

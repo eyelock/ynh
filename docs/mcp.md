@@ -229,6 +229,8 @@ A `url` server becomes `"type": "remote"` with `url` and `headers`; ynh writes `
 
 A local stdio server was confirmed to connect and its tool to be callable by hand-testing; remote servers were not connected to. OpenCode reaches MCP tools through its Code Mode by default: the model sees one `execute` tool and calls `tools.<server>.<tool>(...)` inside it. Each MCP tool it calls still fires `before_tool` and `after_tool` as a tool of its own, and an `mcp__<server>__<tool>` matcher catches it; see [Hooks](hooks.md#opencode-hooks-are-a-generated-plugin).
 
+An agent whose Claude `tools:` list names an MCP tool, such as `tools: Bash, mcp__echo__ynh_ping`, can call that tool and no other tool of the server; this was confirmed live on OpenCode 2.2.3. Such an agent's `execute` tool is denied, so Code Mode is off for it and the MCP tool is an ordinary tool named `<server>_<tool>`. OpenCode often leaves MCP tools out of the model's tool list on its first step, while a local server is still connecting, so a prompt whose very first action is an MCP call may be told the tool does not exist; it is there once the model has made any other call.
+
 ## Root-Harness-Only Rule
 
 MCP server declarations in **included harnesses** (via `includes`) are dropped during assembly. Only the root harness's MCP servers are configured. This prevents composed harnesses from silently adding tool dependencies.

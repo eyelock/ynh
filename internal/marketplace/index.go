@@ -16,10 +16,9 @@ func GenerateIndex(cfg *MarketplaceConfig, plugins []pluginInfo, outputDir strin
 		return fmt.Errorf("marketplace index not supported for vendor %q: %w", vendorName, err)
 	}
 
-	// Every adapter returns a non-empty manifest dir, so there is no
-	// "vendor without a marketplace" case to skip. If one ever lacks a
-	// marketplace system, that is the moment to decide what should happen —
-	// and the answer is likely an explicit error rather than silence.
+	// A vendor without a marketplace system (OpenCode) returns an empty
+	// manifest dir and a nil index; the nil index is what skips it below,
+	// with no file written and no error.
 	manifestDir := adapter.MarketplaceManifestDir()
 
 	indexCfg := vendor.MarketplaceIndexConfig{
