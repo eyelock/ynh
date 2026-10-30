@@ -17,6 +17,10 @@
     },
     "includes": [],
     "delegates_to": [],
+    "mcp_servers": [
+      {"name": "docs", "source": "root", "url": "https://docs.example.com/mcp"},
+      {"name": "github", "source": "eyelock/assistants//ynh/github", "command": "github-mcp-server"}
+    ],
     "manifest": {
       "name": "demo",
       "version": "1.0.0",
