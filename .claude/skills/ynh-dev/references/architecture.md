@@ -95,19 +95,21 @@ type Adapter interface {
 	SupportsExportDelegates() bool
 	MarketplaceManifestDir() string
 	GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error)
+	AgentPluginLayout() AgentPluginLayout
 }
 ```
 
-**25 methods.** Regenerated from `internal/vendor/adapter.go`; that
-declaration is the only authority. This copy has drifted before (it read 10,
-11 and 18 methods in three different places while the interface had 24), which
-hid the entire resume subsystem from anyone writing a new adapter.
+**26 methods.** Regenerated from `internal/vendor/adapter.go`; that
+declaration is the only authority. This copy has drifted before: it read 10,
+11 and 18 methods in three different places while the interface had 24, which
+hid the entire resume subsystem from anyone writing a new adapter, and later
+read 25, without `AgentPluginLayout`, while the interface had 26.
 
 Two launch patterns:
 - **Claude, Copilot** (`NeedsSymlinks() = false`): `syscall.Exec` with `--plugin-dir` for clean process replacement. No ynh process running.
 - **Codex/Cursor** (`NeedsSymlinks() = true`): Child process via `os/exec.Command` with signal forwarding (`SIGINT`/`SIGTERM`). ynh stays alive for cleanup.
 
-New vendors: create one file in `internal/vendor/`, implement the interface, self-register via `init()`.
+New vendors: the adapter is one file in `internal/vendor/` that implements the interface and self-registers via `init()`, but a vendor also needs its per-vendor declarations (hook events, hook timeouts, session-start context, workspace) and the tables that read them, plus schema, image, parity, tests and docs. Follow the `add-vendor-adapter` skill, which lists every touch point.
 
 ## Error handling
 

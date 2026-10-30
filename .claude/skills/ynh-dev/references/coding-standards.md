@@ -37,7 +37,7 @@
 
 ## Open/Closed Principle & Extensibility
 
-- **Strategy + Registry for variation points** — vendor adapters are the model: define an interface, implement per variant, self-register via `init()`. Adding a vendor = one new file, zero changes to existing code.
+- **Strategy + Registry for variation points** — vendor adapters are the model: define an interface, implement per variant, self-register via `init()`. A vendor's behaviour goes in its adapter, but adding a vendor is not one file: it also adds the vendor to the per-vendor tables in `internal/vendor/` (hook events, hook timeouts, session-start context, workspace), which `make check-vendor-parity` checks, and to the schema, image, tests and docs. The `add-vendor-adapter` skill lists every touch point.
 - **No `switch` on type names in core code** — if you find yourself switching on vendor name in the assembler or exporter, push that behaviour into the adapter interface instead.
 - **Don't create extension points speculatively** — if there's one implementation and no testing need, use a concrete type. You can always extract an interface later.
 

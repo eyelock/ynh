@@ -2,8 +2,10 @@ package docs_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -251,18 +253,88 @@ func repoRoot(t *testing.T) string {
 	return filepath.Dir(d)
 }
 
-// repoMarkdown lists tracked-looking markdown outside docs/, skipping the
-// directories that are not ours to police.
+// repoMarkdown lists the markdown outside docs/ that belongs to the repository.
+//
+// It asks git, so a gitignored file is never policed: a local terraform
+// provider cache under infra/github/.terraform carries its own README with
+// links that do not resolve, and walking the disk failed make check in every
+// checkout that had run terraform while CI, on a clean clone, never saw it.
+// Without git (no binary, or a source tree that is not a repository) it falls
+// back to walking the disk, which cannot know what is ignored.
 func repoMarkdown(t *testing.T, root string) []string {
 	t.Helper()
+	files, viaGit, err := repoMarkdownFiles(root)
+	if err != nil {
+		t.Fatalf("list repo markdown: %v", err)
+	}
+	if !viaGit {
+		t.Logf("git unavailable at %s: walked the disk, so gitignored files are not skipped", root)
+	}
+	return files
+}
+
+// skippedDirs are the directories that are not ours to police: docs/ has its
+// own checker, and the rest are fixtures, build output or someone else's code.
+var skippedDirs = map[string]bool{
+	".git": true, "docs": true, "node_modules": true, "bin": true,
+	"vendor": true, "testdata": true, ".terraform": true,
+}
+
+// repoMarkdownFiles returns the markdown under root, outside skippedDirs,
+// relative to root and sorted. viaGit reports whether git chose the files
+// (tracked, plus untracked files that are not ignored); when it is false the
+// disk was walked instead.
+func repoMarkdownFiles(root string) (files []string, viaGit bool, err error) {
+	if files, err := gitMarkdown(root); err == nil {
+		return files, true, nil
+	}
+	files, err = walkMarkdown(root)
+	return files, false, err
+}
+
+// gitMarkdown lists markdown git knows about under root: tracked files, and
+// untracked ones that are not ignored, so a new page is checked before it is
+// committed. A shallow clone has a full index, so this needs no history.
+func gitMarkdown(root string) ([]string, error) {
+	cmd := exec.Command("git", "-C", root, "ls-files", "-z",
+		"--cached", "--others", "--exclude-standard", "--", "*.md")
+	// A test run from a git hook inherits GIT_DIR and friends, which would
+	// point -C at the wrong repository.
+	cmd.Env = withoutGitLocation(os.Environ())
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	var files []string
+	for _, rel := range strings.Split(string(out), "\x00") {
+		if rel == "" || seen[rel] {
+			continue
+		}
+		seen[rel] = true
+		rel = filepath.FromSlash(rel)
+		if inSkippedDir(rel) {
+			continue
+		}
+		// Tracked but deleted in the working tree: nothing to read.
+		if _, statErr := os.Stat(filepath.Join(root, rel)); statErr != nil {
+			continue
+		}
+		files = append(files, rel)
+	}
+	sort.Strings(files)
+	return files, nil
+}
+
+// walkMarkdown is the fallback when git cannot answer.
+func walkMarkdown(root string) ([]string, error) {
 	var out []string
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if info.IsDir() {
-			switch info.Name() {
-			case ".git", "docs", "node_modules", "bin", "vendor", "testdata":
+			if path != root && skippedDirs[info.Name()] {
 				return filepath.SkipDir
 			}
 			return nil
@@ -274,8 +346,29 @@ func repoMarkdown(t *testing.T, root string) []string {
 		out = append(out, rel)
 		return nil
 	})
-	if err != nil {
-		t.Fatalf("walk repo: %v", err)
+	sort.Strings(out)
+	return out, err
+}
+
+func inSkippedDir(rel string) bool {
+	dirs := strings.Split(filepath.Dir(rel), string(filepath.Separator))
+	for _, d := range dirs {
+		if skippedDirs[d] {
+			return true
+		}
+	}
+	return false
+}
+
+func withoutGitLocation(env []string) []string {
+	out := env[:0:0]
+	for _, kv := range env {
+		switch {
+		case strings.HasPrefix(kv, "GIT_DIR="), strings.HasPrefix(kv, "GIT_WORK_TREE="),
+			strings.HasPrefix(kv, "GIT_INDEX_FILE="), strings.HasPrefix(kv, "GIT_COMMON_DIR="):
+			continue
+		}
+		out = append(out, kv)
 	}
 	return out
 }

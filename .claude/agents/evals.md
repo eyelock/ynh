@@ -62,6 +62,7 @@ If another eval may be running on the same machine, put a run tag in every root,
 ### The rules the sandbox enforces
 
 - **Every tutorial path is rewritten into the sandbox.** `/tmp/ynh-tutorial/x` becomes `/tmp/ynh-eval-<slug>/work/ynh-tutorial/x`; the same for `/tmp/ynh-t20`, `/tmp/ynh-edge` and every other `/tmp` path.
+- **A pattern matched against a full path also sees the sandbox prefix.** `find -path`, or `grep` over output that prints paths, matches `ynh-eval-<slug>`, `work` and `home` too, so `find -path '*hooks*'` in the hooks tutorial matched every file. A block whose pattern the prefix can satisfy is a tutorial bug: report it and fix the tutorial by anchoring the pattern below its own directory (#631 made it `-path '*/hook-export/*hooks*'`), rather than working around it in the eval.
 - **Never a bare `cd /tmp`, and no `cd` outside the sandbox.** A tutorial's `cd /` becomes `cd` to the sandbox root. The guard aborts any block that tries to leave, and any block whose `cd` fails, so its commands never run in the wrong directory.
 - **Skip the whole block** if any line in it is skipped. A skipped `cd` followed by a `git init` that did run is how an empty repository ended up at `/private/tmp/.git`.
 - **Never `rm` outside the sandbox.** The guard resolves every `rm` and `rmdir` target and refuses anything that is not strictly inside the sandbox root, or that contains a `..` component. If a refusal fires, stop and report it; do not work around it.

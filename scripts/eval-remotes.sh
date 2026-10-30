@@ -125,7 +125,8 @@ harness $A ynh/david david "David's personal development persona with full skill
 	"$(inc skills/dev dev-project,dev-quality,dev-review,dev-security,dev-backend,dev-ui,dev-debug),$(inc skills/tech go-lang),$(inc skills/infra gh-os-repo,terraform-backend-aws),$(inc skills/pause help-me-answer,take-a-moment)"
 harness $A ynh/planner planner "Architecture and implementation planning persona" \
 	"$(inc skills/dev dev-project,dev-review),$(inc skills/infra gh-os-repo)"
-harness $A ynh/tester tester "Test planning and execution harness" "$(inc skills/dev dev-test)"
+harness $A ynh/tester tester "Testing and quality assurance persona" \
+	"$(inc skills/dev dev-quality),$(inc skills/tech go-lang)"
 harness $A ynh/researcher researcher "Research and analysis persona for investigating codebases, APIs, and technical topics" "$(inc skills/dev dev-review)"
 publish $A v1.0.0
 
