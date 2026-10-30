@@ -98,6 +98,7 @@ func cmdLint(args []string) error {
 		case filepath.Base(f) == plugin.PluginFile:
 			issues = append(issues, lintPluginJSONFile(f)...)
 			issues = append(issues, lintDeclaredReads(f)...)
+			printHookWarnings(f)
 		}
 	}
 

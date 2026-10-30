@@ -276,6 +276,10 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 	}
 	opts.Telemetry = rt
 
+	opts.WorkspaceGrant = func(h *harness.Harness, id, backend, worktree string) []string {
+		return workspaceGrant(h, id, backend, worktree, false, stderr)
+	}
+
 	result, err := agent.RunLoop(opts)
 	// The vendor has exited: let the relay drain what it sent, then stop it.
 	rt.relay.stop()

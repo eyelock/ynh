@@ -376,5 +376,6 @@ docker run -e YNH_IMAGE_DIGEST="$(docker inspect --format '{{index .RepoDigests 
 | Claude Code (`claude`) | `npm install -g @anthropic-ai/claude-code` (pinned) |
 | Codex (`codex`) | `npm install -g @openai/codex` (pinned) |
 | Cursor (`agent`) | `curl https://cursor.com/install` (latest) |
+| ynr (`ynr`) | The pinned release binary from `eyelock/ynr`, checked against the release's `checksums.txt`; only the binary is copied in. Its version is the `dev.ynh.ynr.version` label. Having it starts nothing: the [telemetry relay](telemetry.md#vendor-telemetry-through-the-relay) runs only when asked |
 | Git, SSH, bash | Alpine packages |
 | tini | PID 1 signal handler |

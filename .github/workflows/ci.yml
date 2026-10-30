@@ -104,12 +104,13 @@ jobs:
           go-version-file: go.mod
       # The telemetry relay test against the real ynr (TestAgentRun_RealRelayJoinsRunTrace)
       # skips without ynr on PATH. Install the released binary users get, checked
-      # against the release's checksums; move YNR_VERSION when the relay's
-      # contract changes.
+      # against the release's checksums; move YNR_VERSION in the Dockerfile when the
+      # relay's contract changes.
       - name: Install ynr for the relay test
-        env:
-          YNR_VERSION: 0.2.0
         run: |
+          # The Dockerfile is the one place the version is pinned.
+          YNR_VERSION="$(sed -n 's/^ARG YNR_VERSION=//p' Dockerfile)"
+          [ -n "$YNR_VERSION" ]
           dir="$RUNNER_TEMP/ynr"
           mkdir -p "$dir"
           asset="ynr_${YNR_VERSION}_linux_amd64.tar.gz"

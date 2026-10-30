@@ -52,6 +52,16 @@ func cmdHookAdd(args []string, stdout io.Writer) error {
 			}
 			i++
 			opts.Matcher = args[i]
+		case "--timeout":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--timeout requires a value")
+			}
+			i++
+			secs, err := strconv.Atoi(args[i])
+			if err != nil || secs < 1 || secs > plugin.MaxHookTimeout {
+				return fmt.Errorf("--timeout must be a whole number of seconds from 1 to %d, got %q", plugin.MaxHookTimeout, args[i])
+			}
+			opts.Timeout = secs
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return fmt.Errorf("unknown flag: %s", args[i])
@@ -60,7 +70,7 @@ func cmdHookAdd(args []string, stdout io.Writer) error {
 		}
 	}
 	if len(positional) != 3 {
-		return fmt.Errorf("usage: ynh hook add <harness> <event> <command> [--matcher <pattern>]")
+		return fmt.Errorf("usage: ynh hook add <harness> <event> <command> [--matcher <pattern>] [--timeout <seconds>]")
 	}
 	harnessRef, event, command := positional[0], positional[1], positional[2]
 

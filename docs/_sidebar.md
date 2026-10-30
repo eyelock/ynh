@@ -11,6 +11,7 @@
 * **Configure**
   * [Harness Manifest](/harnesses.md)
   * [Hooks](/hooks.md)
+  * [Workspace Folders](/workspace.md)
   * [MCP Servers](/mcp.md)
   * [Profiles](/profiles.md)
   * [Focus](/focus.md)
@@ -41,25 +42,26 @@
   * [8. Focus](/tutorial/focus.md)
   * [9. Composing Tools](/tutorial/composing-tools.md)
   * [10. Project-Local Config](/tutorial/project-local-config.md)
+  * [11. Workspace Folders](/tutorial/workspace.md)
 
 * **Tutorials: Refine**
-  * [11. Developer Tools](/tutorial/developer-tools.md)
-  * [12. Developer Preview](/tutorial/developer-preview.md)
+  * [12. Developer Tools](/tutorial/developer-tools.md)
+  * [13. Developer Preview](/tutorial/developer-preview.md)
 
 * **Tutorials: Automate**
-  * [13. Structured Output](/tutorial/structured-output.md)
-  * [14. Sensors](/tutorial/sensors.md)
-  * [15. Gating with `ynh check`](/tutorial/check.md)
-  * [16. The Agent Loop](/tutorial/agent-loop.md)
-  * [17. Shadow Mode](/tutorial/shadow-mode.md)
+  * [14. Structured Output](/tutorial/structured-output.md)
+  * [15. Sensors](/tutorial/sensors.md)
+  * [16. Gating with `ynh check`](/tutorial/check.md)
+  * [17. The Agent Loop](/tutorial/agent-loop.md)
+  * [18. Shadow Mode](/tutorial/shadow-mode.md)
 
 * **Tutorials: Share & Scale**
-  * [18. Delegation](/tutorial/delegation.md)
-  * [19. Export](/tutorial/export.md)
-  * [20. Marketplace](/tutorial/marketplace.md)
-  * [21. Registry & Discovery](/tutorial/registry-and-discovery.md)
-  * [22. Docker Images](/tutorial/docker-image.md)
-  * [23. Namespacing & Migration](/tutorial/namespacing-and-migration.md)
+  * [19. Delegation](/tutorial/delegation.md)
+  * [20. Export](/tutorial/export.md)
+  * [21. Marketplace](/tutorial/marketplace.md)
+  * [22. Registry & Discovery](/tutorial/registry-and-discovery.md)
+  * [23. Docker Images](/tutorial/docker-image.md)
+  * [24. Namespacing & Migration](/tutorial/namespacing-and-migration.md)
 
 * **Project**
   * [Migrating to 0.2](/migration.md)

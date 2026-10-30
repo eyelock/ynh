@@ -1,7 +1,6 @@
 package migration
 
 import (
-	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -196,17 +195,18 @@ func TestManifestDirMigration_Decisions(t *testing.T) {
 }
 
 // A source tree is moved only by MigrateChain. FormatChain, which every load
-// runs, must leave a user's tree exactly as it was.
+// runs, refuses it with the fix and leaves a user's tree exactly as it was.
 func TestManifestDirMigrator_SourceTreeOnlyUnderMigrateChain(t *testing.T) {
 	t.Setenv("YNH_HOME", t.TempDir())
 	root := t.TempDir()
 	dir := legacyTree(t, root, "src", false)
 
-	if (ManifestDirMigrator{}).Applies(dir) {
-		t.Fatal("the load-time migrator must not apply to a source tree")
+	_, err := FormatChain().Run(dir)
+	if err == nil {
+		t.Fatal("FormatChain must refuse a source tree that keeps its manifest in .ynh-plugin")
 	}
-	if _, err := FormatChain().Run(dir); err != nil {
-		t.Fatal(err)
+	if !strings.Contains(err.Error(), "ynd migrate "+dir) || !strings.Contains(err.Error(), plugin.LegacyPluginDir) {
+		t.Errorf("error should name the directory and `ynd migrate %s`, got: %v", dir, err)
 	}
 	if !exists(filepath.Join(dir, plugin.LegacyPluginDir, plugin.PluginFile)) || exists(filepath.Join(dir, plugin.AgentsDir)) {
 		t.Fatal("FormatChain changed a source tree")
@@ -356,49 +356,117 @@ func TestManifestDirMigrator_RunRefusesSourceTreeWithoutScope(t *testing.T) {
 	}
 }
 
-func TestManifestDirDeprecation(t *testing.T) {
+// Everything ynh owns moves on load, so an old-layout remote source keeps
+// working: an install under harnesses/ and a git clone under cache/. Only
+// the copy is renamed; a source tree beside them is not.
+func TestManifestDirMigrator_OwnedTreesMoveOnLoad(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("YNH_HOME", home)
+	cases := []struct {
+		name, parent string
+	}{
+		{"install", filepath.Join(home, "harnesses")},
+		{"cached clone", filepath.Join(home, "cache")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := legacyTree(t, tc.parent, "old", false)
+			mustBeUnderTemp(t, home, dir)
+			if _, err := FormatChain().Run(dir); err != nil {
+				t.Fatal(err)
+			}
+			if !plugin.IsPluginDir(dir) || exists(filepath.Join(dir, plugin.LegacyPluginDir)) {
+				t.Error("the copy should be on .agents/harness after loading")
+			}
+		})
+	}
+}
 
-	t.Run("source tree names ynd migrate", func(t *testing.T) {
+// ownedByYnh is what keeps a user's tree safe: the cache and harnesses roots
+// themselves, and anything outside them, are not ynh's to rename.
+func TestOwnedByYnh(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	cases := map[string]bool{
+		filepath.Join(home, "harnesses", "x"):       true,
+		filepath.Join(home, "cache", "x"):           true,
+		filepath.Join(home, "cache", "x", "sub"):    true,
+		filepath.Join(home, "harnesses"):            false,
+		filepath.Join(home, "cache"):                false,
+		filepath.Join(home, "cache2", "x"):          false,
+		filepath.Join(home, "elsewhere", "x"):       false,
+		home:                                        false,
+		filepath.Join(t.TempDir(), "cache", "x"):    false,
+		filepath.Join(home, "cache", "..", "src"):   false,
+		filepath.Join(home, "harnesses", "..", "x"): false,
+	}
+	for p, want := range cases {
+		if got := ownedByYnh(p); got != want {
+			t.Errorf("ownedByYnh(%s) = %v, want %v", p, got, want)
+		}
+	}
+}
+
+// A tree with both layouts is an error in every tree, owned or not: nothing is
+// merged, the message names both, and neither manifest changes.
+func TestManifestDirMigrator_BothLayoutsAreAnError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	for _, tc := range []struct{ name, parent string }{
+		{"source tree", t.TempDir()},
+		{"cached clone", filepath.Join(home, "cache")},
+		{"install", filepath.Join(home, "harnesses")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := legacyTree(t, tc.parent, "both", false)
+			writeFile(t, filepath.Join(dir, plugin.PluginDir, plugin.PluginFile), `{"name":"canonical"}`)
+			mustBeUnderTemp(t, tc.parent, dir)
+
+			_, err := FormatChain().Run(dir)
+			if err == nil {
+				t.Fatal("a tree with both layouts must be an error")
+			}
+			for _, want := range []string{plugin.PluginDir, plugin.LegacyPluginDir, "nothing was merged"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error should mention %q, got: %v", want, err)
+				}
+			}
+			if got := readFile(t, filepath.Join(dir, plugin.PluginDir, plugin.PluginFile)); got != `{"name":"canonical"}` {
+				t.Errorf("canonical plugin.json changed: %q", got)
+			}
+			if !exists(filepath.Join(dir, plugin.LegacyPluginDir, plugin.PluginFile)) {
+				t.Error("legacy manifest was removed")
+			}
+		})
+	}
+}
+
+func TestLegacyManifestDir(t *testing.T) {
+	t.Run("none", func(t *testing.T) {
+		if err := LegacyManifestDir(t.TempDir()); err != nil {
+			t.Errorf("got %v", err)
+		}
+	})
+	t.Run("legacy only names the fix", func(t *testing.T) {
 		dir := legacyTree(t, t.TempDir(), "src", false)
-		got := ManifestDirDeprecation(dir)
-		if !strings.Contains(got, "deprecated") || !strings.Contains(got, "ynd migrate "+dir) {
-			t.Errorf("got %q", got)
+		err := LegacyManifestDir(dir)
+		if err == nil || !strings.Contains(err.Error(), "ynd migrate "+dir) {
+			t.Errorf("got %v", err)
 		}
 	})
-	t.Run("cached clone asks the maintainer", func(t *testing.T) {
-		dir := legacyTree(t, filepath.Join(home, "cache"), "clone", false)
-		got := ManifestDirDeprecation(dir)
-		if !strings.Contains(got, "maintainer") || strings.Contains(got, "ynd migrate "+dir) {
-			t.Errorf("got %q", got)
+	t.Run("canonical only", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, filepath.Join(dir, plugin.PluginDir, plugin.PluginFile), legacyPlugin)
+		if err := LegacyManifestDir(dir); err != nil {
+			t.Errorf("got %v", err)
 		}
 	})
-	t.Run("movable install is silent", func(t *testing.T) {
-		dir := legacyTree(t, filepath.Join(home, "harnesses"), "inst", true)
-		if got := ManifestDirDeprecation(dir); got != "" {
-			t.Errorf("got %q, want no warning: ynh moves it itself", got)
-		}
-	})
-	t.Run("blocked tree gives the reason", func(t *testing.T) {
+	t.Run("blocked gives the reason, not a command that would refuse", func(t *testing.T) {
 		dir := legacyTree(t, t.TempDir(), "both", false)
 		writeFile(t, filepath.Join(dir, plugin.PluginDir, plugin.PluginFile), legacyPlugin)
-		got := ManifestDirDeprecation(dir)
-		if !strings.Contains(got, "nothing was merged") {
-			t.Errorf("got %q", got)
-		}
-	})
-	t.Run("notice writes to the given writer", func(t *testing.T) {
-		dir := legacyTree(t, t.TempDir(), "src2", false)
-		var buf bytes.Buffer
-		ManifestDirNotice(&buf)(dir)
-		if !strings.HasPrefix(buf.String(), "warning: "+dir) || !strings.HasSuffix(buf.String(), "\n") {
-			t.Errorf("got %q", buf.String())
-		}
-		buf.Reset()
-		ManifestDirNotice(&buf)(legacyTree(t, filepath.Join(home, "harnesses"), "inst2", false))
-		if buf.Len() != 0 {
-			t.Errorf("a movable install must print nothing, got %q", buf.String())
+		err := LegacyManifestDir(dir)
+		if err == nil || !strings.Contains(err.Error(), "cannot be moved automatically") || strings.Contains(err.Error(), "move it with: ynd migrate") {
+			t.Errorf("got %v", err)
 		}
 	})
 }

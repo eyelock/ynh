@@ -231,6 +231,64 @@
         "type": "string"
       },
       "description": "Why the set could not be read in full. Present only with state unavailable."
+    },
+    "launch_focus": {
+      "type": "object",
+      "description": "The focus a bare `ynh run` wakes with (the manifest's launch_focus): its prompt is the first message of every such session, so it steers the model as much as a command does. Present only when the harness declares one. Covered by digest. Filled by `trust show` only.",
+      "properties": {
+        "name": { "type": "string", "description": "The focus's name." },
+        "profile": { "type": "string", "description": "The profile it binds, when it names one." },
+        "prompt": { "type": "string", "description": "The prompt in full. Empty when the named focus does not exist, which `ynd validate` reports." }
+      },
+      "required": ["name", "prompt"],
+      "additionalProperties": false
+    },
+    "workspace": {
+      "type": "object",
+      "description": "The workspace folders the harness requests for the vendor CLI to reach, and what a run from the current directory would meet. Present only when the harness requests any. The requested strings are covered by digest, so a changed entry reports changed. Reporting only: the grant is decided at launch.",
+      "properties": {
+        "allow_list": {
+          "type": "string",
+          "description": "env or config when an operator allow-list is in force (YNH_WORKSPACE_ROOTS replaces workspace_roots for a run). Absent when none is, in which case trust decides. Open set; tolerate unknown values."
+        },
+        "remote_install": {
+          "type": "boolean",
+          "description": "True when the harness was installed from a remote source, so none of its entries is ever granted. Omitted otherwise."
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "requested": {
+                "type": "string",
+                "description": "The entry as written in the manifest."
+              },
+              "resolved": {
+                "type": "string",
+                "description": "The absolute path it resolves to, symlinks followed when the path exists."
+              },
+              "refused": {
+                "type": "string",
+                "description": "Why this folder can never be granted (does not exist, is the filesystem root, is the home directory, contains the harness or the project). Omitted when nothing refuses it."
+              },
+              "allow_list_covers": {
+                "type": "boolean",
+                "description": "Whether the allow-list covers the resolved path. Present only with an allow-list and no refusal."
+              }
+            },
+            "required": [
+              "requested",
+              "resolved"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "entries"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [
