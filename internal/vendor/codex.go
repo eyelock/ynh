@@ -440,3 +440,12 @@ func launchCodex(configPath string, extraArgs []string) error {
 	cmd.Dir = configPath
 	return runChildProcess(cmd)
 }
+
+// Workspace folders: "--add-dir" is a global flag of the codex command
+// ("Grant additional directories write access alongside the main workspace.
+// Repeat for multiple paths.", developers.openai.com/codex/cli/reference,
+// served from learn.chatgpt.com/docs/developer-commands). The page lists it
+// for the top-level command and says most global flags propagate; whether
+// `codex exec` and `codex exec resume` accept it is unverified.
+var codexWorkspaceFlag = "--add-dir"
+var codexWorkspaceUnsupported = ""

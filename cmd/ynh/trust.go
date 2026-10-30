@@ -174,6 +174,12 @@ type trustSet struct {
 	Sensors    []executable
 	Hooks      []hookExec
 	MCPServers []mcpExec
+	// Workspace is the folders the harness requests, as written, sorted. They
+	// are not executed, but they widen what the vendor CLI can read and write,
+	// which is the same question the operator is asked to answer, so the
+	// digest covers them. Only the harness's own list: a profile does not
+	// change it.
+	Workspace []string
 	// Problems is why the set could not be read completely: an include that
 	// is not cached, a merge that refuses. A set with problems is partial, and
 	// a partial set must never be digested or reported as the whole.
@@ -181,6 +187,11 @@ type trustSet struct {
 }
 
 func (t trustSet) count() int { return len(t.Sensors) + len(t.Hooks) + len(t.MCPServers) }
+
+// reviewable counts everything there is to review: the executable strings
+// and the workspace folders. count() stays executables only, because the
+// COMMANDS column and a record's Commands mean commands.
+func (t trustSet) reviewable() int { return t.count() + len(t.Workspace) }
 
 var envRefRe = regexp.MustCompile(`^\$\{[A-Za-z_][A-Za-z0-9_]*\}$`)
 
@@ -345,6 +356,9 @@ func harnessExecutables(p *harness.Harness) trustSet {
 	// exactly this bug with its findings array (#328); the published schema
 	// caught it here.
 	set := trustSet{Sensors: []executable{}}
+	if len(p.Workspace) > 0 {
+		set.Workspace = slices.Sorted(slices.Values(p.Workspace))
+	}
 	views, problems := runViews(p)
 	set.Problems = problems
 	baseSensors, baseHooks, baseMCP := map[string]bool{}, map[string]bool{}, map[string]bool{}
@@ -419,6 +433,12 @@ func executablesDigest(set trustSet) string {
 	for _, m := range set.MCPServers {
 		field(h, "mcp_server")
 		writeMCP(h, m)
+	}
+	// Only when there are entries, so a harness without a workspace keeps the
+	// digest it was accepted under: no scheme bump, no spurious "changed".
+	for _, w := range set.Workspace {
+		field(h, "workspace")
+		field(h, w)
 	}
 	return "sha256:" + hex.EncodeToString(h.Sum(nil))[:16]
 }
@@ -514,6 +534,10 @@ type trustStatus struct {
 	// UndeclaredEnv names variables the sensors inherit but the harness never
 	// declared. Names only.
 	UndeclaredEnv []string `json:"undeclared_env,omitempty"`
+	// Workspace is the workspace folders the harness requests and what would
+	// become of them here. Filled by `trust show` only, which has the
+	// operator's allow-list and working directory to hand.
+	Workspace *workspaceReport `json:"workspace,omitempty"`
 }
 
 const (
@@ -563,7 +587,7 @@ func trustStatusFor(id string, p *harness.Harness, store trustStore, environ []s
 	// Nothing to review outranks "never reviewed": a harness that executes
 	// nothing cannot be a risk, and flagging it forever would train people to
 	// ignore the state column that matters.
-	if set.count() == 0 && st.State == trustUnreviewed {
+	if set.reviewable() == 0 && st.State == trustUnreviewed {
 		st.State = trustNoCommands
 	}
 	return st
@@ -679,6 +703,7 @@ func cmdTrustShow(args []string, stdout, stderr io.Writer) error {
 		return cliError(stderr, structured, errCodeIOError, err.Error())
 	}
 	st := trustStatusFor(name, p, store, os.Environ())
+	st.Workspace = workspaceReportFor(p)
 
 	if format == "json" {
 		return writeJSON(stdout, st)
@@ -727,7 +752,11 @@ func cmdTrustAccept(args []string, stdout, stderr io.Writer) error {
 	if format == "json" {
 		return writeJSON(stdout, trustStatusFor(name, p, store, os.Environ()))
 	}
-	_, err = fmt.Fprintf(stdout, "Recorded %s: %d command(s), %s\n", name, rec.Commands, rec.Digest)
+	workspaceNote := ""
+	if n := len(set.Workspace); n > 0 {
+		workspaceNote = fmt.Sprintf(", %d workspace folder(s)", n)
+	}
+	_, err = fmt.Fprintf(stdout, "Recorded %s: %d command(s)%s, %s\n", name, rec.Commands, workspaceNote, rec.Digest)
 	return err
 }
 
@@ -790,7 +819,7 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 		_, _ = fmt.Fprintf(w, "  accepted: %s on %s\n", s.AcceptedDigest, s.AcceptedAt)
 	}
 
-	if len(s.Executables)+len(s.Hooks)+len(s.MCPServers) == 0 {
+	if len(s.Executables)+len(s.Hooks)+len(s.MCPServers) == 0 && s.Workspace == nil {
 		_, _ = fmt.Fprintln(w, "\nThis harness declares no commands.")
 		return nil
 	}
@@ -835,6 +864,8 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 			}
 		}
 	}
+
+	printWorkspaceSection(w, s.Workspace)
 
 	if len(s.UndeclaredEnv) > 0 {
 		_, _ = fmt.Fprintf(w, "\nThese commands inherit your full environment. %d variable(s) reach them\n"+

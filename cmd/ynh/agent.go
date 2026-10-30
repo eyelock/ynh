@@ -11,6 +11,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/agent"
 	"github.com/eyelock/ynh/internal/config"
+	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/telemetry"
 )
 
@@ -267,6 +268,10 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 		defer rt.relay.stop()
 	}
 	opts.Telemetry = rt
+
+	opts.WorkspaceGrant = func(h *harness.Harness, id, backend, worktree string) []string {
+		return workspaceGrant(h, id, backend, worktree, false, stderr)
+	}
 
 	result, err := agent.RunLoop(opts)
 	// The vendor has exited: let the relay drain what it sent, then stop it.

@@ -32,6 +32,22 @@ func lookWorkerCLI(backend string) (string, error) {
 	return bin, nil
 }
 
+const (
+	vendorClaude = "claude"
+	vendorCodex  = "codex"
+)
+
+// workspaceArgs renders granted workspace folders as the vendor's own flag.
+// The vendor package owns the flag; a vendor with none renders nothing here,
+// and the caller that granted the folders has already said so.
+func workspaceArgs(vendorName string, dirs []string) []string {
+	args, _, err := vendor.WorkspaceArgs(vendorName, dirs)
+	if err != nil {
+		return nil
+	}
+	return args
+}
+
 // WorkerBackend abstracts over different vendor agent CLIs.
 // All wire-format details (NDJSON protocol, message shapes) live inside
 // each implementation — the loop driver never sees them.
@@ -63,6 +79,11 @@ type WorkerSession interface {
 type StartOptions struct {
 	// WorktreeDir is the git worktree for this session; the worker runs here.
 	WorktreeDir string
+	// Workspace are extra folders already granted by the operator's
+	// allow-list or trust (cmd/ynh decides). A backend renders them as its
+	// vendor's flag through vendor.WorkspaceArgs; one whose vendor has none
+	// never receives any, because the decision reports it before this point.
+	Workspace []string
 	// ConfigPath is the assembled harness directory (contains .claude/, CLAUDE.md, etc.).
 	ConfigPath string
 	// Sandbox is "srt" or "none".

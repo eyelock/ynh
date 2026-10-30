@@ -140,16 +140,18 @@ type Harness struct {
 	// the source manifest declared. Without them a *Harness cannot reproduce
 	// its own plugin.json, and every path that assembles from one — `ynh run`
 	// and `ynd preview` — silently ships less than `ynd export` does.
-	Author          *plugin.AuthorInfo
-	Keywords        []string
-	DefaultVendor   string
-	Namespace       string // e.g. "eyelock/assistants"; empty for local/unqualified installs
-	Dir             string // absolute path to the harness directory — the base for relative local includes
-	Includes        []Include
-	DelegatesTo     []Delegate
-	Hooks           map[string][]plugin.HookEntry
-	MCPServers      map[string]plugin.MCPServer
-	EnvPassthrough  []string
+	Author         *plugin.AuthorInfo
+	Keywords       []string
+	DefaultVendor  string
+	Namespace      string // e.g. "eyelock/assistants"; empty for local/unqualified installs
+	Dir            string // absolute path to the harness directory, the base for relative local includes
+	Includes       []Include
+	DelegatesTo    []Delegate
+	Hooks          map[string][]plugin.HookEntry
+	MCPServers     map[string]plugin.MCPServer
+	EnvPassthrough []string
+	// Workspace is the manifest's requested workspace folders, as written.
+	Workspace       []string
 	Agent           *plugin.AgentConfig
 	Profiles        map[string]plugin.Profile
 	Focuses         map[string]plugin.Focus
@@ -722,6 +724,9 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	if len(hj.EnvPassthrough) > 0 {
 		p.EnvPassthrough = hj.EnvPassthrough
 	}
+	if len(hj.Workspace) > 0 {
+		p.Workspace = hj.Workspace
+	}
 	if hj.Agent != nil {
 		p.Agent = hj.Agent
 	}
@@ -962,6 +967,9 @@ func LoadFile(path string) (*Harness, error) {
 	// See above: neither of these is an MCP setting.
 	if len(hj.EnvPassthrough) > 0 {
 		p.EnvPassthrough = hj.EnvPassthrough
+	}
+	if len(hj.Workspace) > 0 {
+		p.Workspace = hj.Workspace
 	}
 	if hj.Agent != nil {
 		p.Agent = hj.Agent

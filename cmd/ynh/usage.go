@@ -92,6 +92,7 @@ Run flags:
   --resume=<id>                Continue one specific session by id
                                A trailing prompt is sent to the resumed session
                                (not a --focus prompt); some vendors refuse it
+  --no-workspace               Grant none of the harness's requested workspace folders for this run
   --install                    Install symlinks for the vendor in current project
   --clean                      Remove symlinks for the vendor in current project
   All other flags are passed through to the vendor CLI.

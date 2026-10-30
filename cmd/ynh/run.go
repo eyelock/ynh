@@ -102,6 +102,11 @@ func cmdRun(args []string) error {
 		harnessDir = cwd
 	}
 
+	// The harness as installed, before a focus or profile reshapes it: the
+	// trust record covers this form, so the workspace grant must be judged
+	// against it.
+	loaded := p
+
 	// A resume continues a task, so only a prompt typed on the command line
 	// travels with it; a focus prompt starts one. Captured before the focus
 	// overwrites ra.Prompt. (--focus and a trailing prompt are exclusive.)
@@ -387,6 +392,14 @@ func cmdRun(args []string) error {
 				}
 			}
 		}
+
+		// Workspace folders the harness requested and the operator granted,
+		// as the vendor's own flags, ahead of the caller's pass-through args.
+		wsArgs, wsErr := workspaceLaunchArgs(loaded, harnessID, adapter.Name(), ra.NoWorkspace, os.Stderr)
+		if wsErr != nil {
+			return wsErr
+		}
+		vendorArgs = append(wsArgs, vendorArgs...)
 
 		// Launch
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
@@ -693,6 +706,7 @@ type runArgs struct {
 	Interactive  bool     // --interactive: stay in session after initial prompt
 	Resume       bool     // --resume: continue a previous session
 	ResumeID     string   // --resume=<id>: continue one specific session
+	NoWorkspace  bool     // --no-workspace: grant none of the harness's workspace folders; not forwarded
 }
 
 func parseRunArgs(args []string) runArgs {
@@ -740,6 +754,8 @@ func parseRunArgs(args []string) runArgs {
 		case strings.HasPrefix(flagArgs[i], "--resume="):
 			ra.Resume = true
 			ra.ResumeID = strings.TrimPrefix(flagArgs[i], "--resume=")
+		case flagArgs[i] == "--no-workspace":
+			ra.NoWorkspace = true
 		case flagArgs[i] == "--install":
 			ra.Action = "install"
 		case flagArgs[i] == "--clean":
