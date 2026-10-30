@@ -136,6 +136,17 @@ at the run's relay, with every content switch forced off, and the same
 settings as `--settings`. Those settings replace any of the same family the
 harness passes through.
 
+### MCP servers
+
+A worker loads the harness's own [MCP servers](mcp.md), named on the `claude`
+backend as `plugin:<harness>:<server>`, as `ynh run` names them. A harness or
+profile that sets `mcp_isolation` runs its worker with only those servers, the
+same as `ynh run`; `ynh agent run` has no `--isolated-mcp` flag, so isolation
+comes from the manifest alone. It is applied on the `claude` backend only (its
+tools are then named `<server>`); on `codex` and `cursor` ynh prints one
+`warning:` line on stderr and the worker loads your own servers too. See
+[Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
+
 ## Redaction
 
 Trajectories are redacted **by value**. At startup ynh takes the values of
