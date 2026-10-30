@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"os/exec"
@@ -10,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 func TestDirOf(t *testing.T) {
@@ -155,5 +158,53 @@ func TestGitAutoCommit_CommitsChanges(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "turn 2") {
 		t.Errorf("expected 'turn 2' in log, got: %s", out)
+	}
+}
+
+// The worker loads <config>/.claude as its plugin. Without a manifest inside
+// it Claude Code names the plugin after the directory, and the harness's MCP
+// tools come out as plugin:.claude:<server>, not plugin:<harness>:<server>.
+func TestAssembleHarness_ClaudeWritesSessionPluginManifest(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	h := &harness.Harness{
+		Name:       "myharness",
+		Version:    "1.2.3",
+		Dir:        t.TempDir(),
+		MCPServers: map[string]plugin.MCPServer{"docs": {Command: "docs-mcp"}},
+	}
+	dir, _, err := assembleHarness(h, "claude", harness.Selection{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	// The same folder buildClaudeStreamArgs hands to --plugin-dir.
+	pluginDir := filepath.Join(dir, (&vendor.Claude{}).ConfigDir())
+	data, err := os.ReadFile(filepath.Join(pluginDir, ".claude-plugin", "plugin.json"))
+	if err != nil {
+		t.Fatalf("no session plugin manifest: %v", err)
+	}
+	var got struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != "myharness" || got.Version != "1.2.3" {
+		t.Errorf("manifest = %+v, want name myharness, version 1.2.3", got)
+	}
+}
+
+func TestAssembleHarness_NonClaudeWritesNoSessionPluginManifest(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	h := &harness.Harness{Name: "myharness", Dir: t.TempDir()}
+	dir, _, err := assembleHarness(h, "codex", harness.Selection{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	if _, err := os.Stat(filepath.Join(dir, ".claude", ".claude-plugin", "plugin.json")); !os.IsNotExist(err) {
+		t.Errorf("codex worker got a Claude session manifest (stat err %v)", err)
 	}
 }
