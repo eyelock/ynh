@@ -215,10 +215,12 @@ so ynh holds an OpenCode matcher to the syntax both read the same.
 `validateOpencodeMatcher` (`internal/vendor/opencode.go`) runs at generate
 time: it compiles the matcher as RE2, then `opencodeMatcherNotJS` refuses
 anything JavaScript rejects or reads differently: any `(?` group but `(?:`
-(`(?i)`, `(?P<name>...)`), a POSIX class (`[[:alpha:]]`), escapes outside
-`\d \D \s \S \w \W \f \n \r \t \v`, `\b`/`\B` outside a class, `\xHH` and
-escaped punctuation (so `\A`, `\z`, `\Q...\E`, `\pL`, `\x{41}`, octal), and a
-`]` first in a class (`[]a]`, `[^]a]`). Why: a matcher JavaScript rejects used
+(`(?i)`, `(?P<name>...)`), a POSIX class (`[[:alpha:]]`), a `]` first in a
+class (`[]a]`, `[^]a]`), and any escape of a letter or digit other than these
+it allows: `\d \D \s \S \w \W \f \n \r \t \v`, `\xHH` with two hex digits,
+and `\b`/`\B` outside a class. So `\A`, `\z`, `\Q...\E`, `\pL`, `\x{41}`,
+octal, and `\b`/`\B` inside a class are refused; escaped punctuation (`\.`,
+`\[`) is always allowed. Why: a matcher JavaScript rejects used
 to throw inside `execute.before` and block every tool call (ynw-kst.2). The
 plugin now compiles each matcher once in a `try`/`catch` and a bad one matches
 nothing (its hook never runs, reported on stderr), and syntax JavaScript reads
