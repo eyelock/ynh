@@ -331,7 +331,17 @@ find /tmp/ynh-tutorial/hook-export -path '*hooks*' -type f | sort
 cat /tmp/ynh-tutorial/hook-export/claude/.claude-plugin/plugin.json
 ```
 
-Expected: one `Exported for` line per vendor, plus `warning: codex: skipping 1 rules (not supported)` because a Codex plugin carries only skills. Then exactly three hook files, one per vendor, and no `hooks/hooks.json` or session path such as `.claude/hooks/hooks.json`:
+Expected: one `Exported for` line per vendor, with the Cursor matcher warning from above under Cursor's, and `warning: codex: skipping 1 rules (not supported)` under Codex's because a Codex plugin carries only skills:
+
+```
+Exported for claude → /tmp/ynh-tutorial/hook-export/claude (0 skills, 0 agents)
+Exported for cursor → /tmp/ynh-tutorial/hook-export/cursor (0 skills, 0 agents)
+  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+Exported for codex → /tmp/ynh-tutorial/hook-export/codex (0 skills, 0 agents)
+  warning: codex: skipping 1 rules (not supported)
+```
+
+Then exactly three hook files, one per vendor, and no `hooks/hooks.json` or session path such as `.claude/hooks/hooks.json`:
 
 ```
 /tmp/ynh-tutorial/hook-export/claude/hooks/claude.json

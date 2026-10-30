@@ -823,7 +823,8 @@ ynh run -v ollama/codex
 # Expected: Error: backend "ollama" has no config for vendor "codex" (add backends.ollama.vendors.codex to ~/.ynh/config.json)
 
 ynh vendors --format json | jq '.[] | select(.name=="ollama/claude")'
-# Expected: a row present (name, display_name, cli, config_dir, available, supports_initial_prompt).
+# Expected: a row present (name, display_name, cli, config_dir, available, supports_initial_prompt,
+# supports_resume).
 # No live Ollama server is required for this check: model discovery is best-effort — an
 # unreachable/unconfigured-type backend falls back to the bare "<backend>/<vendor>" row
 # instead of erroring the whole `ynh vendors` listing.

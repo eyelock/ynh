@@ -325,6 +325,7 @@ ynh installed local/exportable
 ls -a /tmp/ynh-tutorial/agent-plugin
 # Expected: no .agents or .ynh-plugin directory; the package is as exported
 ynh uninstall local/exportable
+# Expected: Uninstalled harness "exportable", then "Source tree left in place: /tmp/ynh-tutorial/agent-plugin"
 ```
 
 ### Validate and install a package you did not write
@@ -337,8 +338,9 @@ git clone https://github.com/agentplugins/agent-plugins-example /tmp/ynh-tutoria
 ynd validate /tmp/ynh-tutorial/agent-plugins-example
 ```
 
-Expected:
+Expected (git's own `Cloning into` line, then the validation):
 ```
+Cloning into '/tmp/ynh-tutorial/agent-plugins-example'...
 /tmp/ynh-tutorial/agent-plugins-example: valid (Agent Plugin 1.0.0)
 ```
 
@@ -371,6 +373,7 @@ Includes:
 ls -a /tmp/ynh-tutorial/agent-plugins-example
 # Expected: .git LICENSE README.md plugin.json skills; no .agents or .ynh-plugin
 ynh uninstall local/agent-plugins-example
+# Expected: Uninstalled harness "agent-plugins-example", then "Source tree left in place: /tmp/ynh-tutorial/agent-plugins-example"
 ```
 
 ### Test with GitHub Copilot

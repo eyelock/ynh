@@ -198,7 +198,8 @@ COPY --chown=ynh:ynh vendors/copilot/ /home/ynh/.ynh/run/local--docker-demo/copi
 # Harness source (metadata for ynh run)
 COPY --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--docker-demo/
 
-# Schema version of the layout above, so ynh does not try to migrate it
+# Schema version of the layout above, so ynh does not try to migrate it, and
+# the include cache (cache/), so included sensors are read from the build
 COPY --chown=ynh:ynh home/ /home/ynh/.ynh/
 
 # Default vendor (override: docker run -e YNH_VENDOR=codex)
