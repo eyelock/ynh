@@ -618,15 +618,19 @@ type opencodeHookEntry struct {
 //     --standalone and --print-logs (CONFIRMED v2.2.3)
 //   - a matcher is an anchored JavaScript regex, checked here at generate
 //     time (see validateOpencodeMatcher); a bad one is an error naming it
-//   - MCP tools: the model calls them inside Code Mode's "execute" tool, and
-//     OpenCode fires the tool hooks for the wrapper AND for each nested tool,
-//     the latter under the id "<server>_<tool>" (CONFIRMED: echo_ynh_ping). A
-//     matcher written "mcp__server__tool" matches it (CONFIRMED to block the
-//     call before the server sees it; re-CONFIRMED on v2.2.3). The block throws
-//     inside the wrapper's code, so later tool calls in the same "execute" do
-//     not run. A hook with no matcher skips the "execute" wrapper, so it runs
-//     once per real tool, not twice; a matcher that names "execute" still sees
-//     it. The payload's tool_name is the OpenCode id, not mcp__server__tool
+//   - MCP tools fire the tool hooks under the id "<server>_<tool>" (CONFIRMED:
+//     echo_ynh_ping), and a matcher written "mcp__server__tool" matches it
+//     (CONFIRMED to block the call before the server sees it, re-CONFIRMED on
+//     v2.2.3). With Code Mode on (the default: the agent may use "execute"),
+//     the model calls them inside the "execute" tool and OpenCode fires the
+//     hooks for that wrapper AND for each nested tool; the block throws inside
+//     the wrapper's code, so later tool calls in the same "execute" do not
+//     run. A hook with no matcher skips the "execute" wrapper, so it runs once
+//     per real tool, not twice; a matcher that names "execute" still sees it.
+//     An agent with a Claude tools: list is denied "execute", so Code Mode is
+//     off for it and its granted MCP tools are ordinary tools with no wrapper
+//     (CONFIRMED on v2.2.3 that the matcher still blocks them). The payload's
+//     tool_name is the OpenCode id, not mcp__server__tool
 func (o *OpenCode) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
 	doc := map[string][]opencodeHookEntry{}
 	for _, event := range slices.Sorted(maps.Keys(opencodeHookEventMap)) {
