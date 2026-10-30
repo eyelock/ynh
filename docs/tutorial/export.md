@@ -434,7 +434,9 @@ any ancestor of it, or a git working copy — and that refusal ignores `-y`.
 ynd export github.com/eyelock/assistants --path ynh/david -o /tmp/ynh-tutorial/remote-export -v claude
 ```
 
-Clones the repo, applies `--path` scoping, exports. Same as exporting a local directory.
+Expected: `Exported for claude → /tmp/ynh-tutorial/remote-export/claude (12 skills, 0 agents)`
+
+Clones the repo, applies `--path` scoping, exports. Same as exporting a local directory. The skills come from `ynh/david`'s includes; it has no instructions of its own, so there is no `AGENTS.md`.
 
 ## Export with no instructions
 

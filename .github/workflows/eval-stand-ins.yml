@@ -1,0 +1,45 @@
+# The evals run the tutorials against stand-ins of the GitHub repositories they
+# fetch (scripts/eval-remotes.sh), and compare output only with those stand-ins.
+# When a real harness in eyelock/assistants changed and its stand-in did not,
+# nothing noticed: the stand-in ynh/tester kept one include after the real one
+# had two, and a tutorial block documenting the stand-in's output passed review.
+#
+# This compares each stand-in harness with the real one. It needs the network
+# and reads a repository this one does not control, so it is not in
+# `make check` or ci.yml. It runs on a schedule, so a change in
+# eyelock/assistants is caught without anyone pushing here, and on changes to
+# the stand-ins or the check.
+#
+# On a failure, update the stand-in in scripts/eval-remotes.sh (and any
+# tutorial output that changes with it). Never change the real harness to suit
+# the evals.
+
+name: Eval stand-ins
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'scripts/eval-remotes.sh'
+      - 'scripts/eval-stand-ins.sh'
+      - '.github/workflows/eval-stand-ins.yml'
+  pull_request:
+    paths:
+      - 'scripts/eval-remotes.sh'
+      - 'scripts/eval-stand-ins.sh'
+      - '.github/workflows/eval-stand-ins.yml'
+  workflow_dispatch:
+  schedule:
+    # 07:30 UTC daily.
+    - cron: '30 7 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  stand-ins:
+    name: Stand-ins match the real harnesses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - run: make check-eval-stand-ins
