@@ -1715,7 +1715,45 @@ func assembleHarness(h *harness.Harness, backendName string) (string, error) {
 		}
 	}
 
+	// After hooks and MCP, so the manifest's pointers to them are accurate.
+	if err := writeSessionPluginManifest(dir, adapter, h); err != nil {
+		_ = os.RemoveAll(dir)
+		return "", err
+	}
+
 	return dir, nil
+}
+
+// writeSessionPluginManifest writes the manifest of the plugin the worker
+// loads, as `ynh run` does. Claude Code names a plugin without a manifest
+// after its directory, so without it a Claude worker's MCP tools come out as
+// plugin:.claude:<server> instead of plugin:<harness>:<server>. Vendors that
+// do not load the run as a named plugin write nothing.
+func writeSessionPluginManifest(dir string, adapter vendor.Adapter, h *harness.Harness) error {
+	namer, ok := adapter.(vendor.SessionPluginNamer)
+	if !ok {
+		return nil
+	}
+	files, err := namer.GenerateSessionPluginManifest(&plugin.HarnessJSON{
+		Name:        h.Name,
+		Version:     h.Version,
+		Description: h.Description,
+		Author:      h.Author,
+		Keywords:    h.Keywords,
+	}, dir)
+	if err != nil {
+		return fmt.Errorf("writing plugin manifest: %w", err)
+	}
+	for relPath, data := range files {
+		absPath := filepath.Join(dir, relPath)
+		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+			return fmt.Errorf("creating manifest dir: %w", err)
+		}
+		if err := os.WriteFile(absPath, data, 0o644); err != nil {
+			return fmt.Errorf("writing manifest %s: %w", relPath, err)
+		}
+	}
+	return nil
 }
 
 // gitAutoCommit runs `git add -A && git commit` in the given directory.
