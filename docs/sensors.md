@@ -829,6 +829,11 @@ Four properties are load-bearing:
 - **Not mandatory.** Adding it to every sensor would break every existing
   harness.
 
+`--calibrate` does not combine with `--profile`, `--sensor-overlay`,
+`--update-baseline` or `--no-baseline`; each is refused (exit 2). Calibration
+runs each declared command against its fixture and never reads tolerance, which
+is all a profile can change, so a profile would silently do nothing.
+
 **An uncalibrated sensor is not yet a sensor.** A fixture is the only thing
 that proves a sensor still observes anything, and it is what catches the
 working-directory mistake above. A script that found its own root, pointed at
@@ -993,6 +998,10 @@ and the report names the profile in a top-level `profile` field.
 **`--profile` on `ynh check` is a flag only.** It does not read `YNH_PROFILE`,
 which `ynh run` does: an environment variable left in a shell would quietly make
 every interactive check advisory.
+
+**`--calibrate` with `--profile` is refused.** Calibration runs each declared
+command against its reference fixture and never reads tolerance, which is all a
+profile can change, so the flag would do nothing.
 
 **`--update-baseline` with `--profile` is allowed.** Recording writes a failing
 sensor's output whatever its tolerance, and a profile cannot change the ratchet,
