@@ -206,6 +206,26 @@ Tool names differ from Claude's. **CONFIRMED** ids (from `x.tool` in a
 is unprobed. Matchers need a mapping table, and the generated plugin tests a
 matcher (as an anchored regex) against the OpenCode id and its Claude names.
 
+The matcher is a **JavaScript** regex: the plugin builds it with
+`new RegExp("^(?:" + matcher + ")$")`. The other vendors' matchers are RE2,
+so ynh holds an OpenCode matcher to the syntax both read the same.
+`validateOpencodeMatcher` (`internal/vendor/opencode.go`) runs at generate
+time: it compiles the matcher as RE2, then `opencodeMatcherNotJS` refuses
+anything JavaScript rejects or reads differently: any `(?` group but `(?:`
+(`(?i)`, `(?P<name>...)`), a POSIX class (`[[:alpha:]]`), escapes outside
+`\d \D \s \S \w \W \f \n \r \t \v`, `\b`/`\B` outside a class, `\xHH` and
+escaped punctuation (so `\A`, `\z`, `\Q...\E`, `\pL`, `\x{41}`, octal), and a
+`]` first in a class (`[]a]`, `[^]a]`). Why: a matcher JavaScript rejects used
+to throw inside `execute.before` and block every tool call (ynw-kst.2). The
+plugin now compiles each matcher once in a `try`/`catch` and a bad one matches
+nothing (its hook never runs, reported on stderr), and syntax JavaScript reads
+differently without throwing would silently match the wrong tools; so the
+check refuses both kinds before the plugin is written. It is over-strict in
+one known case: any `[:` inside a class is taken for a POSIX class, so `[[:]`
+(the set of `[` and `:`, the same in both dialects) is refused; write `[\[:]`.
+Keep the check, `opencodeSameEscapes` and the user doc (`docs/hooks.md`) in
+step when changing one of them.
+
 Further **CONFIRMED** behaviour of the generated plugin (v2.0.27):
 
 - `before_tool` with `exit 2` throws; the model sees the hook's stderr as the
