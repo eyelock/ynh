@@ -227,7 +227,7 @@ OpenCode 2 reads MCP servers from the `mcp.servers` key of `opencode.json`, not 
 
 A `url` server becomes `"type": "remote"` with `url` and `headers`; ynh writes `"oauth": false` on it. OpenCode expands environment variables as `{env:NAME}` only (`$NAME` and `${NAME}` are not expanded in JSON strings), so ynh rewrites `${NAME}` references to that form.
 
-A local stdio server was confirmed to connect and its tool to be callable by hand-testing; remote servers were not connected to. OpenCode reaches MCP tools through its Code Mode by default: the model sees one `execute` tool and calls `tools.<server>.<tool>(...)` inside it, so an MCP call is not visible to a `before_tool` hook as a tool of its own.
+A local stdio server was confirmed to connect and its tool to be callable by hand-testing; remote servers were not connected to. OpenCode reaches MCP tools through its Code Mode by default: the model sees one `execute` tool and calls `tools.<server>.<tool>(...)` inside it. Each MCP tool it calls still fires `before_tool` and `after_tool` as a tool of its own, and an `mcp__<server>__<tool>` matcher catches it; see [Hooks](hooks.md#opencode-hooks-are-a-generated-plugin).
 
 ## Root-Harness-Only Rule
 

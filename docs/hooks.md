@@ -266,7 +266,7 @@ OpenCode 2 has no declarative hook config, so ynh generates `.opencode/plugins/y
 
 Matchers on `before_tool` and `after_tool` are written with Claude's tool names and mapped to OpenCode's ids, so `Bash` fires on OpenCode's `shell`, `Edit` on `edit`, and a native id such as `shell` works too. A matcher is an anchored regex tested against the OpenCode id and every Claude name that maps to it.
 
-`on_session_start` and `on_stop` ride OpenCode's event stream rather than a documented hook, so they are the most likely to change in a later OpenCode release. OpenCode reaches MCP tools through its Code Mode (one `execute` tool), so a `before_tool` matcher does not see an MCP call as its own tool.
+`on_session_start` and `on_stop` ride OpenCode's event stream rather than a documented hook, so they are the most likely to change in a later OpenCode release. OpenCode reaches MCP tools through its Code Mode: the model writes code in one `execute` tool that calls the server's tools. The tool hooks fire for that `execute` call and again for each MCP tool it calls, under OpenCode's id `<server>_<tool>`. A matcher written as on Claude Code, `mcp__<server>__<tool>`, matches that call, and exit code 2 blocks it before the server sees it. The block also stops the rest of the `execute` call's code, so other tools it would have called in the same call do not run. A hook with no matcher runs for each MCP tool but not for the `execute` call, so it does not run twice for one MCP call; a matcher that names `execute` does run for it. The payload's `tool_name` for an MCP tool is OpenCode's id (`echo_ynh_ping`), not Claude's `mcp__echo__ynh_ping`, so a hook script that reads `tool_name` must allow for both.
 
 ### Hook script paths
 

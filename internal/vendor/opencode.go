@@ -618,8 +618,11 @@ type opencodeHookEntry struct {
 //     OpenCode fires the tool hooks for the wrapper AND for each nested tool,
 //     the latter under the id "<server>_<tool>" (CONFIRMED: echo_ynh_ping). A
 //     matcher written "mcp__server__tool" matches it (CONFIRMED to block the
-//     call). A hook with no matcher skips the "execute" wrapper, so it runs
-//     once per real tool, not twice; a matcher that names "execute" still sees it
+//     call before the server sees it; re-CONFIRMED on v2.2.3). The block throws
+//     inside the wrapper's code, so later tool calls in the same "execute" do
+//     not run. A hook with no matcher skips the "execute" wrapper, so it runs
+//     once per real tool, not twice; a matcher that names "execute" still sees
+//     it. The payload's tool_name is the OpenCode id, not mcp__server__tool
 func (o *OpenCode) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
 	doc := map[string][]opencodeHookEntry{}
 	for _, event := range slices.Sorted(maps.Keys(opencodeHookEventMap)) {

@@ -138,8 +138,9 @@ takes extra directories or URLs.
 **CONFIRMED:** a local stdio server written to the bundle's `opencode.json`
 connects and its tool is callable. OpenCode 2 exposes MCP tools through "Code
 Mode" by default (`codemode: true`): the model sees one `execute` tool and
-calls `tools.<server>.<tool>({})` inside it, so MCP calls are not visible as
-their own tool ids to a `tool` hook. Local fields: `type`, `command` (array),
+calls `tools.<server>.<tool>({})` inside it. Each MCP tool it calls still
+fires the `tool` hooks under its own id, `<server>_<tool>` (see "MCP tools and
+`tool` hooks" below). Local fields: `type`, `command` (array),
 `cwd`, `environment`, `disabled`, `codemode`, `timeout`. Remote fields:
 `type: "remote"`, `url` (Streamable HTTP), `headers`, `oauth` (default on;
 `false` to disable), `disabled`. **Env substitution is `{env:NAME}`**;
@@ -293,7 +294,15 @@ Pro/Max subscription through OpenCode.
   and then again for each tool it calls, under the id `<server>_<tool>`
   (`echo_ynh_ping`). A generated hook matcher `mcp__echo__ynh_ping` blocked
   the MCP call with the hook's message. The plugin skips the `execute`
-  wrapper for hooks with no matcher so they do not run twice.
+  wrapper for hooks with no matcher so they do not run twice. Re-confirmed
+  on v2.2.3 with `deepseek-v4.1-flash-free` (ynw-kst.4): a matcherless hook
+  saw `opencode_list_mcp_resources`, `echo_ynh_ping` and `echo_ynh_other` but
+  never `execute`; the matcher blocked `echo_ynh_ping` before the stub server
+  received it; an unmatched `echo_ynh_other` reached the server. The block
+  throws inside the `execute` code, so a later call in the same code
+  (`ynh_other` after `ynh_ping`) did not run either. The hook payload's
+  `tool_name` is the OpenCode id `echo_ynh_ping`, not Claude's
+  `mcp__echo__ynh_ping`.
 - **`--` works in `opencode run`:** `run --standalone -m x --format json --
   "--help me"` sent the text as a message. ynh puts extra args before `--`.
 - **Scoped shell permissions:** an `allow shell "echo *"` after `* deny`
