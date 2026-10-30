@@ -33,8 +33,9 @@ func lookWorkerCLI(backend string) (string, error) {
 }
 
 const (
-	vendorClaude = "claude"
-	vendorCodex  = "codex"
+	vendorClaude   = "claude"
+	vendorCodex    = "codex"
+	vendorOpenCode = "opencode"
 )
 
 // workspaceArgs renders granted workspace folders as the vendor's own flag.

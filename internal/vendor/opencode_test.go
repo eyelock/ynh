@@ -112,10 +112,20 @@ func TestOpenCodeLaunch(t *testing.T) {
 			return o.LaunchNonInteractive(c, "go", []string{"--format", "json"})
 		},
 			[]string{"opencode", "run", "--standalone", "--format", "json", "--", "go"}},
-		{"resume id", func(o *OpenCode, c string) error { return o.LaunchResume(c, "ses_1", []string{"--auto"}) },
+		{"resume id", func(o *OpenCode, c string) error { return o.LaunchResume(c, "ses_1", "", true, []string{"--auto"}) },
 			[]string{"opencode", "--standalone", "-s", "ses_1", "--auto"}},
-		{"resume last", func(o *OpenCode, c string) error { return o.LaunchResume(c, "", nil) },
+		{"resume last", func(o *OpenCode, c string) error { return o.LaunchResume(c, "", "", false, nil) },
 			[]string{"opencode", "--standalone", "-c"}},
+		{"resume id with prompt, one-shot", func(o *OpenCode, c string) error {
+			return o.LaunchResume(c, "ses_1", "-go on", false, []string{"--auto"})
+		},
+			[]string{"opencode", "run", "--standalone", "-s", "ses_1", "--auto", "--", "-go on"}},
+		{"resume last with prompt, one-shot", func(o *OpenCode, c string) error { return o.LaunchResume(c, "", "go on", false, nil) },
+			[]string{"opencode", "run", "--standalone", "-c", "--", "go on"}},
+		{"resume id with prompt, interactive", func(o *OpenCode, c string) error {
+			return o.LaunchResume(c, "ses_1", "go on", true, []string{"--auto"})
+		},
+			[]string{"opencode", "--standalone", "-s", "ses_1", "--prompt", "go on", "--auto"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -705,5 +715,64 @@ console.log(JSON.stringify(out))
 	}
 	if stdin["hook_event_name"] != "PreToolUse" || stdin["tool_name"] != "Bash" || stdin["session_id"] != "s1" {
 		t.Errorf("stdin = %v", stdin)
+	}
+}
+
+// TestOpenCodeHookTimeout: a per-hook timeout rides in the generated plugin's
+// HOOKS table, in seconds, and the plugin hands it to spawnSync in ms; a hook
+// without one carries none and gets the 60 s default.
+func TestOpenCodeHookTimeout(t *testing.T) {
+	hooks := map[string][]plugin.HookEntry{
+		"before_tool": {{Command: "slow", Timeout: 12}, {Command: "plain"}},
+		"on_stop":     {{Command: "stop", Timeout: 300}},
+	}
+	files, err := (&OpenCode{}).GenerateHookConfig(hooks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(files[filepath.Join(".opencode", "plugins", "ynh-hooks.ts")])
+	start := strings.Index(src, "= {\n")
+	end := strings.Index(src, "\n}\n\nconst ROOT")
+	if start < 0 || end < 0 {
+		t.Fatalf("hook table not found:\n%s", src)
+	}
+	var table map[string][]opencodeHookEntry
+	if err := json.Unmarshal([]byte(src[start+2:end+2]), &table); err != nil {
+		t.Fatal(err)
+	}
+	if got := table["before_tool"]; got[0].Timeout != 12 || got[1].Timeout != 0 {
+		t.Errorf("before_tool timeouts = %+v, want 12 then none", got)
+	}
+	if got := table["on_stop"][0].Timeout; got != 300 {
+		t.Errorf("on_stop timeout = %d, want 300 (no cap)", got)
+	}
+	if strings.Contains(src, "timeout: 60000") || !strings.Contains(src, "timeout: (timeout ?? 60) * 1000") {
+		t.Error("the plugin must run each hook with its own timeout, 60 s by default")
+	}
+	if w := HookWarnings("opencode", hooks); len(w) != 0 {
+		t.Errorf("warnings = %q, want none", w)
+	}
+}
+
+// TestOpenCodeHookDeclarations pins the contract declarations the parity
+// scripts read.
+func TestOpenCodeHookDeclarations(t *testing.T) {
+	if _, ok := opencodeUnsupportedHookEvents["on_session_end"]; !ok {
+		t.Error("on_session_end must be declared unsupported, with a reason")
+	}
+	if !strings.HasPrefix(sessionStartContext["opencode"], sessionStartNoPrefix) {
+		t.Errorf("session-start context = %q, want unsupported:<why>", sessionStartContext["opencode"])
+	}
+	if sessionContextMode("opencode") != "" {
+		t.Error("an unsupported vendor gets no wrapper")
+	}
+	field, reason, _, ok := hookTimeoutSupport("opencode")
+	if !ok || field != "timeout" || reason != "" {
+		t.Errorf("timeout support = %q %q %v", field, reason, ok)
+	}
+	// on_session_end is not written into the plugin.
+	files, err := (&OpenCode{}).GenerateHookConfig(map[string][]plugin.HookEntry{"on_session_end": {{Command: "bye"}}})
+	if err != nil || files != nil {
+		t.Errorf("on_session_end alone = %v, %v; want no plugin", keysOf(files), err)
 	}
 }

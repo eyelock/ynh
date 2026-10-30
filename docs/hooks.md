@@ -260,7 +260,7 @@ OpenCode 2 has no declarative hook config, so ynh generates `.opencode/plugins/y
 | `before_tool` | Exit code 2 throws, which blocks the call; the hook's stderr is the tool error the model sees. The tool does not run |
 | `after_tool` | Runs after the call and cannot reject the result. The payload carries Claude's `file_path`, `old_string` and `new_string` beside OpenCode's own input keys |
 | `before_prompt` | Exit code 2 does block, before the model is called, but OpenCode surfaces only an opaque `UnexpectedStatus: 500`, not the hook's message. Prefer logging in a prompt hook over blocking |
-| `on_session_start` | Comes from the event stream (`session.created`). Cannot block; a matcher is ignored; its output does not reach the model (see [on_session_start output becomes model context](#on_session_start-output-becomes-model-context)) |
+| `on_session_start` | Comes from the event stream (`session.created`). Cannot block; a matcher is ignored; its output does not reach the model (see [on_session_start output becomes model context](#on-session-start-output-becomes-model-context)) |
 | `on_stop` | Comes from the event stream (`session.execution.succeeded` / `.failed`), once per turn. Cannot block; a matcher is ignored |
 | `on_session_end` | Not supported: nothing in OpenCode 2 fires when a session ends. Not written; assembly warns |
 

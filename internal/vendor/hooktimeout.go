@@ -16,6 +16,8 @@ func hookTimeoutSupport(vendorName string) (field, unsupported string, caps map[
 		return cursorHookTimeoutField, cursorHookTimeoutUnsupported, cursorHookTimeoutCaps, true
 	case "copilot":
 		return copilotHookTimeoutField, copilotHookTimeoutUnsupported, copilotHookTimeoutCaps, true
+	case "opencode":
+		return opencodeHookTimeoutField, opencodeHookTimeoutUnsupported, opencodeHookTimeoutCaps, true
 	}
 	return "", "", nil, false
 }

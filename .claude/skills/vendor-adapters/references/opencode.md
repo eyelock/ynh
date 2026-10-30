@@ -180,6 +180,7 @@ docs' table says "tools" and "permissions"; those are `undefined`.
 | `before_prompt` | `session` `prompt` | **CONFIRMED** |
 | `on_session_start` | event `session.created` | **CONFIRMED** (event, not a hook) |
 | `on_stop` | event `session.execution.succeeded` / `session.execution.failed` | **CONFIRMED** (event, not a hook) |
+| `on_session_end` | none: no hook, and no session-end event in the stream (`session.deleted` / `session.archived` are not the end of a run) | **declared unsupported** (`opencodeUnsupportedHookEvents`) |
 
 Tool names differ from Claude's. **CONFIRMED** ids (from `x.tool` in a
 `tool` hook): `shell`, `read`, `write`, `edit`, `glob`, `grep`, `webfetch`,
@@ -208,6 +209,18 @@ Further **CONFIRMED** behaviour of the generated plugin (v2.0.27):
 - `ctx.location.directory` honours `$PWD`, not the process's real cwd; a
   process that only `chdir`s (a Go test) still sees the old directory.
 
+Contract declarations (read by `make check-vendor-parity`):
+
+- Timeout: `opencodeHookTimeoutField = "timeout"`. Each hook's timeout, in
+  seconds, rides in the plugin's `HOOKS` table and is passed to `spawnSync`;
+  60 s when none is set. No caps: the plugin enforces it, not OpenCode.
+- Session-start context: `unsupported:`. `on_session_start` runs from an
+  event-stream subscriber, which cannot add context; its stdout is discarded.
+- Matchers: honoured on `execute.before` / `execute.after` only
+  (`opencodeMatcherEvents`); elsewhere `HookWarnings` says it is ignored.
+- Workspace: no flag (`opencodeWorkspaceUnsupported`); `--help` on 2.2.3 lists
+  no add-dir equivalent.
+
 ## CLI
 
 ```
@@ -227,6 +240,10 @@ opencode run [--standalone] [-c] [-s <id>] [--fork] [-m provider/model#variant]
 
 - **CONFIRMED:** `-s <id>` resumes that session; `-c` continues the last one.
   Neither opens a picker.
+- **CONFIRMED** (v2.2.3, 2026-10-30): a prompt reaches a resumed session.
+  One-shot: `opencode run --standalone -s <id> -- <prompt>` (and `-c`).
+  Interactive: `opencode --standalone -s <id> --prompt <prompt>` submits it into
+  the resumed session. The model answered from the earlier turns both ways.
 - **CONFIRMED:** `--format json` emits newline-delimited events, each with
   `sessionID` (types `step_start`, `text`, `tool_use`, `tool`, `step_finish`,
   `error`).

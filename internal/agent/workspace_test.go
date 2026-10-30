@@ -37,6 +37,15 @@ func TestWorkerArgsRenderWorkspace(t *testing.T) {
 			t.Errorf("cursor has no such flag, got %v", args)
 		}
 	})
+	t.Run("opencode carries none", func(t *testing.T) {
+		args := buildOpenCodeArgs(StartOptions{Workspace: dirs}, "", "msg")
+		if slices.Contains(args, "--add-dir") || slices.Contains(args, "/w/one") {
+			t.Errorf("opencode has no such flag, got %v", args)
+		}
+		if args[len(args)-2] != "--" || args[len(args)-1] != "msg" {
+			t.Errorf("the message must stay last, after --: %v", args)
+		}
+	})
 	t.Run("none requested adds nothing", func(t *testing.T) {
 		if slices.Contains(buildCodexArgs(StartOptions{}, ""), "--add-dir") {
 			t.Error("--add-dir without a grant")

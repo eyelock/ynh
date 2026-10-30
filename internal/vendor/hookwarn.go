@@ -24,6 +24,8 @@ func hookEventSupport(vendorName string) (native, unsupported map[string]string,
 		return cursorHookEventMap, cursorUnsupportedHookEvents, true
 	case "copilot":
 		return copilotHookEventMap, copilotUnsupportedHookEvents, true
+	case "opencode":
+		return opencodeHookEventMap, opencodeUnsupportedHookEvents, true
 	}
 	return nil, nil, false
 }
@@ -96,6 +98,8 @@ func matcherWarnings(vendorName, event, nativeEvent string, entries []plugin.Hoo
 		scoped = cursorMatcherEvents
 	case "copilot":
 		scoped = copilotMatcherEvents
+	case "opencode":
+		scoped = opencodeMatcherEvents
 	default:
 		return nil
 	}

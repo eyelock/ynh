@@ -29,7 +29,7 @@ Two agents to delegate to rather than doing the work inline:
 - **`ynd-artifact-reviewer`** — reviewing one skill or agent for specificity,
   frontmatter correctness and reference integrity.
 - **`ynh-harness-reviewer`** — reviewing a *whole* harness before it ships:
-  validates it, assembles it for all four vendors, and checks that every file
+  validates it, assembles it for all five vendors, and checks that every file
   the artifacts promise actually reaches a user. Delegate before installing,
   publishing or tagging.
 

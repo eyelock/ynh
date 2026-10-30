@@ -21,10 +21,11 @@ import (
 //
 // An undeclared vendor cannot compile into the table below.
 var sessionStartContext = map[string]string{
-	"claude":  claudeSessionStartContext,
-	"codex":   codexSessionStartContext,
-	"copilot": copilotSessionStartContext,
-	"cursor":  cursorSessionStartContext,
+	"claude":   claudeSessionStartContext,
+	"codex":    codexSessionStartContext,
+	"copilot":  copilotSessionStartContext,
+	"cursor":   cursorSessionStartContext,
+	"opencode": opencodeSessionStartContext,
 }
 
 const (

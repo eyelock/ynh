@@ -174,6 +174,7 @@ func buildOpenCodeArgs(opts StartOptions, sessionID, msg string) []string {
 	if sessionID != "" {
 		args = append(args, "-s", sessionID)
 	}
+	args = append(args, workspaceArgs(vendorOpenCode, opts.Workspace)...)
 	return append(args, "--", msg)
 }
 

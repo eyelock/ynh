@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -484,24 +486,75 @@ func (o *OpenCode) ResolveLastSession(cwd string, notBefore time.Time) (string, 
 	return "", ErrSessionLookupUnavailable
 }
 
-// LaunchResume continues a session. CONFIRMED: -s <id> resumes that session
-// and -c the last one, and neither opens a picker.
-func (o *OpenCode) LaunchResume(configPath, sessionID string, extraArgs []string) error {
+// LaunchResume continues a session: -s <id> resumes that session and -c the
+// last one, and neither opens a picker. A prompt is delivered both ways,
+// CONFIRMED by hand against v2.2.3 (2026-10-30), with the model answering from
+// the resumed session's earlier turns:
+//   - one-shot: `opencode run --standalone -s <id> -- <prompt>` (and -c)
+//   - interactive: `opencode --standalone -s <id> --prompt <prompt>`, which
+//     submits the prompt into the resumed session
+func (o *OpenCode) LaunchResume(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
+	return launchOpencodeArgs(configPath, opencodeResumeArgs(sessionID, prompt, interactive, extraArgs))
+}
+
+func opencodeResumeArgs(sessionID, prompt string, interactive bool, extraArgs []string) []string {
 	resume := []string{"-c"}
 	if sessionID != "" {
 		resume = []string{"-s", sessionID}
 	}
-	return launchOpencode(configPath, append(resume, extraArgs...))
+	if prompt != "" && !interactive {
+		args := append([]string{"run", "--standalone"}, resume...)
+		args = append(args, extraArgs...)
+		return append(args, "--", prompt)
+	}
+	args := append([]string{"--standalone"}, resume...)
+	if prompt != "" {
+		args = append(args, "--prompt", prompt)
+	}
+	return append(args, extraArgs...)
 }
 
-// opencodeHookEvents maps ynh's canonical events to the hook the generated
-// plugin installs for each. The plugin template switches on these names.
-var opencodeHookEvents = []string{"before_tool", "after_tool", "before_prompt", "on_session_start", "on_stop"}
+// opencodeHookEventMap maps ynh's canonical events to what the generated
+// plugin installs for each: a tool or session hook, or an event of the event
+// stream. The plugin's HOOKS table is keyed by the canonical name.
+var opencodeHookEventMap = map[string]string{
+	"before_tool":      "execute.before",
+	"after_tool":       "execute.after",
+	"before_prompt":    "prompt",
+	"on_stop":          "session.execution.succeeded/failed",
+	"on_session_start": "session.created",
+}
+
+// opencodeUnsupportedHookEvents names the canonical events OpenCode cannot
+// express, each with the reason.
+var opencodeUnsupportedHookEvents = map[string]string{
+	"on_session_end": "OpenCode 2 has no session-end hook and its event stream has no session-end event (sessions persist to be resumed; session.deleted and session.archived are not the end of a run)",
+}
+
+// opencodeMatcherEvents are the native hooks whose matcher the generated
+// plugin honours: the tool hooks, tested against the tool. The session hook
+// and the event-stream subscribers have no tool, so a matcher there is ignored.
+var opencodeMatcherEvents = map[string]bool{"execute.before": true, "execute.after": true}
+
+// Per-hook timeout, in seconds, carried as "timeout" in the generated
+// plugin's HOOKS table, which runs the command with spawnSync and that many
+// seconds (60 when none is set). The plugin enforces it, not OpenCode, so no
+// event has a cap.
+var opencodeHookTimeoutField = "timeout"
+var opencodeHookTimeoutUnsupported = ""
+
+var opencodeHookTimeoutCaps = map[string]int{}
+
+// How on_session_start output reaches the model: it cannot. The hook runs
+// from an event-stream subscriber (session.created), which has no way to add
+// context, and the plugin discards its stdout.
+var opencodeSessionStartContext = "unsupported:on_session_start runs from OpenCode's event stream, which cannot add model context, so its output is discarded"
 
 // opencodeHookEntry is one hook as the generated plugin carries it.
 type opencodeHookEntry struct {
 	Matcher string `json:"matcher,omitempty"`
 	Command string `json:"command"`
+	Timeout int    `json:"timeout,omitempty"`
 }
 
 // GenerateHookConfig returns .opencode/plugins/ynh-hooks.ts, or nil when no
@@ -520,7 +573,8 @@ type opencodeHookEntry struct {
 //     once per turn, as on Claude Code. A matcher is ignored on both.
 //   - a "./" command is a script the harness ships; see SessionHookScriptDir
 //   - only exit 2 blocks, as on Claude Code; the harness is cross-vendor, so a
-//     hook that cannot run (spawn error, killed, timed out after 60s) lets the
+//     hook that cannot run (spawn error, killed, timed out after its timeout,
+//     60s by default) lets the
 //     call proceed, but is reported on stderr with its command, as is any exit
 //     other than 0 and 2
 //   - a matcher is an anchored regex, checked here at generate time; a bad
@@ -533,7 +587,7 @@ type opencodeHookEntry struct {
 //     once per real tool, not twice; a matcher that names "execute" still sees it
 func (o *OpenCode) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
 	doc := map[string][]opencodeHookEntry{}
-	for _, event := range opencodeHookEvents {
+	for _, event := range slices.Sorted(maps.Keys(opencodeHookEventMap)) {
 		for _, h := range hooks[event] {
 			if event == "before_tool" || event == "after_tool" {
 				if err := validateOpencodeMatcher(h.Matcher); err != nil {
@@ -543,6 +597,7 @@ func (o *OpenCode) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[
 			doc[event] = append(doc[event], opencodeHookEntry{
 				Matcher: h.Matcher,
 				Command: pluginRootCommand("YNH_HOOK_ROOT")(h.Command),
+				Timeout: hookTimeoutValue("opencode", event, h.Timeout),
 			})
 		}
 	}
@@ -594,7 +649,7 @@ import { spawnSync } from "node:child_process"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-const HOOKS: Record<string, { matcher?: string; command: string }[]> = __HOOKS__
+const HOOKS: Record<string, { matcher?: string; command: string; timeout?: number }[]> = __HOOKS__
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 
@@ -644,13 +699,13 @@ function claudeInput(input: any): any {
 // Only exit 2 blocks, as on Claude Code: any other failure lets the call
 // proceed. It is reported rather than swallowed, so a hook that never ran is
 // visible.
-function run(command: string, payload: any, cwd: string): { code: number | null; text: string } {
+function run(command: string, payload: any, cwd: string, timeout?: number): { code: number | null; text: string } {
   const r = spawnSync("sh", ["-c", command], {
     cwd,
     input: JSON.stringify(payload),
     encoding: "utf8",
     env: { ...process.env, YNH_HOOK_ROOT: ROOT },
-    timeout: 60000,
+    timeout: (timeout ?? 60) * 1000,
   })
   const text = ((r.stderr || "") || (r.stdout || "")).trim()
   if (r.error || r.status === null) {
@@ -664,7 +719,7 @@ function run(command: string, payload: any, cwd: string): { code: number | null;
 function fire(event: string, tool: string | undefined, payload: any, cwd: string, block: boolean) {
   for (const h of HOOKS[event] ?? []) {
     if (tool !== undefined && !matches(h.matcher, tool)) continue
-    const r = run(h.command, payload, cwd)
+    const r = run(h.command, payload, cwd, h.timeout)
     if (block && r.code === 2) throw new Error(r.text || "blocked by a ynh hook")
   }
 }
@@ -898,3 +953,9 @@ func launchOpencodeArgs(configPath string, args []string) error {
 	dir := filepath.Join(configPath, ".opencode")
 	return opencodeExec(bin, append([]string{opencodeCLI}, args...), opencodeEnviron(os.Environ(), dir))
 }
+
+// OpenCode 2 has no flag that grants a folder beside the project: the
+// positional <directory> names the one directory it starts in, and --help
+// (v2.2.3) lists no add-dir equivalent.
+var opencodeWorkspaceFlag = ""
+var opencodeWorkspaceUnsupported = "the OpenCode CLI has no flag that adds a directory to a session (its <directory> argument names the single project)"
