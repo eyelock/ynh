@@ -255,6 +255,16 @@ MCP servers from included harnesses:
   github (from eyelock/assistants//ynh/github)
 ```
 
+`ynh info` lists every server a run carries in the same form, marking the harness's own:
+
+```
+MCP Servers:
+  docs: https://docs.example.com/mcp  (own)
+  github: github-mcp-server  (from eyelock/assistants//ynh/github)
+```
+
+It reads includes from disk and the cache only, never the network; an include that is not cached yet is named instead, and `ynh update` fills the cache. With `--format json` the same list is the harness's `mcp_servers` (see [reference](reference.md#envelope-and-harness-fields)).
+
 The rules:
 
 - **Transitive.** An included harness's own `includes` are followed, so what it composes comes with it. Dependencies are assembled before the harness that includes them, and the root last, so later sources keep overriding earlier ones. Relative sources in an included harness resolve against that harness's directory, and the allow-list (`allowed_remote_sources`) applies to every include in the chain.
