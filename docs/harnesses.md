@@ -131,10 +131,17 @@ the two must be set.
 | `pick` | no | Specific artifact paths to include. If omitted, includes all. |
 | `instructions` | no | Boolean, default `true`. `false` leaves the include's `instructions.md` / `AGENTS.md` out of the composed instructions; its skills, agents, rules and commands still come through. See [Artifacts](artifacts.md#project-instructions). |
 | `sensors` | no | Boolean, default `true`. `false` drops the sensors the include declares; its skills, agents, rules and commands still come through. See [sensors](sensors.md#taking-an-include-without-its-sensors). |
-| `hooks` | no | `true` to let the included harness's hooks run in the session. Default `false`; a harness reached through another needs it at every link. See [Hooks from Included Harnesses](hooks.md#hooks-from-included-harnesses). |
+| `hooks` | no | `true` to let the included harness's hooks run in the session. Default `false`; a harness reached through another needs it at every link, on every route (see [When routes disagree](#when-routes-disagree)). See [Hooks from Included Harnesses](hooks.md#hooks-from-included-harnesses). |
 | `as` | no | Namespace for the included harness's focuses and profiles, in place of its own name. A harness name: letters, digits, `.`, `_`, `-`, and no `:`. See [Profiles and focuses of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses). |
 
 If the resolved directory holds a harness manifest, the include is a harness: its `mcp_servers` come with it, and, unless `pick` is set, so do its own `includes`. Its sensors come with it too unless the include says `"sensors": false` (see [Sensors from an include](sensors.md#sensors-from-an-include)), and its hooks only when the include says `"hooks": true` (see [Hooks from Included Harnesses](hooks.md#hooks-from-included-harnesses)). Its focuses and profiles are not applied unless you select them by namespace (`--profile github:ci`, `--focus github:triage`). See [Servers from Included Harnesses](mcp.md#servers-from-included-harnesses) and [Profiles and focuses of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses).
+
+#### When routes disagree
+
+A harness can be reached by more than one route: the root includes it directly and through another harness, or two included harnesses both include it. It contributes once. When its routes disagree about it, **the default holds, and the root's own direct include is its final word**. The order of the includes makes no difference.
+
+- **MCP servers default on.** An included harness's `null` removes a server from its dependencies only if every route to the dependency removes it. A direct include by the root removes nothing, so it keeps the server. See [Servers from Included Harnesses](mcp.md#servers-from-included-harnesses).
+- **Hooks default off.** A harness's hooks run only if every route to it says `"hooks": true` at every link. If the root includes the harness directly, that include decides alone: with `"hooks": true` its hooks run, whatever an intermediate harness's include of it says, and without it they do not. See [Hooks from Included Harnesses](hooks.md#hooks-from-included-harnesses).
 
 Local includes are useful when a harness ships bundled artifact directories
 **inside** its root, or when a profile needs to pull in an adjacent
