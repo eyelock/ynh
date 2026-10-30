@@ -147,6 +147,37 @@ tools are then named `<server>`); on `codex` and `cursor` ynh prints one
 `warning:` line on stderr and the worker loads your own servers too. See
 [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
 
+### Delegates
+
+A worker carries the harness's delegates (`delegates_to`) as subagents, as
+`ynh run` does. Each delegate's source is checked against
+`allowed_remote_sources` first; one the allow-list refuses stops the run before
+any worker starts, with an error naming the delegate. A delegate already in the
+cache is used as it is; one that is not is cloned while the run sets up, so **a
+lane's egress must allow the hosts the delegates name** as well as the
+includes'.
+
+Each delegate brings its own [MCP servers](mcp.md#mcp-servers-of-delegates),
+for its subagent only: the worker's main session does not list them, and
+`mcp_isolation` keeps them. Whether they reach the subagent depends on the
+backend:
+
+| Backend | Their MCP servers |
+|---------|-------------------|
+| `claude` | Carried, and passed to Claude with `--agents` |
+| `cursor`, `codex` | Not carried. The delegate's agent file is written without them, and ynh prints one `warning:` line per delegate on stderr |
+
+On `claude`, a delegate server's `${VAR}` references are resolved from the
+delegate's own `env_passthrough`, against the environment `ynh agent run` was
+started in, and their values go to a `.env.ynh` file in the loop's temporary
+config directory, which is removed when the run ends. The worker's own
+environment is built from the root harness's `env_passthrough` only, as above,
+and does not need the delegate's variables: the launcher that starts the server
+reads the file. A reference that is undeclared or unset stops the run before
+any worker starts, with an error naming the delegate, the server and the field.
+[MCP Servers of Delegates](mcp.md#mcp-servers-of-delegates) explains how the
+values are kept off the command line.
+
 ## Redaction
 
 Trajectories are redacted **by value**. At startup ynh takes the values of

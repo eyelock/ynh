@@ -314,7 +314,7 @@ The warning reads:
   warning: delegate probe declares MCP servers (db, probe-srv) that Cursor subagents cannot carry; they are not available to it
 ```
 
-No documented per-agent MCP field exists for the other vendors. Copilot's references document MCP only at the project and user level (`.github/mcp.json`, `~/.copilot/mcp-config.json`), so ynh does not guess at a custom-agent field it has not verified. Codex has no agents directory in a run, so its delegates are not assembled at all.
+No documented per-agent MCP field exists for the other vendors. Copilot's references document MCP only at the project and user level (`.github/mcp.json`, `~/.copilot/mcp-config.json`), so ynh does not guess at a custom-agent field it has not verified. For Codex, a run writes the delegate's agent file to `.codex/agents/` like the others, without its servers.
 
 ### How Claude Code gets them
 

@@ -142,11 +142,11 @@ func ComposeDelegateMCP(del *harness.Harness, included []resolver.ResolveResult,
 				// Referenced in the command or args, which an expansion
 				// leaves alone: held to the same two rules.
 				if !slices.Contains(h.EnvPassthrough, name) {
-					return nil, fmt.Errorf("delegate %s: mcp server %q: args references ${%s}, which is not in %s", del.Name, src.Server, name, plugin.EnvPassthroughField)
+					return nil, fmt.Errorf("delegate %s: mcp server %q: %s references ${%s}, which is not in %s", del.Name, src.Server, refField(s, name), name, plugin.EnvPassthroughField)
 				}
 				var ok bool
 				if v, ok = lookup(name); !ok {
-					return nil, fmt.Errorf("delegate %s: mcp server %q: args references ${%s}, which is not set", del.Name, src.Server, name)
+					return nil, fmt.Errorf("delegate %s: mcp server %q: %s references ${%s}, which is not set", del.Name, src.Server, refField(s, name), name)
 				}
 			}
 			out.Secrets[name] = v
@@ -154,6 +154,15 @@ func ComposeDelegateMCP(del *harness.Harness, included []resolver.ResolveResult,
 		out.Wrapped[src.Server] = true
 	}
 	return out, nil
+}
+
+// refField names the field of s that references ${name} without an
+// expansion having seen it: the command when it does, else the args.
+func refField(s plugin.MCPServer, name string) string {
+	if slices.Contains(plugin.EnvRefNames(s.Command), name) {
+		return "command"
+	}
+	return "args"
 }
 
 // writeEnvFile writes the secrets of one delegate to
