@@ -243,7 +243,14 @@ ynd preview /tmp/ynh-tutorial/preview-harness -v cursor -o /tmp/ynh-tutorial/cur
 cat /tmp/ynh-tutorial/cursor-output/.cursor/hooks.json
 ```
 
-Expected:
+Expected: the same Cursor matcher warning first, on stderr, and the line `ynd preview` prints when it writes to a directory:
+
+```
+  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+Preview written to /tmp/ynh-tutorial/cursor-output
+```
+
+Then the hooks file:
 
 ```json
 {
