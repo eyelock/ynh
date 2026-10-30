@@ -612,8 +612,8 @@ type opencodeHookEntry struct {
 //     60s by default) lets the
 //     call proceed, but is reported on stderr with its command, as is any exit
 //     other than 0 and 2
-//   - a matcher is an anchored regex, checked here at generate time; a bad
-//     one is an error naming it
+//   - a matcher is an anchored JavaScript regex, checked here at generate
+//     time (see validateOpencodeMatcher); a bad one is an error naming it
 //   - MCP tools: the model calls them inside Code Mode's "execute" tool, and
 //     OpenCode fires the tool hooks for the wrapper AND for each nested tool,
 //     the latter under the id "<server>_<tool>" (CONFIRMED: echo_ynh_ping). A
@@ -649,9 +649,14 @@ func (o *OpenCode) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[
 
 // validateOpencodeMatcher rejects a tool matcher that is not a valid regular
 // expression, at generate time. The plugin tests it as an anchored JavaScript
-// regex; a bad one used to fall back silently to an exact-name compare, so the
-// hook quietly stopped matching. RE2 is stricter than JavaScript (no
-// lookahead), so anything it accepts the plugin accepts.
+// regex. RE2 rejects what JavaScript adds (lookaround, backreferences), but it
+// also accepts groups JavaScript rejects with "Invalid group": inline flags
+// such as (?i) and (?s:...), and Go's (?P<name>...). So a matcher must also
+// pass RE2 with no "(?" group other than the plain (?:...). RE2 syntax that
+// JavaScript reads differently without throwing ([[:alpha:]], \z, \Q...\E)
+// is not caught here; the plugin compiles every matcher once at setup, so one
+// that throws there is reported and matches nothing rather than blocking
+// every tool.
 func validateOpencodeMatcher(m string) error {
 	if m == "" || m == "*" {
 		return nil
@@ -659,7 +664,41 @@ func validateOpencodeMatcher(m string) error {
 	if _, err := regexp.Compile("^(?:" + m + ")$"); err != nil {
 		return fmt.Errorf("invalid matcher %q: %w", m, err)
 	}
+	if i := opencodeSpecialGroup(m); i >= 0 {
+		return fmt.Errorf("invalid matcher %q: the group at offset %d is not JavaScript; only (?:...) is allowed", m, i)
+	}
 	return nil
+}
+
+// opencodeSpecialGroup returns the offset of the first "(?" group in m that is
+// not "(?:", or -1. An escaped "\(" and a "(" inside a character class are
+// literals, not groups. m has already compiled as RE2, so it is well formed.
+func opencodeSpecialGroup(m string) int {
+	inClass := false
+	for i := 0; i < len(m); i++ {
+		switch c := m[i]; {
+		case c == '\\':
+			i++ // the escaped byte is a literal
+		case inClass:
+			if c == ']' {
+				inClass = false
+			}
+		case c == '[':
+			inClass = true
+			// A "]" first in the class (after an optional "^") is a literal.
+			if i+1 < len(m) && m[i+1] == '^' {
+				i++
+			}
+			if i+1 < len(m) && m[i+1] == ']' {
+				i++
+			}
+		case c == '(' && i+1 < len(m) && m[i+1] == '?':
+			if i+2 >= len(m) || m[i+2] != ':' {
+				return i
+			}
+		}
+	}
+	return -1
 }
 
 // SessionHookScriptDir puts a hook's "./" script in .opencode/, beside the
@@ -715,12 +754,32 @@ function namesFor(tool: string): string[] {
   return names
 }
 
+// Tool matchers, compiled once at setup. ynh checks them when it generates
+// this file, but one JavaScript still cannot compile would throw inside the
+// tool hook and block every call; instead it is reported once and matches
+// nothing, so its hook never runs.
+const MATCHERS = new Map<string, RegExp | null>()
+
+function compileMatchers() {
+  for (const event of ["before_tool", "after_tool"]) {
+    for (const h of HOOKS[event] ?? []) {
+      if (!h.matcher || h.matcher === "*" || MATCHERS.has(h.matcher)) continue
+      try {
+        MATCHERS.set(h.matcher, new RegExp("^(?:" + h.matcher + ")$"))
+      } catch (e: any) {
+        MATCHERS.set(h.matcher, null)
+        console.error("[ynh hook] " + h.command + ": matcher " + JSON.stringify(h.matcher) + " is not a valid JavaScript regex, so the hook never runs (" + (e?.message ?? e) + ")")
+      }
+    }
+  }
+}
+
 function matches(matcher: string | undefined, tool: string): boolean {
   // "execute" is Code Mode's wrapper: the tools it runs fire their own hooks,
   // so a hook with no matcher is not also run for the wrapper.
   if (!matcher || matcher === "*") return tool !== "execute"
-  const re = new RegExp("^(?:" + matcher + ")$")
-  return namesFor(tool).some((n) => re.test(n))
+  const re = MATCHERS.get(matcher)
+  return !!re && namesFor(tool).some((n) => re.test(n))
 }
 
 function claudeInput(input: any): any {
@@ -762,6 +821,7 @@ function fire(event: string, tool: string | undefined, payload: any, cwd: string
 export default Plugin.define({
   id: "ynh.hooks",
   setup(ctx: any) {
+    compileMatchers()
     const cwd: string = ctx.location?.directory ?? process.cwd()
     const toolPayload = (x: any) => ({
       session_id: x.sessionID,
