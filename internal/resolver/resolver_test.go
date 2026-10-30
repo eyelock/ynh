@@ -861,3 +861,33 @@ func TestResolve_RelativeGitIncludeMatchedAgainstHarnessDir(t *testing.T) {
 		t.Fatalf("Resolve error = %v, want it to contain %q", err, want)
 	}
 }
+
+func TestResolve_LocalInclude_InstructionsLabelAndOptOut(t *testing.T) {
+	harnessDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(harnessDir, "extras", "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	off := false
+	p := &harness.Harness{
+		Name: "h",
+		Dir:  harnessDir,
+		Includes: []harness.Include{
+			{GitSource: harness.GitSource{Local: "extras"}},
+			{GitSource: harness.GitSource{Local: "extras", Path: "sub"}, Instructions: &off},
+		},
+	}
+	results, err := Resolve(p, nil)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	tests := []struct {
+		label string
+		off   bool
+	}{{"extras", false}, {"extras/sub", true}}
+	for i, tt := range tests {
+		c := results[i].Content
+		if c.Label != tt.label || c.NoInstructions != tt.off {
+			t.Errorf("include %d: Label=%q NoInstructions=%v, want %q %v", i, c.Label, c.NoInstructions, tt.label, tt.off)
+		}
+	}
+}

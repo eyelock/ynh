@@ -666,6 +666,10 @@
           "sensors": {
             "type": "boolean",
             "description": "Whether the sensors this include declares travel into the consumer. Defaults to true. false adopts the include's skills, agents, rules and commands without its gate."
+          },
+          "instructions": {
+            "type": "boolean",
+            "description": "Whether the include's instructions file (instructions.md or AGENTS.md) is composed into the harness's instructions, as a section headed by the include's source. Defaults to true. false adopts the include's skills, agents, rules and commands without its instructions."
           }
         },
         "oneOf": [

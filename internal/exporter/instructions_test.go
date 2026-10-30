@@ -6,8 +6,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-
-	"github.com/eyelock/ynh/internal/resolver"
 )
 
 // fakeGenerator stands in for a vendor adapter. WriteSystemPrompt takes the
@@ -19,17 +17,6 @@ func (f fakeGenerator) GenerateSystemPrompt(content []byte) map[string][]byte {
 		return f.files
 	}
 	return map[string][]byte{"AGENTS.md": content}
-}
-
-func writeFile(t *testing.T, path, body string) string {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	return path
 }
 
 func lsRel(t *testing.T, root string) []string {
@@ -57,7 +44,7 @@ func lsRel(t *testing.T, root string) []string {
 }
 
 func TestWriteSystemPrompt_WritesWhatTheAdapterReturns(t *testing.T) {
-	src := writeFile(t, filepath.Join(t.TempDir(), "instructions.md"), "# Rules\n")
+	src := []byte("# Rules\n")
 	out := t.TempDir()
 
 	gen := fakeGenerator{files: map[string][]byte{
@@ -85,7 +72,7 @@ func TestWriteSystemPrompt_WritesWhatTheAdapterReturns(t *testing.T) {
 }
 
 func TestWriteSystemPrompt_PassesFileContentThrough(t *testing.T) {
-	src := writeFile(t, filepath.Join(t.TempDir(), "instructions.md"), "distinctive body\n")
+	src := []byte("distinctive body\n")
 	out := t.TempDir()
 
 	if err := WriteSystemPrompt(src, out, fakeGenerator{}); err != nil {
@@ -100,20 +87,10 @@ func TestWriteSystemPrompt_PassesFileContentThrough(t *testing.T) {
 	}
 }
 
-func TestWriteSystemPrompt_MissingInstructionsIsAnError(t *testing.T) {
-	err := WriteSystemPrompt(filepath.Join(t.TempDir(), "absent.md"), t.TempDir(), fakeGenerator{})
-	if err == nil {
-		t.Fatal("expected an error for a missing instructions file")
-	}
-	if !strings.Contains(err.Error(), "reading instructions") {
-		t.Errorf("error should say what it was doing, got: %v", err)
-	}
-}
-
 // Merged export writes one tree for several vendors. Files they share are
 // deduplicated; files unique to one vendor must all survive.
 func TestWriteMergedSystemPrompt_UnionsVendorFiles(t *testing.T) {
-	src := writeFile(t, filepath.Join(t.TempDir(), "instructions.md"), "shared\n")
+	src := []byte("shared\n")
 	out := t.TempDir()
 
 	if err := WriteMergedSystemPrompt(src, out, []string{"claude", "codex", "cursor"}); err != nil {
@@ -143,7 +120,7 @@ func TestWriteMergedSystemPrompt_UnionsVendorFiles(t *testing.T) {
 // deliberate choice and worth pinning: a typo in a vendor name silently
 // contributes nothing rather than stopping the build.
 func TestWriteMergedSystemPrompt_SkipsUnknownVendor(t *testing.T) {
-	src := writeFile(t, filepath.Join(t.TempDir(), "instructions.md"), "x\n")
+	src := []byte("x\n")
 	out := t.TempDir()
 
 	if err := WriteMergedSystemPrompt(src, out, []string{"claude", "nosuchvendor"}); err != nil {
@@ -155,7 +132,7 @@ func TestWriteMergedSystemPrompt_SkipsUnknownVendor(t *testing.T) {
 }
 
 func TestWriteMergedSystemPrompt_NoVendorsWritesNothing(t *testing.T) {
-	src := writeFile(t, filepath.Join(t.TempDir(), "instructions.md"), "x\n")
+	src := []byte("x\n")
 	out := t.TempDir()
 
 	if err := WriteMergedSystemPrompt(src, out, nil); err != nil {
@@ -163,57 +140,6 @@ func TestWriteMergedSystemPrompt_NoVendorsWritesNothing(t *testing.T) {
 	}
 	if got := lsRel(t, out); len(got) != 0 {
 		t.Errorf("no vendors should write no files, got %v", got)
-	}
-}
-
-func TestWriteMergedSystemPrompt_MissingInstructionsIsAnError(t *testing.T) {
-	err := WriteMergedSystemPrompt(filepath.Join(t.TempDir(), "gone.md"), t.TempDir(), []string{"claude"})
-	if err == nil {
-		t.Fatal("expected an error for a missing instructions file")
-	}
-}
-
-// DiscoverInstructions prefers instructions.md over AGENTS.md within one
-// source, and lets a later source override an earlier one, so a harness's own
-// instructions beat those of anything it includes.
-func TestDiscoverInstructions(t *testing.T) {
-	early := t.TempDir()
-	late := t.TempDir()
-	writeFile(t, filepath.Join(early, "AGENTS.md"), "early\n")
-	writeFile(t, filepath.Join(late, "instructions.md"), "late\n")
-
-	got := DiscoverInstructions([]resolver.ResolvedContent{
-		{BasePath: early}, {BasePath: late},
-	})
-	if got != filepath.Join(late, "instructions.md") {
-		t.Errorf("later source should win, got %q", got)
-	}
-
-	// Reversed, the later source has only AGENTS.md and still wins.
-	got = DiscoverInstructions([]resolver.ResolvedContent{
-		{BasePath: late}, {BasePath: early},
-	})
-	if got != filepath.Join(early, "AGENTS.md") {
-		t.Errorf("later source should win regardless of filename, got %q", got)
-	}
-}
-
-func TestDiscoverInstructions_PrefersInstructionsOverAgents(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "AGENTS.md"), "agents\n")
-	writeFile(t, filepath.Join(dir, "instructions.md"), "instructions\n")
-
-	if got := DiscoverInstructions([]resolver.ResolvedContent{{BasePath: dir}}); got != filepath.Join(dir, "instructions.md") {
-		t.Errorf("instructions.md should win within one source, got %q", got)
-	}
-}
-
-func TestDiscoverInstructions_NoneFound(t *testing.T) {
-	if got := DiscoverInstructions([]resolver.ResolvedContent{{BasePath: t.TempDir()}}); got != "" {
-		t.Errorf("expected empty string when nothing is found, got %q", got)
-	}
-	if got := DiscoverInstructions(nil); got != "" {
-		t.Errorf("expected empty string for no content, got %q", got)
 	}
 }
 
