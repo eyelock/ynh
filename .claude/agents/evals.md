@@ -372,7 +372,9 @@ sandbox's `~/.gitconfig` so that git serves them in place of GitHub, through
 `url.<local repository>.insteadOf` entries for both the `git@github.com:` form
 ynh clones with and the `https://github.com/` form. Because only the transport
 changes, the ids ynh derives (`github.com/eyelock/assistants/david`), the
-allow-list checks and every line of output are what a reader sees.
+allow-list checks and every line of output are what a reader sees, as long as
+each stand-in matches the real repository (see [Stand-ins match the real
+harnesses](#stand-ins-match-the-real-harnesses)).
 `GIT_ALLOW_PROTOCOL=file` still refuses any other repository, so a command that
 would reach GitHub for something not served here fails instead of connecting.
 
@@ -382,7 +384,7 @@ which is why this is done below the commands and not in them.
 
 | Repository | What the tutorials take from it |
 |------------|---------------------------------|
-| `eyelock/assistants` | `skills/<category>/skills/<name>` (`dev` has seven, `tech` three, `infra` two, `pause` two), the harnesses `ynh/david` (four includes), `ynh/planner`, `ynh/tester` and `ynh/researcher`, and `plugins/media-management`. Branch `main` and tag `v1.0.0` |
+| `eyelock/assistants` | `skills/<category>/skills/<name>` (`dev` has nine, `tech` three, `infra` four, `pause` two), the harnesses `ynh/david` (four includes), `ynh/planner`, `ynh/tester` and `ynh/researcher`, each with the real one's name, description, includes and delegates, and `plugins/media-management`. Branch `main` and tag `v1.0.0` |
 | `anthropics/skills` | `skills/frontend-design`, `skills/pdf`, `skills/docx` |
 | `vercel-labs/skills` | `skills/find-skills`, `skills/vercel-deploy` |
 | `agentplugins/agent-plugins-example` | A stand-in for the specification project's reference package: a root `plugin.json`, one skill (`migrate-agent-plugin`), `README.md` and `LICENSE` |
@@ -393,6 +395,30 @@ When it names a new repository, add that there too: `make check-vendor-parity`
 fails on a `github.com/<org>/<repo>` in a tutorial command that nothing serves
 (check E), and builds the fixtures once to prove the script works. The manual
 test plan does not use the fixtures, and its sandbox does not serve them.
+
+#### Stand-ins match the real harnesses
+
+An eval compares tutorial output only with the stand-ins, so it cannot notice
+a stand-in that has drifted from the real harness: the stand-in `ynh/tester`
+once had one include while the real one had two, and a tutorial block printing
+the stand-in's count passed review. `make check-eval-stand-ins`
+(`scripts/eval-stand-ins.sh`) closes that gap. It builds the stand-ins, clones
+each repository that has stand-in harnesses from GitHub (its default branch,
+which is what `ynh install` fetches), and compares every stand-in harness with
+the real one: name, description, `default_vendor`, and each include and
+delegate with its git address, path, ref and picks. It prints a diff for each
+harness that differs and fails. Version, `$schema` and file layout are not
+compared.
+
+It needs the network, so it is not part of `make check` and an eval does not
+run it. It runs daily, and on any change to the stand-ins, in
+`.github/workflows/eval-stand-ins.yml`. Run it yourself before an eval that
+leans on a stand-in harness's output.
+
+When it fails, **update the stand-in** in `scripts/eval-remotes.sh` to match
+the real harness, adding any skill a new pick needs, and then any tutorial
+output that changes with it. Never change the real harness to suit the evals:
+the tutorials document what a reader installs.
 
 ### Run each block
 
