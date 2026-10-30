@@ -238,4 +238,4 @@ Vendor plugin formats evolve frequently. The `vendor-adapters` skill (`.claude/s
 
 ## Adding a New Vendor
 
-See [CONTRIBUTING.md](https://github.com/eyelock/ynh/blob/main/.github/CONTRIBUTING.md) for how to implement a vendor adapter.
+Adding a vendor touches more than its adapter file. The [`add-vendor-adapter`](https://github.com/eyelock/ynh/blob/main/.claude/skills/add-vendor-adapter/SKILL.md) skill is the checklist of every file to change, and [CONTRIBUTING.md](https://github.com/eyelock/ynh/blob/main/.github/CONTRIBUTING.md#vendor-adapters) describes the `Adapter` interface and the launch patterns.
