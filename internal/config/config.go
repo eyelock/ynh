@@ -23,7 +23,7 @@ var Version = "dev"
 //
 // Consumers (for example) read this via `ynh version --format json` and gate
 // features on it with their own `minimumYNHCapabilities` constant.
-const CapabilitiesVersion = "0.9.0"
+const CapabilitiesVersion = "0.10.0"
 
 // features names the capabilities a consumer can gate on without parsing a
 // version, reported by `ynh version --format json` and `ynd version --format
@@ -33,9 +33,10 @@ const CapabilitiesVersion = "0.9.0"
 // never renamed or removed, and consumers tolerate names they do not know.
 // Adding one is additive and does not bump CapabilitiesVersion.
 var features = []string{
-	"agent-run-fetches-includes", // a run fetches its git includes at setup (ynf #130)
-	"agent-run-harness-path",     // `ynh agent run --harness` takes a path (#564)
-	"workspace-folders",          // manifest `workspace`, workspace_roots, YNH_WORKSPACE_ROOTS, `ynh run --no-workspace` (#624)
+	"agent-run-fetches-includes",        // a run fetches its git includes at setup (ynf #130)
+	"agent-run-harness-path",            // `ynh agent run --harness` takes a path (#564)
+	"trust-counts-composed-mcp-servers", // `ynh trust` mcp_servers lists servers from includes (source) and delegates (delegate)
+	"workspace-folders",                 // manifest `workspace`, workspace_roots, YNH_WORKSPACE_ROOTS, `ynh run --no-workspace` (#624)
 }
 
 // Features returns a copy of the feature names, sorted.

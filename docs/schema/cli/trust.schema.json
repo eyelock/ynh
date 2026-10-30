@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/cli/trust.schema.json",
   "title": "ynh trust --format json",
   "description": "Output of `ynh trust --format json`. Bare array, one entry per installed harness, same shape as `ynh trust show`. Envelope retrofit deferred, matching the other Phase 3 commands. Hooks and MCP servers are covered as in trust show.",
-  "x-capabilities": "0.8",
+  "x-capabilities": "0.10",
   "$defs": {
     "Executable": {
       "type": "object",

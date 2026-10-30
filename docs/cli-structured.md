@@ -124,7 +124,7 @@ Both `ynh version --format json` and `ynd version --format json` emit:
 {
   "version": "0.5.0",
   "capabilities": "0.6.0",
-  "features": ["agent-run-fetches-includes", "agent-run-harness-path", "workspace-folders"]
+  "features": ["agent-run-fetches-includes", "agent-run-harness-path", "trust-counts-composed-mcp-servers", "workspace-folders"]
 }
 ```
 
@@ -133,9 +133,11 @@ Both `ynh version --format json` and `ynd version --format json` emit:
 
 `capabilities` is a source constant (`internal/config.CapabilitiesVersion`), so developer builds report the contract they actually support — not whatever tag the repo was last released at. Bumped when consumer-visible contracts change; additive fields older clients can ignore do **not** bump it.
 
-- `features`: optional array of strings naming capabilities a consumer can gate on without comparing versions, for example `agent-run-harness-path` (`ynh agent run --harness` takes a path) `agent-run-fetches-includes` (a run fetches its git includes at setup) and `workspace-folders` (a harness can request workspace folders that the operator's allow-list or trust grants; `ynh trust show --format json` reports them in `workspace`). Names are stable, kebab-case and **only ever added**: a name that shipped is never renamed or removed. Consumers must tolerate names they do not know. The list is sorted and declared in one place, `internal/config.Features`. Adding a name is additive and does not bump `capabilities`.
+- `features`: optional array of strings naming capabilities a consumer can gate on without comparing versions, for example `agent-run-harness-path` (`ynh agent run --harness` takes a path) `agent-run-fetches-includes` (a run fetches its git includes at setup), `trust-counts-composed-mcp-servers` (`ynh trust` and `ynh trust show` list in `mcp_servers` the servers of included harnesses, each with its `source`, and those carried by delegates, each with its `delegate`; a delegate's servers are not the session's) and `workspace-folders` (a harness can request workspace folders that the operator's allow-list or trust grants; `ynh trust show --format json` reports them in `workspace`). Names are stable, kebab-case and **only ever added**: a name that shipped is never renamed or removed. Consumers must tolerate names they do not know. The list is sorted and declared in one place, `internal/config.Features`. Adding a name is additive and does not bump `capabilities`.
 
 Downstream tooling (for example) reads `capabilities` and refuses to run against an older ynh than it requires.
+
+Capabilities `0.10.0` is a breaking bump. `ynh info`'s harness carries `mcp_servers`, the servers a run would get with its includes composed, as a required field (with an optional `mcp_servers_error` when an include could not be read), and the trajectory's `session_start` no longer writes the deprecated `model` (read `model_requested`, and `worker_model` for what ran). `ynh trust` and `ynh trust show` are not enveloped, so the change in what their `mcp_servers` counts is reported by the `trust-counts-composed-mcp-servers` feature instead.
 
 ## Scope
 
@@ -200,9 +202,8 @@ completely. Each is absent when unknown, and `model` is never filled in from
 `model_requested`. In the trajectory, `session_start` and `session_resumed`
 carry `model_requested`, and a new `worker_model` event records the model that
 ran, since the header is written before the worker reports one.
-`session_start.model` is still written, as a deprecated copy of
-`model_requested`, until a release that bumps the capabilities version
-([#443](https://github.com/eyelock/ynh/issues/443)). See
+`session_start.model`, a deprecated copy of `model_requested`, was removed at
+capabilities `0.10.0` ([#443](https://github.com/eyelock/ynh/issues/443)). See
 [Agent](agent.md#the-model).
 
 A convergence verifier's `sensor_result` in the trajectory used to carry

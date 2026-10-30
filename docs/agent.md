@@ -628,9 +628,8 @@ harness SHA and base commit reproduces the request. It cannot carry the model
 that ran: the header is written before the worker has said anything. A
 `worker_model` event records that instead, when each worker process first
 reports a model and again whenever it reports a different one.
-`session_start` still writes `model` too, as a copy of `model_requested`, so
-no field disappears from the header. It is deprecated and goes in a release
-that bumps the capabilities version; read `model_requested` instead.
+Until capabilities `0.10.0`, `session_start` also wrote `model`, a deprecated
+copy of `model_requested`. It is no longer written; read `model_requested`.
 
 ### Effort
 
@@ -711,7 +710,7 @@ a run without parsing terminal output.
 
 | Event | Emitted when |
 |---|---|
-| `session_start` | Run begins. Carries the model requested (`model_requested`, and the deprecated `model` copy of it), the effort requested (`effort_requested`), ynh version, harness version, base commit, the `--auto-approve` level, and the resolved budgets with their sources |
+| `session_start` | Run begins. Carries the model requested (`model_requested`), the effort requested (`effort_requested`), ynh version, harness version, base commit, the `--auto-approve` level, and the resolved budgets with their sources |
 | `session_resumed` | Resumed run begins, before the first new turn. Carries this process's `--auto-approve` level, model requested and effort requested |
 | `worker_model` | The worker reported the model it runs on: once per worker process, and again if it reports another |
 | `plan` / `plan_revised` | Plan produced or revised |

@@ -188,13 +188,15 @@ func TestRunLoop_ReportsModelAndModelRequested(t *testing.T) {
 				}
 			}
 
-			// The header is written before the worker reports a model, so
-			// both keys hold the request: model is its deprecated copy.
+			// The header is written before the worker reports a model, so it
+			// holds the request only. Its deprecated model copy went at
+			// capabilities 0.10.0 (#443).
 			start := readSessionStart(t, opts.EmitJSONL)
-			for _, key := range []string{"model_requested", "model"} {
-				if got, present := start[key]; (tt.wantRequested == nil) == present || (present && got != tt.wantRequested) {
-					t.Errorf("session_start %s = %v (present %v), want %v", key, got, present, tt.wantRequested)
-				}
+			if got, present := start["model_requested"]; (tt.wantRequested == nil) == present || (present && got != tt.wantRequested) {
+				t.Errorf("session_start model_requested = %v (present %v), want %v", got, present, tt.wantRequested)
+			}
+			if got, present := start["model"]; present {
+				t.Errorf("session_start model = %v, want the key absent (removed in 0.10.0, #443)", got)
 			}
 			var reported []string
 			for _, e := range readTrajectoryFile(t, opts.EmitJSONL) {

@@ -587,7 +587,6 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			Backend:         wb.Name(),
 			Task:            opts.Task,
 			ModelRequested:  opts.Model,
-			Model:           opts.Model,
 			EffortRequested: opts.Effort,
 			AutoApprove:     opts.AutoApprove,
 			YnhVersion:      config.Version,

@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/cli/trust-show.schema.json",
   "title": "ynh trust show --format json",
   "description": "Output of `ynh trust show <harness> --format json`. Everything a harness can get executed: sensor commands (through /bin/sh -c), hook commands and MCP servers (through the vendor CLI), each as resolved for a run at the top level and in every profile, with the provenance it was installed from and whether the operator has accepted this exact set. A sensor's command running the project's own tools is the feature; the gap this reports is that the harness lives in ~/.ynh/harnesses/ while its sensors run against a tree elsewhere, so the executing code is nowhere near the directory the operator is looking at. Reporting only: nothing refuses to run because a harness is unreviewed.",
-  "x-capabilities": "0.8",
+  "x-capabilities": "0.10",
   "$defs": {
     "Executable": {
       "type": "object",
