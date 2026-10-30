@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -690,5 +691,141 @@ func TestCmdInfoText_LocalIncludes(t *testing.T) {
 				t.Errorf("Includes section:\ngot  %q\nwant %q\nfull output:\n%s", got, tt.want, stdout.String())
 			}
 		})
+	}
+}
+
+// installInfoIncludeChain installs local/root, which includes harness mid,
+// which includes harness leaf, each declaring an MCP server of its own. root
+// also replaces a server mid declares and removes one leaf declares.
+func installInfoIncludeChain(t *testing.T, home string) {
+	t.Helper()
+	src := t.TempDir()
+	leaf := filepath.Join(src, "leaf")
+	mid := filepath.Join(src, "mid")
+	for dir, body := range map[string]string{
+		leaf: `{"name": "leaf", "version": "0.1.0", "mcp_servers": {
+			"leaf-db": {"command": "leaf-mcp"},
+			"dropped": {"command": "dropped-mcp"}
+		}}`,
+		mid: `{"name": "mid", "version": "0.1.0", "includes": [{"local": "` + leaf + `"}],
+			"mcp_servers": {
+				"mid-api": {"url": "https://mid.example.com/mcp"},
+				"shadowed": {"command": "mid-shadowed"}
+			}}`,
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := writePluginJSONFile(dir, []byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	installListTestHarness(t, home, "root", `{"name": "root", "version": "0.1.0",
+		"includes": [{"local": "`+mid+`"}],
+		"mcp_servers": {
+			"own": {"command": "own-mcp"},
+			"shadowed": {"command": "root-shadowed"},
+			"dropped": null
+		}}`)
+}
+
+// #548 item 3: info lists the servers a run carries, from every harness the
+// includes reach, with where each came from.
+func TestCmdInfoText_IncludedMCPServersWithProvenance(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installInfoIncludeChain(t, home)
+
+	var stdout bytes.Buffer
+	if err := cmdInfoTo([]string{"local/root"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+	got := infoSection(stdout.String(), "MCP Servers")
+	want := []string{
+		"  leaf-db: leaf-mcp  (from mid > leaf)",
+		"  mid-api: https://mid.example.com/mcp  (from mid)",
+		"  own: own-mcp  (own)",
+		"  shadowed: root-shadowed  (own)",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("MCP Servers section:\ngot  %q\nwant %q\nfull output:\n%s", got, want, stdout.String())
+	}
+}
+
+func TestCmdInfoJSON_IncludedMCPServersWithProvenance(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installInfoIncludeChain(t, home)
+
+	var stdout bytes.Buffer
+	if err := cmdInfoTo([]string{"local/root", "--format", "json"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+	var env infoEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, stdout.String())
+	}
+	want := []infoMCPServer{
+		{Name: "leaf-db", Source: "mid > leaf", Command: "leaf-mcp"},
+		{Name: "mid-api", Source: "mid", URL: "https://mid.example.com/mcp"},
+		{Name: "own", Source: "root", Command: "own-mcp"},
+		{Name: "shadowed", Source: "root", Command: "root-shadowed"},
+	}
+	if !slices.Equal(env.Harness.MCPServers, want) {
+		t.Errorf("mcp_servers:\ngot  %+v\nwant %+v", env.Harness.MCPServers, want)
+	}
+	if env.Harness.MCPServersError != "" {
+		t.Errorf("mcp_servers_error = %q, want none", env.Harness.MCPServersError)
+	}
+
+	var v any
+	if err := json.Unmarshal(stdout.Bytes(), &v); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := clischema.Get("info")
+	if err != nil {
+		t.Fatalf("Get info schema: %v", err)
+	}
+	if err := schema.Validate(v); err != nil {
+		t.Errorf("info JSON does not validate: %v\noutput: %s", err, stdout.String())
+	}
+}
+
+// An include that is not in the cache is not fetched: info lists the
+// harness's own servers and says the included ones are missing, rather than
+// presenting a partial list as complete.
+func TestCmdInfo_UncachedIncludeIsReportedNotFetched(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "remote", `{"name": "remote", "version": "0.1.0",
+		"includes": [{"git": "github.com/eyelock/does-not-exist-ynh-test"}],
+		"mcp_servers": {"own": {"command": "own-mcp"}}}`)
+
+	var text bytes.Buffer
+	if err := cmdInfoTo([]string{"local/remote"}, &text, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+	got := infoSection(text.String(), "MCP Servers")
+	if len(got) != 2 || got[0] != "  own: own-mcp  (own)" ||
+		!strings.HasPrefix(got[1], "  servers from includes not shown: ") {
+		t.Errorf("MCP Servers section: %q", got)
+	}
+
+	var js bytes.Buffer
+	if err := cmdInfoTo([]string{"local/remote", "--format", "json"}, &js, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo json: %v", err)
+	}
+	var env infoEnvelope
+	if err := json.Unmarshal(js.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	if len(env.Harness.MCPServers) != 1 || env.Harness.MCPServersError == "" {
+		t.Errorf("mcp_servers %+v, error %q: want own server and an error", env.Harness.MCPServers, env.Harness.MCPServersError)
+	}
+	var v any
+	_ = json.Unmarshal(js.Bytes(), &v)
+	schema, _ := clischema.Get("info")
+	if err := schema.Validate(v); err != nil {
+		t.Errorf("info JSON does not validate: %v", err)
 	}
 }

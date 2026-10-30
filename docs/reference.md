@@ -220,6 +220,8 @@ Per-harness fields:
 | `artifacts` | (`ynh ls` only) Counts: `skills`, `agents`, `rules`, `commands` |
 | `includes` | Array of include objects: `git`, `ref_installed`, `ref_available`, `is_pinned`, optional `path`, `pick`. A `local` include has an empty `git` and carries `local`, its path as declared in the manifest |
 | `delegates_to` | Array of delegate objects: `git`, `ref_installed`, `ref_available`, `is_pinned`, optional `path` |
+| `mcp_servers` | (`ynh info` only) The MCP servers a run carries, sorted by name: those of every harness the includes reach, then the harness's own. Each has `name`, `source` (`root` for the harness's own, or the include chain that supplied it, such as `eyelock/a > eyelock/b//path`, as `ynd preview` names it) and the `command` or `url` as written. Includes are read from disk and the cache only, never fetched |
+| `mcp_servers_error` | (`ynh info` only) Present when the includes' servers could not be read (an include not in the cache, or two includes declaring one server differently). `mcp_servers` then lists only the harness's own; run `ynh update` to fill the cache |
 | `manifest` | (`ynh info` only) Raw `.agents/harness/plugin.json` body, JSON-compacted |
 
 #### `--check-updates` flag

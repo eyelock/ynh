@@ -81,6 +81,15 @@
           "type": "array",
           "items": {"$ref": "#/$defs/Delegate"}
         },
+        "mcp_servers": {
+          "type": "array",
+          "description": "The MCP servers a run of the harness carries, sorted by name: those of every harness its includes reach, then its own. Includes are resolved from disk and the cache only, never the network.",
+          "items": {"$ref": "#/$defs/ComposedMCPServer"}
+        },
+        "mcp_servers_error": {
+          "type": "string",
+          "description": "Present when the servers of includes could not be read (an include not in the cache, or two includes declaring one server differently); mcp_servers then lists only the harness's own."
+        },
         "manifest": {
           "type": "object",
           "description": "Raw plugin.json (passed through unmodified). Schema available at docs/schema/plugin.schema.json — not validated by this envelope.",
@@ -89,8 +98,20 @@
       },
       "required": [
         "id", "name", "kind", "version_installed", "default_vendor", "path",
-        "is_pinned", "includes", "delegates_to", "manifest"
+        "is_pinned", "includes", "delegates_to", "mcp_servers", "manifest"
       ],
+      "additionalProperties": false
+    },
+    "ComposedMCPServer": {
+      "type": "object",
+      "description": "One MCP server of a run, with where it was declared.",
+      "properties": {
+        "name": {"type": "string"},
+        "source": {"type": "string", "description": "\"root\" for a server the harness declares itself, or the include chain that supplied it, as ynd preview names it (\"eyelock/a > eyelock/b//path\")."},
+        "command": {"type": "string", "description": "The stdio server's command, as written."},
+        "url": {"type": "string", "description": "The HTTP server's URL, as written."}
+      },
+      "required": ["name", "source"],
       "additionalProperties": false
     },
     "InstalledFrom": {
