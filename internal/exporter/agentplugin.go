@@ -109,6 +109,9 @@ func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Ha
 
 		// Hooks, in the vendor's plugin shape (commands anchored at the
 		// plugin root, #498), at the place it reads them.
+		if len(p.Hooks) > 0 {
+			result.Warnings = append(result.Warnings, vendor.ExportHookWarnings(name, p.Hooks)...)
+		}
 		if len(p.Hooks) > 0 && layout.Hooks != "" {
 			generate := a.GenerateHookConfig
 			if pg, ok := a.(PluginHookGenerator); ok {
@@ -140,7 +143,9 @@ func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Ha
 			if pg, ok := a.(PluginMCPGenerator); ok {
 				generate = pg.GeneratePluginMCPConfig
 			}
-			files, err := generate(p.MCPServers)
+			servers, anchorWarnings := vendor.AnchorMCPServers(name, p.MCPServers)
+			result.Warnings = append(result.Warnings, anchorWarnings...)
+			files, err := generate(servers)
 			if err != nil {
 				return nil, fmt.Errorf("%s MCP config: %w", name, err)
 			}
@@ -188,6 +193,13 @@ func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Ha
 			return nil, err
 		}
 		result.Warnings = append(result.Warnings, warnings...)
+		// The portable mcp.json names a ./ command as the specification
+		// defines it, so the script it names must be in the package.
+		scriptWarnings, err := assembler.CopyMCPScripts(p.Dir, out, p.MCPServers, "the plugin")
+		if err != nil {
+			return nil, err
+		}
+		result.Warnings = append(result.Warnings, scriptWarnings...)
 	}
 
 	// A harness name starts with an alphanumeric (harness.LoadDir enforces

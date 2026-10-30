@@ -649,15 +649,29 @@ func ExpandPluginPlaceholders(servers map[string]MCPServer, root, data string, p
 type HookEntry struct {
 	Matcher string `json:"matcher,omitempty"` // tool name pattern (optional)
 	Command string `json:"command"`           // shell command to run
+	// Timeout is the most seconds the vendor lets the command run, 1 to
+	// MaxHookTimeout; 0 means unset, and the vendor's own default applies. A
+	// vendor with no timeout field gets a warning instead of a value.
+	Timeout int `json:"timeout,omitempty"`
 }
 
-// ValidHookEvents lists the canonical hook event names.
+// MaxHookTimeout is the largest per-hook timeout, in seconds, a manifest may
+// declare. No vendor documents a general maximum for a hook command (Claude's
+// per-hook timeout, Codex's, Cursor's and Copilot's timeoutSec are all
+// uncapped; only Claude's and Codex's SessionEnd budgets are, which the
+// vendor adapters clamp to), so this is ynh's own bound: one hour.
+const MaxHookTimeout = 3600
+
+// ValidHookEvents lists the canonical hook event names. The manifest schemas
+// (docs/schema/plugin.schema.json, harness.schema.json), `ynd validate` and
+// `ynh hook add` all take their list from here or mirror it.
 var ValidHookEvents = map[string]bool{
 	"before_tool":      true,
 	"after_tool":       true,
 	"before_prompt":    true,
 	"on_stop":          true,
 	"on_session_start": true,
+	"on_session_end":   true,
 }
 
 // ProfileRatchetRefusal is why a profile's sensor override may not carry a

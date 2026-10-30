@@ -671,6 +671,81 @@ func TestValidateHarness_HooksValid(t *testing.T) {
 	}
 }
 
+// All six canonical events pass both the manifest schema and the cross-field
+// checks, on_session_end included.
+func TestValidateHarness_AllSixHookEvents(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "hooks-six")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"), []byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"hooks-six","version":"0.1.0","hooks":{
+"before_tool":[{"command":"a"}],"after_tool":[{"command":"b"}],"before_prompt":[{"command":"c"}],
+"on_stop":[{"command":"d"}],"on_session_start":[{"command":"e"}],"on_session_end":[{"command":"f"}]}}`))
+
+	if err := validateHarness(hr); err != nil {
+		t.Errorf("all six events should validate: %v", err)
+	}
+	if issues := lintHarnessJSONFile(filepath.Join(hr, ".agents/harness", "plugin.json")); len(issues) != 0 {
+		t.Errorf("lint issues = %v, want none", issues)
+	}
+}
+
+// A hook a targeted vendor cannot carry as declared is a warning, not an
+// error: the manifest still validates.
+// A hook timeout is a whole number of seconds from 1 to 3600, by the schema and
+// by the cross-field check.
+func TestValidateHarness_HookTimeout(t *testing.T) {
+	for _, tc := range []struct {
+		timeout string
+		ok      bool
+	}{{"10", true}, {"1", true}, {"3600", true}, {"0", false}, {"-1", false}, {"3601", false}, {"1.5", false}, {`"10"`, false}} {
+		t.Run(tc.timeout, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+			hr := filepath.Join(dir, "h")
+			mkdirAll(t, hr)
+			writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"), []byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"h","version":"0.1.0","hooks":{"on_session_end":[{"command":"x","timeout":`+tc.timeout+`}]}}`))
+			err := validateHarness(hr)
+			if (err == nil) != tc.ok {
+				t.Errorf("timeout %s: err = %v, want ok=%v", tc.timeout, err, tc.ok)
+			}
+		})
+	}
+}
+
+// With no timeout field on the targeted vendor the validator warns; every
+// vendor has one today, so a clamp is the warning that fires.
+func TestHookVendorWarnings_Timeout(t *testing.T) {
+	var hj map[string]any
+	if err := json.Unmarshal([]byte(`{"name":"w","version":"0.1.0","default_vendor":"codex","hooks":{"on_session_end":[{"command":"x","timeout":30}]}}`), &hj); err != nil {
+		t.Fatal(err)
+	}
+	got := hookVendorWarnings(hj)
+	if len(got) != 1 || !strings.Contains(got[0], "on_session_end") || !strings.Contains(got[0], "codex") || !strings.Contains(got[0], "30s") {
+		t.Fatalf("warnings = %q", got)
+	}
+}
+
+func TestHookVendorWarnings(t *testing.T) {
+	var hj map[string]any
+	manifest := `{"name":"w","version":"0.1.0","default_vendor":"cursor","hooks":{"on_session_start":[{"matcher":"startup","command":"x"}]},
+"profiles":{"ci":{"hooks":{"on_stop":[{"matcher":"m","command":"y"}]}}}}`
+	if err := json.Unmarshal([]byte(manifest), &hj); err != nil {
+		t.Fatal(err)
+	}
+	got := hookVendorWarnings(hj)
+	if len(got) != 2 || !strings.Contains(got[0], "on_session_start") || !strings.HasPrefix(got[1], `profile "ci": `) {
+		t.Fatalf("warnings = %q", got)
+	}
+
+	// Another vendor targeted: Claude takes a SessionStart matcher.
+	hj["default_vendor"] = "claude"
+	if got := hookVendorWarnings(hj); len(got) != 0 {
+		t.Errorf("claude warnings = %q, want none", got)
+	}
+}
+
 func TestValidateHarness_HooksUnknownEvent(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
@@ -695,6 +770,9 @@ func TestHookEventMessage(t *testing.T) {
 		{"PostToolUse", "after_tool"},
 		{"afterFileEdit", "after_tool"},
 		{"stop", "on_stop"},
+		{"SessionEnd", "on_session_end"},
+		{"sessionEnd", "on_session_end"},
+		{"preToolUse", "before_tool"},
 		{"totally_made_up", "unknown event"},
 	}
 	for _, tt := range tests {

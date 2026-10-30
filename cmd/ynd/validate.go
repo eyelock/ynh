@@ -417,6 +417,13 @@ func validateHarness(dir string) error {
 		}
 	}
 
+	// Hooks a targeted vendor cannot carry are warnings: the manifest is valid.
+	var warnings []string
+	var hjw map[string]any
+	if data != nil && json.Unmarshal(data, &hjw) == nil {
+		warnings = hookVendorWarnings(hjw)
+	}
+
 	checked := describeHarnessChecks(dir, manifestPath, data)
 	for _, n := range notes {
 		checked = append(checked, "not checked: "+n)
@@ -426,13 +433,22 @@ func validateHarness(dir string) error {
 		for _, issue := range issues {
 			fmt.Printf("  - %s\n", issue)
 		}
+		printWarnings(warnings)
 		printChecked(checked)
 		return fmt.Errorf("harness %q has %d issue(s)", rel, len(issues))
 	}
 
 	fmt.Printf("%s: valid\n", rel)
+	printWarnings(warnings)
 	printChecked(checked)
 	return nil
+}
+
+// printWarnings lists findings that do not fail validation.
+func printWarnings(warnings []string) {
+	for _, w := range warnings {
+		fmt.Printf("  warning: %s\n", w)
+	}
 }
 
 // printChecked lists what validation looked at, so "valid" is never a claim the reader has to
@@ -610,6 +626,10 @@ var vendorHookEventNames = map[string]string{
 	"beforeSubmitPrompt":   "before_prompt",
 	"stop":                 "on_stop",
 	"sessionStart":         "on_session_start",
+	"SessionEnd":           "on_session_end",
+	"sessionEnd":           "on_session_end",
+	"preToolUse":           "before_tool",
+	"postToolUse":          "after_tool",
 }
 
 // hookEventMessage returns the validation message for an invalid hook event,
@@ -618,7 +638,7 @@ func hookEventMessage(event string) string {
 	if canonical, ok := vendorHookEventNames[event]; ok {
 		return fmt.Sprintf("event %q is a vendor-native name — plugin.json uses canonical events; use %q (ynh translates it per vendor)", event, canonical)
 	}
-	return fmt.Sprintf("unknown event %q (valid: before_tool, after_tool, before_prompt, on_stop, on_session_start)", event)
+	return fmt.Sprintf("unknown event %q (valid: before_tool, after_tool, before_prompt, on_stop, on_session_start, on_session_end)", event)
 }
 
 // validateHarnessHooks validates the hooks section inside harness.json.
@@ -653,6 +673,12 @@ func validateHarnessHooks(hj map[string]any) []string {
 			cmd, _ := entry["command"].(string)
 			if cmd == "" {
 				issues = append(issues, fmt.Sprintf("hooks.%s[%d]: command must not be empty", event, i))
+			}
+			if t, present := entry["timeout"]; present {
+				n, isNum := t.(float64)
+				if !isNum || n != float64(int(n)) || n < 1 || n > float64(plugin.MaxHookTimeout) {
+					issues = append(issues, fmt.Sprintf("hooks.%s[%d]: timeout must be a whole number of seconds from 1 to %d", event, i, plugin.MaxHookTimeout))
+				}
 			}
 		}
 	}

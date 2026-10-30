@@ -259,9 +259,18 @@ for a subcommand's arguments and flags.`,
 
 Manage a harness's top-level hooks.
 
-  ynh hook add <harness> <event> <command> [--matcher <pattern>]
+  ynh hook add <harness> <event> <command> [--matcher <pattern>] [--timeout <seconds>]
   ynh hook remove <harness> <event> <index>
   ynh hook export <harness> --target <settings|local> [--dry-run]
+
+Events: before_tool, after_tool, before_prompt, on_stop, on_session_start,
+on_session_end.
+
+  on_stop            fires at the end of EVERY turn, not once per session
+  on_session_start   fires on start AND resume (on Claude Code also on /clear
+                     and compaction), so the script must be idempotent
+  on_session_end     best-effort, time-boxed, cannot block, may not fire at
+                     all; use it for once-per-session work
 
 Run 'ynh hook <subcommand> --help' for a subcommand's arguments and flags.`,
 

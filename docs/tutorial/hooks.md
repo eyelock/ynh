@@ -114,11 +114,11 @@ Expected output includes `.cursor/hooks.json` with Cursor's format:
 ```json
 {
   "hooks": {
-    "afterFileEdit": [
+    "postToolUse": [
       { "command": "/usr/local/bin/run-linter.sh" }
     ],
-    "beforeShellExecution": [
-      { "command": "/usr/local/bin/check-commands.sh" }
+    "preToolUse": [
+      { "command": "/usr/local/bin/check-commands.sh", "matcher": "Bash" }
     ],
     "stop": [
       { "command": "/usr/local/bin/session-report.sh" }
@@ -128,7 +128,7 @@ Expected output includes `.cursor/hooks.json` with Cursor's format:
 }
 ```
 
-Note: Cursor uses different event names (`beforeShellExecution` / `afterFileEdit` vs `PreToolUse` / `PostToolUse`), includes a `version: 1` key, and a flat structure without matchers or type wrappers.
+Note: Cursor uses different event names (`preToolUse` / `postToolUse` vs `PreToolUse` / `PostToolUse`), includes a `version: 1` key, and a flat structure without matcher groups or type wrappers. Cursor matches `preToolUse` and `postToolUse` against its own tool types (`Shell`, `Read`, `Write`, ...), not Claude's tool names, so the preview prints a warning that the `Bash` matcher is written as-is and will not match; use `Shell` for Cursor.
 
 `.cursor/hooks.json` is the only hook file in the Cursor preview, because it is the one project path Cursor reads hooks from. A Cursor plugin reads its hooks from a different file, which `ynd export` writes instead (see [Export hooks in a plugin](#export-hooks-in-a-plugin)). Check it:
 
@@ -285,7 +285,7 @@ ynh profile remove /tmp/ynh-tutorial/hook-harness ci
 
 The first positional argument accepts either a filesystem path (during authoring) or a canonical harness id (`local/<name>`, `github.com/<org>/<repo>/<name>`) once installed.
 
-`<event>` is validated against the canonical set (`before_tool`, `after_tool`, `before_prompt`, `on_stop`, `on_session_start`). `<index>` is zero-based; removing the last entry for an event drops the event key entirely. See [hooks.md §"CLI Editing"](../hooks.md#cli-editing) and [reference.md](../reference.md) for the full flag matrix.
+`<event>` is validated against the canonical set (`before_tool`, `after_tool`, `before_prompt`, `on_stop`, `on_session_start`, `on_session_end`). `<index>` is zero-based; removing the last entry for an event drops the event key entirely. See [hooks.md §"CLI Editing"](../hooks.md#cli-editing) and [reference.md](../reference.md) for the full flag matrix.
 
 ## Clean up
 

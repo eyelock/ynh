@@ -26,6 +26,21 @@ func TestAddHook_New(t *testing.T) {
 	}
 }
 
+func TestAddHook_AcceptsEveryCanonicalEvent(t *testing.T) {
+	for _, event := range []string{"before_tool", "after_tool", "before_prompt", "on_stop", "on_session_start", "on_session_end"} {
+		t.Run(event, func(t *testing.T) {
+			dir := t.TempDir()
+			writeTestHarness(t, dir, "h")
+			if err := AddHook(dir, event, "./x.sh", HookAddOptions{}); err != nil {
+				t.Fatalf("AddHook(%s): %v", event, err)
+			}
+			if err := AddProfileHook(dir, "ci", event, "./x.sh", HookAddOptions{}); err != nil && !strings.Contains(err.Error(), "profile") {
+				t.Fatalf("AddProfileHook(%s): %v", event, err)
+			}
+		})
+	}
+}
+
 func TestAddHook_Appends(t *testing.T) {
 	dir := t.TempDir()
 	writeTestHarness(t, dir, "h")
@@ -219,5 +234,22 @@ func TestRemoveProfileHook_IndexOutOfRange(t *testing.T) {
 	err := RemoveProfileHook(dir, "ci", "before_tool", 9)
 	if err == nil || !strings.Contains(err.Error(), "out of range") {
 		t.Errorf("want range error, got %v", err)
+	}
+}
+
+func TestAddHook_Timeout(t *testing.T) {
+	dir := t.TempDir()
+	writeTestHarness(t, dir, "h")
+	if err := AddHook(dir, "on_session_end", "./bye.sh", HookAddOptions{Timeout: 10}); err != nil {
+		t.Fatal(err)
+	}
+	hj, _ := plugin.LoadPluginJSON(dir)
+	if got := hj.Hooks["on_session_end"][0].Timeout; got != 10 {
+		t.Errorf("timeout = %d, want 10", got)
+	}
+	for _, bad := range []int{-1, plugin.MaxHookTimeout + 1} {
+		if err := AddHook(dir, "on_stop", "x", HookAddOptions{Timeout: bad}); err == nil {
+			t.Errorf("timeout %d accepted", bad)
+		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
@@ -255,21 +256,38 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 			continue
 		}
 		if len(p.Hooks) > 0 {
-			wrote, err := writeHookConfig(outputDir, adapter, p.Hooks)
-			if err != nil {
-				return nil, fmt.Errorf("writing hook config for %s: %w", v, err)
+			// Copilot reads the hooks file the shared manifest names, which is
+			// Claude's, and ignores its own root hooks.json there (CONFIRMED
+			// live, Copilot CLI 1.0.105), so that file would be dead weight.
+			if v == "copilot" && slices.Contains(vendors, "claude") {
+				result.Warnings = append(result.Warnings, vendor.ExportHookWarnings(v, p.Hooks)...)
+			} else {
+				wrote, err := writeHookConfig(outputDir, adapter, p.Hooks)
+				if err != nil {
+					return nil, fmt.Errorf("writing hook config for %s: %w", v, err)
+				}
+				wroteHooks = wroteHooks || wrote
+				result.Warnings = append(result.Warnings, vendor.ExportHookWarnings(v, p.Hooks)...)
 			}
-			wroteHooks = wroteHooks || wrote
 		}
 		if len(p.MCPServers) > 0 {
-			if err := writeMCPConfig(outputDir, adapter, p.MCPServers); err != nil {
+			servers, warnings := vendor.AnchorMCPServers(v, p.MCPServers)
+			if err := writeMCPConfig(outputDir, adapter, servers); err != nil {
 				return nil, fmt.Errorf("writing MCP config for %s: %w", v, err)
 			}
+			result.Warnings = append(result.Warnings, warnings...)
 		}
 		result.Warnings = append(result.Warnings, skippedArtifactWarnings(v, adapter, p, content)...)
 	}
 	if wroteHooks {
 		warnings, err := assembler.CopyHookScripts(p.Dir, outputDir, p.Hooks, "the plugin")
+		if err != nil {
+			return nil, err
+		}
+		result.Warnings = append(result.Warnings, warnings...)
+	}
+	if len(p.MCPServers) > 0 {
+		warnings, err := assembler.CopyMCPScripts(p.Dir, outputDir, p.MCPServers, "the plugin")
 		if err != nil {
 			return nil, err
 		}
@@ -358,6 +376,7 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 		if err != nil {
 			return result, fmt.Errorf("writing hook config: %w", err)
 		}
+		result.Warnings = append(result.Warnings, vendor.ExportHookWarnings(vendorName, p.Hooks)...)
 		if wrote {
 			warnings, err := assembler.CopyHookScripts(p.Dir, outputDir, p.Hooks, "the plugin")
 			if err != nil {
@@ -369,9 +388,16 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 
 	// MCP config
 	if len(p.MCPServers) > 0 {
-		if err := writeMCPConfig(outputDir, adapter, p.MCPServers); err != nil {
+		servers, anchorWarnings := vendor.AnchorMCPServers(vendorName, p.MCPServers)
+		if err := writeMCPConfig(outputDir, adapter, servers); err != nil {
 			return result, fmt.Errorf("writing MCP config: %w", err)
 		}
+		result.Warnings = append(result.Warnings, anchorWarnings...)
+		warnings, err := assembler.CopyMCPScripts(p.Dir, outputDir, p.MCPServers, "the plugin")
+		if err != nil {
+			return result, err
+		}
+		result.Warnings = append(result.Warnings, warnings...)
 	}
 
 	// Manifest — generated after content (MCP, skills) so path pointers are accurate
@@ -456,7 +482,7 @@ func writeMCPConfig(outputDir string, adapter VendorExporter, servers map[string
 
 // writeHookConfig generates the vendor's plugin hook config and writes it to
 // the output directory. It reports whether it wrote any file: a vendor that
-// emits no hooks (Copilot) needs none of the scripts they run.
+// writes none needs none of the scripts they run.
 func writeHookConfig(outputDir string, adapter VendorExporter, hooks map[string][]plugin.HookEntry) (bool, error) {
 	generate := adapter.GenerateHookConfig
 	if pg, ok := adapter.(PluginHookGenerator); ok {

@@ -106,19 +106,21 @@ func TestCursorGenerateHookConfig_FlatFormat(t *testing.T) {
 		t.Fatal("expected hooks object")
 	}
 
-	// Check beforeShellExecution (flat, no nesting, matcher ignored)
-	beforeShell, ok := hooksObj["beforeShellExecution"].([]any)
+	// Check preToolUse (flat, no nesting; matcher kept, tool events only)
+	beforeShell, ok := hooksObj["preToolUse"].([]any)
 	if !ok {
-		t.Fatal("expected beforeShellExecution array")
+		t.Fatal("expected preToolUse array")
 	}
 	if len(beforeShell) != 2 {
-		t.Fatalf("beforeShellExecution entries = %d, want 2", len(beforeShell))
+		t.Fatalf("preToolUse entries = %d, want 2", len(beforeShell))
 	}
 
-	// Verify matcher field is NOT present in output
 	entry0 := beforeShell[0].(map[string]any)
-	if _, hasMatcher := entry0["matcher"]; hasMatcher {
-		t.Error("Cursor hooks should not include matcher field")
+	if entry0["matcher"] != "Bash" {
+		t.Errorf("matcher = %v, want Bash (preToolUse takes a matcher)", entry0["matcher"])
+	}
+	if _, hasMatcher := beforeShell[1].(map[string]any)["matcher"]; hasMatcher {
+		t.Error("an entry without a matcher must not carry one")
 	}
 	if entry0["command"] != "echo before bash" {
 		t.Errorf("command = %v, want 'echo before bash'", entry0["command"])
@@ -252,6 +254,7 @@ func TestCursorGenerateHookConfig_EventTranslation(t *testing.T) {
 		"before_prompt":    {{Command: "cmd3"}},
 		"on_stop":          {{Command: "cmd4"}},
 		"on_session_start": {{Command: "cmd5"}},
+		"on_session_end":   {{Command: "cmd6"}},
 	}
 
 	result, err := c.GenerateHookConfig(hooks)
@@ -266,7 +269,7 @@ func TestCursorGenerateHookConfig_EventTranslation(t *testing.T) {
 	}
 
 	hooksObj := config["hooks"].(map[string]any)
-	expectedEvents := []string{"beforeShellExecution", "afterFileEdit", "beforeSubmitPrompt", "stop", "sessionStart"}
+	expectedEvents := []string{"preToolUse", "postToolUse", "beforeSubmitPrompt", "stop", "sessionStart", "sessionEnd"}
 	for _, event := range expectedEvents {
 		if _, ok := hooksObj[event]; !ok {
 			t.Errorf("missing event %s", event)

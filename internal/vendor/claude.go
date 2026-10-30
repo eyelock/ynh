@@ -250,14 +250,33 @@ func buildClaudeArgs(configPath string, initialPrompt string, extraArgs []string
 	return args
 }
 
-// claudeHookEventMap maps canonical event names to Claude Code hook events.
+// claudeHookEventMap maps canonical event names to Claude Code hook events
+// (code.claude.com/docs/en/hooks). SessionEnd is best-effort: its hooks share a
+// 1.5 s budget by default, raisable per hook up to 60 s, and cannot block.
 var claudeHookEventMap = map[string]string{
 	"before_tool":      "PreToolUse",
 	"after_tool":       "PostToolUse",
 	"before_prompt":    "UserPromptSubmit",
 	"on_stop":          "Stop",
 	"on_session_start": "SessionStart",
+	"on_session_end":   "SessionEnd",
 }
+
+// claudeUnsupportedHookEvents names the canonical events Claude Code cannot
+// express, each with the reason. Empty: every canonical event maps. Declared
+// anyway so scripts/hook-event-parity.sh can tell "forgotten" from "refused".
+var claudeUnsupportedHookEvents = map[string]string{}
+
+// Per-hook timeout, in seconds, written as the hook's "timeout" field
+// (code.claude.com/docs/en/hooks, "Common fields": "Seconds before canceling";
+// default 600 for a command hook). SessionEnd hooks share a 1.5 s budget, up to
+// 60 s, and a plugin hook's own timeout does NOT raise it (CONFIRMED live,
+// Claude Code, 2026-10-30; see ClaudeSessionEndEnv for the variable that does),
+// so the value is clamped to 60 for on_session_end and warned about.
+var claudeHookTimeoutField = "timeout"
+var claudeHookTimeoutUnsupported = ""
+
+var claudeHookTimeoutCaps = map[string]int{"on_session_end": 60}
 
 // anchorHookCommand rewrites a leading "./" in a hook command so it resolves
 // from the project root via $CLAUDE_PROJECT_DIR, which Claude Code injects into
@@ -341,6 +360,7 @@ func claudeHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string)
 	type claudeInnerHook struct {
 		Type    string `json:"type"`
 		Command string `json:"command"`
+		Timeout int    `json:"timeout,omitempty"`
 	}
 	type claudeHookGroup struct {
 		Matcher string            `json:"matcher,omitempty"`
@@ -366,7 +386,7 @@ func claudeHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string)
 		// Group entries by matcher
 		type matcherGroup struct {
 			matcher string
-			cmds    []string
+			entries []plugin.HookEntry
 		}
 		var groups []matcherGroup
 		groupIdx := make(map[string]int)
@@ -374,18 +394,18 @@ func claudeHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string)
 		for _, entry := range entries {
 			key := entry.Matcher
 			if idx, exists := groupIdx[key]; exists {
-				groups[idx].cmds = append(groups[idx].cmds, entry.Command)
+				groups[idx].entries = append(groups[idx].entries, entry)
 			} else {
 				groupIdx[key] = len(groups)
-				groups = append(groups, matcherGroup{matcher: key, cmds: []string{entry.Command}})
+				groups = append(groups, matcherGroup{matcher: key, entries: []plugin.HookEntry{entry}})
 			}
 		}
 
 		var hookGroups []claudeHookGroup
 		for _, g := range groups {
 			var inner []claudeInnerHook
-			for _, cmd := range g.cmds {
-				inner = append(inner, claudeInnerHook{Type: "command", Command: anchor(cmd)})
+			for _, e := range g.entries {
+				inner = append(inner, claudeInnerHook{Type: "command", Command: anchor(e.Command), Timeout: hookTimeoutValue("claude", event, e.Timeout)})
 			}
 			hookGroups = append(hookGroups, claudeHookGroup{
 				Matcher: g.matcher,
@@ -601,5 +621,10 @@ func launchClaude(configPath string, initialPrompt string, extraArgs []string) e
 	}
 
 	args := buildClaudeArgs(configPath, initialPrompt, extraArgs)
-	return syscall.Exec(claudeBin, args, os.Environ())
+	env := os.Environ()
+	extra, warnings := ClaudeSessionEndEnv(configPath, os.LookupEnv)
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
+	}
+	return syscall.Exec(claudeBin, args, append(env, extra...))
 }
