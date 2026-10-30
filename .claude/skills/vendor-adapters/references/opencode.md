@@ -107,7 +107,8 @@ deny` blocks `echo SHELLRAN` with the tool error `Permission denied: shell`
 (`state.status: "error"`, `executed: false`), while the same deny followed by
 an allow lets it run. Actions: `read`, `edit` (edit, write, patch), `glob`,
 `grep`, `shell`, `webfetch`, `websearch`, `subagent`, `skill`, `question`,
-`execute` (Code Mode, hence MCP), `external_directory`.
+`execute` (Code Mode's wrapper; MCP tools do not need it, see below),
+`external_directory`.
 
 Claude's `tools:` allow-list is therefore translated to `* * deny` followed
 by an `allow` per mapped action (Read read, Write/Edit/MultiEdit edit, Bash
@@ -154,7 +155,9 @@ takes extra directories or URLs.
 **CONFIRMED:** a local stdio server written to the bundle's `opencode.json`
 connects and its tool is callable. OpenCode 2 exposes MCP tools through "Code
 Mode" by default (`codemode: true`): the model sees one `execute` tool and
-calls `tools.<server>.<tool>({})` inside it. Each MCP tool it calls still
+calls `tools.<server>.<tool>({})` inside it. Code Mode is on only for an agent
+that may use `execute`; an agent with a Claude `tools:` list is denied it, so
+its granted MCP tools are ordinary tools (see "Granted MCP tools" above). Each MCP tool it calls still
 fires the `tool` hooks under its own id, `<server>_<tool>` (see "MCP tools and
 `tool` hooks" below). Local fields: `type`, `command` (array),
 `cwd`, `environment`, `disabled`, `codemode`, `timeout`. Remote fields:
@@ -341,7 +344,12 @@ service, which does not see the key and lists no `anthropic/*` model;
   never `execute`; the matcher blocked `echo_ynh_ping` before the stub server
   received it; an unmatched `echo_ynh_other` reached the server. The block
   throws inside the `execute` code, so a later call in the same code
-  (`ynh_other` after `ynh_ping`) did not run either. The hook payload's
+  (`ynh_other` after `ynh_ping`) did not run either. With Code Mode off, the
+  same matcher still blocks: on v2.2.3 with `anthropic/claude-haiku-4-5`
+  (ynw-kst.10), a `tools: Bash, mcp__echo__ynh_ping` agent called
+  `echo_ynh_ping` as an ordinary tool, no `execute` call appeared, the hook
+  ran and the model got its message, and the stub server logged no call; with
+  the hook removed, the same agent's call reached the server. The hook payload's
   `tool_name` is the OpenCode id `echo_ynh_ping`, not Claude's
   `mcp__echo__ynh_ping`.
 - **`--` works in `opencode run`:** `run --standalone -m x --format json --
