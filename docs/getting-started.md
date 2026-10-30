@@ -118,6 +118,7 @@ All flags except `-v`, `--install`, and `--clean` are passed through to the vend
 ```bash
 david --model opus --max-turns 1 "fix this bug"   # --model opus --max-turns 1, prompt "fix this bug"
 david --verbose "fix this bug"                    # --verbose, prompt "fix this bug"
+david --verbose "fix this bug" --model=opus       # --verbose --model=opus, prompt "fix this bug"
 ```
 
 Use `--` to separate vendor flags from the prompt, or write a value with `=`, whenever the last word would otherwise be read the wrong way, such as a flag with a value and no prompt:
@@ -125,6 +126,7 @@ Use `--` to separate vendor flags from the prompt, or write a value with `=`, wh
 ```bash
 david --model opus -- "fix this bug"
 david --model=opus                                # no prompt: "--model opus" would make opus the prompt
+david --verbose --model opus -- "fix this bug"    # "--verbose 'fix this bug' --model opus" would make opus the prompt
 david -v codex -- "refactor auth"
 ```
 

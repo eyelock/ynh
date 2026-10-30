@@ -758,11 +758,14 @@ func resolveVendor(flag string, p *harness.Harness, cfg *config.Config) (string,
 // Without --, ynh cannot know which vendor flags take a value, so it reads a
 // bare word by where it stands. After the harness name, a bare word that
 // directly follows a passed-through flag (one without "=") stays with that
-// flag as its value, unless it is the last argument: the last bare word is
-// the prompt. Any other bare word is the prompt if there is none yet. So
-// "--model opus --max-turns 1 'fix it'" forwards "--model opus --max-turns 1"
-// and prompts "fix it", while "--model opus" on its own makes "opus" the
-// prompt. Write "--model=opus", or end the flags with --, to be unambiguous.
+// flag as its value only if a later bare word exists to be the prompt: the
+// last bare word is the prompt. Any other bare word is the prompt if there is
+// none yet. So "--model opus --max-turns 1 'fix it'" forwards
+// "--model opus --max-turns 1" and prompts "fix it", "--verbose 'fix it'
+// --model=opus" prompts "fix it", while "--model opus" on its own makes "opus"
+// the prompt. Position alone cannot tell a boolean flag from one that takes a
+// value, so "--verbose 'fix it' --model opus" prompts "opus" (ynw-sbo.2).
+// Write "--model=opus", or end the flags with --, to be unambiguous.
 // runArgs holds parsed arguments for ynh run.
 type runArgs struct {
 	HarnessName  string   // positional name, if given
@@ -781,6 +784,13 @@ type runArgs struct {
 	NoWorkspace  bool     // --no-workspace: grant none of the harness's workspace folders; not forwarded
 }
 
+// ynhValueFlags are ynh's own run flags that take the next argument as their
+// value. parseRunArgs handles each one in its switch.
+var ynhValueFlags = map[string]bool{
+	"-v": true, "--profile": true, "--focus": true,
+	"--harness-file": true, "--session-name": true, "--instructions": true,
+}
+
 func parseRunArgs(args []string) runArgs {
 	var ra runArgs
 	flagArgs := args
@@ -793,6 +803,19 @@ func parseRunArgs(args []string) runArgs {
 				ra.Prompt = args[i+1]
 			}
 			break
+		}
+	}
+
+	// The last bare word is the prompt, so find it first. A word that one of
+	// ynh's own flags takes as its value is not a bare word.
+	lastBare := -1
+	for j := 0; j < len(flagArgs); j++ {
+		if ynhValueFlags[flagArgs[j]] && j+1 < len(flagArgs) {
+			j++
+			continue
+		}
+		if !strings.HasPrefix(flagArgs[j], "-") {
+			lastBare = j
 		}
 	}
 
@@ -846,10 +869,9 @@ func parseRunArgs(args []string) runArgs {
 				// First positional arg is the harness name
 				ra.HarnessName = flagArgs[i]
 				firstPositional = false
-			case prevPassthrough && i < len(flagArgs)-1:
+			case prevPassthrough && i < lastBare:
 				// The value of the vendor flag before it ("--model haiku"),
-				// not the prompt: more arguments follow, so it is not the
-				// last bare word.
+				// not the prompt: a later bare word is the prompt.
 				ra.VendorArgs = append(ra.VendorArgs, flagArgs[i])
 			case ra.Prompt == "":
 				ra.Prompt = flagArgs[i]

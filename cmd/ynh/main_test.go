@@ -194,6 +194,48 @@ func TestParseRunArgs(t *testing.T) {
 			wantArgs:   []string{"--model=opus", "--verbose"},
 		},
 		{
+			name:       "boolean passthrough flag then prompt after more flags",
+			args:       []string{"my-harness", "--verbose", "fix the bug", "--model=opus"},
+			wantName:   "my-harness",
+			wantPrompt: "fix the bug",
+			wantArgs:   []string{"--verbose", "--model=opus"},
+		},
+		// ynw-sbo.1: the last bare word is the prompt, even when flags follow it.
+		{
+			name:       "prompt after boolean flag, before equals-form flag",
+			args:       []string{"david", "--verbose", "fix it", "--model=opus"},
+			wantName:   "david",
+			wantPrompt: "fix it",
+			wantArgs:   []string{"--verbose", "--model=opus"},
+		},
+		{
+			name:       "prompt after short boolean flag, before another flag",
+			args:       []string{"david", "-c", "fix it", "--verbose"},
+			wantName:   "david",
+			wantPrompt: "fix it",
+			wantArgs:   []string{"-c", "--verbose"},
+		},
+		{
+			name:       "ynh value flag after the prompt does not hide it",
+			args:       []string{"david", "--verbose", "fix it", "-v", "claude"},
+			wantName:   "david",
+			wantVendor: "claude",
+			wantPrompt: "fix it",
+			wantArgs:   []string{"--verbose"},
+		},
+		// Known ambiguity, pinned until ynw-sbo.2 decides how ynh tells a
+		// boolean vendor flag from one that takes a value. By position this
+		// is the same shape as "--model haiku -p 'say ok'", so the last bare
+		// word "opus" is the prompt and "fix it" goes with --verbose. Users
+		// write "--model=opus" or -- to get "fix it".
+		{
+			name:       "prompt after boolean flag, before space-separated flag (ynw-sbo.2)",
+			args:       []string{"david", "--verbose", "fix it", "--model", "opus"},
+			wantName:   "david",
+			wantPrompt: "opus",
+			wantArgs:   []string{"--verbose", "fix it", "--model"},
+		},
+		{
 			name:       "lone space-separated value is the last bare word, so the prompt",
 			args:       []string{"my-harness", "--model", "opus"},
 			wantName:   "my-harness",
