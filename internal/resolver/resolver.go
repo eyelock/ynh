@@ -12,6 +12,7 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/pathutil"
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 // ResolvedContent represents files extracted from a Git source.
@@ -142,6 +143,34 @@ func sectionLabel(source, path string) string {
 	return source + "/" + strings.Trim(path, "/")
 }
 
+// localLabel names a local include. The heading ends up in assembled
+// instructions, exports and marketplace output that get published, so it never
+// carries a filesystem path from the build machine. An include with a manifest
+// is named by its harness name; otherwise a relative path is kept as written
+// and an absolute one is reduced to its base directory name.
+func localLabel(local, path, basePath string) string {
+	if hj, err := plugin.LoadPluginJSON(basePath); err == nil {
+		return hj.Name
+	}
+	return sectionLabel(portableSource(local), path)
+}
+
+// gitLabel names a git include: owner/repo, plus the subpath when scoped. A
+// source that is really a filesystem path (a file:// or absolute URL) is
+// reduced to its base directory name.
+func gitLabel(url, path string) string {
+	return sectionLabel(portableSource(ShortGitURL(url)), path)
+}
+
+// portableSource keeps a relative source as written and reduces an absolute
+// one to its base directory name.
+func portableSource(source string) string {
+	if filepath.IsAbs(source) {
+		return filepath.Base(filepath.Clean(source))
+	}
+	return source
+}
+
 // resolveWith resolves all includes using the given source resolver.
 func resolveWith(p *harness.Harness, cfg *config.Config, resolve sourceResolver) ([]ResolveResult, error) {
 	var results []ResolveResult
@@ -159,7 +188,7 @@ func resolveWith(p *harness.Harness, cfg *config.Config, resolve sourceResolver)
 				Content: ResolvedContent{
 					BasePath:       basePath,
 					Paths:          inc.Pick,
-					Label:          sectionLabel(inc.Local, inc.Path),
+					Label:          localLabel(inc.Local, inc.Path, basePath),
 					NoInstructions: !inc.InstructionsEnabled(),
 				},
 				Source: inc.Local,
@@ -185,7 +214,7 @@ func resolveWith(p *harness.Harness, cfg *config.Config, resolve sourceResolver)
 			Content: ResolvedContent{
 				BasePath:       basePath,
 				Paths:          inc.Pick,
-				Label:          sectionLabel(ShortGitURL(inc.Git), inc.Path),
+				Label:          gitLabel(inc.Git, inc.Path),
 				NoInstructions: !inc.InstructionsEnabled(),
 			},
 			Source: ShortGitURL(inc.Git),
