@@ -1,5 +1,10 @@
 # syntax=docker/dockerfile:1
 
+# The one place the ynr version is pinned. .github/workflows/ci.yml reads it
+# from this line for the relay test. Move it when ynh's relay contract with
+# ynr changes. Stages that use it redeclare `ARG YNR_VERSION` to inherit it.
+ARG YNR_VERSION=0.2.0
+
 # Stage 1: Build ynh and ynd
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS builder
 
@@ -72,6 +77,32 @@ RUN set -eu; \
     chmod 755 /usr/local/bin/agent; \
     rm -rf /tmp/agent /tmp/agent.tar.gz
 
+# Stage 2d: ynr (parallel), only the slim binary
+FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS ynr-cli
+RUN apk add --no-cache curl
+
+ARG YNR_VERSION
+ARG TARGETARCH
+# The tarball is checked against the release's checksums.txt, strictly: the
+# build fails if the line for this asset is missing, or does not match.
+RUN set -eu; \
+    case "${TARGETARCH:-$(uname -m)}" in \
+      amd64|x86_64)  YNR_ARCH=amd64 ;; \
+      arm64|aarch64) YNR_ARCH=arm64 ;; \
+      *) echo "unsupported architecture: ${TARGETARCH:-$(uname -m)}" >&2; exit 1 ;; \
+    esac; \
+    asset="ynr_${YNR_VERSION}_linux_${YNR_ARCH}.tar.gz"; \
+    base="https://github.com/eyelock/ynr/releases/download/v${YNR_VERSION}"; \
+    mkdir -p /tmp/ynr /out; \
+    cd /tmp/ynr; \
+    curl -fsSL -O "${base}/${asset}" -O "${base}/checksums.txt"; \
+    grep " ${asset}\$" checksums.txt > wanted.txt; \
+    [ "$(wc -l < wanted.txt)" -eq 1 ]; \
+    sha256sum -c -s wanted.txt; \
+    tar -xzf "${asset}" -C /out ynr; \
+    chmod 755 /out/ynr; \
+    rm -rf /tmp/ynr
+
 # Stage 3: Runtime — assemble everything
 FROM node:26-alpine
 
@@ -83,6 +114,11 @@ COPY --from=claude-cli /usr/local/bin/claude /usr/local/bin/claude
 COPY --from=codex-cli  /usr/local/lib/node_modules/@openai/ /usr/local/lib/node_modules/@openai/
 RUN ln -s ../lib/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex
 COPY --from=cursor-cli /usr/local/bin/agent /usr/local/bin/agent
+
+# ynr, for the telemetry relay. Having it here starts nothing: ynh runs
+# `ynr relay` only when asked (--telemetry-relay, YNH_TELEMETRY_RELAY or
+# telemetry_relay in config), never because the binary exists.
+COPY --from=ynr-cli /out/ynr /usr/local/bin/ynr
 
 # Copy ynh binaries from builder
 COPY --link --from=builder /out/ynh /usr/local/bin/ynh
@@ -116,6 +152,7 @@ USER ynh
 ARG VERSION=dev
 ARG CLAUDE_CODE_VERSION=2.1.76
 ARG CODEX_VERSION=0.114.0
+ARG YNR_VERSION
 LABEL org.opencontainers.image.title="ynh" \
       org.opencontainers.image.description="Harness template manager for AI coding assistants" \
       org.opencontainers.image.source="https://github.com/eyelock/ynh" \
@@ -123,6 +160,7 @@ LABEL org.opencontainers.image.title="ynh" \
       dev.ynh.version="${VERSION}" \
       dev.ynh.claude-code.version="${CLAUDE_CODE_VERSION}" \
       dev.ynh.codex.version="${CODEX_VERSION}" \
+      dev.ynh.ynr.version="${YNR_VERSION}" \
       dev.ynh.cursor-agent.version="latest"
 
 # tini handles PID 1 signal forwarding correctly for both:

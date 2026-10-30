@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 )
 
 // HarnessJSON represents the plugin.json manifest: the single source of truth.
@@ -42,10 +41,18 @@ type HarnessJSON struct {
 	// variables reach an agent worker's process. Empty means none — a worker
 	// inheriting the operator's whole environment holds every credential the
 	// operator holds, which is not a default anyone chose.
-	EnvPassthrough []string           `json:"env_passthrough,omitempty"`
-	Profiles       map[string]Profile `json:"profiles,omitempty"`
-	Focuses        map[string]Focus   `json:"focuses,omitempty"`
-	Sensors        map[string]Sensor  `json:"sensors,omitempty"`
+	EnvPassthrough []string `json:"env_passthrough,omitempty"`
+	// Workspace requests extra folders for the vendor CLI to reach. A request
+	// grants nothing: the operator's allow-list or `ynh trust accept` does
+	// (docs/workspace.md). Relative entries resolve against the harness's own
+	// directory.
+	Workspace []string           `json:"workspace,omitempty"`
+	Profiles  map[string]Profile `json:"profiles,omitempty"`
+	Focuses   map[string]Focus   `json:"focuses,omitempty"`
+	// LaunchFocus names the focus a bare `ynh run` wakes with: no --focus and
+	// no prompt. It applies to nothing else (docs/focus.md, "Launch focus").
+	LaunchFocus string            `json:"launch_focus,omitempty"`
+	Sensors     map[string]Sensor `json:"sensors,omitempty"`
 
 	// SensorOverrides tunes sensors obtained from includes. Tolerance and
 	// ratchet only: an included sensor's observation belongs to whoever
@@ -223,12 +230,6 @@ func (s Sensor) EffectiveRatchet() string {
 	return s.Ratchet
 }
 
-// ValidSensorExpectations lists the answers a reference fixture may declare.
-var ValidSensorExpectations = map[string]bool{
-	"fail": true,
-	"pass": true,
-}
-
 // ValidSensorTolerances lists how `ynh check` treats a failing sensor.
 // Maps onto the three enforcement loops: blocking sensors gate a merge,
 // advisory sensors report loudly without failing the run, report sensors
@@ -343,19 +344,6 @@ type GitHubCheckSource struct {
 	OnMissing string `json:"on_missing,omitempty"`
 }
 
-// ValidGitHubStatusStates are the states the Status API can report.
-var ValidGitHubStatusStates = map[string]bool{
-	"success": true, "pending": true, "failure": true, "error": true,
-}
-
-// ValidGitHubCheckConclusions are the conclusions the Checks API can report.
-// A run that has not concluded has no conclusion at all, which is why
-// "pending" is not a member here and is handled by OnMissing instead.
-var ValidGitHubCheckConclusions = map[string]bool{
-	"success": true, "failure": true, "neutral": true, "cancelled": true,
-	"timed_out": true, "action_required": true, "stale": true, "skipped": true,
-}
-
 // Dir returns the directory $YNH_HARNESS_DIR and reference.path resolve
 // against: the harness that published the sensor if it came from an include,
 // otherwise fallback, the harness being run.
@@ -371,13 +359,6 @@ func (s Sensor) Dir(fallback string) string {
 type SensorOverride struct {
 	Tolerance string `json:"tolerance,omitempty"`
 	Ratchet   string `json:"ratchet,omitempty"`
-}
-
-// ValidSensorOnMissing are the verdicts available when the observation is
-// absent. "broken" is the default on purpose: a sensor that cannot see is not
-// a sensor that passed.
-var ValidSensorOnMissing = map[string]bool{
-	"broken": true, "fail": true, "pass": true,
 }
 
 // Kind reports which source variant is set. Returns "" if none or
@@ -521,126 +502,6 @@ var ValidSensorCategories = map[string]bool{
 	"maintainability": true,
 	"architecture":    true,
 	"behaviour":       true,
-}
-
-// ValidateSensors checks each sensor's source/output/category and resolves
-// focus references against the supplied profile and focus name sets.
-// profileNames and focusNames may be nil if no cross-reference data is
-// available (callers should pass both to enable full validation).
-func ValidateSensors(sensors map[string]Sensor, profileNames, focusNames map[string]bool) []string {
-	var issues []string
-	for name, s := range sensors {
-		if name == "" {
-			issues = append(issues, "sensor name must not be empty")
-			continue
-		}
-		prefix := fmt.Sprintf("sensor %q:", name)
-		if s.Category != "" && !ValidSensorCategories[s.Category] {
-			issues = append(issues, fmt.Sprintf("%s category %q must be one of maintainability, architecture, behaviour", prefix, s.Category))
-		}
-		if s.Role != "" && !ValidSensorRoles[s.Role] {
-			issues = append(issues, fmt.Sprintf("%s role %q must be one of regular, convergence-verifier, stuck-recovery", prefix, s.Role))
-		}
-		if s.Ratchet != "" && !ValidSensorRatchets[s.Ratchet] {
-			issues = append(issues, fmt.Sprintf("%s ratchet %q must be one of fingerprint, count", prefix, s.Ratchet))
-		}
-		if s.Ratchet == "count" && s.Source.Kind() != "" && s.Source.Kind() != "command" {
-			issues = append(issues, fmt.Sprintf(
-				"%s ratchet count requires a command source: only a command sensor produces countable findings", prefix))
-		}
-		if s.Reference != nil {
-			if s.Reference.Path == "" {
-				issues = append(issues, fmt.Sprintf("%s reference.path must be non-empty", prefix))
-			}
-			if strings.HasPrefix(s.Reference.Path, "/") || strings.Contains(s.Reference.Path, "..") {
-				issues = append(issues, fmt.Sprintf(
-					"%s reference.path %q must be a relative path inside the harness", prefix, s.Reference.Path))
-			}
-			if !ValidSensorExpectations[s.Reference.Expect] {
-				issues = append(issues, fmt.Sprintf(
-					"%s reference.expect %q must be one of fail, pass", prefix, s.Reference.Expect))
-			}
-			// Calibration compares an exit code against a declared
-			// expectation, and only a command source produces one.
-			//
-			// Not the same rule that stops a files sensor converging a run,
-			// though the two are easy to conflate. A files sensor does now
-			// produce a verdict — freshness — and it does gate on it. It
-			// still cannot be calibrated (no exit code) and still cannot
-			// converge (freshness says whether an artifact is current, never
-			// whether the work is done). Three separate limits, three reasons.
-			if k := s.Source.Kind(); k != "" && k != "command" {
-				issues = append(issues, fmt.Sprintf(
-					"%s reference requires a command source: no verdict about a %s sensor's output is derivable", prefix, k))
-			}
-		}
-		if s.Role == "convergence-verifier" {
-			if why := ConvergenceVerifierRefusal(s.Source.Kind()); why != "" {
-				issues = append(issues, prefix+" "+why)
-			}
-		}
-		if s.Tolerance != "" && !ValidSensorTolerances[s.Tolerance] {
-			issues = append(issues, fmt.Sprintf("%s tolerance %q must be one of blocking, advisory, report", prefix, s.Tolerance))
-		}
-		if s.Source.Kind() == "" {
-			issues = append(issues, fmt.Sprintf("%s source must have exactly one of files, command, focus, github_status, github_check", prefix))
-		} else {
-			switch s.Source.Kind() {
-			case "github_status":
-				g := s.Source.GitHubStatus
-				if g.Context == "" {
-					issues = append(issues, fmt.Sprintf("%s source.github_status.context is required: a sensor that selects no particular status observes a set that changes underneath it", prefix))
-				}
-				if g.Require != "" && !ValidGitHubStatusStates[g.Require] {
-					issues = append(issues, fmt.Sprintf("%s source.github_status.require %q must be one of success, pending, failure, error", prefix, g.Require))
-				}
-				issues = append(issues, validateGitHubCommon(prefix+" source.github_status", g.Repo, g.OnMissing)...)
-			case "github_check":
-				g := s.Source.GitHubCheck
-				if g.Name == "" {
-					issues = append(issues, fmt.Sprintf("%s source.github_check.name is required: a sensor that selects no particular check run observes a set that changes underneath it", prefix))
-				}
-				if g.Require != "" && !ValidGitHubCheckConclusions[g.Require] {
-					issues = append(issues, fmt.Sprintf("%s source.github_check.require %q must be a check conclusion (success, failure, neutral, cancelled, timed_out, action_required, stale, skipped). A run that has not finished has no conclusion — use on_missing for that case", prefix, g.Require))
-				}
-				issues = append(issues, validateGitHubCommon(prefix+" source.github_check", g.Repo, g.OnMissing)...)
-			case "files":
-				if len(s.Source.Files) == 0 {
-					issues = append(issues, fmt.Sprintf("%s source.files must be a non-empty array", prefix))
-				}
-				for i, p := range s.Source.Files {
-					if p == "" {
-						issues = append(issues, fmt.Sprintf("%s source.files[%d] must be non-empty", prefix, i))
-					}
-				}
-			case "command":
-				if s.Source.Command == "" {
-					issues = append(issues, fmt.Sprintf("%s source.command must be a non-empty string", prefix))
-				}
-			case "focus":
-				if s.Source.Focus.Inline != nil {
-					if s.Source.Focus.Inline.Prompt == "" {
-						issues = append(issues, fmt.Sprintf("%s source.focus.prompt must not be empty", prefix))
-					}
-					if p := s.Source.Focus.Inline.Profile; p != "" && profileNames != nil && !profileNames[p] {
-						issues = append(issues, fmt.Sprintf("%s source.focus references unknown profile %q", prefix, p))
-					}
-				} else if s.Source.Focus.Name != "" && focusNames != nil && !focusNames[s.Source.Focus.Name] {
-					issues = append(issues, fmt.Sprintf("%s source.focus references undefined focus %q", prefix, s.Source.Focus.Name))
-				}
-			}
-		}
-		if s.Output.Format == "" {
-			issues = append(issues, fmt.Sprintf("%s output.format must not be empty", prefix))
-		}
-		// A match that does not compile would silently select nothing, which
-		// turns the sensor's whole output into accepted debt on the next
-		// baseline write. Caught here instead.
-		if _, err := s.OutputMatcher(); err != nil {
-			issues = append(issues, fmt.Sprintf("%s %v", prefix, err))
-		}
-	}
-	return issues
 }
 
 // Focus is a named combination of profile + prompt for repeatable AI execution.
@@ -861,103 +722,35 @@ func ExpandPluginPlaceholders(servers map[string]MCPServer, root, data string, p
 type HookEntry struct {
 	Matcher string `json:"matcher,omitempty"` // tool name pattern (optional)
 	Command string `json:"command"`           // shell command to run
+	// Timeout is the most seconds the vendor lets the command run, 1 to
+	// MaxHookTimeout; 0 means unset, and the vendor's own default applies. A
+	// vendor with no timeout field gets a warning instead of a value.
+	Timeout int `json:"timeout,omitempty"`
 }
 
-// ValidHookEvents lists the canonical hook event names.
+// MaxHookTimeout is the largest per-hook timeout, in seconds, a manifest may
+// declare. No vendor documents a general maximum for a hook command (Claude's
+// per-hook timeout, Codex's, Cursor's and Copilot's timeoutSec are all
+// uncapped; only Claude's and Codex's SessionEnd budgets are, which the
+// vendor adapters clamp to), so this is ynh's own bound: one hour.
+const MaxHookTimeout = 3600
+
+// ValidHookEvents lists the canonical hook event names. The manifest schemas
+// (docs/schema/plugin.schema.json, harness.schema.json), `ynd validate` and
+// `ynh hook add` all take their list from here or mirror it.
 var ValidHookEvents = map[string]bool{
 	"before_tool":      true,
 	"after_tool":       true,
 	"before_prompt":    true,
 	"on_stop":          true,
 	"on_session_start": true,
-}
-
-// ValidateHooks checks that hook event names are valid and commands are non-empty.
-func ValidateHooks(hooks map[string][]HookEntry) []string {
-	var issues []string
-	for event, entries := range hooks {
-		if !ValidHookEvents[event] {
-			issues = append(issues, fmt.Sprintf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop, on_session_start)", event))
-		}
-		for i, entry := range entries {
-			if entry.Command == "" {
-				issues = append(issues, fmt.Sprintf("hooks.%s[%d]: command must not be empty", event, i))
-			}
-		}
-	}
-	return issues
+	"on_session_end":   true,
 }
 
 // ProfileRatchetRefusal is why a profile's sensor override may not carry a
 // ratchet. One sentence, shared by `ynd validate` and the runtime.
 const ProfileRatchetRefusal = "ratchet cannot be set by a profile: the ratchet decides how the committed " +
 	"baseline is recorded, and the baseline belongs to the repository, not to a context"
-
-// ValidateProfileSensorOverrides checks the shape of one profile's
-// sensor_overrides: tolerance must be a known value and ratchet is refused.
-// Whether the named sensors exist, and what role they play, needs the merged
-// sensor set, so that half is the resolver's.
-func ValidateProfileSensorOverrides(profile string, overrides map[string]SensorOverride) []string {
-	var issues []string
-	for _, name := range sortedOverrideNames(overrides) {
-		ov := overrides[name]
-		if ov.Ratchet != "" {
-			issues = append(issues, fmt.Sprintf("profile %q: sensor_overrides.%s: %s", profile, name, ProfileRatchetRefusal))
-		}
-		if ov.Tolerance == "" {
-			if ov.Ratchet == "" {
-				issues = append(issues, fmt.Sprintf("profile %q: sensor_overrides.%s: tolerance is required", profile, name))
-			}
-		} else if !ValidSensorTolerances[ov.Tolerance] {
-			issues = append(issues, fmt.Sprintf("profile %q: sensor_overrides.%s: tolerance %q must be one of blocking, advisory, report", profile, name, ov.Tolerance))
-		}
-	}
-	return issues
-}
-
-func sortedOverrideNames(m map[string]SensorOverride) []string {
-	names := make([]string, 0, len(m))
-	for n := range m {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	return names
-}
-
-// ValidateProfiles validates hooks and mcp_servers within each profile.
-// Nil MCPServer entries (JSON null) are skipped — they signal removal of
-// an inherited server during profile merge.
-func ValidateProfiles(profiles map[string]Profile) []string {
-	var issues []string
-	for name, profile := range profiles {
-		for _, issue := range ValidateHooks(profile.Hooks) {
-			issues = append(issues, fmt.Sprintf("profile %q: %s", name, issue))
-		}
-		// Filter out nil entries (null removals) before validating
-		servers := make(map[string]MCPServer)
-		for k, v := range profile.MCPServers {
-			if v != nil {
-				servers[k] = *v
-			}
-		}
-		for _, issue := range ValidateMCPServers(servers) {
-			issues = append(issues, fmt.Sprintf("profile %q: %s", name, issue))
-		}
-		issues = append(issues, ValidateProfileSensorOverrides(name, profile.SensorOverrides)...)
-	}
-	return issues
-}
-
-// ValidateFocus checks that each focus entry has a non-empty prompt.
-func ValidateFocus(focuses map[string]Focus) []string {
-	var issues []string
-	for name, f := range focuses {
-		if f.Prompt == "" {
-			issues = append(issues, fmt.Sprintf("focus.%s: prompt must not be empty", name))
-		}
-	}
-	return issues
-}
 
 // ProvenanceMeta records where a harness was installed from.
 type ProvenanceMeta struct {
@@ -981,6 +774,10 @@ type IncludeMeta struct {
 	// Sensors, when false, drops the sensors the include declares. Absent
 	// means true: sensors travel with the include.
 	Sensors *bool `json:"sensors,omitempty"`
+	// Instructions, when false, leaves out the include's instructions file
+	// (instructions.md / AGENTS.md) when instructions are composed. Absent
+	// means true: the include contributes a section.
+	Instructions *bool `json:"instructions,omitempty"`
 }
 
 // DelegateMeta is the JSON representation of a delegate reference.
@@ -1012,15 +809,11 @@ const AgentsDir = ".agents"
 const PluginDir = AgentsDir + "/harness"
 
 // LegacyPluginDir is the manifest directory used before PluginDir moved
-// under AgentsDir. It is deprecated (#404): still read, second to PluginDir,
-// so a harness that has not moved keeps working, and a manifest that already
-// lives here is edited in place, but every read reports it through
-// SetLegacyManifestDirNotice and `ynd migrate` moves it. Nothing creates a
-// new file here.
+// under AgentsDir. ynh no longer reads it (#404): a source tree that still has
+// one is refused with the fix, `ynd migrate`, which is the one place it is
+// still understood. Installs and cached clones, which ynh owns, are moved by
+// the format chain on load. Nothing creates a file here.
 const LegacyPluginDir = ".ynh-plugin"
-
-// manifestDirs is the lookup order for the manifest directory.
-var manifestDirs = [...]string{PluginDir, LegacyPluginDir}
 
 // PluginFile is the manifest filename inside PluginDir.
 const PluginFile = "plugin.json"
@@ -1029,197 +822,43 @@ const PluginFile = "plugin.json"
 // Authors never write this file: ynh install writes it at install time.
 const InstalledFile = "installed.json"
 
-// manifestFiles are the files a manifest directory holds.
-var manifestFiles = [...]string{PluginFile, InstalledFile, MarketplaceFile}
-
-// findManifest returns the path of file under the first manifest directory
-// of dir that holds it.
-func findManifest(dir, file string) (string, bool) {
-	for _, md := range manifestDirs {
-		p := filepath.Join(dir, md, file)
-		if _, err := os.Stat(p); err == nil {
-			if md == LegacyPluginDir {
-				noteLegacyManifestDir(dir)
-			}
-			return p, true
-		}
-	}
-	return "", false
-}
-
-// legacyNotice holds the callback set by SetLegacyManifestDirNotice and the
-// directories it has already been called for.
-var legacyNotice struct {
-	mu   sync.Mutex
-	fn   func(dir string)
-	seen map[string]bool
-}
-
-// SetLegacyManifestDirNotice sets the function called when a harness's
-// manifest is read from LegacyPluginDir, or clears it with nil. It is called
-// once per harness directory per process however many files are read, so a
-// command can print a deprecation warning without repeating it.
-//
-// The plugin package never prints. Commands set this in main and decide where
-// the warning goes; library callers and tests leave it unset.
-func SetLegacyManifestDirNotice(fn func(dir string)) {
-	legacyNotice.mu.Lock()
-	defer legacyNotice.mu.Unlock()
-	legacyNotice.fn = fn
-	legacyNotice.seen = map[string]bool{}
-}
-
-// noteLegacyManifestDir reports that dir's manifest was read from
-// LegacyPluginDir, the first time only.
-func noteLegacyManifestDir(dir string) {
-	legacyNotice.mu.Lock()
-	fn := legacyNotice.fn
-	if fn == nil {
-		legacyNotice.mu.Unlock()
-		return
-	}
-	key := filepath.Clean(dir)
-	if abs, err := filepath.Abs(dir); err == nil {
-		key = abs
-	}
-	if legacyNotice.seen[key] {
-		legacyNotice.mu.Unlock()
-		return
-	}
-	legacyNotice.seen[key] = true
-	legacyNotice.mu.Unlock()
-	fn(dir)
-}
-
-// ManifestDir returns the manifest directory of the harness at dir, as
-// PluginDir or LegacyPluginDir relative to dir: the one that holds
-// plugin.json, canonical first. ok is false when neither does.
-//
-// Every sibling file (installed.json, marketplace.json) is read from and
-// written to this one directory, so a harness never has its manifest split
-// across the two.
-//
-// Resolving to LegacyPluginDir is reported through
-// SetLegacyManifestDirNotice.
-func ManifestDir(dir string) (string, bool) {
-	for _, md := range manifestDirs {
-		if _, err := os.Stat(filepath.Join(dir, md, PluginFile)); err == nil {
-			if md == LegacyPluginDir {
-				noteLegacyManifestDir(dir)
-			}
-			return md, true
-		}
-	}
-	return "", false
-}
-
-// readPath is where file is read from under dir. When dir has a plugin.json,
-// that is its manifest directory (see ManifestDir), whether or not file
-// exists there. Without one, each file is looked up on its own, canonical
-// first. A file found nowhere reports the canonical path, so errors name
-// the documented location.
-//
-// installed.json is the one exception: when it is missing beside
-// plugin.json, the other directory is still read. An install made while
-// plugin.json and installed.json sat in different directories must not lose
-// its provenance; ynd validate reports the split.
-func readPath(dir, file string) string {
-	if md, ok := ManifestDir(dir); ok {
-		p := filepath.Join(dir, md, file)
-		if file == InstalledFile {
-			if _, err := os.Stat(p); err != nil {
-				if q, found := findManifest(dir, file); found {
-					return q
-				}
-			}
-		}
-		return p
-	}
-	if p, ok := findManifest(dir, file); ok {
-		return p
-	}
+// manifestPath is where file is read from under dir: always PluginDir. A file
+// found nowhere still reports that path, so errors name the documented
+// location.
+func manifestPath(dir, file string) string {
 	return filepath.Join(dir, PluginDir, file)
 }
 
-// writePath is where file is written under dir: the manifest directory when
-// dir has a plugin.json, so a manifest that already exists is rewritten
-// where it is and every sibling joins it. Without a plugin.json, an existing
-// file is rewritten in place and a new one goes to the canonical location.
-func writePath(dir, file string) string {
-	if md, ok := ManifestDir(dir); ok {
-		return filepath.Join(dir, md, file)
-	}
-	if p, ok := findManifest(dir, file); ok {
-		return p
-	}
-	return filepath.Join(dir, PluginDir, file)
-}
-
-// PluginPath returns the path plugin.json is read from under dir. See
-// readPath for the rule.
-func PluginPath(dir string) string { return readPath(dir, PluginFile) }
+// PluginPath returns the path plugin.json is read from under dir.
+func PluginPath(dir string) string { return manifestPath(dir, PluginFile) }
 
 // InstalledPath returns the path installed.json is read from under dir.
-func InstalledPath(dir string) string { return readPath(dir, InstalledFile) }
+func InstalledPath(dir string) string { return manifestPath(dir, InstalledFile) }
 
 // MarketplacePath returns the path marketplace.json is read from under dir.
-func MarketplacePath(dir string) string { return readPath(dir, MarketplaceFile) }
+func MarketplacePath(dir string) string { return manifestPath(dir, MarketplaceFile) }
 
-// InManifestDir reports whether path sits directly inside a manifest
-// directory, canonical or legacy. It answers from the path alone, without
-// touching the filesystem, so it works for a file that does not exist yet.
+// InManifestDir reports whether path sits directly inside the manifest
+// directory. It answers from the path alone, without touching the filesystem,
+// so it works for a file that does not exist yet.
 func InManifestDir(path string) bool {
 	parent := filepath.ToSlash(filepath.Dir(path))
-	for _, md := range manifestDirs {
-		if parent == md || strings.HasSuffix(parent, "/"+md) {
-			return true
-		}
-	}
-	return false
+	return parent == PluginDir || strings.HasSuffix(parent, "/"+PluginDir)
 }
 
 // HarnessRoot returns the harness root for a manifest file path, or "" when
-// the path is not directly inside a manifest directory. Callers must not
-// walk up a fixed number of directories: the canonical directory is two
-// segments deep and the legacy one is one.
+// the path is not directly inside the manifest directory. Callers must not
+// walk up a fixed number of directories: the directory is two segments deep.
 func HarnessRoot(manifestPath string) string {
 	parent := filepath.Dir(manifestPath)
 	slash := filepath.ToSlash(parent)
-	for _, md := range manifestDirs {
-		if slash == md {
-			return "."
-		}
-		if strings.HasSuffix(slash, "/"+md) {
-			return filepath.Clean(parent[:len(parent)-len(md)-1])
-		}
+	if slash == PluginDir {
+		return "."
+	}
+	if strings.HasSuffix(slash, "/"+PluginDir) {
+		return filepath.Clean(parent[:len(parent)-len(PluginDir)-1])
 	}
 	return ""
-}
-
-// MisplacedManifestFiles returns the manifest files under dir that sit
-// outside its manifest directory (see ManifestDir), as slash-separated paths
-// relative to dir. A plugin.json there is shadowed by the one that wins; a
-// sibling there is not read, except installed.json, which readPath still
-// falls back to. Loaders do not refuse a split manifest; ynd validate
-// reports it. Without a plugin.json there is no manifest directory to
-// compare against, so nothing is reported.
-func MisplacedManifestFiles(dir string) []string {
-	md, ok := ManifestDir(dir)
-	if !ok {
-		return nil
-	}
-	var out []string
-	for _, other := range manifestDirs {
-		if other == md {
-			continue
-		}
-		for _, f := range manifestFiles {
-			if _, err := os.Stat(filepath.Join(dir, other, f)); err == nil {
-				out = append(out, other+"/"+f)
-			}
-		}
-	}
-	return out
 }
 
 // InstalledJSON records where a harness was installed from.
@@ -1238,7 +877,7 @@ type InstalledJSON struct {
 	Resolved     []ResolvedSourceJSON `json:"resolved,omitempty"`
 	// Format names a source format other than a ynh harness when the
 	// installed content is derived from one at load time rather than read
-	// from .ynh-plugin/plugin.json: "agent-plugin" for an Agent Plugins
+	// from .agents/harness/plugin.json: "agent-plugin" for an Agent Plugins
 	// package. Empty for a ynh harness.
 	Format string `json:"format,omitempty"`
 }
@@ -1268,14 +907,14 @@ type ForkedFromJSON struct {
 }
 
 // IsPluginDir returns true if the directory contains a plugin.json manifest
-// in either manifest directory.
+// in the manifest directory. A tree that has one only under LegacyPluginDir is
+// not a plugin dir: ynh does not read that layout.
 func IsPluginDir(dir string) bool {
-	_, ok := ManifestDir(dir)
-	return ok
+	_, err := os.Stat(manifestPath(dir, PluginFile))
+	return err == nil
 }
 
-// LoadPluginJSON reads and parses plugin.json from dir, canonical location
-// first. Unknown fields are rejected. The migration chain must run before
+// LoadPluginJSON reads and parses plugin.json from dir. Unknown fields are rejected. The migration chain must run before
 // this so callers can assume the new format exists.
 func LoadPluginJSON(dir string) (*HarnessJSON, error) {
 	data, err := os.ReadFile(PluginPath(dir))
@@ -1345,7 +984,7 @@ func LoadMCPJSON(dir string) (map[string]MCPServer, error) {
 // otherwise at the canonical location.
 // InstalledFrom is stripped — provenance belongs in installed.json.
 func SavePluginJSON(dir string, hj *HarnessJSON) error {
-	path := writePath(dir, PluginFile)
+	path := manifestPath(dir, PluginFile)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("creating manifest dir: %w", err)
 	}
@@ -1382,11 +1021,8 @@ func LoadInstalledJSON(dir string) (*InstalledJSON, error) {
 }
 
 // SaveInstalledJSON writes ins to installed.json beside dir's plugin.json.
-// A copy left in the other manifest directory by an earlier split install
-// is removed once the new one is written: it is stale, and leaving it would
-// let it resurface through readPath's fallback when the current one goes.
 func SaveInstalledJSON(dir string, ins *InstalledJSON) error {
-	path := writePath(dir, InstalledFile)
+	path := manifestPath(dir, InstalledFile)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("creating manifest dir: %w", err)
 	}
@@ -1399,16 +1035,6 @@ func SaveInstalledJSON(dir string, ins *InstalledJSON) error {
 
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("writing installed.json: %w", err)
-	}
-
-	for _, md := range manifestDirs {
-		stale := filepath.Join(dir, md, InstalledFile)
-		if stale == path {
-			continue
-		}
-		if err := os.Remove(stale); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("removing stale installed.json: %w", err)
-		}
 	}
 
 	return nil
@@ -1606,21 +1232,4 @@ func ExpandMCPEnv(servers map[string]MCPServer, allowed []string, lookup func(st
 		out[name] = s
 	}
 	return out, nil
-}
-
-// validateGitHubCommon checks the fields both GitHub sensor sources share.
-func validateGitHubCommon(prefix, repo, onMissing string) []string {
-	var issues []string
-	if repo != "" {
-		// "owner/name", nothing else. A bare name or a URL both silently
-		// address the wrong repository, which a sensor must never do.
-		parts := strings.Split(repo, "/")
-		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-			issues = append(issues, fmt.Sprintf("%s.repo %q must be \"owner/name\"", prefix, repo))
-		}
-	}
-	if onMissing != "" && !ValidSensorOnMissing[onMissing] {
-		issues = append(issues, fmt.Sprintf("%s.on_missing %q must be one of broken, fail, pass", prefix, onMissing))
-	}
-	return issues
 }

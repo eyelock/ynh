@@ -19,6 +19,7 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 | `TRACEPARENT`, `TRACESTATE` | _(none)_ | `ynh agent run` | the trace a run joins |
 | `OTEL_EXPORTER_OTLP_*` | _(none)_ | `ynh agent run` | an OTLP endpoint, which wins over the spool; not exported yet |
 | `OTEL_RESOURCE_ATTRIBUTES` | _(none)_ | `ynh agent run` | extra telemetry resource attributes |
+| `YNH_WORKSPACE_ROOTS` | _(none)_ | `ynh run`, `ynh agent run` | colon-separated allow-list of folders a harness may be granted; replaces `workspace_roots` in `config.json` for the run ([Workspace Folders](workspace.md)) |
 | `YNH_TELEMETRY_RELAY` | _(off)_ | `ynh agent run` | `--telemetry-relay` flag; turns the [telemetry relay](telemetry.md#vendor-telemetry-through-the-relay) on or off |
 
 **Note:** `YNH_VENDOR` is not used by `ynd diff` — diff always compares across multiple vendors and a single vendor value is not meaningful. Use `-v` with a comma-separated list instead.
@@ -32,6 +33,7 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 | Focus | `--focus` flag > `YNH_FOCUS` > no focus (mutually exclusive with `--profile`) |
 | Harness source | `--harness` flag > `YNH_HARNESS` > positional arg > `.` (CWD) or error |
 | Non-interactive | `-y` flag > `YNH_YES` > `CI` |
+| Workspace folders | never-granted paths refuse first; then `YNH_WORKSPACE_ROOTS` (replaces) > `workspace_roots` in `config.json` as the allow-list; with neither, `ynh trust accept`. `--no-workspace` grants none. See [Workspace Folders](workspace.md) |
 | Telemetry relay | `--telemetry-relay` flag > `YNH_TELEMETRY_RELAY` > `telemetry_relay` in `config.json` > off |
 
 The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For `preview`, `export`, and `diff` it is an error if no source is specified.
@@ -41,7 +43,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | Command | Key Flags |
 |---------|-----------|
 | `ynh install <source>` | `--path`, `-v` |
-| `ynh run [harness-id\|path]` | `-v`, `--profile`, `--focus`, `--harness-file <file>`, `--isolated-mcp`, `--install`, `--clean`, `--resume[=<id>]`, `--session-name <name>` (see [Resuming a Session](focus.md#resuming-a-session); on Claude the name binds `--resume` to that name's session) |
+| `ynh run [harness-id\|path]` | (a bare run wakes with the manifest's [`launch_focus`](focus.md#launch-focus)) `-v`, `--profile`, `--focus`, `--harness-file <file>`, `--isolated-mcp`, `--install`, `--clean`, `--resume[=<id>]`, `--no-workspace` (grant none of the harness's requested [workspace folders](workspace.md)), `--session-name <name>` (see [Resuming a Session](focus.md#resuming-a-session); on Claude the name binds `--resume` to that name's session) |
 | `ynh uninstall <harness>...` | |
 | `ynh update [harness]` | |
 | `ynh fork <name>` | `--to <path>`, `--name <new>`, `--format <text\|json>` |
@@ -64,7 +66,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh profile ls <harness>` | `--format <text\|json>` |
 | `ynh profile add <harness> <name>` | |
 | `ynh profile remove <harness> <name>` | (refuses if any focus references it) |
-| `ynh profile hook add <harness> <profile> <event> <command>` | `--matcher` |
+| `ynh profile hook add <harness> <profile> <event> <command>` | `--matcher`, `--timeout <seconds>` (1 to 3600) |
 | `ynh profile hook remove <harness> <profile> <event> <index>` | |
 | `ynh profile mcp add <harness> <profile> <name>` | `--command`, `--url`, `--type`, `--arg`, `--env`, `--cwd`, `--header`, `--null` |
 | `ynh profile mcp remove <harness> <profile> <name>` | |
@@ -72,7 +74,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh profile include add <harness> <profile> <url>` | `--path`, `--ref`, `--replace` |
 | `ynh profile include remove <harness> <profile> <url>` | `--path` |
 | `ynh profile include update <harness> <profile> <url>` | `--from-path`, `--path`, `--ref` |
-| `ynh hook add <harness> <event> <command>` | `--matcher` — top-level harness hook |
+| `ynh hook add <harness> <event> <command>` | `--matcher`, `--timeout <seconds>` (1 to 3600); top-level harness hook |
 | `ynh hook remove <harness> <event> <index>` | top-level harness hook |
 | `ynh hook export <harness>` | `--target <settings\|local>` (required), `-v <vendor>` (claude), `--dry-run` — write a harness's hooks into a Claude settings file ([why](hooks.md#running-hooks-in-a-plain-claude-session)) |
 | `ynh mcp add <harness> <name>` | `--command`, `--url`, `--type`, `--arg`, `--env`, `--cwd`, `--header`, top-level harness MCP server (no `--null`; harness-level entries cannot be null) |
@@ -124,13 +126,13 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 
 | Command | Structured fields |
 |---------|-------------------|
-| `ynd compose` | Composed harness: `name`, `version`, `description`, `default_vendor`, `artifacts` (with source), `includes`, `delegates_to`, `hooks`, `mcp_servers`, `profiles` (object keyed by name — see breaking change note below), `focuses`, `sensors`, `counts` |
+| `ynd compose` | Composed harness: `name`, `version`, `description`, `default_vendor`, `artifacts` (with source), `includes`, `delegates_to`, `hooks`, `mcp_servers`, `profiles` (object keyed by name; see breaking change note below), `focuses`, `launch_focus` (when set), `sensors`, `counts` |
 | `ynh sensors ls <harness-id\|path>` | Array of sensor summaries: `name`, `category`, `role`, `source_kind`, `format`, `inline_focus` (bool), see [Sensors](sensors.md) |
 | `ynh focus ls <harness>` | Array of focus summaries: `name`, `profile` (when set), `prompt` in full — the text view abbreviates, JSON does not |
 | `ynh profile ls <harness>` | Array of profile summaries: `name` plus counts of `hooks`, `mcp_servers`, `includes`, `env_passthrough` — `ynh info` resolves one in full |
 | `ynh sensors show <harness-id\|path> <name>` | Resolved sensor object with inline-focus expansion |
 | `ynh sensors run <harness-id\|path> <name>` | Sensor run result: `kind`, `exit_code`, `duration_ms`, `output` (raw signal, no `passed` field; pass/fail is loop-driver policy) |
-| `ynh trust` | Array of harness trust states: `harness`, `source`, `sha`, `digest`, `executables`, `state`, `undeclared_env`. `ynh trust show <harness>` returns one object of the same shape. Reports what a harness will execute; it does not block. See [Sensors](sensors.md) |
+| `ynh trust` | Array of harness trust states: `harness`, `source`, `sha`, `digest`, `executables`, `state`, `undeclared_env`. `ynh trust show <harness>` returns one object of the same shape. Reports what a harness will execute; it does not block. See [Sensors](sensors.md). `ynh trust show` adds an optional `launch_focus` object (`name`, `profile`, `prompt`) when the harness declares a [launch focus](focus.md#launch-focus), and an optional `workspace` object (`allow_list`, `remote_install`, `entries[]` with `requested`, `resolved`, `refused`, `allow_list_covers`) when the harness requests [workspace folders](workspace.md) |
 | `ynh doctor` | Setup diagnosis: `summary` (`checks`, `errors`, `warnings`) and `checks[]`, each with `name`, `title`, `status` and `findings[]` (`severity`, `subject`, `message`, `remedy`). Exit status is 0 regardless; gate on `summary.errors` |
 | `ynh agent run` | Run result: `exit_code`, `reason`, `converged`, `budgets`/`budget_sources`/`consumed` with `bound_by`, `convergence`, `sensors[]`, `changed_files` — see [Agent](agent.md#run-result) |
 | `ynh baseline <harness>` | What the ratchet forgives: per-sensor `recorded`, `recorded_at`, `forgiven`, and under `--explain` the `findings` themselves — see [Sensors](sensors.md#reading-the-ratchet) |

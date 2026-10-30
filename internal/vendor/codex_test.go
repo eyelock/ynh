@@ -227,6 +227,7 @@ func TestCodexGenerateHookConfig_EventTranslation(t *testing.T) {
 		"before_prompt":    {{Command: "cmd3"}},
 		"on_stop":          {{Command: "cmd4"}},
 		"on_session_start": {{Command: "cmd5"}},
+		"on_session_end":   {{Command: "cmd6"}},
 	}
 
 	result, err := c.GenerateHookConfig(hooks)
@@ -241,7 +242,7 @@ func TestCodexGenerateHookConfig_EventTranslation(t *testing.T) {
 	}
 
 	hooksObj := config["hooks"].(map[string]any)
-	expectedEvents := []string{"PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop", "SessionStart"}
+	expectedEvents := []string{"PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop", "SessionStart", "SessionEnd"}
 	for _, event := range expectedEvents {
 		if _, ok := hooksObj[event]; !ok {
 			t.Errorf("missing event %s", event)

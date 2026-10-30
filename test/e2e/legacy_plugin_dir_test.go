@@ -41,48 +41,50 @@ func writeLegacyLayoutHarness(t *testing.T, name string) string {
 	return dir
 }
 
-// assertDeprecationWarning checks that stderr carries the .ynh-plugin
-// deprecation warning for dir exactly once, and stdout none of it.
-func assertDeprecationWarning(t *testing.T, stdout, stderr, dir string) {
+// assertLegacyRefusal checks that a command failed with the .ynh-plugin
+// refusal: it names the tree and `ynd migrate`, and prints nothing on stdout.
+func assertLegacyRefusal(t *testing.T, stdout, stderr string, err error, dir string) {
 	t.Helper()
-	if n := strings.Count(stderr, "keeps its manifest in .ynh-plugin/"); n != 1 {
-		t.Errorf("want one deprecation warning on stderr, got %d:\n%s", n, stderr)
+	if err == nil {
+		t.Fatalf("a source tree that keeps its manifest in .ynh-plugin must be refused\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
-	if !strings.Contains(stderr, "ynd migrate "+dir) {
-		t.Errorf("the warning should name ynd migrate %s, got:\n%s", dir, stderr)
-	}
-	if strings.Contains(stdout, "deprecated") {
-		t.Errorf("the warning must not reach stdout, got:\n%s", stdout)
+	combined := stdout + stderr
+	if !strings.Contains(combined, ".ynh-plugin/") || !strings.Contains(combined, "ynd migrate "+dir) {
+		t.Errorf("the refusal should name .ynh-plugin/ and `ynd migrate %s`, got:\nstdout:\n%s\nstderr:\n%s", dir, stdout, stderr)
 	}
 }
 
-// TestLegacyPluginDir_YndStillReadsIt: the developer tools validate and
-// preview a harness that has not moved to .agents/harness, warn that the
-// layout is deprecated, and leave it alone: reading never migrates.
-func TestLegacyPluginDir_YndStillReadsIt(t *testing.T) {
-	dir := writeLegacyLayoutHarness(t, "old-layout")
-
-	out, errOut := mustRunYndInDir(t, dir, "validate", dir)
-	if !strings.Contains(out, "valid") {
-		t.Errorf("validate should accept a .ynh-plugin harness, got:\n%s", out)
-	}
-	assertDeprecationWarning(t, out, errOut, dir)
-
-	out, _ = mustRunYndInDir(t, dir, "preview", "-v", "claude", ".")
-	if !strings.Contains(out, "always-test") {
-		t.Errorf("preview should assemble the legacy harness's rules, got:\n%s", out)
-	}
-
+// assertLegacyTreeUntouched checks that a refused read left the user's tree as it was.
+func assertLegacyTreeUntouched(t *testing.T, dir string) {
+	t.Helper()
 	if _, err := os.Stat(filepath.Join(dir, ".agents")); !os.IsNotExist(err) {
-		t.Errorf("reading a legacy harness must not create .agents/: no migration happens on read")
+		t.Errorf("a refused read must not create .agents/")
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".ynh-plugin", "plugin.json")); err != nil {
 		t.Errorf("the legacy manifest must be left where it was: %v", err)
 	}
 }
 
-// TestLegacyPluginDir_YndMigrateMovesIt: ynd migrate is the fix the warning
-// names. It lists the move, makes it, and afterwards validate is silent.
+// TestLegacyPluginDir_YndRefusesIt: the developer tools no longer read a
+// harness that keeps its manifest in .ynh-plugin. They say so, name
+// `ynd migrate`, and leave the tree alone.
+func TestLegacyPluginDir_YndRefusesIt(t *testing.T) {
+	dir := writeLegacyLayoutHarness(t, "old-layout")
+	for _, args := range [][]string{
+		{"validate", dir},
+		{"preview", "-v", "claude", dir},
+	} {
+		t.Run(args[0], func(t *testing.T) {
+			out, errOut, err := runYndInDirEnv(t, dir, nil, args...)
+			assertLegacyRefusal(t, out, errOut, err, dir)
+			assertLegacyTreeUntouched(t, dir)
+		})
+	}
+}
+
+// TestLegacyPluginDir_YndMigrateMovesIt: ynd migrate is the fix the refusal
+// names, and still reads the old layout. It lists the move, makes it, and
+// afterwards the tree validates and previews.
 func TestLegacyPluginDir_YndMigrateMovesIt(t *testing.T) {
 	dir := writeLegacyLayoutHarness(t, "old-layout")
 
@@ -90,50 +92,123 @@ func TestLegacyPluginDir_YndMigrateMovesIt(t *testing.T) {
 	if !strings.Contains(out, ".ynh-plugin/ → .agents/harness/") {
 		t.Errorf("dry run should list the move, got:\n%s", out)
 	}
+	assertLegacyTreeUntouched(t, dir)
 
-	out, errOut := mustRunYndInDir(t, dir, "migrate", "-y", dir)
-	if strings.Contains(errOut, "deprecated") {
-		t.Errorf("migrate must not warn about the tree it is migrating, got:\n%s", errOut)
-	}
+	out, _ = mustRunYndInDir(t, dir, "migrate", "-y", dir)
 	assertFileExists(t, filepath.Join(dir, ".agents", "harness", "plugin.json"))
 	if _, err := os.Lstat(filepath.Join(dir, ".ynh-plugin")); !os.IsNotExist(err) {
 		t.Errorf(".ynh-plugin should be gone after migrate:\n%s", out)
 	}
 
-	out, errOut = mustRunYndInDir(t, dir, "validate", dir)
+	out, errOut := mustRunYndInDir(t, dir, "validate", dir)
 	if !strings.Contains(out, "valid") || errOut != "" {
 		t.Errorf("validate after migrate should be clean and silent, stdout:\n%s\nstderr:\n%s", out, errOut)
 	}
+	out, _ = mustRunYndInDir(t, dir, "preview", "-v", "claude", ".")
+	if !strings.Contains(out, "always-test") {
+		t.Errorf("preview after migrate should assemble the rules, got:\n%s", out)
+	}
 }
 
-// TestLegacyPluginDir_YnhInstallsAndListsIt: the harness manager installs a
-// .ynh-plugin harness from a local path and lists it like any other. A local
-// install is a pointer to the user's tree, so ynh warns rather than moving it,
-// and the JSON on stdout stays parseable.
-func TestLegacyPluginDir_YnhInstallsAndListsIt(t *testing.T) {
+// TestLegacyPluginDir_YnhRefusesIt: the harness manager refuses to install,
+// check or run a local path that keeps its manifest in .ynh-plugin, and never
+// moves a user's tree.
+func TestLegacyPluginDir_YnhRefusesIt(t *testing.T) {
 	s := newSandbox(t)
 	dir := writeLegacyLayoutHarness(t, "old-layout")
 
+	for _, args := range [][]string{
+		{"install", dir},
+		{"run", dir, "-v", "claude"},
+	} {
+		t.Run(args[0], func(t *testing.T) {
+			out, errOut, err := s.runYnh(t, args...)
+			assertLegacyRefusal(t, out, errOut, err, dir)
+			assertLegacyTreeUntouched(t, dir)
+		})
+	}
+	out, _ := s.mustRunYnh(t, "ls")
+	if strings.Contains(out, "old-layout") {
+		t.Errorf("a refused install must not register the harness, got:\n%s", out)
+	}
+
+	// After ynd migrate the same path installs.
+	mustRunYndInDir(t, dir, "migrate", "-y", dir)
 	s.mustRunYnh(t, "install", dir)
-
-	out, errOut := s.mustRunYnh(t, "ls")
+	out, _ = s.mustRunYnh(t, "ls")
 	if !strings.Contains(out, "old-layout") {
-		t.Errorf("ls should show the installed legacy harness, got:\n%s", out)
+		t.Errorf("ls should show the migrated harness, got:\n%s", out)
 	}
-	assertDeprecationWarning(t, out, errOut, dir)
+}
 
-	out, errOut = s.mustRunYnh(t, "info", "local/old-layout", "--format", "json")
-	if !strings.Contains(out, `"still on the old layout"`) {
-		t.Errorf("info should read the legacy manifest, got:\n%s", out)
+// TestLegacyPluginDir_BothLayoutsAreRefused: a tree that has both is an error
+// naming both, and neither manifest changes.
+func TestLegacyPluginDir_BothLayoutsAreRefused(t *testing.T) {
+	dir := writeLegacyLayoutHarness(t, "both")
+	canonical := filepath.Join(dir, ".agents", "harness", "plugin.json")
+	if err := os.MkdirAll(filepath.Dir(canonical), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if !strings.HasPrefix(strings.TrimSpace(out), "{") {
-		t.Errorf("info --format json stdout must be JSON alone, got:\n%s", out)
+	const body = `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"both","version":"0.1.0"}`
+	if err := os.WriteFile(canonical, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	assertDeprecationWarning(t, out, errOut, dir)
 
-	if _, err := os.Stat(filepath.Join(dir, ".ynh-plugin", "plugin.json")); err != nil {
-		t.Errorf("ynh must not move a user's source tree: %v", err)
+	out, errOut, err := runYndInDirEnv(t, dir, nil, "validate", dir)
+	if err == nil {
+		t.Fatalf("validate should fail on a tree with both layouts:\n%s", out)
 	}
+	if combined := out + errOut; !strings.Contains(combined, ".agents/harness") || !strings.Contains(combined, ".ynh-plugin") || !strings.Contains(combined, "nothing was merged") {
+		t.Errorf("the error should name both layouts, got:\n%s", combined)
+	}
+	if got, _ := os.ReadFile(canonical); string(got) != body {
+		t.Errorf("canonical manifest changed: %s", got)
+	}
+	assertFileExists(t, filepath.Join(dir, ".ynh-plugin", "plugin.json"))
+}
+
+// TestLegacyPluginDir_RemoteSourceStillInstalls: a remote repository that has
+// not moved to .agents/harness keeps working. ynh renames the manifest
+// directory inside its own copies, the clone under cache/ and the install
+// under harnesses/, and never in a tree the user owns. The upstream is a git
+// repository served over file://, standing in for a remote.
+func TestLegacyPluginDir_RemoteSourceStillInstalls(t *testing.T) {
+	s := newSandbox(t)
+	upstream := filepath.Join(t.TempDir(), "upstream")
+	root := writeLegacyLayoutHarness(t, "remote-old")
+	initRepo(t, upstream)
+	if err := os.CopyFS(upstream, os.DirFS(root)); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, upstream, "add", "-A")
+	mustGit(t, upstream, "commit", "--quiet", "-m", "old layout")
+	url := "file://" + upstream
+
+	s.mustRunYnh(t, "install", url)
+
+	out, _ := s.mustRunYnh(t, "ls")
+	if !strings.Contains(out, "remote-old") {
+		t.Fatalf("ls should show the remote harness, got:\n%s", out)
+	}
+	installDir := filepath.Join(s.home, "harnesses", "local--remote-old")
+	assertFileExists(t, filepath.Join(installDir, ".agents", "harness", "plugin.json"))
+	if _, err := os.Lstat(filepath.Join(installDir, ".ynh-plugin")); !os.IsNotExist(err) {
+		t.Errorf("the install should have moved off .ynh-plugin")
+	}
+	// The upstream working copy, which is the "remote" and not ynh's, is untouched.
+	assertFileExists(t, filepath.Join(upstream, ".ynh-plugin", "plugin.json"))
+	if _, err := os.Stat(filepath.Join(upstream, ".agents")); !os.IsNotExist(err) {
+		t.Errorf("ynh must not touch the remote's own tree")
+	}
+
+	// A later update fetches the old layout again over the migrated clone.
+	if err := os.WriteFile(filepath.Join(upstream, "AGENTS.md"), []byte("# remote-old\n\nUpdated.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, upstream, "add", "-A")
+	mustGit(t, upstream, "commit", "--quiet", "-m", "update")
+	s.mustRunYnh(t, "update", "local/remote-old")
+	s.mustRunYnh(t, "info", "local/remote-old")
 }
 
 // TestCanonicalPluginDir_CreateWritesIt: ynd create scaffolds the documented

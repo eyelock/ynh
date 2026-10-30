@@ -62,6 +62,23 @@ func (b *ClaudeBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 		cmd.Dir = opts.WorktreeDir
 	}
 	cmd.Env = workerEnvFor(opts.Env)
+	if opts.ConfigPath != "" {
+		// A plugin hook's own timeout does not raise Claude's SessionEnd budget;
+		// this variable does. The worker's environment is built from an
+		// allowlist, so the operator's value counts only if it was passed through.
+		extra, warnings := vendor.ClaudeSessionEndEnv(opts.ConfigPath, func(name string) (string, bool) {
+			for i := len(cmd.Env) - 1; i >= 0; i-- {
+				if v, ok := strings.CutPrefix(cmd.Env[i], name+"="); ok {
+					return v, true
+				}
+			}
+			return "", false
+		})
+		for _, w := range warnings {
+			_, _ = fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
+		}
+		cmd.Env = append(cmd.Env, extra...)
+	}
 	tail := &stderrTail{}
 	cmd.Stderr = stderrSink(opts.Stderr, tail)
 
@@ -158,6 +175,8 @@ func buildClaudeStreamArgs(opts StartOptions) []string {
 			args = append(args, vendor.ClaudeIsolationArgs(opts.ConfigPath)...)
 		}
 	}
+
+	args = append(args, workspaceArgs(vendorClaude, opts.Workspace)...)
 
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
