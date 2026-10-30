@@ -148,7 +148,7 @@ something you can read rather than take on trust:
 ```text
 .: valid
   checked:
-    manifest     .ynh-plugin/plugin.json against https://eyelock.github.io/ynh/schema/plugin.schema.json
+    manifest     .agents/harness/plugin.json against https://eyelock.github.io/ynh/schema/plugin.schema.json
     includes     https://github.com/eyelock/assistants path skills/dev pick skills/dev-review
                  https://github.com/eyelock/ynm pick skills/ynm-memory
     mcp_servers  ynm runs `ynm serve`

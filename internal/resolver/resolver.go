@@ -383,8 +383,16 @@ func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 		return RepoResult{Path: repoDir, SHA: gitHead(repoDir), ResolvedRef: effectiveRef(repoDir, ref), Cloned: true, Changed: true}, nil
 	}
 
+	// ynh renames a clone's .ynh-plugin/ to .agents/harness/ when it loads
+	// one (see migration.ManifestDirMigrator), so the working tree may differ
+	// from HEAD in ways git would refuse to check out over. The cache is
+	// disposable and nothing else writes to it: put the tree back to exactly
+	// what upstream has, and the next load migrates it again.
+	if reason := refuseToResetClone(config.CacheDir(), repoDir); reason != "" {
+		return RepoResult{}, fmt.Errorf("refusing to reset %s: %s", repoDir, reason)
+	}
 	if ref != "" {
-		if err := gitCmd("-C", repoDir, "checkout", "FETCH_HEAD"); err != nil {
+		if err := gitCmd("-C", repoDir, "checkout", "--force", "FETCH_HEAD"); err != nil {
 			return RepoResult{}, fmt.Errorf("git checkout FETCH_HEAD in %s: %w", repoDir, err)
 		}
 	} else {
@@ -392,9 +400,35 @@ func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 			return RepoResult{}, fmt.Errorf("git reset in %s: %w", repoDir, err)
 		}
 	}
+	if err := gitCmd("-C", repoDir, "clean", "-fdq"); err != nil {
+		return RepoResult{}, fmt.Errorf("git clean in %s: %w", repoDir, err)
+	}
 
 	after := gitHead(repoDir)
 	return RepoResult{Path: repoDir, SHA: after, ResolvedRef: effectiveRef(repoDir, ref), Changed: before != after}, nil
+}
+
+// refuseToResetClone reports why repoDir must not be handed to the commands
+// that discard working-tree changes (checkout --force, clean), or "" when it
+// may be. A pure predicate: it only stats and resolves symlinks, per
+// .claude/rules/destructive-operations.md. repoDir must be strictly inside
+// cacheRoot after symlinks are resolved, so the root itself, a sibling, a
+// parent, or a link that escapes the cache is refused.
+func refuseToResetClone(cacheRoot, repoDir string) string {
+	root, err := filepath.EvalSymlinks(cacheRoot)
+	if err != nil {
+		return "cannot resolve the cache directory"
+	}
+	dir, err := filepath.EvalSymlinks(repoDir)
+	if err != nil {
+		return "cannot resolve the clone directory"
+	}
+	rel, err := filepath.Rel(root, dir)
+	if err != nil || rel == "." || rel == ".." || filepath.IsAbs(rel) ||
+		strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "it is not strictly inside the cache directory"
+	}
+	return ""
 }
 
 // CacheOnlyRepo returns a cached repo without hitting the network.

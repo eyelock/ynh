@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 )
 
 // HarnessJSON represents the plugin.json manifest: the single source of truth.
@@ -723,15 +722,11 @@ const AgentsDir = ".agents"
 const PluginDir = AgentsDir + "/harness"
 
 // LegacyPluginDir is the manifest directory used before PluginDir moved
-// under AgentsDir. It is deprecated (#404): still read, second to PluginDir,
-// so a harness that has not moved keeps working, and a manifest that already
-// lives here is edited in place, but every read reports it through
-// SetLegacyManifestDirNotice and `ynd migrate` moves it. Nothing creates a
-// new file here.
+// under AgentsDir. ynh no longer reads it (#404): a source tree that still has
+// one is refused with the fix, `ynd migrate`, which is the one place it is
+// still understood. Installs and cached clones, which ynh owns, are moved by
+// the format chain on load. Nothing creates a file here.
 const LegacyPluginDir = ".ynh-plugin"
-
-// manifestDirs is the lookup order for the manifest directory.
-var manifestDirs = [...]string{PluginDir, LegacyPluginDir}
 
 // PluginFile is the manifest filename inside PluginDir.
 const PluginFile = "plugin.json"
@@ -740,197 +735,43 @@ const PluginFile = "plugin.json"
 // Authors never write this file: ynh install writes it at install time.
 const InstalledFile = "installed.json"
 
-// manifestFiles are the files a manifest directory holds.
-var manifestFiles = [...]string{PluginFile, InstalledFile, MarketplaceFile}
-
-// findManifest returns the path of file under the first manifest directory
-// of dir that holds it.
-func findManifest(dir, file string) (string, bool) {
-	for _, md := range manifestDirs {
-		p := filepath.Join(dir, md, file)
-		if _, err := os.Stat(p); err == nil {
-			if md == LegacyPluginDir {
-				noteLegacyManifestDir(dir)
-			}
-			return p, true
-		}
-	}
-	return "", false
-}
-
-// legacyNotice holds the callback set by SetLegacyManifestDirNotice and the
-// directories it has already been called for.
-var legacyNotice struct {
-	mu   sync.Mutex
-	fn   func(dir string)
-	seen map[string]bool
-}
-
-// SetLegacyManifestDirNotice sets the function called when a harness's
-// manifest is read from LegacyPluginDir, or clears it with nil. It is called
-// once per harness directory per process however many files are read, so a
-// command can print a deprecation warning without repeating it.
-//
-// The plugin package never prints. Commands set this in main and decide where
-// the warning goes; library callers and tests leave it unset.
-func SetLegacyManifestDirNotice(fn func(dir string)) {
-	legacyNotice.mu.Lock()
-	defer legacyNotice.mu.Unlock()
-	legacyNotice.fn = fn
-	legacyNotice.seen = map[string]bool{}
-}
-
-// noteLegacyManifestDir reports that dir's manifest was read from
-// LegacyPluginDir, the first time only.
-func noteLegacyManifestDir(dir string) {
-	legacyNotice.mu.Lock()
-	fn := legacyNotice.fn
-	if fn == nil {
-		legacyNotice.mu.Unlock()
-		return
-	}
-	key := filepath.Clean(dir)
-	if abs, err := filepath.Abs(dir); err == nil {
-		key = abs
-	}
-	if legacyNotice.seen[key] {
-		legacyNotice.mu.Unlock()
-		return
-	}
-	legacyNotice.seen[key] = true
-	legacyNotice.mu.Unlock()
-	fn(dir)
-}
-
-// ManifestDir returns the manifest directory of the harness at dir, as
-// PluginDir or LegacyPluginDir relative to dir: the one that holds
-// plugin.json, canonical first. ok is false when neither does.
-//
-// Every sibling file (installed.json, marketplace.json) is read from and
-// written to this one directory, so a harness never has its manifest split
-// across the two.
-//
-// Resolving to LegacyPluginDir is reported through
-// SetLegacyManifestDirNotice.
-func ManifestDir(dir string) (string, bool) {
-	for _, md := range manifestDirs {
-		if _, err := os.Stat(filepath.Join(dir, md, PluginFile)); err == nil {
-			if md == LegacyPluginDir {
-				noteLegacyManifestDir(dir)
-			}
-			return md, true
-		}
-	}
-	return "", false
-}
-
-// readPath is where file is read from under dir. When dir has a plugin.json,
-// that is its manifest directory (see ManifestDir), whether or not file
-// exists there. Without one, each file is looked up on its own, canonical
-// first. A file found nowhere reports the canonical path, so errors name
-// the documented location.
-//
-// installed.json is the one exception: when it is missing beside
-// plugin.json, the other directory is still read. An install made while
-// plugin.json and installed.json sat in different directories must not lose
-// its provenance; ynd validate reports the split.
-func readPath(dir, file string) string {
-	if md, ok := ManifestDir(dir); ok {
-		p := filepath.Join(dir, md, file)
-		if file == InstalledFile {
-			if _, err := os.Stat(p); err != nil {
-				if q, found := findManifest(dir, file); found {
-					return q
-				}
-			}
-		}
-		return p
-	}
-	if p, ok := findManifest(dir, file); ok {
-		return p
-	}
+// manifestPath is where file is read from under dir: always PluginDir. A file
+// found nowhere still reports that path, so errors name the documented
+// location.
+func manifestPath(dir, file string) string {
 	return filepath.Join(dir, PluginDir, file)
 }
 
-// writePath is where file is written under dir: the manifest directory when
-// dir has a plugin.json, so a manifest that already exists is rewritten
-// where it is and every sibling joins it. Without a plugin.json, an existing
-// file is rewritten in place and a new one goes to the canonical location.
-func writePath(dir, file string) string {
-	if md, ok := ManifestDir(dir); ok {
-		return filepath.Join(dir, md, file)
-	}
-	if p, ok := findManifest(dir, file); ok {
-		return p
-	}
-	return filepath.Join(dir, PluginDir, file)
-}
-
-// PluginPath returns the path plugin.json is read from under dir. See
-// readPath for the rule.
-func PluginPath(dir string) string { return readPath(dir, PluginFile) }
+// PluginPath returns the path plugin.json is read from under dir.
+func PluginPath(dir string) string { return manifestPath(dir, PluginFile) }
 
 // InstalledPath returns the path installed.json is read from under dir.
-func InstalledPath(dir string) string { return readPath(dir, InstalledFile) }
+func InstalledPath(dir string) string { return manifestPath(dir, InstalledFile) }
 
 // MarketplacePath returns the path marketplace.json is read from under dir.
-func MarketplacePath(dir string) string { return readPath(dir, MarketplaceFile) }
+func MarketplacePath(dir string) string { return manifestPath(dir, MarketplaceFile) }
 
-// InManifestDir reports whether path sits directly inside a manifest
-// directory, canonical or legacy. It answers from the path alone, without
-// touching the filesystem, so it works for a file that does not exist yet.
+// InManifestDir reports whether path sits directly inside the manifest
+// directory. It answers from the path alone, without touching the filesystem,
+// so it works for a file that does not exist yet.
 func InManifestDir(path string) bool {
 	parent := filepath.ToSlash(filepath.Dir(path))
-	for _, md := range manifestDirs {
-		if parent == md || strings.HasSuffix(parent, "/"+md) {
-			return true
-		}
-	}
-	return false
+	return parent == PluginDir || strings.HasSuffix(parent, "/"+PluginDir)
 }
 
 // HarnessRoot returns the harness root for a manifest file path, or "" when
-// the path is not directly inside a manifest directory. Callers must not
-// walk up a fixed number of directories: the canonical directory is two
-// segments deep and the legacy one is one.
+// the path is not directly inside the manifest directory. Callers must not
+// walk up a fixed number of directories: the directory is two segments deep.
 func HarnessRoot(manifestPath string) string {
 	parent := filepath.Dir(manifestPath)
 	slash := filepath.ToSlash(parent)
-	for _, md := range manifestDirs {
-		if slash == md {
-			return "."
-		}
-		if strings.HasSuffix(slash, "/"+md) {
-			return filepath.Clean(parent[:len(parent)-len(md)-1])
-		}
+	if slash == PluginDir {
+		return "."
+	}
+	if strings.HasSuffix(slash, "/"+PluginDir) {
+		return filepath.Clean(parent[:len(parent)-len(PluginDir)-1])
 	}
 	return ""
-}
-
-// MisplacedManifestFiles returns the manifest files under dir that sit
-// outside its manifest directory (see ManifestDir), as slash-separated paths
-// relative to dir. A plugin.json there is shadowed by the one that wins; a
-// sibling there is not read, except installed.json, which readPath still
-// falls back to. Loaders do not refuse a split manifest; ynd validate
-// reports it. Without a plugin.json there is no manifest directory to
-// compare against, so nothing is reported.
-func MisplacedManifestFiles(dir string) []string {
-	md, ok := ManifestDir(dir)
-	if !ok {
-		return nil
-	}
-	var out []string
-	for _, other := range manifestDirs {
-		if other == md {
-			continue
-		}
-		for _, f := range manifestFiles {
-			if _, err := os.Stat(filepath.Join(dir, other, f)); err == nil {
-				out = append(out, other+"/"+f)
-			}
-		}
-	}
-	return out
 }
 
 // InstalledJSON records where a harness was installed from.
@@ -949,7 +790,7 @@ type InstalledJSON struct {
 	Resolved     []ResolvedSourceJSON `json:"resolved,omitempty"`
 	// Format names a source format other than a ynh harness when the
 	// installed content is derived from one at load time rather than read
-	// from .ynh-plugin/plugin.json: "agent-plugin" for an Agent Plugins
+	// from .agents/harness/plugin.json: "agent-plugin" for an Agent Plugins
 	// package. Empty for a ynh harness.
 	Format string `json:"format,omitempty"`
 }
@@ -979,14 +820,14 @@ type ForkedFromJSON struct {
 }
 
 // IsPluginDir returns true if the directory contains a plugin.json manifest
-// in either manifest directory.
+// in the manifest directory. A tree that has one only under LegacyPluginDir is
+// not a plugin dir: ynh does not read that layout.
 func IsPluginDir(dir string) bool {
-	_, ok := ManifestDir(dir)
-	return ok
+	_, err := os.Stat(manifestPath(dir, PluginFile))
+	return err == nil
 }
 
-// LoadPluginJSON reads and parses plugin.json from dir, canonical location
-// first. Unknown fields are rejected. The migration chain must run before
+// LoadPluginJSON reads and parses plugin.json from dir. Unknown fields are rejected. The migration chain must run before
 // this so callers can assume the new format exists.
 func LoadPluginJSON(dir string) (*HarnessJSON, error) {
 	data, err := os.ReadFile(PluginPath(dir))
@@ -1056,7 +897,7 @@ func LoadMCPJSON(dir string) (map[string]MCPServer, error) {
 // otherwise at the canonical location.
 // InstalledFrom is stripped — provenance belongs in installed.json.
 func SavePluginJSON(dir string, hj *HarnessJSON) error {
-	path := writePath(dir, PluginFile)
+	path := manifestPath(dir, PluginFile)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("creating manifest dir: %w", err)
 	}
@@ -1093,11 +934,8 @@ func LoadInstalledJSON(dir string) (*InstalledJSON, error) {
 }
 
 // SaveInstalledJSON writes ins to installed.json beside dir's plugin.json.
-// A copy left in the other manifest directory by an earlier split install
-// is removed once the new one is written: it is stale, and leaving it would
-// let it resurface through readPath's fallback when the current one goes.
 func SaveInstalledJSON(dir string, ins *InstalledJSON) error {
-	path := writePath(dir, InstalledFile)
+	path := manifestPath(dir, InstalledFile)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("creating manifest dir: %w", err)
 	}
@@ -1110,16 +948,6 @@ func SaveInstalledJSON(dir string, ins *InstalledJSON) error {
 
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("writing installed.json: %w", err)
-	}
-
-	for _, md := range manifestDirs {
-		stale := filepath.Join(dir, md, InstalledFile)
-		if stale == path {
-			continue
-		}
-		if err := os.Remove(stale); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("removing stale installed.json: %w", err)
-		}
 	}
 
 	return nil
