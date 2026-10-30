@@ -979,7 +979,7 @@ cat > /tmp/ynh-live/probe-harness/scripts/probe.sh << 'EOF'
 #!/bin/sh
 # usage: probe.sh <label> [sleep-seconds]
 payload=$(cat)
-printf '%s %s pwd=%s PLUGIN_ROOT=%s CLAUDE_PLUGIN_ROOT=%s payload=%s\n' "$(date +%T)" "$1" "$PWD" "$PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT" "$payload" >> /tmp/ynh-live/probe.log
+printf '%s %s pwd=%s PLUGIN_ROOT=%s CLAUDE_PLUGIN_ROOT=%s COPILOT_PLUGIN_ROOT=%s payload=%s\n' "$(date +%T)" "$1" "$PWD" "$PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT" "$COPILOT_PLUGIN_ROOT" "$payload" >> /tmp/ynh-live/probe.log
 sleep "${2:-0}"
 printf '%s %s done\n' "$(date +%T)" "$1" >> /tmp/ynh-live/probe.log
 EOF
@@ -1002,11 +1002,13 @@ EOF
 
 ### L1: Copilot, session layout, untrusted folder
 
-In a scratch git repository that is not in Copilot's `trustedFolders`, launch with a prompt that makes the agent run `ls`, then read the log:
+In a scratch git repository that is not in Copilot's `trustedFolders`, launch with a prompt that makes the agent run `ls`, then read the log. `--allow-tool 'shell(ls)'` lets the one-shot session run that command and nothing else:
+
+*Your output will differ: it shows what the model did.*
 
 ```bash
 cd /tmp/ynh-live/project && git init -q
-ynh run /tmp/ynh-live/probe-harness -v copilot -- -p "run ls and stop"
+ynh run /tmp/ynh-live/probe-harness -v copilot --allow-tool 'shell(ls)' -- "Run the shell command: ls . Then reply with the single word done."
 cat /tmp/ynh-live/probe.log
 ```
 
@@ -1030,23 +1032,30 @@ In the merged package Copilot must read `hooks/claude.json` and ignore a root `h
 
 ### L4: Claude, SessionEnd budget
 
+*Your output will differ: it shows what the model did.*
+
 ```bash
 cd /tmp/ynh-live/project
-ynh run /tmp/ynh-live/probe-harness -v claude -- -p "say hi"
+ynh run /tmp/ynh-live/probe-harness -v claude -- "Reply with the single word done." < /dev/null
 cat /tmp/ynh-live/probe.log
 ```
 
-Confirm `SessionEnd` fires after `Stop`. `ynh run` sets `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS=10000` because the hook has `timeout` 10, so the 3 s hook must show its `done` line. Then run the exported plugin without the variable (`claude --plugin-dir /tmp/ynh-live/exp-merged -p "say hi"`): the `done` line must be missing ("Hook cancelled"), which is what the export warning says. Setting `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS=10000` makes it finish.
+Confirm `SessionEnd` fires after `Stop`. `ynh run` sets `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS=10000` because the hook has `timeout` 10, so the 3 s hook must show its `done` line. Then run the exported plugin without the variable (`claude --plugin-dir /tmp/ynh-live/exp-merged -p "Reply with the single word done." < /dev/null`): the `done` line must be missing ("Hook cancelled"), which is what the export warning says. Setting `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS=10000` makes it finish.
 
 ### L5: Cursor, print mode
 
+Cursor reads tool permissions from the project's `.cursor/cli.json`; allow `ls` and nothing else. `--trust` trusts this workspace for the one run:
+
+*Your output will differ: it shows what the model did.*
+
 ```bash
 cd /tmp/ynh-live/project
-ynh run /tmp/ynh-live/probe-harness -v cursor --trust -- "run ls and stop"
+mkdir -p .cursor && echo '{"permissions":{"allow":["Shell(ls)"],"deny":[]}}' > .cursor/cli.json
+ynh run /tmp/ynh-live/probe-harness -v cursor --trust -- "First read README.md if it exists. Then run the shell command: ls . Then reply with the single word done."
 cat /tmp/ynh-live/probe.log
 ```
 
-Confirm `sessionStart`, `sessionEnd`, `preToolUse` and `postToolUse` lines, hooks running in the run directory, a `Shell` matcher firing only for shell calls and a `Bash` matcher never firing. `beforeSubmitPrompt` and `stop` do not fire in print mode, and `ynh run` must have printed a warning naming `before_prompt` and `on_stop`. Interactive CLI and IDE behaviour is not yet tested.
+Confirm `sessionStart`, `sessionEnd`, `preToolUse` and `postToolUse` lines, hooks running in the run directory, and the `Bash`-matched tool hooks never firing (Cursor calls its shell tool `Shell`; `ynh run` warns about the `Bash` matcher). To check a `Shell` matcher, change both matchers to `Shell` and rerun: they fire for the `ls` call only. `beforeSubmitPrompt` and `stop` do not fire in print mode, and `ynh run` must have printed a warning naming `before_prompt` and `on_stop`. Interactive CLI and IDE behaviour is not yet tested.
 
 Clean up:
 
