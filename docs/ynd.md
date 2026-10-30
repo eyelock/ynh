@@ -283,6 +283,10 @@ ynd preview --harness ./my-harness          # explicit harness flag
 
 Preview lists the focuses and profiles an included harness offers, under "Focuses from included harnesses:" and "Profiles from included harnesses:", with the namespaced names to pass. It also lists the hooks that came from included harnesses ("Hooks from included harnesses:") and those declined for want of `"hooks": true`, each with its source, and warns about the declined ones on stderr.
 
+Preview lists the MCP servers that came from included harnesses under "MCP servers from included harnesses:", each with the include chain that supplied it (`github (from eyelock/assistants//ynh/github)`). The harness's own servers are not listed there: the MCP file already shows them. See [MCP Servers: Servers from Included Harnesses](mcp.md#servers-from-included-harnesses).
+
+Preview also lists the MCP servers each delegate carries, under "MCP servers of delegates:", one line per server as `<delegate>: <server>`, marked `(its own)` or `(from <include>)` when one of the delegate's included harnesses supplied it. These are the delegate's subagent's servers, not the session's. See [MCP Servers: MCP Servers of Delegates](mcp.md#mcp-servers-of-delegates).
+
 When no `-o` flag is given, preview prints a tree with file contents to stdout. With `-o`, it writes the full assembled output to the specified directory.
 
 Preview supports the same source types as export: local directories with `.agents/harness/plugin.json` or bare `AGENTS.md` directories.
@@ -383,6 +387,8 @@ Key differences from runtime layout:
 - `--merged` produces one directory with all vendor manifests, Codex's included; Claude and Copilot share the same `.claude-plugin/plugin.json`, which both render identically. `ynd marketplace build` exports each harness entry this way. The shared tree keeps agents, rules and commands for the vendors that read them, and the Codex and Copilot warnings above are printed in merged mode too, because those vendors still do not load them
 - Hooks go to `hooks/<vendor>.json` at the plugin root, named by the `"hooks"` field of that vendor's manifest; there is no shared `hooks/hooks.json` (see [Hooks: Config File Locations](hooks.md#config-file-locations))
 - MCP servers go to each vendor's plugin file: `mcp/claude.json` (named by the `"mcpServers"` field of `.claude-plugin/plugin.json`), Codex's `.mcp.json` (named by its manifest), Cursor's `mcp.json` and Copilot's `.github/mcp.json`. No two share a path, and every manifest is written after the files it names (see [MCP Servers: Config File Locations](mcp.md#config-file-locations))
+- An MCP server carried by an included harness exports like the root's own, unless it points into the include's directory (a command or `cwd` starting with `./`, or a `${PLUGIN_ROOT}` reference), which the plugin does not contain. The export then stops with an error naming the server and the include; declare that server in the root harness, or set it to `null` there (see [MCP Servers: Exporting](mcp.md#exporting))
+- A delegate's MCP servers are written into its agent unexpanded, with a warning that Claude Code ignores `mcpServers` in a plugin's agents. A delegate server that points into the delegate's own directory, or into one of its includes, cannot be exported, because the plugin carries the agent file and not the delegate's directory: the export stops with an error naming the delegate and the server (see [MCP Servers: Exporting delegates](mcp.md#exporting-delegates))
 
 **Output structure** (`--format agent-plugin`):
 
