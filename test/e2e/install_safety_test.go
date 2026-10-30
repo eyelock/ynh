@@ -49,13 +49,29 @@ func TestRun_RejectsLocalPathTraversal(t *testing.T) {
 	}
 }
 
-// TestInstall_TransitiveAgentsMd verifies the documented "later sources
-// override earlier" rule for AGENTS.md / instructions.md: when both an
-// include and the harness itself carry instructions, the harness wins.
-//
-// This is critical correctness — silently swapping the order would mean
-// users' own AGENTS.md gets clobbered by an include's.
+// TestInstall_TransitiveAgentsMd verifies the instructions composition rule
+// for AGENTS.md / instructions.md: the harness's own instructions come first,
+// byte for byte, and each include that has instructions follows as a section
+// headed "## Instructions from <label>". An include never replaces or reorders
+// the harness's own text, and "instructions": false on the include drops its
+// section. The label never carries an absolute path: an
+// include without a manifest is labelled by its directory name.
 func TestInstall_TransitiveAgentsMd(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		instructions string // JSON fragment added to the include entry
+		wantInclude  bool
+	}{
+		{"composed", "", true},
+		{"opted out", `, "instructions": false`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testTransitiveAgentsMd(t, tc.instructions, tc.wantInclude)
+		})
+	}
+}
+
+func testTransitiveAgentsMd(t *testing.T, instructions string, wantInclude bool) {
 	s := newSandbox(t)
 
 	// Include source carries its own AGENTS.md (and a skill so the include is non-empty).
@@ -81,9 +97,9 @@ func TestInstall_TransitiveAgentsMd(t *testing.T) {
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "transitive",
   "version": "0.1.0",
-  "includes": [{"local": %q}]
+  "includes": [{"local": %q%s}]
 }
-`, include)
+`, include, instructions)
 	if err := os.WriteFile(filepath.Join(harness, ".agents/harness", "plugin.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -103,10 +119,21 @@ func TestInstall_TransitiveAgentsMd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading .cursorrules: %v", err)
 	}
-	if !strings.Contains(string(body), "HARNESS_INSTRUCTIONS") {
-		t.Errorf(".cursorrules should contain harness's own instructions, got:\n%s", body)
+	got := string(body)
+	if !strings.HasPrefix(got, "HARNESS_INSTRUCTIONS\n") {
+		t.Errorf(".cursorrules should start with the harness's own instructions, got:\n%s", got)
 	}
-	if strings.Contains(string(body), "INCLUDE_INSTRUCTIONS") {
-		t.Errorf(".cursorrules contains include's instructions — harness should override:\n%s", body)
+	if strings.Contains(got, include) || strings.Contains(got, filepath.Dir(include)) {
+		t.Errorf(".cursorrules leaks the include's absolute path:\n%s", got)
+	}
+	if !wantInclude {
+		if strings.Contains(got, "INCLUDE_INSTRUCTIONS") || strings.Contains(got, "## Instructions from") {
+			t.Errorf(`.cursorrules has include instructions despite "instructions": false:\n%s`, got)
+		}
+		return
+	}
+	want := "HARNESS_INSTRUCTIONS\n\n## Instructions from include-source\n\nINCLUDE_INSTRUCTIONS\n"
+	if !strings.HasPrefix(got, want) {
+		t.Errorf(".cursorrules should start with %q, got:\n%s", want, got)
 	}
 }
