@@ -35,6 +35,7 @@ const CapabilitiesVersion = "0.9.0"
 var features = []string{
 	"agent-run-fetches-includes", // a run fetches its git includes at setup (ynf #130)
 	"agent-run-harness-path",     // `ynh agent run --harness` takes a path (#564)
+	"workspace-folders",          // manifest `workspace`, workspace_roots, YNH_WORKSPACE_ROOTS, `ynh run --no-workspace` (#624)
 }
 
 // Features returns a copy of the feature names, sorted.
@@ -108,11 +109,15 @@ type BackendDef struct {
 }
 
 type Config struct {
-	DefaultVendor        string                `json:"default_vendor,omitempty"`
-	AllowedRemoteSources []string              `json:"allowed_remote_sources,omitempty"`
-	Registries           []RegistrySource      `json:"registries,omitempty"`
-	Sources              []Source              `json:"sources,omitempty"`
-	Backends             map[string]BackendDef `json:"backends,omitempty"`
+	DefaultVendor        string   `json:"default_vendor,omitempty"`
+	AllowedRemoteSources []string `json:"allowed_remote_sources,omitempty"`
+	// WorkspaceRoots is the operator allow-list for harness workspace folders
+	// (docs/workspace.md). "~/" expands. YNH_WORKSPACE_ROOTS replaces it for
+	// one run.
+	WorkspaceRoots []string              `json:"workspace_roots,omitempty"`
+	Registries     []RegistrySource      `json:"registries,omitempty"`
+	Sources        []Source              `json:"sources,omitempty"`
+	Backends       map[string]BackendDef `json:"backends,omitempty"`
 	// TelemetryRelay turns on the telemetry relay for every `ynh agent run`
 	// (docs/telemetry.md). --telemetry-relay and YNH_TELEMETRY_RELAY come
 	// first.

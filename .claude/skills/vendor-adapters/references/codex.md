@@ -4,7 +4,7 @@
 
 - Plugins Overview: https://developers.openai.com/codex/plugins
 - Plugin Build Guide: https://developers.openai.com/codex/plugins/build
-- Hooks: https://developers.openai.com/codex/hooks
+- Hooks: https://learn.chatgpt.com/docs/hooks (https://developers.openai.com/codex/hooks redirects there)
 - CLI Reference: https://developers.openai.com/codex
 - GitHub Repo: https://github.com/openai/codex
 - Hook Schemas: https://github.com/openai/codex/tree/main/codex-rs/hooks/schema/generated
@@ -56,9 +56,22 @@ plugin-root/
 - Feature flag required: `[features] codex_hooks = true` in `config.toml`
 - Status: **Experimental**
 
-## Hook Events (5)
+## Hook Events (12)
 
-SessionStart, PreToolUse, PostToolUse, UserPromptSubmit, Stop
+SessionStart, SessionEnd, SubagentStart, PreToolUse, PermissionRequest, PostToolUse,
+PreCompact, PostCompact, UserPromptSubmit, SubagentStop, Stop, Interrupt
+(https://learn.chatgpt.com/docs/hooks). ynh maps six: `before_tool` PreToolUse,
+`after_tool` PostToolUse, `before_prompt` UserPromptSubmit, `on_stop` Stop,
+`on_session_start` SessionStart, `on_session_end` SessionEnd.
+
+`SessionEnd`: main thread only (not subagents); runs when a conversation is archived or
+deleted, when Codex closes normally, or after 30 minutes idle with no connected client.
+Default timeout 1 s, maximum 3 s (`timeout` field, seconds; most other hooks default to
+600). Always synchronous, even with `async`. Output is advisory. Its matcher filters
+`reason`, currently always `other`. Matchers: tool name for PreToolUse, PostToolUse and
+PermissionRequest; trigger for PreCompact and PostCompact; source (`startup`, `resume`,
+`clear`, `compact`, `fork`) for SessionStart; none for UserPromptSubmit, Stop and
+Interrupt. Non-managed hooks must be trusted via `/hooks` before they run.
 
 ## Hook Types
 

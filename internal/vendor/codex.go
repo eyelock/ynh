@@ -155,7 +155,10 @@ func (c *Codex) ApplyRuntimeInstructions(runDir, text string) ([]string, error) 
 	return []string{"-c", "developer_instructions=" + text}, nil
 }
 
-// codexHookEventMap maps canonical event names to Codex hook events.
+// codexHookEventMap maps canonical event names to Codex hook events
+// (learn.chatgpt.com/docs/hooks; developers.openai.com/codex/hooks redirects
+// there). SessionEnd runs for the main thread only and defaults to a 1 s
+// timeout, at most 3 s.
 // SessionStart entries can filter on source (startup|resume) via the
 // existing generic HookEntry.Matcher field — authors set it themselves,
 // no special-casing needed here.
@@ -165,7 +168,27 @@ var codexHookEventMap = map[string]string{
 	"before_prompt":    "UserPromptSubmit",
 	"on_stop":          "Stop",
 	"on_session_start": "SessionStart",
+	"on_session_end":   "SessionEnd",
 }
+
+// How on_session_start output reaches the model: Per
+// learn.chatgpt.com/docs/hooks: "Plain text on stdout is added as extra
+// developer context." UNVERIFIED live: Codex was not installed to test.
+var codexSessionStartContext = "plain"
+
+// codexUnsupportedHookEvents names the canonical events Codex cannot express,
+// each with the reason. Empty: every canonical event maps (Codex documents 12
+// events, learn.chatgpt.com/docs/hooks).
+var codexUnsupportedHookEvents = map[string]string{}
+
+// Per-hook timeout, in seconds, written as the hook's "timeout" field
+// (learn.chatgpt.com/docs/hooks: "The timeout field is in seconds"; most hooks
+// default to 600). SessionEnd defaults to 1 and supports up to 3, so on_session_end
+// is clamped to 3 and warned about.
+var codexHookTimeoutField = "timeout"
+var codexHookTimeoutUnsupported = ""
+
+var codexHookTimeoutCaps = map[string]int{"on_session_end": 3}
 
 // GenerateHookConfig writes the project hook file, .codex/hooks.json, which
 // Codex reads from a trusted project's .codex/ layer
@@ -211,6 +234,7 @@ func codexHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string) 
 	type codexInnerHook struct {
 		Type    string `json:"type"`
 		Command string `json:"command"`
+		Timeout int    `json:"timeout,omitempty"`
 	}
 	type codexHookGroup struct {
 		Matcher string           `json:"matcher,omitempty"`
@@ -235,7 +259,7 @@ func codexHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string) 
 		// Group entries by matcher (same logic as Claude adapter)
 		type matcherGroup struct {
 			matcher string
-			cmds    []string
+			entries []plugin.HookEntry
 		}
 		var groups []matcherGroup
 		groupIdx := make(map[string]int)
@@ -243,18 +267,18 @@ func codexHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string) 
 		for _, entry := range entries {
 			key := entry.Matcher
 			if idx, exists := groupIdx[key]; exists {
-				groups[idx].cmds = append(groups[idx].cmds, entry.Command)
+				groups[idx].entries = append(groups[idx].entries, entry)
 			} else {
 				groupIdx[key] = len(groups)
-				groups = append(groups, matcherGroup{matcher: key, cmds: []string{entry.Command}})
+				groups = append(groups, matcherGroup{matcher: key, entries: []plugin.HookEntry{entry}})
 			}
 		}
 
 		var hookGroups []codexHookGroup
 		for _, g := range groups {
 			var inner []codexInnerHook
-			for _, cmd := range g.cmds {
-				inner = append(inner, codexInnerHook{Type: "command", Command: anchor(cmd)})
+			for _, e := range g.entries {
+				inner = append(inner, codexInnerHook{Type: "command", Command: anchor(e.Command), Timeout: hookTimeoutValue("codex", event, e.Timeout)})
 			}
 			hookGroups = append(hookGroups, codexHookGroup{
 				Matcher: g.matcher,
@@ -427,3 +451,12 @@ func launchCodex(configPath string, extraArgs []string) error {
 	cmd.Dir = configPath
 	return runChildProcess(cmd)
 }
+
+// Workspace folders: "--add-dir" is a global flag of the codex command
+// ("Grant additional directories write access alongside the main workspace.
+// Repeat for multiple paths.", developers.openai.com/codex/cli/reference,
+// served from learn.chatgpt.com/docs/developer-commands). The page lists it
+// for the top-level command and says most global flags propagate; whether
+// `codex exec` and `codex exec resume` accept it is unverified.
+var codexWorkspaceFlag = "--add-dir"
+var codexWorkspaceUnsupported = ""

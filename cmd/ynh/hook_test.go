@@ -345,3 +345,24 @@ func TestMergeHookEntries_UnionDedupPreserve(t *testing.T) {
 		t.Errorf("re-merge added = %d, want 0", added2)
 	}
 }
+
+func TestCmdHookAdd_WithTimeout(t *testing.T) {
+	dir := t.TempDir()
+	writeHookTestHarness(t, dir, "h")
+
+	var buf bytes.Buffer
+	if err := cmdHookTo([]string{"add", dir, "on_session_end", "./bye.sh", "--timeout", "10"}, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := loadTestHarness(t, dir).Hooks["on_session_end"][0].Timeout; got != 10 {
+		t.Errorf("timeout = %d, want 10", got)
+	}
+	for _, bad := range []string{"0", "-3", "abc", "99999"} {
+		if err := cmdHookTo([]string{"add", dir, "on_stop", "x", "--timeout", bad}, &buf); err == nil {
+			t.Errorf("--timeout %s accepted", bad)
+		}
+	}
+	if err := cmdHookTo([]string{"add", dir, "on_stop", "x", "--timeout"}, &buf); err == nil {
+		t.Error("--timeout without a value accepted")
+	}
+}

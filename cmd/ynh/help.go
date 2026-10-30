@@ -99,6 +99,8 @@ Flags:
   --resume=<id>            Continue one specific session by id
                            A trailing prompt is sent to the resumed session,
                            a --focus prompt is not; some vendors refuse it
+  --no-workspace           Grant none of the harness's requested workspace folders
+                           for this run (see docs/workspace.md)
   --install                Install symlinks for the vendor in this project
   --clean                  Remove symlinks for the vendor in this project
 
@@ -261,9 +263,18 @@ for a subcommand's arguments and flags.`,
 
 Manage a harness's top-level hooks.
 
-  ynh hook add <harness> <event> <command> [--matcher <pattern>]
+  ynh hook add <harness> <event> <command> [--matcher <pattern>] [--timeout <seconds>]
   ynh hook remove <harness> <event> <index>
   ynh hook export <harness> --target <settings|local> [--dry-run]
+
+Events: before_tool, after_tool, before_prompt, on_stop, on_session_start,
+on_session_end.
+
+  on_stop            fires at the end of EVERY turn, not once per session
+  on_session_start   fires on start AND resume (on Claude Code also on /clear
+                     and compaction), so the script must be idempotent
+  on_session_end     best-effort, time-boxed, cannot block, may not fire at
+                     all; use it for once-per-session work
 
 Run 'ynh hook <subcommand> --help' for a subcommand's arguments and flags.`,
 
@@ -325,6 +336,7 @@ Flags:
   --update-baseline     Accept current failures so only new ones gate
   --no-baseline         Ignore the baseline for this run
   --calibrate           Run each sensor against its reference fixture instead
+                        (not with --profile, --sensor-overlay or baseline flags)
   --sensor-overlay <j>  Substitute sensor declarations from a JSON object
   --format text|json    Output format (default text)
 

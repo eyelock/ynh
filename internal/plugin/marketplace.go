@@ -103,7 +103,7 @@ func LoadMarketplaceJSON(dir string) (*MarketplaceJSON, error) {
 // plugin.json when there is one, otherwise in place if one exists, otherwise
 // at the canonical location.
 func SaveMarketplaceJSON(dir string, mj *MarketplaceJSON) error {
-	path := writePath(dir, MarketplaceFile)
+	path := manifestPath(dir, MarketplaceFile)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("creating manifest dir: %w", err)
 	}

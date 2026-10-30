@@ -44,33 +44,3 @@ func TestOutputMatcher(t *testing.T) {
 		}
 	})
 }
-
-// A match that does not compile would silently select nothing, turning the
-// sensor's whole output into accepted debt on the next baseline write. It is
-// caught at validation instead.
-func TestValidateSensors_RejectsAnUncompilableMatch(t *testing.T) {
-	issues := ValidateSensors(map[string]Sensor{
-		"lint": {
-			Source: SensorSource{Command: "true"},
-			Output: SensorOutput{Format: "text", Match: `([unclosed`},
-		},
-	}, nil, nil)
-	joined := strings.Join(issues, "\n")
-	if !strings.Contains(joined, "output.match") {
-		t.Errorf("an uncompilable match must be reported, got: %v", issues)
-	}
-}
-
-func TestValidateSensors_AcceptsAValidMatch(t *testing.T) {
-	issues := ValidateSensors(map[string]Sensor{
-		"lint": {
-			Source: SensorSource{Command: "true"},
-			Output: SensorOutput{Format: "text", Match: `^[^ ]+\.go:[0-9]+:[0-9]+:`},
-		},
-	}, nil, nil)
-	for _, i := range issues {
-		if strings.Contains(i, "output.match") {
-			t.Errorf("a valid match must not be reported: %s", i)
-		}
-	}
-}

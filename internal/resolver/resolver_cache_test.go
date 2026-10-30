@@ -701,3 +701,158 @@ func TestEnsureRepo_ConcurrentCallers_DoNotRace(t *testing.T) {
 		t.Errorf("cache contents corrupted: %q", string(data))
 	}
 }
+
+// ynh renames a cached clone's .ynh-plugin/ to .agents/harness/ when it loads
+// the clone, so an old-layout remote keeps working. The next EnsureRepo must
+// still bring the clone to what upstream has, whether upstream keeps the old
+// layout (git sees a deleted tracked file) or has moved to the new one (the
+// renamed files are untracked and in the way).
+func TestEnsureRepo_UpdatesCloneYnhRenamed(t *testing.T) {
+	cases := []struct {
+		name string
+		ref  string
+		// upstream makes the next commit in srcDir.
+		upstream func(t *testing.T, srcDir string)
+		// want is a file that must exist after the update; gone must not.
+		want, gone string
+	}{
+		{
+			name: "upstream still on .ynh-plugin",
+			upstream: func(t *testing.T, srcDir string) {
+				writeFileT(t, filepath.Join(srcDir, ".ynh-plugin", "plugin.json"), `{"v":2}`)
+			},
+			want: filepath.Join(".ynh-plugin", "plugin.json"),
+			gone: filepath.Join(".agents", "harness", "plugin.json"),
+		},
+		{
+			name: "upstream moved to .agents/harness",
+			upstream: func(t *testing.T, srcDir string) {
+				if err := os.RemoveAll(filepath.Join(srcDir, ".ynh-plugin")); err != nil {
+					t.Fatal(err)
+				}
+				writeFileT(t, filepath.Join(srcDir, ".agents", "harness", "plugin.json"), `{"v":2}`)
+			},
+			want: filepath.Join(".agents", "harness", "plugin.json"),
+			gone: ".ynh-plugin",
+		},
+		{
+			name: "upstream still on .ynh-plugin, pinned ref",
+			ref:  "main",
+			upstream: func(t *testing.T, srcDir string) {
+				writeFileT(t, filepath.Join(srcDir, ".ynh-plugin", "plugin.json"), `{"v":2}`)
+			},
+			want: filepath.Join(".ynh-plugin", "plugin.json"),
+			gone: filepath.Join(".agents", "harness", "plugin.json"),
+		},
+		{
+			name: "upstream moved to .agents/harness, pinned ref",
+			ref:  "main",
+			upstream: func(t *testing.T, srcDir string) {
+				if err := os.RemoveAll(filepath.Join(srcDir, ".ynh-plugin")); err != nil {
+					t.Fatal(err)
+				}
+				writeFileT(t, filepath.Join(srcDir, ".agents", "harness", "plugin.json"), `{"v":2}`)
+			},
+			want: filepath.Join(".agents", "harness", "plugin.json"),
+			gone: ".ynh-plugin",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("YNH_HOME", home)
+			srcDir := t.TempDir()
+			runGit(t, srcDir, "init", "-b", "main")
+			runGit(t, srcDir, "config", "user.email", "test@test.com")
+			runGit(t, srcDir, "config", "user.name", "Test")
+			writeFileT(t, filepath.Join(srcDir, ".ynh-plugin", "plugin.json"), `{"v":1}`)
+			runGit(t, srcDir, "add", ".")
+			runGit(t, srcDir, "commit", "-m", "v1")
+
+			first, err := EnsureRepo(srcDir, tc.ref)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// What the format chain does to a clone on load. The clone is under
+			// the temp YNH_HOME, never a real path.
+			if rel, err := filepath.Rel(home, first.Path); err != nil || strings.HasPrefix(rel, "..") {
+				t.Fatalf("clone %s is outside the test's YNH_HOME", first.Path)
+			}
+			if err := os.MkdirAll(filepath.Join(first.Path, ".agents"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Rename(filepath.Join(first.Path, ".ynh-plugin"), filepath.Join(first.Path, ".agents", "harness")); err != nil {
+				t.Fatal(err)
+			}
+
+			tc.upstream(t, srcDir)
+			runGit(t, srcDir, "add", "-A")
+			runGit(t, srcDir, "commit", "-m", "v2")
+
+			second, err := EnsureRepo(srcDir, tc.ref)
+			if err != nil {
+				t.Fatalf("update of a renamed clone failed: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(second.Path, tc.want)); err != nil {
+				t.Errorf("clone should have %s after the update: %v", tc.want, err)
+			}
+			if _, err := os.Stat(filepath.Join(second.Path, tc.gone)); !os.IsNotExist(err) {
+				t.Errorf("clone should not have %s after the update (err %v): the renamed copy is stale", tc.gone, err)
+			}
+		})
+	}
+}
+
+func writeFileT(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// refuseToResetClone is the guard in front of checkout --force and git clean.
+// This test feeds the predicate alone: no dangerous path is ever given to
+// EnsureRepo or git.
+func TestRefuseToResetClone(t *testing.T) {
+	tmp := t.TempDir()
+	cache := filepath.Join(tmp, "cache")
+	child := filepath.Join(cache, "org--repo--abc")
+	sibling := filepath.Join(tmp, "cache2")
+	outside := filepath.Join(tmp, "outside")
+	for _, d := range []string{child, sibling, outside} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	escape := filepath.Join(cache, "escape")
+	if err := os.Symlink(outside, escape); err != nil {
+		t.Fatal(err)
+	}
+	home, _ := os.UserHomeDir()
+
+	cases := []struct {
+		name    string
+		path    string
+		refused bool
+	}{
+		{"filesystem root", string(filepath.Separator), true},
+		{"home directory", home, true},
+		{"the cache root itself", cache, true},
+		{"parent of the cache", tmp, true},
+		{"sibling of the cache", sibling, true},
+		{"symlink escaping the cache", escape, true},
+		{"missing path", filepath.Join(cache, "nope"), true},
+		{"valid child", child, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := refuseToResetClone(cache, tc.path)
+			if (got != "") != tc.refused {
+				t.Errorf("refuseToResetClone(%q) = %q, refused want %v", tc.path, got, tc.refused)
+			}
+		})
+	}
+}

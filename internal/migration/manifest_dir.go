@@ -2,7 +2,6 @@ package migration
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,28 +11,32 @@ import (
 )
 
 // ManifestDirMigrator renames a harness's .ynh-plugin/ directory to
-// .agents/harness/ (#404).
+// .agents/harness/ (#404). ynh no longer reads .ynh-plugin/: this is the one
+// place that still understands it.
 //
-// Where it runs is decided by SourceTrees, because the two kinds of tree have
-// different owners:
+// Where it runs is decided by SourceTrees, because the trees have different
+// owners:
 //
-//   - The zero value, in FormatChain and DefaultChain, touches only trees ynh
-//     owns: installs under config.HarnessesDir(), which ynh copied there and
-//     rewrites on every update. Loading one moves its manifest, provenance
-//     included, and nobody else's files change.
-//   - SourceTrees is set only by MigrateChain, which `ynd migrate` runs. A
-//     harness in a user's repository or a cached clone of someone else's is
-//     never renamed as a side effect of reading it: `ynh run` in a git working
-//     copy must not leave a hundred-line diff behind. Those trees keep working
-//     through the read fallback and print a deprecation warning that names
-//     `ynd migrate` instead.
+//   - The zero value, in FormatChain and DefaultChain, moves the trees ynh
+//     owns: installs under config.HarnessesDir() and git clones under
+//     config.CacheDir(). Both are copies ynh made and rewrites at will, so an
+//     old-layout remote source keeps working: the first load renames its
+//     manifest directory inside the copy and nobody else's files change.
+//   - Anywhere else is the user's own tree. A read command never renames it
+//     (`ynh run` in a git working copy must not leave a hundred-line diff
+//     behind); Run refuses with an error naming `ynd migrate` instead.
+//   - SourceTrees is set only by MigrateChain, which `ynd migrate` runs
+//     behind its confirmation.
+//
+// A tree that has both layouts, or whose .ynh-plugin/ cannot be moved safely,
+// is an error in every tree: nothing is merged, and the message says why.
 //
 // The rename is a single os.Rename of the directory. Nothing is copied,
 // merged or deleted, so there is no state in which a manifest exists twice or
 // not at all. When the move cannot be made that simply, the tree is left alone
-// and ManifestDirBlocked says why.
+// and the reason is returned.
 type ManifestDirMigrator struct {
-	// SourceTrees allows the rename outside config.HarnessesDir(). Only
+	// SourceTrees allows the rename outside the trees ynh owns. Only
 	// `ynd migrate`, an explicit request from the tree's owner, sets it.
 	SourceTrees bool
 }
@@ -42,28 +45,65 @@ func (ManifestDirMigrator) Description() string {
 	return "manifest dir: " + plugin.LegacyPluginDir + "/ → " + plugin.PluginDir + "/"
 }
 
+// Applies reports whether dir has a .ynh-plugin/ to deal with. For
+// `ynd migrate` that means one it can move; in FormatChain it means any, so
+// that Run can refuse a tree that must not be read, rather than the chain
+// skipping it as manifest-less.
 func (m ManifestDirMigrator) Applies(dir string) bool {
-	if !m.SourceTrees && !insideHarnessesDir(dir) {
-		return false
-	}
 	action, _ := manifestDirMigration(dir)
-	return action == manifestDirMove
+	if m.SourceTrees {
+		return action == manifestDirMove
+	}
+	return action != manifestDirNone
 }
 
 func (m ManifestDirMigrator) Run(dir string) error {
 	// Decide again rather than trusting an earlier Applies: the tree may have
 	// changed in between, and the mover must only ever see a tree the
 	// predicate cleared just now.
-	if !m.SourceTrees && !insideHarnessesDir(dir) {
-		return fmt.Errorf("%s is not a ynh install; run ynd migrate on it", dir)
+	action, reason := manifestDirMigration(dir)
+	if action == manifestDirNone {
+		return fmt.Errorf("not moving %s: nothing to move", filepath.Join(dir, plugin.LegacyPluginDir))
 	}
-	if action, reason := manifestDirMigration(dir); action != manifestDirMove {
-		if reason == "" {
-			reason = "nothing to move"
-		}
-		return fmt.Errorf("not moving %s: %s", filepath.Join(dir, plugin.LegacyPluginDir), reason)
+	if action == manifestDirBlocked {
+		return legacyManifestDirError(dir, reason)
+	}
+	if !m.SourceTrees && !ownedByYnh(dir) {
+		return legacyManifestDirError(dir, "")
 	}
 	return moveManifestDir(dir)
+}
+
+// LegacyManifestDir returns the error a read command gives for a tree whose
+// manifest directory is .ynh-plugin/, or nil when it has none. ynh no longer
+// reads that layout, and no longer moves it as a side effect of reading. A
+// pure predicate: it only stats and lists.
+//
+// It is the one check for source trees, which is why it ignores who owns dir:
+// a tree ynh owns is moved by the format chain before anything asks.
+func LegacyManifestDir(dir string) error {
+	action, reason := manifestDirMigration(dir)
+	if action == manifestDirNone {
+		return nil
+	}
+	return legacyManifestDirError(dir, reason)
+}
+
+// legacyManifestDirError names the tree and the fix. reason is empty when the
+// tree could be moved and is the user's to move; otherwise it says why
+// nothing can move it.
+func legacyManifestDirError(dir, reason string) error {
+	// Name the tree absolutely: "." is no help once the error is read out of
+	// context.
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	if reason != "" {
+		return fmt.Errorf("%s keeps its manifest in %s/, which ynh no longer reads, and it cannot be moved automatically: %s",
+			dir, plugin.LegacyPluginDir, reason)
+	}
+	return fmt.Errorf("%s keeps its manifest in %s/, which ynh no longer reads; move it with: ynd migrate %s",
+		dir, plugin.LegacyPluginDir, dir)
 }
 
 // ManifestDirBlocked reports why dir's .ynh-plugin/ cannot be moved, or ""
@@ -235,66 +275,31 @@ func isRegular(path string) bool {
 // insideHarnessesDir reports whether dir is strictly inside
 // config.HarnessesDir(), where ynh keeps the trees it installed. Decided from
 // the path alone.
-func insideHarnessesDir(dir string) bool {
-	abs, err := filepath.Abs(dir)
+func insideHarnessesDir(dir string) bool { return strictlyWithin(config.HarnessesDir(), dir) }
+
+// ownedByYnh reports whether dir is a copy ynh made and may rewrite: an
+// install under config.HarnessesDir(), or a git clone under config.CacheDir()
+// (includes, delegates, remote installs, registries). Decided from the path
+// alone. Everything else is the user's.
+func ownedByYnh(dir string) bool {
+	return insideHarnessesDir(dir) || strictlyWithin(config.CacheDir(), dir)
+}
+
+// strictlyWithin reports whether path is inside root, and not root itself.
+func strictlyWithin(root, path string) bool {
+	r, err := filepath.Abs(root)
 	if err != nil {
 		return false
 	}
-	root, err := filepath.Abs(config.HarnessesDir())
+	p, err := filepath.Abs(path)
 	if err != nil {
 		return false
 	}
-	rel, err := filepath.Rel(root, abs)
+	rel, err := filepath.Rel(r, p)
 	if err != nil {
 		return false
 	}
 	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
-// ManifestDirDeprecation is the warning for a harness whose manifest was read
-// from .ynh-plugin/, or "" when none is owed. Commands print it to stderr; see
-// plugin.SetLegacyManifestDirNotice.
-//
-// The advice depends on who can act on the tree:
-//   - An install under config.HarnessesDir() that can be moved gets no
-//     warning: the format chain moves it on this load or the next, and there
-//     is nothing for the user to do.
-//   - A cached clone under config.CacheDir() is someone else's repository, and
-//     ynd migrate on it would be undone by the next fetch, so the advice is
-//     for its maintainer.
-//   - A tree ynd migrate would leave alone gets the reason instead.
-//   - Anything else is the user's own tree: run ynd migrate on it.
-func ManifestDirDeprecation(dir string) string {
-	blocked := ManifestDirBlocked(dir)
-	if blocked == "" && insideHarnessesDir(dir) {
-		return ""
-	}
-	// Name the tree absolutely: "." is no help once the warning is read
-	// out of context.
-	if abs, err := filepath.Abs(dir); err == nil {
-		dir = abs
-	}
-	head := fmt.Sprintf("warning: %s keeps its manifest in %s/, which is deprecated and will stop being read in a later release.",
-		dir, plugin.LegacyPluginDir)
-	switch {
-	case within(config.CacheDir(), dir):
-		return head + "\n  It is a cached copy of a remote harness; ask its maintainer to run `ynd migrate` and publish the result."
-	case blocked != "":
-		return head + "\n  To fix: " + blocked + "."
-	default:
-		return head + "\n  To fix: ynd migrate " + dir
-	}
-}
-
-// ManifestDirNotice returns a callback for plugin.SetLegacyManifestDirNotice
-// that writes ManifestDirDeprecation to w, which commands pass as stderr so a
-// structured response on stdout is never touched.
-func ManifestDirNotice(w io.Writer) func(dir string) {
-	return func(dir string) {
-		if msg := ManifestDirDeprecation(dir); msg != "" {
-			_, _ = fmt.Fprintln(w, msg)
-		}
-	}
 }
 
 // within reports whether path is root or inside it.

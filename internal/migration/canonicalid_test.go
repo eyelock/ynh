@@ -971,3 +971,34 @@ func TestMigrate_PointerAndInstallTree(t *testing.T) {
 		t.Error("persisted manifest is empty")
 	}
 }
+
+// A home written when manifests lived in .ynh-plugin/ still migrates: its
+// installs are ynh's own copies, so the schema migration moves each one to
+// .agents/harness and carries its provenance along.
+func TestMigrate_FlatInstallTree_LegacyManifestDir(t *testing.T) {
+	home := t.TempDir()
+	harnessesDir := filepath.Join(home, "harnesses")
+	dir := filepath.Join(harnessesDir, "planner")
+	writeFile(t, filepath.Join(dir, plugin.LegacyPluginDir, plugin.PluginFile), `{"name":"planner","version":"1.0.0"}`)
+	writeFile(t, filepath.Join(dir, plugin.LegacyPluginDir, plugin.InstalledFile),
+		`{"source_type":"git","source":"","installed_at":"2026-04-01T00:00:00Z"}`)
+
+	if _, err := MigrateToSchema2(home, MigrateOpts{}); err != nil {
+		t.Fatalf("MigrateToSchema2: %v", err)
+	}
+
+	newDir := filepath.Join(harnessesDir, "local--planner")
+	if exists(filepath.Join(newDir, plugin.LegacyPluginDir)) {
+		t.Error("the install should have left .ynh-plugin")
+	}
+	ins, err := plugin.LoadInstalledJSON(newDir)
+	if err != nil {
+		t.Fatalf("provenance lost in the move: %v", err)
+	}
+	if ins.Namespace != "local" {
+		t.Errorf("namespace = %q, want local", ins.Namespace)
+	}
+	if _, err := plugin.LoadPluginJSON(newDir); err != nil {
+		t.Errorf("plugin.json should be at %s: %v", plugin.PluginDir, err)
+	}
+}
