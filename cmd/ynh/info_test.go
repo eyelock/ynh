@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/clischema"
+	"github.com/eyelock/ynh/internal/resolver"
 )
 
 func TestCmdInfoTextSuccess(t *testing.T) {
@@ -1058,5 +1059,41 @@ func TestCmdInfo_NamespacedSelectionNeedsTheIncludeCached(t *testing.T) {
 	}
 	if err := cmdInfoTo([]string{"local/remote"}, io.Discard, io.Discard); err != nil {
 		t.Errorf("no selection: %v", err)
+	}
+}
+
+// A bad selection fails before --check-updates probes anything over the
+// network.
+func TestCmdInfoJSON_BadSelectionFailsBeforeCheckUpdates(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "probed", `{
+		"name": "probed",
+		"version": "0.1.0",
+		"includes": [{"git": "github.com/example/repo", "ref": "main"}]
+	}`)
+
+	probed := false
+	original := resolver.LsRemoteFunc
+	resolver.LsRemoteFunc = func(string, string) (string, error) {
+		probed = true
+		return "", errors.New("stubbed")
+	}
+	t.Cleanup(func() { resolver.LsRemoteFunc = original })
+
+	args := []string{"local/probed", "--format", "json", "--check-updates", "--focus", "nope"}
+	if err := cmdInfoTo(args, io.Discard, io.Discard); err == nil {
+		t.Fatal("want an error for an unknown focus")
+	}
+	if probed {
+		t.Error("--check-updates probed the network before the selection was checked")
+	}
+
+	// The probe does run for a valid request, so the check above means something.
+	if err := cmdInfoTo([]string{"local/probed", "--format", "json", "--check-updates"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("valid request: %v", err)
+	}
+	if !probed {
+		t.Error("--check-updates did not probe the include on a valid request")
 	}
 }

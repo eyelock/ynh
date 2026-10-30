@@ -48,7 +48,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh update [harness]` | |
 | `ynh fork <name>` | `--to <path>`, `--name <new>`, `--format <text\|json>` |
 | `ynh ls` | `--format <text\|json>` |
-| `ynh info <harness>` | `--format <text\|json>`, `--check-updates` (with `--format json`), `--profile` (repeatable, as on `ynh run`), `--focus` (`name` or `namespace:name`; not with `--profile`). With a profile or focus selected, the hooks and MCP servers shown are what a run with that selection carries; profiles and focuses are still listed as declared. A bare run's [`launch_focus`](focus.md#launch-focus) is not applied: pass it as `--focus` to see what a bare run wakes with |
+| `ynh info <harness>` | `--format <text\|json>`, `--check-updates` (with `--format json`), `--profile` (repeatable, as on `ynh run`), `--focus` (`name` or `namespace:name`; not with `--profile`). With a profile or focus selected, the MCP servers shown are what a run with that selection carries. Hooks are the harness's own, with a selected profile of its own merged; hooks of included harnesses are not shown. Profiles and focuses are still listed as declared. A bare run's [`launch_focus`](focus.md#launch-focus) is not applied: pass it as `--focus` to see what a bare run wakes with |
 | `ynh installed <harness>` | `--format <text\|json>` |
 | `ynh schema <name>` | (or `ynh schema --all --format json`) — print embedded JSON schemas |
 | `ynh vendors` | `--format <text\|json>` |

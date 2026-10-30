@@ -504,6 +504,13 @@ func printInfoJSON(stdout, stderr io.Writer, name string, profiles []string, foc
 			fmt.Sprintf("parsing manifest: %v", err))
 	}
 
+	// Check the selection before --check-updates goes to the network, so a
+	// bad --profile or --focus fails fast.
+	view, err := resolveInfoView(p, profiles, focus)
+	if err != nil {
+		return cliError(stderr, true, errCodeInvalidInput, err.Error())
+	}
+
 	base := buildListEntry(p)
 	if checkUpdates {
 		single := []listEntry{base}
@@ -528,10 +535,6 @@ func printInfoJSON(stdout, stderr io.Writer, name string, profiles []string, foc
 		Includes:         base.Includes,
 		DelegatesTo:      base.DelegatesTo,
 		Manifest:         compacted,
-	}
-	view, err := resolveInfoView(p, profiles, focus)
-	if err != nil {
-		return cliError(stderr, true, errCodeInvalidInput, err.Error())
 	}
 	entry.MCPServers = view.servers
 	if view.mcpErr != nil {
