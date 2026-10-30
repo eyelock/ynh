@@ -114,7 +114,8 @@ inc() { # inc <path> <pick,...>
 harness $A ynh/david david "Full-stack development harness with Go expertise" \
 	"$(inc skills/dev dev-project,dev-quality),$(inc skills/tech go-lang),$(inc skills/infra docker),$(inc skills/pause help-me-answer)"
 harness $A ynh/planner planner "Project planning and architecture harness" "$(inc skills/pause take-a-moment)"
-harness $A ynh/tester tester "Test planning and execution harness" "$(inc skills/dev dev-test)"
+harness $A ynh/tester tester "Testing and quality assurance persona" \
+	"$(inc skills/dev dev-quality),$(inc skills/tech go-lang)"
 harness $A ynh/researcher researcher "Researches a code base and reports what it finds" ""
 publish $A v1.0.0
 

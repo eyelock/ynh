@@ -313,7 +313,8 @@ ynh uninstall github.com/eyelock/assistants/tester
 
 Expected: the install's own lines, then the two refs (the SHAs are the repository's head, so yours differ; right after an install the two are equal), then the uninstall:
 ```
-Fetching 1 include(s) and 0 delegate(s)...
+Fetching 2 include(s) and 0 delegate(s)...
+  Fetched eyelock/assistants
   Fetched eyelock/assistants
 Installed harness "tester"
   Location: /Users/<you>/.ynh/harnesses/github.com--eyelock--assistants--tester
