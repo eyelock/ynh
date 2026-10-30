@@ -29,8 +29,8 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 | Setting | Resolution Order |
 |---------|-----------------|
 | Vendor | `-v` flag > `YNH_VENDOR` > harness `default_vendor` > global config. Any of these also accepts a backend-redirected spec (`<backend>/<vendor>` or `<backend>/<vendor>/<model>`) — see [Local Model Backends](vendors.md#local-model-backends). |
-| Profile | `--profile` flag > `YNH_PROFILE` > no profile (top-level). `ynh check` takes the flag only. `--profile` may repeat on `ynh run`: at most one unqualified (the root's) and one `namespace:name` per included harness, for example `--profile work --profile github:ci`. `YNH_PROFILE` is a single value. See [Profiles of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses) |
-| Focus | `--focus` flag > `YNH_FOCUS` > no focus (mutually exclusive with `--profile`). `--focus namespace:name` selects a focus of an included harness |
+| Profile | `--profile` flag > `YNH_PROFILE` > no profile (top-level). `ynh check` and `ynh info` take the flag only. `--profile` may repeat on `ynh run` and `ynh info`: at most one unqualified (the root's) and one `namespace:name` per included harness, for example `--profile work --profile github:ci`. `YNH_PROFILE` is a single value. See [Profiles of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses) |
+| Focus | `--focus` flag > `YNH_FOCUS` > no focus (mutually exclusive with `--profile`). `--focus namespace:name` selects a focus of an included harness. `ynh info` takes the flag only |
 | Harness source | `--harness` flag > `YNH_HARNESS` > positional arg > `.` (CWD) or error |
 | Non-interactive | `-y` flag > `YNH_YES` > `CI` |
 | Workspace folders | never-granted paths refuse first; then `YNH_WORKSPACE_ROOTS` (replaces) > `workspace_roots` in `config.json` as the allow-list; with neither, `ynh trust accept`. `--no-workspace` grants none. See [Workspace Folders](workspace.md) |
@@ -48,7 +48,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh update [harness]` | |
 | `ynh fork <name>` | `--to <path>`, `--name <new>`, `--format <text\|json>` |
 | `ynh ls` | `--format <text\|json>` |
-| `ynh info <harness>` | `--format <text\|json>` |
+| `ynh info <harness>` | `--format <text\|json>`, `--check-updates` (with `--format json`), `--profile` (repeatable, as on `ynh run`), `--focus` (`name` or `namespace:name`; not with `--profile`). With a profile or focus selected, the hooks and MCP servers shown are what a run with that selection carries; profiles and focuses are still listed as declared. A bare run's [`launch_focus`](focus.md#launch-focus) is not applied: pass it as `--focus` to see what a bare run wakes with |
 | `ynh installed <harness>` | `--format <text\|json>` |
 | `ynh schema <name>` | (or `ynh schema --all --format json`) — print embedded JSON schemas |
 | `ynh vendors` | `--format <text\|json>` |
@@ -222,6 +222,7 @@ Per-harness fields:
 | `delegates_to` | Array of delegate objects: `git`, `ref_installed`, `ref_available`, `is_pinned`, optional `path` |
 | `mcp_servers` | (`ynh info` only) The MCP servers a run carries, sorted by name: those of every harness the includes reach, then the harness's own. Each has `name`, `source` (`root` for the harness's own, or the include chain that supplied it, such as `eyelock/a > eyelock/b//path`, as `ynd preview` names it) and the `command` or `url` as written. Includes are read from disk and the cache only, never fetched |
 | `mcp_servers_error` | (`ynh info` only) Present when the includes' servers could not be read (an include not in the cache, or two includes declaring one server differently). `mcp_servers` then lists only the harness's own; run `ynh update` to fill the cache |
+| `selection` | (`ynh info` only) Present when `--profile` or `--focus` was given; `mcp_servers` is then what a run with that selection carries. `focus` is the `--focus` value as given; `profiles` are the profiles applied, as `--profile` takes them (`name` for the harness's own, `namespace:name` for an included harness's), including the one a focus names. A selection info cannot honour is an `invalid_input` error: both flags, a profile or focus not defined, or a namespaced one whose includes are not in the cache |
 | `manifest` | (`ynh info` only) Raw `.agents/harness/plugin.json` body, JSON-compacted |
 
 #### `--check-updates` flag

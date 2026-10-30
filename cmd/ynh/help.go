@@ -142,8 +142,19 @@ Flags:
 Show a harness's resolved configuration: vendor, includes, delegates, hooks,
 MCP servers, profiles, focuses and sensors.
 
+With no --profile or --focus, hooks and MCP servers are those of a run with
+no profile. A selection shows what a run with it carries; profiles and
+focuses are still listed as declared. A bare run's launch_focus is not
+applied: pass it as --focus to see what a bare run wakes with.
+
 Flags:
-  --format text|json   Output format (default text)`,
+  --format text|json   Output format (default text)
+  --profile <name>     Apply a profile, as ynh run does. Repeatable: at most one
+                       unqualified (the harness's own) and one namespace:name
+                       per included harness
+  --focus <name>       Apply a focus's profile; namespace:name selects an
+                       included harness's focus. Not with --profile
+  --check-updates      With --format json, check the source for newer content`,
 
 	"installed": `ynh installed <name> [flags]
 

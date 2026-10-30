@@ -90,6 +90,19 @@
           "type": "string",
           "description": "Present when the servers of includes could not be read (an include not in the cache, or two includes declaring one server differently); mcp_servers then lists only the harness's own."
         },
+        "selection": {
+          "type": "object",
+          "description": "Present when ynh info was given --profile or --focus. mcp_servers is then what a run with that selection carries.",
+          "properties": {
+            "focus": {"type": "string", "description": "The --focus value as given: name for the harness's own focus, namespace:name for an included harness's."},
+            "profiles": {
+              "type": "array",
+              "description": "The profiles applied, as --profile takes them (name for the harness's own, namespace:name for an included harness's), including the one a focus names.",
+              "items": {"type": "string"}
+            }
+          },
+          "additionalProperties": false
+        },
         "manifest": {
           "type": "object",
           "description": "Raw plugin.json (passed through unmodified). Schema available at docs/schema/plugin.schema.json — not validated by this envelope.",

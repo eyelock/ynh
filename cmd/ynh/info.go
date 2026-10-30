@@ -57,8 +57,20 @@ type infoEntry struct {
 	// MCPServersError says why the servers of includes could not be read
 	// (an include not in the cache, say); MCPServers then holds only the
 	// harness's own.
-	MCPServersError string          `json:"mcp_servers_error,omitempty"`
-	Manifest        json.RawMessage `json:"manifest"`
+	MCPServersError string `json:"mcp_servers_error,omitempty"`
+	// Selection is the profile or focus --profile or --focus selected, when
+	// one was. MCPServers is then what a run with that selection carries.
+	Selection *infoSelection  `json:"selection,omitempty"`
+	Manifest  json.RawMessage `json:"manifest"`
+}
+
+// infoSelection is what `ynh info --profile/--focus` selected. Focus is the
+// --focus value as given; Profiles are the profiles applied, each as
+// --profile takes it ("name" for the harness's own, "namespace:name" for an
+// included harness's), including the one a focus names.
+type infoSelection struct {
+	Focus    string   `json:"focus,omitempty"`
+	Profiles []string `json:"profiles,omitempty"`
 }
 
 // infoMCPServer is one composed MCP server in `ynh info`. Source is "root"
@@ -71,34 +83,98 @@ type infoMCPServer struct {
 	URL     string `json:"url,omitempty"`
 }
 
-// infoMCPServers lists the MCP servers a run of p carries, sorted by name,
-// resolving includes as a run does but only from disk and the cache: info
-// never reaches the network. When the includes cannot be resolved it returns
-// p's own servers and the error, so the caller can say what is missing rather
-// than show a partial list as complete.
-func infoMCPServers(p *harness.Harness) ([]infoMCPServer, error) {
-	var includes []harness.IncludedHarness
-	var resolveErr error
-	if len(p.Includes) > 0 {
-		resolved, err := resolver.ResolveIncludesLocal(p, harness.Selection{})
-		if err != nil {
-			resolveErr = err
-		} else {
-			includes = resolver.IncludedHarnesses(resolved)
+// infoView is the harness ynh info shows: as loaded, or reshaped by the
+// profile or focus selected, with the MCP servers a run of it carries.
+type infoView struct {
+	harness   *harness.Harness
+	servers   []infoMCPServer
+	mcpErr    error
+	selection *infoSelection
+}
+
+// resolveInfoView applies the --profile values and --focus value to p as
+// `ynh run` does, and lists the MCP servers that run carries, sorted by name.
+// Includes are resolved as a run resolves them but only from disk and the
+// cache: info never reaches the network. When they cannot be resolved the
+// view holds p's own servers and the error, so the caller can say what is
+// missing rather than show a partial list as complete.
+//
+// A selection info cannot honour is an error: --focus with --profile, a
+// profile or focus the harness does not define, and a namespaced one when
+// the includes it names cannot be read, since info could not show what it
+// applies.
+func resolveInfoView(p *harness.Harness, profiles []string, focus string) (*infoView, error) {
+	if focus != "" && len(profiles) > 0 {
+		return nil, fmt.Errorf("cannot use --focus and --profile together (focus includes a profile)")
+	}
+	sel, err := harness.ParseSelection(profiles, focus)
+	if err != nil {
+		return nil, err
+	}
+	view := &infoView{harness: p}
+	if focus != "" || len(profiles) > 0 {
+		view.selection = &infoSelection{Focus: focus, Profiles: slices.Clone(profiles)}
+	}
+
+	rootProfile := sel.Profile
+	if focus != "" && sel.FocusNS == "" {
+		f, ok := p.Focuses[focus]
+		if !ok {
+			if len(p.Focuses) == 0 {
+				return nil, fmt.Errorf("focus %q not defined in harness (the harness declares no focuses)", focus)
+			}
+			return nil, fmt.Errorf("focus %q not defined in harness (available: %v)", focus, slices.Sorted(maps.Keys(p.Focuses)))
+		}
+		if f.Profile != "" {
+			rootProfile = f.Profile
+			view.selection.Profiles = []string{f.Profile}
 		}
 	}
-	servers, provenance, err := harness.ComposeMCPServersRaw(p, includes)
+	if rootProfile != "" {
+		if view.harness, err = harness.ResolveProfile(p, rootProfile); err != nil {
+			return nil, err
+		}
+	}
+
+	var includes []harness.IncludedHarness
+	if len(view.harness.Includes) > 0 {
+		resolved, nsFocus, err := resolver.ResolveSelectedLocal(view.harness, sel)
+		switch {
+		case err != nil && (len(sel.Included) > 0 || sel.FocusNS != ""):
+			return nil, err
+		case err != nil:
+			view.mcpErr = err
+		default:
+			includes = resolver.IncludedHarnesses(resolved)
+			if nsFocus != nil && nsFocus.Profile != "" {
+				view.selection.Profiles = []string{sel.FocusNS + ":" + nsFocus.Profile}
+			}
+		}
+	} else if len(sel.Included) > 0 || sel.FocusNS != "" {
+		return nil, fmt.Errorf("no included harness has namespace %q (the harness includes no other harnesses)", firstNamespace(sel))
+	}
+
+	servers, provenance, err := harness.ComposeMCPServersRaw(view.harness, includes)
 	if err != nil {
 		// A conflict between includes: fall back to the harness's own.
-		servers, provenance, _ = harness.ComposeMCPServersRaw(p, nil)
-		resolveErr = err
+		servers, provenance, _ = harness.ComposeMCPServersRaw(view.harness, nil)
+		view.mcpErr = err
 	}
-	out := make([]infoMCPServer, 0, len(provenance))
+	view.servers = make([]infoMCPServer, 0, len(provenance))
 	for _, pr := range provenance {
 		s := servers[pr.Server]
-		out = append(out, infoMCPServer{Name: pr.Server, Source: pr.Source, Command: s.Command, URL: s.URL})
+		view.servers = append(view.servers, infoMCPServer{Name: pr.Server, Source: pr.Source, Command: s.Command, URL: s.URL})
 	}
-	return out, resolveErr
+	return view, nil
+}
+
+// firstNamespace names a namespace sel selects, for an error: the focus's,
+// else the first of the profiles' in sorted order.
+func firstNamespace(sel harness.Selection) string {
+	if sel.FocusNS != "" {
+		return sel.FocusNS
+	}
+	return slices.Sorted(maps.Keys(sel.Included))[0]
 }
 
 func cmdInfo(args []string) error {
@@ -110,7 +186,8 @@ func cmdInfoTo(args []string, stdout, stderr io.Writer) error {
 
 	format := "text"
 	checkUpdates := false
-	var name string
+	var name, focus string
+	var profiles []string
 	i := 0
 	for i < len(args) {
 		switch args[i] {
@@ -122,6 +199,19 @@ func cmdInfoTo(args []string, stdout, stderr io.Writer) error {
 			format = args[i]
 		case "--check-updates":
 			checkUpdates = true
+		case "--profile", "--focus":
+			if i+1 >= len(args) || args[i+1] == "" {
+				return cliError(stderr, structured, errCodeInvalidInput, args[i]+" requires a value")
+			}
+			if args[i] == "--profile" {
+				profiles = append(profiles, args[i+1])
+			} else {
+				if focus != "" {
+					return cliError(stderr, structured, errCodeInvalidInput, "--focus given twice")
+				}
+				focus = args[i+1]
+			}
+			i++
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return cliError(stderr, structured, errCodeInvalidInput,
@@ -146,20 +236,28 @@ func cmdInfoTo(args []string, stdout, stderr io.Writer) error {
 			return cliError(stderr, structured, errCodeInvalidInput,
 				"--check-updates requires --format json")
 		}
-		return printInfoText(stdout, name)
+		return printInfoText(stdout, name, profiles, focus)
 	case "json":
-		return printInfoJSON(stdout, stderr, name, checkUpdates)
+		return printInfoJSON(stdout, stderr, name, profiles, focus, checkUpdates)
 	default:
 		return cliError(stderr, structured, errCodeInvalidInput,
 			fmt.Sprintf("invalid --format value %q (want text or json)", format))
 	}
 }
 
-func printInfoText(w io.Writer, name string) error {
-	p, err := harness.LoadQualified(name)
+func printInfoText(w io.Writer, name string, profiles []string, focus string) error {
+	loaded, err := harness.LoadQualified(name)
 	if err != nil {
 		return err
 	}
+	view, err := resolveInfoView(loaded, profiles, focus)
+	if err != nil {
+		return err
+	}
+	// p is the harness with the selected profile applied: its hooks and MCP
+	// servers are what that run carries. Profiles and focuses are listed as
+	// declared, from the harness as loaded.
+	p := view.harness
 
 	vendorName := p.DefaultVendor
 	if vendorName == "" {
@@ -173,6 +271,16 @@ func printInfoText(w io.Writer, name string) error {
 	_, _ = fmt.Fprintf(w, "ID:           %s\n", name)
 	_, _ = fmt.Fprintf(w, "Name:         %s\n", p.Name)
 	_, _ = fmt.Fprintf(w, "Vendor:       %s\n", vendorName)
+	if sel := view.selection; sel != nil {
+		var parts []string
+		if sel.Focus != "" {
+			parts = append(parts, "focus "+sel.Focus)
+		}
+		if len(sel.Profiles) > 0 {
+			parts = append(parts, "profile "+strings.Join(sel.Profiles, ", "))
+		}
+		_, _ = fmt.Fprintf(w, "Selected:     %s\n", strings.Join(parts, ", "))
+	}
 
 	if p.InstalledFrom != nil {
 		_, _ = fmt.Fprintf(w, "Installed:    %s\n", p.InstalledFrom.InstalledAt)
@@ -268,7 +376,7 @@ func printInfoText(w io.Writer, name string) error {
 
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintln(w, "MCP Servers:")
-	servers, mcpErr := infoMCPServers(p)
+	servers, mcpErr := view.servers, view.mcpErr
 	if len(servers) == 0 && mcpErr == nil {
 		_, _ = fmt.Fprintln(w, "  (none)")
 	}
@@ -292,13 +400,13 @@ func printInfoText(w io.Writer, name string) error {
 
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintln(w, "Profiles:")
-	if len(p.Profiles) == 0 {
+	if len(loaded.Profiles) == 0 {
 		_, _ = fmt.Fprintln(w, "  (none)")
 	} else {
 		// Profiles, hook events and servers are all map keys: sorted, so the
 		// listing does not change order between runs (#520).
-		for _, pname := range slices.Sorted(maps.Keys(p.Profiles)) {
-			profile := p.Profiles[pname]
+		for _, pname := range slices.Sorted(maps.Keys(loaded.Profiles)) {
+			profile := loaded.Profiles[pname]
 			var parts []string
 			if len(profile.Hooks) > 0 {
 				parts = append(parts, "hooks: "+strings.Join(slices.Sorted(maps.Keys(profile.Hooks)), ", "))
@@ -364,7 +472,7 @@ func printInfoText(w io.Writer, name string) error {
 	return nil
 }
 
-func printInfoJSON(stdout, stderr io.Writer, name string, checkUpdates bool) error {
+func printInfoJSON(stdout, stderr io.Writer, name string, profiles []string, focus string, checkUpdates bool) error {
 	p, err := harness.LoadQualified(name)
 	if err != nil {
 		code := errCodeNotFound
@@ -421,11 +529,15 @@ func printInfoJSON(stdout, stderr io.Writer, name string, checkUpdates bool) err
 		DelegatesTo:      base.DelegatesTo,
 		Manifest:         compacted,
 	}
-	servers, mcpErr := infoMCPServers(p)
-	entry.MCPServers = servers
-	if mcpErr != nil {
-		entry.MCPServersError = mcpErr.Error()
+	view, err := resolveInfoView(p, profiles, focus)
+	if err != nil {
+		return cliError(stderr, true, errCodeInvalidInput, err.Error())
 	}
+	entry.MCPServers = view.servers
+	if view.mcpErr != nil {
+		entry.MCPServersError = view.mcpErr.Error()
+	}
+	entry.Selection = view.selection
 
 	envelope := infoEnvelope{
 		Capabilities:  config.CapabilitiesVersion,
