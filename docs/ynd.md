@@ -281,6 +281,8 @@ ynd preview --harness ./my-harness          # explicit harness flag
 | `--profile <name>` | Profile to apply during assembly |
 | `--focus <name>` | Focus to apply during assembly (mutually exclusive with `--profile`) |
 
+Preview lists the MCP servers that came from included harnesses under "MCP servers from included harnesses:", each with the include chain that supplied it (`github (from eyelock/assistants//ynh/github)`). The harness's own servers are not listed there: the MCP file already shows them. See [MCP Servers: Servers from Included Harnesses](mcp.md#servers-from-included-harnesses).
+
 When no `-o` flag is given, preview prints a tree with file contents to stdout. With `-o`, it writes the full assembled output to the specified directory.
 
 Preview supports the same source types as export: local directories with `.agents/harness/plugin.json` or bare `AGENTS.md` directories.
@@ -381,6 +383,7 @@ Key differences from runtime layout:
 - `--merged` produces one directory with all vendor manifests, Codex's included; Claude and Copilot share the same `.claude-plugin/plugin.json`, which both render identically. `ynd marketplace build` exports each harness entry this way. The shared tree keeps agents, rules and commands for the vendors that read them, and the Codex and Copilot warnings above are printed in merged mode too, because those vendors still do not load them
 - Hooks go to `hooks/<vendor>.json` at the plugin root, named by the `"hooks"` field of that vendor's manifest; there is no shared `hooks/hooks.json` (see [Hooks: Config File Locations](hooks.md#config-file-locations))
 - MCP servers go to each vendor's plugin file: `mcp/claude.json` (named by the `"mcpServers"` field of `.claude-plugin/plugin.json`), Codex's `.mcp.json` (named by its manifest), Cursor's `mcp.json` and Copilot's `.github/mcp.json`. No two share a path, and every manifest is written after the files it names (see [MCP Servers: Config File Locations](mcp.md#config-file-locations))
+- An MCP server carried by an included harness exports like the root's own, unless it points into the include's directory (a command or `cwd` starting with `./`, or a `${PLUGIN_ROOT}` reference), which the plugin does not contain. The export then stops with an error naming the server and the include; declare that server in the root harness, or set it to `null` there (see [MCP Servers: Exporting](mcp.md#exporting))
 
 **Output structure** (`--format agent-plugin`):
 
