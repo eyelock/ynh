@@ -528,3 +528,51 @@ func TestResolveProfileCarriesSensorOverrides(t *testing.T) {
 		t.Error("the original harness was mutated")
 	}
 }
+
+func TestReadIncludeSensors(t *testing.T) {
+	root := t.TempDir()
+	writeHarness(t, filepath.Join(root, "up"), "up", map[string]any{"go-vet": commandSensor("blocking")})
+	if err := os.MkdirAll(filepath.Join(root, "bare"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	local := func(p string) harness.Include {
+		return harness.Include{GitSource: harness.GitSource{Local: p}}
+	}
+
+	got, err := ReadIncludeSensors(root, local("up"))
+	if err != nil || got["go-vet"].Source.Kind() != "command" {
+		t.Fatalf("local include: %v %v", got, err)
+	}
+	if got, err := ReadIncludeSensors(root, local("bare")); err != nil || len(got) != 0 {
+		t.Errorf("an include with no manifest declares none and is not an error: %v %v", got, err)
+	}
+	if _, err := ReadIncludeSensors(root, local("missing")); err == nil {
+		t.Error("a missing local include must be an error")
+	}
+
+	// A git include is read from the cache only.
+	src := t.TempDir()
+	writeHarness(t, src, "up", map[string]any{"lint": commandSensor("blocking")})
+	runGit(t, src, "init")
+	runGit(t, src, "config", "user.email", "test@test.com")
+	runGit(t, src, "config", "user.name", "Test")
+	runGit(t, src, "add", ".")
+	runGit(t, src, "commit", "-m", "init")
+	t.Setenv("YNH_HOME", "")
+	t.Setenv("HOME", t.TempDir())
+	inc := harness.Include{GitSource: harness.GitSource{Git: src}}
+	if _, err := ReadIncludeSensors(root, inc); err == nil {
+		t.Fatal("a cold cache must be an error")
+	}
+	if _, ok := LookupCache(src, ""); ok {
+		t.Fatal("reading must not populate the cache")
+	}
+	h := &harness.Harness{Name: "c", Dir: t.TempDir(), Includes: []harness.Include{inc}}
+	if _, err := ResolveFromCache(h, nil); err != nil {
+		t.Fatal(err)
+	}
+	got, err = ReadIncludeSensors(root, inc)
+	if err != nil || got["lint"].Source.Kind() != "command" {
+		t.Fatalf("warm cache: %v %v", got, err)
+	}
+}

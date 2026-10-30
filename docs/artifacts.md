@@ -186,7 +186,7 @@ You are a senior developer working on a Go microservices codebase.
 - Run `make check` before committing
 ```
 
-When several sources provide instructions, they are composed rather than overwritten. The harness's own instructions come first, then one section per include that has instructions, in include order, each headed `## Instructions from <source>` (the include's `git` or `local` value, with its `path` appended when set). Content identical to a section already present appears once, so an include reached twice contributes one section. If the harness has no instructions of its own, the result is just the include sections.
+When several sources provide instructions, they are composed rather than overwritten. The harness's own instructions come first, then one section per include that has instructions, in include order, each headed `## Instructions from <source>` (the include's harness name when it has a manifest; otherwise `owner/repo` for a git include, and for a local one its path as written when relative or its directory name when absolute; `path` is appended when set; the heading never carries an absolute filesystem path). Content identical to a section already present appears once, so an include reached twice contributes one section. If the harness has no instructions of its own, the result is just the include sections.
 
 An include that is only wanted for its skills can leave its instructions out with `"instructions": false` (see [Includes](harnesses.md#includes-optional)). Composition applies to `ynh run`, `ynd preview`, `ynd export` and `ynh image`.
 

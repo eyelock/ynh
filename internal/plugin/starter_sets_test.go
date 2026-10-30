@@ -31,46 +31,6 @@ func starterSetsPath(t *testing.T) string {
 
 var jsonFence = regexp.MustCompile("(?s)```json\n(.*?)```")
 
-func TestStarterSets_ValidateAsSensorDeclarations(t *testing.T) {
-	path := starterSetsPath(t)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		// Not a skip. The file is committed; its absence is the failure.
-		t.Fatalf("starter sets not found at %s: %v", path, err)
-	}
-
-	blocks := jsonFence.FindAllStringSubmatch(string(data), -1)
-	if len(blocks) == 0 {
-		t.Fatal("no json blocks found; the extractor is wrong or the file lost its examples")
-	}
-
-	sensorsSeen := 0
-	for i, b := range blocks {
-		body := strings.TrimSpace(b[1])
-		// Blocks are manifest fragments, so wrap them into an object.
-		var doc struct {
-			Sensors map[string]Sensor `json:"sensors"`
-		}
-		if err := json.Unmarshal([]byte("{"+strings.TrimSuffix(body, ",")+"}"), &doc); err != nil {
-			t.Errorf("block %d does not parse as a manifest fragment: %v", i+1, err)
-			continue
-		}
-		if len(doc.Sensors) == 0 {
-			continue // a block that is not a sensor set
-		}
-		sensorsSeen += len(doc.Sensors)
-
-		for _, issue := range ValidateSensors(doc.Sensors, nil, nil) {
-			t.Errorf("block %d: %s", i+1, issue)
-		}
-	}
-
-	if sensorsSeen == 0 {
-		t.Fatal("no sensors were validated; this test asserts nothing")
-	}
-	t.Logf("validated %d sensors across %d blocks", sensorsSeen, len(blocks))
-}
-
 // A sensor wrapping a tool that prints more than findings needs output.match,
 // or fixing one finding registers the changed summary as a new one (#338).
 // The library shipped without a single one, which is what #366 recorded.

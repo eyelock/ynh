@@ -52,7 +52,10 @@ func discoverFiles(root string, extensions []string) ([]string, error) {
 		}
 		return nil
 	})
-	return filterIgnored(files), err
+	if err != nil {
+		return nil, err
+	}
+	return applyIgnores(root, files)
 }
 
 // discoverByName walks root and returns files matching the given exact names.
@@ -87,7 +90,10 @@ func discoverByName(root string, names []string) ([]string, error) {
 		}
 		return nil
 	})
-	return filterIgnored(files), err
+	if err != nil {
+		return nil, err
+	}
+	return applyIgnores(root, files)
 }
 
 // discoverAll walks root and returns all files matching extensions or exact names.
@@ -127,5 +133,8 @@ func discoverAll(root string, extensions []string, names []string) ([]string, er
 		}
 		return nil
 	})
-	return filterIgnored(files), err
+	if err != nil {
+		return nil, err
+	}
+	return applyIgnores(root, files)
 }
