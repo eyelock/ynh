@@ -137,7 +137,13 @@ ynd preview /tmp/ynh-tutorial/hook-harness -v cursor -o /tmp/ynh-tutorial/hook-h
 find /tmp/ynh-tutorial/hook-harness-cursor -name hooks.json
 ```
 
-Expected: exactly one line, ending in `.cursor/hooks.json`.
+Expected: the Cursor matcher warning from above and a `Preview written to` line from `ynd preview`, then exactly one line from `find`, ending in `.cursor/hooks.json`:
+
+```
+  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+Preview written to /tmp/ynh-tutorial/hook-harness-cursor
+/tmp/ynh-tutorial/hook-harness-cursor/.cursor/hooks.json
+```
 
 ## Preview for Codex
 
@@ -405,7 +411,13 @@ Use `ynd diff` to see how the same hooks translate differently:
 ynd diff /tmp/ynh-tutorial/hook-harness claude cursor codex
 ```
 
-Expected output shows:
+Expected: the Cursor matcher warning from above comes first:
+
+```
+  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+```
+
+Then the three comparisons, which show:
 - `.claude/hooks/hooks.json` is only in Claude
 - `.cursor/hooks.json` is only in Cursor
 - `.codex/hooks.json` is only in Codex
