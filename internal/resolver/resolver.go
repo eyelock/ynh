@@ -53,14 +53,18 @@ type ResolveResult struct {
 	// under: the "as" alias of the include, or the harness's own name. Empty
 	// for a plain artifact package.
 	Namespace string
-	// HooksActive is whether the harness's hooks may run: every include on
-	// the way to it, from the root's, says "hooks": true. Without it the
+	// HooksActive is whether the harness's hooks may run: every route to it
+	// says "hooks": true at every link, or the root includes it directly
+	// with "hooks": true (see includeResolver.hooksConsent). Without it the
 	// hooks are declared but not carried.
 	HooksActive bool
 
 	// node is the include's identity in the include graph (see
 	// includeResolver.parents), empty for a plain artifact package.
 	node string
+	// id is the identity of the harness the include holds, the same for a
+	// picked include and a whole one, empty for a plain artifact package.
+	id string
 }
 
 // repoFunc is a function that fetches or looks up a Git repo.
@@ -189,7 +193,20 @@ type includeResolver struct {
 	// removals holds the MCP servers each walked harness sets to null, by
 	// identity.
 	removals map[string][]string
-	rootID   string
+	// hookLinks records, for every harness include met, each include of it
+	// (once per route, picked or not, including the routes the walk skips):
+	// the harness that includes it and whether that include says
+	// "hooks": true. It is keyed by the harness's identity, not by its node,
+	// so a picked include and a whole one of the same harness agree.
+	hookLinks map[string][]hookLink
+	rootID    string
+}
+
+// hookLink is one include of a harness: who includes it, and whether that
+// include consents to its hooks.
+type hookLink struct {
+	parent string
+	hooks  bool
 }
 
 // seenHarness is one harness met under a namespace.
@@ -293,14 +310,16 @@ func walkIncludes(p *harness.Harness, cfg *config.Config, resolve sourceResolver
 	r := &includeResolver{
 		cfg: cfg, source: resolve, done: map[string]bool{},
 		selected: selected, seen: map[string][]seenHarness{}, profileErr: map[string]error{},
-		parents: map[string][]string{}, removals: map[string][]string{}, rootID: dirIdentity(p.Dir),
+		parents: map[string][]string{}, removals: map[string][]string{},
+		hookLinks: map[string][]hookLink{}, rootID: dirIdentity(p.Dir),
 	}
 	chain := []chainLink{{id: r.rootID, label: "root"}}
-	results, err := r.resolve(p, chain, "", true)
+	results, err := r.resolve(p, chain, "")
 	if err != nil {
 		return nil, nil, err
 	}
 	r.applyRemovals(results)
+	r.applyHooksConsent(results)
 	if err := r.check(); err != nil {
 		return nil, nil, err
 	}
@@ -441,10 +460,51 @@ func (r *includeResolver) applyRemovals(results []ResolveResult) {
 	}
 }
 
+// hooksConsent reports whether the hooks of the harness with identity id may
+// run. Hooks are off unless consented to, and when the routes to a harness
+// disagree that default holds, with the root's own direct include as its
+// final word: if the root includes the harness directly, that include
+// decides, with "hooks": true or without it, whatever other routes say.
+// Otherwise every route must say "hooks": true at every link. The outcome does
+// not depend on the order the includes are listed in.
+func (r *includeResolver) hooksConsent(id string, memo map[string]bool) bool {
+	if id == r.rootID {
+		return true
+	}
+	if got, ok := memo[id]; ok {
+		return got
+	}
+	memo[id] = false // cycles are refused by the walk; this only guards the recursion
+	links := r.hookLinks[id]
+	direct := slices.DeleteFunc(slices.Clone(links), func(l hookLink) bool { return l.parent != r.rootID })
+	if len(direct) > 0 {
+		links = direct
+	}
+	consent := len(links) > 0
+	for _, l := range links {
+		if !l.hooks || !r.hooksConsent(l.parent, memo) {
+			consent = false
+			break
+		}
+	}
+	memo[id] = consent
+	return consent
+}
+
+// applyHooksConsent sets HooksActive on each included harness (see
+// hooksConsent).
+func (r *includeResolver) applyHooksConsent(results []ResolveResult) {
+	memo := map[string]bool{}
+	for i := range results {
+		if results[i].id != "" {
+			results[i].HooksActive = r.hooksConsent(results[i].id, memo)
+		}
+	}
+}
+
 // resolve resolves p's includes. via is the display chain of the harness p was
-// reached through, empty for the root. consent is whether every include on the
-// way to p consented to hooks, true for the root itself.
-func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via string, consent bool) ([]ResolveResult, error) {
+// reached through, empty for the root.
+func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via string) ([]ResolveResult, error) {
 	var results []ResolveResult
 	parent := chain[len(chain)-1].id
 
@@ -477,8 +537,8 @@ func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via str
 			ns = inner.Name
 		}
 		res.Namespace = ns
-		hooksConsent := consent && inc.Hooks
-		res.HooksActive = hooksConsent
+		res.id = id
+		r.hookLinks[id] = append(r.hookLinks[id], hookLink{parent: parent, hooks: inc.Hooks})
 		r.register(ns, id, res.Chain, inner)
 		inner = r.applyProfile(ns, inner)
 		res.Harness = inner
@@ -520,7 +580,7 @@ func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via str
 		}
 		r.removals[id] = inner.MCPRemovals
 		res.node = id
-		deps, err := r.resolve(inner, append(chain[:len(chain):len(chain)], chainLink{id: id, label: label}), res.Chain, hooksConsent)
+		deps, err := r.resolve(inner, append(chain[:len(chain):len(chain)], chainLink{id: id, label: label}), res.Chain)
 		if err != nil {
 			return nil, err
 		}
