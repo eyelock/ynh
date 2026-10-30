@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -16,23 +18,34 @@ import (
 
 // composeOutput is the top-level JSON shape for `ynd compose`.
 type composeOutput struct {
-	Name          string                    `json:"name"`
-	Version       string                    `json:"version"`
-	Description   string                    `json:"description,omitempty"`
-	DefaultVendor string                    `json:"default_vendor"`
-	Artifacts     composeArtifacts          `json:"artifacts"`
-	Includes      []composeInclude          `json:"includes"`
-	DelegatesTo   []composeDelegate         `json:"delegates_to"`
-	Hooks         map[string][]composeHook  `json:"hooks,omitempty"`
-	MCPServers    map[string]composeMCP     `json:"mcp_servers,omitempty"`
-	Profiles      map[string]composeProfile `json:"profiles"`
-	Focuses       map[string]composeFocus   `json:"focuses,omitempty"`
-	LaunchFocus   string                    `json:"launch_focus,omitempty"`
-	Sensors       map[string]composeSensor  `json:"sensors,omitempty"`
-	Counts        composeCounts             `json:"counts"`
+	Name          string                   `json:"name"`
+	Version       string                   `json:"version"`
+	Description   string                   `json:"description,omitempty"`
+	DefaultVendor string                   `json:"default_vendor"`
+	Artifacts     composeArtifacts         `json:"artifacts"`
+	Includes      []composeInclude         `json:"includes"`
+	DelegatesTo   []composeDelegate        `json:"delegates_to"`
+	Hooks         map[string][]composeHook `json:"hooks,omitempty"`
+	MCPServers    map[string]composeMCP    `json:"mcp_servers,omitempty"`
+	// MCPServersError says why the servers of includes could not be composed
+	// (two includes define one name differently); MCPServers then holds only
+	// the root's own.
+	MCPServersError string                    `json:"mcp_servers_error,omitempty"`
+	Profiles        map[string]composeProfile `json:"profiles"`
+	Focuses         map[string]composeFocus   `json:"focuses,omitempty"`
+	LaunchFocus     string                    `json:"launch_focus,omitempty"`
+	Sensors         map[string]composeSensor  `json:"sensors,omitempty"`
+	// SensorsError says why the sensors of includes could not be merged (a
+	// name declared twice, a stale override); Sensors then holds only the
+	// root's own.
+	SensorsError string        `json:"sensors_error,omitempty"`
+	Counts       composeCounts `json:"counts"`
 }
 
 type composeSensor struct {
+	// Origin names the include that declared the sensor; empty for the
+	// root's own. (Source is the sensor's own source, what it observes.)
+	Origin   string              `json:"origin,omitempty"`
 	Category string              `json:"category,omitempty"`
 	Role     string              `json:"role,omitempty"`
 	Source   composeSensorSource `json:"source"`
@@ -97,6 +110,10 @@ type composeHook struct {
 }
 
 type composeMCP struct {
+	// Source is where a composed server was declared: "root", or the include
+	// chain that supplied it ("eyelock/a > eyelock/b"), as `ynh info` and
+	// `ynd preview` name it. Empty inside a profile, which is root's own.
+	Source  string            `json:"source,omitempty"`
 	Type    string            `json:"type"`
 	Command string            `json:"command,omitempty"`
 	Args    []string          `json:"args,omitempty"`
@@ -398,11 +415,21 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 		out.Hooks = hooks
 	}
 
-	// MCP Servers
-	if len(h.MCPServers) > 0 {
-		servers := make(map[string]composeMCP)
-		for name, srv := range h.MCPServers {
-			servers[name] = composeMCP{
+	// MCP Servers — what a run carries: the servers of every harness the
+	// includes reach, then the root's own, with the root's removals applied.
+	// Composed as written (nothing expanded), as `ynh info` and `ynh trust`
+	// read them.
+	servers, provenance, err := harness.ComposeMCPServersRaw(h, resolver.IncludedHarnesses(resolved))
+	if err != nil {
+		servers, provenance, _ = harness.ComposeMCPServersRaw(h, nil)
+		out.MCPServersError = err.Error()
+	}
+	if len(provenance) > 0 {
+		out.MCPServers = make(map[string]composeMCP, len(provenance))
+		for _, pr := range provenance {
+			srv := servers[pr.Server]
+			out.MCPServers[pr.Server] = composeMCP{
+				Source:  pr.Source,
 				Type:    srv.Transport(),
 				Command: srv.Command,
 				Args:    srv.Args,
@@ -412,7 +439,6 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 				Headers: srv.Headers,
 			}
 		}
-		out.MCPServers = servers
 	}
 
 	// Profiles — full content so consumers can render/diff without re-parsing
@@ -475,11 +501,21 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 		out.LaunchFocus = h.LaunchFocus
 	}
 
-	// Sensors — root harness only (included harnesses' sensors are dropped by design)
-	if len(h.Sensors) > 0 {
+	// Sensors — the root's own and those its direct includes declare, with
+	// the include-level and profile overrides applied, as `ynh check` sees
+	// them (resolver.WithIncludedSensors). A copy, so h is not changed.
+	sensorSet := h.Sensors
+	withIncluded := *h
+	if merged, err := resolver.WithIncludedSensors(&withIncluded); err != nil {
+		out.SensorsError = err.Error()
+	} else {
+		sensorSet = merged.Sensors
+	}
+	if len(sensorSet) > 0 {
 		sensors := make(map[string]composeSensor)
-		for name, s := range h.Sensors {
+		for name, s := range sensorSet {
 			cs := composeSensor{
+				Origin:   s.Origin,
 				Category: s.Category,
 				Role:     s.Role,
 				Output: composeSensorOutput{
@@ -605,14 +641,41 @@ func printComposeText(w io.Writer, out composeOutput) error {
 		}
 	}
 
-	if len(out.MCPServers) > 0 {
+	if len(out.MCPServers) > 0 || out.MCPServersError != "" {
 		_, _ = fmt.Fprintln(w, "\nMCP Servers:")
-		for name, srv := range out.MCPServers {
+		for _, name := range slices.Sorted(maps.Keys(out.MCPServers)) {
+			srv := out.MCPServers[name]
+			line := "  " + name
 			if srv.Command != "" {
-				_, _ = fmt.Fprintf(w, "  %s: %s\n", name, srv.Command)
+				line += ": " + srv.Command
 			} else if srv.URL != "" {
-				_, _ = fmt.Fprintf(w, "  %s: %s\n", name, srv.URL)
+				line += ": " + srv.URL
 			}
+			if srv.Source == harness.MCPSourceRoot {
+				line += "  (own)"
+			} else {
+				line += "  (from " + srv.Source + ")"
+			}
+			_, _ = fmt.Fprintln(w, line)
+		}
+		if out.MCPServersError != "" {
+			_, _ = fmt.Fprintf(w, "  servers from includes not shown: %s\n", out.MCPServersError)
+		}
+	}
+
+	if len(out.Sensors) > 0 || out.SensorsError != "" {
+		_, _ = fmt.Fprintln(w, "\nSensors:")
+		for _, name := range slices.Sorted(maps.Keys(out.Sensors)) {
+			line := "  " + name
+			if origin := out.Sensors[name].Origin; origin != "" {
+				line += "  (from " + origin + ")"
+			} else {
+				line += "  (own)"
+			}
+			_, _ = fmt.Fprintln(w, line)
+		}
+		if out.SensorsError != "" {
+			_, _ = fmt.Fprintf(w, "  sensors from includes not shown: %s\n", out.SensorsError)
 		}
 	}
 
