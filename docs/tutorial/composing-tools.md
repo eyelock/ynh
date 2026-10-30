@@ -933,8 +933,8 @@ Expected output:
 Preview written to out/delegate
 
 MCP servers from included harnesses:
-  notes (from /tmp/ynh-tutorial/composing-tools/github-lite > /tmp/ynh-tutorial/composing-tools/notes)
-  tracker (from /tmp/ynh-tutorial/composing-tools/github-lite)
+  notes (from github-lite > notes)
+  tracker (from github-lite)
 
 MCP servers of delegates:
   ops: pager (its own)
@@ -946,7 +946,7 @@ Profiles from included harnesses:
   github-lite:readonly
 
 Hooks from included harnesses:
-  on_session_start (from /tmp/ynh-tutorial/composing-tools/github-lite)
+  on_session_start (from github-lite)
 ```
 
 The delegate's server has its own section. It is not in the root's MCP config, and the agent file written for `ops` carries it instead:
