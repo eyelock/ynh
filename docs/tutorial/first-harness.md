@@ -270,6 +270,7 @@ Expected (stylized — actual `ls -Ra` format uses directory headers):
 ```
 CLAUDE.md
 .claude/
+  .claude-plugin/plugin.json
   agents/nitpicker.md
   commands/hello.md
   rules/be-brief.md
@@ -278,7 +279,7 @@ CLAUDE.md
   plugin.json
 ```
 
-`CLAUDE.md` (at the root) was generated from `instructions.md`. Artifacts are inside `.claude/` — the layout Claude expects for `--plugin-dir`.
+`CLAUDE.md` (at the root) was generated from `instructions.md`. Artifacts are inside `.claude/` — the layout Claude expects for `--plugin-dir`. `.claude/.claude-plugin/plugin.json` names that plugin after the harness, so Claude calls its MCP tools `plugin:my-harness:<server>` rather than after the `.claude` directory.
 
 ## Uninstall
 
