@@ -11,6 +11,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/resolver"
@@ -26,7 +27,14 @@ type composeOutput struct {
 	Includes      []composeInclude         `json:"includes"`
 	DelegatesTo   []composeDelegate        `json:"delegates_to"`
 	Hooks         map[string][]composeHook `json:"hooks,omitempty"`
-	MCPServers    map[string]composeMCP    `json:"mcp_servers,omitempty"`
+	// HooksNotActive lists, per event, the included harnesses that declare
+	// hooks a run does not carry, because the include does not say
+	// "hooks": true.
+	HooksNotActive []composeHookOrigin `json:"hooks_not_active,omitempty"`
+	// HooksError says why the hooks of includes could not be composed (a
+	// script outside its harness); Hooks then holds only the root's own.
+	HooksError string                `json:"hooks_error,omitempty"`
+	MCPServers map[string]composeMCP `json:"mcp_servers,omitempty"`
 	// MCPServersError says why the servers of includes could not be composed
 	// (two includes define one name differently); MCPServers then holds only
 	// the root's own.
@@ -104,9 +112,18 @@ type composeDelegate struct {
 }
 
 type composeHook struct {
+	// Source is the include chain that supplied the hook; empty for the
+	// root's own.
+	Source  string `json:"source,omitempty"`
 	Command string `json:"command"`
 	Matcher string `json:"matcher,omitempty"`
 	Timeout int    `json:"timeout,omitempty"`
+}
+
+// composeHookOrigin is an included harness's hooks for one event.
+type composeHookOrigin struct {
+	Event  string `json:"event"`
+	Source string `json:"source"`
 }
 
 type composeMCP struct {
@@ -400,21 +417,36 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 	}
 	out.DelegatesTo = delegates
 
-	// Hooks
-	if len(h.Hooks) > 0 {
+	// Hooks — what a run carries: those of included harnesses whose include
+	// consented ("hooks": true), then the root's own (assembler.ComposeHooks,
+	// as a run and `ynh trust` compose them). An included "./" script is
+	// shown at the path the session runs it from.
+	hookSet, err := assembler.ComposeHooks(h.Hooks, resolved)
+	if err != nil {
+		hookSet = assembler.HookSet{Hooks: h.Hooks}
+		out.HooksError = err.Error()
+	}
+	if len(hookSet.Hooks) > 0 {
 		hooks := make(map[string][]composeHook)
-		for event, entries := range h.Hooks {
+		for event, entries := range hookSet.Hooks {
 			var ch []composeHook
-			for _, e := range entries {
-				ch = append(ch, composeHook{
+			for i, e := range entries {
+				hook := composeHook{
 					Command: e.Command,
 					Matcher: e.Matcher,
 					Timeout: e.Timeout,
-				})
+				}
+				if src := hookSet.Sources[event]; i < len(src) {
+					hook.Source = src[i]
+				}
+				ch = append(ch, hook)
 			}
 			hooks[event] = ch
 		}
 		out.Hooks = hooks
+	}
+	for _, o := range hookSet.NotActive {
+		out.HooksNotActive = append(out.HooksNotActive, composeHookOrigin{Event: o.Event, Source: o.Source})
 	}
 
 	// MCP Servers — what a run carries: the servers of every harness the
@@ -630,16 +662,25 @@ func printComposeText(w io.Writer, out composeOutput) error {
 		}
 	}
 
-	if len(out.Hooks) > 0 {
+	if len(out.Hooks) > 0 || len(out.HooksNotActive) > 0 || out.HooksError != "" {
 		_, _ = fmt.Fprintln(w, "\nHooks:")
-		for event, entries := range out.Hooks {
-			for _, e := range entries {
+		for _, event := range slices.Sorted(maps.Keys(out.Hooks)) {
+			for _, e := range out.Hooks[event] {
 				line := "  " + event + ": " + e.Command
 				if e.Matcher != "" {
 					line += "  (matcher=" + e.Matcher + ")"
 				}
+				if e.Source != "" {
+					line += "  (from " + e.Source + ")"
+				}
 				_, _ = fmt.Fprintln(w, line)
 			}
+		}
+		for _, o := range out.HooksNotActive {
+			_, _ = fmt.Fprintf(w, "  %s: not active, from %s (add \"hooks\": true to the include)\n", o.Event, o.Source)
+		}
+		if out.HooksError != "" {
+			_, _ = fmt.Fprintf(w, "  hooks from includes not shown: %s\n", out.HooksError)
 		}
 	}
 

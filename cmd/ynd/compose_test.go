@@ -950,3 +950,73 @@ func TestCompose_SensorCollisionIsReported(t *testing.T) {
 		t.Errorf("want only the root's own sensor, got %+v", got.Sensors)
 	}
 }
+
+// Since an include can carry hooks with "hooks": true, compose reported only
+// the root's own. It now shows the consented hooks with their source, and
+// names the included harnesses whose hooks are not active.
+func TestCompose_HooksOfIncludes(t *testing.T) {
+	root := t.TempDir()
+	hook := func(cmd string) map[string]any {
+		return map[string]any{"before_tool": []map[string]any{{"command": cmd}}}
+	}
+	writeComposeHarnesses(t, map[string]map[string]any{
+		root: {
+			"name": "root", "version": "1.0.0",
+			"includes": []map[string]any{
+				{"local": "guard", "hooks": true},
+				{"local": "quiet"},
+			},
+			"hooks": hook("echo own"),
+		},
+		filepath.Join(root, "guard"): {
+			"name": "guard", "version": "1.0.0",
+			"hooks": hook("echo guard"),
+		},
+		filepath.Join(root, "quiet"): {
+			"name": "quiet", "version": "1.0.0",
+			"hooks": hook("echo quiet"),
+		},
+	})
+
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{root}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, stdout.String())
+	}
+	if got.HooksError != "" {
+		t.Fatalf("hooks_error = %q", got.HooksError)
+	}
+	entries := got.Hooks["before_tool"]
+	if len(entries) != 2 {
+		t.Fatalf("want the guard's hook and the root's, got %+v", entries)
+	}
+	if entries[0].Command != "echo guard" || entries[0].Source != "guard" {
+		t.Errorf("first hook = %+v, want echo guard from guard", entries[0])
+	}
+	if entries[1].Command != "echo own" || entries[1].Source != "" {
+		t.Errorf("second hook = %+v, want the root's own", entries[1])
+	}
+	if len(got.HooksNotActive) != 1 || got.HooksNotActive[0] != (composeHookOrigin{Event: "before_tool", Source: "quiet"}) {
+		t.Errorf("hooks_not_active = %+v, want before_tool from quiet", got.HooksNotActive)
+	}
+
+	stdout.Reset()
+	if err := cmdComposeTo([]string{root, "--format", "text"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo text: %v", err)
+	}
+	for _, want := range []string{
+		"before_tool: echo guard  (from guard)",
+		"before_tool: echo own\n",
+		`before_tool: not active, from quiet (add "hooks": true to the include)`,
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("text output lacks %q:\n%s", want, stdout.String())
+		}
+	}
+	if strings.Contains(stdout.String(), "echo quiet") {
+		t.Errorf("a hook without consent is listed as carried:\n%s", stdout.String())
+	}
+}
