@@ -1012,7 +1012,7 @@ ynh run /tmp/ynh-live/probe-harness -v copilot --allow-tool 'shell(ls)' -- "Run 
 cat /tmp/ynh-live/probe.log
 ```
 
-Confirm a line for each of the six events, the `pwd` being the plugin directory (not the project), `PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `COPILOT_PLUGIN_ROOT` set, `tool_name` `Bash` in the tool payloads, and `reason` `complete` in the `SessionEnd` payload. Record that the hooks fired without trusting the folder.
+Confirm a line for each of the six events, the `pwd` being the project root (ynh writes `"cwd": "."`, in a merged package with Claude too), `PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `COPILOT_PLUGIN_ROOT` set, `tool_name` `Bash` in the tool payloads, and `reason` `complete` in the `SessionEnd` payload. Record that the hooks fired without trusting the folder.
 
 ### L2: Copilot, matcher and timeout
 

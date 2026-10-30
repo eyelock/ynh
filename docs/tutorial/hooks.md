@@ -244,7 +244,7 @@ ynd preview /tmp/ynh-tutorial/end-harness -v copilot -o /tmp/ynh-tutorial/end-co
 cat /tmp/ynh-tutorial/end-copilot/.copilot/hooks/hooks.json
 ```
 
-Expected: Copilot's flat format with PascalCase events, `"version": 1`, and the timeout in Copilot's field name:
+Expected: Copilot's flat format with PascalCase events, `"version": 1`, `"cwd": "."` so the command runs from the repository root, and the timeout in Copilot's field name:
 
 ```json
 {
@@ -253,6 +253,7 @@ Expected: Copilot's flat format with PascalCase events, `"version": 1`, and the 
       {
         "type": "command",
         "command": "/usr/local/bin/check-commands.sh",
+        "cwd": ".",
         "matcher": "Bash"
       }
     ],
@@ -260,13 +261,15 @@ Expected: Copilot's flat format with PascalCase events, `"version": 1`, and the 
       {
         "type": "command",
         "command": "/usr/local/bin/flush-log.sh",
+        "cwd": ".",
         "timeoutSec": 10
       }
     ],
     "Stop": [
       {
         "type": "command",
-        "command": "/usr/local/bin/turn-report.sh"
+        "command": "/usr/local/bin/turn-report.sh",
+        "cwd": "."
       }
     ]
   },

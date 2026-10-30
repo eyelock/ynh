@@ -522,3 +522,81 @@ func TestExportMerged_CopilotRootHooksOnlyWithoutClaude(t *testing.T) {
 		}
 	}
 }
+
+// Copilot runs a plugin hook from the plugin folder unless the entry carries
+// "cwd": "." (CONFIRMED live, Copilot CLI 1.0.105, 2026-10-30), so every
+// Copilot hook file ynh writes carries it. Claude's hooks/claude.json, which
+// Copilot also reads in a merged package, must not: Claude's handler fields do
+// not document "cwd". A relative command in that package gets a warning.
+func TestExport_CopilotHooksCarryCwd(t *testing.T) {
+	srcDir := t.TempDir()
+	writeJSON(t, filepath.Join(srcDir, plugin.PluginDir, plugin.PluginFile), map[string]any{
+		"name":    "plugin-hooks",
+		"version": "0.1.0",
+		"hooks": map[string]any{
+			"before_tool": []any{
+				map[string]string{"matcher": "Bash", "command": "bash scripts/wake.sh"},
+				map[string]string{"command": "./scripts/guard.sh"},
+			},
+		},
+	})
+	writeTree(t, srcDir, map[string]string{"scripts/guard.sh": "#!/bin/sh\n"})
+
+	read := func(out, rel string) string {
+		data, err := os.ReadFile(filepath.Join(out, rel))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+
+	for _, tc := range []struct {
+		name    string
+		vendors []string
+		mode    ExportMode
+		file    string
+	}{
+		{"copilot-only export", []string{"copilot"}, ModeMerged, "hooks.json"},
+		{"agent plugin", []string{"copilot"}, ModeAgentPlugin, "com.github.copilot/hooks/hooks.json"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := filepath.Join(t.TempDir(), "o")
+			if _, err := Export(ExportOptions{SourceDir: srcDir, OutputDir: out, Vendors: tc.vendors, Mode: tc.mode}); err != nil {
+				t.Fatal(err)
+			}
+			got := read(out, tc.file)
+			if n := strings.Count(got, `"cwd": "."`); n != 2 {
+				t.Errorf("want cwd on both entries, got %d:\n%s", n, got)
+			}
+			if !strings.Contains(got, `"\"${PLUGIN_ROOT}\"/scripts/guard.sh"`) {
+				t.Errorf("./ script not anchored:\n%s", got)
+			}
+		})
+	}
+
+	t.Run("merged with Claude", func(t *testing.T) {
+		out := filepath.Join(t.TempDir(), "o")
+		res, err := Export(ExportOptions{SourceDir: srcDir, OutputDir: out, Vendors: []string{"claude", "copilot"}, Mode: ModeMerged})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := strings.Count(read(out, "hooks/claude.json"), `"cwd": "."`); n != 2 {
+			t.Errorf("hooks/claude.json: want cwd on both handlers, got %d", n)
+		}
+		for _, r := range res {
+			if slices.ContainsFunc(r.Warnings, func(w string) bool { return strings.Contains(w, "plugin folder") }) {
+				t.Errorf("unexpected warning: %v", r.Warnings)
+			}
+		}
+	})
+
+	t.Run("Claude only", func(t *testing.T) {
+		out := filepath.Join(t.TempDir(), "o")
+		if _, err := Export(ExportOptions{SourceDir: srcDir, OutputDir: out, Vendors: []string{"claude"}, Mode: ModeMerged}); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(read(out, "hooks/claude.json"), `"cwd"`) {
+			t.Error("a Claude-only export must not carry cwd")
+		}
+	})
+}

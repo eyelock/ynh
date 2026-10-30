@@ -291,8 +291,15 @@ Run with David's approval, against ynh's assembled and exported output.
   was not retested.
 - **Variables (#497):** `PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `COPILOT_PLUGIN_ROOT` are all
   set to the plugin dir; `"${PLUGIN_ROOT}"/...` expands.
-- **Working directory:** a hook script runs with the PLUGIN dir as cwd, not the project. The
-  project dir is the payload's `cwd`.
+- **Working directory:** without `cwd` a hook runs in the PLUGIN dir, not the project. ynh
+  writes `"cwd": "."` on every Copilot hook entry (session, Copilot-only export, Agent Plugins),
+  which runs the hook from the repository root and makes a relative command work (CONFIRMED live,
+  Copilot CLI 1.0.105, 2026-10-30). Copilot documents `cwd` as "relative to repository root or
+  absolute", so in a subfolder session the root is the repository root, where Claude uses the
+  session's folder. Merged with Claude, Copilot loads `hooks/claude.json`, so ynh writes
+  `"cwd": "."` there too (`Claude.GeneratePluginHookConfigForCopilot`), only when the package
+  also targets Copilot. Claude tolerates the field and it is a no-op for it (CONFIRMED live,
+  Claude Code, 2026-10-30).
 - **Payload:** Claude-style: `tool_name` is `Bash` for shell; `SessionEnd` has
   `reason: "complete"` in a `-p` run.
 - **Matchers:** `Bash` works on `PreToolUse` and `PostToolUse`; an `Edit` matcher did not
