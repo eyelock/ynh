@@ -114,9 +114,10 @@ These are session paths: `ynh run` loads `.claude/` as a plugin directory. An ex
 ynd preview /tmp/ynh-tutorial/preview-harness -v cursor
 ```
 
-Expected output structure:
+Expected output structure, after a warning on stderr: Cursor matches its tool hooks against its own tool types, so the `Bash` matcher will not match there (see [Hooks: Matchers](../hooks.md#matchers)):
 
 ```
+  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
 .cursor/
   agents/
   commands/
@@ -165,9 +166,10 @@ mapping.
 ynd diff /tmp/ynh-tutorial/preview-harness claude cursor
 ```
 
-Expected output:
+Expected output, with the same Cursor matcher warning first:
 
 ```
+  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
 === claude vs cursor ===
 Only in claude:
   .claude/.mcp.json
