@@ -3,6 +3,7 @@ package harness
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/eyelock/ynh/internal/config"
@@ -24,65 +25,104 @@ func writeLegacyHarness(t *testing.T, dir, name string) {
 	}
 }
 
-// A harness that has not moved its manifest to .agents/harness keeps
-// loading. This is the compatibility promise of the move: no migration, no
-// warning on load, no difference in what comes back.
-func TestLoadDir_LegacyPluginDirFallback(t *testing.T) {
-	dir := t.TempDir()
-	writeLegacyHarness(t, dir, "legacy")
-
-	if got, err := DetectFormat(dir); err != nil || got != "plugin" {
-		t.Fatalf("DetectFormat = %q, %v, want plugin", got, err)
+// wantLegacyRefusal checks err is the refusal a read command gives for a
+// source tree that keeps its manifest in .ynh-plugin: it names the tree and
+// the command that fixes it.
+func wantLegacyRefusal(t *testing.T, err error, dir string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected a refusal for a tree that keeps its manifest in .ynh-plugin")
 	}
-	h, err := LoadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if h.Name != "legacy" || h.DefaultVendor != "claude" {
-		t.Errorf("loaded %+v, want name legacy and vendor claude", h)
-	}
-	if _, err := os.Stat(filepath.Join(dir, plugin.PluginDir)); !os.IsNotExist(err) {
-		t.Errorf("loading must not create %s: reads are side-effect free", plugin.PluginDir)
+	for _, want := range []string{dir, plugin.LegacyPluginDir, "ynd migrate " + dir} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should mention %q, got: %v", want, err)
+		}
 	}
 }
 
-// ynh's editor commands (include, hook, profile, focus, mcp, delegate) all
-// resolve their target through ResolveEditTarget and then save through the
-// plugin package. A legacy manifest must be found, and must be edited where
-// it is.
-func TestResolveEditTarget_LegacyPluginDir(t *testing.T) {
-	dir := t.TempDir()
-	writeLegacyHarness(t, dir, "legacy")
+// A source tree that still has its manifest in .ynh-plugin is not read (#404):
+// every way into it fails with the fix, and the tree is left as it was.
+func TestLoadDir_LegacyPluginDirIsRefused(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	cases := []struct {
+		name string
+		run  func(dir string) error
+	}{
+		{"DetectFormat", func(dir string) error { _, err := DetectFormat(dir); return err }},
+		{"LoadDir", func(dir string) error { _, err := LoadDir(dir); return err }},
+		{"ResolveEditTarget", func(dir string) error { _, _, err := ResolveEditTarget(dir); return err }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeLegacyHarness(t, dir, "legacy")
 
-	got, installed, err := ResolveEditTarget(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if installed {
-		t.Error("a path ref is not an installed harness")
-	}
-	abs, _ := filepath.Abs(dir)
-	if got != abs {
-		t.Errorf("dir = %q, want %q", got, abs)
-	}
+			wantLegacyRefusal(t, tc.run(dir), dir)
 
-	hj, err := plugin.LoadPluginJSON(got)
-	if err != nil {
-		t.Fatal(err)
+			if _, err := os.Stat(filepath.Join(dir, plugin.PluginDir)); !os.IsNotExist(err) {
+				t.Errorf("a refused read must not create %s", plugin.PluginDir)
+			}
+			if _, err := os.Stat(filepath.Join(dir, plugin.LegacyPluginDir, plugin.PluginFile)); err != nil {
+				t.Errorf("the user's manifest must be left where it was: %v", err)
+			}
+		})
 	}
-	hj.Description = "edited"
-	if err := plugin.SavePluginJSON(got, hj); err != nil {
-		t.Fatal(err)
+}
+
+// ynh's own copies keep loading from the old layout, so an old-layout remote
+// source still works: an install under harnesses/ and a clone under cache/
+// are renamed in place, and nothing else is touched.
+func TestLoadDir_OwnedCopiesAreMigratedOnLoad(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	cases := []struct{ name, parent string }{
+		{"install", config.HarnessesDir()},
+		{"cached clone", config.CacheDir()},
 	}
-	if _, err := os.Stat(filepath.Join(dir, plugin.PluginDir)); !os.IsNotExist(err) {
-		t.Errorf("editing a legacy manifest must not create %s", plugin.PluginDir)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := filepath.Join(tc.parent, "example--old")
+			writeLegacyHarness(t, dir, "old")
+
+			if got, err := DetectFormat(dir); err != nil || got != "plugin" {
+				t.Fatalf("DetectFormat = %q, %v, want plugin", got, err)
+			}
+			h, err := LoadDir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if h.Name != "old" || h.DefaultVendor != "claude" {
+				t.Errorf("loaded %+v, want name old and vendor claude", h)
+			}
+			if _, err := os.Stat(filepath.Join(dir, plugin.PluginDir, plugin.PluginFile)); err != nil {
+				t.Errorf("the copy should have moved to %s: %v", plugin.PluginDir, err)
+			}
+			if _, err := os.Stat(filepath.Join(dir, plugin.LegacyPluginDir)); !os.IsNotExist(err) {
+				t.Errorf("%s should be gone from the copy", plugin.LegacyPluginDir)
+			}
+		})
 	}
-	back, err := plugin.LoadPluginJSON(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if back.Description != "edited" {
-		t.Errorf("edit did not land in the legacy file: %+v", back)
+}
+
+// A tree with both layouts is refused wherever it is, naming both.
+func TestLoadDir_BothLayoutsAreRefused(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	for _, tc := range []struct{ name, parent string }{
+		{"source tree", t.TempDir()},
+		{"cached clone", config.CacheDir()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := filepath.Join(tc.parent, "both")
+			writeLegacyHarness(t, dir, "both")
+			if err := plugin.SavePluginJSON(dir, &plugin.HarnessJSON{Name: "both", Version: "0.1.0"}); err != nil {
+				t.Fatal(err)
+			}
+			_, err := LoadDir(dir)
+			if err == nil || !strings.Contains(err.Error(), plugin.PluginDir) || !strings.Contains(err.Error(), plugin.LegacyPluginDir) {
+				t.Errorf("want an error naming both layouts, got: %v", err)
+			}
+		})
 	}
 }
 
@@ -111,34 +151,5 @@ func TestLegacyHarnessFile_InstallMigratesToCanonicalDir(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, plugin.LegacyPluginDir)); !os.IsNotExist(err) {
 		t.Errorf("migration must not write to %s", plugin.LegacyPluginDir)
-	}
-}
-
-// An install whose plugin.json is in .agents/harness but whose installed.json
-// was left in .ynh-plugin still loads its provenance: a split tree must never
-// silently drop where a harness came from.
-func TestLoadDir_SplitTreeKeepsProvenance(t *testing.T) {
-	dir := t.TempDir()
-	canon := filepath.Join(dir, plugin.PluginDir)
-	legacy := filepath.Join(dir, plugin.LegacyPluginDir)
-	for _, d := range []string{canon, legacy} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(canon, plugin.PluginFile), []byte(`{"name":"split","version":"0.1.0"}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	ins := `{"source_type":"git","source":"github.com/example/split","installed_at":"2026-09-01T00:00:00Z"}`
-	if err := os.WriteFile(filepath.Join(legacy, plugin.InstalledFile), []byte(ins), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	h, err := LoadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if h.InstalledFrom == nil || h.InstalledFrom.Source != "github.com/example/split" {
-		t.Errorf("InstalledFrom = %+v, want provenance from %s", h.InstalledFrom, plugin.LegacyPluginDir)
 	}
 }

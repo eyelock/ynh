@@ -750,15 +750,28 @@ func RemoveProfile(dir, name string) error {
 // identical — only the storage scope differs.
 type HookAddOptions struct {
 	Matcher string
+	// Timeout is seconds, 1 to plugin.MaxHookTimeout; 0 leaves it unset.
+	Timeout int
+}
+
+// checkHookTimeout rejects a timeout outside 0 (unset) to plugin.MaxHookTimeout.
+func checkHookTimeout(timeout int) error {
+	if timeout < 0 || timeout > plugin.MaxHookTimeout {
+		return fmt.Errorf("hook timeout %d must be between 1 and %d seconds", timeout, plugin.MaxHookTimeout)
+	}
+	return nil
 }
 
 // AddHook appends a hook entry to a top-level event on the harness.
 func AddHook(dir, event, command string, opts HookAddOptions) error {
 	if !plugin.ValidHookEvents[event] {
-		return fmt.Errorf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop, on_session_start)", event)
+		return fmt.Errorf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop, on_session_start, on_session_end)", event)
 	}
 	if command == "" {
 		return fmt.Errorf("hook command must not be empty")
+	}
+	if err := checkHookTimeout(opts.Timeout); err != nil {
+		return err
 	}
 	hj, err := loadManifest(dir)
 	if err != nil {
@@ -767,7 +780,7 @@ func AddHook(dir, event, command string, opts HookAddOptions) error {
 	if hj.Hooks == nil {
 		hj.Hooks = make(map[string][]plugin.HookEntry)
 	}
-	hj.Hooks[event] = append(hj.Hooks[event], plugin.HookEntry{Matcher: opts.Matcher, Command: command})
+	hj.Hooks[event] = append(hj.Hooks[event], plugin.HookEntry{Matcher: opts.Matcher, Command: command, Timeout: opts.Timeout})
 	return plugin.SavePluginJSON(dir, hj)
 }
 
@@ -800,10 +813,13 @@ func RemoveHook(dir, event string, index int) error {
 // AddProfileHook appends a hook entry to an event in a profile.
 func AddProfileHook(dir, profileName, event, command string, opts HookAddOptions) error {
 	if !plugin.ValidHookEvents[event] {
-		return fmt.Errorf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop, on_session_start)", event)
+		return fmt.Errorf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop, on_session_start, on_session_end)", event)
 	}
 	if command == "" {
 		return fmt.Errorf("hook command must not be empty")
+	}
+	if err := checkHookTimeout(opts.Timeout); err != nil {
+		return err
 	}
 	hj, err := loadManifest(dir)
 	if err != nil {
@@ -816,7 +832,7 @@ func AddProfileHook(dir, profileName, event, command string, opts HookAddOptions
 	if p.Hooks == nil {
 		p.Hooks = make(map[string][]plugin.HookEntry)
 	}
-	p.Hooks[event] = append(p.Hooks[event], plugin.HookEntry{Matcher: opts.Matcher, Command: command})
+	p.Hooks[event] = append(p.Hooks[event], plugin.HookEntry{Matcher: opts.Matcher, Command: command, Timeout: opts.Timeout})
 	hj.Profiles[profileName] = p
 	return plugin.SavePluginJSON(dir, hj)
 }

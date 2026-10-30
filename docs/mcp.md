@@ -108,7 +108,7 @@ The document is identical in both places; only the path differs. A manifest name
 
 Every vendor in a merged package gets a file of its own. A Claude plugin reads `.mcp.json` at its root and then what its manifest's `mcpServers` names, but Codex keeps its `.mcp.json` at the root, so Claude's servers go in `mcp/claude.json` instead. Claude still loads that root file first; it holds the same document, so the merge changes nothing. Copilot also accepts `.mcp.json` at a plugin root, which is why its file is `.github/mcp.json`.
 
-Copilot reads `.claude-plugin/plugin.json`, the manifest Claude writes. In a Copilot-only export that manifest names no MCP file and Copilot reads `.github/mcp.json`, its default. In a package that also carries Claude, the manifest's `mcpServers` names `mcp/claude.json`, and Copilot's plugin reference lists that field beside `.mcp.json` and `.github/mcp.json` without saying how the three combine. `mcp/claude.json` is in Claude's format, which gives a stdio server no `"type"` where Copilot's own file says `"local"`; which file an installed Copilot plugin loads from such a package has not been tested by hand ([#499](https://github.com/eyelock/ynh/issues/499)).
+Copilot reads `.claude-plugin/plugin.json`, the manifest Claude writes. In a Copilot-only export that manifest names no MCP file and Copilot reads `.github/mcp.json`, its default. In a package that also carries Claude, the manifest's `mcpServers` names `mcp/claude.json`, and Copilot's plugin reference lists that field beside `.mcp.json` and `.github/mcp.json` without saying how the three combine. `mcp/claude.json` is in Claude's format, which gives a stdio server no `"type"` where Copilot's own file says `"local"`; CONFIRMED live (Copilot CLI 1.0.105, 2026-10-30, a package installed from a local marketplace into a scratch `COPILOT_HOME`): Copilot loads `.github/mcp.json`, so both its servers started, and does **not** load the manifest-named `mcp/claude.json`, so neither of that file's servers started ([#499](https://github.com/eyelock/ynh/issues/499)). `${PLUGIN_ROOT}` expands in an MCP `command`.
 
 Each adapter spells the canonical transport in the vendor's own words:
 
@@ -202,7 +202,7 @@ Copilot requires an explicit `"type"` field on every server (`"local"` for a `co
 }
 ```
 
-**Delivery is project-root, not plugin-dir.** Copilot does not read a plugin-bundled `.mcp.json` via `--plugin-dir` (confirmed by hand-testing), so `ynh run` projects the generated config directly into the calling project's `.github/mcp.json` instead: a file fully owned by ynh, distinct from anything the user might hand-author. `ynd export` writes the same document to `.github/mcp.json` at the plugin root, where an installed Copilot plugin reads it (untested by hand: a plugin loaded with `--plugin-dir` ignores it, as above). The manifest sits beside it at `.claude-plugin/plugin.json` in the plugin root, next to the exported skills, whatever other files the export holds.
+**Delivery is project-root, not plugin-dir.** Copilot does not read a plugin-bundled `.mcp.json` via `--plugin-dir` (confirmed by hand-testing), so `ynh run` projects the generated config directly into the calling project's `.github/mcp.json` instead: a file fully owned by ynh, distinct from anything the user might hand-author. `ynd export` writes the same document to `.github/mcp.json` at the plugin root, where an installed Copilot plugin reads it (a plugin loaded with `--plugin-dir` ignores it, as above; an installed plugin reads it, CONFIRMED on Copilot CLI 1.0.105). The manifest sits beside it at `.claude-plugin/plugin.json` in the plugin root, next to the exported skills, whatever other files the export holds.
 
 ## Running with only the harness's servers
 
@@ -365,6 +365,20 @@ whenever it assembles a run (`ynh run`, `ynd preview`, `ynh agent run`):
 The two names are never credentials: `env_passthrough` neither admits nor
 refuses them, and `ynd validate` does not report them as undeclared. A ynh
 harness that uses them assembles and exports the same way.
+
+## Scripts in an export
+
+A stdio server whose `command` (or `cwd`) starts with `./` names a script the harness ships. A server runs in the user's project, not in the plugin, so `ynd export` and `ynd marketplace build` do for it what they do for [hook scripts](hooks.md#hook-script-paths): copy each `./` command into the package at the same path, keeping its mode, and rewrite the `./` to the vendor's plugin-root placeholder.
+
+| Vendor | `./scripts/x.sh` becomes |
+|--------|--------------------------|
+| Claude Code | `${CLAUDE_PLUGIN_ROOT}/scripts/x.sh` |
+| Cursor | `${CURSOR_PLUGIN_ROOT}/scripts/x.sh` |
+| Copilot | `${PLUGIN_ROOT}/scripts/x.sh` (CONFIRMED to expand in a command, Copilot CLI 1.0.105) |
+| Codex | left as `./scripts/x.sh`, with a warning: its docs name no placeholder for an MCP server |
+| Agent Plugins `mcp.json` | left as `./scripts/x.sh`, which is the form the specification defines |
+
+A script that is not a file in the harness, or climbs out of it, is not copied and the export warns (`mcp script ./scripts/x.sh is not a file in the harness, so the plugin does not carry it`). Session assembly (`ynh run`) is unchanged: it already makes `./` absolute against the harness.
 
 ## The Portable Format
 

@@ -212,7 +212,8 @@ before the worker starts:
 
 When one does not hold, ynh prints one note on stderr and the run carries on
 without the vendor's telemetry. ynh never starts the relay because it found
-`ynr`: only the setting does.
+`ynr`: only the setting does. The base image carries `ynr`, and that
+changes nothing: see [Docker](docker.md#image-contents).
 
 ### Its lifetime
 

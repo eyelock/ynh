@@ -3,6 +3,7 @@ package resolver
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"sort"
 
 	"github.com/eyelock/ynh/internal/harness"
@@ -284,4 +285,37 @@ func ResolveDelegateLocal(gs harness.GitSource, harnessDir string) (string, erro
 	}
 	base, _, err := resolveGitSourceWith(gs, harnessDir, fetch)
 	return base, err
+}
+
+// ReadIncludeSensors reports the sensors one include declares, for static
+// validation. Unlike the merge it never fetches, not even the harness's own
+// repo: a local include is read from disk and a git include only from the
+// cache, so a cache miss is an error the caller reports as "not checked".
+//
+// An include with no manifest declares none, and that is not an error, as at
+// run time. A manifest that exists but cannot be read is, because an author
+// validating needs to hear it rather than be told the include has no sensors.
+func ReadIncludeSensors(harnessDir string, inc harness.Include) (map[string]plugin.Sensor, error) {
+	var dir string
+	if inc.IsLocal() {
+		b, err := resolveLocalSource(inc.GitSource, harnessDir)
+		if err != nil {
+			return nil, err
+		}
+		dir = b
+	} else {
+		b, _, err := resolveGitSourceWith(inc.GitSource, harnessDir, lookupOnlyRepo)
+		if err != nil {
+			return nil, err
+		}
+		dir = b
+	}
+	hj, err := plugin.LoadPluginJSON(dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return hj.Sensors, nil
 }

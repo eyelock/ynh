@@ -167,7 +167,7 @@ Installed harness "david"
   Vendor:   claude
 ```
 
-Before that summary it prints `Fetching 4 include(s) and 0 delegate(s)...` and a `Fetched` line for each include. While `github.com/eyelock/assistants` still keeps its manifests in `.ynh-plugin/`, it also prints a deprecation warning naming the cached copy; that is a note for the repo's maintainer, and the install succeeds.
+Before that summary it prints `Fetching 4 include(s) and 0 delegate(s)...` and a `Fetched` line for each include.
 
 Inspect and uninstall use the canonical id — bare names like `david` are no longer accepted:
 

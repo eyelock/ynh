@@ -104,6 +104,14 @@ type RunOptions struct {
 
 	// WorktreeDir is where the worker subprocess runs. Defaults to cwd.
 	WorktreeDir string
+	// WorkspaceGrant decides the harness's requested workspace folders and
+	// returns the ones to grant the worker. It is handed the harness as
+	// loaded, before any focus or profile, the installed id ("" for a
+	// harness given by path), the backend and the worktree. It reports what
+	// it granted and refused itself. Nil grants nothing; the decision needs
+	// the operator's allow-list and trust record, which this package does not
+	// read.
+	WorkspaceGrant func(h *harness.Harness, id, backend, worktree string) []string
 
 	// EmitJSONL is the path for trajectory output. "-" writes to Stdout.
 	// If empty, trajectory events are discarded.
@@ -343,6 +351,8 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	// the same severities the run was assembled under; without it a sensor a
 	// profile softened would block the loop it was softened for.
 	var gateProfile string
+	// workspaceDirs are the extra folders granted to the worker.
+	var workspaceDirs []string
 
 	if opts.HarnessName != "" {
 		// An installed id or a local harness directory, resolved exactly as
@@ -357,6 +367,14 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		if namespace.Classify(opts.HarnessName) == namespace.RefPath {
 			opts.HarnessName = harnessObj.Dir
 			reportedName = harnessObj.Name
+		}
+
+		if opts.WorkspaceGrant != nil && len(harnessObj.Workspace) > 0 {
+			id := ""
+			if namespace.Classify(opts.HarnessName) == namespace.RefID {
+				id = opts.HarnessName
+			}
+			workspaceDirs = opts.WorkspaceGrant(harnessObj, id, opts.Backend, opts.WorktreeDir)
 		}
 
 		// Resolve focus → prompt + bound profile. Mirrors `ynh run --focus`.
@@ -701,6 +719,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	}
 	sess, err := wb.Start(ctx, StartOptions{
 		WorktreeDir: opts.WorktreeDir,
+		Workspace:   workspaceDirs,
 		ConfigPath:  configPath,
 		Sandbox:     opts.Sandbox,
 		SessionDir:  sessionDir,

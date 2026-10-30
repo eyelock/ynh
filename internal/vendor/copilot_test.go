@@ -161,20 +161,6 @@ func TestBuildCopilotArgs_ProjectsMCPConfig(t *testing.T) {
 	}
 }
 
-func TestCopilotGenerateHookConfig_AlwaysNil(t *testing.T) {
-	c := &Copilot{}
-	hooks := map[string][]plugin.HookEntry{
-		"before_tool": {{Command: "echo hi"}},
-	}
-	result, err := c.GenerateHookConfig(hooks)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result != nil {
-		t.Error("expected nil hook config regardless of input — hooks are blocked on the trust-gating gap")
-	}
-}
-
 func TestCopilotGenerateMCPConfig_NilServers(t *testing.T) {
 	c := &Copilot{}
 	result, err := c.GenerateMCPConfig(nil)

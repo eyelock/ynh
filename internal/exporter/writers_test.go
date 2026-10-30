@@ -167,7 +167,7 @@ func TestPluginManifest_PrefersExportLayout(t *testing.T) {
 func TestWriteHookConfig(t *testing.T) {
 	out := t.TempDir()
 	s := stubExporter{hooks: map[string][]byte{"hooks/hooks.json": []byte(`{}`)}}
-	wrote, err := writeHookConfig(out, s, nil)
+	wrote, err := writeHookConfig(out, s, nil, false)
 	if err != nil {
 		t.Fatalf("writeHookConfig: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestWriteHookConfig_PrefersPluginPath(t *testing.T) {
 		stubExporter: stubExporter{hooks: map[string][]byte{".vendor/hooks.json": []byte(`{}`)}},
 		plugin:       map[string][]byte{"hooks/hooks.json": []byte(`{}`)},
 	}
-	if _, err := writeHookConfig(out, s, nil); err != nil {
+	if _, err := writeHookConfig(out, s, nil, false); err != nil {
 		t.Fatalf("writeHookConfig: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(out, "hooks", "hooks.json")); err != nil {
@@ -210,7 +210,7 @@ func TestWriteHookConfig_PrefersPluginPath(t *testing.T) {
 }
 
 func TestWriteHookConfig_GeneratorErrorPropagates(t *testing.T) {
-	_, err := writeHookConfig(t.TempDir(), stubExporter{hookErr: errors.New("boom")}, nil)
+	_, err := writeHookConfig(t.TempDir(), stubExporter{hookErr: errors.New("boom")}, nil, false)
 	if err == nil {
 		t.Fatal("a generator failure must not be swallowed")
 	}
@@ -223,7 +223,7 @@ func TestWriteHookConfig_GeneratorErrorPropagates(t *testing.T) {
 // exactly this because its hooks never fire.
 func TestWriteHookConfig_NoFilesIsFine(t *testing.T) {
 	out := t.TempDir()
-	wrote, err := writeHookConfig(out, stubExporter{}, nil)
+	wrote, err := writeHookConfig(out, stubExporter{}, nil, false)
 	if err != nil {
 		t.Fatalf("a vendor with no hook config must not fail: %v", err)
 	}

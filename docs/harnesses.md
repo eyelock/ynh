@@ -10,11 +10,10 @@ manifest sits beside `.agents/skills/` and `.agents/plugins/` rather than
 claiming another dot-directory at the project root.
 
 > **Still on `.ynh-plugin/`?** That was the manifest directory before it
-> moved under `.agents/`, and it is deprecated. ynh still reads it, second to
-> `.agents/harness/`, and warns on stderr when it does; the fallback will be
-> removed in a later release. Run `ynd migrate .` to move it. If both exist,
-> `.agents/harness` wins, `ynd migrate` leaves the tree alone, and
-> `ynd validate` reports the shadowed copy. See [migration](migration.md).
+> moved under `.agents/`. ynh no longer reads it from a tree you own: it
+> refuses the tree, naming `ynd migrate`, which moves it. If both exist, ynh
+> refuses the tree naming both, and `ynd migrate` leaves it alone. See
+> [migration](migration.md).
 
 > **Migration note:** Legacy format (`.claude-plugin/plugin.json` + `metadata.json`) is no longer supported. Consolidate into `.agents/harness/plugin.json`.
 
@@ -130,6 +129,7 @@ the two must be set.
 | `ref` | no | Git tag, branch, or commit (Git sources only) |
 | `path` | no | Subdirectory within the resolved source. Must be a relative path with no `..` traversal. |
 | `pick` | no | Specific artifact paths to include. If omitted, includes all. |
+| `instructions` | no | Boolean, default `true`. `false` leaves the include's `instructions.md` / `AGENTS.md` out of the composed instructions; its skills, agents, rules and commands still come through. See [Artifacts](artifacts.md#project-instructions). |
 | `sensors` | no | Boolean, default `true`. `false` drops the sensors the include declares; its skills, agents, rules and commands still come through. See [sensors](sensors.md#taking-an-include-without-its-sensors). |
 | `hooks` | no | `true` to let the included harness's hooks run in the session. Default `false`; a harness reached through another needs it at every link. See [Hooks from Included Harnesses](hooks.md#hooks-from-included-harnesses). |
 | `as` | no | Namespace for the included harness's focuses and profiles, in place of its own name. A harness name: letters, digits, `.`, `_`, `-`, and no `:`. See [Profiles and focuses of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses). |
@@ -282,6 +282,14 @@ The servers of an included harness are carried into the including harness; see [
 ### mcp_isolation (optional)
 
 Boolean, default `false`. When `true`, `ynh run` launches the harness with only its own MCP servers, not alongside the ones you have configured. `ynh run --isolated-mcp` turns it on for one run. See [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
+
+### workspace (optional)
+
+Extra folders the vendor CLI should be able to reach, such as sibling repositories: `"workspace": ["../ynh", "~/code/shared"]`. A request, not a grant. The operator's allow-list (`workspace_roots`, `YNH_WORKSPACE_ROOTS`) or `ynh trust accept` grants it, and some paths are never granted. See [Workspace Folders](workspace.md).
+
+### launch_focus (optional)
+
+The name of the focus a bare `ynh run` wakes with: interactive, the focus prompt as the first message, the focus's profile applied. It must name a key of `focuses` whose prompt is not empty. An explicit `--focus` or prompt overrides it, and `ynh agent run` and delegation ignore it. See [Focus: Launch focus](focus.md#launch-focus).
 
 ### profiles (optional)
 

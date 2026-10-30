@@ -342,7 +342,7 @@ Copilot's plugin loader (`--plugin-dir`) reads the same `.claude-plugin/plugin.j
 
 - Skills and agents export like Claude Code's; rules and commands are excluded (Copilot has no loading mechanism for them)
 - Marketplace index is written to `.github/plugin/marketplace.json`
-- **Hooks are excluded from Copilot plugins entirely** — see [Hooks: Copilot](hooks.md#vendor-translation) for why
+- **Hooks** are written to `hooks.json` at the plugin root, in Copilot's own format, and fire on Copilot CLI 1.0.105 (in a package that also targets Claude, Copilot loads Claude's `hooks/claude.json` instead); see [Hooks: Copilot](hooks.md#copilot-format-and-trust)
 
 ### Official Resources
 
