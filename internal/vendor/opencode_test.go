@@ -469,7 +469,17 @@ func TestOpenCodeTransformArtifact(t *testing.T) {
 		{
 			"tools yaml list, dupes and unknown", "agents", "a.md",
 			"---\ndescription: d\ntools:\n  - Edit\n  - Write\n  - mcp__x__y\n  - Bash\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + denyAll + allow("edit", "*") + allow("shell", "*") + "---\nB\n",
+			"---\ndescription: d\npermissions:\n" + denyAll + allow("edit", "*") + allow("x_y", "*") + allow("shell", "*") + "---\nB\n",
+		},
+		{
+			"granted MCP tool is allowed, not denied", "agents", "a.md",
+			"---\ndescription: d\ntools: [Read, mcp__srv__do_it, mcp__bad, mcp__srv__x(y)]\n---\nB\n",
+			"---\ndescription: d\npermissions:\n" + denyAll + allow("read", "*") + allow("srv_do_it", "*") + "---\nB\n",
+		},
+		{
+			"granted MCP tool with existing permissions is not denied", "agents", "a.md",
+			"---\ndescription: d\ntools: Read, Glob, Grep, Edit, Bash, WebFetch, WebSearch, Task, Skill, mcp__srv__do_it\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: ask\n---\nB\n",
+			"---\ndescription: d\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: ask\n---\nB\n",
 		},
 		{
 			"tools flow list, only unknown", "agents", "a.md",
@@ -521,9 +531,19 @@ func TestOpenCodeTransformArtifact(t *testing.T) {
 			"---\ndescription: d\npermissions:\n    - action: edit\n      resource: \"*\"\n      effect: deny\n---\nB\n",
 		},
 		{
-			"existing flow-form permissions cannot be appended to and are left", "agents", "a.md",
-			"---\ndescription: d\ndisallowedTools: Bash\npermissions: []\n---\nB\n",
+			"empty inline permissions are no permissions, so the lists still apply", "agents", "a.md",
+			"---\ndescription: d\ntools: Read\ndisallowedTools: Bash\npermissions: [ ]\n---\nB\n",
+			"---\ndescription: d\npermissions:\n" + denyAll + allow("read", "*") + deny("shell", "*") + "---\nB\n",
+		},
+		{
+			"empty inline permissions without tool lists are dropped", "agents", "a.md",
 			"---\ndescription: d\npermissions: []\n---\nB\n",
+			"---\ndescription: d\n---\nB\n",
+		},
+		{
+			"inline permissions without tool lists are kept as written", "agents", "a.md",
+			"---\ndescription: d\npermissions: [{action: edit, resource: \"*\", effect: ask}]\n---\nB\n",
+			"---\ndescription: d\npermissions: [{action: edit, resource: \"*\", effect: ask}]\n---\nB\n",
 		},
 		{
 			"no description", "agents", "plan-helper.md",
@@ -542,12 +562,41 @@ func TestOpenCodeTransformArtifact(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			name, got := o.TransformArtifact(tc.artifact, tc.file, []byte(tc.in))
+			name, got, err := o.TransformArtifact(tc.artifact, tc.file, []byte(tc.in))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			if name != tc.file {
 				t.Errorf("name = %q", name)
 			}
 			if string(got) != tc.want {
 				t.Errorf("got\n%q\nwant\n%q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestOpenCodeTransformArtifactRefusesInlinePermissionsWithToolLists(t *testing.T) {
+	inline := "permissions: [{action: edit, resource: \"*\", effect: ask}]\n"
+	for _, lists := range []string{
+		"tools: Read\n",
+		"disallowedTools: Bash\n",
+		"disallowed-tools: [Bash]\n",
+		"tools: Read\ndisallowedTools: Bash\n",
+	} {
+		t.Run(strings.TrimSpace(lists), func(t *testing.T) {
+			in := "---\ndescription: d\n" + lists + inline + "---\nB\n"
+			_, got, err := (&OpenCode{}).TransformArtifact("agents", "a.md", []byte(in))
+			if !errors.Is(err, errOpencodeInlinePermissions) {
+				t.Fatalf("err = %v, want the inline-permissions refusal", err)
+			}
+			if got != nil {
+				t.Errorf("refused agent still produced output: %q", got)
+			}
+			for _, want := range []string{"tools: / disallowedTools", "inline", "block list"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not say %q", err, want)
+				}
 			}
 		})
 	}

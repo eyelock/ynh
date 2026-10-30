@@ -92,7 +92,7 @@ Provide actionable feedback, not just observations.
 Refer to your vendor's documentation for agent format details:
 - [Claude Code sub-agents](https://docs.anthropic.com/en/docs/claude-code/sub-agents)
 - [Codex agents](https://github.com/openai/codex)
-- [OpenCode agents](https://opencode.ai/v2/docs): ynh translates an agent's frontmatter for OpenCode 2, which silently drops an agent with a comma-string `tools:`, a bare model alias such as `sonnet`, or a `color:`. It keeps `description` (derived from the file name when missing), `mode`, `permissions` and a `provider/model` model, and turns a Claude `tools:` allow-list into deny-by-default permissions
+- [OpenCode agents](https://opencode.ai/v2/docs): ynh translates an agent's frontmatter for OpenCode 2, which silently drops an agent with a comma-string `tools:`, a bare model alias such as `sonnet`, or a `color:`. It keeps `description` (derived from the file name when missing), `mode`, `permissions` and a `provider/model` model, and turns a Claude `tools:` allow-list into deny-by-default permissions. An agent with `tools:` or `disallowedTools` whose `permissions:` is written inline (`permissions: [...]`) is refused at assembly, because those rules cannot be appended to an inline value; write `permissions:` as a block list, or remove it
 
 ## Rules
 

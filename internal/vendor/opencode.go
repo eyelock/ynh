@@ -176,17 +176,32 @@ func shellResource(scope string) string {
 	return scope
 }
 
+// opencodeMCPAction maps an MCP tool "mcp__server__tool" to its OpenCode
+// action "server_tool", the id OpenCode gives a tool Code Mode calls.
+func opencodeMCPAction(name string) (string, bool) {
+	if !strings.HasPrefix(name, "mcp__") || strings.Count(name, "__") < 2 {
+		return "", false
+	}
+	parts := strings.SplitN(strings.TrimPrefix(name, "mcp__"), "__", 2)
+	return parts[0] + "_" + parts[1], true
+}
+
 // opencodeAllows maps an allow-list to allow rules. Only Bash has a scope that
 // carries over (a command pattern); the path and URL scopes of the other tools
 // use Claude's own pattern syntax, which OpenCode's whole-value globs do not
-// reproduce, so a scoped Read(...) gets no allow and stays denied. A name with
-// no mapping (an MCP tool) gets none either.
+// reproduce, so a scoped Read(...) gets no allow and stays denied. An MCP tool
+// is allowed by the same action opencodeDenies denies it by, so a granted MCP
+// tool is not denied by the deny-everything rule. Any other unmapped name gets
+// no allow.
 func opencodeAllows(tools []string) []opencodeRule {
 	var rules []opencodeRule
 	seen := map[opencodeRule]bool{}
 	for _, t := range tools {
 		name, scope, scoped := splitToolSpec(t)
 		action, ok := opencodeToolActions[name]
+		if !ok && !scoped {
+			action, ok = opencodeMCPAction(name)
+		}
 		if !ok {
 			continue
 		}
@@ -221,11 +236,12 @@ func opencodeDenies(tools []string) []opencodeRule {
 			if scoped && action == "shell" && scope != "" {
 				r.resource = shellResource(scope)
 			}
-		case strings.HasPrefix(name, "mcp__") && strings.Count(name, "__") >= 2:
-			parts := strings.SplitN(strings.TrimPrefix(name, "mcp__"), "__", 2)
-			r.action = parts[0] + "_" + parts[1]
 		default:
-			continue
+			mcp, isMCP := opencodeMCPAction(name)
+			if !isMCP {
+				continue
+			}
+			r.action = mcp
 		}
 		rules = append(rules, r)
 	}
@@ -281,6 +297,9 @@ func splitOutsideParens(s string) []string {
 //     are appended: the disallowed tools, plus, for an allow-list, a deny for
 //     every known action it does not allow. That never widens, but it cannot
 //     deny a tool this adapter has no action for.
+//
+// The caller has already refused an inline (flow) permissions value that
+// could not be appended to, and turned an empty "[]" into no permissions.
 func opencodePermissions(tools, disallowed []string, existing *frontmatterEntry) string {
 	var rules []opencodeRule
 	allows := opencodeAllows(tools)
@@ -308,11 +327,7 @@ func opencodePermissions(tools, disallowed []string, existing *frontmatterEntry)
 	if existing == nil {
 		b.WriteString("permissions:\n")
 	} else {
-		// Match the indentation of the author's list; a flow list or other
-		// non-block form cannot be appended to and is left as written.
-		if existing.value != "" {
-			return ""
-		}
+		// Match the indentation of the author's block list.
 		for _, l := range existing.cont {
 			if t := strings.TrimLeft(l, " \t"); strings.HasPrefix(t, "-") {
 				indent = l[:len(l)-len(t)]
@@ -339,9 +354,14 @@ func opencodePermissions(tools, disallowed []string, existing *frontmatterEntry)
 // translated to `permissions` by opencodePermissions, never dropped: dropping
 // an allow-list would hand the agent every tool. Absent or empty lists mean
 // all tools on Claude and add nothing here. Other artifact types pass through.
-func (o *OpenCode) TransformArtifact(artifactType, name string, data []byte) (string, []byte) {
+//
+// An agent whose `permissions:` is written inline ("permissions: [...]") and
+// that also has a tool list is refused: the rules the lists translate to
+// cannot be appended to an inline value, so the agent would run without its
+// tool restrictions. An empty "permissions: []" is no permissions at all.
+func (o *OpenCode) TransformArtifact(artifactType, name string, data []byte) (string, []byte, error) {
 	if artifactType != "agents" || !strings.HasSuffix(name, ".md") {
-		return name, data
+		return name, data, nil
 	}
 	var entries []frontmatterEntry
 	body := data
@@ -377,6 +397,14 @@ func (o *OpenCode) TransformArtifact(artifactType, name string, data []byte) (st
 			}
 		}
 	}
+	if existing != nil && existing.value != "" {
+		switch {
+		case strings.Join(strings.Fields(existing.value), "") == "[]":
+			existing = nil
+		case len(tools) > 0 || len(disallowed) > 0:
+			return name, nil, errOpencodeInlinePermissions
+		}
+	}
 	if !hasDescription {
 		b.WriteString("description: " + strconv.Quote(humanizeRuleName(strings.TrimSuffix(name, ".md"))) + "\n")
 	}
@@ -389,8 +417,15 @@ func (o *OpenCode) TransformArtifact(artifactType, name string, data []byte) (st
 	b.WriteString(opencodePermissions(tools, disallowed, existing))
 	b.WriteString("---\n")
 	b.Write(bytes.TrimLeft(body, "\r\n"))
-	return name, []byte(b.String())
+	return name, []byte(b.String()), nil
 }
+
+// errOpencodeInlinePermissions refuses an agent whose inline permissions
+// would leave its tools: / disallowedTools unenforced on OpenCode.
+var errOpencodeInlinePermissions = errors.New("opencode cannot enforce this agent's tools: / disallowedTools: " +
+	"its permissions: is written inline (permissions: [...]), and the rules those lists translate to " +
+	"cannot be appended to an inline value, so the agent would run with every tool. " +
+	"Write permissions: as a block list (one \"- action: ...\" item per line), or remove it")
 
 // opencodeRuntimeFile holds the text ApplyRuntimeInstructions appends.
 const opencodeRuntimeFile = "ynh-runtime.md"

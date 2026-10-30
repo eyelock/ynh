@@ -112,9 +112,10 @@ an allow lets it run. Actions: `read`, `edit` (edit, write, patch), `glob`,
 Claude's `tools:` allow-list is therefore translated to `* * deny` followed
 by an `allow` per mapped action (Read read, Write/Edit/MultiEdit edit, Bash
 shell, Glob, Grep, WebFetch, WebSearch, Task/Agent subagent, Skill skill).
-Unmapped names (MCP tools) get no allow and stay denied. An agent with no
-`tools:` (or an empty one) gets no rules; an agent that already has
-`permissions` keeps them untouched. CONFIRMED with `* deny` plus `shell allow`
+An MCP tool `mcp__server__tool` is allowed (and, when disallowed, denied) as
+the action `server_tool`; other unmapped names get no allow and stay denied.
+An agent with no `tools:` (or an empty one) gets no rules; an agent that
+already has `permissions` keeps them, with only denies appended (below). CONFIRMED with `* deny` plus `shell allow`
 that shell runs. Caveat: an agent that denies `shell` (including `* deny`
 without a shell allow) cannot be run on the `opencode/*-free` models at all:
 the request fails `403 FreeTierError: OpenCode's free tier can only be used
@@ -271,6 +272,10 @@ Pro/Max subscription through OpenCode.
 - A Claude `tools:` list becomes deny-by-default `permissions`. The live
   check that a `tools: Read` agent cannot run `shell` needs a paid provider:
   the free models refuse any agent without `shell` (403 FreeTierError).
+- A granted MCP tool (`tools: [..., mcp__srv__x]`) gets `allow srv_x` after
+  `* * deny`. That the tool is then callable was not confirmed live (the free
+  tier's usage limit was hit): Code Mode's own `execute` tool also falls under
+  `* * deny`, and whether it must be allowed too is unprobed.
 - No edits-only auto-approve.
 - `on_session_start` and `on_stop` ride the event stream, not a documented
   hook, so they are the most likely to move.
@@ -300,6 +305,16 @@ Pro/Max subscription through OpenCode.
 - **`disallowedTools` / `disallowed-tools`** translate to deny rules after the
   allows. With `permissions` already present those rules are kept as written
   and only denies are appended (a deny for every known action a `tools:` list
-  does not allow, plus the disallowed ones), so access never widens. A
-  non-block (flow) `permissions:` value cannot be appended to and is left
-  untouched.
+  does not allow, plus the disallowed ones), so access never widens.
+- **Inline `permissions:` is refused with a tool list:** an agent with
+  `tools:` or `disallowedTools` whose `permissions:` is written inline
+  (`permissions: [{...}]`) fails assembly, naming the agent. Those rules
+  cannot be appended to an inline value, so the agent would otherwise run
+  with every tool. The fix is to write `permissions:` as a block list, or to
+  remove it. An empty `permissions: []` counts as no permissions and the
+  lists are translated as usual; inline permissions on an agent without tool
+  lists are kept as written.
+- **MCP permission actions (CONFIRMED v2.2.3):** `deny echo_ynh_ping` withdrew
+  that tool from Code Mode (the model was told `Unknown tool
+  'echo.ynh_ping'`) while `echo_ynh_other` on the same server stayed
+  callable, so `disallowedTools: mcp__echo__ynh_ping` maps to a working deny.

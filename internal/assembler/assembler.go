@@ -27,12 +27,14 @@ type LayoutProvider interface {
 // ArtifactTransform rewrites a single artifact file's name and content before
 // it is written to the target directory. Used by vendors whose plugin format
 // differs from the raw source layout (e.g. Cursor's .mdc rules with frontmatter).
-type ArtifactTransform func(artifactType, name string, data []byte) (string, []byte)
+// An error refuses the artifact, and with it the assembly: a vendor returns
+// one when the file cannot be carried over without losing what it says.
+type ArtifactTransform func(artifactType, name string, data []byte) (string, []byte, error)
 
 // ArtifactTransformer is an optional capability a LayoutProvider may implement
 // to rewrite an artifact file's name/content during copy.
 type ArtifactTransformer interface {
-	TransformArtifact(artifactType, name string, data []byte) (string, []byte)
+	TransformArtifact(artifactType, name string, data []byte) (string, []byte, error)
 }
 
 // Assemble creates a temporary directory with vendor-specific config layout
@@ -267,7 +269,10 @@ func copyArtifactFile(artifactType, src, targetBaseDir, targetDir, name string, 
 		return err
 	}
 
-	newName, newData := transform(artifactType, name, data)
+	newName, newData, err := transform(artifactType, name, data)
+	if err != nil {
+		return fmt.Errorf("%s/%s: %w", artifactType, name, err)
+	}
 	dst := filepath.Join(targetBaseDir, targetDir, newName)
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
