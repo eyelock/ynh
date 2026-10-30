@@ -156,19 +156,22 @@ func TestCopilotGenerateHookConfig(t *testing.T) {
       {
         "type": "command",
         "command": "\"${PLUGIN_ROOT}\"/scripts/guard.sh --strict",
+        "cwd": ".",
         "matcher": "Bash"
       }
     ],
     "SessionEnd": [
       {
         "type": "command",
-        "command": "\"${PLUGIN_ROOT}\"/scripts/bye.sh"
+        "command": "\"${PLUGIN_ROOT}\"/scripts/bye.sh",
+        "cwd": "."
       }
     ],
     "Stop": [
       {
         "type": "command",
-        "command": "/usr/local/bin/done.sh"
+        "command": "/usr/local/bin/done.sh",
+        "cwd": "."
       }
     ]
   },

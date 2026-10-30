@@ -335,7 +335,10 @@ func (c *Copilot) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) 
 // copilotHookDocument renders canonical hooks in Copilot's format, or nil when
 // none of them maps to a Copilot event. The file is version 1 with a "hooks"
 // object keyed by event, each value a flat array of command entries (no
-// matcher groups): {"type": "command", "command": "...", "matcher": "..."}.
+// matcher groups): {"type": "command", "command": "...", "cwd": ".", "matcher": "..."}.
+// "cwd": "." runs the command from the repository root rather than the plugin
+// folder (CONFIRMED live, Copilot CLI 1.0.105, 2026-10-30); ynh's own "./"
+// scripts are anchored with ${PLUGIN_ROOT} and unaffected.
 // "command" is the cross-platform spelling; Copilot copies it to bash and
 // powershell when those are absent. timeoutSec is written only when the hook
 // declares a timeout; otherwise Copilot's documented default of 30 s applies.
@@ -348,6 +351,7 @@ func copilotHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string
 	type copilotHookEntry struct {
 		Type    string `json:"type"`
 		Command string `json:"command"`
+		Cwd     string `json:"cwd"`
 		Matcher string `json:"matcher,omitempty"`
 		Timeout int    `json:"timeoutSec,omitempty"`
 	}
@@ -360,7 +364,7 @@ func copilotHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string
 		}
 		var entries []copilotHookEntry
 		for _, entry := range hooks[event] {
-			e := copilotHookEntry{Type: "command", Command: anchor(entry.Command), Timeout: hookTimeoutValue("copilot", event, entry.Timeout)}
+			e := copilotHookEntry{Type: "command", Command: anchor(entry.Command), Cwd: ".", Timeout: hookTimeoutValue("copilot", event, entry.Timeout)}
 			if copilotMatcherEvents[copilotEvent] {
 				e.Matcher = entry.Matcher
 			}

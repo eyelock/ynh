@@ -312,7 +312,7 @@ func ClaudeHookEvent(canonical string) (string, bool) {
 // SessionHookScriptDir, #495). An exported plugin uses
 // GeneratePluginHookConfig instead.
 func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
-	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"))
+	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"), "")
 	if err != nil || data == nil {
 		return nil, err
 	}
@@ -329,7 +329,7 @@ func (c *Claude) SessionHookScriptDir() string { return c.ConfigDir() }
 // belongs to the project, so a "./" command is anchored to $CLAUDE_PROJECT_DIR
 // (see anchorHookCommand). It returns nil when no hook maps to a Claude event.
 func ClaudeSettingsHooks(hooks map[string][]plugin.HookEntry) ([]byte, error) {
-	return claudeHookDocument(hooks, anchorHookCommand)
+	return claudeHookDocument(hooks, anchorHookCommand, "")
 }
 
 // GeneratePluginHookConfig writes the plugin hook file, hooks/claude.json at
@@ -339,7 +339,7 @@ func ClaudeSettingsHooks(hooks map[string][]plugin.HookEntry) ([]byte, error) {
 // command names a script shipped in the plugin and is anchored to
 // ${CLAUDE_PLUGIN_ROOT} (#483).
 func (c *Claude) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
-	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"))
+	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"), "")
 	if err != nil || data == nil {
 		return nil, err
 	}
@@ -348,8 +348,8 @@ func (c *Claude) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (
 
 // claudeHookDocument renders canonical hooks in Claude Code's format, or nil
 // when none of them maps to a Claude event. anchor rewrites each command for
-// where the file is read.
-func claudeHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string) string) ([]byte, error) {
+// where the file is read. cwd is written to each handler when not empty.
+func claudeHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string) string, cwd string) ([]byte, error) {
 	if len(hooks) == 0 {
 		return nil, nil
 	}
@@ -360,6 +360,7 @@ func claudeHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string)
 	type claudeInnerHook struct {
 		Type    string `json:"type"`
 		Command string `json:"command"`
+		Cwd     string `json:"cwd,omitempty"`
 		Timeout int    `json:"timeout,omitempty"`
 	}
 	type claudeHookGroup struct {
@@ -405,7 +406,7 @@ func claudeHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string)
 		for _, g := range groups {
 			var inner []claudeInnerHook
 			for _, e := range g.entries {
-				inner = append(inner, claudeInnerHook{Type: "command", Command: anchor(e.Command), Timeout: hookTimeoutValue("claude", event, e.Timeout)})
+				inner = append(inner, claudeInnerHook{Type: "command", Command: anchor(e.Command), Cwd: cwd, Timeout: hookTimeoutValue("claude", event, e.Timeout)})
 			}
 			hookGroups = append(hookGroups, claudeHookGroup{
 				Matcher: g.matcher,
@@ -636,3 +637,17 @@ func launchClaude(configPath string, initialPrompt string, extraArgs []string) e
 // configuration from an added directory, so this grants file access only.
 var claudeWorkspaceFlag = "--add-dir"
 var claudeWorkspaceUnsupported = ""
+
+// GeneratePluginHookConfigForCopilot writes the plugin hook file for a package
+// that also targets Copilot, which loads hooks/claude.json there and, without a
+// "cwd", runs each hook in the plugin folder. Each handler carries "cwd": ".",
+// which puts Copilot in the repository root like the other vendors. Claude Code
+// tolerates the extra field and runs hooks in its current directory regardless
+// (CONFIRMED live, Claude Code, 2026-10-30).
+func (c *Claude) GeneratePluginHookConfigForCopilot(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
+	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"), ".")
+	if err != nil || data == nil {
+		return nil, err
+	}
+	return map[string][]byte{pluginHookFile(c.Name()): data}, nil
+}
