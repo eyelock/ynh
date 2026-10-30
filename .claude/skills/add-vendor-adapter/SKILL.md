@@ -107,7 +107,14 @@ grep -rniE "all (four|five|six) |(four|five|six) vendors" \
   `MarketplaceManifestDir`). OpenCode (#580) needed all three.
 - [ ] Tests that count or list vendors: `TestExportAllVendors`
   (`internal/exporter/exporter_test.go`) checks the number of export results,
-  and `cmd/ynh/image_test.go` lists every vendor's `COPY` line.
+  and `cmd/ynh/image_test.go` lists every vendor's `COPY` line. The
+  per-vendor tables in `internal/vendor/workspace_test.go`
+  (`TestWorkspaceArgs`) and `internal/agent/workspace_test.go`
+  (`TestWorkerArgsRenderWorkspace`) need a row or subtest for the vendor.
+  `TestHookWarnings` in `internal/vendor/hook_events_test.go` assumes every
+  vendor maps all six events; a vendor that cannot carry one is skipped there
+  and gets its own subtest pinning what ynh reports for it (as OpenCode's
+  does in #580).
 - [ ] Symlink vendors reuse `installSymlinks` / `cleanSymlinks`
   (`internal/vendor/symlinks.go`). Managed child processes reuse
   `runChildProcess` (`internal/vendor/process.go`).
@@ -247,8 +254,9 @@ both in the same PR since they share research.
   - B: every vendor assembles the same artifact set, `plugin/` manifest
     included. A vendor with no plugin manifest format goes in
     `NO_MANIFEST_VENDORS` in the script (added for OpenCode in #580), which
-    compares it on everything else and fails if it writes `plugin/` anyway. Name it there explicitly;
-    the list is not inferred, so a broken manifest cannot exempt itself.
+    compares it on everything else and fails if it writes `plugin/` anyway.
+    Name it there explicitly; the list is not inferred, so a broken manifest
+    cannot exempt itself.
   - C: every vendor CLI ynh or ynd launches is stubbed in evals.
   - D: tutorial eval lines (`*This launches:* ...`) are well formed and name
     a stubbed program. Any tutorial block you add for the vendor needs them.
@@ -267,8 +275,10 @@ writing these were:
 
 - [ ] Reference: `docs/vendors.md`, `docs/hooks.md`, `docs/mcp.md`,
   `docs/marketplace.md`, `docs/artifacts.md`, `docs/skills-standard.md`,
-  `docs/docker.md`, `docs/ynd.md`, and `docs/agent.md` (the `ynh agent run`
-  backends, and the `--auto-approve` table, which has a column per backend).
+  `docs/docker.md`, `docs/ynd.md`, `docs/agent.md` (the `ynh agent run`
+  backends, and the `--auto-approve` table, which has a column per backend),
+  `docs/workspace.md` (the per-vendor workspace flag table) and
+  `docs/focus.md` (the per-vendor resume table).
 - [ ] Entry points: `README.md`, `AGENTS.md`, `docs/getting-started.md`
   (switching vendors, and symlink installation for a symlink vendor),
   `docs/harness-engineering.md`.
@@ -283,8 +293,8 @@ writing these were:
   `.claude/agents/ynh-contributor.md`,
   `.claude/skills/ynh-dev/references/architecture.md`.
 - [ ] Shipped artifacts that teach users about vendors: `skills/ynh-*/`
-  (create-harness, adopt, team-setup, troubleshoot, ynd-inspect) and
-  `agents/ynh-harness-reviewer.md`.
+  (create-harness, adopt, team-setup, troubleshoot), `skills/ynd-inspect/`
+  (`references/inspect-workflow.md`) and `agents/ynh-harness-reviewer.md`.
 - [ ] `.skillspector-baseline.yaml`: the new
   `.claude/skills/vendor-adapters/references/<vendor>.md` is scanned by
   `make scan-artifacts`, and a reference that documents a vendor's
