@@ -47,9 +47,14 @@ surface; "not supported" is a valid answer if documented (see pitfalls).
 | Per-run context | `ApplyRuntimeInstructions` | A system-prompt flag, or a file to append to |
 | Install | `NeedsSymlinks`, `Install`, `Clean` | See launch strategy |
 | Launch | `LaunchInteractive`, `LaunchNonInteractive`, `LaunchWithInitialPrompt` | TUI command, one-shot command, initial-prompt flag |
-| Resume | `SupportsResume`, `ResolveLastSession`, `LaunchResume` | Continue-last form; explicit-id form; a readable on-disk session store |
+| Resume | `SupportsResume`, `ResolveLastSession`, `LaunchResume` (+ `SessionBinder`) | Continue-last form; explicit-id form; a readable on-disk session store; can a resumed session take a prompt, interactively and one-shot? Can a new session take a caller-chosen id? |
 | Hooks | `GenerateHookConfig` (+ `PluginHookGenerator`, `SessionHookScriptDirer`) | Declarative hook config? Event names mapped to ynh's canonical events |
+| Hook events | `<x>HookEventMap`, `<x>UnsupportedHookEvents` (+ `<x>MatcherEvents`) | Native name for each canonical event, or why there is none; which native events honour a matcher |
+| Hook timeouts | `<x>HookTimeoutField`, `<x>HookTimeoutUnsupported`, `<x>HookTimeoutCaps` | A per-hook timeout field, its unit, and any per-event cap |
+| Session-start context | `<x>SessionStartContext` | Does a session-start hook's stdout reach the model as written, only through a JSON field, or not at all? |
+| Workspace | `<x>WorkspaceFlag`, `<x>WorkspaceUnsupported` | A flag that grants a folder beside the project (`--add-dir`), or why there is none |
 | MCP | `GenerateMCPConfig` (+ `PluginMCPGenerator`) | Config key and shape; transport spelling for `stdio`, `streamable-http`, `sse` |
+| MCP in a plugin | `mcpPluginRootVar` | A variable the plugin loader expands to the plugin's install path in an MCP server's command and cwd |
 | Artifact rewrite | `ArtifactTransformer` (optional) | Does it need a different file name or frontmatter (Cursor's `.mdc`)? |
 | Export / plugin | `GeneratePluginManifest`, `PluginManifestDir`, `ExportArtifactDirs`, `SupportsExportDelegates` (+ `ExportManifestGenerator`) | A plugin manifest format? Which artifact types a plugin may carry |
 | Marketplace | `MarketplaceManifestDir`, `GenerateMarketplaceIndex` | A marketplace index format, or none |
@@ -94,8 +99,54 @@ Copilot alone.
   relaunch). Return `ErrNoResumableSession` and
   `ErrSessionLookupUnavailable` for the two different cases; callers fall back
   differently.
+- [ ] `LaunchResume(configPath, sessionID, prompt, interactive, extraArgs)`:
+  an empty prompt resumes interactively; a prompt is sent into the resumed
+  session, which stays open when `interactive` is true and is a one-shot run
+  when it is false. A combination the CLI has no documented form for returns
+  `ErrResumePromptNotSupported` before launching anything; never drop the
+  prompt (`internal/vendor/adapter.go`).
+- [ ] `SessionBinder` (`adapter.go`) is optional: implement it only if the CLI
+  takes a caller-chosen id for a new session and ynh can read its store
+  (Claude alone today, for `ynh run --session-name`). No stub otherwise.
 - [ ] MCP transports: map ynh's canonical names (`internal/plugin/plugin.go`,
   `MCPType*`) to the vendor's spelling.
+- [ ] `mcpPluginRootVar` (`internal/vendor/mcpanchor.go`): add the vendor only
+  if its plugin loader documents (or you confirm by hand) a variable that
+  expands to the plugin's install path in an MCP server's command and cwd.
+  Without an entry, an exported `./` server command is left as written and
+  warned about, which is the right answer when there is no such variable.
+
+### Per-vendor declarations
+
+These are plain variables in `internal/vendor/<name>.go`, read both by Go
+tables and, as text, by the parity scripts (checks F and G below). Declare
+every one, even when the answer is "not supported": an undeclared vendor fails
+`make check-vendor-parity`. A table entry that names an undeclared variable
+does not compile, and a vendor missing from `hookEventSupport` gets no hook
+warnings at all from `HookWarnings`.
+
+- [ ] Hook events: `<x>HookEventMap` (canonical event to native name) and
+  `<x>UnsupportedHookEvents` (canonical event to the reason it is not
+  written). Every canonical event is in exactly one of the two. Add the
+  vendor's case to `hookEventSupport` in `internal/vendor/hookwarn.go`.
+- [ ] Matchers: if the vendor honours a matcher on some native events only,
+  declare `<x>MatcherEvents` and add the vendor's case to `matcherWarnings`
+  (`hookwarn.go`), as Cursor and Copilot do. A vendor that passes a matcher
+  through on every event, like Claude and Codex, needs neither.
+- [ ] Hook timeouts: `<x>HookTimeoutField` (the native field, or `""`),
+  `<x>HookTimeoutUnsupported` (required when the field is `""`) and
+  `<x>HookTimeoutCaps` (canonical event to seconds, empty when uncapped). Add
+  the vendor's case to `hookTimeoutSupport` in `internal/vendor/hooktimeout.go`.
+- [ ] Session-start context: `<x>SessionStartContext`, one of `plain`,
+  `json-field:<name>` or `unsupported:<why>`, added to `sessionStartContext`
+  in `internal/vendor/sessioncontext.go`. A `json-field` vendor gets
+  `hooks/ynh-session-context.sh` wrapped around its `on_session_start`
+  commands; confirm by hand which form the CLI actually reads.
+- [ ] Workspace: `<x>WorkspaceFlag` (the flag that grants a folder, or `""`)
+  and `<x>WorkspaceUnsupported` (the reason, required when the flag is
+  `""`); exactly one is non-empty. Add the vendor to `workspaceDeclarations`
+  in `internal/vendor/workspace.go`; `ynh run` and `ynh agent run` render
+  granted folders through `vendor.WorkspaceArgs`.
 
 ### Schema
 
@@ -140,6 +191,9 @@ both in the same PR since they share research.
   (`internal/agent/worker.go`). Claude, Codex and Cursor use three different
   resume strategies; read all three before choosing.
 - [ ] Find the CLI with `lookWorkerCLI(b.Name())`, never a literal.
+- [ ] Render `StartOptions.Workspace` with `workspaceArgs(<vendor>,
+  opts.Workspace)` (`worker.go`, which calls `vendor.WorkspaceArgs`), as the
+  Claude and Codex backends do. Never spell the flag in the backend.
 - [ ] `internal/agent/loop.go`: `validateBackend` (accepted names and the
   "supported" error text) and `selectBackend` (construction and its error
   text).
@@ -166,9 +220,20 @@ both in the same PR since they share research.
 
 - [ ] `.claude/agents/evals.md`: add the vendor's CLI binary to the `STUBS`
   line and the stub table, so no eval can launch the real CLI.
-- [ ] `make check-vendor-parity`: it checks the reference index (A), that
-  every vendor assembles the same artifact set (B), and the stubs (C). It is
-  **not** part of `make check`, but CI runs it.
+- [ ] `make check-vendor-parity` (`scripts/vendor-parity.sh`). It is **not**
+  part of `make check`, but CI runs it. Its checks:
+  - A: the vendor has a row in the reference index.
+  - B: every vendor assembles the same artifact set.
+  - C: every vendor CLI ynh or ynd launches is stubbed in evals.
+  - D: tutorial eval lines (`*This launches:* ...`) are well formed and name
+    a stubbed program. Any tutorial block you add for the vendor needs them.
+  - E: every repository a tutorial command names is served by
+    `scripts/eval-remotes.sh`.
+  - F: `scripts/hook-event-parity.sh`: the vendor's hook event map,
+    unsupported events, timeout field (or reason) and session-start context
+    are declared.
+  - G: `scripts/workspace-parity.sh`: the vendor declares a workspace flag or
+    the reason it has none.
 
 ### Documentation
 
@@ -206,8 +271,9 @@ writing these were:
    index row. The adapter is then reviewable against a written spec.
 2. Adapter and its test; `make test FILE=./internal/vendor` green in
    isolation.
-3. Schema enum, exporter and marketplace output, Agent Plugins layout, docker
-   image.
+3. Per-vendor declarations (hook events, timeouts, session-start context,
+   workspace, MCP plugin root), schema enum, exporter and marketplace output,
+   Agent Plugins layout, docker image.
 4. `ynh agent run` backend and `llmVendors`, if applicable.
 5. Evals stubs, then every documentation touch point.
 6. `make check` and `make check-vendor-parity`.
