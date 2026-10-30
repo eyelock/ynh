@@ -132,10 +132,10 @@ func collapseLocalInstalls(home string, opts MigrateOpts, m *Manifest) error {
 		// manifest at the top — MigrateToSchema2 should have flattened
 		// these, but if a home was hand-edited or partially migrated, leave
 		// them alone for the schema-1→2 migration to handle.
-		if !plugin.IsPluginDir(copyDir) {
+		if !hasManifest(copyDir) {
 			continue
 		}
-		insPath := plugin.InstalledPath(copyDir)
+		insPath := manifestFileAt(copyDir, plugin.InstalledFile)
 		insData, err := os.ReadFile(insPath)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -158,7 +158,7 @@ func collapseLocalInstalls(home string, opts MigrateOpts, m *Manifest) error {
 		if ins.Path != "" {
 			loadDir = filepath.Join(ins.Source, ins.Path)
 		}
-		if !plugin.IsPluginDir(loadDir) {
+		if !hasManifest(loadDir) {
 			return quarantineOrAbort(copyDir,
 				fmt.Errorf("source path missing or has no manifest: %s", loadDir),
 				opts, m)
@@ -236,7 +236,7 @@ func absorbPointerProvenance(home string, opts MigrateOpts, m *Manifest) error {
 		if ptr.Path != "" {
 			loadDir = filepath.Join(ptr.Source, ptr.Path)
 		}
-		diskInsPath := plugin.InstalledPath(loadDir)
+		diskInsPath := manifestFileAt(loadDir, plugin.InstalledFile)
 		diskData, err := os.ReadFile(diskInsPath)
 		if err != nil {
 			// Nothing to absorb. The pointer is already canonical (legacy

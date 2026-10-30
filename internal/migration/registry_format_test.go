@@ -76,10 +76,10 @@ func TestRegistryMigrator_ClaimsAnYnhRegistry(t *testing.T) {
 // Already migrated means nothing to do, regardless of what registry.json holds.
 func TestRegistryMigrator_SkipsWhenAlreadyMigrated(t *testing.T) {
 	dir := regDir(t, `{"name":"eyelock","entries":[{"name":"x","repo":"r"}]}`)
-	if err := os.MkdirAll(filepath.Join(dir, ".ynh-plugin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".agents", "harness"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".ynh-plugin", "marketplace.json"), []byte(`{}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".agents", "harness", "marketplace.json"), []byte(`{}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if (RegistryFormatMigrator{}).Applies(dir) {

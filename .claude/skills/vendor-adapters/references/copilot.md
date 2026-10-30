@@ -19,6 +19,8 @@ against v1.0.80. Treat the rest as documentation claims.
 | MCP Servers | https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-mcp-servers |
 | Hooks | https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/use-hooks |
 | Hooks Reference | https://docs.github.com/en/copilot/reference/hooks-reference |
+| Hooks Configuration | https://docs.github.com/en/copilot/reference/hooks-configuration |
+| CLI Plugin Reference | https://docs.github.com/en/copilot/reference/cli-plugin-reference |
 | Plugins & Marketplace | https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/plugins-marketplace |
 | Plugin Reference | https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference |
 | GitHub Repo | https://github.com/github/copilot-cli |
@@ -165,20 +167,31 @@ the CLI's own help.
   `PreToolUse`) are accepted with Claude's matcher semantics. CONFIRMED 2026-10-04,
   docs.github.com/en/copilot/reference/cli-plugin-reference and
   docs.github.com/en/copilot/reference/hooks-configuration.
-- ynh emits no Copilot hooks, but Copilot reads `.claude-plugin/plugin.json`, the file
-  Claude writes, rendered for both by `claudePluginManifest`. In a merged package that
-  also targets Claude, its `hooks` field names `hooks/claude.json`, so Copilot finds
-  Claude-format hooks there. A Copilot-only export carries none (#469).
-- That file anchors a `./` hook command to `"${CLAUDE_PLUGIN_ROOT}"/` (#483). Copilot
-  documents `${PLUGIN_ROOT}` and its `${CLAUDE_PLUGIN_ROOT}`/`${COPILOT_PLUGIN_ROOT}`
-  aliases for MCP servers and LSP config, and says a plugin hook "can also read the
-  directory it was loaded from", but not whether it expands the variable in a hook
-  command. UNVERIFIED for Copilot.
+- Repo inline: a `hooks` field in `.github/copilot/settings.json` / `settings.local.json`
+  (`.claude/settings.json` is also read). Policy files under `/etc/github-copilot/policy.d/`.
+  Combined order: policy, user, project, plugins; every matching entry runs.
+  (docs.github.com/en/copilot/reference/hooks-configuration, checked 2026-10-30.)
+- ynh now writes Copilot hooks (this section replaces "ynh emits no Copilot hooks"). See
+  "How ynh generates hooks for Copilot" below. See "CONFIRMED live" below for what has been run.
+- Copilot reads `.claude-plugin/plugin.json`, the file Claude writes, rendered for both by
+  `claudePluginManifest`. In a merged package that also targets Claude, its `hooks` field
+  names `hooks/claude.json` (Claude format, `"${CLAUDE_PLUGIN_ROOT}"/` anchors, #483), so
+  Copilot may find Claude-format hooks there as well as its own `hooks.json`.
 
 ## Hook Events (14 — confirmed complete)
 
-All keys are **camelCase**, nested under a top-level `"hooks"` object:
-`{"version": 1, "hooks": {"<eventName>": [...]}}`.
+Native keys are **camelCase**, nested under a top-level `"hooks"` object:
+`{"version": 1, "hooks": {"<eventName>": [...]}}`. Copilot also accepts a PascalCase
+VS Code compatible spelling of the same events with Claude-shaped snake_case payloads
+(`SessionStart`, `SessionEnd`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`,
+`PostToolUseFailure`, `Stop` (= `agentStop`), `SubagentStart`, `SubagentStop`,
+`PermissionRequest`, `Notification`, `PreCompact`, `ErrorOccurred`;
+docs.github.com/en/copilot/reference/hooks-configuration). `sessionEnd` carries `reason`:
+complete, error, abort, timeout, user_exit. Entry fields also include `type` (`command`,
+`http`, `prompt`; default `command`), `command` (cross-platform fallback copied to `bash`
+and `powershell` when absent), `exec`/`args`, `cwd`, `env`, `timeoutSec` (default 30,
+alias `timeout`), `matcher`. Timeouts are always fail-open. Exit 2 is a warning, except a
+deny on `preToolUse` and `permissionRequest`.
 
 | JSON key | Fires when | Output processed? |
 |---|---|---|
@@ -225,10 +238,81 @@ Do not use it for context injection.
 
 Top-level also accepts `"disableAllHooks": false`.
 
-## Why ynh does not generate hooks for Copilot
+## How ynh generates hooks for Copilot
 
-`GenerateHookConfig` returns `nil, nil` in `internal/vendor/copilot.go`. This is
-deliberate, and it is the single most important thing on this page.
+`Copilot.GenerateHookConfig` and `Copilot.GeneratePluginHookConfig`
+(`internal/vendor/copilot.go`) write real hook files. This reverses the earlier decision
+to return `nil, nil`, which rested on the hand test below. The plugin route is CONFIRMED
+to fire (see below).
+
+| ynh output | File | Generator |
+|------------|------|-----------|
+| `ynh run`, `ynd preview`, agent loop | `.copilot/hooks/hooks.json`: the `hooks/hooks.json` of the `.copilot/` plugin dir passed as `--plugin-dir` | `Copilot.GenerateHookConfig` (scripts copied to `.copilot/`, `SessionHookScriptDir`) |
+| `ynd export -v copilot`, `ynd marketplace build` | `hooks.json` at the plugin root | `Copilot.GeneratePluginHookConfig` |
+| `ynd export --format agent-plugin` | `com.github.copilot/hooks/hooks.json` (`AgentPluginLayout().Hooks`) | same generator, via the exporter |
+
+Format chosen, and why:
+
+- **Plugin route, not `.github/hooks/`.** The page says "Repository and inherited-agent
+  hooks require workspace admission", and the v1.0.75 test below saw a repository hook
+  never fire in an untrusted folder. A plugin's hooks are not mentioned as gated. ynh also
+  would not write executable commands into the user's repository, where they would run for
+  everyone who clones it. `buildCopilotArgs` therefore projects nothing for hooks (unlike
+  instructions and MCP).
+- **Root `hooks.json` in a Copilot-only export, not `hooks/hooks.json`; none in a merged package with Claude.** Both are default names Copilot
+  reads; Claude Code, Cursor and Codex read `hooks/hooks.json` and none read a root
+  `hooks.json`, so a merged package never hands Copilot's format to another vendor (#469).
+- **PascalCase events**, flat entries `{"type": "command", "command": ..., "matcher": ...}`,
+  `"version": 1`. The page says a PascalCase `PreToolUse` takes Claude-style matchers
+  (`*`, `Edit|Write`, runtime `bash` -> `Bash`), so canonical matchers keep their meaning
+  and a script reads the same payload as on Claude. `command` rather than `bash`/`powershell`
+  so one file serves both platforms. `timeoutSec` is written only when the
+  manifest hook sets `timeout` (CONFIRMED live, Copilot CLI 1.0.105, 2026-10-30: of two 3 s SessionStart hooks, `timeoutSec: 1` was killed and `timeoutSec: 10` completed); otherwise the 30 s
+  default applies. The page documents no maximum.
+- **Mapping:** before_tool PreToolUse, after_tool PostToolUse, before_prompt
+  UserPromptSubmit, on_stop Stop (= agentStop), on_session_start SessionStart,
+  on_session_end SessionEnd. `after_tool` is **not** fanned out to `PostToolUseFailure`: the
+  other adapters map it to success-only events too. `before_prompt` is not
+  `userPromptTransformed`, which fires later on already-rewritten content.
+- **Matchers** are written on PreToolUse and PostToolUse only; ynh warns where one is
+  dropped.
+- **`./` scripts** are anchored `"${PLUGIN_ROOT}"/...` (`copilotPluginRootVar`). The CLI
+  plugin reference documents `PLUGIN_ROOT` for stdio MCP servers and the
+  `CLAUDE_PLUGIN_ROOT`/`COPILOT_PLUGIN_ROOT` aliases only in agent `mcp-servers`
+  frontmatter, and says nothing about hooks; live runs show all three are set for hooks.
+
+### CONFIRMED live (Copilot CLI 1.0.105, 2026-10-30)
+
+Run with David's approval, against ynh's assembled and exported output.
+
+- **Session layout** (`ynh run -v copilot`): all six events fire from `.copilot/hooks/hooks.json` via
+  `--plugin-dir`, in an UNTRUSTED folder. Plugin hooks need no folder trust. The v1.0.75
+  trust finding applies to repository `.github/hooks/`, which ynh does not write and which
+  was not retested.
+- **Variables (#497):** `PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `COPILOT_PLUGIN_ROOT` are all
+  set to the plugin dir; `"${PLUGIN_ROOT}"/...` expands.
+- **Working directory:** a hook script runs with the PLUGIN dir as cwd, not the project. The
+  project dir is the payload's `cwd`.
+- **Payload:** Claude-style: `tool_name` is `Bash` for shell; `SessionEnd` has
+  `reason: "complete"` in a `-p` run.
+- **Matchers:** `Bash` works on `PreToolUse` and `PostToolUse`; an `Edit` matcher did not
+  fire for a shell call.
+- **Exports via `--plugin-dir`:** each hook fired exactly once in the Copilot-only export
+  (root `hooks.json`), the merged package, and the Agent Plugins export
+  (`com.github.copilot/hooks/hooks.json`).
+- **Merged package (#499):** Copilot loads `hooks/claude.json`, named by the manifest's
+  `hooks`, and IGNORES root `hooks.json`; ynh therefore writes no root `hooks.json` when
+  Claude is in the package.
+- **Installed plugin from a merged package** (local marketplace, scratch `COPILOT_HOME`):
+  Copilot loads `.github/mcp.json` (both servers started) and does NOT load the
+  manifest-named `mcp/claude.json`. `${PLUGIN_ROOT}` expands in an MCP `command`.
+
+### Still untested
+
+Hooks of a plugin installed with `copilot plugin install` (runs used `--plugin-dir`), and
+the repository `.github/hooks/` route.
+
+### The v1.0.75 hand test (history)
 
 **CONFIRMED: hooks silently no-op in an untrusted folder**, with no error and no
 warning. A `.github/hooks/copilot-cli-policy.json` carrying a `preToolUse` hook
@@ -241,9 +325,6 @@ with `--allow-all-paths`) still did not make the hook fire. `--add-dir` extends
 path *access*; it does not confer trusted-folder status. They are separate
 gates.
 
-A hook config that silently never fires is worse than an honest "not supported",
-so ynh declines to emit one. `docs/vendors.md` states this for users.
-
 One further wrinkle if you revisit this: trust did not stay where it was
 written. `trustedFolders` was hand-set in `~/.copilot/settings.json`, but the
 CLI's auto-managed `~/.copilot/config.json` absorbed it and became the persisted
@@ -251,19 +332,9 @@ source — `settings.json` was later found empty. Treat `config.json` as
 runtime-authoritative, while being wary of writing to a file its own header
 marks as app-managed.
 
-**Canonical event mapping**, should the trust problem ever be solved:
-
-- `before_tool` → `preToolUse`
-- `after_tool` → **both** `postToolUse` and `postToolUseFailure`. Copilot splits
-  by outcome, where the other adapters map `after_tool` to one event (Claude and
-  Codex `PostToolUse`, Cursor `afterFileEdit`); fanning out to both loses less
-  than picking one.
-- `before_prompt` → `userPromptSubmitted` (not `userPromptTransformed`, which
-  fires later on already-rewritten content)
-- `on_stop` → `agentStop`
-- No canonical equivalent for `sessionEnd`, `subagentStart`, `subagentStop`,
-  `errorOccurred`, `preCompact`, `permissionRequest`, `notification`. Leave
-  unmapped — same precedent as Cursor's missing `afterShellExecution`.
+The canonical-event mapping the old section proposed is superseded by the table above.
+`subagentStart`, `subagentStop`, `errorOccurred`, `preCompact`, `permissionRequest` and
+`notification` have no canonical equivalent and stay unmapped.
 
 Do not confuse these JSON config keys with the `@github/copilot-sdk` callback
 method names (PascalCase / `onXxx`), which are a separate surface.
@@ -316,8 +387,10 @@ so Copilot reads `.github/mcp.json`. In a package that also carries Claude, the
 shared manifest's `mcpServers` names Claude's `mcp/claude.json` (#481), whose
 entries lack `type` and `tools`, and a merged package that includes Codex also
 has Codex's `.mcp.json` (same format) at the root. Which of those an installed
-Copilot plugin loads, and whether it accepts entries without `type`, is
-**UNVERIFIED** (#499). Hand-test before relying on Copilot MCP from a merged package.
+Copilot plugin loads: CONFIRMED live (Copilot CLI 1.0.105, 2026-10-30, package installed from a local
+marketplace into a scratch `COPILOT_HOME`): `.github/mcp.json` loads (both servers started)
+and the manifest-named `mcp/claude.json` does NOT (neither of its servers started).
+`${PLUGIN_ROOT}` expands in an MCP `command`. Closes #499.
 
 **Never shell out to `copilot mcp add`**: it only writes user-level
 `~/.copilot/mcp-config.json` and has no flag to target the workspace file.
@@ -394,8 +467,6 @@ update` / the CLI's normal update flow outside of an ynh-launched session.
 
 ## What Copilot Does NOT Support (in plugins)
 
-- **Hooks via ynh** — see the trust-folder section above. Not a format gap; a
-  silent-failure gap.
 - **Custom slash commands** — no user-definable `.prompt.md` equivalent as of
   2026-07-29. Open requests: github/copilot-cli#618, #942, #1113. Plugin
   manifests can declare a `commands` component, but how it surfaces is

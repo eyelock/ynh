@@ -341,9 +341,42 @@ ynh trust show <harness>     # every command it will run, with provenance
 ynh trust accept <harness>   # record that you have read them
 ```
 
-`ynh trust show` prints each `command` and `version_command`, the source and
-commit the harness was installed from, and the environment variables those
-commands inherit that the harness never declared in `env_passthrough`.
+`ynh trust show` prints, grouped by kind:
+
+- **Sensors**: each `command` and `version_command`, including those an
+  include contributes (see [Sensors from an include](#sensors-from-an-include)).
+  An included sensor shows the include it came from and the directory
+  `$YNH_HARNESS_DIR` will be when it runs, which is the publishing harness.
+- **Hooks**: each hook command, with its event and matcher.
+- **MCP servers**: the `command` with its `args`, or the `url`, plus `cwd`, and
+  the names of the `env` entries and `headers`.
+
+Everything is shown as resolved for a run: the harness's own, then whatever
+each profile adds or changes (an entry identical to the harness's own is not
+repeated). Includes contribute sensors today; when they contribute hooks and
+MCP servers, those are covered too.
+
+Reading an include never reaches the network, as with `ynh check`. If an
+include is not cached, the set is incomplete, so `ynh trust` reports
+`unavailable` rather than digesting part of it, `ynh trust accept` refuses, and
+`ynh check` warns if you had accepted the harness. An include with
+`"sensors": false` contributes nothing and needs no cache.
+
+It also prints the source and commit the harness was installed from, and the
+environment variables those commands inherit that the harness never declared in
+`env_passthrough`.
+
+The digest covers all of it. An `env` or header value can change what runs
+(`NODE_OPTIONS`, `LD_PRELOAD`, `PATH`), so the values are in the digest. They
+are not in the output: a `${VAR}` reference is shown as written, and any other
+value is printed as `(literal, not shown)`, because a literal may be a
+credential. Read the manifest in the harness directory to see one.
+
+**Upgrading.** Until hooks and MCP servers were covered (#577), the digest covered sensor commands only. A harness
+you accepted then shows `changed` once, even if nothing in it has, and says so.
+That is intended: you were never shown its hooks and MCP servers, so the old
+acceptance does not cover them. Review them with `ynh trust show`, then
+`ynh trust accept`. Old records are never accepted on your behalf.
 
 | State | Meaning |
 |-------|---------|
@@ -351,6 +384,7 @@ commands inherit that the harness never declared in `env_passthrough`.
 | `accepted` | The commands match what you accepted. |
 | `changed` | The commands differ from what you accepted. |
 | `no-commands` | The harness executes nothing. Most harnesses. |
+| `unavailable` | What the harness executes could not be read in full, because an include is not in the cache. Nothing can be accepted; run `ynh update`. |
 
 **This reports; it does not block.** Nothing refuses to run because a harness is
 unreviewed, and `ynh check` warns only on `changed`, never on `unreviewed`: a
@@ -795,6 +829,11 @@ Four properties are load-bearing:
 - **Not mandatory.** Adding it to every sensor would break every existing
   harness.
 
+`--calibrate` does not combine with `--profile`, `--sensor-overlay`,
+`--update-baseline` or `--no-baseline`; each is refused (exit 2). Calibration
+runs each declared command against its fixture and never reads tolerance, which
+is all a profile can change, so a profile would silently do nothing.
+
 **An uncalibrated sensor is not yet a sensor.** A fixture is the only thing
 that proves a sensor still observes anything, and it is what catches the
 working-directory mistake above. A script that found its own root, pointed at
@@ -959,6 +998,10 @@ and the report names the profile in a top-level `profile` field.
 **`--profile` on `ynh check` is a flag only.** It does not read `YNH_PROFILE`,
 which `ynh run` does: an environment variable left in a shell would quietly make
 every interactive check advisory.
+
+**`--calibrate` with `--profile` is refused.** Calibration runs each declared
+command against its reference fixture and never reads tolerance, which is all a
+profile can change, so the flag would do nothing.
 
 **`--update-baseline` with `--profile` is allowed.** Recording writes a failing
 sensor's output whatever its tolerance, and a profile cannot change the ratchet,

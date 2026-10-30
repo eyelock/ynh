@@ -51,6 +51,9 @@ Provide specific, actionable feedback with file paths and line numbers.
 | `scripts/` | Executable code the agent can run |
 | `references/` | Additional documentation loaded on demand |
 | `assets/` | Templates, schemas, static resources |
+| `evals/` | Authoring-time test cases and fixtures. Not used at runtime, so ynh leaves it out when assembling and exporting |
+
+Only an `evals/` directly inside a skill (`skills/<name>/evals/`) is skipped; every other file of the skill is copied, and an `evals/` nested deeper is kept.
 
 Skills use **progressive disclosure**: agents load only the `name` and `description` at startup, then read the full `SKILL.md` when the skill is activated. Keep `SKILL.md` under 500 lines; move detailed content to `references/`.
 
@@ -183,7 +186,9 @@ You are a senior developer working on a Go microservices codebase.
 - Run `make check` before committing
 ```
 
-If multiple sources provide instructions (e.g., an included repo and the harness itself), the last source wins. Since the harness's own content is processed last, its `AGENTS.md` takes priority over included repos.
+When several sources provide instructions, they are composed rather than overwritten. The harness's own instructions come first, then one section per include that has instructions, in include order, each headed `## Instructions from <source>` (the include's harness name when it has a manifest; otherwise `owner/repo` for a git include, and for a local one its path as written when relative or its directory name when absolute; `path` is appended when set; the heading never carries an absolute filesystem path). Content identical to a section already present appears once, so an include reached twice contributes one section. If the harness has no instructions of its own, the result is just the include sections.
+
+An include that is only wanted for its skills can leave its instructions out with `"instructions": false` (see [Includes](harnesses.md#includes-optional)). Composition applies to `ynh run`, `ynd preview`, `ynd export` and `ynh image`.
 
 > **Note:** `instructions.md` is also supported and takes precedence over `AGENTS.md` if both exist. New harnesses should use `AGENTS.md`.
 

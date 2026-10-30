@@ -156,7 +156,9 @@ Manage local harness source directories.
 
   ynh sources add <path>      Add a local source directory
   ynh sources list            Show configured sources (supports --format json)
-  ynh sources remove <name>   Remove a source`,
+  ynh sources remove <name>   Remove a source
+
+Run 'ynh sources <subcommand> --help' for a subcommand's arguments and flags.`,
 
 	"paths": `ynh paths [flags]
 
@@ -186,7 +188,9 @@ Manage harness registries.
   ynh registry add <url>      Add a registry
   ynh registry list           Show configured registries (supports --format json)
   ynh registry remove <url>   Remove a registry
-  ynh registry update         Refresh all cached registries`,
+  ynh registry update         Refresh all cached registries
+
+Run 'ynh registry <subcommand> --help' for a subcommand's arguments and flags.`,
 
 	"backend": `ynh backend <add|list|remove> [args]
 
@@ -194,11 +198,19 @@ Manage local model backends that a vendor CLI can be redirected at.
 
   ynh backend add <name> <vendor> --base-url <url> [--auth-token <token>] [--type <type>]
   ynh backend list                      Show configured backends (supports --format json)
-  ynh backend remove <name> [<vendor>]  Remove a backend, or one vendor's connection within it`,
+  ynh backend remove <name> [<vendor>]  Remove a backend, or one vendor's connection within it
+
+Run 'ynh backend <subcommand> --help' for a subcommand's arguments and flags.`,
 
 	"delegate": `ynh delegate <add|remove|update> <harness> <url> [flags]
 
-Manage a harness's Git delegates.`,
+Manage a harness's Git delegates.
+
+  ynh delegate add <harness> <url>      Add a delegate
+  ynh delegate remove <harness> <url>   Remove a delegate
+  ynh delegate update <harness> <url>   Change a delegate's path or ref
+
+Run 'ynh delegate <subcommand> --help' for a subcommand's arguments and flags.`,
 
 	"fork": `ynh fork <name> [flags]
 
@@ -210,7 +222,13 @@ Flags:
 
 	"include": `ynh include <add|remove|update> <harness> <url> [flags]
 
-Manage a harness's Git includes.`,
+Manage a harness's Git includes.
+
+  ynh include add <harness> <url>      Add an include
+  ynh include remove <harness> <url>   Remove an include
+  ynh include update <harness> <url>   Change an include's path, picks or ref
+
+Run 'ynh include <subcommand> --help' for a subcommand's arguments and flags.`,
 
 	"focus": `ynh focus <ls|add|remove|update> [args]
 
@@ -219,7 +237,9 @@ Inspect and edit a harness's named focuses.
   ynh focus ls <harness> [--format text|json]              List declared focuses
   ynh focus add <harness> <name> <prompt> [--profile <name>]
   ynh focus remove <harness> <name>
-  ynh focus update <harness> <name> [--prompt <text>] [--profile <name>] [--clear-profile]`,
+  ynh focus update <harness> <name> [--prompt <text>] [--profile <name>] [--clear-profile]
+
+Run 'ynh focus <subcommand> --help' for a subcommand's arguments and flags.`,
 
 	"profile": `ynh profile <ls|add|remove|hook|mcp|include> [args]
 
@@ -230,15 +250,29 @@ Inspect and edit a harness's named profiles.
   ynh profile remove <harness> <name>
   ynh profile hook <add|remove> <harness> <profile> ...
   ynh profile mcp <add|remove|update> <harness> <profile> <name> [flags]
-  ynh profile include <add|remove|update> <harness> <profile> <url> [flags]`,
+  ynh profile include <add|remove|update> <harness> <profile> <url> [flags]
+
+Run 'ynh profile <subcommand> --help', or 'ynh profile <hook|mcp|include> <subcommand> --help',
+for a subcommand's arguments and flags.`,
 
 	"hook": `ynh hook <add|remove|export> [args]
 
 Manage a harness's top-level hooks.
 
-  ynh hook add <harness> <event> <command> [--matcher <pattern>]
+  ynh hook add <harness> <event> <command> [--matcher <pattern>] [--timeout <seconds>]
   ynh hook remove <harness> <event> <index>
-  ynh hook export <harness> --target <settings|local> [--dry-run]`,
+  ynh hook export <harness> --target <settings|local> [--dry-run]
+
+Events: before_tool, after_tool, before_prompt, on_stop, on_session_start,
+on_session_end.
+
+  on_stop            fires at the end of EVERY turn, not once per session
+  on_session_start   fires on start AND resume (on Claude Code also on /clear
+                     and compaction), so the script must be idempotent
+  on_session_end     best-effort, time-boxed, cannot block, may not fire at
+                     all; use it for once-per-session work
+
+Run 'ynh hook <subcommand> --help' for a subcommand's arguments and flags.`,
 
 	"doctor": `ynh doctor [--format <text|json>]
 
@@ -263,7 +297,13 @@ gate on the result, read summary.errors from --format json.`,
 
 	"mcp": `ynh mcp <add|remove|update> <harness> <name> [flags]
 
-Manage a harness's top-level MCP servers.`,
+Manage a harness's top-level MCP servers.
+
+  ynh mcp add <harness> <name>      Declare a server
+  ynh mcp remove <harness> <name>   Remove a server
+  ynh mcp update <harness> <name>   Change a server's fields
+
+Run 'ynh mcp <subcommand> --help' for a subcommand's arguments and flags.`,
 
 	"sensors": `ynh sensors <ls|show|run> [args]
 
@@ -292,6 +332,7 @@ Flags:
   --update-baseline     Accept current failures so only new ones gate
   --no-baseline         Ignore the baseline for this run
   --calibrate           Run each sensor against its reference fixture instead
+                        (not with --profile, --sensor-overlay or baseline flags)
   --sensor-overlay <j>  Substitute sensor declarations from a JSON object
   --format text|json    Output format (default text)
 
@@ -309,6 +350,10 @@ the feature: a sensor runs the project's own tools. But a harness is installed
 from a Git URL into ~/.ynh/harnesses/ and its sensors run against a tree
 somewhere else, so the code that executes is nowhere near the directory you are
 looking at.
+
+Hooks and MCP servers execute too, through the vendor CLI with your
+environment, and so do sensors the harness's includes contribute. All of them
+are shown and covered by what you accept.
 
   ynh trust                      State of every installed harness
   ynh trust show <harness>       Every command it will run, with provenance

@@ -96,18 +96,14 @@ func assembleInto(workDir string, adapter LayoutProvider, content []resolver.Res
 		}
 	}
 
-	// Copy instructions to vendor-specific project instructions file.
-	// Checks instructions.md first, then AGENTS.md as fallback.
-	// Later sources override earlier ones (harness's own instructions win).
+	// Compose the sources' instructions into the vendor-specific project
+	// instructions file.
 	instructionsFile := adapter.InstructionsFile()
 	if instructionsFile != "" {
-		for _, rc := range content {
-			src := FindInstructionsFile(rc.BasePath)
-			if src != "" {
-				dst := filepath.Join(workDir, instructionsFile)
-				if err := CopyFile(src, dst); err != nil {
-					return fmt.Errorf("copying instructions: %w", err)
-				}
+		if composed := ComposeInstructions(content); len(composed) > 0 {
+			dst := filepath.Join(workDir, instructionsFile)
+			if err := os.WriteFile(dst, composed, 0o644); err != nil {
+				return fmt.Errorf("writing instructions: %w", err)
 			}
 		}
 	}
@@ -165,13 +161,62 @@ func CopyPicked(repoBase string, picked string, targetBaseDir string, artifactDi
 
 	info, err := os.Stat(src)
 	if err != nil {
-		return fmt.Errorf("pick path not found: %s (%w)", picked, err)
+		return fmt.Errorf("pick path not found: %s (%w)%s", picked, err, pickHint(repoBase, picked))
 	}
 
 	if info.IsDir() {
-		return CopyDirDeref(src, filepath.Join(targetBaseDir, targetDir, parts[1]))
+		return copyArtifactDir(artifactType, src, filepath.Join(targetBaseDir, targetDir, parts[1]))
 	}
 	return copyArtifactFile(artifactType, src, targetBaseDir, targetDir, parts[1], transform)
+}
+
+// pickMaxDepth bounds how far pickHint looks below the include root. Artifact
+// trees are shallow; a deeper search only finds vendored copies.
+const pickMaxDepth = 6
+
+// pickHint explains a missing pick when the same-named entry exists elsewhere
+// in the include, which is the usual cause: the include's `path` points at the
+// wrong directory. It returns "" when there is nothing useful to say, and
+// otherwise a leading newline followed by where the entry is and, when the
+// pick is a suffix of that location, the --path that would make it resolve.
+func pickHint(repoBase, picked string) string {
+	sep := string(filepath.Separator)
+	base := filepath.Base(filepath.FromSlash(picked))
+	suffix := sep + filepath.FromSlash(picked)
+	var first, suffixed string
+	_ = filepath.WalkDir(repoBase, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		rel, rerr := filepath.Rel(repoBase, p)
+		if rerr != nil || rel == "." {
+			return nil
+		}
+		if d.IsDir() && (d.Name() == ".git" || d.Name() == "node_modules" ||
+			strings.Count(rel, sep) >= pickMaxDepth) {
+			return filepath.SkipDir
+		}
+		if d.Name() != base {
+			return nil
+		}
+		if first == "" {
+			first = rel
+		}
+		if suffixed == "" && strings.HasSuffix(sep+rel, suffix) {
+			suffixed = rel
+		}
+		return nil
+	})
+	if first == "" {
+		return ""
+	}
+	if suffixed != "" {
+		path := strings.TrimPrefix(strings.TrimSuffix(sep+suffixed, suffix), sep)
+		return fmt.Sprintf("\n%q exists at %q inside this include; if the include's path is wrong, run:\n"+
+			"  ynh include update <harness> <url> --path %s", base, filepath.ToSlash(suffixed), filepath.ToSlash(path))
+	}
+	return fmt.Sprintf("\n%q exists at %q inside this include; the pick must be relative to the include's path",
+		base, filepath.ToSlash(first))
 }
 
 // CopyAllArtifacts scans the repo for known artifact type directories and copies them.
@@ -193,7 +238,7 @@ func CopyAllArtifacts(repoBase string, targetBaseDir string, artifactDirs map[st
 			src := filepath.Join(srcDir, entry.Name())
 
 			if entry.IsDir() {
-				if err := CopyDirDeref(src, filepath.Join(targetBaseDir, targetDir, entry.Name())); err != nil {
+				if err := copyArtifactDir(artifactType, src, filepath.Join(targetBaseDir, targetDir, entry.Name())); err != nil {
 					return err
 				}
 			} else {
@@ -296,14 +341,37 @@ func CopyDir(src, dst string) error {
 // error naming it: the output cannot be made self-contained without the
 // target, and the previous behaviour was already a hard failure.
 func CopyDirDeref(src, dst string) error {
+	return copyDirDerefSkipping(src, dst)
+}
+
+// skillAuthoringDirs are directories directly inside a skill that are
+// authoring-time material in the Agent Skills layout: only SKILL.md and the
+// files it references are used at runtime, so assembly and export leave them
+// behind.
+var skillAuthoringDirs = []string{"evals"}
+
+// copyArtifactDir copies one artifact directory. A skill is copied without
+// its authoring-time directories (see skillAuthoringDirs); any other artifact
+// directory is copied whole.
+func copyArtifactDir(artifactType, src, dst string) error {
+	if artifactType == "skills" {
+		return copyDirDerefSkipping(src, dst, skillAuthoringDirs...)
+	}
+	return CopyDirDeref(src, dst)
+}
+
+// copyDirDerefSkipping is CopyDirDeref that leaves out the named directories
+// directly inside src, and only there: a deeper directory of the same name is
+// kept.
+func copyDirDerefSkipping(src, dst string, skipTop ...string) error {
 	real, err := filepath.EvalSymlinks(src)
 	if err != nil {
 		return err
 	}
-	return copyDeref(src, dst, []string{real})
+	return copyDeref(src, dst, []string{real}, skipTop)
 }
 
-func copyDeref(src, dst string, ancestors []string) error {
+func copyDeref(src, dst string, ancestors []string, skipTop []string) error {
 	if err := os.MkdirAll(dst, 0o755); err != nil {
 		return err
 	}
@@ -317,6 +385,11 @@ func copyDeref(src, dst string, ancestors []string) error {
 		isLink := e.Type()&fs.ModeSymlink != 0
 		if e.IsDir() && e.Name() == ".git" {
 			continue
+		}
+		if slices.Contains(skipTop, e.Name()) {
+			if skipInfo, err := os.Stat(from); err == nil && skipInfo.IsDir() {
+				continue
+			}
 		}
 		info, err := os.Stat(from)
 		if err != nil {
@@ -338,7 +411,7 @@ func copyDeref(src, dst string, ancestors []string) error {
 		if slices.Contains(ancestors, real) {
 			return fmt.Errorf("symlink cycle at %s: it points to %s, which contains it", from, real)
 		}
-		if err := copyDeref(from, to, append(ancestors, real)); err != nil {
+		if err := copyDeref(from, to, append(ancestors, real), nil); err != nil {
 			return err
 		}
 	}
@@ -444,4 +517,67 @@ func FindInstructionsFile(dir string) string {
 		}
 	}
 	return ""
+}
+
+// ComposeInstructions builds the project instructions from every content
+// source's instructions file (instructions.md, else AGENTS.md).
+//
+// The harness's own content (empty Label) comes first, unheaded. Each include
+// that has instructions follows, in include order, as a section headed
+// "## Instructions from <label>". An include with NoInstructions set
+// contributes nothing, and content identical to a section already present
+// appears once. When the harness has no instructions the result is the include
+// sections alone, and a single unheaded source is returned byte for byte.
+// Returns nil when no source has instructions.
+func ComposeInstructions(content []resolver.ResolvedContent) []byte {
+	type section struct {
+		label string
+		body  string
+	}
+	var own, included []section
+	seen := map[string]bool{}
+	add := func(rc resolver.ResolvedContent, dst *[]section) {
+		if rc.NoInstructions {
+			return
+		}
+		src := FindInstructionsFile(rc.BasePath)
+		if src == "" {
+			return
+		}
+		data, err := os.ReadFile(src)
+		if err != nil {
+			return
+		}
+		key := strings.TrimSpace(string(data))
+		if key == "" || seen[key] {
+			return
+		}
+		seen[key] = true
+		*dst = append(*dst, section{label: rc.Label, body: string(data)})
+	}
+	for _, rc := range content {
+		if rc.Label == "" {
+			add(rc, &own)
+		}
+	}
+	for _, rc := range content {
+		if rc.Label != "" {
+			add(rc, &included)
+		}
+	}
+
+	if len(included) == 0 && len(own) == 1 {
+		return []byte(own[0].body)
+	}
+	var parts []string
+	for _, s := range own {
+		parts = append(parts, strings.TrimRight(s.body, "\n"))
+	}
+	for _, s := range included {
+		parts = append(parts, "## Instructions from "+s.label+"\n\n"+strings.TrimRight(s.body, "\n"))
+	}
+	if len(parts) == 0 {
+		return nil
+	}
+	return []byte(strings.Join(parts, "\n\n") + "\n")
 }

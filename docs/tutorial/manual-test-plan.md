@@ -180,6 +180,8 @@ Requires Docker installed and running.
 | Export hooks in a plugin: one `hooks/<vendor>.json` per vendor, named by its manifest | [Export hooks in a plugin](hooks.md#export-hooks-in-a-plugin) |
 | Write a blocking hook script | [Write a blocking hook example](hooks.md#write-a-blocking-hook-example) |
 | Diff hook config across vendors | [Compare hook config across vendors](hooks.md#compare-hook-config-across-vendors) |
+| `on_session_end` with `--timeout`: Claude `SessionEnd`, Copilot `timeoutSec`, Codex clamp warning, Cursor matcher warning, Claude export warning | [Run something once per session, with a timeout](hooks.md#run-something-once-per-session-with-a-timeout) |
+| Live Copilot, Claude and Cursor hook checks (not run by the eval) | [Live Vendor Checks: hooks](#live-vendor-checks-hooks) |
 
 ### MCP Servers
 
@@ -965,6 +967,104 @@ ls -d /tmp/ynh-edge 2>/dev/null
 
 ---
 
+## Live Vendor Checks: hooks
+
+**Not run by the eval.** These need the real Copilot, Claude Code and Cursor CLIs, a login for each, and a person to approve the runs; the eval stubs every vendor CLI. Run them by hand after a change to hook generation, and record the CLI version and date next to the result in [Hooks](../hooks.md) and the vendor references. They are how the CONFIRMED results there were obtained.
+
+Set up once. A probe script logs its event, its working directory and the plugin-root variables, so one script answers most questions:
+
+```bash
+mkdir -p /tmp/ynh-live/probe-harness/.agents/harness /tmp/ynh-live/probe-harness/scripts /tmp/ynh-live/project
+cat > /tmp/ynh-live/probe-harness/scripts/probe.sh << 'EOF'
+#!/bin/sh
+# usage: probe.sh <label> [sleep-seconds]
+payload=$(cat)
+printf '%s %s pwd=%s PLUGIN_ROOT=%s CLAUDE_PLUGIN_ROOT=%s COPILOT_PLUGIN_ROOT=%s payload=%s\n' "$(date +%T)" "$1" "$PWD" "$PLUGIN_ROOT" "$CLAUDE_PLUGIN_ROOT" "$COPILOT_PLUGIN_ROOT" "$payload" >> /tmp/ynh-live/probe.log
+sleep "${2:-0}"
+printf '%s %s done\n' "$(date +%T)" "$1" >> /tmp/ynh-live/probe.log
+EOF
+chmod +x /tmp/ynh-live/probe-harness/scripts/probe.sh
+cat > /tmp/ynh-live/probe-harness/.agents/harness/plugin.json << 'EOF'
+{
+  "name": "probe",
+  "version": "0.1.0",
+  "hooks": {
+    "before_tool": [{ "matcher": "Bash", "command": "./scripts/probe.sh before_tool" }],
+    "after_tool": [{ "matcher": "Bash", "command": "./scripts/probe.sh after_tool" }],
+    "before_prompt": [{ "command": "./scripts/probe.sh before_prompt" }],
+    "on_stop": [{ "command": "./scripts/probe.sh on_stop" }],
+    "on_session_start": [{ "command": "./scripts/probe.sh on_session_start" }],
+    "on_session_end": [{ "command": "./scripts/probe.sh on_session_end 3", "timeout": 10 }]
+  }
+}
+EOF
+```
+
+### L1: Copilot, session layout, untrusted folder
+
+In a scratch git repository that is not in Copilot's `trustedFolders`, launch with a prompt that makes the agent run `ls`, then read the log. `--allow-tool 'shell(ls)'` lets the one-shot session run that command and nothing else:
+
+*Your output will differ: it shows what the model did.*
+
+```bash
+cd /tmp/ynh-live/project && git init -q
+ynh run /tmp/ynh-live/probe-harness -v copilot --allow-tool 'shell(ls)' -- "Run the shell command: ls . Then reply with the single word done."
+cat /tmp/ynh-live/probe.log
+```
+
+Confirm a line for each of the six events, the `pwd` being the plugin directory (not the project), `PLUGIN_ROOT`, `CLAUDE_PLUGIN_ROOT` and `COPILOT_PLUGIN_ROOT` set, `tool_name` `Bash` in the tool payloads, and `reason` `complete` in the `SessionEnd` payload. Record that the hooks fired without trusting the folder.
+
+### L2: Copilot, matcher and timeout
+
+Change the matchers to `Edit` and rerun L1: neither tool hook should fire for the shell call. Change `on_session_start` to `./scripts/probe.sh on_session_start 3` with `--timeout 1` added to one hook and `--timeout 10` to a second: the `done` line must be missing for the first and present for the second (`timeoutSec` is honoured).
+
+### L3: Copilot, export layouts
+
+Export three layouts and load each with `--plugin-dir`; each hook must fire exactly once:
+
+```bash
+ynd export /tmp/ynh-live/probe-harness -v copilot -o /tmp/ynh-live/exp-copilot
+ynd export /tmp/ynh-live/probe-harness --merged -v claude,copilot -o /tmp/ynh-live/exp-merged
+ynd export /tmp/ynh-live/probe-harness --format agent-plugin -v copilot -o /tmp/ynh-live/exp-ap
+```
+
+In the merged package Copilot must read `hooks/claude.json` and ignore a root `hooks.json` (there is none). For MCP, install the merged package from a local marketplace into a scratch `COPILOT_HOME` and confirm `.github/mcp.json` loads and `mcp/claude.json` does not.
+
+### L4: Claude, SessionEnd budget
+
+*Your output will differ: it shows what the model did.*
+
+```bash
+cd /tmp/ynh-live/project
+ynh run /tmp/ynh-live/probe-harness -v claude -- "Reply with the single word done." < /dev/null
+cat /tmp/ynh-live/probe.log
+```
+
+Confirm `SessionEnd` fires after `Stop`. `ynh run` sets `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS=10000` because the hook has `timeout` 10, so the 3 s hook must show its `done` line. Then run the exported plugin without the variable (`claude --plugin-dir /tmp/ynh-live/exp-merged -p "Reply with the single word done." < /dev/null`): the `done` line must be missing ("Hook cancelled"), which is what the export warning says. Setting `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS=10000` makes it finish.
+
+### L5: Cursor, print mode
+
+Cursor reads tool permissions from the project's `.cursor/cli.json`; allow `ls` and nothing else. `--trust` trusts this workspace for the one run:
+
+*Your output will differ: it shows what the model did.*
+
+```bash
+cd /tmp/ynh-live/project
+mkdir -p .cursor && echo '{"permissions":{"allow":["Shell(ls)"],"deny":[]}}' > .cursor/cli.json
+ynh run /tmp/ynh-live/probe-harness -v cursor --trust -- "First read README.md if it exists. Then run the shell command: ls . Then reply with the single word done."
+cat /tmp/ynh-live/probe.log
+```
+
+Confirm `sessionStart`, `sessionEnd`, `preToolUse` and `postToolUse` lines, hooks running in the run directory, and the `Bash`-matched tool hooks never firing (Cursor calls its shell tool `Shell`; `ynh run` warns about the `Bash` matcher). To check a `Shell` matcher, change both matchers to `Shell` and rerun: they fire for the `ls` call only. `beforeSubmitPrompt` and `stop` do not fire in print mode, and `ynh run` must have printed a warning naming `before_prompt` and `on_stop`. Interactive CLI and IDE behaviour is not yet tested.
+
+Clean up:
+
+```bash
+rm -rf /tmp/ynh-live
+```
+
+---
+
 ## Summary
 
 | Section | Tests |
@@ -978,7 +1078,7 @@ ls -d /tmp/ynh-edge 2>/dev/null
 | Registry & Discovery | 11 |
 | Developer Tools | 8 |
 | Docker Images | 10 |
-| Hooks | 6 |
+| Hooks | 8 |
 | MCP Servers | 7 |
 | Developer Preview | 5 |
 | Profiles | 8 |
@@ -987,4 +1087,4 @@ ls -d /tmp/ynh-edge 2>/dev/null
 | Structured Output | 11 |
 | Sensors | 3 |
 | Edge Cases | 28 |
-| **Total** | **160** |
+| **Total** | **162** |

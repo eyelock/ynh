@@ -59,6 +59,9 @@ type Include struct {
 	// Sensors is the include's "sensors" flag. nil means true; see
 	// SensorsEnabled.
 	Sensors *bool
+	// Instructions is the include's "instructions" flag. nil means true; see
+	// InstructionsEnabled.
+	Instructions *bool
 	// SHA is the resolved commit at install/update time, populated from
 	// installed.json's resolved slice. Empty for local-path includes and for
 	// pre-migration installs that predate SHA recording.
@@ -75,6 +78,13 @@ type Include struct {
 // the consumer. They do unless the include says "sensors": false.
 func (i Include) SensorsEnabled() bool {
 	return i.Sensors == nil || *i.Sensors
+}
+
+// InstructionsEnabled reports whether the include's instructions file is
+// composed into the harness's instructions. It is unless the include says
+// "instructions": false.
+func (i Include) InstructionsEnabled() bool {
+	return i.Instructions == nil || *i.Instructions
 }
 
 type Delegate struct {
@@ -153,7 +163,7 @@ type Harness struct {
 	InstalledFrom          *Provenance
 
 	// Manifest is the manifest this harness was loaded from: the parsed
-	// .ynh-plugin/plugin.json, or the one derived in memory from an Agent
+	// .agents/harness/plugin.json, or the one derived in memory from an Agent
 	// Plugins package. Export and info read it rather than the file, so a
 	// derived harness has one to give.
 	Manifest *plugin.HarnessJSON
@@ -650,9 +660,10 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 
 	for _, inc := range hj.Includes {
 		p.Includes = append(p.Includes, Include{
-			GitSource: GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
-			Pick:      inc.Pick,
-			Sensors:   inc.Sensors,
+			GitSource:    GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
+			Pick:         inc.Pick,
+			Sensors:      inc.Sensors,
+			Instructions: inc.Instructions,
 		})
 	}
 	for _, del := range hj.DelegatesTo {
@@ -881,8 +892,9 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 					Ref:   inc.Ref,
 					Path:  inc.Path,
 				},
-				Pick:    inc.Pick,
-				Sensors: inc.Sensors,
+				Pick:         inc.Pick,
+				Sensors:      inc.Sensors,
+				Instructions: inc.Instructions,
 			})
 		}
 		resolved.Includes = merged
@@ -930,9 +942,10 @@ func LoadFile(path string) (*Harness, error) {
 
 	for _, inc := range hj.Includes {
 		p.Includes = append(p.Includes, Include{
-			GitSource: GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
-			Pick:      inc.Pick,
-			Sensors:   inc.Sensors,
+			GitSource:    GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
+			Pick:         inc.Pick,
+			Sensors:      inc.Sensors,
+			Instructions: inc.Instructions,
 		})
 	}
 	for _, del := range hj.DelegatesTo {

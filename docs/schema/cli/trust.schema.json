@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://eyelock.github.io/ynh/schema/cli/trust.schema.json",
   "title": "ynh trust --format json",
-  "description": "Output of `ynh trust --format json`. Bare array, one entry per installed harness, same shape as `ynh trust show`. Envelope retrofit deferred, matching the other Phase 3 commands.",
+  "description": "Output of `ynh trust --format json`. Bare array, one entry per installed harness, same shape as `ynh trust show`. Envelope retrofit deferred, matching the other Phase 3 commands. Hooks and MCP servers are covered as in trust show.",
   "x-capabilities": "0.8",
   "$defs": {
     "Executable": {
@@ -23,12 +23,119 @@
         "value": {
           "type": "string",
           "description": "The string as declared, unexpanded. What the shell finally runs may differ: a substitution such as $(git rev-parse --show-toplevel) resolves against the measured tree at run time, so a harness can execute a script it does not itself ship."
+        },
+        "profile": {
+          "type": "string",
+          "description": "Present when only this profile contributes the sensor, through a profile-level include."
+        },
+        "source": {
+          "type": "string",
+          "description": "Present for a sensor contributed by an include: where it came from, e.g. 'include github.com/org/sensors'."
+        },
+        "harness_dir": {
+          "type": "string",
+          "description": "Present with source: the directory $YNH_HARNESS_DIR resolves to when the sensor runs, the publishing harness rather than this one."
         }
       },
       "required": [
         "sensor",
         "field",
         "value"
+      ],
+      "additionalProperties": false
+    },
+    "Hook": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "string",
+          "description": "Present when only this profile adds or changes the hook. Absent for a hook of the harness itself. A profile's hook identical to the harness's own is not repeated."
+        },
+        "event": {
+          "type": "string",
+          "description": "Canonical hook event name, e.g. before_tool."
+        },
+        "matcher": {
+          "type": "string",
+          "description": "Tool-name pattern the hook is limited to, when declared."
+        },
+        "command": {
+          "type": "string",
+          "description": "The shell command, as declared and unexpanded."
+        }
+      },
+      "required": [
+        "event",
+        "command"
+      ],
+      "additionalProperties": false
+    },
+    "ValueEntry": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string",
+          "description": "A whole-value ${VAR} reference as written, otherwise the literal text \"(literal, not shown)\". A literal may be a credential, so it is never printed; the digest still covers it."
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "MCPServer": {
+      "type": "object",
+      "properties": {
+        "profile": {
+          "type": "string",
+          "description": "Present when only this profile adds or changes the server. Absent for a server of the harness itself."
+        },
+        "name": {
+          "type": "string"
+        },
+        "transport": {
+          "type": "string",
+          "description": "Effective transport, e.g. stdio or streamable-http. Open set."
+        },
+        "command": {
+          "type": "string",
+          "description": "Executable launched for a stdio server."
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "url": {
+          "type": "string",
+          "description": "Endpoint contacted for a remote server."
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "env": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValueEntry"
+          },
+          "description": "Sorted by name. Values are covered by the digest because an env value can change what runs (NODE_OPTIONS, LD_PRELOAD, PATH)."
+        },
+        "headers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValueEntry"
+          },
+          "description": "Sorted by name."
+        }
+      },
+      "required": [
+        "name",
+        "transport"
       ],
       "additionalProperties": false
     }
@@ -59,14 +166,32 @@
       },
       "digest": {
         "type": "string",
-        "description": "Fingerprint of the current command set, covering sensor name, field and value for every executable string. Comparing it against accepted_digest is how a changed command is noticed."
+        "description": "Fingerprint of everything reviewed: sensor name, field and value; hook profile, event, matcher and command; every MCP server field including env and header values (hashed, never printed). A harness accepted before hooks and MCP servers were covered has an older digest, never equal to this one, so it reports changed once (see legacy_digest). Comparing it against accepted_digest is how a changed command is noticed."
       },
       "executables": {
         "type": "array",
         "items": {
           "$ref": "#/$defs/Executable"
         },
-        "description": "Sorted, so the digest does not depend on Go's randomised map order."
+        "description": "Sensor commands, including those contributed by includes (source and harness_dir say which). Hooks and MCP servers are in their own arrays. Sorted, so the digest does not depend on Go's randomised map order."
+      },
+      "hooks": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/Hook"
+        },
+        "description": "Hook commands as resolved for a run. Omitted when there are none. Sorted by profile, event, then declaration order."
+      },
+      "mcp_servers": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/MCPServer"
+        },
+        "description": "MCP servers as resolved for a run. Omitted when there are none. Includes contribute none today."
+      },
+      "legacy_digest": {
+        "type": "boolean",
+        "description": "True when the accepted digest predates hooks and MCP servers being covered. It is why state is changed; accepting again clears it. Omitted otherwise."
       },
       "state": {
         "type": "string",
@@ -74,9 +199,10 @@
           "unreviewed",
           "accepted",
           "changed",
-          "no-commands"
+          "no-commands",
+          "unavailable"
         ],
-        "description": "unreviewed: never accepted, which is also every install predating this command. accepted: matches what was accepted. changed: differs from what was accepted. no-commands: the harness executes nothing, so there is nothing to review. Open set per docs/cli-structured.md; tolerate unknown members."
+        "description": "unreviewed: never accepted, which is also every install predating this command. accepted: matches what was accepted. changed: differs from what was accepted. no-commands: the harness executes nothing, so there is nothing to review. Open set per docs/cli-structured.md; tolerate unknown members. unavailable: what the harness executes could not be read in full (an include is not cached), so digest is empty and nothing can be accepted until `ynh update` fetches it."
       },
       "accepted_digest": {
         "type": "string",
@@ -92,6 +218,13 @@
           "type": "string"
         },
         "description": "Names of environment variables these commands inherit that the harness never declared in env_passthrough. Names only, never values: a report meant to prevent a leak must not become one. Reported rather than removed, because scrubbing would break any sensor relying on inherited configuration, gh reading GH_TOKEN among them."
+      },
+      "problems": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Why the set could not be read in full. Present only with state unavailable."
       }
     },
     "required": [

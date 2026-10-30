@@ -229,6 +229,11 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
 				"--calibrate does not take --sensor-overlay: calibrating a substituted command proves nothing about the declared one"))
 		}
+		if profileName != "" {
+			return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
+				"--calibrate does not take --profile: calibration runs each declared command against its "+
+					"reference fixture and never reads tolerance, which is all a profile can change, so the profile would do nothing"))
+		}
 		return runCalibration(p, wanted, stdout, stderr, structured)
 	}
 
