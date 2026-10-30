@@ -14,6 +14,7 @@ import (
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 )
 
@@ -109,6 +110,14 @@ type composeDelegate struct {
 	Git  string `json:"git"`
 	Ref  string `json:"ref,omitempty"`
 	Path string `json:"path,omitempty"`
+	// MCPServers are the servers the delegate carries for its own subagent,
+	// not the session's: those of the harnesses its includes reach, then its
+	// own ("root" is the delegate itself), composed as a run composes them.
+	MCPServers map[string]composeMCP `json:"mcp_servers,omitempty"`
+	// MCPServersError says why the delegate's servers could not be read (it
+	// is not cached, or two of its includes conflict); MCPServers then holds
+	// none.
+	MCPServersError string `json:"mcp_servers_error,omitempty"`
 }
 
 type composeHook struct {
@@ -409,11 +418,17 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 	// Delegates
 	delegates := make([]composeDelegate, 0, len(h.DelegatesTo))
 	for _, del := range h.DelegatesTo {
-		delegates = append(delegates, composeDelegate{
+		cd := composeDelegate{
 			Git:  del.Git,
 			Ref:  del.Ref,
 			Path: del.Path,
-		})
+		}
+		if servers, provenance, err := delegateMCPServers(del, h.Dir); err != nil {
+			cd.MCPServersError = err.Error()
+		} else {
+			cd.MCPServers = composeMCPServers(servers, provenance)
+		}
+		delegates = append(delegates, cd)
 	}
 	out.DelegatesTo = delegates
 
@@ -458,22 +473,7 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 		servers, provenance, _ = harness.ComposeMCPServersRaw(h, nil)
 		out.MCPServersError = err.Error()
 	}
-	if len(provenance) > 0 {
-		out.MCPServers = make(map[string]composeMCP, len(provenance))
-		for _, pr := range provenance {
-			srv := servers[pr.Server]
-			out.MCPServers[pr.Server] = composeMCP{
-				Source:  pr.Source,
-				Type:    srv.Transport(),
-				Command: srv.Command,
-				Args:    srv.Args,
-				Env:     srv.Env,
-				Cwd:     srv.Cwd,
-				URL:     srv.URL,
-				Headers: srv.Headers,
-			}
-		}
-	}
+	out.MCPServers = composeMCPServers(servers, provenance)
 
 	// Profiles — full content so consumers can render/diff without re-parsing
 	// the underlying manifest. Always emit a non-nil map so JSON consumers see
@@ -596,6 +596,53 @@ func printComposeJSON(w io.Writer, out composeOutput) error {
 	return err
 }
 
+// composeMCPServers renders composed MCP servers with where each came from,
+// or nil when there are none.
+func composeMCPServers(servers map[string]plugin.MCPServer, provenance []harness.MCPProvenance) map[string]composeMCP {
+	if len(provenance) == 0 {
+		return nil
+	}
+	out := make(map[string]composeMCP, len(provenance))
+	for _, pr := range provenance {
+		srv := servers[pr.Server]
+		out[pr.Server] = composeMCP{
+			Source:  pr.Source,
+			Type:    srv.Transport(),
+			Command: srv.Command,
+			Args:    srv.Args,
+			Env:     srv.Env,
+			Cwd:     srv.Cwd,
+			URL:     srv.URL,
+			Headers: srv.Headers,
+		}
+	}
+	return out
+}
+
+// delegateMCPServers composes the MCP servers a delegate carries, as written:
+// its includes (resolved against its own directory) and then its own, the way
+// a run composes them. It reads the disk and the cache only, never the
+// network, as `ynh trust` does; a delegate not yet cached is an error.
+func delegateMCPServers(del harness.Delegate, harnessDir string) (map[string]plugin.MCPServer, []harness.MCPProvenance, error) {
+	base, err := resolver.ResolveDelegateLocal(del.GitSource, harnessDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	dh, err := harness.LoadDir(base)
+	if err != nil {
+		return nil, nil, err
+	}
+	var included []harness.IncludedHarness
+	if len(dh.Includes) > 0 {
+		resolved, err := resolver.ResolveIncludesLocal(dh, harness.Selection{})
+		if err != nil {
+			return nil, nil, fmt.Errorf("includes: %w", err)
+		}
+		included = resolver.IncludedHarnesses(resolved)
+	}
+	return harness.ComposeMCPServersRaw(dh, included)
+}
+
 func printComposeText(w io.Writer, out composeOutput) error {
 	_, _ = fmt.Fprintf(w, "Name:         %s\n", out.Name)
 	if out.Version != "" {
@@ -659,6 +706,13 @@ func printComposeText(w io.Writer, out composeOutput) error {
 				line += "  path=" + del.Path
 			}
 			_, _ = fmt.Fprintln(w, line)
+			// The delegate's own subagent's servers, not the session's.
+			for _, name := range slices.Sorted(maps.Keys(del.MCPServers)) {
+				_, _ = fmt.Fprintln(w, "    MCP server "+composeMCPLine(name, del.MCPServers[name], "its own"))
+			}
+			if del.MCPServersError != "" {
+				_, _ = fmt.Fprintf(w, "    MCP servers not shown: %s\n", del.MCPServersError)
+			}
 		}
 	}
 
@@ -687,19 +741,7 @@ func printComposeText(w io.Writer, out composeOutput) error {
 	if len(out.MCPServers) > 0 || out.MCPServersError != "" {
 		_, _ = fmt.Fprintln(w, "\nMCP Servers:")
 		for _, name := range slices.Sorted(maps.Keys(out.MCPServers)) {
-			srv := out.MCPServers[name]
-			line := "  " + name
-			if srv.Command != "" {
-				line += ": " + srv.Command
-			} else if srv.URL != "" {
-				line += ": " + srv.URL
-			}
-			if srv.Source == harness.MCPSourceRoot {
-				line += "  (own)"
-			} else {
-				line += "  (from " + srv.Source + ")"
-			}
-			_, _ = fmt.Fprintln(w, line)
+			_, _ = fmt.Fprintln(w, "  "+composeMCPLine(name, out.MCPServers[name], "own"))
 		}
 		if out.MCPServersError != "" {
 			_, _ = fmt.Fprintf(w, "  servers from includes not shown: %s\n", out.MCPServersError)
@@ -746,4 +788,22 @@ func printComposeText(w io.Writer, out composeOutput) error {
 	}
 
 	return nil
+}
+
+// composeMCPLine is one server for the text format: its name, its command or
+// URL, and where it came from, with own labelling a server the harness
+// declares itself.
+func composeMCPLine(name string, srv composeMCP, own string) string {
+	line := name
+	if srv.Command != "" {
+		line += ": " + srv.Command
+	} else if srv.URL != "" {
+		line += ": " + srv.URL
+	}
+	if srv.Source == harness.MCPSourceRoot {
+		line += "  (" + own + ")"
+	} else {
+		line += "  (from " + srv.Source + ")"
+	}
+	return line
 }

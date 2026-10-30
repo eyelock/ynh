@@ -303,6 +303,8 @@ MCP servers of delegates:
   probe: db (from eyelock/assistants//ynh/db)
 ```
 
+`ynd compose` shows the same servers under each delegate in `delegates_to`, apart from the session's `mcp_servers`: each with a `source` (`root` for the delegate's own, or the include chain), and in `--format text` as `MCP server <name>: <command>  (its own)` beneath the delegate. Compose reads the delegate from disk and the cache only; a delegate it cannot read is still listed, with `mcp_servers_error` saying why.
+
 | Vendor | Delegate servers |
 |--------|------------------|
 | Claude Code | Carried. The generated agent has an `mcpServers` frontmatter field and a run hands the agent to Claude with `--agents`; see below. |
