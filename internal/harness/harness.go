@@ -163,7 +163,7 @@ type Harness struct {
 	InstalledFrom          *Provenance
 
 	// Manifest is the manifest this harness was loaded from: the parsed
-	// .ynh-plugin/plugin.json, or the one derived in memory from an Agent
+	// .agents/harness/plugin.json, or the one derived in memory from an Agent
 	// Plugins package. Export and info read it rather than the file, so a
 	// derived harness has one to give.
 	Manifest *plugin.HarnessJSON

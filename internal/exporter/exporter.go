@@ -137,7 +137,7 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	}
 
 	// The manifest the loader read, or derived when the source is an Agent
-	// Plugins package that has no .ynh-plugin/plugin.json to read.
+	// Plugins package that has no .agents/harness/plugin.json to read.
 	hj := p.Manifest
 
 	// Check remote sources for all delegates

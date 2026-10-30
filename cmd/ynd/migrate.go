@@ -170,7 +170,7 @@ Runs every registered format migrator against the target directory tree.
 Migrators decide whether they apply based on the directory contents,
 so the command works for any format transition handled by the chain.
 
-This includes moving a deprecated .ynh-plugin/ manifest directory to
+This includes moving the old .ynh-plugin/ manifest directory to
 .agents/harness/. A tree where both exist, or where .ynh-plugin is a
 symlink or holds one, is listed as left alone and nothing in it is moved.
 

@@ -190,7 +190,7 @@ Flags:
 
 Move a harness to the current manifest layout in place.
 
-Renames a deprecated .ynh-plugin/ directory to .agents/harness/. A tree
+Renames the old .ynh-plugin/ directory to .agents/harness/. A tree
 where both exist, or where .ynh-plugin is or holds a symlink, is listed as
 left alone and nothing in it is moved or merged.
 

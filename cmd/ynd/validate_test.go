@@ -1475,7 +1475,7 @@ func TestValidateHarness_ReportsWhatWasChecked(t *testing.T) {
 	t.Chdir(dir)
 	hr := filepath.Join(dir, "h")
 	mkdirAll(t, filepath.Join(hr, "skills", "hello"))
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"), []byte(`{
+	writeFile(t, filepath.Join(hr, ".agents", "harness", "plugin.json"), []byte(`{
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "h", "version": "0.1.0",
   "includes": [{"git": "https://github.com/eyelock/ynm", "pick": ["skills/ynm-memory"]}],
@@ -1495,7 +1495,7 @@ func TestValidateHarness_ReportsWhatWasChecked(t *testing.T) {
 	for _, want := range []string{
 		": valid",
 		"checked:",
-		"manifest     " + filepath.Join(hr, ".ynh-plugin", "plugin.json") + " against https://eyelock.github.io/ynh/schema/plugin.schema.json",
+		"manifest     " + filepath.Join(hr, ".agents", "harness", "plugin.json") + " against https://eyelock.github.io/ynh/schema/plugin.schema.json",
 		"includes     https://github.com/eyelock/ynm pick skills/ynm-memory",
 		"mcp_servers  ynm runs `ynm serve`",
 		"hooks        on_stop runs `ynm hook stop`",
@@ -1508,10 +1508,10 @@ func TestValidateHarness_ReportsWhatWasChecked(t *testing.T) {
 	}
 }
 
-// A manifest split across .agents/harness and .ynh-plugin fails validation,
-// naming each file that sits away from plugin.json. Trees kept in one
-// directory are unaffected.
-func TestValidateHarness_SplitManifestDir(t *testing.T) {
+// ynd validate does not read .ynh-plugin: a tree that keeps its manifest
+// there, or in both directories, fails validation with the reason and the fix
+// (#404). Only a tree in .agents/harness alone is valid.
+func TestValidateHarness_LegacyManifestDir(t *testing.T) {
 	const manifest = `{"$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json", "name": "h", "version": "0.1.0"}`
 	const installed = `{"source_type":"local","source":"/src","installed_at":"now"}`
 	cases := []struct {
@@ -1525,8 +1525,10 @@ func TestValidateHarness_SplitManifestDir(t *testing.T) {
 			files: map[string]string{".agents/harness/plugin.json": manifest, ".agents/harness/installed.json": installed},
 		},
 		{
-			name:  "legacy only",
-			files: map[string]string{".ynh-plugin/plugin.json": manifest, ".ynh-plugin/installed.json": installed},
+			name:    "legacy only",
+			files:   map[string]string{".ynh-plugin/plugin.json": manifest, ".ynh-plugin/installed.json": installed},
+			wantErr: true,
+			want:    []string{"keeps its manifest in .ynh-plugin/", "which ynh no longer reads; move it with: ynd migrate"},
 		},
 		{
 			name: "siblings split from plugin.json",
@@ -1536,18 +1538,13 @@ func TestValidateHarness_SplitManifestDir(t *testing.T) {
 				".ynh-plugin/marketplace.json": `{"name":"reg","owner":{"name":"o"},"harnesses":[]}`,
 			},
 			wantErr: true,
-			want: []string{
-				".ynh-plugin/installed.json is split from .agents/harness/plugin.json; move it to .agents/harness/installed.json",
-				".ynh-plugin/marketplace.json is split from .agents/harness/plugin.json; move it to .agents/harness/marketplace.json",
-			},
+			want:    []string{"cannot be moved automatically", "both .agents/harness and .ynh-plugin exist"},
 		},
 		{
-			name:    "shadowed plugin.json",
+			name:    "both plugin.json",
 			files:   map[string]string{".agents/harness/plugin.json": manifest, ".ynh-plugin/plugin.json": manifest},
 			wantErr: true,
-			want: []string{
-				"both .agents/harness/plugin.json and .ynh-plugin/plugin.json exist; .agents/harness wins and .ynh-plugin/plugin.json is ignored, so remove it",
-			},
+			want:    []string{"cannot be moved automatically", "nothing was merged"},
 		},
 	}
 	for _, tc := range cases {
@@ -1569,9 +1566,6 @@ func TestValidateHarness_SplitManifestDir(t *testing.T) {
 				if !strings.Contains(out, want) {
 					t.Errorf("output missing %q:\n%s", want, out)
 				}
-			}
-			if !tc.wantErr && strings.Contains(out, "split from") {
-				t.Errorf("a tree in one directory must not be reported as split:\n%s", out)
 			}
 		})
 	}

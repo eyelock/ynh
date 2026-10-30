@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -78,7 +77,7 @@ func cmdValidate(args []string) error {
 			return fmt.Errorf("validation failed")
 		}
 		fmt.Println("No harness directories found.")
-		fmt.Println("A harness requires .agents/harness/plugin.json (or the deprecated .ynh-plugin/plugin.json, which ynd migrate moves).")
+		fmt.Println("A harness requires .agents/harness/plugin.json.")
 		return nil
 	}
 
@@ -165,11 +164,14 @@ func validateFile(path string) error {
 }
 
 // isHarnessRoot reports whether dir is a harness, including one whose only
-// manifest is the legacy .harness.json: validateHarness reports that as an
-// issue rather than skipping the tree as manifest-less. Read only: validate
-// never converts a tree (#406).
+// manifest is the legacy .harness.json or whose manifest directory is the
+// legacy .ynh-plugin/: validateHarness reports that as an issue rather than
+// skipping the tree as manifest-less. Read only: validate never converts a
+// tree (#406).
 func isHarnessRoot(dir string) bool {
-	return plugin.IsPluginDir(dir) || migration.LegacyHarnessManifest(dir) != nil
+	return plugin.IsPluginDir(dir) ||
+		migration.LegacyHarnessManifest(dir) != nil ||
+		migration.LegacyManifestDir(dir) != nil
 }
 
 // harnessManifestPath returns the path to dir's plugin.json, or "" if it has
@@ -184,27 +186,6 @@ func harnessManifestPath(dir string) string {
 func isLegacyHarnessRoot(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, ".claude-plugin", "plugin.json"))
 	return err == nil
-}
-
-// misplacedManifestIssues reports each manifest file that sits outside the
-// directory holding plugin.json. A second plugin.json is shadowed and
-// ignored; any other file belongs beside the plugin.json that wins.
-func misplacedManifestIssues(dir string) []string {
-	md, ok := plugin.ManifestDir(dir)
-	if !ok {
-		return nil
-	}
-	var issues []string
-	for _, f := range plugin.MisplacedManifestFiles(dir) {
-		if path.Base(f) == plugin.PluginFile {
-			issues = append(issues, fmt.Sprintf("both %s/%s and %s exist; %s wins and %s is ignored, so remove it",
-				md, plugin.PluginFile, f, md, f))
-			continue
-		}
-		issues = append(issues, fmt.Sprintf("%s is split from %s/%s; move it to %s/%s",
-			f, md, plugin.PluginFile, md, path.Base(f)))
-	}
-	return issues
 }
 
 // findHarnessRoots walks root for ynh harnesses and Agent Plugins. Either
@@ -292,7 +273,9 @@ func validateHarness(dir string) error {
 	if isLegacyHarnessRoot(dir) && !isHarnessRoot(dir) {
 		issues = append(issues, "legacy format detected: migrate .claude-plugin/plugin.json and metadata.json to .agents/harness/plugin.json")
 	}
-	issues = append(issues, misplacedManifestIssues(dir)...)
+	if legacy := migration.LegacyManifestDir(dir); legacy != nil {
+		issues = append(issues, legacy.Error())
+	}
 
 	manifestPath := harnessManifestPath(dir)
 	const manifestLabel = ".agents/harness/plugin.json"
