@@ -218,8 +218,9 @@ escaped punctuation (so `\A`, `\z`, `\Q...\E`, `\pL`, `\x{41}`, octal), and a
 `]` first in a class (`[]a]`, `[^]a]`). Why: a matcher JavaScript rejects used
 to throw inside `execute.before` and block every tool call (ynw-kst.2). The
 plugin now compiles each matcher once in a `try`/`catch` and a bad one matches
-nothing (its hook never runs, reported on stderr), and syntax JavaScript reads
-differently without throwing would silently match the wrong tools; so the
+nothing (its hook never runs, reported on stderr; see Timeout below for when
+`opencode run` shows that), and syntax JavaScript reads differently without
+throwing would silently match the wrong tools; so the
 check refuses both kinds before the plugin is written. It is over-strict in
 one known case: any `[:` inside a class is taken for a POSIX class, so `[[:]`
 (the set of `[` and `:`, the same in both dialects) is refused; write `[\[:]`.
@@ -255,6 +256,15 @@ Contract declarations (read by `make check-vendor-parity`):
   CONFIRMED live on v2.2.3 (ynw-kst.7): a `before_tool` hook that sleeps 8 s
   and exits 2 was killed after its `timeout: 3` and the shell call went
   ahead; with `timeout: 15` it ran to the end and blocked the call.
+  The `[ynh hook] ...: did not run to completion (spawnSync sh ETIMEDOUT)`
+  report is `console.error` in the plugin, and `opencode run` shows it only
+  with both `--standalone` and `--print-logs` (CONFIRMED v2.2.3, ynw-kst.8:
+  the hook fired and was killed in every run, and the report appeared
+  only with both flags). Without `--standalone` the plugin runs in the
+  background service, whose stderr is not shown (`--help`: "server logs
+  require --standalone"). The other `[ynh hook]` reports (bad matcher, exit
+  other than 0 and 2) use the same `console.error`, so the same holds;
+  only the timeout was checked live.
 - Session-start context: `unsupported:`. `on_session_start` runs from an
   event-stream subscriber, which cannot add context; its stdout is discarded.
 - Matchers: honoured on `execute.before` / `execute.after` only
