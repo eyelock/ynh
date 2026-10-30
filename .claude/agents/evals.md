@@ -457,7 +457,7 @@ ynh install /tmp/ynh-tutorial/sensor-harness   # ← real ~/.ynh gets polluted
 
 Many tutorials do not require network access or vendor CLIs and must be run:
 
-- **Hooks** (`hooks.md`): Create a harness with hooks defined in plugin.json, run `ynd validate`, `ynd preview -v claude -o /tmp/out`, and verify hook config appears in output. No vendor CLI needed.
+- **Hooks** (`hooks.md`): Create a harness with hooks defined in plugin.json, run `ynd validate`, `ynd preview -v claude -o /tmp/out`, and verify hook config appears in output. No vendor CLI needed. The tutorial also adds an `on_session_end` hook with `--timeout 10` and previews it for Claude, Copilot, Codex and Cursor, and exports it for Claude: the Codex clamp, Cursor matcher and Claude export warnings are printed on stderr and the blocks redirect `2>&1`, so check them against the expected lines. The manual test plan's "Live Vendor Checks: hooks" section needs real vendor CLIs: do not run it, and do not count it.
 - **MCP servers** (`mcp-servers.md`): Same pattern: define mcp_servers, validate, preview. Output is local assembly only.
 - **Profiles** (`profiles.md`): Create harness with profiles, run `ynd preview --profile <name>`, and verify merged output. Fully local.
 - **Focus** (`focus.md`): Create harness with focus entries, run `ynd preview --focus <name>`, and verify prompt + profile. Fully local.

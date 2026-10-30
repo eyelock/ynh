@@ -175,7 +175,10 @@ var subcommandHelp = map[string]subHelp{
 		Usage:   "ynh profile hook add <harness> <profile> <event> <command> [flags]",
 		Summary: "Add a hook to a profile.",
 		Args:    []argHelp{harnessArg, profileArg, {"<event>", "Lifecycle event"}, {"<command>", "Command the vendor runs"}},
-		Flags:   []flagHelp{{"--matcher <pattern>", "Only fire for tools matching this pattern"}},
+		Flags: []flagHelp{
+			{"--matcher <pattern>", "Only fire for tools matching this pattern"},
+			{"--timeout <seconds>", "Most seconds the vendor lets the hook run, 1 to 3600; a vendor without a timeout field warns and uses its default"},
+		},
 		Parsers: []string{"cmdProfileHookAdd"},
 	},
 	"profile hook remove": {
@@ -235,7 +238,10 @@ var subcommandHelp = map[string]subHelp{
 		Usage:   "ynh hook add <harness> <event> <command> [flags]",
 		Summary: "Add a hook the vendor runs at a lifecycle event.",
 		Args:    []argHelp{harnessArg, {"<event>", "Lifecycle event"}, {"<command>", "Command the vendor runs"}},
-		Flags:   []flagHelp{{"--matcher <pattern>", "Only fire for tools matching this pattern"}},
+		Flags: []flagHelp{
+			{"--matcher <pattern>", "Only fire for tools matching this pattern"},
+			{"--timeout <seconds>", "Most seconds the vendor lets the hook run, 1 to 3600; a vendor without a timeout field warns and uses its default"},
+		},
 		Parsers: []string{"cmdHookAdd"},
 	},
 	"hook remove": {

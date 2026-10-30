@@ -92,6 +92,7 @@ type composeDelegate struct {
 type composeHook struct {
 	Command string `json:"command"`
 	Matcher string `json:"matcher,omitempty"`
+	Timeout int    `json:"timeout,omitempty"`
 }
 
 type composeMCP struct {
@@ -389,6 +390,7 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 				ch = append(ch, composeHook{
 					Command: e.Command,
 					Matcher: e.Matcher,
+					Timeout: e.Timeout,
 				})
 			}
 			hooks[event] = ch
@@ -424,7 +426,7 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 			for event, entries := range p.Hooks {
 				ch := make([]composeHook, len(entries))
 				for i, e := range entries {
-					ch[i] = composeHook{Command: e.Command, Matcher: e.Matcher}
+					ch[i] = composeHook{Command: e.Command, Matcher: e.Matcher, Timeout: e.Timeout}
 				}
 				cp.Hooks[event] = ch
 			}

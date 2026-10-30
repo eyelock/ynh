@@ -488,7 +488,8 @@
           "after_tool",
           "before_prompt",
           "on_stop",
-          "on_session_start"
+          "on_session_start",
+          "on_session_end"
         ]
       },
       "additionalProperties": {
@@ -506,6 +507,12 @@
             },
             "matcher": {
               "type": "string"
+            },
+            "timeout": {
+              "description": "Most seconds the vendor lets the hook run. Written to the vendor's own timeout field; a vendor without one warns and uses its default. SessionEnd is capped by Claude Code (60) and Codex (3).",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3600
             }
           }
         }

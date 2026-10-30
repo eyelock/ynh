@@ -2,6 +2,7 @@
 
 ## Documentation URLs
 
+- Hooks: https://cursor.com/docs/hooks
 - Plugin Template: https://github.com/cursor/plugin-template
 - Official Plugins Repo: https://github.com/cursor/plugins
 - Marketplace: https://cursor.com/marketplace
@@ -60,17 +61,52 @@ project root" (CONFIRMED 2026-10-04, cursor.com/docs/hooks), `launchCursor` star
 agent in the run dir, and `assembler.WriteSessionHooks` copies the script to the run dir's
 root (#495; see docs/hooks.md "Hook script paths").
 
-## Hook Events (25 — same as Claude Code)
+## Hook Events (18 agent events, plus Tab and app-lifecycle ones; NOT the same as Claude Code)
 
-SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest, PermissionDenied,
-PostToolUse, PostToolUseFailure, Notification, SubagentStart, SubagentStop,
-TaskCreated, TaskCompleted, Stop, StopFailure, TeammateIdle, InstructionsLoaded,
-ConfigChange, CwdChanged, FileChanged, WorktreeCreate, WorktreeRemove,
-PreCompact, PostCompact, Elicitation, ElicitationResult, SessionEnd
+Agent: sessionStart, sessionEnd, preToolUse, postToolUse, postToolUseFailure,
+subagentStart, subagentStop, beforeShellExecution, afterShellExecution,
+beforeMCPExecution, afterMCPExecution, beforeReadFile, afterFileEdit,
+beforeSubmitPrompt, preCompact, stop, afterAgentResponse, afterAgentThought.
+Tab: beforeTabFileRead, afterTabFileEdit. App lifecycle: workspaceOpen.
+(cursor.com/docs/hooks, checked 2026-10-30.) Event names are camelCase; Claude's
+PascalCase names appear in Cursor only as matcher values (`Stop`, `UserPromptSubmit`).
+
+ynh maps six: `before_tool` preToolUse, `after_tool` postToolUse, `before_prompt`
+beforeSubmitPrompt, `on_stop` stop, `on_session_start` sessionStart, `on_session_end`
+sessionEnd. before_tool and after_tool used to map to beforeShellExecution and
+afterFileEdit (shell commands and file edits only); preToolUse and postToolUse fire for
+any tool (Shell, Read, Write, Grep, Delete, Task, MCP), so the events now mean what they
+mean on Claude and Codex.
+
+Matcher (regex; empty or `*` matches everything): preToolUse, postToolUse and
+postToolUseFailure match the tool type (`Shell`, `Read`, `Write`, `Grep`, `Delete`,
+`Task`, `MCP:<tool_name>`); beforeShellExecution the full command; stop the word `Stop`;
+beforeSubmitPrompt the word `UserPromptSubmit`. **Not documented** for sessionStart,
+sessionEnd, preCompact, beforeMCPExecution. ynh writes a matcher on preToolUse and
+postToolUse only, and warns when a Claude tool name (`Bash`, `Edit`, `MultiEdit`) is used
+there, since Cursor calls the shell tool `Shell`.
+
+`sessionEnd`: fires when a composer conversation ends; fire-and-forget (response logged,
+not used); input `session_id`, `reason` (completed, aborted, error, window_close,
+user_close), `duration_ms`, `is_background_agent`, `final_status`, `error_message`.
+**Not available to cloud agents** (tied to the IDE session); fires on self-hosted workers
+when the session's claim is released. **CLI behaviour is not specified** in the docs.
+`sessionStart` is fire-and-forget too, not available to cloud agents.
+
+**CONFIRMED live (cursor-agent 2026.10.01-e373342, 2026-10-30, `ynh run -v cursor --trust --
+"<prompt>"`, CLI print mode, all six events in `.cursor/hooks.json`):** `sessionStart` and
+`sessionEnd` fire from the CLI; `preToolUse` with no matcher fires for every tool type seen
+(Grep, Read, Shell) and `postToolUse` fires; a `Shell` matcher fires only for shell calls and
+a `Bash` matcher never fires (ynh's warning printed); hook scripts run with the run dir as
+cwd, so a bare `./scripts/x.sh` works. **`beforeSubmitPrompt` and `stop` did NOT fire in print
+mode.** ynh warns when launching Cursor non-interactively (`LaunchNonInteractive`, and the
+agent loop's `--print` worker) with those hooks assembled (`vendor.CursorPrintModeWarnings`).
+UNVERIFIED: interactive CLI and IDE behaviour, including whether those two fire there.
 
 ## Hook Types
 
-command, http, prompt, agent (same as Claude Code)
+command, prompt (cursor.com/docs/hooks); the older "same as Claude" claim of http and
+agent types is not in the current page.
 
 ## Hook Formats (TWO different formats)
 
@@ -78,11 +114,11 @@ command, http, prompt, agent (same as Claude Code)
 ```json
 {
   "hooks": {
-    "beforeShellExecution": [
-      {"command": "./scripts/validate-shell.sh", "matcher": "rm|curl|wget"}
+    "preToolUse": [
+      {"command": "./scripts/validate-shell.sh", "matcher": "Shell"}
     ],
-    "afterFileEdit": [
-      {"command": "./scripts/format-code.sh"}
+    "postToolUse": [
+      {"command": "./scripts/format-code.sh", "matcher": "Write"}
     ],
     "stop": [
       {"command": "./scripts/audit.sh"}
@@ -118,14 +154,9 @@ file is `hooks/cursor.json` via the manifest `hooks` field, not the default
 `hooks/hooks.json`: Claude Code always loads a plugin root's `hooks/hooks.json`, so in
 a merged package it would read Cursor's format (#469).
 
-Full supported event list confirmed via docs: `sessionStart`, `sessionEnd`,
-`preToolUse`, `postToolUse`, `postToolUseFailure`, `subagentStart`, `subagentStop`,
-`beforeShellExecution`, `afterShellExecution`, `beforeMCPExecution`,
-`afterMCPExecution`, `beforeReadFile`, `afterFileEdit`, `beforeSubmitPrompt`,
-`preCompact`, `stop`, `afterAgentResponse`, `afterAgentThought` (plus Tab hooks
-`beforeTabFileRead`/`afterTabFileEdit` and app-lifecycle `workspaceOpen`, not
-currently mapped by ynh). ynh's canonical map covers five events:
-`before_tool`, `after_tool`, `before_prompt`, `on_stop` and `on_session_start`.
+The full event list is under "Hook Events" above. ynh's canonical map covers six events:
+`before_tool`, `after_tool`, `before_prompt`, `on_stop`, `on_session_start` and
+`on_session_end`.
 
 ## MCP Format
 

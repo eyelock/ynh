@@ -22,14 +22,19 @@ type pluginHookCase struct {
 	manifest string
 	hookFile string
 	event    string
+	// unnamed: the vendor finds hookFile by default, so its manifest does not
+	// name it (Copilot's hooks.json).
+	unnamed bool
 }
 
 var pluginHookCases = []pluginHookCase{
 	{vendor: "claude", manifest: ".claude-plugin/plugin.json", hookFile: "hooks/claude.json", event: "PreToolUse"},
 	{vendor: "codex", manifest: ".codex-plugin/plugin.json", hookFile: "hooks/codex.json", event: "PreToolUse"},
-	{vendor: "cursor", manifest: ".cursor-plugin/plugin.json", hookFile: "hooks/cursor.json", event: "beforeShellExecution"},
-	// Copilot emits no hooks of its own (see Copilot.GenerateHookConfig).
-	{vendor: "copilot", manifest: ".claude-plugin/plugin.json"},
+	{vendor: "cursor", manifest: ".cursor-plugin/plugin.json", hookFile: "hooks/cursor.json", event: "preToolUse"},
+	// Copilot reads hooks.json at the plugin root by default; its manifest is
+	// Claude's and names no hooks file of Copilot's (see
+	// Copilot.GeneratePluginHookConfig).
+	{vendor: "copilot", manifest: ".claude-plugin/plugin.json", hookFile: "hooks.json", event: "PreToolUse", unnamed: true},
 }
 
 func writeHooksHarness(t *testing.T) string {
@@ -114,7 +119,12 @@ func hookEvents(t *testing.T, path string) []string {
 func assertPluginHooks(t *testing.T, root string, cases []pluginHookCase) {
 	t.Helper()
 	var want []string
+	hasClaude := slices.ContainsFunc(cases, func(o pluginHookCase) bool { return o.vendor == "claude" })
 	for _, c := range cases {
+		if c.unnamed && hasClaude {
+			// Copilot loads the file Claude's manifest names, not its own.
+			continue
+		}
 		if c.hookFile != "" {
 			want = append(want, c.hookFile)
 		}
@@ -126,6 +136,15 @@ func assertPluginHooks(t *testing.T, root string, cases []pluginHookCase) {
 
 	for _, c := range cases {
 		got := manifestHooks(t, filepath.Join(root, c.manifest))
+		if c.unnamed && hasClaude {
+			continue
+		}
+		if c.unnamed {
+			if events := hookEvents(t, filepath.Join(root, c.hookFile)); !slices.Equal(events, []string{c.event}) {
+				t.Errorf("%s: %s events = %v, want [%s]", c.vendor, c.hookFile, events, c.event)
+			}
+			continue
+		}
 		if c.hookFile == "" {
 			// Copilot shares Claude's manifest, which may legitimately
 			// point at Claude's file when both are present.
@@ -306,8 +325,7 @@ func assertScriptWarnings(t *testing.T, warnings []string) {
 // A plugin hook anchors a "./" script to the plugin root (#483), so the
 // script must be in the plugin: an export copies each script a hook runs from
 // the harness tree to the same path in the plugin, and warns about any it
-// cannot (not in the harness, or outside it). A vendor whose plugin carries
-// no hooks (Copilot alone) gets no scripts and no warnings.
+// cannot (not in the harness, or outside it).
 func TestExport_PluginHookScripts(t *testing.T) {
 	srcDir := writeScriptHooksHarness(t)
 	for _, c := range pluginHookCases {
@@ -355,4 +373,152 @@ func TestExport_PluginHookScripts(t *testing.T) {
 			t.Errorf("missing.sh warned %d times, want once", n)
 		}
 	})
+}
+
+// A hook a vendor cannot carry as declared is reported on the export, never
+// dropped silently: Cursor documents a matcher for tool events only, so a
+// matcher on on_session_start is warned about, naming the event and the vendor.
+func TestExport_HookWarnings(t *testing.T) {
+	srcDir := t.TempDir()
+	writeJSON(t, filepath.Join(srcDir, plugin.PluginDir, plugin.PluginFile), map[string]any{
+		"name":    "hook-warn",
+		"version": "0.1.0",
+		"hooks": map[string]any{
+			"on_session_start": []any{map[string]string{"matcher": "startup", "command": "echo hi"}},
+			"on_session_end":   []any{map[string]string{"command": "echo bye"}},
+		},
+	})
+	for _, mode := range []ExportMode{ModePerVendor, ModeMerged, ModeAgentPlugin} {
+		results, err := Export(ExportOptions{SourceDir: srcDir, OutputDir: filepath.Join(t.TempDir(), "out"), Vendors: []string{"cursor", "claude"}, Mode: mode})
+		if err != nil {
+			t.Fatalf("mode %v: %v", mode, err)
+		}
+		var warnings []string
+		for _, r := range results {
+			warnings = append(warnings, r.Warnings...)
+		}
+		joined := strings.Join(warnings, "\n")
+		if !strings.Contains(joined, "on_session_start") || !strings.Contains(joined, "cursor") {
+			t.Errorf("mode %v: warnings = %q, want one naming on_session_start and cursor", mode, warnings)
+		}
+		if strings.Contains(joined, "claude") {
+			t.Errorf("mode %v: claude takes a SessionStart matcher, got %q", mode, warnings)
+		}
+	}
+}
+
+func writeMCPScriptHarness(t *testing.T) string {
+	t.Helper()
+	srcDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(srcDir, "scripts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "scripts", "serve.sh"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(srcDir, plugin.PluginDir, plugin.PluginFile), map[string]any{
+		"name":    "mcp-scripts",
+		"version": "0.1.0",
+		"hooks":   map[string]any{"on_stop": []any{map[string]string{"command": "./scripts/serve.sh"}}},
+		"mcp_servers": map[string]any{
+			"local":   map[string]any{"command": "./scripts/serve.sh", "cwd": "./scripts"},
+			"missing": map[string]any{"command": "./scripts/missing.sh"},
+		},
+	})
+	return srcDir
+}
+
+// An MCP server run by a "./" script is exported with the script in the
+// package and the command anchored to the vendor's plugin-root placeholder, as
+// hook commands are. Codex documents no placeholder, so it is left as written
+// and warned about. A script that is not in the harness is warned about too.
+func TestExport_MCPScripts(t *testing.T) {
+	srcDir := writeMCPScriptHarness(t)
+	cases := []struct {
+		vendor, file, want string
+	}{
+		{"claude", "mcp/claude.json", "${CLAUDE_PLUGIN_ROOT}/scripts/serve.sh"},
+		{"cursor", "mcp.json", "${CURSOR_PLUGIN_ROOT}/scripts/serve.sh"},
+		{"copilot", ".github/mcp.json", "${PLUGIN_ROOT}/scripts/serve.sh"},
+		{"codex", ".mcp.json", "./scripts/serve.sh"},
+	}
+	for _, c := range cases {
+		t.Run(c.vendor, func(t *testing.T) {
+			outputDir := t.TempDir()
+			results, err := Export(ExportOptions{SourceDir: srcDir, OutputDir: outputDir, Vendors: []string{c.vendor}, Mode: ModePerVendor})
+			if err != nil {
+				t.Fatal(err)
+			}
+			dir := filepath.Join(outputDir, c.vendor)
+			data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(c.file)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var doc struct {
+				MCPServers map[string]struct {
+					Command string `json:"command"`
+					Cwd     string `json:"cwd"`
+				} `json:"mcpServers"`
+			}
+			if err := json.Unmarshal(data, &doc); err != nil {
+				t.Fatal(err)
+			}
+			if got := doc.MCPServers["local"].Command; got != c.want {
+				t.Errorf("command = %q, want %q", got, c.want)
+			}
+			if _, err := os.Stat(filepath.Join(dir, "scripts", "serve.sh")); err != nil {
+				t.Errorf("script not in the package: %v", err)
+			}
+			joined := strings.Join(results[0].Warnings, "\n")
+			if !strings.Contains(joined, "mcp script ./scripts/missing.sh is not a file in the harness") {
+				t.Errorf("no missing-script warning: %q", results[0].Warnings)
+			}
+			if gotWarn := strings.Contains(joined, "documents no plugin-root placeholder"); gotWarn != (c.vendor == "codex") {
+				t.Errorf("placeholder warning = %v for %s: %q", gotWarn, c.vendor, results[0].Warnings)
+			}
+		})
+	}
+
+	t.Run("agent plugin keeps the specification's ./ and ships the script", func(t *testing.T) {
+		out := filepath.Join(t.TempDir(), "ap")
+		if _, err := Export(ExportOptions{SourceDir: srcDir, OutputDir: out, Vendors: []string{"copilot"}, Mode: ModeAgentPlugin}); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(filepath.Join(out, "mcp.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(data), `"command": "./scripts/serve.sh"`) {
+			t.Errorf("mcp.json:\n%s", data)
+		}
+		if _, err := os.Stat(filepath.Join(out, "scripts", "serve.sh")); err != nil {
+			t.Errorf("script not in the package: %v", err)
+		}
+	})
+}
+
+// In a merged package Copilot loads the hooks file the shared manifest names
+// (Claude's) and ignores a root hooks.json (CONFIRMED live, Copilot CLI
+// 1.0.105), so none is written when Claude is in the package; a Copilot-only
+// export or a merge without Claude keeps it.
+func TestExportMerged_CopilotRootHooksOnlyWithoutClaude(t *testing.T) {
+	srcDir := writeHooksHarness(t)
+	for _, tc := range []struct {
+		vendors  []string
+		wantRoot bool
+	}{
+		{[]string{"claude", "copilot"}, false},
+		{[]string{"copilot", "claude", "cursor"}, false},
+		{[]string{"copilot", "cursor"}, true},
+		{[]string{"copilot"}, true},
+	} {
+		out := filepath.Join(t.TempDir(), "m")
+		if _, err := Export(ExportOptions{SourceDir: srcDir, OutputDir: out, Vendors: tc.vendors, Mode: ModeMerged}); err != nil {
+			t.Fatal(err)
+		}
+		_, err := os.Stat(filepath.Join(out, "hooks.json"))
+		if (err == nil) != tc.wantRoot {
+			t.Errorf("%v: root hooks.json present = %v, want %v", tc.vendors, err == nil, tc.wantRoot)
+		}
+	}
 }
