@@ -178,6 +178,146 @@ Expected output includes `.codex/hooks.json` with Codex's three-level format (sa
 
 Note: Codex uses the same event names and three-level nesting as Claude — matcher objects wrapping hook arrays with `{"type": "command", ...}` entries.
 
+## Run something once per session, with a timeout
+
+`on_stop` fires at the end of **every turn**, so a ten-turn session runs it ten times. For work that belongs at the end of the **session**, such as flushing a log, use `on_session_end`. It is best-effort: vendors give it a short time budget, it cannot block, and it may not fire at all if the process is killed, so keep the script fast and idempotent. See [Hooks: on_session_end semantics](../hooks.md#on-session-end-semantics).
+
+Create a second harness with a per-turn report on `on_stop` and a `Bash` guard on `before_tool`:
+
+```bash
+mkdir -p /tmp/ynh-tutorial/end-harness/.agents/harness
+cat > /tmp/ynh-tutorial/end-harness/.agents/harness/plugin.json << 'EOF'
+{
+  "name": "end-demo",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "hooks": {
+    "before_tool": [
+      { "matcher": "Bash", "command": "/usr/local/bin/check-commands.sh" }
+    ],
+    "on_stop": [
+      { "command": "/usr/local/bin/turn-report.sh" }
+    ]
+  }
+}
+EOF
+echo "You are a careful assistant." > /tmp/ynh-tutorial/end-harness/instructions.md
+```
+
+Add the once-per-session hook from the command line, with a timeout of 10 seconds:
+
+```bash
+ynh hook add /tmp/ynh-tutorial/end-harness on_session_end /usr/local/bin/flush-log.sh --timeout 10
+```
+
+Expected: `Added hook (event on_session_end)`. The manifest now holds `{ "command": "/usr/local/bin/flush-log.sh", "timeout": 10 }` under `on_session_end`. `timeout` is a whole number of seconds from 1 to 3600, and ynd writes it to each vendor's own field.
+
+### Claude: `SessionEnd` with `timeout`
+
+```bash
+ynd preview /tmp/ynh-tutorial/end-harness -v claude -o /tmp/ynh-tutorial/end-claude
+cat /tmp/ynh-tutorial/end-claude/.claude/hooks/hooks.json
+```
+
+Expected: the hook file has `PreToolUse`, `SessionEnd` and `Stop` (`on_stop`). The `SessionEnd` entry carries the timeout:
+
+```json
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/bin/flush-log.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+```
+
+Claude Code gives `SessionEnd` hooks a shared budget of 1.5 seconds and ignores a plugin hook's `timeout` when setting it. `ynh run` therefore also sets `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` (here `10000`) in the Claude process it launches. A plugin you export cannot do that, as the export step below shows.
+
+### Copilot: `.copilot/hooks/hooks.json` with `timeoutSec`
+
+```bash
+ynd preview /tmp/ynh-tutorial/end-harness -v copilot -o /tmp/ynh-tutorial/end-copilot
+cat /tmp/ynh-tutorial/end-copilot/.copilot/hooks/hooks.json
+```
+
+Expected: Copilot's flat format with PascalCase events, `"version": 1`, and the timeout in Copilot's field name:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "type": "command",
+        "command": "/usr/local/bin/check-commands.sh",
+        "matcher": "Bash"
+      }
+    ],
+    "SessionEnd": [
+      {
+        "type": "command",
+        "command": "/usr/local/bin/flush-log.sh",
+        "timeoutSec": 10
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "/usr/local/bin/turn-report.sh"
+      }
+    ]
+  },
+  "version": 1
+}
+```
+
+### Codex: a cap, with a warning
+
+Codex lets a `SessionEnd` hook run for at most 3 seconds. A larger `timeout` is clamped to that cap, and the preview says so instead of changing it silently:
+
+```bash
+ynd preview /tmp/ynh-tutorial/end-harness -v codex -o /tmp/ynh-tutorial/end-codex 2>&1
+grep -A8 SessionEnd /tmp/ynh-tutorial/end-codex/.codex/hooks.json
+```
+
+Expected: the warning, then the `Preview written to` line, then the `SessionEnd` entry with `"timeout": 3`:
+
+```
+  warning: hook timeout 10s on on_session_end exceeds the 3s codex allows for it, so 3s is written
+Preview written to /tmp/ynh-tutorial/end-codex
+```
+
+### Cursor: a matcher that will not match
+
+Cursor matches `preToolUse` against its own tool types (`Shell`, `Read`, `Write`), not Claude's `Bash`. ynd writes the matcher as declared and warns:
+
+```bash
+ynd preview /tmp/ynh-tutorial/end-harness -v cursor -o /tmp/ynh-tutorial/end-cursor 2>&1
+```
+
+Expected output begins with the warning, then the `Preview written to` line:
+
+```
+  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+```
+
+Change the matcher to `Shell` for Cursor and the warning goes away.
+
+### Export: Claude cannot raise its own budget
+
+```bash
+ynd export /tmp/ynh-tutorial/end-harness -v claude -o /tmp/ynh-tutorial/end-export 2>&1
+```
+
+Expected: after the `Exported for claude` line, a warning that names the variable to set when you launch Claude Code with the exported plugin:
+
+```
+  warning: claude ignores a plugin hook's timeout for SessionEnd, so on_session_end will be cancelled after about 1.5 s; set CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS=10000 in the environment that launches Claude Code
+```
+
 ## Export hooks in a plugin
 
 A preview is a session layout. An exported plugin carries hooks where each vendor's plugin loader reads them: `hooks/<vendor>.json` at the plugin root, named by the `"hooks"` field of that vendor's manifest.
@@ -267,7 +407,7 @@ Hooks can also be added and removed from the CLI — useful for scripted setup a
 ```bash
 # Top-level hooks. The new hook is appended after the existing Bash hook (index 0),
 # so it lands at index 1, and that is the one to remove.
-ynh hook add /tmp/ynh-tutorial/hook-harness before_tool "echo guard" --matcher Write
+ynh hook add /tmp/ynh-tutorial/hook-harness before_tool "echo guard" --matcher Write --timeout 5
 # Added hook (event before_tool)
 ynh hook remove /tmp/ynh-tutorial/hook-harness before_tool 1
 # Removed hook 1 (event before_tool)
@@ -297,7 +437,8 @@ rm -rf /tmp/ynh-tutorial
 
 - Hooks are declared in `.agents/harness/plugin.json` under `hooks` using canonical event names
 - `ynd preview` shows the assembled vendor-native output without installing
-- Claude, Cursor, and Codex each use different event names and nesting structures
+- Claude, Cursor, and Codex each use different event names and nesting structures; Copilot has its own flat format
+- `on_stop` fires at the end of every turn, `on_session_end` once per session (best-effort), and `timeout` is written to each vendor's own field, with a warning wherever a vendor caps or ignores it
 - Hook scripts should exit with code 2 to block actions and include remediation instructions
 - `ynd diff` compares the assembled output across vendors side by side
 - Hooks can be edited from the CLI with `ynh hook add/remove` (top-level) and `ynh profile hook add/remove` (profile-level) — the same surface a GUI consumer drives

@@ -64,7 +64,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh profile ls <harness>` | `--format <text\|json>` |
 | `ynh profile add <harness> <name>` | |
 | `ynh profile remove <harness> <name>` | (refuses if any focus references it) |
-| `ynh profile hook add <harness> <profile> <event> <command>` | `--matcher` |
+| `ynh profile hook add <harness> <profile> <event> <command>` | `--matcher`, `--timeout <seconds>` (1 to 3600) |
 | `ynh profile hook remove <harness> <profile> <event> <index>` | |
 | `ynh profile mcp add <harness> <profile> <name>` | `--command`, `--url`, `--type`, `--arg`, `--env`, `--cwd`, `--header`, `--null` |
 | `ynh profile mcp remove <harness> <profile> <name>` | |
@@ -72,7 +72,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh profile include add <harness> <profile> <url>` | `--path`, `--ref`, `--replace` |
 | `ynh profile include remove <harness> <profile> <url>` | `--path` |
 | `ynh profile include update <harness> <profile> <url>` | `--from-path`, `--path`, `--ref` |
-| `ynh hook add <harness> <event> <command>` | `--matcher` — top-level harness hook |
+| `ynh hook add <harness> <event> <command>` | `--matcher`, `--timeout <seconds>` (1 to 3600); top-level harness hook |
 | `ynh hook remove <harness> <event> <index>` | top-level harness hook |
 | `ynh hook export <harness>` | `--target <settings\|local>` (required), `-v <vendor>` (claude), `--dry-run` — write a harness's hooks into a Claude settings file ([why](hooks.md#running-hooks-in-a-plain-claude-session)) |
 | `ynh mcp add <harness> <name>` | `--command`, `--url`, `--type`, `--arg`, `--env`, `--cwd`, `--header`, top-level harness MCP server (no `--null`; harness-level entries cannot be null) |
