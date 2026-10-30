@@ -13,14 +13,16 @@
 #
 # For every harness manifest the stand-ins hold, this clones the real
 # repository's default branch (what `ynh install` fetches) and compares the
-# fields that decide what a reader sees: name, description, default_vendor,
-# each include and delegate with its git, path, ref and picks, and which of the
-# harness's own files are present beside the manifest (instructions.md,
-# AGENTS.md, CLAUDE.md, rules/, skills/, agents/, commands/): a delegate's
-# agent file has an Instructions section, and an export an AGENTS.md, only when
-# the harness has instructions. Version, $schema and the files' contents are
-# not compared. The git address is compared without
-# its scheme or .git, since ynh treats those forms as one repository.
+# whole manifest, every field but version and $schema, so that a field the
+# stand-in lacks fails the check rather than passing unseen. Each git address,
+# wherever it appears (an include, a delegate), is compared without its scheme
+# or .git, since ynh treats those forms as one repository; a local include is
+# compared as it is. It also compares which of the harness's own files are
+# present beside the manifest (instructions.md, AGENTS.md, CLAUDE.md, rules/,
+# skills/, agents/, commands/): a delegate's agent file has an Instructions
+# section, and an export an AGENTS.md, only when the harness has instructions.
+# The files' contents are not compared. It fails when it finds no stand-in
+# harness to compare, since that means it checked nothing.
 #
 # It needs the network, so it is not part of `make check`. When it fails, update
 # the stand-in in scripts/eval-remotes.sh to match the real harness, and any
@@ -56,22 +58,22 @@ own_files() {
 	jq -cn '$ARGS.positional' --args ${present[@]+"${present[@]}"}
 }
 
-# normalise <manifest> <harness dir>: the fields compared, normalised so that
-# formatting and equivalent git addresses do not count as differences.
+# normalise <manifest> <harness dir>: the whole manifest less version and
+# $schema, with every git address normalised so that equivalent forms do not
+# count as differences, and the harness's own files beside it.
 normalise() {
 	jq -S --argjson own "$(own_files "$2")" '
 		def addr: sub("^(https?://|ssh://git@|git@)"; "") | sub("^github\\.com:"; "github.com/") | sub("\\.git$"; "") | sub("/$"; "");
-		def ref: {git: (.git | addr), path, ref, pick} | with_entries(select(.value != null));
 		{
-			name, description, default_vendor,
-			includes: [(.includes // [])[] | ref],
-			delegates_to: [(.delegates_to // [])[] | ref],
+			manifest: (del(.version, ."$schema")
+				| walk(if type == "object" and (.git | type) == "string" then .git |= addr else . end)),
 			own_files: $own
 		}' "$1"
 }
 
 fail=0 checked=0
 for repo_dir in "$SRC"/*/*; do
+	[ -d "$repo_dir" ] || continue
 	repo=${repo_dir#"$SRC"/}
 	manifests=$(cd "$repo_dir" && find . -path '*/.agents/harness/plugin.json' | sed 's|^\./||' | sort)
 	[ -n "$manifests" ] || continue
@@ -99,12 +101,12 @@ for repo_dir in "$SRC"/*/*; do
 			continue
 		fi
 		if ! normalise "$repo_dir/$m" "$repo_dir/$dir" > "$SB/stand-in.json" 2> "$SB/jq.log"; then
-			echo "  FAIL     $dir: the stand-in's manifest is not valid JSON: $(cat "$SB/jq.log")"
+			echo "  FAIL     $dir: could not read the stand-in's manifest: $(cat "$SB/jq.log")"
 			fail=1
 			continue
 		fi
 		if ! normalise "$real_m" "$real/$dir" > "$SB/real.json" 2> "$SB/jq.log"; then
-			echo "  FAIL     $dir: the real manifest is not valid JSON: $(cat "$SB/jq.log")"
+			echo "  FAIL     $dir: could not read the real manifest: $(cat "$SB/jq.log")"
 			fail=1
 			continue
 		fi
@@ -120,6 +122,12 @@ for repo_dir in "$SRC"/*/*; do
 done
 
 echo
+if [ "$checked" -eq 0 ]; then
+	echo "FAIL: found no stand-in harness (.agents/harness/plugin.json) under the stand-ins"
+	echo "scripts/eval-remotes.sh built, so nothing was compared. If the stand-ins moved,"
+	echo "update scripts/eval-stand-ins.sh to find them."
+	exit 1
+fi
 if [ "$fail" -ne 0 ]; then
 	echo "FAIL: a stand-in in scripts/eval-remotes.sh differs from the real harness."
 	echo "Update the stand-in (and any tutorial output that changes with it) to match."

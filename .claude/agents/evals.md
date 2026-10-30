@@ -405,14 +405,17 @@ the stand-in's count passed review. `make check-eval-stand-ins`
 (`scripts/eval-stand-ins.sh`) closes that gap. It builds the stand-ins, clones
 each repository that has stand-in harnesses from GitHub (its default branch,
 which is what `ynh install` fetches), and compares every stand-in harness with
-the real one: name, description, `default_vendor`, and each include and
-delegate with its git address, path, ref and picks, and which of the harness's
+the real one. It compares the whole manifest except `version` and `$schema`, so
+a field the stand-in lacks (a profile, a hook, an include's options, a local
+include) fails the check rather than passing unseen; each git address is
+compared without its scheme or `.git`. It also compares which of the harness's
 own files are present (`instructions.md`, `AGENTS.md`, `CLAUDE.md`, `rules/`,
 `skills/`, `agents/`, `commands/`). Those files change what a reader sees: a
 delegate's agent file has an Instructions section, and an export an
 `AGENTS.md`, only when the harness has instructions. It prints a diff for each
-harness that differs and fails. Version, `$schema` and the files' contents are
-not compared.
+harness that differs and fails. The files' contents are not compared. It also
+fails when it finds no stand-in harness at all, since then it has checked
+nothing: if the stand-ins move, update the script to find them.
 
 It needs the network, so it is not part of `make check` and an eval does not
 run it. It runs daily, and on any change to the stand-ins, in
