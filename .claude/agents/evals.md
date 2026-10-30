@@ -384,7 +384,7 @@ which is why this is done below the commands and not in them.
 
 | Repository | What the tutorials take from it |
 |------------|---------------------------------|
-| `eyelock/assistants` | `skills/<category>/skills/<name>` (`dev` has nine, `tech` three, `infra` four, `pause` two), the harnesses `ynh/david` (four includes), `ynh/planner`, `ynh/tester` and `ynh/researcher`, each with the real one's name, description, includes and delegates, and `plugins/media-management`. Branch `main` and tag `v1.0.0` |
+| `eyelock/assistants` | `skills/<category>/skills/<name>` (`dev` has nine, `tech` three, `infra` four, `pause` two), the harnesses `ynh/david` (four includes), `ynh/planner`, `ynh/tester` and `ynh/researcher`, each with the real one's name, description, includes and delegates and none of its own instructions, rules or skills (the real ones have none), and `plugins/media-management`. Branch `main` and tag `v1.0.0` |
 | `anthropics/skills` | `skills/frontend-design`, `skills/pdf`, `skills/docx` |
 | `vercel-labs/skills` | `skills/find-skills`, `skills/vercel-deploy` |
 | `agentplugins/agent-plugins-example` | A stand-in for the specification project's reference package: a root `plugin.json`, one skill (`migrate-agent-plugin`), `README.md` and `LICENSE` |
@@ -406,9 +406,13 @@ the stand-in's count passed review. `make check-eval-stand-ins`
 each repository that has stand-in harnesses from GitHub (its default branch,
 which is what `ynh install` fetches), and compares every stand-in harness with
 the real one: name, description, `default_vendor`, and each include and
-delegate with its git address, path, ref and picks. It prints a diff for each
-harness that differs and fails. Version, `$schema` and file layout are not
-compared.
+delegate with its git address, path, ref and picks, and which of the harness's
+own files are present (`instructions.md`, `AGENTS.md`, `CLAUDE.md`, `rules/`,
+`skills/`, `agents/`, `commands/`). Those files change what a reader sees: a
+delegate's agent file has an Instructions section, and an export an
+`AGENTS.md`, only when the harness has instructions. It prints a diff for each
+harness that differs and fails. Version, `$schema` and the files' contents are
+not compared.
 
 It needs the network, so it is not part of `make check` and an eval does not
 run it. It runs daily, and on any change to the stand-ins, in

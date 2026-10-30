@@ -14,8 +14,12 @@
 # For every harness manifest the stand-ins hold, this clones the real
 # repository's default branch (what `ynh install` fetches) and compares the
 # fields that decide what a reader sees: name, description, default_vendor,
-# and each include and delegate with its git, path, ref and picks. Version,
-# $schema and file layout are not compared. The git address is compared without
+# each include and delegate with its git, path, ref and picks, and which of the
+# harness's own files are present beside the manifest (instructions.md,
+# AGENTS.md, CLAUDE.md, rules/, skills/, agents/, commands/): a delegate's
+# agent file has an Instructions section, and an export an AGENTS.md, only when
+# the harness has instructions. Version, $schema and the files' contents are
+# not compared. The git address is compared without
 # its scheme or .git, since ynh treats those forms as one repository.
 #
 # It needs the network, so it is not part of `make check`. When it fails, update
@@ -38,16 +42,31 @@ if ! "$ROOT/scripts/eval-remotes.sh" "$SB" > "$SB/remotes.log" 2>&1; then
 fi
 SRC=$SB/remotes/src
 
-# The fields compared, normalised so that formatting and equivalent git
-# addresses do not count as differences.
+# own_files <harness dir>: which of the harness's own files are present, as a
+# JSON array.
+OWN_FILES="instructions.md AGENTS.md CLAUDE.md rules/ skills/ agents/ commands/"
+own_files() {
+	local f present=()
+	for f in $OWN_FILES; do
+		case $f in
+		*/) [ -d "$1/${f%/}" ] && present+=("$f") ;;
+		*) [ -f "$1/$f" ] && present+=("$f") ;;
+		esac
+	done
+	jq -cn '$ARGS.positional' --args ${present[@]+"${present[@]}"}
+}
+
+# normalise <manifest> <harness dir>: the fields compared, normalised so that
+# formatting and equivalent git addresses do not count as differences.
 normalise() {
-	jq -S '
+	jq -S --argjson own "$(own_files "$2")" '
 		def addr: sub("^(https?://|ssh://git@|git@)"; "") | sub("^github\\.com:"; "github.com/") | sub("\\.git$"; "") | sub("/$"; "");
 		def ref: {git: (.git | addr), path, ref, pick} | with_entries(select(.value != null));
 		{
 			name, description, default_vendor,
 			includes: [(.includes // [])[] | ref],
-			delegates_to: [(.delegates_to // [])[] | ref]
+			delegates_to: [(.delegates_to // [])[] | ref],
+			own_files: $own
 		}' "$1"
 }
 
@@ -79,12 +98,12 @@ for repo_dir in "$SRC"/*/*; do
 			fail=1
 			continue
 		fi
-		if ! normalise "$repo_dir/$m" > "$SB/stand-in.json" 2> "$SB/jq.log"; then
+		if ! normalise "$repo_dir/$m" "$repo_dir/$dir" > "$SB/stand-in.json" 2> "$SB/jq.log"; then
 			echo "  FAIL     $dir: the stand-in's manifest is not valid JSON: $(cat "$SB/jq.log")"
 			fail=1
 			continue
 		fi
-		if ! normalise "$real_m" > "$SB/real.json" 2> "$SB/jq.log"; then
+		if ! normalise "$real_m" "$real/$dir" > "$SB/real.json" 2> "$SB/jq.log"; then
 			echo "  FAIL     $dir: the real manifest is not valid JSON: $(cat "$SB/jq.log")"
 			fail=1
 			continue

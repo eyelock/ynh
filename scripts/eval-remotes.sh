@@ -56,7 +56,12 @@ description: Fixture skill $3 for the ynh tutorials.
 This is the $3 skill."
 }
 
-# harness <repo> <dir> <name> <description> [includes-json]: write a harness manifest.
+# harness <repo> <dir> <name> <description> [includes-json] [instructions]: write
+# a harness manifest, and <dir>/instructions.md only when [instructions] is
+# given. A harness's own files change what a reader sees (a delegate's agent
+# file has an Instructions section only when the delegate has instructions; an
+# export writes AGENTS.md only then), so a stand-in has only the files its real
+# harness has, and `make check-eval-stand-ins` compares which are present.
 harness() {
 	local inc=""
 	[ -n "${5:-}" ] && inc=",
@@ -69,7 +74,7 @@ harness() {
   \"description\": \"$4\",
   \"default_vendor\": \"claude\"$inc
 }"
-	file "$1" "$2/instructions.md" "You are the $3 harness. $4."
+	[ -z "${6:-}" ] || file "$1" "$2/instructions.md" "$6"
 }
 
 # publish <repo> <tag>: commit the working tree, tag it, and serve it as a bare repository.
@@ -112,7 +117,9 @@ inc() { # inc <path> <pick,...>
 	printf '\n    {"git": "github.com/eyelock/assistants", "path": "%s", "pick": [%s]}' "$1" "${picks%, }"
 }
 # The harnesses match the real ones on eyelock/assistants' default branch in
-# name, description, default_vendor, includes and delegates:
+# name, description, default_vendor, includes and delegates, and in which of
+# their own files they have (none of the four has instructions, rules, skills,
+# agents or commands of its own):
 # `make check-eval-stand-ins` compares them, and a difference is fixed here.
 harness $A ynh/david david "David's personal development persona with full skill set" \
 	"$(inc skills/dev dev-project,dev-quality,dev-review,dev-security,dev-backend,dev-ui,dev-debug),$(inc skills/tech go-lang),$(inc skills/infra gh-os-repo,terraform-backend-aws),$(inc skills/pause help-me-answer,take-a-moment)"
