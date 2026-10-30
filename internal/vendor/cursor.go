@@ -160,6 +160,12 @@ var cursorHookEventMap = map[string]string{
 	"on_session_end":   "sessionEnd",
 }
 
+// How on_session_start output reaches the model: CONFIRMED live (cursor-
+// agent 2026.10.01, 2026-10-30): plain stdout does NOT reach the model;
+// {"additional_context": "..."} does (cursor.com/docs/hooks). ynh wraps the
+// hook.
+var cursorSessionStartContext = "json-field:additional_context"
+
 // cursorUnsupportedHookEvents names the canonical events Cursor cannot
 // express, each with the reason. Empty: every canonical event maps.
 var cursorUnsupportedHookEvents = map[string]string{}
@@ -189,7 +195,9 @@ func (c *Cursor) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[st
 	if err != nil || data == nil {
 		return nil, err
 	}
-	return map[string][]byte{filepath.Join(".cursor", "hooks.json"): data}, nil
+	files := map[string][]byte{filepath.Join(".cursor", "hooks.json"): data}
+	sessionContextFiles(files, SessionContextScript, sessionContextMode("cursor"), hooks)
+	return files, nil
 }
 
 // GeneratePluginHookConfig writes the plugin hook file, hooks/cursor.json at
@@ -207,7 +215,9 @@ func (c *Cursor) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (
 	if err != nil || data == nil {
 		return nil, err
 	}
-	return map[string][]byte{pluginHookFile(c.Name()): data}, nil
+	files := map[string][]byte{pluginHookFile(c.Name()): data}
+	sessionContextFiles(files, SessionContextScript, sessionContextMode("cursor"), hooks)
+	return files, nil
 }
 
 // cursorHookDocument renders canonical hooks in Cursor's flat format, or nil
@@ -242,7 +252,7 @@ func cursorHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string)
 
 		var hookEntries []cursorHookEntry
 		for _, entry := range entries {
-			e := cursorHookEntry{Command: anchor(entry.Command), Timeout: hookTimeoutValue("cursor", event, entry.Timeout)}
+			e := cursorHookEntry{Command: sessionCommand(sessionContextMode("cursor"), event, entry.Command, anchor), Timeout: hookTimeoutValue("cursor", event, entry.Timeout)}
 			if cursorMatcherEvents[cursorEvent] {
 				e.Matcher = entry.Matcher
 			}

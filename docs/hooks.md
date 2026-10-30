@@ -27,6 +27,30 @@ ynh defines six canonical hook events. Each vendor translates these to its nativ
 
 `on_stop` and `on_session_end` are different events: a session of ten turns runs `on_stop` ten times and `on_session_end` once, if the vendor gets to run it at all.
 
+### on_session_start output becomes model context
+
+On every vendor, what an `on_session_start` hook prints reaches the model. **Write plain text to stdout**; ynh does the rest. A hook that prints a line of orientation, today's tasks or a wake block works the same on Claude Code, Codex, Copilot and Cursor.
+
+The vendors do not agree on how the output is read. Verified on 2026-10-30 with a hook printing a unique token and a one-shot prompt asking the model to repeat any token in its context:
+
+| Vendor | Plain stdout reaches the model? | The field that does | ynh |
+|--------|---------------------------------|---------------------|-----|
+| Claude Code | Yes | also `hookSpecificOutput.additionalContext` | writes the command as declared |
+| Codex | Per its docs ("Plain text on stdout is added as extra developer context"); **not verified live** | also `hookSpecificOutput.additionalContext` | writes the command as declared |
+| Copilot CLI 1.0.105 | No | `{"additionalContext": "..."}` | wraps the command |
+| Cursor (cursor-agent 2026.10.01) | No | `{"additional_context": "..."}` | wraps the command |
+
+On Copilot and Cursor ynh writes the hook as `sh <root>/hooks/ynh-session-context.sh <field> '<your command>'`. The wrapper is a small generated POSIX `sh` and `awk` script shipped inside the session layout and inside every exported package (`hooks/ynh-session-context.sh`), so it works on a machine where ynh is not installed, with no python or jq. It:
+
+- passes the hook payload on stdin to your command, keeps its stderr, and exits with its exit status;
+- turns your stdout into `{"<field>": "<stdout>"}`, escaping quotes, backslashes, newlines, tabs and control characters (UTF-8 passes through);
+- passes stdout through unchanged when it is already a JSON object, so a hook can still choose its own output;
+- emits nothing when your command prints nothing.
+
+In a package that Claude Code and Copilot share one hook file for, the wrapper emits both shapes at once. Other events are untouched.
+
+Each vendor declares how it delivers this as `<vendor>SessionStartContext` in its adapter (`plain`, `json-field:<name>` or `unsupported:<reason>`), and `make check-vendor-parity` requires it. A vendor that declares `unsupported` makes `ynd validate`, `ynd lint` and assembly warn that the hook's output does not reach the model there.
+
 ### on_session_end semantics
 
 `on_session_end` is for cleanup and bookkeeping that is worth doing and safe to lose: flush a log, write a summary, remove a scratch file. Do not put anything on it that must happen.

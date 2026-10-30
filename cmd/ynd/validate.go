@@ -319,6 +319,7 @@ func validateHarness(dir string) error {
 			issues = append(issues, validateHarnessMCPServers(hj)...)
 			issues = append(issues, validateHarnessProfiles(hj)...)
 			issues = append(issues, validateHarnessFocus(hj)...)
+			issues = append(issues, validateHarnessLaunchFocus(hj)...)
 			issues = append(issues, validateHarnessSensors(hj)...)
 			issues = append(issues, validateHarnessIncludes(hj)...)
 			wsIssues, wsNotes := validateHarnessWorkspace(dir, hj)
@@ -901,6 +902,31 @@ func validateProfileMCPServers(profile map[string]any) []string {
 	}
 
 	return issues
+}
+
+// validateHarnessLaunchFocus checks launch_focus: it must name a focus that
+// exists and has a prompt, because a bare `ynh run` sends that prompt as the
+// first message and a missing one would fail every launch.
+func validateHarnessLaunchFocus(hj map[string]any) []string {
+	raw, ok := hj["launch_focus"]
+	if !ok {
+		return nil
+	}
+	name, ok := raw.(string)
+	if !ok || name == "" {
+		return []string{"'launch_focus' must be a non-empty string naming a focus"}
+	}
+	focuses, _ := hj["focuses"].(map[string]any)
+	entry, found := focuses[name]
+	if !found {
+		return []string{fmt.Sprintf("launch_focus references undefined focus %q", name)}
+	}
+	if m, _ := entry.(map[string]any); m != nil {
+		if prompt, _ := m["prompt"].(string); prompt == "" {
+			return []string{fmt.Sprintf("launch_focus %q: the focus has no prompt to send", name)}
+		}
+	}
+	return nil
 }
 
 // validateHarnessFocus validates focus entries inside plugin.json.

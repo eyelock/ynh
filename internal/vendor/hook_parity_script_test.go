@@ -103,6 +103,15 @@ func TestHookEventParityScript(t *testing.T) {
 			editCopy(t, root, "internal/vendor/codex.go", "var codexHookTimeoutField = \"timeout\"", "var codexHookTimeoutField = \"\"")
 			editCopy(t, root, "internal/vendor/codex.go", "var codexHookTimeoutUnsupported = \"\"", "const codexHookTimeoutUnsupported = \"no such field\"")
 		}, ""},
+		{"session-start context declaration removed", func() {
+			editCopy(t, root, "internal/vendor/claude.go", "var claudeSessionStartContext = \"plain\"\n", "")
+		}, "claude: must declare <x>SessionStartContext"},
+		{"session-start context malformed", func() {
+			editCopy(t, root, "internal/vendor/cursor.go", "\"json-field:additional_context\"", "\"maybe\"")
+		}, "cursor: <x>SessionStartContext is \"maybe\""},
+		{"session-start context unsupported with a reason passes", func() {
+			editCopy(t, root, "internal/vendor/codex.go", "var codexSessionStartContext = \"plain\"", "var codexSessionStartContext = \"unsupported:no way\"")
+		}, ""},
 		{"new event in the schema only", func() {
 			editCopy(t, root, "docs/schema/plugin.schema.json", "\"on_session_end\"", "\"on_session_end\", \"on_compact\"")
 		}, "on_compact is neither mapped nor declared unsupported"},

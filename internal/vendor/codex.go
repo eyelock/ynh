@@ -165,6 +165,11 @@ var codexHookEventMap = map[string]string{
 	"on_session_end":   "SessionEnd",
 }
 
+// How on_session_start output reaches the model: Per
+// learn.chatgpt.com/docs/hooks: "Plain text on stdout is added as extra
+// developer context." UNVERIFIED live: Codex was not installed to test.
+var codexSessionStartContext = "plain"
+
 // codexUnsupportedHookEvents names the canonical events Codex cannot express,
 // each with the reason. Empty: every canonical event maps (Codex documents 12
 // events, learn.chatgpt.com/docs/hooks).

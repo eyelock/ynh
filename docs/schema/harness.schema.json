@@ -47,6 +47,11 @@
         }
       }
     },
+    "launch_focus": {
+      "description": "Name of the focus a bare `ynh run` (no --focus, no prompt) wakes with: interactive, the focus prompt as the first message, the focus's profile applied. Must name a key of focuses whose prompt is non-empty. Ignored by explicit --focus runs, delegation and `ynh agent run`.",
+      "type": "string",
+      "minLength": 1
+    },
     "focuses": {
       "description": "Named combinations of profile + prompt for repeatable AI execution.",
       "type": "object",

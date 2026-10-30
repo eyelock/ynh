@@ -40,7 +40,10 @@ type HarnessJSON struct {
 	Workspace []string           `json:"workspace,omitempty"`
 	Profiles  map[string]Profile `json:"profiles,omitempty"`
 	Focuses   map[string]Focus   `json:"focuses,omitempty"`
-	Sensors   map[string]Sensor  `json:"sensors,omitempty"`
+	// LaunchFocus names the focus a bare `ynh run` wakes with: no --focus and
+	// no prompt. It applies to nothing else (docs/focus.md, "Launch focus").
+	LaunchFocus string            `json:"launch_focus,omitempty"`
+	Sensors     map[string]Sensor `json:"sensors,omitempty"`
 
 	// SensorOverrides tunes sensors obtained from includes. Tolerance and
 	// ratchet only: an included sensor's observation belongs to whoever

@@ -124,6 +124,13 @@ func cmdRun(args []string) error {
 		ra.Prompt = focus.Prompt
 	}
 
+	// A bare launch wakes with the harness's launch_focus. Only this command
+	// reads it: delegates and `ynh agent run` never come through here.
+	launch, profileName, err := resolveLaunchFocus(p, &ra, profileName)
+	if err != nil {
+		return err
+	}
+
 	// Resolve profile
 	if profileName != "" {
 		p, err = harness.ResolveProfile(p, profileName)
@@ -132,7 +139,6 @@ func cmdRun(args []string) error {
 		}
 	}
 
-	prompt := ra.Prompt
 	vendorArgs := ra.VendorArgs
 	action := ra.Action
 
@@ -161,6 +167,14 @@ func cmdRun(args []string) error {
 	if err != nil {
 		return err
 	}
+
+	// A vendor that cannot take a first message starts bare, and says so.
+	if launch.Bare && !launchFocusPromptSupported(adapter) {
+		fmt.Fprintf(os.Stderr, "warning: launch_focus %q: %s cannot start a session with a first message, so its prompt is not sent and the session starts bare with the focus's profile only\n", launch.Name, adapter.Name())
+		ra.Prompt = ""
+	}
+
+	prompt := ra.Prompt
 
 	// Redirect the vendor CLI at the backend named in the spec, if any.
 	// No-op otherwise — vendor talks to its normal cloud API.
@@ -402,9 +416,62 @@ func cmdRun(args []string) error {
 		vendorArgs = append(wsArgs, vendorArgs...)
 
 		// Launch
+		if launch.Bare {
+			fmt.Fprintf(os.Stderr, "Using launch_focus %q (pass --focus or a prompt to run something else)\n", launch.Name)
+		}
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
 		return launchSession(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
 	}
+}
+
+// launchFocus is the outcome of resolveLaunchFocus.
+type launchFocus struct {
+	// Name is the manifest's launch_focus that applies to this run, or "".
+	Name string
+	// Bare is true when this is a bare launch: no focus and no prompt, so the
+	// launch focus's prompt is sent and the session is interactive.
+	Bare bool
+}
+
+// resolveLaunchFocus applies the harness's launch_focus to a run that names no
+// focus of its own (docs/focus.md, "Launch focus"):
+//
+//   - an explicit focus (--focus or YNH_FOCUS) is not touched: the launch focus
+//     is not involved, and its interactivity does not leak into it;
+//   - otherwise the launch focus's profile applies, unless a profile was named
+//     explicitly, which wins;
+//   - with no prompt either (a bare launch) its prompt becomes the first message
+//     and the session is interactive; with a prompt, the prompt stands and
+//     interactivity is whatever the caller asked for.
+//
+// It returns the profile to resolve. ra is changed only for a bare launch.
+func resolveLaunchFocus(p *harness.Harness, ra *runArgs, profileName string) (launchFocus, string, error) {
+	if ra.FocusFlag != "" || p.LaunchFocus == "" || ra.Action != "" {
+		return launchFocus{}, profileName, nil
+	}
+	f, ok := p.Focuses[p.LaunchFocus]
+	if !ok {
+		return launchFocus{}, "", fmt.Errorf("launch_focus %q not defined in harness focuses", p.LaunchFocus)
+	}
+	if profileName == "" {
+		profileName = f.Profile
+	}
+	if ra.Prompt != "" {
+		return launchFocus{Name: p.LaunchFocus}, profileName, nil
+	}
+	if f.Prompt == "" {
+		return launchFocus{}, "", fmt.Errorf("launch_focus %q has no prompt", p.LaunchFocus)
+	}
+	ra.Prompt = f.Prompt
+	ra.Interactive = true
+	return launchFocus{Name: p.LaunchFocus, Bare: true}, profileName, nil
+}
+
+// launchFocusPromptSupported reports whether the vendor can start an
+// interactive session with a first message.
+func launchFocusPromptSupported(adapter vendor.Adapter) bool {
+	ip, ok := adapter.(initialPrompter)
+	return ok && ip.SupportsInitialPrompt()
 }
 
 // launchSession starts the vendor CLI: a resume when ra.Resume finds a session,

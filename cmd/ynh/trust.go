@@ -180,6 +180,10 @@ type trustSet struct {
 	// digest covers them. Only the harness's own list: a profile does not
 	// change it.
 	Workspace []string
+	// LaunchFocus is the focus every bare launch wakes with, or nil. Its
+	// prompt is the first message of every such session, so it steers the
+	// model as much as a command does, and the digest covers it.
+	LaunchFocus *launchFocusReport
 	// Problems is why the set could not be read completely: an include that
 	// is not cached, a merge that refuses. A set with problems is partial, and
 	// a partial set must never be digested or reported as the whole.
@@ -191,7 +195,33 @@ func (t trustSet) count() int { return len(t.Sensors) + len(t.Hooks) + len(t.MCP
 // reviewable counts everything there is to review: the executable strings
 // and the workspace folders. count() stays executables only, because the
 // COMMANDS column and a record's Commands mean commands.
-func (t trustSet) reviewable() int { return t.count() + len(t.Workspace) }
+func (t trustSet) reviewable() int {
+	n := t.count() + len(t.Workspace)
+	if t.LaunchFocus != nil {
+		n++
+	}
+	return n
+}
+
+// launchFocusReport is a harness's launch_focus as the operator reviews it.
+type launchFocusReport struct {
+	Name    string `json:"name"`
+	Profile string `json:"profile,omitempty"`
+	Prompt  string `json:"prompt"`
+}
+
+// launchFocusFor returns the harness's launch focus, or nil when it declares
+// none or names one that does not exist (`ynd validate` reports that).
+func launchFocusFor(p *harness.Harness) *launchFocusReport {
+	if p.LaunchFocus == "" {
+		return nil
+	}
+	f, ok := p.Focuses[p.LaunchFocus]
+	if !ok {
+		return &launchFocusReport{Name: p.LaunchFocus}
+	}
+	return &launchFocusReport{Name: p.LaunchFocus, Profile: f.Profile, Prompt: f.Prompt}
+}
 
 var envRefRe = regexp.MustCompile(`^\$\{[A-Za-z_][A-Za-z0-9_]*\}$`)
 
@@ -359,6 +389,7 @@ func harnessExecutables(p *harness.Harness) trustSet {
 	if len(p.Workspace) > 0 {
 		set.Workspace = slices.Sorted(slices.Values(p.Workspace))
 	}
+	set.LaunchFocus = launchFocusFor(p)
 	views, problems := runViews(p)
 	set.Problems = problems
 	baseSensors, baseHooks, baseMCP := map[string]bool{}, map[string]bool{}, map[string]bool{}
@@ -439,6 +470,14 @@ func executablesDigest(set trustSet) string {
 	for _, w := range set.Workspace {
 		field(h, "workspace")
 		field(h, w)
+	}
+	// Likewise only when declared, so a harness without launch_focus keeps its
+	// digest.
+	if lf := set.LaunchFocus; lf != nil {
+		field(h, "launch_focus")
+		field(h, lf.Name)
+		field(h, lf.Profile)
+		field(h, lf.Prompt)
 	}
 	return "sha256:" + hex.EncodeToString(h.Sum(nil))[:16]
 }
@@ -538,6 +577,9 @@ type trustStatus struct {
 	// become of them here. Filled by `trust show` only, which has the
 	// operator's allow-list and working directory to hand.
 	Workspace *workspaceReport `json:"workspace,omitempty"`
+	// LaunchFocus is the focus a bare `ynh run` wakes with. Covered by Digest.
+	// Filled by `trust show` only.
+	LaunchFocus *launchFocusReport `json:"launch_focus,omitempty"`
 }
 
 const (
@@ -704,6 +746,7 @@ func cmdTrustShow(args []string, stdout, stderr io.Writer) error {
 	}
 	st := trustStatusFor(name, p, store, os.Environ())
 	st.Workspace = workspaceReportFor(p)
+	st.LaunchFocus = launchFocusFor(p)
 
 	if format == "json" {
 		return writeJSON(stdout, st)
@@ -819,7 +862,7 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 		_, _ = fmt.Fprintf(w, "  accepted: %s on %s\n", s.AcceptedDigest, s.AcceptedAt)
 	}
 
-	if len(s.Executables)+len(s.Hooks)+len(s.MCPServers) == 0 && s.Workspace == nil {
+	if len(s.Executables)+len(s.Hooks)+len(s.MCPServers) == 0 && s.Workspace == nil && s.LaunchFocus == nil {
 		_, _ = fmt.Fprintln(w, "\nThis harness declares no commands.")
 		return nil
 	}
@@ -866,6 +909,10 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 	}
 
 	printWorkspaceSection(w, s.Workspace)
+
+	if lf := s.LaunchFocus; lf != nil {
+		_, _ = fmt.Fprintf(w, "\nLaunch focus, the first message of every bare 'ynh run' (a prompt it is given replaces this one):\n\n  %s%s\n    %q\n", lf.Name, scopeSuffix(lf.Profile), lf.Prompt)
+	}
 
 	if len(s.UndeclaredEnv) > 0 {
 		_, _ = fmt.Fprintf(w, "\nThese commands inherit your full environment. %d variable(s) reach them\n"+

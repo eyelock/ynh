@@ -13,6 +13,8 @@
 #                                    <x>UnsupportedHookEvents canonical -> reason
 #                                    <x>HookTimeoutField      native timeout field, or ""
 #                                    <x>HookTimeoutUnsupported reason, required when the field is ""
+#                                    <x>SessionStartContext   how on_session_start output reaches the model:
+#                                                             plain | json-field:<name> | unsupported:<reason>
 #
 # The schema, ValidHookEvents, and each vendor's two maps are plain Go and JSON
 # literals, so this is a text check: no build, no vendor CLI.
@@ -113,8 +115,18 @@ for v in "$@"; do
 		echo "  CONFLICT $v: has a timeout field ($tfield) and also declares it unsupported"
 		bad=1
 	fi
+	# A vendor says how on_session_start output becomes model context.
+	sdecl=$(grep -cE '^(const |var )?[a-z]+SessionStartContext = "' "$src" || true)
+	sval=$(sed -nE 's/^(const |var )?[a-z]+SessionStartContext = "([^"]*)".*/\2/p' "$src")
+	if [ "$sdecl" -ne 1 ]; then
+		echo "  MISSING  $v: must declare <x>SessionStartContext exactly once (plain, json-field:<name> or unsupported:<reason>)"
+		bad=1
+	elif ! printf '%s\n' "$sval" | grep -qE '^(plain|json-field:[A-Za-z_]+|unsupported:.+)$'; then
+		echo "  MISSING  $v: <x>SessionStartContext is \"$sval\", want plain, json-field:<name> or unsupported:<reason>"
+		bad=1
+	fi
 	if [ "$bad" -eq 0 ]; then
-		echo "  ok       $v: $(printf '%s\n' "$events" | wc -l | tr -d ' ') events accounted for, timeout ${tfield:-unsupported}"
+		echo "  ok       $v: $(printf '%s\n' "$events" | wc -l | tr -d ' ') events accounted for, timeout ${tfield:-unsupported}, session-start context $sval"
 	else
 		fail=1
 	fi
