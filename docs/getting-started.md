@@ -113,10 +113,18 @@ ynh install ./david
 
 ## Passing Vendor Flags
 
-All flags except `-v`, `--install`, and `--clean` are passed through to the vendor CLI. Use `--` to separate vendor flags from the prompt:
+All flags except `-v`, `--install`, and `--clean` are passed through to the vendor CLI, in order. ynh cannot know which vendor flags take a value, so it reads a bare word by where it stands: a word right after a passed-through flag stays with that flag as its value, and the last bare word is the prompt.
+
+```bash
+david --model opus --max-turns 1 "fix this bug"   # --model opus --max-turns 1, prompt "fix this bug"
+david --verbose "fix this bug"                    # --verbose, prompt "fix this bug"
+```
+
+Use `--` to separate vendor flags from the prompt, or write a value with `=`, whenever the last word would otherwise be read the wrong way, such as a flag with a value and no prompt:
 
 ```bash
 david --model opus -- "fix this bug"
+david --model=opus                                # no prompt: "--model opus" would make opus the prompt
 david -v codex -- "refactor auth"
 ```
 

@@ -102,8 +102,10 @@ Flags:
   --install                Install symlinks for the vendor in this project
   --clean                  Remove symlinks for the vendor in this project
 
-All other flags are passed through to the vendor CLI. Use -- to separate the
-prompt from flags.
+All other flags are passed through to the vendor CLI, in order. A bare word
+right after a passed-through flag is that flag's value ("--model haiku"),
+except the last bare word, which is the prompt. Use "--model=haiku", or --
+before the prompt, when that would read your words the wrong way.
 
 Examples:
   ynh run local/david

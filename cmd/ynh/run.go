@@ -746,18 +746,23 @@ func resolveVendor(flag string, p *harness.Harness, cfg *config.Config) (string,
 //   - --install     : install symlinks for the vendor
 //   - --clean       : remove symlinks for the vendor
 //
-// All other arguments are passed through to the vendor CLI verbatim.
-// Use -- to separate vendor flags from the prompt when vendor flags take values:
+// All other arguments are passed through to the vendor CLI verbatim, in order:
 //
 //	ynh run david "simple prompt"
 //	ynh run david --verbose "simple prompt"
+//	ynh run david --model opus --max-turns 1 "fix this bug"
 //	ynh run david --model opus -- "fix this bug"
 //	ynh run david -v codex -- "deploy it"
 //	ynh run david -v cursor --install
 //
-// Without --, the first non-flag argument is treated as the prompt. Flag values
-// like "opus" in "--model opus" would be mistaken for the prompt, so use -- when
-// vendor flags take values.
+// Without --, ynh cannot know which vendor flags take a value, so it reads a
+// bare word by where it stands. After the harness name, a bare word that
+// directly follows a passed-through flag (one without "=") stays with that
+// flag as its value, unless it is the last argument: the last bare word is
+// the prompt. Any other bare word is the prompt if there is none yet. So
+// "--model opus --max-turns 1 'fix it'" forwards "--model opus --max-turns 1"
+// and prompts "fix it", while "--model opus" on its own makes "opus" the
+// prompt. Write "--model=opus", or end the flags with --, to be unambiguous.
 // runArgs holds parsed arguments for ynh run.
 type runArgs struct {
 	HarnessName  string   // positional name, if given
@@ -793,7 +798,13 @@ func parseRunArgs(args []string) runArgs {
 
 	// Second pass: process flags
 	firstPositional := true
+	// afterPassthrough is true while the previous argument was a flag ynh does
+	// not know and forwards, written without "=": a bare word now may be its
+	// value.
+	afterPassthrough := false
 	for i := 0; i < len(flagArgs); i++ {
+		prevPassthrough := afterPassthrough
+		afterPassthrough = false
 		switch {
 		case flagArgs[i] == "-v" && i+1 < len(flagArgs):
 			ra.VendorFlag = flagArgs[i+1]
@@ -830,17 +841,24 @@ func parseRunArgs(args []string) runArgs {
 		case flagArgs[i] == "--interactive":
 			ra.Interactive = true
 		case !strings.HasPrefix(flagArgs[i], "-"):
-			if firstPositional {
+			switch {
+			case firstPositional:
 				// First positional arg is the harness name
 				ra.HarnessName = flagArgs[i]
 				firstPositional = false
-			} else if ra.Prompt == "" {
+			case prevPassthrough && i < len(flagArgs)-1:
+				// The value of the vendor flag before it ("--model haiku"),
+				// not the prompt: more arguments follow, so it is not the
+				// last bare word.
+				ra.VendorArgs = append(ra.VendorArgs, flagArgs[i])
+			case ra.Prompt == "":
 				ra.Prompt = flagArgs[i]
-			} else {
+			default:
 				ra.VendorArgs = append(ra.VendorArgs, flagArgs[i])
 			}
 		default:
 			ra.VendorArgs = append(ra.VendorArgs, flagArgs[i])
+			afterPassthrough = !strings.Contains(flagArgs[i], "=")
 		}
 	}
 
