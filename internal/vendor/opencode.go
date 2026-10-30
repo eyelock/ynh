@@ -178,6 +178,9 @@ func shellResource(scope string) string {
 
 // opencodeMCPAction maps an MCP tool "mcp__server__tool" to its OpenCode
 // action "server_tool", the id OpenCode gives a tool Code Mode calls.
+// CONFIRMED (v2.2.3): "allow server_tool" after "* * deny" makes that tool,
+// and no other of the server's, callable; "execute" needs no allow, as with it
+// denied Code Mode is off and MCP tools are ordinary tools.
 func opencodeMCPAction(name string) (string, bool) {
 	if !strings.HasPrefix(name, "mcp__") || strings.Count(name, "__") < 2 {
 		return "", false

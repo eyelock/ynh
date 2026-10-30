@@ -120,8 +120,24 @@ that shell runs. Caveat: an agent that denies `shell` (including `* deny`
 without a shell allow) cannot be run on the `opencode/*-free` models at all:
 the request fails `403 FreeTierError: OpenCode's free tier can only be used
 from within OpenCode`, apparently because the free tier insists on the usual
-tool set. The shell tool being withdrawn is visible in that failure, but a
-live "tools: Read cannot run shell" check needs a paid provider.
+tool set. On v2.2.3 the free tier went further and refused every agent whose
+rules start with `* * deny`, even one that allows `shell`, reporting it as
+`Free usage limit reached` (an agent with no rules, run just before and after
+on the same model, worked). A paid provider (`anthropic/*`, below) runs them.
+
+**Granted MCP tools (CONFIRMED v2.2.3, `anthropic/claude-haiku-4-5`,
+ynw-kst.7):** the generated rules work as written. A `tools: Bash,
+mcp__echo__ynh_ping` agent (`* * deny`, `allow shell`, `allow echo_ynh_ping`)
+called `echo_ynh_ping` and the stub server received it; `ynh_other`, not
+granted, was not in its tool list. `execute` does not need an allow: with
+`execute` denied, Code Mode is off for the agent and its granted MCP tools are
+ordinary tools named `<server>_<tool>`. With `execute` allowed as well, the
+same grant puts only `tools.echo.ynh_ping` in the Code Mode catalog and the
+model calls it through `execute`. Either way, MCP tools are often missing from
+the model's tool list on its first step, while the local server is still
+connecting, with or without any rules: an unrestricted agent told to call the
+tool as its very first action did not see it. Once the model has made any
+other call (a `shell` command, `list_mcp_resources`) the tools are there.
 
 ## Skills
 
@@ -216,6 +232,9 @@ Contract declarations (read by `make check-vendor-parity`):
 - Timeout: `opencodeHookTimeoutField = "timeout"`. Each hook's timeout, in
   seconds, rides in the plugin's `HOOKS` table and is passed to `spawnSync`;
   60 s when none is set. No caps: the plugin enforces it, not OpenCode.
+  CONFIRMED live on v2.2.3 (ynw-kst.7): a `before_tool` hook that sleeps 8 s
+  and exits 2 was killed after its `timeout: 3` and the shell call went
+  ahead; with `timeout: 15` it ran to the end and blocked the call.
 - Session-start context: `unsupported:`. `on_session_start` runs from an
   event-stream subscriber, which cannot add context; its stdout is discarded.
 - Matchers: honoured on `execute.before` / `execute.after` only
@@ -264,7 +283,12 @@ opencode run [--standalone] [-c] [-s <id>] [--fork] [-m provider/model#variant]
 `opencode/*-free` models work with no login. The free list changes
 (`exo-free`, once the default, is deprecated), so always pin `-m`. The
 Anthropic provider takes an API key; Anthropic prohibits using a Claude
-Pro/Max subscription through OpenCode.
+Pro/Max subscription through OpenCode. CONFIRMED (v2.2.3): with
+`ANTHROPIC_API_KEY` exported, `ynh run ... -v opencode -m
+anthropic/claude-haiku-4-5` works with no `opencode auth`, as ynh launches
+OpenCode standalone. A bare `opencode models` asks the shared background
+service, which does not see the key and lists no `anthropic/*` model;
+`opencode models --standalone` does.
 
 ## Known gaps
 
@@ -272,11 +296,8 @@ Pro/Max subscription through OpenCode.
 - Remote MCP servers were not connected to; only local stdio was.
 - A Claude `tools:` list becomes deny-by-default `permissions`. The live
   check that a `tools: Read` agent cannot run `shell` needs a paid provider:
-  the free models refuse any agent without `shell` (403 FreeTierError).
-- A granted MCP tool (`tools: [..., mcp__srv__x]`) gets `allow srv_x` after
-  `* * deny`. That the tool is then callable was not confirmed live (the free
-  tier's usage limit was hit): Code Mode's own `execute` tool also falls under
-  `* * deny`, and whether it must be allowed too is unprobed.
+  the free models refuse any agent with `* * deny` rules. It was not run
+  with Anthropic in ynw-kst.7, which probed only the MCP grant.
 - No edits-only auto-approve.
 - `on_session_start` and `on_stop` ride the event stream, not a documented
   hook, so they are the most likely to move.
