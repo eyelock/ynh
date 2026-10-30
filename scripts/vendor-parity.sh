@@ -5,7 +5,7 @@
 # that. Copilot shipped as a working adapter and every skill still described
 # three vendors, because no check ever compared the vendor list against anything.
 #
-# Five assertions:
+# Seven assertions:
 #
 #   A. Every vendor `ynh vendors` reports has a row in the vendor-adapters
 #      reference index. A new adapter that nobody documented fails here.
@@ -32,6 +32,14 @@
 #      offline instead of being skipped (#534). A tutorial that reaches a new
 #      repository fails here until a fixture exists for it. It also builds the
 #      fixtures once, so a broken fixture script fails here too.
+#
+#   F. Every canonical hook event is mapped, or declared unsupported with a
+#      reason, for every vendor (scripts/hook-event-parity.sh). A new event
+#      cannot be added to the schema and forgotten on one vendor.
+#
+#   G. Every vendor declares the flag that grants a workspace folder, or the
+#      reason it has none (scripts/workspace-parity.sh). A vendor that cannot
+#      warns; it never drops a folder silently.
 #
 # Usage: scripts/vendor-parity.sh [path-to-harness]   (default: repo root)
 
@@ -264,6 +272,20 @@ while IFS=$'\t' read -r repo file; do
 	fail=1
 done < "$TMP/named.tsv"
 echo "  $(wc -l < "$TMP/served.txt" | tr -d ' ') repositories served, $named named in tutorial commands"
+
+# --- F. every hook event is accounted for on every vendor ------------------
+echo
+echo "== F. hook events =="
+if ! "$ROOT/scripts/hook-event-parity.sh" "$ROOT" $(cut -f1 "$TMP/vendors.tsv"); then
+	fail=1
+fi
+
+# --- G. every vendor declares its workspace flag ---------------------------
+echo
+echo "== G. workspace folders =="
+if ! "$ROOT/scripts/workspace-parity.sh" "$ROOT" $(cut -f1 "$TMP/vendors.tsv"); then
+	fail=1
+fi
 
 echo
 if [ "$fail" -ne 0 ]; then

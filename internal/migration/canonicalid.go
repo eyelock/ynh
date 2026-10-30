@@ -460,7 +460,7 @@ func isLegacyNamespacedParent(dir string) bool {
 	if !strings.Contains(filepath.Base(dir), "--") {
 		return false
 	}
-	if plugin.IsPluginDir(dir) || plugin.IsClaudePluginDir(dir) {
+	if hasManifest(dir) || plugin.IsClaudePluginDir(dir) {
 		return false
 	}
 	// Confirm it has at least one child dir with a plugin manifest.
@@ -473,7 +473,7 @@ func isLegacyNamespacedParent(dir string) bool {
 			continue
 		}
 		childPath := filepath.Join(dir, c.Name())
-		if plugin.IsPluginDir(childPath) || plugin.IsClaudePluginDir(childPath) {
+		if hasManifest(childPath) || plugin.IsClaudePluginDir(childPath) {
 			return true
 		}
 	}
@@ -490,7 +490,7 @@ func migrateNamespacedParent(parent, harnessesDir string, opts MigrateOpts, m *M
 			continue
 		}
 		childPath := filepath.Join(parent, c.Name())
-		if !plugin.IsPluginDir(childPath) && !plugin.IsClaudePluginDir(childPath) {
+		if !hasManifest(childPath) && !plugin.IsClaudePluginDir(childPath) {
 			continue
 		}
 		if err := migrateOneInstall(childPath, harnessesDir, c.Name(), "install_tree_ns", opts, m); err != nil {
@@ -508,7 +508,7 @@ func migrateNamespacedParent(parent, harnessesDir string, opts MigrateOpts, m *M
 }
 
 func migrateFlatOrSchema2Install(dir, harnessesDir string, opts MigrateOpts, m *Manifest) error {
-	if !plugin.IsPluginDir(dir) && !plugin.IsClaudePluginDir(dir) {
+	if !hasManifest(dir) && !plugin.IsClaudePluginDir(dir) {
 		// Empty / unrelated dir — leave it alone.
 		return nil
 	}
@@ -516,7 +516,7 @@ func migrateFlatOrSchema2Install(dir, harnessesDir string, opts MigrateOpts, m *
 }
 
 func migrateOneInstall(installDir, harnessesDir, oldID, kind string, opts MigrateOpts, m *Manifest) error {
-	ins, err := plugin.LoadInstalledJSON(installDir)
+	ins, err := loadInstalled(installDir)
 	if err != nil {
 		return quarantineOrAbort(installDir, fmt.Errorf("load installed.json: %w", err), opts, m)
 	}
@@ -563,6 +563,14 @@ func migrateOneInstall(installDir, harnessesDir, oldID, kind string, opts Migrat
 		return nil
 	}
 
+	// A home this old keeps its installs in .ynh-plugin/, which nothing else
+	// reads. They are ynh's own copies: move the manifest directory first so
+	// the rewrite below lands beside plugin.json.
+	if action, _ := manifestDirMigration(installDir); action == manifestDirMove {
+		if err := moveManifestDir(installDir); err != nil {
+			return quarantineOrAbort(installDir, err, opts, m)
+		}
+	}
 	if err := plugin.SaveInstalledJSON(installDir, ins); err != nil {
 		return quarantineOrAbort(installDir, fmt.Errorf("rewrite installed.json: %w", err), opts, m)
 	}
@@ -589,8 +597,11 @@ func migrateOneInstall(installDir, harnessesDir, oldID, kind string, opts Migrat
 // .harness.json single-file layout for installs from older binaries that
 // the format migrator hasn't touched yet.
 func loadHarnessName(dir string) string {
-	if plugin.IsPluginDir(dir) {
-		if hj, err := plugin.LoadPluginJSON(dir); err == nil && hj != nil {
+	if hasManifest(dir) {
+		var hj struct {
+			Name string `json:"name"`
+		}
+		if data, err := os.ReadFile(manifestFileAt(dir, plugin.PluginFile)); err == nil && json.Unmarshal(data, &hj) == nil {
 			return hj.Name
 		}
 	}
@@ -700,4 +711,41 @@ func ReadManifest(home string) (*Manifest, error) {
 		return nil, fmt.Errorf("parsing manifest: %w", err)
 	}
 	return &m, nil
+}
+
+// The schema migrations below run on homes written by binaries that kept
+// their manifests in .ynh-plugin/, a layout nothing else reads any more
+// (#404). These helpers are how they still find what they are migrating.
+
+// manifestFileAt is where file sits under dir: the canonical manifest
+// directory if it holds it, else the legacy one, else the canonical path.
+func manifestFileAt(dir, file string) string {
+	canonical := filepath.Join(dir, plugin.PluginDir, file)
+	if _, err := os.Stat(canonical); err == nil {
+		return canonical
+	}
+	if legacy := filepath.Join(dir, plugin.LegacyPluginDir, file); isRegular(legacy) {
+		return legacy
+	}
+	return canonical
+}
+
+// hasManifest reports whether dir has a plugin.json in either manifest
+// directory.
+func hasManifest(dir string) bool {
+	_, err := os.Stat(manifestFileAt(dir, plugin.PluginFile))
+	return err == nil
+}
+
+// loadInstalled reads dir's installed.json from either manifest directory.
+func loadInstalled(dir string) (*plugin.InstalledJSON, error) {
+	data, err := os.ReadFile(manifestFileAt(dir, plugin.InstalledFile))
+	if err != nil {
+		return nil, fmt.Errorf("reading installed.json: %w", err)
+	}
+	var ins plugin.InstalledJSON
+	if err := json.Unmarshal(data, &ins); err != nil {
+		return nil, fmt.Errorf("invalid installed.json: %w", err)
+	}
+	return &ins, nil
 }

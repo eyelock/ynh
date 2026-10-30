@@ -259,12 +259,16 @@ func TestWriteComposedSessionHooks_IncludeScripts(t *testing.T) {
 		{"claude", ".claude/hooks/hooks.json", `"${CLAUDE_PLUGIN_ROOT}"/scripts/_include/guard/scripts/mark.sh now`, ".claude"},
 		{"codex", ".codex/hooks.json", "./scripts/_include/guard/scripts/mark.sh now", "."},
 		{"cursor", ".cursor/hooks.json", "./scripts/_include/guard/scripts/mark.sh now", "."},
+		{"copilot", ".copilot/hooks/hooks.json", `"${PLUGIN_ROOT}"/scripts/_include/guard/scripts/mark.sh now`, ".copilot"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.vendor, func(t *testing.T) {
 			base := t.TempDir()
-			hookHarness(t, filepath.Join(base, "guard"), "guard", map[string][]string{"on_session_start": {"./scripts/mark.sh now", "/usr/bin/env true"}}, nil, "scripts/mark.sh")
-			hookHarness(t, base, "root", map[string][]string{"on_session_start": {"./scripts/mark.sh"}}, []map[string]any{{"local": "guard", "hooks": true}}, "scripts/mark.sh")
+			// on_stop, not on_session_start: Cursor and Copilot wrap a
+			// session-start command to carry its output to the model (#627),
+			// which this test is not about.
+			hookHarness(t, filepath.Join(base, "guard"), "guard", map[string][]string{"on_stop": {"./scripts/mark.sh now", "/usr/bin/env true"}}, nil, "scripts/mark.sh")
+			hookHarness(t, base, "root", map[string][]string{"on_stop": {"./scripts/mark.sh"}}, []map[string]any{{"local": "guard", "hooks": true}}, "scripts/mark.sh")
 			p, resolved := resolveHooks(t, base, harness.Selection{})
 			adapter, err := vendor.Get(tt.vendor)
 			if err != nil {
@@ -283,8 +287,11 @@ func TestWriteComposedSessionHooks_IncludeScripts(t *testing.T) {
 				t.Fatal(err)
 			}
 			rootCmd := "./scripts/mark.sh"
-			if tt.vendor == "claude" {
+			switch tt.vendor {
+			case "claude":
 				rootCmd = `"${CLAUDE_PLUGIN_ROOT}"/scripts/mark.sh`
+			case "copilot":
+				rootCmd = `"${PLUGIN_ROOT}"/scripts/mark.sh`
 			}
 			want := []string{tt.command, "/usr/bin/env true", rootCmd}
 			if got := sessionHookCommands(t, data); !slices.Equal(got, want) {
@@ -420,5 +427,33 @@ func TestWriteComposedSessionHooks_MissingIncludeScript(t *testing.T) {
 	want := "hook script ./scripts/gone.sh is not a file in included harness guard, so the session does not carry it"
 	if !slices.Equal(warnings, []string{want}) {
 		t.Errorf("warnings = %q, want %q", warnings, want)
+	}
+}
+
+// An included harness's on_session_end hook keeps its own timeout through
+// composition, so Claude's SessionEnd budget is raised for it as for the
+// root's own (#621).
+func TestWriteComposedSessionHooks_IncludedSessionEndTimeout(t *testing.T) {
+	base := t.TempDir()
+	guard := filepath.Join(base, "guard")
+	if err := plugin.SavePluginJSON(guard, &plugin.HarnessJSON{
+		Name: "guard", Version: "1.0.0",
+		Hooks: map[string][]plugin.HookEntry{"on_session_end": {{Command: "/usr/bin/env true", Timeout: 10}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	hookHarness(t, base, "root", nil, []map[string]any{{"local": "guard", "hooks": true}})
+	p, resolved := resolveHooks(t, base, harness.Selection{})
+	adapter, err := vendor.Get("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runDir := t.TempDir()
+	if _, err := WriteComposedSessionHooks(runDir, adapter, p, resolved); err != nil {
+		t.Fatal(err)
+	}
+	env, warnings := vendor.ClaudeSessionEndEnv(runDir, func(string) (string, bool) { return "", false })
+	if want := []string{vendor.ClaudeSessionEndEnvVar + "=10000"}; !slices.Equal(env, want) || len(warnings) != 0 {
+		t.Errorf("env = %q, warnings = %q, want %q", env, warnings, want)
 	}
 }

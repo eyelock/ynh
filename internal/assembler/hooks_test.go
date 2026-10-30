@@ -168,8 +168,9 @@ func TestWriteSessionHooks(t *testing.T) {
 	}
 }
 
-// TestWriteSessionHooks_Copilot: Copilot emits no session hooks, so it needs
-// none of their scripts.
+// TestWriteSessionHooks_Copilot: Copilot's session hooks go in the
+// --plugin-dir plugin (.copilot/hooks/hooks.json), with the scripts they run
+// beside them, anchored at ${PLUGIN_ROOT}.
 func TestWriteSessionHooks_Copilot(t *testing.T) {
 	harnessDir, hooks := sessionHookHarness(t)
 	runDir := t.TempDir()
@@ -184,8 +185,16 @@ func TestWriteSessionHooks_Copilot(t *testing.T) {
 	if len(warnings) != 0 {
 		t.Errorf("warnings = %q, want none", warnings)
 	}
-	if got := filesUnder(t, runDir); len(got) != 0 {
-		t.Errorf("run dir files = %q, want none", got)
+	want := []string{".copilot/hooks/hooks.json", ".copilot/scripts/guard.sh"}
+	if got := filesUnder(t, runDir); strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("run dir files = %q, want %q", got, want)
+	}
+	data, err := os.ReadFile(filepath.Join(runDir, ".copilot", "hooks", "hooks.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `\"${PLUGIN_ROOT}\"/scripts/guard.sh`) {
+		t.Errorf("hooks.json does not anchor guard.sh at ${PLUGIN_ROOT}:\n%s", data)
 	}
 }
 
@@ -277,5 +286,42 @@ func TestCopyHookScripts_NoWriteThroughSymlink(t *testing.T) {
 	}
 	if string(data) != "original\n" {
 		t.Errorf("symlink target was overwritten: %q", data)
+	}
+}
+
+// A session on Copilot or Cursor writes the wrapper beside the hook file, where
+// the wrapped command's anchor reaches it; Claude and Codex write none.
+func TestWriteSessionHooks_SessionStartWrapper(t *testing.T) {
+	tests := []struct {
+		vendor  string
+		wrapper string // relative to the run dir; "" for none
+	}{
+		{"claude", ""},
+		{"codex", ""},
+		{"copilot", ".copilot/hooks/ynh-session-context.sh"},
+		{"cursor", "hooks/ynh-session-context.sh"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.vendor, func(t *testing.T) {
+			runDir := t.TempDir()
+			adapter, err := vendor.Get(tt.vendor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			hooks := map[string][]plugin.HookEntry{"on_session_start": {{Command: "echo wake"}}}
+			if _, err := WriteSessionHooks(runDir, adapter, t.TempDir(), HookSet{Hooks: hooks}); err != nil {
+				t.Fatal(err)
+			}
+			_, statErr := os.Stat(filepath.Join(runDir, filepath.FromSlash(tt.wrapper)))
+			if tt.wrapper == "" {
+				if _, err := os.Stat(filepath.Join(runDir, "hooks", "ynh-session-context.sh")); err == nil {
+					t.Error("unexpected wrapper")
+				}
+				return
+			}
+			if statErr != nil {
+				t.Errorf("wrapper missing: %v", statErr)
+			}
+		})
 	}
 }

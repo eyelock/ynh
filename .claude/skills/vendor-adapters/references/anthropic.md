@@ -7,6 +7,7 @@
 - Plugins Reference: https://code.claude.com/docs/en/plugins-reference
 - Plugin Marketplaces: https://code.claude.com/docs/en/plugin-marketplaces
 - Hooks Guide: https://code.claude.com/docs/en/hooks-guide
+- Hooks Reference: https://code.claude.com/docs/en/hooks
 - MCP Servers: https://code.claude.com/docs/en/mcp
 - Settings: https://code.claude.com/docs/en/settings
 - Subagents: https://code.claude.com/docs/en/sub-agents
@@ -58,6 +59,33 @@ TaskCreated, TaskCompleted, Stop, StopFailure, TeammateIdle, InstructionsLoaded,
 ConfigChange, CwdChanged, FileChanged, WorktreeCreate, WorktreeRemove,
 PreCompact, PostCompact, Elicitation, ElicitationResult, SessionEnd
 
+### SessionEnd (canonical `on_session_end`)
+
+Source: https://code.claude.com/docs/en/hooks. Fires when a session terminates. The
+matcher filters the reason: `clear`, `resume`, `logout`, `prompt_input_exit`, `other`.
+All `SessionEnd` hooks share a **1.5 s** budget by default. The docs once read as if a
+hook's own `timeout` raises it (up to 60 s), but the SessionEnd section says: "Timeouts set
+on plugin-provided hooks don't raise the budget." **CONFIRMED live (Claude Code,
+2026-10-30):** `"timeout": 10` on a 3 s plugin hook, via `ynh run`, was still "Hook
+cancelled" at about 1.5 s. The override is the env var `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS`
+(milliseconds; sets the budget and the timeout of each hook without its own `timeout`;
+Claude Code 2.1.268+), capped at 60 s. No decision control: exit 2 only shows stderr to the
+user. `SessionStart` fires on `startup`, `resume`, `clear`, `compact` and `fork`.
+
+ynh still writes the manifest hook's `timeout` (it bounds that hook; clamped to 60 for
+SessionEnd), and additionally:
+- sessions it launches (`launchClaude`, the agent loop's Claude worker) get the env var set
+  to the largest `on_session_end` timeout x 1000, capped at 60000, by
+  `vendor.ClaudeSessionEndEnv`; a user-set value is never overridden, and a lower one is
+  warned about;
+- exports and marketplace output cannot set it, so `vendor.ExportHookWarnings` warns when an
+  `on_session_end` timeout exceeds 1.5 s and gives the value to set.
+
+**CONFIRMED live (Claude Code, 2026-10-30):** `SessionEnd` fires at the end of a `-p` run,
+after `Stop`; a 3 s `SessionEnd` hook was cancelled ("Hook cancelled") at the default
+budget. Not yet tested: that the env var lets it finish, `/clear`, `/exit` interactively,
+`kill -9`.
+
 ## Hook Types
 
 command, http, prompt, agent
@@ -78,6 +106,12 @@ command, http, prompt, agent
   }
 }
 ```
+
+A hook handler's `cwd` is not a documented field (`cwd` is only the stdin payload's current
+directory). **CONFIRMED live (Claude Code, 2026-10-30):** an extra `"cwd": "."` on a handler
+is tolerated, with no error or warning, and changes nothing, since Claude runs hooks in its
+current directory. ynh writes it into `hooks/claude.json` only for a merged package that also
+targets Copilot, which loads that file (`Claude.GeneratePluginHookConfigForCopilot`).
 
 ## MCP Format (.mcp.json at plugin root or project root)
 
