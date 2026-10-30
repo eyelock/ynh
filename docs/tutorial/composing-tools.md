@@ -674,7 +674,7 @@ team -> team
 tracker -> tracker
 ```
 
-Two harnesses sharing a name is fine until you select by it. Then the namespace is ambiguous:
+Two harnesses sharing a name is fine until you select by it. Then the namespace is ambiguous. The error names the route to each include by harness, but shows each colliding include by its source, since both have the same name:
 
 ```bash
 ynd preview my-team -v claude --profile notes:draft -o out/ambiguous 2>&1
@@ -683,7 +683,7 @@ ynd preview my-team -v claude --profile notes:draft -o out/ambiguous 2>&1
 Expected output:
 
 ```
-Error: resolving includes: namespace "notes" is ambiguous: github-lite > notes and notes; give one include an "as" alias
+Error: resolving includes: namespace "notes" is ambiguous: github-lite > /tmp/ynh-tutorial/composing-tools/notes and /tmp/ynh-tutorial/composing-tools/notes-v2; give one include an "as" alias
 ```
 
 Give the second include an `as` alias, which becomes its namespace. `ynh include add <harness> <url-or-path> --as notes-v2` writes the same field, for a Git include and for a local one alike (`--replace` if the include already exists). The manifest below has the same includes that `ynh include add my-team /tmp/ynh-tutorial/composing-tools/notes-v2 --as notes-v2 --replace` would leave; it is written out in full so that the rest of the file is on the page:
