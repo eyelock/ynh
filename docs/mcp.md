@@ -308,7 +308,8 @@ MCP servers of delegates:
 | Vendor | Delegate servers |
 |--------|------------------|
 | Claude Code | Carried. The generated agent has an `mcpServers` frontmatter field and a run hands the agent to Claude with `--agents`; see below. |
-| Cursor, Copilot, Codex | Not carried. ynh warns once per delegate on stderr and writes the agent without them. |
+| Cursor, Copilot | Not carried. ynh warns once per delegate on stderr and writes the agent without them. |
+| Codex | Not carried, and the delegate itself is not picked up: ynh warns once per delegate on stderr and writes a Markdown agent file that Codex does not read; see below. |
 
 The warning reads:
 
@@ -316,7 +317,7 @@ The warning reads:
   warning: delegate probe declares MCP servers (db, probe-srv) that Cursor subagents cannot carry; they are not available to it
 ```
 
-No documented per-agent MCP field exists for the other vendors. Copilot's references document MCP only at the project and user level (`.github/mcp.json`, `~/.copilot/mcp-config.json`), so ynh does not guess at a custom-agent field it has not verified. For Codex, a run writes the delegate's agent file to `.codex/agents/` like the others, without its servers.
+No documented per-agent MCP field exists for the other vendors. Copilot's references document MCP only at the project and user level (`.github/mcp.json`, `~/.copilot/mcp-config.json`), so ynh does not guess at a custom-agent field it has not verified. For Codex, a run writes the delegate's agent file as Markdown, `.codex/agents/<name>.md`, without its servers. [Codex's subagent docs](https://developers.openai.com/codex/subagents) define project custom agents only as TOML files in `.codex/agents/` (with `name`, `description` and `developer_instructions`), so Codex does not pick up the Markdown file and a Codex session has no subagent for the delegate today, with or without its servers. The same docs say a custom agent inherits the parent session's MCP servers and cannot override them, so even a TOML agent could not carry the delegate's own. This is read from Codex's documentation, not checked against a live `codex`.
 
 ### How Claude Code gets them
 
