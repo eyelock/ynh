@@ -162,12 +162,6 @@ func (s Sensor) EffectiveRatchet() string {
 	return s.Ratchet
 }
 
-// ValidSensorExpectations lists the answers a reference fixture may declare.
-var ValidSensorExpectations = map[string]bool{
-	"fail": true,
-	"pass": true,
-}
-
 // ValidSensorTolerances lists how `ynh check` treats a failing sensor.
 // Maps onto the three enforcement loops: blocking sensors gate a merge,
 // advisory sensors report loudly without failing the run, report sensors
@@ -282,19 +276,6 @@ type GitHubCheckSource struct {
 	OnMissing string `json:"on_missing,omitempty"`
 }
 
-// ValidGitHubStatusStates are the states the Status API can report.
-var ValidGitHubStatusStates = map[string]bool{
-	"success": true, "pending": true, "failure": true, "error": true,
-}
-
-// ValidGitHubCheckConclusions are the conclusions the Checks API can report.
-// A run that has not concluded has no conclusion at all, which is why
-// "pending" is not a member here and is handled by OnMissing instead.
-var ValidGitHubCheckConclusions = map[string]bool{
-	"success": true, "failure": true, "neutral": true, "cancelled": true,
-	"timed_out": true, "action_required": true, "stale": true, "skipped": true,
-}
-
 // Dir returns the directory $YNH_HARNESS_DIR and reference.path resolve
 // against: the harness that published the sensor if it came from an include,
 // otherwise fallback, the harness being run.
@@ -310,13 +291,6 @@ func (s Sensor) Dir(fallback string) string {
 type SensorOverride struct {
 	Tolerance string `json:"tolerance,omitempty"`
 	Ratchet   string `json:"ratchet,omitempty"`
-}
-
-// ValidSensorOnMissing are the verdicts available when the observation is
-// absent. "broken" is the default on purpose: a sensor that cannot see is not
-// a sensor that passed.
-var ValidSensorOnMissing = map[string]bool{
-	"broken": true, "fail": true, "pass": true,
 }
 
 // Kind reports which source variant is set. Returns "" if none or
@@ -460,126 +434,6 @@ var ValidSensorCategories = map[string]bool{
 	"maintainability": true,
 	"architecture":    true,
 	"behaviour":       true,
-}
-
-// ValidateSensors checks each sensor's source/output/category and resolves
-// focus references against the supplied profile and focus name sets.
-// profileNames and focusNames may be nil if no cross-reference data is
-// available (callers should pass both to enable full validation).
-func ValidateSensors(sensors map[string]Sensor, profileNames, focusNames map[string]bool) []string {
-	var issues []string
-	for name, s := range sensors {
-		if name == "" {
-			issues = append(issues, "sensor name must not be empty")
-			continue
-		}
-		prefix := fmt.Sprintf("sensor %q:", name)
-		if s.Category != "" && !ValidSensorCategories[s.Category] {
-			issues = append(issues, fmt.Sprintf("%s category %q must be one of maintainability, architecture, behaviour", prefix, s.Category))
-		}
-		if s.Role != "" && !ValidSensorRoles[s.Role] {
-			issues = append(issues, fmt.Sprintf("%s role %q must be one of regular, convergence-verifier, stuck-recovery", prefix, s.Role))
-		}
-		if s.Ratchet != "" && !ValidSensorRatchets[s.Ratchet] {
-			issues = append(issues, fmt.Sprintf("%s ratchet %q must be one of fingerprint, count", prefix, s.Ratchet))
-		}
-		if s.Ratchet == "count" && s.Source.Kind() != "" && s.Source.Kind() != "command" {
-			issues = append(issues, fmt.Sprintf(
-				"%s ratchet count requires a command source: only a command sensor produces countable findings", prefix))
-		}
-		if s.Reference != nil {
-			if s.Reference.Path == "" {
-				issues = append(issues, fmt.Sprintf("%s reference.path must be non-empty", prefix))
-			}
-			if strings.HasPrefix(s.Reference.Path, "/") || strings.Contains(s.Reference.Path, "..") {
-				issues = append(issues, fmt.Sprintf(
-					"%s reference.path %q must be a relative path inside the harness", prefix, s.Reference.Path))
-			}
-			if !ValidSensorExpectations[s.Reference.Expect] {
-				issues = append(issues, fmt.Sprintf(
-					"%s reference.expect %q must be one of fail, pass", prefix, s.Reference.Expect))
-			}
-			// Calibration compares an exit code against a declared
-			// expectation, and only a command source produces one.
-			//
-			// Not the same rule that stops a files sensor converging a run,
-			// though the two are easy to conflate. A files sensor does now
-			// produce a verdict — freshness — and it does gate on it. It
-			// still cannot be calibrated (no exit code) and still cannot
-			// converge (freshness says whether an artifact is current, never
-			// whether the work is done). Three separate limits, three reasons.
-			if k := s.Source.Kind(); k != "" && k != "command" {
-				issues = append(issues, fmt.Sprintf(
-					"%s reference requires a command source: no verdict about a %s sensor's output is derivable", prefix, k))
-			}
-		}
-		if s.Role == "convergence-verifier" {
-			if why := ConvergenceVerifierRefusal(s.Source.Kind()); why != "" {
-				issues = append(issues, prefix+" "+why)
-			}
-		}
-		if s.Tolerance != "" && !ValidSensorTolerances[s.Tolerance] {
-			issues = append(issues, fmt.Sprintf("%s tolerance %q must be one of blocking, advisory, report", prefix, s.Tolerance))
-		}
-		if s.Source.Kind() == "" {
-			issues = append(issues, fmt.Sprintf("%s source must have exactly one of files, command, focus, github_status, github_check", prefix))
-		} else {
-			switch s.Source.Kind() {
-			case "github_status":
-				g := s.Source.GitHubStatus
-				if g.Context == "" {
-					issues = append(issues, fmt.Sprintf("%s source.github_status.context is required: a sensor that selects no particular status observes a set that changes underneath it", prefix))
-				}
-				if g.Require != "" && !ValidGitHubStatusStates[g.Require] {
-					issues = append(issues, fmt.Sprintf("%s source.github_status.require %q must be one of success, pending, failure, error", prefix, g.Require))
-				}
-				issues = append(issues, validateGitHubCommon(prefix+" source.github_status", g.Repo, g.OnMissing)...)
-			case "github_check":
-				g := s.Source.GitHubCheck
-				if g.Name == "" {
-					issues = append(issues, fmt.Sprintf("%s source.github_check.name is required: a sensor that selects no particular check run observes a set that changes underneath it", prefix))
-				}
-				if g.Require != "" && !ValidGitHubCheckConclusions[g.Require] {
-					issues = append(issues, fmt.Sprintf("%s source.github_check.require %q must be a check conclusion (success, failure, neutral, cancelled, timed_out, action_required, stale, skipped). A run that has not finished has no conclusion — use on_missing for that case", prefix, g.Require))
-				}
-				issues = append(issues, validateGitHubCommon(prefix+" source.github_check", g.Repo, g.OnMissing)...)
-			case "files":
-				if len(s.Source.Files) == 0 {
-					issues = append(issues, fmt.Sprintf("%s source.files must be a non-empty array", prefix))
-				}
-				for i, p := range s.Source.Files {
-					if p == "" {
-						issues = append(issues, fmt.Sprintf("%s source.files[%d] must be non-empty", prefix, i))
-					}
-				}
-			case "command":
-				if s.Source.Command == "" {
-					issues = append(issues, fmt.Sprintf("%s source.command must be a non-empty string", prefix))
-				}
-			case "focus":
-				if s.Source.Focus.Inline != nil {
-					if s.Source.Focus.Inline.Prompt == "" {
-						issues = append(issues, fmt.Sprintf("%s source.focus.prompt must not be empty", prefix))
-					}
-					if p := s.Source.Focus.Inline.Profile; p != "" && profileNames != nil && !profileNames[p] {
-						issues = append(issues, fmt.Sprintf("%s source.focus references unknown profile %q", prefix, p))
-					}
-				} else if s.Source.Focus.Name != "" && focusNames != nil && !focusNames[s.Source.Focus.Name] {
-					issues = append(issues, fmt.Sprintf("%s source.focus references undefined focus %q", prefix, s.Source.Focus.Name))
-				}
-			}
-		}
-		if s.Output.Format == "" {
-			issues = append(issues, fmt.Sprintf("%s output.format must not be empty", prefix))
-		}
-		// A match that does not compile would silently select nothing, which
-		// turns the sensor's whole output into accepted debt on the next
-		// baseline write. Caught here instead.
-		if _, err := s.OutputMatcher(); err != nil {
-			issues = append(issues, fmt.Sprintf("%s %v", prefix, err))
-		}
-	}
-	return issues
 }
 
 // Focus is a named combination of profile + prompt for repeatable AI execution.
@@ -807,92 +661,10 @@ var ValidHookEvents = map[string]bool{
 	"on_session_start": true,
 }
 
-// ValidateHooks checks that hook event names are valid and commands are non-empty.
-func ValidateHooks(hooks map[string][]HookEntry) []string {
-	var issues []string
-	for event, entries := range hooks {
-		if !ValidHookEvents[event] {
-			issues = append(issues, fmt.Sprintf("unknown hook event %q (valid: before_tool, after_tool, before_prompt, on_stop, on_session_start)", event))
-		}
-		for i, entry := range entries {
-			if entry.Command == "" {
-				issues = append(issues, fmt.Sprintf("hooks.%s[%d]: command must not be empty", event, i))
-			}
-		}
-	}
-	return issues
-}
-
 // ProfileRatchetRefusal is why a profile's sensor override may not carry a
 // ratchet. One sentence, shared by `ynd validate` and the runtime.
 const ProfileRatchetRefusal = "ratchet cannot be set by a profile: the ratchet decides how the committed " +
 	"baseline is recorded, and the baseline belongs to the repository, not to a context"
-
-// ValidateProfileSensorOverrides checks the shape of one profile's
-// sensor_overrides: tolerance must be a known value and ratchet is refused.
-// Whether the named sensors exist, and what role they play, needs the merged
-// sensor set, so that half is the resolver's.
-func ValidateProfileSensorOverrides(profile string, overrides map[string]SensorOverride) []string {
-	var issues []string
-	for _, name := range sortedOverrideNames(overrides) {
-		ov := overrides[name]
-		if ov.Ratchet != "" {
-			issues = append(issues, fmt.Sprintf("profile %q: sensor_overrides.%s: %s", profile, name, ProfileRatchetRefusal))
-		}
-		if ov.Tolerance == "" {
-			if ov.Ratchet == "" {
-				issues = append(issues, fmt.Sprintf("profile %q: sensor_overrides.%s: tolerance is required", profile, name))
-			}
-		} else if !ValidSensorTolerances[ov.Tolerance] {
-			issues = append(issues, fmt.Sprintf("profile %q: sensor_overrides.%s: tolerance %q must be one of blocking, advisory, report", profile, name, ov.Tolerance))
-		}
-	}
-	return issues
-}
-
-func sortedOverrideNames(m map[string]SensorOverride) []string {
-	names := make([]string, 0, len(m))
-	for n := range m {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	return names
-}
-
-// ValidateProfiles validates hooks and mcp_servers within each profile.
-// Nil MCPServer entries (JSON null) are skipped — they signal removal of
-// an inherited server during profile merge.
-func ValidateProfiles(profiles map[string]Profile) []string {
-	var issues []string
-	for name, profile := range profiles {
-		for _, issue := range ValidateHooks(profile.Hooks) {
-			issues = append(issues, fmt.Sprintf("profile %q: %s", name, issue))
-		}
-		// Filter out nil entries (null removals) before validating
-		servers := make(map[string]MCPServer)
-		for k, v := range profile.MCPServers {
-			if v != nil {
-				servers[k] = *v
-			}
-		}
-		for _, issue := range ValidateMCPServers(servers) {
-			issues = append(issues, fmt.Sprintf("profile %q: %s", name, issue))
-		}
-		issues = append(issues, ValidateProfileSensorOverrides(name, profile.SensorOverrides)...)
-	}
-	return issues
-}
-
-// ValidateFocus checks that each focus entry has a non-empty prompt.
-func ValidateFocus(focuses map[string]Focus) []string {
-	var issues []string
-	for name, f := range focuses {
-		if f.Prompt == "" {
-			issues = append(issues, fmt.Sprintf("focus.%s: prompt must not be empty", name))
-		}
-	}
-	return issues
-}
 
 // ProvenanceMeta records where a harness was installed from.
 type ProvenanceMeta struct {
@@ -1541,21 +1313,4 @@ func ExpandMCPEnv(servers map[string]MCPServer, allowed []string, lookup func(st
 		out[name] = s
 	}
 	return out, nil
-}
-
-// validateGitHubCommon checks the fields both GitHub sensor sources share.
-func validateGitHubCommon(prefix, repo, onMissing string) []string {
-	var issues []string
-	if repo != "" {
-		// "owner/name", nothing else. A bare name or a URL both silently
-		// address the wrong repository, which a sensor must never do.
-		parts := strings.Split(repo, "/")
-		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-			issues = append(issues, fmt.Sprintf("%s.repo %q must be \"owner/name\"", prefix, repo))
-		}
-	}
-	if onMissing != "" && !ValidSensorOnMissing[onMissing] {
-		issues = append(issues, fmt.Sprintf("%s.on_missing %q must be one of broken, fail, pass", prefix, onMissing))
-	}
-	return issues
 }
