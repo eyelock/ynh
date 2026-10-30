@@ -17,7 +17,7 @@ a schema.
 | `.github/copilot-instructions.md` | merge into `AGENTS.md` | |
 | `AGENTS.md` | stays `AGENTS.md` | already correct |
 | `.harness.json` | `.agents/harness/plugin.json` | `ynd migrate .` |
-| `.ynh-plugin/` | `.agents/harness/` | `git mv`; still read as a fallback, so nothing breaks until you do |
+| `.ynh-plugin/` | `.agents/harness/` | `ynd migrate` (or `git mv`); no longer read, so ynh refuses the tree until you do |
 | `.claude/settings.json` | **stays put** | vendor config, not a harness artifact |
 | `.mcp.json` | manifest `mcp_servers` | a decision, not a move |
 

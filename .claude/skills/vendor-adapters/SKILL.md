@@ -204,16 +204,17 @@ converted only by `ynd migrate` and refused by every other command.
 |                   | event > matcher > hooks[]        | event > matcher > hooks[]        | {event: [{command}]} — CONFIRMED |
 |                   |                                  |                                  | ynh writes both paths identically|
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
-| Events            | 25 events (see Claude docs)      | 5 events: SessionStart,          | 25 events (same as Claude)       |
-| (vendor-native):  | Key: PreToolUse, PostToolUse,    | PreToolUse, PostToolUse,         |                                  |
-|                   | UserPromptSubmit, Stop,          | UserPromptSubmit, Stop           |                                  |
-|                   | SessionStart, ...                |                                  |                                  |
+| Events            | 25 events (see Claude docs)      | 12 events (learn.chatgpt.com/    | 18 agent events + Tab (own names)|
+| (vendor-native):  | Key: PreToolUse, PostToolUse,    | docs/hooks): SessionStart,       | Key: preToolUse, postToolUse,    |
+|                   | UserPromptSubmit, Stop,          | SessionEnd, PreToolUse,          | beforeSubmitPrompt, stop,        |
+|                   | SessionStart, SessionEnd, ...    | PostToolUse, UserPromptSubmit,.. | sessionStart, sessionEnd, ...    |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
-| ynh canonical     | before_tool -> PreToolUse        | before_tool -> PreToolUse        | before_tool -> beforeShellExec   |
-| event mapping:    | after_tool  -> PostToolUse       | after_tool  -> PostToolUse       | after_tool  -> afterFileEdit     |
+| ynh canonical     | before_tool -> PreToolUse        | before_tool -> PreToolUse        | before_tool -> preToolUse        |
+| event mapping:    | after_tool  -> PostToolUse       | after_tool  -> PostToolUse       | after_tool  -> postToolUse       |
 |                   | before_prompt -> UserPromptSubmit| before_prompt -> UserPromptSubmit| before_prompt -> beforeSubmit    |
 |                   | on_stop -> Stop                  | on_stop -> Stop                  | on_stop -> stop                  |
 |                   | on_session_start -> SessionStart | on_session_start -> SessionStart | on_session_start -> sessionStart |
+|                   | on_session_end -> SessionEnd     | on_session_end -> SessionEnd     | on_session_end -> sessionEnd     |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Hook types:       | command, http, prompt, agent     | command only                     | command, prompt, http, agent     |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
@@ -356,6 +357,12 @@ spelling rather than passing the struct through:
   `copilot mcp add`**, exactly like it already does for Claude and Cursor.
 
 ### Copilot CLI Hook Events (confirmed complete, 2026-07-29)
+
+> **Superseded in part (2026-10-30).** ynh now generates Copilot hooks (plugin route,
+> PascalCase events; see `references/copilot.md`, "How ynh generates hooks for Copilot").
+> The trust findings below concern repository `.github/hooks/`; plugin hooks fire in an untrusted folder (CONFIRMED Copilot CLI 1.0.105).
+> Where this section says not to ship `GenerateHookConfig` or to resolve staging-dir trust
+> first, read it as history: the open questions are now the live-test list in the reference.
 
 Source: `docs.github.com/en/copilot/reference/hooks-reference` — the page's
 own table header states it lists "every supported event." All 14 keys are
@@ -539,8 +546,10 @@ not conflict with the project's own `CLAUDE.md`.
 |      |   Cursor's requirements                   |            |
 | ---  | on_session_start event mapping: RESOLVED | Claude,    |
 |      |   (#199 - claude.go, codex.go, cursor.go | Codex,     |
-|      |    all map it; Copilot ships no hook     | Cursor     |
-|      |    config at all, so it maps nothing.    |            |
+|      |    and copilot.go all map it, and       | Cursor,    |
+|      |    on_session_end; scripts/hook-event-   | Copilot    |
+|      |    parity.sh keeps every event mapped    |            |
+|      |    or declared unsupported per vendor)   |            |
 | LOW  | Hook types beyond "command"              | Claude,    |
 |      |   (prompt, http, agent not mapped)       | Cursor     |
 | LOW  | Cursor CLI flags for non-interactive     | Cursor     |

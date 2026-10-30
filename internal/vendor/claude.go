@@ -139,6 +139,44 @@ func (c *Claude) ResolveLastSession(cwd string, notBefore time.Time) (string, er
 	return newestCandidate(candidates, notBefore)
 }
 
+// SessionExists reports whether Claude's store holds sessionID for cwd, trying
+// every form of the directory ResolveLastSession does. An id that is not a
+// plain file stem never exists, so a caller-supplied value cannot walk out of
+// the store.
+func (c *Claude) SessionExists(cwd, sessionID string) bool {
+	if sessionID == "" || sessionID != filepath.Base(sessionID) || sessionID == "." || sessionID == ".." {
+		return false
+	}
+	home, err := vendorHomeDir()
+	if err != nil {
+		return false
+	}
+	for _, dir := range dirCandidates(cwd) {
+		path := filepath.Join(home, ".claude", "projects", claudeProjectSlug(dir), sessionID+".jsonl")
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+// LaunchWithSessionID starts a new Claude conversation under a chosen id.
+// Claude documents --session-id as "Use a specific session ID for the
+// conversation (must be a valid UUID)"
+// (code.claude.com/docs/en/cli-reference).
+func (c *Claude) LaunchWithSessionID(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
+	initial, args := claudeSessionIDArgs(sessionID, prompt, interactive, extraArgs)
+	return launchClaude(configPath, initial, args)
+}
+
+func claudeSessionIDArgs(sessionID, prompt string, interactive bool, extraArgs []string) (string, []string) {
+	idArgs := []string{"--session-id", sessionID}
+	if prompt != "" && !interactive {
+		return "", append(append([]string{"-p", prompt}, idArgs...), extraArgs...)
+	}
+	return prompt, append(idArgs, extraArgs...)
+}
+
 // claudeProjectSlug converts an absolute path into the directory name Claude
 // uses under ~/.claude/projects. Every "/" and "." becomes "-", so a leading
 // slash yields a leading dash and "/foo/.worktrees" yields "-foo--worktrees".
@@ -155,14 +193,28 @@ func claudeProjectSlug(dir string) string {
 // back to --continue, which Claude documents as "the most recent conversation
 // in the current directory" — directory-scoped, so it stays bound to this
 // project. A bare --resume is never emitted: it opens the session picker.
-func (c *Claude) LaunchResume(configPath, sessionID string, extraArgs []string) error {
+//
+// A prompt is delivered as Claude's positional prompt, which starts an
+// interactive session with that first message, or with -p for a one-shot run
+// (`claude -p --resume <id> "<prompt>"` is the documented headless resume).
+func (c *Claude) LaunchResume(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
+	initial, args := claudeResumeArgs(sessionID, prompt, interactive, extraArgs)
+	return launchClaude(configPath, initial, args)
+}
+
+// claudeResumeArgs returns the initial prompt for buildClaudeArgs and the
+// extra args, with the resume selector in front of the caller's own.
+func claudeResumeArgs(sessionID, prompt string, interactive bool, extraArgs []string) (string, []string) {
 	var resumeArgs []string
 	if sessionID != "" {
 		resumeArgs = []string{"--resume", sessionID}
 	} else {
 		resumeArgs = []string{"--continue"}
 	}
-	return launchClaude(configPath, "", append(resumeArgs, extraArgs...))
+	if prompt != "" && !interactive {
+		return "", append(append([]string{"-p", prompt}, resumeArgs...), extraArgs...)
+	}
+	return prompt, append(resumeArgs, extraArgs...)
 }
 
 func (c *Claude) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
@@ -198,14 +250,38 @@ func buildClaudeArgs(configPath string, initialPrompt string, extraArgs []string
 	return args
 }
 
-// claudeHookEventMap maps canonical event names to Claude Code hook events.
+// claudeHookEventMap maps canonical event names to Claude Code hook events
+// (code.claude.com/docs/en/hooks). SessionEnd is best-effort: its hooks share a
+// 1.5 s budget by default, raisable per hook up to 60 s, and cannot block.
 var claudeHookEventMap = map[string]string{
 	"before_tool":      "PreToolUse",
 	"after_tool":       "PostToolUse",
 	"before_prompt":    "UserPromptSubmit",
 	"on_stop":          "Stop",
 	"on_session_start": "SessionStart",
+	"on_session_end":   "SessionEnd",
 }
+
+// How on_session_start output reaches the model: CONFIRMED live (Claude
+// Code, 2026-10-30): plain stdout of a SessionStart hook reaches the model;
+// hookSpecificOutput.additionalContext does too.
+var claudeSessionStartContext = "plain"
+
+// claudeUnsupportedHookEvents names the canonical events Claude Code cannot
+// express, each with the reason. Empty: every canonical event maps. Declared
+// anyway so scripts/hook-event-parity.sh can tell "forgotten" from "refused".
+var claudeUnsupportedHookEvents = map[string]string{}
+
+// Per-hook timeout, in seconds, written as the hook's "timeout" field
+// (code.claude.com/docs/en/hooks, "Common fields": "Seconds before canceling";
+// default 600 for a command hook). SessionEnd hooks share a 1.5 s budget, up to
+// 60 s, and a plugin hook's own timeout does NOT raise it (CONFIRMED live,
+// Claude Code, 2026-10-30; see ClaudeSessionEndEnv for the variable that does),
+// so the value is clamped to 60 for on_session_end and warned about.
+var claudeHookTimeoutField = "timeout"
+var claudeHookTimeoutUnsupported = ""
+
+var claudeHookTimeoutCaps = map[string]int{"on_session_end": 60}
 
 // anchorHookCommand rewrites a leading "./" in a hook command so it resolves
 // from the project root via $CLAUDE_PROJECT_DIR, which Claude Code injects into
@@ -241,7 +317,7 @@ func ClaudeHookEvent(canonical string) (string, bool) {
 // SessionHookScriptDir, #495). An exported plugin uses
 // GeneratePluginHookConfig instead.
 func (c *Claude) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
-	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"))
+	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"), "", "")
 	if err != nil || data == nil {
 		return nil, err
 	}
@@ -258,7 +334,7 @@ func (c *Claude) SessionHookScriptDir() string { return c.ConfigDir() }
 // belongs to the project, so a "./" command is anchored to $CLAUDE_PROJECT_DIR
 // (see anchorHookCommand). It returns nil when no hook maps to a Claude event.
 func ClaudeSettingsHooks(hooks map[string][]plugin.HookEntry) ([]byte, error) {
-	return claudeHookDocument(hooks, anchorHookCommand)
+	return claudeHookDocument(hooks, anchorHookCommand, "", "")
 }
 
 // GeneratePluginHookConfig writes the plugin hook file, hooks/claude.json at
@@ -268,7 +344,7 @@ func ClaudeSettingsHooks(hooks map[string][]plugin.HookEntry) ([]byte, error) {
 // command names a script shipped in the plugin and is anchored to
 // ${CLAUDE_PLUGIN_ROOT} (#483).
 func (c *Claude) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
-	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"))
+	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"), "", "")
 	if err != nil || data == nil {
 		return nil, err
 	}
@@ -277,8 +353,10 @@ func (c *Claude) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (
 
 // claudeHookDocument renders canonical hooks in Claude Code's format, or nil
 // when none of them maps to a Claude event. anchor rewrites each command for
-// where the file is read.
-func claudeHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string) string) ([]byte, error) {
+// where the file is read. cwd is written to each handler when not empty.
+// contextMode wraps on_session_start commands (see sessionCommand); Claude's
+// own files pass "" because plain stdout is already context.
+func claudeHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string) string, cwd, contextMode string) ([]byte, error) {
 	if len(hooks) == 0 {
 		return nil, nil
 	}
@@ -289,6 +367,8 @@ func claudeHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string)
 	type claudeInnerHook struct {
 		Type    string `json:"type"`
 		Command string `json:"command"`
+		Cwd     string `json:"cwd,omitempty"`
+		Timeout int    `json:"timeout,omitempty"`
 	}
 	type claudeHookGroup struct {
 		Matcher string            `json:"matcher,omitempty"`
@@ -314,7 +394,7 @@ func claudeHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string)
 		// Group entries by matcher
 		type matcherGroup struct {
 			matcher string
-			cmds    []string
+			entries []plugin.HookEntry
 		}
 		var groups []matcherGroup
 		groupIdx := make(map[string]int)
@@ -322,18 +402,18 @@ func claudeHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string)
 		for _, entry := range entries {
 			key := entry.Matcher
 			if idx, exists := groupIdx[key]; exists {
-				groups[idx].cmds = append(groups[idx].cmds, entry.Command)
+				groups[idx].entries = append(groups[idx].entries, entry)
 			} else {
 				groupIdx[key] = len(groups)
-				groups = append(groups, matcherGroup{matcher: key, cmds: []string{entry.Command}})
+				groups = append(groups, matcherGroup{matcher: key, entries: []plugin.HookEntry{entry}})
 			}
 		}
 
 		var hookGroups []claudeHookGroup
 		for _, g := range groups {
 			var inner []claudeInnerHook
-			for _, cmd := range g.cmds {
-				inner = append(inner, claudeInnerHook{Type: "command", Command: anchor(cmd)})
+			for _, e := range g.entries {
+				inner = append(inner, claudeInnerHook{Type: "command", Command: sessionCommand(contextMode, event, e.Command, anchor), Cwd: cwd, Timeout: hookTimeoutValue("claude", event, e.Timeout)})
 			}
 			hookGroups = append(hookGroups, claudeHookGroup{
 				Matcher: g.matcher,
@@ -549,5 +629,34 @@ func launchClaude(configPath string, initialPrompt string, extraArgs []string) e
 	}
 
 	args := buildClaudeArgs(configPath, initialPrompt, extraArgs)
-	return syscall.Exec(claudeBin, args, os.Environ())
+	env := os.Environ()
+	extra, warnings := ClaudeSessionEndEnv(configPath, os.LookupEnv)
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
+	}
+	return syscall.Exec(claudeBin, args, append(env, extra...))
+}
+
+// Workspace folders: the flag that grants a directory beside the project
+// (code.claude.com/docs/en/cli-reference, "--add-dir": "Add additional working
+// directories for Claude to read and edit files"). It is variadic and repeats;
+// ynh emits one flag per folder. Claude Code does not discover most .claude/
+// configuration from an added directory, so this grants file access only.
+var claudeWorkspaceFlag = "--add-dir"
+var claudeWorkspaceUnsupported = ""
+
+// GeneratePluginHookConfigForCopilot writes the plugin hook file for a package
+// that also targets Copilot, which loads hooks/claude.json there and, without a
+// "cwd", runs each hook in the plugin folder. Each handler carries "cwd": ".",
+// which puts Copilot in the repository root like the other vendors. Claude Code
+// tolerates the extra field and runs hooks in its current directory regardless
+// (CONFIRMED live, Claude Code, 2026-10-30).
+func (c *Claude) GeneratePluginHookConfigForCopilot(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
+	data, err := claudeHookDocument(hooks, pluginRootCommand("CLAUDE_PLUGIN_ROOT"), ".", sessionContextBoth)
+	if err != nil || data == nil {
+		return nil, err
+	}
+	files := map[string][]byte{pluginHookFile(c.Name()): data}
+	sessionContextFiles(files, SessionContextScript, sessionContextBoth, hooks)
+	return files, nil
 }

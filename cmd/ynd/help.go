@@ -53,7 +53,6 @@ blank runs, missing final newlines, frontmatter problems, shell syntax, and
 manifest structure.
 
 Flags:
-  -n                     Report without rewriting anything
   --harness <source>     Harness to resolve against (falls back to $YNH_HARNESS)`,
 
 	"validate": `ynd validate [path]
@@ -77,7 +76,10 @@ Flags:
 Format markdown files in place.
 
 Normalises whitespace and trailing newlines. Run it before committing
-artifacts; lint reports what fmt fixes.`,
+artifacts; lint reports what fmt fixes.
+
+Flags:
+  --harness <source>     Harness to resolve against (falls back to $YNH_HARNESS)`,
 
 	"compress": `ynd compress [path] [flags]
 
@@ -188,7 +190,7 @@ Flags:
 
 Move a harness to the current manifest layout in place.
 
-Renames a deprecated .ynh-plugin/ directory to .agents/harness/. A tree
+Renames the old .ynh-plugin/ directory to .agents/harness/. A tree
 where both exist, or where .ynh-plugin is or holds a symlink, is listed as
 left alone and nothing in it is moved or merged.
 
@@ -203,8 +205,8 @@ Safe to run more than once: it does nothing once the new layout exists.
 Given a directory, migrates every harness beneath it.
 
 Options:
-  --dry-run    List what would be migrated and change nothing.
-  -y, --yes    Skip the confirmation. Also honoured via YNH_YES or CI.
+  -n, --dry-run  List what would be migrated and change nothing.
+  -y, --yes      Skip the confirmation. Also honoured via YNH_YES or CI.
 
 This command deletes .harness.json, so it lists what it will touch and asks
 first. The prompt refuses on EOF, so a piped or scripted run without -y

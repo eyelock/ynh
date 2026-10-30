@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
@@ -180,7 +182,14 @@ func readCopilotWorkspace(path string) (id string, cwd string, err error) {
 // qualifier, so it can resume a session belonging to an entirely different
 // worktree. Prefer an explicit id. A bare --resume is never emitted — Copilot's
 // own help describes it as "using session picker".
-func (c *Copilot) LaunchResume(configPath, sessionID string, extraArgs []string) error {
+//
+// A prompt is refused: Copilot documents -i and --resume separately and no
+// page confirms the pair together
+// (docs.github.com/en/copilot/reference/cli-command-reference).
+func (c *Copilot) LaunchResume(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
+	if prompt != "" {
+		return ErrResumePromptNotSupported
+	}
 	var resumeArgs []string
 	if sessionID != "" {
 		resumeArgs = []string{"--resume=" + sessionID}
@@ -210,17 +219,179 @@ func (c *Copilot) ApplyRuntimeInstructions(runDir, text string) ([]string, error
 	return nil, nil
 }
 
-// GenerateHookConfig always returns nil: hooks are confirmed to silently
-// no-op when the run directory is not a Copilot "trusted folder" (hand-tested
-// against v1.0.75 — a correctly-configured, confirmed-real preToolUse hook
-// never fired in an untrusted scratch repo, with no error surfaced). ynh's
-// staging dir is never pre-trusted and no CLI flag grants trust per-invocation
-// (--add-dir and --allow-all-paths were both tested and do not). Emitting a
-// hook config that silently never fires is worse than the honest gap this
-// documents. See .claude/skills/vendor-adapters/SKILL.md § "Copilot CLI Hook
-// Events" for the full finding and remediation options.
+// copilotHookEventMap maps canonical event names to Copilot hook events, in the
+// PascalCase spelling of the VS Code compatible format (SessionStart,
+// UserPromptSubmit, PreToolUse, PostToolUse, Stop, SessionEnd), per
+// docs.github.com/en/copilot/reference/hooks-configuration. Copilot also
+// accepts camelCase native names (sessionStart, userPromptSubmitted,
+// preToolUse, postToolUse, agentStop, sessionEnd). PascalCase is used because
+// the page says a PascalCase PreToolUse takes Claude-style matchers: "*" or an
+// empty value matches all tools, and "Edit|Write" matches the Claude tool
+// names (runtime edit maps to Edit, bash to Bash, view to Read). Canonical
+// matchers are written in those names, so they keep their meaning. The
+// payload is also Claude's snake_case one (hook_event_name, session_id).
+// CONFIRMED live (Copilot CLI 1.0.105, 2026-10-30): a Bash matcher fires on both
+// PreToolUse and PostToolUse, and an Edit matcher does not fire for a shell
+// call; tool_name is Bash in the payload.
+var copilotHookEventMap = map[string]string{
+	"before_tool":      "PreToolUse",
+	"after_tool":       "PostToolUse",
+	"before_prompt":    "UserPromptSubmit",
+	"on_stop":          "Stop",
+	"on_session_start": "SessionStart",
+	"on_session_end":   "SessionEnd",
+}
+
+// How on_session_start output reaches the model: CONFIRMED live (Copilot
+// CLI 1.0.105, 2026-10-30): plain stdout does NOT reach the model;
+// {"additionalContext": "..."} does
+// (docs.github.com/en/copilot/reference/hooks-configuration: "Only
+// additionalContext is consumed for sessionStart"). ynh wraps the hook.
+var copilotSessionStartContext = "json-field:additionalContext"
+
+// copilotUnsupportedHookEvents names the canonical events Copilot cannot
+// express, each with the reason. Empty: every canonical event maps.
+var copilotUnsupportedHookEvents = map[string]string{}
+
+// Per-hook timeout, in seconds, written as "timeoutSec"
+// (docs.github.com/en/copilot/reference/hooks-configuration: "Timeout in
+// seconds. Default: 30"; "timeout" is an alias used only when timeoutSec is
+// absent). The page documents no maximum. CONFIRMED live (Copilot CLI
+// 1.0.105, 2026-10-30): timeoutSec 1 killed a 3 s hook, 10 let it finish.
+var copilotHookTimeoutField = "timeoutSec"
+var copilotHookTimeoutUnsupported = ""
+
+var copilotHookTimeoutCaps = map[string]int{}
+
+// copilotMatcherEvents are the native events whose matcher Copilot documents:
+// the tool events match the tool name. The page documents no matcher for
+// session or prompt events, so ynd does not write one there.
+var copilotMatcherEvents = map[string]bool{"PreToolUse": true, "PostToolUse": true}
+
+// copilotPluginRootVar is the variable a "./" hook command is anchored to. The
+// CLI plugin reference documents PLUGIN_ROOT, set in the environment of stdio
+// MCP servers and expanded in their args, env and cwd, and CLAUDE_PLUGIN_ROOT
+// and COPILOT_PLUGIN_ROOT as aliases in agent mcp-servers frontmatter. It does
+// not say whether a hook command sees any of them. CONFIRMED live (Copilot CLI 1.0.105, 2026-10-30):
+// all three are set to the plugin directory for a hook, and
+// "${PLUGIN_ROOT}"/... expands (#497). A hook script also runs with the plugin
+// directory as its working directory; the project is the payload's cwd.
+const copilotPluginRootVar = "PLUGIN_ROOT"
+
+// copilotSessionHookFile is where `ynh run`, `ynd preview` and the agent loop
+// put Copilot's hooks: hooks/hooks.json at the root of the .copilot/ directory
+// buildCopilotArgs passes to --plugin-dir. A plugin reads hooks.json or
+// hooks/hooks.json from its installation directory
+// (docs.github.com/en/copilot/reference/hooks-configuration, "Plugins").
+var copilotSessionHookFile = filepath.Join(".copilot", "hooks", "hooks.json")
+
+// copilotPluginHookFile is where an exported plugin carries Copilot's hooks:
+// hooks.json at the plugin root, one of the two default names Copilot reads.
+// It is deliberately not hooks/hooks.json, which Claude Code, Cursor and Codex
+// all read by default and would take for their own format (#469). Claude,
+// Cursor and Codex read no root hooks.json.
+const copilotPluginHookFile = "hooks.json"
+
+// GenerateHookConfig writes the session hook file, .copilot/hooks/hooks.json.
+// `ynh run` launches Copilot with --plugin-dir pointed at the assembled
+// .copilot/ directory, so this is the plugin's own hooks/hooks.json. A "./"
+// command names a script the harness ships and is anchored to
+// "${PLUGIN_ROOT}", with session assembly copying the script into .copilot/
+// (see SessionHookScriptDir). An exported plugin uses GeneratePluginHookConfig.
+//
+// Earlier ynh returned nothing here: a hand test against v1.0.75 saw a
+// preToolUse hook in .github/hooks/ never fire in an untrusted folder. The
+// current page says "Repository and inherited-agent hooks require workspace
+// admission", and says nothing of plugin hooks. So ynh does not write
+// .github/hooks/ into the project, and rests on the plugin route. CONFIRMED
+// live (Copilot CLI 1.0.105, 2026-10-30): all six events fire from this file via --plugin-dir in
+// an UNTRUSTED folder, so plugin hooks need no folder trust. The repository
+// .github/hooks/ route was not retested. See
+// .claude/skills/vendor-adapters/references/copilot.md.
 func (c *Copilot) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
-	return nil, nil
+	data, err := copilotHookDocument(hooks, pluginRootCommand(copilotPluginRootVar))
+	if err != nil || data == nil {
+		return nil, err
+	}
+	files := map[string][]byte{copilotSessionHookFile: data}
+	sessionContextFiles(files, filepath.Join(c.ConfigDir(), SessionContextScript), sessionContextMode("copilot"), hooks)
+	return files, nil
+}
+
+// SessionHookScriptDir is where session assembly copies the scripts a session
+// hook runs by a "./" path: the --plugin-dir plugin root, which
+// ${PLUGIN_ROOT} names in GenerateHookConfig's commands.
+func (c *Copilot) SessionHookScriptDir() string { return c.ConfigDir() }
+
+// GeneratePluginHookConfig writes the plugin hook file, hooks.json at the
+// plugin root, for `ynd export` and marketplace packages. The document is the
+// session file's: "./" commands are anchored to "${PLUGIN_ROOT}", and the
+// exporter copies the scripts into the plugin.
+//
+// In a Copilot-only export the manifest (.claude-plugin/plugin.json) names no
+// hooks file, so Copilot finds this one by default. In a package that also
+// targets Claude the shared manifest names hooks/claude.json, and CONFIRMED
+// live (Copilot CLI 1.0.105, 2026-10-30) Copilot loads that file and ignores a root hooks.json, so
+// the exporter does not write this file there (#499).
+func (c *Copilot) GeneratePluginHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
+	data, err := copilotHookDocument(hooks, pluginRootCommand(copilotPluginRootVar))
+	if err != nil || data == nil {
+		return nil, err
+	}
+	files := map[string][]byte{copilotPluginHookFile: data}
+	sessionContextFiles(files, SessionContextScript, sessionContextMode("copilot"), hooks)
+	return files, nil
+}
+
+// copilotHookDocument renders canonical hooks in Copilot's format, or nil when
+// none of them maps to a Copilot event. The file is version 1 with a "hooks"
+// object keyed by event, each value a flat array of command entries (no
+// matcher groups): {"type": "command", "command": "...", "cwd": ".", "matcher": "..."}.
+// "cwd": "." runs the command from the repository root rather than the plugin
+// folder (CONFIRMED live, Copilot CLI 1.0.105, 2026-10-30); ynh's own "./"
+// scripts are anchored with ${PLUGIN_ROOT} and unaffected.
+// "command" is the cross-platform spelling; Copilot copies it to bash and
+// powershell when those are absent. timeoutSec is written only when the hook
+// declares a timeout; otherwise Copilot's documented default of 30 s applies.
+// anchor rewrites each command for where the file is read.
+func copilotHookDocument(hooks map[string][]plugin.HookEntry, anchor func(string) string) ([]byte, error) {
+	if len(hooks) == 0 {
+		return nil, nil
+	}
+
+	type copilotHookEntry struct {
+		Type    string `json:"type"`
+		Command string `json:"command"`
+		Cwd     string `json:"cwd"`
+		Matcher string `json:"matcher,omitempty"`
+		Timeout int    `json:"timeoutSec,omitempty"`
+	}
+
+	allEvents := make(map[string][]copilotHookEntry)
+	for _, event := range slices.Sorted(maps.Keys(hooks)) {
+		copilotEvent, ok := copilotHookEventMap[event]
+		if !ok {
+			continue
+		}
+		var entries []copilotHookEntry
+		for _, entry := range hooks[event] {
+			e := copilotHookEntry{Type: "command", Command: sessionCommand(sessionContextMode("copilot"), event, entry.Command, anchor), Cwd: ".", Timeout: hookTimeoutValue("copilot", event, entry.Timeout)}
+			if copilotMatcherEvents[copilotEvent] {
+				e.Matcher = entry.Matcher
+			}
+			entries = append(entries, e)
+		}
+		allEvents[copilotEvent] = entries
+	}
+	if len(allEvents) == 0 {
+		return nil, nil
+	}
+
+	data, err := json.MarshalIndent(map[string]any{"version": 1, "hooks": allEvents}, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshalling hook config: %w", err)
+	}
+	return append(data, '\n'), nil
 }
 
 // GeneratePluginManifest writes the manifest for the `ynh run` layout, which
@@ -249,8 +420,8 @@ func (c *Copilot) GeneratePluginManifest(hj *plugin.HarnessJSON, outputDir strin
 // The file is Claude's manifest, so both are rendered by claudePluginManifest:
 // in a merged package Claude and Copilot both write it, and a Copilot render
 // that differed would drop Claude's "hooks" and "mcpServers" pointers whenever
-// Copilot wrote last (#469, #481). Copilot itself emits no hooks (see
-// GenerateHookConfig), and its MCP file, .github/mcp.json, is one of its
+// Copilot wrote last (#469, #481). Copilot's own hooks go in hooks.json, which
+// this manifest does not name (see GeneratePluginHookConfig), and its MCP file, .github/mcp.json, is one of its
 // defaults, so a Copilot-only export names neither. In a package that also
 // carries Claude, the manifest's "mcpServers" names Claude's mcp/claude.json,
 // which Copilot reads too; see GeneratePluginMCPConfig.
@@ -569,3 +740,12 @@ func launchCopilot(configPath string, initialPrompt string, extraArgs []string) 
 	}
 	return syscall.Exec(copilotBin, args, os.Environ())
 }
+
+// Workspace folders: Copilot CLI's /add-dir command is documented as "Allow
+// file access to a directory and load its .github/skills and .github/agents as
+// trusted configurations" (docs.github.com/en/copilot/reference/cli-command-reference).
+// The launch flag --add-dir is the one this adapter already passes for the
+// staging directory. A granted folder's agent configuration is therefore
+// loaded as trusted, which is a wider grant than file access alone.
+var copilotWorkspaceFlag = "--add-dir"
+var copilotWorkspaceUnsupported = ""

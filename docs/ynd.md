@@ -41,6 +41,41 @@ ynd lint path/to/harness       # specific directory
 ynd lint --harness ./my-harness  # explicit harness flag
 ```
 
+#### Ignoring paths: `.yndignore`
+
+`ynd lint`, `ynd validate` and `ynd fmt` skip git-ignored files, `.git`,
+`node_modules`, `vendor` and a few others. That does not help with tracked
+files that are meant to be broken: eval fixtures for a skill that diagnoses
+broken skills fail lint by design, and they must stay in git.
+
+Put a `.yndignore` at the root of the tree you walk, in
+[gitignore syntax](https://git-scm.com/docs/gitignore#_pattern_format)
+(comments, `!` negation, `**`, a trailing `/` for directories, a leading `/` to
+anchor at the root). All three commands read it, so they walk the same set.
+
+```gitignore
+# .yndignore: deliberately broken fixtures for the skill-doctor evals
+evals/fixtures/
+*.broken.md
+!evals/fixtures/keep-me.broken.md
+```
+
+With that file at `./`, `ynd lint .`, `ynd validate .` and `ynd fmt .` do not
+see anything under `evals/fixtures/`, including a harness inside it. Rules:
+
+- Only the root you name is consulted: `ynd lint skills/` reads
+  `skills/.yndignore`, not the repository's. Run from the directory that holds
+  the file, or name that directory.
+- A file named outright (`ynd lint evals/fixtures/a.md`) is still checked.
+  Naming a path is a direct request.
+- Patterns are matched by `git check-ignore` against a scratch repository, so
+  the answer is the same inside a git repository, outside one, and in a
+  worktree, and the tree's own `.gitignore` and your global excludes do not
+  change it. `.gitignore` still applies separately, as before.
+- It needs `git` on the PATH. If a `.yndignore` exists and cannot be applied,
+  the command fails rather than lint the files you excluded. With no
+  `.yndignore`, git is not required.
+
 #### Declared reads
 
 An artifact that tells an agent to open a file can name one that never ships.
@@ -113,7 +148,7 @@ something you can read rather than take on trust:
 ```text
 .: valid
   checked:
-    manifest     .ynh-plugin/plugin.json against https://eyelock.github.io/ynh/schema/plugin.schema.json
+    manifest     .agents/harness/plugin.json against https://eyelock.github.io/ynh/schema/plugin.schema.json
     includes     https://github.com/eyelock/assistants path skills/dev pick skills/dev-review
                  https://github.com/eyelock/ynm pick skills/ynm-memory
     mcp_servers  ynm runs `ynm serve`
@@ -157,6 +192,26 @@ ynh manifest's `version` requirement or name rule.
 ynd validate ./my-agent-plugin   # root plugin.json with the agent-plugins.org $schema
 ```
 
+`validate` honours [`.yndignore`](#ignoring-paths-yndignore) when it searches a
+directory for harnesses.
+
+#### Sensors
+
+Beyond the manifest schema, `validate` checks each declared sensor's source,
+role, tolerance and focus references, plus: a `count` ratchet needs a `command`
+source, `output.match` must compile, and a `reference.path` must be a relative
+directory that exists in the harness. A sensor set meant to be included is
+checked as an ordinary harness, because it is one.
+
+The harness's own top-level `sensor_overrides` (tuning sensors its includes
+bring) are checked with the same wording `ynh check` refuses with: the shape,
+the tolerance and ratchet values, only those two keys, and no override of a
+sensor this harness declares itself. Whether each name is declared by an
+include is checked too, reading local includes and git includes already in the
+include cache, honouring `"sensors": false`, and never touching the network.
+An include that cannot be read is listed under `checked:` as `not checked:`
+and does not fail validation; run `ynh update` to cache it and validate again.
+
 ### fmt
 
 Format markdown files — normalise headings, whitespace, and list markers.
@@ -166,6 +221,9 @@ ynd fmt                        # all .md files under CWD
 ynd fmt skills/                # specific directory
 ynd fmt --harness ./my-harness   # explicit harness flag
 ```
+
+`fmt` rewrites files, so it matters that it skips what `.gitignore` and
+[`.yndignore`](#ignoring-paths-yndignore) exclude.
 
 ### compress
 
@@ -439,7 +497,7 @@ converted on load.
 
 | Flag | Description |
 |------|-------------|
-| `--dry-run` | List what would be migrated and change nothing. |
+| `-n, --dry-run` | List what would be migrated and change nothing. |
 | `-y, --yes` | Skip the confirmation. Also honoured via `YNH_YES` or `CI`. |
 | `-h, --help` | Show help |
 

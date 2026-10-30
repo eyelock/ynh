@@ -24,7 +24,7 @@ import (
 func cmdCheck(args []string, stdout, stderr io.Writer) error {
 	structured := detectJSONFormat(args)
 	cwd := ""
-	var harnessName string
+	var harnessName, profileName string
 	var only []string
 	var updateBaseline, ignoreBaseline, calibrate bool
 	overlay := map[string]json.RawMessage{}
@@ -58,6 +58,18 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 				return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
 					fmt.Sprintf("--sensor-overlay: invalid JSON: %v", err)))
 			}
+		case "--profile":
+			// Flag only, deliberately not YNH_PROFILE. `ynh run` takes the
+			// environment variable because a profile there picks a posture
+			// the operator chose; here a profile can soften a gate, and an
+			// ambient variable left in a shell would silently make every
+			// interactive check advisory. Softening has to be asked for on
+			// the command line it applies to.
+			if i+1 >= len(args) {
+				return checkExecErr(cliError(stderr, structured, errCodeInvalidInput, "--profile requires a value"))
+			}
+			i++
+			profileName = args[i]
 		case "--only":
 			if i+1 >= len(args) {
 				return checkExecErr(cliError(stderr, structured, errCodeInvalidInput, "--only requires a value"))
@@ -97,7 +109,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 
 	if harnessName == "" {
 		return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
-			"usage: ynh check <harness-id|path> [--only a,b] [--cwd dir] [--format text|json]"))
+			"usage: ynh check <harness-id|path> [--only a,b] [--profile name] [--cwd dir] [--format text|json]"))
 	}
 
 	// A path or an installed id, deciding which by the same classifier every
@@ -110,7 +122,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 	// only way to check a harness was to install it first. That is a real
 	// barrier while you are still authoring one, which is exactly when you most
 	// want to run the gate.
-	p, err := loadHarnessRef(harnessName)
+	p, err := loadHarnessRefProfile(harnessName, profileName)
 	if err != nil {
 		return checkExecErr(cliError(stderr, structured, errCodeNotFound, err.Error()))
 	}
@@ -150,6 +162,13 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 					"not a side effect of a build. Run it locally and commit the result."))
 		}
 	}
+
+	// Recording does not depend on tolerance: a failing sensor is recorded
+	// below whatever severity it has, and a profile cannot change the ratchet.
+	// So the same failures are recorded with or without --profile, and the
+	// combination is allowed rather than refused the way --sensor-overlay is
+	// (an overlay changes what runs; a profile only changes how a failure is
+	// judged).
 
 	// Load once, and treat a load failure as fatal even under --no-baseline.
 	//
@@ -210,6 +229,11 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
 				"--calibrate does not take --sensor-overlay: calibrating a substituted command proves nothing about the declared one"))
 		}
+		if profileName != "" {
+			return checkExecErr(cliError(stderr, structured, errCodeInvalidInput,
+				"--calibrate does not take --profile: calibration runs each declared command against its "+
+					"reference fixture and never reads tolerance, which is all a profile can change, so the profile would do nothing"))
+		}
 		return runCalibration(p, wanted, stdout, stderr, structured)
 	}
 
@@ -223,6 +247,7 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 		Capabilities: config.CapabilitiesVersion,
 		YnhVersion:   config.Version,
 		Harness:      p.Name,
+		Profile:      profileName,
 		Verdict:      gate.VerdictPass,
 	}
 
@@ -240,11 +265,12 @@ func cmdCheck(args []string, stdout, stderr io.Writer) error {
 			s = merged
 		}
 		res := gate.Result{
-			Name:        name,
-			Kind:        s.Source.Kind(),
-			Category:    s.Category,
-			Tolerance:   s.EffectiveTolerance(),
-			ToolVersion: toolVersion(s.VersionCommand, cwd, p.Dir),
+			Name:            name,
+			Kind:            s.Source.Kind(),
+			Category:        s.Category,
+			Tolerance:       s.EffectiveTolerance(),
+			ToleranceSource: s.ToleranceSource,
+			ToolVersion:     toolVersion(s.VersionCommand, cwd, s.Dir(p.Dir)),
 		}
 
 		if len(wanted) > 0 && !wanted[name] {
@@ -634,7 +660,14 @@ func writeCheckText(w io.Writer, env gate.Envelope) error {
 			// operator nothing about what to do. The state is the finding.
 			detail = r.Freshness
 		}
-		if r.Status == gate.StatusFail && r.Tolerance != "blocking" {
+		// A severity that is not the declared one is always said, whatever the
+		// outcome: a passing sensor softened by a profile is the case where
+		// the operator most needs to know the gate is not what the manifest
+		// says. A failing non-blocking sensor is marked as before.
+		switch {
+		case r.ToleranceSource != "":
+			detail += " (" + r.Tolerance + ", " + toleranceSourceText(r.ToleranceSource, env.Profile) + ")"
+		case r.Status == gate.StatusFail && r.Tolerance != "blocking":
 			detail += " (" + r.Tolerance + ")"
 		}
 		if _, err := fmt.Fprintf(tw, "  %s\t%s\t%s\t%dms\n", mark, r.Name, detail, r.DurationMS); err != nil {
@@ -702,6 +735,17 @@ func writeCheckText(w io.Writer, env gate.Envelope) error {
 	return writeBaselineFooter(w, env)
 }
 
+// toleranceSourceText names the layer that set a sensor's tolerance.
+func toleranceSourceText(source, profile string) string {
+	switch source {
+	case "profile":
+		return "profile " + profile
+	case "include":
+		return "include override"
+	}
+	return source
+}
+
 // writeBaselineFooter surfaces a ratchet that has slack in it. Debt paid off
 // stays forgiven until someone narrows the baseline, so the gate says when
 // that is worth doing rather than waiting to be asked.
@@ -731,8 +775,18 @@ func plural(n int, word string) string {
 // loadHarnessRef resolves either a canonical id or a filesystem path, with
 // the sensors its includes declare folded in.
 func loadHarnessRef(ref string) (*harness.Harness, error) {
+	return loadHarnessRefProfile(ref, "")
+}
+
+// loadHarnessRefProfile is loadHarnessRef with a profile selected, whose
+// sensor_overrides are applied after the include merge. An unknown profile is
+// an error.
+func loadHarnessRefProfile(ref, profile string) (*harness.Harness, error) {
 	h, err := harness.LoadIDOrPath(ref)
 	if err != nil {
+		return nil, err
+	}
+	if h, err = harness.ResolveProfile(h, profile); err != nil {
 		return nil, err
 	}
 	return resolver.WithIncludedSensors(h)

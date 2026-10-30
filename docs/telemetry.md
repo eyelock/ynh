@@ -85,8 +85,7 @@ its spool folder:
 |---|---|
 | the vendor CLI (the worker) | `TRACEPARENT` (and `TRACESTATE`, if any) naming the run's span, and `YNR_SPOOL` |
 | the vendor CLI, with the [relay](#vendor-telemetry-through-the-relay) on | also its telemetry settings, pointing at the relay |
-| each `ynh check` between turns, and every sensor command it runs | `TRACEPARENT` naming a `ynh.check` span, a child of the run, and `YNR_SPOOL` |
-| the convergence verifier's `ynh sensors run` | `TRACEPARENT` naming a `ynh.sensors.run` span, and `YNR_SPOOL` |
+| each `ynh check` between turns and the one that runs the convergence verifiers, and every sensor command they run | `TRACEPARENT` naming a `ynh.check` span, a child of the run, and `YNR_SPOOL` |
 
 `YNR_SPOOL` is the folder ynh resolved, absolute, including the laptop default,
 so whatever those processes start that follows the same contract, such as an MCP
@@ -101,7 +100,7 @@ commit, the changed files, and for `--auto-commit`) get nothing added: they make
 no network calls and emit nothing.
 
 When telemetry is off, the worker gets no trace context and no `YNR_SPOOL`, and
-`ynh check` and `ynh sensors run` inherit ynh's environment exactly as they
+`ynh check` inherits ynh's environment exactly as it
 always have, with nothing added or removed.
 
 ## What a run emits
@@ -110,8 +109,7 @@ always have, with nothing added or removed.
 |---|---|---|
 | `ynh.run.started` | event (log record) | the run begins, before any worker starts |
 | `ynh.run` | span | the run, from start to end |
-| `ynh.check` | span, child of `ynh.run` | each `ynh check` between turns |
-| `ynh.sensors.run` | span, child of `ynh.run` | each run of the convergence verifier |
+| `ynh.check` | span, child of `ynh.run` | each `ynh check` between turns, and each one that runs the convergence verifiers |
 | `ynh.run.finished` | event (log record) | the run ends |
 
 A run refused before any worker starts still emits all three, with the outcome
@@ -153,7 +151,6 @@ zero.
 | `ynh.run.profile` | all | the `--profile` given |
 | `ynh.run.resumed` | all | `true` for a `--resume` |
 | `ynh.run.turn` | call spans | the turn the call follows |
-| `ynh.sensor.name` | `ynh.sensors.run` | the sensor run |
 | `ynh.call.outcome` | call spans | the gate's verdict (`pass`, `blocked`), the sensor's status word, or `error` when the call could not run; an `error` call has an error status |
 
 On a `--resume`, the harness, focus and profile are the ones the checkpoint
@@ -215,7 +212,8 @@ before the worker starts:
 
 When one does not hold, ynh prints one note on stderr and the run carries on
 without the vendor's telemetry. ynh never starts the relay because it found
-`ynr`: only the setting does.
+`ynr`: only the setting does. The base image carries `ynr`, and that
+changes nothing: see [Docker](docker.md#image-contents).
 
 ### Its lifetime
 

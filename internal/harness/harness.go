@@ -56,6 +56,12 @@ func (g GitSource) IsLocal() bool { return g.Local != "" && g.Git == "" }
 type Include struct {
 	GitSource
 	Pick []string
+	// Sensors is the include's "sensors" flag. nil means true; see
+	// SensorsEnabled.
+	Sensors *bool
+	// Instructions is the include's "instructions" flag. nil means true; see
+	// InstructionsEnabled.
+	Instructions *bool
 	// SHA is the resolved commit at install/update time, populated from
 	// installed.json's resolved slice. Empty for local-path includes and for
 	// pre-migration installs that predate SHA recording.
@@ -66,6 +72,19 @@ type Include struct {
 	// captured at clone time. Used by --check-updates so probe targets the
 	// same ref that ynh update tracks. Empty for pre-migration installs.
 	ResolvedRef string
+}
+
+// SensorsEnabled reports whether the sensors this include declares travel into
+// the consumer. They do unless the include says "sensors": false.
+func (i Include) SensorsEnabled() bool {
+	return i.Sensors == nil || *i.Sensors
+}
+
+// InstructionsEnabled reports whether the include's instructions file is
+// composed into the harness's instructions. It is unless the include says
+// "instructions": false.
+func (i Include) InstructionsEnabled() bool {
+	return i.Instructions == nil || *i.Instructions
 }
 
 type Delegate struct {
@@ -121,25 +140,35 @@ type Harness struct {
 	// the source manifest declared. Without them a *Harness cannot reproduce
 	// its own plugin.json, and every path that assembles from one — `ynh run`
 	// and `ynd preview` — silently ships less than `ynd export` does.
-	Author          *plugin.AuthorInfo
-	Keywords        []string
-	DefaultVendor   string
-	Namespace       string // e.g. "eyelock/assistants"; empty for local/unqualified installs
-	Dir             string // absolute path to the harness directory — the base for relative local includes
-	Includes        []Include
-	DelegatesTo     []Delegate
-	Hooks           map[string][]plugin.HookEntry
-	MCPServers      map[string]plugin.MCPServer
-	EnvPassthrough  []string
-	Agent           *plugin.AgentConfig
-	Profiles        map[string]plugin.Profile
-	Focuses         map[string]plugin.Focus
+	Author         *plugin.AuthorInfo
+	Keywords       []string
+	DefaultVendor  string
+	Namespace      string // e.g. "eyelock/assistants"; empty for local/unqualified installs
+	Dir            string // absolute path to the harness directory, the base for relative local includes
+	Includes       []Include
+	DelegatesTo    []Delegate
+	Hooks          map[string][]plugin.HookEntry
+	MCPServers     map[string]plugin.MCPServer
+	EnvPassthrough []string
+	// Workspace is the manifest's requested workspace folders, as written.
+	Workspace []string
+	Agent     *plugin.AgentConfig
+	Profiles  map[string]plugin.Profile
+	Focuses   map[string]plugin.Focus
+	// LaunchFocus is the manifest's launch_focus: the focus a bare `ynh run`
+	// wakes with. Only cmdRun reads it.
+	LaunchFocus     string
 	Sensors         map[string]plugin.Sensor
 	SensorOverrides map[string]plugin.SensorOverride
-	InstalledFrom   *Provenance
+	// ActiveProfile and ProfileSensorOverrides are set by ResolveProfile and
+	// applied last by resolver.WithIncludedSensors, after the include merge,
+	// because they may name sensors only that merge produces.
+	ActiveProfile          string
+	ProfileSensorOverrides map[string]plugin.SensorOverride
+	InstalledFrom          *Provenance
 
 	// Manifest is the manifest this harness was loaded from: the parsed
-	// .ynh-plugin/plugin.json, or the one derived in memory from an Agent
+	// .agents/harness/plugin.json, or the one derived in memory from an Agent
 	// Plugins package. Export and info read it rather than the file, so a
 	// derived harness has one to give.
 	Manifest *plugin.HarnessJSON
@@ -636,8 +665,10 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 
 	for _, inc := range hj.Includes {
 		p.Includes = append(p.Includes, Include{
-			GitSource: GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
-			Pick:      inc.Pick,
+			GitSource:    GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
+			Pick:         inc.Pick,
+			Sensors:      inc.Sensors,
+			Instructions: inc.Instructions,
 		})
 	}
 	for _, del := range hj.DelegatesTo {
@@ -696,6 +727,9 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	if len(hj.EnvPassthrough) > 0 {
 		p.EnvPassthrough = hj.EnvPassthrough
 	}
+	if len(hj.Workspace) > 0 {
+		p.Workspace = hj.Workspace
+	}
 	if hj.Agent != nil {
 		p.Agent = hj.Agent
 	}
@@ -705,6 +739,7 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	if len(hj.Focuses) > 0 {
 		p.Focuses = hj.Focuses
 	}
+	p.LaunchFocus = hj.LaunchFocus
 	if len(hj.Sensors) > 0 {
 		p.Sensors = hj.Sensors
 	}
@@ -787,6 +822,8 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 	}
 
 	resolved := *h
+	resolved.ActiveProfile = profileName
+	resolved.ProfileSensorOverrides = profile.SensorOverrides
 
 	// Merge hooks: per-event replace, inherit absent events
 	if profile.Hooks != nil {
@@ -864,7 +901,9 @@ func ResolveProfile(h *Harness, profileName string) (*Harness, error) {
 					Ref:   inc.Ref,
 					Path:  inc.Path,
 				},
-				Pick: inc.Pick,
+				Pick:         inc.Pick,
+				Sensors:      inc.Sensors,
+				Instructions: inc.Instructions,
 			})
 		}
 		resolved.Includes = merged
@@ -912,8 +951,10 @@ func LoadFile(path string) (*Harness, error) {
 
 	for _, inc := range hj.Includes {
 		p.Includes = append(p.Includes, Include{
-			GitSource: GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
-			Pick:      inc.Pick,
+			GitSource:    GitSource{Git: inc.Git, Local: inc.Local, Ref: inc.Ref, Path: inc.Path},
+			Pick:         inc.Pick,
+			Sensors:      inc.Sensors,
+			Instructions: inc.Instructions,
 		})
 	}
 	for _, del := range hj.DelegatesTo {
@@ -931,6 +972,9 @@ func LoadFile(path string) (*Harness, error) {
 	if len(hj.EnvPassthrough) > 0 {
 		p.EnvPassthrough = hj.EnvPassthrough
 	}
+	if len(hj.Workspace) > 0 {
+		p.Workspace = hj.Workspace
+	}
 	if hj.Agent != nil {
 		p.Agent = hj.Agent
 	}
@@ -940,6 +984,7 @@ func LoadFile(path string) (*Harness, error) {
 	if len(hj.Focuses) > 0 {
 		p.Focuses = hj.Focuses
 	}
+	p.LaunchFocus = hj.LaunchFocus
 	if len(hj.Sensors) > 0 {
 		p.Sensors = hj.Sensors
 	}

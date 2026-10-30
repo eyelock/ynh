@@ -64,6 +64,10 @@ rules:
     reason: "Documents vendor session and MCP config behaviour (copilot mcp add writes user-level config) so the adapter can avoid depending on it."
 
   - id: "RA2"
+    path: "*vendor-adapters/references/copilot.md"
+    reason: "Records live-verified Copilot CLI hook behaviour (which hooks file loads, where hook scripts run, which session events fire) so ynh's Copilot adapter generates hooks Copilot actually runs. It is reference material for the adapter's Go code and grants no agent session persistence."
+
+  - id: "RA2"
     path: "*agents/evals.md"
     reason: "Matches the per-tutorial sandbox (/tmp/ynh-eval-<slug>) and its run.sh, which carries the working directory and exports from one block of a tutorial to the next. The sandbox exists to CONTAIN the eval run and is torn down after each tutorial; nothing persists across sessions."
 

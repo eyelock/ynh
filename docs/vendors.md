@@ -181,7 +181,7 @@ These come from Ollama's own docs, not ynh:
 
 **Cursor Agent** - Full interactive and non-interactive support. Uses symlink-based artifact installation. Requires `agent` CLI installed (`curl https://cursor.com/install -fsS | bash`). Uses `-p` for non-interactive prompts. See [cursor.com/cli](https://cursor.com/cli).
 
-**GitHub Copilot CLI** - Full interactive and non-interactive support. Uses `--plugin-dir` for artifact loading, like Claude. Requires `copilot` CLI installed. Non-interactive runs need `--allow-all-tools` (added automatically). Harness instructions and MCP servers are projected into the calling project's `.github/instructions/ynh-harness.instructions.md` and `.github/mcp.json`, because Copilot doesn't read plugin-bundled `AGENTS.md`/`.mcp.json` via `--plugin-dir`. The instructions file gets one frontmatter block, `applyTo: "**/*"` so it is always on, followed by any fields of the harness instructions' own frontmatter except `applyTo`. **Hooks are not supported**: Copilot silently no-ops hooks in folders it hasn't marked as trusted, and no CLI flag exists to grant that trust per-invocation, so `ynh`-managed hook config would silently fail rather than run. See [github.com/features/copilot/cli](https://github.com/features/copilot/cli).
+**GitHub Copilot CLI** - Full interactive and non-interactive support. Uses `--plugin-dir` for artifact loading, like Claude. Requires `copilot` CLI installed. Non-interactive runs need `--allow-all-tools` (added automatically). Harness instructions and MCP servers are projected into the calling project's `.github/instructions/ynh-harness.instructions.md` and `.github/mcp.json`, because Copilot doesn't read plugin-bundled `AGENTS.md`/`.mcp.json` via `--plugin-dir`. The instructions file gets one frontmatter block, `applyTo: "**/*"` so it is always on, followed by any fields of the harness instructions' own frontmatter except `applyTo`. **Hooks** are written into the `--plugin-dir` plugin (`.copilot/hooks/hooks.json`), not into your repository, and fire in an untrusted folder (verified on Copilot CLI 1.0.105). See [Hooks: Copilot format and trust](hooks.md#copilot-format-and-trust). See [github.com/features/copilot/cli](https://github.com/features/copilot/cli).
 
 ## Export Output by Vendor
 
@@ -195,7 +195,7 @@ These come from Ollama's own docs, not ynh:
 | **Rules** | `rules/<name>.md` | `rules/<name>.mdc` | *excluded* | *excluded* |
 | **Commands** | `commands/<name>.md` | `commands/<name>.md` | *excluded* | *excluded* |
 | **Instructions** | `AGENTS.md` | `.cursorrules` + `AGENTS.md` | `AGENTS.md` | `AGENTS.md` |
-| **Hooks** | `hooks/claude.json` | `hooks/cursor.json` | `hooks/codex.json` | *none* |
+| **Hooks** | `hooks/claude.json` | `hooks/cursor.json` | `hooks/codex.json` | `hooks.json` (Copilot-only; a merged package with Claude uses `hooks/claude.json`) |
 | **MCP servers** | `mcp/claude.json` | `mcp.json` | `.mcp.json` | `.github/mcp.json` |
 | **Marketplace** | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` | `.agents/plugins/marketplace.json` | `.github/plugin/marketplace.json` (best-effort, unverified) |
 
@@ -205,7 +205,7 @@ Key differences between runtime and export:
 - **Export** places artifacts at the plugin root (e.g., `skills/`) — the standard distributable layout
 - Claude export writes `AGENTS.md` for instructions, not `CLAUDE.md` (which would conflict with the installing project's own)
 - Codex export is limited to skills — agents, rules, commands, and delegates are excluded with warnings
-- Hooks go to the session path at runtime (`.claude/hooks/hooks.json`, `.cursor/hooks.json`, `.codex/hooks.json`) and to `hooks/<vendor>.json` at the plugin root in an export, named by the `"hooks"` field of that vendor's manifest, never both. A plugin never reads the session path, and there is no shared `hooks/hooks.json`, so a merged package never hands one vendor's format to another (see [Hooks: Config File Locations](hooks.md#config-file-locations))
+- Hooks go to the session path at runtime (`.claude/hooks/hooks.json`, `.cursor/hooks.json`, `.codex/hooks.json`, `.copilot/hooks/hooks.json`) and to `hooks/<vendor>.json` at the plugin root in an export, named by the `"hooks"` field of that vendor's manifest, never both. A plugin never reads the session path, and there is no shared `hooks/hooks.json`, so a merged package never hands one vendor's format to another (see [Hooks: Config File Locations](hooks.md#config-file-locations))
 - MCP config goes to the session path at runtime (`.claude/.mcp.json`, `.cursor/mcp.json`) and to the plugin path in an export (`mcp/claude.json`, named by the `"mcpServers"` field of `.claude-plugin/plugin.json`, and Cursor's root `mcp.json`), never both, for the same reason. Every vendor in a merged package has its own MCP file, and each manifest names only a file that is there (see [MCP Servers: Config File Locations](mcp.md#config-file-locations))
 - Codex is included in merged export (`--merged`) and in `ynd marketplace build`, which exports each harness the same way: `.codex-plugin/plugin.json` sits beside the other vendors' manifests and points only at `skills/`, so Codex ignores the agents, rules and commands the other vendors read from the same directory. `ynd export --merged` says so with the same warning a per-vendor Codex export prints. Pass `-v` without `codex` to leave it out
 - Copilot export is limited to skills and agents — rules and commands are excluded with warnings
@@ -224,7 +224,7 @@ join it, each where that client documents reading them:
 | | Loads the format | What `-v` adds to the package |
 |---|---|---|
 | Codex | yes | `com.openai/hooks/hooks.json`, named under `extensions.com.openai` |
-| Copilot / VS Code | yes | `com.github.copilot/agents/` (same subset as the vendor export) |
+| Copilot / VS Code | yes | `com.github.copilot/agents/` (same subset as the vendor export) and `com.github.copilot/hooks/hooks.json` |
 | Cursor | yes, core only | nothing: Cursor has published no extension namespace, and does not expand `${PLUGIN_ROOT}` or `${PLUGIN_DATA}` |
 | Claude Code | no | `.claude-plugin/plugin.json`, `mcp/claude.json` and `hooks/claude.json` (named by that manifest, as in its own plugin export), `agents/`, `rules/`, `commands/`, `CLAUDE.md` at the root: a compatibility package, as the spec's migration guide describes |
 

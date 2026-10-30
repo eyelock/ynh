@@ -12,6 +12,7 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/pathutil"
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 // ResolvedContent represents files extracted from a Git source.
@@ -21,6 +22,13 @@ type ResolvedContent struct {
 	// Paths are the specific files/dirs requested via pick.
 	// If empty, the entire repo is included.
 	Paths []string
+	// Label names the include for the heading of its section in the composed
+	// instructions. Empty marks the harness's own content, which comes first
+	// and carries no heading.
+	Label string
+	// NoInstructions leaves this content's instructions file out of the
+	// composed instructions ("instructions": false on the include).
+	NoInstructions bool
 }
 
 // ResolveResult pairs a ResolvedContent with metadata about how it was resolved.
@@ -70,7 +78,7 @@ func resolveGitSourceWith(gs harness.GitSource, harnessDir string, fetch repoFun
 		}
 		basePath = filepath.Join(result.Path, gs.Path)
 		if _, err := os.Stat(basePath); os.IsNotExist(err) {
-			return "", nil, fmt.Errorf("path %q not found in %s", gs.Path, gs.Git)
+			return "", nil, &missingPathError{path: gs.Path, git: gs.Git}
 		}
 	}
 
@@ -123,8 +131,48 @@ func CheckLocalInclude(cfg *config.Config, inc harness.Include, harnessDir strin
 	return nil
 }
 
-// resolveWith fetches all includes using the given repo function.
-func resolveWith(p *harness.Harness, cfg *config.Config, fetch repoFunc) ([]ResolveResult, error) {
+// sourceResolver resolves one git source to a directory on disk.
+type sourceResolver func(gs harness.GitSource, harnessDir string) (string, *RepoResult, error)
+
+// sectionLabel names an include in the heading of its instructions section:
+// its source, with the subpath appended when the include is scoped to one.
+func sectionLabel(source, path string) string {
+	if path == "" {
+		return source
+	}
+	return source + "/" + strings.Trim(path, "/")
+}
+
+// localLabel names a local include. The heading ends up in assembled
+// instructions, exports and marketplace output that get published, so it never
+// carries a filesystem path from the build machine. An include with a manifest
+// is named by its harness name; otherwise a relative path is kept as written
+// and an absolute one is reduced to its base directory name.
+func localLabel(local, path, basePath string) string {
+	if hj, err := plugin.LoadPluginJSON(basePath); err == nil {
+		return hj.Name
+	}
+	return sectionLabel(portableSource(local), path)
+}
+
+// gitLabel names a git include: owner/repo, plus the subpath when scoped. A
+// source that is really a filesystem path (a file:// or absolute URL) is
+// reduced to its base directory name.
+func gitLabel(url, path string) string {
+	return sectionLabel(portableSource(ShortGitURL(url)), path)
+}
+
+// portableSource keeps a relative source as written and reduces an absolute
+// one to its base directory name.
+func portableSource(source string) string {
+	if filepath.IsAbs(source) {
+		return filepath.Base(filepath.Clean(source))
+	}
+	return source
+}
+
+// resolveWith resolves all includes using the given source resolver.
+func resolveWith(p *harness.Harness, cfg *config.Config, resolve sourceResolver) ([]ResolveResult, error) {
 	var results []ResolveResult
 
 	for _, inc := range p.Includes {
@@ -138,8 +186,10 @@ func resolveWith(p *harness.Harness, cfg *config.Config, fetch repoFunc) ([]Reso
 			}
 			results = append(results, ResolveResult{
 				Content: ResolvedContent{
-					BasePath: basePath,
-					Paths:    inc.Pick,
+					BasePath:       basePath,
+					Paths:          inc.Pick,
+					Label:          localLabel(inc.Local, inc.Path, basePath),
+					NoInstructions: !inc.InstructionsEnabled(),
 				},
 				Source: inc.Local,
 				Path:   inc.Path,
@@ -155,15 +205,17 @@ func resolveWith(p *harness.Harness, cfg *config.Config, fetch repoFunc) ([]Reso
 			}
 		}
 
-		basePath, repoResult, err := resolveGitSourceWith(inc.GitSource, p.Dir, fetch)
+		basePath, repoResult, err := resolve(inc.GitSource, p.Dir)
 		if err != nil {
 			return nil, err
 		}
 
 		results = append(results, ResolveResult{
 			Content: ResolvedContent{
-				BasePath: basePath,
-				Paths:    inc.Pick,
+				BasePath:       basePath,
+				Paths:          inc.Pick,
+				Label:          gitLabel(inc.Git, inc.Path),
+				NoInstructions: !inc.InstructionsEnabled(),
 			},
 			Source: ShortGitURL(inc.Git),
 			Path:   inc.Path,
@@ -186,7 +238,7 @@ func ResolveGitSource(gs harness.GitSource, harnessDir string) (string, *RepoRes
 // with resolution metadata (cloned vs cached).
 // If cfg is non-nil, remote sources are checked against the allowed sources list.
 func Resolve(p *harness.Harness, cfg *config.Config) ([]ResolveResult, error) {
-	return resolveWith(p, cfg, EnsureRepo)
+	return resolveWith(p, cfg, ResolveGitSource)
 }
 
 // ShortGitURL abbreviates a git URL for display: the host, scheme, user and
@@ -331,8 +383,16 @@ func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 		return RepoResult{Path: repoDir, SHA: gitHead(repoDir), ResolvedRef: effectiveRef(repoDir, ref), Cloned: true, Changed: true}, nil
 	}
 
+	// ynh renames a clone's .ynh-plugin/ to .agents/harness/ when it loads
+	// one (see migration.ManifestDirMigrator), so the working tree may differ
+	// from HEAD in ways git would refuse to check out over. The cache is
+	// disposable and nothing else writes to it: put the tree back to exactly
+	// what upstream has, and the next load migrates it again.
+	if reason := refuseToResetClone(config.CacheDir(), repoDir); reason != "" {
+		return RepoResult{}, fmt.Errorf("refusing to reset %s: %s", repoDir, reason)
+	}
 	if ref != "" {
-		if err := gitCmd("-C", repoDir, "checkout", "FETCH_HEAD"); err != nil {
+		if err := gitCmd("-C", repoDir, "checkout", "--force", "FETCH_HEAD"); err != nil {
 			return RepoResult{}, fmt.Errorf("git checkout FETCH_HEAD in %s: %w", repoDir, err)
 		}
 	} else {
@@ -340,9 +400,35 @@ func ensureRepoLocked(repoDir, fullURL, ref string) (RepoResult, error) {
 			return RepoResult{}, fmt.Errorf("git reset in %s: %w", repoDir, err)
 		}
 	}
+	if err := gitCmd("-C", repoDir, "clean", "-fdq"); err != nil {
+		return RepoResult{}, fmt.Errorf("git clean in %s: %w", repoDir, err)
+	}
 
 	after := gitHead(repoDir)
 	return RepoResult{Path: repoDir, SHA: after, ResolvedRef: effectiveRef(repoDir, ref), Changed: before != after}, nil
+}
+
+// refuseToResetClone reports why repoDir must not be handed to the commands
+// that discard working-tree changes (checkout --force, clean), or "" when it
+// may be. A pure predicate: it only stats and resolves symlinks, per
+// .claude/rules/destructive-operations.md. repoDir must be strictly inside
+// cacheRoot after symlinks are resolved, so the root itself, a sibling, a
+// parent, or a link that escapes the cache is refused.
+func refuseToResetClone(cacheRoot, repoDir string) string {
+	root, err := filepath.EvalSymlinks(cacheRoot)
+	if err != nil {
+		return "cannot resolve the cache directory"
+	}
+	dir, err := filepath.EvalSymlinks(repoDir)
+	if err != nil {
+		return "cannot resolve the clone directory"
+	}
+	rel, err := filepath.Rel(root, dir)
+	if err != nil || rel == "." || rel == ".." || filepath.IsAbs(rel) ||
+		strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "it is not strictly inside the cache directory"
+	}
+	return ""
 }
 
 // CacheOnlyRepo returns a cached repo without hitting the network.
@@ -379,8 +465,10 @@ func ResolveGitSourceFromCache(gs harness.GitSource, harnessDir string) (string,
 
 // ResolveFromCache is like Resolve but uses CacheOnlyRepo to avoid network
 // access when the cache is warm. Falls back to a network fetch on cache miss.
+// The harness's own repo is the exception: it is refreshed (see
+// ResolveSourceForRun).
 func ResolveFromCache(p *harness.Harness, cfg *config.Config) ([]ResolveResult, error) {
-	return resolveWith(p, cfg, CacheOnlyRepo)
+	return resolveWith(p, cfg, ResolveSourceForRun)
 }
 
 // gitHead returns the short HEAD SHA for a repo, or empty string on error.
@@ -654,6 +742,12 @@ func NormalizeGitURL(url string) string {
 	// Fallback: treat as HTTPS
 	return "https://" + url + ".git"
 }
+
+// CacheEntryName returns the name of the cache directory for (gitURL, ref),
+// the key LookupCache computes. gitURL is the URL after GitSourceURL has made a
+// relative source absolute. Exported so `ynh image` can bake a cache entry under
+// the name the image's own lookup will compute.
+func CacheEntryName(gitURL, ref string) string { return repoDirName(gitURL, ref) }
 
 // repoDirName creates a deterministic cache directory name from a Git URL and ref.
 // Format: org--repo--<hash> with double hyphens for parsibility.

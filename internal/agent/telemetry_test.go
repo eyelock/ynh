@@ -30,8 +30,8 @@ func (f *fakeTelemetry) RelayEndpoint(backend string) string {
 	return f.relay
 }
 
-func (f *fakeTelemetry) StartCall(kind string, turn int, sensor string) ([]string, func(string, bool)) {
-	id := fmt.Sprintf("%s-%d-%s", kind, turn, sensor)
+func (f *fakeTelemetry) StartCall(kind string, turn int) ([]string, func(string, bool)) {
+	id := fmt.Sprintf("%s-%d", kind, turn)
 	f.calls = append(f.calls, id)
 	return []string{"TRACEPARENT=" + id, "YNR_SPOOL=/spool"}, func(outcome string, ok bool) {
 		f.outcomes = append(f.outcomes, fmt.Sprintf("%s:%s:%v", id, outcome, ok))
@@ -52,7 +52,7 @@ func TestRunLoop_TelemetryEnvReachesEveryProcess(t *testing.T) {
 			name:       "telemetry on",
 			tel:        &fakeTelemetry{},
 			wantWorker: []string{"TRACEPARENT=worker", "YNR_SPOOL=/spool"},
-			wantCheck:  [][]string{{"TRACEPARENT=check-1-", "YNR_SPOOL=/spool"}},
+			wantCheck:  [][]string{{"TRACEPARENT=check-1", "YNR_SPOOL=/spool"}},
 		},
 	}
 	for _, tt := range tests {
@@ -60,7 +60,7 @@ func TestRunLoop_TelemetryEnvReachesEveryProcess(t *testing.T) {
 			orig := runCheckFn
 			t.Cleanup(func() { runCheckFn = orig })
 			var gotCheck [][]string
-			runCheckFn = func(_, _, _ string, only []string, _ map[string]json.RawMessage, extra []string) (*gate.Envelope, error) {
+			runCheckFn = func(_, _, _, _ string, only []string, _ map[string]json.RawMessage, extra []string) (*gate.Envelope, error) {
 				gotCheck = append(gotCheck, extra)
 				return env(gate.Result{Name: only[0], Kind: "command", Status: gate.StatusPass}), nil
 			}
@@ -87,31 +87,33 @@ func TestRunLoop_TelemetryEnvReachesEveryProcess(t *testing.T) {
 			if fmt.Sprint(gotCheck) != fmt.Sprint(tt.wantCheck) {
 				t.Errorf("check env = %v, want %v", gotCheck, tt.wantCheck)
 			}
-			if tt.tel != nil && fmt.Sprint(tt.tel.outcomes) != "[check-1-:pass:true]" {
+			if tt.tel != nil && fmt.Sprint(tt.tel.outcomes) != "[check-1:pass:true]" {
 				t.Errorf("call outcomes = %v, want the gate's verdict", tt.tel.outcomes)
 			}
 		})
 	}
 }
 
-// The convergence verifier's sensors run is a call of its own.
-func TestCheckConvergence_SensorCallGetsTelemetryEnv(t *testing.T) {
-	restore := runSensorFn
-	t.Cleanup(func() { runSensorFn = restore })
+// The convergence verifiers' check is a call of its own, with the run's
+// trace context like the gate's.
+func TestCheckConvergence_VerifierCallGetsTelemetryEnv(t *testing.T) {
+	restore := runCheckFn
+	t.Cleanup(func() { runCheckFn = restore })
 	var got []string
-	runSensorFn = func(_, _, _, _, _ string, extra []string) (*SensorResult, error) {
+	runCheckFn = func(_, _, _, _ string, _ []string, _ map[string]json.RawMessage, extra []string) (*gate.Envelope, error) {
 		got = extra
-		return &SensorResult{Kind: "command", ExitCode: 0}, nil
+		return env(gate.Result{Name: "verifier", Kind: "command", Tolerance: "blocking", Status: gate.StatusPass}), nil
 	}
 	tel := &fakeTelemetry{}
 	e := &gate.Envelope{Verdict: gate.VerdictPass}
-	if converged, _, _ := checkConvergence(e, "verifier", "ynh", "local/demo", t.TempDir(), newNullTrajectory(), tel, 3, false); !converged {
+	v := verifierRun{names: []string{"verifier"}, ynh: "ynh", harness: "local/demo", tel: tel}
+	if converged, _, _, _ := checkConvergence(e, v, newNullTrajectory(), 3, false); !converged {
 		t.Fatal("a clean verifier must converge")
 	}
-	if fmt.Sprint(got) != "[TRACEPARENT=sensor-3-verifier YNR_SPOOL=/spool]" {
-		t.Errorf("sensors run env = %v", got)
+	if fmt.Sprint(got) != "[TRACEPARENT=check-3 YNR_SPOOL=/spool]" {
+		t.Errorf("verifier check env = %v", got)
 	}
-	if fmt.Sprint(tel.outcomes) != "[sensor-3-verifier:pass:true]" {
+	if fmt.Sprint(tel.outcomes) != "[check-3:pass:true]" {
 		t.Errorf("outcomes = %v", tel.outcomes)
 	}
 }

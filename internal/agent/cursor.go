@@ -9,8 +9,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // CursorBackend implements WorkerBackend for Cursor's headless agent CLI.
@@ -26,6 +29,13 @@ func (b *CursorBackend) Start(ctx context.Context, opts StartOptions) (WorkerSes
 	cursorBin, err := lookWorkerCLI(b.Name())
 	if err != nil {
 		return nil, err
+	}
+	// The worker runs Cursor in print mode, which skips beforeSubmitPrompt and
+	// stop hooks.
+	if opts.ConfigPath != "" {
+		for _, w := range vendor.CursorPrintModeWarnings(opts.ConfigPath) {
+			_, _ = fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
+		}
 	}
 
 	// Resume token = cursor chatId. cursor already persists chats on disk and

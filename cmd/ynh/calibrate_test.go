@@ -22,7 +22,7 @@ func calibrationHarness(t *testing.T, sensors string) string {
 	t.Setenv("CI", "")
 	t.Setenv("YNH_AGENT_SESSION", "")
 
-	manifest := `{"name":"cal","version":"0.1.0","default_vendor":"claude","sensors":` + sensors + `}`
+	manifest := `{"name":"cal","version":"0.1.0","default_vendor":"claude","profiles":{"factory":{"sensor_overrides":{}}},"sensors":` + sensors + `}`
 	installListTestHarness(t, home, "cal", manifest)
 
 	// Fixtures live inside the installed harness, which is what a reference
@@ -266,5 +266,36 @@ func TestCalibrate_FlagsANonPortableCommand(t *testing.T) {
 	}
 	if !strings.Contains(byName["cwdrel"].Note, "YNH_HARNESS_DIR") {
 		t.Errorf("the note should name the fix, got %q", byName["cwdrel"].Note)
+	}
+}
+
+// A flag that changes nothing and says nothing is worse than no flag.
+// Calibration never reads tolerance, which is all a profile changes.
+func TestCalibrate_RefusesIncompatibleFlags(t *testing.T) {
+	calibrationHarness(t, `{
+      "lint": {"tolerance":"blocking","source":{"command":"exit 1"},"output":{"format":"text"},
+               "reference":{"path":"testdata/calibration/dirty","expect":"fail"}}
+    }`)
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"profile", []string{"--profile", "factory"}, "--calibrate does not take --profile"},
+		{"sensor overlay", []string{"--sensor-overlay", `{"lint":{"source":{"command":"exit 0"}}}`}, "--calibrate does not take --sensor-overlay"},
+		{"update baseline", []string{"--update-baseline"}, "--calibrate does not take baseline flags"},
+		{"no baseline", []string{"--no-baseline"}, "--calibrate does not take baseline flags"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out bytes.Buffer
+			err := cmdCheck(append([]string{"local/cal", "--calibrate"}, tt.args...), &out, &out)
+			if err == nil {
+				t.Fatalf("expected refusal, got success:\n%s", out.String())
+			}
+			if !strings.Contains(out.String()+err.Error(), tt.want) {
+				t.Errorf("output %q / err %v lacks %q", out.String(), err, tt.want)
+			}
+		})
 	}
 }

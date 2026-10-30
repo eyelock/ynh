@@ -87,9 +87,12 @@ Run flags:
   --profile <name>             Apply a named profile overlay (with a prompt, implies non-interactive)
   --interactive                Override non-interactive default — stay in session after focus or prompt
   --instructions "<text>"      Inject per-invocation context after harness instructions
-  --session-name <name>        Session label (recorded by ynh, not forwarded to vendor CLI)
+  --session-name <name>        Claude: bind --resume to this name's session; other vendors: a label
   --resume                     Continue the previous session in this directory
   --resume=<id>                Continue one specific session by id
+                               A trailing prompt is sent to the resumed session
+                               (not a --focus prompt); some vendors refuse it
+  --no-workspace               Grant none of the harness's requested workspace folders for this run
   --install                    Install symlinks for the vendor in current project
   --clean                      Remove symlinks for the vendor in current project
   All other flags are passed through to the vendor CLI.

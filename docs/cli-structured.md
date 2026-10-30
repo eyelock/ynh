@@ -124,7 +124,7 @@ Both `ynh version --format json` and `ynd version --format json` emit:
 {
   "version": "0.5.0",
   "capabilities": "0.6.0",
-  "features": ["agent-run-fetches-includes", "agent-run-harness-path"]
+  "features": ["agent-run-fetches-includes", "agent-run-harness-path", "workspace-folders"]
 }
 ```
 
@@ -133,7 +133,7 @@ Both `ynh version --format json` and `ynd version --format json` emit:
 
 `capabilities` is a source constant (`internal/config.CapabilitiesVersion`), so developer builds report the contract they actually support — not whatever tag the repo was last released at. Bumped when consumer-visible contracts change; additive fields older clients can ignore do **not** bump it.
 
-- `features`: optional array of strings naming capabilities a consumer can gate on without comparing versions, for example `agent-run-harness-path` (`ynh agent run --harness` takes a path) and `agent-run-fetches-includes` (a run fetches its git includes at setup). Names are stable, kebab-case and **only ever added**: a name that shipped is never renamed or removed. Consumers must tolerate names they do not know. The list is sorted and declared in one place, `internal/config.Features`. Adding a name is additive and does not bump `capabilities`.
+- `features`: optional array of strings naming capabilities a consumer can gate on without comparing versions, for example `agent-run-harness-path` (`ynh agent run --harness` takes a path) `agent-run-fetches-includes` (a run fetches its git includes at setup) and `workspace-folders` (a harness can request workspace folders that the operator's allow-list or trust grants; `ynh trust show --format json` reports them in `workspace`). Names are stable, kebab-case and **only ever added**: a name that shipped is never renamed or removed. Consumers must tolerate names they do not know. The list is sorted and declared in one place, `internal/config.Features`. Adding a name is additive and does not bump `capabilities`.
 
 Downstream tooling (for example) reads `capabilities` and refuses to run against an older ynh than it requires.
 
@@ -204,6 +204,16 @@ ran, since the header is written before the worker reports one.
 `model_requested`, until a release that bumps the capabilities version
 ([#443](https://github.com/eyelock/ynh/issues/443)). See
 [Agent](agent.md#the-model).
+
+A convergence verifier's `sensor_result` in the trajectory used to carry
+`kind: "focus"` whatever the sensor was. That was wrong, and it now carries the
+sensor's real kind (a verifier is a command sensor), a `status`, and the rest of
+what any `sensor_result` carries. Identify verifiers by `role:
+"convergence-verifier"`, not by `kind`. Every verifier now runs, not just one,
+and the `agent run` result's `convergence` gains an optional `verifiers` array
+listing each with its `sensor`, `kind`, `status`, `passed` and `summary`;
+`convergence.sensor` is the first verifier that failed, or the first when all
+passed. See [Agent](agent.md#convergence).
 
 `effort_requested` in the `agent run` result, and on the trajectory's
 `session_start` and `session_resumed`, is the effort `--effort` or the

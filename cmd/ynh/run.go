@@ -20,6 +20,7 @@ import (
 	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
+	"github.com/eyelock/ynh/internal/sessions"
 	"github.com/eyelock/ynh/internal/symlink"
 	"github.com/eyelock/ynh/internal/vendor"
 )
@@ -101,6 +102,16 @@ func cmdRun(args []string) error {
 		harnessDir = cwd
 	}
 
+	// The harness as installed, before a focus or profile reshapes it: the
+	// trust record covers this form, so the workspace grant must be judged
+	// against it.
+	loaded := p
+
+	// A resume continues a task, so only a prompt typed on the command line
+	// travels with it; a focus prompt starts one. Captured before the focus
+	// overwrites ra.Prompt. (--focus and a trailing prompt are exclusive.)
+	explicitPrompt := ra.Prompt
+
 	// Resolve focus → profile + prompt
 	if ra.FocusFlag != "" {
 		focus, ok := p.Focuses[ra.FocusFlag]
@@ -113,6 +124,13 @@ func cmdRun(args []string) error {
 		ra.Prompt = focus.Prompt
 	}
 
+	// A bare launch wakes with the harness's launch_focus. Only this command
+	// reads it: delegates and `ynh agent run` never come through here.
+	launch, profileName, err := resolveLaunchFocus(p, &ra, profileName)
+	if err != nil {
+		return err
+	}
+
 	// Resolve profile
 	if profileName != "" {
 		p, err = harness.ResolveProfile(p, profileName)
@@ -121,7 +139,6 @@ func cmdRun(args []string) error {
 		}
 	}
 
-	prompt := ra.Prompt
 	vendorArgs := ra.VendorArgs
 	action := ra.Action
 
@@ -150,6 +167,14 @@ func cmdRun(args []string) error {
 	if err != nil {
 		return err
 	}
+
+	// A vendor that cannot take a first message starts bare, and says so.
+	if launch.Bare && !launchFocusPromptSupported(adapter) {
+		fmt.Fprintf(os.Stderr, "warning: launch_focus %q: %s cannot start a session with a first message, so its prompt is not sent and the session starts bare with the focus's profile only\n", launch.Name, adapter.Name())
+		ra.Prompt = ""
+	}
+
+	prompt := ra.Prompt
 
 	// Redirect the vendor CLI at the backend named in the spec, if any.
 	// No-op otherwise — vendor talks to its normal cloud API.
@@ -382,28 +407,198 @@ func cmdRun(args []string) error {
 			}
 		}
 
+		// Workspace folders the harness requested and the operator granted,
+		// as the vendor's own flags, ahead of the caller's pass-through args.
+		wsArgs, wsErr := workspaceLaunchArgs(loaded, harnessID, adapter.Name(), ra.NoWorkspace, os.Stderr)
+		if wsErr != nil {
+			return wsErr
+		}
+		vendorArgs = append(wsArgs, vendorArgs...)
+
 		// Launch
+		if launch.Bare {
+			fmt.Fprintf(os.Stderr, "Using launch_focus %q (pass --focus or a prompt to run something else)\n", launch.Name)
+		}
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
-		if ra.Resume {
-			if !adapter.SupportsResume() {
-				return fmt.Errorf("%s does not support resuming sessions", adapter.Name())
-			}
-			sessionID, resumed := resolveResumeSession(adapter, ra.ResumeID, os.Stderr)
-			if resumed {
-				return adapter.LaunchResume(runDir, sessionID, vendorArgs)
-			}
-			// Nothing to resume: fall through to a normal cold launch rather
-			// than failing. A card relaunching for the first time must still
-			// start.
-		}
-		if prompt != "" {
-			if ra.Interactive {
-				return adapter.LaunchWithInitialPrompt(runDir, prompt, vendorArgs)
-			}
-			return adapter.LaunchNonInteractive(runDir, prompt, vendorArgs)
-		}
-		return adapter.LaunchInteractive(runDir, vendorArgs)
+		return launchSession(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
 	}
+}
+
+// launchFocus is the outcome of resolveLaunchFocus.
+type launchFocus struct {
+	// Name is the manifest's launch_focus that applies to this run, or "".
+	Name string
+	// Bare is true when this is a bare launch: no focus and no prompt, so the
+	// launch focus's prompt is sent and the session is interactive.
+	Bare bool
+}
+
+// resolveLaunchFocus applies the harness's launch_focus to a run that names no
+// focus of its own (docs/focus.md, "Launch focus"):
+//
+//   - an explicit focus (--focus or YNH_FOCUS) is not touched: the launch focus
+//     is not involved, and its interactivity does not leak into it;
+//   - otherwise the launch focus's profile applies, unless a profile was named
+//     explicitly, which wins;
+//   - with no prompt either (a bare launch) its prompt becomes the first message
+//     and the session is interactive; with a prompt, the prompt stands and
+//     interactivity is whatever the caller asked for.
+//
+// It returns the profile to resolve. ra is changed only for a bare launch.
+func resolveLaunchFocus(p *harness.Harness, ra *runArgs, profileName string) (launchFocus, string, error) {
+	if ra.FocusFlag != "" || p.LaunchFocus == "" || ra.Action != "" {
+		return launchFocus{}, profileName, nil
+	}
+	f, ok := p.Focuses[p.LaunchFocus]
+	if !ok {
+		return launchFocus{}, "", fmt.Errorf("launch_focus %q not defined in harness focuses", p.LaunchFocus)
+	}
+	if profileName == "" {
+		profileName = f.Profile
+	}
+	if ra.Prompt != "" {
+		return launchFocus{Name: p.LaunchFocus}, profileName, nil
+	}
+	if f.Prompt == "" {
+		return launchFocus{}, "", fmt.Errorf("launch_focus %q has no prompt", p.LaunchFocus)
+	}
+	ra.Prompt = f.Prompt
+	ra.Interactive = true
+	return launchFocus{Name: p.LaunchFocus, Bare: true}, profileName, nil
+}
+
+// launchFocusPromptSupported reports whether the vendor can start an
+// interactive session with a first message.
+func launchFocusPromptSupported(adapter vendor.Adapter) bool {
+	ip, ok := adapter.(initialPrompter)
+	return ok && ip.SupportsInitialPrompt()
+}
+
+// launchSession starts the vendor CLI: a resume when ra.Resume finds a session,
+// otherwise a cold launch.
+//
+// prompt is what a cold launch sends (the trailing prompt or the focus prompt).
+// explicitPrompt is only the trailing prompt, and is all a resume sends: a
+// focus prompt starts a task, and a caller that re-sends its stored command
+// with --resume (TermQ reopening a card) must not repeat it into a continued
+// session. Whichever prompt is in play, it is never dropped silently: a vendor
+// that cannot resume with one refuses before anything launches.
+//
+// harnessKey identifies the harness for session binding: with --session-name on
+// a vendor that supports it, the session is bound to (harnessKey, directory,
+// name) rather than to the newest session in the directory.
+func launchSession(adapter vendor.Adapter, runDir, harnessKey string, ra runArgs, prompt, explicitPrompt string, vendorArgs []string, stderr io.Writer) error {
+	if binder, ok := adapter.(vendor.SessionBinder); ok && ra.SessionName != "" {
+		if flag := conflictingSessionFlag(vendorArgs); flag != "" {
+			_, _ = fmt.Fprintf(stderr, "session: %s was passed to %s directly, so --session-name %q does not bind a session\n", flag, adapter.Name(), ra.SessionName)
+		} else {
+			return launchBound(adapter, binder, runDir, harnessKey, ra, prompt, explicitPrompt, vendorArgs, stderr)
+		}
+	}
+	if ra.Resume {
+		if !adapter.SupportsResume() {
+			return fmt.Errorf("%s does not support resuming sessions", adapter.Name())
+		}
+		sessionID, resumed := resolveResumeSession(adapter, ra.ResumeID, stderr)
+		if resumed {
+			return launchResume(adapter, runDir, sessionID, explicitPrompt, ra.Interactive, vendorArgs)
+		}
+		// Nothing to resume: fall through to a normal cold launch rather
+		// than failing. A card relaunching for the first time must still
+		// start, and it is a new session, so the focus prompt applies.
+	}
+	if prompt != "" {
+		if ra.Interactive {
+			return adapter.LaunchWithInitialPrompt(runDir, prompt, vendorArgs)
+		}
+		return adapter.LaunchNonInteractive(runDir, prompt, vendorArgs)
+	}
+	return adapter.LaunchInteractive(runDir, vendorArgs)
+}
+
+// launchResume continues sessionID, naming the vendor when it refuses the
+// prompt.
+func launchResume(adapter vendor.Adapter, runDir, sessionID, prompt string, interactive bool, vendorArgs []string) error {
+	err := adapter.LaunchResume(runDir, sessionID, prompt, interactive, vendorArgs)
+	if errors.Is(err, vendor.ErrResumePromptNotSupported) {
+		mode := ""
+		if interactive {
+			mode = " interactively"
+		}
+		return fmt.Errorf("%s cannot resume a session%s with a prompt; drop --resume or the prompt", adapter.Name(), mode)
+	}
+	return err
+}
+
+// newSessionID is a seam so tests can pin the id a cold launch chooses.
+var newSessionID = sessions.NewID
+
+// conflictingSessionFlag returns the first session-selecting flag in the
+// caller's own vendor args, or "". When one is present ynh adds none of its
+// own: two selectors on one command line would contradict each other.
+func conflictingSessionFlag(vendorArgs []string) string {
+	for _, a := range vendorArgs {
+		name, _, _ := strings.Cut(a, "=")
+		switch name {
+		case "--session-id", "--resume", "-r", "--continue", "-c":
+			return name
+		}
+	}
+	return ""
+}
+
+// launchBound launches a vendor that can be given a session id, binding the
+// session to ra.SessionName (#601). The record is written before the launch
+// because the vendor replaces this process.
+//
+//   - fresh launch: new id, recorded, replacing any earlier record, so a
+//     caller that starts over resumes the new session next time;
+//   - --resume: the recorded session if the vendor still has it, otherwise a
+//     cold start with a new id. Never the newest session in the directory,
+//     which may belong to someone else;
+//   - --resume=<id>: that session, and the name follows it if the vendor has it.
+func launchBound(adapter vendor.Adapter, binder vendor.SessionBinder, runDir, harnessKey string, ra runArgs, prompt, explicitPrompt string, vendorArgs []string, stderr io.Writer) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("session %q: cannot determine working directory: %w", ra.SessionName, err)
+	}
+	if abs, aerr := filepath.EvalSymlinks(cwd); aerr == nil {
+		cwd = abs
+	}
+	key := sessions.Key(harnessKey, cwd, ra.SessionName)
+	bind := func(id string) {
+		b := sessions.Binding{SessionID: id, Name: ra.SessionName, Cwd: cwd, Harness: harnessKey}
+		if err := sessions.Save(key, b); err != nil {
+			_, _ = fmt.Fprintf(stderr, "session: could not record %q (%v); a later --resume will start a new session\n", ra.SessionName, err)
+		}
+	}
+
+	if ra.Resume {
+		if ra.ResumeID != "" {
+			if binder.SessionExists(cwd, ra.ResumeID) {
+				bind(ra.ResumeID)
+			}
+			return launchResume(adapter, runDir, ra.ResumeID, explicitPrompt, ra.Interactive, vendorArgs)
+		}
+		rec, found, err := sessions.Load(key)
+		switch {
+		case err != nil:
+			_, _ = fmt.Fprintf(stderr, "resume: could not read the record for session %q (%v); starting a new session\n", ra.SessionName, err)
+		case !found:
+			_, _ = fmt.Fprintf(stderr, "resume: no session recorded for %q in %s; starting a new session\n", ra.SessionName, cwd)
+		case !binder.SessionExists(cwd, rec.SessionID):
+			_, _ = fmt.Fprintf(stderr, "resume: session %s for %q is no longer in the vendor's history; starting a new session\n", rec.SessionID, ra.SessionName)
+		default:
+			return launchResume(adapter, runDir, rec.SessionID, explicitPrompt, ra.Interactive, vendorArgs)
+		}
+	}
+
+	id, err := newSessionID()
+	if err != nil {
+		return err
+	}
+	bind(id)
+	return binder.LaunchWithSessionID(runDir, id, prompt, ra.Interactive, vendorArgs)
 }
 
 // resolveResumeSession decides which session `--resume` should continue.
@@ -570,7 +765,7 @@ type runArgs struct {
 	VendorFlag   string   // -v or YNH_VENDOR
 	ProfileFlag  string   // --profile or YNH_PROFILE
 	FocusFlag    string   // --focus or YNH_FOCUS
-	SessionName  string   // --session-name: consumed by ynh, not forwarded to vendor
+	SessionName  string   // --session-name: binds --resume to this name where the vendor allows; not forwarded
 	Instructions string   // --instructions: per-invocation context injected into vendor pipeline
 	Prompt       string   // trailing prompt after --
 	VendorArgs   []string // passthrough args for vendor CLI
@@ -578,6 +773,7 @@ type runArgs struct {
 	Interactive  bool     // --interactive: stay in session after initial prompt
 	Resume       bool     // --resume: continue a previous session
 	ResumeID     string   // --resume=<id>: continue one specific session
+	NoWorkspace  bool     // --no-workspace: grant none of the harness's workspace folders; not forwarded
 }
 
 func parseRunArgs(args []string) runArgs {
@@ -625,6 +821,8 @@ func parseRunArgs(args []string) runArgs {
 		case strings.HasPrefix(flagArgs[i], "--resume="):
 			ra.Resume = true
 			ra.ResumeID = strings.TrimPrefix(flagArgs[i], "--resume=")
+		case flagArgs[i] == "--no-workspace":
+			ra.NoWorkspace = true
 		case flagArgs[i] == "--install":
 			ra.Action = "install"
 		case flagArgs[i] == "--clean":

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
@@ -433,6 +434,7 @@ func TestClaudeGenerateHookConfig_EventTranslation(t *testing.T) {
 		"before_prompt":    {{Command: "cmd3"}},
 		"on_stop":          {{Command: "cmd4"}},
 		"on_session_start": {{Command: "cmd5"}},
+		"on_session_end":   {{Command: "cmd6"}},
 	}
 
 	result, err := c.GenerateHookConfig(hooks)
@@ -447,7 +449,7 @@ func TestClaudeGenerateHookConfig_EventTranslation(t *testing.T) {
 	}
 
 	hooksObj := settings["hooks"].(map[string]any)
-	expectedEvents := []string{"PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop", "SessionStart"}
+	expectedEvents := []string{"PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop", "SessionStart", "SessionEnd"}
 	for _, event := range expectedEvents {
 		if _, ok := hooksObj[event]; !ok {
 			t.Errorf("missing event %s", event)
@@ -469,5 +471,46 @@ func TestClaudeApplyRuntimeInstructions(t *testing.T) {
 	}
 	if args[1] != "PR #22 in eyelock/assistants" {
 		t.Errorf("args[1] = %q, want PR #22 in eyelock/assistants", args[1])
+	}
+}
+
+func TestClaudeSessionExists(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cwd := t.TempDir()
+	dir := filepath.Join(home, ".claude", "projects", claudeProjectSlug(cwd))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "abc.jsonl"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &Claude{}
+	for id, want := range map[string]bool{"abc": true, "nope": false, "": false, "..": false, "../abc": false} {
+		if got := c.SessionExists(cwd, id); got != want {
+			t.Errorf("SessionExists(%q) = %v, want %v", id, got, want)
+		}
+	}
+}
+
+func TestClaudeSessionIDArgs(t *testing.T) {
+	tests := []struct {
+		name        string
+		prompt      string
+		interactive bool
+		wantInitial string
+		wantArgs    []string
+	}{
+		{"no prompt", "", false, "", []string{"--session-id", "u", "--x"}},
+		{"one-shot", "hi", false, "", []string{"-p", "hi", "--session-id", "u", "--x"}},
+		{"interactive", "hi", true, "hi", []string{"--session-id", "u", "--x"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initial, args := claudeSessionIDArgs("u", tt.prompt, tt.interactive, []string{"--x"})
+			if initial != tt.wantInitial || !reflect.DeepEqual(args, tt.wantArgs) {
+				t.Errorf("got %q %q", initial, args)
+			}
+		})
 	}
 }

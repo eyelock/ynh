@@ -24,6 +24,12 @@ var ErrInitialPromptNotSupported = errors.New("vendor does not support interacti
 // no mechanism to continue a previous interactive session.
 var ErrResumeNotSupported = errors.New("vendor does not support resuming sessions")
 
+// ErrResumePromptNotSupported is returned by LaunchResume when a prompt was
+// supplied but the vendor's CLI has no documented way to send one to a resumed
+// session in the requested mode. Callers surface it as a refusal naming the
+// vendor; the prompt is never dropped silently.
+var ErrResumePromptNotSupported = errors.New("vendor cannot resume a session with a prompt")
+
 // ErrNoResumableSession is returned by ResolveLastSession when the vendor's
 // session store was readable but holds nothing for the given directory.
 // Callers treat this as "launch cold", not as a failure: there is genuinely no
@@ -39,6 +45,23 @@ var ErrNoResumableSession = errors.New("no resumable session found")
 // session exists: these vendors can still resume via their continue-last form,
 // so callers should resume with an empty id rather than launching cold.
 var ErrSessionLookupUnavailable = errors.New("vendor cannot resolve session ids locally")
+
+// SessionBinder is an optional capability for vendors whose CLI accepts a
+// caller-chosen id for a new session and whose session store ynh can read.
+// `ynh run --session-name` uses it to bind `--resume` to one named session
+// instead of the newest in the directory (#601). Only Claude implements it;
+// every other vendor keeps the continue-newest behaviour, so none needs a
+// stub. Check with a type assertion.
+type SessionBinder interface {
+	// SessionExists reports whether the vendor's store holds sessionID for cwd.
+	SessionExists(cwd, sessionID string) bool
+
+	// LaunchWithSessionID starts a new session with the given id, which the
+	// caller has already recorded. prompt and interactive mean what they do for
+	// LaunchResume: an empty prompt is interactive, a prompt with interactive
+	// false is a one-shot run.
+	LaunchWithSessionID(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error
+}
 
 // SymlinkEntry records a single symlink created during Install.
 type SymlinkEntry struct {
@@ -136,7 +159,15 @@ type Adapter interface {
 	// a keypress. Emit an explicit id, or the vendor's continue-last form
 	// (claude --continue, codex resume --last, cursor --continue) — never
 	// neither.
-	LaunchResume(configPath string, sessionID string, extraArgs []string) error
+	//
+	// prompt, when non-empty, is delivered to the resumed session. With
+	// interactive true the session stays open after the prompt is answered
+	// (the prompt is the first message sent into it); with interactive false
+	// it is a one-shot run, mirroring LaunchNonInteractive. A vendor with no
+	// documented way to do the requested combination returns
+	// ErrResumePromptNotSupported before launching anything. An empty prompt
+	// always resumes interactively and ignores interactive.
+	LaunchResume(configPath string, sessionID string, prompt string, interactive bool, extraArgs []string) error
 
 	// GenerateSystemPrompt produces vendor-native instruction files from the
 	// harness instructions content. Returns a map of relative file paths to

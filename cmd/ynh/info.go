@@ -274,6 +274,9 @@ func printInfoText(w io.Writer, name string) error {
 			}
 			_, _ = fmt.Fprintf(w, "  %s    %s    %q\n", fname, profileLabel, focus.Prompt)
 		}
+		if p.LaunchFocus != "" {
+			_, _ = fmt.Fprintf(w, "  launch focus: %s\n", p.LaunchFocus)
+		}
 	}
 
 	_, _ = fmt.Fprintln(w)

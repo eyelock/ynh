@@ -42,7 +42,7 @@ func (m *mockAdapter) SupportsResume() bool { return false }
 func (m *mockAdapter) ResolveLastSession(cwd string, notBefore time.Time) (string, error) {
 	return "", vendor.ErrSessionLookupUnavailable
 }
-func (m *mockAdapter) LaunchResume(configPath, sessionID string, extraArgs []string) error {
+func (m *mockAdapter) LaunchResume(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
 	return nil
 }
 func (m *mockAdapter) GenerateSystemPrompt(content []byte) map[string][]byte {
@@ -331,40 +331,6 @@ func TestAssembleInstructionsFile(t *testing.T) {
 	}
 	if string(data) != "You are a helpful assistant." {
 		t.Errorf("instructions content = %q", string(data))
-	}
-}
-
-func TestAssembleInstructionsFile_LastSourceWins(t *testing.T) {
-	// Create two content sources with instructions.md
-	repo1 := t.TempDir()
-	if err := os.WriteFile(filepath.Join(repo1, "instructions.md"), []byte("from repo1"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	repo2 := t.TempDir()
-	if err := os.WriteFile(filepath.Join(repo2, "instructions.md"), []byte("from repo2"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	content := []resolver.ResolvedContent{
-		{BasePath: repo1},
-		{BasePath: repo2},
-	}
-
-	adapter := &mockAdapter{}
-	workDir, err := Assemble(adapter, content)
-	if err != nil {
-		t.Fatalf("Assemble failed: %v", err)
-	}
-	defer Cleanup(workDir)
-
-	// Last source should win
-	data, err := os.ReadFile(filepath.Join(workDir, "MOCK.md"))
-	if err != nil {
-		t.Fatalf("instructions file not created: %v", err)
-	}
-	if string(data) != "from repo2" {
-		t.Errorf("expected last source to win, got %q", string(data))
 	}
 }
 

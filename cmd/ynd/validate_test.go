@@ -671,6 +671,81 @@ func TestValidateHarness_HooksValid(t *testing.T) {
 	}
 }
 
+// All six canonical events pass both the manifest schema and the cross-field
+// checks, on_session_end included.
+func TestValidateHarness_AllSixHookEvents(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	hr := filepath.Join(dir, "hooks-six")
+	mkdirAll(t, hr)
+	writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"), []byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"hooks-six","version":"0.1.0","hooks":{
+"before_tool":[{"command":"a"}],"after_tool":[{"command":"b"}],"before_prompt":[{"command":"c"}],
+"on_stop":[{"command":"d"}],"on_session_start":[{"command":"e"}],"on_session_end":[{"command":"f"}]}}`))
+
+	if err := validateHarness(hr); err != nil {
+		t.Errorf("all six events should validate: %v", err)
+	}
+	if issues := lintHarnessJSONFile(filepath.Join(hr, ".agents/harness", "plugin.json")); len(issues) != 0 {
+		t.Errorf("lint issues = %v, want none", issues)
+	}
+}
+
+// A hook a targeted vendor cannot carry as declared is a warning, not an
+// error: the manifest still validates.
+// A hook timeout is a whole number of seconds from 1 to 3600, by the schema and
+// by the cross-field check.
+func TestValidateHarness_HookTimeout(t *testing.T) {
+	for _, tc := range []struct {
+		timeout string
+		ok      bool
+	}{{"10", true}, {"1", true}, {"3600", true}, {"0", false}, {"-1", false}, {"3601", false}, {"1.5", false}, {`"10"`, false}} {
+		t.Run(tc.timeout, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+			hr := filepath.Join(dir, "h")
+			mkdirAll(t, hr)
+			writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"), []byte(`{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"h","version":"0.1.0","hooks":{"on_session_end":[{"command":"x","timeout":`+tc.timeout+`}]}}`))
+			err := validateHarness(hr)
+			if (err == nil) != tc.ok {
+				t.Errorf("timeout %s: err = %v, want ok=%v", tc.timeout, err, tc.ok)
+			}
+		})
+	}
+}
+
+// With no timeout field on the targeted vendor the validator warns; every
+// vendor has one today, so a clamp is the warning that fires.
+func TestHookVendorWarnings_Timeout(t *testing.T) {
+	var hj map[string]any
+	if err := json.Unmarshal([]byte(`{"name":"w","version":"0.1.0","default_vendor":"codex","hooks":{"on_session_end":[{"command":"x","timeout":30}]}}`), &hj); err != nil {
+		t.Fatal(err)
+	}
+	got := hookVendorWarnings(hj)
+	if len(got) != 1 || !strings.Contains(got[0], "on_session_end") || !strings.Contains(got[0], "codex") || !strings.Contains(got[0], "30s") {
+		t.Fatalf("warnings = %q", got)
+	}
+}
+
+func TestHookVendorWarnings(t *testing.T) {
+	var hj map[string]any
+	manifest := `{"name":"w","version":"0.1.0","default_vendor":"cursor","hooks":{"on_session_start":[{"matcher":"startup","command":"x"}]},
+"profiles":{"ci":{"hooks":{"on_stop":[{"matcher":"m","command":"y"}]}}}}`
+	if err := json.Unmarshal([]byte(manifest), &hj); err != nil {
+		t.Fatal(err)
+	}
+	got := hookVendorWarnings(hj)
+	if len(got) != 2 || !strings.Contains(got[0], "on_session_start") || !strings.HasPrefix(got[1], `profile "ci": `) {
+		t.Fatalf("warnings = %q", got)
+	}
+
+	// Another vendor targeted: Claude takes a SessionStart matcher.
+	hj["default_vendor"] = "claude"
+	if got := hookVendorWarnings(hj); len(got) != 0 {
+		t.Errorf("claude warnings = %q, want none", got)
+	}
+}
+
 func TestValidateHarness_HooksUnknownEvent(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
@@ -695,6 +770,9 @@ func TestHookEventMessage(t *testing.T) {
 		{"PostToolUse", "after_tool"},
 		{"afterFileEdit", "after_tool"},
 		{"stop", "on_stop"},
+		{"SessionEnd", "on_session_end"},
+		{"sessionEnd", "on_session_end"},
+		{"preToolUse", "before_tool"},
 		{"totally_made_up", "unknown event"},
 	}
 	for _, tt := range tests {
@@ -1405,7 +1483,7 @@ func TestValidateHarness_RejectsTraversingLocalInclude(t *testing.T) {
 
 // Only a command sensor's verdict is an exit code about the tree it was
 // pointed at, so only a command sensor can answer the question calibration
-// asks. plugin.ValidateSensors has always held this rule and has no
+// asks. A validator in internal/plugin once held this rule and had no
 // production caller, so nothing enforced it here — and --calibrate did not
 // skip such a sensor. It ran it and reported "the sensor passed a fixture
 // built to trip it — it is no longer observing", failing the run with a false
@@ -1475,7 +1553,7 @@ func TestValidateHarness_ReportsWhatWasChecked(t *testing.T) {
 	t.Chdir(dir)
 	hr := filepath.Join(dir, "h")
 	mkdirAll(t, filepath.Join(hr, "skills", "hello"))
-	writeFile(t, filepath.Join(hr, ".ynh-plugin", "plugin.json"), []byte(`{
+	writeFile(t, filepath.Join(hr, ".agents", "harness", "plugin.json"), []byte(`{
   "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
   "name": "h", "version": "0.1.0",
   "includes": [{"git": "https://github.com/eyelock/ynm", "pick": ["skills/ynm-memory"]}],
@@ -1495,7 +1573,7 @@ func TestValidateHarness_ReportsWhatWasChecked(t *testing.T) {
 	for _, want := range []string{
 		": valid",
 		"checked:",
-		"manifest     " + filepath.Join(hr, ".ynh-plugin", "plugin.json") + " against https://eyelock.github.io/ynh/schema/plugin.schema.json",
+		"manifest     " + filepath.Join(hr, ".agents", "harness", "plugin.json") + " against https://eyelock.github.io/ynh/schema/plugin.schema.json",
 		"includes     https://github.com/eyelock/ynm pick skills/ynm-memory",
 		"mcp_servers  ynm runs `ynm serve`",
 		"hooks        on_stop runs `ynm hook stop`",
@@ -1508,10 +1586,10 @@ func TestValidateHarness_ReportsWhatWasChecked(t *testing.T) {
 	}
 }
 
-// A manifest split across .agents/harness and .ynh-plugin fails validation,
-// naming each file that sits away from plugin.json. Trees kept in one
-// directory are unaffected.
-func TestValidateHarness_SplitManifestDir(t *testing.T) {
+// ynd validate does not read .ynh-plugin: a tree that keeps its manifest
+// there, or in both directories, fails validation with the reason and the fix
+// (#404). Only a tree in .agents/harness alone is valid.
+func TestValidateHarness_LegacyManifestDir(t *testing.T) {
 	const manifest = `{"$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json", "name": "h", "version": "0.1.0"}`
 	const installed = `{"source_type":"local","source":"/src","installed_at":"now"}`
 	cases := []struct {
@@ -1525,8 +1603,10 @@ func TestValidateHarness_SplitManifestDir(t *testing.T) {
 			files: map[string]string{".agents/harness/plugin.json": manifest, ".agents/harness/installed.json": installed},
 		},
 		{
-			name:  "legacy only",
-			files: map[string]string{".ynh-plugin/plugin.json": manifest, ".ynh-plugin/installed.json": installed},
+			name:    "legacy only",
+			files:   map[string]string{".ynh-plugin/plugin.json": manifest, ".ynh-plugin/installed.json": installed},
+			wantErr: true,
+			want:    []string{"keeps its manifest in .ynh-plugin/", "which ynh no longer reads; move it with: ynd migrate"},
 		},
 		{
 			name: "siblings split from plugin.json",
@@ -1536,18 +1616,13 @@ func TestValidateHarness_SplitManifestDir(t *testing.T) {
 				".ynh-plugin/marketplace.json": `{"name":"reg","owner":{"name":"o"},"harnesses":[]}`,
 			},
 			wantErr: true,
-			want: []string{
-				".ynh-plugin/installed.json is split from .agents/harness/plugin.json; move it to .agents/harness/installed.json",
-				".ynh-plugin/marketplace.json is split from .agents/harness/plugin.json; move it to .agents/harness/marketplace.json",
-			},
+			want:    []string{"cannot be moved automatically", "both .agents/harness and .ynh-plugin exist"},
 		},
 		{
-			name:    "shadowed plugin.json",
+			name:    "both plugin.json",
 			files:   map[string]string{".agents/harness/plugin.json": manifest, ".ynh-plugin/plugin.json": manifest},
 			wantErr: true,
-			want: []string{
-				"both .agents/harness/plugin.json and .ynh-plugin/plugin.json exist; .agents/harness wins and .ynh-plugin/plugin.json is ignored, so remove it",
-			},
+			want:    []string{"cannot be moved automatically", "nothing was merged"},
 		},
 	}
 	for _, tc := range cases {
@@ -1569,9 +1644,6 @@ func TestValidateHarness_SplitManifestDir(t *testing.T) {
 				if !strings.Contains(out, want) {
 					t.Errorf("output missing %q:\n%s", want, out)
 				}
-			}
-			if !tc.wantErr && strings.Contains(out, "split from") {
-				t.Errorf("a tree in one directory must not be reported as split:\n%s", out)
 			}
 		})
 	}
@@ -1611,6 +1683,322 @@ func TestValidateHarnessSensors_ConvergenceVerifierSource(t *testing.T) {
 			}
 			if found != c.refused {
 				t.Errorf("refused=%v want %v; issues: %v", found, c.refused, issues)
+			}
+		})
+	}
+}
+
+func TestSchemaPlugin_IncludeSensorsFlag(t *testing.T) {
+	cases := []struct {
+		name      string
+		value     string
+		wantIssue bool
+	}{
+		{"false", `false`, false},
+		{"true", `true`, false},
+		{"string", `"false"`, true},
+		{"number", `0`, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			src := `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"h","version":"0.1.0","includes":[{"git":"github.com/x/y","sensors":` + c.value + `}]}`
+			path := filepath.Join(t.TempDir(), "plugin.json")
+			writeFile(t, path, []byte(src))
+			issues := lintHarnessJSON(path)
+			if c.wantIssue && len(issues) == 0 {
+				t.Errorf("expected an issue for sensors: %s", c.value)
+			}
+			if !c.wantIssue && len(issues) > 0 {
+				t.Errorf("unexpected issues for sensors: %s: %v", c.value, issues)
+			}
+		})
+	}
+}
+
+func TestValidateHarnessProfiles_SensorOverrides(t *testing.T) {
+	out := map[string]any{"format": "text"}
+	own := map[string]any{
+		"e2e-status": map[string]any{"source": map[string]any{"command": "true"}, "output": out},
+		"verify":     map[string]any{"role": "convergence-verifier", "source": map[string]any{"command": "true"}, "output": out},
+	}
+	ov := func(m map[string]any) map[string]any {
+		return map[string]any{"sensor_overrides": m}
+	}
+	cases := []struct {
+		name     string
+		hj       map[string]any
+		wantSub  string // "" means no issue
+		wantFrom string // extra substring
+	}{
+		{"softening an own sensor is fine",
+			map[string]any{"sensors": own, "profiles": map[string]any{"factory": ov(map[string]any{"e2e-status": map[string]any{"tolerance": "advisory"}})}},
+			"", ""},
+		{"ratchet refused",
+			map[string]any{"sensors": own, "profiles": map[string]any{"factory": ov(map[string]any{"e2e-status": map[string]any{"tolerance": "advisory", "ratchet": "count"}})}},
+			"ratchet cannot be set by a profile", `profile "factory"`},
+		{"bad tolerance",
+			map[string]any{"sensors": own, "profiles": map[string]any{"factory": ov(map[string]any{"e2e-status": map[string]any{"tolerance": "loud"}})}},
+			"must be one of blocking, advisory, report", ""},
+		{"verifier refused, even as blocking",
+			map[string]any{"sensors": own, "profiles": map[string]any{"factory": ov(map[string]any{"verify": map[string]any{"tolerance": "blocking"}})}},
+			"convergence verifier", "verify"},
+		{"unknown sensor with no includes",
+			map[string]any{"sensors": own, "profiles": map[string]any{"factory": ov(map[string]any{"ghost": map[string]any{"tolerance": "advisory"}})}},
+			"no sensor of that name is declared", "ghost"},
+		{"unknown sensor is undecidable when an include may bring it",
+			map[string]any{"sensors": own, "includes": []any{map[string]any{"git": "github.com/x/y"}},
+				"profiles": map[string]any{"factory": ov(map[string]any{"ghost": map[string]any{"tolerance": "advisory"}})}},
+			"", ""},
+		{"unknown sensor is undecidable when the profile adds an include",
+			map[string]any{"sensors": own, "profiles": map[string]any{"factory": map[string]any{
+				"includes":         []any{map[string]any{"git": "github.com/x/y"}},
+				"sensor_overrides": map[string]any{"ghost": map[string]any{"tolerance": "advisory"}}}}},
+			"", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			issues := validateHarnessProfiles(c.hj)
+			joined := strings.Join(issues, "\n")
+			if c.wantSub == "" {
+				if len(issues) != 0 {
+					t.Fatalf("unexpected issues: %v", issues)
+				}
+				return
+			}
+			if !strings.Contains(joined, c.wantSub) || !strings.Contains(joined, c.wantFrom) {
+				t.Errorf("issues %q should contain %q and %q", joined, c.wantSub, c.wantFrom)
+			}
+		})
+	}
+}
+
+// The published schema rejects a ratchet in a profile override too, so the
+// refusal does not depend on the cross-field check running.
+func TestSchemaPlugin_ProfileSensorOverrides(t *testing.T) {
+	cases := []struct {
+		name      string
+		override  string
+		wantIssue bool
+	}{
+		{"tolerance", `{"tolerance":"advisory"}`, false},
+		{"ratchet", `{"tolerance":"advisory","ratchet":"count"}`, true},
+		{"ratchet alone", `{"ratchet":"count"}`, true},
+		{"bad tolerance", `{"tolerance":"loud"}`, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			src := `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"h","version":"0.1.0","profiles":{"factory":{"sensor_overrides":{"s":` + c.override + `}}}}`
+			path := filepath.Join(t.TempDir(), "plugin.json")
+			writeFile(t, path, []byte(src))
+			issues := lintHarnessJSON(path)
+			if c.wantIssue != (len(issues) > 0) {
+				t.Errorf("issues = %v, wantIssue %v", issues, c.wantIssue)
+			}
+		})
+	}
+}
+
+// A harness's top-level sensor_overrides are checked statically (#613), with
+// the wording of the runtime's refusals so the author sees the same message
+// at `ynd validate` that `ynh check` would give later.
+func TestValidateIncludeSensorOverrides(t *testing.T) {
+	out := map[string]any{"format": "text"}
+	upSensor := map[string]any{"source": map[string]any{"command": "true"}, "output": out}
+	cmdSensor := upSensor
+
+	type tc struct {
+		name      string
+		overrides any
+		own       map[string]any
+		includes  []any // local include dirs are created under "up" with upSensors
+		upSensors map[string]any
+		wantIssue string // substring, "" for none
+		wantNote  string // substring, "" for none
+	}
+	cases := []tc{
+		{name: "valid override of an included sensor",
+			overrides: map[string]any{"lint": map[string]any{"tolerance": "advisory", "ratchet": "count"}},
+			includes:  []any{map[string]any{"local": "up"}}, upSensors: map[string]any{"lint": upSensor}},
+		{name: "bad tolerance",
+			overrides: map[string]any{"lint": map[string]any{"tolerance": "loud"}},
+			includes:  []any{map[string]any{"local": "up"}}, upSensors: map[string]any{"lint": upSensor},
+			wantIssue: `sensor_overrides.lint: tolerance "loud" must be one of blocking, advisory, report`},
+		{name: "bad ratchet",
+			overrides: map[string]any{"lint": map[string]any{"ratchet": "forever"}},
+			includes:  []any{map[string]any{"local": "up"}}, upSensors: map[string]any{"lint": upSensor},
+			wantIssue: `ratchet "forever" must be one of fingerprint, count`},
+		{name: "not an object",
+			overrides: map[string]any{"lint": "advisory"},
+			wantIssue: "sensor_overrides.lint: must be an object"},
+		{name: "section not an object",
+			overrides: []any{"x"},
+			wantIssue: "'sensor_overrides' must be an object"},
+		{name: "only tolerance and ratchet may change",
+			overrides: map[string]any{"lint": map[string]any{"tolerance": "advisory", "command": "x"}},
+			includes:  []any{map[string]any{"local": "up"}}, upSensors: map[string]any{"lint": upSensor},
+			wantIssue: `"command" cannot be overridden`},
+		{name: "own sensor refused",
+			overrides: map[string]any{"mine": map[string]any{"tolerance": "advisory"}},
+			own:       map[string]any{"mine": cmdSensor},
+			wantIssue: `sensor "mine" is declared by this harness, so edit it directly rather than overriding it`},
+		{name: "name no include declares",
+			overrides: map[string]any{"ghost": map[string]any{"tolerance": "advisory"}},
+			includes:  []any{map[string]any{"local": "up"}}, upSensors: map[string]any{"lint": upSensor},
+			wantIssue: `override names sensor "ghost", which no include or this harness declares`},
+		{name: "no includes at all",
+			overrides: map[string]any{"ghost": map[string]any{"tolerance": "advisory"}},
+			wantIssue: "which no include or this harness declares"},
+		{name: "opted-out include contributes nothing",
+			overrides: map[string]any{"lint": map[string]any{"tolerance": "advisory"}},
+			includes:  []any{map[string]any{"local": "up", "sensors": false}}, upSensors: map[string]any{"lint": upSensor},
+			wantIssue: "which no include or this harness declares"},
+		{name: "unreadable include is a note, not a pass or a failure",
+			overrides: map[string]any{"lint": map[string]any{"tolerance": "advisory"}},
+			includes:  []any{map[string]any{"local": "gone"}},
+			wantNote:  "include gone could not be read"},
+		{name: "found in a readable include, other include unreadable: no note",
+			overrides: map[string]any{"lint": map[string]any{"tolerance": "advisory"}},
+			includes:  []any{map[string]any{"local": "up"}, map[string]any{"local": "gone"}}, upSensors: map[string]any{"lint": upSensor}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if c.upSensors != nil {
+				hj, _ := json.Marshal(map[string]any{"name": "up", "version": "1.0.0", "sensors": c.upSensors})
+				if err := writePluginJSONFile(filepath.Join(dir, "up"), hj); err != nil {
+					t.Fatal(err)
+				}
+			}
+			m := map[string]any{"name": "app", "version": "1.0.0", "sensor_overrides": c.overrides}
+			if c.own != nil {
+				m["sensors"] = c.own
+			}
+			if c.includes != nil {
+				m["includes"] = c.includes
+			}
+			data, _ := json.Marshal(m)
+			issues, notes := validateIncludeSensorOverrides(dir, m, data)
+			if c.wantIssue == "" && len(issues) != 0 {
+				t.Errorf("unexpected issues: %v", issues)
+			}
+			if c.wantIssue != "" && !strings.Contains(strings.Join(issues, "\n"), c.wantIssue) {
+				t.Errorf("issues %v should contain %q", issues, c.wantIssue)
+			}
+			if c.wantNote == "" && len(notes) != 0 {
+				t.Errorf("unexpected notes: %v", notes)
+			}
+			if c.wantNote != "" {
+				if !strings.Contains(strings.Join(notes, "\n"), c.wantNote) {
+					t.Errorf("notes %v should contain %q", notes, c.wantNote)
+				}
+				if len(issues) != 0 {
+					t.Errorf("an include that cannot be read must not fail validation: %v", issues)
+				}
+			}
+		})
+	}
+}
+
+// An uncached git include is skipped, and says so in the output; the run is
+// still valid.
+func TestValidateHarness_SkippedIncludeIsReported(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("YNH_HOME", "")
+	dir := t.TempDir()
+	data := `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"app","version":"1.0.0",` +
+		`"includes":[{"git":"github.com/example/uncached-sensors"}],` +
+		`"sensor_overrides":{"lint":{"tolerance":"advisory"}}}`
+	if err := writePluginJSONFile(dir, []byte(data)); err != nil {
+		t.Fatal(err)
+	}
+	var verr error
+	var buf bytes.Buffer
+	withStdout(t, &buf, func() { verr = validateHarness(dir) })
+	out := buf.String()
+	if verr != nil {
+		t.Fatalf("an unreadable include must not fail validation: %v\n%s", verr, out)
+	}
+	if !strings.Contains(out, "not checked: sensor_overrides.lint") || !strings.Contains(out, "uncached-sensors") {
+		t.Errorf("the skipped check must be reported:\n%s", out)
+	}
+}
+
+func TestValidateSensorDetails(t *testing.T) {
+	dir := t.TempDir()
+	mkdirAll(t, filepath.Join(dir, "fixtures", "trips"))
+	writeFile(t, filepath.Join(dir, "fixtures", "afile"), []byte("x"))
+	build := func(entry string) []byte {
+		return []byte(`{"name":"set","version":"1.0.0","sensors":{"s":` + entry + `}}`)
+	}
+	cmd := `"source":{"command":"true"},"output":{"format":"text"}`
+	cases := []struct {
+		name, entry, want string
+	}{
+		{"clean with fixture", `{` + cmd + `,"reference":{"path":"fixtures/trips","expect":"fail"}}`, ""},
+		{"count ratchet on a command", `{` + cmd + `,"ratchet":"count"}`, ""},
+		{"count ratchet needs a command",
+			`{"source":{"files":["a"]},"output":{"format":"text"},"ratchet":"count"}`, "ratchet count requires a command source"},
+		{"match that does not compile",
+			`{"source":{"command":"true"},"output":{"format":"text","match":"("}}`, "output.match"},
+		{"fixture missing", `{` + cmd + `,"reference":{"path":"fixtures/nope","expect":"fail"}}`, `reference.path "fixtures/nope" is not a directory`},
+		{"fixture is a file", `{` + cmd + `,"reference":{"path":"fixtures/afile","expect":"fail"}}`, "is not a directory"},
+		{"fixture escapes", `{` + cmd + `,"reference":{"path":"../x","expect":"fail"}}`, "relative path inside the harness"},
+		{"fixture absolute", `{` + cmd + `,"reference":{"path":"/etc","expect":"fail"}}`, "relative path inside the harness"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := strings.Join(validateSensorDetails(dir, build(c.entry)), "\n")
+			if c.want == "" && got != "" {
+				t.Errorf("unexpected: %s", got)
+			}
+			if c.want != "" && !strings.Contains(got, c.want) {
+				t.Errorf("%q should contain %q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestValidateHarness_LaunchFocus(t *testing.T) {
+	const head = `{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"lf","version":"0.1.0",`
+	tests := []struct {
+		name    string
+		body    string
+		wantErr string // "" passes
+	}{
+		{"valid", `"focuses":{"wake":{"prompt":"Begin"}},"launch_focus":"wake"}`, ""},
+		{"valid with profile", `"profiles":{"live":{}},"focuses":{"wake":{"prompt":"Begin","profile":"live"}},"launch_focus":"wake"}`, ""},
+		{"names a focus that does not exist", `"focuses":{"wake":{"prompt":"Begin"}},"launch_focus":"sleep"}`, `launch_focus references undefined focus "sleep"`},
+		{"no focuses at all", `"launch_focus":"wake"}`, `undefined focus "wake"`},
+		{"focus without a prompt", `"focuses":{"wake":{"profile":"live"}},"profiles":{"live":{}},"launch_focus":"wake"}`, "prompt"},
+		{"focus with an empty prompt", `"focuses":{"wake":{"prompt":""}},"launch_focus":"wake"}`, "prompt"},
+		{"empty name", `"focuses":{"wake":{"prompt":"Begin"}},"launch_focus":""}`, "launch_focus"},
+		{"not a string", `"focuses":{"wake":{"prompt":"Begin"}},"launch_focus":3}`, "launch_focus"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Chdir(dir)
+			hr := filepath.Join(dir, "lf")
+			mkdirAll(t, hr)
+			writeFile(t, filepath.Join(hr, ".agents/harness", "plugin.json"), []byte(head+tc.body))
+			err := validateHarness(hr)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("want pass, got %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("want a validation failure mentioning %q", tc.wantErr)
+			}
+			// The failure's text is printed; the issues themselves come from the helper.
+			var hj map[string]any
+			if jerr := json.Unmarshal([]byte(head+tc.body), &hj); jerr != nil {
+				t.Fatal(jerr)
+			}
+			issues := strings.Join(validateHarnessLaunchFocus(hj), "\n")
+			if !strings.Contains(issues, tc.wantErr) {
+				t.Errorf("issues = %q, want %q", issues, tc.wantErr)
 			}
 		})
 	}

@@ -528,7 +528,9 @@ func TestResolve_RelativeGitSourceUsesHarnessDir(t *testing.T) {
 			{GitSource: harness.GitSource{Git: "https://github.com/eyelock/assistants"}},
 		},
 	}
-	if _, err := resolveWith(p, nil, fetch); err != nil {
+	if _, err := resolveWith(p, nil, func(gs harness.GitSource, dir string) (string, *RepoResult, error) {
+		return resolveGitSourceWith(gs, dir, fetch)
+	}); err != nil {
 		t.Fatalf("resolveWith: %v", err)
 	}
 	want := []string{
@@ -857,5 +859,96 @@ func TestResolve_RelativeGitIncludeMatchedAgainstHarnessDir(t *testing.T) {
 	want := `(add "` + filepath.Join(harnessDir, "inc") + `" to allowed_remote_sources)`
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("Resolve error = %v, want it to contain %q", err, want)
+	}
+}
+
+func TestResolve_LocalInclude_InstructionsLabelAndOptOut(t *testing.T) {
+	harnessDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(harnessDir, "extras", "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	off := false
+	p := &harness.Harness{
+		Name: "h",
+		Dir:  harnessDir,
+		Includes: []harness.Include{
+			{GitSource: harness.GitSource{Local: "extras"}},
+			{GitSource: harness.GitSource{Local: "extras", Path: "sub"}, Instructions: &off},
+		},
+	}
+	results, err := Resolve(p, nil)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	tests := []struct {
+		label string
+		off   bool
+	}{{"extras", false}, {"extras/sub", true}}
+	for i, tt := range tests {
+		c := results[i].Content
+		if c.Label != tt.label || c.NoInstructions != tt.off {
+			t.Errorf("include %d: Label=%q NoInstructions=%v, want %q %v", i, c.Label, c.NoInstructions, tt.label, tt.off)
+		}
+	}
+}
+
+func TestResolve_LocalInclude_LabelNeverLeaksAbsolutePath(t *testing.T) {
+	harnessDir := t.TempDir()
+	abs := filepath.Join(t.TempDir(), "plain-source")
+	named := filepath.Join(t.TempDir(), "dir-on-disk")
+	for _, d := range []string{filepath.Join(harnessDir, "inc"), abs, filepath.Join(abs, "sub"), named} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manifest := `{"name": "named-harness", "version": "0.1.0"}`
+	if err := os.MkdirAll(filepath.Join(named, ".agents", "harness"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(named, ".agents", "harness", "plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p := &harness.Harness{
+		Name: "h",
+		Dir:  harnessDir,
+		Includes: []harness.Include{
+			{GitSource: harness.GitSource{Local: "./inc"}},
+			{GitSource: harness.GitSource{Local: abs}},
+			{GitSource: harness.GitSource{Local: abs, Path: "sub"}},
+			{GitSource: harness.GitSource{Local: named}},
+		},
+	}
+	results, err := Resolve(p, nil)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	want := []string{"./inc", "plain-source", "plain-source/sub", "named-harness"}
+	for i, w := range want {
+		got := results[i].Content.Label
+		if got != w {
+			t.Errorf("include %d: Label = %q, want %q", i, got, w)
+		}
+		if filepath.IsAbs(got) || strings.Contains(got, os.TempDir()) {
+			t.Errorf("include %d: Label %q contains an absolute path", i, got)
+		}
+	}
+}
+
+func TestGitLabel(t *testing.T) {
+	tests := []struct {
+		url, path, want string
+	}{
+		{"github.com/eyelock/assistants", "", "eyelock/assistants"},
+		{"https://github.com/eyelock/assistants.git", "skills", "eyelock/assistants/skills"},
+		{"file:///var/folders/xx/repo", "", "repo"},
+		{"/var/folders/xx/repo", "sub", "repo/sub"},
+		{"./repo", "", "./repo"},
+	}
+	for _, tt := range tests {
+		got := gitLabel(tt.url, tt.path)
+		if got != tt.want {
+			t.Errorf("gitLabel(%q, %q) = %q, want %q", tt.url, tt.path, got, tt.want)
+		}
 	}
 }

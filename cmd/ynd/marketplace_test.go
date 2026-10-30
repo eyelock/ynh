@@ -457,7 +457,7 @@ func TestCmdMarketplaceBuild_PrintsEntryWarnings(t *testing.T) {
 				"name":    "reviewer",
 				"version": "0.1.0",
 				"hooks": map[string]any{
-					"before_tool": []any{map[string]string{"matcher": "Bash", "command": tt.command}},
+					"before_tool": []any{map[string]string{"command": tt.command}},
 				},
 			})
 			configFile := filepath.Join(dir, "marketplace.json")

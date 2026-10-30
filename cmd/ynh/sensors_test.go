@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/plugin"
 )
 
 const sensorHarnessJSON = `{
@@ -448,5 +450,17 @@ func TestCmdSensors_SeeIncludedSensors(t *testing.T) {
 		if !strings.Contains(stdout.String(), "green") {
 			t.Errorf("%v: the included sensor is not seen: %s", args[0], stdout.String())
 		}
+	}
+}
+
+func TestMergeSensorOverlayKeepsTheOriginHarness(t *testing.T) {
+	base := plugin.Sensor{Tolerance: "blocking", HarnessDir: "/somewhere/else",
+		Source: plugin.SensorSource{Command: "true"}}
+	got, err := mergeSensorOverlay(base, []byte(`{"tolerance":"advisory"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Tolerance != "advisory" || got.HarnessDir != "/somewhere/else" {
+		t.Errorf("got tolerance %q, HarnessDir %q", got.Tolerance, got.HarnessDir)
 	}
 }

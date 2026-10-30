@@ -37,7 +37,7 @@ func toolVersion(cmdline, cwd, harnessDir string) string {
 	if strings.TrimSpace(cmdline) == "" {
 		return ""
 	}
-	key := cwd + "\x00" + cmdline
+	key := cwd + "\x00" + harnessDir + "\x00" + cmdline
 	if v, ok := toolVersions.Load(key); ok {
 		return v.(string)
 	}

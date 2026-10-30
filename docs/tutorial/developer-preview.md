@@ -248,11 +248,11 @@ Expected:
 ```json
 {
   "hooks": {
-    "afterFileEdit": [
+    "postToolUse": [
       { "command": "/usr/local/bin/validate-output.sh" }
     ],
-    "beforeShellExecution": [
-      { "command": "/usr/local/bin/check-deploy.sh" }
+    "preToolUse": [
+      { "command": "/usr/local/bin/check-deploy.sh", "matcher": "Bash" }
     ]
   },
   "version": 1
