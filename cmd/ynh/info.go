@@ -15,6 +15,7 @@ import (
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/resolver"
 )
 
 // infoEnvelope wraps a single harness with the wire-contract version
@@ -50,7 +51,54 @@ type infoEntry struct {
 	InstalledFrom    *listInstalledFrom `json:"installed_from,omitempty"`
 	Includes         []listInclude      `json:"includes"`
 	DelegatesTo      []listDelegate     `json:"delegates_to"`
-	Manifest         json.RawMessage    `json:"manifest"`
+	// MCPServers is what a run of the harness carries: the servers of every
+	// harness its includes reach, then its own, each with where it came from.
+	MCPServers []infoMCPServer `json:"mcp_servers"`
+	// MCPServersError says why the servers of includes could not be read
+	// (an include not in the cache, say); MCPServers then holds only the
+	// harness's own.
+	MCPServersError string          `json:"mcp_servers_error,omitempty"`
+	Manifest        json.RawMessage `json:"manifest"`
+}
+
+// infoMCPServer is one composed MCP server in `ynh info`. Source is "root"
+// for a server the harness declares itself, or the include chain that
+// supplied it ("eyelock/a > eyelock/b"), as `ynd preview` names it.
+type infoMCPServer struct {
+	Name    string `json:"name"`
+	Source  string `json:"source"`
+	Command string `json:"command,omitempty"`
+	URL     string `json:"url,omitempty"`
+}
+
+// infoMCPServers lists the MCP servers a run of p carries, sorted by name,
+// resolving includes as a run does but only from disk and the cache: info
+// never reaches the network. When the includes cannot be resolved it returns
+// p's own servers and the error, so the caller can say what is missing rather
+// than show a partial list as complete.
+func infoMCPServers(p *harness.Harness) ([]infoMCPServer, error) {
+	var includes []harness.IncludedHarness
+	var resolveErr error
+	if len(p.Includes) > 0 {
+		resolved, err := resolver.ResolveIncludesLocal(p)
+		if err != nil {
+			resolveErr = err
+		} else {
+			includes = resolver.IncludedHarnesses(resolved)
+		}
+	}
+	servers, provenance, err := harness.ComposeMCPServersRaw(p, includes)
+	if err != nil {
+		// A conflict between includes: fall back to the harness's own.
+		servers, provenance, _ = harness.ComposeMCPServersRaw(p, nil)
+		resolveErr = err
+	}
+	out := make([]infoMCPServer, 0, len(provenance))
+	for _, pr := range provenance {
+		s := servers[pr.Server]
+		out = append(out, infoMCPServer{Name: pr.Server, Source: pr.Source, Command: s.Command, URL: s.URL})
+	}
+	return out, resolveErr
 }
 
 func cmdInfo(args []string) error {
@@ -220,16 +268,26 @@ func printInfoText(w io.Writer, name string) error {
 
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintln(w, "MCP Servers:")
-	if len(p.MCPServers) == 0 {
+	servers, mcpErr := infoMCPServers(p)
+	if len(servers) == 0 && mcpErr == nil {
 		_, _ = fmt.Fprintln(w, "  (none)")
-	} else {
-		for sname, server := range p.MCPServers {
-			if server.Command != "" {
-				_, _ = fmt.Fprintf(w, "  %s: %s\n", sname, server.Command)
-			} else if server.URL != "" {
-				_, _ = fmt.Fprintf(w, "  %s: %s\n", sname, server.URL)
-			}
+	}
+	for _, s := range servers {
+		line := "  " + s.Name
+		if target := s.Command; target != "" {
+			line += ": " + target
+		} else if s.URL != "" {
+			line += ": " + s.URL
 		}
+		if s.Source == harness.MCPSourceRoot {
+			line += "  (own)"
+		} else {
+			line += "  (from " + s.Source + ")"
+		}
+		_, _ = fmt.Fprintln(w, line)
+	}
+	if mcpErr != nil {
+		_, _ = fmt.Fprintf(w, "  servers from includes not shown: %s\n", mcpErr)
 	}
 
 	_, _ = fmt.Fprintln(w)
@@ -362,6 +420,11 @@ func printInfoJSON(stdout, stderr io.Writer, name string, checkUpdates bool) err
 		Includes:         base.Includes,
 		DelegatesTo:      base.DelegatesTo,
 		Manifest:         compacted,
+	}
+	servers, mcpErr := infoMCPServers(p)
+	entry.MCPServers = servers
+	if mcpErr != nil {
+		entry.MCPServersError = mcpErr.Error()
 	}
 
 	envelope := infoEnvelope{
