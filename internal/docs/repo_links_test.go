@@ -1,6 +1,7 @@
 package docs_test
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -259,16 +260,17 @@ func repoRoot(t *testing.T) string {
 // provider cache under infra/github/.terraform carries its own README with
 // links that do not resolve, and walking the disk failed make check in every
 // checkout that had run terraform while CI, on a clean clone, never saw it.
-// Without git (no binary, or a source tree that is not a repository) it falls
-// back to walking the disk, which cannot know what is ignored.
+// Without git (no binary, a failing git, or a source tree that is not itself a
+// repository) it falls back to walking the disk, which cannot know what is
+// ignored.
 func repoMarkdown(t *testing.T, root string) []string {
 	t.Helper()
-	files, viaGit, err := repoMarkdownFiles(root)
+	files, gitErr, err := repoMarkdownFiles(root)
 	if err != nil {
 		t.Fatalf("list repo markdown: %v", err)
 	}
-	if !viaGit {
-		t.Logf("git unavailable at %s: walked the disk, so gitignored files are not skipped", root)
+	if gitErr != nil {
+		t.Logf("git could not list %s (%v): walked the disk, so gitignored files are not skipped", root, gitErr)
 	}
 	return files
 }
@@ -281,21 +283,57 @@ var skippedDirs = map[string]bool{
 }
 
 // repoMarkdownFiles returns the markdown under root, outside skippedDirs,
-// relative to root and sorted. viaGit reports whether git chose the files
-// (tracked, plus untracked files that are not ignored); when it is false the
-// disk was walked instead.
-func repoMarkdownFiles(root string) (files []string, viaGit bool, err error) {
-	if files, err := gitMarkdown(root); err == nil {
-		return files, true, nil
+// relative to root and sorted. gitErr is nil when git chose the files
+// (tracked, plus untracked files that are not ignored); otherwise it says why
+// git could not and the disk was walked instead.
+func repoMarkdownFiles(root string) (files []string, gitErr error, err error) {
+	files, gitErr = gitMarkdown(root)
+	if gitErr == nil {
+		return files, nil, nil
 	}
 	files, err = walkMarkdown(root)
-	return files, false, err
+	return files, gitErr, err
+}
+
+// gitToplevel returns git's top-level directory for root, with symlinks
+// resolved so it compares equal to root.
+func gitToplevel(root string) (string, error) {
+	cmd := exec.Command("git", "-C", root, "rev-parse", "--show-toplevel")
+	cmd.Env = withoutGitLocation(os.Environ())
+	out, err := cmd.Output()
+	if err != nil {
+		return "", gitError(err)
+	}
+	return filepath.EvalSymlinks(strings.TrimSpace(string(out)))
+}
+
+// gitError folds git's stderr into the error, which exec leaves out of Error().
+func gitError(err error) error {
+	if ee, ok := err.(*exec.ExitError); ok && len(ee.Stderr) > 0 {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(ee.Stderr)))
+	}
+	return err
 }
 
 // gitMarkdown lists markdown git knows about under root: tracked files, and
 // untracked ones that are not ignored, so a new page is checked before it is
 // committed. A shallow clone has a full index, so this needs no history.
+//
+// It errors when root is not git's top level: a tree nested in another
+// repository (an archive extracted into a parent's ignored directory) would
+// otherwise be answered for by the parent, listing nothing.
 func gitMarkdown(root string) ([]string, error) {
+	top, err := gitToplevel(root)
+	if err != nil {
+		return nil, err
+	}
+	want, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, err
+	}
+	if top != want {
+		return nil, fmt.Errorf("%s is inside the git repository at %s, not its top level", root, top)
+	}
 	cmd := exec.Command("git", "-C", root, "ls-files", "-z",
 		"--cached", "--others", "--exclude-standard", "--", "*.md")
 	// A test run from a git hook inherits GIT_DIR and friends, which would
@@ -303,7 +341,7 @@ func gitMarkdown(root string) ([]string, error) {
 	cmd.Env = withoutGitLocation(os.Environ())
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, err
+		return nil, gitError(err)
 	}
 	seen := map[string]bool{}
 	var files []string
