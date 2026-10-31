@@ -19,12 +19,13 @@ LDFLAGS := -ldflags "-X github.com/eyelock/ynh/internal/config.Version=$(VERSION
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-deps: ## Install prerequisites (Go, linter, formatter, jq)
+deps: ## Install prerequisites (Go, linter, formatter, jq) and check python3 is present
 	@echo "Checking prerequisites..."
 	@command -v go >/dev/null 2>&1 || { echo "Installing Go..."; brew install go; }
 	@command -v golangci-lint >/dev/null 2>&1 || { echo "Installing golangci-lint..."; brew install golangci-lint; }
 	@test -x $(GOIMPORTS) || { echo "Installing goimports..."; go install golang.org/x/tools/cmd/goimports@latest; }
 	@command -v jq >/dev/null 2>&1 || { echo "Installing jq..."; brew install jq; }
+	@command -v python3 >/dev/null 2>&1 || { echo "python3 not found: check-marketplace needs it. Install python3 and re-run."; exit 1; }
 	@echo "All prerequisites installed."
 	@echo ""
 	@echo "Run 'make install' to build and install binaries to ~/.ynh/bin/"

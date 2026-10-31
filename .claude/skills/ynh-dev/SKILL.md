@@ -32,7 +32,7 @@ This runs deps, format, lint, check-tidy, test, build, check-artifacts, check-ve
 If you need to run steps individually:
 
 ```bash
-make deps      # install prerequisites (goimports, golangci-lint)
+make deps      # install prerequisites (Go, golangci-lint, goimports, jq); checks python3 is present
 make format    # goimports + gofmt
 make lint      # golangci-lint
 make test      # go test with race detection and coverage

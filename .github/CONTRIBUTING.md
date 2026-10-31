@@ -199,7 +199,7 @@ The user-facing version of this guidance lives in [`docs/marketplace.md` § Pinn
 ## Development Setup
 
 ```bash
-# Prerequisites + dev tools (Go, linter, formatter)
+# Prerequisites + dev tools (Go, linter, formatter, jq); checks python3 is present
 make deps
 
 # Build and install binaries to ~/.ynh/bin/

@@ -28,7 +28,7 @@ make clean              # remove build artifacts and caches
 make clean && make build  # fresh build (use when binary seems stale)
 make check-artifacts    # ynd validate + ynd lint over skills/ agents/ rules/ .claude/
 make check-vendor-parity # every vendor documented, assembles the same artifacts, stubbed in evals (needs jq)
-make check-marketplace  # committed marketplace indexes agree with the plugin manifests
+make check-marketplace  # committed marketplace indexes agree with the plugin manifests (needs python3)
 make scan-artifacts     # SkillSpector security scan of the same dirs (needs Docker)
 make vulncheck          # govulncheck over the Go code (needs network)
 ```

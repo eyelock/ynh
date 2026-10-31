@@ -85,7 +85,7 @@ Requires Go 1.25+.
 ```bash
 git clone https://github.com/eyelock/ynh.git
 cd ynh
-make deps      # installs Go, linter, formatter
+make deps      # installs Go, linter, formatter, jq; checks for python3
 make install   # builds and installs to ~/.ynh/bin/
 ```
 
