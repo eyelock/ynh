@@ -111,7 +111,7 @@
       "$ref": "#/$defs/mcp_servers"
     },
     "mcp_isolation": {
-      "description": "Run this harness with only the MCP servers it composes (its own and those of its included harnesses; its delegates keep theirs), instead of alongside the operator's configured servers and connectors. Default false. A launch-time setting: it changes how `ynh run` starts the vendor CLI and does not change an export. Fully supported on Claude Code; partial on Copilot; Codex and Cursor cannot isolate and ynh warns.",
+      "description": "Run this harness with only the MCP servers it composes (its own and those of its included harnesses; its delegates keep theirs), instead of alongside the operator's configured servers and connectors. Default false. A launch-time setting: it changes how `ynh run` starts the vendor CLI and does not change an export. Fully supported on Claude Code; partial on Copilot; Codex, Cursor and OpenCode cannot isolate and ynh warns.",
       "type": "boolean"
     },
     "profiles": {
