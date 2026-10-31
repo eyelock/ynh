@@ -3,10 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 
@@ -948,33 +946,11 @@ func validateHarnessDelegates(dir string, data []byte) (issues, notes []string) 
 			notes = append(notes, fmt.Sprintf("%s selection not checked: the delegate could not be loaded (%v)", prefix, err))
 			continue
 		}
-		if dm.Profile != "" {
-			if _, ok := dh.Profiles[dm.Profile]; !ok {
-				issues = append(issues, fmt.Sprintf("%s references profile %q, which delegate %s does not define (%s)", prefix, dm.Profile, dh.Name, declaredNames(dh.Profiles, "profiles")))
-			}
-			continue
-		}
-		focus, ok := dh.Focuses[dm.Focus]
-		if !ok {
-			issues = append(issues, fmt.Sprintf("%s references focus %q, which delegate %s does not define (%s)", prefix, dm.Focus, dh.Name, declaredNames(dh.Focuses, "focuses")))
-			continue
-		}
-		if focus.Profile != "" {
-			if _, ok := dh.Profiles[focus.Profile]; !ok {
-				issues = append(issues, fmt.Sprintf("%s focus %q of delegate %s names profile %q, which it does not define", prefix, dm.Focus, dh.Name, focus.Profile))
-			}
+		if err := del.CheckDeclared(dh); err != nil {
+			issues = append(issues, fmt.Sprintf("%s %v", prefix, err))
 		}
 	}
 	return issues, notes
-}
-
-// declaredNames lists a map's keys for a message: "declares: a, b", or
-// "declares no <what>".
-func declaredNames[V any](m map[string]V, what string) string {
-	if len(m) == 0 {
-		return "it declares no " + what
-	}
-	return "it declares: " + strings.Join(slices.Sorted(maps.Keys(m)), ", ")
 }
 
 // validateHarnessLaunchFocus checks launch_focus: it must name a focus that
