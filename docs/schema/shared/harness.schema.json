@@ -125,7 +125,7 @@
       },
       "required": [
         "id", "name", "kind", "version_installed", "default_vendor", "path",
-        "is_pinned", "includes", "delegates_to", "mcp_servers", "manifest"
+        "is_pinned", "includes", "delegates_to", "mcp_servers", "hooks", "manifest"
       ],
       "additionalProperties": false
     },
