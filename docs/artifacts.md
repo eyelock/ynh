@@ -89,9 +89,11 @@ You are a code review specialist. When delegated to, review the provided code fo
 Provide actionable feedback, not just observations.
 ```
 
+Under Codex, ynh writes each agent as a TOML custom agent, `.codex/agents/<name>.toml`, because that is the only form Codex reads. Only three fields survive: `name` and `description` from the frontmatter, and the body as `developer_instructions`. Every other field is dropped, including `tools`, `disallowedTools` and `model`, since Codex has no tool allowlist and Claude Code's model names are not Codex models. A Codex custom agent runs with the session's permissions, so the read-only reviewer above is not read-only there: it can do whatever the session allows. See [Vendors: Symlink Installation](vendors.md#symlink-installation-codex-cursor) for the details.
+
 Refer to your vendor's documentation for agent format details:
 - [Claude Code sub-agents](https://docs.anthropic.com/en/docs/claude-code/sub-agents)
-- [Codex agents](https://github.com/openai/codex)
+- [Codex subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents)
 
 ## Rules
 
