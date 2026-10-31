@@ -151,8 +151,16 @@ converted only by `ynd migrate` and refused by every other command.
 |                   | maxTurns, effort, memory,        |                                  |                                  |
 |                   | background, isolation            |                                  |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
-| Delegation:       | Native subagent system           | NOT SUPPORTED                    | NEEDS RESEARCH                   |
-| (delegates_to)    | via agent .md files              |                                  |                                  |
+| Delegation:       | Markdown subagent in             | TOML custom agent in             | Markdown subagent in             |
+| (delegates_to)    | .claude/agents/<name>.md (name,  | .codex/agents/<name>.toml (name, | .cursor/agents/<name>.md (name,  |
+|                   | description); the delegate's MCP | description,                     | description), per                |
+|                   | servers carried (mcpServers,     | developer_instructions); MCP     | cursor.com/docs/subagents; the   |
+|                   | plus --agents at launch)         | servers inherited from the       | delegate's MCP servers not       |
+|                   |                                  | session, the delegate's own not  | carried (warning); live pickup   |
+|                   |                                  | carried (warning); run only, not | not checked                      |
+|                   |                                  | export; live pickup NOT observed |                                  |
+|                   |                                  | on 0.166.0 (unknown agent_type;  |                                  |
+|                   |                                  | ynw-t7i)                         |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 ```
 

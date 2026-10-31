@@ -158,12 +158,25 @@ Note: Different format from Claude/Cursor — uses `source` object with `source`
 - Plugin on/off: `~/.codex/config.toml` under `[plugins."name@marketplace"]`
 - User config: `~/.codex/config.toml` or `config.yaml` or `config.json`
 
+## Runtime Custom Agents (Subagents)
+
+Codex has subagents at runtime, outside plugins: custom agents, one standalone
+TOML file each, in `.codex/agents/` for a project or `~/.codex/agents/` for the
+user ([developers.openai.com/codex/subagents](https://developers.openai.com/codex/subagents),
+which now redirects to learn.chatgpt.com/docs/agent-configuration/subagents).
+
+- Every file must set `name`, `description` and `developer_instructions`, all strings. `name` identifies the agent; naming the file after it is the convention. The docs name only TOML files there, so the Markdown agent ynh writes for other vendors would not be one.
+- A custom agent inherits the parent's permissions (sandbox and approvals), model provider and MCP servers; `mcp_servers` in the agent file does not override them.
+- ynh writes each delegate (`delegates_to`) in a run as `.codex/agents/<name>.toml` with those three fields (`DelegateAgentFile` in `internal/vendor/codex_agent.go`, through the `DelegateAgentEncoder` interface in `internal/assembler/delegates.go`). A delegate's own MCP servers have no field, so ynh warns and the subagent has the session's servers instead (`docs/mcp.md`, "MCP Servers of Delegates").
+- `ynd export` writes no Codex delegates (`SupportsExportDelegates()` is `false`): this is the run assembly only.
+- Live pickup NOT observed (codex-cli 0.166.0, ynw-t7i): `spawn_agent` with the delegate's `name` as `agent_type` failed with `unknown agent_type`, whether or not the run directory (Codex's working directory) was trusted. Whether Codex loads a project's `.codex/agents/*.toml` at all is unverified. ynw-s9h reported it as confirmed, but that was a generic subagent reading the TOML file from the workspace. Codex 0.166.0 also ignores a `-c projects."<path>"` override when the path contains a dot.
+
 ## What Codex Does NOT Support (in plugins)
 
-- Agents/subagents — NOT supported in plugin format
+- Agents/subagents — NOT supported in plugin format (runtime custom agents are; see above)
 - Rules — NOT supported in plugin format
 - Commands — NOT supported (use skills)
-- Delegates — NOT supported
+- Delegates — NOT exported in a plugin; a run writes them as custom agents (see above)
 - LSP servers — NOT documented
 
 ## Known ynh Discrepancies (as of 2026-07-30)

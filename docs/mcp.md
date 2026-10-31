@@ -309,7 +309,7 @@ MCP servers of delegates:
 |--------|------------------|
 | Claude Code | Carried. The generated agent has an `mcpServers` frontmatter field and a run hands the agent to Claude with `--agents`; see below. |
 | Cursor, Copilot | Not carried. ynh warns once per delegate on stderr and writes the agent without them. |
-| Codex | Not carried, and the delegate itself is not picked up: ynh warns once per delegate on stderr and writes a Markdown agent file that Codex does not read; see below. |
+| Codex | Not carried. ynh warns once per delegate on stderr and writes the delegate as a TOML custom agent without them; see below. |
 
 The warning reads:
 
@@ -317,7 +317,7 @@ The warning reads:
   warning: delegate probe declares MCP servers (db, probe-srv) that Cursor subagents cannot carry; they are not available to it
 ```
 
-No documented per-agent MCP field exists for the other vendors. Copilot's references document MCP only at the project and user level (`.github/mcp.json`, `~/.copilot/mcp-config.json`), so ynh does not guess at a custom-agent field it has not verified. For Codex, a run writes the delegate's agent file as Markdown, `.codex/agents/<name>.md`, without its servers. [Codex's subagent docs](https://developers.openai.com/codex/subagents) define project custom agents only as TOML files in `.codex/agents/` (with `name`, `description` and `developer_instructions`), so Codex does not pick up the Markdown file and a Codex session has no subagent for the delegate today, with or without its servers. The same docs say a custom agent inherits the parent session's MCP servers and cannot override them, so even a TOML agent could not carry the delegate's own. This is read from Codex's documentation, not checked against a live `codex`.
+No documented per-agent MCP field exists for the other vendors. Copilot's references document MCP only at the project and user level (`.github/mcp.json`, `~/.copilot/mcp-config.json`), so ynh does not guess at a custom-agent field it has not verified. For Codex, a run writes the delegate as a custom agent, `.codex/agents/<name>.toml`, in the form [Codex's subagent docs](https://developers.openai.com/codex/subagents) define: the three fields every custom agent file must set, `name`, `description` (the delegate's) and `developer_instructions` (the delegate's instructions, rules and skills, as the Markdown agent's body holds them for the other vendors). The same docs say a custom agent inherits the parent session's MCP servers, sandbox and approval policy, and its file cannot override them, so there is no field for the delegate's own servers: the warning stands, and the subagent has the session's servers instead. Whether a live `codex` loads the file is unverified. On codex-cli 0.166.0 (2026-10-31), the pickup was NOT observed: a `spawn_agent` call naming the delegate as its `agent_type` failed with `unknown agent_type`, whether or not ynh's run directory, where Codex runs, was trusted. An earlier version of this page said the pickup was confirmed live. That was wrong: the subagent that answered was a generic one that had read the TOML file from the workspace (ynw-t7i).
 
 ### How Claude Code gets them
 

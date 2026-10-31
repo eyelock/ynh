@@ -40,6 +40,20 @@ type DelegateMCPCarrier interface {
 	DelegateLaunchFile(agents []vendor.DelegateLaunchAgent) (string, []byte, error)
 }
 
+// DelegateAgentEncoder is implemented by a vendor adapter whose subagents
+// are not the Markdown agent file BuildDelegateAgent writes. Codex reads a
+// project's custom agents as TOML files in .codex/agents/, each with a name,
+// a description and developer_instructions
+// (developers.openai.com/codex/subagents), and ignores a Markdown file there.
+// The encoder replaces the Markdown agent, frontmatter and all, so a vendor
+// that is also a DelegateMCPCarrier would lose the delegate's mcpServers line.
+type DelegateAgentEncoder interface {
+	// DelegateAgentFile returns the agent file's name within the agents
+	// directory, and its content, for a delegate with the given name,
+	// description and prompt.
+	DelegateAgentFile(name, description, prompt string) (string, []byte, error)
+}
+
 // DelegateMCP records one MCP server a delegate declares: the delegate, the
 // server's name, and where the delegate got it (harness.MCPSourceRoot for its
 // own, or the include that supplied it).
@@ -205,7 +219,9 @@ func writeEnvFile(workDir, delegate string, secrets map[string]string) (string, 
 // own directory, their skills are listed, and their MCP servers and its own
 // are composed. A vendor whose subagents can carry MCP servers gets them in
 // the agent file; for any other vendor one warning per delegate names the
-// servers it cannot have. Delegates of delegates are not followed.
+// servers it cannot have. The agent file is Markdown with frontmatter, unless
+// the vendor encodes its own (DelegateAgentEncoder). Delegates of delegates
+// are not followed.
 //
 // The returned list names every server each delegate declares, for preview.
 func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harness.Delegate, harnessDir string, opts DelegateOptions) ([]DelegateMCP, error) {
@@ -229,6 +245,7 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 		warn = os.Stderr
 	}
 	carrier, _ := adapter.(DelegateMCPCarrier)
+	encoder, _ := adapter.(DelegateAgentEncoder)
 	vendorName := configDir
 	if n, ok := adapter.(interface{ DisplayName() string }); ok {
 		vendorName = n.DisplayName()
@@ -287,9 +304,14 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 			}
 		}
 
-		agentContent := BuildDelegateAgent(delHarness, basePath, included, mcpLine)
-		agentFile := filepath.Join(agentsPath, delHarness.Name+".md")
-		if err := os.WriteFile(agentFile, []byte(agentContent), 0o644); err != nil {
+		fileName, agentContent := delHarness.Name+".md", []byte(BuildDelegateAgent(delHarness, basePath, included, mcpLine))
+		if encoder != nil {
+			if fileName, agentContent, err = encoder.DelegateAgentFile(delHarness.Name, delegateDescription(delHarness), delegateBody(delHarness, basePath, included)); err != nil {
+				return nil, fmt.Errorf("delegate %s: %w", delHarness.Name, err)
+			}
+		}
+		agentFile := filepath.Join(agentsPath, fileName)
+		if err := os.WriteFile(agentFile, agentContent, 0o644); err != nil {
 			return nil, fmt.Errorf("writing delegate agent %s: %w", delHarness.Name, err)
 		}
 	}
