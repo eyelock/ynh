@@ -111,7 +111,8 @@ type StartOptions struct {
 	// conversation (codex) subtracts it so earlier turns are not counted
 	// again; the others ignore it.
 	UsageBase *Usage
-	// IsolatedMCP restricts the worker to the harness's own MCP servers.
+	// IsolatedMCP restricts the worker to the MCP servers the harness composes
+	// (its own and its included harnesses'), leaving out the operator's.
 	// Only the claude backend honours it.
 	IsolatedMCP bool
 	// Env holds additional environment variables to pass to the subprocess.
