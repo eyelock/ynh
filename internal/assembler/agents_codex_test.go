@@ -72,3 +72,60 @@ func TestAssemble_CodexWritesHarnessAgentsAsTOML(t *testing.T) {
 		})
 	}
 }
+
+// When the root and an include both carry agents/reviewer.md, the root's copy
+// (later in content) is the one staged, and the warnings describe that copy
+// alone, once: none when it declares no tools, even though the include's does.
+func TestAssemble_CodexAgentWarningsFollowTheStagedCopy(t *testing.T) {
+	adapter, err := vendor.Get("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeAgent := func(t *testing.T, body string) string {
+		t.Helper()
+		repo := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(repo, "agents"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(repo, "agents", "reviewer.md"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return repo
+	}
+	const toolsWarning = "  warning: agent \"reviewer\": Codex custom agents cannot restrict tools, so its tools list is dropped; it leaves out Bash, so the agent's shell tool is turned off (features.shell_tool = false)\n"
+	for _, tc := range []struct {
+		name, root, wantWarn string
+		shellOff             bool
+	}{
+		{"root declares tools", "---\nname: reviewer\ntools: Read, Grep\n---\nRoot.\n", toolsWarning, true},
+		{"root declares none", "---\nname: reviewer\n---\nRoot.\n", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			include := writeAgent(t, "---\nname: reviewer\ntools: Read\n---\nInclude.\n")
+			root := writeAgent(t, tc.root)
+
+			var warned bytes.Buffer
+			warnOut = &warned
+			defer func() { warnOut = os.Stderr }()
+			staged, err := Assemble(adapter, []resolver.ResolvedContent{{BasePath: include}, {BasePath: root}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer Cleanup(staged)
+
+			if warned.String() != tc.wantWarn {
+				t.Errorf("warnings =\n%q\nwant\n%q", warned.String(), tc.wantWarn)
+			}
+			data, err := os.ReadFile(filepath.Join(staged, adapter.ConfigDir(), "agents", "reviewer.toml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(data), "Root.") {
+				t.Errorf("staged agent is not the root's:\n%s", data)
+			}
+			if got := strings.Contains(string(data), "features.shell_tool = false"); got != tc.shellOff {
+				t.Errorf("shell_tool off = %v, want %v:\n%s", got, tc.shellOff, data)
+			}
+		})
+	}
+}

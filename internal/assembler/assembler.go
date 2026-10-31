@@ -86,20 +86,32 @@ func assembleInto(workDir string, adapter LayoutProvider, content []resolver.Res
 		}
 	}
 
+	// Warnings are kept per file written, keyed by its path in the config
+	// dir: a later source (the root after its includes) that writes the same
+	// file replaces the earlier copy, and its warnings replace that copy's,
+	// so each agent staged warns once, about the copy that was staged.
 	var transform ArtifactTransform
-	var warnings []string
+	var warned []string               // target paths, in first-written order
+	warnings := map[string][]string{} // target path -> that copy's warnings
 	if t, ok := adapter.(ArtifactTransformer); ok {
 		transform = t.TransformArtifact
 		if w, ok := adapter.(ArtifactWarner); ok {
 			transform = func(artifactType, name string, data []byte) (string, []byte) {
-				warnings = append(warnings, w.ArtifactWarnings(artifactType, name, data)...)
-				return t.TransformArtifact(artifactType, name, data)
+				newName, newData := t.TransformArtifact(artifactType, name, data)
+				key := artifactType + "/" + newName
+				if _, seen := warnings[key]; !seen {
+					warned = append(warned, key)
+				}
+				warnings[key] = w.ArtifactWarnings(artifactType, name, data)
+				return newName, newData
 			}
 		}
 	}
 	defer func() {
-		for _, w := range warnings {
-			_, _ = fmt.Fprintf(warnOut, "  warning: %s\n", w)
+		for _, key := range warned {
+			for _, w := range warnings[key] {
+				_, _ = fmt.Fprintf(warnOut, "  warning: %s\n", w)
+			}
 		}
 	}()
 
