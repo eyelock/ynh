@@ -813,9 +813,11 @@ func resolveVendor(flag string, p *harness.Harness, cfg *config.Config) (string,
 // "--model opus --" forwards "--model opus" with no prompt. Write
 // "--model=opus", or put the prompt after --, to be unambiguous.
 //
-// After --, the first word is the prompt and later words are forwarded to the
-// vendor. If a prompt came before -- and the word after it starts with "-",
-// the whole tail is vendor flags: "'say ok' -- -m gpt-5".
+// After --, the first word is the prompt unless it starts with "-", and every
+// later word is forwarded to the vendor. A first word that starts with "-" is
+// a vendor flag, never the prompt: "'say ok' -- -m gpt-5" prompts "say ok" and
+// forwards "-m gpt-5". A bare word before -- that is not the prompt is
+// forwarded too: "first -- second" prompts "second" and forwards "first".
 // runArgs holds parsed arguments for ynh run.
 type runArgs struct {
 	HarnessName  string   // positional name, if given
@@ -854,6 +856,13 @@ func parseRunArgs(args []string) runArgs {
 			separated = true
 			flagArgs = args[:i]
 			tail = args[i+1:]
+			// A first word starting with "-" is a vendor flag, never the
+			// prompt. Otherwise it is the prompt, and an earlier bare word
+			// is forwarded to the vendor as it always was.
+			if len(tail) > 0 && !strings.HasPrefix(tail[0], "-") {
+				ra.Prompt = tail[0]
+				tail = tail[1:]
+			}
 			break
 		}
 	}
@@ -939,18 +948,9 @@ func parseRunArgs(args []string) runArgs {
 		}
 	}
 
-	// After --: the first word is the prompt, unless a prompt was already given
-	// before -- and that word is a flag, in which case the whole tail is vendor
-	// flags ("'say ok' -- -m gpt-5"). Words after the prompt are forwarded, not
-	// dropped.
-	if len(tail) > 0 {
-		if ra.Prompt != "" && strings.HasPrefix(tail[0], "-") {
-			ra.VendorArgs = append(ra.VendorArgs, tail...)
-		} else {
-			ra.Prompt = tail[0]
-			ra.VendorArgs = append(ra.VendorArgs, tail[1:]...)
-		}
-	}
+	// Everything after the prompt (or all of it, when the first word after --
+	// is a flag) goes to the vendor in order, after the flags before --.
+	ra.VendorArgs = append(ra.VendorArgs, tail...)
 
 	// Env var fallbacks
 	if ra.FocusFlag == "" {

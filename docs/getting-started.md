@@ -131,7 +131,7 @@ david --verbose --model opus -- "fix this bug"    # "--verbose 'fix this bug' --
 david -v codex -- "refactor auth"
 ```
 
-After `--`, the first word is the prompt, and any words after the prompt are forwarded to the vendor. If you already gave a prompt before `--` and the word after it starts with `-`, everything after `--` is vendor flags. The `=` form is the least ambiguous way to give a value:
+After `--`, the first word is the prompt unless it starts with `-`. A word starting with `-` there is a vendor flag, never the prompt, and every later word is forwarded to the vendor. A prompt that itself starts with `-` cannot be given this way. The `=` form is the least ambiguous way to give a value:
 
 ```bash
 david -v codex "say ok" -- --model=gpt-5          # prompt "say ok", --model=gpt-5 forwarded

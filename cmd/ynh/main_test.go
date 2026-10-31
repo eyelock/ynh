@@ -312,6 +312,25 @@ func TestParseRunArgs(t *testing.T) {
 			wantArgs:   []string{"-m", "gpt-5"},
 		},
 		{
+			name:       "earlier bare word is forwarded, not dropped, when the prompt follows --",
+			args:       []string{"my-harness", "first", "--", "second"},
+			wantName:   "my-harness",
+			wantPrompt: "second",
+			wantArgs:   []string{"first"},
+		},
+		{
+			name:     "flag-looking word after -- is never the prompt (value taken by earlier flag)",
+			args:     []string{"my-harness", "--verbose", "fix", "--", "-m", "x"},
+			wantName: "my-harness",
+			wantArgs: []string{"--verbose", "fix", "-m", "x"},
+		},
+		{
+			name:     "flag-looking word after -- is never the prompt (-p takes the earlier word)",
+			args:     []string{"my-harness", "-p", "say ok", "--", "--model", "haiku"},
+			wantName: "my-harness",
+			wantArgs: []string{"-p", "say ok", "--model", "haiku"},
+		},
+		{
 			name:       "known ynh flag value is not a passthrough value",
 			args:       []string{"my-harness", "-v", "claude", "fix the bug"},
 			wantName:   "my-harness",

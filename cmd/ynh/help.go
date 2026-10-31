@@ -125,9 +125,11 @@ flag is that flag's value ("--model haiku"), except the last bare word, which
 is the prompt. Write the value with "=" ("--model=haiku"), or put the prompt
 after --, when that would read your words the wrong way. Before --, a word
 right after a flag is always its value. After --, the first word is the
-prompt (unless a prompt came before -- and that word starts with "-", then
-everything after -- is vendor flags: 'say ok' -- -m gpt-5); any words after the
-prompt are forwarded to the vendor. The safest form is "--model=gpt-5".
+prompt unless it starts with "-"; a word starting with "-" there is a vendor
+flag, never the prompt. Every later word is forwarded to the vendor, so
+'say ok' -- -m gpt-5 prompts "say ok" and forwards -m gpt-5. A prompt that
+itself starts with "-" cannot be given this way. The safest form for a value
+is "--model=gpt-5".
 
 Examples:
   ynh run local/david
