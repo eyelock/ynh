@@ -132,7 +132,8 @@ func TestCmdVersion_JSONFeatures(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"agent-run-harness-path", "agent-run-fetches-includes"} {
+	// Every shipped name: a name is never renamed or removed once it ships.
+	for _, want := range []string{"agent-run-harness-path", "agent-run-fetches-includes", "trust-counts-composed-mcp-servers", "workspace-folders"} {
 		if !slices.Contains(payload.Features, want) {
 			t.Errorf("features %v is missing %q", payload.Features, want)
 		}

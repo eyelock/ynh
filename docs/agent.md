@@ -144,8 +144,9 @@ and its `null` removing; see
 [Servers from Included Harnesses](mcp.md#servers-from-included-harnesses)),
 named on the `claude` backend as `plugin:<harness>:<server>`, as `ynh run`
 names them. A harness or profile that sets `mcp_isolation` runs its worker
-with only that composed set, the same as `ynh run`; `ynh agent run` has no `--isolated-mcp` flag, so isolation
-comes from the manifest alone. It is applied on the `claude` backend only (its
+with only that composed set, the same as `ynh run`; `ynh agent run` has no
+`--isolated-mcp` flag, so isolation comes from the manifest alone. It is
+applied on the `claude` backend only (its
 tools are then named `<server>`); on `codex` and `cursor` ynh prints one
 `warning:` line on stderr and the worker loads your own servers too. See
 [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
