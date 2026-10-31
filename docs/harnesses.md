@@ -322,7 +322,7 @@ A `delegates_to` entry may name one of the delegate harness's own profiles or fo
 
 - **`ynh delegate add`** writes the selection with `--profile <name>` or `--focus <name>`; naming both is an error, with the same message `ynd validate` gives. For an installed harness the delegate is fetched and the name checked against what it declares, as `ynd validate` does; for a harness being edited in place, nothing is fetched and `ynd validate` is the check.
 
-The same selection applies wherever ynh builds a delegate: `ynh run`, `ynh agent run`, `ynd preview`, `ynh image`, `ynd export`, and the delegate servers `ynd compose` and `ynh trust` report. `ynd compose` shows the selection beside the delegate (`profile=strict`, `focus=ci-failures`).
+The same selection applies wherever ynh builds a delegate: `ynh run`, `ynh agent run`, `ynd preview`, `ynh image`, `ynd export`, and the delegate servers `ynd compose` and `ynh trust` report. `ynd compose` and `ynh info` show the selection beside the delegate (`profile=strict`, `focus=ci-failures`), `ynh ls` in brackets (`(focus ci-failures)`), and their JSON carries it as optional `profile` and `focus` fields.
 
 ## Embedded vs External Artifacts
 

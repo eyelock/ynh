@@ -418,6 +418,12 @@ func printInfoText(w io.Writer, name string, profiles []string, focus string) er
 			if del.Ref != "" {
 				line += "  ref=" + del.Ref
 			}
+			if del.Profile != "" {
+				line += "  profile=" + del.Profile
+			}
+			if del.Focus != "" {
+				line += "  focus=" + del.Focus
+			}
 			_, _ = fmt.Fprintln(w, line)
 		}
 	}

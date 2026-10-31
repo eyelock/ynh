@@ -239,7 +239,9 @@
         "ref_installed": {"type": "string"},
         "ref_available": {"type": "string"},
         "is_pinned": {"type": "boolean"},
-        "path": {"type": "string"}
+        "path": {"type": "string"},
+        "profile": {"type": "string", "description": "The profile of the delegate's own that the entry selects. Present only when it names one. The manifest refuses an entry with both."},
+        "focus": {"type": "string", "description": "The focus of the delegate's own that the entry selects: its profile applies and its prompt becomes the delegate's standing instructions. Present only when it names one. The manifest refuses an entry with both."}
       },
       "required": ["git", "is_pinned"],
       "additionalProperties": false
