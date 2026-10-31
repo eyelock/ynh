@@ -686,3 +686,45 @@ func TestPrintDelegateMCP(t *testing.T) {
 		t.Errorf("listing = %q, want %q", out.String(), want)
 	}
 }
+
+// #547: an include cycle resolves; preview assembles every harness in it and
+// notes the include that closes it.
+func TestPreviewNotesAnIncludeCycle(t *testing.T) {
+	root := t.TempDir()
+	for dir, hj := range map[string]map[string]any{
+		root: {
+			"name": "root", "version": "1.0.0",
+			"includes": []map[string]any{{"local": "a"}},
+		},
+		filepath.Join(root, "a"): {
+			"name": "a", "version": "1.0.0",
+			"includes": []map[string]any{{"local": filepath.Join(root, "b")}},
+		},
+		filepath.Join(root, "b"): {
+			"name": "b", "version": "1.0.0",
+			"includes": []map[string]any{{"local": filepath.Join(root, "a")}},
+		},
+	} {
+		data, _ := json.Marshal(hj)
+		if err := writePluginJSONFile(dir, data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tmp, report, err := assembleForVendorSources(root, "claude", harness.Selection{})
+	if err != nil {
+		t.Fatalf("a cycle must assemble, got %v", err)
+	}
+	_ = os.RemoveAll(tmp)
+	var out strings.Builder
+	printIncludeNotes(&out, report.included)
+	want := "\nInclude notes:\n  include cycle: root -> a -> b -> a; a is already included, so this include adds nothing\n"
+	if out.String() != want {
+		t.Errorf("notes =\n%q\nwant\n%q", out.String(), want)
+	}
+
+	var none strings.Builder
+	printIncludeNotes(&none, nil)
+	if none.Len() != 0 {
+		t.Errorf("no notes should print nothing, got %q", none.String())
+	}
+}

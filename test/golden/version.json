@@ -4,6 +4,7 @@
   "features": [
     "agent-run-fetches-includes",
     "agent-run-harness-path",
+    "include-cycles-resolve",
     "trust-counts-composed-mcp-servers",
     "workspace-folders"
   ]
