@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -322,6 +324,9 @@ func validateHarness(dir string) error {
 			issues = append(issues, validateHarnessLaunchFocus(hj)...)
 			issues = append(issues, validateHarnessSensors(hj)...)
 			issues = append(issues, validateHarnessIncludes(hj)...)
+			delIssues, delNotes := validateHarnessDelegates(dir, data)
+			issues = append(issues, delIssues...)
+			notes = append(notes, delNotes...)
 			wsIssues, wsNotes := validateHarnessWorkspace(dir, hj)
 			issues = append(issues, wsIssues...)
 			notes = append(notes, wsNotes...)
@@ -906,6 +911,70 @@ func validateProfileMCPServers(profile map[string]any) []string {
 	}
 
 	return issues
+}
+
+// validateHarnessDelegates checks each delegates_to entry's selection. An
+// entry may name a profile or a focus of the delegate harness, not both,
+// since a focus carries its profile; the name must be one the delegate
+// declares, as launch_focus must name one of the harness's own focuses. The
+// delegate is read from disk or the cache only, never the network: one that
+// cannot be read is a note, not checked, rather than an error.
+func validateHarnessDelegates(dir string, data []byte) (issues, notes []string) {
+	var meta plugin.HarnessJSON
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return nil, nil
+	}
+	for i, dm := range meta.DelegatesTo {
+		if dm.Profile == "" && dm.Focus == "" {
+			continue
+		}
+		del := harness.Delegate{
+			GitSource: harness.GitSource{Git: dm.Git, Ref: dm.Ref, Path: dm.Path},
+			Profile:   dm.Profile,
+			Focus:     dm.Focus,
+		}
+		prefix := fmt.Sprintf("delegates_to[%d] (%s):", i, del.Label())
+		if dm.Profile != "" && dm.Focus != "" {
+			issues = append(issues, fmt.Sprintf("%s names both profile %q and focus %q; a focus already carries its profile, so name one", prefix, dm.Profile, dm.Focus))
+			continue
+		}
+		base, err := resolver.ResolveDelegateLocal(del.GitSource, dir)
+		if err != nil {
+			notes = append(notes, fmt.Sprintf("%s selection not checked: the delegate could not be read (%v)", prefix, err))
+			continue
+		}
+		dh, err := harness.LoadDir(base)
+		if err != nil {
+			notes = append(notes, fmt.Sprintf("%s selection not checked: the delegate could not be loaded (%v)", prefix, err))
+			continue
+		}
+		if dm.Profile != "" {
+			if _, ok := dh.Profiles[dm.Profile]; !ok {
+				issues = append(issues, fmt.Sprintf("%s references profile %q, which delegate %s does not define (%s)", prefix, dm.Profile, dh.Name, declaredNames(dh.Profiles, "profiles")))
+			}
+			continue
+		}
+		focus, ok := dh.Focuses[dm.Focus]
+		if !ok {
+			issues = append(issues, fmt.Sprintf("%s references focus %q, which delegate %s does not define (%s)", prefix, dm.Focus, dh.Name, declaredNames(dh.Focuses, "focuses")))
+			continue
+		}
+		if focus.Profile != "" {
+			if _, ok := dh.Profiles[focus.Profile]; !ok {
+				issues = append(issues, fmt.Sprintf("%s focus %q of delegate %s names profile %q, which it does not define", prefix, dm.Focus, dh.Name, focus.Profile))
+			}
+		}
+	}
+	return issues, notes
+}
+
+// declaredNames lists a map's keys for a message: "declares: a, b", or
+// "declares no <what>".
+func declaredNames[V any](m map[string]V, what string) string {
+	if len(m) == 0 {
+		return "it declares no " + what
+	}
+	return "it declares: " + strings.Join(slices.Sorted(maps.Keys(m)), ", ")
 }
 
 // validateHarnessLaunchFocus checks launch_focus: it must name a focus that

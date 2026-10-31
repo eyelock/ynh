@@ -284,6 +284,8 @@ Other harnesses this one can invoke as subagents.
 | `git` | yes | Git URL (same formats as includes) |
 | `ref` | no | Git tag/branch |
 | `path` | no | Subdirectory within the repo (monorepo support). Must be a relative path with no `..` traversal. |
+| `profile` | no | One of the delegate harness's own profiles, applied to it. Not with `focus`. |
+| `focus` | no | One of the delegate harness's own focuses: its profile is applied, and its prompt becomes standing instructions in the delegate's agent. Not with `profile`. |
 
 When running as `david`, you can ask it to delegate a task to `team-dev`. The delegation happens through the vendor's native subagent system.
 
@@ -296,6 +298,29 @@ At runtime, ynh generates a vendor-native agent file for each delegate containin
 - **MCP servers** the delegate declares, and those of the harnesses it includes, carried by the subagent alone; see [MCP servers of delegates](mcp.md#mcp-servers-of-delegates)
 
 A delegate is resolved as a harness: its own `includes` are followed, against its own directory and the same allow-list. Delegates of delegates are not followed.
+
+#### Profile or focus of a delegate
+
+A `delegates_to` entry may name one of the delegate harness's own profiles or focuses, or neither:
+
+```json
+{
+  "delegates_to": [
+    {"git": "github.com/eyelock/reviewer", "profile": "strict"},
+    {"git": "github.com/eyelock/triager", "focus": "ci-failures"},
+    {"git": "github.com/eyelock/helper"}
+  ]
+}
+```
+
+- **`profile`** applies that profile to the delegate, as `--profile` would to a run of it: its `mcp_servers` (including a `null` removal), `includes` and the rest of what a profile changes. The agent ynh writes carries the result.
+- **`focus`** applies the focus's profile, if it has one, the same way, and adds the focus's prompt to the delegate's agent as standing instructions, under `## Focus: <name>`. The prompt does not become the delegate's task: the calling session still says what to do, each time it hands work to the delegate.
+- **Neither** runs the delegate on its base configuration, as before.
+- **Both is an error.** A focus already carries its profile, so an entry that names both is refused by `ynd validate`, by the schema, and when ynh assembles the delegate.
+- The names are the delegate's own, never `namespace:name`. A name the delegate harness does not declare fails `ynd validate` and the run, naming what it does declare. `ynd validate` reads the delegate from disk or the cache only; one it cannot read there is a note, not checked.
+- The delegate's `launch_focus` is never applied. A delegate runs a focus only when its entry names one.
+
+The same selection applies wherever ynh builds a delegate: `ynh run`, `ynh agent run`, `ynd preview`, `ynh image`, `ynd export`, and the delegate servers `ynd compose` and `ynh trust` report. `ynd compose` shows the selection beside the delegate (`profile=strict`, `focus=ci-failures`).
 
 ## Embedded vs External Artifacts
 

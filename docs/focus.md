@@ -91,7 +91,7 @@ A harness can declare the focus it always wakes with, so launching it with no ar
 | `ynh run h --focus other` | Unchanged: that focus, one-shot unless `--interactive`. The launch focus is not involved: not its prompt, not its profile, and its interactive session does not leak in. A dispatcher running `worker --focus next` still gets a run that exits. |
 | `ynh run h -- "text"` | Your prompt replaces the launch focus's prompt, but the launch focus's profile still applies. Interactivity is as it always was: one-shot unless `--interactive`. |
 | `ynh run h --resume` | The launch focus's profile applies. Its prompt is not sent, for the same reason a focus prompt is not: a resume continues a task. If there is nothing to resume and ynh starts a new session, that session is a bare launch and the prompt is sent. |
-| `ynh agent run`, delegation | Not applied: no wake prompt, no forced interactive session. Neither goes through `ynh run`, and nothing on their paths reads the field. |
+| `ynh agent run`, delegation | Not applied: no wake prompt, no forced interactive session. Neither goes through `ynh run`, and nothing on their paths reads the field. A delegate runs a focus only when its `delegates_to` entry names one (see [Focus of a delegate](#focus-of-a-delegate)). |
 
 There is no off switch. An explicit prompt is how you get a session that does not wake with the launch focus. A `--profile` (or `YNH_PROFILE`) you pass wins over the launch focus's profile.
 
@@ -146,6 +146,16 @@ binds the resume to that name instead:
 Two names in one directory keep separate sessions. Codex, Copilot and Cursor
 are unchanged: `--session-name` is only a label there, and `--resume` still
 continues the newest session in the directory.
+
+## Focus of a Delegate
+
+A `delegates_to` entry may name one of the delegate harness's own focuses:
+
+```json
+{ "delegates_to": [ { "git": "github.com/eyelock/triager", "focus": "ci-failures" } ] }
+```
+
+The focus's profile, if it has one, is applied to the delegate, and its prompt is added to the delegate's agent as standing instructions, under `## Focus: ci-failures`. It does not become the delegate's task: the calling session still gives the task each time it delegates. An entry names a profile or a focus, not both, since a focus carries its profile. See [delegates_to](harnesses.md#profile-or-focus-of-a-delegate).
 
 ## Missing Focus Behavior
 

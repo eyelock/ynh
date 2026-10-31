@@ -181,3 +181,52 @@ func TestResolveExportDelegates_RefusesPathRelativeServer(t *testing.T) {
 		})
 	}
 }
+
+// An export applies the delegates_to entry's focus as a run does: its
+// profile's servers, and its prompt as standing instructions in the agent.
+func TestWriteDelegates_FocusApplies(t *testing.T) {
+	repo := t.TempDir()
+	hj := map[string]any{
+		"name": "probe", "version": "0.1.0",
+		"mcp_servers": map[string]any{"base": map[string]any{"command": "base-srv"}},
+		"profiles":    map[string]any{"ci": map[string]any{"mcp_servers": map[string]any{"ci": map[string]any{"command": "ci-srv"}}}},
+		"focuses":     map[string]any{"triage": map[string]any{"profile": "ci", "prompt": "Triage first."}},
+	}
+	data, err := json.Marshal(hj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, plugin.PluginDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, plugin.PluginDir, plugin.PluginFile), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"init"}, {"config", "user.email", "t@t"}, {"config", "user.name", "t"}, {"add", "."}, {"commit", "-m", "init"}} {
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	t.Setenv("YNH_HOME", t.TempDir())
+	ds, err := ResolveExportDelegates([]harness.Delegate{{GitSource: harness.GitSource{Git: repo}, Focus: "triage"}}, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claude, err := vendor.Get("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	if err := WriteDelegates(out, ds, delegateCarrier(claude)); err != nil {
+		t.Fatal(err)
+	}
+	agent, err := os.ReadFile(filepath.Join(out, "agents", "probe.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"ci":{"command":"ci-srv"}`, `"base":{"command":"base-srv"}`, "## Focus: triage\n\nTriage first."} {
+		if !strings.Contains(string(agent), want) {
+			t.Errorf("agent lacks %q:\n%s", want, agent)
+		}
+	}
+}

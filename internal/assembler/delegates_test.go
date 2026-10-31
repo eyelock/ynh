@@ -31,7 +31,7 @@ func TestBuildDelegateAgent(t *testing.T) {
 		DefaultVendor: "claude",
 	}
 
-	content := BuildDelegateAgent(p, dir, nil, "")
+	content := BuildDelegateAgent(p, dir, nil, nil, "")
 
 	// Check frontmatter
 	if !strings.Contains(content, "name: team-dev") {
@@ -61,7 +61,7 @@ func TestBuildDelegateAgent_NoRulesNoSkills(t *testing.T) {
 		Name: "minimal",
 	}
 
-	content := BuildDelegateAgent(p, dir, nil, "")
+	content := BuildDelegateAgent(p, dir, nil, nil, "")
 
 	if !strings.Contains(content, "name: minimal") {
 		t.Error("missing name")

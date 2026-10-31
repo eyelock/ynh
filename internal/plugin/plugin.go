@@ -792,6 +792,12 @@ type DelegateMeta struct {
 	Git  string `json:"git"`
 	Ref  string `json:"ref,omitempty"`
 	Path string `json:"path,omitempty"`
+	// Profile names one of the delegate harness's own profiles to apply to
+	// it. Focus names one of its own focuses: its profile applies and its
+	// prompt becomes standing instructions in the delegate's agent. At most
+	// one of the two; neither runs the delegate on its base config.
+	Profile string `json:"profile,omitempty"`
+	Focus   string `json:"focus,omitempty"`
 }
 
 // HarnessFile is the legacy single-file harness manifest. ynh reads it only to
