@@ -391,6 +391,14 @@ func delegateBody(p *harness.Harness, basePath string, included []resolver.Resol
 				skills = append(skills, s)
 			}
 		}
+		// A top-level skill folder the include picks by name.
+		for _, p := range r.Content.Paths {
+			if harness.TopLevelSkill(r.Content.BasePath, p) {
+				if s, _ := harness.PickedSkillName(r.Content.BasePath, p); !slices.Contains(skills, s) {
+					skills = append(skills, s)
+				}
+			}
+		}
 	}
 	for _, s := range listSkillsFrom(basePath) {
 		if !slices.Contains(skills, s) {

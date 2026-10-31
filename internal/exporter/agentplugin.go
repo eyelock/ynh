@@ -267,7 +267,7 @@ func restrictContent(content []resolver.ResolvedContent, dirs map[string]string)
 		kept := rc
 		kept.Paths = nil
 		for _, p := range rc.Paths {
-			if _, ok := dirs[strings.SplitN(p, "/", 2)[0]]; ok {
+			if _, ok := dirs[harness.PickArtifactType(rc.BasePath, p)]; ok {
 				kept.Paths = append(kept.Paths, p)
 			}
 		}

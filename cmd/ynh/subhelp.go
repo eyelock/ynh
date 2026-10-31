@@ -78,7 +78,7 @@ var subcommandHelp = map[string]subHelp{
 		Args:    []argHelp{harnessArg, {"<url|path>", "Git URL of the source, or a filesystem path (absolute, ./, ../, ~/, or an existing directory)"}},
 		Flags: []flagHelp{
 			pathFlag,
-			{"--pick <items>", "Comma-separated artifacts to take, e.g. skills/commit,agents/reviewer.md"},
+			{"--pick <items>", "Comma-separated artifacts to take, e.g. skills/commit,agents/reviewer.md, or a top-level skill folder by name"},
 			refFlag,
 			{"--as <alias>", "Namespace for the included harness's focuses and profiles (alias:name)"},
 			{"--git", "Treat a path as a Git repository on disk instead of a local include"},

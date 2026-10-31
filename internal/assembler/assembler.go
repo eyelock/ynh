@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/resolver"
 )
 
@@ -156,10 +157,22 @@ func Cleanup(workDir string) {
 // targetBaseDir is where artifact type directories live (e.g., workDir/.claude/ for runtime,
 // or pluginRoot/ for export).
 func CopyPicked(repoBase string, picked string, targetBaseDir string, artifactDirs map[string]string, transform ArtifactTransform) error {
+	// A folder at the include's top level whose SKILL.md is at its root is
+	// a skill, picked by its name alone (harness.TopLevelSkill). It used to
+	// be an error, so no pick that resolved before resolves differently.
+	if harness.TopLevelSkill(repoBase, picked) {
+		targetDir, ok := artifactDirs["skills"]
+		if !ok {
+			return fmt.Errorf("unknown artifact type %q in pick: %s", "skills", picked)
+		}
+		name := filepath.Clean(picked)
+		return copyArtifactDir("skills", filepath.Join(repoBase, name), filepath.Join(targetBaseDir, targetDir, name))
+	}
+
 	// Determine which artifact type this belongs to
 	parts := strings.SplitN(picked, "/", 2)
 	if len(parts) < 2 {
-		return fmt.Errorf("pick path must be in format 'type/name': %s", picked)
+		return fmt.Errorf("pick path must be in format 'type/name', or name a top-level folder with a SKILL.md at its root: %s", picked)
 	}
 
 	artifactType := parts[0]
