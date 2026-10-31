@@ -269,7 +269,7 @@ make install
 
 # Verify the contract
 ynh version --format json
-# {"version": "dev-<branch>-<sha>", "capabilities": "0.4.0"}
+# {"version": "dev-<branch>-<sha>", "capabilities": "0.x.y"}
 
 # Downstream tooling on PATH now sees the dev build
 ```
