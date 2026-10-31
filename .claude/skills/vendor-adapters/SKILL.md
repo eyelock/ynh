@@ -274,8 +274,9 @@ the format, its reverse-domain namespace, where its artifacts, hooks and MCP
 config go, and whether the manifest needs a hooks pointer. `ynd export
 --format agent-plugin` and `ynd marketplace build --format agent-plugin`
 read those declarations; `internal/agentplugin` holds the spec's reader and
-validator. Adding a vendor means declaring its layout there, and nothing
-else. Verified sources: the specification and the four vendors' plugin
+validator. For Agent Plugins, adding a vendor means declaring its layout
+there and nothing else; the rest of a new vendor is in
+[`add-vendor-adapter`](../add-vendor-adapter/SKILL.md). Verified sources: the specification and the four vendors' plugin
 docs, 2026-09-25.
 
 ### GitHub Copilot CLI Mapping

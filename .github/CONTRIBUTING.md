@@ -342,7 +342,7 @@ func (c Chain) Run(dir string) ([]string, error)  // returns descriptions of app
 
 ### Vendor Adapters
 
-Each vendor is an adapter, `internal/vendor/<name>.go`, that implements the `Adapter` interface and self-registers via `init()`. The adapter file is not the whole job. A new vendor also declares its hook events, hook timeouts, session-start context and workspace flag, adds itself to the per-vendor tables in `internal/vendor/` that read those declarations, and needs the schema, the Docker image, the parity checks, tests and the docs that list vendors. The [`add-vendor-adapter`](../.claude/skills/add-vendor-adapter/SKILL.md) skill is the checklist for all of it; this section covers only the interface and the two launch patterns.
+Each vendor is an adapter, `internal/vendor/<name>.go`, that implements the `Adapter` interface and self-registers via `init()`. The adapter file is not the whole job. A new vendor also declares its hook events, its hook timeout field (or why it has none), its session-start context and its workspace flag (or why it has none), adds itself to the per-vendor tables in `internal/vendor/` that read those declarations, and needs the schema, the Docker image, the parity checks, tests and the docs that list vendors. The [`add-vendor-adapter`](../.claude/skills/add-vendor-adapter/SKILL.md) skill is the checklist for all of it; this section covers only the interface and the two launch patterns.
 
 **Interface** (`internal/vendor/adapter.go`):
 
