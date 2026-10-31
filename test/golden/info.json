@@ -16,7 +16,9 @@
       "installed_at": "2026-05-13T12:00:00Z"
     },
     "includes": [],
-    "delegates_to": [],
+    "delegates_to": [
+      {"git": "github.com/eyelock/triager", "ref_installed": "3f2c9a1e0b7d4c5a6f8e9d0c1b2a3f4e5d6c7b8a", "is_pinned": true, "focus": "ci-failures"}
+    ],
     "mcp_servers": [
       {"name": "docs", "source": "root", "url": "https://docs.example.com/mcp"},
       {"name": "github", "source": "eyelock/assistants//ynh/github", "command": "github-mcp-server"}

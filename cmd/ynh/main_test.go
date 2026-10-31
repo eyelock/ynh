@@ -1221,6 +1221,10 @@ func TestFormatDelegates(t *testing.T) {
 		{"with path and ref", []harness.Delegate{
 			{GitSource: harness.GitSource{Git: "github.com/example/mono", Path: "harnesses/ops", Ref: "v2"}},
 		}, "example/mono/harnesses/ops@v2"},
+		{"with a profile and a focus", []harness.Delegate{
+			{GitSource: harness.GitSource{Git: "github.com/example/reviewer"}, Profile: "strict"},
+			{GitSource: harness.GitSource{Git: "github.com/example/triager"}, Focus: "ci-failures"},
+		}, "example/reviewer (profile strict), example/triager (focus ci-failures)"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
