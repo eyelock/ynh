@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage e2e format lint check check-artifacts check-vendor-parity check-marketplace check-eval-stand-ins scan-artifacts run docs help docker-build docker-push vulncheck
+.PHONY: clean deps install build test test-coverage e2e format lint check check-tidy check-artifacts check-vendor-parity check-marketplace check-eval-stand-ins scan-artifacts run docs help docker-build docker-push vulncheck
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -73,6 +73,13 @@ format: ## Format code
 
 lint: ## Lint code
 	golangci-lint run ./...
+
+check-tidy: ## Fail if go.mod or go.sum is not tidy (read-only; CI's `go mod tidy -diff`)
+	@# A direct import marked `// indirect` is invisible to build, test and lint
+	@# alike; only this sees it. -diff prints what tidy would change and exits
+	@# non-zero, writing nothing. Like build and test, it needs the network only
+	@# when the module cache is cold.
+	$(GO) mod tidy -diff
 
 # The harness artifacts this repo ships (skills/ agents/ rules/) plus the one it
 # uses on itself (.claude/). testdata/ is deliberately excluded: its fixtures are
@@ -153,7 +160,14 @@ docker-push: ## Push base Docker image to GHCR
 	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
 	docker push $(DOCKER_IMAGE):latest
 
-# Every check CI runs that needs neither Docker nor the network, so a green
-# `make check` means a green CI. Left out on purpose: scan-artifacts (Docker),
-# vulncheck and check-eval-stand-ins (network), e2e (release gate).
-check: deps format lint test build check-artifacts check-vendor-parity check-marketplace ## Run full CI pipeline
+# Every check CI's CI workflow runs that needs neither Docker nor the network
+# (beyond the module downloads build and test already need on a cold cache).
+# A green `make check` is not a promise of a green CI. Left out on purpose:
+#   scan-artifacts                  Skill Security job (Docker)
+#   the container image build       Packaging Config job (Docker)
+#   vulncheck                       vulncheck.yml (network: live vuln database)
+#   check-eval-stand-ins            eval-stand-ins.yml (network: GitHub)
+#   e2e                             e2e.yml (release gate)
+# `format` rewrites files where CI's Format Check only reports them, so commit
+# what it changes.
+check: deps format lint check-tidy test build check-artifacts check-vendor-parity check-marketplace ## Run every CI check that needs neither Docker nor the network

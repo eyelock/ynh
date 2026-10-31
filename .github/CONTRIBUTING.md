@@ -218,8 +218,8 @@ make format
 # Lint
 make lint
 
-# Full CI pipeline (deps, format, lint, test, build, check-artifacts,
-# check-vendor-parity, check-marketplace)
+# Every CI check needing no Docker or network (deps, format, lint, check-tidy,
+# test, build, check-artifacts, check-vendor-parity, check-marketplace)
 make check
 
 # E2E suite (release gate; not part of `make check`)

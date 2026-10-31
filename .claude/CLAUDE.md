@@ -16,7 +16,7 @@ Both built by `make build`, released together via goreleaser (single `v*` tag).
 **Always use Make targets, not raw `go`/`golangci-lint` commands.** The Makefile wraps them with correct flags (race detection, coverage, ldflags, version injection).
 
 ```bash
-make check              # full CI: deps, format, lint, test, build, check-artifacts, check-vendor-parity, check-marketplace
+make check              # every CI check needing no Docker or network: deps, format, lint, check-tidy, test, build, check-artifacts, check-vendor-parity, check-marketplace
 make build              # build both binaries to bin/
 make test               # all tests with race detection and coverage
 make test FILE=./cmd/ynd  # test specific package

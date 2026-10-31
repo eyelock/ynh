@@ -26,7 +26,7 @@ Do not proceed under any circumstances until they pass.
 
 ### 2. Full check
 
-`make check` — format, lint, test, build, check-artifacts, check-vendor-parity and check-marketplace. If anything
+`make check` — deps, format, lint, check-tidy, test, build, check-artifacts, check-vendor-parity and check-marketplace. If anything
 fails, stop and report.
 
 ### 3. Start from a clean, current `develop`
