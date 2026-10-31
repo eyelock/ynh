@@ -218,7 +218,8 @@ make format
 # Lint
 make lint
 
-# Full CI pipeline (deps, format, lint, test, build)
+# Full CI pipeline (deps, format, lint, test, build, check-artifacts,
+# check-vendor-parity, check-marketplace)
 make check
 
 # E2E suite (release gate; not part of `make check`)
@@ -686,7 +687,7 @@ are applied with Terraform. Change them there, in a pull request, not in the set
 1. Fork the repo
 2. Create a feature branch
 3. Make your changes
-4. Run `make check` (format, lint, test, build)
+4. Run `make check` (format, lint, test, build and the artifact checks)
 5. Submit a pull request
 
 All tests must pass. New features should include tests. Keep the code simple - this is a tool for developers, not a framework.

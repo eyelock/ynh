@@ -25,7 +25,7 @@ Run the full CI pipeline:
 make check
 ```
 
-This runs deps, format, lint, test, and build in sequence. Fix any issues before committing.
+This runs deps, format, lint, test, build, check-artifacts, check-vendor-parity and check-marketplace in sequence. Fix any issues before committing.
 
 ## Individual steps
 

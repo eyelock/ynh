@@ -1,4 +1,4 @@
-Run the full CI pipeline: format, lint, test, and build. Fix any issues found.
+Run the full CI pipeline: format, lint, test, build, check-artifacts, check-vendor-parity and check-marketplace. Fix any issues found.
 
 ```bash
 make check

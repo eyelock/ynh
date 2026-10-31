@@ -19,11 +19,12 @@ LDFLAGS := -ldflags "-X github.com/eyelock/ynh/internal/config.Version=$(VERSION
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-deps: ## Install prerequisites (Go, linter, formatter)
+deps: ## Install prerequisites (Go, linter, formatter, jq)
 	@echo "Checking prerequisites..."
 	@command -v go >/dev/null 2>&1 || { echo "Installing Go..."; brew install go; }
 	@command -v golangci-lint >/dev/null 2>&1 || { echo "Installing golangci-lint..."; brew install golangci-lint; }
 	@test -x $(GOIMPORTS) || { echo "Installing goimports..."; go install golang.org/x/tools/cmd/goimports@latest; }
+	@command -v jq >/dev/null 2>&1 || { echo "Installing jq..."; brew install jq; }
 	@echo "All prerequisites installed."
 	@echo ""
 	@echo "Run 'make install' to build and install binaries to ~/.ynh/bin/"
@@ -152,4 +153,7 @@ docker-push: ## Push base Docker image to GHCR
 	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
 	docker push $(DOCKER_IMAGE):latest
 
-check: deps format lint test build check-artifacts ## Run full CI pipeline
+# Every check CI runs that needs neither Docker nor the network, so a green
+# `make check` means a green CI. Left out on purpose: scan-artifacts (Docker),
+# vulncheck and check-eval-stand-ins (network), e2e (release gate).
+check: deps format lint test build check-artifacts check-vendor-parity check-marketplace ## Run full CI pipeline

@@ -29,7 +29,7 @@ is optional:
 ## Pre-release checklist
 
 1. **Evals pass**: `/evals` must report `EVALS: PASS` in this conversation
-2. **All checks pass**: `make check` — includes `check-artifacts`
+2. **All checks pass**: `make check` — includes `check-artifacts`, `check-vendor-parity` and `check-marketplace`
 3. **On `develop`, clean, and current with `origin/develop`**
 4. **`.github/CONTRIBUTING.md` current**: reflects any new commands, config, or patterns
 5. **README.md current**: quick start and commands table match the code

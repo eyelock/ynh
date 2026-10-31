@@ -19,7 +19,7 @@ Recipes reference `$(GOIMPORTS)` instead of bare `goimports`. This means `make f
 
 | Command | What it does |
 |---------|-------------|
-| `make check` | Full CI pipeline: deps, format, lint, test, build, **check-artifacts** |
+| `make check` | Full CI pipeline: deps, format, lint, test, build, **check-artifacts**, **check-vendor-parity**, **check-marketplace** |
 | `make deps` | Install prerequisites (goimports, golangci-lint) |
 | `make build` | Build **both** binaries to `bin/ynh` and `bin/ynd` |
 | `make install` | Build and copy both binaries to `~/.ynh/bin` |
@@ -30,6 +30,7 @@ Recipes reference `$(GOIMPORTS)` instead of bare `goimports`. This means `make f
 | `make lint` | Run golangci-lint |
 | `make check-artifacts` | `ynd validate` + `ynd lint` over `skills/ agents/ rules/ .claude/` |
 | `make check-vendor-parity` | Every vendor documented, assembling the same artifacts, and its CLI stubbed in `.claude/agents/evals.md` (needs jq) |
+| `make check-marketplace` | The committed marketplace indexes agree with the plugin manifests |
 | `make scan-artifacts` | SkillSpector security scan (needs Docker; not part of `make check`) |
 | `make e2e` | E2E suite — release gate, not part of `make test` or `make check` |
 | `make clean` | Remove build artifacts and caches |
