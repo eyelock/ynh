@@ -288,7 +288,7 @@ The servers of an included harness are carried into the including harness; see [
 
 ### mcp_isolation (optional)
 
-Boolean, default `false`. When `true`, `ynh run` launches the harness with only its own MCP servers, not alongside the ones you have configured. `ynh run --isolated-mcp` turns it on for one run. See [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
+Boolean, default `false`. When `true`, `ynh run` launches the harness with only the MCP servers it composes (its own and those of its included harnesses), not alongside the ones you have configured. `ynh run --isolated-mcp` turns it on for one run. See [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
 
 ### workspace (optional)
 
