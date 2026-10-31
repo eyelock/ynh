@@ -440,7 +440,7 @@ func (r *includeResolver) removedFrom(id string, memo map[string][]string) []str
 	if got, ok := memo[id]; ok {
 		return got
 	}
-	memo[id] = nil // cycles are refused by the walk; this only guards the recursion
+	memo[id] = nil // the walk skips the include that closes a cycle; this only guards the recursion
 	var common []string
 	for i, parent := range r.parents[id] {
 		route := slices.Clone(r.removedFrom(parent, memo))
@@ -497,7 +497,7 @@ func (r *includeResolver) hooksConsent(id string, memo map[string]bool) bool {
 	if got, ok := memo[id]; ok {
 		return got
 	}
-	memo[id] = false // cycles are refused by the walk; this only guards the recursion
+	memo[id] = false // the walk skips the include that closes a cycle; this only guards the recursion
 	links := r.hookLinks[id]
 	direct := slices.DeleteFunc(slices.Clone(links), func(l hookLink) bool { return l.parent != r.rootID })
 	if len(direct) > 0 {
