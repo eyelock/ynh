@@ -47,7 +47,7 @@ ynh agent run --resume <session-dir> [flags]
 | `--max-plan-iterations <n>` | Cap on plan revisions before acting |
 | `--emit-jsonl <path>` | Write the trajectory; `-` for stdout |
 | `--resume <dir>` | Continue a previous session from its directory (the `--emit-jsonl` file's folder) |
-| `--telemetry-relay` | Start `ynr relay` for the run and send the vendor's own telemetry into the spool (claude only). Also `YNH_TELEMETRY_RELAY`, or `"telemetry_relay": true` in `config.json`. See [Telemetry](telemetry.md#vendor-telemetry-through-the-relay) |
+| `--telemetry-relay` | Start `ynr relay` for the run and send the vendor's own telemetry into the spool (claude, codex). Also `YNH_TELEMETRY_RELAY`, or `"telemetry_relay": true` in `config.json`. See [Telemetry](telemetry.md#vendor-telemetry-through-the-relay) |
 
 ### Budgets
 
@@ -134,7 +134,9 @@ With the [telemetry relay](telemetry.md#vendor-telemetry-through-the-relay)
 on, a `claude` worker also receives Claude Code's telemetry settings pointing
 at the run's relay, with every content switch forced off, and the same
 settings as `--settings`. Those settings replace any of the same family the
-harness passes through.
+harness passes through. A `codex` worker gets its relay settings as `-c`
+overrides on each `codex exec`, with Codex's logs off, and loses any
+`OTEL_EXPORTER_OTLP_*` the harness passes through.
 
 ### MCP servers
 

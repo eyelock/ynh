@@ -462,8 +462,8 @@ Flags:
   --auto-commit               Commit the result (opt-in; off by default)
   --resume <dir>              Continue a run from its --emit-jsonl folder
   --telemetry-relay           Start ynr relay for the run and send the
-                              vendor's own telemetry to the spool (claude
-                              only). Also YNH_TELEMETRY_RELAY, or
+                              vendor's own telemetry to the spool (claude,
+                              codex). Also YNH_TELEMETRY_RELAY, or
                               "telemetry_relay": true in config.json
   --format text|json          Output format (default text)`,
 
