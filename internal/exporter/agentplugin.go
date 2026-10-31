@@ -35,7 +35,7 @@ const AgentPluginVendor = "agent-plugin"
 // The output is validated against the specification before this returns.
 // A fatal finding is an error: ynh must not publish a package it would
 // itself refuse to load.
-func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructions []byte, vendors []string) ([]ExportResult, error) {
+func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Harness, hs assembler.HookSet, content []resolver.ResolvedContent, instructions []byte, vendors []string) ([]ExportResult, error) {
 	out := opts.OutputDir
 	result := ExportResult{Vendor: AgentPluginVendor, OutputDir: out}
 
@@ -98,10 +98,11 @@ func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Ha
 			for t := range dirs {
 				carried[t] = true
 			}
-			if len(p.DelegatesTo) > 0 && a.SupportsExportDelegates() {
-				if err := ExportDelegates(target, p.DelegatesTo, p.Dir); err != nil {
+			if len(opts.delegates) > 0 && a.SupportsExportDelegates() {
+				if err := WriteDelegates(target, opts.delegates, delegateCarrier(a)); err != nil {
 					return nil, fmt.Errorf("%s delegates: %w", name, err)
 				}
+				result.Warnings = append(result.Warnings, DelegateMCPWarnings(opts.delegates, a)...)
 				carried["delegates"] = true
 			}
 			result.Agents += countDir(filepath.Join(target, "agents"))
@@ -178,7 +179,7 @@ func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Ha
 	// The scripts the hooks run ship with the package, once: every vendor's
 	// hook file anchors them at the same plugin root (#498).
 	if hooksCarried {
-		warnings, err := assembler.CopyHookScripts(p.Dir, out, p.Hooks, "the plugin")
+		warnings, err := assembler.CopyHookScripts(p.Dir, out, hs, "the plugin")
 		if err != nil {
 			return nil, err
 		}

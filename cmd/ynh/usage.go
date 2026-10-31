@@ -87,6 +87,7 @@ Run flags:
   --profile <name>             Apply a named profile overlay (with a prompt, implies non-interactive)
   --interactive                Override non-interactive default — stay in session after focus or prompt
   --instructions "<text>"      Inject per-invocation context after harness instructions
+  --isolated-mcp               Run with only the harness's MCP servers (can only turn mcp_isolation on)
   --session-name <name>        Claude: bind --resume to this name's session; other vendors: a label
   --resume                     Continue the previous session in this directory
   --resume=<id>                Continue one specific session by id

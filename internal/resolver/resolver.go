@@ -3,10 +3,12 @@ package resolver
 import (
 	"crypto/sha256"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/config"
@@ -38,6 +40,31 @@ type ResolveResult struct {
 	Path    string // subpath within repo, if any
 	Cloned  bool   // true if freshly cloned (first time)
 	Cached  bool   // true if already in cache (not first time)
+
+	// Harness is the harness the include resolved to, when its directory
+	// holds a manifest, and nil for a plain artifact package. Its MCP servers
+	// reach a run through harness.ComposeMCPServers.
+	Harness *harness.Harness
+	// Chain is where the include came from, for provenance: Source plus
+	// "//Path", and for an include reached through another harness the chain
+	// of includes that led to it, "eyelock/a > eyelock/b".
+	Chain string
+	// Namespace is what the harness's focuses and profiles are selected
+	// under: the "as" alias of the include, or the harness's own name. Empty
+	// for a plain artifact package.
+	Namespace string
+	// HooksActive is whether the harness's hooks may run: every route to it
+	// says "hooks": true at every link, or the root includes it directly
+	// with "hooks": true (see includeResolver.hooksConsent). Without it the
+	// hooks are declared but not carried.
+	HooksActive bool
+
+	// node is the include's identity in the include graph (see
+	// includeResolver.parents), empty for a plain artifact package.
+	node string
+	// id is the identity of the harness the include holds, the same for a
+	// picked include and a whole one, empty for a plain artifact package.
+	id string
 }
 
 // repoFunc is a function that fetches or looks up a Git repo.
@@ -131,6 +158,64 @@ func CheckLocalInclude(cfg *config.Config, inc harness.Include, harnessDir strin
 	return nil
 }
 
+// chainLink is one step on the include chain being resolved, kept to catch a
+// harness that includes itself, directly or through others.
+type chainLink struct {
+	id    string // identity, see includeIdentity
+	label string // display name for the error message
+}
+
+// includeResolver carries what resolving one harness's includes shares across
+// the recursion into included harnesses.
+type includeResolver struct {
+	cfg    *config.Config
+	source sourceResolver
+	// done holds the identity of every harness include already resolved, so a
+	// harness reached by two routes (a diamond) contributes once.
+	done map[string]bool
+	// selected holds the namespaces a --profile or --focus named: the value
+	// is the profile applied to that included harness, empty when the
+	// namespace is only used for its focus.
+	selected map[string]string
+	// seen records every harness include met, by namespace, with the
+	// identity and display chain of each distinct harness, so a namespace
+	// two harnesses share is caught when something uses it.
+	seen map[string][]seenHarness
+	// profileErr holds a failed profile lookup per namespace. It is raised
+	// by check, after ambiguity, since a namespace two harnesses share fails
+	// as ambiguous whichever of them lacked the profile.
+	profileErr map[string]error
+	// parents records, for every harness include met, the identity of the
+	// harness that includes it, once per route, including the routes the
+	// walk skips because the harness was already resolved. The root is
+	// rootID.
+	parents map[string][]string
+	// removals holds the MCP servers each walked harness sets to null, by
+	// identity.
+	removals map[string][]string
+	// hookLinks records, for every harness include met, each include of it
+	// (once per route, picked or not, including the routes the walk skips):
+	// the harness that includes it and whether that include says
+	// "hooks": true. It is keyed by the harness's identity, not by its node,
+	// so a picked include and a whole one of the same harness agree.
+	hookLinks map[string][]hookLink
+	rootID    string
+}
+
+// hookLink is one include of a harness: who includes it, and whether that
+// include consents to its hooks.
+type hookLink struct {
+	parent string
+	hooks  bool
+}
+
+// seenHarness is one harness met under a namespace.
+type seenHarness struct {
+	id      string
+	chain   string
+	harness *harness.Harness
+}
+
 // sourceResolver resolves one git source to a directory on disk.
 type sourceResolver func(gs harness.GitSource, harnessDir string) (string, *RepoResult, error)
 
@@ -171,60 +256,429 @@ func portableSource(source string) string {
 	return source
 }
 
-// resolveWith resolves all includes using the given source resolver.
+// resolveWith resolves all includes using the given source resolver, at every
+// depth: an included harness's own includes follow the same own-repo and cache
+// rules as the root's.
+//
+// An include whose directory holds a harness manifest is loaded, and its own
+// includes are resolved in turn unless the include picks artifacts. The
+// result lists dependencies before the harness that includes them, and p's
+// own includes in order, so that later content keeps overriding earlier.
 func resolveWith(p *harness.Harness, cfg *config.Config, resolve sourceResolver) ([]ResolveResult, error) {
-	var results []ResolveResult
+	results, _, err := resolveSelected(p, cfg, resolve, harness.Selection{})
+	return results, err
+}
 
-	for _, inc := range p.Includes {
-		if inc.IsLocal() {
-			if err := CheckLocalInclude(cfg, inc, p.Dir); err != nil {
-				return nil, err
+// resolveSelected is resolveWith with the profiles and focus of sel applied
+// to the included harnesses they name. A namespaced focus is returned: its
+// profile, if it has one, is applied to its harness, which is only known
+// once the graph has been walked, so the walk runs again with the profile.
+func resolveSelected(p *harness.Harness, cfg *config.Config, resolve sourceResolver, sel harness.Selection) ([]ResolveResult, *plugin.Focus, error) {
+	selected := make(map[string]string, len(sel.Included)+1)
+	for ns, profile := range sel.Included {
+		selected[ns] = profile
+	}
+	if sel.FocusNS != "" {
+		if _, ok := selected[sel.FocusNS]; !ok {
+			selected[sel.FocusNS] = ""
+		}
+	}
+
+	results, r, err := walkIncludes(p, cfg, resolve, selected)
+	if err != nil {
+		return nil, nil, err
+	}
+	if sel.FocusNS == "" {
+		return results, nil, nil
+	}
+
+	inner := r.seen[sel.FocusNS][0].harness
+	focus, ok := inner.Focuses[sel.FocusName]
+	if !ok {
+		return nil, nil, fmt.Errorf("focus %q not defined in included harness %q (%s)", sel.FocusName, sel.FocusNS, availableNames(inner.Focuses, "focuses"))
+	}
+	if focus.Profile != "" && selected[sel.FocusNS] != focus.Profile {
+		selected[sel.FocusNS] = focus.Profile
+		if results, _, err = walkIncludes(p, cfg, resolve, selected); err != nil {
+			return nil, nil, err
+		}
+	}
+	return results, &focus, nil
+}
+
+func walkIncludes(p *harness.Harness, cfg *config.Config, resolve sourceResolver, selected map[string]string) ([]ResolveResult, *includeResolver, error) {
+	r := &includeResolver{
+		cfg: cfg, source: resolve, done: map[string]bool{},
+		selected: selected, seen: map[string][]seenHarness{}, profileErr: map[string]error{},
+		parents: map[string][]string{}, removals: map[string][]string{},
+		hookLinks: map[string][]hookLink{}, rootID: dirIdentity(p.Dir),
+	}
+	chain := []chainLink{{id: r.rootID, label: "root"}}
+	results, err := r.resolve(p, chain, "")
+	if err != nil {
+		return nil, nil, err
+	}
+	r.applyRemovals(results)
+	r.applyHooksConsent(results)
+	if err := r.check(); err != nil {
+		return nil, nil, err
+	}
+	return results, r, nil
+}
+
+// AmbiguousNamespaceError is returned when a selection names a namespace that
+// more than one included harness answers to.
+type AmbiguousNamespaceError struct {
+	Namespace string
+	msg       string
+}
+
+func (e *AmbiguousNamespaceError) Error() string { return e.msg }
+
+// availableNames words the names a map declares for an error message.
+func availableNames[V any](m map[string]V, what string) string {
+	if len(m) == 0 {
+		return "the harness declares no " + what
+	}
+	return fmt.Sprintf("available: %v", slices.Sorted(maps.Keys(m)))
+}
+
+// register records a harness met under namespace ns. A harness reached twice
+// is the same harness and is recorded once.
+func (r *includeResolver) register(ns, id, chain string, h *harness.Harness) {
+	if slices.ContainsFunc(r.seen[ns], func(s seenHarness) bool { return s.id == id }) {
+		return
+	}
+	r.seen[ns] = append(r.seen[ns], seenHarness{id: id, chain: chain, harness: h})
+}
+
+// applyProfile resolves the profile selected for namespace ns on an included
+// harness. An undefined profile is held in profileErr, not returned: see
+// check.
+func (r *includeResolver) applyProfile(ns string, inner *harness.Harness) *harness.Harness {
+	profile := r.selected[ns]
+	if profile == "" {
+		return inner
+	}
+	if _, ok := inner.Profiles[profile]; !ok {
+		if _, held := r.profileErr[ns]; !held {
+			r.profileErr[ns] = fmt.Errorf("profile %q not defined in included harness %q (%s)", profile, ns, availableNames(inner.Profiles, "profiles"))
+		}
+		return inner
+	}
+	resolved, err := harness.ResolveProfile(inner, profile)
+	if err != nil {
+		if _, held := r.profileErr[ns]; !held {
+			r.profileErr[ns] = fmt.Errorf("profile %q of included harness %q: %w", profile, ns, err)
+		}
+		return inner
+	}
+	return resolved
+}
+
+// check reports what a namespaced --profile or --focus got wrong once the
+// whole graph is known: a namespace no harness answers to, one that more
+// than one does, or a profile its harness does not define. A namespace that
+// nothing selected is never an error, however many harnesses share it.
+func (r *includeResolver) check() error {
+	for _, ns := range slices.Sorted(maps.Keys(r.selected)) {
+		switch found := r.seen[ns]; {
+		case len(found) == 0:
+			if len(r.seen) == 0 {
+				return fmt.Errorf("no included harness has namespace %q (the harness includes no other harnesses)", ns)
 			}
-			basePath, err := resolveLocalSource(inc.GitSource, p.Dir)
-			if err != nil {
-				return nil, err
+			return fmt.Errorf("no included harness has namespace %q (available: %s)", ns, strings.Join(slices.Sorted(maps.Keys(r.seen)), ", "))
+		case len(found) > 1:
+			chains := make([]string, len(found))
+			for i, f := range found {
+				chains[i] = f.chain
 			}
-			results = append(results, ResolveResult{
-				Content: ResolvedContent{
-					BasePath:       basePath,
-					Paths:          inc.Pick,
-					Label:          localLabel(inc.Local, inc.Path, basePath),
-					NoInstructions: !inc.InstructionsEnabled(),
-				},
-				Source: inc.Local,
-				Path:   inc.Path,
-				Cloned: false,
-				Cached: true,
-			})
+			return &AmbiguousNamespaceError{Namespace: ns, msg: fmt.Sprintf("namespace %q is ambiguous: %s; give one include an \"as\" alias", ns, strings.Join(chains, " and "))}
+		}
+		if err := r.profileErr[ns]; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// removedFrom returns the servers that included harnesses' nulls remove
+// from the include with identity id. A null in an included harness drops the
+// server from what reaches the root through that harness, so a route removes
+// what any harness along it sets to null. An include reached by more than one
+// route loses a server only when every route removes it: a route that keeps
+// it, such as a direct include by the root, wins. The outcome does not depend
+// on the order the includes are listed in. The root's own nulls are applied
+// later, by harness.ComposeMCPServers, and are not counted here.
+func (r *includeResolver) removedFrom(id string, memo map[string][]string) []string {
+	if id == r.rootID {
+		return nil
+	}
+	if got, ok := memo[id]; ok {
+		return got
+	}
+	memo[id] = nil // cycles are refused by the walk; this only guards the recursion
+	var common []string
+	for i, parent := range r.parents[id] {
+		route := slices.Clone(r.removedFrom(parent, memo))
+		if parent != r.rootID {
+			route = append(route, r.removals[parent]...)
+		}
+		if i == 0 {
+			common = route
 			continue
 		}
+		common = slices.DeleteFunc(common, func(name string) bool { return !slices.Contains(route, name) })
+	}
+	slices.Sort(common)
+	common = slices.Compact(common)
+	memo[id] = common
+	return common
+}
 
-		if cfg != nil {
-			if err := cfg.CheckSource(inc.Git, p.Dir); err != nil {
-				return nil, fmt.Errorf("include %q: %w", inc.Git, err)
+// applyRemovals drops from each included harness the servers that every
+// route to it removes (see removedFrom).
+func (r *includeResolver) applyRemovals(results []ResolveResult) {
+	memo := map[string][]string{}
+	for i := range results {
+		h := results[i].Harness
+		if h == nil {
+			continue
+		}
+		removals := r.removedFrom(results[i].node, memo)
+		if len(removals) == 0 {
+			continue
+		}
+		view := *h
+		view.MCPServers = make(map[string]plugin.MCPServer, len(h.MCPServers))
+		for name, s := range h.MCPServers {
+			if !slices.Contains(removals, name) {
+				view.MCPServers[name] = s
 			}
 		}
+		results[i].Harness = &view
+	}
+}
 
-		basePath, repoResult, err := resolve(inc.GitSource, p.Dir)
+// hooksConsent reports whether the hooks of the harness with identity id may
+// run. Hooks are off unless consented to, and when the routes to a harness
+// disagree that default holds, with the root's own direct include as its
+// final word: if the root includes the harness directly, that include
+// decides, with "hooks": true or without it, whatever other routes say.
+// Otherwise every route must say "hooks": true at every link. The outcome does
+// not depend on the order the includes are listed in.
+func (r *includeResolver) hooksConsent(id string, memo map[string]bool) bool {
+	if id == r.rootID {
+		return true
+	}
+	if got, ok := memo[id]; ok {
+		return got
+	}
+	memo[id] = false // cycles are refused by the walk; this only guards the recursion
+	links := r.hookLinks[id]
+	direct := slices.DeleteFunc(slices.Clone(links), func(l hookLink) bool { return l.parent != r.rootID })
+	if len(direct) > 0 {
+		links = direct
+	}
+	consent := len(links) > 0
+	for _, l := range links {
+		if !l.hooks || !r.hooksConsent(l.parent, memo) {
+			consent = false
+			break
+		}
+	}
+	memo[id] = consent
+	return consent
+}
+
+// applyHooksConsent sets HooksActive on each included harness (see
+// hooksConsent).
+func (r *includeResolver) applyHooksConsent(results []ResolveResult) {
+	memo := map[string]bool{}
+	for i := range results {
+		if results[i].id != "" {
+			results[i].HooksActive = r.hooksConsent(results[i].id, memo)
+		}
+	}
+}
+
+// resolve resolves p's includes. via is the display chain of the harness p was
+// reached through, empty for the root.
+func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via string) ([]ResolveResult, error) {
+	var results []ResolveResult
+	parent := chain[len(chain)-1].id
+
+	for _, inc := range p.Includes {
+		res, id, err := r.resolveOne(p, inc)
 		if err != nil {
 			return nil, err
 		}
+		res.Chain = res.Source
+		if res.Path != "" {
+			res.Chain += "//" + res.Path
+		}
+		label := res.Chain
+		if via != "" {
+			res.Chain = via + " > " + res.Chain
+		}
 
-		results = append(results, ResolveResult{
-			Content: ResolvedContent{
-				BasePath:       basePath,
-				Paths:          inc.Pick,
-				Label:          gitLabel(inc.Git, inc.Path),
-				NoInstructions: !inc.InstructionsEnabled(),
-			},
-			Source: ShortGitURL(inc.Git),
-			Path:   inc.Path,
-			Cloned: repoResult.Cloned,
-			Cached: !repoResult.Cloned,
-		})
+		if !harness.IsHarnessDir(res.Content.BasePath) {
+			results = append(results, res)
+			continue
+		}
+
+		inner, err := harness.LoadDir(res.Content.BasePath)
+		if err != nil {
+			return nil, fmt.Errorf("loading included harness %s: %w", res.Chain, err)
+		}
+
+		ns := inc.As
+		if ns == "" {
+			ns = inner.Name
+		}
+		res.Namespace = ns
+		res.id = id
+		r.hookLinks[id] = append(r.hookLinks[id], hookLink{parent: parent, hooks: inc.Hooks})
+		r.register(ns, id, res.Chain, inner)
+		inner = r.applyProfile(ns, inner)
+		res.Harness = inner
+
+		// A local include is known by the harness it holds, as a Git one is by
+		// its repository, rather than by a path that differs per machine.
+		if inc.IsLocal() && inner.Name != "" {
+			label = inner.Name
+			if res.Path != "" {
+				label += "//" + res.Path
+			}
+			res.Chain = label
+			if via != "" {
+				res.Chain = via + " > " + label
+			}
+		}
+
+		if len(inc.Pick) > 0 {
+			// A picked include contributes its picked artifacts and its MCP
+			// servers; its own includes are not followed.
+			key := id + pickKey(inc.Pick)
+			r.parents[key] = append(r.parents[key], parent)
+			if !r.done[key] {
+				r.done[key] = true
+				res.node = key
+				results = append(results, res)
+			}
+			continue
+		}
+
+		for _, link := range chain {
+			if link.id == id {
+				return nil, fmt.Errorf("include cycle: %s -> %s", chainLabels(chain), link.label)
+			}
+		}
+		r.parents[id] = append(r.parents[id], parent)
+		if r.done[id] {
+			continue
+		}
+		r.removals[id] = inner.MCPRemovals
+		res.node = id
+		deps, err := r.resolve(inner, append(chain[:len(chain):len(chain)], chainLink{id: id, label: label}), res.Chain)
+		if err != nil {
+			return nil, err
+		}
+		r.done[id] = true
+		results = append(results, deps...)
+		results = append(results, res)
 	}
 
 	return results, nil
+}
+
+func chainLabels(chain []chainLink) string {
+	labels := make([]string, len(chain))
+	for i, l := range chain {
+		labels[i] = l.label
+	}
+	return strings.Join(labels, " -> ")
+}
+
+func pickKey(pick []string) string {
+	sorted := slices.Sorted(slices.Values(pick))
+	return "|" + strings.Join(sorted, ",")
+}
+
+// dirIdentity is the identity of a local directory: its absolute path with
+// symlinks resolved where the path exists.
+func dirIdentity(dir string) string {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		abs = filepath.Clean(dir)
+	}
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		return real
+	}
+	return abs
+}
+
+// resolveOne resolves a single include of p to a ResolveResult, applying the
+// allow-list, and returns the include's identity for cycle detection.
+func (r *includeResolver) resolveOne(p *harness.Harness, inc harness.Include) (ResolveResult, string, error) {
+	if inc.IsLocal() {
+		if err := CheckLocalInclude(r.cfg, inc, p.Dir); err != nil {
+			return ResolveResult{}, "", err
+		}
+		basePath, err := resolveLocalSource(inc.GitSource, p.Dir)
+		if err != nil {
+			return ResolveResult{}, "", err
+		}
+		return ResolveResult{
+			Content: ResolvedContent{
+				BasePath:       basePath,
+				Paths:          inc.Pick,
+				Label:          localLabel(inc.Local, inc.Path, basePath),
+				NoInstructions: !inc.InstructionsEnabled(),
+			},
+			Source: inc.Local,
+			Path:   inc.Path,
+			Cloned: false,
+			Cached: true,
+		}, dirIdentity(basePath), nil
+	}
+
+	if r.cfg != nil {
+		if err := r.cfg.CheckSource(inc.Git, p.Dir); err != nil {
+			return ResolveResult{}, "", fmt.Errorf("include %q: %w", inc.Git, err)
+		}
+	}
+
+	basePath, repoResult, err := r.source(inc.GitSource, p.Dir)
+	if err != nil {
+		return ResolveResult{}, "", err
+	}
+
+	id := ShortGitURL(GitSourceURL(inc.Git, p.Dir)) + "@" + inc.Ref + "//" + inc.Path
+	return ResolveResult{
+		Content: ResolvedContent{
+			BasePath:       basePath,
+			Paths:          inc.Pick,
+			Label:          gitLabel(inc.Git, inc.Path),
+			NoInstructions: !inc.InstructionsEnabled(),
+		},
+		Source: ShortGitURL(inc.Git),
+		Path:   inc.Path,
+		Cloned: repoResult.Cloned,
+		Cached: !repoResult.Cloned,
+	}, id, nil
+}
+
+// IncludedHarnesses lists the harnesses among resolved, in content order, for
+// harness.ComposeMCPServers and harness.ComposeMCPServersForExport.
+func IncludedHarnesses(resolved []ResolveResult) []harness.IncludedHarness {
+	var out []harness.IncludedHarness
+	for _, r := range resolved {
+		if r.Harness != nil {
+			out = append(out, harness.IncludedHarness{Harness: r.Harness, Source: r.Chain})
+		}
+	}
+	return out
 }
 
 // ResolveGitSource clones/updates a GitSource and returns the resolved base path,
@@ -469,6 +923,20 @@ func ResolveGitSourceFromCache(gs harness.GitSource, harnessDir string) (string,
 // ResolveSourceForRun).
 func ResolveFromCache(p *harness.Harness, cfg *config.Config) ([]ResolveResult, error) {
 	return resolveWith(p, cfg, ResolveSourceForRun)
+}
+
+// ResolveSelected is Resolve with the selections of sel applied to the
+// included harnesses: each namespaced profile to the harness it names, and a
+// namespaced focus's profile likewise. The focus itself comes back as well,
+// nil when sel names none.
+func ResolveSelected(p *harness.Harness, cfg *config.Config, sel harness.Selection) ([]ResolveResult, *plugin.Focus, error) {
+	return resolveSelected(p, cfg, ResolveGitSource, sel)
+}
+
+// ResolveSelectedFromCache is ResolveSelected over the cache, as
+// ResolveFromCache is to Resolve.
+func ResolveSelectedFromCache(p *harness.Harness, cfg *config.Config, sel harness.Selection) ([]ResolveResult, *plugin.Focus, error) {
+	return resolveSelected(p, cfg, ResolveSourceForRun, sel)
 }
 
 // gitHead returns the short HEAD SHA for a repo, or empty string on error.

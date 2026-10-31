@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -738,5 +739,391 @@ func TestCompose_AttributesLocalInclude(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("the included skill is missing: %+v", out.Artifacts.Skills)
+	}
+}
+
+// writeComposeHarnesses writes each manifest into its directory.
+func writeComposeHarnesses(t *testing.T, manifests map[string]map[string]any) {
+	t.Helper()
+	for dir, hj := range manifests {
+		data, err := json.Marshal(hj)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := writePluginJSONFile(dir, data); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// `ynd compose` is documented as the composed harness, and the troubleshoot
+// skill sends users to it for "what resolved, and from where". It listed only
+// the root's own MCP servers, so a server an include carries into every run,
+// or one the root removed with null, was reported wrongly.
+func TestCompose_MCPServersOfIncludesWithSource(t *testing.T) {
+	root := t.TempDir()
+	inc := filepath.Join(root, "inc")
+	deep := filepath.Join(inc, "deep")
+	writeComposeHarnesses(t, map[string]map[string]any{
+		root: {
+			"name": "root", "version": "1.0.0",
+			"includes": []map[string]any{{"local": "inc"}},
+			"mcp_servers": map[string]any{
+				"own":     map[string]any{"command": "node"},
+				"dropped": nil,
+			},
+		},
+		inc: {
+			"name": "inc", "version": "1.0.0",
+			"includes": []map[string]any{{"local": "deep"}},
+			"mcp_servers": map[string]any{
+				"db":      map[string]any{"command": "./bin/db"},
+				"dropped": map[string]any{"command": "gone"},
+			},
+		},
+		deep: {
+			"name": "deep", "version": "1.0.0",
+			"mcp_servers": map[string]any{"web": map[string]any{"url": "https://example.com/mcp"}},
+		},
+	})
+
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{root}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, stdout.String())
+	}
+	if got.MCPServersError != "" {
+		t.Fatalf("mcp_servers_error = %q", got.MCPServersError)
+	}
+	if len(got.MCPServers) != 3 {
+		t.Fatalf("want own, db and web, got %+v", got.MCPServers)
+	}
+	if s := got.MCPServers["own"]; s.Source != "root" {
+		t.Errorf("own source = %q, want root", s.Source)
+	}
+	if s := got.MCPServers["db"]; s.Source != "inc" || s.Command != "./bin/db" {
+		t.Errorf("db = %+v, want from inc, as written", s)
+	}
+	if s := got.MCPServers["web"]; s.Source != "inc > deep" || s.URL != "https://example.com/mcp" {
+		t.Errorf("web = %+v, want from inc > deep", s)
+	}
+	if _, ok := got.MCPServers["dropped"]; ok {
+		t.Error("a server the root removes with null is listed")
+	}
+
+	stdout.Reset()
+	if err := cmdComposeTo([]string{root, "--format", "text"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo text: %v", err)
+	}
+	for _, want := range []string{"db: ./bin/db  (from inc)", "own: node  (own)", "web: https://example.com/mcp  (from inc > deep)"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("text output lacks %q:\n%s", want, stdout.String())
+		}
+	}
+}
+
+// Two includes defining one server differently is an error for a run; compose
+// still answers, showing the root's own and saying why the rest are missing.
+func TestCompose_MCPServerConflictIsReported(t *testing.T) {
+	root := t.TempDir()
+	writeComposeHarnesses(t, map[string]map[string]any{
+		root: {
+			"name": "root", "version": "1.0.0",
+			"includes":    []map[string]any{{"local": "a"}, {"local": "b"}},
+			"mcp_servers": map[string]any{"own": map[string]any{"command": "node"}},
+		},
+		filepath.Join(root, "a"): {
+			"name": "a", "version": "1.0.0",
+			"mcp_servers": map[string]any{"db": map[string]any{"command": "one"}},
+		},
+		filepath.Join(root, "b"): {
+			"name": "b", "version": "1.0.0",
+			"mcp_servers": map[string]any{"db": map[string]any{"command": "two"}},
+		},
+	})
+
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{root}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, stdout.String())
+	}
+	if !strings.Contains(got.MCPServersError, `"db"`) {
+		t.Errorf("mcp_servers_error = %q, want the conflict on db", got.MCPServersError)
+	}
+	if len(got.MCPServers) != 1 || got.MCPServers["own"].Source != "root" {
+		t.Errorf("want only the root's own server, got %+v", got.MCPServers)
+	}
+}
+
+// Sensors from direct includes travel (#595); compose said they were dropped
+// by design, and showed only the root's own.
+func TestCompose_SensorsOfIncludes(t *testing.T) {
+	root := t.TempDir()
+	writeComposeHarnesses(t, map[string]map[string]any{
+		root: {
+			"name": "root", "version": "1.0.0",
+			"includes": []map[string]any{{"local": "set"}},
+			"sensors": map[string]any{
+				"build": map[string]any{
+					"source": map[string]any{"command": "make check"},
+					"output": map[string]any{"format": "text"},
+				},
+			},
+		},
+		filepath.Join(root, "set"): {
+			"name": "set", "version": "1.0.0",
+			"sensors": map[string]any{
+				"lint": map[string]any{
+					"source": map[string]any{"command": "make lint"},
+					"output": map[string]any{"format": "text"},
+				},
+			},
+		},
+	})
+
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{root}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, stdout.String())
+	}
+	if got.SensorsError != "" {
+		t.Fatalf("sensors_error = %q", got.SensorsError)
+	}
+	if s, ok := got.Sensors["build"]; !ok || s.Origin != "" {
+		t.Errorf("build = %+v, want the root's own", s)
+	}
+	if s, ok := got.Sensors["lint"]; !ok || s.Origin != "include set" || s.Source.Command != "make lint" {
+		t.Errorf("lint = %+v, want from include set", s)
+	}
+
+	stdout.Reset()
+	if err := cmdComposeTo([]string{root, "--format", "text"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo text: %v", err)
+	}
+	for _, want := range []string{"build  (own)", "lint  (from include set)"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("text output lacks %q:\n%s", want, stdout.String())
+		}
+	}
+}
+
+// A sensor name declared by both the root and an include fails `ynh check`;
+// compose still answers, with the root's own and the reason.
+func TestCompose_SensorCollisionIsReported(t *testing.T) {
+	root := t.TempDir()
+	sensor := map[string]any{
+		"source": map[string]any{"command": "make check"},
+		"output": map[string]any{"format": "text"},
+	}
+	writeComposeHarnesses(t, map[string]map[string]any{
+		root: {
+			"name": "root", "version": "1.0.0",
+			"includes": []map[string]any{{"local": "set"}},
+			"sensors":  map[string]any{"build": sensor},
+		},
+		filepath.Join(root, "set"): {
+			"name": "set", "version": "1.0.0",
+			"sensors": map[string]any{"build": sensor},
+		},
+	})
+
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{root}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, stdout.String())
+	}
+	if !strings.Contains(got.SensorsError, `"build"`) {
+		t.Errorf("sensors_error = %q, want the collision on build", got.SensorsError)
+	}
+	if len(got.Sensors) != 1 || got.Sensors["build"].Origin != "" {
+		t.Errorf("want only the root's own sensor, got %+v", got.Sensors)
+	}
+}
+
+// Since an include can carry hooks with "hooks": true, compose reported only
+// the root's own. It now shows the consented hooks with their source, and
+// names the included harnesses whose hooks are not active.
+func TestCompose_HooksOfIncludes(t *testing.T) {
+	root := t.TempDir()
+	hook := func(cmd string) map[string]any {
+		return map[string]any{"before_tool": []map[string]any{{"command": cmd}}}
+	}
+	writeComposeHarnesses(t, map[string]map[string]any{
+		root: {
+			"name": "root", "version": "1.0.0",
+			"includes": []map[string]any{
+				{"local": "guard", "hooks": true},
+				{"local": "quiet"},
+			},
+			"hooks": hook("echo own"),
+		},
+		filepath.Join(root, "guard"): {
+			"name": "guard", "version": "1.0.0",
+			"hooks": hook("echo guard"),
+		},
+		filepath.Join(root, "quiet"): {
+			"name": "quiet", "version": "1.0.0",
+			"hooks": hook("echo quiet"),
+		},
+	})
+
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{root}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, stdout.String())
+	}
+	if got.HooksError != "" {
+		t.Fatalf("hooks_error = %q", got.HooksError)
+	}
+	entries := got.Hooks["before_tool"]
+	if len(entries) != 2 {
+		t.Fatalf("want the guard's hook and the root's, got %+v", entries)
+	}
+	if entries[0].Command != "echo guard" || entries[0].Source != "guard" {
+		t.Errorf("first hook = %+v, want echo guard from guard", entries[0])
+	}
+	if entries[1].Command != "echo own" || entries[1].Source != "" {
+		t.Errorf("second hook = %+v, want the root's own", entries[1])
+	}
+	if len(got.HooksNotActive) != 1 || got.HooksNotActive[0] != (composeHookOrigin{Event: "before_tool", Source: "quiet"}) {
+		t.Errorf("hooks_not_active = %+v, want before_tool from quiet", got.HooksNotActive)
+	}
+
+	stdout.Reset()
+	if err := cmdComposeTo([]string{root, "--format", "text"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo text: %v", err)
+	}
+	for _, want := range []string{
+		"before_tool: echo guard  (from guard)",
+		"before_tool: echo own\n",
+		`before_tool: not active, from quiet (add "hooks": true to the include)`,
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("text output lacks %q:\n%s", want, stdout.String())
+		}
+	}
+	if strings.Contains(stdout.String(), "echo quiet") {
+		t.Errorf("a hook without consent is listed as carried:\n%s", stdout.String())
+	}
+}
+
+// A delegate carries its own MCP servers for its subagent (#573). Compose
+// lists them under the delegate, not with the session's, each with where the
+// delegate got it.
+func TestCompose_DelegateMCPServers(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	repo := gitRepo(t, "")
+	del := filepath.Join(repo, "harnesses", "del")
+	writeComposeHarnesses(t, map[string]map[string]any{
+		repo: {
+			"name": "root", "version": "1.0.0",
+			"delegates_to": []map[string]any{{"git": ".", "path": "harnesses/del"}},
+			"mcp_servers":  map[string]any{"session": map[string]any{"command": "node"}},
+		},
+		del: {
+			"name": "del", "version": "1.0.0",
+			"includes":    []map[string]any{{"local": "inc"}},
+			"mcp_servers": map[string]any{"probe": map[string]any{"command": "probe-srv"}},
+		},
+		filepath.Join(del, "inc"): {
+			"name": "inc", "version": "1.0.0",
+			"mcp_servers": map[string]any{"db": map[string]any{"url": "https://example.com/mcp"}},
+		},
+	})
+	for _, args := range [][]string{{"add", "-A"}, {"commit", "-q", "-m", "c"}} {
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{repo}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, stdout.String())
+	}
+	if len(got.MCPServers) != 1 || got.MCPServers["session"].Source != "root" {
+		t.Errorf("session servers = %+v, want only the root's own", got.MCPServers)
+	}
+	if len(got.DelegatesTo) != 1 {
+		t.Fatalf("delegates_to = %+v", got.DelegatesTo)
+	}
+	d := got.DelegatesTo[0]
+	if d.MCPServersError != "" {
+		t.Fatalf("delegate mcp_servers_error = %q", d.MCPServersError)
+	}
+	if s := d.MCPServers["probe"]; s.Source != "root" || s.Command != "probe-srv" {
+		t.Errorf("probe = %+v, want the delegate's own", s)
+	}
+	if s := d.MCPServers["db"]; s.Source != "inc" || s.URL != "https://example.com/mcp" {
+		t.Errorf("db = %+v, want from inc", s)
+	}
+	if len(d.MCPServers) != 2 {
+		t.Errorf("delegate servers = %+v, want probe and db", d.MCPServers)
+	}
+
+	stdout.Reset()
+	if err := cmdComposeTo([]string{repo, "--format", "text"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo text: %v", err)
+	}
+	for _, want := range []string{
+		"    MCP server db: https://example.com/mcp  (from inc)",
+		"    MCP server probe: probe-srv  (its own)",
+		"  session: node  (own)",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("text output lacks %q:\n%s", want, stdout.String())
+		}
+	}
+}
+
+// A delegate compose cannot read (here, not cached) does not fail compose:
+// the delegate is listed and says why its servers are missing.
+func TestCompose_UnreadableDelegateMCPIsReported(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	dir := t.TempDir()
+	writeComposeHarnesses(t, map[string]map[string]any{
+		dir: {
+			"name": "root", "version": "1.0.0",
+			"delegates_to": []map[string]any{{"git": "https://example.invalid/del.git"}},
+		},
+	})
+
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{dir}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, stdout.String())
+	}
+	if len(got.DelegatesTo) != 1 || got.DelegatesTo[0].MCPServersError == "" || got.DelegatesTo[0].MCPServers != nil {
+		t.Errorf("delegate = %+v, want an mcp_servers_error and no servers", got.DelegatesTo)
+	}
+
+	stdout.Reset()
+	if err := cmdComposeTo([]string{dir, "--format", "text"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo text: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "    MCP servers not shown: ") {
+		t.Errorf("text output does not say why:\n%s", stdout.String())
 	}
 }

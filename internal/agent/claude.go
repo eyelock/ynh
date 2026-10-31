@@ -170,6 +170,12 @@ func buildClaudeStreamArgs(opts StartOptions) []string {
 		if data, err := os.ReadFile(instructionsPath); err == nil && len(data) > 0 {
 			args = append(args, "--append-system-prompt", string(data))
 		}
+
+		args = append(args, vendor.ClaudeDelegateAgentArgs(opts.ConfigPath)...)
+
+		if opts.IsolatedMCP {
+			args = append(args, vendor.ClaudeIsolationArgs(opts.ConfigPath)...)
+		}
 	}
 
 	args = append(args, workspaceArgs(vendorClaude, opts.Workspace)...)

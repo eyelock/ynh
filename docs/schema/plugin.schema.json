@@ -110,6 +110,10 @@
     "mcp_servers": {
       "$ref": "#/$defs/mcp_servers"
     },
+    "mcp_isolation": {
+      "description": "Run this harness with only the MCP servers it composes (its own and those of its included harnesses; its delegates keep theirs), instead of alongside the operator's configured servers and connectors. Default false. A launch-time setting: it changes how `ynh run` starts the vendor CLI and does not change an export. Fully supported on Claude Code; partial on Copilot; Codex and Cursor cannot isolate and ynh warns.",
+      "type": "boolean"
+    },
     "profiles": {
       "description": "Named configuration variants. Merge semantics: mcp_servers are deep-merged (profile keys win), hooks use per-event replace (profile event replaces default, absent events inherited), includes are appended to the base harness's includes when the profile is active. Set a server to null to remove it.",
       "type": "object",
@@ -125,6 +129,10 @@
           },
           "includes": {
             "$ref": "#/$defs/includes"
+          },
+          "mcp_isolation": {
+            "description": "Overrides the harness-level mcp_isolation when this profile is selected, either way. Absent inherits.",
+            "type": "boolean"
           },
           "env_passthrough": {
             "description": "Replaces the harness-level env_passthrough when this profile is selected. Replacement rather than union: a profile that exists to restrict what an agent can see has to be able to, and a union could only ever widen.",
@@ -159,7 +167,7 @@
       }
     },
     "launch_focus": {
-      "description": "Name of the focus a bare `ynh run` (no --focus, no prompt) wakes with: interactive, the focus prompt as the first message, the focus's profile applied. Must name a key of focuses whose prompt is non-empty. Ignored by explicit --focus runs, delegation and `ynh agent run`.",
+      "description": "Name of the focus a bare `ynh run` (no --focus, no prompt) wakes with: interactive, the focus prompt as the first message, the focus's profile applied. Must name a key of the harness's own focuses whose prompt is non-empty; an included harness's namespace:name focus or a delegate's focus is not allowed, and ynd validate and ynh run refuse it (use --focus namespace:name to run one). Ignored by explicit --focus runs, delegation and `ynh agent run`.",
       "type": "string",
       "minLength": 1
     },
@@ -534,56 +542,64 @@
     },
     "mcp_servers": {
       "type": "object",
+      "description": "MCP servers. A null entry removes a server of that name inherited from an included harness.",
       "additionalProperties": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "stdio",
-              "streamable-http",
-              "sse"
-            ],
-            "description": "Transport, in the Agent Plugins vocabulary. Optional: command implies stdio, url implies streamable-http."
-          },
-          "command": {
-            "type": "string"
-          },
-          "args": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "env": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            }
-          },
-          "cwd": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string"
-          },
-          "headers": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            }
-          }
-        },
         "oneOf": [
           {
-            "required": [
-              "command"
-            ]
+            "type": "null"
           },
           {
-            "required": [
-              "url"
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "stdio",
+                  "streamable-http",
+                  "sse"
+                ],
+                "description": "Transport, in the Agent Plugins vocabulary. Optional: command implies stdio, url implies streamable-http."
+              },
+              "command": {
+                "type": "string"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "env": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "cwd": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              },
+              "headers": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            },
+            "oneOf": [
+              {
+                "required": [
+                  "command"
+                ]
+              },
+              {
+                "required": [
+                  "url"
+                ]
+              }
             ]
           }
         ]
@@ -687,6 +703,16 @@
           "sensors": {
             "type": "boolean",
             "description": "Whether the sensors this include declares travel into the consumer. Defaults to true. false adopts the include's skills, agents, rules and commands without its gate."
+          },
+          "as": {
+            "type": "string",
+            "description": "Namespace for the focuses and profiles of the harness this include resolves to, selected as as:name (for example --profile github:ci). Defaults to the included harness's own name. A harness name: no colon.",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$"
+          },
+          "hooks": {
+            "type": "boolean",
+            "description": "Consent to the hooks of the harness this include resolves to. When true they run in the session, ahead of the root's own hooks for each event. Default false: the hooks are not active and a warning names them. A hook is command execution, so the root author opts in per include, and for a harness reached through another, at every link, on every route; a direct include by the root decides alone.",
+            "default": false
           },
           "instructions": {
             "type": "boolean",

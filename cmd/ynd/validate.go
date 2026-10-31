@@ -738,6 +738,7 @@ func validateHarnessWorkspace(dir string, hj map[string]any) (issues, notes []st
 }
 
 // validateHarnessMCPServers validates the mcp_servers section inside harness.json.
+// A null entry removes a server inherited from an include and is accepted.
 func validateHarnessMCPServers(hj map[string]any) []string {
 	var issues []string
 
@@ -752,9 +753,12 @@ func validateHarnessMCPServers(hj map[string]any) []string {
 	}
 
 	for name, entry := range serversMap {
+		if entry == nil {
+			continue // null = remove a server inherited from an include
+		}
 		serverMap, ok := entry.(map[string]any)
 		if !ok {
-			issues = append(issues, fmt.Sprintf("mcp_servers.%s must be an object", name))
+			issues = append(issues, fmt.Sprintf("mcp_servers.%s must be an object or null", name))
 			continue
 		}
 		cmd, _ := serverMap["command"].(string)
@@ -1229,6 +1233,19 @@ func validateHarnessIncludes(hj map[string]any) []string {
 		if sub, ok := obj["path"].(string); ok && sub != "" {
 			if err := pathutil.CheckSubpath(sub); err != nil {
 				issues = append(issues, fmt.Sprintf("includes[%d].path: %v", i, err))
+			}
+		}
+		// The alias is the namespace of the include's focuses and profiles,
+		// so it is held to the harness-name rule, and may not hold the ":"
+		// that separates namespace from name.
+		if as, ok := obj["as"].(string); ok {
+			if err := harness.ValidateIncludeAlias(as); err != nil {
+				issues = append(issues, fmt.Sprintf("includes[%d].as: %v", i, err))
+			}
+		}
+		if hooks, ok := obj["hooks"]; ok {
+			if _, isBool := hooks.(bool); !isBool {
+				issues = append(issues, fmt.Sprintf("includes[%d].hooks must be true or false", i))
 			}
 		}
 	}

@@ -131,6 +131,17 @@ the two must be set.
 | `pick` | no | Specific artifact paths to include. If omitted, includes all. |
 | `instructions` | no | Boolean, default `true`. `false` leaves the include's `instructions.md` / `AGENTS.md` out of the composed instructions; its skills, agents, rules and commands still come through. See [Artifacts](artifacts.md#project-instructions). |
 | `sensors` | no | Boolean, default `true`. `false` drops the sensors the include declares; its skills, agents, rules and commands still come through. See [sensors](sensors.md#taking-an-include-without-its-sensors). |
+| `hooks` | no | `true` to let the included harness's hooks run in the session. Default `false`; a harness reached through another needs it at every link, on every route (see [When routes disagree](#when-routes-disagree)). See [Hooks from Included Harnesses](hooks.md#hooks-from-included-harnesses). |
+| `as` | no | Namespace for the included harness's focuses and profiles, in place of its own name. A harness name: letters, digits, `.`, `_`, `-`, and no `:`. See [Profiles and focuses of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses). |
+
+If the resolved directory holds a harness manifest, the include is a harness: its `mcp_servers` come with it, and, unless `pick` is set, so do its own `includes`. Its sensors come with it too unless the include says `"sensors": false` (see [Sensors from an include](sensors.md#sensors-from-an-include)), and its hooks only when the include says `"hooks": true` (see [Hooks from Included Harnesses](hooks.md#hooks-from-included-harnesses)). Its focuses and profiles are not applied unless you select them by namespace (`--profile github:ci`, `--focus github:triage`). See [Servers from Included Harnesses](mcp.md#servers-from-included-harnesses) and [Profiles and focuses of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses).
+
+#### When routes disagree
+
+A harness can be reached by more than one route: the root includes it directly and through another harness, or two included harnesses both include it. It contributes once. When its routes disagree about it, **the default holds, and the root's own direct include is its final word**. The order of the includes makes no difference.
+
+- **MCP servers default on.** An included harness's `null` removes a server from its dependencies only if every route to the dependency removes it. A direct include by the root removes nothing, so it keeps the server. See [Servers from Included Harnesses](mcp.md#servers-from-included-harnesses).
+- **Hooks default off.** A harness's hooks run only if every route to it says `"hooks": true` at every link. If the root includes the harness directly, that include decides alone: with `"hooks": true` its hooks run, whatever an intermediate harness's include of it says, and without it they do not. See [Hooks from Included Harnesses](hooks.md#hooks-from-included-harnesses).
 
 Local includes are useful when a harness ships bundled artifact directories
 **inside** its root, or when a profile needs to pull in an adjacent
@@ -241,7 +252,10 @@ At runtime, ynh generates a vendor-native agent file for each delegate containin
 - **Description** from the delegate's `.agents/harness/plugin.json` (helps the AI route to the right delegate)
 - **Instructions** from the delegate's `AGENTS.md` (gives the delegate its identity)
 - **Rules** inlined from the delegate's `rules/` directory
-- **Skills** listed from the delegate's `skills/` directory
+- **Skills** listed from the delegate's `skills/` directory, and from the harnesses it includes
+- **MCP servers** the delegate declares, and those of the harnesses it includes, carried by the subagent alone; see [MCP servers of delegates](mcp.md#mcp-servers-of-delegates)
+
+A delegate is resolved as a harness: its own `includes` are followed, against its own directory and the same allow-list. Delegates of delegates are not followed.
 
 ## Embedded vs External Artifacts
 
@@ -259,13 +273,30 @@ Lifecycle hooks. See [Hooks](hooks.md) for full reference.
 
 MCP server declarations. See [MCP Servers](mcp.md) for full reference.
 
+A server set to `null` removes a server of that name inherited from an included harness, which is how a harness drops one it does not want:
+
+```json
+{
+  "mcp_servers": {
+    "github": null,
+    "docs": { "url": "https://docs.example.com/mcp" }
+  }
+}
+```
+
+The servers of an included harness are carried into the including harness; see [Servers from Included Harnesses](mcp.md#servers-from-included-harnesses).
+
+### mcp_isolation (optional)
+
+Boolean, default `false`. When `true`, `ynh run` launches the harness with only the MCP servers it composes (its own and those of its included harnesses; its delegates keep theirs), not alongside the ones you have configured. `ynh run --isolated-mcp` turns it on for one run. See [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
+
 ### workspace (optional)
 
 Extra folders the vendor CLI should be able to reach, such as sibling repositories: `"workspace": ["../ynh", "~/code/shared"]`. A request, not a grant. The operator's allow-list (`workspace_roots`, `YNH_WORKSPACE_ROOTS`) or `ynh trust accept` grants it, and some paths are never granted. See [Workspace Folders](workspace.md).
 
 ### launch_focus (optional)
 
-The name of the focus a bare `ynh run` wakes with: interactive, the focus prompt as the first message, the focus's profile applied. It must name a key of `focuses` whose prompt is not empty. An explicit `--focus` or prompt overrides it, and `ynh agent run` and delegation ignore it. See [Focus: Launch focus](focus.md#launch-focus).
+The name of the focus a bare `ynh run` wakes with: interactive, the focus prompt as the first message, the focus's profile applied. It must name a key of the harness's own `focuses` whose prompt is not empty: never an included harness's `namespace:name` focus or a delegate's focus. `ynd validate` errors on any other value and `ynh run` refuses it; run an included harness's focus with `--focus namespace:name` instead. An explicit `--focus` or prompt overrides it, and `ynh agent run` and delegation ignore it. See [Focus: Launch focus](focus.md#launch-focus).
 
 ### profiles (optional)
 
@@ -407,8 +438,14 @@ After a harness is installed, use `ynh include` to add, remove, or update its Gi
 ### Add an include
 
 ```bash
-ynh include add <harness> <url> [--path <subdir>] [--pick <items>] [--ref <ref>] [--replace]
+ynh include add <harness> <url|path> [--path <subdir>] [--pick <items>] [--ref <ref>] [--as <alias>] [--git] [--hooks] [--replace]
 ```
+
+The source is a Git URL, or a path to a directory on disk: absolute, starting `./`, `../` or `~/`, or an existing directory. A path is recorded as a `local` include, so `--as`, `--pick` and the rest apply to it and nothing is cloned. A path inside the harness is stored relative to it; one outside is stored absolute, and the source allow-list governs it. `--ref` is Git-only. `--git` keeps a path a Git source (a repository on disk, such as `.` for the harness's own repo). `remove` and `update` find a local include by the path as typed.
+
+`--as <alias>` sets the include's `as`: the namespace its focuses and profiles are selected under. The alias must be a valid harness name and may not contain `:`.
+
+`--hooks` sets `"hooks": true`: the included harness's hooks run in the session. Without it they are declared but not carried, and a warning names them. See [Hooks from Included Harnesses](hooks.md#hooks-from-included-harnesses).
 
 `<harness>` is the installed harness name **or** a filesystem path to a harness directory. Names resolve to `~/.ynh/harnesses/<name>`; a leading `/` or `.` forces path semantics.
 

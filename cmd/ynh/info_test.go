@@ -7,10 +7,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/eyelock/ynh/internal/clischema"
+	"github.com/eyelock/ynh/internal/resolver"
 )
 
 func TestCmdInfoTextSuccess(t *testing.T) {
@@ -690,5 +692,573 @@ func TestCmdInfoText_LocalIncludes(t *testing.T) {
 				t.Errorf("Includes section:\ngot  %q\nwant %q\nfull output:\n%s", got, tt.want, stdout.String())
 			}
 		})
+	}
+}
+
+// installInfoIncludeChain installs local/root, which includes harness mid,
+// which includes harness leaf, each declaring an MCP server of its own. root
+// also replaces a server mid declares and removes one leaf declares.
+func installInfoIncludeChain(t *testing.T, home string) {
+	t.Helper()
+	src := t.TempDir()
+	leaf := filepath.Join(src, "leaf")
+	mid := filepath.Join(src, "mid")
+	for dir, body := range map[string]string{
+		leaf: `{"name": "leaf", "version": "0.1.0", "mcp_servers": {
+			"leaf-db": {"command": "leaf-mcp"},
+			"dropped": {"command": "dropped-mcp"}
+		}}`,
+		mid: `{"name": "mid", "version": "0.1.0", "includes": [{"local": "` + leaf + `"}],
+			"mcp_servers": {
+				"mid-api": {"url": "https://mid.example.com/mcp"},
+				"shadowed": {"command": "mid-shadowed"}
+			}}`,
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := writePluginJSONFile(dir, []byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	installListTestHarness(t, home, "root", `{"name": "root", "version": "0.1.0",
+		"includes": [{"local": "`+mid+`"}],
+		"mcp_servers": {
+			"own": {"command": "own-mcp"},
+			"shadowed": {"command": "root-shadowed"},
+			"dropped": null
+		}}`)
+}
+
+// #548 item 3: info lists the servers a run carries, from every harness the
+// includes reach, with where each came from.
+func TestCmdInfoText_IncludedMCPServersWithProvenance(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installInfoIncludeChain(t, home)
+
+	var stdout bytes.Buffer
+	if err := cmdInfoTo([]string{"local/root"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+	got := infoSection(stdout.String(), "MCP Servers")
+	want := []string{
+		"  leaf-db: leaf-mcp  (from mid > leaf)",
+		"  mid-api: https://mid.example.com/mcp  (from mid)",
+		"  own: own-mcp  (own)",
+		"  shadowed: root-shadowed  (own)",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("MCP Servers section:\ngot  %q\nwant %q\nfull output:\n%s", got, want, stdout.String())
+	}
+}
+
+func TestCmdInfoJSON_IncludedMCPServersWithProvenance(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installInfoIncludeChain(t, home)
+
+	var stdout bytes.Buffer
+	if err := cmdInfoTo([]string{"local/root", "--format", "json"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+	var env infoEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, stdout.String())
+	}
+	want := []infoMCPServer{
+		{Name: "leaf-db", Source: "mid > leaf", Command: "leaf-mcp"},
+		{Name: "mid-api", Source: "mid", URL: "https://mid.example.com/mcp"},
+		{Name: "own", Source: "root", Command: "own-mcp"},
+		{Name: "shadowed", Source: "root", Command: "root-shadowed"},
+	}
+	if !slices.Equal(env.Harness.MCPServers, want) {
+		t.Errorf("mcp_servers:\ngot  %+v\nwant %+v", env.Harness.MCPServers, want)
+	}
+	if env.Harness.MCPServersError != "" {
+		t.Errorf("mcp_servers_error = %q, want none", env.Harness.MCPServersError)
+	}
+
+	var v any
+	if err := json.Unmarshal(stdout.Bytes(), &v); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := clischema.Get("info")
+	if err != nil {
+		t.Fatalf("Get info schema: %v", err)
+	}
+	if err := schema.Validate(v); err != nil {
+		t.Errorf("info JSON does not validate: %v\noutput: %s", err, stdout.String())
+	}
+}
+
+// An include that is not in the cache is not fetched: info lists the
+// harness's own servers and says the included ones are missing, rather than
+// presenting a partial list as complete.
+func TestCmdInfo_UncachedIncludeIsReportedNotFetched(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "remote", `{"name": "remote", "version": "0.1.0",
+		"includes": [{"git": "github.com/eyelock/does-not-exist-ynh-test"}],
+		"mcp_servers": {"own": {"command": "own-mcp"}}}`)
+
+	var text bytes.Buffer
+	if err := cmdInfoTo([]string{"local/remote"}, &text, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+	got := infoSection(text.String(), "MCP Servers")
+	if len(got) != 2 || got[0] != "  own: own-mcp  (own)" ||
+		!strings.HasPrefix(got[1], "  servers from includes not shown: ") {
+		t.Errorf("MCP Servers section: %q", got)
+	}
+
+	var js bytes.Buffer
+	if err := cmdInfoTo([]string{"local/remote", "--format", "json"}, &js, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo json: %v", err)
+	}
+	var env infoEnvelope
+	if err := json.Unmarshal(js.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	if len(env.Harness.MCPServers) != 1 || env.Harness.MCPServersError == "" {
+		t.Errorf("mcp_servers %+v, error %q: want own server and an error", env.Harness.MCPServers, env.Harness.MCPServersError)
+	}
+	var v any
+	_ = json.Unmarshal(js.Bytes(), &v)
+	schema, _ := clischema.Get("info")
+	if err := schema.Validate(v); err != nil {
+		t.Errorf("info JSON does not validate: %v", err)
+	}
+}
+
+// installInfoProfileChain installs local/root, which includes harness mid.
+// root's profile "work" adds a server, drops one and replaces a hook; its
+// focus "triage" selects "work". mid's profile "ci" adds a server, and its
+// focus "review" selects "ci".
+func installInfoProfileChain(t *testing.T, home string) {
+	t.Helper()
+	mid := filepath.Join(t.TempDir(), "mid")
+	if err := os.MkdirAll(mid, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePluginJSONFile(mid, []byte(`{"name": "mid", "version": "0.1.0",
+		"mcp_servers": {"mid-api": {"command": "mid-mcp"}},
+		"profiles": {"ci": {"mcp_servers": {"ci-runner": {"command": "ci-mcp"}}}},
+		"focuses": {"review": {"profile": "ci", "prompt": "Review it"}}}`)); err != nil {
+		t.Fatal(err)
+	}
+	installListTestHarness(t, home, "root", `{"name": "root", "version": "0.1.0",
+		"includes": [{"local": "`+mid+`"}],
+		"hooks": {"before_tool": [{"command": "echo base"}]},
+		"mcp_servers": {"own": {"command": "own-mcp"}, "gone": {"command": "gone-mcp"}},
+		"profiles": {"work": {
+			"hooks": {"before_tool": [{"command": "echo work"}]},
+			"mcp_servers": {"work-db": {"command": "work-mcp"}, "gone": null}
+		}},
+		"focuses": {
+			"triage": {"profile": "work", "prompt": "Triage it"},
+			"plain": {"prompt": "Just look"}
+		}}`)
+}
+
+// ynw-9cc.10: --profile and --focus show what a run with that selection
+// carries, not only the servers of a run with no profile.
+func TestCmdInfoText_SelectionShowsWhatARunCarries(t *testing.T) {
+	base := []string{
+		"  gone: gone-mcp  (own)",
+		"  mid-api: mid-mcp  (from mid)",
+		"  own: own-mcp  (own)",
+	}
+	work := []string{
+		"  mid-api: mid-mcp  (from mid)",
+		"  own: own-mcp  (own)",
+		"  work-db: work-mcp  (own)",
+	}
+	tests := []struct {
+		name     string
+		args     []string
+		selected string
+		servers  []string
+		hook     string
+	}{
+		{"no selection", nil, "", base, "  before_tool: echo base"},
+		{"root profile", []string{"--profile", "work"}, "profile work", work, "  before_tool: echo work"},
+		{"root focus selects its profile", []string{"--focus", "triage"}, "focus triage, profile work", work, "  before_tool: echo work"},
+		{"root focus without a profile", []string{"--focus", "plain"}, "focus plain", base, "  before_tool: echo base"},
+		{"included harness's profile", []string{"--profile", "mid:ci"}, "profile mid:ci", []string{
+			"  ci-runner: ci-mcp  (from mid)",
+			"  gone: gone-mcp  (own)",
+			"  mid-api: mid-mcp  (from mid)",
+			"  own: own-mcp  (own)",
+		}, "  before_tool: echo base"},
+		{"both kinds of profile", []string{"--profile", "work", "--profile", "mid:ci"}, "profile work, mid:ci", []string{
+			"  ci-runner: ci-mcp  (from mid)",
+			"  mid-api: mid-mcp  (from mid)",
+			"  own: own-mcp  (own)",
+			"  work-db: work-mcp  (own)",
+		}, "  before_tool: echo work"},
+		{"included harness's focus", []string{"--focus", "mid:review"}, "focus mid:review, profile mid:ci", []string{
+			"  ci-runner: ci-mcp  (from mid)",
+			"  gone: gone-mcp  (own)",
+			"  mid-api: mid-mcp  (from mid)",
+			"  own: own-mcp  (own)",
+		}, "  before_tool: echo base"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("YNH_HOME", home)
+			installInfoProfileChain(t, home)
+
+			var stdout bytes.Buffer
+			if err := cmdInfoTo(append([]string{"local/root"}, tt.args...), &stdout, io.Discard); err != nil {
+				t.Fatalf("cmdInfoTo: %v", err)
+			}
+			out := stdout.String()
+			if got := infoSection(out, "MCP Servers"); strings.Join(got, "\n") != strings.Join(tt.servers, "\n") {
+				t.Errorf("MCP Servers section:\ngot  %q\nwant %q\nfull output:\n%s", got, tt.servers, out)
+			}
+			if got := infoSection(out, "Hooks"); len(got) != 1 || got[0] != tt.hook {
+				t.Errorf("Hooks section: got %q, want [%q]", got, tt.hook)
+			}
+			wantLine := "Selected:     " + tt.selected + "\n"
+			if tt.selected == "" {
+				if strings.Contains(out, "Selected:") {
+					t.Errorf("no selection, yet output has a Selected line:\n%s", out)
+				}
+			} else if !strings.Contains(out, wantLine) {
+				t.Errorf("want %q in output:\n%s", wantLine, out)
+			}
+			// Profiles and focuses are listed as declared, whatever is selected.
+			if got := infoSection(out, "Profiles"); len(got) != 1 || !strings.HasPrefix(got[0], "  work    hooks: before_tool    mcp_servers: gone, work-db") {
+				t.Errorf("Profiles section: %q", got)
+			}
+		})
+	}
+}
+
+func TestCmdInfoJSON_Selection(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		want    *infoSelection
+		servers []string
+	}{
+		{"none", nil, nil, []string{"gone", "mid-api", "own"}},
+		{"root profile", []string{"--profile", "work"}, &infoSelection{Profiles: []string{"work"}}, []string{"mid-api", "own", "work-db"}},
+		{"root focus", []string{"--focus", "triage"}, &infoSelection{Focus: "triage", Profiles: []string{"work"}}, []string{"mid-api", "own", "work-db"}},
+		{"root focus without a profile", []string{"--focus", "plain"}, &infoSelection{Focus: "plain"}, []string{"gone", "mid-api", "own"}},
+		{"included focus", []string{"--focus", "mid:review"}, &infoSelection{Focus: "mid:review", Profiles: []string{"mid:ci"}}, []string{"ci-runner", "gone", "mid-api", "own"}},
+	}
+	schema, err := clischema.Get("info")
+	if err != nil {
+		t.Fatalf("Get info schema: %v", err)
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("YNH_HOME", home)
+			installInfoProfileChain(t, home)
+
+			var stdout bytes.Buffer
+			args := append([]string{"local/root", "--format", "json"}, tt.args...)
+			if err := cmdInfoTo(args, &stdout, io.Discard); err != nil {
+				t.Fatalf("cmdInfoTo: %v", err)
+			}
+			var env infoEnvelope
+			if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+				t.Fatalf("unmarshal: %v\n%s", err, stdout.String())
+			}
+			var names []string
+			for _, s := range env.Harness.MCPServers {
+				names = append(names, s.Name)
+			}
+			if !slices.Equal(names, tt.servers) {
+				t.Errorf("mcp_servers = %v, want %v", names, tt.servers)
+			}
+			got := env.Harness.Selection
+			if (got == nil) != (tt.want == nil) || got != nil && (got.Focus != tt.want.Focus || !slices.Equal(got.Profiles, tt.want.Profiles)) {
+				t.Errorf("selection = %+v, want %+v", got, tt.want)
+			}
+			if tt.want == nil && strings.Contains(stdout.String(), `"selection"`) {
+				t.Errorf("selection emitted with no flag:\n%s", stdout.String())
+			}
+			var v any
+			if err := json.Unmarshal(stdout.Bytes(), &v); err != nil {
+				t.Fatal(err)
+			}
+			if err := schema.Validate(v); err != nil {
+				t.Errorf("info JSON does not validate: %v\noutput: %s", err, stdout.String())
+			}
+		})
+	}
+}
+
+func TestCmdInfo_SelectionErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		harness string
+		args    []string
+		want    string
+	}{
+		{"focus and profile", "root", []string{"--focus", "triage", "--profile", "work"}, "cannot use --focus and --profile together"},
+		{"profile without value", "root", []string{"--profile"}, "--profile requires a value"},
+		{"focus without value", "root", []string{"--focus"}, "--focus requires a value"},
+		{"focus twice", "root", []string{"--focus", "triage", "--focus", "plain"}, "--focus given twice"},
+		{"profile twice for the root", "root", []string{"--profile", "work", "--profile", "other"}, "--profile given twice"},
+		{"unknown profile", "root", []string{"--profile", "nope"}, `profile "nope" not defined`},
+		{"unknown focus", "root", []string{"--focus", "nope"}, `focus "nope" not defined in harness (available: [plain triage])`},
+		{"unknown namespace", "root", []string{"--profile", "nah:ci"}, `no included harness has namespace "nah"`},
+		{"unknown included profile", "root", []string{"--profile", "mid:nope"}, `"nope"`},
+		{"unknown included focus", "root", []string{"--focus", "mid:nope"}, `focus "nope" not defined in included harness "mid"`},
+		{"namespace with no includes", "solo", []string{"--focus", "mid:review"}, `no included harness has namespace "mid" (the harness includes no other harnesses)`},
+		{"focus on a harness without focuses", "solo", []string{"--focus", "x"}, "the harness declares no focuses"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("YNH_HOME", home)
+			installInfoProfileChain(t, home)
+			installListTestHarness(t, home, "solo", `{"name": "solo", "version": "0.1.0"}`)
+
+			err := cmdInfoTo(append([]string{"local/" + tt.harness}, tt.args...), io.Discard, io.Discard)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Errorf("text: err = %v, want it to contain %q", err, tt.want)
+			}
+
+			var stderr bytes.Buffer
+			args := append([]string{"local/" + tt.harness, "--format", "json"}, tt.args...)
+			if err := cmdInfoTo(args, io.Discard, &stderr); err == nil {
+				t.Fatal("json: want an error")
+			}
+			var env struct {
+				Error struct{ Code, Message string } `json:"error"`
+			}
+			if err := json.Unmarshal(stderr.Bytes(), &env); err != nil {
+				t.Fatalf("json error envelope: %v\n%s", err, stderr.String())
+			}
+			if env.Error.Code != errCodeInvalidInput || !strings.Contains(env.Error.Message, tt.want) {
+				t.Errorf("json error = %+v, want code %s and %q", env.Error, errCodeInvalidInput, tt.want)
+			}
+		})
+	}
+}
+
+// A namespaced selection cannot be shown when its include is not in the
+// cache, so it is an error; with no selection the same harness still shows
+// its own servers and says why the included ones are missing.
+func TestCmdInfo_NamespacedSelectionNeedsTheIncludeCached(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "remote", `{"name": "remote", "version": "0.1.0",
+		"includes": [{"git": "github.com/eyelock/does-not-exist-ynh-test"}],
+		"mcp_servers": {"own": {"command": "own-mcp"}}}`)
+
+	if err := cmdInfoTo([]string{"local/remote", "--profile", "x:y"}, io.Discard, io.Discard); err == nil {
+		t.Error("want an error for a namespaced profile whose include is not cached")
+	}
+	if err := cmdInfoTo([]string{"local/remote"}, io.Discard, io.Discard); err != nil {
+		t.Errorf("no selection: %v", err)
+	}
+}
+
+// A bad selection fails before --check-updates probes anything over the
+// network.
+func TestCmdInfoJSON_BadSelectionFailsBeforeCheckUpdates(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "probed", `{
+		"name": "probed",
+		"version": "0.1.0",
+		"includes": [{"git": "github.com/example/repo", "ref": "main"}]
+	}`)
+
+	probed := false
+	original := resolver.LsRemoteFunc
+	resolver.LsRemoteFunc = func(string, string) (string, error) {
+		probed = true
+		return "", errors.New("stubbed")
+	}
+	t.Cleanup(func() { resolver.LsRemoteFunc = original })
+
+	args := []string{"local/probed", "--format", "json", "--check-updates", "--focus", "nope"}
+	if err := cmdInfoTo(args, io.Discard, io.Discard); err == nil {
+		t.Fatal("want an error for an unknown focus")
+	}
+	if probed {
+		t.Error("--check-updates probed the network before the selection was checked")
+	}
+
+	// The probe does run for a valid request, so the check above means something.
+	if err := cmdInfoTo([]string{"local/probed", "--format", "json", "--check-updates"}, io.Discard, io.Discard); err != nil {
+		t.Fatalf("valid request: %v", err)
+	}
+	if !probed {
+		t.Error("--check-updates did not probe the include on a valid request")
+	}
+}
+
+// installInfoHookChain installs local/root, which includes harness on with
+// "hooks": true and harness off without it. on declares a "./" script hook
+// and a profile "ci" that adds a hook; off declares a hook a run does not
+// carry. root declares hooks of its own on two events.
+func installInfoHookChain(t *testing.T, home string) {
+	t.Helper()
+	src := t.TempDir()
+	on := filepath.Join(src, "on")
+	off := filepath.Join(src, "off")
+	for dir, body := range map[string]string{
+		on: `{"name": "on", "version": "0.1.0",
+			"hooks": {
+				"before_tool": [{"command": "./check.sh --strict", "matcher": "Bash"}],
+				"on_stop": [{"command": "echo on-stop"}]
+			},
+			"profiles": {"ci": {"hooks": {"after_tool": [{"command": "echo ci"}]}}}}`,
+		off: `{"name": "off", "version": "0.1.0",
+			"hooks": {"before_prompt": [{"command": "echo off"}]}}`,
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := writePluginJSONFile(dir, []byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	installListTestHarness(t, home, "root", `{"name": "root", "version": "0.1.0",
+		"includes": [{"local": "`+on+`", "hooks": true}, {"local": "`+off+`"}],
+		"hooks": {
+			"before_tool": [{"command": "echo base"}],
+			"after_tool": [{"command": "echo root-after"}]
+		}}`)
+}
+
+// ynw-9cc.14: the Hooks section shows every hook a run carries, sorted by
+// event: included harnesses' with their source, those of an include without
+// consent marked not active, and with a selection what that run carries.
+func TestCmdInfoText_HooksARunCarries(t *testing.T) {
+	notActive := `  before_prompt: not active, from off (add "hooks": true to the include)`
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"no selection", nil, []string{
+			"  after_tool: echo root-after",
+			"  before_tool: ./scripts/_include/on/check.sh --strict  (matcher=Bash)  (from on)",
+			"  before_tool: echo base",
+			"  on_stop: echo on-stop  (from on)",
+			notActive,
+		}},
+		{"included harness's profile", []string{"--profile", "on:ci"}, []string{
+			"  after_tool: echo ci  (from on)",
+			"  after_tool: echo root-after",
+			"  before_tool: ./scripts/_include/on/check.sh --strict  (matcher=Bash)  (from on)",
+			"  before_tool: echo base",
+			"  on_stop: echo on-stop  (from on)",
+			notActive,
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("YNH_HOME", home)
+			installInfoHookChain(t, home)
+			// Event order comes from a map: run a few times so an unsorted
+			// listing is caught.
+			for range 5 {
+				var stdout bytes.Buffer
+				if err := cmdInfoTo(append([]string{"local/root"}, tt.args...), &stdout, io.Discard); err != nil {
+					t.Fatalf("cmdInfoTo: %v", err)
+				}
+				if got := infoSection(stdout.String(), "Hooks"); strings.Join(got, "\n") != strings.Join(tt.want, "\n") {
+					t.Fatalf("Hooks section:\ngot  %q\nwant %q\nfull output:\n%s", got, tt.want, stdout.String())
+				}
+			}
+		})
+	}
+}
+
+func TestCmdInfoJSON_HooksARunCarries(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installInfoHookChain(t, home)
+
+	var stdout bytes.Buffer
+	if err := cmdInfoTo([]string{"local/root", "--format", "json", "--profile", "on:ci"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+	var env infoEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, stdout.String())
+	}
+	want := []infoHook{
+		{Event: "after_tool", Source: "on", Command: "echo ci"},
+		{Event: "after_tool", Source: "root", Command: "echo root-after"},
+		{Event: "before_tool", Source: "on", Command: "./scripts/_include/on/check.sh --strict", Matcher: "Bash"},
+		{Event: "before_tool", Source: "root", Command: "echo base"},
+		{Event: "on_stop", Source: "on", Command: "echo on-stop"},
+	}
+	if !slices.Equal(env.Harness.Hooks, want) {
+		t.Errorf("hooks:\ngot  %+v\nwant %+v", env.Harness.Hooks, want)
+	}
+	if wantNA := []infoHookOrigin{{Event: "before_prompt", Source: "off"}}; !slices.Equal(env.Harness.HooksNotActive, wantNA) {
+		t.Errorf("hooks_not_active = %+v, want %+v", env.Harness.HooksNotActive, wantNA)
+	}
+	if env.Harness.HooksError != "" {
+		t.Errorf("hooks_error = %q, want none", env.Harness.HooksError)
+	}
+
+	var v any
+	if err := json.Unmarshal(stdout.Bytes(), &v); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := clischema.Get("info")
+	if err != nil {
+		t.Fatalf("Get info schema: %v", err)
+	}
+	if err := schema.Validate(v); err != nil {
+		t.Errorf("info JSON does not validate: %v\noutput: %s", err, stdout.String())
+	}
+}
+
+// A harness with no hooks emits an empty hooks array, and an include that is
+// not cached leaves the harness's own hooks with the reason the rest are
+// missing.
+func TestCmdInfo_HooksWithoutIncludes(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "bare", `{"name": "bare", "version": "0.1.0"}`)
+	installListTestHarness(t, home, "remote", `{"name": "remote", "version": "0.1.0",
+		"includes": [{"git": "github.com/eyelock/does-not-exist-ynh-test", "hooks": true}],
+		"hooks": {"on_stop": [{"command": "echo own"}]}}`)
+
+	var bare bytes.Buffer
+	if err := cmdInfoTo([]string{"local/bare", "--format", "json"}, &bare, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+	if !strings.Contains(bare.String(), `"hooks": []`) {
+		t.Errorf("want an empty hooks array:\n%s", bare.String())
+	}
+
+	var text bytes.Buffer
+	if err := cmdInfoTo([]string{"local/remote"}, &text, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+	got := infoSection(text.String(), "Hooks")
+	if len(got) != 2 || got[0] != "  on_stop: echo own" ||
+		!strings.HasPrefix(got[1], "  hooks from includes not shown: ") {
+		t.Errorf("Hooks section: %q", got)
+	}
+
+	var js bytes.Buffer
+	if err := cmdInfoTo([]string{"local/remote", "--format", "json"}, &js, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo json: %v", err)
+	}
+	var env infoEnvelope
+	if err := json.Unmarshal(js.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	if len(env.Harness.Hooks) != 1 || env.Harness.HooksError == "" {
+		t.Errorf("hooks %+v, error %q: want own hook and an error", env.Harness.Hooks, env.Harness.HooksError)
 	}
 }

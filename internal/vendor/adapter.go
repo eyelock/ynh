@@ -63,6 +63,17 @@ type SessionBinder interface {
 	LaunchWithSessionID(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error
 }
 
+// SessionPluginNamer is an optional capability for vendors that load the run
+// directory's vendor folder as a plugin and name it from a manifest inside
+// that folder. Claude does: `--plugin-dir <run>/.claude`, and a plugin with no
+// manifest of its own is named after its directory (".claude"), which turned
+// every MCP tool into plugin:.claude:<server>. Check with a type assertion.
+type SessionPluginNamer interface {
+	// GenerateSessionPluginManifest returns the manifest, keyed by its path
+	// relative to runDir, that gives the loaded plugin the harness's name.
+	GenerateSessionPluginManifest(hj *plugin.HarnessJSON, runDir string) (map[string][]byte, error)
+}
+
 // SymlinkEntry records a single symlink created during Install.
 type SymlinkEntry struct {
 	Target string `json:"target"` // Where the symlink points (staging dir)
@@ -168,6 +179,14 @@ type Adapter interface {
 	// ErrResumePromptNotSupported before launching anything. An empty prompt
 	// always resumes interactively and ignores interactive.
 	LaunchResume(configPath string, sessionID string, prompt string, interactive bool, extraArgs []string) error
+
+	// IsolateMCP returns the extra launch arguments that restrict the vendor
+	// CLI to the MCP servers the harness composes (the assembled config in
+	// configPath), and a one-line warning when the vendor cannot do that
+	// fully. Either may be empty. The arguments are safe to append after a
+	// positional prompt. It never fails a run: a vendor that cannot isolate
+	// says so in the warning and the run goes ahead.
+	IsolateMCP(configPath string) (args []string, warning string)
 
 	// GenerateSystemPrompt produces vendor-native instruction files from the
 	// harness instructions content. Returns a map of relative file paths to

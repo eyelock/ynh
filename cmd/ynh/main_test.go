@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -30,6 +32,12 @@ func TestParseRunArgs(t *testing.T) {
 		wantArgs    []string
 		wantAction  string
 	}{
+		{
+			name:        "repeated profile flags, one per harness",
+			args:        []string{"my-harness", "--profile", "work", "--profile", "github:ci"},
+			wantName:    "my-harness",
+			wantProfile: "work,github:ci",
+		},
 		{
 			name:     "harness name as first positional",
 			args:     []string{"my-harness"},
@@ -306,8 +314,8 @@ func TestParseRunArgs(t *testing.T) {
 			if ra.VendorFlag != tt.wantVendor {
 				t.Errorf("VendorFlag = %q, want %q", ra.VendorFlag, tt.wantVendor)
 			}
-			if ra.ProfileFlag != tt.wantProfile {
-				t.Errorf("ProfileFlag = %q, want %q", ra.ProfileFlag, tt.wantProfile)
+			if got := strings.Join(ra.ProfileFlags, ","); got != tt.wantProfile {
+				t.Errorf("ProfileFlags = %q, want %q", got, tt.wantProfile)
 			}
 			if ra.FocusFlag != tt.wantFocus {
 				t.Errorf("FocusFlag = %q, want %q", ra.FocusFlag, tt.wantFocus)
@@ -1768,5 +1776,104 @@ func TestCmdUninstall_PointerByBareName(t *testing.T) {
 
 	if _, err := os.Stat(harness.PointerPath("my-fork")); !os.IsNotExist(err) {
 		t.Errorf("schema-1 pointer still exists after bare-name uninstall: err=%v", err)
+	}
+}
+
+func TestParseRunArgs_IsolatedMCP(t *testing.T) {
+	t.Setenv("YNH_FOCUS", "")
+	t.Setenv("YNH_HARNESS_FILE", "")
+
+	tests := []struct {
+		name       string
+		args       []string
+		want       bool
+		wantPrompt string
+		wantVendor []string
+	}{
+		{"absent", []string{"h"}, false, "", nil},
+		{"present", []string{"h", "--isolated-mcp"}, true, "", nil},
+		{"with prompt", []string{"h", "--isolated-mcp", "--", "go"}, true, "go", nil},
+		{"not forwarded to the vendor", []string{"h", "--isolated-mcp", "--verbose"}, true, "", []string{"--verbose"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ra := parseRunArgs(tt.args)
+			if ra.IsolatedMCP != tt.want {
+				t.Errorf("IsolatedMCP = %v, want %v", ra.IsolatedMCP, tt.want)
+			}
+			if ra.Prompt != tt.wantPrompt {
+				t.Errorf("Prompt = %q, want %q", ra.Prompt, tt.wantPrompt)
+			}
+			if !reflect.DeepEqual(ra.VendorArgs, tt.wantVendor) {
+				t.Errorf("VendorArgs = %v, want %v", ra.VendorArgs, tt.wantVendor)
+			}
+		})
+	}
+}
+
+func TestIsolationLaunchArgs_Warnings(t *testing.T) {
+	dir := t.TempDir()
+	for _, tt := range []struct {
+		vendor   string
+		wantArgs int
+		wantWarn bool
+	}{
+		{"claude", 1, false},
+		{"copilot", 1, true},
+		{"codex", 0, true},
+		{"cursor", 0, true},
+	} {
+		t.Run(tt.vendor, func(t *testing.T) {
+			adapter, err := vendor.Get(tt.vendor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var buf bytes.Buffer
+			args := isolationLaunchArgs(adapter, dir, &buf)
+			if len(args) != tt.wantArgs {
+				t.Errorf("args = %v, want %d", args, tt.wantArgs)
+			}
+			out := buf.String()
+			if tt.wantWarn != (out != "") {
+				t.Errorf("stderr = %q, want warning %v", out, tt.wantWarn)
+			}
+			if tt.wantWarn && (!strings.HasPrefix(out, "warning: ") || strings.Count(out, "\n") != 1) {
+				t.Errorf("warning %q is not a single 'warning: ' line", out)
+			}
+		})
+	}
+}
+
+func TestCmdRun_RepeatedProfileRules(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	t.Setenv("YNH_FOCUS", "")
+	t.Setenv("YNH_PROFILE", "")
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"duplicate root profile", []string{"h", "--profile", "a", "--profile", "b"}, "at most one unqualified profile"},
+		{"duplicate namespace", []string{"h", "--profile", "g:a", "--profile", "g:b"}, `namespace "g"`},
+		{"focus and namespaced profile", []string{"h", "--focus", "g:f", "--profile", "g:a"}, "cannot use --focus and --profile together"},
+		{"malformed value", []string{"h", "--profile", "a:b:c"}, "expected name or namespace:name"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := cmdRun(tt.args)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want containing %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCmdRun_EnvProfileMayBeNamespaced(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	t.Setenv("YNH_FOCUS", "")
+	t.Setenv("YNH_PROFILE", "a:b:c")
+	err := cmdRun([]string{"h"})
+	if err == nil || !strings.Contains(err.Error(), "expected name or namespace:name") {
+		t.Fatalf("YNH_PROFILE should be parsed as a selection, got: %v", err)
 	}
 }

@@ -160,8 +160,20 @@ ynd preview <harness> --profile ci
 - **Vendor**: `-v` flag > harness `default_vendor` > global config
 - **Instructions**: last source wins — the harness's own `AGENTS.md` beats an
   included one
-- **Sensors**: root-only. An included harness's sensors are never read, by
-  design, so "what observes this repository" stays in one committed file
+- **Sensors**: a direct include's sensors travel with it and run from its own
+  directory; `"sensors": false` on the include takes its files without its gate
+- **Hooks**: an included harness's hooks run only if its include says
+  `"hooks": true` (`ynh include add --hooks`), at every link of a chain.
+  Without it a warning names them. Per event the included entries go first,
+  the root's last, and a `./` script is carried under `scripts/_include/<ns>/`
+- **MCP servers**: an included harness's servers are carried (and those of the
+  harnesses it includes, unless the include uses `pick`). The root's server of
+  the same name wins, and `null` in the root's or a profile's `mcp_servers`
+  removes an inherited one
+- **Profiles and focuses of included harnesses**: not applied unless selected as
+  `namespace:name` (`--profile github:ci`, `--focus github:triage`). The
+  namespace is the harness's name or the include's `as` alias, and `--profile`
+  may repeat once per harness
 
 ## Where to go next
 
