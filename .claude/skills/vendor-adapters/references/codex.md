@@ -169,7 +169,7 @@ which now redirects to learn.chatgpt.com/docs/agent-configuration/subagents).
 - A custom agent inherits the parent's permissions (sandbox and approvals), model provider and MCP servers; `mcp_servers` in the agent file does not override them.
 - ynh writes each delegate (`delegates_to`) in a run as `.codex/agents/<name>.toml` with those three fields (`DelegateAgentFile` in `internal/vendor/codex_agent.go`, through the `DelegateAgentEncoder` interface in `internal/assembler/delegates.go`). A delegate's own MCP servers have no field, so ynh warns and the subagent has the session's servers instead (`docs/mcp.md`, "MCP Servers of Delegates").
 - `ynd export` writes no Codex delegates (`SupportsExportDelegates()` is `false`): this is the run assembly only.
-- Read from Codex's documentation; that a live `codex` picks up the agent has not been checked (ynw-s9h).
+- CONFIRMED live (codex-cli 0.166.0, ynw-s9h): Codex lists and spawns the delegate by its `name`, but only when ynh's run directory, Codex's working directory, is trusted (ynw-t7i). Trusting the project is not enough, and `codex exec` there also needs `--skip-git-repo-check`, since the run directory is not a git repository.
 
 ## What Codex Does NOT Support (in plugins)
 

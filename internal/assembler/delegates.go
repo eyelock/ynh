@@ -45,6 +45,8 @@ type DelegateMCPCarrier interface {
 // project's custom agents as TOML files in .codex/agents/, each with a name,
 // a description and developer_instructions
 // (developers.openai.com/codex/subagents), and ignores a Markdown file there.
+// The encoder replaces the Markdown agent, frontmatter and all, so a vendor
+// that is also a DelegateMCPCarrier would lose the delegate's mcpServers line.
 type DelegateAgentEncoder interface {
 	// DelegateAgentFile returns the agent file's name within the agents
 	// directory, and its content, for a delegate with the given name,

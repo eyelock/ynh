@@ -158,8 +158,9 @@ converted only by `ynd migrate` and refused by every other command.
 |                   | plus --agents at launch)         | servers inherited from the       | delegate's MCP servers not       |
 |                   |                                  | session, the delegate's own not  | carried (warning); live pickup   |
 |                   |                                  | carried (warning); run only, not | not checked                      |
-|                   |                                  | export; live pickup unchecked    |                                  |
-|                   |                                  | (ynw-s9h)                        |                                  |
+|                   |                                  | export; live pickup CONFIRMED    |                                  |
+|                   |                                  | with the run dir trusted         |                                  |
+|                   |                                  | (ynw-s9h, ynw-t7i)               |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 ```
 
