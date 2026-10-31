@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://eyelock.github.io/ynh/schema/cli/info.schema.json",
   "title": "ynh info <name> --format json",
-  "description": "Output of `ynh info <name> --format json` (with or without --check-updates). Single-harness variant of list, with the raw plugin.json manifest attached.",
+  "description": "Output of `ynh info <name> --format json` (with or without --check-updates, --profile or --focus; a selection adds harness.selection and changes harness.mcp_servers and harness.hooks). Single-harness variant of list, with the raw plugin.json manifest attached.",
   "x-capabilities": "0.6",
   "$defs": {
     "Info": {

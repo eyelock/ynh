@@ -30,7 +30,7 @@ func TestTrajectorySchemaMatchesTheEmitter(t *testing.T) {
 	}{
 		{KindSessionStart, 0, SessionStartData{
 			SessionID: "s1", Harness: "local/h", Backend: "claude", Task: "do it",
-			ModelRequested: "opus", Model: "opus", EffortRequested: "high", YnhVersion: "0.6.0", HarnessVersion: "0.6.0",
+			ModelRequested: "opus", EffortRequested: "high", YnhVersion: "0.6.0", HarnessVersion: "0.6.0",
 			HarnessSHA: "abc123", ImageDigest: "sha256:deadbeef", BaseCommit: "def456",
 			Budgets:       &BudgetLimits{MaxTurns: 10, MaxTokens: 1000, MaxWallMS: 60000},
 			BudgetSources: &BudgetSource{Turns: "flag", Tokens: "manifest", Wall: "default"},

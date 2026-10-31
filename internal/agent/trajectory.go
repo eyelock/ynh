@@ -107,10 +107,6 @@ type SessionStartData struct {
 	// request; what ran is recorded by the worker_model event, since the
 	// worker reports it only after this header is written.
 	ModelRequested string `json:"model_requested,omitempty"`
-	// Model is deprecated: a copy of ModelRequested, written so no field
-	// disappears from the header. It goes in a release that bumps
-	// CapabilitiesVersion.
-	Model string `json:"model,omitempty"`
 	// EffortRequested is the reasoning effort the run asked for, from
 	// --effort or the harness's agent.effort. Absent when none was asked for.
 	EffortRequested string `json:"effort_requested,omitempty"`

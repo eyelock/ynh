@@ -52,9 +52,14 @@ type RunOptions struct {
 	// Profile is an optional profile name to apply to the harness before
 	// assembly. Mirrors `ynh run --profile`. Mutually exclusive with Focus.
 	Profile string
+	// IncludedProfiles maps a namespace to the profile applied to the
+	// included harness that answers to it, from `--profile namespace:name`.
+	// The root is unaffected. Mutually exclusive with Focus.
+	IncludedProfiles map[string]string
 	// Focus is an optional focus name. The focus's prompt becomes the task
 	// and the focus's bound profile (if any) is applied. Mirrors
-	// `ynh run --focus`. Mutually exclusive with Task and Profile.
+	// `ynh run --focus`. "namespace:name" names a focus of an included
+	// harness. Mutually exclusive with Task and Profile.
 	Focus string
 	// Backend selects the worker backend ("claude", "codex" or "cursor").
 	// Defaults to "claude", or on a resume to the checkpoint's backend, which
@@ -373,8 +378,15 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		}
 
 		// Resolve focus → prompt + bound profile. Mirrors `ynh run --focus`.
-		profileName := opts.Profile
+		sel := harness.Selection{Profile: opts.Profile, Included: opts.IncludedProfiles}
 		if opts.Focus != "" {
+			var selErr error
+			if sel.FocusNS, sel.FocusName, selErr = harness.SplitQualified(opts.Focus); selErr != nil {
+				return result, selErr
+			}
+		}
+		profileName := opts.Profile
+		if opts.Focus != "" && sel.FocusNS == "" {
 			focus, ok := harnessObj.Focuses[opts.Focus]
 			if !ok {
 				return result, fmt.Errorf("focus %q not defined in harness", opts.Focus)
@@ -421,12 +433,16 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			return result, err
 		}
 
-		configPath, err = assembleHarness(harnessObj, opts.Backend)
+		var nsFocus *plugin.Focus
+		configPath, nsFocus, err = assembleHarness(harnessObj, opts.Backend, sel)
 		if err != nil {
 			return result, fmt.Errorf("assembling harness: %w", err)
 		}
+		if nsFocus != nil {
+			opts.Task = nsFocus.Prompt
+		}
 		defer func() { _ = os.RemoveAll(configPath) }()
-	} else if opts.Focus != "" || opts.Profile != "" {
+	} else if opts.Focus != "" || opts.Profile != "" || len(opts.IncludedProfiles) > 0 {
 		return result, fmt.Errorf("--focus and --profile require --harness")
 	}
 
@@ -571,7 +587,6 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			Backend:         wb.Name(),
 			Task:            opts.Task,
 			ModelRequested:  opts.Model,
-			Model:           opts.Model,
 			EffortRequested: opts.Effort,
 			AutoApprove:     opts.AutoApprove,
 			YnhVersion:      config.Version,
@@ -697,6 +712,10 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		return &ExitError{Code: ExitInterrupted, Message: reason}
 	}
 
+	isolatedMCP := harnessObj != nil && harnessObj.MCPIsolation
+	if isolatedMCP && wb.Name() != "claude" {
+		_, _ = fmt.Fprintf(opts.Stderr, "warning: MCP isolation is only applied to the claude backend: %s will load your own MCP servers\n", wb.Name())
+	}
 	sess, err := wb.Start(ctx, StartOptions{
 		WorktreeDir: opts.WorktreeDir,
 		Workspace:   workspaceDirs,
@@ -706,6 +725,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		AutoApprove: opts.AutoApprove,
 		Model:       opts.Model,
 		Effort:      opts.Effort,
+		IsolatedMCP: isolatedMCP,
 		ResumeToken: resumeToken,
 		UsageBase:   usageBase,
 		Env:         workerEnv,
@@ -751,6 +771,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		Focus:             opts.Focus,
 		HarnessName:       opts.HarnessName,
 		Profile:           opts.Profile,
+		IncludedProfiles:  opts.IncludedProfiles,
 		ConvergenceSensor: opts.ConvergenceSensor,
 		MaxTurns:          opts.MaxTurns,
 		MaxTokens:         opts.MaxTokens,
@@ -1627,19 +1648,23 @@ func fetchIncludes(h *harness.Harness) error {
 // assembleHarness assembles the harness for the named vendor backend into
 // a temporary directory. The caller is responsible for os.RemoveAll on the
 // returned path.
-func assembleHarness(h *harness.Harness, backendName string) (string, error) {
+//
+// sel carries the profiles and focus chosen for included harnesses. The focus
+// of an included harness comes back when sel names one, since only resolving
+// the includes finds it.
+func assembleHarness(h *harness.Harness, backendName string, sel harness.Selection) (string, *plugin.Focus, error) {
 	cfg, cfgErr := config.Load()
 	if cfgErr != nil {
-		return "", fmt.Errorf("loading config: %w", cfgErr)
+		return "", nil, fmt.Errorf("loading config: %w", cfgErr)
 	}
 	adapter, err := vendor.Get(backendName)
 	if err != nil {
-		return "", fmt.Errorf("vendor %q: %w", backendName, err)
+		return "", nil, fmt.Errorf("vendor %q: %w", backendName, err)
 	}
 
 	dir, err := os.MkdirTemp("", "ynh-agent-")
 	if err != nil {
-		return "", fmt.Errorf("creating temp dir: %w", err)
+		return "", nil, fmt.Errorf("creating temp dir: %w", err)
 	}
 
 	// Resolve includes exactly as `ynh run` does. Assembling from h.Dir alone
@@ -1651,10 +1676,10 @@ func assembleHarness(h *harness.Harness, backendName string) (string, error) {
 	// a baked image carries its includes there with an origin that may be
 	// unreachable (private, or a relative path), where a refresh would fail
 	// and discard the entry.
-	resolved, resErr := resolver.ResolveFromCache(h, cfg)
+	resolved, nsFocus, resErr := resolver.ResolveSelectedFromCache(h, cfg, sel)
 	if resErr != nil {
 		_ = os.RemoveAll(dir)
-		return "", fmt.Errorf("resolving includes: %w", resErr)
+		return "", nil, fmt.Errorf("resolving includes: %w", resErr)
 	}
 	var content []resolver.ResolvedContent
 	for _, r := range resolved {
@@ -1664,53 +1689,104 @@ func assembleHarness(h *harness.Harness, backendName string) (string, error) {
 
 	if err := assembler.AssembleTo(dir, adapter, content); err != nil {
 		_ = os.RemoveAll(dir)
-		return "", fmt.Errorf("assembling harness: %w", err)
+		return "", nil, fmt.Errorf("assembling harness: %w", err)
+	}
+
+	// Assemble the delegates as agent files, as `ynh run` does, each with
+	// its own includes' skills and MCP servers.
+	for _, del := range h.DelegatesTo {
+		if chkErr := cfg.CheckSource(del.Git, h.Dir); chkErr != nil {
+			_ = os.RemoveAll(dir)
+			return "", nil, fmt.Errorf("delegate %q: %w", del.Git, chkErr)
+		}
+	}
+	if _, delErr := assembler.AssembleDelegates(dir, adapter, h.DelegatesTo, h.Dir, assembler.DelegateOptions{Config: cfg, Launch: true}); delErr != nil {
+		_ = os.RemoveAll(dir)
+		return "", nil, fmt.Errorf("assembling delegates: %w", delErr)
 	}
 
 	// Generate vendor-native hook config, and copy in the scripts those hooks
-	// run from the harness.
-	if len(h.Hooks) > 0 {
-		warnings, err := assembler.WriteSessionHooks(dir, adapter, h.Dir, h.Hooks)
-		if err != nil {
-			_ = os.RemoveAll(dir)
-			return "", err
-		}
-		for _, w := range warnings {
-			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-		}
+	// run from the harness, and from the included harnesses that consented to
+	// their hooks.
+	hookWarnings, hookErr := assembler.WriteComposedSessionHooks(dir, adapter, h, resolved)
+	if hookErr != nil {
+		_ = os.RemoveAll(dir)
+		return "", nil, hookErr
+	}
+	for _, w := range hookWarnings {
+		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 	}
 
-	// Generate vendor-native MCP config.
-	if len(h.MCPServers) > 0 {
-		dataDir := harness.PluginDataDir(h)
+	// Generate vendor-native MCP config: the harness's own servers and those
+	// of its included harnesses, composed.
+	dataDir := harness.PluginDataDir(h)
+	servers, _, expErr := harness.ComposeMCPServers(h, resolver.IncludedHarnesses(resolved), dataDir, os.LookupEnv)
+	if expErr != nil {
+		_ = os.RemoveAll(dir)
+		return "", nil, expErr
+	}
+	if len(servers) > 0 {
 		if mkdirErr := os.MkdirAll(dataDir, 0o755); mkdirErr != nil {
 			_ = os.RemoveAll(dir)
-			return "", mkdirErr
-		}
-		servers, expErr := harness.AssembleMCPServers(h, dataDir, os.LookupEnv)
-		if expErr != nil {
-			_ = os.RemoveAll(dir)
-			return "", expErr
+			return "", nil, mkdirErr
 		}
 		mcpFiles, err := adapter.GenerateMCPConfig(servers)
 		if err != nil {
 			_ = os.RemoveAll(dir)
-			return "", fmt.Errorf("generating MCP config: %w", err)
+			return "", nil, fmt.Errorf("generating MCP config: %w", err)
 		}
 		for relPath, data := range mcpFiles {
 			absPath := fmt.Sprintf("%s/%s", dir, relPath)
 			if mkdirErr := os.MkdirAll(dirOf(absPath), 0o755); mkdirErr != nil {
 				_ = os.RemoveAll(dir)
-				return "", mkdirErr
+				return "", nil, mkdirErr
 			}
 			if writeErr := os.WriteFile(absPath, data, 0o644); writeErr != nil {
 				_ = os.RemoveAll(dir)
-				return "", writeErr
+				return "", nil, writeErr
 			}
 		}
 	}
 
-	return dir, nil
+	// After hooks and MCP, so the manifest's pointers to them are accurate.
+	if err := writeSessionPluginManifest(dir, adapter, h); err != nil {
+		_ = os.RemoveAll(dir)
+		return "", nil, err
+	}
+
+	return dir, nsFocus, nil
+}
+
+// writeSessionPluginManifest writes the manifest of the plugin the worker
+// loads, as `ynh run` does. Claude Code names a plugin without a manifest
+// after its directory, so without it a Claude worker's MCP tools come out as
+// plugin:.claude:<server> instead of plugin:<harness>:<server>. Vendors that
+// do not load the run as a named plugin write nothing.
+func writeSessionPluginManifest(dir string, adapter vendor.Adapter, h *harness.Harness) error {
+	namer, ok := adapter.(vendor.SessionPluginNamer)
+	if !ok {
+		return nil
+	}
+	files, err := namer.GenerateSessionPluginManifest(&plugin.HarnessJSON{
+		Name:        h.Name,
+		Version:     h.Version,
+		Description: h.Description,
+		Author:      h.Author,
+		Keywords:    h.Keywords,
+	}, dir)
+	if err != nil {
+		return fmt.Errorf("writing plugin manifest: %w", err)
+	}
+	for relPath, data := range files {
+		absPath := filepath.Join(dir, relPath)
+		if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
+			return fmt.Errorf("creating manifest dir: %w", err)
+		}
+		if err := os.WriteFile(absPath, data, 0o644); err != nil {
+			return fmt.Errorf("writing manifest %s: %w", relPath, err)
+		}
+	}
+	return nil
 }
 
 // gitAutoCommit runs `git add -A && git commit` in the given directory.

@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/cli/trust-show.schema.json",
   "title": "ynh trust show --format json",
   "description": "Output of `ynh trust show <harness> --format json`. Everything a harness can get executed: sensor commands (through /bin/sh -c), hook commands and MCP servers (through the vendor CLI), each as resolved for a run at the top level and in every profile, with the provenance it was installed from and whether the operator has accepted this exact set. A sensor's command running the project's own tools is the feature; the gap this reports is that the harness lives in ~/.ynh/harnesses/ while its sensors run against a tree elsewhere, so the executing code is nowhere near the directory the operator is looking at. Reporting only: nothing refuses to run because a harness is unreviewed.",
-  "x-capabilities": "0.8",
+  "x-capabilities": "0.10",
   "$defs": {
     "Executable": {
       "type": "object",
@@ -62,6 +62,10 @@
         "command": {
           "type": "string",
           "description": "The shell command, as declared and unexpanded."
+        },
+        "source": {
+          "type": "string",
+          "description": "The included harness that supplied the hook, which consented to it with hooks: true on its include. A \"./\" script is shown as placed in the session, under scripts/_include. Absent for a hook of the harness itself."
         }
       },
       "required": [
@@ -96,6 +100,14 @@
         },
         "name": {
           "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "description": "The included harness that supplied the server, as the include chain reads (a > b when reached through another harness). Absent for a server of the harness itself."
+        },
+        "delegate": {
+          "type": "string",
+          "description": "The delegate harness that carries the server. A delegate's servers are connected only while that delegate runs, and are not the session's. Absent for a server of the session."
         },
         "transport": {
           "type": "string",
@@ -178,14 +190,14 @@
       "items": {
         "$ref": "#/$defs/Hook"
       },
-      "description": "Hook commands as resolved for a run. Omitted when there are none. Sorted by profile, event, then declaration order."
+      "description": "Hook commands as resolved for a run, including those of included harnesses that were given consent to run them. Omitted when there are none. Sorted by profile, event, then declaration order."
     },
     "mcp_servers": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/MCPServer"
       },
-      "description": "MCP servers as resolved for a run. Omitted when there are none. Includes contribute none today."
+      "description": "MCP servers as resolved for a run. Omitted when there are none. Includes contribute theirs, transitively, with the supplying harness in source. Delegates contribute the servers they carry, named in delegate."
     },
     "legacy_digest": {
       "type": "boolean",

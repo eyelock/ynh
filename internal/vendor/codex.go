@@ -145,6 +145,12 @@ func codexResumeArgs(sessionID, prompt string, interactive bool, extraArgs []str
 	return args, nil
 }
 
+// IsolateMCP cannot isolate on Codex: ynh knows no way to keep the user's
+// configured servers out, so it says so and launches normally.
+func (c *Codex) IsolateMCP(configPath string) ([]string, string) {
+	return nil, "MCP isolation is not supported by Codex: servers in your Codex config will still load"
+}
+
 func (c *Codex) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
 	return []string{"-c", "developer_instructions=" + text}, nil
 }

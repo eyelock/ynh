@@ -29,8 +29,8 @@ Centralized reference for both `ynh` and `ynd` binaries — environment variable
 | Setting | Resolution Order |
 |---------|-----------------|
 | Vendor | `-v` flag > `YNH_VENDOR` > harness `default_vendor` > global config. Any of these also accepts a backend-redirected spec (`<backend>/<vendor>` or `<backend>/<vendor>/<model>`) — see [Local Model Backends](vendors.md#local-model-backends). |
-| Profile | `--profile` flag > `YNH_PROFILE` > no profile (top-level). `ynh check` takes the flag only |
-| Focus | `--focus` flag > `YNH_FOCUS` > no focus (mutually exclusive with `--profile`) |
+| Profile | `--profile` flag > `YNH_PROFILE` > no profile (top-level). `ynh check` and `ynh info` take the flag only. `--profile` may repeat on `ynh run` and `ynh info`: at most one unqualified (the root's) and one `namespace:name` per included harness, for example `--profile work --profile github:ci`. `YNH_PROFILE` is a single value. See [Profiles of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses) |
+| Focus | `--focus` flag > `YNH_FOCUS` > no focus (mutually exclusive with `--profile`). `--focus namespace:name` selects a focus of an included harness. `ynh info` takes the flag only |
 | Harness source | `--harness` flag > `YNH_HARNESS` > positional arg > `.` (CWD) or error |
 | Non-interactive | `-y` flag > `YNH_YES` > `CI` |
 | Workspace folders | never-granted paths refuse first; then `YNH_WORKSPACE_ROOTS` (replaces) > `workspace_roots` in `config.json` as the allow-list; with neither, `ynh trust accept`. `--no-workspace` grants none. See [Workspace Folders](workspace.md) |
@@ -43,12 +43,12 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | Command | Key Flags |
 |---------|-----------|
 | `ynh install <source>` | `--path`, `-v` |
-| `ynh run [harness-id\|path]` | (a bare run wakes with the manifest's [`launch_focus`](focus.md#launch-focus)) `-v`, `--profile`, `--focus`, `--harness-file <file>`, `--install`, `--clean`, `--resume[=<id>]`, `--no-workspace` (grant none of the harness's requested [workspace folders](workspace.md)), `--session-name <name>` (see [Resuming a Session](focus.md#resuming-a-session); on Claude the name binds `--resume` to that name's session) |
+| `ynh run [harness-id\|path]` | (a bare run wakes with the manifest's [`launch_focus`](focus.md#launch-focus)) `-v`, `--profile`, `--focus`, `--harness-file <file>`, `--isolated-mcp`, `--install`, `--clean`, `--resume[=<id>]`, `--no-workspace` (grant none of the harness's requested [workspace folders](workspace.md)), `--session-name <name>` (see [Resuming a Session](focus.md#resuming-a-session); on Claude the name binds `--resume` to that name's session) |
 | `ynh uninstall <harness>...` | |
 | `ynh update [harness]` | |
 | `ynh fork <name>` | `--to <path>`, `--name <new>`, `--format <text\|json>` |
 | `ynh ls` | `--format <text\|json>` |
-| `ynh info <harness>` | `--format <text\|json>` |
+| `ynh info <harness>` | `--format <text\|json>`, `--check-updates` (with `--format json`), `--profile` (repeatable, as on `ynh run`), `--focus` (`name` or `namespace:name`; not with `--profile`). The hooks and MCP servers shown are what a run carries, included harnesses' with their source (an included harness's hooks only where its include says `"hooks": true`; the rest are listed as not active). With a profile or focus selected, they are what a run with that selection carries. Profiles and focuses are still listed as declared. A bare run's [`launch_focus`](focus.md#launch-focus) is not applied: pass it as `--focus` to see what a bare run wakes with |
 | `ynh installed <harness>` | `--format <text\|json>` |
 | `ynh schema <name>` | (or `ynh schema --all --format json`) — print embedded JSON schemas |
 | `ynh vendors` | `--format <text\|json>` |
@@ -56,7 +56,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh delegate add <harness> <url>` | `--ref`, `--path` — `<url>` must be a git URL; local paths are not supported (see CONTRIBUTING.md "Delegates: remote-only") |
 | `ynh delegate remove <harness> <url>` | `--path` |
 | `ynh delegate update <harness> <url>` | `--from-path`, `--path`, `--ref` |
-| `ynh include add <harness> <url>` | `--path`, `--pick`, `--ref`, `--replace` |
+| `ynh include add <harness> <url\|path>` | `--path`, `--pick`, `--ref`, `--as <alias>`, `--git`, `--hooks`, `--replace` |
 | `ynh include remove <harness> <url>` | `--path` |
 | `ynh include update <harness> <url>` | `--from-path`, `--path`, `--pick`, `--ref` |
 | `ynh focus ls <harness>` | `--format <text\|json>` |
@@ -71,7 +71,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh profile mcp add <harness> <profile> <name>` | `--command`, `--url`, `--type`, `--arg`, `--env`, `--cwd`, `--header`, `--null` |
 | `ynh profile mcp remove <harness> <profile> <name>` | |
 | `ynh profile mcp update <harness> <profile> <name>` | `--command`, `--url`, `--type`, `--arg`, `--env`, `--cwd`, `--header`, `--clear-args`, `--clear-env`, `--clear-headers` |
-| `ynh profile include add <harness> <profile> <url>` | `--path`, `--ref`, `--replace` |
+| `ynh profile include add <harness> <profile> <url\|path>` | `--path`, `--ref`, `--git`, `--replace` |
 | `ynh profile include remove <harness> <profile> <url>` | `--path` |
 | `ynh profile include update <harness> <profile> <url>` | `--from-path`, `--path`, `--ref` |
 | `ynh hook add <harness> <event> <command>` | `--matcher`, `--timeout <seconds>` (1 to 3600); top-level harness hook |
@@ -110,7 +110,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynd validate [path]` | `--harness` |
 | `ynd lint [path]` | `--harness` |
 | `ynd fmt [path]` | `--harness` |
-| `ynd compose <source>` | `--harness`, `--profile`, `--format <text\|json>` (default `json`) |
+| `ynd compose <source>` | `--harness`, `--profile` (repeatable), `--format <text\|json>` (default `json`) |
 | `ynd compress [files...]` | `-v`, `-y`, `--restore`, `--list-backups`, `--pick` |
 | `ynd inspect` | `-v`, `-y`, `-o` |
 | `ynd preview <source>` | `-v`, `-o`, `--harness`, `--profile`, `--focus` |
@@ -126,13 +126,13 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 
 | Command | Structured fields |
 |---------|-------------------|
-| `ynd compose` | Composed harness: `name`, `version`, `description`, `default_vendor`, `artifacts` (with source), `includes`, `delegates_to`, `hooks`, `mcp_servers`, `profiles` (object keyed by name; see breaking change note below), `focuses`, `launch_focus` (when set), `sensors`, `counts` |
+| `ynd compose` | Composed harness: `name`, `version`, `description`, `default_vendor`, `artifacts` (with source), `includes`, `delegates_to` (each with its `mcp_servers`: the servers the delegate carries for its own subagent, not the session's, each with a `source` of `root` for the delegate's own or its include chain; read from disk and the cache only, with `mcp_servers_error` when they cannot be read), `hooks` (what a run carries: the hooks of included harnesses whose include says `"hooks": true`, each with its `source`, then the root's own; `hooks_not_active` names the included harnesses whose hooks are declined, and `hooks_error` says why included hooks could not be composed), `mcp_servers` (what a run carries: the servers of every harness the includes reach, then the root's own, each with a `source` of `root` or the include chain; `mcp_servers_error` when two includes conflict), `profiles` (object keyed by name; see breaking change note below), `focuses`, `launch_focus` (when set), `sensors` (the root's own and those its direct includes declare, an included one with its `origin`; `sensors_error` when they cannot be merged), `counts` |
 | `ynh sensors ls <harness-id\|path>` | Array of sensor summaries: `name`, `category`, `role`, `source_kind`, `format`, `inline_focus` (bool), see [Sensors](sensors.md) |
 | `ynh focus ls <harness>` | Array of focus summaries: `name`, `profile` (when set), `prompt` in full — the text view abbreviates, JSON does not |
 | `ynh profile ls <harness>` | Array of profile summaries: `name` plus counts of `hooks`, `mcp_servers`, `includes`, `env_passthrough` — `ynh info` resolves one in full |
 | `ynh sensors show <harness-id\|path> <name>` | Resolved sensor object with inline-focus expansion |
 | `ynh sensors run <harness-id\|path> <name>` | Sensor run result: `kind`, `exit_code`, `duration_ms`, `output` (raw signal, no `passed` field; pass/fail is loop-driver policy) |
-| `ynh trust` | Array of harness trust states: `harness`, `source`, `sha`, `digest`, `executables`, `state`, `undeclared_env`. `ynh trust show <harness>` returns one object of the same shape. Reports what a harness will execute; it does not block. See [Sensors](sensors.md). `ynh trust show` adds an optional `launch_focus` object (`name`, `profile`, `prompt`) when the harness declares a [launch focus](focus.md#launch-focus), and an optional `workspace` object (`allow_list`, `remote_install`, `entries[]` with `requested`, `resolved`, `refused`, `allow_list_covers`) when the harness requests [workspace folders](workspace.md) |
+| `ynh trust` | Array of harness trust states: `harness`, `source`, `sha`, `digest`, `executables`, `hooks`, `mcp_servers`, `state`, `undeclared_env`. `hooks` are the hooks a run carries, a hook from an included harness (which consented with `"hooks": true`) with its `source`. `mcp_servers` are the servers a run carries: the harness's own, those of its included harnesses, each with its `source` (the include chain), and those its delegates carry, each with its `delegate` (a delegate's servers are not the session's). That meaning is new, and the [`trust-counts-composed-mcp-servers`](cli-structured.md#wire-contract-capability-version-format-json) feature tells a consumer it gets it. `ynh trust show <harness>` returns one object of the same shape. Reports what a harness will execute; it does not block. See [Sensors](sensors.md). `ynh trust show` adds an optional `launch_focus` object (`name`, `profile`, `prompt`) when the harness declares a [launch focus](focus.md#launch-focus), and an optional `workspace` object (`allow_list`, `remote_install`, `entries[]` with `requested`, `resolved`, `refused`, `allow_list_covers`) when the harness requests [workspace folders](workspace.md) |
 | `ynh doctor` | Setup diagnosis: `summary` (`checks`, `errors`, `warnings`) and `checks[]`, each with `name`, `title`, `status` and `findings[]` (`severity`, `subject`, `message`, `remedy`). Exit status is 0 regardless; gate on `summary.errors` |
 | `ynh agent run` | Run result: `exit_code`, `reason`, `converged`, `budgets`/`budget_sources`/`consumed` with `bound_by`, `convergence`, `sensors[]`, `changed_files` — see [Agent](agent.md#run-result) |
 | `ynh baseline <harness>` | What the ratchet forgives: per-sensor `recorded`, `recorded_at`, `forgiven`, and under `--explain` the `findings` themselves — see [Sensors](sensors.md#reading-the-ratchet) |
@@ -190,7 +190,7 @@ Empty case is `"profiles": {}` (empty object), no longer `"profiles": []`. This 
 
 ```json
 {
-  "capabilities": "0.3.0",
+  "capabilities": "0.x.y",
   "ynh_version": "0.x.y",
   "harnesses": [ /* ynh ls — array */ ]
 }
@@ -220,6 +220,12 @@ Per-harness fields:
 | `artifacts` | (`ynh ls` only) Counts: `skills`, `agents`, `rules`, `commands` |
 | `includes` | Array of include objects: `git`, `ref_installed`, `ref_available`, `is_pinned`, optional `path`, `pick`. A `local` include has an empty `git` and carries `local`, its path as declared in the manifest |
 | `delegates_to` | Array of delegate objects: `git`, `ref_installed`, `ref_available`, `is_pinned`, optional `path` |
+| `mcp_servers` | (`ynh info` only) The MCP servers a run carries, sorted by name: those of every harness the includes reach, then the harness's own. Each has `name`, `source` (`root` for the harness's own, or the include chain that supplied it, such as `eyelock/a > eyelock/b//path`, as `ynd preview` names it) and the `command` or `url` as written. Includes are read from disk and the cache only, never fetched |
+| `mcp_servers_error` | (`ynh info` only) Present when the includes' servers could not be read (an include not in the cache, or two includes declaring one server differently). `mcp_servers` then lists only the harness's own; run `ynh update` to fill the cache |
+| `hooks` | (`ynh info` only) The hooks a run carries, sorted by event; within an event in the order a run fires them, those of included harnesses whose include says `"hooks": true` first, then the harness's own. Each has `event`, `source` (`root` for the harness's own, or the include chain, as for `mcp_servers`), `command` (an included `./` script at the path the session runs it from, as `ynd compose` shows it), and `matcher` and `timeout` when set. Includes are read from disk and the cache only, never fetched |
+| `hooks_not_active` | (`ynh info` only) Present when an included harness declares hooks a run does not carry, because its include does not say `"hooks": true`: one `event` and `source` per event, sorted by event |
+| `hooks_error` | (`ynh info` only) Present when the includes' hooks could not be read (an include not in the cache, or a hook script outside its included harness). `hooks` then lists only the harness's own |
+| `selection` | (`ynh info` only) Present when `--profile` or `--focus` was given; `mcp_servers` and `hooks` are then what a run with that selection carries. `focus` is the `--focus` value as given; `profiles` are the profiles applied, as `--profile` takes them (`name` for the harness's own, `namespace:name` for an included harness's), including the one a focus names. A selection info cannot honour is an `invalid_input` error: both flags, a profile or focus not defined, or a namespaced one whose includes are not in the cache |
 | `manifest` | (`ynh info` only) Raw `.agents/harness/plugin.json` body, JSON-compacted |
 
 #### `--check-updates` flag
@@ -252,7 +258,7 @@ The `is_pinned` rule is the same on harnesses and includes:
 
 ```json
 {
-  "capabilities": "0.3.0",
+  "capabilities": "0.x.y",
   "ynh_version": "0.x.y",
   "name": "demo",
   "path": "/absolute/path/to/fork",

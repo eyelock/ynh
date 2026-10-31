@@ -104,12 +104,16 @@ type ExportOptions struct {
 	Mode ExportMode
 	// Config provides remote source checking for includes and delegates.
 	Config *config.Config
-	// Profile selects a named configuration variant. Empty means no profile.
-	Profile string
+	// Selection chooses the profile of the harness and the profiles and focus
+	// of the harnesses it includes. The zero value selects nothing.
+	Selection harness.Selection
 	// BeforeWrite, when set, runs once the source has loaded and its includes
 	// have resolved, before anything is written. The CLI runs --clean here, so
 	// a refused export does not empty the output directory first.
 	BeforeWrite func() error
+
+	// delegates are the delegates resolved for export, set by Export.
+	delegates []ExportDelegate
 }
 
 // ExportResult describes the output for one vendor.
@@ -130,8 +134,8 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	}
 
 	// Apply profile if specified
-	if opts.Profile != "" {
-		p, err = harness.ResolveProfile(p, opts.Profile)
+	if opts.Selection.Profile != "" {
+		p, err = harness.ResolveProfile(p, opts.Selection.Profile)
 		if err != nil {
 			return nil, err
 		}
@@ -151,10 +155,28 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	}
 
 	// Resolve all remote includes
-	resolved, err := resolver.Resolve(p, opts.Config)
+	resolved, _, err := resolver.ResolveSelected(p, opts.Config, opts.Selection)
 	if err != nil {
 		return nil, fmt.Errorf("resolving includes: %w", err)
 	}
+
+	// The servers the export carries are the root's and those of its included
+	// harnesses, composed. Work on a copy so the caller's harness is left as
+	// it was loaded.
+	servers, err := harness.ComposeMCPServersForExport(p, resolver.IncludedHarnesses(resolved))
+	if err != nil {
+		return nil, err
+	}
+	// The hooks it carries are the root's and those of the included
+	// harnesses that consented to them, with their scripts.
+	hs, err := assembler.ComposeHooks(p.Hooks, resolved)
+	if err != nil {
+		return nil, err
+	}
+	exported := *p
+	exported.MCPServers = servers
+	exported.Hooks = hs.Hooks
+	p = &exported
 
 	// Extract ResolvedContent for assembly
 	var content []resolver.ResolvedContent
@@ -176,22 +198,44 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 		vendors = vendor.Available()
 	}
 
+	// Each delegate is resolved as a harness, so that a delegate that cannot
+	// be exported is an error before anything is written. A vendor that
+	// carries no delegates in an export leaves them out, with a warning.
+	for _, v := range vendors {
+		if a, aerr := vendor.Get(v); aerr == nil && a.SupportsExportDelegates() {
+			if opts.delegates, err = ResolveExportDelegates(p.DelegatesTo, p.Dir, opts.Config); err != nil {
+				return nil, err
+			}
+			break
+		}
+	}
+
 	if opts.BeforeWrite != nil {
 		if err := opts.BeforeWrite(); err != nil {
 			return nil, err
 		}
 	}
 
+	var results []ExportResult
 	switch opts.Mode {
 	case ModeMerged:
-		return exportMerged(opts, hj, p, content, instructions, vendors)
+		results, err = exportMerged(opts, hj, p, hs, content, instructions, vendors)
 	case ModeAgentPlugin:
-		return exportAgentPlugin(opts, hj, p, content, instructions, vendors)
+		results, err = exportAgentPlugin(opts, hj, p, hs, content, instructions, vendors)
+	default:
+		results, err = exportPerVendor(opts, hj, p, hs, content, instructions, vendors)
 	}
-	return exportPerVendor(opts, hj, p, content, instructions, vendors)
+	if err != nil {
+		return nil, err
+	}
+	// Said once, whatever the number of vendors exported.
+	if len(results) > 0 {
+		results[0].Warnings = append(slices.Clone(hs.Inactive), results[0].Warnings...)
+	}
+	return results, nil
 }
 
-func exportPerVendor(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructions []byte, vendors []string) ([]ExportResult, error) {
+func exportPerVendor(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness, hs assembler.HookSet, content []resolver.ResolvedContent, instructions []byte, vendors []string) ([]ExportResult, error) {
 	var results []ExportResult
 
 	for _, v := range vendors {
@@ -205,7 +249,7 @@ func exportPerVendor(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harn
 			return nil, fmt.Errorf("creating %s output: %w", v, err)
 		}
 
-		result, err := exportForVendor(v, vendorDir, pj, p, content, instructions)
+		result, err := exportForVendor(v, vendorDir, pj, p, hs, content, instructions, opts.delegates)
 		if err != nil {
 			return nil, fmt.Errorf("exporting for %s: %w", v, err)
 		}
@@ -215,7 +259,7 @@ func exportPerVendor(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harn
 	return results, nil
 }
 
-func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructions []byte, vendors []string) ([]ExportResult, error) {
+func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness, hs assembler.HookSet, content []resolver.ResolvedContent, instructions []byte, vendors []string) ([]ExportResult, error) {
 	outputDir := opts.OutputDir
 
 	// Clean and recreate output dir
@@ -281,7 +325,7 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 	}
 	result.Warnings = append(result.Warnings, workspaceWarnings(p)...)
 	if wroteHooks {
-		warnings, err := assembler.CopyHookScripts(p.Dir, outputDir, p.Hooks, "the plugin")
+		warnings, err := assembler.CopyHookScripts(p.Dir, outputDir, hs, "the plugin")
 		if err != nil {
 			return nil, err
 		}
@@ -317,9 +361,20 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 	}
 
 	// Delegates land in the shared agents/, read by every vendor whose
-	// manifest does not restrict it to skills.
-	if len(p.DelegatesTo) > 0 {
-		if err := ExportDelegates(outputDir, p.DelegatesTo, p.Dir); err != nil {
+	// manifest does not restrict it to skills. Claude's subagent frontmatter
+	// carries a delegate's MCP servers; the shared file is the one place to
+	// put them, so they are written whenever Claude is among the vendors.
+	if len(opts.delegates) > 0 {
+		var carrier assembler.DelegateMCPCarrier
+		for _, v := range vendors {
+			if a, err := vendor.Get(v); err == nil {
+				if c := delegateCarrier(a); c != nil {
+					carrier = c
+				}
+				result.Warnings = append(result.Warnings, DelegateMCPWarnings(opts.delegates, a)...)
+			}
+		}
+		if err := WriteDelegates(outputDir, opts.delegates, carrier); err != nil {
 			return nil, fmt.Errorf("exporting delegates: %w", err)
 		}
 		// Recount agents after delegate generation
@@ -331,7 +386,7 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 	return []ExportResult{result}, nil
 }
 
-func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON, p *harness.Harness, content []resolver.ResolvedContent, instructions []byte) (ExportResult, error) {
+func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON, p *harness.Harness, hs assembler.HookSet, content []resolver.ResolvedContent, instructions []byte, delegates []ExportDelegate) (ExportResult, error) {
 	result := ExportResult{
 		Vendor:    vendorName,
 		OutputDir: outputDir,
@@ -366,10 +421,11 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 	}
 
 	// Delegates
-	if len(p.DelegatesTo) > 0 && adapter.SupportsExportDelegates() {
-		if err := ExportDelegates(outputDir, p.DelegatesTo, p.Dir); err != nil {
+	if len(delegates) > 0 && adapter.SupportsExportDelegates() {
+		if err := WriteDelegates(outputDir, delegates, delegateCarrier(adapter)); err != nil {
 			return result, fmt.Errorf("exporting delegates: %w", err)
 		}
+		result.Warnings = append(result.Warnings, DelegateMCPWarnings(delegates, adapter)...)
 	}
 
 	// Hook config, and the scripts its hooks run
@@ -380,7 +436,7 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 		}
 		result.Warnings = append(result.Warnings, vendor.ExportHookWarnings(vendorName, p.Hooks)...)
 		if wrote {
-			warnings, err := assembler.CopyHookScripts(p.Dir, outputDir, p.Hooks, "the plugin")
+			warnings, err := assembler.CopyHookScripts(p.Dir, outputDir, hs, "the plugin")
 			if err != nil {
 				return result, err
 			}

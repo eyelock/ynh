@@ -107,6 +107,7 @@ Expected:
 | `--path <subdir>` | Scope into a subdirectory of the repo |
 | `--pick <items>` | Comma-separated artifact paths in `type/name` form: `skills/<name>`, `agents/<name>.md`, `rules/<name>.md`, `commands/<name>.md`. All others excluded. |
 | `--ref <ref>` | Pin to a branch, tag, or commit SHA |
+| `--as <alias>` | Namespace for the included harness's focuses and profiles (`--profile <alias>:<name>`), instead of its own name |
 
 ## Duplicate add → error
 
