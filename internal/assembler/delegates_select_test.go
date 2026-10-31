@@ -130,3 +130,26 @@ func TestAssembleDelegates_SelectionErrors(t *testing.T) {
 		})
 	}
 }
+
+// On Codex the delegate is a TOML custom agent, and a selected focus's prompt
+// is in its developer_instructions, as it is in the Markdown agent's body.
+func TestAssembleDelegates_CodexDelegateCarriesFocus(t *testing.T) {
+	repo := selectRepo(t)
+	t.Setenv("YNH_HOME", t.TempDir())
+	adapter, err := vendor.Get("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workDir := t.TempDir()
+	var warn strings.Builder
+	if _, err := AssembleDelegates(workDir, adapter, []harness.Delegate{{GitSource: harness.GitSource{Git: repo}, Focus: "triage"}}, "", DelegateOptions{Warn: &warn}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(workDir, ".codex", "agents", "probe.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "## Focus: triage\n\nTriage the failing build first.") {
+		t.Errorf("developer_instructions lack the focus:\n%s", data)
+	}
+}

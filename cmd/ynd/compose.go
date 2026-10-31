@@ -361,6 +361,14 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 			}
 			allSkills = append(allSkills, composeArtifact{Name: s, Source: incSource})
 		}
+		// A top-level skill folder picked by its name, with no skills/
+		// directory (harness.TopLevelSkill).
+		for _, p := range r.Content.Paths {
+			if harness.TopLevelSkill(r.Content.BasePath, p) {
+				name, _ := harness.PickedSkillName(r.Content.BasePath, p)
+				allSkills = append(allSkills, composeArtifact{Name: name, Source: incSource})
+			}
+		}
 		for _, a := range incArts.Agents {
 			if len(pickSet) > 0 && !pickSet["agents/"+a] {
 				continue

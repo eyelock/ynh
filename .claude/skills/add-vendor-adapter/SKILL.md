@@ -248,8 +248,8 @@ both in the same PR since they share research.
 
 - [ ] `.claude/agents/evals.md`: add the vendor's CLI binary to the `STUBS`
   line and the stub table, so no eval can launch the real CLI.
-- [ ] `make check-vendor-parity` (`scripts/vendor-parity.sh`). It is **not**
-  part of `make check`, but CI runs it. Its checks:
+- [ ] `make check-vendor-parity` (`scripts/vendor-parity.sh`). `make check`
+  runs it, and so does CI. Its checks:
   - A: the vendor has a row in the reference index.
   - B: every vendor assembles the same artifact set, `plugin/` manifest
     included. A vendor with no plugin manifest format goes in
@@ -320,7 +320,7 @@ writing these were:
    Agent Plugins layout, docker image.
 4. `ynh agent run` backend and `llmVendors`, if applicable.
 5. Evals stubs, then every documentation touch point.
-6. `make check`, `make check-vendor-parity` and `make scan-artifacts`.
+6. `make check` (which includes `check-vendor-parity`) and `make scan-artifacts`.
 7. Manual smoke test: `make install`, create a throwaway harness in `/tmp/`,
    `ynh run -v <name>` against the real CLI, and confirm launch, skills,
    instructions, MCP and hooks actually take effect.

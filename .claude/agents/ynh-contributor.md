@@ -57,7 +57,7 @@ Read the "Testing" and "Resolution and Assembly Test Matrix" sections in `.githu
 
 ## When reviewing contributions
 
-- Check that `make check` passes (format, lint, test, build)
+- Check that `make check` passes (format, lint, check-tidy, test, build and the artifact checks)
 - New features need tests
 - No test frameworks - standard `testing` package only
 - Errors wrapped with context: `fmt.Errorf("context: %w", err)`
