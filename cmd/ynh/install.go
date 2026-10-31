@@ -371,6 +371,16 @@ func cmdInstall(args []string) error {
 		})
 		fmt.Printf("  Fetched %s\n", resolver.ShortGitURL(gitURL))
 	}
+	// Delegates of delegates run too, so they are fetched now, and `ynh
+	// trust` can show their servers before the first run.
+	nested, err := fetchNestedDelegates(p, cfg)
+	if err != nil {
+		return fmt.Errorf("fetching nested delegates: %w", err)
+	}
+	for _, n := range nested {
+		ins.Resolved = append(ins.Resolved, n)
+		fmt.Printf("  Fetched nested delegate %s\n", resolver.ShortGitURL(n.Git))
+	}
 
 	if isLocal {
 		// Pointer-form: the install record lives in PointersDir, never in
