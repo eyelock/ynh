@@ -35,7 +35,9 @@ The repository moved from `sst/opencode` to `anomalyco/opencode`.
 2.x runs every command through a shared **background service**
 (`opencode service status`). **CONFIRMED:** the service ignores the client's
 environment, so `OPENCODE_CONFIG_DIR` and `OPENCODE_CONFIG` have no effect on
-a plain `opencode` or `opencode run`.
+a plain `opencode` or `opencode run`. It does still load a project
+`.opencode/` in the working directory, so a `ynd export` run from its own
+directory works without `--standalone` (CONFIRMED v2.2.3, ynw-kst.12).
 
 **CONFIRMED:** `--standalone` starts a private server for the invocation, and
 that server honours `OPENCODE_CONFIG_DIR=<dir>`. Agents defined in the bundle
@@ -223,8 +225,9 @@ octal, and `\b`/`\B` inside a class are refused; escaped punctuation (`\.`,
 `\[`) is always allowed. Why: a matcher JavaScript rejects used
 to throw inside `execute.before` and block every tool call (ynw-kst.2). The
 plugin now compiles each matcher once in a `try`/`catch` and a bad one matches
-nothing (its hook never runs, reported on stderr), and syntax JavaScript reads
-differently without throwing would silently match the wrong tools; so the
+nothing (its hook never runs, reported on stderr; see Timeout below for when
+`opencode run` shows that), and syntax JavaScript reads differently without
+throwing would silently match the wrong tools; so the
 check refuses both kinds before the plugin is written. It is over-strict in
 one known case: any `[:` inside a class is taken for a POSIX class, so `[[:]`
 (the set of `[` and `:`, the same in both dialects) is refused; write `[\[:]`.
@@ -260,6 +263,25 @@ Contract declarations (read by `make check-vendor-parity`):
   CONFIRMED live on v2.2.3 (ynw-kst.7): a `before_tool` hook that sleeps 8 s
   and exits 2 was killed after its `timeout: 3` and the shell call went
   ahead; with `timeout: 15` it ran to the end and blocked the call.
+  The `[ynh hook] ...: did not run to completion (spawnSync sh ETIMEDOUT)`
+  report is `console.error` in the plugin, and `opencode run` shows it only
+  with both `--standalone` and `--print-logs` (CONFIRMED v2.2.3, ynw-kst.8:
+  the hook fired and was killed in every run, and the report appeared
+  only with both flags). Without `--standalone` the plugin runs in the
+  background service, whose stderr is not shown (`--help`: "server logs
+  require --standalone"). The other `[ynh hook]` reports (bad matcher, exit
+  other than 0 and 2) use the same `console.error`, so the same holds;
+  only the timeout was checked live.
+  Those kst.8 runs without `--standalone` still loaded the plugin because
+  they ran from a `ynd export` directory: the plugin was the project's
+  `.opencode/plugins/` in the working directory, which the service loads
+  (see Config bundle layout), not `OPENCODE_CONFIG_DIR`, which it ignores
+  (Launch model). CONFIRMED v2.2.3, ynw-kst.12: with no `--standalone`, the
+  same plugin fired from the run dir as working directory and did not fire
+  from another directory with `OPENCODE_CONFIG_DIR` pointing at it.
+  ynh always passes `--standalone`, so a ynh user adds only `--print-logs`:
+  `ynh run <harness> --print-logs -- "<prompt>"` showed the report
+  (CONFIRMED v2.2.3, ynw-kst.12; one-shot only, the TUI is unchecked).
 - Session-start context: `unsupported:`. `on_session_start` runs from an
   event-stream subscriber, which cannot add context; its stdout is discarded.
 - Matchers: honoured on `execute.before` / `execute.after` only
@@ -270,10 +292,14 @@ Contract declarations (read by `make check-vendor-parity`):
 ## CLI
 
 ```
-opencode [--standalone] [--auto] [-c] [-s <id>] [--prompt <text>] [<directory>]
-opencode run [--standalone] [-c] [-s <id>] [--fork] [-m provider/model#variant]
+opencode [--standalone] [--print-logs] [--auto] [-c] [-s <id>] [--prompt <text>] [<directory>]
+opencode run [--standalone] [--print-logs] [-c] [-s <id>] [--fork] [-m provider/model#variant]
              [--agent <name>] [--format default|json] [-f <file>] [--title] [--auto] [<message...>]
 ```
+
+- Logs: `--print-logs` prints logs to stderr, including a plugin's
+  `console.error`; the service's logs need `--standalone` as well (`--help`:
+  "server logs require --standalone"). See Timeout above.
 
 - Interactive: `opencode`. Initial prompt: `--prompt`.
 - One-shot: `opencode run`. **CONFIRMED:** piped stdin is the prompt.
