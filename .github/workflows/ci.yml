@@ -265,13 +265,28 @@ jobs:
     if: needs.changes.outputs.registry == 'true'
     env:
       WEAVER_VERSION: v0.27.0
+      # The tarball's SHA-256, pinned beside the version: the release's own
+      # .sha256 must agree with it, and the download must match it, before
+      # anything is extracted or run. Move both together.
+      WEAVER_SHA256: 7e497eb48215a5240a0bf77747cf431596c468f1039d481807b1f1e096cb5ac2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      - name: weaver registry check
+      - name: Install Weaver, checked against its pinned checksum
         run: |
           set -eu
-          curl -fsSL "https://github.com/open-telemetry/weaver/releases/download/${WEAVER_VERSION}/weaver-x86_64-unknown-linux-gnu.tar.xz" | tar -xJ -C "$RUNNER_TEMP"
-          "$RUNNER_TEMP"/weaver-x86_64-unknown-linux-gnu/weaver registry check -r telemetry/registry
+          dir="$RUNNER_TEMP/weaver"
+          mkdir -p "$dir"
+          asset="weaver-x86_64-unknown-linux-gnu.tar.xz"
+          base="https://github.com/open-telemetry/weaver/releases/download/${WEAVER_VERSION}"
+          curl -fsSL --output-dir "$dir" -O "$base/$asset" -O "$base/$asset.sha256"
+          # The release's published checksum names the same digest as the pin.
+          grep -q "^${WEAVER_SHA256} " "$dir/$asset.sha256"
+          (cd "$dir" && echo "${WEAVER_SHA256}  ${asset}" | sha256sum -c -)
+          tar -xJf "$dir/$asset" -C "$dir"
+          "$dir/weaver-x86_64-unknown-linux-gnu/weaver" --version
+          echo "$dir/weaver-x86_64-unknown-linux-gnu" >> "$GITHUB_PATH"
+      - name: weaver registry check
+        run: weaver registry check -r telemetry/registry
 
   all-clear:
     name: All Clear
