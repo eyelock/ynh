@@ -19,7 +19,7 @@ func (c *Codex) DelegateAgentFile(name, description, prompt string) (string, []b
 	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
 		return "", nil, fmt.Errorf("delegate name %q cannot name a file", name)
 	}
-	return name + ".toml", codexAgentTOML(name, description, prompt), nil
+	return name + ".toml", codexAgentTOML(name, description, prompt, ""), nil
 }
 
 // TransformArtifact writes a harness's own agents (agents/<name>.md) as Codex
@@ -43,13 +43,19 @@ func (c *Codex) TransformArtifact(artifactType, name string, data []byte) (strin
 //     requires the field.
 //   - developer_instructions: the body after the frontmatter.
 //
+// One optional field carries over: effort becomes model_reasoning_effort,
+// which a custom agent file may set, with the mapping ynh agent run uses for
+// Codex (internal/agent/effort.go): low, medium and high pass through as they
+// are. Claude Code's other levels (xhigh, max) are dropped, as ynh exposes
+// only those three, so a level means the same thing on every backend.
+//
 // Every other source field is dropped, because none maps onto a custom
 // agent's: Claude Code's model names (sonnet, inherit) are not Codex models,
 // and Codex has no tool allowlist (tools, disallowedTools); a custom agent
 // inherits the session's permissions and MCP servers. A source with no closed
 // frontmatter block is all body.
 func codexAgent(stem string, data []byte) []byte {
-	name, description, body := "", "", data
+	name, description, effort, body := "", "", "", data
 	if lines, rest, ok := splitFrontmatter(data); ok {
 		body = bytes.TrimLeft(rest, "\r\n")
 		for _, e := range frontmatterEntries(lines) {
@@ -58,6 +64,8 @@ func codexAgent(stem string, data []byte) []byte {
 				name = strings.TrimSpace(e.scalar())
 			case "description":
 				description = strings.Join(strings.Fields(e.scalar()), " ")
+			case "effort":
+				effort = codexReasoningEffort(strings.TrimSpace(e.scalar()))
 			}
 		}
 	}
@@ -67,14 +75,30 @@ func codexAgent(stem string, data []byte) []byte {
 	if description == "" {
 		description = fmt.Sprintf("Agent %q.", name)
 	}
-	return codexAgentTOML(name, description, string(body))
+	return codexAgentTOML(name, description, string(body), effort)
 }
 
-// codexAgentTOML encodes a custom agent's three fields as its TOML file.
-func codexAgentTOML(name, description, instructions string) []byte {
+// codexReasoningEffort maps an agent's effort onto Codex's
+// model_reasoning_effort: ynh's three levels (internal/agent/effort.go, which
+// imports this package and so cannot be imported here) pass through, and any
+// other level maps to nothing.
+func codexReasoningEffort(level string) string {
+	switch level {
+	case "low", "medium", "high":
+		return level
+	}
+	return ""
+}
+
+// codexAgentTOML encodes a custom agent's three required fields as its TOML
+// file, and model_reasoning_effort when effort is set.
+func codexAgentTOML(name, description, instructions, effort string) []byte {
 	var b strings.Builder
 	fmt.Fprintf(&b, "name = %s\n", tomlString(name))
 	fmt.Fprintf(&b, "description = %s\n", tomlString(description))
+	if effort != "" {
+		fmt.Fprintf(&b, "model_reasoning_effort = %s\n", tomlString(effort))
+	}
 	fmt.Fprintf(&b, "developer_instructions = %s\n", tomlMultilineString(instructions))
 	return []byte(b.String())
 }

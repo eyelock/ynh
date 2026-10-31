@@ -76,3 +76,29 @@ func TestCodexTransformArtifact_Passthrough(t *testing.T) {
 		}
 	}
 }
+
+// An agent's effort becomes model_reasoning_effort for ynh's three levels,
+// mapped as ynh agent run maps them for Codex; Claude Code's other levels
+// have no ynh mapping and are dropped rather than guessed at.
+func TestCodexTransformArtifact_AgentEffort(t *testing.T) {
+	c := &Codex{}
+	for _, tc := range []struct{ effort, want string }{
+		{"low", "model_reasoning_effort = \"low\"\n"},
+		{"medium", "model_reasoning_effort = \"medium\"\n"},
+		{" high ", "model_reasoning_effort = \"high\"\n"},
+		{"xhigh", ""},
+		{"max", ""},
+		{"High", ""},
+		{"", ""},
+	} {
+		src := "---\nname: probe\ndescription: d\neffort: " + tc.effort + "\n---\nBody.\n"
+		_, data := c.TransformArtifact("agents", "probe.md", []byte(src))
+		want := "name = \"probe\"\n" +
+			"description = \"d\"\n" +
+			tc.want +
+			"developer_instructions = \"\"\"\nBody.\n\"\"\"\n"
+		if string(data) != want {
+			t.Errorf("effort %q: got\n%s\nwant\n%s", tc.effort, data, want)
+		}
+	}
+}

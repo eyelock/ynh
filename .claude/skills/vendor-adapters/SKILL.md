@@ -150,9 +150,12 @@ converted only by `ynd migrate` and refused by every other command.
 |                   |                                  | unchecked, ynw-s9h)              |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Frontmatter:      | name, description, model,        | name, description; the body      | name, description                |
-|                   | tools, disallowedTools, skills,  | becomes developer_instructions.  |                                  |
-|                   | maxTurns, effort, memory,        | Every other field dropped (model |                                  |
-|                   | background, isolation            | names differ; no tool allowlist) |                                  |
+|                   | tools, disallowedTools, skills,  | becomes developer_instructions;  |                                  |
+|                   | maxTurns, effort, memory,        | effort low/medium/high becomes   |                                  |
+|                   | background, isolation            | model_reasoning_effort (xhigh,   |                                  |
+|                   |                                  | max dropped). Every other field  |                                  |
+|                   |                                  | dropped (model names differ; no  |                                  |
+|                   |                                  | tool allowlist)                  |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Delegation:       | Markdown subagent in             | TOML custom agent in             | Markdown subagent in             |
 | (delegates_to)    | .claude/agents/<name>.md (name,  | .codex/agents/<name>.toml (name, | .cursor/agents/<name>.md (name,  |
