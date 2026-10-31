@@ -379,7 +379,7 @@ func cmdInstall(args []string) error {
 	}
 	for _, n := range nested {
 		ins.Resolved = append(ins.Resolved, n)
-		fmt.Printf("  Fetched nested delegate %s\n", resolver.ShortGitURL(resolver.GitSourceURL(n.Git, p.Dir)))
+		fmt.Printf("  Fetched nested delegate %s\n", resolver.ShortGitURL(n.Git))
 	}
 
 	if isLocal {

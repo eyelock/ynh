@@ -171,6 +171,9 @@ func cmdUpdate(args []string) error {
 	// Delegates of delegates run too: refresh them with the rest.
 	nested, nerr := fetchNestedDelegates(p, cfg)
 	if nerr != nil {
+		if isNestedRefusal(nerr) {
+			return fmt.Errorf("nested delegate: %w", nerr)
+		}
 		fmt.Fprintf(os.Stderr, "  Warning: nested delegates: %v\n", nerr)
 	}
 	for _, n := range nested {
