@@ -212,7 +212,7 @@ is unprobed. Matchers need a mapping table, and the generated plugin tests a
 matcher (as an anchored regex) against the OpenCode id and its Claude names.
 
 The matcher is a **JavaScript** regex: the plugin builds it with
-`new RegExp("^(?:" + matcher + ")$")`. The other vendors' matchers are RE2,
+`new RegExp("^(?:" + matcher + ")$")`, with no flags. The other vendors' matchers are RE2,
 so ynh holds an OpenCode matcher to the syntax both read the same.
 `validateOpencodeMatcher` (`internal/vendor/opencode.go`) runs at generate
 time: it compiles the matcher as RE2, then `opencodeMatcherNotJS` refuses
@@ -304,8 +304,10 @@ opencode run [--standalone] [--print-logs] [-c] [-s <id>] [--fork] [-m provider/
 - Interactive: `opencode`. Initial prompt: `--prompt`.
 - One-shot: `opencode run`. **CONFIRMED:** piped stdin is the prompt.
 - Effort: no flag; a model variant, `-m provider/model#variant`.
-- Auto-approve: `--auto` approves everything not explicitly denied. No
-  edits-only mode; that would need generated `permissions` rules.
+- `--auto`: OpenCode stops asking for any tool call a rule does not deny.
+  It has no setting limited to file edits; ynh would need generated
+  `permissions` rules for that, so on OpenCode `ynh agent run` accepts
+  only the `all` level of its approval flag, not `edits`.
 - Removed since 1.x: `--variant`, `--command`, `--dir`.
 
 ## Sessions and resume
@@ -349,7 +351,7 @@ service, which does not see the key and lists no `anthropic/*` model;
   check that a `tools: Read` agent cannot run `shell` needs a paid provider:
   the free models refuse any agent with `* * deny` rules. It was not run
   with Anthropic in ynw-kst.7, which probed only the MCP grant.
-- No edits-only auto-approve.
+- No setting limited to file edits (see `--auto` above).
 - `on_session_start` and `on_stop` ride the event stream, not a documented
   hook, so they are the most likely to move.
 
