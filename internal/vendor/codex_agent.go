@@ -3,13 +3,14 @@ package vendor
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"strings"
 )
 
 // DelegateAgentFile writes a delegate as a Codex custom agent: a TOML file in
 // .codex/agents/ that sets the three fields every custom agent file must,
 // name, description and developer_instructions
-// (developers.openai.com/codex/subagents). Codex identifies the agent by its
+// (learn.chatgpt.com/docs/agent-configuration/subagents). Codex identifies the agent by its
 // name field; the file is named after it too.
 //
 // Nothing else is set. A custom agent inherits the parent session's MCP
@@ -19,23 +20,56 @@ func (c *Codex) DelegateAgentFile(name, description, prompt string) (string, []b
 	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
 		return "", nil, fmt.Errorf("delegate name %q cannot name a file", name)
 	}
-	return name + ".toml", codexAgentTOML(name, description, prompt, ""), nil
+	return name + ".toml", codexAgentTOML(codexAgentFields{name: name, description: description, instructions: prompt}), nil
 }
 
 // TransformArtifact writes a harness's own agents (agents/<name>.md) as Codex
 // custom agents. Codex reads only TOML files in .codex/agents/
-// (developers.openai.com/codex/subagents), so a Markdown agent linked there
+// (learn.chatgpt.com/docs/agent-configuration/subagents), so a Markdown agent linked there
 // would never be one. Other artifact types pass through unchanged.
 func (c *Codex) TransformArtifact(artifactType, name string, data []byte) (string, []byte) {
 	if artifactType != "agents" || !strings.HasSuffix(name, ".md") {
 		return name, data
 	}
 	stem := strings.TrimSuffix(name, ".md")
-	return stem + ".toml", codexAgent(stem, data)
+	return stem + ".toml", codexAgentTOML(parseCodexAgent(stem, data))
 }
 
-// codexAgent renders a Markdown agent as a Codex custom agent with the three
-// fields every one must set:
+// ArtifactWarnings returns what a run loses when TransformArtifact writes an
+// agent as a Codex custom agent: one warning, naming the agent, for each of
+// tools and disallowedTools it declares. A custom agent cannot restrict its
+// tools, so both lists are dropped. When tools leaves out Bash, the warning
+// says the shell tool is turned off instead (features.shell_tool = false),
+// the one part of the list Codex can honour. Other artifacts have none.
+func (c *Codex) ArtifactWarnings(artifactType, name string, data []byte) []string {
+	if artifactType != "agents" || !strings.HasSuffix(name, ".md") {
+		return nil
+	}
+	a := parseCodexAgent(strings.TrimSuffix(name, ".md"), data)
+	var warnings []string
+	if a.hasTools {
+		msg := fmt.Sprintf("agent %q: Codex custom agents cannot restrict tools, so its tools list is dropped", a.name)
+		if a.shellOff {
+			msg += "; it leaves out Bash, so the agent's shell tool is turned off (features.shell_tool = false)"
+		}
+		warnings = append(warnings, msg)
+	}
+	if a.hasDisallowed {
+		warnings = append(warnings, fmt.Sprintf("agent %q: Codex custom agents cannot restrict tools, so its disallowedTools list is dropped", a.name))
+	}
+	return warnings
+}
+
+// codexAgentFields are what a Codex custom agent file carries.
+type codexAgentFields struct {
+	name, description, instructions string
+	effort                          string // model_reasoning_effort; empty for none
+	shellOff                        bool   // features.shell_tool = false
+	hasTools, hasDisallowed         bool   // the source declared these lists
+}
+
+// parseCodexAgent reads a Markdown agent into a Codex custom agent's fields.
+// Three are set on every one:
 //
 //   - name: the source's, else the file name. Codex identifies the agent by
 //     it. The file keeps the source's name, so two agents never share one.
@@ -43,39 +77,85 @@ func (c *Codex) TransformArtifact(artifactType, name string, data []byte) (strin
 //     requires the field.
 //   - developer_instructions: the body after the frontmatter.
 //
-// One optional field carries over: effort becomes model_reasoning_effort,
-// which a custom agent file may set, with the mapping ynh agent run uses for
-// Codex (internal/agent/effort.go): low, medium and high pass through as they
-// are. Claude Code's other levels (xhigh, max) are dropped, as ynh exposes
-// only those three, so a level means the same thing on every backend.
+// Two optional ones carry over. effort becomes model_reasoning_effort, which
+// a custom agent file may set, with the mapping ynh agent run uses for Codex
+// (internal/agent/effort.go): low, medium and high pass through as they are.
+// Claude Code's other levels (xhigh, max) are dropped, as ynh exposes only
+// those three, so a level means the same thing on every backend. And a tools
+// list that leaves out Bash sets features.shell_tool = false, so an agent
+// that was not to run shell commands has no shell tool.
 //
 // Every other source field is dropped, because none maps onto a custom
 // agent's: Claude Code's model names (sonnet, inherit) are not Codex models,
 // and Codex has no tool allowlist (tools, disallowedTools); a custom agent
-// inherits the session's permissions and MCP servers. A source with no closed
-// frontmatter block is all body.
-func codexAgent(stem string, data []byte) []byte {
-	name, description, effort, body := "", "", "", data
+// inherits the session's permissions and MCP servers. ArtifactWarnings
+// reports the dropped tool lists. A source with no closed frontmatter block
+// is all body.
+func parseCodexAgent(stem string, data []byte) codexAgentFields {
+	var a codexAgentFields
+	body := data
 	if lines, rest, ok := splitFrontmatter(data); ok {
 		body = bytes.TrimLeft(rest, "\r\n")
 		for _, e := range frontmatterEntries(lines) {
 			switch e.key {
 			case "name":
-				name = strings.TrimSpace(e.scalar())
+				a.name = strings.TrimSpace(e.scalar())
 			case "description":
-				description = strings.Join(strings.Fields(e.scalar()), " ")
+				a.description = strings.Join(strings.Fields(e.scalar()), " ")
 			case "effort":
-				effort = codexReasoningEffort(strings.TrimSpace(e.scalar()))
+				a.effort = codexReasoningEffort(strings.TrimSpace(e.scalar()))
+			case "tools":
+				if tools := agentToolList(e); len(tools) > 0 {
+					a.hasTools = true
+					a.shellOff = !slices.ContainsFunc(tools, isBashTool)
+				}
+			case "disallowedTools":
+				a.hasDisallowed = len(agentToolList(e)) > 0
 			}
 		}
 	}
-	if name == "" {
-		name = stem
+	if a.name == "" {
+		a.name = stem
 	}
-	if description == "" {
-		description = fmt.Sprintf("Agent %q.", name)
+	if a.description == "" {
+		a.description = fmt.Sprintf("Agent %q.", a.name)
 	}
-	return codexAgentTOML(name, description, string(body), effort)
+	a.instructions = string(body)
+	return a
+}
+
+// agentToolList reads a Claude Code agent's tools or disallowedTools: a
+// comma-separated scalar ("Read, Grep, Bash") or a YAML list. An entry such
+// as "Bash(git status:*)" has a comma only inside its parentheses, which the
+// split respects.
+func agentToolList(e frontmatterEntry) []string {
+	var out []string
+	for _, item := range e.list() {
+		depth, start := 0, 0
+		for i, r := range item {
+			switch {
+			case r == '(':
+				depth++
+			case r == ')':
+				depth--
+			case r == ',' && depth == 0:
+				if t := strings.TrimSpace(item[start:i]); t != "" {
+					out = append(out, t)
+				}
+				start = i + 1
+			}
+		}
+		if t := strings.TrimSpace(item[start:]); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// isBashTool reports whether a tools entry grants Claude Code's Bash tool,
+// whole ("Bash") or for some commands ("Bash(git:*)").
+func isBashTool(tool string) bool {
+	return tool == "Bash" || strings.HasPrefix(tool, "Bash(")
 }
 
 // codexReasoningEffort maps an agent's effort onto Codex's
@@ -91,15 +171,21 @@ func codexReasoningEffort(level string) string {
 }
 
 // codexAgentTOML encodes a custom agent's three required fields as its TOML
-// file, and model_reasoning_effort when effort is set.
-func codexAgentTOML(name, description, instructions, effort string) []byte {
+// file, with model_reasoning_effort when effort is set and
+// features.shell_tool = false when the shell is off. The dotted key sets the
+// features table without a [features] header, so every key stays at the top
+// level before the multi-line instructions.
+func codexAgentTOML(a codexAgentFields) []byte {
 	var b strings.Builder
-	fmt.Fprintf(&b, "name = %s\n", tomlString(name))
-	fmt.Fprintf(&b, "description = %s\n", tomlString(description))
-	if effort != "" {
-		fmt.Fprintf(&b, "model_reasoning_effort = %s\n", tomlString(effort))
+	fmt.Fprintf(&b, "name = %s\n", tomlString(a.name))
+	fmt.Fprintf(&b, "description = %s\n", tomlString(a.description))
+	if a.effort != "" {
+		fmt.Fprintf(&b, "model_reasoning_effort = %s\n", tomlString(a.effort))
 	}
-	fmt.Fprintf(&b, "developer_instructions = %s\n", tomlMultilineString(instructions))
+	if a.shellOff {
+		b.WriteString("features.shell_tool = false\n")
+	}
+	fmt.Fprintf(&b, "developer_instructions = %s\n", tomlMultilineString(a.instructions))
 	return []byte(b.String())
 }
 

@@ -2,6 +2,7 @@ package assembler
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -34,6 +35,16 @@ type ArtifactTransform func(artifactType, name string, data []byte) (string, []b
 type ArtifactTransformer interface {
 	TransformArtifact(artifactType, name string, data []byte) (string, []byte)
 }
+
+// ArtifactWarner is an optional capability an ArtifactTransformer may add: the
+// warnings for what its transform of one artifact drops, such as the tools
+// list of an agent Codex writes as a custom agent. Assembly prints each one.
+type ArtifactWarner interface {
+	ArtifactWarnings(artifactType, name string, data []byte) []string
+}
+
+// warnOut receives assembly's warnings. Tests swap it to read them.
+var warnOut io.Writer = os.Stderr
 
 // Assemble creates a temporary directory with vendor-specific config layout
 // populated from resolved Git content.
@@ -76,9 +87,21 @@ func assembleInto(workDir string, adapter LayoutProvider, content []resolver.Res
 	}
 
 	var transform ArtifactTransform
+	var warnings []string
 	if t, ok := adapter.(ArtifactTransformer); ok {
 		transform = t.TransformArtifact
+		if w, ok := adapter.(ArtifactWarner); ok {
+			transform = func(artifactType, name string, data []byte) (string, []byte) {
+				warnings = append(warnings, w.ArtifactWarnings(artifactType, name, data)...)
+				return t.TransformArtifact(artifactType, name, data)
+			}
+		}
 	}
+	defer func() {
+		for _, w := range warnings {
+			_, _ = fmt.Fprintf(warnOut, "  warning: %s\n", w)
+		}
+	}()
 
 	// Copy content into the right places
 	for _, rc := range content {

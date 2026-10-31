@@ -1,6 +1,10 @@
 package vendor
 
-import "testing"
+import (
+	"slices"
+	"strings"
+	"testing"
+)
 
 func TestCodexDelegateAgentFile(t *testing.T) {
 	c := &Codex{}
@@ -30,7 +34,8 @@ func TestCodexDelegateAgentFile_RefusesPathNames(t *testing.T) {
 
 // A harness's own agent is written as a TOML custom agent: Codex reads no
 // Markdown in .codex/agents/. name, description and the body map onto the
-// three fields; fields with no Codex counterpart are dropped.
+// three fields; fields with no Codex counterpart are dropped. Its tools list
+// leaves out Bash, so the shell tool is turned off.
 func TestCodexTransformArtifact_AgentToTOML(t *testing.T) {
 	c := &Codex{}
 	src := "---\nname: code-reviewer\ndescription: >\n  Reviews \"diffs\"\n  for bugs.\ntools: Read, Grep\nmodel: sonnet\n---\n\nYou review code.\nCheck C:\\tmp.\n"
@@ -40,6 +45,7 @@ func TestCodexTransformArtifact_AgentToTOML(t *testing.T) {
 	}
 	want := "name = \"code-reviewer\"\n" +
 		"description = \"Reviews \\\"diffs\\\" for bugs.\"\n" +
+		"features.shell_tool = false\n" +
 		"developer_instructions = \"\"\"\nYou review code.\nCheck C:\\\\tmp.\n\"\"\"\n"
 	if string(data) != want {
 		t.Errorf("got\n%s\nwant\n%s", data, want)
@@ -99,6 +105,79 @@ func TestCodexTransformArtifact_AgentEffort(t *testing.T) {
 			"developer_instructions = \"\"\"\nBody.\n\"\"\"\n"
 		if string(data) != want {
 			t.Errorf("effort %q: got\n%s\nwant\n%s", tc.effort, data, want)
+		}
+	}
+}
+
+// A tools list that leaves out Bash turns the agent's shell tool off; one
+// that grants Bash, whole or for some commands, leaves it alone, as does an
+// agent with no tools list or only disallowedTools.
+func TestCodexTransformArtifact_ShellTool(t *testing.T) {
+	c := &Codex{}
+	for _, tc := range []struct {
+		name, frontmatter string
+		off               bool
+	}{
+		{"tools without Bash", "tools: Read, Grep", true},
+		{"flow list without Bash", "tools: [Read, Edit]", true},
+		{"block list without Bash", "tools:\n  - Read\n  - Glob", true},
+		{"tools with Bash", "tools: Read, Bash", false},
+		{"Bash for some commands", "tools: Read, Bash(git status:*, git diff:*)", false},
+		{"block list with Bash", "tools:\n  - Read\n  - Bash", false},
+		{"no tools", "model: sonnet", false},
+		{"empty tools", "tools:", false},
+		{"disallowedTools only", "disallowedTools: Bash", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "---\nname: probe\ndescription: d\n" + tc.frontmatter + "\n---\nBody.\n"
+			_, data := c.TransformArtifact("agents", "probe.md", []byte(src))
+			if got := strings.Contains(string(data), "features.shell_tool = false\n"); got != tc.off {
+				t.Errorf("shell_tool off = %v, want %v; got\n%s", got, tc.off, data)
+			}
+		})
+	}
+}
+
+// An agent that declares tools or disallowedTools gets one warning per list,
+// naming the agent, because a Codex custom agent cannot restrict its tools.
+// The tools warning says when the shell is turned off.
+func TestCodexArtifactWarnings(t *testing.T) {
+	c := &Codex{}
+	dropTools := `agent "probe": Codex custom agents cannot restrict tools, so its tools list is dropped`
+	shellOff := "; it leaves out Bash, so the agent's shell tool is turned off (features.shell_tool = false)"
+	dropDisallowed := `agent "probe": Codex custom agents cannot restrict tools, so its disallowedTools list is dropped`
+	for _, tc := range []struct {
+		name, frontmatter string
+		want              []string
+	}{
+		{"tools without Bash", "tools: Read, Grep", []string{dropTools + shellOff}},
+		{"tools with Bash", "tools: [Read, Bash]", []string{dropTools}},
+		{"disallowedTools", "disallowedTools: Write, Edit", []string{dropDisallowed}},
+		{"both", "tools:\n  - Read\n  - Bash\ndisallowedTools:\n  - Write", []string{dropTools, dropDisallowed}},
+		{"neither", "model: sonnet\neffort: high", nil},
+		{"empty lists", "tools:\ndisallowedTools: []", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "---\nname: probe\ndescription: d\n" + tc.frontmatter + "\n---\nBody.\n"
+			got := c.ArtifactWarnings("agents", "file.md", []byte(src))
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("got %q\nwant %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// The warning names the agent by the name Codex will know it by: the file
+// name when the frontmatter has none. Other artifacts never warn.
+func TestCodexArtifactWarnings_NameAndPassthrough(t *testing.T) {
+	c := &Codex{}
+	got := c.ArtifactWarnings("agents", "helper.md", []byte("---\ntools: Read\n---\nHelp.\n"))
+	if len(got) != 1 || !strings.HasPrefix(got[0], `agent "helper": `) {
+		t.Errorf("got %q, want one warning naming helper", got)
+	}
+	for _, tc := range []struct{ typ, name string }{{"rules", "style.md"}, {"skills", "SKILL.md"}, {"agents", "notes.txt"}} {
+		if w := c.ArtifactWarnings(tc.typ, tc.name, []byte("---\ntools: Read\n---\n")); w != nil {
+			t.Errorf("%s/%s: got %q, want no warnings", tc.typ, tc.name, w)
 		}
 	}
 }

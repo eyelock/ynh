@@ -1,6 +1,7 @@
 package assembler
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,9 +37,16 @@ func TestAssemble_CodexWritesHarnessAgentsAsTOML(t *testing.T) {
 		{"picked", resolver.ResolvedContent{BasePath: repo, Paths: []string{"agents/reviewer.md"}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			var warned bytes.Buffer
+			warnOut = &warned
+			defer func() { warnOut = os.Stderr }()
 			staged, err := Assemble(adapter, []resolver.ResolvedContent{tc.content})
 			if err != nil {
 				t.Fatal(err)
+			}
+			wantWarn := "  warning: agent \"reviewer\": Codex custom agents cannot restrict tools, so its tools list is dropped; it leaves out Bash, so the agent's shell tool is turned off (features.shell_tool = false)\n"
+			if warned.String() != wantWarn {
+				t.Errorf("warnings =\n%q\nwant\n%q", warned.String(), wantWarn)
 			}
 			defer Cleanup(staged)
 
@@ -51,7 +59,7 @@ func TestAssemble_CodexWritesHarnessAgentsAsTOML(t *testing.T) {
 			if err != nil {
 				t.Fatalf("agent file: %v", err)
 			}
-			want := "name = \"reviewer\"\ndescription = \"Reviews code.\"\ndeveloper_instructions = \"\"\"\nReview it.\n\"\"\"\n"
+			want := "name = \"reviewer\"\ndescription = \"Reviews code.\"\nfeatures.shell_tool = false\ndeveloper_instructions = \"\"\"\nReview it.\n\"\"\"\n"
 			if string(data) != want {
 				t.Errorf("agent =\n%s\nwant\n%s", data, want)
 			}

@@ -44,7 +44,7 @@ type DelegateMCPCarrier interface {
 // are not the Markdown agent file BuildDelegateAgent writes. Codex reads a
 // project's custom agents as TOML files in .codex/agents/, each with a name,
 // a description and developer_instructions
-// (developers.openai.com/codex/subagents), and ignores a Markdown file there.
+// (learn.chatgpt.com/docs/agent-configuration/subagents), and ignores a Markdown file there.
 type DelegateAgentEncoder interface {
 	// DelegateAgentFile returns the agent file's name within the agents
 	// directory, and its content, for a delegate with the given name,
