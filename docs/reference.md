@@ -126,13 +126,13 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 
 | Command | Structured fields |
 |---------|-------------------|
-| `ynd compose` | Composed harness: `name`, `version`, `description`, `default_vendor`, `artifacts` (with source), `includes`, `delegates_to`, `hooks` (what a run carries: the hooks of included harnesses whose include says `"hooks": true`, each with its `source`, then the root's own; `hooks_not_active` names the included harnesses whose hooks are declined, and `hooks_error` says why included hooks could not be composed), `mcp_servers` (what a run carries: the servers of every harness the includes reach, then the root's own, each with a `source` of `root` or the include chain; `mcp_servers_error` when two includes conflict), `profiles` (object keyed by name; see breaking change note below), `focuses`, `launch_focus` (when set), `sensors` (the root's own and those its direct includes declare, an included one with its `origin`; `sensors_error` when they cannot be merged), `counts` |
+| `ynd compose` | Composed harness: `name`, `version`, `description`, `default_vendor`, `artifacts` (with source), `includes`, `delegates_to` (each with its `mcp_servers`: the servers the delegate carries for its own subagent, not the session's, each with a `source` of `root` for the delegate's own or its include chain; read from disk and the cache only, with `mcp_servers_error` when they cannot be read), `hooks` (what a run carries: the hooks of included harnesses whose include says `"hooks": true`, each with its `source`, then the root's own; `hooks_not_active` names the included harnesses whose hooks are declined, and `hooks_error` says why included hooks could not be composed), `mcp_servers` (what a run carries: the servers of every harness the includes reach, then the root's own, each with a `source` of `root` or the include chain; `mcp_servers_error` when two includes conflict), `profiles` (object keyed by name; see breaking change note below), `focuses`, `launch_focus` (when set), `sensors` (the root's own and those its direct includes declare, an included one with its `origin`; `sensors_error` when they cannot be merged), `counts` |
 | `ynh sensors ls <harness-id\|path>` | Array of sensor summaries: `name`, `category`, `role`, `source_kind`, `format`, `inline_focus` (bool), see [Sensors](sensors.md) |
 | `ynh focus ls <harness>` | Array of focus summaries: `name`, `profile` (when set), `prompt` in full — the text view abbreviates, JSON does not |
 | `ynh profile ls <harness>` | Array of profile summaries: `name` plus counts of `hooks`, `mcp_servers`, `includes`, `env_passthrough` — `ynh info` resolves one in full |
 | `ynh sensors show <harness-id\|path> <name>` | Resolved sensor object with inline-focus expansion |
 | `ynh sensors run <harness-id\|path> <name>` | Sensor run result: `kind`, `exit_code`, `duration_ms`, `output` (raw signal, no `passed` field; pass/fail is loop-driver policy) |
-| `ynh trust` | Array of harness trust states: `harness`, `source`, `sha`, `digest`, `executables`, `state`, `undeclared_env`. `ynh trust show <harness>` returns one object of the same shape. Reports what a harness will execute; it does not block. See [Sensors](sensors.md). `ynh trust show` adds an optional `launch_focus` object (`name`, `profile`, `prompt`) when the harness declares a [launch focus](focus.md#launch-focus), and an optional `workspace` object (`allow_list`, `remote_install`, `entries[]` with `requested`, `resolved`, `refused`, `allow_list_covers`) when the harness requests [workspace folders](workspace.md) |
+| `ynh trust` | Array of harness trust states: `harness`, `source`, `sha`, `digest`, `executables`, `hooks`, `mcp_servers`, `state`, `undeclared_env`. `hooks` are the hooks a run carries, a hook from an included harness (which consented with `"hooks": true`) with its `source`. `mcp_servers` are the servers a run carries: the harness's own, those of its included harnesses, each with its `source` (the include chain), and those its delegates carry, each with its `delegate` (a delegate's servers are not the session's). That meaning is new, and the [`trust-counts-composed-mcp-servers`](cli-structured.md#wire-contract-capability-version-format-json) feature tells a consumer it gets it. `ynh trust show <harness>` returns one object of the same shape. Reports what a harness will execute; it does not block. See [Sensors](sensors.md). `ynh trust show` adds an optional `launch_focus` object (`name`, `profile`, `prompt`) when the harness declares a [launch focus](focus.md#launch-focus), and an optional `workspace` object (`allow_list`, `remote_install`, `entries[]` with `requested`, `resolved`, `refused`, `allow_list_covers`) when the harness requests [workspace folders](workspace.md) |
 | `ynh doctor` | Setup diagnosis: `summary` (`checks`, `errors`, `warnings`) and `checks[]`, each with `name`, `title`, `status` and `findings[]` (`severity`, `subject`, `message`, `remedy`). Exit status is 0 regardless; gate on `summary.errors` |
 | `ynh agent run` | Run result: `exit_code`, `reason`, `converged`, `budgets`/`budget_sources`/`consumed` with `bound_by`, `convergence`, `sensors[]`, `changed_files` — see [Agent](agent.md#run-result) |
 | `ynh baseline <harness>` | What the ratchet forgives: per-sensor `recorded`, `recorded_at`, `forgiven`, and under `--explain` the `findings` themselves — see [Sensors](sensors.md#reading-the-ratchet) |
@@ -190,7 +190,7 @@ Empty case is `"profiles": {}` (empty object), no longer `"profiles": []`. This 
 
 ```json
 {
-  "capabilities": "0.3.0",
+  "capabilities": "0.x.y",
   "ynh_version": "0.x.y",
   "harnesses": [ /* ynh ls — array */ ]
 }
@@ -255,7 +255,7 @@ The `is_pinned` rule is the same on harnesses and includes:
 
 ```json
 {
-  "capabilities": "0.3.0",
+  "capabilities": "0.x.y",
   "ynh_version": "0.x.y",
   "name": "demo",
   "path": "/absolute/path/to/fork",

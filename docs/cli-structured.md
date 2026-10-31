@@ -95,8 +95,8 @@ Some `--format json` commands wrap their result in an envelope:
 
 ```json
 {
-  "capabilities": "0.6.0",
-  "ynh_version": "0.5.0",
+  "capabilities": "0.x.y",
+  "ynh_version": "0.x.y",
   "<payload-key>": <payload>
 }
 ```
@@ -122,8 +122,8 @@ Both `ynh version --format json` and `ynd version --format json` emit:
 
 ```json
 {
-  "version": "0.5.0",
-  "capabilities": "0.6.0",
+  "version": "0.x.y",
+  "capabilities": "0.x.y",
   "features": ["agent-run-fetches-includes", "agent-run-harness-path", "trust-counts-composed-mcp-servers", "workspace-folders"]
 }
 ```
