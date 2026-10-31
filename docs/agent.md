@@ -169,7 +169,7 @@ backend:
 |---------|-------------------|
 | `claude` | Carried, and passed to Claude with `--agents` |
 | `cursor` | Not carried. The delegate's agent file is written without them, and ynh prints one `warning:` line per delegate on stderr |
-| `codex` | Not carried. ynh writes the delegate as a TOML custom agent, `.codex/agents/<name>.toml`, without them, since a Codex custom agent inherits the session's MCP servers and cannot set its own, and prints one `warning:` line per delegate on stderr. That a live `codex` picks up the agent has not been checked; see [MCP Servers of Delegates](mcp.md#mcp-servers-of-delegates) |
+| `codex` | Not carried. ynh writes the delegate as a TOML custom agent, `.codex/agents/<name>.toml`, without them, since a Codex custom agent inherits the session's MCP servers and cannot set its own, and prints one `warning:` line per delegate on stderr. CONFIRMED live on codex-cli 0.166.0 that Codex picks up the agent, provided ynh's run directory, where Codex runs, is trusted; see [MCP Servers of Delegates](mcp.md#mcp-servers-of-delegates) |
 
 On `claude`, a delegate server's `${VAR}` references are resolved from the
 delegate's own `env_passthrough`, against the environment `ynh agent run` was
