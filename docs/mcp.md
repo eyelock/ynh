@@ -255,7 +255,7 @@ MCP servers from included harnesses:
   github (from eyelock/assistants//ynh/github)
 ```
 
-`ynh info` lists every server a run with no profile carries in the same form, marking the harness's own. With `--profile` or `--focus` it lists what a run with that selection carries instead, so a profile's `null` removal (see the rules below) shows only with `--profile`:
+`ynh info` lists every server a run with no profile carries in the same form, marking the harness's own. With `--profile` or `--focus` it lists what a run with that selection carries instead, so a profile's `null` removal (see the rules below) shows only with a selection that applies that profile: `--profile`, or a `--focus` whose focus names it (plain or `ns:name`):
 
 ```
 MCP Servers:
