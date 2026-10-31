@@ -365,7 +365,7 @@ The Claude manifest names its file:
 }
 ```
 
-A merged export (`--merged`, and every `ynd marketplace build` package) puts all three files in one plugin root, and each manifest still names only its own, so no vendor reads another's format. See [Hooks: Config File Locations](../hooks.md#config-file-locations) for why there is no shared `hooks/hooks.json`.
+A merged export (`--merged`, and every `ynd marketplace build` package) puts all three files in one plugin root, and each manifest still names only its own, so no vendor reads another's format. See [Hooks: Config File Locations](../hooks.md#config-file-locations) for why there is no shared `hooks/hooks.json`. OpenCode has no declarative hook file, so its hooks travel as a generated plugin, `.opencode/plugins/ynh-hooks.ts`; see [OpenCode hooks](../hooks.md#opencode-hooks-are-a-generated-plugin).
 
 ## Write a blocking hook example
 

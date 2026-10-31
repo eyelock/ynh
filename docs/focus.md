@@ -121,6 +121,7 @@ instead of starting one. What reaches the resumed session:
 | Codex | One-shot only (`codex exec resume`); refused with `--interactive` |
 | Copilot | Refused: no documented form |
 | Cursor | Refused: no documented form |
+| OpenCode | Supported, interactive (`--prompt`) and one-shot (`opencode run -s <id> -- <prompt>`); confirmed by hand on OpenCode 2.2.3 |
 
 Where a vendor refuses, ynh stops before launching with an error naming it
 (for example `codex cannot resume a session interactively with a prompt; drop

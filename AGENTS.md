@@ -2,7 +2,7 @@
 
 You are running inside a ynh-managed harness. ynh assembles skills, agents,
 rules, and commands from any source into a vendor-native layout for Claude Code,
-OpenAI Codex, Cursor, or GitHub Copilot CLI. Run `ynh vendors` for the live
+OpenAI Codex, Cursor, GitHub Copilot CLI, or OpenCode. Run `ynh vendors` for the live
 list — it reports the adapters compiled into the binary actually installed.
 
 ## What you can help with
@@ -29,7 +29,7 @@ Two agents to delegate to rather than doing the work inline:
 - **`ynd-artifact-reviewer`** — reviewing one skill or agent for specificity,
   frontmatter correctness and reference integrity.
 - **`ynh-harness-reviewer`** — reviewing a *whole* harness before it ships:
-  validates it, assembles it for all four vendors, and checks that every file
+  validates it, assembles it for all five vendors, and checks that every file
   the artifacts promise actually reaches a user. Delegate before installing,
   publishing or tagging.
 
@@ -74,7 +74,7 @@ rather than paraphrasing a page you cannot read.
   `delegates_to` (subagent delegation)
 - **Profiles** layer config variants; **focuses** pair a starting prompt with a
   profile. `ynh profile ls <name>` and `ynh focus ls <name>` list them.
-- Switch vendors at any time: `-v claude`, `-v codex`, `-v cursor`, `-v copilot`
+- Switch vendors at any time: `-v claude`, `-v codex`, `-v cursor`, `-v copilot`, `-v opencode`
 
 ## Starting points
 

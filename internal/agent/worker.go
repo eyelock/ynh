@@ -33,8 +33,9 @@ func lookWorkerCLI(backend string) (string, error) {
 }
 
 const (
-	vendorClaude = "claude"
-	vendorCodex  = "codex"
+	vendorClaude   = "claude"
+	vendorCodex    = "codex"
+	vendorOpenCode = "opencode"
 )
 
 // workspaceArgs renders granted workspace folders as the vendor's own flag.
@@ -66,7 +67,7 @@ type WorkerSession interface {
 	// Returns io.EOF when the worker has exited cleanly.
 	Next() (Turn, error)
 	// ResumeToken returns the backend-native handle (claude session id,
-	// cursor chatId, codex session id) that a later relaunch supplies via
+	// cursor chatId, codex session id, opencode session id) that a later relaunch supplies via
 	// StartOptions.ResumeToken to reconstruct this conversation. Returns an
 	// empty string before the token is known (e.g. a backend that only learns
 	// its session id after the first turn) or for backends that cannot resume.
@@ -103,7 +104,7 @@ type StartOptions struct {
 	// ResumeToken, when non-empty, starts the worker in resume mode against a
 	// prior conversation rather than a fresh one. The value is a backend-native
 	// handle previously obtained from WorkerSession.ResumeToken (claude session
-	// id, cursor chatId, codex session id).
+	// id, cursor chatId, codex session id, opencode session id).
 	ResumeToken string
 	// UsageBase is what the resumed conversation had already consumed, as
 	// the checkpoint recorded it, or nil when that is unknown or nothing is
@@ -173,7 +174,7 @@ type Usage struct {
 // the loop ends the run as a worker error on that turn rather than feeding the
 // message back and later calling the repetition stuck.
 type WorkerError struct {
-	// Backend names the worker backend ("claude", "codex", "cursor").
+	// Backend names the worker backend ("claude", "codex", "cursor", "opencode").
 	Backend string
 	// Message is the vendor's own words for the failure.
 	Message string

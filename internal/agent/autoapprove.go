@@ -44,7 +44,7 @@ func validateAutoApprove(level, backend string) error {
 	switch backend {
 	case "claude":
 		return nil
-	case "codex", "cursor":
+	case "codex", "cursor", "opencode":
 		if level == AutoApproveEdits {
 			return fmt.Errorf(
 				"%s cannot auto-approve edits only: it has no mode that approves file edits while still withholding commands; "+
@@ -52,7 +52,7 @@ func validateAutoApprove(level, backend string) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("--auto-approve is not supported by the %s backend (supported: claude, codex, cursor)", backend)
+		return fmt.Errorf("--auto-approve is not supported by the %s backend (supported: claude, codex, cursor, opencode)", backend)
 	}
 }
 
@@ -93,6 +93,8 @@ func projectPermissionSetting(dir, backend string) (string, error) {
 	case "codex":
 		return codexProjectPolicy(filepath.Join(dir, (&vendor.Codex{}).ConfigDir(), "config.toml"))
 	default:
+		// opencode: --auto approves everything not explicitly denied, so a
+		// project's permission rules still apply under it, as with cursor.
 		// cursor's project file (.cursor/cli.json) carries only allow and
 		// deny lists, which cursor still applies under --force ("unless
 		// explicitly denied"). Its approval mode is a global setting only.

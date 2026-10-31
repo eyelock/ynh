@@ -76,6 +76,7 @@ Each granted folder becomes the vendor's own flag. `ynh run` and the worker that
 | GitHub Copilot CLI | `--add-dir <dir>` | The [command reference](https://docs.github.com/en/copilot/reference/cli-command-reference) describes `/add-dir` as allowing file access to a directory and loading its `.github/skills` and `.github/agents` as trusted configurations. **A granted folder's agent configuration is loaded as trusted**, a wider grant than file access. Treat a Copilot workspace root accordingly. |
 | OpenAI Codex | `--add-dir <dir>` | [CLI reference](https://developers.openai.com/codex/cli/reference): "Grant additional directories write access alongside the main workspace. Repeat for multiple paths." Listed as a global flag; whether `codex exec` and `codex exec resume` accept it is unverified. |
 | Cursor | none | The [CLI parameters](https://cursor.com/docs/cli/reference/parameters) have no flag that adds a directory (`--workspace` names the single workspace). ynh warns, naming the vendor and the folder, and grants nothing. |
+| OpenCode | none | `opencode --help` (2.2.3) lists no flag that adds a directory; its positional `<directory>` names the single project. ynh warns, naming the vendor and the folder, and grants nothing. |
 
 A vendor with no equivalent is never silently dropped: `scripts/workspace-parity.sh` (run by `make check-vendor-parity`) requires every vendor adapter to declare its flag or the reason it has none.
 

@@ -29,7 +29,7 @@ ynh defines six canonical hook events. Each vendor translates these to its nativ
 
 ### on_session_start output becomes model context
 
-On every vendor, what an `on_session_start` hook prints reaches the model. **Write plain text to stdout**; ynh does the rest. A hook that prints a line of orientation, today's tasks or a wake block works the same on Claude Code, Codex, Copilot and Cursor.
+On every vendor but OpenCode, what an `on_session_start` hook prints reaches the model. **Write plain text to stdout**; ynh does the rest. A hook that prints a line of orientation, today's tasks or a wake block works the same on Claude Code, Codex, Copilot and Cursor.
 
 The vendors do not agree on how the output is read. Verified on 2026-10-30 with a hook printing a unique token and a one-shot prompt asking the model to repeat any token in its context:
 
@@ -39,6 +39,7 @@ The vendors do not agree on how the output is read. Verified on 2026-10-30 with 
 | Codex | Per its docs ("Plain text on stdout is added as extra developer context"); **not verified live** | also `hookSpecificOutput.additionalContext` | writes the command as declared |
 | Copilot CLI 1.0.105 | No | `{"additionalContext": "..."}` | wraps the command |
 | Cursor (cursor-agent 2026.10.01) | No | `{"additional_context": "..."}` | wraps the command |
+| OpenCode 2 | No | none: the hook runs from the event stream (`session.created`), which cannot add context, and the generated plugin discards its stdout | declares `unsupported`, so assembly warns |
 
 On Copilot and Cursor ynh writes the hook as `sh <root>/hooks/ynh-session-context.sh <field> '<your command>'`. The wrapper is a small generated POSIX `sh` and `awk` script shipped inside the session layout and inside every exported package (`hooks/ynh-session-context.sh`), so it works on a machine where ynh is not installed, with no python or jq. It:
 
@@ -69,6 +70,7 @@ Per vendor:
 | Codex | `SessionEnd` | **Main thread only**, not subagents. 1 s default, 3 s maximum. Always runs synchronously, even with `async`. Its matcher filters `reason`, which is currently always `other` |
 | Cursor | `sessionEnd` | Tied to the **IDE session**: cloud agents do not run it. CONFIRMED live to fire from the **CLI** in print mode (cursor-agent 2026.10.01-e373342, 2026-10-30); the IDE is untested. Fire-and-forget; the response is logged and not used |
 | Copilot | `SessionEnd` | `reason` is one of complete, error, abort, timeout, user_exit; CONFIRMED live to fire at the end of a `-p` run with `reason: "complete"` (Copilot CLI 1.0.105, 2026-10-30) |
+| OpenCode | none | Not supported: OpenCode 2 has no session-end hook, and its event stream has no session-end event (a session persists so it can be resumed; `session.deleted` and `session.archived` are not the end of a run). The hook is not written, and assembly warns |
 
 ## Hooks Cursor's CLI does not run
 
@@ -99,7 +101,7 @@ ynh never drops a hook silently. If a vendor has no equivalent for a canonical e
   warning: hook event on_session_end has no equivalent on cursor, so it is not written
 ```
 
-`ynd validate` and `ynd lint` report the same thing as a **warning**, not an error, for the vendors the harness targets (its `default_vendor`, or every vendor when it sets none). Today all six events map on all four vendors, so this fires only for a matcher the vendor cannot honour (see [Matchers](#matchers)). `make check-vendor-parity` requires every canonical event to be either mapped or declared unsupported, with a reason, for every vendor, so a new event cannot be forgotten on one of them.
+`ynd validate` and `ynd lint` report the same thing as a **warning**, not an error, for the vendors the harness targets (its `default_vendor`, or every vendor when it sets none). Today all six events map on Claude Code, Codex, Cursor and Copilot; OpenCode maps five and declares `on_session_end` unsupported, so this fires for an `on_session_end` hook on OpenCode and for a matcher the vendor cannot honour (see [Matchers](#matchers)). `make check-vendor-parity` requires every canonical event to be either mapped or declared unsupported, with a reason, for every vendor, so a new event cannot be forgotten on one of them.
 
 ## Manifest Format
 
@@ -141,16 +143,17 @@ Each hook entry has:
 
 ### Timeout
 
-`timeout` is written to the vendor's own field when it has one. Left out, the vendor's default applies (Claude 600 s for a command hook and a shared 1.5 s for `SessionEnd`, Codex 600 s and 1 s for `SessionEnd`, Copilot 30 s, Cursor platform-dependent).
+`timeout` is written to the vendor's own field when it has one. Left out, the vendor's default applies (Claude 600 s for a command hook and a shared 1.5 s for `SessionEnd`, Codex 600 s and 1 s for `SessionEnd`, Copilot 30 s, Cursor platform-dependent, OpenCode 60 s).
 
 | Vendor | Field written | Cap ynd applies | Source |
 |--------|---------------|-----------------|--------|
 | Claude Code | `timeout` (seconds) | `on_session_end`: 60 | [code.claude.com/docs/en/hooks](https://code.claude.com/docs/en/hooks): "Seconds before canceling". It bounds the one hook but, for a plugin's `SessionEnd` hook, does not raise the shared budget; see [Claude SessionEnd budget](#claude-sessionend-budget) |
 | Codex | `timeout` (seconds) | `on_session_end`: 3 | [learn.chatgpt.com/docs/hooks](https://learn.chatgpt.com/docs/hooks): "The `timeout` field is in seconds"; `SessionEnd` defaults to 1 and supports up to 3 |
 | Cursor | `timeout` (seconds) | none documented | [cursor.com/docs/hooks](https://cursor.com/docs/hooks), "Command format": per-script `timeout` in seconds |
+| OpenCode | `timeout` (seconds), in the generated plugin's hook table | none | OpenCode has no hook config; the generated plugin runs each command with that many seconds, 60 when none is set, and a hook that times out lets the call proceed. The plugin reports it on stderr, which `opencode run` shows only with both `--standalone` and `--print-logs`; ynh already passes `--standalone`, so add `--print-logs` (see [OpenCode hooks are a generated plugin](#opencode-hooks-are-a-generated-plugin)) |
 | Copilot | `timeoutSec` (seconds) | none documented | [docs.github.com: hooks configuration](https://docs.github.com/en/copilot/reference/hooks-configuration): "Timeout in seconds. Default: 30". CONFIRMED live (Copilot CLI 1.0.105, 2026-10-30): of two 3 s `SessionStart` hooks, `timeoutSec: 1` was killed before finishing and `timeoutSec: 10` completed |
 
-The 3600-second schema maximum is ynh's own bound; no vendor documents a general one. Where a vendor caps an event below the request, ynd writes the cap and prints a warning naming the event, the vendor, the requested value and the cap, rather than refuse: the hook still runs, with the longest budget the vendor allows, and the other vendors get the value as asked. If a vendor has **no** timeout field, ynd writes none and warns that the vendor's default applies instead; `ynd validate` and `ynd lint` report the same warning for the vendors the harness targets. All four vendors have a field today, and `make check-vendor-parity` requires every vendor to declare whether it does.
+The 3600-second schema maximum is ynh's own bound; no vendor documents a general one. Where a vendor caps an event below the request, ynd writes the cap and prints a warning naming the event, the vendor, the requested value and the cap, rather than refuse: the hook still runs, with the longest budget the vendor allows, and the other vendors get the value as asked. If a vendor has **no** timeout field, ynd writes none and warns that the vendor's default applies instead; `ynd validate` and `ynd lint` report the same warning for the vendors the harness targets. All five vendors have a field today, and `make check-vendor-parity` requires every vendor to declare whether it does.
 
 ```
   warning: hook timeout 120s on on_session_end exceeds the 60s claude allows for it, so 60s is written
@@ -167,7 +170,7 @@ Claude Code ignores the `timeout` of a plugin-provided `SessionEnd` hook when it
 
 ### Matchers
 
-A matcher is written exactly as declared. Claude Code and Codex take it on every event; the other two scope it more narrowly:
+A matcher is written exactly as declared. Claude Code and Codex take it on every event; the others scope it more narrowly:
 
 | Vendor | Where the matcher is written | Matched against |
 |--------|------------------------------|-----------------|
@@ -175,6 +178,7 @@ A matcher is written exactly as declared. Claude Code and Codex take it on every
 | Codex | every event (ignored by `UserPromptSubmit` and `Stop`) | tool name, session source, end reason |
 | Cursor | `preToolUse` and `postToolUse` only | Cursor's tool type as a regex: `Shell`, `Read`, `Write`, `Grep`, `Delete`, `Task`, `MCP:<tool>` |
 | Copilot | `PreToolUse` and `PostToolUse` only | the tool name; `PreToolUse` takes Claude-style names (`Bash`, `Edit\|Write`) |
+| OpenCode | `before_tool` and `after_tool` only (ynh warns when a matcher is set on another event) | an anchored regex tested against OpenCode's tool id and the Claude names that map to it (`Bash` matches `shell`); see [OpenCode hooks are a generated plugin](#opencode-hooks-are-a-generated-plugin) |
 
 On a Cursor event with no documented matcher the matcher is left out and a warning says the hook runs unfiltered. On Cursor `preToolUse`, a Claude tool name such as `Bash` will not match (Cursor calls it `Shell`); ynd writes the matcher as-is and warns when it sees `Bash`, `Edit` or `MultiEdit`.
 
@@ -184,20 +188,22 @@ Each vendor uses different event names and config file formats. GitHub Copilot C
 
 ### Event Name Mapping
 
-| Canonical | Claude Code | Cursor | Codex | Copilot |
-|-----------|-------------|--------|-------|---------|
-| `before_tool` | `PreToolUse` | `preToolUse` | `PreToolUse` | `PreToolUse` |
-| `after_tool` | `PostToolUse` | `postToolUse` | `PostToolUse` | `PostToolUse` |
-| `before_prompt` | `UserPromptSubmit` | `beforeSubmitPrompt` | `UserPromptSubmit` | `UserPromptSubmit` |
-| `on_stop` | `Stop` | `stop` | `Stop` | `Stop` |
-| `on_session_start` | `SessionStart` | `sessionStart` | `SessionStart` | `SessionStart` |
-| `on_session_end` | `SessionEnd` | `sessionEnd` | `SessionEnd` | `SessionEnd` |
+| Canonical | Claude Code | Cursor | Codex | Copilot | OpenCode |
+|-----------|-------------|--------|-------|---------|----------|
+| `before_tool` | `PreToolUse` | `preToolUse` | `PreToolUse` | `PreToolUse` | `tool` hook `execute.before` |
+| `after_tool` | `PostToolUse` | `postToolUse` | `PostToolUse` | `PostToolUse` | `tool` hook `execute.after` |
+| `before_prompt` | `UserPromptSubmit` | `beforeSubmitPrompt` | `UserPromptSubmit` | `UserPromptSubmit` | `session` hook `prompt` |
+| `on_stop` | `Stop` | `stop` | `Stop` | `Stop` | event `session.execution.succeeded` / `session.execution.failed` |
+| `on_session_start` | `SessionStart` | `sessionStart` | `SessionStart` | `SessionStart` | event `session.created` |
+| `on_session_end` | `SessionEnd` | `sessionEnd` | `SessionEnd` | `SessionEnd` | *none*: no session-end hook or event |
 
 Sources: [Claude Code](https://code.claude.com/docs/en/hooks), [Codex](https://learn.chatgpt.com/docs/hooks) (12 events; `developers.openai.com/codex/hooks` redirects there), [Cursor](https://cursor.com/docs/hooks), [Copilot](https://docs.github.com/en/copilot/reference/hooks-configuration).
 
 Cursor's `before_tool` and `after_tool` used to map to `beforeShellExecution` and `afterFileEdit`, which cover shell commands and file edits only. They now map to `preToolUse` and `postToolUse`, which fire for any tool (Shell, Read, Write, Grep, Delete, Task, MCP), so the two events mean the same on Cursor as on Claude Code and Codex. A harness whose Cursor hooks relied on the narrower scope will now see them run on more tools; scope them with a `matcher` (`Shell`, `Write`).
 
 Copilot accepts the same events in camelCase (`preToolUse`, `agentStop`, `userPromptSubmitted`, ...) with camelCase payload fields, or in PascalCase with the VS Code compatible, Claude-shaped snake_case payload. ynd writes **PascalCase**, so a hook script reads the same payload fields as on Claude Code and a canonical matcher keeps its Claude tool names.
+
+OpenCode's entries are hooks and events of a generated plugin, not config keys; see [OpenCode hooks are a generated plugin](#opencode-hooks-are-a-generated-plugin). OpenCode has nothing that fires when a session ends, so an `on_session_end` hook is not written for it and ynh warns.
 
 ### Config File Locations
 
@@ -207,6 +213,7 @@ Copilot accepts the same events in camelCase (`preToolUse`, `agentStop`, `userPr
 | Cursor | Flat: event > hook array (with `"version": 1` required) |
 | Codex | Three-level nesting: event > matcher group > hook array (same structure as Claude) |
 | Copilot | Flat: event > array of `{"type": "command", "command": ..., "cwd": ".", "matcher": ...}` entries, with `"version": 1` |
+| OpenCode | No config format: a generated TypeScript plugin that runs each hook command |
 
 Each vendor reads hooks from a different file depending on how the harness reaches it: a session in a project directory, or an installed plugin. ynh writes each file only where that vendor reads it:
 
@@ -216,6 +223,7 @@ Each vendor reads hooks from a different file depending on how the harness reach
 | Cursor | `.cursor/hooks.json`, the only project-level path Cursor reads ([cursor.com/docs/hooks](https://cursor.com/docs/hooks)) | `hooks/cursor.json`, named by `"hooks"` in `.cursor-plugin/plugin.json` |
 | Codex | `.codex/hooks.json`, read from a trusted project's `.codex/` layer ([developers.openai.com/codex/hooks](https://developers.openai.com/codex/hooks)) | `hooks/codex.json`, named by `"hooks"` in `.codex-plugin/plugin.json` |
 | Copilot | `.copilot/hooks/hooks.json`: the `hooks/hooks.json` of the `.copilot/` plugin directory `ynh run` passes as `--plugin-dir`. CONFIRMED, all six events | `hooks.json` at the plugin root for a Copilot-only export (CONFIRMED). In a merged package with Claude, none: Copilot reads `hooks/claude.json` |
+| OpenCode | `.opencode/plugins/ynh-hooks.ts`, auto-discovered from the `OPENCODE_CONFIG_DIR` bundle `ynh run` launches with | none: OpenCode has no plugin manifest, so an export carries the same generated file but nothing loads it as a plugin |
 
 The document is the same in a vendor's session file and its plugin file except, on Cursor, Codex and Copilot, for commands that start with `./`, which reach the harness's script from a different root in each (see [Hook script paths](#hook-script-paths)). A plugin never reads a session path, so an export does not carry `.claude/hooks/`, `.cursor/hooks.json`, `.codex/hooks.json` or `.copilot/hooks/`, and a session assembly does not carry `hooks/<vendor>.json` or a root `hooks.json`.
 
@@ -243,6 +251,33 @@ Copilot has no manifest of its own: it reads `.claude-plugin/plugin.json`, the f
 | Merged package without Claude | root `hooks.json` | as for a Copilot-only export |
 | Agent Plugins export | `com.github.copilot/hooks/hooks.json` | the namespace path |
 
+### OpenCode hooks are a generated plugin
+
+OpenCode 2 has no declarative hook config, so ynh generates `.opencode/plugins/ynh-hooks.ts` in the run directory and OpenCode discovers it. The plugin runs each hook command with Claude-shaped JSON on stdin; edits to it are overwritten on the next run. The mapping:
+
+| ynh event | Behaviour on OpenCode |
+|-----------|-----------------------|
+| `before_tool` | Exit code 2 throws, which blocks the call; the hook's stderr is the tool error the model sees. The tool does not run |
+| `after_tool` | Runs after the call and cannot reject the result. The payload carries Claude's `file_path`, `old_string` and `new_string` beside OpenCode's own input keys |
+| `before_prompt` | Exit code 2 does block, before the model is called, but OpenCode surfaces only an opaque `UnexpectedStatus: 500`, not the hook's message. Prefer logging in a prompt hook over blocking |
+| `on_session_start` | Comes from the event stream (`session.created`). Cannot block; a matcher is ignored; its output does not reach the model (see [on_session_start output becomes model context](#on-session-start-output-becomes-model-context)) |
+| `on_stop` | Comes from the event stream (`session.execution.succeeded` / `.failed`), once per turn. Cannot block; a matcher is ignored |
+| `on_session_end` | Not supported: nothing in OpenCode 2 fires when a session ends. Not written; assembly warns |
+
+Matchers on `before_tool` and `after_tool` are written with Claude's tool names and mapped to OpenCode's ids, so `Bash` fires on OpenCode's `shell`, `Edit` on `edit`, and a native id such as `shell` works too. A matcher is an anchored regex tested against the OpenCode id and every Claude name that maps to it. The plugin tests it as a JavaScript regex, so ynh refuses at generate time any matcher JavaScript would reject or read differently from the other vendors' RE2: inline flags and named groups such as `(?i)` and `(?P<name>...)` (only `(?:...)` is allowed), POSIX classes such as `[[:alpha:]]`, escapes such as `\A`, `\z`, `\Q...\E`, `\pL` and `\x{41}` (`\d`, `\s`, `\w`, `\b`, `\x41` and escaped punctuation are fine), and a `]` first in a class (write `\]`).
+
+A hook that cannot run (it times out, is killed or fails to start) lets the call proceed, as does one that exits with anything but 0 or 2, and a matcher JavaScript cannot compile makes its hook never run. The plugin reports each of these on stderr as a `[ynh hook]` line naming the command, but OpenCode does not pass a plugin's stderr through by default: `opencode run` shows it only with **both** `--standalone` and `--print-logs` (CONFIRMED live for a timeout, OpenCode 2.2.3, 2026-10-30: `[ynh hook] ...: did not run to completion (spawnSync sh ETIMEDOUT)` appeared with both flags, and with neither, only `--standalone` or only `--print-logs` nothing was shown although the hook ran and was killed). OpenCode's own `--help` gives the reason: `--print-logs` prints logs to stderr, but "server logs require --standalone".
+
+ynh launches every OpenCode session with `--standalone` already, so through ynh the one flag to add is `--print-logs`, passed through to OpenCode like any other vendor flag:
+
+```bash
+ynh run <harness> --print-logs -- "<prompt>"
+```
+
+(or `<launcher> --print-logs -- "<prompt>"`). It takes no value, so it needs no `=` form. CONFIRMED live, OpenCode 2.2.3, 2026-10-30: with a prompt, which ynh runs as `opencode run --standalone`, the `[ynh hook]` timeout report appeared with `--print-logs` and not without it, though the hook ran and was killed both times. Only that one-shot `opencode run` was checked; the interactive TUI that `ynh run <harness>` opens without a prompt was not, so whether it shows the report there is unconfirmed.
+
+`on_session_start` and `on_stop` ride OpenCode's event stream rather than a documented hook, so they are the most likely to change in a later OpenCode release. Each MCP tool call fires the tool hooks under OpenCode's id `<server>_<tool>`, and a matcher written as on Claude Code, `mcp__<server>__<tool>`, matches it: exit code 2 blocks the call before the server sees it. What else fires depends on whether the agent may use OpenCode's `execute` tool. By default it may, and OpenCode's Code Mode is on: the model writes code in one `execute` tool that calls the server's tools, and the tool hooks fire for that `execute` call as well as for each MCP tool it calls. A block then also stops the rest of the `execute` call's code, so other tools it would have called in the same call do not run. A hook with no matcher runs for each MCP tool but not for the `execute` call, so it does not run twice for one MCP call; a matcher that names `execute` does run for it. An agent with a Claude `tools:` list may not use `execute` (ynh denies every tool the list does not name), so Code Mode is off for it: its granted MCP tools are ordinary tools, there is no `execute` call to fire hooks or to stop, and a block stops only the MCP call itself. Blocking with an `mcp__` matcher was confirmed live in both cases. The payload's `tool_name` for an MCP tool is OpenCode's id (`echo_ynh_ping`), not Claude's `mcp__echo__ynh_ping`, so a hook script that reads `tool_name` must allow for both.
+
 ### Hook script paths
 
 A command such as `./scripts/guard.sh` names a script relative to the harness that declares it: `scripts/guard.sh` in the harness's own tree. Wherever the hooks end up, in a session's run directory or an installed plugin, the harness tree is not there, so ynh copies the script alongside the hooks and makes the command reach the copy. It does this for a command whose first characters are `./`, and only those; an absolute path (`/usr/local/bin/lint.sh`), a command already anchored to a variable (`$CLAUDE_PROJECT_DIR/x.sh`) and a PATH-style command (`make check`) are written exactly as declared.
@@ -253,6 +288,7 @@ A command such as `./scripts/guard.sh` names a script relative to the harness th
 | Cursor | `./scripts/guard.sh`, unchanged, script copied to `scripts/guard.sh` in the run directory | `"${CURSOR_PLUGIN_ROOT}"/scripts/guard.sh`, which Cursor expands in a plugin hook command ([cursor.com/docs/reference/plugins](https://cursor.com/docs/reference/plugins)) |
 | Codex | `./scripts/guard.sh`, unchanged, script copied to `scripts/guard.sh` in the run directory | `"${PLUGIN_ROOT}"/scripts/guard.sh`; Codex exports `PLUGIN_ROOT` to plugin hook commands ([developers.openai.com/codex/plugins/build](https://developers.openai.com/codex/plugins/build)) |
 | Copilot | `"${PLUGIN_ROOT}"/scripts/guard.sh`, script copied to `.copilot/scripts/guard.sh`: the `--plugin-dir` plugin root (CONFIRMED to expand) | `"${PLUGIN_ROOT}"/scripts/guard.sh`; in a merged package with Claude it reads `hooks/claude.json`, with Claude's `${CLAUDE_PLUGIN_ROOT}`, which Copilot also sets |
+| OpenCode | `./scripts/guard.sh`, script copied to `.opencode/scripts/guard.sh`; the generated plugin anchors the command to its own location (`YNH_HOOK_ROOT`), not the working directory | none: no OpenCode plugin export |
 
 The variable is quoted so an install path with spaces stays one word, as Claude Code's reference recommends.
 
@@ -540,7 +576,7 @@ A `./` command from an included harness names a script inside **that harness's**
 When writing hook scripts for use across vendors:
 
 1. **Output correct JSON for the event type** — Claude expects `{"type": "command"}` wrapper; Cursor and Codex do not. Your *script output* (blocking messages) should be plain text or simple JSON that any vendor can display.
-2. **Use exit code 2 for blocking**: Claude Code, Codex and Cursor treat exit code 2 as "block this action" on the events that can block. Copilot CLI does so only for `preToolUse` and `permissionRequest`; on its other events exit 2 is a warning, and a hook blocks through its JSON output instead. `on_session_end` cannot block on any vendor.
+2. **Use exit code 2 for blocking**: Claude Code, Codex, Cursor and OpenCode (on `before_tool` and `before_prompt`) treat exit code 2 as "block this action" on the events that can block. Copilot CLI does so only for `preToolUse` and `permissionRequest`; on its other events exit 2 is a warning, and a hook blocks through its JSON output instead. `on_session_end` cannot block on any vendor.
 3. **Include remediation instructions** — tell the agent how to fix the problem, not just that there is one.
 4. **Keep scripts idempotent**: hooks may fire multiple times per session: `on_stop` runs at the end of every turn, `on_session_start` on start and on resume (and, on Claude Code, on `/clear` and compaction), and `on_session_end` may run on `/clear` as well as at the end. Use `on_session_end` for once-per-session work, and expect it might not run.
 5. **Make command paths cwd-independent**: hooks run in the agent's current working directory, not the project root, and that cwd changes as the agent navigates. A relative command (`./tools/hooks/foo.sh`) breaks after any `cd`. Anchor to the vendor's project-root variable (`$CLAUDE_PROJECT_DIR` on Claude Code) or use an absolute path. For a session or a plugin export, ynh anchors a `./` script for you and ships the script alongside the hooks; see [Hook script paths](#hook-script-paths).

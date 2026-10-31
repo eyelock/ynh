@@ -17,6 +17,7 @@ func TestWorkspaceArgs(t *testing.T) {
 		{"copilot", []string{"--add-dir", "/a/one", "--add-dir", "/a/two"}, ""},
 		{"codex", []string{"--add-dir", "/a/one", "--add-dir", "/a/two"}, ""},
 		{"cursor", nil, "no flag"},
+		{"opencode", nil, "no flag"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.vendor, func(t *testing.T) {

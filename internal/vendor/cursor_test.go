@@ -12,7 +12,7 @@ import (
 
 func TestCursorTransformArtifact_RulesRenamedToMdc(t *testing.T) {
 	c := &Cursor{}
-	newName, newData := c.TransformArtifact("rules", "artifact-authoring.md", []byte("be specific"))
+	newName, newData, _ := c.TransformArtifact("rules", "artifact-authoring.md", []byte("be specific"))
 
 	if newName != "artifact-authoring.mdc" {
 		t.Errorf("newName = %q, want artifact-authoring.mdc", newName)
@@ -24,7 +24,7 @@ func TestCursorTransformArtifact_RulesRenamedToMdc(t *testing.T) {
 
 func TestCursorTransformArtifact_FrontmatterShape(t *testing.T) {
 	c := &Cursor{}
-	_, newData := c.TransformArtifact("rules", "artifact-authoring.md", []byte("body text"))
+	_, newData, _ := c.TransformArtifact("rules", "artifact-authoring.md", []byte("body text"))
 
 	want := "---\ndescription: Artifact Authoring\nalwaysApply: true\n---\n\nbody text"
 	if string(newData) != want {
@@ -35,7 +35,7 @@ func TestCursorTransformArtifact_FrontmatterShape(t *testing.T) {
 func TestCursorTransformArtifact_NonRulesPassthrough(t *testing.T) {
 	c := &Cursor{}
 	data := []byte("skill content")
-	newName, newData := c.TransformArtifact("skills", "SKILL.md", data)
+	newName, newData, _ := c.TransformArtifact("skills", "SKILL.md", data)
 
 	if newName != "SKILL.md" {
 		t.Errorf("newName = %q, want unchanged SKILL.md", newName)
@@ -47,7 +47,7 @@ func TestCursorTransformArtifact_NonRulesPassthrough(t *testing.T) {
 
 func TestCursorTransformArtifact_NonMdRulesPassthrough(t *testing.T) {
 	c := &Cursor{}
-	newName, newData := c.TransformArtifact("rules", "already.mdc", []byte("body"))
+	newName, newData, _ := c.TransformArtifact("rules", "already.mdc", []byte("body"))
 
 	if newName != "already.mdc" || string(newData) != "body" {
 		t.Errorf("expected passthrough for non-.md rule, got name=%q data=%q", newName, newData)
@@ -414,7 +414,7 @@ func TestCursorTransformArtifact_MergesSourceFrontmatter(t *testing.T) {
 	c := &Cursor{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			name, got := c.TransformArtifact("rules", "safety.md", []byte(tt.src))
+			name, got, _ := c.TransformArtifact("rules", "safety.md", []byte(tt.src))
 			if name != "safety.mdc" {
 				t.Errorf("name = %q, want safety.mdc", name)
 			}

@@ -7,10 +7,11 @@ import "fmt"
 // <x>WorkspaceFlag and <x>WorkspaceUnsupported declarations in each adapter's
 // file, which scripts/vendor-parity.sh requires of every vendor.
 var workspaceDeclarations = map[string]struct{ flag, unsupported string }{
-	"claude":  {claudeWorkspaceFlag, claudeWorkspaceUnsupported},
-	"codex":   {codexWorkspaceFlag, codexWorkspaceUnsupported},
-	"copilot": {copilotWorkspaceFlag, copilotWorkspaceUnsupported},
-	"cursor":  {cursorWorkspaceFlag, cursorWorkspaceUnsupported},
+	"claude":   {claudeWorkspaceFlag, claudeWorkspaceUnsupported},
+	"codex":    {codexWorkspaceFlag, codexWorkspaceUnsupported},
+	"copilot":  {copilotWorkspaceFlag, copilotWorkspaceUnsupported},
+	"cursor":   {cursorWorkspaceFlag, cursorWorkspaceUnsupported},
+	"opencode": {opencodeWorkspaceFlag, opencodeWorkspaceUnsupported},
 }
 
 // WorkspaceArgs renders granted folders as the vendor's flags, one pair per

@@ -446,12 +446,12 @@ type cursorMCPServer struct {
 // requires: renamed from .md to .mdc with Cursor's frontmatter. Plain .md
 // files under .cursor/rules are silently ignored by Cursor. Other artifact
 // types pass through unchanged.
-func (c *Cursor) TransformArtifact(artifactType, name string, data []byte) (string, []byte) {
+func (c *Cursor) TransformArtifact(artifactType, name string, data []byte) (string, []byte, error) {
 	if artifactType != "rules" || !strings.HasSuffix(name, ".md") {
-		return name, data
+		return name, data, nil
 	}
 	stem := strings.TrimSuffix(name, ".md")
-	return stem + ".mdc", cursorRule(stem, data)
+	return stem + ".mdc", cursorRule(stem, data), nil
 }
 
 // cursorRule renders a rule as an .mdc file with exactly one frontmatter

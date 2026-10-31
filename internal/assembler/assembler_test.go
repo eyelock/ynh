@@ -3,6 +3,7 @@ package assembler
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -128,11 +129,11 @@ type transformMockAdapter struct {
 	mockAdapter
 }
 
-func (m *transformMockAdapter) TransformArtifact(artifactType, name string, data []byte) (string, []byte) {
+func (m *transformMockAdapter) TransformArtifact(artifactType, name string, data []byte) (string, []byte, error) {
 	if artifactType != "rules" {
-		return name, data
+		return name, data, nil
 	}
-	return name + "c", append([]byte("transformed: "), data...)
+	return name + "c", append([]byte("transformed: "), data...), nil
 }
 
 func TestAssembleAllArtifacts_WithTransform(t *testing.T) {
@@ -427,3 +428,35 @@ func TestAssembleWithAgentsMD(t *testing.T) {
 func (m *mockAdapter) AgentPluginLayout() vendor.AgentPluginLayout { return vendor.AgentPluginLayout{} }
 
 var _ vendor.Adapter = &mockAdapter{}
+
+// A vendor that refuses an artifact stops assembly, and the error names the
+// artifact. OpenCode refuses an agent whose inline permissions would leave
+// its tools: list unenforced, rather than writing one that runs every tool.
+func TestAssemble_TransformRefusalStopsAssembly(t *testing.T) {
+	src := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(src, "agents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	agent := "---\ndescription: d\ntools: Read\npermissions: [{action: edit, resource: \"*\", effect: ask}]\n---\nB\n"
+	if err := os.WriteFile(filepath.Join(src, "agents", "locked.md"), []byte(agent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string][]resolver.ResolvedContent{
+		"all":    {{BasePath: src}},
+		"picked": {{BasePath: src, Paths: []string{"agents/locked.md"}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			out := t.TempDir()
+			err := AssembleTo(out, &vendor.OpenCode{}, content)
+			if err == nil {
+				t.Fatal("assembly succeeded; want the agent refused")
+			}
+			if !strings.Contains(err.Error(), "agents/locked.md") || !strings.Contains(err.Error(), "inline") {
+				t.Errorf("err = %v, want the refusal naming agents/locked.md", err)
+			}
+			if _, statErr := os.Stat(filepath.Join(out, ".opencode", "agents", "locked.md")); !os.IsNotExist(statErr) {
+				t.Errorf("refused agent was written (stat err %v)", statErr)
+			}
+		})
+	}
+}

@@ -22,8 +22,11 @@ func writeCodexAgents(t *testing.T, runDir string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agentName, agentData := c.TransformArtifact("agents", "file-name.md",
+	agentName, agentData, err := c.TransformArtifact("agents", "file-name.md",
 		[]byte("---\nname: front-matter\ndescription: A test agent.\n---\n\nReply ok.\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	for name, data := range map[string][]byte{delName: delData, agentName: agentData} {
 		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
 			t.Fatal(err)
