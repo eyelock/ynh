@@ -35,7 +35,7 @@ const CapabilitiesVersion = "0.10.0"
 var features = []string{
 	"agent-run-fetches-includes",        // a run fetches its git includes at setup (ynf #130)
 	"agent-run-harness-path",            // `ynh agent run --harness` takes a path (#564)
-	"trust-counts-composed-mcp-servers", // `ynh trust` mcp_servers lists servers from includes (source) and delegates (delegate)
+	"trust-counts-composed-mcp-servers", // `ynh trust` mcp_servers lists servers from includes (source) and delegates (delegate) (#573, ynw-9cc.9)
 	"workspace-folders",                 // manifest `workspace`, workspace_roots, YNH_WORKSPACE_ROOTS, `ynh run --no-workspace` (#624)
 }
 
