@@ -112,6 +112,11 @@ func (i Include) InstructionsEnabled() bool {
 
 type Delegate struct {
 	GitSource
+	// Profile and Focus are the delegates_to entry's selection: one of the
+	// delegate harness's own profiles, or one of its own focuses. At most
+	// one is set (see Select).
+	Profile string
+	Focus   string
 	// SHA is the resolved commit at install/update time, populated from
 	// installed.json's resolved slice. Empty for pre-migration installs.
 	SHA string
@@ -708,6 +713,8 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	for _, del := range hj.DelegatesTo {
 		p.DelegatesTo = append(p.DelegatesTo, Delegate{
 			GitSource: GitSource{Git: del.Git, Ref: del.Ref, Path: del.Path},
+			Profile:   del.Profile,
+			Focus:     del.Focus,
 		})
 	}
 
@@ -1028,6 +1035,8 @@ func LoadFile(path string) (*Harness, error) {
 	for _, del := range hj.DelegatesTo {
 		p.DelegatesTo = append(p.DelegatesTo, Delegate{
 			GitSource: GitSource{Git: del.Git, Ref: del.Ref, Path: del.Path},
+			Profile:   del.Profile,
+			Focus:     del.Focus,
 		})
 	}
 	if len(hj.Hooks) > 0 {

@@ -23,6 +23,7 @@ type ExportDelegate struct {
 	harness  *harness.Harness
 	basePath string
 	included []resolver.ResolveResult
+	focus    *harness.DelegateFocus
 	servers  map[string]plugin.MCPServer
 }
 
@@ -44,6 +45,10 @@ func ResolveExportDelegates(delegates []harness.Delegate, harnessDir string, cfg
 		if err != nil {
 			return nil, fmt.Errorf("loading delegate harness %s: %w", del.Git, err)
 		}
+		delHarness, focus, err := del.Select(delHarness)
+		if err != nil {
+			return nil, err
+		}
 
 		included, _, err := resolver.ResolveSelected(delHarness, cfg, harness.Selection{})
 		if err != nil {
@@ -53,7 +58,7 @@ func ResolveExportDelegates(delegates []harness.Delegate, harnessDir string, cfg
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, ExportDelegate{harness: delHarness, basePath: basePath, included: included, servers: servers})
+		out = append(out, ExportDelegate{harness: delHarness, basePath: basePath, included: included, focus: focus, servers: servers})
 	}
 	return out, nil
 }
@@ -81,7 +86,7 @@ func WriteDelegates(outputDir string, delegates []ExportDelegate, carrier assemb
 			}
 		}
 
-		agentContent := assembler.BuildDelegateAgent(del.harness, del.basePath, del.included, mcpLine)
+		agentContent := assembler.BuildDelegateAgent(del.harness, del.basePath, del.included, del.focus, mcpLine)
 		agentFile := filepath.Join(agentsDir, del.harness.Name+".md")
 		if err := os.WriteFile(agentFile, []byte(agentContent), 0o644); err != nil {
 			return fmt.Errorf("writing delegate agent %s: %w", del.harness.Name, err)
