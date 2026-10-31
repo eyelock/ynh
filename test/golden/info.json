@@ -21,6 +21,13 @@
       {"name": "docs", "source": "root", "url": "https://docs.example.com/mcp"},
       {"name": "github", "source": "eyelock/assistants//ynh/github", "command": "github-mcp-server"}
     ],
+    "hooks": [
+      {"event": "before_tool", "source": "eyelock/assistants//ynh/github", "command": "./scripts/_include/github/check.sh", "matcher": "Bash"},
+      {"event": "before_tool", "source": "root", "command": "echo before"}
+    ],
+    "hooks_not_active": [
+      {"event": "on_stop", "source": "eyelock/assistants//ynh/notify"}
+    ],
     "manifest": {
       "name": "demo",
       "version": "1.0.0",

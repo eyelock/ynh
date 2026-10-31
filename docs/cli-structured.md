@@ -137,7 +137,7 @@ Both `ynh version --format json` and `ynd version --format json` emit:
 
 Downstream tooling (for example) reads `capabilities` and refuses to run against an older ynh than it requires.
 
-Capabilities `0.10.0` is a breaking bump. `ynh info`'s harness carries `mcp_servers`, the servers a run would get with its includes composed, as a required field (with an optional `mcp_servers_error` when an include could not be read, and an optional `selection` when `--profile` or `--focus` chose what a run carries), and the trajectory's `session_start` no longer writes the deprecated `model` (read `model_requested`, and `worker_model` for what ran). `ynh trust` and `ynh trust show` are not enveloped, so the change in what their `mcp_servers` counts is reported by the `trust-counts-composed-mcp-servers` feature instead.
+Capabilities `0.10.0` is a breaking bump. `ynh info`'s harness carries `mcp_servers`, the servers a run would get with its includes composed, as a required field (with an optional `mcp_servers_error` when an include could not be read, and an optional `selection` when `--profile` or `--focus` chose what a run carries) and an optional `hooks`, the hooks a run carries with their source (with `hooks_not_active` for included hooks without consent and `hooks_error` when an include could not be read), and the trajectory's `session_start` no longer writes the deprecated `model` (read `model_requested`, and `worker_model` for what ran). `ynh trust` and `ynh trust show` are not enveloped, so the change in what their `mcp_servers` counts is reported by the `trust-counts-composed-mcp-servers` feature instead.
 
 ## Scope
 

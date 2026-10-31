@@ -90,9 +90,23 @@
           "type": "string",
           "description": "Present when the servers of includes could not be read (an include not in the cache, or two includes declaring one server differently); mcp_servers then lists only the harness's own."
         },
+        "hooks": {
+          "type": "array",
+          "description": "The hooks a run of the harness carries, sorted by event. Within an event they are in the order a run fires them: those of included harnesses whose include says \"hooks\": true first, then the harness's own. Includes are resolved from disk and the cache only, never the network.",
+          "items": {"$ref": "#/$defs/ComposedHook"}
+        },
+        "hooks_not_active": {
+          "type": "array",
+          "description": "Per event, each included harness that declares hooks a run does not carry, because its include does not say \"hooks\": true. Sorted by event.",
+          "items": {"$ref": "#/$defs/HookOrigin"}
+        },
+        "hooks_error": {
+          "type": "string",
+          "description": "Present when the hooks of includes could not be read (an include not in the cache, or a hook script outside its included harness); hooks then lists only the harness's own."
+        },
         "selection": {
           "type": "object",
-          "description": "Present when ynh info was given --profile or --focus. mcp_servers is then what a run with that selection carries.",
+          "description": "Present when ynh info was given --profile or --focus. mcp_servers and hooks are then what a run with that selection carries.",
           "properties": {
             "focus": {"type": "string", "description": "The --focus value as given: name for the harness's own focus, namespace:name for an included harness's."},
             "profiles": {
@@ -125,6 +139,29 @@
         "url": {"type": "string", "description": "The HTTP server's URL, as written."}
       },
       "required": ["name", "source"],
+      "additionalProperties": false
+    },
+    "ComposedHook": {
+      "type": "object",
+      "description": "One hook of a run, with where it was declared.",
+      "properties": {
+        "event": {"type": "string"},
+        "source": {"type": "string", "description": "\"root\" for a hook the harness declares itself, or the include chain that supplied it, as for mcp_servers."},
+        "command": {"type": "string", "description": "The command a run executes. An included harness's \"./\" script is shown at the path the session runs it from."},
+        "matcher": {"type": "string"},
+        "timeout": {"type": "integer"}
+      },
+      "required": ["event", "source", "command"],
+      "additionalProperties": false
+    },
+    "HookOrigin": {
+      "type": "object",
+      "description": "An included harness's hooks for one event.",
+      "properties": {
+        "event": {"type": "string"},
+        "source": {"type": "string", "description": "The include chain of the harness that declares them."}
+      },
+      "required": ["event", "source"],
       "additionalProperties": false
     },
     "InstalledFrom": {

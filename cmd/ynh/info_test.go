@@ -1097,3 +1097,168 @@ func TestCmdInfoJSON_BadSelectionFailsBeforeCheckUpdates(t *testing.T) {
 		t.Error("--check-updates did not probe the include on a valid request")
 	}
 }
+
+// installInfoHookChain installs local/root, which includes harness on with
+// "hooks": true and harness off without it. on declares a "./" script hook
+// and a profile "ci" that adds a hook; off declares a hook a run does not
+// carry. root declares hooks of its own on two events.
+func installInfoHookChain(t *testing.T, home string) {
+	t.Helper()
+	src := t.TempDir()
+	on := filepath.Join(src, "on")
+	off := filepath.Join(src, "off")
+	for dir, body := range map[string]string{
+		on: `{"name": "on", "version": "0.1.0",
+			"hooks": {
+				"before_tool": [{"command": "./check.sh --strict", "matcher": "Bash"}],
+				"on_stop": [{"command": "echo on-stop"}]
+			},
+			"profiles": {"ci": {"hooks": {"after_tool": [{"command": "echo ci"}]}}}}`,
+		off: `{"name": "off", "version": "0.1.0",
+			"hooks": {"before_prompt": [{"command": "echo off"}]}}`,
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := writePluginJSONFile(dir, []byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	installListTestHarness(t, home, "root", `{"name": "root", "version": "0.1.0",
+		"includes": [{"local": "`+on+`", "hooks": true}, {"local": "`+off+`"}],
+		"hooks": {
+			"before_tool": [{"command": "echo base"}],
+			"after_tool": [{"command": "echo root-after"}]
+		}}`)
+}
+
+// ynw-9cc.14: the Hooks section shows every hook a run carries, sorted by
+// event: included harnesses' with their source, those of an include without
+// consent marked not active, and with a selection what that run carries.
+func TestCmdInfoText_HooksARunCarries(t *testing.T) {
+	notActive := `  before_prompt: not active, from off (add "hooks": true to the include)`
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"no selection", nil, []string{
+			"  after_tool: echo root-after",
+			"  before_tool: ./scripts/_include/on/check.sh --strict  (matcher=Bash)  (from on)",
+			"  before_tool: echo base",
+			"  on_stop: echo on-stop  (from on)",
+			notActive,
+		}},
+		{"included harness's profile", []string{"--profile", "on:ci"}, []string{
+			"  after_tool: echo ci  (from on)",
+			"  after_tool: echo root-after",
+			"  before_tool: ./scripts/_include/on/check.sh --strict  (matcher=Bash)  (from on)",
+			"  before_tool: echo base",
+			"  on_stop: echo on-stop  (from on)",
+			notActive,
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("YNH_HOME", home)
+			installInfoHookChain(t, home)
+			// Event order comes from a map: run a few times so an unsorted
+			// listing is caught.
+			for range 5 {
+				var stdout bytes.Buffer
+				if err := cmdInfoTo(append([]string{"local/root"}, tt.args...), &stdout, io.Discard); err != nil {
+					t.Fatalf("cmdInfoTo: %v", err)
+				}
+				if got := infoSection(stdout.String(), "Hooks"); strings.Join(got, "\n") != strings.Join(tt.want, "\n") {
+					t.Fatalf("Hooks section:\ngot  %q\nwant %q\nfull output:\n%s", got, tt.want, stdout.String())
+				}
+			}
+		})
+	}
+}
+
+func TestCmdInfoJSON_HooksARunCarries(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installInfoHookChain(t, home)
+
+	var stdout bytes.Buffer
+	if err := cmdInfoTo([]string{"local/root", "--format", "json", "--profile", "on:ci"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+	var env infoEnvelope
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, stdout.String())
+	}
+	want := []infoHook{
+		{Event: "after_tool", Source: "on", Command: "echo ci"},
+		{Event: "after_tool", Source: "root", Command: "echo root-after"},
+		{Event: "before_tool", Source: "on", Command: "./scripts/_include/on/check.sh --strict", Matcher: "Bash"},
+		{Event: "before_tool", Source: "root", Command: "echo base"},
+		{Event: "on_stop", Source: "on", Command: "echo on-stop"},
+	}
+	if !slices.Equal(env.Harness.Hooks, want) {
+		t.Errorf("hooks:\ngot  %+v\nwant %+v", env.Harness.Hooks, want)
+	}
+	if wantNA := []infoHookOrigin{{Event: "before_prompt", Source: "off"}}; !slices.Equal(env.Harness.HooksNotActive, wantNA) {
+		t.Errorf("hooks_not_active = %+v, want %+v", env.Harness.HooksNotActive, wantNA)
+	}
+	if env.Harness.HooksError != "" {
+		t.Errorf("hooks_error = %q, want none", env.Harness.HooksError)
+	}
+
+	var v any
+	if err := json.Unmarshal(stdout.Bytes(), &v); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := clischema.Get("info")
+	if err != nil {
+		t.Fatalf("Get info schema: %v", err)
+	}
+	if err := schema.Validate(v); err != nil {
+		t.Errorf("info JSON does not validate: %v\noutput: %s", err, stdout.String())
+	}
+}
+
+// A harness with no hooks emits an empty hooks array, and an include that is
+// not cached leaves the harness's own hooks with the reason the rest are
+// missing.
+func TestCmdInfo_HooksWithoutIncludes(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "bare", `{"name": "bare", "version": "0.1.0"}`)
+	installListTestHarness(t, home, "remote", `{"name": "remote", "version": "0.1.0",
+		"includes": [{"git": "github.com/eyelock/does-not-exist-ynh-test", "hooks": true}],
+		"hooks": {"on_stop": [{"command": "echo own"}]}}`)
+
+	var bare bytes.Buffer
+	if err := cmdInfoTo([]string{"local/bare", "--format", "json"}, &bare, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+	if !strings.Contains(bare.String(), `"hooks": []`) {
+		t.Errorf("want an empty hooks array:\n%s", bare.String())
+	}
+
+	var text bytes.Buffer
+	if err := cmdInfoTo([]string{"local/remote"}, &text, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+	got := infoSection(text.String(), "Hooks")
+	if len(got) != 2 || got[0] != "  on_stop: echo own" ||
+		!strings.HasPrefix(got[1], "  hooks from includes not shown: ") {
+		t.Errorf("Hooks section: %q", got)
+	}
+
+	var js bytes.Buffer
+	if err := cmdInfoTo([]string{"local/remote", "--format", "json"}, &js, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo json: %v", err)
+	}
+	var env infoEnvelope
+	if err := json.Unmarshal(js.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	if len(env.Harness.Hooks) != 1 || env.Harness.HooksError == "" {
+		t.Errorf("hooks %+v, error %q: want own hook and an error", env.Harness.Hooks, env.Harness.HooksError)
+	}
+}

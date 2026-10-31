@@ -142,12 +142,13 @@ Flags:
 Show a harness's resolved configuration: vendor, includes, delegates, hooks,
 MCP servers, profiles, focuses and sensors.
 
-With no --profile or --focus, MCP servers are those of a run with no
-profile; a selection shows the MCP servers a run with it carries. Hooks are
-the harness's own, with a selected profile of its own merged; hooks of
-included harnesses are not shown. Profiles and focuses are still listed as
-declared. A bare run's launch_focus is not applied: pass it as --focus to
-see what a bare run wakes with.
+Hooks and MCP servers are what a run carries, included harnesses' with
+their source; an included harness's hooks run only where its include says
+"hooks": true, and the rest are listed as not active. With no --profile or
+--focus they are those of a run with no profile; a selection shows what a
+run with it carries. Profiles and focuses are still listed as declared. A
+bare run's launch_focus is not applied: pass it as --focus to see what a
+bare run wakes with.
 
 Flags:
   --format text|json   Output format (default text)

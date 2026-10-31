@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/eyelock/ynh/internal/agentplugin"
+	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/migration"
@@ -58,8 +59,19 @@ type infoEntry struct {
 	// (an include not in the cache, say); MCPServers then holds only the
 	// harness's own.
 	MCPServersError string `json:"mcp_servers_error,omitempty"`
+	// Hooks is the hooks a run of the harness carries, sorted by event:
+	// within an event, those of included harnesses whose include consented
+	// ("hooks": true) first, then its own, in the order a run fires them.
+	Hooks []infoHook `json:"hooks"`
+	// HooksNotActive lists, per event, the included harnesses that declare
+	// hooks a run does not carry, because the include does not consent.
+	HooksNotActive []infoHookOrigin `json:"hooks_not_active,omitempty"`
+	// HooksError says why the hooks of includes could not be read (an
+	// include not in the cache, say); Hooks then holds only the harness's own.
+	HooksError string `json:"hooks_error,omitempty"`
 	// Selection is the profile or focus --profile or --focus selected, when
-	// one was. MCPServers is then what a run with that selection carries.
+	// one was. MCPServers and Hooks are then what a run with that selection
+	// carries.
 	Selection *infoSelection  `json:"selection,omitempty"`
 	Manifest  json.RawMessage `json:"manifest"`
 }
@@ -83,20 +95,45 @@ type infoMCPServer struct {
 	URL     string `json:"url,omitempty"`
 }
 
+// infoHook is one hook a run carries in `ynh info`. Source is "root" for a
+// hook the harness declares itself, or the include chain that supplied it,
+// as for infoMCPServer. An included harness's "./" script is shown at the
+// path the session runs it from, as `ynd compose` shows it.
+type infoHook struct {
+	Event   string `json:"event"`
+	Source  string `json:"source"`
+	Command string `json:"command"`
+	Matcher string `json:"matcher,omitempty"`
+	Timeout int    `json:"timeout,omitempty"`
+}
+
+// infoHookOrigin is an included harness whose hooks for Event a run does not
+// carry: its include did not say "hooks": true.
+type infoHookOrigin struct {
+	Event  string `json:"event"`
+	Source string `json:"source"`
+}
+
 // infoView is the harness ynh info shows: as loaded, or reshaped by the
-// profile or focus selected, with the MCP servers a run of it carries.
+// profile or focus selected, with the MCP servers and hooks a run of it
+// carries.
 type infoView struct {
-	harness   *harness.Harness
-	servers   []infoMCPServer
-	mcpErr    error
-	selection *infoSelection
+	harness        *harness.Harness
+	servers        []infoMCPServer
+	mcpErr         error
+	hooks          []infoHook
+	hooksNotActive []infoHookOrigin
+	hooksErr       error
+	selection      *infoSelection
 }
 
 // resolveInfoView applies the --profile values and --focus value to p as
-// `ynh run` does, and lists the MCP servers that run carries, sorted by name.
+// `ynh run` does, and lists the MCP servers that run carries, sorted by name,
+// and its hooks, sorted by event, with those of includes that did not consent
+// to run them listed apart.
 // Includes are resolved as a run resolves them but only from disk and the
 // cache: info never reaches the network. When they cannot be resolved the
-// view holds p's own servers and the error, so the caller can say what is
+// view holds p's own servers and hooks and the error, so the caller can say what is
 // missing rather than show a partial list as complete.
 //
 // A selection info cannot honour is an error: --focus with --profile, a
@@ -136,16 +173,17 @@ func resolveInfoView(p *harness.Harness, profiles []string, focus string) (*info
 		}
 	}
 
-	var includes []harness.IncludedHarness
+	var resolved []resolver.ResolveResult
 	if len(view.harness.Includes) > 0 {
-		resolved, nsFocus, err := resolver.ResolveSelectedLocal(view.harness, sel)
+		results, nsFocus, err := resolver.ResolveSelectedLocal(view.harness, sel)
 		switch {
 		case err != nil && (len(sel.Included) > 0 || sel.FocusNS != ""):
 			return nil, err
 		case err != nil:
 			view.mcpErr = err
+			view.hooksErr = err
 		default:
-			includes = resolver.IncludedHarnesses(resolved)
+			resolved = results
 			if nsFocus != nil && nsFocus.Profile != "" {
 				view.selection.Profiles = []string{sel.FocusNS + ":" + nsFocus.Profile}
 			}
@@ -154,7 +192,7 @@ func resolveInfoView(p *harness.Harness, profiles []string, focus string) (*info
 		return nil, fmt.Errorf("no included harness has namespace %q (the harness includes no other harnesses)", firstNamespace(sel))
 	}
 
-	servers, provenance, err := harness.ComposeMCPServersRaw(view.harness, includes)
+	servers, provenance, err := harness.ComposeMCPServersRaw(view.harness, resolver.IncludedHarnesses(resolved))
 	if err != nil {
 		// A conflict between includes: fall back to the harness's own.
 		servers, provenance, _ = harness.ComposeMCPServersRaw(view.harness, nil)
@@ -165,6 +203,32 @@ func resolveInfoView(p *harness.Harness, profiles []string, focus string) (*info
 		s := servers[pr.Server]
 		view.servers = append(view.servers, infoMCPServer{Name: pr.Server, Source: pr.Source, Command: s.Command, URL: s.URL})
 	}
+
+	// Hooks as a run composes them (assembler.ComposeHooks), so an included
+	// harness's hooks appear only where its include consented.
+	hookSet, err := assembler.ComposeHooks(view.harness.Hooks, resolved)
+	if err != nil {
+		// A script that climbs out of its included harness: show the
+		// harness's own.
+		hookSet = assembler.HookSet{Hooks: view.harness.Hooks}
+		view.hooksErr = err
+	}
+	view.hooks = []infoHook{}
+	for _, event := range slices.Sorted(maps.Keys(hookSet.Hooks)) {
+		for i, e := range hookSet.Hooks[event] {
+			source := harness.MCPSourceRoot
+			if src := hookSet.Sources[event]; i < len(src) && src[i] != "" {
+				source = src[i]
+			}
+			view.hooks = append(view.hooks, infoHook{Event: event, Source: source, Command: e.Command, Matcher: e.Matcher, Timeout: e.Timeout})
+		}
+	}
+	for _, o := range hookSet.NotActive {
+		view.hooksNotActive = append(view.hooksNotActive, infoHookOrigin{Event: o.Event, Source: o.Source})
+	}
+	slices.SortStableFunc(view.hooksNotActive, func(a, b infoHookOrigin) int {
+		return strings.Compare(a.Event, b.Event)
+	})
 	return view, nil
 }
 
@@ -254,8 +318,8 @@ func printInfoText(w io.Writer, name string, profiles []string, focus string) er
 	if err != nil {
 		return err
 	}
-	// p is the harness with the selected profile applied: its hooks and MCP
-	// servers are what that run carries. Profiles and focuses are listed as
+	// p is the harness with the selected profile applied; view holds the
+	// hooks and MCP servers that run carries. Profiles and focuses are listed as
 	// declared, from the harness as loaded.
 	p := view.harness
 
@@ -360,18 +424,24 @@ func printInfoText(w io.Writer, name string, profiles []string, focus string) er
 
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintln(w, "Hooks:")
-	if len(p.Hooks) == 0 {
+	if len(view.hooks) == 0 && len(view.hooksNotActive) == 0 && view.hooksErr == nil {
 		_, _ = fmt.Fprintln(w, "  (none)")
-	} else {
-		for event, entries := range p.Hooks {
-			for _, entry := range entries {
-				line := "  " + event + ": " + entry.Command
-				if entry.Matcher != "" {
-					line += "  (matcher=" + entry.Matcher + ")"
-				}
-				_, _ = fmt.Fprintln(w, line)
-			}
+	}
+	for _, h := range view.hooks {
+		line := "  " + h.Event + ": " + h.Command
+		if h.Matcher != "" {
+			line += "  (matcher=" + h.Matcher + ")"
 		}
+		if h.Source != harness.MCPSourceRoot {
+			line += "  (from " + h.Source + ")"
+		}
+		_, _ = fmt.Fprintln(w, line)
+	}
+	for _, o := range view.hooksNotActive {
+		_, _ = fmt.Fprintf(w, "  %s: not active, from %s (add \"hooks\": true to the include)\n", o.Event, o.Source)
+	}
+	if view.hooksErr != nil {
+		_, _ = fmt.Fprintf(w, "  hooks from includes not shown: %s\n", view.hooksErr)
 	}
 
 	_, _ = fmt.Fprintln(w)
@@ -539,6 +609,11 @@ func printInfoJSON(stdout, stderr io.Writer, name string, profiles []string, foc
 	entry.MCPServers = view.servers
 	if view.mcpErr != nil {
 		entry.MCPServersError = view.mcpErr.Error()
+	}
+	entry.Hooks = view.hooks
+	entry.HooksNotActive = view.hooksNotActive
+	if view.hooksErr != nil {
+		entry.HooksError = view.hooksErr.Error()
 	}
 	entry.Selection = view.selection
 
