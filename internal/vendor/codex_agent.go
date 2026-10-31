@@ -1,6 +1,7 @@
 package vendor
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 )
@@ -18,11 +19,64 @@ func (c *Codex) DelegateAgentFile(name, description, prompt string) (string, []b
 	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
 		return "", nil, fmt.Errorf("delegate name %q cannot name a file", name)
 	}
+	return name + ".toml", codexAgentTOML(name, description, prompt), nil
+}
+
+// TransformArtifact writes a harness's own agents (agents/<name>.md) as Codex
+// custom agents. Codex reads only TOML files in .codex/agents/
+// (developers.openai.com/codex/subagents), so a Markdown agent linked there
+// would never be one. Other artifact types pass through unchanged.
+func (c *Codex) TransformArtifact(artifactType, name string, data []byte) (string, []byte) {
+	if artifactType != "agents" || !strings.HasSuffix(name, ".md") {
+		return name, data
+	}
+	stem := strings.TrimSuffix(name, ".md")
+	return stem + ".toml", codexAgent(stem, data)
+}
+
+// codexAgent renders a Markdown agent as a Codex custom agent with the three
+// fields every one must set:
+//
+//   - name: the source's, else the file name. Codex identifies the agent by
+//     it. The file keeps the source's name, so two agents never share one.
+//   - description: the source's, else one that names the agent; Codex
+//     requires the field.
+//   - developer_instructions: the body after the frontmatter.
+//
+// Every other source field is dropped, because none maps onto a custom
+// agent's: Claude Code's model names (sonnet, inherit) are not Codex models,
+// and Codex has no tool allowlist (tools, disallowedTools); a custom agent
+// inherits the session's permissions and MCP servers. A source with no closed
+// frontmatter block is all body.
+func codexAgent(stem string, data []byte) []byte {
+	name, description, body := "", "", data
+	if lines, rest, ok := splitFrontmatter(data); ok {
+		body = bytes.TrimLeft(rest, "\r\n")
+		for _, e := range frontmatterEntries(lines) {
+			switch e.key {
+			case "name":
+				name = strings.TrimSpace(e.scalar())
+			case "description":
+				description = strings.Join(strings.Fields(e.scalar()), " ")
+			}
+		}
+	}
+	if name == "" {
+		name = stem
+	}
+	if description == "" {
+		description = fmt.Sprintf("Agent %q.", name)
+	}
+	return codexAgentTOML(name, description, string(body))
+}
+
+// codexAgentTOML encodes a custom agent's three fields as its TOML file.
+func codexAgentTOML(name, description, instructions string) []byte {
 	var b strings.Builder
 	fmt.Fprintf(&b, "name = %s\n", tomlString(name))
 	fmt.Fprintf(&b, "description = %s\n", tomlString(description))
-	fmt.Fprintf(&b, "developer_instructions = %s\n", tomlMultilineString(prompt))
-	return name + ".toml", []byte(b.String()), nil
+	fmt.Fprintf(&b, "developer_instructions = %s\n", tomlMultilineString(instructions))
+	return []byte(b.String())
 }
 
 // tomlString encodes s as a TOML basic string, on one line.

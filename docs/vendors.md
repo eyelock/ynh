@@ -40,6 +40,8 @@ david -v cursor               # launches normally
 david -v cursor --clean       # removes symlinks
 ```
 
+Codex reads a project's custom agents only as TOML files in `.codex/agents/` ([Codex's subagent docs](https://developers.openai.com/codex/subagents)), so a harness's own agents are written there as `<name>.toml`, not linked as Markdown. Each sets the three fields a custom agent must: `name` and `description` from the agent's frontmatter (the file name, and a description naming the agent, when it has none) and `developer_instructions` from its body. No other frontmatter field carries over: Claude Code's `model` names are not Codex models, Codex has no tool allowlist for `tools` or `disallowedTools`, and a custom agent inherits the session's permissions and MCP servers. That a live `codex` picks the agents up has not been checked. A Codex export carries no agents, since Codex plugins have none.
+
 Installations are tracked in `~/.ynh/symlinks.json`. Use `ynh status` to see all installations and `ynh prune` to clean up orphaned ones.
 
 ## Choosing a Vendor

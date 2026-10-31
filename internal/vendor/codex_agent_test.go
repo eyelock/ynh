@@ -27,3 +27,52 @@ func TestCodexDelegateAgentFile_RefusesPathNames(t *testing.T) {
 		}
 	}
 }
+
+// A harness's own agent is written as a TOML custom agent: Codex reads no
+// Markdown in .codex/agents/. name, description and the body map onto the
+// three fields; fields with no Codex counterpart are dropped.
+func TestCodexTransformArtifact_AgentToTOML(t *testing.T) {
+	c := &Codex{}
+	src := "---\nname: code-reviewer\ndescription: >\n  Reviews \"diffs\"\n  for bugs.\ntools: Read, Grep\nmodel: sonnet\n---\n\nYou review code.\nCheck C:\\tmp.\n"
+	name, data := c.TransformArtifact("agents", "reviewer.md", []byte(src))
+	if name != "reviewer.toml" {
+		t.Errorf("file = %q, want reviewer.toml", name)
+	}
+	want := "name = \"code-reviewer\"\n" +
+		"description = \"Reviews \\\"diffs\\\" for bugs.\"\n" +
+		"developer_instructions = \"\"\"\nYou review code.\nCheck C:\\\\tmp.\n\"\"\"\n"
+	if string(data) != want {
+		t.Errorf("got\n%s\nwant\n%s", data, want)
+	}
+}
+
+// With no frontmatter the whole file is the instructions, the file name the
+// agent's name, and the required description names the agent.
+func TestCodexTransformArtifact_AgentWithoutFrontmatter(t *testing.T) {
+	c := &Codex{}
+	name, data := c.TransformArtifact("agents", "helper.md", []byte("Just help.\n"))
+	if name != "helper.toml" {
+		t.Errorf("file = %q, want helper.toml", name)
+	}
+	want := "name = \"helper\"\n" +
+		"description = \"Agent \\\"helper\\\".\"\n" +
+		"developer_instructions = \"\"\"\nJust help.\n\"\"\"\n"
+	if string(data) != want {
+		t.Errorf("got\n%s\nwant\n%s", data, want)
+	}
+}
+
+func TestCodexTransformArtifact_Passthrough(t *testing.T) {
+	c := &Codex{}
+	for _, tc := range []struct{ typ, name string }{
+		{"rules", "style.md"},
+		{"commands", "deploy.md"},
+		{"skills", "SKILL.md"},
+		{"agents", "notes.txt"},
+	} {
+		name, data := c.TransformArtifact(tc.typ, tc.name, []byte("x"))
+		if name != tc.name || string(data) != "x" {
+			t.Errorf("%s/%s: got %q %q, want it unchanged", tc.typ, tc.name, name, data)
+		}
+	}
+}

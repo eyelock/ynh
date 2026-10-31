@@ -144,12 +144,15 @@ converted only by `ynd migrate` and refused by every other command.
 | ynh               | Claude Code                      | Codex                            | Cursor                           |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Source:            |                                  |                                  |                                  |
-| agents/<name>.md  | agents/<name>.md                 | NOT SUPPORTED in plugins         | agents/<name>.md                 |
+| agents/<name>.md  | agents/<name>.md                 | NOT SUPPORTED in plugins; a run  | agents/<name>.md                 |
+|                   |                                  | writes .codex/agents/<name>.toml |                                  |
+|                   |                                  | (TOML custom agent; live pickup  |                                  |
+|                   |                                  | unchecked, ynw-s9h)              |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
-| Frontmatter:      | name, description, model,        |                                  | name, description                |
-|                   | tools, disallowedTools, skills,  |                                  |                                  |
-|                   | maxTurns, effort, memory,        |                                  |                                  |
-|                   | background, isolation            |                                  |                                  |
+| Frontmatter:      | name, description, model,        | name, description; the body      | name, description                |
+|                   | tools, disallowedTools, skills,  | becomes developer_instructions.  |                                  |
+|                   | maxTurns, effort, memory,        | Every other field dropped (model |                                  |
+|                   | background, isolation            | names differ; no tool allowlist) |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Delegation:       | Markdown subagent in             | TOML custom agent in             | Markdown subagent in             |
 | (delegates_to)    | .claude/agents/<name>.md (name,  | .codex/agents/<name>.toml (name, | .cursor/agents/<name>.md (name,  |
