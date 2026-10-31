@@ -144,6 +144,10 @@ type listDelegate struct {
 	RefAvailable string `json:"ref_available,omitempty"`
 	IsPinned     bool   `json:"is_pinned"`
 	Path         string `json:"path,omitempty"`
+	// Profile and Focus are the entry's selection of the delegate's own
+	// profile or focus, when it names one (at most one of the two).
+	Profile string `json:"profile,omitempty"`
+	Focus   string `json:"focus,omitempty"`
 }
 
 func cmdList(args []string) error {
@@ -502,6 +506,8 @@ func buildDelegates(delegates []harness.Delegate) []listDelegate {
 			RefInstalled: refInstalled,
 			IsPinned:     harness.IsPinnedRef(del.Ref),
 			Path:         del.Path,
+			Profile:      del.Profile,
+			Focus:        del.Focus,
 		})
 	}
 	return result
@@ -601,6 +607,12 @@ func formatDelegates(delegates []harness.Delegate) string {
 		}
 		if del.Ref != "" && del.Ref != "main" && del.Ref != "HEAD" {
 			s += "@" + del.Ref
+		}
+		if del.Profile != "" {
+			s += " (profile " + del.Profile + ")"
+		}
+		if del.Focus != "" {
+			s += " (focus " + del.Focus + ")"
 		}
 		parts = append(parts, s)
 	}

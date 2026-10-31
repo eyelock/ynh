@@ -749,7 +749,23 @@
           },
           "path": {
             "type": "string"
+          },
+          "profile": {
+            "type": "string",
+            "minLength": 1,
+            "description": "One of the delegate harness's own profiles, applied to it. Not with focus."
+          },
+          "focus": {
+            "type": "string",
+            "minLength": 1,
+            "description": "One of the delegate harness's own focuses: its profile is applied and its prompt becomes standing instructions in the delegate's agent. Not with profile, since a focus carries its profile."
           }
+        },
+        "not": {
+          "required": [
+            "profile",
+            "focus"
+          ]
         }
       }
     },

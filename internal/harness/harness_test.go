@@ -75,7 +75,8 @@ func TestLoadDir_FullMetadata(t *testing.T) {
 		],
 		"delegates_to": [
 			{"git": "github.com/example/team-harness"},
-			{"git": "github.com/company/monorepo", "path": "harnesses/team-ops"}
+			{"git": "github.com/company/monorepo", "path": "harnesses/team-ops", "focus": "triage"},
+			{"git": "github.com/example/ci-harness", "profile": "ci"}
 		]
 	}`
 	if err := writePluginJSONFile(dir, []byte(hj)); err != nil {
@@ -108,8 +109,14 @@ func TestLoadDir_FullMetadata(t *testing.T) {
 	if p.Includes[1].Path != "packages/ai-config" {
 		t.Errorf("Include[1] path = %q", p.Includes[1].Path)
 	}
-	if len(p.DelegatesTo) != 2 {
-		t.Fatalf("DelegatesTo length = %d, want 2", len(p.DelegatesTo))
+	if len(p.DelegatesTo) != 3 {
+		t.Fatalf("DelegatesTo length = %d, want 3", len(p.DelegatesTo))
+	}
+	if p.DelegatesTo[1].Focus != "triage" || p.DelegatesTo[1].Profile != "" {
+		t.Errorf("Delegate[1] selection = profile %q, focus %q", p.DelegatesTo[1].Profile, p.DelegatesTo[1].Focus)
+	}
+	if p.DelegatesTo[2].Profile != "ci" || p.DelegatesTo[2].Focus != "" {
+		t.Errorf("Delegate[2] selection = profile %q, focus %q", p.DelegatesTo[2].Profile, p.DelegatesTo[2].Focus)
 	}
 	if p.DelegatesTo[0].Git != "github.com/example/team-harness" {
 		t.Errorf("Delegate[0] git = %q", p.DelegatesTo[0].Git)
