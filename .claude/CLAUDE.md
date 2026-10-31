@@ -16,7 +16,7 @@ Both built by `make build`, released together via goreleaser (single `v*` tag).
 **Always use Make targets, not raw `go`/`golangci-lint` commands.** The Makefile wraps them with correct flags (race detection, coverage, ldflags, version injection).
 
 ```bash
-make check              # full CI: deps, format, lint, test, build, check-artifacts
+make check              # every CI check needing no Docker or network: deps, format, lint, check-tidy, test, build, check-artifacts, check-vendor-parity, check-marketplace
 make build              # build both binaries to bin/
 make test               # all tests with race detection and coverage
 make test FILE=./cmd/ynd  # test specific package
@@ -28,6 +28,7 @@ make clean              # remove build artifacts and caches
 make clean && make build  # fresh build (use when binary seems stale)
 make check-artifacts    # ynd validate + ynd lint over skills/ agents/ rules/ .claude/
 make check-vendor-parity # every vendor documented, assembles the same artifacts, stubbed in evals (needs jq)
+make check-marketplace  # committed marketplace indexes agree with the plugin manifests (needs python3)
 make scan-artifacts     # SkillSpector security scan of the same dirs (needs Docker)
 make vulncheck          # govulncheck over the Go code (needs network)
 ```
