@@ -167,10 +167,41 @@ Outcomes, one per [exit code](agent.md#exit-codes): `converged`, `refused`,
 `user_aborted`, `interrupted`. The span's status is ok for `converged` and an
 error otherwise, described by the outcome word alone.
 
-**These names are a draft.** The `ynh.*` names will move into a registry ynh
-owns, with constants generated from it, and may change then. The standard names
-follow semantic conventions 1.41.0, the last version whose Go package carries
-the `gen_ai.*` names, which upstream still marks as in development.
+## The registry
+
+Every name above is declared in ynh's telemetry registry, an
+[OpenTelemetry Weaver](https://github.com/open-telemetry/weaver) registry in
+[`telemetry/registry/`](https://github.com/eyelock/ynh/tree/develop/telemetry/registry)
+(ynr ADR-007): `manifest.yaml` names the tool and pins the upstream semantic
+conventions, `attributes.yaml` defines ynh's own `ynh.*` attributes with their
+types, enum members and examples, and `signals.yaml` lists each span and event
+with the attributes it carries and their requirement levels. ynh records no
+metrics yet.
+
+The registry is embedded in the binary, and `ynh telemetry registry` prints it:
+
+```bash
+ynh telemetry registry                 # the names, for a person
+ynh telemetry registry --format json   # the registry, for ynr
+```
+
+The JSON is a bare object in the shape every tool of the family prints
+(`ynf telemetry registry --format json` defined it): `tool` and `version`,
+which `service.name` and `service.version` repeat on every record,
+`semantic_conventions`, `attributes`, `standard_attributes`, `spans`, `events`
+and `metrics`. ynr reads it to learn the names. The schema is
+[`docs/schema/cli/telemetry-registry.schema.json`](https://github.com/eyelock/ynh/blob/develop/docs/schema/cli/telemetry-registry.schema.json).
+
+The Go constants ynh emits with (`internal/telemetry/names_gen.go`) are
+generated from the registry with `go generate ./internal/telemetry`, and a test
+fails when they differ from it, or when code spells a registered name as a
+string instead of using its constant. CI checks the registry itself with
+Weaver's `registry check`.
+
+The standard names follow semantic conventions 1.41.0, the last version whose
+Go package carries the `gen_ai.*` names, which upstream still marks as in
+development. The registry's attributes are at stability `development`: a name
+may still change, and when one does, the registry says so.
 
 ## Vendor telemetry through the relay
 
@@ -357,8 +388,6 @@ These are still to come:
   with a note.
 - **Other vendors' telemetry** through the relay, starting with Codex once its
   behaviour is verified.
-- **The registry** and `ynh telemetry registry --format json`, which will
-  replace the draft names above.
 - **Conformance** checks with `ynr conformance` in CI.
 - **More events**, such as one per turn, per sensor verdict or per budget
   threshold, and metrics.

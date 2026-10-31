@@ -1,0 +1,79 @@
+groups:
+  # Spans: one for the run, and a child per call out (ynr ADR-006).
+  - id: span.ynh.run
+    type: span
+    span_kind: internal
+    stability: development
+    brief: "One `ynh agent run`, from start to end."
+    attributes:
+      - {ref: ynh.run.outcome, requirement_level: required}
+      - {ref: process.exit.code, requirement_level: required}
+      - {ref: ynh.run.turns, requirement_level: required}
+      - {ref: ynh.run.bound_by, requirement_level: recommended}
+      - {ref: ynh.run.session_id, requirement_level: recommended}
+      - {ref: ynh.run.vendor, requirement_level: recommended}
+      - {ref: ynh.run.effort.requested, requirement_level: recommended}
+      - {ref: ynh.run.effort, requirement_level: recommended}
+      - {ref: ynh.run.focus, requirement_level: recommended}
+      - {ref: ynh.run.profile, requirement_level: recommended}
+      - {ref: ynh.run.resumed, requirement_level: recommended}
+      - {ref: ynh.run.cost_usd, requirement_level: recommended}
+      - {ref: ynh.harness.name, requirement_level: recommended}
+      - {ref: ynh.harness.version, requirement_level: recommended}
+      - {ref: ynh.harness.commit, requirement_level: recommended}
+      - {ref: gen_ai.request.model, requirement_level: recommended}
+      - {ref: gen_ai.response.model, requirement_level: recommended}
+      - {ref: gen_ai.usage.input_tokens, requirement_level: recommended}
+      - {ref: gen_ai.usage.output_tokens, requirement_level: recommended}
+      - {ref: gen_ai.usage.cache_read.input_tokens, requirement_level: recommended}
+      - {ref: gen_ai.usage.cache_creation.input_tokens, requirement_level: recommended}
+  - id: span.ynh.check
+    type: span
+    span_kind: client
+    stability: development
+    brief: "A `ynh check` the run calls: the gate between turns, or the convergence verifiers."
+    attributes:
+      - {ref: ynh.run.turn, requirement_level: required}
+      - {ref: ynh.call.outcome, requirement_level: recommended}
+
+  # Events: log records with an event name.
+  - id: event.ynh.run.started
+    type: event
+    name: ynh.run.started
+    stability: development
+    brief: A run began, before any worker started. A start with no finish is how a crash shows.
+    attributes:
+      - {ref: ynh.run.vendor, requirement_level: recommended}
+      - {ref: ynh.run.effort.requested, requirement_level: recommended}
+      - {ref: ynh.run.focus, requirement_level: recommended}
+      - {ref: ynh.run.profile, requirement_level: recommended}
+      - {ref: ynh.run.resumed, requirement_level: recommended}
+      - {ref: ynh.harness.name, requirement_level: recommended}
+      - {ref: gen_ai.request.model, requirement_level: recommended}
+  - id: event.ynh.run.finished
+    type: event
+    name: ynh.run.finished
+    stability: development
+    brief: A run ended. It carries the started event's attributes and how the run ended.
+    attributes:
+      - {ref: ynh.run.outcome, requirement_level: required}
+      - {ref: process.exit.code, requirement_level: required}
+      - {ref: ynh.run.turns, requirement_level: required}
+      - {ref: ynh.run.bound_by, requirement_level: recommended}
+      - {ref: ynh.run.session_id, requirement_level: recommended}
+      - {ref: ynh.run.vendor, requirement_level: recommended}
+      - {ref: ynh.run.effort.requested, requirement_level: recommended}
+      - {ref: ynh.run.effort, requirement_level: recommended}
+      - {ref: ynh.run.focus, requirement_level: recommended}
+      - {ref: ynh.run.profile, requirement_level: recommended}
+      - {ref: ynh.run.resumed, requirement_level: recommended}
+      - {ref: ynh.run.cost_usd, requirement_level: recommended}
+      - {ref: ynh.harness.name, requirement_level: recommended}
+      - {ref: ynh.harness.version, requirement_level: recommended}
+      - {ref: ynh.harness.commit, requirement_level: recommended}
+      - {ref: gen_ai.request.model, requirement_level: recommended}
+      - {ref: gen_ai.response.model, requirement_level: recommended}
+      - {ref: gen_ai.usage.input_tokens, requirement_level: recommended}
+      - {ref: gen_ai.usage.output_tokens, requirement_level: recommended}
+      - {ref: gen_ai.usage.cache_read.input_tokens, requirement_level: recommended}
+      - {ref: gen_ai.usage.cache_creation.input_tokens, requirement_level: recommended}

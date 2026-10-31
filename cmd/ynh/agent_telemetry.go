@@ -23,21 +23,21 @@ import (
 var telemetryOptions telemetry.Options
 
 // runOutcomes is ynh's outcome vocabulary for a run, one word per exit code
-// (docs/agent.md, "Exit codes").
+// (docs/agent.md, "Exit codes"), as the registry declares ynh.run.outcome.
 var runOutcomes = map[int]string{
-	agent.ExitConverged:        "converged",
-	agent.ExitRefused:          "refused",
-	agent.ExitIterationCap:     "turn_cap",
-	agent.ExitTokenBudget:      "token_budget",
-	agent.ExitWallClock:        "wall_clock",
-	agent.ExitStuck:            "stuck",
-	agent.ExitTamper:           "tamper",
-	agent.ExitPlanIterationCap: "plan_iteration_cap",
-	agent.ExitWorkerError:      "worker_error",
-	agent.ExitResumeError:      "resume_error",
-	agent.ExitGateError:        "gate_error",
-	agent.ExitUserAborted:      "user_aborted",
-	agent.ExitInterrupted:      "interrupted",
+	agent.ExitConverged:        telemetry.RunOutcomeConverged,
+	agent.ExitRefused:          telemetry.RunOutcomeRefused,
+	agent.ExitIterationCap:     telemetry.RunOutcomeTurnCap,
+	agent.ExitTokenBudget:      telemetry.RunOutcomeTokenBudget,
+	agent.ExitWallClock:        telemetry.RunOutcomeWallClock,
+	agent.ExitStuck:            telemetry.RunOutcomeStuck,
+	agent.ExitTamper:           telemetry.RunOutcomeTamper,
+	agent.ExitPlanIterationCap: telemetry.RunOutcomePlanIterationCap,
+	agent.ExitWorkerError:      telemetry.RunOutcomeWorkerError,
+	agent.ExitResumeError:      telemetry.RunOutcomeResumeError,
+	agent.ExitGateError:        telemetry.RunOutcomeGateError,
+	agent.ExitUserAborted:      telemetry.RunOutcomeUserAborted,
+	agent.ExitInterrupted:      telemetry.RunOutcomeInterrupted,
 }
 
 // runOutcome names a run's exit code.
@@ -45,7 +45,7 @@ func runOutcome(code int) string {
 	if o, ok := runOutcomes[code]; ok {
 		return o
 	}
-	return "unknown"
+	return telemetry.RunOutcomeUnknown
 }
 
 // Every attribute below is an id, a name, an enum or a count (contract rule
@@ -65,13 +65,13 @@ func runStartAttributes(opts agent.RunOptions) []attribute.KeyValue {
 	if namespace.Classify(opts.HarnessName) == namespace.RefID {
 		add(telemetry.AttrHarnessName, opts.HarnessName)
 	}
-	add(telemetry.AttrFocus, opts.Focus)
-	add(telemetry.AttrProfile, opts.Profile)
-	add(telemetry.AttrVendor, opts.Backend)
-	add(telemetry.AttrModelRequested, opts.Model)
-	add(telemetry.AttrEffortRequested, opts.Effort)
+	add(telemetry.AttrRunFocus, opts.Focus)
+	add(telemetry.AttrRunProfile, opts.Profile)
+	add(telemetry.AttrRunVendor, opts.Backend)
+	add(telemetry.AttrGenAIRequestModel, opts.Model)
+	add(telemetry.AttrRunEffortRequested, opts.Effort)
 	if opts.Resume != "" {
-		attrs = append(attrs, telemetry.AttrResumed.Bool(true))
+		attrs = append(attrs, telemetry.AttrRunResumed.Bool(true))
 	}
 	return attrs
 }
@@ -79,21 +79,21 @@ func runStartAttributes(opts agent.RunOptions) []attribute.KeyValue {
 // runEndAttributes describes the run as it ended, from its result.
 func runEndAttributes(r *agent.RunResult) []attribute.KeyValue {
 	attrs := []attribute.KeyValue{
-		telemetry.AttrExitCode.Int(r.ExitCode),
-		telemetry.AttrTurns.Int(r.Consumed.Turns),
+		telemetry.AttrProcessExitCode.Int(r.ExitCode),
+		telemetry.AttrRunTurns.Int(r.Consumed.Turns),
 	}
 	add := func(k attribute.Key, v string) {
 		if v != "" {
 			attrs = append(attrs, k.String(v))
 		}
 	}
-	add(telemetry.AttrSessionID, r.SessionID)
-	add(telemetry.AttrVendor, r.Backend)
-	add(telemetry.AttrModel, r.Model)
-	add(telemetry.AttrModelRequested, r.ModelRequested)
-	add(telemetry.AttrEffort, r.Effort)
-	add(telemetry.AttrEffortRequested, r.EffortRequested)
-	add(telemetry.AttrBoundBy, r.BoundBy)
+	add(telemetry.AttrRunSessionID, r.SessionID)
+	add(telemetry.AttrRunVendor, r.Backend)
+	add(telemetry.AttrGenAIResponseModel, r.Model)
+	add(telemetry.AttrGenAIRequestModel, r.ModelRequested)
+	add(telemetry.AttrRunEffort, r.Effort)
+	add(telemetry.AttrRunEffortRequested, r.EffortRequested)
+	add(telemetry.AttrRunBoundBy, r.BoundBy)
 	if h := r.Harness; h != nil {
 		// The same rule as at the start: a harness given by path is reported
 		// by its manifest name, which is not an id, so it is left out.
@@ -111,19 +111,19 @@ func runEndAttributes(r *agent.RunResult) []attribute.KeyValue {
 		input := *c.InputTokens
 		if c.CacheReadTokens != nil {
 			input += *c.CacheReadTokens
-			attrs = append(attrs, telemetry.AttrCacheReadTokens.Int64(*c.CacheReadTokens))
+			attrs = append(attrs, telemetry.AttrGenAIUsageCacheReadInputTokens.Int64(*c.CacheReadTokens))
 		}
 		if c.CacheCreationTokens != nil {
 			input += *c.CacheCreationTokens
-			attrs = append(attrs, telemetry.AttrCacheCreationTokens.Int64(*c.CacheCreationTokens))
+			attrs = append(attrs, telemetry.AttrGenAIUsageCacheCreationInputTokens.Int64(*c.CacheCreationTokens))
 		}
-		attrs = append(attrs, telemetry.AttrInputTokens.Int64(input))
+		attrs = append(attrs, telemetry.AttrGenAIUsageInputTokens.Int64(input))
 	}
 	if c.OutputTokens != nil {
-		attrs = append(attrs, telemetry.AttrOutputTokens.Int64(*c.OutputTokens))
+		attrs = append(attrs, telemetry.AttrGenAIUsageOutputTokens.Int64(*c.OutputTokens))
 	}
 	if c.CostUSD != nil {
-		attrs = append(attrs, telemetry.AttrCostUSD.Float64(*c.CostUSD))
+		attrs = append(attrs, telemetry.AttrRunCostUSD.Float64(*c.CostUSD))
 	}
 	return attrs
 }
@@ -141,7 +141,7 @@ func (r runTelemetry) WorkerEnv() []string { return r.run.WorkerEnv() }
 func (r runTelemetry) RelayEndpoint(backend string) string { return r.relay.endpoint(backend) }
 
 func (r runTelemetry) StartCall(_ string, turn int) ([]string, func(string, bool)) {
-	return r.run.StartCall(telemetry.SpanCheck, telemetry.AttrTurn.Int(turn))
+	return r.run.StartCall(telemetry.SpanCheck, telemetry.AttrRunTurn.Int(turn))
 }
 
 // The relay's bounds. Tests shorten them.

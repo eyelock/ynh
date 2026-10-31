@@ -1,0 +1,14 @@
+# ynh's telemetry registry: the names ynh emits under the ynh. prefix, as an OpenTelemetry Weaver
+# registry (ynr ADR-007). It is embedded in the binary and printed by `ynh telemetry registry
+# --format json`; internal/telemetry/names_gen.go is generated from it (`go generate ./...`).
+file_format: definition_manifest/2.0
+name: ynh
+description: The names ynh emits, under the ynh. prefix, and the OpenTelemetry names it uses beside them.
+schema_url: https://github.com/eyelock/ynh/telemetry/schemas/0.1.0
+dependencies:
+  # The upstream semantic conventions ynh follows: 1.41.0, the last release whose Go package
+  # carries the gen_ai.* names (internal/telemetry.SemconvVersion). Moving this is a deliberate
+  # change.
+  - name: otel
+    schema_url: https://opentelemetry.io/schemas/1.41.0
+    registry_path: https://github.com/open-telemetry/semantic-conventions/archive/refs/tags/v1.41.0.zip[model]

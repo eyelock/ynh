@@ -198,6 +198,12 @@ func TestInstalledGolden(t *testing.T) { validateGolden(t, "installed", "install
 
 func TestCheckGolden(t *testing.T) { validateGolden(t, "check", "check.json") }
 
+// `ynh telemetry registry` prints a bare object in the shape every tool of
+// the family prints, which ynr reads.
+func TestTelemetryRegistryGolden(t *testing.T) {
+	validateGolden(t, "telemetry-registry", "telemetry-registry.json")
+}
+
 // Phase 3 bare-array commands that previously emitted structured output with
 // no schema to check it against — `docs/cli-structured.md` claimed universal
 // coverage while these two had none.

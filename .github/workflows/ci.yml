@@ -26,6 +26,7 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
       artifacts: ${{ steps.filter.outputs.artifacts }}
       packaging: ${{ steps.filter.outputs.packaging }}
+      registry: ${{ steps.filter.outputs.registry }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d  # v4
@@ -54,6 +55,14 @@ jobs:
               - 'testdata/**'
               - 'test/**'
               - 'docs/**'
+              # telemetry/registry/ — embedded into the binary, and
+              #              internal/telemetry checks names_gen.go against it.
+              - 'telemetry/**'
+            # ynh's telemetry registry, an OpenTelemetry Weaver registry
+            # (ynr ADR-007), which Weaver itself checks.
+            registry:
+              - 'telemetry/registry/**'
+              - '.github/workflows/ci.yml'
             # The harness artifacts this repo ships and uses on itself. Before
             # this filter existed, a PR touching only skills/ or agents/ matched
             # no filter, skipped every job, and All Clear went green having run
@@ -245,10 +254,29 @@ jobs:
       - name: Build the container image
         run: docker buildx build --load --tag ynh:ci-check .
 
+  registry:
+    # ynh's telemetry registry is an OpenTelemetry Weaver registry (ynr
+    # ADR-007): Weaver checks it, against the semantic conventions it pins.
+    # The build reads only the subset it uses (internal/telemetry/weaver),
+    # so this is the one check that the registry is valid Weaver.
+    name: Telemetry Registry
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.registry == 'true'
+    env:
+      WEAVER_VERSION: v0.27.0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - name: weaver registry check
+        run: |
+          set -eu
+          curl -fsSL "https://github.com/open-telemetry/weaver/releases/download/${WEAVER_VERSION}/weaver-x86_64-unknown-linux-gnu.tar.xz" | tar -xJ -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP"/weaver-x86_64-unknown-linux-gnu/weaver registry check -r telemetry/registry
+
   all-clear:
     name: All Clear
     runs-on: ubuntu-latest
-    needs: [changes, build, test, lint, format, artifacts, skill-security, packaging]
+    needs: [changes, build, test, lint, format, artifacts, skill-security, packaging, registry]
     if: always()
     steps:
       - name: Check results
@@ -262,6 +290,7 @@ jobs:
           echo "  artifacts: ${{ needs.artifacts.result }}"
           echo "  skill-security: ${{ needs['skill-security'].result }}"
           echo "  packaging: ${{ needs.packaging.result }}"
+          echo "  registry: ${{ needs.registry.result }}"
 
           if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
             echo "One or more required checks failed"

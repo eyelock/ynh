@@ -40,6 +40,20 @@ Recipes reference `$(GOIMPORTS)` instead of bare `goimports`. This means `make f
 `make help` is generated from the Makefile itself, so it cannot go stale —
 prefer it over this table.
 
+## Telemetry names
+
+The names ynh emits in OpenTelemetry are declared in its Weaver registry,
+`telemetry/registry/`, and `internal/telemetry/names_gen.go` is generated from
+it. After changing the registry, run:
+
+```bash
+go generate ./internal/telemetry
+```
+
+`TestConstantsMatchTheRegistry` fails until you do, and
+`TestCodeUsesOnlyTheConstants` fails when code spells a registered name as a
+string. CI's Telemetry Registry job checks the registry with Weaver itself.
+
 ## Permissions
 
 All `make` commands are pre-approved in `.claude/settings.json`. You should never need to ask for permission to run them.

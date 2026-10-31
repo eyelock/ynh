@@ -198,6 +198,18 @@ Manage local harness source directories.
 
 Run 'ynh sources <subcommand> --help' for a subcommand's arguments and flags.`,
 
+	"telemetry": `ynh telemetry registry [flags]
+
+Print ynh's telemetry registry: the names it emits in OpenTelemetry under the
+ynh. prefix (attributes, spans and events), the OpenTelemetry names it uses
+beside them, and the semantic-conventions version it follows. The registry is
+an OpenTelemetry Weaver registry embedded in the binary; its tool name and
+version are what service.name and service.version say on every record.
+The JSON shape is the one every tool of the family prints, which ynr reads.
+
+Flags:
+  --format text|json   Output format (default text)`,
+
 	"paths": `ynh paths [flags]
 
 Show the resolved path roots ynh uses: home, cache, run and bin.
