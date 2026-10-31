@@ -160,7 +160,7 @@
     },
     "source": {
       "type": "string",
-      "description": "Where the harness was installed from, copied from provenance. Absent for a local-path install."
+      "description": "Where the harness was installed from, copied from provenance, such as a git URL; for a local-path install, its path (source_type local, with no ref or sha)."
     },
     "source_type": {
       "type": "string",

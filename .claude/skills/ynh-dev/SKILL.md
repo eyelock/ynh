@@ -19,20 +19,20 @@ Read these before starting work:
 
 ## Quick checks
 
-Run the full CI pipeline:
+Run every CI check that needs neither Docker nor the network:
 
 ```bash
 make check
 ```
 
-This runs deps, format, lint, test, and build in sequence. Fix any issues before committing.
+This runs deps, format, lint, check-tidy, test, build, check-artifacts, check-vendor-parity and check-marketplace in sequence. It leaves out scan-artifacts and the container image build (Docker), vulncheck and check-eval-stand-ins (network) and e2e (release gate), so a green `make check` is not a promise of a green CI. Fix any issues before committing.
 
 ## Individual steps
 
 If you need to run steps individually:
 
 ```bash
-make deps      # install prerequisites (goimports, golangci-lint)
+make deps      # install prerequisites (Go, golangci-lint, goimports, jq); checks python3 is present
 make format    # goimports + gofmt
 make lint      # golangci-lint
 make test      # go test with race detection and coverage

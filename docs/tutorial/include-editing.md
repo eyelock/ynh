@@ -105,7 +105,7 @@ Expected:
 | Flag | Purpose |
 |------|---------|
 | `--path <subdir>` | Scope into a subdirectory of the repo |
-| `--pick <items>` | Comma-separated artifact paths in `type/name` form: `skills/<name>`, `agents/<name>.md`, `rules/<name>.md`, `commands/<name>.md`. All others excluded. |
+| `--pick <items>` | Comma-separated artifact paths in `type/name` form: `skills/<name>`, `agents/<name>.md`, `rules/<name>.md`, `commands/<name>.md`, or the name alone of a top-level skill folder in a repository with no `skills/` directory (see [Skills at the top level of a repository](../harnesses.md#skills-at-the-top-level-of-a-repository)). All others excluded. |
 | `--ref <ref>` | Pin to a branch, tag, or commit SHA |
 | `--as <alias>` | Namespace for the included harness's focuses and profiles (`--profile <alias>:<name>`), instead of its own name |
 
@@ -482,7 +482,7 @@ rm -rf /tmp/ynh-tutorial-includes
 - `ynh include update <harness> <url>` — updates specific fields; only supplied flags change; uses `--from-path` to target one of multiple entries from the same URL; `--path` changes the path value
 - `<harness>` is a **name** (installed harness) or a **path** (local directory); paths take a `/` or `.` prefix
 - Installed harnesses are pre-fetched after `add` or `update` so `ynh run` works immediately — no separate `ynh update` needed
-- `--pick` values must use the canonical `type/name` form (`skills/<name>`, `agents/<name>.md`, `rules/<name>.md`, `commands/<name>.md`); validated against the fetched repo before the manifest is touched
+- `--pick` values must use the canonical `type/name` form (`skills/<name>`, `agents/<name>.md`, `rules/<name>.md`, `commands/<name>.md`), or name a top-level folder whose `SKILL.md` is at its root; validated against the fetched repo before the manifest is touched
 - If a bare basename or mistyped pick resolves to existing canonical entries, the error leads with a "Did you mean …?" hint (`--pick foo` → `did you mean skills/foo or agents/foo.md?`); otherwise the full available list is shown
 - The `type/` prefix disambiguates a skill and a flat artifact that share a basename — both can be picked independently
 - Mutations never happen if validation fails — the `.agents/harness/plugin.json` is only written after all checks pass

@@ -128,13 +128,53 @@ the two must be set.
 | `local` | one of git/local | Local filesystem path. Absolute, or relative to the harness root. |
 | `ref` | no | Git tag, branch, or commit (Git sources only) |
 | `path` | no | Subdirectory within the resolved source. Must be a relative path with no `..` traversal. |
-| `pick` | no | Specific artifact paths to include. If omitted, includes all. |
+| `pick` | no | Specific artifact paths to include, in `type/name` form (`skills/<name>`, `agents/<name>.md`, `rules/<name>.md`, `commands/<name>.md`), or a top-level skill folder by its name alone (see [Skills at the top level of a repository](#skills-at-the-top-level-of-a-repository)). If omitted, includes all. |
 | `instructions` | no | Boolean, default `true`. `false` leaves the include's `instructions.md` / `AGENTS.md` out of the composed instructions; its skills, agents, rules and commands still come through. See [Artifacts](artifacts.md#project-instructions). |
 | `sensors` | no | Boolean, default `true`. `false` drops the sensors the include declares; its skills, agents, rules and commands still come through. See [sensors](sensors.md#taking-an-include-without-its-sensors). |
 | `hooks` | no | `true` to let the included harness's hooks run in the session. Default `false`; a harness reached through another needs it at every link, on every route (see [When routes disagree](#when-routes-disagree)). See [Hooks from Included Harnesses](hooks.md#hooks-from-included-harnesses). |
 | `as` | no | Namespace for the included harness's focuses and profiles, in place of its own name. A harness name: letters, digits, `.`, `_`, `-`, and no `:`. See [Profiles and focuses of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses). |
 
 If the resolved directory holds a harness manifest, the include is a harness: its `mcp_servers` come with it, and, unless `pick` is set, so do its own `includes`. Its sensors come with it too unless the include says `"sensors": false` (see [Sensors from an include](sensors.md#sensors-from-an-include)), and its hooks only when the include says `"hooks": true` (see [Hooks from Included Harnesses](hooks.md#hooks-from-included-harnesses)). Its focuses and profiles are not applied unless you select them by namespace (`--profile github:ci`, `--focus github:triage`). See [Servers from Included Harnesses](mcp.md#servers-from-included-harnesses) and [Profiles and focuses of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses).
+
+#### Skills at the top level of a repository
+
+Many community skill repositories keep each skill as a folder at the top level,
+with its `SKILL.md` at the folder's root and no `skills/` directory:
+
+```
+community-skills/
+├── README.md
+├── bash-scripting/
+│   └── SKILL.md
+└── python/
+    └── SKILL.md
+```
+
+Pick such a skill by its folder name alone, and ynh takes it as the skill
+`skills/<name>`, with everything in the folder:
+
+```json
+{
+  "includes": [
+    {
+      "git": "github.com/Mindrally/skills",
+      "ref": "7682ca77710e0971eab4e0ae5dddfa281aea0ba5",
+      "pick": ["bash-scripting"]
+    }
+  ]
+}
+```
+
+- A bare name is taken this way only when it names a folder at the include's
+  top level (after `path`, if the include has one) whose `SKILL.md` is at its
+  root. Any other bare name is refused, as before, with a "did you mean" hint.
+- Nothing about other includes changes. A pick without a type used to be an
+  error, so this only gives a meaning to picks that failed before. An include of
+  such a repository with no `pick` still takes nothing, since ynh does not guess
+  which folders are skills; pick the ones you want.
+- `ynh include add --pick bash-scripting` validates the pick against the fetched
+  repository like any other, and `ynd compose` lists the skill with the include
+  as its source.
 
 #### When routes disagree
 
