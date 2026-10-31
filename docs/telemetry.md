@@ -352,8 +352,8 @@ hand to Codex.
 **Codex's logs are off** because every Codex log record carries the signed-in
 account's email address and account id as attributes (`user.email`,
 `user.account_id`), and nothing in its `[otel]` table leaves them out. People
-appear in telemetry only by their handle, never by email (ynr ADR-006, rule
-10). Codex's spans and metrics carry neither. The token counts its events
+appear in telemetry only by their handle, never by email ([ynr ADR-006, rule
+10](https://github.com/eyelock/ynr/blob/develop/docs/adr/006-sibling-instrumentation-contract.md)). Codex's spans and metrics carry neither. The token counts its events
 would have reported are on its turn spans too (`gen_ai.usage.*`,
 `codex.turn.token_usage.*`).
 
@@ -370,8 +370,27 @@ spool. With logs on, Codex's `codex.user_prompt` event carried
 `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT` in Codex's
 environment did not move the traces away from the `-c` endpoint.
 
-What Codex's spans do carry that ynh's own never do: the working directory
-(`cwd`) and the host's name (`host.name`), as Codex reports them.
+**The relay strips paths and host names.** Codex's spans carry the working
+directory (`cwd`, ynh's run directory, which sits under the user's home and so
+names their account) and the host's name (`host.name`), and nothing in Codex's
+`[otel]` table drops an attribute. `ynr relay` removes them before anything
+reaches the spool ([ynr #86](https://github.com/eyelock/ynr/pull/86)). It drops
+`cwd`, `host.name`, `host.id`, `host.ip`, `host.mac`, `process.owner`,
+`process.command`, `process.command_line`, `process.command_args` and
+`process.executable.path`, and any attribute whose value is the user's home
+folder or a path under it, on every signal and from every vendor. Paths and host
+names are dropped rather than hashed
+([ynr ADR-006, rule 10](https://github.com/eyelock/ynr/blob/develop/docs/adr/006-sibling-instrumentation-contract.md)). This needs a `ynr` newer than v0.3.2, the
+latest release when this was written; an older relay writes those attributes
+as Codex sends them. The relay scrubs attributes only, not log bodies or span
+names; Codex's log bodies are off anyway, and its span names carry no paths.
+
+**What Codex passes on.** The commands Codex runs inherit `TRACEPARENT` and
+`OTEL_RESOURCE_ATTRIBUTES` from its environment (checked live with codex-cli
+0.166.0: a shell command listed both). Under ynh with the relay on, Codex's
+environment carries no `OTEL_EXPORTER_OTLP_*`, so neither do its commands.
+Unchecked: whether Codex passes them to the MCP servers it starts, and whether
+it sends a W3C `traceparent` header on its requests to the OpenAI API.
 
 ### Other vendors
 
@@ -389,6 +408,12 @@ particular it never carries:
 - any path: the worktree, the session directory, `--resume`, `--emit-jsonl`, a
   harness given as a path, or the changed files
 - people's names or email addresses
+
+A vendor's own telemetry through the relay is held to the same rules
+([ynr ADR-006, rule 10](https://github.com/eyelock/ynr/blob/develop/docs/adr/006-sibling-instrumentation-contract.md)). ynh turns the vendor's content options off,
+turns off Codex's logs (they carry the account's email), and the relay drops
+paths and host names before the spool (see
+[What Codex receives](#what-codex-receives)).
 
 ## Not yet
 
