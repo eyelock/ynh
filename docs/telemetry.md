@@ -205,8 +205,8 @@ may still change, and when one does, the registry says so.
 
 ## Vendor telemetry through the relay
 
-Claude Code can report its own spans, metrics and events, but only over the
-network. The telemetry relay setting lets a run collect them into its spool
+Claude Code and Codex can report their own spans, metrics and events, but only
+over the network. The telemetry relay setting lets a run collect them into its spool
 too: ynh starts [`ynr relay`](https://github.com/eyelock/ynr), a small OTLP/HTTP
 receiver on a random loopback port, points the vendor CLI at it, and stops it
 when the run ends. The relay writes what it receives into the run's spool
@@ -227,7 +227,7 @@ The setting is off by default. The first of these that says anything decides:
 With the setting on, ynh starts the relay only when all of these hold, just
 before the worker starts:
 
-- the backend is `claude` (see [Other vendors](#other-vendors))
+- the backend is `claude` or `codex` (see [Other vendors](#other-vendors))
 - the run's telemetry goes to the spool: an operator's `OTEL_EXPORTER_OTLP_*`
   means the vendor's telemetry is theirs to direct, so ynh leaves it alone,
   and with no spool there is nowhere to write
@@ -359,11 +359,93 @@ tools; Claude Code's own requests are the vendor's behaviour, there is no
 documented switch to stop them short of turning spans off, and the header
 carries only random ids, never content.
 
+### What Codex receives
+
+Codex reads its telemetry settings from its `config.toml` (an `[otel]` table),
+not from `OTEL_*` variables. ynh gives each `codex exec` (one per turn) these
+`-c` overrides, which outrank `~/.codex/config.toml` and its profiles:
+
+| Override | Value | Why |
+|---|---|---|
+| `otel.trace_exporter` | `{otlp-http={endpoint="<relay>/v1/traces",protocol="binary"}}` | spans to the relay over OTLP/HTTP protobuf |
+| `otel.metrics_exporter` | `{otlp-http={endpoint="<relay>/v1/metrics",protocol="binary"}}` | metrics to the relay |
+| `otel.exporter` | `"none"` | Codex's logs (events) off: see below |
+| `otel.log_user_prompt` | `false` | the prompt, which Codex otherwise logs |
+| `otel.log_agent_responses` | `false` | the model's responses |
+| `otel.log_guardian_assessments` | `false` | the auto-reviewer's assessments |
+
+Codex's `otlp-http` endpoint is the URL it posts to, so each one carries its
+signal's path. Each exporter is given as a whole inline table, so headers, TLS
+or another endpoint in a user's `[otel]` block do not survive. Before the run,
+ynh also drops any `OTEL_EXPORTER_OTLP_*` a harness's `env_passthrough` would
+hand to Codex.
+
+**Codex's logs are off** because every Codex log record carries the signed-in
+account's email address and account id as attributes (`user.email`,
+`user.account_id`), and nothing in its `[otel]` table leaves them out. People
+appear in telemetry only by their handle, never by email ([ynr ADR-006, rule
+10](https://github.com/eyelock/ynr/blob/develop/docs/adr/006-sibling-instrumentation-contract.md)). Codex's spans and metrics carry neither. The token counts its events
+would have reported are on its turn spans too (`gen_ai.usage.*`,
+`codex.turn.token_usage.*`).
+
+**Codex joins the run's trace.** It reads `TRACEPARENT` and `TRACESTATE` from
+its environment ("TRACEPARENT detected; continuing trace from parent
+context"), and its `codex.exec` span is a child of the run's `ynh.run` span.
+
+Verified on 2026-10-31 with codex-cli 0.166.0, signed in with ChatGPT, against
+a real `ynr relay`: `ynh agent run --backend codex` with the relay on wrote
+Codex's spans and metrics into the run's spool, in the caller's trace, with
+`codex.exec` under `ynh.run`. No log records and no email address reached the
+spool. With logs on, Codex's `codex.user_prompt` event carried
+`prompt="[REDACTED]"` under `log_user_prompt=false`. An
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT` in Codex's
+environment did not move the traces away from the `-c` endpoint.
+
+**The relay strips paths and host names.** Codex's spans carry the working
+directory (`cwd`, ynh's run directory, which sits under the user's home and so
+names their account) and the host's name (`host.name`), and nothing in Codex's
+`[otel]` table drops an attribute. `ynr relay` removes them before anything
+reaches the spool ([ynr #86](https://github.com/eyelock/ynr/pull/86)). It drops
+`cwd`, `host.name`, `host.id`, `host.ip`, `host.mac`, `process.owner`,
+`process.command`, `process.command_line`, `process.command_args` and
+`process.executable.path`, and any attribute whose value is the user's home
+folder or a path under it, on every signal and from every vendor. Paths and host
+names are dropped rather than hashed
+([ynr ADR-006, rule 10](https://github.com/eyelock/ynr/blob/develop/docs/adr/006-sibling-instrumentation-contract.md)). This needs a `ynr` newer than v0.3.2, the
+latest release when this was written; an older relay writes those attributes
+as Codex sends them. The relay scrubs attributes only, not log bodies or span
+names; Codex's log bodies are off anyway, and its span names carry no paths.
+
+**What Codex passes on.** The commands Codex runs inherit `TRACEPARENT` and
+`OTEL_RESOURCE_ATTRIBUTES` from its environment. This was checked live on
+2026-10-31 with codex-cli 0.166.0, outside ynh. `codex exec --json` ran with
+`TRACEPARENT` and `OTEL_RESOURCE_ATTRIBUTES` set in its environment and was
+asked to run, in Codex's default shell environment policy:
+
+```sh
+env | grep -E '^(TRACEPARENT|TRACESTATE|OTEL_)' | sed 's/=.*//' ; echo done
+```
+
+The command's output in the `command_execution` event (exit code 0) was the
+variable names only, never their values:
+
+```
+OTEL_RESOURCE_ATTRIBUTES
+TRACEPARENT
+done
+```
+
+That shows the names reach the command, not whether the `TRACEPARENT` value
+is the one Codex was given or one for its own span. `TRACESTATE` was not set
+for that run, so whether it passes through is unchecked. Under ynh with the
+relay on, Codex's environment carries no `OTEL_EXPORTER_OTLP_*`, so neither do
+its commands.
+Unchecked: whether Codex passes them to the MCP servers it starts, and whether
+it sends a W3C `traceparent` header on its requests to the OpenAI API.
+
 ### Other vendors
 
-Nothing yet. Codex is configured through its `config.toml` rather than the
-environment, and whether it reads `TRACEPARENT` is unverified; Cursor is
-unexamined. With the setting on, a Codex or Cursor run starts no relay and
+Cursor is unexamined. With the setting on, a Cursor run starts no relay and
 prints one note.
 
 ## No content
@@ -378,6 +460,12 @@ particular it never carries:
   harness given as a path, or the changed files
 - people's names or email addresses
 
+A vendor's own telemetry through the relay is held to the same rules
+([ynr ADR-006, rule 10](https://github.com/eyelock/ynr/blob/develop/docs/adr/006-sibling-instrumentation-contract.md)). ynh turns the vendor's content options off,
+turns off Codex's logs (they carry the account's email), and the relay drops
+paths and host names before the spool (see
+[What Codex receives](#what-codex-receives)).
+
 ## Not yet
 
 These are still to come:
@@ -386,8 +474,7 @@ These are still to come:
   protobuf, about ninety modules; ynh does not take that on for an endpoint it
   cannot yet use. Until then an `OTEL_EXPORTER_OTLP_*` setting writes nothing,
   with a note.
-- **Other vendors' telemetry** through the relay, starting with Codex once its
-  behaviour is verified.
+- **Cursor's telemetry** through the relay, once its behaviour is examined.
 - **Conformance** checks with `ynr conformance` in CI.
 - **More events**, such as one per turn, per sensor verdict or per budget
   threshold, and metrics.

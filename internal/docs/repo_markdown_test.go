@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -57,12 +58,12 @@ func TestRepoMarkdownSkipsIgnoredFiles(t *testing.T) {
 	)
 	runGit(t, root, "add", "README.md", ".github/CONTRIBUTING.md", ".gitignore")
 
-	got, viaGit, err := repoMarkdownFiles(root)
+	got, gitErr, err := repoMarkdownFiles(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !viaGit {
-		t.Fatal("expected git to list the files in a git repository")
+	if gitErr != nil {
+		t.Fatalf("expected git to list the files in a git repository: %v", gitErr)
 	}
 	want := []string{
 		filepath.FromSlash(".github/CONTRIBUTING.md"),
@@ -88,12 +89,39 @@ func TestRepoMarkdownFallsBackWithoutGit(t *testing.T) {
 		"node_modules/pkg/README.md",
 	)
 
-	got, viaGit, err := repoMarkdownFiles(root)
+	got, gitErr, err := repoMarkdownFiles(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if viaGit {
+	if gitErr == nil {
 		t.Fatal("expected the disk walk outside a git repository")
+	}
+	if want := []string{"README.md"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("repoMarkdownFiles = %q, want %q", got, want)
+	}
+}
+
+// TestRepoMarkdownFallsBackInsideAnotherRepo covers a source tree extracted
+// into a directory a parent repository ignores: git answers for the parent and
+// lists nothing, so the disk must be walked instead, and the error says why.
+func TestRepoMarkdownFallsBackInsideAnotherRepo(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	parent := t.TempDir()
+	runGit(t, parent, "init", "-q")
+	writeTree(t, parent, "src/README.md", "src/docs/guide.md")
+	if err := os.WriteFile(filepath.Join(parent, ".gitignore"), []byte("src/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(parent, "src")
+
+	got, gitErr, err := repoMarkdownFiles(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gitErr == nil || !strings.Contains(gitErr.Error(), "top level") {
+		t.Fatalf("expected a not-top-level error, got %v", gitErr)
 	}
 	if want := []string{"README.md"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("repoMarkdownFiles = %q, want %q", got, want)

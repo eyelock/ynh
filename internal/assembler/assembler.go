@@ -2,6 +2,7 @@ package assembler
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/eyelock/ynh/internal/harness"
 	"github.com/eyelock/ynh/internal/resolver"
 )
 
@@ -34,6 +36,16 @@ type ArtifactTransform func(artifactType, name string, data []byte) (string, []b
 type ArtifactTransformer interface {
 	TransformArtifact(artifactType, name string, data []byte) (string, []byte)
 }
+
+// ArtifactWarner is an optional capability an ArtifactTransformer may add: the
+// warnings for what its transform of one artifact drops, such as the tools
+// list of an agent Codex writes as a custom agent. Assembly prints each one.
+type ArtifactWarner interface {
+	ArtifactWarnings(artifactType, name string, data []byte) []string
+}
+
+// warnOut receives assembly's warnings. Tests swap it to read them.
+var warnOut io.Writer = os.Stderr
 
 // Assemble creates a temporary directory with vendor-specific config layout
 // populated from resolved Git content.
@@ -75,10 +87,34 @@ func assembleInto(workDir string, adapter LayoutProvider, content []resolver.Res
 		}
 	}
 
+	// Warnings are kept per file written, keyed by its path in the config
+	// dir: a later source (the root after its includes) that writes the same
+	// file replaces the earlier copy, and its warnings replace that copy's,
+	// so each agent staged warns once, about the copy that was staged.
 	var transform ArtifactTransform
+	var warned []string               // target paths, in first-written order
+	warnings := map[string][]string{} // target path -> that copy's warnings
 	if t, ok := adapter.(ArtifactTransformer); ok {
 		transform = t.TransformArtifact
+		if w, ok := adapter.(ArtifactWarner); ok {
+			transform = func(artifactType, name string, data []byte) (string, []byte) {
+				newName, newData := t.TransformArtifact(artifactType, name, data)
+				key := artifactType + "/" + newName
+				if _, seen := warnings[key]; !seen {
+					warned = append(warned, key)
+				}
+				warnings[key] = w.ArtifactWarnings(artifactType, name, data)
+				return newName, newData
+			}
+		}
 	}
+	defer func() {
+		for _, key := range warned {
+			for _, w := range warnings[key] {
+				_, _ = fmt.Fprintf(warnOut, "  warning: %s\n", w)
+			}
+		}
+	}()
 
 	// Copy content into the right places
 	for _, rc := range content {
@@ -121,10 +157,22 @@ func Cleanup(workDir string) {
 // targetBaseDir is where artifact type directories live (e.g., workDir/.claude/ for runtime,
 // or pluginRoot/ for export).
 func CopyPicked(repoBase string, picked string, targetBaseDir string, artifactDirs map[string]string, transform ArtifactTransform) error {
+	// A folder at the include's top level whose SKILL.md is at its root is
+	// a skill, picked by its name alone (harness.TopLevelSkill). It used to
+	// be an error, so no pick that resolved before resolves differently.
+	if harness.TopLevelSkill(repoBase, picked) {
+		targetDir, ok := artifactDirs["skills"]
+		if !ok {
+			return fmt.Errorf("unknown artifact type %q in pick: %s", "skills", picked)
+		}
+		name := filepath.Clean(picked)
+		return copyArtifactDir("skills", filepath.Join(repoBase, name), filepath.Join(targetBaseDir, targetDir, name))
+	}
+
 	// Determine which artifact type this belongs to
 	parts := strings.SplitN(picked, "/", 2)
 	if len(parts) < 2 {
-		return fmt.Errorf("pick path must be in format 'type/name': %s", picked)
+		return fmt.Errorf("pick path must be in format 'type/name', or name a top-level folder with a SKILL.md at its root: %s", picked)
 	}
 
 	artifactType := parts[0]

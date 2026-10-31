@@ -19,8 +19,8 @@ Recipes reference `$(GOIMPORTS)` instead of bare `goimports`. This means `make f
 
 | Command | What it does |
 |---------|-------------|
-| `make check` | Full CI pipeline: deps, format, lint, test, build, **check-artifacts** |
-| `make deps` | Install prerequisites (goimports, golangci-lint) |
+| `make check` | Every CI check needing no Docker or network: deps, format, lint, **check-tidy**, test, build, **check-artifacts**, **check-vendor-parity**, **check-marketplace** |
+| `make deps` | Install prerequisites (Go, golangci-lint, goimports, jq); fails if python3 is missing, which it does not install |
 | `make build` | Build **both** binaries to `bin/ynh` and `bin/ynd` |
 | `make install` | Build and copy both binaries to `~/.ynh/bin` |
 | `make test` | Run all tests with race detection and coverage |
@@ -28,8 +28,10 @@ Recipes reference `$(GOIMPORTS)` instead of bare `goimports`. This means `make f
 | `make test-coverage` | Tests with coverage profile + per-function report |
 | `make format` | Run goimports + gofmt |
 | `make lint` | Run golangci-lint |
+| `make check-tidy` | Fail if `go.mod`/`go.sum` are not tidy (`go mod tidy -diff`, writes nothing) |
 | `make check-artifacts` | `ynd validate` + `ynd lint` over `skills/ agents/ rules/ .claude/` |
 | `make check-vendor-parity` | Every vendor documented, assembling the same artifacts, and its CLI stubbed in `.claude/agents/evals.md` (needs jq) |
+| `make check-marketplace` | The committed marketplace indexes agree with the plugin manifests (needs python3) |
 | `make scan-artifacts` | SkillSpector security scan (needs Docker; not part of `make check`) |
 | `make e2e` | E2E suite — release gate, not part of `make test` or `make check` |
 | `make clean` | Remove build artifacts and caches |

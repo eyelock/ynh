@@ -47,7 +47,7 @@ ynh agent run --resume <session-dir> [flags]
 | `--max-plan-iterations <n>` | Cap on plan revisions before acting |
 | `--emit-jsonl <path>` | Write the trajectory; `-` for stdout |
 | `--resume <dir>` | Continue a previous session from its directory (the `--emit-jsonl` file's folder) |
-| `--telemetry-relay` | Start `ynr relay` for the run and send the vendor's own telemetry into the spool (claude only). Also `YNH_TELEMETRY_RELAY`, or `"telemetry_relay": true` in `config.json`. See [Telemetry](telemetry.md#vendor-telemetry-through-the-relay) |
+| `--telemetry-relay` | Start `ynr relay` for the run and send the vendor's own telemetry into the spool (claude, codex). Also `YNH_TELEMETRY_RELAY`, or `"telemetry_relay": true` in `config.json`. See [Telemetry](telemetry.md#vendor-telemetry-through-the-relay) |
 
 ### Budgets
 
@@ -134,7 +134,9 @@ With the [telemetry relay](telemetry.md#vendor-telemetry-through-the-relay)
 on, a `claude` worker also receives Claude Code's telemetry settings pointing
 at the run's relay, with every content switch forced off, and the same
 settings as `--settings`. Those settings replace any of the same family the
-harness passes through.
+harness passes through. A `codex` worker gets its relay settings as `-c`
+overrides on each `codex exec`, with Codex's logs off, and loses any
+`OTEL_EXPORTER_OTLP_*` the harness passes through.
 
 ### MCP servers
 
@@ -144,8 +146,9 @@ and its `null` removing; see
 [Servers from Included Harnesses](mcp.md#servers-from-included-harnesses)),
 named on the `claude` backend as `plugin:<harness>:<server>`, as `ynh run`
 names them. A harness or profile that sets `mcp_isolation` runs its worker
-with only that composed set, the same as `ynh run`; `ynh agent run` has no `--isolated-mcp` flag, so isolation
-comes from the manifest alone. It is applied on the `claude` backend only (its
+with only that composed set, the same as `ynh run`; `ynh agent run` has no
+`--isolated-mcp` flag, so isolation comes from the manifest alone. It is
+applied on the `claude` backend only (its
 tools are then named `<server>`); on `codex` and `cursor` ynh prints one
 `warning:` line on stderr and the worker loads your own servers too. See
 [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
@@ -169,7 +172,7 @@ backend:
 |---------|-------------------|
 | `claude` | Carried, and passed to Claude with `--agents` |
 | `cursor` | Not carried. The delegate's agent file is written without them, and ynh prints one `warning:` line per delegate on stderr |
-| `codex` | Not carried, and the delegate itself is not picked up. ynh writes the delegate's agent file as Markdown, `.codex/agents/<name>.md`, without them, and prints one `warning:` line per delegate on stderr; but Codex reads only TOML custom agents there, so the worker has no subagent for the delegate today. Not checked against a live `codex`; see [MCP Servers of Delegates](mcp.md#mcp-servers-of-delegates) |
+| `codex` | Not carried. ynh writes the delegate as a TOML custom agent, `.codex/agents/<name>.toml`, without them, since a Codex custom agent inherits the session's MCP servers and cannot set its own, and prints one `warning:` line per delegate on stderr. Each launch registers it with Codex (see [Symlink Installation](vendors.md#symlink-installation-codex-cursor)), CONFIRMED live on codex-cli 0.166.0; see [MCP Servers of Delegates](mcp.md#mcp-servers-of-delegates) |
 
 On `claude`, a delegate server's `${VAR}` references are resolved from the
 delegate's own `env_passthrough`, against the environment `ynh agent run` was
