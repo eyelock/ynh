@@ -206,7 +206,7 @@ Copilot requires an explicit `"type"` field on every server (`"local"` for a `co
 
 ## Running with only the harness's servers
 
-By default a harness's MCP servers load alongside the servers you have already configured: your user config and, on Claude Code, your claude.ai connectors. To run with only the harness's own servers, isolate them.
+By default a harness's MCP servers load alongside the servers you have already configured: your user config and, on Claude Code, your claude.ai connectors. To run with only the servers the harness composes, isolate them: its own and those of the harnesses it includes are kept, as are its delegates' (see [MCP Servers of Delegates](#isolation)), and yours and your connectors are left out.
 
 Two ways, which combine:
 
