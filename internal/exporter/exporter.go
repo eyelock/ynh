@@ -203,7 +203,7 @@ func Export(opts ExportOptions) ([]ExportResult, error) {
 	// carries no delegates in an export leaves them out, with a warning.
 	for _, v := range vendors {
 		if a, aerr := vendor.Get(v); aerr == nil && a.SupportsExportDelegates() {
-			if opts.delegates, err = ResolveExportDelegates(p.DelegatesTo, p.Dir, opts.Config); err != nil {
+			if opts.delegates, err = ResolveExportDelegates(p.DelegatesTo, p.Dir, p.Name, opts.Config); err != nil {
 				return nil, err
 			}
 			break
