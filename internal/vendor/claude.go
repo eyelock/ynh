@@ -217,10 +217,11 @@ func claudeResumeArgs(sessionID, prompt string, interactive bool, extraArgs []st
 	return prompt, append(resumeArgs, extraArgs...)
 }
 
-// IsolateMCP restricts Claude to the harness's own servers. --strict-mcp-config
+// IsolateMCP restricts Claude to the servers the harness composes (its own and
+// its included harnesses', all in the assembled config). --strict-mcp-config
 // ignores every other source (user config, claude.ai connectors) and, with no
 // --mcp-config, loads none at all, which is the right answer for a harness
-// that declares no servers. --plugin-dir stays, so hooks and the rest of the
+// that composes no servers. --plugin-dir stays, so hooks and the rest of the
 // plugin still load. The harness's servers then arrive as <server> rather
 // than plugin:<harness>:<server>. The "=" spelling keeps --mcp-config, which
 // is variadic, from swallowing a positional that follows it.
