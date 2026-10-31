@@ -10,8 +10,9 @@ import (
 // standing instructions in the delegate's agent, under its name. The calling
 // session still gives the delegate its task.
 type DelegateFocus struct {
-	Name   string
-	Prompt string
+	Name    string
+	Profile string // the profile the focus binds, "" for none
+	Prompt  string
 }
 
 // CheckSelection reports a delegates_to entry that names both a profile and
@@ -63,7 +64,7 @@ func (d Delegate) Select(h *Harness) (*Harness, *DelegateFocus, error) {
 		if err != nil {
 			return nil, nil, fmt.Errorf("delegate %s: focus %q: %w", h.Name, d.Focus, err)
 		}
-		return resolved, &DelegateFocus{Name: d.Focus, Prompt: focus.Prompt}, nil
+		return resolved, &DelegateFocus{Name: d.Focus, Profile: focus.Profile, Prompt: focus.Prompt}, nil
 	}
 	return h, nil, nil
 }

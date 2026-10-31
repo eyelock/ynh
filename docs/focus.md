@@ -155,7 +155,9 @@ A `delegates_to` entry may name one of the delegate harness's own focuses:
 { "delegates_to": [ { "git": "github.com/eyelock/triager", "focus": "ci-failures" } ] }
 ```
 
-The focus's profile, if it has one, is applied to the delegate, and its prompt is added to the delegate's agent as standing instructions, under `## Focus: ci-failures`. It does not become the delegate's task: the calling session still gives the task each time it delegates. An entry names a profile or a focus, not both, since a focus carries its profile. See [delegates_to](harnesses.md#profile-or-focus-of-a-delegate).
+The focus's profile, if it has one, is applied to the delegate, and its prompt is added to the delegate's agent as standing instructions, under `## Focus: ci-failures`. It does not become the delegate's task: the calling session still gives the task each time it delegates. An entry names a profile or a focus, not both, since a focus carries its profile.
+
+Because that prompt steers the delegate for every task, `ynh trust show` lists it against the delegate, with its profile, and the trust digest covers it, as it does a [launch focus](#launch-focus). Changing the prompt, or selecting another focus, asks for review again. A harness whose `delegates_to` entries select no focus keeps the digest it had. See [delegates_to](harnesses.md#profile-or-focus-of-a-delegate).
 
 ## Missing Focus Behavior
 

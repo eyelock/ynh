@@ -319,6 +319,7 @@ A `delegates_to` entry may name one of the delegate harness's own profiles or fo
 - **Both is an error.** A focus already carries its profile, so an entry that names both is refused by `ynd validate`, by the schema, and when ynh assembles the delegate.
 - The names are the delegate's own, never `namespace:name`. A name the delegate harness does not declare fails `ynd validate` and the run, naming what it does declare. `ynd validate` reads the delegate from disk or the cache only; one it cannot read there is a note, not checked.
 - The delegate's `launch_focus` is never applied. A delegate runs a focus only when its entry names one.
+- A selected focus's prompt is listed by `ynh trust show` and covered by the trust digest, since it steers the delegate for every task (see [What a command sensor can reach](sensors.md#what-a-command-sensor-can-reach)).
 
 The same selection applies wherever ynh builds a delegate: `ynh run`, `ynh agent run`, `ynd preview`, `ynh image`, `ynd export`, and the delegate servers `ynd compose` and `ynh trust` report. `ynd compose` shows the selection beside the delegate (`profile=strict`, `focus=ci-failures`).
 

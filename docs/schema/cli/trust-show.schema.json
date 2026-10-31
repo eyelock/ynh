@@ -247,6 +247,21 @@
       "required": ["name", "prompt"],
       "additionalProperties": false
     },
+    "delegate_focuses": {
+      "type": "array",
+      "description": "The focuses delegates_to entries select, in entry order. Each prompt becomes the delegate's standing instructions for every task it is given, so it steers that subagent as launch_focus steers a session. Present only when an entry selects a focus. Covered by digest. Filled by `trust show` only.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "delegate": { "type": "string", "description": "The delegate harness's name." },
+          "name": { "type": "string", "description": "The focus's name, one of the delegate's own." },
+          "profile": { "type": "string", "description": "The profile the focus binds, when it names one." },
+          "prompt": { "type": "string", "description": "The prompt in full." }
+        },
+        "required": ["delegate", "name", "prompt"],
+        "additionalProperties": false
+      }
+    },
     "workspace": {
       "type": "object",
       "description": "The workspace folders the harness requests for the vendor CLI to reach, and what a run from the current directory would meet. Present only when the harness requests any. The requested strings are covered by digest, so a changed entry reports changed. Reporting only: the grant is decided at launch.",

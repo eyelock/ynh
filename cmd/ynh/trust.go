@@ -195,6 +195,11 @@ type trustSet struct {
 	// prompt is the first message of every such session, so it steers the
 	// model as much as a command does, and the digest covers it.
 	LaunchFocus *launchFocusReport
+	// DelegateFocuses are the focuses delegates_to entries select, in entry
+	// order. Each prompt is a delegate's standing instructions, so it steers
+	// that subagent as launch_focus steers a session, and the digest covers
+	// it. delegates_to is not changed by a profile, so they are read once.
+	DelegateFocuses []delegateFocusReport
 	// Problems is why the set could not be read completely: an include that
 	// is not cached, a merge that refuses. A set with problems is partial, and
 	// a partial set must never be digested or reported as the whole.
@@ -207,11 +212,21 @@ func (t trustSet) count() int { return len(t.Sensors) + len(t.Hooks) + len(t.MCP
 // and the workspace folders. count() stays executables only, because the
 // COMMANDS column and a record's Commands mean commands.
 func (t trustSet) reviewable() int {
-	n := t.count() + len(t.Workspace)
+	n := t.count() + len(t.Workspace) + len(t.DelegateFocuses)
 	if t.LaunchFocus != nil {
 		n++
 	}
 	return n
+}
+
+// delegateFocusReport is a focus a delegates_to entry selects, as the
+// operator reviews it: the delegate, the focus, its profile, and the prompt
+// that becomes the delegate's standing instructions.
+type delegateFocusReport struct {
+	Delegate string `json:"delegate"`
+	Name     string `json:"name"`
+	Profile  string `json:"profile,omitempty"`
+	Prompt   string `json:"prompt"`
 }
 
 // launchFocusReport is a harness's launch_focus as the operator reviews it.
@@ -289,6 +304,9 @@ type delegateView struct {
 	Name    string
 	Servers map[string]plugin.MCPServer
 	Sources map[string]string
+	// Focus is the focus the delegates_to entry selects, nil for none. Its
+	// prompt is the delegate's standing instructions.
+	Focus *harness.DelegateFocus
 }
 
 // runSources is where the servers and hooks of a view came from.
@@ -414,7 +432,8 @@ func delegateViews(h *harness.Harness) ([]delegateView, error) {
 		if err != nil {
 			return nil, fmt.Errorf("delegate %s: %w", del.Git, err)
 		}
-		if dh, _, err = del.Select(dh); err != nil {
+		dh, focus, err := del.Select(dh)
+		if err != nil {
 			return nil, err
 		}
 		var included []harness.IncludedHarness
@@ -429,7 +448,7 @@ func delegateViews(h *harness.Harness) ([]delegateView, error) {
 		if err != nil {
 			return nil, fmt.Errorf("delegate %s: %w", dh.Name, err)
 		}
-		dv := delegateView{Name: dh.Name, Servers: servers, Sources: map[string]string{}}
+		dv := delegateView{Name: dh.Name, Servers: servers, Sources: map[string]string{}, Focus: focus}
 		for _, pr := range provenance {
 			dv.Sources[pr.Server] = pr.Source
 		}
@@ -578,6 +597,13 @@ func harnessExecutables(p *harness.Harness) trustSet {
 		if v.Profile != "" {
 			continue
 		}
+		for _, d := range v.Delegates {
+			if d.Focus != nil {
+				set.DelegateFocuses = append(set.DelegateFocuses, delegateFocusReport{
+					Delegate: d.Name, Name: d.Focus.Name, Profile: d.Focus.Profile, Prompt: d.Focus.Prompt,
+				})
+			}
+		}
 		for _, e := range set.Sensors {
 			baseSensors[sensorKey(e)] = true
 		}
@@ -672,6 +698,15 @@ func executablesDigest(set trustSet) string {
 		field(h, lf.Name)
 		field(h, lf.Profile)
 		field(h, lf.Prompt)
+	}
+	// Likewise only when a delegates_to entry selects a focus, so a harness
+	// whose delegates name none keeps its digest.
+	for _, df := range set.DelegateFocuses {
+		field(h, "delegate_focus")
+		field(h, df.Delegate)
+		field(h, df.Name)
+		field(h, df.Profile)
+		field(h, df.Prompt)
 	}
 	return "sha256:" + hex.EncodeToString(h.Sum(nil))[:16]
 }
@@ -790,6 +825,12 @@ type trustStatus struct {
 	// LaunchFocus is the focus a bare `ynh run` wakes with. Covered by Digest.
 	// Filled by `trust show` only.
 	LaunchFocus *launchFocusReport `json:"launch_focus,omitempty"`
+	// DelegateFocuses are the focuses delegates_to entries select, whose
+	// prompts are delegates' standing instructions. Covered by Digest.
+	// Filled by `trust show` only.
+	DelegateFocuses []delegateFocusReport `json:"delegate_focuses,omitempty"`
+	// delegateFocuses is the set's, for `trust show` to fill the field.
+	delegateFocuses []delegateFocusReport
 }
 
 const (
@@ -819,6 +860,8 @@ func trustStatusFor(id string, p *harness.Harness, store trustStore, environ []s
 		MCPServers:    set.MCPServers,
 		State:         trustUnreviewed,
 		UndeclaredEnv: undeclaredEnvNames(p, environ),
+
+		delegateFocuses: set.DelegateFocuses,
 	}
 	if pr := p.InstalledFrom; pr != nil {
 		st.Source, st.SourceType, st.Ref, st.SHA = pr.Source, pr.SourceType, pr.Ref, pr.SHA
@@ -957,6 +1000,7 @@ func cmdTrustShow(args []string, stdout, stderr io.Writer) error {
 	st := trustStatusFor(name, p, store, os.Environ())
 	st.Workspace = workspaceReportFor(p)
 	st.LaunchFocus = launchFocusFor(p)
+	st.DelegateFocuses = st.delegateFocuses
 
 	if format == "json" {
 		return writeJSON(stdout, st)
@@ -1072,7 +1116,7 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 		_, _ = fmt.Fprintf(w, "  accepted: %s on %s\n", s.AcceptedDigest, s.AcceptedAt)
 	}
 
-	if len(s.Executables)+len(s.Hooks)+len(s.MCPServers) == 0 && s.Workspace == nil && s.LaunchFocus == nil {
+	if len(s.Executables)+len(s.Hooks)+len(s.MCPServers) == 0 && s.Workspace == nil && s.LaunchFocus == nil && len(s.DelegateFocuses) == 0 {
 		_, _ = fmt.Fprintln(w, "\nThis harness declares no commands.")
 		return nil
 	}
@@ -1122,6 +1166,12 @@ func printTrustDetail(w io.Writer, s trustStatus) error {
 
 	if lf := s.LaunchFocus; lf != nil {
 		_, _ = fmt.Fprintf(w, "\nLaunch focus, the first message of every bare 'ynh run' (a prompt it is given replaces this one):\n\n  %s%s\n    %q\n", lf.Name, scopeSuffix(lf.Profile), lf.Prompt)
+	}
+	if len(s.DelegateFocuses) > 0 {
+		_, _ = fmt.Fprintf(w, "\nDelegate focuses, standing instructions of a delegate's subagent for every task it is given:\n\n")
+		for _, df := range s.DelegateFocuses {
+			_, _ = fmt.Fprintf(w, "  %s%s%s\n    %q\n", df.Name, delegateSuffix(df.Delegate), scopeSuffix(df.Profile), df.Prompt)
+		}
 	}
 
 	if len(s.UndeclaredEnv) > 0 {
