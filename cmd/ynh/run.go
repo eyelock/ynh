@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,13 +39,22 @@ func cmdRun(args []string) error {
 	}
 
 	// Mutual exclusivity: --focus + --profile
-	profileName := ra.ProfileFlag
-	if profileName == "" {
-		profileName = os.Getenv("YNH_PROFILE")
+	// --profile may repeat, one per harness (see harness.Selection). YNH_PROFILE
+	// is a single value, used only when no flag was given.
+	profileValues := ra.ProfileFlags
+	if len(profileValues) == 0 {
+		if env := os.Getenv("YNH_PROFILE"); env != "" {
+			profileValues = []string{env}
+		}
 	}
-	if ra.FocusFlag != "" && profileName != "" {
+	if ra.FocusFlag != "" && len(profileValues) > 0 {
 		return fmt.Errorf("cannot use --focus and --profile together (focus includes a profile)")
 	}
+	sel, selErr := harness.ParseSelection(profileValues, ra.FocusFlag)
+	if selErr != nil {
+		return selErr
+	}
+	profileName := sel.Profile
 
 	// Mutual exclusivity: --focus + trailing prompt
 	if ra.FocusFlag != "" && ra.Prompt != "" {
@@ -113,7 +123,7 @@ func cmdRun(args []string) error {
 	explicitPrompt := ra.Prompt
 
 	// Resolve focus → profile + prompt
-	if ra.FocusFlag != "" {
+	if ra.FocusFlag != "" && sel.FocusNS == "" {
 		focus, ok := p.Focuses[ra.FocusFlag]
 		if !ok {
 			return fmt.Errorf("focus %q not defined in harness", ra.FocusFlag)
@@ -194,9 +204,14 @@ func cmdRun(args []string) error {
 	if len(p.Includes) > 0 {
 		fmt.Fprintf(os.Stderr, "Resolving %d include(s)...\n", len(p.Includes))
 	}
-	resolved, err := resolver.ResolveFromCache(p, cfg)
+	resolved, nsFocus, err := resolver.ResolveSelectedFromCache(p, cfg, sel)
 	if err != nil {
 		return fmt.Errorf("resolving includes: %w", err)
+	}
+	if nsFocus != nil {
+		// A focus of an included harness: its prompt is the run's prompt, and
+		// its profile has been applied to that harness during resolution.
+		prompt = nsFocus.Prompt
 	}
 
 	// Print per-source status
@@ -263,36 +278,37 @@ func cmdRun(args []string) error {
 		}
 
 		// Assemble delegate harnesses as agent files
-		if err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo, p.Dir); err != nil {
+		if _, err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo, p.Dir, assembler.DelegateOptions{Config: cfg, Launch: true}); err != nil {
 			return fmt.Errorf("assembling delegates: %w", err)
 		}
 
 		// Generate vendor-native hook config files, and copy in the scripts
-		// those hooks run from the harness
-		if len(p.Hooks) > 0 {
-			warnings, err := assembler.WriteSessionHooks(runDir, adapter, harnessDir, p.Hooks)
-			if err != nil {
-				return err
-			}
-			for _, w := range warnings {
-				fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-			}
+		// those hooks run from the harness. The hooks are the root's and
+		// those of the included harnesses that consented to them.
+		hookWarnings, err := assembler.WriteComposedSessionHooks(runDir, adapter, p, resolved)
+		if err != nil {
+			return err
+		}
+		for _, w := range hookWarnings {
+			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 		}
 
-		// Generate vendor-native MCP config files
-		if len(p.MCPServers) > 0 {
-			// ynh is the client here in the Agent Plugins sense: it resolves
-			// the plugin's placeholders and ./ paths against where the package
-			// really is, and gives the package a data directory that outlives
-			// this run. The vendor CLI that launches the server sees only
-			// absolute paths.
-			dataDir := harness.PluginDataDir(p)
+		// Generate vendor-native MCP config files. The servers are the
+		// root's and those of every included harness, composed.
+		//
+		// ynh is the client here in the Agent Plugins sense: it resolves
+		// the plugin's placeholders and ./ paths against where the package
+		// really is, and gives the package a data directory that outlives
+		// this run. The vendor CLI that launches the server sees only
+		// absolute paths.
+		dataDir := harness.PluginDataDir(p)
+		servers, _, expErr := harness.ComposeMCPServers(p, resolver.IncludedHarnesses(resolved), dataDir, os.LookupEnv)
+		if expErr != nil {
+			return expErr
+		}
+		if len(servers) > 0 {
 			if err := os.MkdirAll(dataDir, 0o755); err != nil {
 				return fmt.Errorf("creating plugin data dir: %w", err)
-			}
-			servers, expErr := harness.AssembleMCPServers(p, dataDir, os.LookupEnv)
-			if expErr != nil {
-				return expErr
 			}
 			mcpFiles, err := adapter.GenerateMCPConfig(servers)
 			if err != nil {
@@ -323,6 +339,16 @@ func cmdRun(args []string) error {
 		manifestFiles, mErr := adapter.GeneratePluginManifest(pj, runDir)
 		if mErr != nil {
 			return fmt.Errorf("writing plugin manifest: %w", mErr)
+		}
+		// The plugin the vendor loads is named from its own manifest. Without
+		// one the vendor falls back to the directory name, and the harness's
+		// MCP tools come out as plugin:.claude:<server>.
+		if namer, ok := adapter.(vendor.SessionPluginNamer); ok {
+			extra, nErr := namer.GenerateSessionPluginManifest(pj, runDir)
+			if nErr != nil {
+				return fmt.Errorf("writing plugin manifest: %w", nErr)
+			}
+			maps.Copy(manifestFiles, extra)
 		}
 		for relPath, content := range manifestFiles {
 			absPath := filepath.Join(runDir, relPath)
@@ -407,6 +433,12 @@ func cmdRun(args []string) error {
 			}
 		}
 
+		// MCP isolation: the harness's own declaration, or --isolated-mcp,
+		// which can only turn it on.
+		if p.MCPIsolation || ra.IsolatedMCP {
+			vendorArgs = append(vendorArgs, isolationLaunchArgs(adapter, runDir, os.Stderr)...)
+		}
+
 		// Workspace folders the harness requested and the operator granted,
 		// as the vendor's own flags, ahead of the caller's pass-through args.
 		wsArgs, wsErr := workspaceLaunchArgs(loaded, harnessID, adapter.Name(), ra.NoWorkspace, os.Stderr)
@@ -422,6 +454,16 @@ func cmdRun(args []string) error {
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
 		return launchSession(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
 	}
+}
+
+// isolationLaunchArgs returns the vendor arguments that isolate the run's MCP
+// servers, printing the vendor's warning when it cannot isolate fully.
+func isolationLaunchArgs(adapter vendor.Adapter, runDir string, stderr io.Writer) []string {
+	args, warning := adapter.IsolateMCP(runDir)
+	if warning != "" {
+		_, _ = fmt.Fprintf(stderr, "warning: %s\n", warning)
+	}
+	return args
 }
 
 // launchFocus is the outcome of resolveLaunchFocus.
@@ -775,7 +817,7 @@ type runArgs struct {
 	HarnessName  string   // positional name, if given
 	HarnessFile  string   // --harness-file or YNH_HARNESS_FILE
 	VendorFlag   string   // -v or YNH_VENDOR
-	ProfileFlag  string   // --profile or YNH_PROFILE
+	ProfileFlags []string // --profile, repeatable; YNH_PROFILE is read by cmdRun
 	FocusFlag    string   // --focus or YNH_FOCUS
 	SessionName  string   // --session-name: binds --resume to this name where the vendor allows; not forwarded
 	Instructions string   // --instructions: per-invocation context injected into vendor pipeline
@@ -783,6 +825,7 @@ type runArgs struct {
 	VendorArgs   []string // passthrough args for vendor CLI
 	Action       string   // "install", "clean", or ""
 	Interactive  bool     // --interactive: stay in session after initial prompt
+	IsolatedMCP  bool     // --isolated-mcp: run with only the harness's MCP servers
 	Resume       bool     // --resume: continue a previous session
 	ResumeID     string   // --resume=<id>: continue one specific session
 	NoWorkspace  bool     // --no-workspace: grant none of the harness's workspace folders; not forwarded
@@ -839,7 +882,7 @@ func parseRunArgs(args []string) runArgs {
 			ra.VendorFlag = flagArgs[i+1]
 			i++
 		case flagArgs[i] == "--profile" && i+1 < len(flagArgs):
-			ra.ProfileFlag = flagArgs[i+1]
+			ra.ProfileFlags = append(ra.ProfileFlags, flagArgs[i+1])
 			i++
 		case flagArgs[i] == "--focus" && i+1 < len(flagArgs):
 			ra.FocusFlag = flagArgs[i+1]
@@ -869,6 +912,8 @@ func parseRunArgs(args []string) runArgs {
 			ra.Action = "clean"
 		case flagArgs[i] == "--interactive":
 			ra.Interactive = true
+		case flagArgs[i] == "--isolated-mcp":
+			ra.IsolatedMCP = true
 		case !strings.HasPrefix(flagArgs[i], "-"):
 			switch {
 			case firstPositional:

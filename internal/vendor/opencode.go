@@ -514,6 +514,13 @@ func (o *OpenCode) LaunchWithInitialPrompt(configPath string, prompt string, ext
 
 func (o *OpenCode) SupportsInitialPrompt() bool { return true }
 
+// IsolateMCP cannot isolate on OpenCode: ynh has not verified a way to keep
+// the servers in the user's own OpenCode config out of a run, so it says so
+// and launches normally, as for Codex and Cursor.
+func (o *OpenCode) IsolateMCP(configPath string) ([]string, string) {
+	return nil, "MCP isolation is not supported by OpenCode: servers in your OpenCode config will still load"
+}
+
 func (o *OpenCode) SupportsResume() bool { return true }
 
 // ResolveLastSession cannot resolve an id: OpenCode's session store is SQLite

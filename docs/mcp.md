@@ -122,7 +122,7 @@ Each adapter spells the canonical transport in the vendor's own words:
 
 Claude Code rejects a `url` entry that carries no `type` and reads an untyped entry as stdio, so the `http` on a remote server is not cosmetic.
 
-> **Claude Code:** `ynh run` passes the assembled `.claude/` directory as `--plugin-dir`, and Claude activates its MCP servers (and hooks) from there with no `/plugin install` step. They load alongside your own MCP servers (user config, claude.ai connectors); ynh does not isolate them yet (tracked in #548). Copilot is the exception: see [Copilot Format](#copilot-format).
+> **Claude Code:** `ynh run` passes the assembled `.claude/` directory as `--plugin-dir`, and Claude activates its MCP servers (and hooks) from there with no `/plugin install` step. They load alongside your own MCP servers (user config, claude.ai connectors) unless you isolate them: see [Running with only the harness's servers](#running-with-only-the-harness-s-servers). Copilot is the exception: see [Copilot Format](#copilot-format).
 
 ### Claude Code Format
 
@@ -231,11 +231,161 @@ A local stdio server was confirmed to connect and its tool to be callable by han
 
 An agent whose Claude `tools:` list names an MCP tool, such as `tools: Bash, mcp__echo__ynh_ping`, can call that tool and no other tool of the server; this was confirmed live on OpenCode 2.2.3. Such an agent's `execute` tool is denied, so Code Mode is off for it and the MCP tool is an ordinary tool named `<server>_<tool>`. OpenCode often leaves MCP tools out of the model's tool list on its first step, while a local server is still connecting, so a prompt whose very first action is an MCP call may be told the tool does not exist; it is there once the model has made any other call.
 
-## Root-Harness-Only Rule
+## Running with only the harness's servers
 
-MCP server declarations in **included harnesses** (via `includes`) are dropped during assembly. Only the root harness's MCP servers are configured. This prevents composed harnesses from silently adding tool dependencies.
+By default a harness's MCP servers load alongside the servers you have already configured: your user config and, on Claude Code, your claude.ai connectors. To run with only the servers the harness composes, isolate them: its own and those of the harnesses it includes are kept, as are its delegates' (see [MCP Servers of Delegates](#isolation)), and yours and your connectors are left out.
 
-If an included harness requires an MCP server, add the server declaration to the root harness's `.agents/harness/plugin.json`.
+Two ways, which combine:
+
+- `mcp_isolation` in the manifest, a boolean that defaults to `false`. A profile may set it too, and a profile's value replaces the harness's when set, either way; a profile that leaves it out inherits.
+- `ynh run --isolated-mcp`, which turns isolation on for that run. It cannot turn isolation off: a harness that declares `"mcp_isolation": true` stays isolated.
+
+```json
+{
+  "mcp_servers": { "docs-api": { "url": "https://example.com/mcp" } },
+  "mcp_isolation": true,
+  "profiles": {
+    "open": { "mcp_isolation": false }
+  }
+}
+```
+
+Isolation is a launch setting. It changes how `ynh run` and `ynh agent run` start the vendor CLI; an export (`ynd export`, `ynd marketplace build`) and `ynd preview` are unchanged.
+
+| Vendor | Isolation |
+|--------|-----------|
+| Claude Code | Full. ynh adds `--strict-mcp-config` and, when the harness has servers, `--mcp-config=<run dir>/.claude/.mcp.json`; `--plugin-dir` stays, so hooks still fire. A harness with no servers gets none at all. |
+| Copilot | Partial. ynh adds `--disable-builtin-mcps` and warns: servers in `~/.copilot/mcp-config.json` still load. |
+| Codex | Not supported. ynh warns that your servers will load, and launches normally. |
+| Cursor | Not supported. ynh warns that your servers will load, and launches normally. |
+| OpenCode | Not supported. ynh warns that your servers will load, and launches normally. |
+
+The warning is one line on stderr, prefixed `warning:`, and never fails the run. `ynh agent run` applies isolation on the Claude backend only and warns on the others.
+
+**Tool names change on Claude Code.** Without isolation a harness's servers are named `plugin:<harness>:<server>` (`ynh run` and `ynh agent run` write a plugin manifest carrying the harness's name into the plugin directory, because Claude Code names a plugin without one after its directory); with it they are named `<server>`. A permission rule or hook matcher that names a tool by its server prefix must use the name for the mode the harness runs in.
+
+## Servers from Included Harnesses
+
+An include whose directory holds a harness manifest (`.agents/harness/plugin.json`, or an Agent Plugins package) is a harness, not just a folder of artifacts. Its `mcp_servers` are carried into the composed harness along with its skills, agents, rules and commands. An include with no manifest behaves as it always has: artifacts only.
+
+```json
+{
+  "includes": [
+    { "git": "github.com/eyelock/assistants", "path": "ynh/github" }
+  ]
+}
+```
+
+If `ynh/github` declares a `github` server, a run of this harness carries it. `ynd preview` lists each such server with where it came from:
+
+```
+MCP servers from included harnesses:
+  github (from eyelock/assistants//ynh/github)
+```
+
+`ynh info` lists every server a run with no profile carries in the same form, marking the harness's own. With `--profile` or `--focus` it lists what a run with that selection carries instead, so a profile's `null` removal (see the rules below) shows only with a selection that applies that profile: `--profile`, or a `--focus` whose focus names it (plain or `ns:name`):
+
+```
+MCP Servers:
+  docs: https://docs.example.com/mcp  (own)
+  github: github-mcp-server  (from eyelock/assistants//ynh/github)
+```
+
+It reads includes from disk and the cache only, never the network; an include that is not cached yet is named instead, and `ynh update` fills the cache. With `--format json` the same list is the harness's `mcp_servers` (see [reference](reference.md#envelope-and-harness-fields)).
+
+`ynd compose <dir> --format text` shows the same list for a harness you are developing, and `ynd compose` (JSON) gives each server in `mcp_servers` a `source`: `root`, or the include chain that supplied it. When two includes define a server differently, both commands show the harness's own servers and say why the rest are missing (`mcp_servers_error` in compose's JSON).
+
+The rules:
+
+- **Transitive.** An included harness's own `includes` are followed, so what it composes comes with it. Dependencies are assembled before the harness that includes them, and the root last, so later sources keep overriding earlier ones. Relative sources in an included harness resolve against that harness's directory, and the allow-list (`allowed_remote_sources`) applies to every include in the chain.
+- **The root wins.** A server the root declares replaces an included server of the same name entirely: nothing is merged field by field.
+- **`null` removes.** Set a top-level server to `null` in the root's `mcp_servers` to drop one inherited from an include. A profile can do the same with `null` in its own `mcp_servers`, which removes the server only while that profile is active. Removing a name that no include declares is not an error.
+- **Conflicts are errors.** Two includes that declare the same server name must declare it identically, once expanded, or the run stops with an error naming the server and both includes. Declare the server in the root to choose one, or set it to `null` and declare nothing.
+- **Each server expands in its own include's context.** `${PLUGIN_ROOT}` and a leading `./` resolve against the include's directory, and `${VAR}` references resolve against the include's own `env_passthrough`. An unset variable fails the run, exactly as it does for the root.
+- **The root's `env_passthrough` is not widened.** An include's variables are visible to that include's servers only, and a variable only the root declares is not visible to an include's servers. The allow-list stays a containment boundary the root author controls.
+- **`pick` brings the servers but not the includes.** An include that names `pick` contributes the picked artifacts and its own MCP servers, and its own `includes` are not followed. To pull in an include's dependencies, include it without `pick`.
+- **Cycles are refused.** A harness that includes itself, directly or through others, fails with the chain: `include cycle: root -> eyelock/a -> eyelock/b -> root`. A harness reached by two routes contributes once.
+- **An included harness's own `null` removes from its own dependencies.** A `null` in the `mcp_servers` of an included harness, or of the profile selected for it, drops that server from the harnesses it includes, as the root's `null` does for everything. It removes the server only from what reaches the root through that harness: a harness reached by more than one route loses a server only when every route removes it, so a direct include by the root, or a route through a harness that keeps the server, wins. The order of the includes makes no difference (see [When routes disagree](harnesses.md#when-routes-disagree)). The root's `null` still removes a server whichever harness declared it.
+- **Sensors of an included harness are carried, and its hooks only with consent.** Its sensors travel unless its include says `"sensors": false` (see [sensors](sensors.md#sensors-from-an-include)). An included harness's hooks run only when its include says `"hooks": true` (see [hooks](hooks.md#hooks-from-included-harnesses)).
+- **Profiles and focuses of an included harness are carried only when selected.** `--profile github:ci` applies the included harness's `ci` profile to that harness alone, and its `mcp_servers` and `includes` change accordingly. See [Profiles and focuses of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses).
+
+### Exporting
+
+`ynd export` and `ynd marketplace build` ship a plugin that does not contain an include's directory. An included server that points into it (a command or `cwd` starting with `./`, or a `${PLUGIN_ROOT}` reference in its command, args, env or cwd) cannot work there, so the export stops:
+
+```
+Error: included MCP server "db" from eyelock/assistants//ynh/db uses a path inside the include and cannot be exported; declare it in the root harness
+```
+
+Declare that server in the root harness, or set it to `null` in the root. An included server with no such reference, such as `npx` or a remote `url`, exports normally, and its `${VAR}` references stay literal as for any exported server.
+
+## MCP Servers of Delegates
+
+A delegate (`delegates_to`) is a harness, and the MCP servers it declares are its own. They are not the session's: the parent harness's run does not list them, and the delegate's subagent is the only one that connects to them. ynh resolves the delegate the way it resolves any harness. Its `includes` are followed (transitively, with `pick`, the cycle guard and the allow-list, against the delegate's own directory), and its servers are composed from its included harnesses' and its own under the rules of [Servers from Included Harnesses](#servers-from-included-harnesses). Each server expands in its own harness's context, so `${VAR}` references resolve against the delegate's `env_passthrough`, not the parent's. The skills of the delegate's includes are listed in its agent file with its own. A delegate's own delegates are not followed.
+
+```
+$ ynd preview ./team-lead
+...
+MCP servers of delegates:
+  probe: probe-srv (its own)
+  probe: db (from eyelock/assistants//ynh/db)
+```
+
+`ynd compose` shows the same servers under each delegate in `delegates_to`, apart from the session's `mcp_servers`: each with a `source` (`root` for the delegate's own, or the include chain), and in `--format text` as `MCP server <name>: <command>  (its own)` beneath the delegate. Compose reads the delegate from disk and the cache only; a delegate it cannot read is still listed, with `mcp_servers_error` saying why.
+
+| Vendor | Delegate servers |
+|--------|------------------|
+| Claude Code | Carried. The generated agent has an `mcpServers` frontmatter field and a run hands the agent to Claude with `--agents`; see below. |
+| Cursor, Copilot, OpenCode | Not carried. ynh warns once per delegate on stderr and writes the agent without them. |
+| Codex | Not carried, and the delegate itself is not picked up: ynh warns once per delegate on stderr and writes a Markdown agent file that Codex does not read; see below. |
+
+The warning reads:
+
+```
+  warning: delegate probe declares MCP servers (db, probe-srv) that Cursor subagents cannot carry; they are not available to it
+```
+
+No documented per-agent MCP field exists for the other vendors. Copilot's references document MCP only at the project and user level (`.github/mcp.json`, `~/.copilot/mcp-config.json`), so ynh does not guess at a custom-agent field it has not verified. For Codex, a run writes the delegate's agent file as Markdown, `.codex/agents/<name>.md`, without its servers. [Codex's subagent docs](https://developers.openai.com/codex/subagents) define project custom agents only as TOML files in `.codex/agents/` (with `name`, `description` and `developer_instructions`), so Codex does not pick up the Markdown file and a Codex session has no subagent for the delegate today, with or without its servers. The same docs say a custom agent inherits the parent session's MCP servers and cannot override them, so even a TOML agent could not carry the delegate's own. This is read from Codex's documentation, not checked against a live `codex`.
+
+### How Claude Code gets them
+
+Claude Code subagents accept an `mcpServers` frontmatter field: a list whose entries are a one-key map from the server name to its definition, in the same per-server shape as `.mcp.json`. The servers connect when the subagent starts and disconnect when it finishes. ynh writes the field into the agent file:
+
+```markdown
+---
+name: probe
+description: Probe agent with a ping tool
+mcpServers: [{"probe-srv":{"command":"python3","args":["/opt/probe/server.py"]}}]
+---
+```
+
+The tools appear to the subagent as `mcp__<server>__<tool>`.
+
+**Claude ignores that field in a plugin's agents** ("For security reasons, plugin subagents don't support the `hooks`, `mcpServers`, or `permissionMode` frontmatter fields", code.claude.com/docs/en/sub-agents), and `ynh run` loads the assembled directory as a plugin with `--plugin-dir`. Checked against Claude Code 2.1.293: with the field alone, the subagent had no `probe_ping` tool. So for each delegate that declares servers, ynh also writes `<run dir>/.ynh-delegate-agents.json` (mode 0600) and launches Claude with `--agents <that JSON>` (in `ynh run` and `ynh agent run`). An agent passed that way is a session-level definition, which outranks the plugin's agent of the same name and which Claude honours `mcpServers` for. With that, the subagent called `mcp__probe-srv__probe_ping` and got its answer, and the main session's `init` event did not list the server.
+
+### Secrets: `.env.ynh` and `ynh mcp-exec`
+
+A server's `${VAR}` references are resolved from the delegate's own `env_passthrough`, as for any harness: an undeclared reference, or a declared variable that is not set, fails the run with the usual error naming the server and the field. But the `--agents` JSON is a command-line argument, and any local process can read a command line (`ps -axww`). Claude does not expand `${VAR}` inside `--agents` either (the server received the text `${PROBE_TOKEN}`). So ynh does not put the values there. Instead:
+
+- For each delegate with servers that reference a variable, ynh writes `<run dir>/delegates/<delegate>/.env.ynh`, mode 0600 in a 0700 directory, regenerated on every run. It holds exactly the variables that delegate's servers reference, as `NAME="value"` lines. The value is a double-quoted string with Go escapes (`\n`, `\"`, `\\`, `\xNN`), so any value, including `=`, quotes, newlines and arbitrary bytes, stays on one line and reads back exactly. Blank lines and `#` comments are skipped.
+- A **stdio** server that references a variable is passed to Claude as `ynh mcp-exec --env-file <abs path to .env.ynh> -- <command> <args...>`. The `args` and `env` keep `${VAR}` literal. `ynh mcp-exec` is an internal command (it is not in `ynh help`): it reads the file, expands `${VAR}` in the arguments and in its own environment values using only the file's variables (an unknown reference is an error naming it, on stderr, with a non-zero exit and nothing on stdout, which is the MCP channel), and then replaces itself with the command, so stdin and stdout are the server's. `ynh` is found through `PATH`, like every other tool of the family.
+- A **remote** (`http`, `sse`) server whose `headers` reference a variable keeps its `url` and its other headers as they are, and gets a `headersHelper`: `ynh mcp-headers --env-file <path> -- 'Authorization: Bearer ${TOKEN}'`. Claude runs that command and reads a JSON object of headers from its stdout (checked against Claude Code 2.1.294: a `headersHelper` in a server passed with `--agents` is honoured, and its headers arrive alongside the static ones). The command line carries the template, never the value. A `${VAR}` in the `url` itself is an error that tells you to move the secret to a header.
+- A server with no `${VAR}` reference is passed unchanged, with no launcher.
+- `${PLUGIN_ROOT}`, `${PLUGIN_DATA}` and plugin-relative `./` paths are not secrets; ynh expands them as it always has. A `${VAR}` in a server's `cwd` is not expanded by anything.
+
+Checked against Claude Code 2.1.294 with `PROBE_TOKEN=s3cret-xyz`: the subagent's tool returned `pong:s3cret-xyz`, and sampling `ps -axww -o args` through the whole run never showed the value in the `claude` process's arguments.
+
+`.env.ynh` matches common `.env.*` ignore patterns, which is the intent, but ynh only ever writes it under its own run directory. It is never written by `ynd export`, `ynd preview` or `ynh image`. In `ynh agent run` the run directory is the loop's temporary config directory, which is removed when the run ends; the launcher reads the file, so the worker's environment (built from the root harness's `env_passthrough` only) does not need the delegate's variables. A baked image (`ynh image`) is assembled without secrets, so its delegates' servers are not carried on Claude; run the harness from source to get them.
+
+The field stays in the agent file as well: it is what `ynd export` ships, and it works once the file is copied into `.claude/agents/`.
+
+### Isolation
+
+A delegate's servers are the delegate's own declaration, so isolation (`mcp_isolation`, `--isolated-mcp`) keeps them. `--strict-mcp-config` restricts the session's servers and the servers of subagent frontmatter, but not servers passed inline with `--agents`, which Claude treats as explicit caller input. Checked: an isolated run's `init` event listed no MCP servers, and the delegate's subagent still called `mcp__probe-srv__probe_ping` and got `pong`.
+
+### Exporting delegates
+
+`ynd export` writes delegate agents too, with the servers unexpanded: `${VAR}` is left literal for the consumer, as for any exported server. Claude Code does not honour `mcpServers` in a plugin's subagents, so in an installed plugin the field is there for whoever copies the agent into `.claude/agents/`. The export says so, with a warning in its result: `delegate probe declares MCP servers (probe-srv); Claude Code ignores mcpServers in plugin agents, so they will not load when this plugin is installed`. A delegate server that points into the delegate's own directory (a `./` command or `cwd`, or a `${PLUGIN_ROOT}` reference), or into one of its includes, cannot be exported, because the plugin carries the agent file and not the delegate's directory. The export stops with an error naming the delegate and the server. Other vendors get a warning in the export result, as above.
 
 ## Plugin Placeholders
 
@@ -296,7 +446,7 @@ ynh profile mcp remove <harness> <profile> <name>
 
 `--command` and `--url` are mutually exclusive; at least one is required at add time. `--arg` builds the args array in declaration order; `--env K=V` and `--header K=V` are repeatable. `--type` sets the transport and is refused when it disagrees with the fields; `--cwd` sets the subprocess working directory, and `--cwd ""` on update clears it.
 
-**`--null` is profile-only.** A profile MCP entry can be a JSON null to suppress an inherited harness-level server when the profile is active — there is no harness-level analogue because there is nothing to inherit from. Passing `--null` to `ynh mcp add` is rejected.
+**`--null` is profile-only.** A profile MCP entry can be a JSON null to suppress an inherited server when the profile is active. A harness can also null a server inherited from an [included harness](#servers-from-included-harnesses), but that is written in the manifest by hand: passing `--null` to `ynh mcp add` is rejected.
 
 `mcp update` requires at least one flag. The `--clear-*` flags zero out a collection (args, env, headers) without supplying replacement content — useful for "remove all args" without writing the empty list out manually.
 
@@ -305,6 +455,7 @@ See [reference.md](reference.md) for the complete flag matrix and [profiles.md](
 ## See Also
 
 - [MCP Servers](tutorial/mcp-servers.md) — step-by-step walkthrough
+- [Composing Tools Across Harnesses](tutorial/composing-tools.md): servers, profiles, focuses and hooks across includes
 - [Hooks](hooks.md) — lifecycle hooks that bridge guides to sensors
 - [Vendor Support](vendors.md) — vendor capabilities and differences
 

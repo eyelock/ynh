@@ -4,35 +4,57 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"text/tabwriter"
 
+	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
 )
 
 // composeOutput is the top-level JSON shape for `ynd compose`.
 type composeOutput struct {
-	Name          string                    `json:"name"`
-	Version       string                    `json:"version"`
-	Description   string                    `json:"description,omitempty"`
-	DefaultVendor string                    `json:"default_vendor"`
-	Artifacts     composeArtifacts          `json:"artifacts"`
-	Includes      []composeInclude          `json:"includes"`
-	DelegatesTo   []composeDelegate         `json:"delegates_to"`
-	Hooks         map[string][]composeHook  `json:"hooks,omitempty"`
-	MCPServers    map[string]composeMCP     `json:"mcp_servers,omitempty"`
-	Profiles      map[string]composeProfile `json:"profiles"`
-	Focuses       map[string]composeFocus   `json:"focuses,omitempty"`
-	LaunchFocus   string                    `json:"launch_focus,omitempty"`
-	Sensors       map[string]composeSensor  `json:"sensors,omitempty"`
-	Counts        composeCounts             `json:"counts"`
+	Name          string                   `json:"name"`
+	Version       string                   `json:"version"`
+	Description   string                   `json:"description,omitempty"`
+	DefaultVendor string                   `json:"default_vendor"`
+	Artifacts     composeArtifacts         `json:"artifacts"`
+	Includes      []composeInclude         `json:"includes"`
+	DelegatesTo   []composeDelegate        `json:"delegates_to"`
+	Hooks         map[string][]composeHook `json:"hooks,omitempty"`
+	// HooksNotActive lists, per event, the included harnesses that declare
+	// hooks a run does not carry, because the include does not say
+	// "hooks": true.
+	HooksNotActive []composeHookOrigin `json:"hooks_not_active,omitempty"`
+	// HooksError says why the hooks of includes could not be composed (a
+	// script outside its harness); Hooks then holds only the root's own.
+	HooksError string                `json:"hooks_error,omitempty"`
+	MCPServers map[string]composeMCP `json:"mcp_servers,omitempty"`
+	// MCPServersError says why the servers of includes could not be composed
+	// (two includes define one name differently); MCPServers then holds only
+	// the root's own.
+	MCPServersError string                    `json:"mcp_servers_error,omitempty"`
+	Profiles        map[string]composeProfile `json:"profiles"`
+	Focuses         map[string]composeFocus   `json:"focuses,omitempty"`
+	LaunchFocus     string                    `json:"launch_focus,omitempty"`
+	Sensors         map[string]composeSensor  `json:"sensors,omitempty"`
+	// SensorsError says why the sensors of includes could not be merged (a
+	// name declared twice, a stale override); Sensors then holds only the
+	// root's own.
+	SensorsError string        `json:"sensors_error,omitempty"`
+	Counts       composeCounts `json:"counts"`
 }
 
 type composeSensor struct {
+	// Origin names the include that declared the sensor; empty for the
+	// root's own. (Source is the sensor's own source, what it observes.)
+	Origin   string              `json:"origin,omitempty"`
 	Category string              `json:"category,omitempty"`
 	Role     string              `json:"role,omitempty"`
 	Source   composeSensorSource `json:"source"`
@@ -88,15 +110,36 @@ type composeDelegate struct {
 	Git  string `json:"git"`
 	Ref  string `json:"ref,omitempty"`
 	Path string `json:"path,omitempty"`
+	// MCPServers are the servers the delegate carries for its own subagent,
+	// not the session's: those of the harnesses its includes reach, then its
+	// own ("root" is the delegate itself), composed as a run composes them.
+	MCPServers map[string]composeMCP `json:"mcp_servers,omitempty"`
+	// MCPServersError says why the delegate's servers could not be read (it
+	// is not cached, or two of its includes conflict); MCPServers then holds
+	// none.
+	MCPServersError string `json:"mcp_servers_error,omitempty"`
 }
 
 type composeHook struct {
+	// Source is the include chain that supplied the hook; empty for the
+	// root's own.
+	Source  string `json:"source,omitempty"`
 	Command string `json:"command"`
 	Matcher string `json:"matcher,omitempty"`
 	Timeout int    `json:"timeout,omitempty"`
 }
 
+// composeHookOrigin is an included harness's hooks for one event.
+type composeHookOrigin struct {
+	Event  string `json:"event"`
+	Source string `json:"source"`
+}
+
 type composeMCP struct {
+	// Source is where a composed server was declared: "root", or the include
+	// chain that supplied it ("eyelock/a > eyelock/b"), as `ynh info` and
+	// `ynd preview` name it. Empty inside a profile, which is root's own.
+	Source  string            `json:"source,omitempty"`
 	Type    string            `json:"type"`
 	Command string            `json:"command,omitempty"`
 	Args    []string          `json:"args,omitempty"`
@@ -131,9 +174,9 @@ func cmdCompose(args []string) error {
 func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 	structured := composeIsJSON(args)
 	var (
-		source      string
-		profileName string
-		format      = "json"
+		source   string
+		profiles []string
+		format   = "json"
 	)
 
 	i := 0
@@ -150,7 +193,7 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 				return cliError(stderr, structured, errCodeInvalidInput, "--profile requires a value")
 			}
 			i++
-			profileName = args[i]
+			profiles = append(profiles, args[i])
 		case "--format":
 			if i+1 >= len(args) {
 				return cliError(stderr, structured, errCodeInvalidInput, "--format requires a value")
@@ -204,12 +247,14 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 		srcDir = workDir
 	}
 
-	// Apply profile if specified
-	if profileName == "" {
-		profileName = os.Getenv("YNH_PROFILE")
+	// Apply profile if specified. A profile of an included harness is applied
+	// as the includes resolve.
+	sel, err := resolveSelection(srcDir, profiles, "")
+	if err != nil {
+		return cliError(stderr, structured, errCodeInvalidInput, err.Error())
 	}
-	if profileName != "" {
-		h, err = harness.ResolveProfile(h, profileName)
+	if sel.Profile != "" {
+		h, err = harness.ResolveProfile(h, sel.Profile)
 		if err != nil {
 			return cliError(stderr, structured, errCodeInvalidInput, err.Error())
 		}
@@ -222,7 +267,7 @@ func cmdComposeTo(args []string, stdout, stderr io.Writer) error {
 	}
 
 	// Resolve includes
-	resolved, err := resolver.Resolve(h, cfg)
+	resolved, _, err := resolver.ResolveSelected(h, cfg, sel)
 	if err != nil {
 		return cliError(stderr, structured, errCodeIOError, fmt.Sprintf("resolving includes: %v", err))
 	}
@@ -284,18 +329,17 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 	}
 
 	// Collect artifacts from resolved includes
-	for idx, r := range resolved {
-		// A local include has no Git URL, and ShortGitURL("") is "", so every
-		// artifact from one arrived unattributed. `local` is the low-friction
-		// adoption path the shipped ynh-adopt skill teaches, which makes this
-		// the attribution a new adopter hits first.
-		inc := h.Includes[idx]
-		incSource := resolver.ShortGitURL(inc.Git)
-		if inc.Git == "" && inc.Local != "" {
-			incSource = inc.Local
-		}
-		if inc.Path != "" {
-			incSource += "/" + inc.Path
+	for _, r := range resolved {
+		// r.Source names a local include by its path, and a git one by its
+		// short URL; a local include has no Git URL, so ShortGitURL would
+		// leave every artifact from one unattributed. `local` is the
+		// low-friction adoption path the shipped ynh-adopt skill teaches,
+		// which makes this the attribution a new adopter hits first. Results
+		// also include the includes of included harnesses, so they cannot be
+		// matched to h.Includes by position.
+		incSource := r.Source
+		if r.Path != "" {
+			incSource += "/" + r.Path
 		}
 
 		// Scan the resolved base path for artifacts
@@ -374,47 +418,62 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 	// Delegates
 	delegates := make([]composeDelegate, 0, len(h.DelegatesTo))
 	for _, del := range h.DelegatesTo {
-		delegates = append(delegates, composeDelegate{
+		cd := composeDelegate{
 			Git:  del.Git,
 			Ref:  del.Ref,
 			Path: del.Path,
-		})
+		}
+		if servers, provenance, err := delegateMCPServers(del, h.Dir); err != nil {
+			cd.MCPServersError = err.Error()
+		} else {
+			cd.MCPServers = composeMCPServers(servers, provenance)
+		}
+		delegates = append(delegates, cd)
 	}
 	out.DelegatesTo = delegates
 
-	// Hooks
-	if len(h.Hooks) > 0 {
+	// Hooks — what a run carries: those of included harnesses whose include
+	// consented ("hooks": true), then the root's own (assembler.ComposeHooks,
+	// as a run and `ynh trust` compose them). An included "./" script is
+	// shown at the path the session runs it from.
+	hookSet, err := assembler.ComposeHooks(h.Hooks, resolved)
+	if err != nil {
+		hookSet = assembler.HookSet{Hooks: h.Hooks}
+		out.HooksError = err.Error()
+	}
+	if len(hookSet.Hooks) > 0 {
 		hooks := make(map[string][]composeHook)
-		for event, entries := range h.Hooks {
+		for event, entries := range hookSet.Hooks {
 			var ch []composeHook
-			for _, e := range entries {
-				ch = append(ch, composeHook{
+			for i, e := range entries {
+				hook := composeHook{
 					Command: e.Command,
 					Matcher: e.Matcher,
 					Timeout: e.Timeout,
-				})
+				}
+				if src := hookSet.Sources[event]; i < len(src) {
+					hook.Source = src[i]
+				}
+				ch = append(ch, hook)
 			}
 			hooks[event] = ch
 		}
 		out.Hooks = hooks
 	}
-
-	// MCP Servers
-	if len(h.MCPServers) > 0 {
-		servers := make(map[string]composeMCP)
-		for name, srv := range h.MCPServers {
-			servers[name] = composeMCP{
-				Type:    srv.Transport(),
-				Command: srv.Command,
-				Args:    srv.Args,
-				Env:     srv.Env,
-				Cwd:     srv.Cwd,
-				URL:     srv.URL,
-				Headers: srv.Headers,
-			}
-		}
-		out.MCPServers = servers
+	for _, o := range hookSet.NotActive {
+		out.HooksNotActive = append(out.HooksNotActive, composeHookOrigin{Event: o.Event, Source: o.Source})
 	}
+
+	// MCP Servers — what a run carries: the servers of every harness the
+	// includes reach, then the root's own, with the root's removals applied.
+	// Composed as written (nothing expanded), as `ynh info` and `ynh trust`
+	// read them.
+	servers, provenance, err := harness.ComposeMCPServersRaw(h, resolver.IncludedHarnesses(resolved))
+	if err != nil {
+		servers, provenance, _ = harness.ComposeMCPServersRaw(h, nil)
+		out.MCPServersError = err.Error()
+	}
+	out.MCPServers = composeMCPServers(servers, provenance)
 
 	// Profiles — full content so consumers can render/diff without re-parsing
 	// the underlying manifest. Always emit a non-nil map so JSON consumers see
@@ -476,11 +535,21 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 		out.LaunchFocus = h.LaunchFocus
 	}
 
-	// Sensors — root harness only (included harnesses' sensors are dropped by design)
-	if len(h.Sensors) > 0 {
+	// Sensors — the root's own and those its direct includes declare, with
+	// the include-level and profile overrides applied, as `ynh check` sees
+	// them (resolver.WithIncludedSensors). A copy, so h is not changed.
+	sensorSet := h.Sensors
+	withIncluded := *h
+	if merged, err := resolver.WithIncludedSensors(&withIncluded); err != nil {
+		out.SensorsError = err.Error()
+	} else {
+		sensorSet = merged.Sensors
+	}
+	if len(sensorSet) > 0 {
 		sensors := make(map[string]composeSensor)
-		for name, s := range h.Sensors {
+		for name, s := range sensorSet {
 			cs := composeSensor{
+				Origin:   s.Origin,
 				Category: s.Category,
 				Role:     s.Role,
 				Output: composeSensorOutput{
@@ -525,6 +594,53 @@ func printComposeJSON(w io.Writer, out composeOutput) error {
 	}
 	_, err = fmt.Fprintln(w, string(data))
 	return err
+}
+
+// composeMCPServers renders composed MCP servers with where each came from,
+// or nil when there are none.
+func composeMCPServers(servers map[string]plugin.MCPServer, provenance []harness.MCPProvenance) map[string]composeMCP {
+	if len(provenance) == 0 {
+		return nil
+	}
+	out := make(map[string]composeMCP, len(provenance))
+	for _, pr := range provenance {
+		srv := servers[pr.Server]
+		out[pr.Server] = composeMCP{
+			Source:  pr.Source,
+			Type:    srv.Transport(),
+			Command: srv.Command,
+			Args:    srv.Args,
+			Env:     srv.Env,
+			Cwd:     srv.Cwd,
+			URL:     srv.URL,
+			Headers: srv.Headers,
+		}
+	}
+	return out
+}
+
+// delegateMCPServers composes the MCP servers a delegate carries, as written:
+// its includes (resolved against its own directory) and then its own, the way
+// a run composes them. It reads the disk and the cache only, never the
+// network, as `ynh trust` does; a delegate not yet cached is an error.
+func delegateMCPServers(del harness.Delegate, harnessDir string) (map[string]plugin.MCPServer, []harness.MCPProvenance, error) {
+	base, err := resolver.ResolveDelegateLocal(del.GitSource, harnessDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	dh, err := harness.LoadDir(base)
+	if err != nil {
+		return nil, nil, err
+	}
+	var included []harness.IncludedHarness
+	if len(dh.Includes) > 0 {
+		resolved, err := resolver.ResolveIncludesLocal(dh, harness.Selection{})
+		if err != nil {
+			return nil, nil, fmt.Errorf("includes: %w", err)
+		}
+		included = resolver.IncludedHarnesses(resolved)
+	}
+	return harness.ComposeMCPServersRaw(dh, included)
 }
 
 func printComposeText(w io.Writer, out composeOutput) error {
@@ -590,30 +706,61 @@ func printComposeText(w io.Writer, out composeOutput) error {
 				line += "  path=" + del.Path
 			}
 			_, _ = fmt.Fprintln(w, line)
+			// The delegate's own subagent's servers, not the session's.
+			for _, name := range slices.Sorted(maps.Keys(del.MCPServers)) {
+				_, _ = fmt.Fprintln(w, "    MCP server "+composeMCPLine(name, del.MCPServers[name], "its own"))
+			}
+			if del.MCPServersError != "" {
+				_, _ = fmt.Fprintf(w, "    MCP servers not shown: %s\n", del.MCPServersError)
+			}
 		}
 	}
 
-	if len(out.Hooks) > 0 {
+	if len(out.Hooks) > 0 || len(out.HooksNotActive) > 0 || out.HooksError != "" {
 		_, _ = fmt.Fprintln(w, "\nHooks:")
-		for event, entries := range out.Hooks {
-			for _, e := range entries {
+		for _, event := range slices.Sorted(maps.Keys(out.Hooks)) {
+			for _, e := range out.Hooks[event] {
 				line := "  " + event + ": " + e.Command
 				if e.Matcher != "" {
 					line += "  (matcher=" + e.Matcher + ")"
 				}
+				if e.Source != "" {
+					line += "  (from " + e.Source + ")"
+				}
 				_, _ = fmt.Fprintln(w, line)
 			}
 		}
+		for _, o := range out.HooksNotActive {
+			_, _ = fmt.Fprintf(w, "  %s: not active, from %s (add \"hooks\": true to the include)\n", o.Event, o.Source)
+		}
+		if out.HooksError != "" {
+			_, _ = fmt.Fprintf(w, "  hooks from includes not shown: %s\n", out.HooksError)
+		}
 	}
 
-	if len(out.MCPServers) > 0 {
+	if len(out.MCPServers) > 0 || out.MCPServersError != "" {
 		_, _ = fmt.Fprintln(w, "\nMCP Servers:")
-		for name, srv := range out.MCPServers {
-			if srv.Command != "" {
-				_, _ = fmt.Fprintf(w, "  %s: %s\n", name, srv.Command)
-			} else if srv.URL != "" {
-				_, _ = fmt.Fprintf(w, "  %s: %s\n", name, srv.URL)
+		for _, name := range slices.Sorted(maps.Keys(out.MCPServers)) {
+			_, _ = fmt.Fprintln(w, "  "+composeMCPLine(name, out.MCPServers[name], "own"))
+		}
+		if out.MCPServersError != "" {
+			_, _ = fmt.Fprintf(w, "  servers from includes not shown: %s\n", out.MCPServersError)
+		}
+	}
+
+	if len(out.Sensors) > 0 || out.SensorsError != "" {
+		_, _ = fmt.Fprintln(w, "\nSensors:")
+		for _, name := range slices.Sorted(maps.Keys(out.Sensors)) {
+			line := "  " + name
+			if origin := out.Sensors[name].Origin; origin != "" {
+				line += "  (from " + origin + ")"
+			} else {
+				line += "  (own)"
 			}
+			_, _ = fmt.Fprintln(w, line)
+		}
+		if out.SensorsError != "" {
+			_, _ = fmt.Fprintf(w, "  sensors from includes not shown: %s\n", out.SensorsError)
 		}
 	}
 
@@ -641,4 +788,22 @@ func printComposeText(w io.Writer, out composeOutput) error {
 	}
 
 	return nil
+}
+
+// composeMCPLine is one server for the text format: its name, its command or
+// URL, and where it came from, with own labelling a server the harness
+// declares itself.
+func composeMCPLine(name string, srv composeMCP, own string) string {
+	line := name
+	if srv.Command != "" {
+		line += ": " + srv.Command
+	} else if srv.URL != "" {
+		line += ": " + srv.URL
+	}
+	if srv.Source == harness.MCPSourceRoot {
+		line += "  (" + own + ")"
+	} else {
+		line += "  (from " + srv.Source + ")"
+	}
+	return line
 }

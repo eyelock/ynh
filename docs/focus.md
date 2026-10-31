@@ -42,6 +42,18 @@ Focus is selected through a flag or environment variable:
 
 The `--focus` flag is supported on `ynh run`, `ynd preview`, `ynd diff`, and `ynd export`. When both the flag and the environment variable are set, the flag wins.
 
+## Focuses of Included Harnesses
+
+A focus of an included harness is selected as `namespace:name`, where the namespace is the included harness's name or the `as` alias on the include:
+
+```bash
+ynh run my-harness --focus github:triage
+```
+
+The focus's prompt is the run's prompt, and its `profile`, if any, is applied to that included harness only. The root's configuration is unchanged. The namespace, the `:` separator and the ambiguity rule are described in [Profiles and focuses of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses).
+
+`--focus namespace:name` is the only way to run an included harness's focus. A harness's [launch focus](#launch-focus) cannot name one.
+
 ## Mutual Exclusivity
 
 `--focus` and `--profile` are mutually exclusive. A focus already names a profile (or names "no profile" by omission); accepting `--profile` alongside it would create ambiguity over which profile wins.
@@ -71,7 +83,7 @@ A harness can declare the focus it always wakes with, so launching it with no ar
 }
 ```
 
-`launch_focus` is the name of one of the harness's own `focuses`. It is read by `ynh run` and nothing else.
+`launch_focus` is the name of one of the harness's own `focuses`, never an included harness's `namespace:name` focus or a delegate's focus. It is read by `ynh run` and nothing else. To run an included harness's focus, pass it explicitly with `--focus namespace:name` (see [Focuses of Included Harnesses](#focuses-of-included-harnesses)).
 
 | You run | What happens |
 |---------|--------------|
@@ -87,7 +99,7 @@ On a vendor that cannot start an interactive session with a first message, ynh w
 
 Because the launch focus's prompt steers every session of the harness, `ynh trust show` lists it and the trust digest covers it. A harness without `launch_focus` keeps the digest it had.
 
-`ynd validate` errors when `launch_focus` names a focus that does not exist, or one that has no prompt. It also warns, for the vendors the harness targets, when a vendor has no way to deliver `on_session_start` output to the model (see [Hooks](hooks.md#on-session-start-output-becomes-model-context)), since a wake prompt that relies on that output would find nothing.
+`ynd validate` errors when `launch_focus` names a focus that is not one of the harness's own (including a `namespace:name` value or a delegate's focus), or one that has no prompt, and `ynh run` refuses to start such a harness. It also warns, for the vendors the harness targets, when a vendor has no way to deliver `on_session_start` output to the model (see [Hooks](hooks.md#on-session-start-output-becomes-model-context)), since a wake prompt that relies on that output would find nothing.
 
 ## Resuming a Session
 

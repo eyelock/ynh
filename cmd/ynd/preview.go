@@ -2,9 +2,12 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/eyelock/ynh/internal/agentplugin"
@@ -18,11 +21,11 @@ import (
 
 func cmdPreview(args []string) error {
 	var (
-		vendorName  string
-		outputDir   string
-		profileName string
-		focusName   string
-		source      string
+		vendorName string
+		outputDir  string
+		profiles   []string
+		focusName  string
+		source     string
 	)
 
 	// Parse flags
@@ -46,7 +49,7 @@ func cmdPreview(args []string) error {
 				return fmt.Errorf("--profile requires a value")
 			}
 			i++
-			profileName = args[i]
+			profiles = append(profiles, args[i])
 		case "--focus":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--focus requires a value")
@@ -94,35 +97,13 @@ func cmdPreview(args []string) error {
 	if focusName == "" {
 		focusName = os.Getenv("YNH_FOCUS")
 	}
-	if focusName != "" && profileName != "" {
-		return fmt.Errorf("cannot use --focus and --profile together")
-	}
-
-	// Resolve profile from flag or env var
-	if profileName == "" {
-		profileName = os.Getenv("YNH_PROFILE")
-	}
-	if focusName != "" && profileName != "" {
-		return fmt.Errorf("cannot use --focus and --profile together (focus includes a profile)")
-	}
-
-	// Resolve focus → profile (must load harness first to look up focus entry)
-	if focusName != "" {
-		h, _, loadErr := loadHarnessForPreview(srcDir)
-		if loadErr != nil {
-			return fmt.Errorf("loading harness for focus resolution: %w", loadErr)
-		}
-		focus, ok := h.Focuses[focusName]
-		if !ok {
-			return fmt.Errorf("focus %q not defined in harness", focusName)
-		}
-		if focus.Profile != "" {
-			profileName = focus.Profile
-		}
+	sel, err := resolveSelection(srcDir, profiles, focusName)
+	if err != nil {
+		return err
 	}
 
 	// Assemble into temp dir
-	tmpDir, err := assembleForVendor(srcDir, vendorName, profileName)
+	tmpDir, report, err := assembleForVendorSources(srcDir, vendorName, sel)
 	if err != nil {
 		return err
 	}
@@ -144,22 +125,139 @@ func cmdPreview(args []string) error {
 			return fmt.Errorf("printing tree: %w", err)
 		}
 	}
+	printMCPSources(os.Stdout, report.mcp)
+	printDelegateMCP(os.Stdout, report.delegate)
+	printIncludedSelectables(os.Stdout, report.included)
+	printIncludedHooks(os.Stdout, report.included)
 
 	return nil
 }
 
-// assembleForVendor loads a harness from srcDir and assembles vendor-native
+// printIncludedHooks lists the hooks that came from included harnesses, each
+// with the include it came from, and those that did not because the include
+// does not say "hooks": true. The not-active ones are what the warning on
+// stderr is about.
+func printIncludedHooks(w io.Writer, included []resolver.ResolveResult) {
+	hs, err := assembler.ComposeHooks(nil, included)
+	if err != nil {
+		return
+	}
+	for _, list := range []struct {
+		title   string
+		origins []assembler.HookOrigin
+	}{
+		{"Hooks from included harnesses:", hs.FromIncludes},
+		{"Hooks from included harnesses, not active (add \"hooks\": true to the include):", hs.NotActive},
+	} {
+		if len(list.origins) == 0 {
+			continue
+		}
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, list.title)
+		for _, o := range list.origins {
+			_, _ = fmt.Fprintf(w, "  %s (from %s)\n", o.Event, o.Source)
+		}
+	}
+}
+
+// printMCPSources lists the MCP servers that came from an included harness,
+// each with where it came from. Servers the root declares are not listed: the
+// MCP file already shows them, and there is nothing to attribute.
+func printMCPSources(w io.Writer, sources []harness.MCPProvenance) {
+	var lines []string
+	for _, s := range sources {
+		if s.Source != harness.MCPSourceRoot {
+			lines = append(lines, fmt.Sprintf("  %s (from %s)", s.Server, s.Source))
+		}
+	}
+	if len(lines) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "MCP servers from included harnesses:")
+	for _, l := range lines {
+		_, _ = fmt.Fprintln(w, l)
+	}
+}
+
+// printDelegateMCP lists the MCP servers each delegate declares, with where
+// the delegate got them. They are not the session's servers: the vendor
+// connects them to the delegate's subagent alone.
+func printDelegateMCP(w io.Writer, servers []assembler.DelegateMCP) {
+	if len(servers) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "MCP servers of delegates:")
+	for _, s := range servers {
+		source := "its own"
+		if s.Source != harness.MCPSourceRoot {
+			source = "from " + s.Source
+		}
+		_, _ = fmt.Fprintf(w, "  %s: %s (%s)\n", s.Delegate, s.Server, source)
+	}
+}
+
+// printIncludedSelectables lists the focuses and profiles of the included
+// harnesses under the namespaced names --focus and --profile take.
+func printIncludedSelectables(w io.Writer, included []resolver.ResolveResult) {
+	var focuses, profiles []string
+	for _, r := range included {
+		if r.Harness == nil {
+			continue
+		}
+		for _, name := range slices.Sorted(maps.Keys(r.Harness.Focuses)) {
+			focuses = append(focuses, r.Namespace+":"+name)
+		}
+		for _, name := range slices.Sorted(maps.Keys(r.Harness.Profiles)) {
+			profiles = append(profiles, r.Namespace+":"+name)
+		}
+	}
+	for _, list := range []struct {
+		title string
+		names []string
+	}{
+		{"Focuses from included harnesses:", focuses},
+		{"Profiles from included harnesses:", profiles},
+	} {
+		if len(list.names) == 0 {
+			continue
+		}
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, list.title)
+		for _, n := range list.names {
+			_, _ = fmt.Fprintf(w, "  %s\n", n)
+		}
+	}
+}
+
+// previewReport is what assembling a preview learned besides the files: where
+// each MCP server came from, and the harnesses the includes resolved to.
+type previewReport struct {
+	mcp      []harness.MCPProvenance
+	delegate []assembler.DelegateMCP
+	included []resolver.ResolveResult
+}
+
+// assembleForVendor is assembleForVendorSources without the report.
+func assembleForVendor(srcDir string, vendorName string, sel harness.Selection) (string, error) {
+	dir, _, err := assembleForVendorSources(srcDir, vendorName, sel)
+	return dir, err
+}
+
+// assembleForVendorSources loads a harness from srcDir and assembles vendor-native
 // output into a temp directory. Returns the temp dir path (caller must clean up).
-func assembleForVendor(srcDir string, vendorName string, profileName string) (string, error) {
+// It also returns where each MCP server came from and the included harnesses.
+func assembleForVendorSources(srcDir string, vendorName string, sel harness.Selection) (string, previewReport, error) {
 	adapter, err := vendor.Get(vendorName)
 	if err != nil {
-		return "", err
+		return "", previewReport{}, err
 	}
 
 	// Load harness — handle bare AGENTS.md by working on a temp copy
 	h, workDir, err := loadHarnessForPreview(srcDir)
 	if err != nil {
-		return "", fmt.Errorf("loading harness: %w", err)
+		return "", previewReport{}, fmt.Errorf("loading harness: %w", err)
 	}
 	if workDir != "" {
 		defer func() { _ = os.RemoveAll(workDir) }()
@@ -167,10 +265,10 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 	}
 
 	// Apply profile if specified
-	if profileName != "" {
-		h, err = harness.ResolveProfile(h, profileName)
+	if sel.Profile != "" {
+		h, err = harness.ResolveProfile(h, sel.Profile)
 		if err != nil {
-			return "", err
+			return "", previewReport{}, err
 		}
 	}
 
@@ -184,15 +282,15 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 	if cfg != nil {
 		for _, del := range h.DelegatesTo {
 			if err := cfg.CheckSource(del.Git, h.Dir); err != nil {
-				return "", fmt.Errorf("delegate %q: %w", del.Git, err)
+				return "", previewReport{}, fmt.Errorf("delegate %q: %w", del.Git, err)
 			}
 		}
 	}
 
 	// Resolve includes
-	resolved, err := resolver.Resolve(h, cfg)
+	resolved, _, err := resolver.ResolveSelected(h, cfg, sel)
 	if err != nil {
-		return "", fmt.Errorf("resolving includes: %w", err)
+		return "", previewReport{}, fmt.Errorf("resolving includes: %w", err)
 	}
 
 	// Build content list
@@ -207,7 +305,7 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 	// Create temp dir for assembly
 	tmpDir, err := os.MkdirTemp("", "ynd-preview-*")
 	if err != nil {
-		return "", fmt.Errorf("creating temp dir: %w", err)
+		return "", previewReport{}, fmt.Errorf("creating temp dir: %w", err)
 	}
 
 	// Clean up on failure
@@ -220,40 +318,39 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 
 	// Assemble artifacts
 	if err := assembler.AssembleTo(tmpDir, adapter, content); err != nil {
-		return "", fmt.Errorf("assembling: %w", err)
+		return "", previewReport{}, fmt.Errorf("assembling: %w", err)
 	}
 
 	// Assemble delegates
-	if err := assembler.AssembleDelegates(tmpDir, adapter, h.DelegatesTo, h.Dir); err != nil {
-		return "", fmt.Errorf("assembling delegates: %w", err)
+	delegateMCP, err := assembler.AssembleDelegates(tmpDir, adapter, h.DelegatesTo, h.Dir, assembler.DelegateOptions{Config: cfg})
+	if err != nil {
+		return "", previewReport{}, fmt.Errorf("assembling delegates: %w", err)
 	}
 
 	// Generate hook config, and copy in the scripts those hooks run
-	if len(h.Hooks) > 0 {
-		warnings, err := assembler.WriteSessionHooks(tmpDir, adapter, h.Dir, h.Hooks)
-		if err != nil {
-			return "", err
-		}
-		for _, w := range warnings {
-			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-		}
+	hookWarnings, err := assembler.WriteComposedSessionHooks(tmpDir, adapter, h, resolved)
+	if err != nil {
+		return "", previewReport{}, err
+	}
+	for _, w := range hookWarnings {
+		fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 	}
 
-	// Generate MCP config
-	if len(h.MCPServers) > 0 {
-		// Same client-side resolution as ynh run, against the same data
-		// directory, so the preview shows what a run would write. Preview
-		// does not create the directory: it launches nothing.
-		servers, expErr := harness.AssembleMCPServers(h, harness.PluginDataDir(h), os.LookupEnv)
-		if expErr != nil {
-			return "", expErr
-		}
+	// Generate MCP config: the harness's own servers and those of its included
+	// harnesses, composed. Same client-side resolution as ynh run, against the
+	// same data directory, so the preview shows what a run would write.
+	// Preview does not create the directory: it launches nothing.
+	servers, mcpSources, expErr := harness.ComposeMCPServers(h, resolver.IncludedHarnesses(resolved), harness.PluginDataDir(h), os.LookupEnv)
+	if expErr != nil {
+		return "", previewReport{}, expErr
+	}
+	if len(servers) > 0 {
 		mcpFiles, err := adapter.GenerateMCPConfig(servers)
 		if err != nil {
-			return "", fmt.Errorf("generating MCP config: %w", err)
+			return "", previewReport{}, fmt.Errorf("generating MCP config: %w", err)
 		}
 		if err := writeGeneratedFiles(tmpDir, mcpFiles); err != nil {
-			return "", fmt.Errorf("writing MCP config: %w", err)
+			return "", previewReport{}, fmt.Errorf("writing MCP config: %w", err)
 		}
 	}
 
@@ -270,14 +367,14 @@ func assembleForVendor(srcDir string, vendorName string, profileName string) (st
 	}
 	manifestFiles, err := adapter.GeneratePluginManifest(pj, tmpDir)
 	if err != nil {
-		return "", fmt.Errorf("writing plugin manifest: %w", err)
+		return "", previewReport{}, fmt.Errorf("writing plugin manifest: %w", err)
 	}
 	if err := writeGeneratedFiles(tmpDir, manifestFiles); err != nil {
-		return "", fmt.Errorf("writing plugin manifest: %w", err)
+		return "", previewReport{}, fmt.Errorf("writing plugin manifest: %w", err)
 	}
 
 	success = true
-	return tmpDir, nil
+	return tmpDir, previewReport{mcp: mcpSources, delegate: delegateMCP, included: resolved}, nil
 }
 
 // writeGeneratedFiles writes a map of relative paths to file contents into baseDir.

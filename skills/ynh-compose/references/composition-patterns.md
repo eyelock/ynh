@@ -47,13 +47,29 @@ pointing up.
 
 ### What an include brings
 
-Files only: `skills/`, `agents/`, `rules/`, `commands/`. An included harness's
-manifest is never opened, so its hooks, MCP servers, profiles, focuses and
-sensors do **not** come with it.
+Files: `skills/`, `agents/`, `rules/`, `commands/`. When the included directory
+is a harness (it has a manifest), its **MCP servers** come with it too, and, unless
+the include uses `pick`, so do the harnesses it includes in turn. Its sensors
+come with it unless the include says `"sensors": false`, and its hooks only when the include says `"hooks": true` (at every
+link of a chain; `ynh include add --hooks`), with a stderr warning when it
+declines them. Its profiles and focuses are carried only when asked
+for by namespace: `--profile github:ci` applies the included harness's `ci`
+profile to that harness alone, and `--focus github:triage` runs its focus. The
+namespace is the included harness's name, or an `as` alias on the include
+(`ynh include add <harness> <url> --as gh-work`). `--profile` repeats, once per
+harness: `--profile work --profile github:ci`.
 
-That is deliberate for sensors: it keeps "what observes this repository" in one
-committed file a reviewer can read, and stops a composed harness turning
-included content into an execution surface the root author never declared.
+Included servers follow rules worth stating to a user: the root's server of the
+same name wins; `"name": null` in the root's `mcp_servers` (or in a profile)
+removes an inherited one; two includes declaring the same name differently is an
+error; each server expands against its own include's directory and
+`env_passthrough`, never widening the root's; a cycle of includes is refused. A
+path-relative included server cannot be exported. See `docs/mcp.md`.
+
+Sensors travel so a sensor set can be published as an ordinary harness and
+adopted like any other. They run from the included harness's own directory,
+so its scripts and fixtures come with them. Only the root's direct includes
+contribute sensors; `"sensors": false` takes a harness's files without its gate.
 
 ## Pattern: the shared team baseline
 
@@ -112,8 +128,7 @@ ynd preview <harness> --profile ci      # see what it resolves to
 ```
 
 A profile can add `includes`, `hooks`, `mcp_servers` and `env_passthrough`. It
-**cannot** add or override sensors — out of scope in v1, so sensors stay
-root-only.
+**cannot** add or override sensors, which are out of scope for profiles in v1.
 
 ## Pattern: focus as the front door
 
@@ -167,7 +182,9 @@ to diverge; use an include when you want to track.
 |---|---|
 | Vendor | `-v` flag > harness `default_vendor` > `~/.ynh/config.json` |
 | Instructions | last source wins — the harness's own `AGENTS.md` beats an included one |
-| Sensors | root harness only; includes contribute none |
+| Sensors | root's own, plus each direct include's unless it says `"sensors": false`; they run from the include's directory |
+| Hooks | root's, plus an included harness's when its include says `"hooks": true` (every link); included first, root last |
+| MCP servers | included harnesses' servers are carried; the root's wins on a name clash |
 | Profiles | overlay the base manifest; `--profile` selects |
 
 ## Reading the result

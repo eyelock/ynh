@@ -347,20 +347,30 @@ ynh trust accept <harness>   # record that you have read them
   include contributes (see [Sensors from an include](#sensors-from-an-include)).
   An included sensor shows the include it came from and the directory
   `$YNH_HARNESS_DIR` will be when it runs, which is the publishing harness.
-- **Hooks**: each hook command, with its event and matcher.
+- **Hooks**: each hook command, with its event and matcher. Hooks of an
+  included harness are covered, with the include that supplied them, when its
+  include consented with `"hooks": true`; without consent they do not run and
+  are not listed.
 - **MCP servers**: the `command` with its `args`, or the `url`, plus `cwd`, and
   the names of the `env` entries and `headers`.
+  Servers a delegate carries on its own are
+  listed against the delegate, and its own includes' servers with them. They are
+  connected only while that delegate runs, but they run with your credentials
+  all the same.
 
 Everything is shown as resolved for a run: the harness's own, then whatever
 each profile adds or changes (an entry identical to the harness's own is not
-repeated). Includes contribute sensors today; when they contribute hooks and
-MCP servers, those are covered too.
+repeated). Includes contribute their sensors and their MCP servers, the
+latter from every harness the includes reach.
+A profile of an included harness (`--profile ns:name`) can add servers of its
+own, so each is listed as its own view, named `ns:name`.
 
 Reading an include never reaches the network, as with `ynh check`. If an
 include is not cached, the set is incomplete, so `ynh trust` reports
 `unavailable` rather than digesting part of it, `ynh trust accept` refuses, and
-`ynh check` warns if you had accepted the harness. An include with
-`"sensors": false` contributes nothing and needs no cache.
+`ynh check` warns if you had accepted the harness. `"sensors": false` drops an
+include's sensors but not its MCP servers, so such an include still has to be
+readable.
 
 It also prints the source and commit the harness was installed from, and the
 environment variables those commands inherit that the harness never declared in
@@ -931,7 +941,7 @@ sensor "security-scan": source.focus references undefined focus "infer-vulns"
 
 ### Includes
 
-An included harness's sensors travel with it; see [Sensors from an include](#sensors-from-an-include). The merge reads the manifest of each include directly and, like the rest of include resolution, does not recurse: an include's own includes are not read. Set `"sensors": false` on an include to take its files without its gate.
+An included harness's sensors travel with it; see [Sensors from an include](#sensors-from-an-include). Only the root's direct includes contribute sensors: an include's own includes contribute their skills, agents, rules, commands, [MCP servers](mcp.md#servers-from-included-harnesses) and, when opted in, [hooks](hooks.md#hooks-from-included-harnesses), but not their sensors. Set `"sensors": false` on an include to take its files without its gate.
 
 ### Profiles: change severity, not observation
 

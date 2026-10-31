@@ -31,6 +31,21 @@ import (
 // TestEveryDispatchedCommandHasHelp, which is what stops this drifting the way
 // printUsage did when `migrate` and `quarantine` were added without it.
 var commandHelp = map[string]string{
+	"mcp-exec": `ynh mcp-exec --env-file <path> -- <command> [args...]
+
+Internal. Start an MCP server with its secrets filled in from an env file.
+
+ynh writes server definitions that call this; it is not meant to be typed. It
+reads the env file, replaces ${VAR} in the command's arguments and in its own
+environment values with the file's variables only (an unknown reference is an
+error), then becomes the command, so stdin and stdout are the server's.`,
+
+	"mcp-headers": `ynh mcp-headers --env-file <path> -- "Name: value" ...
+
+Internal. Print the headers of a remote MCP server as a JSON object, with
+${VAR} in each value replaced from an env file. It is the headersHelper ynh
+writes for a delegate's remote server, so a token is never on a command line.`,
+
 	"init": `ynh init
 
 Show the resolved ynh home path and setup instructions.
@@ -88,6 +103,8 @@ Flags:
                            non-interactive)
   --profile <name>         Apply a named profile overlay
   --interactive            Stay in session after a focus or prompt
+  --isolated-mcp           Run with only the harness's MCP servers (a harness can
+                           declare mcp_isolation; this flag can only turn it on)
   --instructions "<text>"  Inject per-invocation context after harness instructions
   --harness-file <path>    Load a harness from one manifest file, of any name
                            except a legacy .harness.json
@@ -130,8 +147,22 @@ Flags:
 Show a harness's resolved configuration: vendor, includes, delegates, hooks,
 MCP servers, profiles, focuses and sensors.
 
+Hooks and MCP servers are what a run carries, included harnesses' with
+their source; an included harness's hooks run only where its include says
+"hooks": true, and the rest are listed as not active. With no --profile or
+--focus they are those of a run with no profile; a selection shows what a
+run with it carries. Profiles and focuses are still listed as declared. A
+bare run's launch_focus is not applied: pass it as --focus to see what a
+bare run wakes with.
+
 Flags:
-  --format text|json   Output format (default text)`,
+  --format text|json   Output format (default text)
+  --profile <name>     Apply a profile, as ynh run does. Repeatable: at most one
+                       unqualified (the harness's own) and one namespace:name
+                       per included harness
+  --focus <name>       Apply a focus's profile; namespace:name selects an
+                       included harness's focus. Not with --profile
+  --check-updates      With --format json, check the source for newer content`,
 
 	"installed": `ynh installed <name> [flags]
 
@@ -231,7 +262,7 @@ Flags:
 
 Manage a harness's Git includes.
 
-  ynh include add <harness> <url>      Add an include
+  ynh include add <harness> <url|path> Add an include (Git URL or local path)
   ynh include remove <harness> <url>   Remove an include
   ynh include update <harness> <url>   Change an include's path, picks or ref
 

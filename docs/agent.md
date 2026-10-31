@@ -27,8 +27,8 @@ ynh agent run --resume <session-dir> [flags]
 |---|---|
 | `--harness <id\|path>` | Harness whose sensors, artifacts and hooks drive the run. Takes an installed id (`local/demo`) or a path to a harness directory (`.`, `./my-harness`, an absolute path), exactly as `ynh check` does. A path needs no prior install, which matters while you are still authoring the harness |
 | `--task "<text>"` | What the agent is being asked to do |
-| `--focus <name>` | Use a declared focus for the task and its profile |
-| `--profile <name>` | Apply a profile overlay, including its [sensor overrides](sensors.md#profiles-change-severity-not-observation); the gate between turns gets the same profile (also via a `--focus` bound to one) |
+| `--focus <name>` | Use a declared focus for the task and its profile. `namespace:name` takes a focus of an included harness |
+| `--profile <name>` | Apply a profile overlay, including its [sensor overrides](sensors.md#profiles-change-severity-not-observation); the gate between turns gets the same profile (also via a `--focus` bound to one). Repeatable: one unqualified value for the harness and one `namespace:name` per included harness (see [Profiles of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses)) |
 | `--backend <name>` | Backend to drive: `claude`, `codex`, `cursor` or `opencode` (default: `claude`; on `--resume`, the session's own) |
 | `--model <name>` | Model override passed to the backend |
 | `--effort <low\|medium\|high>` | Reasoning effort, mapped to the backend's own setting; overrides the harness's `agent.effort`. See [Effort](#effort) |
@@ -135,6 +135,52 @@ on, a `claude` worker also receives Claude Code's telemetry settings pointing
 at the run's relay, with every content switch forced off, and the same
 settings as `--settings`. Those settings replace any of the same family the
 harness passes through.
+
+### MCP servers
+
+A worker loads the harness's [MCP servers](mcp.md) and those of its included
+harnesses, composed as `ynh run` composes them (transitively, the root winning
+and its `null` removing; see
+[Servers from Included Harnesses](mcp.md#servers-from-included-harnesses)),
+named on the `claude` backend as `plugin:<harness>:<server>`, as `ynh run`
+names them. A harness or profile that sets `mcp_isolation` runs its worker
+with only that composed set, the same as `ynh run`; `ynh agent run` has no `--isolated-mcp` flag, so isolation
+comes from the manifest alone. It is applied on the `claude` backend only (its
+tools are then named `<server>`); on `codex` and `cursor` ynh prints one
+`warning:` line on stderr and the worker loads your own servers too. See
+[Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
+
+### Delegates
+
+A worker carries the harness's delegates (`delegates_to`) as subagents, as
+`ynh run` does. Each delegate's source is checked against
+`allowed_remote_sources` first; one the allow-list refuses stops the run before
+any worker starts, with an error naming the delegate. A delegate already in the
+cache is used as it is; one that is not is cloned while the run sets up, so **a
+lane's egress must allow the hosts the delegates name** as well as the
+includes'.
+
+Each delegate brings its own [MCP servers](mcp.md#mcp-servers-of-delegates),
+for its subagent only: the worker's main session does not list them, and
+`mcp_isolation` keeps them. Whether they reach the subagent depends on the
+backend:
+
+| Backend | Their MCP servers |
+|---------|-------------------|
+| `claude` | Carried, and passed to Claude with `--agents` |
+| `cursor` | Not carried. The delegate's agent file is written without them, and ynh prints one `warning:` line per delegate on stderr |
+| `codex` | Not carried, and the delegate itself is not picked up. ynh writes the delegate's agent file as Markdown, `.codex/agents/<name>.md`, without them, and prints one `warning:` line per delegate on stderr; but Codex reads only TOML custom agents there, so the worker has no subagent for the delegate today. Not checked against a live `codex`; see [MCP Servers of Delegates](mcp.md#mcp-servers-of-delegates) |
+
+On `claude`, a delegate server's `${VAR}` references are resolved from the
+delegate's own `env_passthrough`, against the environment `ynh agent run` was
+started in, and their values go to a `.env.ynh` file in the loop's temporary
+config directory, which is removed when the run ends. The worker's own
+environment is built from the root harness's `env_passthrough` only, as above,
+and does not need the delegate's variables: the launcher that starts the server
+reads the file. A reference that is undeclared or unset stops the run before
+any worker starts, with an error naming the delegate, the server and the field.
+[MCP Servers of Delegates](mcp.md#mcp-servers-of-delegates) explains how the
+values are kept off the command line.
 
 ## Redaction
 
@@ -335,7 +381,7 @@ same `checkpoint.json`, and the last one to write wins.
 The checkpoint records the run's identity (backend, task or focus, harness,
 profile, convergence sensor, and the turn and token caps) as well as its
 counters, so a resume restores the run it is actually resuming. For the
-harness, profile, convergence sensor and caps, flags passed on the resume take
+harness, profile (including namespaced profiles of included harnesses), convergence sensor and caps, flags passed on the resume take
 precedence and anything omitted comes from the checkpoint.
 
 The backend, task and focus cannot be changed on a resume, only repeated:
@@ -628,9 +674,8 @@ harness SHA and base commit reproduces the request. It cannot carry the model
 that ran: the header is written before the worker has said anything. A
 `worker_model` event records that instead, when each worker process first
 reports a model and again whenever it reports a different one.
-`session_start` still writes `model` too, as a copy of `model_requested`, so
-no field disappears from the header. It is deprecated and goes in a release
-that bumps the capabilities version; read `model_requested` instead.
+Until capabilities `0.10.0`, `session_start` also wrote `model`, a deprecated
+copy of `model_requested`. It is no longer written; read `model_requested`.
 
 ### Effort
 
@@ -711,7 +756,7 @@ a run without parsing terminal output.
 
 | Event | Emitted when |
 |---|---|
-| `session_start` | Run begins. Carries the model requested (`model_requested`, and the deprecated `model` copy of it), the effort requested (`effort_requested`), ynh version, harness version, base commit, the `--auto-approve` level, and the resolved budgets with their sources |
+| `session_start` | Run begins. Carries the model requested (`model_requested`), the effort requested (`effort_requested`), ynh version, harness version, base commit, the `--auto-approve` level, and the resolved budgets with their sources |
 | `session_resumed` | Resumed run begins, before the first new turn. Carries this process's `--auto-approve` level, model requested and effort requested |
 | `worker_model` | The worker reported the model it runs on: once per worker process, and again if it reports another |
 | `plan` / `plan_revised` | Plan produced or revised |
