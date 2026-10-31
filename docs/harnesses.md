@@ -143,6 +143,26 @@ A harness can be reached by more than one route: the root includes it directly a
 - **MCP servers default on.** An included harness's `null` removes a server from its dependencies only if every route to the dependency removes it. A direct include by the root removes nothing, so it keeps the server. See [Servers from Included Harnesses](mcp.md#servers-from-included-harnesses).
 - **Hooks default off.** A harness's hooks run only if every route to it says `"hooks": true` at every link. If the root includes the harness directly, that include decides alone: with `"hooks": true` its hooks run, whatever an intermediate harness's include of it says, and without it they do not. See [Hooks from Included Harnesses](hooks.md#hooks-from-included-harnesses).
 
+#### Cycles, shared includes and versions
+
+Includes form a graph, and ynh resolves it so that every harness in it is included exactly once.
+
+- **A cycle resolves.** When A includes B, B includes C and C includes A, the include that closes the cycle (C's include of A) adds nothing, because A is already included. ynh skips it, includes A, B and C once each, and notes the skipped include. `ynh info` shows the note under Includes (and in `include_notes` with `--format json`), and `ynd preview` shows it under "Include notes:":
+
+  ```
+  include cycle: root -> a -> b -> c -> a; a is already included, so this include adds nothing
+  ```
+
+  The skipped include is not a route to A, so it neither removes A's MCP servers nor withholds consent to A's hooks (see [When routes disagree](#when-routes-disagree)). A harness that includes itself directly is refused: `harness a includes itself`.
+- **A shared include collapses.** When B and C both include D (a diamond), D is included once, before the first harness that needs it.
+- **One source, one version.** A git include is known by its repository, its `path` and the commit its `ref` resolves to, so two refs that name one commit are one harness. The same repository and `path` reached at two different commits, for example B includes it at `v1` and C at `v2`, is an error naming both routes:
+
+  ```
+  include o/shared// is reached at two versions: <v1's commit> by b > o/shared, and <v2's commit> by c > o/shared; include it at one version
+  ```
+
+  Pin both includes to the same `ref`, or include the source once, from the root.
+
 Local includes are useful when a harness ships bundled artifact directories
 **inside** its root, or when a profile needs to pull in an adjacent
 directory (see [Profiles](#profiles) for profile-level includes).

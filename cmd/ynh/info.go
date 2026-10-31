@@ -51,7 +51,10 @@ type infoEntry struct {
 	IsPinned         bool               `json:"is_pinned"`
 	InstalledFrom    *listInstalledFrom `json:"installed_from,omitempty"`
 	Includes         []listInclude      `json:"includes"`
-	DelegatesTo      []listDelegate     `json:"delegates_to"`
+	// IncludeNotes are remarks on the include graph: each include cycle,
+	// and the include that closes it. A cycle is not an error.
+	IncludeNotes []string       `json:"include_notes,omitempty"`
+	DelegatesTo  []listDelegate `json:"delegates_to"`
 	// MCPServers is what a run of the harness carries: the servers of every
 	// harness its includes reach, then its own, each with where it came from.
 	MCPServers []infoMCPServer `json:"mcp_servers"`
@@ -125,6 +128,9 @@ type infoView struct {
 	hooksNotActive []infoHookOrigin
 	hooksErr       error
 	selection      *infoSelection
+	// includeNotes are remarks on the include graph, such as a cycle and
+	// the include that closes it (resolver.IncludeNotes).
+	includeNotes []string
 }
 
 // resolveInfoView applies the --profile values and --focus value to p as
@@ -184,6 +190,7 @@ func resolveInfoView(p *harness.Harness, profiles []string, focus string) (*info
 			view.hooksErr = err
 		default:
 			resolved = results
+			view.includeNotes = resolver.IncludeNotes(results)
 			if nsFocus != nil && nsFocus.Profile != "" {
 				view.selection.Profiles = []string{sel.FocusNS + ":" + nsFocus.Profile}
 			}
@@ -403,6 +410,9 @@ func printInfoText(w io.Writer, name string, profiles []string, focus string) er
 			}
 			_, _ = fmt.Fprintln(w, line)
 		}
+		for _, note := range view.includeNotes {
+			_, _ = fmt.Fprintf(w, "  note: %s\n", note)
+		}
 	}
 
 	_, _ = fmt.Fprintln(w)
@@ -616,6 +626,7 @@ func printInfoJSON(stdout, stderr io.Writer, name string, profiles []string, foc
 		entry.HooksError = view.hooksErr.Error()
 	}
 	entry.Selection = view.selection
+	entry.IncludeNotes = view.includeNotes
 
 	envelope := infoEnvelope{
 		Capabilities:  config.CapabilitiesVersion,

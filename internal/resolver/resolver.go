@@ -58,6 +58,10 @@ type ResolveResult struct {
 	// with "hooks": true (see includeResolver.hooksConsent). Without it the
 	// hooks are declared but not carried.
 	HooksActive bool
+	// Notes are remarks about the include graph that concern this include:
+	// an include cycle its harness closes (see includeResolver.resolve). A
+	// cycle is not an error; ynh info and ynd preview show the note.
+	Notes []string
 
 	// node is the include's identity in the include graph (see
 	// includeResolver.parents), empty for a plain artifact package.
@@ -65,6 +69,10 @@ type ResolveResult struct {
 	// id is the identity of the harness the include holds, the same for a
 	// picked include and a whole one, empty for a plain artifact package.
 	id string
+	// sourceKey is a git include's repository and subpath, and version the
+	// commit it resolved to (or its ref, when none is known); both empty for
+	// a local include.
+	sourceKey, version string
 }
 
 // repoFunc is a function that fetches or looks up a Git repo.
@@ -200,6 +208,20 @@ type includeResolver struct {
 	// so a picked include and a whole one of the same harness agree.
 	hookLinks map[string][]hookLink
 	rootID    string
+	// notes holds, by the identity of the harness that declares it, a note
+	// for each include of that harness that closes a cycle.
+	notes map[string][]string
+	// versions records, for every git source met (its repository and
+	// subpath), the identity it resolved to, with its version, and the chain
+	// it was first reached by, so the same source at two versions is caught.
+	versions map[string]sourceVersion
+}
+
+// sourceVersion is the version a git source resolved to, and where.
+type sourceVersion struct {
+	id      string
+	version string
+	chain   string
 }
 
 // hookLink is one include of a harness: who includes it, and whether that
@@ -312,6 +334,7 @@ func walkIncludes(p *harness.Harness, cfg *config.Config, resolve sourceResolver
 		selected: selected, seen: map[string][]seenHarness{}, profileErr: map[string]error{},
 		parents: map[string][]string{}, removals: map[string][]string{},
 		hookLinks: map[string][]hookLink{}, rootID: dirIdentity(p.Dir),
+		notes: map[string][]string{}, versions: map[string]sourceVersion{},
 	}
 	chain := []chainLink{{id: r.rootID, label: "root"}}
 	results, err := r.resolve(p, chain, "")
@@ -521,6 +544,9 @@ func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via str
 		if via != "" {
 			res.Chain = via + " > " + res.Chain
 		}
+		if err := r.checkVersion(res, id); err != nil {
+			return nil, err
+		}
 
 		if !harness.IsHarnessDir(res.Content.BasePath) {
 			results = append(results, res)
@@ -530,6 +556,24 @@ func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via str
 		inner, err := harness.LoadDir(res.Content.BasePath)
 		if err != nil {
 			return nil, fmt.Errorf("loading included harness %s: %w", res.Chain, err)
+		}
+
+		// An include of a harness already on the chain closes a cycle. The
+		// harness it names is already being included, so the edge adds
+		// nothing: it is skipped, and noted on the harness that declares it.
+		// It counts as no route to that harness, so it neither narrows its
+		// MCP servers nor withholds consent to its hooks. A harness that
+		// includes itself directly is refused.
+		if len(inc.Pick) == 0 {
+			if at := slices.IndexFunc(chain, func(l chainLink) bool { return l.id == id }); at >= 0 {
+				if at == len(chain)-1 {
+					return nil, fmt.Errorf("harness %s includes itself", chain[at].label)
+				}
+				r.notes[parent] = append(r.notes[parent], fmt.Sprintf(
+					"include cycle: %s -> %s; %s is already included, so this include adds nothing",
+					chainLabels(chain), chain[at].label, chain[at].label))
+				continue
+			}
 		}
 
 		ns := inc.As
@@ -569,11 +613,6 @@ func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via str
 			continue
 		}
 
-		for _, link := range chain {
-			if link.id == id {
-				return nil, fmt.Errorf("include cycle: %s -> %s", chainLabels(chain), link.label)
-			}
-		}
 		r.parents[id] = append(r.parents[id], parent)
 		if r.done[id] {
 			continue
@@ -585,6 +624,7 @@ func (r *includeResolver) resolve(p *harness.Harness, chain []chainLink, via str
 			return nil, err
 		}
 		r.done[id] = true
+		res.Notes = r.notes[id]
 		results = append(results, deps...)
 		results = append(results, res)
 	}
@@ -616,6 +656,36 @@ func dirIdentity(dir string) string {
 		return real
 	}
 	return abs
+}
+
+// checkVersion refuses a git source reached at two versions: one repository
+// and subpath whose includes resolve to different commits (or, with no
+// commit known, name different refs). The graph would otherwise hold two
+// copies of one harness, so the error names both chains. A source reached
+// again at the same version is one harness, which the walk includes once.
+func (r *includeResolver) checkVersion(res ResolveResult, id string) error {
+	if res.sourceKey == "" {
+		return nil
+	}
+	first, ok := r.versions[res.sourceKey]
+	if !ok {
+		r.versions[res.sourceKey] = sourceVersion{id: id, version: res.version, chain: res.Chain}
+		return nil
+	}
+	if first.id == id {
+		return nil
+	}
+	return fmt.Errorf("include %s is reached at two versions: %s by %s, and %s by %s; include it at one version",
+		res.sourceKey, displayVersion(first.version), first.chain, displayVersion(res.version), res.Chain)
+}
+
+// displayVersion words a version for an error: the commit or ref, or the
+// default branch when the include names no ref.
+func displayVersion(v string) string {
+	if v == "" {
+		return "the default branch"
+	}
+	return v
 }
 
 // resolveOne resolves a single include of p to a ResolveResult, applying the
@@ -654,8 +724,18 @@ func (r *includeResolver) resolveOne(p *harness.Harness, inc harness.Include) (R
 		return ResolveResult{}, "", err
 	}
 
-	id := ShortGitURL(GitSourceURL(inc.Git, p.Dir)) + "@" + inc.Ref + "//" + inc.Path
+	// A git include is known by its repository, subpath and the commit it
+	// resolved to, so two refs naming one commit are one harness. Without a
+	// resolved commit, the ref stands in.
+	version := inc.Ref
+	if repoResult != nil && repoResult.SHA != "" {
+		version = repoResult.SHA
+	}
+	sourceKey := ShortGitURL(GitSourceURL(inc.Git, p.Dir)) + "//" + inc.Path
+	id := sourceKey + "@" + version
 	return ResolveResult{
+		sourceKey: sourceKey,
+		version:   version,
 		Content: ResolvedContent{
 			BasePath:       basePath,
 			Paths:          inc.Pick,
@@ -667,6 +747,16 @@ func (r *includeResolver) resolveOne(p *harness.Harness, inc harness.Include) (R
 		Cloned: repoResult.Cloned,
 		Cached: !repoResult.Cloned,
 	}, id, nil
+}
+
+// IncludeNotes returns the notes about the include graph among resolved, in
+// content order: an include cycle, and the include that closes it.
+func IncludeNotes(resolved []ResolveResult) []string {
+	var out []string
+	for _, r := range resolved {
+		out = append(out, r.Notes...)
+	}
+	return out
 }
 
 // IncludedHarnesses lists the harnesses among resolved, in content order, for

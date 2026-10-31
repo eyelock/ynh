@@ -1262,3 +1262,59 @@ func TestCmdInfo_HooksWithoutIncludes(t *testing.T) {
 		t.Errorf("hooks %+v, error %q: want own hook and an error", env.Harness.Hooks, env.Harness.HooksError)
 	}
 }
+
+// #547: info resolves an include cycle and shows the include that closes it,
+// as a note under Includes in text and in include_notes in JSON.
+func TestCmdInfo_IncludeCycleIsANote(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	src := t.TempDir()
+	a, b := filepath.Join(src, "a"), filepath.Join(src, "b")
+	for dir, body := range map[string]string{
+		a: `{"name": "a", "version": "0.1.0", "includes": [{"local": "` + b + `"}], "mcp_servers": {"a-db": {"command": "a-mcp"}}}`,
+		b: `{"name": "b", "version": "0.1.0", "includes": [{"local": "` + a + `"}]}`,
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := writePluginJSONFile(dir, []byte(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	installListTestHarness(t, home, "root", `{"name": "root", "version": "0.1.0", "includes": [{"local": "`+a+`"}]}`)
+	note := "include cycle: root -> a -> b -> a; a is already included, so this include adds nothing"
+
+	var text bytes.Buffer
+	if err := cmdInfoTo([]string{"local/root"}, &text, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+	if got := infoSection(text.String(), "Includes"); !slices.Contains(got, "  note: "+note) {
+		t.Errorf("Includes section = %q, want the note %q", got, note)
+	}
+	if got := infoSection(text.String(), "MCP Servers"); !slices.Contains(got, "  a-db: a-mcp  (from a)") {
+		t.Errorf("MCP Servers = %q; the cycle's harnesses must still be composed", got)
+	}
+
+	var js bytes.Buffer
+	if err := cmdInfoTo([]string{"local/root", "--format", "json"}, &js, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo json: %v", err)
+	}
+	var env infoEnvelope
+	if err := json.Unmarshal(js.Bytes(), &env); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(env.Harness.IncludeNotes, []string{note}) {
+		t.Errorf("include_notes = %q, want %q", env.Harness.IncludeNotes, note)
+	}
+	var v any
+	if err := json.Unmarshal(js.Bytes(), &v); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := clischema.Get("info")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := schema.Validate(v); err != nil {
+		t.Errorf("info JSON does not validate: %v", err)
+	}
+}
