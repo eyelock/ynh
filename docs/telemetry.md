@@ -386,9 +386,29 @@ as Codex sends them. The relay scrubs attributes only, not log bodies or span
 names; Codex's log bodies are off anyway, and its span names carry no paths.
 
 **What Codex passes on.** The commands Codex runs inherit `TRACEPARENT` and
-`OTEL_RESOURCE_ATTRIBUTES` from its environment (checked live with codex-cli
-0.166.0: a shell command listed both). Under ynh with the relay on, Codex's
-environment carries no `OTEL_EXPORTER_OTLP_*`, so neither do its commands.
+`OTEL_RESOURCE_ATTRIBUTES` from its environment. This was checked live on
+2026-10-31 with codex-cli 0.166.0, outside ynh. `codex exec --json` ran with
+`TRACEPARENT` and `OTEL_RESOURCE_ATTRIBUTES` set in its environment and was
+asked to run, in Codex's default shell environment policy:
+
+```sh
+env | grep -E '^(TRACEPARENT|TRACESTATE|OTEL_)' | sed 's/=.*//' ; echo done
+```
+
+The command's output in the `command_execution` event (exit code 0) was the
+variable names only, never their values:
+
+```
+OTEL_RESOURCE_ATTRIBUTES
+TRACEPARENT
+done
+```
+
+That shows the names reach the command, not whether the `TRACEPARENT` value
+is the one Codex was given or one for its own span. `TRACESTATE` was not set
+for that run, so whether it passes through is unchecked. Under ynh with the
+relay on, Codex's environment carries no `OTEL_EXPORTER_OTLP_*`, so neither do
+its commands.
 Unchecked: whether Codex passes them to the MCP servers it starts, and whether
 it sends a W3C `traceparent` header on its requests to the OpenAI API.
 
