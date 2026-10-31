@@ -54,7 +54,7 @@ Every command's schema is a top-level `oneOf: [<success envelope>, <error envelo
 
 Envelopes use `additionalProperties: true` at the top level — adding a new envelope field is not a capabilities bump. Nested payload `$def`s use `additionalProperties: false`.
 
-**Note:** `ynh version`, `ynh search`, `ynh sources list`, `ynh registry list`, `ynh paths`, `ynh status`, and `ynh vendors` currently emit shapes without the full envelope (a bare object or array). Envelope retrofit is a separate, capabilities-bumping change tracked outside this initial schema publication.
+**Note:** `ynh version`, `ynh search`, `ynh sources list`, `ynh registry list`, `ynh paths`, `ynh status`, `ynh vendors` and `ynh telemetry registry` currently emit shapes without the full envelope (a bare object or array). Envelope retrofit is a separate, capabilities-bumping change tracked outside this initial schema publication.
 
 ## Error envelope
 

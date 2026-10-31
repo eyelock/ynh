@@ -314,8 +314,8 @@ func TestCmdAgentRun_TelemetryChangesNothing(t *testing.T) {
 							t.Errorf("run span %s parent %s, want a child of TRACEPARENT", span.traceID, span.parentID)
 						}
 						wantOutcome := runOutcome(sc.wantCode)
-						if span.attrs[string(telemetry.AttrOutcome)] != wantOutcome ||
-							span.attrs[string(telemetry.AttrExitCode)] != strconv.Itoa(sc.wantCode) {
+						if span.attrs[string(telemetry.AttrRunOutcome)] != wantOutcome ||
+							span.attrs[string(telemetry.AttrProcessExitCode)] != strconv.Itoa(sc.wantCode) {
 							t.Errorf("span attributes %v, want outcome %s and exit code %d", span.attrs, wantOutcome, sc.wantCode)
 						}
 						if envFile != "" && sc.wantCode == 0 {
@@ -491,8 +491,8 @@ func TestRunAttributes(t *testing.T) {
 			name:   "nothing reported is absent, not zero",
 			result: &agent.RunResult{ExitCode: 1},
 			want:   map[string]any{"process.exit.code": int64(1), "ynh.run.turns": int64(0)},
-			absent: []attribute.Key{telemetry.AttrInputTokens, telemetry.AttrOutputTokens, telemetry.AttrCostUSD,
-				telemetry.AttrModel, telemetry.AttrHarnessName, telemetry.AttrBoundBy},
+			absent: []attribute.Key{telemetry.AttrGenAIUsageInputTokens, telemetry.AttrGenAIUsageOutputTokens, telemetry.AttrRunCostUSD,
+				telemetry.AttrGenAIResponseModel, telemetry.AttrHarnessName, telemetry.AttrRunBoundBy},
 		},
 		{
 			name:   "a harness given by path is reported by a name that is not an id, so it is left out",
@@ -504,7 +504,7 @@ func TestRunAttributes(t *testing.T) {
 			name:   "input without cache counts",
 			result: &agent.RunResult{Consumed: agent.RunConsumed{InputTokens: i64(7), OutputTokens: i64(1)}},
 			want:   map[string]any{"gen_ai.usage.input_tokens": int64(7)},
-			absent: []attribute.Key{telemetry.AttrCacheReadTokens, telemetry.AttrCacheCreationTokens},
+			absent: []attribute.Key{telemetry.AttrGenAIUsageCacheReadInputTokens, telemetry.AttrGenAIUsageCacheCreationInputTokens},
 		},
 	}
 	for _, tt := range tests {
@@ -583,9 +583,9 @@ func TestCmdAgentRun_ResumeRecordsRestoredIdentity(t *testing.T) {
 	}
 	want := map[string]any{
 		string(telemetry.AttrHarnessName): "local/absent",
-		string(telemetry.AttrFocus):       "review",
-		string(telemetry.AttrProfile):     "ci",
-		string(telemetry.AttrResumed):     true,
+		string(telemetry.AttrRunFocus):    "review",
+		string(telemetry.AttrRunProfile):  "ci",
+		string(telemetry.AttrRunResumed):  true,
 	}
 	found := 0
 	for _, r := range readSpoolRecords(t, spoolDir) {
@@ -621,7 +621,7 @@ func TestRunTelemetry_CallSpans(t *testing.T) {
 			got[r.name] = r.attrs
 		}
 	}
-	if a := got[telemetry.SpanCheck]; a == nil || a[string(telemetry.AttrTurn)] != "2" {
+	if a := got[telemetry.SpanCheck]; a == nil || a[string(telemetry.AttrRunTurn)] != "2" {
 		t.Errorf("check span attributes %v", a)
 	}
 }
