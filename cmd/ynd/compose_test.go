@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -1018,5 +1019,111 @@ func TestCompose_HooksOfIncludes(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), "echo quiet") {
 		t.Errorf("a hook without consent is listed as carried:\n%s", stdout.String())
+	}
+}
+
+// A delegate carries its own MCP servers for its subagent (#573). Compose
+// lists them under the delegate, not with the session's, each with where the
+// delegate got it.
+func TestCompose_DelegateMCPServers(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	repo := gitRepo(t, "")
+	del := filepath.Join(repo, "harnesses", "del")
+	writeComposeHarnesses(t, map[string]map[string]any{
+		repo: {
+			"name": "root", "version": "1.0.0",
+			"delegates_to": []map[string]any{{"git": ".", "path": "harnesses/del"}},
+			"mcp_servers":  map[string]any{"session": map[string]any{"command": "node"}},
+		},
+		del: {
+			"name": "del", "version": "1.0.0",
+			"includes":    []map[string]any{{"local": "inc"}},
+			"mcp_servers": map[string]any{"probe": map[string]any{"command": "probe-srv"}},
+		},
+		filepath.Join(del, "inc"): {
+			"name": "inc", "version": "1.0.0",
+			"mcp_servers": map[string]any{"db": map[string]any{"url": "https://example.com/mcp"}},
+		},
+	})
+	for _, args := range [][]string{{"add", "-A"}, {"commit", "-q", "-m", "c"}} {
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{repo}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, stdout.String())
+	}
+	if len(got.MCPServers) != 1 || got.MCPServers["session"].Source != "root" {
+		t.Errorf("session servers = %+v, want only the root's own", got.MCPServers)
+	}
+	if len(got.DelegatesTo) != 1 {
+		t.Fatalf("delegates_to = %+v", got.DelegatesTo)
+	}
+	d := got.DelegatesTo[0]
+	if d.MCPServersError != "" {
+		t.Fatalf("delegate mcp_servers_error = %q", d.MCPServersError)
+	}
+	if s := d.MCPServers["probe"]; s.Source != "root" || s.Command != "probe-srv" {
+		t.Errorf("probe = %+v, want the delegate's own", s)
+	}
+	if s := d.MCPServers["db"]; s.Source != "inc" || s.URL != "https://example.com/mcp" {
+		t.Errorf("db = %+v, want from inc", s)
+	}
+	if len(d.MCPServers) != 2 {
+		t.Errorf("delegate servers = %+v, want probe and db", d.MCPServers)
+	}
+
+	stdout.Reset()
+	if err := cmdComposeTo([]string{repo, "--format", "text"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo text: %v", err)
+	}
+	for _, want := range []string{
+		"    MCP server db: https://example.com/mcp  (from inc)",
+		"    MCP server probe: probe-srv  (its own)",
+		"  session: node  (own)",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("text output lacks %q:\n%s", want, stdout.String())
+		}
+	}
+}
+
+// A delegate compose cannot read (here, not cached) does not fail compose:
+// the delegate is listed and says why its servers are missing.
+func TestCompose_UnreadableDelegateMCPIsReported(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	dir := t.TempDir()
+	writeComposeHarnesses(t, map[string]map[string]any{
+		dir: {
+			"name": "root", "version": "1.0.0",
+			"delegates_to": []map[string]any{{"git": "https://example.invalid/del.git"}},
+		},
+	})
+
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{dir}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, stdout.String())
+	}
+	if len(got.DelegatesTo) != 1 || got.DelegatesTo[0].MCPServersError == "" || got.DelegatesTo[0].MCPServers != nil {
+		t.Errorf("delegate = %+v, want an mcp_servers_error and no servers", got.DelegatesTo)
+	}
+
+	stdout.Reset()
+	if err := cmdComposeTo([]string{dir, "--format", "text"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo text: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "    MCP servers not shown: ") {
+		t.Errorf("text output does not say why:\n%s", stdout.String())
 	}
 }
