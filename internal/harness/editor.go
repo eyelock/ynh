@@ -283,9 +283,16 @@ func FindUpdateTarget(dir, url string, opts UpdateOptions) (plugin.IncludeMeta, 
 // no extension (skills/<name>); flat-file types carry .md:
 //
 //   - Skills:   "skills/<name>"        (a skill directory containing SKILL.md)
+//
 //   - Agents:   "agents/<name>.md"
+//
 //   - Rules:    "rules/<name>.md"
+//
 //   - Commands: "commands/<name>.md"
+//
+//   - A top-level skill folder: "<name>", a folder at the include's root with
+//     its SKILL.md at the folder's root and no skills/ directory around it
+//     (TopLevelSkill), as many community skill repositories are laid out.
 //
 // This is the same format the assembler expects (see assembler.CopyPicked), so
 // a pick that passes validation here is guaranteed to work end-to-end. The
@@ -331,7 +338,7 @@ func ValidatePicks(basePath string, picks []string) error {
 
 	var unknown []string
 	for _, pick := range picks {
-		if !known[pick] {
+		if !known[pick] && !TopLevelSkill(basePath, pick) {
 			unknown = append(unknown, pick)
 		}
 	}

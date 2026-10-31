@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage e2e format lint check check-artifacts check-vendor-parity check-marketplace check-eval-stand-ins scan-artifacts run docs help docker-build docker-push vulncheck
+.PHONY: clean deps install build test test-coverage e2e format lint check check-tidy check-artifacts check-vendor-parity check-marketplace check-eval-stand-ins scan-artifacts run docs help docker-build docker-push vulncheck
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -19,11 +19,13 @@ LDFLAGS := -ldflags "-X github.com/eyelock/ynh/internal/config.Version=$(VERSION
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-deps: ## Install prerequisites (Go, linter, formatter)
+deps: ## Install prerequisites (Go, linter, formatter, jq) and check python3 is present
 	@echo "Checking prerequisites..."
 	@command -v go >/dev/null 2>&1 || { echo "Installing Go..."; brew install go; }
 	@command -v golangci-lint >/dev/null 2>&1 || { echo "Installing golangci-lint..."; brew install golangci-lint; }
 	@test -x $(GOIMPORTS) || { echo "Installing goimports..."; go install golang.org/x/tools/cmd/goimports@latest; }
+	@command -v jq >/dev/null 2>&1 || { echo "Installing jq..."; brew install jq; }
+	@command -v python3 >/dev/null 2>&1 || { echo "python3 not found: check-marketplace needs it. Install python3 and re-run."; exit 1; }
 	@echo "All prerequisites installed."
 	@echo ""
 	@echo "Run 'make install' to build and install binaries to ~/.ynh/bin/"
@@ -72,6 +74,13 @@ format: ## Format code
 
 lint: ## Lint code
 	golangci-lint run ./...
+
+check-tidy: ## Fail if go.mod or go.sum is not tidy (read-only; CI's `go mod tidy -diff`)
+	@# A direct import marked `// indirect` is invisible to build, test and lint
+	@# alike; only this sees it. -diff prints what tidy would change and exits
+	@# non-zero, writing nothing. Like build and test, it needs the network only
+	@# when the module cache is cold.
+	$(GO) mod tidy -diff
 
 # The harness artifacts this repo ships (skills/ agents/ rules/) plus the one it
 # uses on itself (.claude/). testdata/ is deliberately excluded: its fixtures are
@@ -152,4 +161,14 @@ docker-push: ## Push base Docker image to GHCR
 	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
 	docker push $(DOCKER_IMAGE):latest
 
-check: deps format lint test build check-artifacts ## Run full CI pipeline
+# Every check CI's CI workflow runs that needs neither Docker nor the network
+# (beyond the module downloads build and test already need on a cold cache).
+# A green `make check` is not a promise of a green CI. Left out on purpose:
+#   scan-artifacts                  Skill Security job (Docker)
+#   the container image build       Packaging Config job (Docker)
+#   vulncheck                       vulncheck.yml (network: live vuln database)
+#   check-eval-stand-ins            eval-stand-ins.yml (network: GitHub)
+#   e2e                             e2e.yml (release gate)
+# `format` rewrites files where CI's Format Check only reports them, so commit
+# what it changes.
+check: deps format lint check-tidy test build check-artifacts check-vendor-parity check-marketplace ## Run every CI check that needs neither Docker nor the network

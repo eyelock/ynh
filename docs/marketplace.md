@@ -322,7 +322,7 @@ Codex's marketplace is curated rather than open. It supports:
 Codex has significant differences from Claude Code and Cursor:
 
 - **No self-hosted marketplaces** — the catalog is centrally managed (as of March 2026)
-- **Skills-only distribution** — Codex loads skills but has no loading mechanism for agents, rules, or commands as separate artifacts
+- **Skills-only distribution** — Codex plugins carry only skills: there is no loading mechanism for agents, rules, or commands in a plugin. When it runs a harness under Codex, `ynh` writes a harness's agents as TOML custom agents and registers each one with Codex at launch (see [Vendors: Symlink Installation](vendors.md#symlink-installation-codex-cursor))
 - **Limited marketplace.json** — the format exists but the schema is still evolving
 
 ynh includes Codex in marketplace generation. `ynd marketplace build` writes a Codex-specific index at `.agents/plugins/marketplace.json` (source/path pointers and an install policy per plugin) alongside the Claude Code and Cursor indexes. Individual Codex export (`ynd export -v codex`) produces a `.codex-plugin/plugin.json` manifest with a `skills/` directory at the plugin root.

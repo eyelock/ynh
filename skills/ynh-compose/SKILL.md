@@ -52,7 +52,10 @@ Three things worth saying as you do it:
   markdown that becomes instructions inside your agent, so an unpinned branch is
   a supply-chain decision you did not make deliberately.
 - **`pick` narrows it.** Take two skills from a repo of thirty rather than all
-  thirty. Edit the manifest for this; there is no flag.
+  thirty. Edit the manifest for this; there is no flag. A repo that keeps each
+  skill as a top-level folder (`bash-scripting/SKILL.md`, no `skills/`) is
+  picked by folder name alone: `"pick": ["bash-scripting"]`. Without a pick,
+  such a repo contributes nothing.
 - **Local includes exist and have no CLI.** `{"local": "vendor-shared"}` in the
   manifest pulls from a directory in the same repo. `ynh include add` handles
   Git only, so write it by hand.

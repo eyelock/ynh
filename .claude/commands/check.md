@@ -1,4 +1,4 @@
-Run the full CI pipeline: format, lint, test, and build. Fix any issues found.
+Run every CI check that needs neither Docker nor the network: deps, format, lint, check-tidy, test, build, check-artifacts, check-vendor-parity and check-marketplace. Fix any issues found.
 
 ```bash
 make check
