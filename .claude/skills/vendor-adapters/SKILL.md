@@ -146,9 +146,10 @@ converted only by `ynd migrate` and refused by every other command.
 | Source:            |                                  |                                  |                                  |
 | agents/<name>.md  | agents/<name>.md                 | NOT SUPPORTED in plugins; a run  | agents/<name>.md                 |
 |                   |                                  | writes .codex/agents/<name>.toml |                                  |
-|                   |                                  | (TOML custom agent). Live pickup |                                  |
-|                   |                                  | NOT observed on 0.166.0 (unknown |                                  |
-|                   |                                  | agent_type; ynw-t7i)             |                                  |
+|                   |                                  | (TOML custom agent), registered  |                                  |
+|                   |                                  | at launch with -c agents.<name>. |                                  |
+|                   |                                  | config_file; CONFIRMED live on   |                                  |
+|                   |                                  | 0.166.0 (ynw-t7i)                |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Frontmatter:      | name, description, model,        | name, description; the body      | name, description                |
 |                   | tools, disallowedTools, skills,  | becomes developer_instructions;  |                                  |
@@ -169,9 +170,10 @@ converted only by `ynd migrate` and refused by every other command.
 |                   | plus --agents at launch)         | servers inherited from the       | delegate's MCP servers not       |
 |                   |                                  | session, the delegate's own not  | carried (warning); live pickup   |
 |                   |                                  | carried (warning); run only, not | not checked                      |
-|                   |                                  | export; live pickup NOT observed |                                  |
-|                   |                                  | on 0.166.0 (unknown agent_type;  |                                  |
-|                   |                                  | ynw-t7i)                         |                                  |
+|                   |                                  | export; registered at launch     |                                  |
+|                   |                                  | with -c agents.<name>.           |                                  |
+|                   |                                  | config_file; CONFIRMED live on   |                                  |
+|                   |                                  | 0.166.0 (ynw-t7i)                |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 ```
 

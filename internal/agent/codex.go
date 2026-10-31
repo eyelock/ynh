@@ -8,6 +8,8 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 // CodexBackend implements WorkerBackend for OpenAI Codex CLI.
@@ -36,6 +38,13 @@ func (b *CodexBackend) Start(ctx context.Context, opts StartOptions) (WorkerSess
 		codexBin: codexBin,
 		opts:     opts,
 		threadID: opts.ResumeToken,
+	}
+	// Each turn registers the agents again (buildCodexArgs); say once which
+	// cannot be.
+	if _, warnings := vendor.CodexAgentArgs(opts.ConfigPath); opts.Stderr != nil {
+		for _, msg := range warnings {
+			_, _ = fmt.Fprintf(opts.Stderr, "warning: %s\n", msg)
+		}
 	}
 	// codex reports the thread's running token totals, so each turn's usage
 	// is the difference from the totals already counted. A fresh thread starts
@@ -67,6 +76,12 @@ func buildCodexArgs(opts StartOptions, threadID string) []string {
 	if threadID != "" {
 		args = append(args, "resume", threadID)
 	}
+	// Register the harness's agents and delegates written in the run
+	// directory (opts.ConfigPath), as `ynh run` does. The worker runs in the
+	// worktree, so the agents could not be read from the run directory's
+	// .codex/ layer; the -c overrides do not depend on the working directory.
+	agentArgs, _ := vendor.CodexAgentArgs(opts.ConfigPath)
+	args = append(args, agentArgs...)
 	args = append(args, "--json")
 	args = append(args, workspaceArgs(vendorCodex, opts.Workspace)...)
 	if opts.Model != "" {
