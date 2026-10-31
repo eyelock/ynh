@@ -246,6 +246,10 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 		if err != nil {
 			return nil, fmt.Errorf("loading delegate harness %s: %w", del.Git, err)
 		}
+		delHarness, focus, err := del.Select(delHarness)
+		if err != nil {
+			return nil, err
+		}
 
 		included, _, err := resolver.ResolveSelectedFromCache(delHarness, opts.Config, harness.Selection{})
 		if err != nil {
@@ -271,7 +275,7 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 					agent := vendor.DelegateLaunchAgent{
 						Name:        delHarness.Name,
 						Description: delegateDescription(delHarness),
-						Prompt:      delegateBody(delHarness, basePath, included),
+						Prompt:      delegateBody(delHarness, basePath, included, focus),
 						Servers:     servers,
 						Wrapped:     composed.Wrapped,
 					}
@@ -287,7 +291,7 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 			}
 		}
 
-		agentContent := BuildDelegateAgent(delHarness, basePath, included, mcpLine)
+		agentContent := BuildDelegateAgent(delHarness, basePath, included, focus, mcpLine)
 		agentFile := filepath.Join(agentsPath, delHarness.Name+".md")
 		if err := os.WriteFile(agentFile, []byte(agentContent), 0o644); err != nil {
 			return nil, fmt.Errorf("writing delegate agent %s: %w", delHarness.Name, err)
@@ -316,9 +320,10 @@ func delegateDescription(p *harness.Harness) string {
 
 // BuildDelegateAgent generates a markdown agent file for a delegate harness.
 // It includes the delegate's instructions, rules, and available skills,
-// those of its resolved includes among them. mcpLine, when not empty, is the
-// frontmatter line that carries the delegate's MCP servers.
-func BuildDelegateAgent(p *harness.Harness, basePath string, included []resolver.ResolveResult, mcpLine string) string {
+// those of its resolved includes among them, and the standing instructions
+// of the focus its delegates_to entry names (nil for none). mcpLine, when not
+// empty, is the frontmatter line that carries the delegate's MCP servers.
+func BuildDelegateAgent(p *harness.Harness, basePath string, included []resolver.ResolveResult, focus *harness.DelegateFocus, mcpLine string) string {
 	var b strings.Builder
 
 	b.WriteString("---\n")
@@ -333,13 +338,14 @@ func BuildDelegateAgent(p *harness.Harness, basePath string, included []resolver
 		b.WriteString("\n")
 	}
 	b.WriteString("---\n\n")
-	b.WriteString(delegateBody(p, basePath, included))
+	b.WriteString(delegateBody(p, basePath, included, focus))
 	return b.String()
 }
 
 // delegateBody is the agent's prompt: who it is, its instructions and rules,
-// and the skills it has, those of its resolved includes among them.
-func delegateBody(p *harness.Harness, basePath string, included []resolver.ResolveResult) string {
+// the standing instructions of a focus its entry names, and the skills it
+// has, those of its resolved includes among them.
+func delegateBody(p *harness.Harness, basePath string, included []resolver.ResolveResult, focus *harness.DelegateFocus) string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "You are the **%s** harness, invoked as a delegate.\n\n", p.Name)
@@ -359,6 +365,15 @@ func delegateBody(p *harness.Harness, basePath string, included []resolver.Resol
 		for name, content := range rules {
 			fmt.Fprintf(&b, "### %s\n\n%s\n\n", name, content)
 		}
+	}
+
+	// A focus the delegates_to entry names: its prompt stands for every task
+	// the calling session gives the delegate. The task itself still comes
+	// from the caller.
+	if focus != nil && strings.TrimSpace(focus.Prompt) != "" {
+		fmt.Fprintf(&b, "## Focus: %s\n\n", focus.Name)
+		b.WriteString(strings.TrimSpace(focus.Prompt))
+		b.WriteString("\n\n")
 	}
 
 	// List available skills: the includes', then the delegate's own.

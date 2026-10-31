@@ -110,6 +110,10 @@ type composeDelegate struct {
 	Git  string `json:"git"`
 	Ref  string `json:"ref,omitempty"`
 	Path string `json:"path,omitempty"`
+	// Profile and Focus are the entry's selection of the delegate's own
+	// profile or focus; MCPServers are composed with it applied.
+	Profile string `json:"profile,omitempty"`
+	Focus   string `json:"focus,omitempty"`
 	// MCPServers are the servers the delegate carries for its own subagent,
 	// not the session's: those of the harnesses its includes reach, then its
 	// own ("root" is the delegate itself), composed as a run composes them.
@@ -419,9 +423,11 @@ func buildComposeOutput(h *harness.Harness, srcDir string, resolved []resolver.R
 	delegates := make([]composeDelegate, 0, len(h.DelegatesTo))
 	for _, del := range h.DelegatesTo {
 		cd := composeDelegate{
-			Git:  del.Git,
-			Ref:  del.Ref,
-			Path: del.Path,
+			Git:     del.Git,
+			Ref:     del.Ref,
+			Path:    del.Path,
+			Profile: del.Profile,
+			Focus:   del.Focus,
 		}
 		if servers, provenance, err := delegateMCPServers(del, h.Dir); err != nil {
 			cd.MCPServersError = err.Error()
@@ -632,6 +638,9 @@ func delegateMCPServers(del harness.Delegate, harnessDir string) (map[string]plu
 	if err != nil {
 		return nil, nil, err
 	}
+	if dh, _, err = del.Select(dh); err != nil {
+		return nil, nil, err
+	}
 	var included []harness.IncludedHarness
 	if len(dh.Includes) > 0 {
 		resolved, err := resolver.ResolveIncludesLocal(dh, harness.Selection{})
@@ -704,6 +713,12 @@ func printComposeText(w io.Writer, out composeOutput) error {
 			line := "  " + del.Git
 			if del.Path != "" {
 				line += "  path=" + del.Path
+			}
+			if del.Profile != "" {
+				line += "  profile=" + del.Profile
+			}
+			if del.Focus != "" {
+				line += "  focus=" + del.Focus
 			}
 			_, _ = fmt.Fprintln(w, line)
 			// The delegate's own subagent's servers, not the session's.

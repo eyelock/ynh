@@ -414,6 +414,9 @@ func delegateViews(h *harness.Harness) ([]delegateView, error) {
 		if err != nil {
 			return nil, fmt.Errorf("delegate %s: %w", del.Git, err)
 		}
+		if dh, _, err = del.Select(dh); err != nil {
+			return nil, err
+		}
 		var included []harness.IncludedHarness
 		if len(dh.Includes) > 0 {
 			resolved, err := resolver.ResolveIncludesLocal(dh, harness.Selection{})

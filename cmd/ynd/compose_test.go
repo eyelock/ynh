@@ -1127,3 +1127,67 @@ func TestCompose_UnreadableDelegateMCPIsReported(t *testing.T) {
 		t.Errorf("text output does not say why:\n%s", stdout.String())
 	}
 }
+
+// A delegates_to entry's profile (or a focus's) decides the servers compose
+// shows for the delegate, and the selection is shown with it.
+func TestCompose_DelegateSelection(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	repo := gitRepo(t, "")
+	del := filepath.Join(repo, "harnesses", "del")
+	writeComposeHarnesses(t, map[string]map[string]any{
+		repo: {
+			"name": "root", "version": "1.0.0",
+			"delegates_to": []map[string]any{
+				{"git": ".", "path": "harnesses/del", "profile": "ci"},
+				{"git": ".", "path": "harnesses/del", "focus": "triage"},
+			},
+		},
+		del: {
+			"name": "del", "version": "1.0.0",
+			"mcp_servers": map[string]any{"base": map[string]any{"command": "base-srv"}},
+			"profiles": map[string]any{"ci": map[string]any{"mcp_servers": map[string]any{
+				"base": nil, "ci": map[string]any{"command": "ci-srv"},
+			}}},
+			"focuses": map[string]any{"triage": map[string]any{"profile": "ci", "prompt": "Triage."}},
+		},
+	})
+	for _, args := range [][]string{{"add", "-A"}, {"commit", "-q", "-m", "c"}} {
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{repo}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v\n%s", err, stdout.String())
+	}
+	if len(got.DelegatesTo) != 2 {
+		t.Fatalf("delegates_to = %+v", got.DelegatesTo)
+	}
+	for i, d := range got.DelegatesTo {
+		if d.MCPServersError != "" {
+			t.Fatalf("delegate %d: mcp_servers_error = %q", i, d.MCPServersError)
+		}
+		if _, ok := d.MCPServers["ci"]; !ok || len(d.MCPServers) != 1 {
+			t.Errorf("delegate %d servers = %+v, want only the ci profile's", i, d.MCPServers)
+		}
+	}
+	if got.DelegatesTo[0].Profile != "ci" || got.DelegatesTo[1].Focus != "triage" {
+		t.Errorf("selection not shown: %+v", got.DelegatesTo)
+	}
+
+	stdout.Reset()
+	if err := cmdComposeTo([]string{repo, "--format", "text"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo text: %v", err)
+	}
+	for _, want := range []string{"  path=harnesses/del  profile=ci", "  path=harnesses/del  focus=triage"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("text output lacks %q:\n%s", want, stdout.String())
+		}
+	}
+}
