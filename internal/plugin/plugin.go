@@ -29,8 +29,9 @@ type HarnessJSON struct {
 	// harness does not want. It is not a field of its own on the wire (see
 	// MarshalJSON and UnmarshalJSON), and MCPServers never holds those names.
 	MCPRemovals []string `json:"-"`
-	// MCPIsolation runs the harness with only its own MCP servers, instead of
-	// alongside the operator's configured servers. A launch concern: it
+	// MCPIsolation runs the harness with only the MCP servers it composes (its
+	// own and its included harnesses'), instead of alongside the operator's
+	// configured servers. A launch concern: it
 	// changes how `ynh run` starts the vendor CLI, not what an export ships.
 	MCPIsolation bool `json:"mcp_isolation,omitempty"`
 	// Agent carries loop defaults a harness can set once rather than every
