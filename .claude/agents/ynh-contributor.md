@@ -27,9 +27,9 @@ Both share `internal/config` for version injection. `ynd` is self-contained in `
 
 ## Adding a vendor adapter
 
-Read the "Vendor Adapters" section in `.github/CONTRIBUTING.md`. It has the full `Adapter` interface and working examples. Key points:
-- One file in `internal/vendor/`
-- Implements the `Adapter` interface (**25 methods**), grouped: identity
+Follow the `add-vendor-adapter` skill: it is the checklist of every file a new vendor touches, and the adapter file is only one of them. The "Vendor Adapters" section in `.github/CONTRIBUTING.md` has the `Adapter` interface and the launch patterns. Key points:
+- The adapter is `internal/vendor/<name>.go`, but the vendor also goes into the per-vendor tables in `internal/vendor/` (hook events, hook timeouts, session-start context, workspace), the schema, the image, the parity checks, tests and docs
+- Implements the `Adapter` interface (**26 methods**; `adapter.go` is the authority), grouped: identity
   (`Name`, `DisplayName`, `CLIName`), layout (`ConfigDir`, `ArtifactDirs`,
   `InstructionsFile`, `NeedsSymlinks`, `Install`, `Clean`), launch
   (`LaunchInteractive`, `LaunchNonInteractive`, `LaunchWithInitialPrompt`),
@@ -37,15 +37,15 @@ Read the "Vendor Adapters" section in `.github/CONTRIBUTING.md`. It has the full
   (`GenerateSystemPrompt`, `ApplyRuntimeInstructions`, `GenerateHookConfig`,
   `GenerateMCPConfig`, `GeneratePluginManifest`, `PluginManifestDir`) and export
   (`ExportArtifactDirs`, `SupportsExportDelegates`, `MarketplaceManifestDir`,
-  `GenerateMarketplaceIndex`)
+  `GenerateMarketplaceIndex`, `AgentPluginLayout`)
 - **Read the resume contract before implementing it.** `adapter.go` warns that
   an implementation must not emit a bare resume flag: it would hang an
   unattended relaunch waiting for a keypress. That warning is invisible if you
   work from a summary of the interface rather than the declaration.
 - Self-registers via `init()`
-- Two launch patterns: `syscall.Exec` for vendors with native plugin or config-directory loading (Claude, Copilot, OpenCode), child process with signal forwarding for symlink-based vendors (Codex, Cursor)
+- Two launch patterns: `syscall.Exec` for vendors with native plugin or config-directory loading (Claude and Copilot via `--plugin-dir`, OpenCode via `OPENCODE_CONFIG_DIR`), child process with signal forwarding for symlink-based vendors (Codex, Cursor)
 
-See `internal/vendor/claude.go`, `codex.go`, `cursor.go` for working examples.
+See `internal/vendor/claude.go`, `codex.go`, `copilot.go`, `cursor.go` and `opencode.go` for working examples.
 
 ## Testing
 

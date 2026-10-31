@@ -62,7 +62,7 @@ docs/                     User guide (GitHub Pages)
 
 **No build system on content.** Skills, agents, rules, and commands are standard-format files. ynh never transforms or wraps them. A skill from skills.sh works as-is.
 
-**Vendor is a deployment concern, not a content concern.** Harnesses define what artifacts to include. The vendor adapter decides where to put them and how to launch. Adding a new vendor is one file implementing the `Adapter` interface.
+**Vendor is a deployment concern, not a content concern.** Harnesses define what artifacts to include. The vendor adapter decides where to put them and how to launch. Each vendor's adapter, one file implementing the `Adapter` interface, carries most of its behaviour, but adding a vendor touches more than that file: see [Vendor Adapters](#vendor-adapters).
 
 **Git is the package manager.** No npm, no custom registry. Content lives in Git repos, versioned with Git tags, cached locally by hash.
 
@@ -343,7 +343,7 @@ func (c Chain) Run(dir string) ([]string, error)  // returns descriptions of app
 
 ### Vendor Adapters
 
-To add a new vendor, create a single file in `internal/vendor/` that implements the `Adapter` interface and self-registers via `init()`. No other wiring needed - rebuild and the vendor is available.
+Each vendor is an adapter, `internal/vendor/<name>.go`, that implements the `Adapter` interface and self-registers via `init()`. The adapter file is not the whole job. A new vendor also declares its hook events, hook timeouts, session-start context and workspace flag, adds itself to the per-vendor tables in `internal/vendor/` that read those declarations, and needs the schema, the Docker image, the parity checks, tests and the docs that list vendors. The [`add-vendor-adapter`](../.claude/skills/add-vendor-adapter/SKILL.md) skill is the checklist for all of it; this section covers only the interface and the two launch patterns.
 
 **Interface** (`internal/vendor/adapter.go`):
 
@@ -363,7 +363,7 @@ type Adapter interface {
 	LaunchWithInitialPrompt(configPath string, prompt string, extraArgs []string) error
 	SupportsResume() bool
 	ResolveLastSession(cwd string, notBefore time.Time) (string, error)
-	LaunchResume(configPath string, sessionID string, extraArgs []string) error
+	LaunchResume(configPath string, sessionID string, prompt string, interactive bool, extraArgs []string) error
 	GenerateSystemPrompt(content []byte) map[string][]byte
 	ApplyRuntimeInstructions(runDir, text string) ([]string, error)
 	GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)
@@ -374,13 +374,16 @@ type Adapter interface {
 	SupportsExportDelegates() bool
 	MarketplaceManifestDir() string
 	GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error)
+	AgentPluginLayout() AgentPluginLayout
 }
 ```
 
-**25 methods.** Regenerated from `internal/vendor/adapter.go`; that
-declaration is the only authority. This copy has drifted before (it read 10,
-11 and 18 methods in three different places while the interface had 24), which
-hid the entire resume subsystem from anyone writing a new adapter.
+**26 methods.** Regenerated from `internal/vendor/adapter.go`; that
+declaration is the only authority. This copy has drifted before: it read 10,
+11 and 18 methods in three different places while the interface had 24, which
+hid the entire resume subsystem from anyone writing a new adapter, and later
+read 25, without `AgentPluginLayout` and with an old `LaunchResume`
+signature, while the interface had 26.
 
 **Consumer-side narrow interfaces.** Packages that consume adapters define their own interfaces covering only the methods they need:
 

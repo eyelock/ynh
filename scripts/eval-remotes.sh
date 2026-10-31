@@ -56,7 +56,12 @@ description: Fixture skill $3 for the ynh tutorials.
 This is the $3 skill."
 }
 
-# harness <repo> <dir> <name> <description> [includes-json]: write a harness manifest.
+# harness <repo> <dir> <name> <description> [includes-json] [instructions]: write
+# a harness manifest, and <dir>/instructions.md only when [instructions] is
+# given. A harness's own files change what a reader sees (a delegate's agent
+# file has an Instructions section only when the delegate has instructions; an
+# export writes AGENTS.md only then), so a stand-in has only the files its real
+# harness has, and `make check-eval-stand-ins` compares which are present.
 harness() {
 	local inc=""
 	[ -n "${5:-}" ] && inc=",
@@ -69,7 +74,7 @@ harness() {
   \"description\": \"$4\",
   \"default_vendor\": \"claude\"$inc
 }"
-	file "$1" "$2/instructions.md" "You are the $3 harness. $4."
+	[ -z "${6:-}" ] || file "$1" "$2/instructions.md" "$6"
 }
 
 # publish <repo> <tag>: commit the working tree, tag it, and serve it as a bare repository.
@@ -95,9 +100,9 @@ publish() {
 
 # --- github.com/eyelock/assistants -------------------------------------------
 A=eyelock/assistants
-for s in dev-project dev-quality dev-review dev-backend dev-ui dev-test dev-docs; do skill $A skills/dev/skills "$s"; done
+for s in dev-project dev-quality dev-review dev-security dev-backend dev-ui dev-debug dev-test dev-docs; do skill $A skills/dev/skills "$s"; done
 for s in go-lang python-lang typescript-lang; do skill $A skills/tech/skills "$s"; done
-for s in docker terraform; do skill $A skills/infra/skills "$s"; done
+for s in docker terraform gh-os-repo terraform-backend-aws; do skill $A skills/infra/skills "$s"; done
 for s in help-me-answer take-a-moment; do skill $A skills/pause/skills "$s"; done
 skill $A plugins/media-management/skills media-import
 file $A plugins/media-management/.claude-plugin/plugin.json '{
@@ -111,11 +116,18 @@ inc() { # inc <path> <pick,...>
 	picks=$(printf '"skills/%s", ' ${2//,/ })
 	printf '\n    {"git": "github.com/eyelock/assistants", "path": "%s", "pick": [%s]}' "$1" "${picks%, }"
 }
-harness $A ynh/david david "Full-stack development harness with Go expertise" \
-	"$(inc skills/dev dev-project,dev-quality),$(inc skills/tech go-lang),$(inc skills/infra docker),$(inc skills/pause help-me-answer)"
-harness $A ynh/planner planner "Project planning and architecture harness" "$(inc skills/pause take-a-moment)"
-harness $A ynh/tester tester "Test planning and execution harness" "$(inc skills/dev dev-test)"
-harness $A ynh/researcher researcher "Researches a code base and reports what it finds" ""
+# The harnesses match the real ones on eyelock/assistants' default branch in
+# name, description, default_vendor, includes and delegates, and in which of
+# their own files they have (none of the four has instructions, rules, skills,
+# agents or commands of its own):
+# `make check-eval-stand-ins` compares them, and a difference is fixed here.
+harness $A ynh/david david "David's personal development persona with full skill set" \
+	"$(inc skills/dev dev-project,dev-quality,dev-review,dev-security,dev-backend,dev-ui,dev-debug),$(inc skills/tech go-lang),$(inc skills/infra gh-os-repo,terraform-backend-aws),$(inc skills/pause help-me-answer,take-a-moment)"
+harness $A ynh/planner planner "Architecture and implementation planning persona" \
+	"$(inc skills/dev dev-project,dev-review),$(inc skills/infra gh-os-repo)"
+harness $A ynh/tester tester "Testing and quality assurance persona" \
+	"$(inc skills/dev dev-quality),$(inc skills/tech go-lang)"
+harness $A ynh/researcher researcher "Research and analysis persona for investigating codebases, APIs, and technical topics" "$(inc skills/dev dev-review)"
 publish $A v1.0.0
 
 # --- github.com/anthropics/skills ---------------------------------------------

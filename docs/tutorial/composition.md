@@ -491,7 +491,13 @@ Now try to run a harness that includes a non-eyelock source:
 
 ```bash
 with-anthropic "hello" 2>&1
-# Expected error: resolving includes: include "github.com/anthropics/skills": remote source "github.com/anthropics/skills" is not in the allowed sources list (add "github.com/anthropics/skills" to allowed_remote_sources)
+```
+
+Expected (exit 1):
+
+```
+Resolving 1 include(s)...
+Error: resolving includes: include "github.com/anthropics/skills": remote source "github.com/anthropics/skills" is not in the allowed sources list (add "github.com/anthropics/skills" to allowed_remote_sources)
 ```
 
 The `anthropics/skills` source doesn't match `github.com/eyelock/**`, so it's rejected at run time when ynh tries to resolve the includes.
@@ -500,7 +506,13 @@ The `full-stack` harness also fails (it includes both eyelock and anthropic sour
 
 ```bash
 full-stack "hello" 2>&1
-# Expected error: resolving includes: include "github.com/anthropics/skills": remote source "github.com/anthropics/skills" is not in the allowed sources list (add "github.com/anthropics/skills" to allowed_remote_sources)
+```
+
+Expected (exit 1):
+
+```
+Resolving 3 include(s)...
+Error: resolving includes: include "github.com/anthropics/skills": remote source "github.com/anthropics/skills" is not in the allowed sources list (add "github.com/anthropics/skills" to allowed_remote_sources)
 ```
 
 > **Note:** `ynh install` now fetches all includes at install time, so the allow-list is enforced during install as well as at run time. If an include is blocked by the allow-list, `ynh install` will fail with an error.
@@ -537,7 +549,13 @@ The `local-ref` harness from earlier includes `/tmp/ynh-tutorial/local-lib`, whi
 
 ```bash
 local-ref "hello" 2>&1
-# Expected error: resolving includes: include "/tmp/ynh-tutorial/local-lib": source "/tmp/ynh-tutorial/local-lib" is not in the allowed sources list (add "/tmp/ynh-tutorial/local-lib" to allowed_remote_sources)
+```
+
+Expected (exit 1):
+
+```
+Resolving 1 include(s)...
+Error: resolving includes: include "/tmp/ynh-tutorial/local-lib": source "/tmp/ynh-tutorial/local-lib" is not in the allowed sources list (add "/tmp/ynh-tutorial/local-lib" to allowed_remote_sources)
 ```
 
 The message says "source" rather than "remote source", and names the entry to add. Add it:

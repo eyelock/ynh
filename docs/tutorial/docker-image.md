@@ -159,10 +159,10 @@ docker run --rm \
 
 ## Pass vendor flags
 
-Everything after the image name becomes arguments to `ynh run local/docker-demo`. Unrecognised flags pass through to the vendor CLI:
+Everything after the image name becomes arguments to `ynh run local/docker-demo`. Unrecognised flags pass through to the vendor CLI. Put the prompt after `--`, or write a flag's value with `=` (`--model=haiku`): see [Passing Vendor Flags](../getting-started.md#passing-vendor-flags).
 
 ```bash
-# Model override
+# Model override (Claude's own "claude -p '...' --model ...", written with --)
 docker run --rm -v $(pwd):/workspace -e ANTHROPIC_API_KEY \
   docker-demo:latest --model claude-sonnet-4-5-20250514 -- "greet me and tell me which model you are"
 
@@ -199,7 +199,8 @@ COPY --chown=ynh:ynh vendors/opencode/ /home/ynh/.ynh/run/local--docker-demo/ope
 # Harness source (metadata for ynh run)
 COPY --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--docker-demo/
 
-# Schema version of the layout above, so ynh does not try to migrate it
+# Schema version of the layout above, so ynh does not try to migrate it, and
+# the include cache (cache/), so included sensors are read from the build
 COPY --chown=ynh:ynh home/ /home/ynh/.ynh/
 
 # Default vendor (override: docker run -e YNH_VENDOR=codex)

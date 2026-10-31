@@ -121,6 +121,10 @@ rules:
     reason: "Matches the contributor note on --auto-approve, which describes the guards around it: levels a backend cannot honour are refused, a project's own permission mode refuses the run, and a vendor that downgrades a mode is caught. It documents ynh's Go code for contributors; the skill grants no agent autonomy."
 
   - id: "EA2"
+    path: "*add-vendor-adapter/SKILL.md"
+    reason: "Matches the onboarding checklist's lines on auto-approve modes ('which of edits and all the backend can honour'). They tell a contributor to research and refuse levels a vendor cannot enforce; the skill grants no agent autonomy."
+
+  - id: "EA2"
     path: "*vendor-adapters/references/opencode.md"
     reason: "Matches a reference note that OpenCode's --auto approves everything not denied and has no edits-only mode. Same pattern as the copilot.md entry: documenting a vendor's flag is how the adapter knows to refuse what it cannot enforce; the skill grants no autonomy itself."
 
