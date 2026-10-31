@@ -77,6 +77,10 @@ type DelegateOptions struct {
 	// declare servers and writes the env file of each. Preview and image
 	// assembly leave it off: they write neither, so no secret reaches them.
 	Launch bool
+	// RootName is the name of the harness whose delegates these are. A
+	// delegate that reaches it is skipped, as the root is no agent of its
+	// own (see resolver.FlattenDelegates).
+	RootName string
 }
 
 // DelegateMCPWarning is the warning for a delegate whose MCP servers a
@@ -220,8 +224,12 @@ func writeEnvFile(workDir, delegate string, secrets map[string]string) (string, 
 // are composed. A vendor whose subagents can carry MCP servers gets them in
 // the agent file; for any other vendor one warning per delegate names the
 // servers it cannot have. The agent file is Markdown with frontmatter, unless
-// the vendor encodes its own (DelegateAgentEncoder). Delegates of delegates
-// are not followed.
+// the vendor encodes its own (DelegateAgentEncoder).
+//
+// Delegates are flattened (resolver.FlattenDelegates): a delegate's own
+// delegates_to are followed, and every harness reached becomes one top-level
+// agent, once, however many harnesses declare it. The root is never its own
+// delegate. Each agent's prompt lists the delegates it declares itself.
 //
 // The returned list names every server each delegate declares, for preview.
 func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harness.Delegate, harnessDir string, opts DelegateOptions) ([]DelegateMCP, error) {
@@ -253,21 +261,18 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 
 	var declared []DelegateMCP
 	var launch []vendor.DelegateLaunchAgent
-	for _, del := range delegates {
-		basePath, _, err := resolver.ResolveSourceForRun(del.GitSource, harnessDir)
-		if err != nil {
-			return nil, fmt.Errorf("delegate: %w", err)
+	flat, err := resolver.FlattenDelegates(delegates, harnessDir, opts.RootName, func(gs harness.GitSource, dir string) (string, error) {
+		base, _, err := resolver.ResolveSourceForRun(gs, dir)
+		return base, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, fd := range flat {
+		for _, n := range fd.Notes {
+			_, _ = fmt.Fprintf(warn, "  note: %s\n", n)
 		}
-
-		delHarness, err := harness.LoadDir(basePath)
-		if err != nil {
-			return nil, fmt.Errorf("loading delegate harness %s: %w", del.Git, err)
-		}
-		delHarness, focus, err := del.Select(delHarness)
-		if err != nil {
-			return nil, err
-		}
-
+		basePath, delHarness, focus := fd.BasePath, fd.Harness, fd.Focus
 		included, _, err := resolver.ResolveSelectedFromCache(delHarness, opts.Config, harness.Selection{})
 		if err != nil {
 			return nil, fmt.Errorf("resolving includes of delegate %s: %w", delHarness.Name, err)
@@ -292,7 +297,7 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 					agent := vendor.DelegateLaunchAgent{
 						Name:        delHarness.Name,
 						Description: delegateDescription(delHarness),
-						Prompt:      delegateBody(delHarness, basePath, included, focus),
+						Prompt:      delegateBody(delHarness, basePath, included, focus, fd.Declared),
 						Servers:     servers,
 						Wrapped:     composed.Wrapped,
 					}
@@ -308,9 +313,9 @@ func AssembleDelegates(workDir string, adapter LayoutProvider, delegates []harne
 			}
 		}
 
-		fileName, agentContent := delHarness.Name+".md", []byte(BuildDelegateAgent(delHarness, basePath, included, focus, mcpLine))
+		fileName, agentContent := delHarness.Name+".md", []byte(BuildDelegateAgent(delHarness, basePath, included, focus, fd.Declared, mcpLine))
 		if encoder != nil {
-			if fileName, agentContent, err = encoder.DelegateAgentFile(delHarness.Name, delegateDescription(delHarness), delegateBody(delHarness, basePath, included, focus)); err != nil {
+			if fileName, agentContent, err = encoder.DelegateAgentFile(delHarness.Name, delegateDescription(delHarness), delegateBody(delHarness, basePath, included, focus, fd.Declared)); err != nil {
 				return nil, fmt.Errorf("delegate %s: %w", delHarness.Name, err)
 			}
 		}
@@ -343,9 +348,10 @@ func delegateDescription(p *harness.Harness) string {
 // BuildDelegateAgent generates a markdown agent file for a delegate harness.
 // It includes the delegate's instructions, rules, and available skills,
 // those of its resolved includes among them, and the standing instructions
-// of the focus its delegates_to entry names (nil for none). mcpLine, when not
+// of the focus its delegates_to entry names (nil for none), and the names of
+// the delegates it declares itself (declared). mcpLine, when not
 // empty, is the frontmatter line that carries the delegate's MCP servers.
-func BuildDelegateAgent(p *harness.Harness, basePath string, included []resolver.ResolveResult, focus *harness.DelegateFocus, mcpLine string) string {
+func BuildDelegateAgent(p *harness.Harness, basePath string, included []resolver.ResolveResult, focus *harness.DelegateFocus, declared []string, mcpLine string) string {
 	var b strings.Builder
 
 	b.WriteString("---\n")
@@ -360,14 +366,15 @@ func BuildDelegateAgent(p *harness.Harness, basePath string, included []resolver
 		b.WriteString("\n")
 	}
 	b.WriteString("---\n\n")
-	b.WriteString(delegateBody(p, basePath, included, focus))
+	b.WriteString(delegateBody(p, basePath, included, focus, declared))
 	return b.String()
 }
 
 // delegateBody is the agent's prompt: who it is, its instructions and rules,
 // the standing instructions of a focus its entry names, and the skills it
-// has, those of its resolved includes among them.
-func delegateBody(p *harness.Harness, basePath string, included []resolver.ResolveResult, focus *harness.DelegateFocus) string {
+// has, those of its resolved includes among them, and the delegates it
+// declares, with the way back to the main session.
+func delegateBody(p *harness.Harness, basePath string, included []resolver.ResolveResult, focus *harness.DelegateFocus, declared []string) string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "You are the **%s** harness, invoked as a delegate.\n\n", p.Name)
@@ -426,6 +433,18 @@ func delegateBody(p *harness.Harness, basePath string, included []resolver.Resol
 			fmt.Fprintf(&b, "- %s\n", skill)
 		}
 		b.WriteString("\n")
+	}
+
+	// The delegates this one declares are agents of the main session too, as
+	// every reachable delegate is a top-level agent. It may hand work to
+	// them, but what it learns is reported back to the session that called it.
+	if len(declared) > 0 {
+		b.WriteString("## Delegates\n\n")
+		b.WriteString("These delegates are available to you:\n\n")
+		for _, name := range declared {
+			fmt.Fprintf(&b, "- %s\n", name)
+		}
+		b.WriteString("\nHand back to the main session: report your result to the session that invoked you, and leave anything beyond your task to it.\n\n")
 	}
 
 	return b.String()

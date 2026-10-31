@@ -401,22 +401,17 @@ func runViews(p *harness.Harness) (views []runView, problems []string) {
 
 // delegateViews reads the MCP servers each delegate of h carries on its own,
 // the way a run composes them: the delegate's includes (resolved against its
-// own directory, from the cache), then its own servers. Anything unreadable is
+// own directory, from the cache), then its own servers. A delegate's own
+// delegates are among them, as a run flattens them. Anything unreadable is
 // an error, so the set is never reported complete without it.
 func delegateViews(h *harness.Harness) ([]delegateView, error) {
+	flat, err := resolver.FlattenDelegates(h.DelegatesTo, h.Dir, h.Name, resolver.ResolveDelegateLocal)
+	if err != nil {
+		return nil, err
+	}
 	var out []delegateView
-	for _, del := range h.DelegatesTo {
-		base, err := resolver.ResolveDelegateLocal(del.GitSource, h.Dir)
-		if err != nil {
-			return nil, fmt.Errorf("delegate %s: %w", del.Git, err)
-		}
-		dh, err := harness.LoadDir(base)
-		if err != nil {
-			return nil, fmt.Errorf("delegate %s: %w", del.Git, err)
-		}
-		if dh, _, err = del.Select(dh); err != nil {
-			return nil, err
-		}
+	for _, fd := range flat {
+		dh := fd.Harness
 		var included []harness.IncludedHarness
 		if len(dh.Includes) > 0 {
 			resolved, err := resolver.ResolveIncludesLocal(dh, harness.Selection{})

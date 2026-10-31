@@ -124,7 +124,7 @@ Both `ynh version --format json` and `ynd version --format json` emit:
 {
   "version": "0.x.y",
   "capabilities": "0.x.y",
-  "features": ["agent-run-fetches-includes", "agent-run-harness-path", "include-cycles-resolve", "trust-counts-composed-mcp-servers", "workspace-folders"]
+  "features": ["agent-run-fetches-includes", "agent-run-harness-path", "delegate-graph-flattens", "include-cycles-resolve", "trust-counts-composed-mcp-servers", "workspace-folders"]
 }
 ```
 
@@ -133,7 +133,7 @@ Both `ynh version --format json` and `ynd version --format json` emit:
 
 `capabilities` is a source constant (`internal/config.CapabilitiesVersion`), so developer builds report the contract they actually support — not whatever tag the repo was last released at. Bumped when consumer-visible contracts change; additive fields older clients can ignore do **not** bump it.
 
-- `features`: optional array of strings naming capabilities a consumer can gate on without comparing versions, for example `agent-run-harness-path` (`ynh agent run --harness` takes a path) `agent-run-fetches-includes` (a run fetches its git includes at setup), `include-cycles-resolve` (an include cycle resolves, with every harness in it included once and the include that closes it noted in `ynh info`'s `include_notes`, and one git source reached at two versions is an error), `trust-counts-composed-mcp-servers` (`ynh trust` and `ynh trust show` list in `mcp_servers` the servers of included harnesses, each with its `source`, and those carried by delegates, each with its `delegate`; a delegate's servers are not the session's) and `workspace-folders` (a harness can request workspace folders that the operator's allow-list or trust grants; `ynh trust show --format json` reports them in `workspace`). Names are stable, kebab-case and **only ever added**: a name that shipped is never renamed or removed. Consumers must tolerate names they do not know. The list is sorted and declared in one place, `internal/config.Features`. Adding a name is additive and does not bump `capabilities`.
+- `features`: optional array of strings naming capabilities a consumer can gate on without comparing versions, for example `agent-run-harness-path` (`ynh agent run --harness` takes a path) `agent-run-fetches-includes` (a run fetches its git includes at setup), `delegate-graph-flattens` (`delegates_to` is flattened: a delegate's own delegates are followed, and every harness reached is one agent, once, with the root never its own delegate), `include-cycles-resolve` (an include cycle resolves, with every harness in it included once and the include that closes it noted in `ynh info`'s `include_notes`, and one git source reached at two versions is an error), `trust-counts-composed-mcp-servers` (`ynh trust` and `ynh trust show` list in `mcp_servers` the servers of included harnesses, each with its `source`, and those carried by delegates, each with its `delegate`; a delegate's servers are not the session's) and `workspace-folders` (a harness can request workspace folders that the operator's allow-list or trust grants; `ynh trust show --format json` reports them in `workspace`). Names are stable, kebab-case and **only ever added**: a name that shipped is never renamed or removed. Consumers must tolerate names they do not know. The list is sorted and declared in one place, `internal/config.Features`. Adding a name is additive and does not bump `capabilities`.
 
 Downstream tooling (for example) reads `capabilities` and refuses to run against an older ynh than it requires.
 
