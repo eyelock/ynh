@@ -504,7 +504,7 @@ mv notes-plugin.json.bak notes/.agents/harness/plugin.json
 
 ## Run with only the harness's servers
 
-By default a harness's servers load alongside everything you have already configured: your user MCP servers and, on Claude Code, your claude.ai connectors. `--isolated-mcp` runs with only the harness's own. The harness can also ask for it with `"mcp_isolation": true`.
+By default a harness's servers load alongside everything you have already configured: your user MCP servers and, on Claude Code, your claude.ai connectors. `--isolated-mcp` runs with only the servers the harness composes: its own and those of the harnesses it includes, here `notes`, `team` and `tracker`. The harness can also ask for it with `"mcp_isolation": true`.
 
 Without the flag, this is what ynh hands Claude Code:
 
@@ -513,7 +513,7 @@ Without the flag, this is what ynh hands Claude Code:
 ynh run ./my-team "list your MCP servers"
 ```
 
-With it, two more arguments appear, `--strict-mcp-config` and `--mcp-config=` pointing at the harness's own generated file:
+With it, two more arguments appear, `--strict-mcp-config` and `--mcp-config=` pointing at the file ynh generated with the harness's composed servers:
 
 *This launches:* `claude --plugin-dir ~/.ynh/run/_inline-.../.claude --add-dir ~/.ynh/run/_inline-... --append-system-prompt You are a team assistant. ... -p list your MCP servers --strict-mcp-config --mcp-config=~/.ynh/run/_inline-.../.claude/.mcp.json`
 ```bash
