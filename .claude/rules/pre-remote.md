@@ -8,7 +8,8 @@ Run `make check`. It must pass with zero issues. If it fails, fix the issue and 
 
 This includes `make check-artifacts`, which runs `ynd validate` and `ynd lint`
 over the harness artifacts this repo ships (`skills/`, `agents/`, `rules/`) and
-the one it uses on itself (`.claude/`). A change that touches only those
+the one it uses on itself (`.claude/`), plus `make check-vendor-parity` and
+`make check-marketplace`, the other two checks CI's Harness Artifacts job runs. A change that touches only those
 directories still has to pass — CI gates them via the `artifacts` paths filter.
 
 ## Gate 2: Evals (behavioral changes only)

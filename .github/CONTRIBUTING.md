@@ -200,7 +200,7 @@ The user-facing version of this guidance lives in [`docs/marketplace.md` § Pinn
 ## Development Setup
 
 ```bash
-# Prerequisites + dev tools (Go, linter, formatter)
+# Prerequisites + dev tools (Go, linter, formatter, jq); checks python3 is present
 make deps
 
 # Build and install binaries to ~/.ynh/bin/
@@ -219,7 +219,8 @@ make format
 # Lint
 make lint
 
-# Full CI pipeline (deps, format, lint, test, build)
+# Every CI check needing no Docker or network (deps, format, lint, check-tidy,
+# test, build, check-artifacts, check-vendor-parity, check-marketplace)
 make check
 
 # E2E suite (release gate; not part of `make check`)
@@ -270,7 +271,7 @@ make install
 
 # Verify the contract
 ynh version --format json
-# {"version": "dev-<branch>-<sha>", "capabilities": "0.4.0"}
+# {"version": "dev-<branch>-<sha>", "capabilities": "0.x.y"}
 
 # Downstream tooling on PATH now sees the dev build
 ```
@@ -343,7 +344,7 @@ func (c Chain) Run(dir string) ([]string, error)  // returns descriptions of app
 
 ### Vendor Adapters
 
-Each vendor is an adapter, `internal/vendor/<name>.go`, that implements the `Adapter` interface and self-registers via `init()`. The adapter file is not the whole job. A new vendor also declares its hook events, hook timeouts, session-start context and workspace flag, adds itself to the per-vendor tables in `internal/vendor/` that read those declarations, and needs the schema, the Docker image, the parity checks, tests and the docs that list vendors. The [`add-vendor-adapter`](../.claude/skills/add-vendor-adapter/SKILL.md) skill is the checklist for all of it; this section covers only the interface and the two launch patterns.
+Each vendor is an adapter, `internal/vendor/<name>.go`, that implements the `Adapter` interface and self-registers via `init()`. The adapter file is not the whole job. A new vendor also declares its hook events, its hook timeout field (or why it has none), its session-start context and its workspace flag (or why it has none), adds itself to the per-vendor tables in `internal/vendor/` that read those declarations, and needs the schema, the Docker image, the parity checks, tests and the docs that list vendors. The [`add-vendor-adapter`](../.claude/skills/add-vendor-adapter/SKILL.md) skill is the checklist for all of it; this section covers only the interface and the two launch patterns.
 
 **Interface** (`internal/vendor/adapter.go`):
 
@@ -687,7 +688,7 @@ are applied with Terraform. Change them there, in a pull request, not in the set
 1. Fork the repo
 2. Create a feature branch
 3. Make your changes
-4. Run `make check` (format, lint, test, build)
+4. Run `make check` (format, lint, test, build and the artifact checks)
 5. Submit a pull request
 
 All tests must pass. New features should include tests. Keep the code simple - this is a tool for developers, not a framework.

@@ -89,9 +89,11 @@ You are a code review specialist. When delegated to, review the provided code fo
 Provide actionable feedback, not just observations.
 ```
 
+Under Codex, ynh writes each agent as a TOML custom agent, `.codex/agents/<name>.toml`, because that is the only form Codex reads, and registers it with Codex at launch ([Vendors](vendors.md#symlink-installation-codex-cursor)). Three fields always survive: `name` and `description` from the frontmatter, and the body as `developer_instructions`. An `effort` of `low`, `medium` or `high` becomes `model_reasoning_effort` with the same level, as [`ynh agent run --effort`](agent.md#effort) maps it for Codex; Claude Code's `xhigh` and `max` are dropped, since ynh maps only those three. Codex has no tool allowlist, so `tools` and `disallowedTools` are dropped, with a warning naming the agent for each; a `tools` list that leaves out `Bash` turns the agent's shell tool off (`features.shell_tool = false`). Every other field is dropped too, including `model`, since Claude Code's model names are not Codex models. A Codex custom agent otherwise runs with the session's permissions, so the read-only reviewer above is not read-only there: it has no shell, but it can still edit files if the session allows. See [Vendors: Symlink Installation](vendors.md#symlink-installation-codex-cursor) for the details.
+
 Refer to your vendor's documentation for agent format details:
 - [Claude Code sub-agents](https://docs.anthropic.com/en/docs/claude-code/sub-agents)
-- [Codex agents](https://github.com/openai/codex)
+- [Codex subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents)
 - [OpenCode agents](https://opencode.ai/v2/docs): ynh translates an agent's frontmatter for OpenCode 2, which silently drops an agent with a comma-string `tools:`, a bare model alias such as `sonnet`, or a `color:`. It keeps `description` (derived from the file name when missing), `mode`, `permissions` and a `provider/model` model, and turns a Claude `tools:` allow-list into deny-by-default permissions. An agent with `tools:` or `disallowedTools` whose `permissions:` is written inline (`permissions: [...]`) is refused at assembly, because those rules cannot be appended to an inline value; write `permissions:` as a block list, or remove it
 
 ## Rules

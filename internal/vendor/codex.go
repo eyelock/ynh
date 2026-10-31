@@ -3,6 +3,7 @@ package vendor
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -65,21 +66,46 @@ func (c *Codex) Clean(entries []SymlinkEntry) error {
 	return cleanSymlinks(entries)
 }
 
+// Every launch runs Codex in configPath, ynh's run directory, and registers
+// the harness's agents and delegates written there (CodexAgentArgs).
+
 func (c *Codex) LaunchInteractive(configPath string, extraArgs []string) error {
-	return launchCodex(configPath, extraArgs)
+	return launchCodex(configPath, codexInteractiveArgs(configPath, extraArgs, os.Stderr))
 }
 
 func (c *Codex) LaunchNonInteractive(configPath string, prompt string, extraArgs []string) error {
-	args := append([]string{"exec"}, extraArgs...)
-	args = append(args, prompt)
-	return launchCodex(configPath, args)
+	return launchCodex(configPath, codexExecArgs(configPath, prompt, extraArgs, os.Stderr))
 }
 
 func (c *Codex) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []string) error {
 	// Positional arg without exec starts an interactive session with the prompt
 	// pre-loaded as the first user message (documented: codex "query").
-	args := append(extraArgs, prompt)
+	args := append(codexInteractiveArgs(configPath, extraArgs, os.Stderr), prompt)
 	return launchCodex(configPath, args)
+}
+
+// codexAgentArgsWarned is CodexAgentArgs, printing its warnings on w.
+func codexAgentArgsWarned(runDir string, w io.Writer) []string {
+	args, warnings := CodexAgentArgs(runDir)
+	for _, msg := range warnings {
+		_, _ = fmt.Fprintf(w, "warning: %s\n", msg)
+	}
+	return args
+}
+
+// codexInteractiveArgs is an interactive launch's arguments: the agents'
+// registration, then the caller's.
+func codexInteractiveArgs(runDir string, extraArgs []string, w io.Writer) []string {
+	return append(codexAgentArgsWarned(runDir, w), extraArgs...)
+}
+
+// codexExecArgs is a one-shot launch's arguments: exec,
+// --skip-git-repo-check (the run directory is not a git repository), the
+// agents' registration, the caller's, and the prompt last.
+func codexExecArgs(runDir, prompt string, extraArgs []string, w io.Writer) []string {
+	args := append([]string{"exec", codexSkipGitRepoCheck}, codexAgentArgsWarned(runDir, w)...)
+	args = append(args, extraArgs...)
+	return append(args, prompt)
 }
 
 func (c *Codex) SupportsInitialPrompt() bool { return true }
@@ -122,7 +148,23 @@ func (c *Codex) LaunchResume(configPath, sessionID, prompt string, interactive b
 	if err != nil {
 		return err
 	}
+	args = withCodexRunArgs(args, codexAgentArgsWarned(configPath, os.Stderr))
 	return launchCodex(configPath, args)
+}
+
+// withCodexRunArgs puts the agents' registration right after the resume
+// subcommand, and --skip-git-repo-check too when it is `codex exec resume`.
+func withCodexRunArgs(resumeArgs, agentArgs []string) []string {
+	n := 1 // "resume"
+	head := []string{}
+	if len(resumeArgs) > 0 && resumeArgs[0] == "exec" {
+		n = 2 // "exec", "resume"
+		head = append(head, codexSkipGitRepoCheck)
+	}
+	out := append([]string{}, resumeArgs[:n]...)
+	out = append(out, head...)
+	out = append(out, agentArgs...)
+	return append(out, resumeArgs[n:]...)
 }
 
 func codexResumeArgs(sessionID, prompt string, interactive bool, extraArgs []string) ([]string, error) {

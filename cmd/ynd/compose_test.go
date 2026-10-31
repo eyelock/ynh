@@ -1127,3 +1127,47 @@ func TestCompose_UnreadableDelegateMCPIsReported(t *testing.T) {
 		t.Errorf("text output does not say why:\n%s", stdout.String())
 	}
 }
+
+// An include of a repository shaped like Mindrally/skills (top-level skill
+// folders, no skills/ directory) picks a skill by its folder name, and compose
+// lists it with the include as its source.
+func TestCmdComposePicksTopLevelSkillFolder(t *testing.T) {
+	dir := t.TempDir()
+	repo := filepath.Join(dir, "community-skills")
+	for p, body := range map[string]string{
+		"README.md":               "# skills\n",
+		"bash-scripting/SKILL.md": "---\nname: bash-scripting\n---\nWrite safe bash.\n",
+		"python/SKILL.md":         "---\nname: python\n---\nWrite Python.\n",
+	} {
+		full := filepath.Join(repo, filepath.FromSlash(p))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hj := map[string]any{
+		"name": "main", "version": "1.0.0", "default_vendor": "claude",
+		"includes": []map[string]any{{"local": repo, "pick": []string{"bash-scripting"}}},
+	}
+	data, _ := json.MarshalIndent(hj, "", "  ")
+	if err := writePluginJSONFile(dir, data); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	if err := cmdComposeTo([]string{dir}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdComposeTo: %v", err)
+	}
+	var got composeOutput
+	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(got.Artifacts.Skills) != 1 || got.Artifacts.Skills[0].Name != "bash-scripting" {
+		t.Fatalf("skills = %+v, want exactly [bash-scripting]", got.Artifacts.Skills)
+	}
+	if got.Counts.Skills != 1 {
+		t.Errorf("counts.skills = %d, want 1", got.Counts.Skills)
+	}
+}

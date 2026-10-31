@@ -156,15 +156,36 @@ converted only by `ynd migrate` and refused by every other command.
 | ynh               | Claude Code                      | Codex                            | Cursor                           |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Source:            |                                  |                                  |                                  |
-| agents/<name>.md  | agents/<name>.md                 | NOT SUPPORTED in plugins         | agents/<name>.md                 |
+| agents/<name>.md  | agents/<name>.md                 | NOT SUPPORTED in plugins; a run  | agents/<name>.md                 |
+|                   |                                  | writes .codex/agents/<name>.toml |                                  |
+|                   |                                  | (TOML custom agent), registered  |                                  |
+|                   |                                  | at launch with -c agents.<name>. |                                  |
+|                   |                                  | config_file; CONFIRMED live on   |                                  |
+|                   |                                  | 0.166.0 (ynw-t7i)                |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
-| Frontmatter:      | name, description, model,        |                                  | name, description                |
-|                   | tools, disallowedTools, skills,  |                                  |                                  |
-|                   | maxTurns, effort, memory,        |                                  |                                  |
-|                   | background, isolation            |                                  |                                  |
+| Frontmatter:      | name, description, model,        | name, description; the body      | name, description                |
+|                   | tools, disallowedTools, skills,  | becomes developer_instructions;  |                                  |
+|                   | maxTurns, effort, memory,        | effort low/medium/high becomes   |                                  |
+|                   | background, isolation            | model_reasoning_effort (xhigh,   |                                  |
+|                   |                                  | max dropped). tools and          |                                  |
+|                   |                                  | disallowedTools dropped with a   |                                  |
+|                   |                                  | warning naming the agent (no     |                                  |
+|                   |                                  | tool allowlist); tools without   |                                  |
+|                   |                                  | Bash writes features.shell_tool  |                                  |
+|                   |                                  | = false. Every other field       |                                  |
+|                   |                                  | dropped (model names differ)     |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
-| Delegation:       | Native subagent system           | NOT SUPPORTED                    | NEEDS RESEARCH                   |
-| (delegates_to)    | via agent .md files              |                                  |                                  |
+| Delegation:       | Markdown subagent in             | TOML custom agent in             | Markdown subagent in             |
+| (delegates_to)    | .claude/agents/<name>.md (name,  | .codex/agents/<name>.toml (name, | .cursor/agents/<name>.md (name,  |
+|                   | description); the delegate's MCP | description,                     | description), per                |
+|                   | servers carried (mcpServers,     | developer_instructions); MCP     | cursor.com/docs/subagents; the   |
+|                   | plus --agents at launch)         | servers inherited from the       | delegate's MCP servers not       |
+|                   |                                  | session, the delegate's own not  | carried (warning); live pickup   |
+|                   |                                  | carried (warning); run only, not | not checked                      |
+|                   |                                  | export; registered at launch     |                                  |
+|                   |                                  | with -c agents.<name>.           |                                  |
+|                   |                                  | config_file; CONFIRMED live on   |                                  |
+|                   |                                  | 0.166.0 (ynw-t7i)                |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 ```
 
@@ -286,8 +307,9 @@ the format, its reverse-domain namespace, where its artifacts, hooks and MCP
 config go, and whether the manifest needs a hooks pointer. `ynd export
 --format agent-plugin` and `ynd marketplace build --format agent-plugin`
 read those declarations; `internal/agentplugin` holds the spec's reader and
-validator. Adding a vendor means declaring its layout there, and nothing
-else. Verified sources: the specification and the four vendors' plugin
+validator. For Agent Plugins, adding a vendor means declaring its layout
+there and nothing else; the rest of a new vendor is in
+[`add-vendor-adapter`](../add-vendor-adapter/SKILL.md). Verified sources: the specification and the four vendors' plugin
 docs, 2026-09-25.
 
 ### GitHub Copilot CLI Mapping

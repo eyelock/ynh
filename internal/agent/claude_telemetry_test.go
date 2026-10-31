@@ -89,7 +89,7 @@ func TestBuildClaudeStreamArgs_TelemetrySettings(t *testing.T) {
 }
 
 func TestSupportsTelemetryRelay(t *testing.T) {
-	for backend, want := range map[string]bool{"claude": true, "codex": false, "cursor": false, "": false} {
+	for backend, want := range map[string]bool{"claude": true, "codex": true, "cursor": false, "": false} {
 		if got := SupportsTelemetryRelay(backend); got != want {
 			t.Errorf("SupportsTelemetryRelay(%q) = %v", backend, got)
 		}
@@ -99,7 +99,7 @@ func TestSupportsTelemetryRelay(t *testing.T) {
 // The loop asks for the relay once, for the backend it is about to start,
 // and only a backend ynh can configure gets its settings; the trajectory
 // records their names.
-func TestRunLoop_RelayConfiguresOnlyClaude(t *testing.T) {
+func TestRunLoop_RelayConfiguresClaudeAndCodex(t *testing.T) {
 	tests := []struct {
 		backend   string
 		relay     string
@@ -107,7 +107,8 @@ func TestRunLoop_RelayConfiguresOnlyClaude(t *testing.T) {
 	}{
 		{backend: "claude", relay: testRelay, configure: true},
 		{backend: "claude", relay: ""},
-		{backend: "codex", relay: testRelay},
+		{backend: "codex", relay: testRelay, configure: true},
+		{backend: "codex", relay: ""},
 		{backend: "cursor", relay: testRelay},
 	}
 	for _, tt := range tests {
@@ -129,6 +130,19 @@ func TestRunLoop_RelayConfiguresOnlyClaude(t *testing.T) {
 				if !slices.Contains(so.Env, kv) {
 					hasAll = false
 				}
+			}
+			if tt.configure && tt.backend == "codex" {
+				// Codex takes its settings on the command line, from
+				// TelemetryEndpoint; its environment gets none.
+				if so.TelemetryEndpoint != testRelay {
+					t.Errorf("codex with a relay: endpoint %q, want %q", so.TelemetryEndpoint, testRelay)
+				}
+				for _, kv := range so.Env {
+					if strings.HasPrefix(kv, "OTEL_") || strings.HasPrefix(kv, "CLAUDE_CODE_") {
+						t.Errorf("codex got %s; its relay settings go on the command line", kv)
+					}
+				}
+				return
 			}
 			if tt.configure {
 				if !hasAll || so.TelemetryEndpoint != testRelay {
