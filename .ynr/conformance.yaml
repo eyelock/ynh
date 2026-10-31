@@ -1,0 +1,22 @@
+# ynr conformance for ynh (ynr ADR-008): `make conformance` runs it, and CI's Conformance job.
+# Each scenario runs `ynh agent run` against ynr's stub vendor, answering as `claude`, on a harness
+# in testdata/conformance: no model, no secret, no network. The planted canaries are the task (a
+# prompt) and a credential in the environment; the check fails if either reaches a record.
+service: ynh
+registry: telemetry/registry
+vendor: ynr-stub-vendor
+vendor_aliases: [claude]
+units: [ynh.run]
+scenarios:
+  - name: agent run, its sensor passes, so it converges
+    run: ANTHROPIC_API_KEY=@canary:secret ynh agent run --harness ./testdata/conformance/converges --no-plan --max-turns 3 --task @canary:prompt
+    expect: { outcome: converged }
+  - name: agent run, its sensor never passes, so the turn cap ends it
+    run: ANTHROPIC_API_KEY=@canary:secret ynh agent run --harness ./testdata/conformance/never-converges --no-plan --max-turns 1 --task @canary:prompt
+    expect: { outcome: turn_cap }
+  - name: agent run, the stub's 120 tokens a turn exceed the token budget
+    run: ANTHROPIC_API_KEY=@canary:secret ynh agent run --harness ./testdata/conformance/never-converges --no-plan --max-turns 3 --max-tokens 50 --task @canary:prompt
+    expect: { outcome: token_budget }
+  - name: agent run, refused before any worker starts
+    run: ANTHROPIC_API_KEY=@canary:secret ynh agent run --harness ./testdata/conformance/converges --backend cursor --effort high --task @canary:prompt
+    expect: { outcome: refused }

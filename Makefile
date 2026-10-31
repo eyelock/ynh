@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage e2e format lint check check-tidy check-artifacts check-vendor-parity check-marketplace check-eval-stand-ins scan-artifacts run docs help docker-build docker-push vulncheck
+.PHONY: clean deps install build test test-coverage e2e format lint check check-tidy check-artifacts check-vendor-parity check-marketplace check-eval-stand-ins conformance scan-artifacts run docs help docker-build docker-push vulncheck
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -120,6 +120,16 @@ scan-artifacts: ## Security-scan the harness artifacts with SkillSpector (needs 
 
 check-marketplace: ## Assert the committed marketplace indexes match the plugin manifests
 	@./scripts/marketplace-consistency.sh
+
+CONFORMANCE_FORMAT ?= text
+
+conformance: build ## Check ynh's telemetry with ynr conformance (needs ynr and ynr-stub-vendor on PATH)
+	@# Not part of `make check`: it needs ynr and its stub vendor, which CI
+	@# downloads from a pinned, checksum-verified ynr release. The scenarios
+	@# in .ynr/conformance.yaml run bin/ynh against the stub: no model, no secret.
+	@command -v ynr >/dev/null 2>&1 || { echo "ynr is not on your PATH: see docs/telemetry.md, Conformance"; exit 1; }
+	@command -v ynr-stub-vendor >/dev/null 2>&1 || { echo "ynr-stub-vendor is not on your PATH: see docs/telemetry.md, Conformance"; exit 1; }
+	@PATH="$(CURDIR)/bin:$$PATH" ynr conformance --file .ynr/conformance.yaml --format $(CONFORMANCE_FORMAT)
 
 check-vendor-parity: build ## Assert every vendor is documented, assembles the same artifacts and is stubbed in evals
 	@./scripts/vendor-parity.sh

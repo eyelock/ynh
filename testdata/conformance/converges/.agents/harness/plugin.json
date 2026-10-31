@@ -1,0 +1,18 @@
+{
+  "$schema": "https://eyelock.github.io/ynh/schema/plugin.schema.json",
+  "name": "conformance-converges",
+  "version": "0.1.0",
+  "description": "ynr conformance: a harness whose one blocking sensor always passes, so a run converges after its first turn.",
+  "default_vendor": "claude",
+  "sensors": {
+    "always-passes": {
+      "category": "behaviour",
+      "source": {
+        "command": "true"
+      },
+      "output": {
+        "format": "text"
+      }
+    }
+  }
+}
