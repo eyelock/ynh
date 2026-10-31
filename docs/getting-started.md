@@ -131,6 +131,14 @@ david --verbose --model opus -- "fix this bug"    # "--verbose 'fix this bug' --
 david -v codex -- "refactor auth"
 ```
 
+After `--`, the first word is the prompt unless it starts with `-`. A word starting with `-` there is a vendor flag, never the prompt, and every later word is forwarded to the vendor. A prompt that itself starts with `-` cannot be given this way. The `=` form is the least ambiguous way to give a value:
+
+```bash
+david -v codex "say ok" -- --model=gpt-5          # prompt "say ok", --model=gpt-5 forwarded
+david -v codex "say ok" -- -m gpt-5               # the same, with a space-separated value
+david -v codex -- "say ok" --model=gpt-5          # the same, prompt first after --
+```
+
 Claude's own CLI is usually written with the prompt first, `claude -p "say ok" --model haiku`. Through ynh, write it with `--`, and leave out `-p`: ynh passes the prompt to Claude itself.
 
 ```bash

@@ -812,6 +812,12 @@ func resolveVendor(flag string, p *harness.Harness, cfg *config.Config) (string,
 // directly follows a passed-through flag is always that flag's value:
 // "--model opus --" forwards "--model opus" with no prompt. Write
 // "--model=opus", or put the prompt after --, to be unambiguous.
+//
+// After --, the first word is the prompt unless it starts with "-", and every
+// later word is forwarded to the vendor. A first word that starts with "-" is
+// a vendor flag, never the prompt: "'say ok' -- -m gpt-5" prompts "say ok" and
+// forwards "-m gpt-5". A bare word before -- that is not the prompt is
+// forwarded too: "first -- second" prompts "second" and forwards "first".
 // runArgs holds parsed arguments for ynh run.
 type runArgs struct {
 	HarnessName  string   // positional name, if given
@@ -844,12 +850,18 @@ func parseRunArgs(args []string) runArgs {
 
 	// First pass: find -- separator and extract prompt
 	separated := false
+	var tail []string // everything after --
 	for i, arg := range args {
 		if arg == "--" {
 			separated = true
 			flagArgs = args[:i]
-			if i+1 < len(args) {
-				ra.Prompt = args[i+1]
+			tail = args[i+1:]
+			// A first word starting with "-" is a vendor flag, never the
+			// prompt. Otherwise it is the prompt, and an earlier bare word
+			// is forwarded to the vendor as it always was.
+			if len(tail) > 0 && !strings.HasPrefix(tail[0], "-") {
+				ra.Prompt = tail[0]
+				tail = tail[1:]
 			}
 			break
 		}
@@ -935,6 +947,10 @@ func parseRunArgs(args []string) runArgs {
 			afterPassthrough = !strings.Contains(flagArgs[i], "=")
 		}
 	}
+
+	// Everything after the prompt (or all of it, when the first word after --
+	// is a flag) goes to the vendor in order, after the flags before --.
+	ra.VendorArgs = append(ra.VendorArgs, tail...)
 
 	// Env var fallbacks
 	if ra.FocusFlag == "" {
