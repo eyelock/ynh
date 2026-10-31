@@ -647,7 +647,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 		// is one. Last, so its settings win over anything passed through.
 		relayEndpoint = opts.Telemetry.RelayEndpoint(wb.Name())
 		if relayEndpoint != "" && SupportsTelemetryRelay(wb.Name()) {
-			workerEnv = withRelayEnv(workerEnv, relayEndpoint)
+			workerEnv = withBackendRelayEnv(wb.Name(), workerEnv, relayEndpoint)
 		} else {
 			relayEndpoint = ""
 		}
