@@ -442,6 +442,10 @@ func ambiguousIncludeError(url string, includes []plugin.IncludeMeta, indices []
 type DelegateAddOptions struct {
 	Ref  string
 	Path string
+	// Profile and Focus select one of the delegate harness's own profiles or
+	// focuses; at most one may be set.
+	Profile string
+	Focus   string
 }
 
 // DelegateRemoveOptions controls ynh delegate remove behaviour.
@@ -459,6 +463,11 @@ type DelegateUpdateOptions struct {
 // AddDelegate adds a new delegate to a harness directory.
 // Returns an error if the same URL+path combination already exists.
 func AddDelegate(dir, url string, opts DelegateAddOptions) error {
+	sel := Delegate{GitSource: GitSource{Git: url, Ref: opts.Ref, Path: opts.Path}, Profile: opts.Profile, Focus: opts.Focus}
+	if err := sel.CheckSelection(); err != nil {
+		return err
+	}
+
 	hj, err := loadManifest(dir)
 	if err != nil {
 		return err
@@ -472,7 +481,7 @@ func AddDelegate(dir, url string, opts DelegateAddOptions) error {
 		return fmt.Errorf("%s.\nUse 'ynh delegate update' to change its options", msg)
 	}
 
-	hj.DelegatesTo = append(hj.DelegatesTo, plugin.DelegateMeta{Git: url, Ref: opts.Ref, Path: opts.Path})
+	hj.DelegatesTo = append(hj.DelegatesTo, plugin.DelegateMeta{Git: url, Ref: opts.Ref, Path: opts.Path, Profile: opts.Profile, Focus: opts.Focus})
 	return plugin.SavePluginJSON(dir, hj)
 }
 
