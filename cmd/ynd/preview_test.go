@@ -717,7 +717,7 @@ func TestPreviewNotesAnIncludeCycle(t *testing.T) {
 	_ = os.RemoveAll(tmp)
 	var out strings.Builder
 	printIncludeNotes(&out, report.included)
-	want := "Include notes:\n  include cycle: root -> a -> b -> a; a is already included, so this include adds nothing\n"
+	want := "\nInclude notes:\n  include cycle: root -> a -> b -> a; a is already included, so this include adds nothing\n"
 	if out.String() != want {
 		t.Errorf("notes =\n%q\nwant\n%q", out.String(), want)
 	}

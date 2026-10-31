@@ -490,12 +490,29 @@ EOF
 ynd preview my-team -v claude -o out/cycle 2>&1
 ```
 
-The preview succeeds. Every harness in the cycle is included once, and the include that closes it, `notes` including `my-team`, adds nothing, since `my-team` is the harness being previewed. ynh skips it and says so. The output ends with:
+Expected output:
 
 ```
+  warning: included harness github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
+Preview written to out/cycle
+
+MCP servers from included harnesses:
+  tracker (from github-lite)
+
+Focuses from included harnesses:
+  github-lite:triage
+
+Profiles from included harnesses:
+  github-lite:readonly
+
+Hooks from included harnesses, not active (add "hooks": true to the include):
+  on_session_start (from github-lite)
+
 Include notes:
   include cycle: root -> github-lite -> notes -> root; root is already included, so this include adds nothing
 ```
+
+The preview succeeds. Every harness in the cycle is included once, and the include that closes it, `notes` including `my-team`, adds nothing, since `my-team` is the harness being previewed. ynh skips it and says so under "Include notes". `notes` brings no server this time, because its new manifest declares none.
 
 `ynh info` shows the same note under Includes. Put `notes` back:
 

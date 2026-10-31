@@ -142,6 +142,7 @@ func printIncludeNotes(w io.Writer, included []resolver.ResolveResult) {
 	if len(notes) == 0 {
 		return
 	}
+	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintln(w, "Include notes:")
 	for _, n := range notes {
 		_, _ = fmt.Fprintf(w, "  %s\n", n)
