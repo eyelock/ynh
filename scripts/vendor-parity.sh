@@ -95,6 +95,7 @@ done < "$TMP/vendors.tsv"
 #   <config_dir>/     -> harness/     (.claude/, .codex/, .cursor/, .copilot/)
 #   .<vendor>-plugin/ -> plugin/      (manifest dir; copilot nests its own)
 #   .mdc              -> .md          (Cursor renders rules natively as .mdc)
+#   agents/*.toml     -> agents/*.md  (Codex writes agents as TOML custom agents)
 # Top-level instructions files are counted, not name-compared: CLAUDE.md,
 # codex.md, .cursorrules and AGENTS.md are all correct for their vendor.
 echo
@@ -112,6 +113,7 @@ while IFS=$'\t' read -r name cfgdir; do
 		-e 's|^harness/\.[a-z-]*-plugin/|plugin/|' \
 		-e 's|^\.[a-z-]*-plugin/|plugin/|' \
 		-e 's|\.mdc$|.md|' \
+		-e 's|^\(harness/agents/.*\)\.toml$|\1.md|' \
 		| sort > "$TMP/set-$name.txt"
 
 	# One instructions file per vendor; its name is legitimately vendor-specific.
