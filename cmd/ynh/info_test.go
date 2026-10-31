@@ -1318,3 +1318,75 @@ func TestCmdInfo_IncludeCycleIsANote(t *testing.T) {
 		t.Errorf("info JSON does not validate: %v", err)
 	}
 }
+
+// A delegates_to entry's profile or focus is shown by ynh info, in text and
+// in JSON (optional fields, present only when the entry names one), and the
+// JSON still validates; ynh ls --format json carries the same fields.
+func TestCmdInfo_DelegateSelection(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("YNH_HOME", home)
+	installListTestHarness(t, home, "sel", `{"name": "sel", "version": "0.1.0", "delegates_to": [
+		{"git": "github.com/eyelock/reviewer", "profile": "strict"},
+		{"git": "github.com/eyelock/triager", "path": "h", "focus": "ci-failures"},
+		{"git": "github.com/eyelock/helper"}
+	]}`)
+
+	var stdout bytes.Buffer
+	if err := cmdInfoTo([]string{"local/sel"}, &stdout, io.Discard); err != nil {
+		t.Fatalf("cmdInfoTo: %v", err)
+	}
+	want := []string{
+		"  github.com/eyelock/reviewer  profile=strict",
+		"  github.com/eyelock/triager  path=h  focus=ci-failures",
+		"  github.com/eyelock/helper",
+	}
+	if got := infoSection(stdout.String(), "Delegates to"); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("Delegates to section:\ngot  %q\nwant %q", got, want)
+	}
+
+	for _, cmd := range []struct {
+		name string
+		run  func([]string, io.Writer, io.Writer) error
+		args []string
+		path func(map[string]any) []any
+	}{
+		{"info", cmdInfoTo, []string{"local/sel", "--format", "json"}, func(v map[string]any) []any {
+			return v["harness"].(map[string]any)["delegates_to"].([]any)
+		}},
+		{"list", cmdListTo, []string{"--format", "json"}, func(v map[string]any) []any {
+			return v["harnesses"].([]any)[0].(map[string]any)["delegates_to"].([]any)
+		}},
+	} {
+		t.Run(cmd.name, func(t *testing.T) {
+			var out bytes.Buffer
+			if err := cmd.run(cmd.args, &out, io.Discard); err != nil {
+				t.Fatalf("%v", err)
+			}
+			var v map[string]any
+			if err := json.Unmarshal(out.Bytes(), &v); err != nil {
+				t.Fatal(err)
+			}
+			schema, err := clischema.Get(cmd.name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := schema.Validate(any(v)); err != nil {
+				t.Errorf("does not validate: %v\n%s", err, out.String())
+			}
+			dels := cmd.path(v)
+			if len(dels) != 3 {
+				t.Fatalf("delegates_to = %v", dels)
+			}
+			d0, d1, d2 := dels[0].(map[string]any), dels[1].(map[string]any), dels[2].(map[string]any)
+			if d0["profile"] != "strict" || d0["focus"] != nil || d1["focus"] != "ci-failures" || d1["profile"] != nil {
+				t.Errorf("selection not carried: %v, %v", d0, d1)
+			}
+			if _, ok := d2["profile"]; ok {
+				t.Errorf("an entry with no selection must omit the fields: %v", d2)
+			}
+			if _, ok := d2["focus"]; ok {
+				t.Errorf("an entry with no selection must omit the fields: %v", d2)
+			}
+		})
+	}
+}

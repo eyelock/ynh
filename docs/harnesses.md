@@ -353,7 +353,7 @@ A `delegates_to` entry may name one of the delegate harness's own profiles or fo
 - The names are the delegate's own, never `namespace:name`. A name the delegate harness does not declare fails `ynd validate` and the run, naming what it does declare. `ynd validate` reads the delegate from disk or the cache only; one it cannot read there is a note, not checked.
 - The delegate's `launch_focus` is never applied. A delegate runs a focus only when its entry names one.
 
-The same selection applies wherever ynh builds a delegate: `ynh run`, `ynh agent run`, `ynd preview`, `ynh image`, `ynd export`, and the delegate servers `ynd compose` and `ynh trust` report. `ynd compose` shows the selection beside the delegate (`profile=strict`, `focus=ci-failures`).
+The same selection applies wherever ynh builds a delegate: `ynh run`, `ynh agent run`, `ynd preview`, `ynh image`, `ynd export`, and the delegate servers `ynd compose` and `ynh trust` report. `ynd compose` and `ynh info` show the selection beside the delegate (`profile=strict`, `focus=ci-failures`), `ynh ls` in brackets (`(focus ci-failures)`), and their JSON carries it as optional `profile` and `focus` fields.
 
 ## Embedded vs External Artifacts
 
