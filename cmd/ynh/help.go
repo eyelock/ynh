@@ -124,7 +124,10 @@ know which vendor flags take a value: a bare word right after a passed-through
 flag is that flag's value ("--model haiku"), except the last bare word, which
 is the prompt. Write the value with "=" ("--model=haiku"), or put the prompt
 after --, when that would read your words the wrong way. Before --, a word
-right after a flag is always its value.
+right after a flag is always its value. After --, the first word is the
+prompt (unless a prompt came before -- and that word starts with "-", then
+everything after -- is vendor flags: 'say ok' -- -m gpt-5); any words after the
+prompt are forwarded to the vendor. The safest form is "--model=gpt-5".
 
 Examples:
   ynh run local/david
