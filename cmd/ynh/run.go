@@ -746,18 +746,30 @@ func resolveVendor(flag string, p *harness.Harness, cfg *config.Config) (string,
 //   - --install     : install symlinks for the vendor
 //   - --clean       : remove symlinks for the vendor
 //
-// All other arguments are passed through to the vendor CLI verbatim.
-// Use -- to separate vendor flags from the prompt when vendor flags take values:
+// All other arguments are passed through to the vendor CLI verbatim, in order:
 //
 //	ynh run david "simple prompt"
 //	ynh run david --verbose "simple prompt"
+//	ynh run david --model opus --max-turns 1 "fix this bug"
 //	ynh run david --model opus -- "fix this bug"
 //	ynh run david -v codex -- "deploy it"
 //	ynh run david -v cursor --install
 //
-// Without --, the first non-flag argument is treated as the prompt. Flag values
-// like "opus" in "--model opus" would be mistaken for the prompt, so use -- when
-// vendor flags take values.
+// ynh does not know which vendor flags take a value, so without -- it reads a
+// bare word by where it stands. After the harness name, a bare word that
+// directly follows a passed-through flag (one without "=") stays with that
+// flag as its value only if a later bare word exists to be the prompt: the
+// last bare word is the prompt. Any other bare word is the prompt if there is
+// none yet. So "--model opus --max-turns 1 'fix it'" forwards
+// "--model opus --max-turns 1" and prompts "fix it", "--verbose 'fix it'
+// --model=opus" prompts "fix it", while "--model opus" on its own makes "opus"
+// the prompt, and so does "--verbose 'fix it' --model opus": position alone
+// cannot tell a boolean flag from one that takes a value.
+//
+// With --, the prompt is the word after it, so a bare word before -- that
+// directly follows a passed-through flag is always that flag's value:
+// "--model opus --" forwards "--model opus" with no prompt. Write
+// "--model=opus", or put the prompt after --, to be unambiguous.
 // runArgs holds parsed arguments for ynh run.
 type runArgs struct {
 	HarnessName  string   // positional name, if given
@@ -776,13 +788,22 @@ type runArgs struct {
 	NoWorkspace  bool     // --no-workspace: grant none of the harness's workspace folders; not forwarded
 }
 
+// ynhValueFlags are ynh's own run flags that take the next argument as their
+// value. parseRunArgs handles each one in its switch.
+var ynhValueFlags = map[string]bool{
+	"-v": true, "--profile": true, "--focus": true,
+	"--harness-file": true, "--session-name": true, "--instructions": true,
+}
+
 func parseRunArgs(args []string) runArgs {
 	var ra runArgs
 	flagArgs := args
 
 	// First pass: find -- separator and extract prompt
+	separated := false
 	for i, arg := range args {
 		if arg == "--" {
+			separated = true
 			flagArgs = args[:i]
 			if i+1 < len(args) {
 				ra.Prompt = args[i+1]
@@ -791,9 +812,28 @@ func parseRunArgs(args []string) runArgs {
 		}
 	}
 
+	// The last bare word is the prompt, so find it first. A word that one of
+	// ynh's own flags takes as its value is not a bare word.
+	lastBare := -1
+	for j := 0; j < len(flagArgs); j++ {
+		if ynhValueFlags[flagArgs[j]] && j+1 < len(flagArgs) {
+			j++
+			continue
+		}
+		if !strings.HasPrefix(flagArgs[j], "-") {
+			lastBare = j
+		}
+	}
+
 	// Second pass: process flags
 	firstPositional := true
+	// afterPassthrough is true while the previous argument was a flag ynh does
+	// not know and forwards, written without "=": a bare word now may be its
+	// value.
+	afterPassthrough := false
 	for i := 0; i < len(flagArgs); i++ {
+		prevPassthrough := afterPassthrough
+		afterPassthrough = false
 		switch {
 		case flagArgs[i] == "-v" && i+1 < len(flagArgs):
 			ra.VendorFlag = flagArgs[i+1]
@@ -830,17 +870,24 @@ func parseRunArgs(args []string) runArgs {
 		case flagArgs[i] == "--interactive":
 			ra.Interactive = true
 		case !strings.HasPrefix(flagArgs[i], "-"):
-			if firstPositional {
+			switch {
+			case firstPositional:
 				// First positional arg is the harness name
 				ra.HarnessName = flagArgs[i]
 				firstPositional = false
-			} else if ra.Prompt == "" {
+			case prevPassthrough && (separated || i < lastBare):
+				// The value of the vendor flag before it ("--model haiku"),
+				// not the prompt: the prompt follows --, or is a later bare
+				// word.
+				ra.VendorArgs = append(ra.VendorArgs, flagArgs[i])
+			case ra.Prompt == "":
 				ra.Prompt = flagArgs[i]
-			} else {
+			default:
 				ra.VendorArgs = append(ra.VendorArgs, flagArgs[i])
 			}
 		default:
 			ra.VendorArgs = append(ra.VendorArgs, flagArgs[i])
+			afterPassthrough = !strings.Contains(flagArgs[i], "=")
 		}
 	}
 

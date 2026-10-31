@@ -102,12 +102,17 @@ Flags:
   --install                Install symlinks for the vendor in this project
   --clean                  Remove symlinks for the vendor in this project
 
-All other flags are passed through to the vendor CLI. Use -- to separate the
-prompt from flags.
+All other flags are passed through to the vendor CLI, in order. ynh does not
+know which vendor flags take a value: a bare word right after a passed-through
+flag is that flag's value ("--model haiku"), except the last bare word, which
+is the prompt. Write the value with "=" ("--model=haiku"), or put the prompt
+after --, when that would read your words the wrong way. Before --, a word
+right after a flag is always its value.
 
 Examples:
   ynh run local/david
   ynh run local/david "review this PR"
+  ynh run local/david --model haiku -- "say ok"    # claude -p "say ok" --model haiku
   ynh run local/david --focus code-review
   ynh run local/david -v codex -- "refactor auth"
   ynh run ./my-harness -v claude`,

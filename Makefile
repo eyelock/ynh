@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage e2e format lint check check-artifacts check-vendor-parity check-marketplace scan-artifacts run docs help docker-build docker-push vulncheck
+.PHONY: clean deps install build test test-coverage e2e format lint check check-artifacts check-vendor-parity check-marketplace check-eval-stand-ins scan-artifacts run docs help docker-build docker-push vulncheck
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -114,6 +114,14 @@ check-marketplace: ## Assert the committed marketplace indexes match the plugin 
 
 check-vendor-parity: build ## Assert every vendor is documented, assembles the same artifacts and is stubbed in evals
 	@./scripts/vendor-parity.sh
+
+check-eval-stand-ins: ## Compare the evals' stand-in harnesses with the real ones on GitHub (needs the network)
+	@# Not part of `make check`: it clones eyelock/assistants, so its result
+	@# depends on the network and on a repository this one does not control.
+	@# It runs daily and on changes to the stand-ins, in
+	@# .github/workflows/eval-stand-ins.yml. On a failure, update the stand-in in
+	@# scripts/eval-remotes.sh, never the real harness.
+	@./scripts/eval-stand-ins.sh
 
 stamp-version: ## Stamp the harness version into every manifest (VERSION=X.Y.Z, or the latest tag)
 	@./scripts/stamp-harness-version.sh $(VERSION)

@@ -156,6 +156,136 @@ func TestParseRunArgs(t *testing.T) {
 			wantSession: "demo-abc12345",
 			wantPrompt:  "review this",
 		},
+		// ynw-sbo: a space-separated value stays with its vendor flag when
+		// more flags follow, rather than becoming the prompt.
+		{
+			name:       "space-separated passthrough values before -p and prompt",
+			args:       []string{"my-harness", "--model", "haiku", "--max-turns", "1", "-p", "say ok"},
+			wantName:   "my-harness",
+			wantPrompt: "say ok",
+			wantArgs:   []string{"--model", "haiku", "--max-turns", "1", "-p"},
+		},
+		{
+			name:       "equals-form passthrough values before -p and prompt",
+			args:       []string{"my-harness", "--model=haiku", "--max-turns=1", "-p", "say ok"},
+			wantName:   "my-harness",
+			wantPrompt: "say ok",
+			wantArgs:   []string{"--model=haiku", "--max-turns=1", "-p"},
+		},
+		{
+			name:       "space-separated passthrough value then prompt",
+			args:       []string{"my-harness", "--model", "opus", "fix the bug"},
+			wantName:   "my-harness",
+			wantPrompt: "fix the bug",
+			wantArgs:   []string{"--model", "opus"},
+		},
+		{
+			name:       "boolean passthrough flag then prompt",
+			args:       []string{"my-harness", "--verbose", "simple prompt"},
+			wantName:   "my-harness",
+			wantPrompt: "simple prompt",
+			wantArgs:   []string{"--verbose"},
+		},
+		{
+			name:       "equals-form value then prompt after more flags",
+			args:       []string{"my-harness", "--model=opus", "fix the bug", "--verbose"},
+			wantName:   "my-harness",
+			wantPrompt: "fix the bug",
+			wantArgs:   []string{"--model=opus", "--verbose"},
+		},
+		{
+			name:       "boolean passthrough flag then prompt after more flags",
+			args:       []string{"my-harness", "--verbose", "fix the bug", "--model=opus"},
+			wantName:   "my-harness",
+			wantPrompt: "fix the bug",
+			wantArgs:   []string{"--verbose", "--model=opus"},
+		},
+		// ynw-sbo.1: the last bare word is the prompt, even when flags follow it.
+		{
+			name:       "prompt after boolean flag, before equals-form flag",
+			args:       []string{"david", "--verbose", "fix it", "--model=opus"},
+			wantName:   "david",
+			wantPrompt: "fix it",
+			wantArgs:   []string{"--verbose", "--model=opus"},
+		},
+		{
+			name:       "prompt after short boolean flag, before another flag",
+			args:       []string{"david", "-c", "fix it", "--verbose"},
+			wantName:   "david",
+			wantPrompt: "fix it",
+			wantArgs:   []string{"-c", "--verbose"},
+		},
+		{
+			name:       "ynh value flag after the prompt does not hide it",
+			args:       []string{"david", "--verbose", "fix it", "-v", "claude"},
+			wantName:   "david",
+			wantVendor: "claude",
+			wantPrompt: "fix it",
+			wantArgs:   []string{"--verbose"},
+		},
+		// ynh never interprets vendor flags, so by position this is the same
+		// shape as "--model haiku -p 'say ok'": the last bare word "opus" is
+		// the prompt and "fix it" goes with --verbose. Users write
+		// "--model=opus", or put the prompt after --, to get "fix it".
+		{
+			name:       "last bare word is the prompt, even after a space-separated flag",
+			args:       []string{"david", "--verbose", "fix it", "--model", "opus"},
+			wantName:   "david",
+			wantPrompt: "opus",
+			wantArgs:   []string{"--verbose", "fix it", "--model"},
+		},
+		{
+			name:       "lone space-separated value is the last bare word, so the prompt",
+			args:       []string{"my-harness", "--model", "opus"},
+			wantName:   "my-harness",
+			wantPrompt: "opus",
+			wantArgs:   []string{"--model"},
+		},
+		{
+			name:     "equals-form value with no prompt",
+			args:     []string{"my-harness", "--model=opus"},
+			wantName: "my-harness",
+			wantArgs: []string{"--model=opus"},
+		},
+		{
+			name:     "space-separated value then separator with no prompt",
+			args:     []string{"my-harness", "--model", "opus", "--"},
+			wantName: "my-harness",
+			wantArgs: []string{"--model", "opus"},
+		},
+		{
+			name:     "boolean flag, value and separator with no prompt",
+			args:     []string{"my-harness", "--verbose", "--model", "opus", "--"},
+			wantName: "my-harness",
+			wantArgs: []string{"--verbose", "--model", "opus"},
+		},
+		{
+			name:       "claude's own order written with separator",
+			args:       []string{"my-harness", "--verbose", "--model", "haiku", "--", "say ok"},
+			wantName:   "my-harness",
+			wantPrompt: "say ok",
+			wantArgs:   []string{"--verbose", "--model", "haiku"},
+		},
+		{
+			name:       "bare word not after a flag, then separator with no prompt",
+			args:       []string{"my-harness", "fix it", "--"},
+			wantName:   "my-harness",
+			wantPrompt: "fix it",
+		},
+		{
+			name:       "space-separated values with prompt via separator",
+			args:       []string{"my-harness", "--model", "haiku", "--max-turns", "1", "--", "say ok"},
+			wantName:   "my-harness",
+			wantPrompt: "say ok",
+			wantArgs:   []string{"--model", "haiku", "--max-turns", "1"},
+		},
+		{
+			name:       "known ynh flag value is not a passthrough value",
+			args:       []string{"my-harness", "-v", "claude", "fix the bug"},
+			wantName:   "my-harness",
+			wantVendor: "claude",
+			wantPrompt: "fix the bug",
+		},
 		{
 			name:        "session-name value not confused as prompt",
 			args:        []string{"my-harness", "--session-name", "demo-abc12345"},
