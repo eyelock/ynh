@@ -638,7 +638,9 @@ type opencodeHookEntry struct {
 //     An agent with a Claude tools: list is denied "execute", so Code Mode is
 //     off for it and its granted MCP tools are ordinary tools with no wrapper
 //     (CONFIRMED on v2.2.3 that the matcher still blocks them). The payload's
-//     tool_name is the OpenCode id, not mcp__server__tool
+//     tool_name is Claude's form: Bash for shell, mcp__server__tool for an MCP
+//     tool (split at the first underscore of the id, so a server name with an
+//     underscore is split wrongly), so one hook script works on every vendor
 func (o *OpenCode) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
 	doc := map[string][]opencodeHookEntry{}
 	for _, event := range slices.Sorted(maps.Keys(opencodeHookEventMap)) {
@@ -843,6 +845,21 @@ function matches(matcher: string | undefined, tool: string): boolean {
   return !!re && namesFor(tool).some((n) => re.test(n))
 }
 
+// The tool_name a hook receives: Claude's form, so one hook script works on
+// every vendor. A built-in becomes its first Claude name (shell is Bash). An
+// MCP tool, whose OpenCode id is "<server>_<tool>", becomes
+// mcp__<server>__<tool>, split at the first underscore: the id does not say
+// where the server name ends, so a server name that itself holds an underscore
+// is split wrongly here (a matcher still matches every split).
+function claudeToolName(tool: string): string {
+  const mapped = CLAUDE_NAMES[tool]
+  if (mapped) return mapped[0]
+  const i = tool.indexOf("_")
+  // opencode_* are OpenCode's own tools (opencode_list_mcp_resources), not a server's.
+  if (i <= 0 || i === tool.length - 1 || tool.startsWith("opencode_")) return tool
+  return "mcp__" + tool.slice(0, i) + "__" + tool.slice(i + 1)
+}
+
 function claudeInput(input: any): any {
   const out: any = { ...(input ?? {}) }
   if (out.path !== undefined && out.file_path === undefined) out.file_path = out.path
@@ -887,7 +904,7 @@ export default Plugin.define({
     const toolPayload = (x: any) => ({
       session_id: x.sessionID,
       cwd,
-      tool_name: (CLAUDE_NAMES[x.tool] ?? [x.tool])[0],
+      tool_name: claudeToolName(x.tool),
       tool_input: claudeInput(x.input),
     })
 

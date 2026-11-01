@@ -690,6 +690,7 @@ func TestOpenCodeHooksPluginBehaviour(t *testing.T) {
 	dir := t.TempDir()
 	marker := filepath.Join(dir, "edit-marker")
 	stdinLog := filepath.Join(dir, "stdin.json")
+	mcpLog := filepath.Join(dir, "mcp.json")
 	write := func(rel, content string) {
 		t.Helper()
 		p := filepath.Join(dir, rel)
@@ -708,6 +709,7 @@ func TestOpenCodeHooksPluginBehaviour(t *testing.T) {
 		"before_tool": {
 			{Matcher: "Edit", Command: "touch '" + marker + "'"},
 			{Matcher: "Bash", Command: "cat > '" + stdinLog + "'; exit 1"},
+			{Matcher: "mcp__echo__ynh_ping", Command: "cat > '" + mcpLog + "'"},
 			{Matcher: "Bash|Task", Command: "echo 'use make instead' >&2; exit 2"},
 		},
 		"after_tool": {{Matcher: "mcp__srv__do_it", Command: "exit 0"}},
@@ -727,7 +729,7 @@ const ctx = {
 }
 const cleanup = plugin.setup(ctx)
 const out = {}
-for (const tool of ["shell", "read", "edit", "subagent"]) {
+for (const tool of ["shell", "read", "edit", "subagent", "echo_ynh_ping"]) {
   try { hooks["execute.before"]({ tool, sessionID: "s1", input: { command: "ls", path: "/a" } }); out[tool] = "ok" }
   catch (e) { out[tool] = "threw: " + e.message }
 }
@@ -760,6 +762,17 @@ console.log(JSON.stringify(out))
 	}
 	if got["after"] != "function" {
 		t.Errorf("execute.after hook installed = %q", got["after"])
+	}
+	mcpData, err := os.ReadFile(mcpLog)
+	if err != nil {
+		t.Fatalf("the mcp__echo__ynh_ping hook did not run: %v", err)
+	}
+	var mcpStdin map[string]any
+	if err := json.Unmarshal(mcpData, &mcpStdin); err != nil {
+		t.Fatal(err)
+	}
+	if mcpStdin["tool_name"] != "mcp__echo__ynh_ping" {
+		t.Errorf("MCP tool_name = %v, want Claude's mcp__echo__ynh_ping", mcpStdin["tool_name"])
 	}
 	if _, err := os.Stat(marker); err != nil {
 		t.Errorf("the Edit hook did not run for the edit tool: %v", err)
