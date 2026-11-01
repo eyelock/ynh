@@ -466,6 +466,32 @@ turns off Codex's logs (they carry the account's email), and the relay drops
 paths and host names before the spool (see
 [What Codex receives](#what-codex-receives)).
 
+## Conformance
+
+[`ynr conformance`](https://github.com/eyelock/ynr/blob/develop/docs/how-to/add-conformance-to-ci.md)
+checks ynh's telemetry against the instrumentation contract (ynr ADR-006), with
+no model and no secret. Its scenarios are in
+[`.ynr/conformance.yaml`](https://github.com/eyelock/ynh/blob/develop/.ynr/conformance.yaml).
+Each runs `ynh agent run` against ynr's stub vendor, which answers as `claude`,
+on a harness in `testdata/conformance/`. The four scenarios end converged, at the
+turn cap, at the token budget, and refused before any worker starts. Each plants
+a prompt and a credential, and the check fails if either reaches a record.
+
+CI's Conformance job downloads a pinned ynr release, with the SHA-256 of its
+`ynr` and `ynr-stub-vendor` archives pinned beside the version. The release's
+`checksums.txt` must list the same digests, and the downloads must match them,
+before anything is extracted or run. Locally, with `ynr` and `ynr-stub-vendor`
+on your `PATH`:
+
+```bash
+make conformance
+```
+
+Every rule passes or is skipped by design, except one: rule 1's check that a
+tool writes to the operator's `OTEL_EXPORTER_OTLP_ENDPOINT` fails, because ynh
+cannot export over OTLP yet (see below). Until it can, the job is not among the
+checks All Clear needs.
+
 ## Not yet
 
 These are still to come:
@@ -473,9 +499,9 @@ These are still to come:
 - **Exporting over OTLP.** The standard OTLP exporters bring in gRPC and
   protobuf, about ninety modules; ynh does not take that on for an endpoint it
   cannot yet use. Until then an `OTEL_EXPORTER_OTLP_*` setting writes nothing,
-  with a note.
+  with a note, and [conformance](#conformance) fails rule 1's operator-endpoint
+  check.
 - **Cursor's telemetry** through the relay, once its behaviour is examined.
-- **Conformance** checks with `ynr conformance` in CI.
 - **More events**, such as one per turn, per sensor verdict or per budget
   threshold, and metrics.
 

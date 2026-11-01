@@ -33,6 +33,7 @@ Recipes reference `$(GOIMPORTS)` instead of bare `goimports`. This means `make f
 | `make check-vendor-parity` | Every vendor documented, assembling the same artifacts, and its CLI stubbed in `.claude/agents/evals.md` (needs jq) |
 | `make check-marketplace` | The committed marketplace indexes agree with the plugin manifests (needs python3) |
 | `make scan-artifacts` | SkillSpector security scan (needs Docker; not part of `make check`) |
+| `make conformance` | `ynr conformance` against ynh's telemetry (needs `ynr` and `ynr-stub-vendor` on PATH; not part of `make check`; see `docs/telemetry.md`, Conformance) |
 | `make e2e` | E2E suite — release gate, not part of `make test` or `make check` |
 | `make clean` | Remove build artifacts and caches |
 | `make docs` | Serve docs locally (needs npx) |
@@ -54,7 +55,8 @@ go generate ./internal/telemetry
 
 `TestConstantsMatchTheRegistry` fails until you do, and
 `TestCodeUsesOnlyTheConstants` fails when code spells a registered name as a
-string. CI's Telemetry Registry job checks the registry with Weaver itself.
+string. CI's Telemetry Registry job checks the registry with Weaver itself. Its Conformance job runs `make conformance`,
+which checks what ynh emits against ynr; see `docs/telemetry.md`, Conformance.
 
 ## Permissions
 

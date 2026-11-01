@@ -58,6 +58,8 @@ jobs:
               # telemetry/registry/ — embedded into the binary, and
               #              internal/telemetry checks names_gen.go against it.
               - 'telemetry/**'
+              # .ynr/ — the ynr conformance scenarios the Conformance job runs.
+              - '.ynr/**'
             # ynh's telemetry registry, an OpenTelemetry Weaver registry
             # (ynr ADR-007), which Weaver itself checks.
             registry:
@@ -287,6 +289,52 @@ jobs:
           echo "$dir/weaver-x86_64-unknown-linux-gnu" >> "$GITHUB_PATH"
       - name: weaver registry check
         run: weaver registry check -r telemetry/registry
+
+  conformance:
+    # ynr conformance (ynr ADR-008): ynh's own scenarios in .ynr/conformance.yaml
+    # run `ynh agent run` against ynr's stub vendor, offline, with no model and
+    # no secret, against a pinned ynr release. Not yet among All Clear's needs:
+    # making it required is a ruleset change, and it cannot pass while ynh
+    # cannot export over OTLP (rule 1, docs/telemetry.md "Not yet").
+    name: Conformance
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    env:
+      # The ynr release, without the leading v, and the SHA-256 of the two
+      # archives the job runs, pinned beside it: the release's checksums.txt
+      # must list the same digests, and the downloads must match them, before
+      # anything is extracted or run. Move all three together.
+      YNR_VERSION: 0.3.2
+      YNR_SHA256: 2b090aa3449988fed220490e0483401b1fd9b02bd2e2aa3e7def24dc693a6d12
+      YNR_STUB_SHA256: 56272956659f1b4ef5f49899089743f99288112fa02aad4a6bfeb68cbe130e32
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+        with:
+          go-version-file: go.mod
+      - name: Install ynr and its stub vendor, checked against their pinned checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          dl="$RUNNER_TEMP/ynr-download"
+          bin="$RUNNER_TEMP/ynr-bin"
+          mkdir -p "$dl" "$bin"
+          ynr="ynr_${YNR_VERSION}_linux_amd64.tar.gz"
+          stub="ynr-stub-vendor_${YNR_VERSION}_linux_amd64.tar.gz"
+          gh release download "v${YNR_VERSION}" -R eyelock/ynr -D "$dl" -p "$ynr" -p "$stub" -p checksums.txt
+          cd "$dl"
+          # The release's published checksums name the same digests as the pins.
+          grep -qx "${YNR_SHA256}  ${ynr}" checksums.txt
+          grep -qx "${YNR_STUB_SHA256}  ${stub}" checksums.txt
+          printf '%s  %s\n%s  %s\n' "$YNR_SHA256" "$ynr" "$YNR_STUB_SHA256" "$stub" | sha256sum --check --strict -
+          tar -xzf "$ynr" -C "$bin" ynr
+          tar -xzf "$stub" -C "$bin" ynr-stub-vendor
+          "$bin/ynr" version
+          echo "$bin" >> "$GITHUB_PATH"
+      - name: ynr conformance
+        run: make conformance CONFORMANCE_FORMAT=text
 
   all-clear:
     name: All Clear
