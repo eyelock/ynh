@@ -55,7 +55,7 @@ surface; "not supported" is a valid answer if documented (see pitfalls).
 | Workspace | `<x>WorkspaceFlag`, `<x>WorkspaceUnsupported` | A flag that grants a folder beside the project (`--add-dir`), or why there is none |
 | MCP | `GenerateMCPConfig` (+ `PluginMCPGenerator`) | Config key and shape; transport spelling for `stdio`, `streamable-http`, `sse` |
 | MCP in a plugin | `mcpPluginRootVar` | A variable the plugin loader expands to the plugin's install path in an MCP server's command and cwd |
-| MCP isolation | `IsolateMCP` | A flag that runs with only the given MCP config and ignores the user's own servers (Claude's `--strict-mcp-config`, Copilot's `--disable-builtin-mcps`), or why there is none; "not supported" is valid with a one-line warning. Record the vendor in the isolation table in `docs/mcp.md` |
+| MCP isolation | `IsolateMCP` | A flag that runs with only the given MCP config and ignores the user's own servers (full isolation: Claude's `--strict-mcp-config`). Partial is a valid answer: a flag plus a warning for what still loads (Copilot's `--disable-builtin-mcps` drops only the built-in servers; `~/.copilot/mcp-config.json` still loads). "Not supported" is valid with a one-line warning. Record the vendor in the isolation table in `docs/mcp.md` |
 | Artifact rewrite | `ArtifactTransformer` (optional) | Does it need a different file name or frontmatter (Cursor's `.mdc`)? |
 | Export / plugin | `GeneratePluginManifest`, `PluginManifestDir`, `ExportArtifactDirs`, `SupportsExportDelegates` (+ `ExportManifestGenerator`) | A plugin manifest format? Which artifact types a plugin may carry |
 | Marketplace | `MarketplaceManifestDir`, `GenerateMarketplaceIndex` | A marketplace index format, or none |
