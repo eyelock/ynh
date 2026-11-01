@@ -111,3 +111,73 @@ func hasLine(lines []string, want string) bool {
 	}
 	return false
 }
+
+// ynh run -- passes the right argv to the vendor: a codex stub on PATH records
+// exactly what it received.
+func TestRunDoubleDashArgv(t *testing.T) {
+	s := newSandbox(t)
+	harnessDir := filepath.Join(t.TempDir(), "plain")
+	if err := os.MkdirAll(filepath.Join(harnessDir, ".agents/harness"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"name":"plain","version":"0.1.0","default_vendor":"codex"}`
+	if err := os.WriteFile(filepath.Join(harnessDir, ".agents/harness/plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	shims := filepath.Join(t.TempDir(), "shims")
+	if err := os.MkdirAll(shims, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(shims, "codex"), []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$ARGV_OUT\"\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	argvFile := filepath.Join(t.TempDir(), "argv.txt")
+	tests := []struct {
+		name string
+		args []string
+		// wantInOrder are words that must appear in argv, in this order
+		wantInOrder []string
+		wantAbsent  []string
+	}{
+		{"prompt before --, -m after", []string{"say ok", "--", "-m", "gpt-5"}, []string{"-m", "gpt-5"}, nil},
+		{"prompt before --, --model= after", []string{"say ok", "--", "--model=gpt-5"}, []string{"--model=gpt-5"}, nil},
+		{"prompt after --, flags after it", []string{"--", "say ok", "-m", "gpt-5"}, []string{"-m", "gpt-5"}, nil},
+		{"--model= before, prompt after --", []string{"--model=gpt-5", "--", "say ok"}, []string{"--model=gpt-5"}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = os.Remove(argvFile)
+			cmd := exec.Command(ynhBinary(t), append([]string{"run", harnessDir, "-v", "codex"}, tt.args...)...)
+			cmd.Dir = t.TempDir()
+			cmd.Env = append(os.Environ(),
+				"PATH="+shims+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"YNH_HOME="+s.home, "ARGV_OUT="+argvFile, "YNH_FOCUS=", "YNH_PROFILE=")
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("ynh run: %v\n%s", err, out)
+			}
+			data, err := os.ReadFile(argvFile)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Logf("codex stub received: %q", strings.Split(strings.TrimSpace(string(data)), "\n"))
+			lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+			if !hasLine(lines, "say ok") {
+				t.Errorf("argv %q lacks the prompt", lines)
+			}
+			pos := 0
+			for _, w := range tt.wantInOrder {
+				found := false
+				for ; pos < len(lines); pos++ {
+					if lines[pos] == w {
+						found = true
+						pos++
+						break
+					}
+				}
+				if !found {
+					t.Errorf("argv %q lacks %q in order %q", lines, w, tt.wantInOrder)
+				}
+			}
+		})
+	}
+}
