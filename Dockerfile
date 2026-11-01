@@ -42,7 +42,7 @@ RUN --mount=type=cache,target=/root/.npm \
     npm install -g --include=optional "@openai/codex@${CODEX_VERSION}"
 
 # Stage 2c: Cursor Agent CLI (parallel)
-FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS cursor-cli
+FROM alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS cursor-cli
 RUN apk add --no-cache curl bash
 
 # The installer at cursor.com/install is regenerated per release: it embeds
@@ -78,7 +78,7 @@ RUN set -eu; \
     rm -rf /tmp/agent /tmp/agent.tar.gz
 
 # Stage 2d: ynr (parallel), only the slim binary
-FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS ynr-cli
+FROM alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS ynr-cli
 RUN apk add --no-cache curl
 
 ARG YNR_VERSION
