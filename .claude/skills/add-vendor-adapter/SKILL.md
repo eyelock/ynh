@@ -316,8 +316,8 @@ writing these were:
 2. Adapter and its test; `make test FILE=./internal/vendor` green in
    isolation.
 3. Per-vendor declarations (hook events, timeouts, session-start context,
-   workspace, MCP plugin root), schema enum, exporter and marketplace output,
-   Agent Plugins layout, docker image.
+   workspace, MCP plugin root, MCP isolation via `IsolateMCP`), schema enum,
+   exporter and marketplace output, Agent Plugins layout, docker image.
 4. `ynh agent run` backend and `llmVendors`, if applicable.
 5. Evals stubs, then every documentation touch point.
 6. `make check` (which includes `check-vendor-parity`) and `make scan-artifacts`.
