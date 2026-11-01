@@ -1700,7 +1700,8 @@ func assembleHarness(h *harness.Harness, backendName string, sel harness.Selecti
 			return "", nil, fmt.Errorf("delegate %q: %w", del.Git, chkErr)
 		}
 	}
-	if _, delErr := assembler.AssembleDelegates(dir, adapter, h.DelegatesTo, h.Dir, assembler.DelegateOptions{Config: cfg, Launch: true, RootName: h.Name}); delErr != nil {
+	delegateMCP, delErr := assembler.AssembleDelegates(dir, adapter, h.DelegatesTo, h.Dir, assembler.DelegateOptions{Config: cfg, Launch: true, RootName: h.Name})
+	if delErr != nil {
 		_ = os.RemoveAll(dir)
 		return "", nil, fmt.Errorf("assembling delegates: %w", delErr)
 	}
@@ -1708,7 +1709,7 @@ func assembleHarness(h *harness.Harness, backendName string, sel harness.Selecti
 	// Generate vendor-native hook config, and copy in the scripts those hooks
 	// run from the harness, and from the included harnesses that consented to
 	// their hooks.
-	hookWarnings, hookErr := assembler.WriteComposedSessionHooks(dir, adapter, h, resolved)
+	hookWarnings, hookErr := assembler.WriteComposedSessionHooks(dir, adapter, h, resolved, assembler.DelegateServerNames(delegateMCP)...)
 	if hookErr != nil {
 		_ = os.RemoveAll(dir)
 		return "", nil, hookErr

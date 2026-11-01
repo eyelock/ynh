@@ -278,14 +278,15 @@ func cmdRun(args []string) error {
 		}
 
 		// Assemble delegate harnesses as agent files
-		if _, err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo, p.Dir, assembler.DelegateOptions{Config: cfg, Launch: true, RootName: p.Name}); err != nil {
+		delegateMCP, err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo, p.Dir, assembler.DelegateOptions{Config: cfg, Launch: true, RootName: p.Name})
+		if err != nil {
 			return fmt.Errorf("assembling delegates: %w", err)
 		}
 
 		// Generate vendor-native hook config files, and copy in the scripts
 		// those hooks run from the harness. The hooks are the root's and
 		// those of the included harnesses that consented to them.
-		hookWarnings, err := assembler.WriteComposedSessionHooks(runDir, adapter, p, resolved)
+		hookWarnings, err := assembler.WriteComposedSessionHooks(runDir, adapter, p, resolved, assembler.DelegateServerNames(delegateMCP)...)
 		if err != nil {
 			return err
 		}

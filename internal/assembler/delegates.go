@@ -63,6 +63,15 @@ type DelegateMCP struct {
 	Source   string
 }
 
+// DelegateServerNames is the distinct names of the servers in declared, sorted.
+func DelegateServerNames(declared []DelegateMCP) []string {
+	names := make([]string, 0, len(declared))
+	for _, d := range declared {
+		names = append(names, d.Server)
+	}
+	return slices.Compact(slices.Sorted(slices.Values(names)))
+}
+
 // DelegateOptions are what AssembleDelegates needs besides the delegates.
 type DelegateOptions struct {
 	// Config is the allow-list the delegate's own includes are checked

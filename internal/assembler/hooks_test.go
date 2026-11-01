@@ -325,3 +325,24 @@ func TestWriteSessionHooks_SessionStartWrapper(t *testing.T) {
 		})
 	}
 }
+
+// TestWriteSessionHooks_OpenCodeKnowsServers: a session's hook set names its
+// MCP servers, and OpenCode's plugin carries them, longest first, so it can
+// split a "<server>_<tool>" id on a known server name.
+func TestWriteSessionHooks_OpenCodeKnowsServers(t *testing.T) {
+	dir := t.TempDir()
+	hs := HookSet{
+		Hooks:      map[string][]plugin.HookEntry{"before_tool": {{Command: "true"}}},
+		MCPServers: []string{"my", "my_srv"},
+	}
+	if _, err := WriteSessionHooks(dir, &vendor.OpenCode{}, t.TempDir(), hs); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, ".opencode", "plugins", "ynh-hooks.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `const SERVERS: string[] = ["my_srv","my"]`) {
+		t.Errorf("the plugin does not carry the server names, longest first:\n%s", data)
+	}
+}

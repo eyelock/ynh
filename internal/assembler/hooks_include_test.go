@@ -457,3 +457,25 @@ func TestWriteComposedSessionHooks_IncludedSessionEndTimeout(t *testing.T) {
 		t.Errorf("env = %q, warnings = %q, want %q", env, warnings, want)
 	}
 }
+
+// TestWriteComposedSessionHooks_DelegateServers: the servers a session's
+// delegates declare reach OpenCode's plugin beside the harness's own, so a
+// delegate-only server maps exactly.
+func TestWriteComposedSessionHooks_DelegateServers(t *testing.T) {
+	dir := t.TempDir()
+	root := &harness.Harness{
+		Dir:        t.TempDir(),
+		Hooks:      map[string][]plugin.HookEntry{"before_tool": {{Command: "true"}}},
+		MCPServers: map[string]plugin.MCPServer{"own": {Command: "x"}},
+	}
+	if _, err := WriteComposedSessionHooks(dir, &vendor.OpenCode{}, root, nil, "del_only", "own"); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, ".opencode", "plugins", "ynh-hooks.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `const SERVERS: string[] = ["del_only","own"]`) {
+		t.Errorf("the plugin does not carry the delegate's server once, longest first:\n%s", data)
+	}
+}

@@ -638,8 +638,26 @@ type opencodeHookEntry struct {
 //     An agent with a Claude tools: list is denied "execute", so Code Mode is
 //     off for it and its granted MCP tools are ordinary tools with no wrapper
 //     (CONFIRMED on v2.2.3 that the matcher still blocks them). The payload's
-//     tool_name is the OpenCode id, not mcp__server__tool
+//     tool_name is Claude's form: Bash for shell, mcp__server__tool for an MCP
+//     tool, split on the harness's known server names (longest first, so a
+//     server name with an underscore maps exactly; an id no server prefixes
+//     is left as it is), so one hook script works on every vendor
 func (o *OpenCode) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error) {
+	return o.GenerateHookConfigForServers(hooks, nil)
+}
+
+// MCPAwareHooks is implemented by a vendor whose hook config needs the names
+// of the harness's MCP servers: OpenCode names an MCP tool "<server>_<tool>",
+// and only the server names say where one ends and the other begins.
+type MCPAwareHooks interface {
+	GenerateHookConfigForServers(hooks map[string][]plugin.HookEntry, servers []string) (map[string][]byte, error)
+}
+
+// GenerateHookConfigForServers is GenerateHookConfig told the names of the
+// harness's MCP servers, which the plugin uses to hand hooks an MCP tool's
+// name as mcp__server__tool. With none, tool_name for an MCP tool stays
+// OpenCode's id.
+func (o *OpenCode) GenerateHookConfigForServers(hooks map[string][]plugin.HookEntry, servers []string) (map[string][]byte, error) {
 	doc := map[string][]opencodeHookEntry{}
 	for _, event := range slices.Sorted(maps.Keys(opencodeHookEventMap)) {
 		for _, h := range hooks[event] {
@@ -662,7 +680,21 @@ func (o *OpenCode) GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[
 	if err != nil {
 		return nil, fmt.Errorf("marshalling hooks: %w", err)
 	}
+	names := slices.SortedFunc(slices.Values(slices.Compact(slices.Sorted(slices.Values(servers)))), func(a, b string) int {
+		if len(a) != len(b) {
+			return len(b) - len(a)
+		}
+		return strings.Compare(a, b)
+	})
+	if names == nil {
+		names = []string{}
+	}
+	serverJSON, err := json.Marshal(names)
+	if err != nil {
+		return nil, fmt.Errorf("marshalling MCP server names: %w", err)
+	}
 	src := strings.Replace(opencodeHooksPlugin, "__HOOKS__", string(data), 1)
+	src = strings.Replace(src, "__SERVERS__", string(serverJSON), 1)
 	return map[string][]byte{filepath.Join(".opencode", "plugins", "ynh-hooks.ts"): []byte(src)}, nil
 }
 
@@ -788,6 +820,9 @@ const HOOKS: Record<string, { matcher?: string; command: string; timeout?: numbe
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 
+// The harness's MCP server names, longest first.
+const SERVERS: string[] = __SERVERS__
+
 // OpenCode tool ids to the Claude names harness authors write in a matcher.
 const CLAUDE_NAMES: Record<string, string[]> = {
   shell: ["Bash"],
@@ -843,6 +878,23 @@ function matches(matcher: string | undefined, tool: string): boolean {
   return !!re && namesFor(tool).some((n) => re.test(n))
 }
 
+// The tool_name a hook receives: Claude's form, so one hook script works on
+// every vendor. A built-in becomes its first Claude name (shell is Bash). An
+// MCP tool, whose OpenCode id is "<server>_<tool>", becomes
+// mcp__<server>__<tool>, split on the harness's known server names (SERVERS,
+// longest first, so "my_srv" wins over "my"). An id that no server prefixes,
+// such as OpenCode's own opencode_list_mcp_resources, is left as it is.
+function claudeToolName(tool: string): string {
+  const mapped = CLAUDE_NAMES[tool]
+  if (mapped) return mapped[0]
+  for (const s of SERVERS) {
+    if (tool.length > s.length + 1 && tool.startsWith(s + "_")) {
+      return "mcp__" + s + "__" + tool.slice(s.length + 1)
+    }
+  }
+  return tool
+}
+
 function claudeInput(input: any): any {
   const out: any = { ...(input ?? {}) }
   if (out.path !== undefined && out.file_path === undefined) out.file_path = out.path
@@ -887,7 +939,7 @@ export default Plugin.define({
     const toolPayload = (x: any) => ({
       session_id: x.sessionID,
       cwd,
-      tool_name: (CLAUDE_NAMES[x.tool] ?? [x.tool])[0],
+      tool_name: claudeToolName(x.tool),
       tool_input: claudeInput(x.input),
     })
 
