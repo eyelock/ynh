@@ -357,6 +357,14 @@ ynh trust accept <harness>   # record that you have read them
   listed against the delegate, and its own includes' servers with them. They are
   connected only while that delegate runs, but they run with your credentials
   all the same.
+- **Launch focus**: the prompt of the harness's `launch_focus`, the first
+  message of every bare `ynh run` (see [Launch Focus](focus.md#launch-focus)).
+- **Delegate focuses**: the prompt of each focus a `delegates_to` entry
+  selects, listed against the delegate. It becomes that delegate's standing
+  instructions for every task it is given (see
+  [Focus of a Delegate](focus.md#focus-of-a-delegate)), so a change to it, or
+  an entry that selects a different focus, asks for review again. An entry
+  that selects no focus adds nothing, and its harness keeps its digest.
 
 Everything is shown as resolved for a run: the harness's own, then whatever
 each profile adds or changes (an entry identical to the harness's own is not
