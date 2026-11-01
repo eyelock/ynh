@@ -147,7 +147,7 @@ func TestResolve_PickedHarnessDoesNotFollowItsIncludes(t *testing.T) {
 	}
 }
 
-func TestResolve_CycleIsAnError(t *testing.T) {
+func TestResolve_CycleIsANote(t *testing.T) {
 	root := t.TempDir()
 	a := filepath.Join(root, "a")
 	b := t.TempDir()
@@ -156,20 +156,29 @@ func TestResolve_CycleIsAnError(t *testing.T) {
 	writeIncludedHarness(t, b, "b", []map[string]any{localMeta(root)}, nil)
 
 	p := &harness.Harness{Name: "root", Dir: root, Includes: []harness.Include{localInc("a")}}
-	_, err := Resolve(p, nil)
-	want := "include cycle: root -> a -> b -> root"
-	if err == nil || err.Error() != want {
-		t.Fatalf("error = %v, want %q", err, want)
+	results, err := Resolve(p, nil)
+	if err != nil {
+		t.Fatalf("a cycle must resolve, got %v", err)
+	}
+	if got, want := basePaths(results), []string{b, a}; !slices.Equal(got, want) {
+		t.Fatalf("order = %v, want %v", got, want)
+	}
+	want := []string{"include cycle: root -> a -> b -> root; root is already included, so this include adds nothing"}
+	if !slices.Equal(results[0].Notes, want) {
+		t.Errorf("b's notes = %q, want %q", results[0].Notes, want)
+	}
+	if len(results[1].Notes) != 0 {
+		t.Errorf("a's notes = %q, want none", results[1].Notes)
 	}
 }
 
-func TestResolve_SelfIncludeIsACycle(t *testing.T) {
+func TestResolve_SelfIncludeIsRefused(t *testing.T) {
 	root := t.TempDir()
 	a := filepath.Join(root, "a")
 	writeIncludedHarness(t, a, "a", []map[string]any{localMeta(a)}, nil)
 	p := &harness.Harness{Name: "root", Dir: root, Includes: []harness.Include{localInc("a")}}
 	_, err := Resolve(p, nil)
-	want := "include cycle: root -> a -> a"
+	want := "harness a includes itself"
 	if err == nil || err.Error() != want {
 		t.Fatalf("error = %v, want %q", err, want)
 	}

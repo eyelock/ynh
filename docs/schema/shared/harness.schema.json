@@ -100,6 +100,11 @@
           "description": "Per event, each included harness that declares hooks a run does not carry, because its include does not say \"hooks\": true. Sorted by event.",
           "items": {"$ref": "#/$defs/HookOrigin"}
         },
+        "include_notes": {
+          "type": "array",
+          "description": "Remarks on the include graph, present when there are any: each include cycle and the include that closes it, which adds nothing because the harness it names is already included. A cycle is not an error.",
+          "items": {"type": "string"}
+        },
         "hooks_error": {
           "type": "string",
           "description": "Present when the hooks of includes could not be read (an include not in the cache, or a hook script outside its included harness); hooks then lists only the harness's own."

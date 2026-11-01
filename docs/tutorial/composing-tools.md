@@ -360,7 +360,7 @@ Expected output:
 
 Each server expanded in its own harness's context. `${PLUGIN_ROOT}` became the directory of the harness that declared the server, so `notes` runs its own copy of `server.py` and so do the others. `TOKEN` was filled from `TRACKER_TOKEN`, and only `github-lite` could see that variable: `my-team` does not declare it, so the root's `env_passthrough` is not widened.
 
-## The root wins, conflicts are errors, cycles are refused
+## The root wins, conflicts are errors, cycles resolve
 
 A server the root declares replaces an included one of the same name, whole. Redeclare `tracker` in `my-team`:
 
@@ -493,10 +493,28 @@ ynd preview my-team -v claude -o out/cycle 2>&1
 Expected output:
 
 ```
-Error: resolving includes: include cycle: root -> github-lite -> notes -> root
+  warning: included harness github-lite declares hooks (on_session_start) that are not active; add "hooks": true to its include to run them
+Preview written to out/cycle
+
+MCP servers from included harnesses:
+  tracker (from github-lite)
+
+Focuses from included harnesses:
+  github-lite:triage
+
+Profiles from included harnesses:
+  github-lite:readonly
+
+Hooks from included harnesses, not active (add "hooks": true to the include):
+  on_session_start (from github-lite)
+
+Include notes:
+  include cycle: root -> github-lite -> notes -> root; root is already included, so this include adds nothing
 ```
 
-The error names the whole chain. Put `notes` back:
+The preview succeeds. Every harness in the cycle is included once, and the include that closes it, `notes` including `my-team`, adds nothing, since `my-team` is the harness being previewed. ynh skips it and says so under "Include notes". `notes` brings no server this time, because its new manifest declares none.
+
+`ynh info` shows the same note under Includes. Put `notes` back:
 
 ```bash
 mv notes-plugin.json.bak notes/.agents/harness/plugin.json
@@ -1033,7 +1051,7 @@ unset TRACKER_TOKEN PAGER_TOKEN
 - `ynd preview` lists each included server with its provenance, as `include > nested include`
 - Each server expands in its own harness's context: `${PLUGIN_ROOT}` is the declaring harness's directory, and `${VAR}` needs that harness's own `env_passthrough`
 - The root wins by redeclaring a server whole, and removes one with `null`
-- Two includes declaring the same server differently is an error until the root decides; a cycle is an error that names the chain
+- Two includes declaring the same server differently is an error until the root decides; a cycle resolves, each harness once, with a note naming the include that closes it
 - `--isolated-mcp` launches with only the harness's servers, on Claude Code via `--strict-mcp-config` and `--mcp-config`
 - Profiles and focuses of an include apply only when selected as `namespace:name`, to that include alone; `--profile` repeats once per namespace
 - A name shared by two includes is ambiguous only when selected, and an `as` alias on an include settles it

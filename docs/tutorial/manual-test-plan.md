@@ -365,7 +365,7 @@ Requires Docker installed and running.
 | Test | Tutorial step |
 |---|---|
 | Preview shows included servers with provenance, and the unset-variable error | [Preview what the root gets](composing-tools.md#preview-what-the-root-gets) |
-| Root override, conflict error, include cycle | [The root wins, conflicts are errors, cycles are refused](composing-tools.md#the-root-wins-conflicts-are-errors-cycles-are-refused) |
+| Root override, conflict error, include cycle | [The root wins, conflicts are errors, cycles resolve](composing-tools.md#the-root-wins-conflicts-are-errors-cycles-resolve) |
 | Launch with only the harness's servers | [Run with only the harness's servers](composing-tools.md#run-with-only-the-harness-s-servers) |
 | Select a profile or focus of an include as `namespace:name` | [Select a profile or a focus from an include](composing-tools.md#select-a-profile-or-a-focus-from-an-include) |
 | Ambiguous namespace, settled by an `as` alias | [Two includes with one name](composing-tools.md#two-includes-with-one-name) |
