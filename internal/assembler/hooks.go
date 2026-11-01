@@ -351,7 +351,10 @@ func countHooks(h *harness.Harness) int {
 // harnesses (see ComposeHooks) and writes them into dir as WriteSessionHooks
 // does. It returns the warnings to print: first those for included harnesses
 // whose hooks are not active, then for scripts that could not be carried.
-func WriteComposedSessionHooks(dir string, adapter SessionHookGenerator, root *harness.Harness, resolved []resolver.ResolveResult) ([]string, error) {
+// delegateServers names the MCP servers the session's delegates declare
+// (DelegateServerNames), which a vendor whose hooks see an MCP tool under a
+// joined name needs as well as the harness's own.
+func WriteComposedSessionHooks(dir string, adapter SessionHookGenerator, root *harness.Harness, resolved []resolver.ResolveResult, delegateServers ...string) ([]string, error) {
 	hs, err := ComposeHooks(root.Hooks, resolved)
 	if err != nil {
 		return nil, err
@@ -363,6 +366,7 @@ func WriteComposedSessionHooks(dir string, adapter SessionHookGenerator, root *h
 	if raw, _, err := harness.ComposeMCPServersRaw(root, resolver.IncludedHarnesses(resolved)); err == nil {
 		hs.MCPServers = slices.Sorted(maps.Keys(raw))
 	}
+	hs.MCPServers = slices.Compact(slices.Sorted(slices.Values(append(hs.MCPServers, delegateServers...))))
 	written, err := WriteSessionHooks(dir, adapter, root.Dir, hs)
 	if err != nil {
 		return nil, err

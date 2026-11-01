@@ -344,7 +344,7 @@ func assembleForVendorSources(srcDir string, vendorName string, sel harness.Sele
 	}
 
 	// Generate hook config, and copy in the scripts those hooks run
-	hookWarnings, err := assembler.WriteComposedSessionHooks(tmpDir, adapter, h, resolved)
+	hookWarnings, err := assembler.WriteComposedSessionHooks(tmpDir, adapter, h, resolved, assembler.DelegateServerNames(delegateMCP)...)
 	if err != nil {
 		return "", previewReport{}, err
 	}

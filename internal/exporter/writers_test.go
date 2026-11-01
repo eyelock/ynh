@@ -4,8 +4,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/eyelock/ynh/internal/harness"
 
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/plugin"
@@ -283,4 +286,18 @@ func TestCopyContent_AllVersusPicked(t *testing.T) {
 			t.Error("an unpicked skill was copied; pick is not restricting anything")
 		}
 	})
+}
+
+// TestHookServerNames: the names a vendor's hooks need include a delegate's
+// own servers, once each, sorted.
+func TestHookServerNames(t *testing.T) {
+	p := &harness.Harness{MCPServers: map[string]plugin.MCPServer{"echo": {}, "shared": {}}}
+	delegates := []ExportDelegate{
+		{servers: map[string]plugin.MCPServer{"only_delegate": {}, "shared": {}}},
+		{},
+	}
+	got := hookServerNames(p, delegates)
+	if want := []string{"echo", "only_delegate", "shared"}; !slices.Equal(got, want) {
+		t.Errorf("hookServerNames = %v, want %v", got, want)
+	}
 }
