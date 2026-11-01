@@ -262,7 +262,7 @@ func TestRun_SpoolRecords(t *testing.T) {
 			if !tel.Active() || tel.Destination() != DestinationSpool {
 				t.Fatalf("active=%v destination=%q, want the spool", tel.Active(), tel.Destination())
 			}
-			run := tel.StartRun(AttrFocus.String("review"))
+			run := tel.StartRun(AttrRunFocus.String("review"))
 
 			// The started event is on disk before StartRun returns.
 			started := find(readSpool(t, spoolDir), "log", EventRunStarted)
@@ -271,7 +271,7 @@ func TestRun_SpoolRecords(t *testing.T) {
 			}
 
 			env := run.WorkerEnv()
-			run.Finish(tt.outcome, tt.succeeded, AttrTurns.Int(3))
+			run.Finish(tt.outcome, tt.succeeded, AttrRunTurns.Int(3))
 			tel.Shutdown()
 
 			recs := readSpool(t, spoolDir)
@@ -308,11 +308,11 @@ func TestRun_SpoolRecords(t *testing.T) {
 			if !tt.succeeded && span.status["message"] != tt.outcome {
 				t.Errorf("status message = %v, want the outcome alone", span.status["message"])
 			}
-			if span.attrs[string(AttrOutcome)] != tt.outcome || span.attrs[string(AttrFocus)] != "review" ||
-				span.attrs[string(AttrTurns)] != "3" {
+			if span.attrs[string(AttrRunOutcome)] != tt.outcome || span.attrs[string(AttrRunFocus)] != "review" ||
+				span.attrs[string(AttrRunTurns)] != "3" {
 				t.Errorf("span attributes = %v", span.attrs)
 			}
-			if finished.attrs[string(AttrOutcome)] != tt.outcome || finished.attrs[string(AttrFocus)] != "review" {
+			if finished.attrs[string(AttrRunOutcome)] != tt.outcome || finished.attrs[string(AttrRunFocus)] != "review" {
 				t.Errorf("finished attributes = %v", finished.attrs)
 			}
 			res := span.resources
@@ -414,7 +414,7 @@ func TestRun_StartCall(t *testing.T) {
 	}
 	envs := map[string][]string{}
 	for _, tt := range tests {
-		env, end := run.StartCall(tt.name, AttrTurn.Int(2))
+		env, end := run.StartCall(tt.name, AttrRunTurn.Int(2))
 		envs[tt.name] = env
 		end(tt.outcome, tt.ok)
 	}
@@ -434,7 +434,7 @@ func TestRun_StartCall(t *testing.T) {
 		if call.traceID != runSpan.traceID || call.parentID != runSpan.spanID {
 			t.Errorf("%s: trace %s parent %s, want a child of the run span %s", tt.name, call.traceID, call.parentID, runSpan.spanID)
 		}
-		if call.attrs[string(AttrCallOutcome)] != tt.outcome || call.attrs[string(AttrTurn)] != "2" || call.status["code"] != tt.wantStatus {
+		if call.attrs[string(AttrCallOutcome)] != tt.outcome || call.attrs[string(AttrRunTurn)] != "2" || call.status["code"] != tt.wantStatus {
 			t.Errorf("%s: attrs %v status %v", tt.name, call.attrs, call.status)
 		}
 		env := envs[tt.name]
@@ -454,7 +454,7 @@ func TestRun_SpoolAppearsMidRun(t *testing.T) {
 
 	tel := Setup("1.0.0", Options{RecheckInterval: 10 * time.Millisecond}, &bytes.Buffer{})
 	before := time.Now()
-	run := tel.StartRun(AttrFocus.String("review"))
+	run := tel.StartRun(AttrRunFocus.String("review"))
 	if tel.Active() {
 		t.Fatal("active with no destination")
 	}
@@ -485,7 +485,7 @@ func TestRun_SpoolAppearsMidRun(t *testing.T) {
 	if span == nil || find(recs, "log", EventRunFinished) == nil || find(recs, "span", SpanCheck) == nil {
 		t.Fatalf("records %+v, want the run span, the check span and both events", recs)
 	}
-	if span.attrs[string(AttrFocus)] != "review" {
+	if span.attrs[string(AttrRunFocus)] != "review" {
 		t.Errorf("run span attributes %v, want the run's start attributes", span.attrs)
 	}
 	if span.start.After(before.Add(time.Second)) || span.start.Before(before.Add(-time.Second)) {

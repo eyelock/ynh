@@ -106,6 +106,8 @@ func main() {
 		err = cmdSensors(os.Args[2:])
 	case "trust":
 		err = cmdTrust(os.Args[2:])
+	case "telemetry":
+		err = cmdTelemetry(os.Args[2:])
 	case "check":
 		err = cmdCheck(os.Args[2:], os.Stdout, os.Stderr)
 	case "baseline":

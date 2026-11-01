@@ -146,7 +146,7 @@ func (r *Run) Finish(outcome string, succeeded bool, attrs ...attribute.KeyValue
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.finished = true
-	attrs = append([]attribute.KeyValue{AttrOutcome.String(outcome)}, attrs...)
+	attrs = append([]attribute.KeyValue{AttrRunOutcome.String(outcome)}, attrs...)
 	r.span.SetAttributes(attrs...)
 	if succeeded {
 		r.span.SetStatus(codes.Ok, "")

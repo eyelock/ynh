@@ -98,6 +98,7 @@ The harness source defaults to `.` (CWD) for `validate`, `lint`, and `fmt`. For 
 | `ynh backend remove <name> [<vendor>]` | |
 | `ynh image <name>` | `--tag`, `--base`, `--from`, `--path`, `--entrypoint <run\|agent>`, `--dry-run` |
 | `ynh paths` | `--format <text\|json>` |
+| `ynh telemetry registry` | `--format <text\|json>`. See [Telemetry: The registry](telemetry.md#the-registry) |
 | `ynh status` | |
 | `ynh prune` | |
 | `ynh doctor` | diagnose the setup: vendor availability, installed-harness integrity, symlink health, launcher on PATH, quarantine, and Claude hook wiring. Read-only; every finding carries the command that fixes it |
@@ -143,6 +144,7 @@ Commands that take `--format json` emit machine-readable output conforming to [S
 | `ynh installed <name>` | Envelope (`capabilities`, `ynh_version`, `id`, `installed`) where `installed` mirrors the on-disk `.agents/harness/installed.json` (including `resolved[]` commit SHAs). Schema: `cli/installed.schema.json` |
 | `ynh ls` | Envelope (`capabilities`, `ynh_version`, `harnesses`) wrapping an array of harness objects — same shape as `ynh info`, plus `artifacts`, minus `manifest` |
 | `ynh schema <name>` | The raw JSON schema for the named CLI command (e.g. `version`, `list`, `info`, `installed`, `error`). With `--all --format json`: a manifest `{capabilities, ynh_version, schemas: {...}}`. See [Published JSON Schemas](schema-cli.md). |
+| `ynh telemetry registry` | ynh's telemetry registry, a bare object in the shape every tool of the family prints: `tool`, `version`, `semantic_conventions` (`name`, `version`, `schema_url`), `attributes` (each `id`, `type`, optional `members`, `brief`, `stability`, optional `examples` and `annotations`), `standard_attributes`, `spans` (`name`, `kind`, `brief`, `attributes`), `events` (`name`, `brief`, `attributes`), `metrics` (`name`, `instrument`, `unit`, `brief`, `attributes`). A signal's `attributes` are `{name, requirement_level, cardinality?}`. See [Telemetry: The registry](telemetry.md#the-registry) |
 | `ynh paths` | `home`, `config`, `harnesses`, `symlinks`, `cache`, `run`, `bin` — all absolute paths resolved for the current `$YNH_HOME` |
 | `ynh search [query]` | Array of result objects: `name`, `description`, `keywords`, `repo`, `path`, `vendors`, `version`, `from` (`type`, `name`) |
 | `ynh vendors` | Array of vendor objects: `name`, `display_name`, `cli`, `config_dir`, `available` (bool), `supports_initial_prompt` (bool), `supports_resume` (bool: whether the vendor's CLI can continue a previous interactive session at all; true for every current vendor, so it does not mean a specific session can be pinned, which also needs a readable local session store). Plus one row per configured local model backend (see [Local Model Backends](vendors.md#local-model-backends)) — `name` becomes the `<backend>/<vendor>` or, when models were discoverable, `<backend>/<vendor>/<model>` spec `-v` accepts |

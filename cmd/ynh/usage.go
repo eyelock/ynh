@@ -75,6 +75,7 @@ Commands:
     migrate                                Migrate the ynh home to the current schema
     quarantine <list|restore|drop>         Harnesses a failed migration set aside
     schema <name> | --all                  Print a published JSON schema
+    telemetry registry                     The names ynh emits in OpenTelemetry
     version                                Print version
     help                                   Show this help
 
