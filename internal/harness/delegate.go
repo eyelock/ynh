@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 )
 
 // DelegateFocus is a focus a delegates_to entry names: its prompt becomes
@@ -66,4 +67,40 @@ func (d Delegate) Select(h *Harness) (*Harness, *DelegateFocus, error) {
 		return resolved, &DelegateFocus{Name: d.Focus, Prompt: focus.Prompt}, nil
 	}
 	return h, nil, nil
+}
+
+// CheckDeclared reports whether the profile or focus the entry names is one
+// the delegate harness dh declares, and, for a focus, that the profile the
+// focus names is declared too. It is the check ynd validate and ynh delegate
+// add share; the message reads as a continuation of the entry's label. An
+// entry naming neither passes.
+func (d Delegate) CheckDeclared(dh *Harness) error {
+	if d.Profile != "" {
+		if _, ok := dh.Profiles[d.Profile]; !ok {
+			return fmt.Errorf("references profile %q, which delegate %s does not define (%s)", d.Profile, dh.Name, declaredNames(dh.Profiles, "profiles"))
+		}
+		return nil
+	}
+	if d.Focus == "" {
+		return nil
+	}
+	focus, ok := dh.Focuses[d.Focus]
+	if !ok {
+		return fmt.Errorf("references focus %q, which delegate %s does not define (%s)", d.Focus, dh.Name, declaredNames(dh.Focuses, "focuses"))
+	}
+	if focus.Profile != "" {
+		if _, ok := dh.Profiles[focus.Profile]; !ok {
+			return fmt.Errorf("focus %q of delegate %s names profile %q, which it does not define", d.Focus, dh.Name, focus.Profile)
+		}
+	}
+	return nil
+}
+
+// declaredNames lists a map's keys for a message: "it declares: a, b", or
+// "it declares no <what>".
+func declaredNames[V any](m map[string]V, what string) string {
+	if len(m) == 0 {
+		return "it declares no " + what
+	}
+	return "it declares: " + strings.Join(slices.Sorted(maps.Keys(m)), ", ")
 }
