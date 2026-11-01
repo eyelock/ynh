@@ -71,7 +71,7 @@ is the signal.
 ## Check 3 — every vendor, not just the default
 
 ```bash
-for v in claude codex cursor copilot; do
+for v in claude codex cursor copilot opencode; do
   ynd preview <dir> -v "$v" -o "/tmp/hr-$v" >/dev/null && \
     echo "== $v" && find "/tmp/hr-$v" -type f | sed "s|/tmp/hr-$v/||" | sort
 done

@@ -40,6 +40,12 @@ var llmVendors = []struct {
 	// --no-auto-update for the reason the vendor adapter gives: an update
 	// found at launch restarts copilot and drops this invocation.
 	{"copilot", []string{"--no-auto-update", "-s", "--no-ask-user"}, "https://docs.github.com/en/copilot/how-tos/copilot-cli"},
+	// opencode is deliberately absent. `opencode run` reads piped stdin and
+	// prints only the answer, but there is no argument that turns its tools
+	// off: the default build agent allows everything, and even the plan agent
+	// allows shell (CONFIRMED against v2.0.27 with `opencode debug agents`).
+	// ynd sends file content as the prompt, and a model that may run commands
+	// on it is not a text answer.
 }
 
 // llmVendorNames lists the vendors ynd can use, comma-separated.

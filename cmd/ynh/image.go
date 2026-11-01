@@ -52,11 +52,12 @@ type imageTemplateData struct {
 // wrong for custom bases, whose uid is configurable.
 var imageDockerfileTmpl = template.Must(template.New("Dockerfile").Parse(`FROM {{.Base}}
 
-# Pre-assembled vendor layouts (all four, ready to use)
+# Pre-assembled vendor layouts (all five, ready to use)
 COPY --chown=ynh:ynh vendors/claude/ /home/ynh/.ynh/run/local--{{.Name}}/claude/
 COPY --chown=ynh:ynh vendors/codex/ /home/ynh/.ynh/run/local--{{.Name}}/codex/
 COPY --chown=ynh:ynh vendors/cursor/ /home/ynh/.ynh/run/local--{{.Name}}/cursor/
 COPY --chown=ynh:ynh vendors/copilot/ /home/ynh/.ynh/run/local--{{.Name}}/copilot/
+COPY --chown=ynh:ynh vendors/opencode/ /home/ynh/.ynh/run/local--{{.Name}}/opencode/
 
 # Harness source (metadata for ynh run)
 COPY --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--{{.Name}}/
@@ -465,7 +466,7 @@ func cmdImageTo(args []string, stdout, stderr io.Writer) error {
 			return fmt.Errorf("assembling %s layout: %w", adapter.Name(), err)
 		}
 
-		if _, err := assembler.AssembleDelegates(vendorDir, adapter, p.DelegatesTo, p.Dir, assembler.DelegateOptions{Config: cfg}); err != nil {
+		if _, err := assembler.AssembleDelegates(vendorDir, adapter, p.DelegatesTo, p.Dir, assembler.DelegateOptions{Config: cfg, RootName: p.Name}); err != nil {
 			return fmt.Errorf("assembling %s delegates: %w", adapter.Name(), err)
 		}
 	}

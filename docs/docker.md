@@ -75,7 +75,7 @@ leave in `node_modules`, are recreated as symlinks and never followed.
 
 The same rule applies to `ynh install` from a local path and to `ynh update`.
 
-The harness image pre-assembles vendor layouts for all four vendors (Claude, Codex, Cursor and Copilot) at build time. At runtime, `ynh run` detects the pre-assembled layout and skips assembly entirely.
+The harness image pre-assembles vendor layouts for all five vendors (Claude, Codex, Cursor, Copilot and OpenCode) at build time. At runtime, `ynh run` detects the pre-assembled layout and skips assembly entirely.
 
 ### Includes in the image
 

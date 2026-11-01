@@ -129,8 +129,24 @@ func cmdPreview(args []string) error {
 	printDelegateMCP(os.Stdout, report.delegate)
 	printIncludedSelectables(os.Stdout, report.included)
 	printIncludedHooks(os.Stdout, report.included)
+	printIncludeNotes(os.Stdout, report.included)
 
 	return nil
+}
+
+// printIncludeNotes lists the notes on the include graph, such as an include
+// cycle and the include that closes it, which is skipped. A cycle is not an
+// error: every harness in it is included once.
+func printIncludeNotes(w io.Writer, included []resolver.ResolveResult) {
+	notes := resolver.IncludeNotes(included)
+	if len(notes) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w, "Include notes:")
+	for _, n := range notes {
+		_, _ = fmt.Fprintf(w, "  %s\n", n)
+	}
 }
 
 // printIncludedHooks lists the hooks that came from included harnesses, each
@@ -322,7 +338,7 @@ func assembleForVendorSources(srcDir string, vendorName string, sel harness.Sele
 	}
 
 	// Assemble delegates
-	delegateMCP, err := assembler.AssembleDelegates(tmpDir, adapter, h.DelegatesTo, h.Dir, assembler.DelegateOptions{Config: cfg})
+	delegateMCP, err := assembler.AssembleDelegates(tmpDir, adapter, h.DelegatesTo, h.Dir, assembler.DelegateOptions{Config: cfg, RootName: h.Name})
 	if err != nil {
 		return "", previewReport{}, fmt.Errorf("assembling delegates: %w", err)
 	}

@@ -1,0 +1,493 @@
+{
+  "tool": "ynh",
+  "version": "dev",
+  "semantic_conventions": {
+    "name": "otel",
+    "version": "1.41.0",
+    "schema_url": "https://opentelemetry.io/schemas/1.41.0"
+  },
+  "attributes": [
+    {
+      "id": "ynh.run.outcome",
+      "type": "enum",
+      "members": [
+        {
+          "id": "converged",
+          "value": "converged",
+          "brief": "Exit 0: the run converged."
+        },
+        {
+          "id": "refused",
+          "value": "refused",
+          "brief": "The run was refused before any worker started."
+        },
+        {
+          "id": "turn_cap",
+          "value": "turn_cap",
+          "brief": "The turn cap ended the run."
+        },
+        {
+          "id": "token_budget",
+          "value": "token_budget",
+          "brief": "The token budget ended the run."
+        },
+        {
+          "id": "wall_clock",
+          "value": "wall_clock",
+          "brief": "The wall-clock budget ended the run."
+        },
+        {
+          "id": "stuck",
+          "value": "stuck",
+          "brief": "The run stopped making progress."
+        },
+        {
+          "id": "tamper",
+          "value": "tamper",
+          "brief": "The worker changed what it must not."
+        },
+        {
+          "id": "plan_iteration_cap",
+          "value": "plan_iteration_cap",
+          "brief": "The plan revision cap ended the run."
+        },
+        {
+          "id": "worker_error",
+          "value": "worker_error",
+          "brief": "The worker failed."
+        },
+        {
+          "id": "resume_error",
+          "value": "resume_error",
+          "brief": "The run could not resume."
+        },
+        {
+          "id": "gate_error",
+          "value": "gate_error",
+          "brief": "The gate between turns could not run."
+        },
+        {
+          "id": "user_aborted",
+          "value": "user_aborted",
+          "brief": "The user stopped the run."
+        },
+        {
+          "id": "interrupted",
+          "value": "interrupted",
+          "brief": "The run was interrupted and can be resumed."
+        },
+        {
+          "id": "unknown",
+          "value": "unknown",
+          "brief": "An exit code ynh has no word for."
+        }
+      ],
+      "brief": "The outcome word for the run's exit code (docs/agent.md, Exit codes), which also sets the span's status.",
+      "stability": "development",
+      "examples": [
+        "converged"
+      ]
+    },
+    {
+      "id": "ynh.run.bound_by",
+      "type": "enum",
+      "members": [
+        {
+          "id": "turns",
+          "value": "turns",
+          "brief": "The turn cap."
+        },
+        {
+          "id": "tokens",
+          "value": "tokens",
+          "brief": "The token budget."
+        },
+        {
+          "id": "wall_clock",
+          "value": "wall_clock",
+          "brief": "The wall-clock budget."
+        }
+      ],
+      "brief": "The cap that ended the run, when one did.",
+      "stability": "development",
+      "examples": [
+        "turns"
+      ]
+    },
+    {
+      "id": "ynh.run.turns",
+      "type": "int",
+      "brief": "Turns the run took.",
+      "stability": "development",
+      "examples": [
+        3
+      ]
+    },
+    {
+      "id": "ynh.run.turn",
+      "type": "int",
+      "brief": "On a call span, the turn the call follows.",
+      "stability": "development",
+      "examples": [
+        2
+      ]
+    },
+    {
+      "id": "ynh.run.cost_usd",
+      "type": "double",
+      "brief": "Cost in US dollars as the backend reported it. ynh never prices tokens itself.",
+      "stability": "development",
+      "examples": [
+        0.42
+      ]
+    },
+    {
+      "id": "ynh.run.session_id",
+      "type": "string",
+      "brief": "The run's session id, as in the run result.",
+      "stability": "development",
+      "examples": [
+        "8e41c07d2b9a5f13"
+      ]
+    },
+    {
+      "id": "ynh.run.vendor",
+      "type": "string",
+      "brief": "The backend that ran the worker.",
+      "stability": "development",
+      "examples": [
+        "claude",
+        "codex",
+        "cursor"
+      ]
+    },
+    {
+      "id": "ynh.run.effort",
+      "type": "string",
+      "brief": "The reasoning effort the backend reported.",
+      "stability": "development",
+      "examples": [
+        "high"
+      ]
+    },
+    {
+      "id": "ynh.run.effort.requested",
+      "type": "string",
+      "brief": "The reasoning effort asked for.",
+      "stability": "development",
+      "examples": [
+        "medium"
+      ]
+    },
+    {
+      "id": "ynh.run.focus",
+      "type": "string",
+      "brief": "The focus the run was given.",
+      "stability": "development",
+      "examples": [
+        "triage"
+      ]
+    },
+    {
+      "id": "ynh.run.profile",
+      "type": "string",
+      "brief": "The profile the run was given.",
+      "stability": "development",
+      "examples": [
+        "ci"
+      ]
+    },
+    {
+      "id": "ynh.run.resumed",
+      "type": "boolean",
+      "brief": "True for a run that resumes an earlier session.",
+      "stability": "development",
+      "examples": [
+        true
+      ]
+    },
+    {
+      "id": "ynh.harness.name",
+      "type": "string",
+      "brief": "The harness's canonical id.",
+      "stability": "development",
+      "examples": [
+        "local/demo",
+        "github.com/eyelock/assistants/ynh/review"
+      ]
+    },
+    {
+      "id": "ynh.harness.version",
+      "type": "string",
+      "brief": "The harness's declared version.",
+      "stability": "development",
+      "examples": [
+        "0.1.0"
+      ]
+    },
+    {
+      "id": "ynh.harness.commit",
+      "type": "string",
+      "brief": "The commit the harness was installed from.",
+      "stability": "development",
+      "examples": [
+        "3f2c9a1"
+      ]
+    },
+    {
+      "id": "ynh.call.outcome",
+      "type": "string",
+      "brief": "On a call span, the call's outcome: the gate's verdict (pass, blocked), the sensor's status word, or error when the call could not run.",
+      "stability": "development",
+      "examples": [
+        "pass",
+        "blocked",
+        "error"
+      ]
+    }
+  ],
+  "standard_attributes": [
+    "gen_ai.request.model",
+    "gen_ai.response.model",
+    "gen_ai.usage.cache_creation.input_tokens",
+    "gen_ai.usage.cache_read.input_tokens",
+    "gen_ai.usage.input_tokens",
+    "gen_ai.usage.output_tokens",
+    "process.exit.code"
+  ],
+  "spans": [
+    {
+      "name": "ynh.run",
+      "kind": "internal",
+      "brief": "One `ynh agent run`, from start to end.",
+      "attributes": [
+        {
+          "name": "ynh.run.outcome",
+          "requirement_level": "required"
+        },
+        {
+          "name": "process.exit.code",
+          "requirement_level": "required"
+        },
+        {
+          "name": "ynh.run.turns",
+          "requirement_level": "required"
+        },
+        {
+          "name": "ynh.run.bound_by",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.session_id",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.vendor",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.effort.requested",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.effort",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.focus",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.profile",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.resumed",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.cost_usd",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.harness.name",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.harness.version",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.harness.commit",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "gen_ai.request.model",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "gen_ai.response.model",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "gen_ai.usage.input_tokens",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "gen_ai.usage.output_tokens",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "gen_ai.usage.cache_read.input_tokens",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "gen_ai.usage.cache_creation.input_tokens",
+          "requirement_level": "recommended"
+        }
+      ]
+    },
+    {
+      "name": "ynh.check",
+      "kind": "client",
+      "brief": "A `ynh check` the run calls: the gate between turns, or the convergence verifiers.",
+      "attributes": [
+        {
+          "name": "ynh.run.turn",
+          "requirement_level": "required"
+        },
+        {
+          "name": "ynh.call.outcome",
+          "requirement_level": "recommended"
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "ynh.run.started",
+      "brief": "A run began, before any worker started. A start with no finish is how a crash shows.",
+      "attributes": [
+        {
+          "name": "ynh.run.vendor",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.effort.requested",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.focus",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.profile",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.resumed",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.harness.name",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "gen_ai.request.model",
+          "requirement_level": "recommended"
+        }
+      ]
+    },
+    {
+      "name": "ynh.run.finished",
+      "brief": "A run ended. It carries the started event's attributes and how the run ended.",
+      "attributes": [
+        {
+          "name": "ynh.run.outcome",
+          "requirement_level": "required"
+        },
+        {
+          "name": "process.exit.code",
+          "requirement_level": "required"
+        },
+        {
+          "name": "ynh.run.turns",
+          "requirement_level": "required"
+        },
+        {
+          "name": "ynh.run.bound_by",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.session_id",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.vendor",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.effort.requested",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.effort",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.focus",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.profile",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.resumed",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.run.cost_usd",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.harness.name",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.harness.version",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "ynh.harness.commit",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "gen_ai.request.model",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "gen_ai.response.model",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "gen_ai.usage.input_tokens",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "gen_ai.usage.output_tokens",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "gen_ai.usage.cache_read.input_tokens",
+          "requirement_level": "recommended"
+        },
+        {
+          "name": "gen_ai.usage.cache_creation.input_tokens",
+          "requirement_level": "recommended"
+        }
+      ]
+    }
+  ],
+  "metrics": []
+}

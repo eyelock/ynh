@@ -29,6 +29,7 @@ internal/
     codex.go              OpenAI Codex adapter (child process + symlinks)
     cursor.go             Cursor Agent adapter (child process + symlinks)
     copilot.go            GitHub Copilot CLI adapter (exec with --plugin-dir)
+    opencode.go           OpenCode 2.x adapter (exec of `opencode --standalone` with OPENCODE_CONFIG_DIR)
     symlinks.go           Shared symlink install/clean helpers
     process.go            Child process management with signal forwarding
   exporter/               ynd export — vendor-native plugin directories
@@ -62,7 +63,7 @@ agent turns; they have their own reference in `agent-and-baseline.md`.
 - **No build system on content** - artifacts are standard-format files, never transformed
 - **Vendor is a deployment concern** - harnesses define what, adapters decide where/how
 - **Git is the package manager** - no registry, content cached locally by URL+ref hash
-- **Vendor-adaptive launch** - Claude and Copilot use `syscall.Exec` (native `--plugin-dir`), Codex/Cursor use child process with signal forwarding (symlink-based install)
+- **Vendor-adaptive launch** - Claude and Copilot use `syscall.Exec` (native `--plugin-dir`), OpenCode uses `syscall.Exec` (`OPENCODE_CONFIG_DIR`), Codex/Cursor use child process with signal forwarding (symlink-based install)
 - **Deterministic run dir** - `~/.ynh/run/<id-fsname>/` (keyed by canonical id) overwritten each run (no temp dir leaks; same-named installs don't clobber each other)
 - **Single manifest** - `.agents/harness/plugin.json` for all config (identity, includes, hooks, MCP servers, profiles). `.harness.json` is the legacy form: only `ynd migrate` converts it, and every read command refuses a tree that still uses it with that fix, leaving the tree untouched (#406). `.ynh-plugin/` is the pre-0.8 manifest directory: not read (#404), never created. A tree you own that has one is refused with `ynd migrate`; copies ynh owns (installs, cache clones) are renamed on load.
 
@@ -106,7 +107,7 @@ hid the entire resume subsystem from anyone writing a new adapter, and later
 read 25, without `AgentPluginLayout`, while the interface had 26.
 
 Two launch patterns:
-- **Claude, Copilot** (`NeedsSymlinks() = false`): `syscall.Exec` with `--plugin-dir` for clean process replacement. No ynh process running.
+- **Claude, Copilot** (`NeedsSymlinks() = false`): `syscall.Exec` with `--plugin-dir` for clean process replacement. **OpenCode** (also `false`): `syscall.Exec` of `opencode --standalone` with `OPENCODE_CONFIG_DIR`. No ynh process running.
 - **Codex/Cursor** (`NeedsSymlinks() = true`): Child process via `os/exec.Command` with signal forwarding (`SIGINT`/`SIGTERM`). ynh stays alive for cleanup.
 
 New vendors: the adapter is one file in `internal/vendor/` that implements the interface and self-registers via `init()`, but a vendor also needs its per-vendor declarations (hook events, hook timeouts, session-start context, workspace) and the tables that read them, plus schema, image, parity, tests and docs. Follow the `add-vendor-adapter` skill, which lists every touch point.

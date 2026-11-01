@@ -124,7 +124,12 @@ know which vendor flags take a value: a bare word right after a passed-through
 flag is that flag's value ("--model haiku"), except the last bare word, which
 is the prompt. Write the value with "=" ("--model=haiku"), or put the prompt
 after --, when that would read your words the wrong way. Before --, a word
-right after a flag is always its value.
+right after a flag is always its value. After --, the first word is the
+prompt unless it starts with "-"; a word starting with "-" there is a vendor
+flag, never the prompt. Every later word is forwarded to the vendor, so
+'say ok' -- -m gpt-5 prompts "say ok" and forwards -m gpt-5. A prompt that
+itself starts with "-" cannot be given this way. The safest form for a value
+is "--model=gpt-5".
 
 Examples:
   ynh run local/david
@@ -197,6 +202,18 @@ Manage local harness source directories.
   ynh sources remove <name>   Remove a source
 
 Run 'ynh sources <subcommand> --help' for a subcommand's arguments and flags.`,
+
+	"telemetry": `ynh telemetry registry [flags]
+
+Print ynh's telemetry registry: the names it emits in OpenTelemetry under the
+ynh. prefix (attributes, spans and events), the OpenTelemetry names it uses
+beside them, and the semantic-conventions version it follows. The registry is
+an OpenTelemetry Weaver registry embedded in the binary; its tool name and
+version are what service.name and service.version say on every record.
+The JSON shape is the one every tool of the family prints, which ynr reads.
+
+Flags:
+  --format text|json   Output format (default text)`,
 
 	"paths": `ynh paths [flags]
 
@@ -435,11 +452,13 @@ Flags:
   --task <text|@file>         The task to work on
   --focus <name>              Load a named focus instead of a task
   --profile <name>            Apply a named profile overlay
-  --backend <name>            Worker backend: claude (default), codex, cursor.
+  --backend <name>            Worker backend: claude (default), codex, cursor,
+                              opencode.
                               On --resume, the session's backend
   --model <name>              Model override
   --effort low|medium|high    Reasoning effort, mapped to the backend's own
-                              setting (claude, codex; refused on cursor).
+                              setting (claude, codex; refused on cursor and
+                              opencode).
                               Overrides the harness's agent.effort. Not
                               restored on --resume.
   --worktree <path>          Run against a specific worktree
@@ -453,9 +472,9 @@ Flags:
                               write allowlist (claude only); none by default
   --auto-approve edits|all    Approve the worker's file edits, or everything,
                               without prompting (off by default; claude,
-                              codex, cursor). Only for runs inside containment
-                              you own; refused if the project sets its own
-                              permission mode. Not restored on --resume.
+                              codex, cursor, opencode). Only for runs inside
+                              containment you own; refused if the project sets
+                              its own permission mode. Not restored on --resume.
   --convergence-sensor <name> Sensor that decides the run is done
   --sensor-overlay <json>     Substitute sensor declarations
   --emit-jsonl <path>         Write the trajectory as NDJSON

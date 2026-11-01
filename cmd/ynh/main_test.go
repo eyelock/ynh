@@ -288,6 +288,49 @@ func TestParseRunArgs(t *testing.T) {
 			wantArgs:   []string{"--model", "haiku", "--max-turns", "1"},
 		},
 		{
+			name:       "prompt before separator, vendor flags after it",
+			args:       []string{"my-harness", "-v", "codex", "say ok", "--", "-m", "gpt-5"},
+			wantName:   "my-harness",
+			wantVendor: "codex",
+			wantPrompt: "say ok",
+			wantArgs:   []string{"-m", "gpt-5"},
+		},
+		{
+			name:       "prompt before separator, long vendor flag after it",
+			args:       []string{"my-harness", "-v", "codex", "say ok", "--", "--model=gpt-5"},
+			wantName:   "my-harness",
+			wantVendor: "codex",
+			wantPrompt: "say ok",
+			wantArgs:   []string{"--model=gpt-5"},
+		},
+		{
+			name:       "words after the prompt after separator are forwarded, not dropped",
+			args:       []string{"my-harness", "-v", "codex", "--", "say ok", "-m", "gpt-5"},
+			wantName:   "my-harness",
+			wantVendor: "codex",
+			wantPrompt: "say ok",
+			wantArgs:   []string{"-m", "gpt-5"},
+		},
+		{
+			name:       "earlier bare word is forwarded, not dropped, when the prompt follows --",
+			args:       []string{"my-harness", "first", "--", "second"},
+			wantName:   "my-harness",
+			wantPrompt: "second",
+			wantArgs:   []string{"first"},
+		},
+		{
+			name:     "flag-looking word after -- is never the prompt (value taken by earlier flag)",
+			args:     []string{"my-harness", "--verbose", "fix", "--", "-m", "x"},
+			wantName: "my-harness",
+			wantArgs: []string{"--verbose", "fix", "-m", "x"},
+		},
+		{
+			name:     "flag-looking word after -- is never the prompt (-p takes the earlier word)",
+			args:     []string{"my-harness", "-p", "say ok", "--", "--model", "haiku"},
+			wantName: "my-harness",
+			wantArgs: []string{"-p", "say ok", "--model", "haiku"},
+		},
+		{
 			name:       "known ynh flag value is not a passthrough value",
 			args:       []string{"my-harness", "-v", "claude", "fix the bug"},
 			wantName:   "my-harness",
@@ -1221,6 +1264,10 @@ func TestFormatDelegates(t *testing.T) {
 		{"with path and ref", []harness.Delegate{
 			{GitSource: harness.GitSource{Git: "github.com/example/mono", Path: "harnesses/ops", Ref: "v2"}},
 		}, "example/mono/harnesses/ops@v2"},
+		{"with a profile and a focus", []harness.Delegate{
+			{GitSource: harness.GitSource{Git: "github.com/example/reviewer"}, Profile: "strict"},
+			{GitSource: harness.GitSource{Git: "github.com/example/triager"}, Focus: "ci-failures"},
+		}, "example/reviewer (profile strict), example/triager (focus ci-failures)"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

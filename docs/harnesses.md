@@ -183,6 +183,26 @@ A harness can be reached by more than one route: the root includes it directly a
 - **MCP servers default on.** An included harness's `null` removes a server from its dependencies only if every route to the dependency removes it. A direct include by the root removes nothing, so it keeps the server. See [Servers from Included Harnesses](mcp.md#servers-from-included-harnesses).
 - **Hooks default off.** A harness's hooks run only if every route to it says `"hooks": true` at every link. If the root includes the harness directly, that include decides alone: with `"hooks": true` its hooks run, whatever an intermediate harness's include of it says, and without it they do not. See [Hooks from Included Harnesses](hooks.md#hooks-from-included-harnesses).
 
+#### Cycles, shared includes and versions
+
+Includes form a graph, and ynh resolves it so that every harness in it is included exactly once.
+
+- **A cycle resolves.** When A includes B, B includes C and C includes A, the include that closes the cycle (C's include of A) adds nothing, because A is already included. ynh skips it, includes A, B and C once each, and notes the skipped include. `ynh info` shows the note under Includes (and in `include_notes` with `--format json`), and `ynd preview` shows it under "Include notes:":
+
+  ```
+  include cycle: root -> a -> b -> c -> a; a is already included, so this include adds nothing
+  ```
+
+  The skipped include is not a route to A, so it neither removes A's MCP servers nor withholds consent to A's hooks (see [When routes disagree](#when-routes-disagree)). A harness that includes itself directly is refused: `harness a includes itself`.
+- **A shared include collapses.** When B and C both include D (a diamond), D is included once, before the first harness that needs it.
+- **One source, one version.** A git include is known by its repository, its `path` and the commit its `ref` resolves to, so two refs that name one commit are one harness. The same repository and `path` reached at two different commits, for example B includes it at `v1` and C at `v2`, is an error naming both routes:
+
+  ```
+  include o/shared// is reached at two versions: <v1's commit> by b > o/shared, and <v2's commit> by c > o/shared; include it at one version
+  ```
+
+  Pin both includes to the same `ref`, or include the source once, from the root.
+
 Local includes are useful when a harness ships bundled artifact directories
 **inside** its root, or when a profile needs to pull in an adjacent
 directory (see [Profiles](#profiles) for profile-level includes).
@@ -297,7 +317,20 @@ At runtime, ynh generates a vendor-native agent file for each delegate containin
 - **Skills** listed from the delegate's `skills/` directory, and from the harnesses it includes
 - **MCP servers** the delegate declares, and those of the harnesses it includes, carried by the subagent alone; see [MCP servers of delegates](mcp.md#mcp-servers-of-delegates)
 
-A delegate is resolved as a harness: its own `includes` are followed, against its own directory and the same allow-list. Delegates of delegates are not followed.
+A delegate is resolved as a harness: its own `includes` are followed, against its own directory and the same allow-list. A delegate's own `delegates_to` are followed too (see [Cycles and shared delegates](#cycles-and-shared-delegates)).
+
+#### Cycles and shared delegates
+
+Delegates form a graph too, and ynh flattens it: starting from the root's `delegates_to`, it follows each delegate's own `delegates_to` and makes every harness it reaches **one top-level agent, exactly once**. An agent does not nest inside another. They all sit beside one another in the session's agents, so any of them can be asked for.
+
+- **A diamond is one agent.** When B and C both name D as a delegate, D is one agent, and both B's and C's prompts list it.
+- **A cycle ends.** When A names B and B names A, each is one agent and each lists the other.
+- **The root is never its own delegate.** A `delegates_to` entry that reaches the root harness, however far down, is skipped, and a `ynh run`, `ynd preview` or image build prints a `note:` line naming the harness that declared it. The root is the session itself, not an agent. It is recognised by its directory or its name.
+- **A harness naming itself is skipped** the same way.
+- **Each agent's prompt lists the delegates it declares itself**, under "Delegates", and tells it to hand back to the main session: it reports to the session that invoked it. It does not list the root or itself.
+- **One harness, one selection.** A [profile or focus](#profile-or-focus-of-a-delegate) is per entry. The same harness reached with two different selections (or one with a selection and one without) is an error naming both routes, as one agent cannot be both. Two different harnesses with the same `name` are an error too.
+
+A delegate's relative `git` source resolves against the delegate's own directory. `ynh trust` lists the MCP servers of every delegate reached this way. `ynh install` and `ynh update` fetch the whole graph, each nested source checked against `allowed_remote_sources`, so `ynh trust` can read every delegate's servers before the first run.
 
 #### Profile or focus of a delegate
 
@@ -319,9 +352,10 @@ A `delegates_to` entry may name one of the delegate harness's own profiles or fo
 - **Both is an error.** A focus already carries its profile, so an entry that names both is refused by `ynd validate`, by the schema, and when ynh assembles the delegate.
 - The names are the delegate's own, never `namespace:name`. A name the delegate harness does not declare fails `ynd validate` and the run, naming what it does declare. `ynd validate` reads the delegate from disk or the cache only; one it cannot read there is a note, not checked.
 - The delegate's `launch_focus` is never applied. A delegate runs a focus only when its entry names one.
+- **`ynh delegate add`** writes the selection with `--profile <name>` or `--focus <name>`; naming both is an error, with the same message `ynd validate` gives. For an installed harness the delegate is fetched and the name checked against what it declares, as `ynd validate` does; for a harness being edited in place, nothing is fetched and `ynd validate` is the check.
 - A selected focus's prompt is listed by `ynh trust show` and covered by the trust digest, since it steers the delegate for every task (see [What a command sensor can reach](sensors.md#what-a-command-sensor-can-reach)).
 
-The same selection applies wherever ynh builds a delegate: `ynh run`, `ynh agent run`, `ynd preview`, `ynh image`, `ynd export`, and the delegate servers `ynd compose` and `ynh trust` report. `ynd compose` shows the selection beside the delegate (`profile=strict`, `focus=ci-failures`).
+The same selection applies wherever ynh builds a delegate: `ynh run`, `ynh agent run`, `ynd preview`, `ynh image`, `ynd export`, and the delegate servers `ynd compose` and `ynh trust` report. `ynd compose` and `ynh info` show the selection beside the delegate (`profile=strict`, `focus=ci-failures`), `ynh ls` in brackets (`(focus ci-failures)`), and their JSON carries it as optional `profile` and `focus` fields.
 
 ## Embedded vs External Artifacts
 

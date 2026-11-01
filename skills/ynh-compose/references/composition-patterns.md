@@ -63,7 +63,7 @@ Included servers follow rules worth stating to a user: the root's server of the
 same name wins; `"name": null` in the root's `mcp_servers` (or in a profile)
 removes an inherited one; two includes declaring the same name differently is an
 error; each server expands against its own include's directory and
-`env_passthrough`, never widening the root's; a cycle of includes is refused. A
+`env_passthrough`, never widening the root's; a cycle of includes resolves, each harness in it once, with a note naming the include that closes it, but one git source included at two different versions is an error. A
 path-relative included server cannot be exported. See `docs/mcp.md`.
 
 Sensors travel so a sensor set can be published as an ordinary harness and

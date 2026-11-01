@@ -35,7 +35,7 @@ func TestWriteDelegates_NoneWritesNothing(t *testing.T) {
 func TestResolveExportDelegates_UnresolvableIsAnError(t *testing.T) {
 	_, err := ResolveExportDelegates([]harness.Delegate{
 		{GitSource: harness.GitSource{Git: "example.invalid/nope/nothing-here"}},
-	}, "", nil)
+	}, "", "root", nil)
 	if err == nil {
 		t.Fatal("an unresolvable delegate must be an error, not a silent skip")
 	}
@@ -74,7 +74,7 @@ func delegateRepo(t *testing.T, name string, servers map[string]any) string {
 func exportDelegatesFor(t *testing.T, repo string) []ExportDelegate {
 	t.Helper()
 	t.Setenv("YNH_HOME", t.TempDir())
-	ds, err := ResolveExportDelegates([]harness.Delegate{{GitSource: harness.GitSource{Git: repo}}}, "", nil)
+	ds, err := ResolveExportDelegates([]harness.Delegate{{GitSource: harness.GitSource{Git: repo}}}, "", "root", nil)
 	if err != nil {
 		t.Fatalf("ResolveExportDelegates: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestResolveExportDelegates_RefusesPathRelativeServer(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			repo := delegateRepo(t, "local-helper", map[string]any{"local-srv": server})
 			t.Setenv("YNH_HOME", t.TempDir())
-			_, err := ResolveExportDelegates([]harness.Delegate{{GitSource: harness.GitSource{Git: repo}}}, "", nil)
+			_, err := ResolveExportDelegates([]harness.Delegate{{GitSource: harness.GitSource{Git: repo}}}, "", "root", nil)
 			if err == nil {
 				t.Fatal("a server inside the delegate's directory must not export")
 			}
@@ -208,7 +208,7 @@ func TestWriteDelegates_FocusApplies(t *testing.T) {
 		}
 	}
 	t.Setenv("YNH_HOME", t.TempDir())
-	ds, err := ResolveExportDelegates([]harness.Delegate{{GitSource: harness.GitSource{Git: repo}, Focus: "triage"}}, "", nil)
+	ds, err := ResolveExportDelegates([]harness.Delegate{{GitSource: harness.GitSource{Git: repo}, Focus: "triage"}}, "", "root", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

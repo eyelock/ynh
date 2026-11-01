@@ -189,11 +189,12 @@ Expected output (Dockerfile printed to stdout):
 ```dockerfile
 FROM ghcr.io/eyelock/ynh:latest
 
-# Pre-assembled vendor layouts (all four, ready to use)
+# Pre-assembled vendor layouts (all five, ready to use)
 COPY --chown=ynh:ynh vendors/claude/ /home/ynh/.ynh/run/local--docker-demo/claude/
 COPY --chown=ynh:ynh vendors/codex/ /home/ynh/.ynh/run/local--docker-demo/codex/
 COPY --chown=ynh:ynh vendors/cursor/ /home/ynh/.ynh/run/local--docker-demo/cursor/
 COPY --chown=ynh:ynh vendors/copilot/ /home/ynh/.ynh/run/local--docker-demo/copilot/
+COPY --chown=ynh:ynh vendors/opencode/ /home/ynh/.ynh/run/local--docker-demo/opencode/
 
 # Harness source (metadata for ynh run)
 COPY --chown=ynh:ynh harness/ /home/ynh/.ynh/harnesses/local--docker-demo/

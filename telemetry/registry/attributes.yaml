@@ -1,0 +1,107 @@
+groups:
+  - id: registry.ynh
+    type: attribute_group
+    stability: development
+    brief: Attributes ynh sets on its own spans and events.
+    attributes:
+      - id: ynh.run.outcome
+        type:
+          members:
+            - {id: converged, value: converged, stability: development, brief: "Exit 0: the run converged."}
+            - {id: refused, value: refused, stability: development, brief: "The run was refused before any worker started."}
+            - {id: turn_cap, value: turn_cap, stability: development, brief: "The turn cap ended the run."}
+            - {id: token_budget, value: token_budget, stability: development, brief: "The token budget ended the run."}
+            - {id: wall_clock, value: wall_clock, stability: development, brief: "The wall-clock budget ended the run."}
+            - {id: stuck, value: stuck, stability: development, brief: "The run stopped making progress."}
+            - {id: tamper, value: tamper, stability: development, brief: "The worker changed what it must not."}
+            - {id: plan_iteration_cap, value: plan_iteration_cap, stability: development, brief: "The plan revision cap ended the run."}
+            - {id: worker_error, value: worker_error, stability: development, brief: "The worker failed."}
+            - {id: resume_error, value: resume_error, stability: development, brief: "The run could not resume."}
+            - {id: gate_error, value: gate_error, stability: development, brief: "The gate between turns could not run."}
+            - {id: user_aborted, value: user_aborted, stability: development, brief: "The user stopped the run."}
+            - {id: interrupted, value: interrupted, stability: development, brief: "The run was interrupted and can be resumed."}
+            - {id: unknown, value: unknown, stability: development, brief: "An exit code ynh has no word for."}
+        stability: development
+        brief: The outcome word for the run's exit code (docs/agent.md, Exit codes), which also sets the span's status.
+        examples: ["converged"]
+      - id: ynh.run.bound_by
+        type:
+          members:
+            - {id: turns, value: turns, stability: development, brief: "The turn cap."}
+            - {id: tokens, value: tokens, stability: development, brief: "The token budget."}
+            - {id: wall_clock, value: wall_clock, stability: development, brief: "The wall-clock budget."}
+        stability: development
+        brief: The cap that ended the run, when one did.
+        examples: ["turns"]
+      - id: ynh.run.turns
+        type: int
+        stability: development
+        brief: Turns the run took.
+        examples: [3]
+      - id: ynh.run.turn
+        type: int
+        stability: development
+        brief: On a call span, the turn the call follows.
+        examples: [2]
+      - id: ynh.run.cost_usd
+        type: double
+        stability: development
+        brief: Cost in US dollars as the backend reported it. ynh never prices tokens itself.
+        examples: [0.42]
+      - id: ynh.run.session_id
+        type: string
+        stability: development
+        brief: The run's session id, as in the run result.
+        examples: ["8e41c07d2b9a5f13"]
+      - id: ynh.run.vendor
+        type: string
+        stability: development
+        brief: The backend that ran the worker.
+        examples: ["claude", "codex", "cursor"]
+      - id: ynh.run.effort
+        type: string
+        stability: development
+        brief: The reasoning effort the backend reported.
+        examples: ["high"]
+      - id: ynh.run.effort.requested
+        type: string
+        stability: development
+        brief: The reasoning effort asked for.
+        examples: ["medium"]
+      - id: ynh.run.focus
+        type: string
+        stability: development
+        brief: The focus the run was given.
+        examples: ["triage"]
+      - id: ynh.run.profile
+        type: string
+        stability: development
+        brief: The profile the run was given.
+        examples: ["ci"]
+      - id: ynh.run.resumed
+        type: boolean
+        stability: development
+        brief: True for a run that resumes an earlier session.
+        examples: [true]
+      - id: ynh.harness.name
+        type: string
+        stability: development
+        brief: The harness's canonical id.
+        examples: ["local/demo", "github.com/eyelock/assistants/ynh/review"]
+      - id: ynh.harness.version
+        type: string
+        stability: development
+        brief: The harness's declared version.
+        examples: ["0.1.0"]
+      - id: ynh.harness.commit
+        type: string
+        stability: development
+        brief: The commit the harness was installed from.
+        examples: ["3f2c9a1"]
+      - id: ynh.call.outcome
+        type: string
+        stability: development
+        brief: >
+          On a call span, the call's outcome: the gate's verdict (pass, blocked), the sensor's status
+          word, or error when the call could not run.
+        examples: ["pass", "blocked", "error"]
