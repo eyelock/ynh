@@ -24,31 +24,27 @@ type ExportDelegate struct {
 	basePath string
 	included []resolver.ResolveResult
 	focus    *harness.DelegateFocus
+	declared []string
 	servers  map[string]plugin.MCPServer
 }
 
 // ResolveExportDelegates resolves each delegate as a harness: its includes
 // are resolved against its own directory (checked against cfg), and its MCP
 // servers are composed the way an export carries them, with ${VAR} left
-// literal. A server that points into the delegate's or an include's
+// literal. Delegates are flattened as AssembleDelegates does. A server that points into the delegate's or an include's
 // directory cannot be exported and is an error. harnessDir is the exporting
 // harness's directory, which a relative delegate source resolves against.
-func ResolveExportDelegates(delegates []harness.Delegate, harnessDir string, cfg *config.Config) ([]ExportDelegate, error) {
+func ResolveExportDelegates(delegates []harness.Delegate, harnessDir, rootName string, cfg *config.Config) ([]ExportDelegate, error) {
+	flat, err := resolver.FlattenDelegates(delegates, harnessDir, rootName, func(gs harness.GitSource, dir string) (string, error) {
+		base, _, err := resolver.ResolveGitSource(gs, dir)
+		return base, err
+	})
+	if err != nil {
+		return nil, err
+	}
 	var out []ExportDelegate
-	for _, del := range delegates {
-		basePath, _, err := resolver.ResolveGitSource(del.GitSource, harnessDir)
-		if err != nil {
-			return nil, fmt.Errorf("delegate: %w", err)
-		}
-
-		delHarness, err := harness.LoadDir(basePath)
-		if err != nil {
-			return nil, fmt.Errorf("loading delegate harness %s: %w", del.Git, err)
-		}
-		delHarness, focus, err := del.Select(delHarness)
-		if err != nil {
-			return nil, err
-		}
+	for _, fd := range flat {
+		basePath, delHarness, focus := fd.BasePath, fd.Harness, fd.Focus
 
 		included, _, err := resolver.ResolveSelected(delHarness, cfg, harness.Selection{})
 		if err != nil {
@@ -58,7 +54,7 @@ func ResolveExportDelegates(delegates []harness.Delegate, harnessDir string, cfg
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, ExportDelegate{harness: delHarness, basePath: basePath, included: included, focus: focus, servers: servers})
+		out = append(out, ExportDelegate{harness: delHarness, basePath: basePath, included: included, focus: focus, declared: fd.Declared, servers: servers})
 	}
 	return out, nil
 }
@@ -86,7 +82,7 @@ func WriteDelegates(outputDir string, delegates []ExportDelegate, carrier assemb
 			}
 		}
 
-		agentContent := assembler.BuildDelegateAgent(del.harness, del.basePath, del.included, del.focus, mcpLine)
+		agentContent := assembler.BuildDelegateAgent(del.harness, del.basePath, del.included, del.focus, del.declared, mcpLine)
 		agentFile := filepath.Join(agentsDir, del.harness.Name+".md")
 		if err := os.WriteFile(agentFile, []byte(agentContent), 0o644); err != nil {
 			return fmt.Errorf("writing delegate agent %s: %w", del.harness.Name, err)

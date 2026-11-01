@@ -163,6 +163,12 @@ cache is used as it is; one that is not is cloned while the run sets up, so **a
 lane's egress must allow the hosts the delegates name** as well as the
 includes'.
 
+A delegate's own `delegates_to` are followed: every harness reached is one
+agent, once, and the root is never its own delegate (see
+[Cycles and shared delegates](harnesses.md#cycles-and-shared-delegates)). A
+delegate that is only reached through another still needs its host allowed, and
+is cloned at setup if it is not cached.
+
 Each delegate brings its own [MCP servers](mcp.md#mcp-servers-of-delegates),
 for its subagent only: the worker's main session does not list them, and
 `mcp_isolation` keeps them. Whether they reach the subagent depends on the

@@ -278,7 +278,7 @@ func cmdRun(args []string) error {
 		}
 
 		// Assemble delegate harnesses as agent files
-		if _, err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo, p.Dir, assembler.DelegateOptions{Config: cfg, Launch: true}); err != nil {
+		if _, err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo, p.Dir, assembler.DelegateOptions{Config: cfg, Launch: true, RootName: p.Name}); err != nil {
 			return fmt.Errorf("assembling delegates: %w", err)
 		}
 

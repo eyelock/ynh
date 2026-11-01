@@ -1700,7 +1700,7 @@ func assembleHarness(h *harness.Harness, backendName string, sel harness.Selecti
 			return "", nil, fmt.Errorf("delegate %q: %w", del.Git, chkErr)
 		}
 	}
-	if _, delErr := assembler.AssembleDelegates(dir, adapter, h.DelegatesTo, h.Dir, assembler.DelegateOptions{Config: cfg, Launch: true}); delErr != nil {
+	if _, delErr := assembler.AssembleDelegates(dir, adapter, h.DelegatesTo, h.Dir, assembler.DelegateOptions{Config: cfg, Launch: true, RootName: h.Name}); delErr != nil {
 		_ = os.RemoveAll(dir)
 		return "", nil, fmt.Errorf("assembling delegates: %w", delErr)
 	}

@@ -317,7 +317,20 @@ At runtime, ynh generates a vendor-native agent file for each delegate containin
 - **Skills** listed from the delegate's `skills/` directory, and from the harnesses it includes
 - **MCP servers** the delegate declares, and those of the harnesses it includes, carried by the subagent alone; see [MCP servers of delegates](mcp.md#mcp-servers-of-delegates)
 
-A delegate is resolved as a harness: its own `includes` are followed, against its own directory and the same allow-list. Delegates of delegates are not followed.
+A delegate is resolved as a harness: its own `includes` are followed, against its own directory and the same allow-list. A delegate's own `delegates_to` are followed too (see [Cycles and shared delegates](#cycles-and-shared-delegates)).
+
+#### Cycles and shared delegates
+
+Delegates form a graph too, and ynh flattens it: starting from the root's `delegates_to`, it follows each delegate's own `delegates_to` and makes every harness it reaches **one top-level agent, exactly once**. An agent does not nest inside another. They all sit beside one another in the session's agents, so any of them can be asked for.
+
+- **A diamond is one agent.** When B and C both name D as a delegate, D is one agent, and both B's and C's prompts list it.
+- **A cycle ends.** When A names B and B names A, each is one agent and each lists the other.
+- **The root is never its own delegate.** A `delegates_to` entry that reaches the root harness, however far down, is skipped, and a `ynh run`, `ynd preview` or image build prints a `note:` line naming the harness that declared it. The root is the session itself, not an agent. It is recognised by its directory or its name.
+- **A harness naming itself is skipped** the same way.
+- **Each agent's prompt lists the delegates it declares itself**, under "Delegates", and tells it to hand back to the main session: it reports to the session that invoked it. It does not list the root or itself.
+- **One harness, one selection.** A [profile or focus](#profile-or-focus-of-a-delegate) is per entry. The same harness reached with two different selections (or one with a selection and one without) is an error naming both routes, as one agent cannot be both. Two different harnesses with the same `name` are an error too.
+
+A delegate's relative `git` source resolves against the delegate's own directory. `ynh trust` lists the MCP servers of every delegate reached this way.
 
 #### Profile or focus of a delegate
 
