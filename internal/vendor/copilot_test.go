@@ -499,7 +499,7 @@ func TestIsolateMCP_PartialAndUnsupportedVendors(t *testing.T) {
 		t.Errorf("copilot warning = %q, want it to name ~/.copilot/mcp-config.json", warning)
 	}
 
-	for name, a := range map[string]Adapter{"codex": &Codex{}, "cursor": &Cursor{}} {
+	for name, a := range map[string]Adapter{"codex": &Codex{}, "cursor": &Cursor{}, "opencode": &OpenCode{}} {
 		args, warning := a.IsolateMCP(dir)
 		if len(args) != 0 {
 			t.Errorf("%s args = %v, want none", name, args)
