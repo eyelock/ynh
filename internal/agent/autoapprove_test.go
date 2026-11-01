@@ -25,10 +25,13 @@ func TestValidateAutoApprove(t *testing.T) {
 		{"", "claude", ""},
 		{"", "codex", ""},
 		{"", "cursor", ""},
+		{"", "opencode", ""},
 		{"edits", "claude", ""},
 		{"all", "claude", ""},
 		{"all", "codex", ""},
 		{"all", "cursor", ""},
+		{"all", "opencode", ""},
+		{"edits", "opencode", "opencode cannot auto-approve edits only"},
 		{"edits", "codex", "codex cannot auto-approve edits only"},
 		{"edits", "cursor", "cursor cannot auto-approve edits only"},
 		{"all", "copilot", "not supported by the copilot backend"},
@@ -56,7 +59,7 @@ func TestValidateAutoApprove(t *testing.T) {
 var permissionFlags = []string{
 	"--permission-mode", "--dangerously-skip-permissions", "--allow-dangerously-skip-permissions",
 	"--dangerously-bypass-approvals-and-sandbox", "--yolo", "--full-auto", "--ask-for-approval",
-	"-a", "--sandbox", "-s", "--force", "-f",
+	"-a", "--sandbox", "-s", "--force", "-f", "--auto",
 }
 
 // backendArgs returns the argument list each backend builds for opts.
@@ -66,6 +69,8 @@ func backendArgs(backend string, opts StartOptions) []string {
 		return buildClaudeStreamArgs(opts)
 	case "codex":
 		return buildCodexArgs(opts, "")
+	case "opencode":
+		return buildOpenCodeArgs(opts, "", "do the task")
 	default:
 		return buildCursorArgs(opts, "chat", true, "do the task")
 	}
@@ -85,6 +90,8 @@ func TestBackendArgs_AutoApproveMapping(t *testing.T) {
 		{"claude", "all", []string{"--permission-mode", "bypassPermissions"}},
 		{"codex", "all", []string{"--dangerously-bypass-approvals-and-sandbox"}},
 		{"cursor", "all", []string{"--force"}},
+		{"opencode", "", nil},
+		{"opencode", "all", []string{"--auto"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.backend+"/"+tt.level, func(t *testing.T) {
@@ -212,7 +219,7 @@ func TestProjectPermissionSetting_IgnoresUserSettings(t *testing.T) {
 	writeFile(t, filepath.Join(home, ".claude", "settings.json"), `{"permissions":{"defaultMode":"plan"}}`)
 	writeFile(t, filepath.Join(home, ".codex", "config.toml"), "approval_policy = \"never\"\n")
 	project := t.TempDir()
-	for _, backend := range []string{"claude", "codex", "cursor"} {
+	for _, backend := range []string{"claude", "codex", "cursor", "opencode"} {
 		got, err := projectPermissionSetting(project, backend)
 		if err != nil || got != "" {
 			t.Errorf("%s: got %q, %v; want no setting", backend, got, err)
@@ -388,10 +395,15 @@ func TestBackends_VendorRefusalIsWorkerError(t *testing.T) {
 		{&ClaudeBackend{}, claudeRootRefusal},
 		{&CodexBackend{}, "error: approval policy disabled by managed configuration"},
 		{&CursorBackend{}, "Error: --force is disabled by your administrator"},
+		{&OpenCodeBackend{}, "Error: --auto is disabled by your administrator"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.backend.Name(), func(t *testing.T) {
-			fakeVendor(t, tt.backend.Name(), "", tt.stderr, 1)
+			if tt.backend.Name() == "opencode" {
+				fakeOpenCode(t, "opencode v2.0.27", "", tt.stderr, 1) // Start gates on --version
+			} else {
+				fakeVendor(t, tt.backend.Name(), "", tt.stderr, 1)
+			}
 			var operator bytes.Buffer
 			sess, err := tt.backend.Start(context.Background(), StartOptions{
 				WorktreeDir: t.TempDir(),

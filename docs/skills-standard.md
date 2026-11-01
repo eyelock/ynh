@@ -4,7 +4,7 @@ ynh harnesses use the [Agent Skills](https://agentskills.io) open standard for p
 
 ## The Standard
 
-Agent Skills is an open specification originally developed by Anthropic for Claude Code, now adopted by 30+ tools including Cursor, OpenAI Codex, GitHub Copilot, VS Code, Gemini CLI, JetBrains Junie, and others.
+Agent Skills is an open specification originally developed by Anthropic for Claude Code, now adopted by 30+ tools including Cursor, OpenAI Codex, GitHub Copilot, OpenCode, VS Code, Gemini CLI, JetBrains Junie, and others.
 
 - **Spec:** [agentskills.io/specification](https://agentskills.io/specification)
 - **GitHub:** [github.com/agentskills/agentskills](https://github.com/agentskills/agentskills)

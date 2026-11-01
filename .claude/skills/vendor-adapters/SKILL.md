@@ -20,6 +20,7 @@ its adapter.
 | OpenAI Codex | [`references/codex.md`](references/codex.md) | `internal/vendor/codex.go` |
 | Cursor | [`references/cursor.md`](references/cursor.md) | `internal/vendor/cursor.go` |
 | GitHub Copilot CLI | [`references/copilot.md`](references/copilot.md) | `internal/vendor/copilot.go` |
+| OpenCode (2.x) | [`references/opencode.md`](references/opencode.md) | `internal/vendor/opencode.go` |
 
 `ynh vendors` is the authority on which vendors exist. If it lists one with no
 row here, that is the bug to fix first.
@@ -83,6 +84,17 @@ row here, that is the bug to fix first.
 and available models change often." Verify flags against `copilot help`
 output before hardcoding into the adapter, don't trust docs/blog snapshots
 alone.
+
+### OpenCode (2.x)
+
+| Area | URL |
+|------|-----|
+| v2 Config | https://opencode.ai/v2/docs/config |
+| v2 Plugins (loading) | https://opencode.ai/v2/docs/plugins |
+| v2 Build a plugin (hooks) | https://opencode.ai/v2/docs/build/plugins |
+| v2 MCP servers | https://opencode.ai/v2/docs/mcp-servers |
+| Config schema | https://opencode.ai/config.json |
+| GitHub Repo | https://github.com/anomalyco/opencode |
 
 ### Cross-Vendor Standards
 

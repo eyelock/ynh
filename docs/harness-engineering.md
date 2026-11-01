@@ -90,7 +90,7 @@ YNH covers the **guide layer** thoroughly and **declares** the sensor layer:
 | Feedforward Guides | Skills, rules, instructions, agents |
 | Feedback Sensors (declared) | `sensors` block — observation surfaces a loop driver consumes |
 | Harness Templates | A harness bundles guides for a use case |
-| Vendor Abstraction | Single harness → Claude/Cursor/Codex layouts |
+| Vendor Abstraction | Single harness → Claude/Cursor/Codex/Copilot/OpenCode layouts |
 | Composition | `includes` (external Git) + `delegates_to` (subagents) |
 | Distribution | Registry, marketplace, export, Docker images |
 | Agent Skills Standard | Native [agentskills.io](https://agentskills.io) support |

@@ -39,7 +39,10 @@ func TestCodexDelegateAgentFile_RefusesPathNames(t *testing.T) {
 func TestCodexTransformArtifact_AgentToTOML(t *testing.T) {
 	c := &Codex{}
 	src := "---\nname: code-reviewer\ndescription: >\n  Reviews \"diffs\"\n  for bugs.\ntools: Read, Grep\nmodel: sonnet\n---\n\nYou review code.\nCheck C:\\tmp.\n"
-	name, data := c.TransformArtifact("agents", "reviewer.md", []byte(src))
+	name, data, err := c.TransformArtifact("agents", "reviewer.md", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if name != "reviewer.toml" {
 		t.Errorf("file = %q, want reviewer.toml", name)
 	}
@@ -56,7 +59,10 @@ func TestCodexTransformArtifact_AgentToTOML(t *testing.T) {
 // agent's name, and the required description names the agent.
 func TestCodexTransformArtifact_AgentWithoutFrontmatter(t *testing.T) {
 	c := &Codex{}
-	name, data := c.TransformArtifact("agents", "helper.md", []byte("Just help.\n"))
+	name, data, err := c.TransformArtifact("agents", "helper.md", []byte("Just help.\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if name != "helper.toml" {
 		t.Errorf("file = %q, want helper.toml", name)
 	}
@@ -76,7 +82,10 @@ func TestCodexTransformArtifact_Passthrough(t *testing.T) {
 		{"skills", "SKILL.md"},
 		{"agents", "notes.txt"},
 	} {
-		name, data := c.TransformArtifact(tc.typ, tc.name, []byte("x"))
+		name, data, err := c.TransformArtifact(tc.typ, tc.name, []byte("x"))
+		if err != nil {
+			t.Fatal(err)
+		}
 		if name != tc.name || string(data) != "x" {
 			t.Errorf("%s/%s: got %q %q, want it unchanged", tc.typ, tc.name, name, data)
 		}
@@ -98,7 +107,10 @@ func TestCodexTransformArtifact_AgentEffort(t *testing.T) {
 		{"", ""},
 	} {
 		src := "---\nname: probe\ndescription: d\neffort: " + tc.effort + "\n---\nBody.\n"
-		_, data := c.TransformArtifact("agents", "probe.md", []byte(src))
+		_, data, err := c.TransformArtifact("agents", "probe.md", []byte(src))
+		if err != nil {
+			t.Fatal(err)
+		}
 		want := "name = \"probe\"\n" +
 			"description = \"d\"\n" +
 			tc.want +
@@ -130,7 +142,10 @@ func TestCodexTransformArtifact_ShellTool(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			src := "---\nname: probe\ndescription: d\n" + tc.frontmatter + "\n---\nBody.\n"
-			_, data := c.TransformArtifact("agents", "probe.md", []byte(src))
+			_, data, err := c.TransformArtifact("agents", "probe.md", []byte(src))
+			if err != nil {
+				t.Fatal(err)
+			}
 			if got := strings.Contains(string(data), "features.shell_tool = false\n"); got != tc.off {
 				t.Errorf("shell_tool off = %v, want %v; got\n%s", got, tc.off, data)
 			}

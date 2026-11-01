@@ -49,11 +49,12 @@ ynh vendors
 
 Expected:
 ```
-NAME     DISPLAY NAME        CLI      CONFIG DIR  AVAILABLE
-claude   Claude Code         claude   .claude     true
-codex    OpenAI Codex        codex    .codex      true
-copilot  GitHub Copilot CLI  copilot  .copilot    true
-cursor   Cursor              agent    .cursor     true
+NAME      DISPLAY NAME        CLI       CONFIG DIR  AVAILABLE
+claude    Claude Code         claude    .claude     true
+codex     OpenAI Codex        codex     .codex      true
+copilot   GitHub Copilot CLI  copilot   .copilot    true
+cursor    Cursor              agent     .cursor     true
+opencode  OpenCode            opencode  .opencode   true
 ```
 
 ## How vendor resolution works
@@ -285,8 +286,8 @@ rm -rf /tmp/ynh-tutorial
 
 ## What you learned
 
-- ynh supports four vendors: Claude, Codex, Copilot, Cursor
-- Claude uses `--plugin-dir` (no symlinks needed)
+- ynh supports five vendors: Claude, Codex, Copilot, Cursor, OpenCode
+- Claude uses `--plugin-dir` (no symlinks needed); OpenCode loads a config directory named by `OPENCODE_CONFIG_DIR`, also with no symlinks
 - Codex and Cursor need symlinks from the project directory to ynh's staging area
 - ynh **automatically prompts** to install symlinks on first run in a project
 - `--install` and `--clean` manage symlinks explicitly without launching

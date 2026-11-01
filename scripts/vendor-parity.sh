@@ -143,11 +143,29 @@ while IFS=$'\t' read -r name cfgdir; do
 	echo "  $name: $count artifacts, $instr instructions file"
 done < "$TMP/vendors.tsv"
 
+# Vendors with no plugin manifest format at all, so plugin/ is absent by
+# design rather than dropped. Named here, not inferred from the preview: a
+# vendor that broke its manifest would otherwise exempt itself. A vendor listed
+# here is still compared on every other artifact. OpenCode 2 has no manifest
+# (see the vendor-adapters reference, opencode.md).
+NO_MANIFEST_VENDORS="opencode"
+
 REF=$(head -1 "$TMP/vendors.tsv" | cut -f1)
 echo
 while IFS=$'\t' read -r name _; do
 	[ "$name" = "$REF" ] && continue
-	if ! diff -u "$TMP/artifacts-$REF.txt" "$TMP/artifacts-$name.txt" > "$TMP/diff-$name.txt"; then
+	want="$TMP/artifacts-$REF.txt"
+	case " $NO_MANIFEST_VENDORS " in
+	*" $name "*)
+		if grep -q '^plugin/' "$TMP/artifacts-$name.txt"; then
+			echo "  FAIL     $name: listed as having no manifest, but wrote plugin/ entries"
+			fail=1
+		fi
+		grep -v '^plugin/' "$want" > "$TMP/want-$name.txt" || true
+		want="$TMP/want-$name.txt"
+		;;
+	esac
+	if ! diff -u "$want" "$TMP/artifacts-$name.txt" > "$TMP/diff-$name.txt"; then
 		echo "  MISMATCH $REF vs $name:"
 		sed 's/^/      /' "$TMP/diff-$name.txt"
 		fail=1

@@ -187,6 +187,7 @@ Exported for merged → /tmp/ynh-tutorial/mcp-merged (0 skills, 0 agents)
 ./.cursorrules
 ./.github/mcp.json
 ./.mcp.json
+./.opencode/opencode.json
 ./AGENTS.md
 ./CLAUDE.md
 ./mcp.json
@@ -487,10 +488,10 @@ rm -rf /tmp/ynh-tutorial
 
 - MCP servers are declared in `.agents/harness/plugin.json` under `mcp_servers`
 - Servers can use stdio transport (`command` + `args`) or HTTP transport (`url`)
-- All four vendors use JSON with a `mcpServers` key, but in different file locations
+- Claude, Codex, Cursor and Copilot use JSON with a `mcpServers` key, but in different file locations. OpenCode nests its servers under `mcp.servers` in `.opencode/opencode.json`
 - Claude places MCP config at `.claude/.mcp.json`, Cursor at `.cursor/mcp.json`, Codex at `.mcp.json` (plugin root) and Copilot at `.copilot/.mcp.json`
 - The entries differ in the `type` field: Claude and Codex set it only on a remote server (`http` or `sse`), Cursor has none, and Copilot sets it on every server (`local`, `http` or `sse`)
-- An export writes each vendor's plugin MCP file instead: Claude's `mcp/claude.json` (named by its manifest), Codex's `.mcp.json`, Cursor's root `mcp.json`, Copilot's `.github/mcp.json`. No two share a path, so a merged package carries all four
+- An export writes each vendor's plugin MCP file instead: Claude's `mcp/claude.json` (named by its manifest), Codex's `.mcp.json`, Cursor's root `mcp.json`, Copilot's `.github/mcp.json` and OpenCode's `.opencode/opencode.json`. No two share a path, so a merged package carries all five
 - `ynd preview` and `ynd diff` let you verify MCP config without installing
 - MCP servers can be edited from the CLI with `ynh mcp add/update/remove` (top-level) and `ynh profile mcp add/update/remove` (profile-level), with `--null` available on profile-level to suppress an inherited entry
 - An included harness's MCP servers come with the include; `null` in the including harness's `mcp_servers` drops one

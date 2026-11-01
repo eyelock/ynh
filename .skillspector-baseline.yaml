@@ -124,6 +124,11 @@ rules:
     path: "*add-vendor-adapter/SKILL.md"
     reason: "Matches the onboarding checklist's lines on auto-approve modes ('which of edits and all the backend can honour'). They tell a contributor to research and refuse levels a vendor cannot enforce; the skill grants no agent autonomy."
 
+  # --- PE1 · Excessive Permissions -----------------------------------------
+  - id: "PE1"
+    path: "*vendor-adapters/references/opencode.md"
+    reason: "Matches the hand-tested note on OpenCode's permission rules (an allow for a scoped shell pattern after a deny-all). It records how ynh translates a Claude agent's tools list into OpenCode deny-by-default permissions so access is never widened; it grants no permissions itself."
+
   # --- RP1 · Unpinned MCP server reference --------------------------------
   - id: "RP1"
     path: "*ynh-sensors/references/starter-sets.md"

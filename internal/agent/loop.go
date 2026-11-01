@@ -61,7 +61,7 @@ type RunOptions struct {
 	// `ynh run --focus`. "namespace:name" names a focus of an included
 	// harness. Mutually exclusive with Task and Profile.
 	Focus string
-	// Backend selects the worker backend ("claude", "codex" or "cursor").
+	// Backend selects the worker backend ("claude", "codex", "cursor" or "opencode").
 	// Defaults to "claude", or on a resume to the checkpoint's backend, which
 	// it may repeat but not change.
 	Backend string
@@ -1811,7 +1811,7 @@ func gitAutoCommit(dir string, turnN int) error {
 
 // resumeBackend picks the backend a resume drives: the checkpoint's, which a
 // --backend flag may repeat but not change. The resume token belongs to that
-// backend (a codex thread id, a claude or cursor session id) and is meaningless
+// backend (a codex thread id, a claude, cursor or opencode session id) and is meaningless
 // to any other. A checkpoint without a backend predates recording it and was
 // claude's, the only backend then.
 func resumeBackend(flag, recorded string) (string, error) {
@@ -1885,12 +1885,12 @@ func validateBackend(name string) (string, error) {
 	switch name {
 	case "":
 		return "claude", nil
-	case "claude", "codex", "cursor":
+	case "claude", "codex", "cursor", "opencode":
 		return name, nil
 	case "claude-code":
 		return "", fmt.Errorf("unknown backend %q (did you mean \"claude\"?)", name)
 	default:
-		return "", fmt.Errorf("unknown backend %q (supported: claude, codex, cursor)", name)
+		return "", fmt.Errorf("unknown backend %q (supported: claude, codex, cursor, opencode)", name)
 	}
 }
 
@@ -1904,8 +1904,10 @@ func selectBackend(name string) (WorkerBackend, error) {
 		return &CodexBackend{}, nil
 	case "cursor":
 		return &CursorBackend{}, nil
+	case "opencode":
+		return &OpenCodeBackend{}, nil
 	default:
-		return nil, fmt.Errorf("unknown backend %q (supported: claude, codex, cursor)", name)
+		return nil, fmt.Errorf("unknown backend %q (supported: claude, codex, cursor, opencode)", name)
 	}
 }
 

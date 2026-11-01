@@ -27,12 +27,14 @@ func (c *Codex) DelegateAgentFile(name, description, prompt string) (string, []b
 // custom agents. Codex reads only TOML files in .codex/agents/
 // (learn.chatgpt.com/docs/agent-configuration/subagents), so a Markdown agent linked there
 // would never be one. Other artifact types pass through unchanged.
-func (c *Codex) TransformArtifact(artifactType, name string, data []byte) (string, []byte) {
+// It never fails: every agent can be written as a custom agent, so the error
+// the ArtifactTransformer contract allows for is always nil here.
+func (c *Codex) TransformArtifact(artifactType, name string, data []byte) (string, []byte, error) {
 	if artifactType != "agents" || !strings.HasSuffix(name, ".md") {
-		return name, data
+		return name, data, nil
 	}
 	stem := strings.TrimSuffix(name, ".md")
-	return stem + ".toml", codexAgentTOML(parseCodexAgent(stem, data))
+	return stem + ".toml", codexAgentTOML(parseCodexAgent(stem, data)), nil
 }
 
 // ArtifactWarnings returns what a run loses when TransformArtifact writes an
