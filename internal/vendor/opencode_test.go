@@ -691,6 +691,8 @@ func TestOpenCodeHooksPluginBehaviour(t *testing.T) {
 	marker := filepath.Join(dir, "edit-marker")
 	stdinLog := filepath.Join(dir, "stdin.json")
 	mcpLog := filepath.Join(dir, "mcp.json")
+	underLog := filepath.Join(dir, "under.json")
+	otherLog := filepath.Join(dir, "other.jsonl")
 	write := func(rel, content string) {
 		t.Helper()
 		p := filepath.Join(dir, rel)
@@ -705,15 +707,17 @@ func TestOpenCodeHooksPluginBehaviour(t *testing.T) {
 	write("node_modules/@opencode/plugin/package.json", `{"name":"@opencode/plugin","type":"module","main":"index.js"}`)
 	write("node_modules/@opencode/plugin/index.js", `export const Plugin = { define: (p) => p }`)
 
-	files, err := (&OpenCode{}).GenerateHookConfig(map[string][]plugin.HookEntry{
+	files, err := (&OpenCode{}).GenerateHookConfigForServers(map[string][]plugin.HookEntry{
 		"before_tool": {
 			{Matcher: "Edit", Command: "touch '" + marker + "'"},
 			{Matcher: "Bash", Command: "cat > '" + stdinLog + "'; exit 1"},
 			{Matcher: "mcp__echo__ynh_ping", Command: "cat > '" + mcpLog + "'"},
+			{Matcher: "mcp__my_srv__do_it", Command: "cat > '" + underLog + "'"},
+			{Matcher: "opencode_list_mcp_resources|unknown_tool", Command: "cat >> '" + otherLog + "'"},
 			{Matcher: "Bash|Task", Command: "echo 'use make instead' >&2; exit 2"},
 		},
 		"after_tool": {{Matcher: "mcp__srv__do_it", Command: "exit 0"}},
-	})
+	}, []string{"echo", "my_srv", "my"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -729,7 +733,7 @@ const ctx = {
 }
 const cleanup = plugin.setup(ctx)
 const out = {}
-for (const tool of ["shell", "read", "edit", "subagent", "echo_ynh_ping"]) {
+for (const tool of ["shell", "read", "edit", "subagent", "echo_ynh_ping", "my_srv_do_it", "opencode_list_mcp_resources", "unknown_tool"]) {
   try { hooks["execute.before"]({ tool, sessionID: "s1", input: { command: "ls", path: "/a" } }); out[tool] = "ok" }
   catch (e) { out[tool] = "threw: " + e.message }
 }
@@ -773,6 +777,37 @@ console.log(JSON.stringify(out))
 	}
 	if mcpStdin["tool_name"] != "mcp__echo__ynh_ping" {
 		t.Errorf("MCP tool_name = %v, want Claude's mcp__echo__ynh_ping", mcpStdin["tool_name"])
+	}
+	// A server whose name holds an underscore maps exactly, on its full name
+	// rather than its first underscore.
+	underData, err := os.ReadFile(underLog)
+	if err != nil {
+		t.Fatalf("the mcp__my_srv__do_it hook did not run: %v", err)
+	}
+	var underStdin map[string]any
+	if err := json.Unmarshal(underData, &underStdin); err != nil {
+		t.Fatal(err)
+	}
+	if underStdin["tool_name"] != "mcp__my_srv__do_it" {
+		t.Errorf("tool_name for server my_srv = %v, want mcp__my_srv__do_it", underStdin["tool_name"])
+	}
+	// An id no known server prefixes, and OpenCode's own opencode_* tools,
+	// are left as they are.
+	otherData, err := os.ReadFile(otherLog)
+	if err != nil {
+		t.Fatalf("the hook for ids no server owns did not run: %v", err)
+	}
+	var names []string
+	dec := json.NewDecoder(bytes.NewReader(otherData))
+	for dec.More() {
+		var m map[string]any
+		if err := dec.Decode(&m); err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, m["tool_name"].(string))
+	}
+	if !slices.Equal(names, []string{"opencode_list_mcp_resources", "unknown_tool"}) {
+		t.Errorf("tool_name for ids no server owns = %v, want them unchanged", names)
 	}
 	if _, err := os.Stat(marker); err != nil {
 		t.Errorf("the Edit hook did not run for the edit tool: %v", err)

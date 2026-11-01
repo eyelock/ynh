@@ -3,8 +3,10 @@ package assembler
 import (
 	"crypto/sha256"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -39,7 +41,13 @@ type SessionHookScriptDirer interface {
 // each script it could not carry, and one for each hook the vendor cannot
 // express (vendor.HookWarnings), so no event is dropped silently.
 func WriteSessionHooks(dir string, adapter SessionHookGenerator, harnessDir string, hs HookSet) ([]string, error) {
-	files, err := adapter.GenerateHookConfig(hs.Hooks)
+	generate := adapter.GenerateHookConfig
+	if a, ok := adapter.(vendor.MCPAwareHooks); ok {
+		generate = func(h map[string][]plugin.HookEntry) (map[string][]byte, error) {
+			return a.GenerateHookConfigForServers(h, hs.MCPServers)
+		}
+	}
+	files, err := generate(hs.Hooks)
 	if err != nil {
 		return nil, fmt.Errorf("generating hook config: %w", err)
 	}
@@ -211,6 +219,10 @@ type HookSet struct {
 	// own last. An included harness's "./" command is already rewritten to
 	// its place under IncludeScriptDir.
 	Hooks map[string][]plugin.HookEntry
+	// MCPServers names the MCP servers the session carries, for a vendor
+	// whose hooks see an MCP tool under a name that joins server and tool
+	// (OpenCode). Set by WriteComposedSessionHooks; empty otherwise.
+	MCPServers []string
 	// Scripts maps each rewritten "./" script path in Hooks to where it is
 	// copied from. The root's scripts are not in it.
 	Scripts map[string]ScriptOrigin
@@ -347,6 +359,9 @@ func WriteComposedSessionHooks(dir string, adapter SessionHookGenerator, root *h
 	warnings := hs.Inactive
 	if len(hs.Hooks) == 0 {
 		return warnings, nil
+	}
+	if raw, _, err := harness.ComposeMCPServersRaw(root, resolver.IncludedHarnesses(resolved)); err == nil {
+		hs.MCPServers = slices.Sorted(maps.Keys(raw))
 	}
 	written, err := WriteSessionHooks(dir, adapter, root.Dir, hs)
 	if err != nil {

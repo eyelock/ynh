@@ -2,6 +2,7 @@ package exporter
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -306,7 +307,7 @@ func exportMerged(opts ExportOptions, pj *plugin.HarnessJSON, p *harness.Harness
 			if v == "copilot" && slices.Contains(vendors, "claude") {
 				result.Warnings = append(result.Warnings, vendor.ExportHookWarnings(v, p.Hooks)...)
 			} else {
-				wrote, err := writeHookConfig(outputDir, adapter, p.Hooks, v == "claude" && slices.Contains(vendors, "copilot"))
+				wrote, err := writeHookConfig(outputDir, adapter, p.Hooks, p.MCPServers, v == "claude" && slices.Contains(vendors, "copilot"))
 				if err != nil {
 					return nil, fmt.Errorf("writing hook config for %s: %w", v, err)
 				}
@@ -430,7 +431,7 @@ func exportForVendor(vendorName string, outputDir string, pj *plugin.HarnessJSON
 
 	// Hook config, and the scripts its hooks run
 	if len(p.Hooks) > 0 {
-		wrote, err := writeHookConfig(outputDir, adapter, p.Hooks, false)
+		wrote, err := writeHookConfig(outputDir, adapter, p.Hooks, p.MCPServers, false)
 		if err != nil {
 			return result, fmt.Errorf("writing hook config: %w", err)
 		}
@@ -553,8 +554,13 @@ func writeMCPConfig(outputDir string, adapter VendorExporter, servers map[string
 // the output directory. copilotReadsIt marks Claude's file as one Copilot also
 // loads. It reports whether it wrote any file: a vendor that
 // writes none needs none of the scripts they run.
-func writeHookConfig(outputDir string, adapter VendorExporter, hooks map[string][]plugin.HookEntry, copilotReadsIt bool) (bool, error) {
+func writeHookConfig(outputDir string, adapter VendorExporter, hooks map[string][]plugin.HookEntry, servers map[string]plugin.MCPServer, copilotReadsIt bool) (bool, error) {
 	generate := adapter.GenerateHookConfig
+	if a, ok := adapter.(vendor.MCPAwareHooks); ok {
+		generate = func(h map[string][]plugin.HookEntry) (map[string][]byte, error) {
+			return a.GenerateHookConfigForServers(h, slices.Sorted(maps.Keys(servers)))
+		}
+	}
 	if pg, ok := adapter.(PluginHookGenerator); ok {
 		generate = pg.GeneratePluginHookConfig
 	}

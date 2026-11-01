@@ -381,8 +381,8 @@ service, which does not see the key and lists no `anthropic/*` model;
   ran and the model got its message, and the stub server logged no call; with
   the hook removed, the same agent's call reached the server. The OpenCode id in the
   hook payload is `echo_ynh_ping`; the generated plugin rewrites `tool_name` to
-  Claude's `mcp__echo__ynh_ping` before calling hooks (split at the first
-  underscore).
+  Claude's `mcp__echo__ynh_ping` before calling hooks (split on the harness's
+  known MCP server names, longest first).
 - **`--` works in `opencode run`:** `run --standalone -m x --format json --
   "--help me"` sent the text as a message. ynh puts extra args before `--`.
 - **Scoped shell permissions:** an `allow shell "echo *"` after `* deny`

@@ -3,9 +3,11 @@ package exporter
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -115,6 +117,11 @@ func exportAgentPlugin(opts ExportOptions, hj *plugin.HarnessJSON, p *harness.Ha
 		}
 		if len(p.Hooks) > 0 && layout.Hooks != "" {
 			generate := a.GenerateHookConfig
+			if ma, ok := a.(vendor.MCPAwareHooks); ok {
+				generate = func(h map[string][]plugin.HookEntry) (map[string][]byte, error) {
+					return ma.GenerateHookConfigForServers(h, slices.Sorted(maps.Keys(p.MCPServers)))
+				}
+			}
 			if pg, ok := a.(PluginHookGenerator); ok {
 				generate = pg.GeneratePluginHookConfig
 			}
