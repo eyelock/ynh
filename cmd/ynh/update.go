@@ -168,6 +168,19 @@ func cmdUpdate(args []string) error {
 			fmt.Printf("  Already up to date.\n")
 		}
 	}
+	// Delegates of delegates run too: refresh them with the rest.
+	nested, nerr := fetchNestedDelegates(p, cfg)
+	if nerr != nil {
+		if isNestedRefusal(nerr) {
+			return fmt.Errorf("nested delegate: %w", nerr)
+		}
+		fmt.Fprintf(os.Stderr, "  Warning: nested delegates: %v\n", nerr)
+	}
+	for _, n := range nested {
+		checked++
+		resolvedSources = append(resolvedSources, n)
+		fmt.Printf("Checked nested delegate %s\n", n.Git)
+	}
 
 	// Persist resolved SHAs back to the install record so subsequent
 	// --check-updates queries can compare against the recorded SHA without

@@ -166,8 +166,9 @@ includes'.
 A delegate's own `delegates_to` are followed: every harness reached is one
 agent, once, and the root is never its own delegate (see
 [Cycles and shared delegates](harnesses.md#cycles-and-shared-delegates)). A
-delegate that is only reached through another still needs its host allowed, and
-is cloned at setup if it is not cached.
+delegate that is only reached through another still needs its host allowed.
+`ynh install` and `ynh update` fetch it with the rest, so it is cached before
+the run.
 
 Each delegate brings its own [MCP servers](mcp.md#mcp-servers-of-delegates),
 for its subagent only: the worker's main session does not list them, and
