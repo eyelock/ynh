@@ -31,6 +31,7 @@ make check-vendor-parity # every vendor documented, assembles the same artifacts
 make check-marketplace  # committed marketplace indexes agree with the plugin manifests (needs python3)
 make scan-artifacts     # SkillSpector security scan of the same dirs (needs Docker)
 make vulncheck          # govulncheck over the Go code (needs network)
+make conformance        # ynr conformance against ynh's telemetry (needs ynr and ynr-stub-vendor on PATH)
 ```
 
 `scan-artifacts` is deliberately NOT part of `make check` — it needs Docker, and a
@@ -54,6 +55,14 @@ fail tomorrow, and a non-deterministic step does not belong in the check people
 run before pushing. `.github/workflows/vulncheck.yml` gates every PR and runs
 nightly. A standard-library advisory is fixed by the `toolchain` directive in
 `go.mod`, not by a dependency bump.
+
+`make conformance` is outside `make check` too: it needs `ynr` and
+`ynr-stub-vendor` on your PATH, which CI downloads from a pinned,
+checksum-verified ynr release, and a missing optional tool should not fail a
+contributor's build. It runs the scenarios in `.ynr/conformance.yaml` against
+`bin/ynh` and the stub vendor, so it needs no model and no secret. CI's
+Conformance job runs it on every PR. See the Conformance section of
+`docs/telemetry.md`.
 
 **Do not use:** `go build ./...`, `go test ./...`, `golangci-lint run` directly. They miss flags, ldflags, or tool paths that the Makefile provides.
 
