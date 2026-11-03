@@ -5,11 +5,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -177,26 +181,107 @@ func TestChooseDestination(t *testing.T) {
 	}
 }
 
-// An OTLP endpoint is the operator's choice, and this build cannot honour it:
-// one note, nothing written, and no spool even if one is configured.
-func TestSetup_OTLPNotSupported(t *testing.T) {
+// An OTLP endpoint is the operator's choice: the run's spans and logs are
+// posted to it as OTLP/JSON, with the operator's headers, and nothing is
+// written to the spool, even one that is configured.
+func TestSetup_OTLPExports(t *testing.T) {
 	clearTelemetryEnv(t)
+	type hit struct {
+		path, auth, ctype string
+		body              []byte
+	}
+	var mu sync.Mutex
+	var hits []hit
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		hits = append(hits, hit{r.URL.Path, r.Header.Get("Authorization"), r.Header.Get("Content-Type"), body})
+		mu.Unlock()
+	}))
+	defer srv.Close()
 	spoolDir := t.TempDir()
 	t.Setenv("YNR_SPOOL", spoolDir)
-	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", srv.URL)
+	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "Authorization=Bearer s3cret")
 	var stderr bytes.Buffer
 	tel := Setup("1.0.0", Options{}, &stderr)
 	run := tel.StartRun()
 	run.Finish("converged", true)
 	tel.Shutdown()
-	if tel.Active() || tel.Destination() != DestinationOTLP {
-		t.Errorf("active=%v destination=%q, want inactive otlp", tel.Active(), tel.Destination())
+	if !tel.Active() || tel.Destination() != DestinationOTLP {
+		t.Errorf("active=%v destination=%q, want active otlp", tel.Active(), tel.Destination())
 	}
-	if n := strings.Count(stderr.String(), "\n"); n != 1 || !strings.Contains(stderr.String(), "OTEL_EXPORTER_OTLP_") {
-		t.Errorf("stderr = %q, want one note naming OTEL_EXPORTER_OTLP_*", stderr.String())
+	if tel.SpoolDir() != "" {
+		t.Errorf("SpoolDir() = %q, want none", tel.SpoolDir())
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want nothing", stderr.String())
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	seen := map[string]bool{}
+	for _, h := range hits {
+		seen[h.path] = true
+		if h.auth != "Bearer s3cret" || !strings.HasPrefix(h.ctype, "application/json") {
+			t.Errorf("%s: Authorization=%q Content-Type=%q", h.path, h.auth, h.ctype)
+		}
+		if !strings.Contains(string(h.body), `"service.name"`) || !strings.Contains(string(h.body), `"ynh"`) {
+			t.Errorf("%s body lacks the ynh resource: %s", h.path, h.body)
+		}
+	}
+	if !seen["/v1/traces"] || !seen["/v1/logs"] {
+		t.Errorf("posted to %v, want /v1/traces and /v1/logs", seen)
 	}
 	if recs := readSpool(t, spoolDir); len(recs) != 0 {
 		t.Errorf("wrote %d records to the spool", len(recs))
+	}
+}
+
+// A setting the exporter cannot honour is the operator's choice too: one
+// note naming it, never a header value, and nothing written anywhere.
+func TestSetup_OTLPUnsupported(t *testing.T) {
+	for _, env := range []map[string]string{
+		{"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc"},
+		{"OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf"},
+		{"OTEL_EXPORTER_OTLP_CERTIFICATE": "/ca.pem"},
+		{"OTEL_EXPORTER_OTLP_COMPRESSION": "gzip"},
+	} {
+		clearTelemetryEnv(t)
+		spoolDir := t.TempDir()
+		t.Setenv("YNR_SPOOL", spoolDir)
+		t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+		t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "Authorization=Bearer s3cret")
+		for k, v := range env {
+			t.Setenv(k, v)
+		}
+		var stderr bytes.Buffer
+		tel := Setup("1.0.0", Options{}, &stderr)
+		run := tel.StartRun()
+		run.Finish("converged", true)
+		tel.Shutdown()
+		if tel.Active() || tel.Destination() != DestinationOTLP {
+			t.Errorf("%v: active=%v destination=%q, want inactive otlp", env, tel.Active(), tel.Destination())
+		}
+		if n := strings.Count(stderr.String(), "\n"); n != 1 || !strings.Contains(stderr.String(), "OTEL_EXPORTER_OTLP_") {
+			t.Errorf("%v: stderr = %q, want one note naming the setting", env, stderr.String())
+		}
+		if strings.Contains(stderr.String(), "s3cret") {
+			t.Errorf("%v: the note prints a header value: %q", env, stderr.String())
+		}
+		if recs := readSpool(t, spoolDir); len(recs) != 0 {
+			t.Errorf("%v: wrote %d records to the spool", env, len(recs))
+		}
+	}
+}
+
+// Settings that name no endpoint ask for nothing: the spool order goes on.
+func TestChooseDestination_OTLPWithoutEndpoint(t *testing.T) {
+	clearTelemetryEnv(t)
+	spoolDir := t.TempDir()
+	t.Setenv("YNR_SPOOL", spoolDir)
+	t.Setenv("OTEL_EXPORTER_OTLP_TIMEOUT", "5000")
+	if got, _ := ChooseDestination(); got != DestinationSpool {
+		t.Errorf("ChooseDestination() = %q, want spool", got)
 	}
 }
 
@@ -535,5 +620,24 @@ func TestSetup_InstallsNoGlobalPropagator(t *testing.T) {
 	}
 	if len(otel.GetTextMapPropagator().Fields()) != 0 {
 		t.Errorf("global propagator fields %v, want none", otel.GetTextMapPropagator().Fields())
+	}
+}
+
+// A hung endpoint costs the run one FlushTimeout in all, however many times
+// it flushes: once a flush has run out of time, later ones give up at once.
+func TestSetup_HungEndpointBoundsTheWholeRun(t *testing.T) {
+	clearTelemetryEnv(t)
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
+	defer srv.Close()
+	defer close(release)
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", srv.URL)
+	tel := Setup("1.0.0", Options{}, io.Discard)
+	run := tel.StartRun()
+	start := time.Now()
+	run.Finish("converged", true)
+	tel.Shutdown()
+	if d := time.Since(start); d > FlushTimeout+time.Second {
+		t.Errorf("flush and shutdown took %v, want about %v", d, FlushTimeout)
 	}
 }
