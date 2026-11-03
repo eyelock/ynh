@@ -248,7 +248,7 @@ these is yours.
 
 - **Telemetry:** `ynh.label.<key>=<value>` on ynh's resource, so on every
   record `ynh agent run` writes (the registry declares the template
-  `ynh.label`). Every `ynh.label.*` in `OTEL_RESOURCE_ATTRIBUTES` is removed from ynh's environment when the run starts (with a note on stderr naming the keys), since only these were validated; the vendor and `ynh check` never inherit one.
+  `ynh.label`). Every `ynh.label.*` in `OTEL_RESOURCE_ATTRIBUTES` is removed from ynh's environment when the run starts (with a note on stderr naming the keys), since only these were validated; on `ynh agent run` the vendor and `ynh check` never inherit one. `ynh run` does not strip them yet, so its vendor still inherits an operator `ynh.label.*`: the strip belongs with the vendor's `OTEL_RESOURCE_ATTRIBUTES` that bead ynw-17g.17 writes on `ynh run`.
   `ynh run` writes no record of its own yet: when it does, it carries the
   same labels.
 - **Child processes:** ynh sets `YNH_LABELS` to the merged set in the
