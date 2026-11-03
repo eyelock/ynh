@@ -37,7 +37,9 @@ const (
 	// The commit the harness was installed from.
 	AttrHarnessCommit attribute.Key = "ynh.harness.commit"
 	// On a call span, the call's outcome: the gate's verdict (pass, blocked), the sensor's status word, or error when the call could not run.
-	AttrCallOutcome                        attribute.Key = "ynh.call.outcome"
+	AttrCallOutcome attribute.Key = "ynh.call.outcome"
+	// A run label, one attribute per key under the prefix: ynh.label.<key>, on ynh's resource. The key and value are the user's own ids, within ynr ADR-006 rule 10 (key ^[a-z][a-z0-9_.-]{0,31}$, value ^[A-Za-z0-9._/#-]{1,64}$, at most 16 per run), and ynh refuses a run whose labels break them.
+	AttrLabel                              attribute.Key = "ynh.label"
 	AttrGenAIRequestModel                  attribute.Key = "gen_ai.request.model"
 	AttrGenAIResponseModel                 attribute.Key = "gen_ai.response.model"
 	AttrGenAIUsageCacheCreationInputTokens attribute.Key = "gen_ai.usage.cache_creation.input_tokens"

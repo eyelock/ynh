@@ -641,3 +641,87 @@ func TestSetup_HungEndpointBoundsTheWholeRun(t *testing.T) {
 		t.Errorf("flush and shutdown took %v, want about %v", d, FlushTimeout)
 	}
 }
+
+// A run's labels are resource attributes, ynh.label.<key>, on every record
+// ynh writes, and they win over the operator's own ynh.label.* in
+// OTEL_RESOURCE_ATTRIBUTES.
+func TestLabelsAreResourceAttributes(t *testing.T) {
+	clearTelemetryEnv(t)
+	dir := filepath.Join(t.TempDir(), "spool")
+	t.Setenv("YNR_SPOOL", dir)
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "ynh.label.wheelhouse=operator,ynh.label.other=kept")
+	tel := Setup("1.0.0", Options{Labels: map[string]string{"wheelhouse": "ynw", "batch": "7"}}, io.Discard)
+	run := tel.StartRun()
+	run.Finish(RunOutcomeConverged, true)
+	tel.Shutdown()
+
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("no spool files: %v", err)
+	}
+	seen := 0
+	for _, e := range entries {
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+			var req struct {
+				ResourceSpans []struct{ Resource resourceDoc }
+				ResourceLogs  []struct{ Resource resourceDoc }
+			}
+			if err := json.Unmarshal([]byte(line), &req); err != nil {
+				t.Fatal(err)
+			}
+			var resources []resourceDoc
+			for _, r := range req.ResourceSpans {
+				resources = append(resources, r.Resource)
+			}
+			for _, r := range req.ResourceLogs {
+				resources = append(resources, r.Resource)
+			}
+			for _, r := range resources {
+				seen++
+				got := r.attrs()
+				for k, want := range map[string]string{
+					"ynh.label.wheelhouse": "ynw",
+					"ynh.label.batch":      "7",
+					"ynh.label.other":      "kept",
+					"service.name":         "ynh",
+				} {
+					if got[k] != want {
+						t.Errorf("resource %s = %q, want %q", k, got[k], want)
+					}
+				}
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no resource found in the spool")
+	}
+}
+
+type resourceDoc struct {
+	Attributes []struct {
+		Key   string
+		Value struct{ StringValue string }
+	}
+}
+
+func (r resourceDoc) attrs() map[string]string {
+	m := map[string]string{}
+	for _, a := range r.Attributes {
+		m[a.Key] = a.Value.StringValue
+	}
+	return m
+}
+
+func TestLabelAttributes(t *testing.T) {
+	if got := LabelAttributes(nil); len(got) != 0 {
+		t.Errorf("no labels gave %v", got)
+	}
+	got := LabelAttributes(map[string]string{"b": "2", "a": "1"})
+	if len(got) != 2 || string(got[0].Key) != "ynh.label.a" || got[1].Value.AsString() != "2" {
+		t.Errorf("attributes = %v, want sorted ynh.label.<key>", got)
+	}
+}

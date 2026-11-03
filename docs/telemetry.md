@@ -155,6 +155,9 @@ Every record carries the resource `service.name=ynh`, `service.version`, and
 to the resource, for example `deployment.environment.name`, but cannot replace
 those three: they say which registry describes the records.
 
+Each [run label](#run-labels) is a resource attribute too, `ynh.label.<key>`,
+on every record.
+
 ### Attributes
 
 The started event and the span carry what the run was asked for. The span and
@@ -201,6 +204,62 @@ Outcomes, one per [exit code](agent.md#exit-codes): `converged`, `refused`,
 `plan_iteration_cap`, `worker_error`, `resume_error`, `gate_error`,
 `user_aborted`, `interrupted`. The span's status is ok for `converged` and an
 error otherwise, described by the outcome word alone.
+
+## Run labels
+
+A label is a short `key:value` id the user chooses for a run, such as
+`wheelhouse:ynw`, so ynr can group runs and cost by Wheelhouse, project or
+batch. It belongs to the run, not to a vendor: it holds for every vendor ynh
+runs. The rules are ynr's, [ADR-006](https://github.com/eyelock/ynr/blob/develop/docs/adr/006-instrumentation-contract.md)
+rule 10.
+
+### Where they come from
+
+Four sources, merged per key, later winning:
+
+1. `"labels": {"wheelhouse": "ynw"}` in `~/.ynh/config.json`
+   (`$YNH_HOME/config.json`), for every run
+2. `"labels"` in the **root** harness's manifest
+   ([`plugin.json`](harnesses.md#labels-optional)). The labels of harnesses it
+   includes or delegates to are ignored; this is not `keywords`
+3. `YNH_LABELS`, comma-separated: `YNH_LABELS=wheelhouse:ynw,batch:7`
+4. `--label key:value`, repeatable. `--label key:` removes `key`, whatever
+   set it
+
+The flag is on `ynh run` and `ynh agent run`; `ynh run` does not pass it to the
+vendor.
+
+### What a label may be
+
+ynh refuses the run, before anything starts and before anything reaches the
+spool, if the merged set breaks any of these. It never exports a sanitised
+version, and its message names the key, never the refused value.
+
+- a key matches `^[a-z][a-z0-9_.-]{0,31}$`
+- a value matches `^[A-Za-z0-9._/#-]{1,64}$`: no spaces, no `@`
+- a value does not start with `/` or `~`, and does not contain your home folder
+- at most 16 labels
+
+A label is never a person's name or email, a host name, a secret, or a run or
+item id. ynh checks the shape, not the meaning: choosing ids that are none of
+these is yours.
+
+### Where they go
+
+- **Telemetry:** `ynh.label.<key>=<value>` on ynh's resource, so on every
+  record `ynh agent run` writes (the registry declares the template
+  `ynh.label`). They win over an `ynh.label.*` in `OTEL_RESOURCE_ATTRIBUTES`.
+  `ynh run` writes no record of its own yet: when it does, it carries the
+  same labels.
+- **Child processes:** ynh sets `YNH_LABELS` to the merged set in the
+  environment of every process it starts: the vendor CLI (including past
+  `env_passthrough`, which does not apply to it) and each `ynh check`. With no
+  labels it sets nothing, and removes an inherited `YNH_LABELS`.
+- **Not yet:** the vendor's own telemetry does not carry them. Appending them to
+  the vendor's `OTEL_RESOURCE_ATTRIBUTES` is a separate change.
+- **`ynh ls` and `ynh info`** show a harness's own manifest labels, and
+  `ynh ls --label key:value` (repeatable, every one must match) lists only
+  harnesses that carry them.
 
 ## The registry
 

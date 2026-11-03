@@ -23,6 +23,7 @@ import (
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/gate"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/labels"
 	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
@@ -143,6 +144,10 @@ type RunOptions struct {
 	// process the loop starts. Nil, or a Telemetry that returns no
 	// environment, starts every process exactly as it would without one.
 	Telemetry Telemetry
+	// Labels are the run's labels, merged and validated (internal/labels).
+	// The loop hands them to the worker and to each `ynh check` it starts as
+	// YNH_LABELS, as it does the trace context. Empty adds nothing.
+	Labels labels.Set
 
 	// backendOverride is the resolved WorkerBackend; set by tests or left nil to auto-select.
 	backendOverride WorkerBackend
@@ -655,6 +660,9 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 	}
 	// After the passthrough, so the run's own span is the vendor's parent
 	// even when a harness passes the caller's TRACEPARENT through.
+	if e := labels.EnvEntry(opts.Labels); e != "" {
+		workerEnv = append(workerEnv, e)
+	}
 	var relayEndpoint string
 	if opts.Telemetry != nil {
 		workerEnv = append(workerEnv, opts.Telemetry.WorkerEnv()...)
@@ -1158,6 +1166,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 				_ = traj.Emit(KindSensorRun, turnN, name)
 			}
 			callEnv, endCall := startCall(opts.Telemetry, CallCheck, turnN)
+			callEnv = withLabels(callEnv, opts.Labels)
 			env, checkErr := RunCheck(ynh, opts.HarnessName, opts.WorktreeDir, gateProfile, sensorNames, opts.SensorOverlay, callEnv)
 			if checkErr != nil {
 				endCall("error", false)
@@ -1207,6 +1216,7 @@ func RunLoop(opts RunOptions) (result *RunResult, err error) {
 			profile: gateProfile,
 			overlay: opts.SensorOverlay,
 			tel:     opts.Telemetry,
+			labels:  opts.Labels,
 			stop:    stopForWall,
 		}, traj, turnN, verificationExpected)
 		if convergence != nil {
@@ -1318,6 +1328,7 @@ type verifierRun struct {
 	profile string // passed to `ynh check --profile`, so verifiers see the run's severities
 	overlay map[string]json.RawMessage
 	tel     Telemetry
+	labels  labels.Set
 	// stop is asked before the verifiers run and ends the run when it returns
 	// an error. Nil asks nothing.
 	stop func() error
@@ -1409,6 +1420,7 @@ func runVerifiers(v verifierRun, traj *TrajectoryWriter, turnN int) (bool, strin
 		_ = traj.Emit(KindSensorRun, turnN, name)
 	}
 	callEnv, endCall := startCall(v.tel, CallCheck, turnN)
+	callEnv = withLabels(callEnv, v.labels)
 	venv, err := RunCheck(v.ynh, v.harness, v.cwd, v.profile, v.names, v.overlay, callEnv)
 	if err != nil {
 		// As for the per-turn gate, a check that cannot run is an operator

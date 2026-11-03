@@ -37,6 +37,7 @@ var features = []string{
 	"agent-run-harness-path",            // `ynh agent run --harness` takes a path (#564)
 	"delegate-graph-flattens",           // delegates_to is flattened: each reachable harness is one agent, the root never its own delegate (#547)
 	"include-cycles-resolve",            // an include cycle resolves, noted in `ynh info` include_notes, and one source at two versions fails (#547)
+	"run-labels",                        // `ynh run` and `ynh agent run` take run labels: config.json, the manifest, YNH_LABELS, --label; `ynh ls --label` (ynw-17g.16)
 	"trust-counts-composed-mcp-servers", // `ynh trust` mcp_servers lists servers from includes (source) and delegates (delegate) (#573, ynw-9cc.9)
 	"workspace-folders",                 // manifest `workspace`, workspace_roots, YNH_WORKSPACE_ROOTS, `ynh run --no-workspace` (#624)
 }
@@ -125,6 +126,10 @@ type Config struct {
 	// (docs/telemetry.md). --telemetry-relay and YNH_TELEMETRY_RELAY come
 	// first.
 	TelemetryRelay bool `json:"telemetry_relay,omitempty"`
+	// Labels are run labels (key to value) every `ynh run` and `ynh agent
+	// run` carries, the lowest-precedence source: the harness manifest,
+	// YNH_LABELS and --label override them per key (docs/telemetry.md).
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 // HomeDir returns the ynh home directory.

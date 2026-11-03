@@ -14,11 +14,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	otellog "go.opentelemetry.io/otel/log"
 	lognoop "go.opentelemetry.io/otel/log/noop"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
@@ -97,6 +99,10 @@ type Options struct {
 	MaxFileBytes    int64
 	MaxBytes        int64
 	RecheckInterval time.Duration
+	// Labels are the run's labels, already validated (internal/labels).
+	// Each becomes the resource attribute ynh.label.<key>, on every record
+	// ynh writes, so ynr can group by them (ynr ADR-006 rule 10).
+	Labels map[string]string
 }
 
 // Telemetry holds the providers for one process. It is safe for concurrent
@@ -167,6 +173,21 @@ func Setup(version string, opts Options, stderr io.Writer) *Telemetry {
 	return t
 }
 
+// LabelAttributes are the run's labels as resource attributes,
+// ynh.label.<key>, sorted by key.
+func LabelAttributes(labels map[string]string) []attribute.KeyValue {
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make([]attribute.KeyValue, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, attribute.String(string(AttrLabel)+"."+k, labels[k]))
+	}
+	return out
+}
+
 // recheck looks for the spool every interval until it appears or Shutdown.
 func (t *Telemetry) recheck(interval time.Duration) {
 	ticker := time.NewTicker(interval)
@@ -192,14 +213,18 @@ func (t *Telemetry) activate(dir string, sender *spool.HTTPSender) {
 	// The operator's OTEL_RESOURCE_ATTRIBUTES are honoured, but ynh's own
 	// identity wins: service.name and service.version say which registry
 	// describes these records.
+	attrs := []attribute.KeyValue{
+		semconv.ServiceName("ynh"),
+		semconv.ServiceVersion(t.version),
+		semconv.ServiceInstanceID(instanceID),
+	}
+	// The labels are ynh's too: they win over an ynh.label.* the operator
+	// put in OTEL_RESOURCE_ATTRIBUTES, since only these were validated.
+	attrs = append(attrs, LabelAttributes(t.opts.Labels)...)
 	res, err := resource.New(context.Background(),
 		resource.WithTelemetrySDK(),
 		resource.WithFromEnv(),
-		resource.WithAttributes(
-			semconv.ServiceName("ynh"),
-			semconv.ServiceVersion(t.version),
-			semconv.ServiceInstanceID(instanceID),
-		),
+		resource.WithAttributes(attrs...),
 	)
 	if err != nil {
 		// A partial resource is still returned; an unparsable

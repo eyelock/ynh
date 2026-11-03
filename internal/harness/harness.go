@@ -186,9 +186,12 @@ type Harness struct {
 	MCPIsolation   bool // run with only this harness's MCP servers (mcp_isolation)
 	// Workspace is the manifest's requested workspace folders, as written.
 	Workspace []string
-	Agent     *plugin.AgentConfig
-	Profiles  map[string]plugin.Profile
-	Focuses   map[string]plugin.Focus
+	// Labels is the manifest's run labels, as written; validated when a run
+	// starts (internal/labels).
+	Labels   map[string]string
+	Agent    *plugin.AgentConfig
+	Profiles map[string]plugin.Profile
+	Focuses  map[string]plugin.Focus
 	// LaunchFocus is the manifest's launch_focus: the focus a bare `ynh run`
 	// wakes with. Only cmdRun reads it.
 	LaunchFocus     string
@@ -773,6 +776,9 @@ func loadDirWithProvenance(contentDir string, ins *plugin.InstalledJSON) (*Harne
 	if len(hj.Workspace) > 0 {
 		p.Workspace = hj.Workspace
 	}
+	if len(hj.Labels) > 0 {
+		p.Labels = hj.Labels
+	}
 	if hj.Agent != nil {
 		p.Agent = hj.Agent
 	}
@@ -1053,6 +1059,9 @@ func LoadFile(path string) (*Harness, error) {
 	p.MCPIsolation = hj.MCPIsolation
 	if len(hj.Workspace) > 0 {
 		p.Workspace = hj.Workspace
+	}
+	if len(hj.Labels) > 0 {
+		p.Labels = hj.Labels
 	}
 	if hj.Agent != nil {
 		p.Agent = hj.Agent
