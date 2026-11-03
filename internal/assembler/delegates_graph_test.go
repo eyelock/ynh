@@ -233,3 +233,51 @@ func TestAssembleDelegates_FocusKeptInGraph(t *testing.T) {
 		t.Errorf("mid should carry its focus and list leaf:\n%s", data)
 	}
 }
+
+// One repository holds the root and its seats, and a seat delegates to a
+// sibling by a relative git source ("../.."). The root reaches both seats from
+// a cached clone of the repository, and the seat reaches its sibling from
+// inside that clone: the same repository, commit and path, so one agent.
+func TestAssembleDelegates_RelativeGitSourceFromCachedClone(t *testing.T) {
+	repo := t.TempDir()
+	write := func(name, manifest string) {
+		t.Helper()
+		dir := filepath.Join(repo, "harnesses", name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := writePluginJSONFile(dir, []byte(manifest)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("a", `{"name":"a","version":"0.1.0"}`)
+	write("b", `{"name":"b","version":"0.1.0","delegates_to":[{"git":"../..","path":"harnesses/a"}]}`)
+	runGit(t, repo, "init")
+	runGit(t, repo, "config", "user.email", "test@test.com")
+	runGit(t, repo, "config", "user.name", "Test")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "commit", "-m", "init")
+
+	t.Setenv("YNH_HOME", t.TempDir())
+	adapter, err := vendor.Get("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dels := []harness.Delegate{
+		{GitSource: harness.GitSource{Git: ".", Path: "harnesses/a"}},
+		{GitSource: harness.GitSource{Git: ".", Path: "harnesses/b"}},
+	}
+	workDir := t.TempDir()
+	if _, err := AssembleDelegates(workDir, adapter, dels, repo, DelegateOptions{Warn: &strings.Builder{}, RootName: "root"}); err != nil {
+		t.Fatalf("a harness reached by two routes to one source must be one agent: %v", err)
+	}
+	files, _ := os.ReadDir(filepath.Join(workDir, adapter.ConfigDir(), adapter.ArtifactDirs()["agents"]))
+	var got []string
+	for _, f := range files {
+		got = append(got, strings.TrimSuffix(f.Name(), ".md"))
+	}
+	slices.Sort(got)
+	if !slices.Equal(got, []string{"a", "b"}) {
+		t.Fatalf("agents = %v, want [a b]", got)
+	}
+}

@@ -2,6 +2,10 @@ package resolver
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 
 	"github.com/eyelock/ynh/internal/harness"
 )
@@ -84,7 +88,7 @@ func FlattenDelegates(entries []harness.Delegate, rootDir, rootName string, reso
 		if err != nil {
 			return nil, fmt.Errorf("delegate: %w", err)
 		}
-		id := dirIdentity(base)
+		id := sourceIdentity(base)
 		loaded, err := harness.LoadDir(base)
 		if err != nil {
 			return nil, fmt.Errorf("loading delegate harness %s: %w", p.entry.Git, err)
@@ -94,7 +98,7 @@ func FlattenDelegates(entries []harness.Delegate, rootDir, rootName string, reso
 			note(p.parent, fmt.Sprintf("delegate %s is the root harness %s, which is no agent of its own; skipped", p.entry.Label(), rootName))
 			continue
 		}
-		if p.parent >= 0 && id == dirIdentity(routesDir(out, p.parent)) {
+		if p.parent >= 0 && id == sourceIdentity(routesDir(out, p.parent)) {
 			note(p.parent, fmt.Sprintf("harness %s names itself as a delegate; skipped", loaded.Name))
 			continue
 		}
@@ -128,6 +132,55 @@ func FlattenDelegates(entries []harness.Delegate, rootDir, rootName string, reso
 		}
 	}
 	return out, nil
+}
+
+// sourceIdentity is the identity of a harness directory by what it was
+// resolved from rather than where it sits. A directory in a git clone is the
+// clone's origin, the commit it holds and its path in the clone; when the
+// origin is itself a local repository (a relative git source resolved from
+// inside a cached clone is cloned again from that clone), the walk follows it
+// back to the source, so two clones of one repository at one commit give one
+// harness one identity. A directory in no clone is known by its path
+// (dirIdentity).
+func sourceIdentity(dir string) string {
+	abs := dirIdentity(dir)
+	top := abs
+	for top != filepath.Dir(top) {
+		if _, err := os.Stat(filepath.Join(top, ".git")); err == nil {
+			break
+		}
+		top = filepath.Dir(top)
+	}
+	if _, err := os.Stat(filepath.Join(top, ".git")); err != nil {
+		return abs
+	}
+	rel, err := filepath.Rel(top, abs)
+	if err != nil {
+		return abs
+	}
+	sha := gitHead(top)
+	// Follow origin through local clones, bounded in case of a loop.
+	origin := top
+	for i := 0; i < 16; i++ {
+		out, err := exec.Command(gitBin, "-C", origin, "remote", "get-url", "origin").Output()
+		if err != nil {
+			break
+		}
+		url := strings.TrimSpace(string(out))
+		if !filepath.IsAbs(url) {
+			origin = url
+			break
+		}
+		if _, err := os.Stat(filepath.Join(url, ".git")); err != nil {
+			origin = url
+			break
+		}
+		origin = dirIdentity(url)
+	}
+	if sha == "" {
+		return abs
+	}
+	return origin + "@" + sha + "//" + filepath.ToSlash(rel)
 }
 
 func routesDir(out []FlatDelegate, i int) string { return out[i].BasePath }
