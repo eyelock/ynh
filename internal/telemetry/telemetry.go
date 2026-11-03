@@ -111,7 +111,6 @@ type Options struct {
 // use: the spool can appear, and telemetry start, while a run is under way.
 type Telemetry struct {
 	version string
-	stderr  io.Writer
 	opts    Options
 	errors  atomic.Int64
 	// abandoned is set once a flush has run out of time: the destination is
@@ -146,10 +145,10 @@ type Telemetry struct {
 // minute). An agent run can last an hour; a `ynr serve` started after it
 // still receives it. Shutdown stops the search.
 func Setup(version string, opts Options, stderr io.Writer) *Telemetry {
+	stripOperatorLabels(stderr)
 	dest, dir := ChooseDestination()
 	t := &Telemetry{
 		version: version,
-		stderr:  stderr,
 		opts:    opts,
 		dest:    dest,
 		tracer:  tracenoop.NewTracerProvider().Tracer(ScopeName),
@@ -179,9 +178,6 @@ func Setup(version string, opts Options, stderr io.Writer) *Telemetry {
 
 const resourceEnv = "OTEL_RESOURCE_ATTRIBUTES"
 
-// resourceEnvMu serialises the brief rewrite of resourceEnv in activate.
-var resourceEnvMu sync.Mutex
-
 // stripLabelAttrs removes every ynh.label.* pair from an
 // OTEL_RESOURCE_ATTRIBUTES value, and returns the rest and the dropped keys,
 // sorted. Values are never returned.
@@ -201,6 +197,33 @@ func stripLabelAttrs(raw string) (string, []string) {
 	}
 	sort.Strings(dropped)
 	return strings.Join(kept, ","), dropped
+}
+
+// stripOperatorLabels removes every ynh.label.* from the process's
+// OTEL_RESOURCE_ATTRIBUTES and leaves it removed, with one note on stderr
+// naming the keys. Only labels ynh validated are exported (ynr ADR-006 rule
+// 10); an operator's could be a path or a 17th label. Dropped, not refused:
+// the variable is the operator's environment, not a ynh flag, and telemetry
+// never fails a run.
+//
+// It runs once, at the top of Setup, before the recheck goroutine or any
+// child process exists, so nothing reads the variable while it changes. It
+// stays stripped because the SDK merges the process environment into every
+// provider's resource, and because the vendor and `ynh check` children
+// inherit it: none of them should carry unvalidated labels either.
+func stripOperatorLabels(stderr io.Writer) {
+	raw, ok := os.LookupEnv(resourceEnv)
+	if !ok {
+		return
+	}
+	kept, dropped := stripLabelAttrs(raw)
+	if len(dropped) == 0 {
+		return
+	}
+	_ = os.Setenv(resourceEnv, kept)
+	if stderr != nil {
+		_, _ = fmt.Fprintf(stderr, "ynh: dropped %s from OTEL_RESOURCE_ATTRIBUTES: run labels are set with --label, YNH_LABELS, config.json or the manifest\n", strings.Join(dropped, ", "))
+	}
 }
 
 // LabelAttributes are the run's labels as resource attributes,
@@ -248,32 +271,9 @@ func (t *Telemetry) activate(dir string, sender *spool.HTTPSender) {
 		semconv.ServiceVersion(t.version),
 		semconv.ServiceInstanceID(instanceID),
 	}
-	// The labels are ynh's too. Only these were validated (ynr ADR-006 rule
-	// 10), so every ynh.label.* the operator put in OTEL_RESOURCE_ATTRIBUTES,
-	// under the same key or another, is dropped: it could be a path or a
-	// 17th label. Dropped, not refused: the variable is the operator's
-	// environment, not a ynh flag, and telemetry never fails a run.
+	// The labels are ynh's too. Only these were validated; Setup already
+	// removed every operator ynh.label.* from OTEL_RESOURCE_ATTRIBUTES.
 	attrs = append(attrs, LabelAttributes(t.opts.Labels)...)
-	raw, hadEnv := os.LookupEnv(resourceEnv)
-	kept, dropped := stripLabelAttrs(raw)
-	if len(dropped) > 0 {
-		if t.stderr != nil {
-			_, _ = fmt.Fprintf(t.stderr, "ynh: dropped %s from OTEL_RESOURCE_ATTRIBUTES: run labels are set with --label, YNH_LABELS, config.json or the manifest\n", strings.Join(dropped, ", "))
-		}
-		// The SDK merges the process environment into every provider's
-		// resource, so the operator's labels would come back. Hide them while
-		// the providers are built, and put the variable back as it was.
-		resourceEnvMu.Lock()
-		_ = os.Setenv(resourceEnv, kept)
-		defer func() {
-			if hadEnv {
-				_ = os.Setenv(resourceEnv, raw)
-			} else {
-				_ = os.Unsetenv(resourceEnv)
-			}
-			resourceEnvMu.Unlock()
-		}()
-	}
 	res, err := resource.New(context.Background(),
 		resource.WithTelemetrySDK(),
 		resource.WithFromEnv(),
