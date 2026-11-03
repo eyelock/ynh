@@ -210,7 +210,7 @@ error otherwise, described by the outcome word alone.
 A label is a short `key:value` id the user chooses for a run, such as
 `wheelhouse:ynw`, so ynr can group runs and cost by Wheelhouse, project or
 batch. It belongs to the run, not to a vendor: it holds for every vendor ynh
-runs. The rules are ynr's, [ADR-006](https://github.com/eyelock/ynr/blob/develop/docs/adr/006-instrumentation-contract.md)
+runs. The rules are ynr's, [ADR-006](https://github.com/eyelock/ynr/blob/develop/docs/adr/006-sibling-instrumentation-contract.md)
 rule 10.
 
 ### Where they come from
@@ -248,7 +248,7 @@ these is yours.
 
 - **Telemetry:** `ynh.label.<key>=<value>` on ynh's resource, so on every
   record `ynh agent run` writes (the registry declares the template
-  `ynh.label`). They win over an `ynh.label.*` in `OTEL_RESOURCE_ATTRIBUTES`.
+  `ynh.label`). Every `ynh.label.*` in `OTEL_RESOURCE_ATTRIBUTES` is dropped (with a note on stderr naming the keys), since only these were validated.
   `ynh run` writes no record of its own yet: when it does, it carries the
   same labels.
 - **Child processes:** ynh sets `YNH_LABELS` to the merged set in the

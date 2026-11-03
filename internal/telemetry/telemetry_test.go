@@ -643,14 +643,16 @@ func TestSetup_HungEndpointBoundsTheWholeRun(t *testing.T) {
 }
 
 // A run's labels are resource attributes, ynh.label.<key>, on every record
-// ynh writes, and they win over the operator's own ynh.label.* in
-// OTEL_RESOURCE_ATTRIBUTES.
+// ynh writes. Every operator ynh.label.* in OTEL_RESOURCE_ATTRIBUTES, under
+// a key ynh set or another, is dropped, since only ynh's were validated;
+// other operator attributes stay. The note names the keys, never the values.
 func TestLabelsAreResourceAttributes(t *testing.T) {
 	clearTelemetryEnv(t)
 	dir := filepath.Join(t.TempDir(), "spool")
 	t.Setenv("YNR_SPOOL", dir)
-	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "ynh.label.wheelhouse=operator,ynh.label.other=kept")
-	tel := Setup("1.0.0", Options{Labels: map[string]string{"wheelhouse": "ynw", "batch": "7"}}, io.Discard)
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "ynh.label.wheelhouse=operator,ynh.label.other=/home/me/secret,deployment.environment.name=lab")
+	var note bytes.Buffer
+	tel := Setup("1.0.0", Options{Labels: map[string]string{"wheelhouse": "ynw", "batch": "7"}}, &note)
 	run := tel.StartRun()
 	run.Finish(RunOutcomeConverged, true)
 	tel.Shutdown()
@@ -684,10 +686,11 @@ func TestLabelsAreResourceAttributes(t *testing.T) {
 				seen++
 				got := r.attrs()
 				for k, want := range map[string]string{
-					"ynh.label.wheelhouse": "ynw",
-					"ynh.label.batch":      "7",
-					"ynh.label.other":      "kept",
-					"service.name":         "ynh",
+					"ynh.label.wheelhouse":        "ynw",
+					"ynh.label.batch":             "7",
+					"ynh.label.other":             "",
+					"deployment.environment.name": "lab",
+					"service.name":                "ynh",
 				} {
 					if got[k] != want {
 						t.Errorf("resource %s = %q, want %q", k, got[k], want)
@@ -698,6 +701,9 @@ func TestLabelsAreResourceAttributes(t *testing.T) {
 	}
 	if seen == 0 {
 		t.Fatal("no resource found in the spool")
+	}
+	if n := note.String(); !strings.Contains(n, "ynh.label.other") || strings.Contains(n, "secret") {
+		t.Errorf("note = %q, want it to name the dropped keys and no value", n)
 	}
 }
 

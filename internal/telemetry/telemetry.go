@@ -12,9 +12,11 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -109,6 +111,7 @@ type Options struct {
 // use: the spool can appear, and telemetry start, while a run is under way.
 type Telemetry struct {
 	version string
+	stderr  io.Writer
 	opts    Options
 	errors  atomic.Int64
 	// abandoned is set once a flush has run out of time: the destination is
@@ -146,6 +149,7 @@ func Setup(version string, opts Options, stderr io.Writer) *Telemetry {
 	dest, dir := ChooseDestination()
 	t := &Telemetry{
 		version: version,
+		stderr:  stderr,
 		opts:    opts,
 		dest:    dest,
 		tracer:  tracenoop.NewTracerProvider().Tracer(ScopeName),
@@ -171,6 +175,32 @@ func Setup(version string, opts Options, stderr io.Writer) *Telemetry {
 		go t.recheck(interval)
 	}
 	return t
+}
+
+const resourceEnv = "OTEL_RESOURCE_ATTRIBUTES"
+
+// resourceEnvMu serialises the brief rewrite of resourceEnv in activate.
+var resourceEnvMu sync.Mutex
+
+// stripLabelAttrs removes every ynh.label.* pair from an
+// OTEL_RESOURCE_ATTRIBUTES value, and returns the rest and the dropped keys,
+// sorted. Values are never returned.
+func stripLabelAttrs(raw string) (string, []string) {
+	var kept, dropped []string
+	for _, pair := range strings.Split(raw, ",") {
+		key, _, _ := strings.Cut(pair, "=")
+		key = strings.TrimSpace(key)
+		if k, err := url.PathUnescape(key); err == nil {
+			key = k
+		}
+		if strings.HasPrefix(key, string(AttrLabel)+".") {
+			dropped = append(dropped, key)
+			continue
+		}
+		kept = append(kept, pair)
+	}
+	sort.Strings(dropped)
+	return strings.Join(kept, ","), dropped
 }
 
 // LabelAttributes are the run's labels as resource attributes,
@@ -218,9 +248,32 @@ func (t *Telemetry) activate(dir string, sender *spool.HTTPSender) {
 		semconv.ServiceVersion(t.version),
 		semconv.ServiceInstanceID(instanceID),
 	}
-	// The labels are ynh's too: they win over an ynh.label.* the operator
-	// put in OTEL_RESOURCE_ATTRIBUTES, since only these were validated.
+	// The labels are ynh's too. Only these were validated (ynr ADR-006 rule
+	// 10), so every ynh.label.* the operator put in OTEL_RESOURCE_ATTRIBUTES,
+	// under the same key or another, is dropped: it could be a path or a
+	// 17th label. Dropped, not refused: the variable is the operator's
+	// environment, not a ynh flag, and telemetry never fails a run.
 	attrs = append(attrs, LabelAttributes(t.opts.Labels)...)
+	raw, hadEnv := os.LookupEnv(resourceEnv)
+	kept, dropped := stripLabelAttrs(raw)
+	if len(dropped) > 0 {
+		if t.stderr != nil {
+			_, _ = fmt.Fprintf(t.stderr, "ynh: dropped %s from OTEL_RESOURCE_ATTRIBUTES: run labels are set with --label, YNH_LABELS, config.json or the manifest\n", strings.Join(dropped, ", "))
+		}
+		// The SDK merges the process environment into every provider's
+		// resource, so the operator's labels would come back. Hide them while
+		// the providers are built, and put the variable back as it was.
+		resourceEnvMu.Lock()
+		_ = os.Setenv(resourceEnv, kept)
+		defer func() {
+			if hadEnv {
+				_ = os.Setenv(resourceEnv, raw)
+			} else {
+				_ = os.Unsetenv(resourceEnv)
+			}
+			resourceEnvMu.Unlock()
+		}()
+	}
 	res, err := resource.New(context.Background(),
 		resource.WithTelemetrySDK(),
 		resource.WithFromEnv(),
