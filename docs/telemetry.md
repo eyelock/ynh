@@ -90,7 +90,10 @@ ynh-<instance id>-000001.jsonl        closed
   counted.
 - The file is flushed to disk when the run starts and when it ends. Each flush
   is abandoned after 2 seconds, so a slow network filesystem never holds up a
-  run or its exit.
+  run or its exit. One abandoned flush abandons every later one, so a stuck
+  destination costs a run 2 seconds in all. The price: a run whose first flush
+  is slow loses the span and finished event it would have flushed on exit,
+  although the batchers keep sending in between.
 - Every telemetry error is swallowed and counted. None reaches stderr, the run
   result or the exit code.
 
