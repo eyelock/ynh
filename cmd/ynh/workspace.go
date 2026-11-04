@@ -77,6 +77,14 @@ func workspaceAllowlist(home string) workspace.Allowlist {
 // A vendor with no way to grant a folder gets every granted folder reported
 // as not granted, naming the vendor. Nothing is dropped silently.
 func workspaceGrant(loaded *harness.Harness, id, vendorName, projectDir string, noWorkspace bool, stderr io.Writer) []string {
+	return workspaceGrantUnless(loaded, id, vendorName, projectDir, noWorkspace, "", stderr)
+}
+
+// workspaceGrantUnless is workspaceGrant for a launch that cannot grant at all
+// for a reason known beyond the vendor: when blocked is not empty, every folder
+// that would have been granted is reported once as not granted for that reason,
+// and none is reported as granted.
+func workspaceGrantUnless(loaded *harness.Harness, id, vendorName, projectDir string, noWorkspace bool, blocked string, stderr io.Writer) []string {
 	if loaded == nil || len(loaded.Workspace) == 0 {
 		return nil
 	}
@@ -114,13 +122,16 @@ func workspaceGrant(loaded *harness.Harness, id, vendorName, projectDir string, 
 	if len(granted) == 0 {
 		return nil
 	}
-	if _, unsupported, err := vendor.WorkspaceArgs(vendorName, granted); err != nil || unsupported != "" {
-		reason := unsupported
+	if _, unsupported, err := vendor.WorkspaceArgs(vendorName, granted); err != nil || unsupported != "" || blocked != "" {
+		reason := vendorName + ": " + unsupported
 		if err != nil {
-			reason = err.Error()
+			reason = vendorName + ": " + err.Error()
+		}
+		if blocked != "" {
+			reason = blocked
 		}
 		for _, g := range granted {
-			_, _ = fmt.Fprintf(stderr, "  warning: workspace: %s not granted: %s: %s\n", g, vendorName, reason)
+			_, _ = fmt.Fprintf(stderr, "  warning: workspace: %s not granted: %s\n", g, reason)
 		}
 		return nil
 	}
@@ -139,19 +150,19 @@ func workspaceLaunchArgs(loaded *harness.Harness, id, vendorName, runDir string,
 	if err != nil {
 		return nil, err
 	}
-	granted := workspaceGrant(loaded, id, vendorName, projectDir, noWorkspace, stderr)
+	blocked := ""
+	if vendorName == "opencode" && preassembled {
+		// A baked image's run dir is reused and never reassembled, so a rule
+		// written into it would outlive this run's grant, and the image may
+		// be read-only. Leave it alone and say so, once per folder.
+		blocked = "opencode: a pre-assembled run directory is not edited; bake the folder into the image"
+	}
+	granted := workspaceGrantUnless(loaded, id, vendorName, projectDir, noWorkspace, blocked, stderr)
 	args, _, err := vendor.WorkspaceArgs(vendorName, granted)
 	if err != nil {
 		return nil, err
 	}
-	if vendorName == "opencode" && preassembled && len(granted) > 0 {
-		// A baked image's run dir is reused and never reassembled, so a rule
-		// written into it would outlive this run's grant, and the image may
-		// be read-only. Leave it alone and say so.
-		for _, g := range granted {
-			_, _ = fmt.Fprintf(stderr, "  warning: workspace: %s not granted: opencode: a pre-assembled run directory is not edited; bake the folder into the image\n", g)
-		}
-	} else if vendorName == "opencode" {
+	if vendorName == "opencode" && len(granted) > 0 {
 		// No flag: the grant is a rule in each agent file of the run dir.
 		if err := vendor.GrantOpenCodeWorkspace(runDir, granted); err != nil {
 			return nil, err

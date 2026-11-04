@@ -77,6 +77,8 @@ The same rule applies to `ynh install` from a local path and to `ynh update`.
 
 The harness image pre-assembles vendor layouts for all five vendors (Claude, Codex, Cursor, Copilot and OpenCode) at build time. At runtime, `ynh run` detects the pre-assembled layout and skips assembly entirely.
 
+That includes workspace folders on OpenCode. OpenCode has no flag to add a directory; ynh grants one by editing the agent files in the run directory, and ynh does not edit a pre-assembled one. A run from an image reports each requested folder once on stderr as `not granted: opencode: a pre-assembled run directory is not edited; bake the folder into the image`, and never as `granted`. Put the folder in the image at build time.
+
 ### Includes in the image
 
 The image carries the include cache. Every git include the harness resolves, and

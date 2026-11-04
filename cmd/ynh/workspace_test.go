@@ -305,8 +305,15 @@ func TestWorkspaceLaunchArgsPreassembledOpenCodeNotEdited(t *testing.T) {
 	if string(got) != denyAll {
 		t.Errorf("pre-assembled agent was edited:\n%s", got)
 	}
-	if !strings.Contains(stderr.String(), "not granted") {
-		t.Errorf("no warning: %q", stderr.String())
+	out := stderr.String()
+	if !strings.Contains(out, "not granted") {
+		t.Errorf("no warning: %q", out)
+	}
+	if strings.Contains(out, "workspace: granted") {
+		t.Errorf("folder reported as granted and not granted: %q", out)
+	}
+	if n := strings.Count(out, "not granted"); n != 1 {
+		t.Errorf("want one message for the one folder, got %d: %q", n, out)
 	}
 }
 
