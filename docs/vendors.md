@@ -22,7 +22,7 @@ If `~/.ynh/config.json` declares any [local model backends](#local-model-backend
 
 ynh claims more than each vendor yet gets. In v0.16.0:
 
-- **Codex** does not yet receive hooks, session context or commands. Instructions (written to `AGENTS.md`), rules (folded into them), MCP servers, skills, agents, focuses and profiles do. Under `ynh run`, Codex starts in the run directory without `-C`, so the project's own `AGENTS.md` is never read.
+- **Codex** does not yet receive commands. Hooks and session context reach it under `ynh run` for an accepted harness only, not under `ynh agent run` ([Codex hook trust](hooks.md#codex-hook-trust)). Instructions (written to `AGENTS.md`), rules (folded into them), MCP servers, skills, agents, focuses and profiles do. Under `ynh run`, Codex starts in the run directory without `-C`, so the project's own `AGENTS.md` is never read.
 - **Rules** reach Claude Code, Codex and Copilot only by being folded into their instructions under `ynh run`: always on, with no path scoping.
 - **OpenCode**: delegates cannot run as subagents (a harness's own agents can), `on_session_start` does not fire, `on_session_end` cannot fire (OpenCode has no such event, a vendor limit), session context is not injected, and workspace folders are not granted. `ynd export -v opencode` drops delegates silently.
 - **Cursor**: workspace folders are not granted, and print mode skips `before_prompt` and `on_stop`.
@@ -46,8 +46,8 @@ What each vendor receives from a harness in v0.16.0, from the vendor parity audi
 | Rules | Y | Y | Y | Y | Y |
 | Commands | Y | N | Y | Y | U |
 | MCP servers | Y | Y | Y | Y | Y |
-| Hooks | Y | N | X | Y | N |
-| Session context | Y | N | Y | Y | N |
+| Hooks | Y | Y, accepted harnesses only | X | Y | N |
+| Session context | Y | Y, accepted harnesses only | Y | Y | N |
 | Profiles | Y | Y | Y | Y | Y |
 | Focuses, includes, sensors | Y | Y | Y | Y | Y |
 | Workspace folders | Y | Y | N | Y | N |

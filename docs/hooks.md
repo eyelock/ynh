@@ -36,7 +36,7 @@ The vendors do not agree on how the output is read. Verified on 2026-10-30 with 
 | Vendor | Plain stdout reaches the model? | The field that does | ynh |
 |--------|---------------------------------|---------------------|-----|
 | Claude Code | Yes | also `hookSpecificOutput.additionalContext` | writes the command as declared |
-| Codex | Per its docs ("Plain text on stdout is added as extra developer context"); **not verified live** | also `hookSpecificOutput.additionalContext` | writes the command as declared |
+| Codex | Yes (CONFIRMED live, codex-cli 0.166.0, once the hook is trusted; see [Codex hook trust](#codex-hook-trust)) | also `hookSpecificOutput.additionalContext` | writes the command as declared |
 | Copilot CLI 1.0.105 | No | `{"additionalContext": "..."}` | wraps the command |
 | Cursor (cursor-agent 2026.10.01) | No | `{"additional_context": "..."}` | wraps the command |
 | OpenCode 2 | No | none: the hook runs from the event stream (`session.created`), which cannot add context, and the generated plugin discards its stdout | declares `unsupported`, so assembly warns |
@@ -51,6 +51,25 @@ On Copilot and Cursor ynh writes the hook as `sh <root>/hooks/ynh-session-contex
 In a package that Claude Code and Copilot share one hook file for, the wrapper emits both shapes at once. Other events are untouched.
 
 Each vendor declares how it delivers this as `<vendor>SessionStartContext` in its adapter (`plain`, `json-field:<name>` or `unsupported:<reason>`), and `make check-vendor-parity` requires it. A vendor that declares `unsupported` makes `ynd validate`, `ynd lint` and assembly warn that the hook's output does not reach the model there.
+
+### Codex hook trust
+
+Codex runs a hook only when it trusts both the project layer holding it and the hook itself, and it records neither for ynh's run directory, so before this was handled a harness's hooks (and its `on_session_start` context) were written to `.codex/hooks.json` and never ran. A project's `.codex/` layer loads only for a trusted project, and a non-managed hook runs only when `hooks.state."<key>".trusted_hash` holds the hash Codex computes for its current definition ([learn.chatgpt.com/docs/hooks](https://learn.chatgpt.com/docs/hooks)).
+
+`ynh run` passes both for the one invocation, as `-c` overrides: the run directory as a trusted project, and the hash of each hook ynh wrote. It does so only when the installed harness is accepted and current in `ynh trust` (the rule that gates [workspace folders](workspace.md)):
+
+| Harness | Hooks under Codex |
+|---------|-------------------|
+| Installed and accepted, unchanged since | Trusted for that run; they run |
+| Installed, `unreviewed` | Not trusted; Codex skips them |
+| Installed, `changed` since you accepted it | Not trusted; Codex skips them |
+| Run from a path (`ynh run ./dir`), which has no trust record | Not trusted; Codex skips them |
+
+When the grant is withheld, ynh prints one line on stderr saying Codex will skip the hooks, and what to run: `ynh trust accept local/<name>` (for a path run, install the harness first). A harness with no hooks needs no grant and prints nothing. Nothing refuses to run: only the hooks are withheld, as before this was handled.
+
+Nothing is written to your `~/.codex/config.toml`. The overrides are table-form, and they merge with the entries you persisted there rather than replacing them: your own Codex hooks stay trusted and other trusted projects still load during an `ynh run`. This was checked on codex-cli 0.166.0 with a separate Codex home (`hooks/list` through `codex app-server`), and `config.toml` was byte-identical afterwards. It has not been re-checked on other Codex versions. Trusting the run directory as a project also lets Codex load the rest of what ynh wrote under its `.codex/` (for example the agent files), and ynh is the only writer there. The hash is Codex's own and undocumented; ynh reproduces it and a test pins it against values Codex reported. If a Codex release changes it, hooks go back to being skipped rather than run untrusted.
+
+This covers `ynh run` only. `ynh agent run --backend codex` does not pass these overrides, so a harness's hooks do not fire there. A package from `ynd export` is a plugin: Codex reads its hooks only after you trust them with `/hooks`.
 
 ### on_session_end semantics
 
