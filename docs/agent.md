@@ -47,6 +47,7 @@ ynh agent run --resume <session-dir> [flags]
 | `--max-plan-iterations <n>` | Cap on plan revisions before acting |
 | `--emit-jsonl <path>` | Write the trajectory; `-` for stdout |
 | `--resume <dir>` | Continue a previous session from its directory (the `--emit-jsonl` file's folder) |
+| `--label <key:value>` | A [run label](telemetry.md#run-labels), repeatable; `--label key:` removes one. Merged over `config.json`, the harness manifest and `YNH_LABELS`; an invalid label refuses the run |
 | `--telemetry-relay` | Start `ynr relay` for the run and send the vendor's own telemetry into the spool (claude, codex). Also `YNH_TELEMETRY_RELAY`, or `"telemetry_relay": true` in `config.json`. See [Telemetry](telemetry.md#vendor-telemetry-through-the-relay) |
 
 ### Budgets

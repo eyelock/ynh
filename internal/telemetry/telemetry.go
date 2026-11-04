@@ -12,13 +12,17 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	otellog "go.opentelemetry.io/otel/log"
 	lognoop "go.opentelemetry.io/otel/log/noop"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
@@ -97,6 +101,10 @@ type Options struct {
 	MaxFileBytes    int64
 	MaxBytes        int64
 	RecheckInterval time.Duration
+	// Labels are the run's labels, already validated (internal/labels).
+	// Each becomes the resource attribute ynh.label.<key>, on every record
+	// ynh writes, so ynr can group by them (ynr ADR-006 rule 10).
+	Labels map[string]string
 }
 
 // Telemetry holds the providers for one process. It is safe for concurrent
@@ -137,6 +145,7 @@ type Telemetry struct {
 // minute). An agent run can last an hour; a `ynr serve` started after it
 // still receives it. Shutdown stops the search.
 func Setup(version string, opts Options, stderr io.Writer) *Telemetry {
+	stripOperatorLabels(stderr)
 	dest, dir := ChooseDestination()
 	t := &Telemetry{
 		version: version,
@@ -167,6 +176,71 @@ func Setup(version string, opts Options, stderr io.Writer) *Telemetry {
 	return t
 }
 
+const resourceEnv = "OTEL_RESOURCE_ATTRIBUTES"
+
+// stripLabelAttrs removes every ynh.label.* pair from an
+// OTEL_RESOURCE_ATTRIBUTES value, and returns the rest and the dropped keys,
+// sorted. Values are never returned.
+func stripLabelAttrs(raw string) (string, []string) {
+	var kept, dropped []string
+	for _, pair := range strings.Split(raw, ",") {
+		key, _, _ := strings.Cut(pair, "=")
+		key = strings.TrimSpace(key)
+		if k, err := url.PathUnescape(key); err == nil {
+			key = k
+		}
+		if strings.HasPrefix(key, string(AttrLabel)+".") {
+			dropped = append(dropped, key)
+			continue
+		}
+		kept = append(kept, pair)
+	}
+	sort.Strings(dropped)
+	return strings.Join(kept, ","), dropped
+}
+
+// stripOperatorLabels removes every ynh.label.* from the process's
+// OTEL_RESOURCE_ATTRIBUTES and leaves it removed, with one note on stderr
+// naming the keys. Only labels ynh validated are exported (ynr ADR-006 rule
+// 10); an operator's could be a path or a 17th label. Dropped, not refused:
+// the variable is the operator's environment, not a ynh flag, and telemetry
+// never fails a run.
+//
+// It runs once, at the top of Setup, before the recheck goroutine or any
+// child process exists, so nothing reads the variable while it changes. It
+// stays stripped because the SDK merges the process environment into every
+// provider's resource, and because the vendor and `ynh check` children
+// inherit it: none of them should carry unvalidated labels either.
+func stripOperatorLabels(stderr io.Writer) {
+	raw, ok := os.LookupEnv(resourceEnv)
+	if !ok {
+		return
+	}
+	kept, dropped := stripLabelAttrs(raw)
+	if len(dropped) == 0 {
+		return
+	}
+	_ = os.Setenv(resourceEnv, kept)
+	if stderr != nil {
+		_, _ = fmt.Fprintf(stderr, "ynh: dropped %s from OTEL_RESOURCE_ATTRIBUTES: run labels are set with --label, YNH_LABELS, config.json or the manifest\n", strings.Join(dropped, ", "))
+	}
+}
+
+// LabelAttributes are the run's labels as resource attributes,
+// ynh.label.<key>, sorted by key.
+func LabelAttributes(labels map[string]string) []attribute.KeyValue {
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make([]attribute.KeyValue, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, attribute.String(string(AttrLabel)+"."+k, labels[k]))
+	}
+	return out
+}
+
 // recheck looks for the spool every interval until it appears or Shutdown.
 func (t *Telemetry) recheck(interval time.Duration) {
 	ticker := time.NewTicker(interval)
@@ -192,14 +266,18 @@ func (t *Telemetry) activate(dir string, sender *spool.HTTPSender) {
 	// The operator's OTEL_RESOURCE_ATTRIBUTES are honoured, but ynh's own
 	// identity wins: service.name and service.version say which registry
 	// describes these records.
+	attrs := []attribute.KeyValue{
+		semconv.ServiceName("ynh"),
+		semconv.ServiceVersion(t.version),
+		semconv.ServiceInstanceID(instanceID),
+	}
+	// The labels are ynh's too. Only these were validated; Setup already
+	// removed every operator ynh.label.* from OTEL_RESOURCE_ATTRIBUTES.
+	attrs = append(attrs, LabelAttributes(t.opts.Labels)...)
 	res, err := resource.New(context.Background(),
 		resource.WithTelemetrySDK(),
 		resource.WithFromEnv(),
-		resource.WithAttributes(
-			semconv.ServiceName("ynh"),
-			semconv.ServiceVersion(t.version),
-			semconv.ServiceInstanceID(instanceID),
-		),
+		resource.WithAttributes(attrs...),
 	)
 	if err != nil {
 		// A partial resource is still returned; an unparsable

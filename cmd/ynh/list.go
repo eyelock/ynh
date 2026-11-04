@@ -10,6 +10,7 @@ import (
 
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/labels"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/namespace"
 	"github.com/eyelock/ynh/internal/resolver"
@@ -77,6 +78,10 @@ type listEntry struct {
 	BrokenReason string         `json:"broken_reason,omitempty"`
 	Includes     []listInclude  `json:"includes"`
 	DelegatesTo  []listDelegate `json:"delegates_to"`
+	// Labels are the harness's own run labels, from its manifest (key to
+	// value). Absent when it declares none. Labels from config.json,
+	// YNH_LABELS and --label are per run, not the harness's.
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 type listInstalledFrom struct {
@@ -159,6 +164,7 @@ func cmdListTo(args []string, stdout, stderr io.Writer) error {
 
 	format := "text"
 	checkUpdates := false
+	want := labels.Set{}
 	i := 0
 	for i < len(args) {
 		switch args[i] {
@@ -170,6 +176,26 @@ func cmdListTo(args []string, stdout, stderr io.Writer) error {
 			format = args[i]
 		case "--check-updates":
 			checkUpdates = true
+		case "--label":
+			if i+1 >= len(args) {
+				return cliError(stderr, structured, errCodeInvalidInput, "--label requires a value (key:value)")
+			}
+			i++
+			op, err := labels.ParseOp(args[i])
+			if err != nil || op.Remove {
+				return cliError(stderr, structured, errCodeInvalidInput,
+					fmt.Sprintf("--label %q is not key:value", args[i]))
+			}
+			if err := labels.ValidateKey(op.Key); err != nil {
+				return cliError(stderr, structured, errCodeInvalidInput, "--label: "+err.Error())
+			}
+			// Repeated: every one must match. The same key twice with two
+			// values can match nothing.
+			if prev, dup := want[op.Key]; dup && prev != op.Value {
+				want[op.Key] = "\x00"
+			} else {
+				want[op.Key] = op.Value
+			}
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return cliError(stderr, structured, errCodeInvalidInput,
@@ -187,16 +213,16 @@ func cmdListTo(args []string, stdout, stderr io.Writer) error {
 			return cliError(stderr, structured, errCodeInvalidInput,
 				"--check-updates requires --format json")
 		}
-		return printListText(stdout)
+		return printListText(stdout, want)
 	case "json":
-		return printListJSON(stdout, checkUpdates)
+		return printListJSON(stdout, checkUpdates, want)
 	default:
 		return cliError(stderr, structured, errCodeInvalidInput,
 			fmt.Sprintf("invalid --format value %q (want text or json)", format))
 	}
 }
 
-func printListText(w io.Writer) error {
+func printListText(w io.Writer, want labels.Set) error {
 	entries, err := harness.ListAll()
 	if err != nil {
 		return err
@@ -207,6 +233,7 @@ func printListText(w io.Writer) error {
 		_, _ = fmt.Fprintln(w, "Install one with: ynh install <git-url|path>")
 		return nil
 	}
+	shown := 0
 
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	// ID column carries the canonical id — `local/<name>` or
@@ -215,7 +242,7 @@ func printListText(w io.Writer) error {
 	// Showing the bare name here invited users to copy it and hit "not
 	// installed" errors; eradicated in the structured-output overhaul and
 	// kept out here.
-	_, _ = fmt.Fprintln(tw, "ID\tKIND\tVENDOR\tSOURCE\tARTIFACTS\tINCLUDES\tDELEGATES TO")
+	_, _ = fmt.Fprintln(tw, "ID\tKIND\tVENDOR\tSOURCE\tARTIFACTS\tINCLUDES\tDELEGATES TO\tLABELS")
 
 	for _, e := range entries {
 		id := canonicalIDForEntry(e)
@@ -227,9 +254,17 @@ func printListText(w io.Writer) error {
 			p, err = harness.LoadDir(e.Dir)
 		}
 		if err != nil {
-			_, _ = fmt.Fprintf(tw, "%s\t(error: %v)\t\t\t\t\t\n", id, err)
+			// A harness that cannot load has no labels, so none matches.
+			if len(want) == 0 {
+				_, _ = fmt.Fprintf(tw, "%s\t(error: %v)\t\t\t\t\t\t\n", id, err)
+				shown++
+			}
 			continue
 		}
+		if !labels.Set(p.Labels).Matches(want) {
+			continue
+		}
+		shown++
 
 		vendorName := p.DefaultVendor
 		if vendorName == "" {
@@ -242,13 +277,21 @@ func printListText(w io.Writer) error {
 		includes := formatIncludes(p.Includes)
 		delegates := formatDelegates(p.DelegatesTo)
 
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", id, kind, vendorName, source, artifacts, includes, delegates)
+		lbl := "-"
+		if len(p.Labels) > 0 {
+			lbl = labels.Encode(p.Labels)
+		}
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", id, kind, vendorName, source, artifacts, includes, delegates, lbl)
 	}
 
+	if shown == 0 {
+		_, _ = fmt.Fprintln(w, "No harnesses carry every label given.")
+		return nil
+	}
 	return tw.Flush()
 }
 
-func printListJSON(w io.Writer, checkUpdates bool) error {
+func printListJSON(w io.Writer, checkUpdates bool, want labels.Set) error {
 	all, err := harness.ListAll()
 	if err != nil {
 		return err
@@ -277,7 +320,8 @@ func printListJSON(w io.Writer, checkUpdates bool) error {
 			if ptr == nil {
 				ptr, _ = harness.LoadPointerByID(canonicalIDForEntry(e))
 			}
-			if ptr != nil {
+			// A harness that cannot load has no labels, so none matches.
+			if ptr != nil && len(want) == 0 {
 				id := namespace.CanonicalID(ptr.Source, ptr.Name)
 				ns, _ := namespace.SplitID(id)
 				entries = append(entries, listEntry{
@@ -296,6 +340,9 @@ func printListJSON(w io.Writer, checkUpdates bool) error {
 					DelegatesTo: []listDelegate{},
 				})
 			}
+			continue
+		}
+		if !labels.Set(p.Labels).Matches(want) {
 			continue
 		}
 		entries = append(entries, buildListEntry(p))
@@ -412,6 +459,7 @@ func buildListEntry(p *harness.Harness) listEntry {
 		Artifacts:        scanArtifactCounts(p.Dir),
 		Includes:         buildIncludes(p.Includes),
 		DelegatesTo:      buildDelegates(p.DelegatesTo),
+		Labels:           p.Labels,
 	}
 
 	if p.InstalledFrom != nil {

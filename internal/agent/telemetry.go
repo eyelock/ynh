@@ -1,6 +1,10 @@
 package agent
 
-import "os"
+import (
+	"os"
+
+	"github.com/eyelock/ynh/internal/labels"
+)
 
 // Kinds of call the loop makes to another process, for Telemetry.StartCall.
 const (
@@ -48,4 +52,13 @@ func childEnv(extra []string) []string {
 		return nil
 	}
 	return append(os.Environ(), extra...)
+}
+
+// withLabels adds the run's labels, as YNH_LABELS, to a child's extra
+// environment. With none it returns env as it was.
+func withLabels(env []string, set labels.Set) []string {
+	if e := labels.EnvEntry(set); e != "" {
+		return append(env, e)
+	}
+	return env
 }
