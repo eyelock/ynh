@@ -126,6 +126,10 @@
       "description": "Run this harness with only the MCP servers it composes (its own and those of its included harnesses; its delegates keep theirs), instead of alongside the operator's configured servers and connectors. Default false. A launch-time setting: it changes how `ynh run` starts the vendor CLI and does not change an export. Fully supported on Claude Code; partial on Copilot; Codex, Cursor and OpenCode cannot isolate and ynh warns.",
       "type": "boolean"
     },
+    "mcp_manual_approval": {
+      "description": "Leave approval of the harness's own MCP tools on a one-shot run to the vendor and the caller. Default false: on Codex, whose one-shot runs refuse an unapproved MCP call, ynh approves the tools of the MCP servers the harness composes (default_tools_approval_mode=\"approve\" per server), never the operator's own servers and never an interactive run. A launch-time setting; it does not change an export. No other vendor needs it: Copilot gets --allow-all-tools regardless.",
+      "type": "boolean"
+    },
     "profiles": {
       "description": "Named configuration variants. Merge semantics: mcp_servers are deep-merged (profile keys win), hooks use per-event replace (profile event replaces default, absent events inherited), includes are appended to the base harness's includes when the profile is active. Set a server to null to remove it.",
       "type": "object",
@@ -144,6 +148,10 @@
           },
           "mcp_isolation": {
             "description": "Overrides the harness-level mcp_isolation when this profile is selected, either way. Absent inherits.",
+            "type": "boolean"
+          },
+          "mcp_manual_approval": {
+            "description": "Overrides the harness-level mcp_manual_approval when this profile is selected, either way. Absent inherits.",
             "type": "boolean"
           },
           "env_passthrough": {

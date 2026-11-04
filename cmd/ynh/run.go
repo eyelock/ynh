@@ -444,6 +444,13 @@ func cmdRun(args []string) error {
 			vendorArgs = append(vendorArgs, isolationLaunchArgs(adapter, runDir, os.Stderr)...)
 		}
 
+		// One-shot runs have no one to approve an MCP tool call: approve the
+		// tools of the harness's own servers on the vendors that refuse them,
+		// unless the harness opts out (mcp_manual_approval).
+		if a, ok := adapter.(vendor.MCPToolApprover); ok && prompt != "" && !ra.Interactive && !p.MCPManualApproval {
+			vendorArgs = append(a.ApproveMCPTools(runDir, vendorArgs, os.Stderr), vendorArgs...)
+		}
+
 		// Workspace folders the harness requested and the operator granted,
 		// as the vendor's own flags, ahead of the caller's pass-through args.
 		wsArgs, wsErr := workspaceLaunchArgs(loaded, harnessID, adapter.Name(), ra.NoWorkspace, os.Stderr)

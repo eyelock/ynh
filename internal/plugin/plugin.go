@@ -34,6 +34,12 @@ type HarnessJSON struct {
 	// configured servers. A launch concern: it
 	// changes how `ynh run` starts the vendor CLI, not what an export ships.
 	MCPIsolation bool `json:"mcp_isolation,omitempty"`
+	// MCPManualApproval stops ynh approving the tools of the harness's own MCP
+	// servers on a one-shot run, where the vendor would otherwise refuse them
+	// unattended. By default ynh approves them on the vendors that need it
+	// (Codex); true leaves approval to the vendor and the caller. A launch
+	// concern, like MCPIsolation.
+	MCPManualApproval bool `json:"mcp_manual_approval,omitempty"`
 	// Agent carries loop defaults a harness can set once rather than every
 	// caller passing flags.
 	Agent *AgentConfig `json:"agent,omitempty"`
@@ -537,6 +543,9 @@ type Profile struct {
 	// MCPIsolation overrides the harness-level mcp_isolation when set, either
 	// way. A pointer so that unset (inherit) and false (opt out) differ.
 	MCPIsolation *bool `json:"mcp_isolation,omitempty"`
+	// MCPManualApproval overrides the harness-level mcp_manual_approval when
+	// set, either way.
+	MCPManualApproval *bool `json:"mcp_manual_approval,omitempty"`
 
 	// SensorOverrides softens or hardens sensors while this profile is
 	// selected. Tolerance only: a ratchet decides how the committed baseline

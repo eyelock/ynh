@@ -3,6 +3,7 @@ package vendor
 import (
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"path/filepath"
 	"slices"
@@ -45,6 +46,17 @@ var ErrNoResumableSession = errors.New("no resumable session found")
 // session exists: these vendors can still resume via their continue-last form,
 // so callers should resume with an empty id rather than launching cold.
 var ErrSessionLookupUnavailable = errors.New("vendor cannot resolve session ids locally")
+
+// MCPToolApprover is an optional capability for vendors that refuse an MCP
+// tool call on a one-shot run until the tool is approved (Codex: "MCP tool
+// call requires approval, but approval policy is never"). ApproveMCPTools
+// returns the vendor arguments that approve the tools of the MCP servers the
+// run directory declares, leaving alone anything callerArgs or the user's own
+// config already settles. Copilot needs no such capability: ynh adds
+// --allow-all-tools there.
+type MCPToolApprover interface {
+	ApproveMCPTools(runDir string, callerArgs []string, warn io.Writer) []string
+}
 
 // SessionBinder is an optional capability for vendors whose CLI accepts a
 // caller-chosen id for a new session and whose session store ynh can read.

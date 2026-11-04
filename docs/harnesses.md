@@ -391,6 +391,10 @@ The servers of an included harness are carried into the including harness; see [
 
 Boolean, default `false`. When `true`, `ynh run` launches the harness with only the MCP servers it composes (its own and those of its included harnesses; its delegates keep theirs), not alongside the ones you have configured. `ynh run --isolated-mcp` turns it on for one run. See [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
 
+### mcp_manual_approval (optional)
+
+Boolean, default `false`. A one-shot Codex run (`ynh run -v codex "prompt"`) has no one to approve an MCP tool call, and Codex refuses it. By default `ynh run` approves the tools of the MCP servers the harness composes (its own and its included harnesses'), and nothing else. Set `true` to leave approval to Codex and the caller. A profile may set it too, either way. See [Codex Format](mcp.md#codex-format).
+
 ### workspace (optional)
 
 Extra folders the vendor CLI should be able to reach, such as sibling repositories: `"workspace": ["../ynh", "~/code/shared"]`. A request, not a grant. The operator's allow-list (`workspace_roots`, `YNH_WORKSPACE_ROOTS`) or `ynh trust accept` grants it, and some paths are never granted. See [Workspace Folders](workspace.md).
