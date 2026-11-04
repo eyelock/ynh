@@ -88,9 +88,9 @@ func (c *Codex) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []s
 // warnings on w.
 func codexAgentArgsWarned(runDir string, w io.Writer) []string {
 	args, warnings := CodexAgentArgs(runDir)
-	mcpArgs, mcpWarnings := CodexMCPArgs(runDir)
-	args = append(args, mcpArgs...)
-	warnings = append(warnings, mcpWarnings...)
+	mcp := CodexMCP(runDir)
+	args = append(args, mcp.Args...)
+	warnings = append(warnings, mcp.Warnings...)
 	for _, msg := range warnings {
 		_, _ = fmt.Fprintf(w, "warning: %s\n", msg)
 	}
@@ -495,6 +495,11 @@ func launchCodex(configPath string, extraArgs []string) error {
 	// Use cmd.Dir instead of --cd for CWD control.
 	cmd := exec.Command(codexBin, extraArgs...)
 	cmd.Dir = configPath
+	// The values of the servers' headers are passed in the environment, never
+	// on the command line (CodexMCP).
+	if env := CodexMCP(configPath).Env; len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	return runChildProcess(cmd)
 }
 

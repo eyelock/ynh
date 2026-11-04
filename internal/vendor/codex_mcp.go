@@ -7,33 +7,63 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/eyelock/ynh/internal/mcpexec"
 )
 
-// CodexMCPArgs returns the config overrides that load, for one launch, every
-// MCP server in runDir's .mcp.json, the file Codex's GenerateMCPConfig writes.
-// Codex reads no MCP file from a session's working directory (only
-// mcp_servers in its config.toml layers, and a project's .codex/ layer only
-// when trusted), so the root .mcp.json alone leaves a harness's servers
-// unloaded. For each server it passes
+// CodexMCPLaunch is what loading a run directory's MCP servers on Codex takes:
+// the -c overrides, the environment variables the Codex process needs, and
+// the warnings to print.
+type CodexMCPLaunch struct {
+	Args     []string
+	Env      []string // NAME=value entries added to the Codex process's environment
+	Warnings []string
+}
+
+// CodexMCP returns what loads, for one launch, every MCP server in runDir's
+// .mcp.json, the file Codex's GenerateMCPConfig writes. Codex reads no MCP
+// file from a session's working directory (only mcp_servers in its config.toml
+// layers, and a project's .codex/ layer only when trusted), so the root
+// .mcp.json alone leaves a harness's servers unloaded. For each server it
+// passes
 //
 //	-c mcp_servers.<name>.command="..." -c mcp_servers.<name>.args=[...]
-//	-c mcp_servers.<name>.env={K="v"}   -c mcp_servers.<name>.cwd="..."
-//	-c mcp_servers.<name>.url="..."     -c mcp_servers.<name>.http_headers={K="v"}
+//	-c mcp_servers.<name>.env={K="${V}"} -c mcp_servers.<name>.cwd="..."
+//	-c mcp_servers.<name>.url="..."
+//	-c mcp_servers.<name>.env_http_headers={Name="VAR"}
 //
 // The -c layer is always enabled, as for agents (CodexAgentArgs), and nothing
-// is written to the user's Codex config. A name that cannot be a -c key is not
-// loaded and a warning says so. A missing or unreadable file loads nothing.
-func CodexMCPArgs(runDir string) (args []string, warnings []string) {
+// is written to the user's Codex config.
+//
+// A command line is readable by any local process (ps), and the file holds
+// the values of the harness's ${VAR} references already expanded, so no value
+// of a server's env or headers goes on the command line:
+//
+//   - A stdio server with an env is started through `ynh mcp-exec`, with its
+//     env values left as ${YNH_MCP_n} references that the launcher expands
+//     from a 0600 file in runDir (mcpexec.EnvFileName), as for a Claude
+//     delegate's servers.
+//   - A remote server's headers are passed with env_http_headers, which names
+//     the environment variable of the Codex process that holds each value; the
+//     values are returned in Env.
+//
+// Codex has no legacy HTTP+SSE transport, only stdio and streamable HTTP, so
+// a server declared "type": "sse" is not loaded and a warning says so. A name
+// that cannot be a -c key is not loaded either. A missing or unreadable file
+// loads nothing.
+func CodexMCP(runDir string) CodexMCPLaunch {
+	var out CodexMCPLaunch
 	if runDir == "" {
-		return nil, nil
+		return out
 	}
 	file := filepath.Join(runDir, ".mcp.json")
 	data, err := os.ReadFile(file)
 	if err != nil {
-		return nil, nil
+		return out
 	}
 	var doc struct {
 		MCPServers map[string]struct {
+			Type    string            `json:"type"`
 			Command string            `json:"command"`
 			Args    []string          `json:"args"`
 			Env     map[string]string `json:"env"`
@@ -43,40 +73,107 @@ func CodexMCPArgs(runDir string) (args []string, warnings []string) {
 		} `json:"mcpServers"`
 	}
 	if err := json.Unmarshal(data, &doc); err != nil {
-		return nil, []string{fmt.Sprintf("Codex MCP file %s: %v", file, err)}
+		out.Warnings = []string{fmt.Sprintf("Codex MCP file %s: %v", file, err)}
+		return out
 	}
 	names := make([]string, 0, len(doc.MCPServers))
 	for n := range doc.MCPServers {
 		names = append(names, n)
 	}
 	sort.Strings(names)
+	absDir := mustAbs(runDir)
+	secrets := map[string]string{}
+	n := 0
 	for _, name := range names {
 		if !codexAgentNameKey.MatchString(name) {
-			warnings = append(warnings, fmt.Sprintf("MCP server %q: Codex cannot load it, since its name must use only letters, digits, '-' and '_' to be passed with -c (a '.' would split the key)", name))
+			out.Warnings = append(out.Warnings, fmt.Sprintf("MCP server %q: Codex cannot load it, since its name must use only letters, digits, '-' and '_' to be passed with -c (a '.' would split the key)", name))
 			continue
 		}
 		s := doc.MCPServers[name]
+		if s.Type == "sse" {
+			out.Warnings = append(out.Warnings, fmt.Sprintf("MCP server %q: Codex cannot load it, since it speaks the legacy HTTP+SSE transport and Codex supports only stdio and streamable HTTP servers", name))
+			continue
+		}
 		key := "mcp_servers." + name + "."
-		add := func(k, v string) { args = append(args, "-c", key+k+"="+v) }
+		add := func(k, v string) { out.Args = append(out.Args, "-c", key+k+"="+v) }
 		if s.Command != "" {
-			add("command", tomlString(s.Command))
-			if len(s.Args) > 0 {
-				add("args", tomlStringArray(s.Args))
+			command, args := s.Command, s.Args
+			var envTable map[string]string
+			if len(s.Env) > 0 {
+				if containsRef(append([]string{s.Command}, s.Args...)) {
+					out.Warnings = append(out.Warnings, fmt.Sprintf("MCP server %q: Codex cannot load it, since its command or args hold a literal ${...} that the launcher keeping its env off the command line would try to expand", name))
+					continue
+				}
+				command, args = mcpexec.Launcher, append([]string{"mcp-exec", "--env-file", filepath.Join(absDir, mcpexec.EnvFileName), "--", s.Command}, s.Args...)
+				envTable = make(map[string]string, len(s.Env))
+				for k, v := range s.Env {
+					ref := fmt.Sprintf("YNH_MCP_%d", n)
+					n++
+					secrets[ref] = v
+					envTable[k] = "${" + ref + "}"
+				}
+			}
+			add("command", tomlString(command))
+			if len(args) > 0 {
+				add("args", tomlStringArray(args))
 			}
 			if s.Cwd != "" {
 				add("cwd", tomlString(s.Cwd))
 			}
-			if len(s.Env) > 0 {
-				add("env", tomlInlineTable(s.Env))
+			if envTable != nil {
+				add("env", tomlInlineTable(envTable))
 			}
 		} else if s.URL != "" {
 			add("url", tomlString(s.URL))
 			if len(s.Headers) > 0 {
-				add("http_headers", tomlInlineTable(s.Headers))
+				table := make(map[string]string, len(s.Headers))
+				for k, v := range s.Headers {
+					ref := fmt.Sprintf("YNH_MCP_HEADER_%d", n)
+					n++
+					out.Env = append(out.Env, ref+"="+v)
+					table[k] = ref
+				}
+				add("env_http_headers", tomlInlineTable(table))
 			}
 		}
 	}
-	return args, warnings
+	if len(secrets) > 0 {
+		if err := writeMCPEnvFile(absDir, secrets); err != nil {
+			// Without the file the wrapped servers cannot start; load none of
+			// the stdio servers rather than put their values on the command line.
+			return CodexMCPLaunch{Warnings: append(out.Warnings, fmt.Sprintf("Codex MCP servers not loaded: writing %s: %v", mcpexec.EnvFileName, err))}
+		}
+	}
+	return out
+}
+
+func mustAbs(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return p
+}
+
+func containsRef(ss []string) bool {
+	for _, s := range ss {
+		if strings.Contains(s, "${") {
+			return true
+		}
+	}
+	return false
+}
+
+// writeMCPEnvFile writes the secrets to <dir>/.env.ynh, mode 0600.
+func writeMCPEnvFile(dir string, secrets map[string]string) error {
+	data, err := mcpexec.Encode(secrets)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(dir, mcpexec.EnvFileName)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o600)
 }
 
 func tomlStringArray(ss []string) string {

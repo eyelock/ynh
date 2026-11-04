@@ -161,39 +161,65 @@ func TestCodexLaunchArgs_PrintWarnings(t *testing.T) {
 	}
 }
 
-func TestCodexMCPArgs_LoadsEachServer(t *testing.T) {
+func TestCodexMCP_LoadsEachServerWithoutSecretsOnTheCommandLine(t *testing.T) {
 	runDir := t.TempDir()
 	doc := `{"mcpServers":{
-"local":{"command":"py","args":["a b","-x"],"env":{"K":"v\"q"},"cwd":"/w"},
-"remote":{"type":"http","url":"https://x/mcp","headers":{"Authorization":"t"}},
+"local":{"command":"py","args":["a b","-x"],"env":{"K":"s3cret\"q"},"cwd":"/w"},
+"plain":{"command":"py2","args":["y"]},
+"remote":{"type":"http","url":"https://x/mcp","headers":{"Authorization":"Bearer t0ken","X-Static":"v"}},
+"legacy":{"type":"sse","url":"https://x/sse"},
 "bad.name":{"command":"x"}}}`
 	if err := os.WriteFile(filepath.Join(runDir, ".mcp.json"), []byte(doc), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	args, warnings := CodexMCPArgs(runDir)
-	got := strings.Join(args, "\n")
+	got := CodexMCP(runDir)
+	line := strings.Join(got.Args, "\n")
 	for _, want := range []string{
-		`mcp_servers.local.command="py"`,
-		`mcp_servers.local.args=["a b", "-x"]`,
-		`mcp_servers.local.env={"K" = "v\"q"}`,
+		`mcp_servers.local.command="ynh"`,
+		`"mcp-exec", "--env-file", "` + runDir,
+		`"--", "py", "a b", "-x"]`,
+		`mcp_servers.local.env={"K" = "${YNH_MCP_`,
 		`mcp_servers.local.cwd="/w"`,
+		`mcp_servers.plain.command="py2"`,
 		`mcp_servers.remote.url="https://x/mcp"`,
-		`mcp_servers.remote.http_headers={"Authorization" = "t"}`,
+		`mcp_servers.remote.env_http_headers={"Authorization" = "YNH_MCP_HEADER_`,
 	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("missing %s in:\n%s", want, got)
+		if !strings.Contains(line, want) {
+			t.Errorf("missing %s in:\n%s", want, line)
 		}
 	}
-	if strings.Contains(got, "bad.name") {
-		t.Errorf("bad name was passed:\n%s", got)
+	for _, secret := range []string{"s3cret", "t0ken", "Bearer"} {
+		if strings.Contains(line, secret) {
+			t.Errorf("%q is on the command line:\n%s", secret, line)
+		}
 	}
-	if len(warnings) != 1 || !strings.Contains(warnings[0], "bad.name") {
-		t.Errorf("warnings = %v", warnings)
+	for _, name := range []string{"bad.name", "mcp_servers.legacy"} {
+		if strings.Contains(line, name) {
+			t.Errorf("%s was passed:\n%s", name, line)
+		}
+	}
+	if len(got.Warnings) != 2 || !strings.Contains(got.Warnings[0], "bad.name") && !strings.Contains(got.Warnings[1], "bad.name") {
+		t.Errorf("warnings = %v", got.Warnings)
+	}
+	if !strings.Contains(strings.Join(got.Warnings, "\n"), "legacy") {
+		t.Errorf("no warning names the sse server: %v", got.Warnings)
+	}
+	env := strings.Join(got.Env, "\n")
+	if !strings.Contains(env, "=Bearer t0ken") || !strings.Contains(env, "=v") {
+		t.Errorf("env = %v, want the header values", got.Env)
+	}
+	file := filepath.Join(runDir, ".env.ynh")
+	data, err := os.ReadFile(file)
+	if err != nil || !strings.Contains(string(data), `s3cret\"q`) {
+		t.Errorf("env file = %q, %v", data, err)
+	}
+	if fi, _ := os.Stat(file); fi == nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("env file mode = %v, want 0600", fi)
 	}
 }
 
-func TestCodexMCPArgs_NoFile(t *testing.T) {
-	if args, w := CodexMCPArgs(t.TempDir()); args != nil || w != nil {
-		t.Errorf("got %v %v", args, w)
+func TestCodexMCP_NoFile(t *testing.T) {
+	if got := CodexMCP(t.TempDir()); got.Args != nil || got.Env != nil || got.Warnings != nil {
+		t.Errorf("got %+v", got)
 	}
 }
