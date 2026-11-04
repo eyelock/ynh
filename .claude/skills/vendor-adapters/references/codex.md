@@ -114,6 +114,16 @@ Output **must** be JSON on stdout when exit 0.
 
 ## MCP Format (.mcp.json at plugin root)
 
+This is the plugin and export file. Codex reads no MCP file from a session's
+working directory: in a run, `ynh run` and `ynh agent run` pass the run
+directory's `.mcp.json` servers as `-c mcp_servers.<name>.*` overrides
+(`CodexMCP` in `internal/vendor/codex_mcp.go`). A secret is never an override's
+value: a stdio `env` goes through `ynh mcp-exec` and a remote server's headers
+through `env_http_headers` (the name of a variable in Codex's environment).
+Codex supports stdio and streamable HTTP only, so a `"type": "sse"` server is
+not loaded and the run warns. See `docs/mcp.md`, "Codex Format", for what was
+observed live and what was not (remote servers over `ynh run`, TLS, OAuth).
+
 ```json
 {
   "mcpServers": {
@@ -189,7 +199,7 @@ All discrepancies noted on 2026-04-07 were fixed in the same PR (#23, "modernize
 - ynh generates `.codex-plugin/plugin.json` — OK
 - The adapter reports two different directories: `PluginManifestDir()` is `.codex-plugin` and `MarketplaceManifestDir()` is `.agents/plugins`. Codex keeps the two apart, so neither can stand in for the other (#453)
 - ynh exports skills to `skills/` at plugin root — OK
-- ynh writes MCP to `.mcp.json` (JSON) — OK
+- ynh writes MCP to `.mcp.json` (JSON), which a plugin reads; a run loads the servers with `-c mcp_servers.<name>.*` overrides instead (see "MCP Format")
 - ynh includes Codex in marketplace generation (`.agents/plugins/marketplace.json`) and merged export — OK
 - ynh hook format matches Codex spec — OK
 - ynh hook path `.codex/hooks.json` matches Codex spec for a session: OK

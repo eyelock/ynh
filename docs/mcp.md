@@ -92,16 +92,16 @@ Each server must have either `command` or `url`, not both. Validation rejects se
 |--------|------|--------|
 | Claude Code | `.claude/.mcp.json` in a session, `mcp/claude.json` in a plugin | JSON with `mcpServers` key; remote servers carry `"type": "http"` or `"sse"` |
 | Cursor | `.cursor/mcp.json` | JSON with `mcpServers` key; no transport field, Cursor infers it |
+| Codex | `.mcp.json` in the run directory, passed to Codex as `-c mcp_servers.<name>.*` overrides (stdio and streamable HTTP; `sse` is not loaded); `.mcp.json` at the plugin root in an export | JSON with `mcpServers` key (at plugin root), same shape as Claude Code |
 | Copilot | `.copilot/.mcp.json` in the run directory (`.github/mcp.json` at the plugin root in an export) | JSON with `mcpServers` key, each server requires an explicit `"type": "local"|"http"` field |
 | OpenCode | `.opencode/opencode.json` (in the `OPENCODE_CONFIG_DIR` bundle) | JSON with servers under `mcp.servers`; `"type": "local"` with `command` as an array, or `"type": "remote"` with `url` |
-
-Codex is not listed here: in v0.16.0 ynh does not deliver MCP servers to a Codex session (see [Known gaps](vendors.md#known-gaps)).
 
 Claude, Cursor and Copilot read MCP servers from a different file depending on how the harness reaches them, and ynh writes each file only where it is read:
 
 | Vendor | `ynh run`, `ynd preview`, `ynh agent` (a session) | `ynd export`, `ynd marketplace build` (a plugin) |
 |--------|------|------|
 | Claude Code | `.claude/.mcp.json`: `.mcp.json` at the root of the `.claude/` plugin directory the session loads | `mcp/claude.json`, named by the `mcpServers` field of `.claude-plugin/plugin.json` ([plugin reference](https://code.claude.com/docs/en/plugins-reference)) |
+| Codex | `.mcp.json` in the run directory, which Codex does not read itself: every launch, `ynh agent run` included, registers each server in it with `-c mcp_servers.<name>.*` overrides (see [Codex Format](#codex-format)) | `.mcp.json` at the plugin root, named by the `mcpServers` field of `.codex-plugin/plugin.json` |
 | Cursor | `.cursor/mcp.json`, the only project-level path Cursor reads ([cursor.com/docs/context/mcp](https://cursor.com/docs/context/mcp)) | `mcp.json` (no dot) at the plugin root, which a Cursor plugin discovers automatically ([cursor.com/docs/reference/plugins](https://cursor.com/docs/reference/plugins)) |
 | OpenCode | `.opencode/opencode.json` in the run directory, the config bundle OpenCode launches with | `.opencode/opencode.json`, the same document; nothing loads it as a plugin, since OpenCode has no plugin manifest |
 | Copilot | `.copilot/.mcp.json` in the run directory, passed to Copilot with `--additional-mcp-config` at launch, never copied into the project (see [Copilot Format](#copilot-format)) | `.github/mcp.json` at the plugin root, a default MCP path for a Copilot plugin ([Copilot CLI plugin reference](https://docs.github.com/en/copilot/reference/cli-plugin-reference)) |
@@ -171,7 +171,21 @@ Cursor uses `.cursor/mcp.json` in a project, or `mcp.json` at the root of an exp
 
 ### Codex Format
 
-Codex uses `.mcp.json` at the plugin root with the same JSON format as Claude:
+Codex uses `.mcp.json` at the plugin root with the same JSON format as Claude. In a run, though, Codex reads no MCP file from its working directory: it reads `mcp_servers` only from its config layers, and a project's `.codex/` layer only when the project is trusted. So `ynh run` (interactive, one-shot, with a first prompt or resumed) and `ynh agent run --backend codex` (every turn) pass each server in the run directory's `.mcp.json` as `-c mcp_servers.<name>.*` overrides: `.command`, `.args`, `.env` and `.cwd` for a stdio server, or `.url` and `.env_http_headers` for a remote one. Codex treats `-c` as a config layer that is always enabled, so no trust is needed and nothing is written to your Codex config. A server whose name holds anything but letters, digits, `-` and `_` cannot be a `-c` key; the run prints a warning naming it and does not load it.
+
+**Secrets stay off the command line.** A command line is readable by any local process (`ps -axww`), and a server's `${VAR}` references in `env` and `headers` are values by the time ynh builds the overrides. So ynh passes none of them there:
+
+- A stdio server with an `env` is started through `ynh mcp-exec`, as for a delegate's servers on Claude (see [MCP Servers of Delegates](#mcp-servers-of-delegates)). The override carries `command="ynh"` with `args=["mcp-exec", "--env-file", <run directory>/.env.ynh, "--", <command>, <args...>]` and `env={"KEY" = "${YNH_MCP_0}"}`; the values are in `.env.ynh` in the run directory, mode 0600, and the launcher expands them in its own process. A server whose `command` or `args` hold a literal `${` is not loaded, and the run says so, since the launcher would try to expand it.
+- A remote server's headers are passed with `env_http_headers`, which names the environment variable of the Codex process that holds each header's value (`env_http_headers={"Authorization" = "YNH_MCP_HEADER_SECRET_0"}`). ynh sets those variables in the environment of the Codex process it starts, never in its arguments. Codex's shell tool inherits that environment, and Codex 0.166.0 applies its default excludes (names containing `KEY`, `SECRET` or `TOKEN`) only when `shell_environment_policy.ignore_default_excludes` is `false`, which is not its default. So the variables are named so those patterns match, and ynh passes `-c shell_environment_policy.ignore_default_excludes=false` whenever a remote server has headers. ynh does not set `shell_environment_policy.exclude`, so your own exclude list still applies. The cost: on Codex's defaults (`ignore_default_excludes` is `true`), every run with a header server also hides your own `*KEY*`, `*SECRET*` and `*TOKEN*` variables from the shell tool, because ynh's `-c` setting turns the default excludes on for that run. If you set `ignore_default_excludes = true` in your own config, you get the same, since `-c` overrides your config for that run. This fails safe: it hides variables, never exposes them. The MCP client reads the variables from the Codex process, not through that policy.
+- Secrets are numbered (`YNH_MCP_n`, `YNH_MCP_HEADER_SECRET_n`) in sorted server-name, then sorted key order, so the numbering is the same on every call.
+
+**What is proven.** Observed live on codex-cli 0.166.0 (2026-11-04): a stdio server declared in `.mcp.json` loaded through `ynh run`, and Codex listed and called its tool (ynw-81jp.5). Re-checked after moving the secrets off the command line (ynw-g9pu): a stdio server whose `env` held a secret received it, and sampling `ps -axww -o args` through the run never showed it. A streamable-HTTP server (a local `http://127.0.0.1` one, no TLS), declared with a header in `.mcp.json` and reached through `ynh run` itself (`codex exec`), received its `Authorization` value on `initialize`, `tools/list` and `tools/call` with the final shell policy in place; `env` in Codex's shell tool in the same run listed neither `YNH_MCP_HEADER_SECRET_0`, nor a variable the user's own config excluded, nor a `*KEY*` variable, while an ordinary variable was still listed (ynw-2452, ynw-ibf1). Renaming the variable alone was tried first and did not hide it, since the default excludes were off. Not proven live: a remote server over TLS, or with OAuth; `ynh agent run --backend codex` loading a server (the unit tests check its arguments and environment, and the run was not made); and the interactive `codex`.
+
+**`sse` is not loaded.** Codex supports stdio and streamable-HTTP servers; its client has no legacy HTTP+SSE transport. A server declared `"type": "sse"` would otherwise be given to Codex as a streamable-HTTP `url` and fail at the first request, so ynh does not pass it: the run prints a warning naming the server and Codex starts without it. Not tried against a real SSE server.
+
+A one-shot run still stops at Codex's own approval policy (`MCP tool call requires approval, but approval policy is never`) until you pass an approval for the tool yourself, such as `-- -c 'mcp_servers.<name>.tools.<tool>.approval_mode="approve"'`; ynh does not set one.
+
+The file, as an export carries it:
 
 ```json
 {
@@ -374,6 +388,8 @@ A server's `${VAR}` references are resolved from the delegate's own `env_passthr
 - `${PLUGIN_ROOT}`, `${PLUGIN_DATA}` and plugin-relative `./` paths are not secrets; ynh expands them as it always has. A `${VAR}` in a server's `cwd` is not expanded by anything.
 
 Checked against Claude Code 2.1.294 with `PROBE_TOKEN=s3cret-xyz`: the subagent's tool returned `pong:s3cret-xyz`, and sampling `ps -axww -o args` through the whole run never showed the value in the `claude` process's arguments.
+
+On Codex, ynh also writes `.env.ynh` in the run directory itself (not under `delegates/`), mode 0600, holding the values of the `env` of each stdio server of the harness's `.mcp.json` as `YNH_MCP_n` entries, for the `ynh mcp-exec` launcher that wraps those servers (see [Codex](#codex-format)). It is regenerated on every launch. The values of remote servers' headers are not in it; they are set in the Codex process's environment.
 
 `.env.ynh` matches common `.env.*` ignore patterns, which is the intent, but ynh only ever writes it under its own run directory. It is never written by `ynd export`, `ynd preview` or `ynh image`. In `ynh agent run` the run directory is the loop's temporary config directory, which is removed when the run ends; the launcher reads the file, so the worker's environment (built from the root harness's `env_passthrough` only) does not need the delegate's variables. A baked image (`ynh image`) is assembled without secrets, so its delegates' servers are not carried on Claude; run the harness from source to get them.
 
