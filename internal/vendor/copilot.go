@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"os/exec"
@@ -732,9 +733,68 @@ func buildCopilotArgs(configPath string, initialPrompt string, extraArgs []strin
 		}
 	}
 	args = append(args, copilotMCPArgs(configPath)...)
+	if projectDir, err := os.Getwd(); err == nil {
+		warnLegacyProjectMCP(os.Stderr, configPath, projectDir)
+	}
 
 	args = append(args, extraArgs...)
 	return args, nil
+}
+
+// warnLegacyProjectMCP tells the user when the project's .github/mcp.json looks
+// like one an older ynh wrote, which held the servers' expanded credentials. It
+// never deletes or alters the file. The file carries no marker (JSON has no
+// comments), so "looks like" is judged by shape: the only top-level key is
+// mcpServers, every server has the "tools" and "type" fields ynh's document
+// carries, and the server names are exactly those of this run's document. A
+// hand-written file almost never matches all three, but a user's own file could,
+// so the message says "looks like" and leaves the decision to the user.
+func warnLegacyProjectMCP(w io.Writer, configPath, projectDir string) {
+	run, err := os.ReadFile(filepath.Join(configPath, ".copilot", ".mcp.json"))
+	if err != nil {
+		return
+	}
+	runNames, ok := copilotMCPServerNames(run)
+	if !ok {
+		return
+	}
+	path := filepath.Join(projectDir, ".github", "mcp.json")
+	proj, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	projNames, ok := copilotMCPServerNames(proj)
+	if !ok || strings.Join(projNames, "\x00") != strings.Join(runNames, "\x00") {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "warning: %s looks like one an older ynh wrote, and may hold your MCP credentials in plain text. ynh no longer writes it and has not touched it. If you did not write it yourself, delete it and rotate those credentials.\n", path)
+}
+
+// copilotMCPServerNames returns the sorted server names of a Copilot MCP
+// document, and false when it is not shaped like one ynh renders (see
+// copilotMCPDocument): a sole top-level mcpServers key whose servers each carry
+// "type" and "tools".
+func copilotMCPServerNames(data []byte) ([]string, bool) {
+	var doc map[string]map[string]map[string]json.RawMessage
+	if err := json.Unmarshal(data, &doc); err != nil || len(doc) != 1 {
+		return nil, false
+	}
+	servers, ok := doc["mcpServers"]
+	if !ok || len(servers) == 0 {
+		return nil, false
+	}
+	names := make([]string, 0, len(servers))
+	for name, fields := range servers {
+		if _, ok := fields["type"]; !ok {
+			return nil, false
+		}
+		if _, ok := fields["tools"]; !ok {
+			return nil, false
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, true
 }
 
 func launchCopilot(configPath string, initialPrompt string, extraArgs []string) error {

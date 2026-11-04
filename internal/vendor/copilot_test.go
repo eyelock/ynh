@@ -554,3 +554,49 @@ func TestIsolateMCP_PartialAndUnsupportedVendors(t *testing.T) {
 		}
 	}
 }
+
+func TestWarnLegacyProjectMCP(t *testing.T) {
+	runDoc := `{"mcpServers":{"a":{"type":"local","command":"x","env":{"K":"secret"},"tools":["*"]}}}`
+	cases := []struct {
+		name    string
+		project string // "" means no file
+		warn    bool
+	}{
+		{"ynh-shaped, same servers", runDoc, true},
+		{"no project file", "", false},
+		{"different server names", `{"mcpServers":{"b":{"type":"local","tools":["*"]}}}`, false},
+		{"hand-written without tools", `{"mcpServers":{"a":{"type":"local","command":"x"}}}`, false},
+		{"extra top-level key", `{"mcpServers":{"a":{"type":"local","tools":["*"]}},"other":{}}`, false},
+		{"not json", `nope`, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			configPath, projectDir := t.TempDir(), t.TempDir()
+			if err := os.MkdirAll(filepath.Join(configPath, ".copilot"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(configPath, ".copilot", ".mcp.json"), []byte(runDoc), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			target := filepath.Join(projectDir, ".github", "mcp.json")
+			if tc.project != "" {
+				if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(target, []byte(tc.project), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var buf strings.Builder
+			warnLegacyProjectMCP(&buf, configPath, projectDir)
+			if got := strings.Contains(buf.String(), target); got != tc.warn {
+				t.Errorf("warned = %v, want %v (output %q)", got, tc.warn, buf.String())
+			}
+			if tc.project != "" {
+				if b, err := os.ReadFile(target); err != nil || string(b) != tc.project {
+					t.Errorf("project file was altered or removed: %v", err)
+				}
+			}
+		})
+	}
+}
