@@ -456,3 +456,20 @@ func TestResumeWithPromptRefused(t *testing.T) {
 		}
 	}
 }
+
+func TestCodexExecResumeTranslatesAddDir(t *testing.T) {
+	extra := []string{"--add-dir", "/a", "-c", "x=1", "--add-dir", "/b c"}
+	got, err := codexResumeArgs("abc", "go", false, extra)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"exec", "resume", "abc", "-c", "x=1", "-c", `sandbox_workspace_write.writable_roots=["/a","/b c"]`, "go"}
+	if !equalArgs(got, want) {
+		t.Errorf("args = %v, want %v", got, want)
+	}
+	// Without a prompt it is the interactive `codex resume`, which keeps --add-dir.
+	got, _ = codexResumeArgs("abc", "", false, []string{"--add-dir", "/a"})
+	if want := []string{"resume", "abc", "--add-dir", "/a"}; !equalArgs(got, want) {
+		t.Errorf("interactive args = %v, want %v", got, want)
+	}
+}

@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/eyelock/ynh/internal/plugin"
@@ -189,11 +191,42 @@ func codexResumeArgs(sessionID, prompt string, interactive bool, extraArgs []str
 	} else {
 		args = append(args, "--last")
 	}
+	if prompt != "" {
+		extraArgs = codexExecResumeExtraArgs(extraArgs)
+	}
 	args = append(args, extraArgs...)
 	if prompt != "" {
 		args = append(args, prompt)
 	}
 	return args, nil
+}
+
+// codexWritableRootsKey is the config key `codex exec resume` takes granted
+// folders through: it rejects --add-dir (codex-cli 0.166.0: "unexpected
+// argument --add-dir found") but accepts -c.
+const codexWritableRootsKey = "sandbox_workspace_write.writable_roots"
+
+// codexExecResumeExtraArgs rewrites the caller's args for `codex exec resume`:
+// each "--add-dir <dir>" pair becomes one entry of a single
+// -c sandbox_workspace_write.writable_roots=[...] override (repeated -c on one
+// key would replace, not add). Every other arg passes through in order. This is
+// the one place a Codex subcommand's arg dialect is translated; a further
+// per-subcommand rewrite belongs beside it.
+func codexExecResumeExtraArgs(extraArgs []string) []string {
+	var roots []string
+	out := make([]string, 0, len(extraArgs))
+	for i := 0; i < len(extraArgs); i++ {
+		if extraArgs[i] == codexWorkspaceFlag && i+1 < len(extraArgs) {
+			roots = append(roots, strconv.Quote(extraArgs[i+1]))
+			i++
+			continue
+		}
+		out = append(out, extraArgs[i])
+	}
+	if len(roots) > 0 {
+		out = append(out, "-c", codexWritableRootsKey+"=["+strings.Join(roots, ",")+"]")
+	}
+	return out
 }
 
 // IsolateMCP cannot isolate on Codex: ynh knows no way to keep the user's
