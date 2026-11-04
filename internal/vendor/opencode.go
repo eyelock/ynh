@@ -412,9 +412,10 @@ func (o *OpenCode) TransformArtifact(artifactType, name string, data []byte) (st
 		b.WriteString("description: " + strconv.Quote(humanizeRuleName(strings.TrimSuffix(name, ".md"))) + "\n")
 	}
 	if !hasMode {
-		// CONFIRMED live on v2.2.3: an agent with no mode cannot be run by the
-		// task tool ("Agent <name> cannot run as a subagent"); mode: all keeps it
-		// selectable with --agent and runnable as a subagent.
+		// CONFIRMED live on v2.2.3: an agent with no mode defaults to primary,
+		// so the task tool cannot run it ("Agent <name> cannot run as a
+		// subagent"); mode: all keeps it selectable with --agent and runnable
+		// as a subagent.
 		b.WriteString("mode: all\n")
 	}
 	if existing != nil {
