@@ -29,7 +29,7 @@ ynh defines six canonical hook events. Each vendor translates these to its nativ
 
 ### on_session_start output becomes model context
 
-On every vendor but OpenCode, what an `on_session_start` hook prints reaches the model. **Write plain text to stdout**; ynh does the rest. A hook that prints a line of orientation, today's tasks or a wake block works the same on Claude Code, Codex, Copilot and Cursor.
+What an `on_session_start` hook prints reaches the model on every vendor. **Write plain text to stdout**; ynh does the rest. A hook that prints a line of orientation, today's tasks or a wake block works the same on Claude Code, Codex, Copilot, Cursor and OpenCode.
 
 The vendors do not agree on how the output is read. Verified on 2026-10-30 with a hook printing a unique token and a one-shot prompt asking the model to repeat any token in its context:
 
@@ -39,7 +39,9 @@ The vendors do not agree on how the output is read. Verified on 2026-10-30 with 
 | Codex | Yes (CONFIRMED live, codex-cli 0.166.0, once the hook is trusted; see [Codex hook trust](#codex-hook-trust)) | also `hookSpecificOutput.additionalContext` | writes the command as declared |
 | Copilot CLI 1.0.105 | No | `{"additionalContext": "..."}` | wraps the command |
 | Cursor (cursor-agent 2026.10.01) | No | `{"additional_context": "..."}` | wraps the command |
-| OpenCode 2 | No | none: the hook runs from the event stream (`session.created`), which cannot add context, and the generated plugin discards its stdout | declares `unsupported`, so assembly warns |
+| OpenCode 2 | Yes | none: ynh runs the hook itself before launching OpenCode (the event stream's `session.created` cannot add context) and appends its stdout to the generated `AGENTS.md`; only the output of a hook that exits 0 is kept | declares `plain` |
+
+On OpenCode the hook's stdin is the `SessionStart` payload (`hook_event_name`, `cwd`), its working directory is the project, and a hook that fails or times out is reported on stderr without stopping the launch. The generated plugin still runs the hook on `session.created` too, for its side effects only: that run's output is discarded.
 
 On Copilot and Cursor ynh writes the hook as `sh <root>/hooks/ynh-session-context.sh <field> '<your command>'`. The wrapper is a small generated POSIX `sh` and `awk` script shipped inside the session layout and inside every exported package (`hooks/ynh-session-context.sh`), so it works on a machine where ynh is not installed, with no python or jq. It:
 
