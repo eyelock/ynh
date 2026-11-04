@@ -18,6 +18,7 @@ type CodexMCPLaunch struct {
 	Args     []string
 	Env      []string // NAME=value entries added to the Codex process's environment
 	Warnings []string
+	Servers  []string // the servers the overrides load, in sorted order
 }
 
 // CodexMCP returns what loads, for one launch, every MCP server in runDir's
@@ -143,6 +144,9 @@ func CodexMCP(runDir string) CodexMCPLaunch {
 				}
 				add("env_http_headers", tomlInlineTable(table))
 			}
+		}
+		if s.Command != "" || s.URL != "" {
+			out.Servers = append(out.Servers, name)
 		}
 	}
 	if len(out.Env) > 0 {

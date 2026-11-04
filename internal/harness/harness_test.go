@@ -955,3 +955,38 @@ func TestResolveProfile_MCPIsolation(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadDir_MCPManualApproval(t *testing.T) {
+	for _, declared := range []bool{false, true} {
+		dir := t.TempDir()
+		hj := &plugin.HarnessJSON{Name: "ma", Version: "0.1.0", MCPManualApproval: declared}
+		if err := plugin.SavePluginJSON(dir, hj); err != nil {
+			t.Fatal(err)
+		}
+		p, err := LoadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.MCPManualApproval != declared {
+			t.Errorf("MCPManualApproval = %v, want %v", p.MCPManualApproval, declared)
+		}
+	}
+}
+
+func TestResolveProfile_MCPManualApproval(t *testing.T) {
+	yes, no := true, false
+	for _, tt := range []struct {
+		base    bool
+		profile *bool
+		want    bool
+	}{{false, &yes, true}, {true, &no, false}, {true, nil, true}, {false, nil, false}} {
+		h := &Harness{Name: "x", MCPManualApproval: tt.base, Profiles: map[string]plugin.Profile{"p": {MCPManualApproval: tt.profile}}}
+		resolved, err := ResolveProfile(h, "p")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resolved.MCPManualApproval != tt.want {
+			t.Errorf("base %v profile %v: got %v, want %v", tt.base, tt.profile, resolved.MCPManualApproval, tt.want)
+		}
+	}
+}

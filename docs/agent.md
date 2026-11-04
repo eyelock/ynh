@@ -154,6 +154,14 @@ on `codex`, `cursor` and `opencode` ynh prints one `warning:` line on stderr
 and the worker loads your own servers too. See
 [Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
 
+**Codex and MCP approval.** A `codex` worker runs `codex exec`, which has no one
+to ask, so an MCP tool call is refused with `MCP tool call requires approval,
+but approval policy is never` under any `--auto-approve` level short of `all`.
+The approval ynh adds to a one-shot `ynh run` (see
+[Approval on a one-shot run](mcp.md#codex-format) and `mcp_manual_approval`) is
+not applied to `ynh agent run`. Use `--auto-approve all`, or pass your own
+approval to Codex.
+
 ### Delegates
 
 A worker carries the harness's delegates (`delegates_to`) as subagents, as
