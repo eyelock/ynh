@@ -46,7 +46,7 @@ bare array or object with no envelope:
 
 ```console
 $ ynh version --format json
-{ "version": "...", "capabilities": "0.8.0" }
+{ "version": "...", "capabilities": "0.x.y" }
 
 $ ynh vendors --format json
 [ { "name": "claude", ... } ]        ← bare array, no envelope, no version

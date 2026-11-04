@@ -16,6 +16,7 @@ Progressive tutorials from first steps to advanced configurations. Each tutorial
 | [MCP Servers](mcp-servers.md) | Declare MCP server dependencies per harness |
 | [Profiles](profiles.md) | Environment-specific overrides with profiles |
 | [Focus](focus.md) | Bind a prompt and profile for repeatable, non-interactive runs |
+| [Composing Tools](composing-tools.md) | Carry MCP servers, profiles, focuses and hooks across includes |
 | [Project-Local Config](project-local-config.md) | Zero-install `.agents/harness/plugin.json` in your project root |
 | [Workspace Folders](workspace.md) | Request sibling folders; grant them with an allow-list or trust; see what is never granted |
 
@@ -85,7 +86,7 @@ Requires Go 1.25+.
 ```bash
 git clone https://github.com/eyelock/ynh.git
 cd ynh
-make deps      # installs Go, linter, formatter
+make deps      # installs Go, linter, formatter, jq; checks for python3
 make install   # builds and installs to ~/.ynh/bin/
 ```
 
@@ -113,5 +114,6 @@ You also need at least one AI coding assistant CLI installed:
 | OpenAI Codex | `codex` | `npm install -g @openai/codex` |
 | Cursor | `agent` | Bundled with [Cursor](https://cursor.com) |
 | GitHub Copilot CLI | `copilot` | `npm install -g @github/copilot` |
+| OpenCode (2.x only) | `opencode` | `brew install anomalyco/tap/opencode-v2` |
 
 Claude Code is used in most tutorial examples. Codex and Cursor are needed for [Vendors & Symlinks](vendors-and-symlinks.md) and [Export](export.md).

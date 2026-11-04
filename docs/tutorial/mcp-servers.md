@@ -187,6 +187,7 @@ Exported for merged → /tmp/ynh-tutorial/mcp-merged (0 skills, 0 agents)
 ./.cursorrules
 ./.github/mcp.json
 ./.mcp.json
+./.opencode/opencode.json
 ./AGENTS.md
 ./CLAUDE.md
 ./mcp.json
@@ -314,7 +315,11 @@ Expected `.mcp.json` (at plugin root):
 
 Note what that means: the assembled config holds the real credential, expanded.
 The manifest is safe to commit; the assembled output is not. It belongs in the
-run directory and in `.gitignore`, never in a harness you publish.
+run directory and in `.gitignore`, never in a harness you publish. ynh writes
+it there at mode 0600, in directories at 0700. For Copilot it is passed to
+the CLI by file (`--additional-mcp-config`), so no copy lands in your project.
+`ynd preview -o <dir>` writes
+the same files at 0600 in `<dir>`; do not point it at a directory you commit.
 
 ## Compare MCP config across vendors
 
@@ -364,7 +369,7 @@ ynh profile remove /tmp/ynh-tutorial/mcp-harness ci
 
 Quote any `--header` or `--env` value that contains a space: unquoted, `Bearer xyz` is two arguments and `ynh mcp add` prints its usage line instead.
 
-`--command` and `--url` are mutually exclusive; at least one is required at add time. `--null` is profile-only (harness-level entries cannot be null — see [mcp.md §"CLI Editing"](../mcp.md#cli-editing)).
+`--command` and `--url` are mutually exclusive; at least one is required at add time. `--null` is profile-only on the command line (see [mcp.md §"CLI Editing"](../mcp.md#cli-editing)); a harness nulls a server inherited from an include by editing its manifest, as shown below.
 
 The first positional argument accepts either a filesystem path (during authoring) or a canonical harness id (`local/<name>`, `github.com/<org>/<repo>/<name>`) once installed.
 
@@ -410,6 +415,73 @@ Expected:
 Error: mcp_servers.broken: type sse requires url
 ```
 
+## Servers from an included harness
+
+An include that holds a harness manifest brings its MCP servers with it. Build a shared harness that declares a server, and a second harness that includes it:
+
+```bash
+mkdir -p /tmp/ynh-tutorial/team/shared/.agents/harness /tmp/ynh-tutorial/team/.agents/harness
+
+cat > /tmp/ynh-tutorial/team/shared/.agents/harness/plugin.json << 'EOF'
+{
+  "name": "shared",
+  "version": "0.1.0",
+  "mcp_servers": {
+    "wiki": { "url": "https://wiki.example.com/mcp" },
+    "scratch": { "command": "npx", "args": ["-y", "scratch-server"] }
+  }
+}
+EOF
+
+cat > /tmp/ynh-tutorial/team/.agents/harness/plugin.json << 'EOF'
+{
+  "name": "team",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "includes": [{ "local": "shared" }]
+}
+EOF
+
+cat > /tmp/ynh-tutorial/team/instructions.md << 'EOF'
+You are a team assistant.
+EOF
+
+ynd preview /tmp/ynh-tutorial/team -v claude -o /tmp/ynh-tutorial/team-preview
+```
+
+Expected, after the files are written:
+
+```
+MCP servers from included harnesses:
+  scratch (from shared)
+  wiki (from shared)
+```
+
+Both servers are in `/tmp/ynh-tutorial/team-preview/.claude/.mcp.json`, although `team` declares none. To drop one, set it to `null` in the including harness's `mcp_servers`:
+
+```bash
+cat > /tmp/ynh-tutorial/team/.agents/harness/plugin.json << 'EOF'
+{
+  "name": "team",
+  "version": "0.1.0",
+  "default_vendor": "claude",
+  "includes": [{ "local": "shared" }],
+  "mcp_servers": { "scratch": null }
+}
+EOF
+
+ynd preview /tmp/ynh-tutorial/team -v claude -o /tmp/ynh-tutorial/team-preview
+```
+
+Expected, after the files are written:
+
+```
+MCP servers from included harnesses:
+  wiki (from shared)
+```
+
+A server the including harness declares itself replaces an included one of the same name. See [Servers from Included Harnesses](../mcp.md#servers-from-included-harnesses) for the full rules, including how each server expands in its own include's context and why a path-relative included server cannot be exported.
+
 ## Clean up
 
 ```bash
@@ -420,12 +492,13 @@ rm -rf /tmp/ynh-tutorial
 
 - MCP servers are declared in `.agents/harness/plugin.json` under `mcp_servers`
 - Servers can use stdio transport (`command` + `args`) or HTTP transport (`url`)
-- All four vendors use JSON with a `mcpServers` key, but in different file locations
+- Claude, Codex, Cursor and Copilot use JSON with a `mcpServers` key, but in different file locations. OpenCode nests its servers under `mcp.servers` in `.opencode/opencode.json`
 - Claude places MCP config at `.claude/.mcp.json`, Cursor at `.cursor/mcp.json`, Codex at `.mcp.json` (plugin root) and Copilot at `.copilot/.mcp.json`
 - The entries differ in the `type` field: Claude and Codex set it only on a remote server (`http` or `sse`), Cursor has none, and Copilot sets it on every server (`local`, `http` or `sse`)
-- An export writes each vendor's plugin MCP file instead: Claude's `mcp/claude.json` (named by its manifest), Codex's `.mcp.json`, Cursor's root `mcp.json`, Copilot's `.github/mcp.json`. No two share a path, so a merged package carries all four
+- An export writes each vendor's plugin MCP file instead: Claude's `mcp/claude.json` (named by its manifest), Codex's `.mcp.json`, Cursor's root `mcp.json`, Copilot's `.github/mcp.json` and OpenCode's `.opencode/opencode.json`. No two share a path, so a merged package carries all five
 - `ynd preview` and `ynd diff` let you verify MCP config without installing
 - MCP servers can be edited from the CLI with `ynh mcp add/update/remove` (top-level) and `ynh profile mcp add/update/remove` (profile-level), with `--null` available on profile-level to suppress an inherited entry
+- An included harness's MCP servers come with the include; `null` in the including harness's `mcp_servers` drops one
 - The transport is inferred from `command` or `url`; `--type sse` declares the one case that cannot be, and each vendor's config carries its own spelling
 
 ## Next

@@ -23,7 +23,7 @@ var Version = "dev"
 //
 // Consumers (for example) read this via `ynh version --format json` and gate
 // features on it with their own `minimumYNHCapabilities` constant.
-const CapabilitiesVersion = "0.9.0"
+const CapabilitiesVersion = "0.10.0"
 
 // features names the capabilities a consumer can gate on without parsing a
 // version, reported by `ynh version --format json` and `ynd version --format
@@ -33,9 +33,13 @@ const CapabilitiesVersion = "0.9.0"
 // never renamed or removed, and consumers tolerate names they do not know.
 // Adding one is additive and does not bump CapabilitiesVersion.
 var features = []string{
-	"agent-run-fetches-includes", // a run fetches its git includes at setup (ynf #130)
-	"agent-run-harness-path",     // `ynh agent run --harness` takes a path (#564)
-	"workspace-folders",          // manifest `workspace`, workspace_roots, YNH_WORKSPACE_ROOTS, `ynh run --no-workspace` (#624)
+	"agent-run-fetches-includes",        // a run fetches its git includes at setup (ynf #130)
+	"agent-run-harness-path",            // `ynh agent run --harness` takes a path (#564)
+	"delegate-graph-flattens",           // delegates_to is flattened: each reachable harness is one agent, the root never its own delegate (#547)
+	"include-cycles-resolve",            // an include cycle resolves, noted in `ynh info` include_notes, and one source at two versions fails (#547)
+	"run-labels",                        // `ynh run` and `ynh agent run` take run labels: config.json, the manifest, YNH_LABELS, --label; `ynh ls --label` (ynw-17g.16)
+	"trust-counts-composed-mcp-servers", // `ynh trust` mcp_servers lists servers from includes (source) and delegates (delegate) (#573, ynw-9cc.9)
+	"workspace-folders",                 // manifest `workspace`, workspace_roots, YNH_WORKSPACE_ROOTS, `ynh run --no-workspace` (#624)
 }
 
 // Features returns a copy of the feature names, sorted.
@@ -122,6 +126,10 @@ type Config struct {
 	// (docs/telemetry.md). --telemetry-relay and YNH_TELEMETRY_RELAY come
 	// first.
 	TelemetryRelay bool `json:"telemetry_relay,omitempty"`
+	// Labels are run labels (key to value) every `ynh run` and `ynh agent
+	// run` carries, the lowest-precedence source: the harness manifest,
+	// YNH_LABELS and --label override them per key (docs/telemetry.md).
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 // HomeDir returns the ynh home directory.

@@ -199,6 +199,14 @@ func (c *Copilot) LaunchResume(configPath, sessionID, prompt string, interactive
 	return launchCopilot(configPath, "", append(resumeArgs, extraArgs...))
 }
 
+// IsolateMCP is partial on Copilot: --disable-builtin-mcps drops the built-in
+// servers, but the servers in the user's own ~/.copilot/mcp-config.json still
+// load, and ynh has no flag that stops them.
+func (c *Copilot) IsolateMCP(configPath string) ([]string, string) {
+	return []string{"--disable-builtin-mcps"},
+		"MCP isolation is partial on Copilot: built-in servers are disabled, but servers in ~/.copilot/mcp-config.json still load"
+}
+
 // ApplyRuntimeInstructions appends per-invocation text to the assembled
 // AGENTS.md in runDir. buildCopilotArgs reads that same file later in this
 // invocation and projects it into the project's own instructions file, so
@@ -523,9 +531,9 @@ type copilotMCPServer struct {
 
 // GenerateMCPConfig writes the MCP file for the `ynh run` layout, into
 // .copilot/ (the --plugin-dir target). buildCopilotArgs re-reads this same
-// file and projects it into the project's own .github/mcp.json, which is the
-// path confirmed to actually work (see package doc): a plugin loaded via
-// --plugin-dir does not get its bundled MCP config read. An export uses
+// file and passes it with --additional-mcp-config, because a plugin loaded via
+// --plugin-dir does not get its bundled MCP config read, and the expanded
+// values must not be written into the project. An export uses
 // GeneratePluginMCPConfig.
 func (c *Copilot) GenerateMCPConfig(servers map[string]plugin.MCPServer) (map[string][]byte, error) {
 	data, err := copilotMCPDocument(servers)
@@ -608,12 +616,6 @@ func copilotMCPDocument(servers map[string]plugin.MCPServer) ([]byte, error) {
 // an applyTo pattern).
 const copilotInstructionsRelPath = ".github/instructions/ynh-harness.instructions.md"
 
-// copilotProjectMCPRelPath is ynh's dedicated MCP config file in the real
-// project tree. Copilot loads .github/mcp.json additively alongside any
-// root .mcp.json the user maintains themselves, so this file is fully
-// ynh-owned without risk of clobbering user-managed MCP servers.
-const copilotProjectMCPRelPath = ".github/mcp.json"
-
 // writeCopilotProjectFile fully overwrites a ynh-owned file in the project
 // tree, creating parent directories as needed.
 func writeCopilotProjectFile(projectDir, relPath string, data []byte) error {
@@ -675,23 +677,27 @@ func copilotInstructions(content []byte) []byte {
 	return b.Bytes()
 }
 
-// projectCopilotMCPConfig reads the assembled MCP config from the staging
-// dir (written there by GenerateMCPConfig) and re-projects it into the real
-// project directory. Copilot does not read plugin-bundled MCP config via
-// --plugin-dir (confirmed by hand-testing), so this is the only mechanism
-// that actually delivers MCP servers.
-func projectCopilotMCPConfig(configPath, projectDir string) error {
+// copilotMCPArgs returns the launch arguments that hand Copilot the assembled
+// MCP config from the run directory (written there by GenerateMCPConfig, at
+// 0600), or nil when there is none. Copilot does not read plugin-bundled MCP
+// config via --plugin-dir (confirmed by hand-testing), but
+// --additional-mcp-config @<file> loads servers for this session only. The
+// servers' ${VAR} values are already expanded, so the file must stay in the
+// run directory: it is never copied into the project, where it could be
+// committed. The path is absolute, and the flag takes a file, never the JSON
+// inline, which would put the secrets on the command line.
+func copilotMCPArgs(configPath string) []string {
 	mcpPath := filepath.Join(configPath, ".copilot", ".mcp.json")
 	content, err := os.ReadFile(mcpPath)
 	if err != nil || len(content) == 0 {
 		return nil
 	}
-	return writeCopilotProjectFile(projectDir, copilotProjectMCPRelPath, content)
+	return []string{"--additional-mcp-config", "@" + mcpPath}
 }
 
 // buildCopilotArgs constructs the argument list for the Copilot CLI and
-// projects assembled instructions/MCP config into the real project directory
-// (see package doc for why). initialPrompt, when non-empty, is passed via
+// projects assembled instructions into the real project directory (see
+// package doc for why) and passes the MCP config by file, outside the project. initialPrompt, when non-empty, is passed via
 // -i/--interactive, which pre-loads it as the first user message of an
 // otherwise-interactive session (confirmed via `copilot help`).
 //
@@ -719,10 +725,8 @@ func buildCopilotArgs(configPath string, initialPrompt string, extraArgs []strin
 		if err := projectCopilotInstructions(configPath, projectDir); err != nil {
 			return nil, err
 		}
-		if err := projectCopilotMCPConfig(configPath, projectDir); err != nil {
-			return nil, err
-		}
 	}
+	args = append(args, copilotMCPArgs(configPath)...)
 
 	args = append(args, extraArgs...)
 	return args, nil

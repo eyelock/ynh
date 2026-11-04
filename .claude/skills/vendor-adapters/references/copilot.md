@@ -377,8 +377,11 @@ mid-session. `~/.copilot/mcp-config.json` is user scope, lower precedence.
 **CONFIRMED: a `.mcp.json` bundled inside a `--plugin-dir` plugin is NOT read**
 (tested at both `.mcp.json` and `.github/mcp.json` placements inside the plugin
 dir). `GenerateMCPConfig` still writes `.copilot/.mcp.json` for interface
-consistency, but `buildCopilotArgs` re-reads it and projects it into the real
-project's `.github/mcp.json`, the path that actually works.
+consistency, and `buildCopilotArgs` passes that file with
+`--additional-mcp-config @<absolute path>` (CONFIRMED live on Copilot CLI
+1.0.105: the server starts and nothing is written into the project). It used to
+project the file into the project's `.github/mcp.json`, which left expanded
+secrets where they could be committed (ynw-18ln); never do that.
 
 An export writes `GeneratePluginMCPConfig`'s `.github/mcp.json` at the plugin
 root instead: the Copilot CLI plugin reference lists `.mcp.json` and

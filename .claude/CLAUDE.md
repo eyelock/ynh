@@ -2,7 +2,7 @@
 
 ## What This Is
 
-ynh is a harness template manager for AI coding assistants (Claude Code, OpenAI Codex, Cursor, GitHub Copilot). No runtime — resolves config, assembles vendor-specific layout, launches the vendor CLI.
+ynh is a harness template manager for AI coding assistants (Claude Code, OpenAI Codex, Cursor, GitHub Copilot, OpenCode). No runtime — resolves config, assembles vendor-specific layout, launches the vendor CLI.
 
 ## Two Binaries
 
@@ -16,7 +16,7 @@ Both built by `make build`, released together via goreleaser (single `v*` tag).
 **Always use Make targets, not raw `go`/`golangci-lint` commands.** The Makefile wraps them with correct flags (race detection, coverage, ldflags, version injection).
 
 ```bash
-make check              # full CI: deps, format, lint, test, build, check-artifacts
+make check              # every CI check needing no Docker or network: deps, format, lint, check-tidy, test, build, check-artifacts, check-vendor-parity, check-marketplace
 make build              # build both binaries to bin/
 make test               # all tests with race detection and coverage
 make test FILE=./cmd/ynd  # test specific package
@@ -28,8 +28,10 @@ make clean              # remove build artifacts and caches
 make clean && make build  # fresh build (use when binary seems stale)
 make check-artifacts    # ynd validate + ynd lint over skills/ agents/ rules/ .claude/
 make check-vendor-parity # every vendor documented, assembles the same artifacts, stubbed in evals (needs jq)
+make check-marketplace  # committed marketplace indexes agree with the plugin manifests (needs python3)
 make scan-artifacts     # SkillSpector security scan of the same dirs (needs Docker)
 make vulncheck          # govulncheck over the Go code (needs network)
+make conformance        # ynr conformance against ynh's telemetry (needs ynr and ynr-stub-vendor on PATH)
 ```
 
 `scan-artifacts` is deliberately NOT part of `make check` — it needs Docker, and a
@@ -53,6 +55,14 @@ fail tomorrow, and a non-deterministic step does not belong in the check people
 run before pushing. `.github/workflows/vulncheck.yml` gates every PR and runs
 nightly. A standard-library advisory is fixed by the `toolchain` directive in
 `go.mod`, not by a dependency bump.
+
+`make conformance` is outside `make check` too: it needs `ynr` and
+`ynr-stub-vendor` on your PATH, which CI downloads from a pinned,
+checksum-verified ynr release, and a missing optional tool should not fail a
+contributor's build. It runs the scenarios in `.ynr/conformance.yaml` against
+`bin/ynh` and the stub vendor, so it needs no model and no secret. CI's
+Conformance job runs it on every PR. See the Conformance section of
+`docs/telemetry.md`.
 
 **Do not use:** `go build ./...`, `go test ./...`, `golangci-lint run` directly. They miss flags, ldflags, or tool paths that the Makefile provides.
 

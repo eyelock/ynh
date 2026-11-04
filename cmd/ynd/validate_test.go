@@ -1715,6 +1715,45 @@ func TestSchemaPlugin_IncludeSensorsFlag(t *testing.T) {
 	}
 }
 
+func TestValidateHarnessMCPServers_NullRemovesAnIncludedServer(t *testing.T) {
+	hj := map[string]any{"mcp_servers": map[string]any{
+		"gone": nil,
+		"ok":   map[string]any{"command": "c"},
+	}}
+	if issues := validateHarnessMCPServers(hj); len(issues) != 0 {
+		t.Errorf("null entry must be accepted, got %v", issues)
+	}
+	hj = map[string]any{"mcp_servers": map[string]any{"bad": "x"}}
+	if issues := validateHarnessMCPServers(hj); len(issues) != 1 || !strings.Contains(issues[0], "object or null") {
+		t.Errorf("issues = %v", issues)
+	}
+}
+
+func TestValidateHarnessIncludes_Alias(t *testing.T) {
+	for as, wantIssue := range map[string]bool{"gh-work": false, "a:b": true, "-x": true} {
+		issues := validateHarnessIncludes(map[string]any{
+			"includes": []any{map[string]any{"local": "inc", "as": as}},
+		})
+		if got := len(issues) > 0; got != wantIssue {
+			t.Errorf("as %q: issues = %v, want an issue: %v", as, issues, wantIssue)
+		}
+	}
+}
+
+func TestValidateHarnessIncludes_HooksConsent(t *testing.T) {
+	for name, tc := range map[string]struct {
+		hooks any
+		issue bool
+	}{"true": {true, false}, "false": {false, false}, "string": {"yes", true}, "number": {1.0, true}} {
+		issues := validateHarnessIncludes(map[string]any{
+			"includes": []any{map[string]any{"local": "inc", "hooks": tc.hooks}},
+		})
+		if got := len(issues) > 0; got != tc.issue {
+			t.Errorf("%s: issues = %v, want an issue: %v", name, issues, tc.issue)
+		}
+	}
+}
+
 func TestValidateHarnessProfiles_SensorOverrides(t *testing.T) {
 	out := map[string]any{"format": "text"}
 	own := map[string]any{

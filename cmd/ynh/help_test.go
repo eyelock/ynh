@@ -270,10 +270,23 @@ func captureUsage(t *testing.T) string {
 	return buf.String()
 }
 
+// internalCommands are dispatched and have help, but ynh writes the calls to
+// them: they are not for a person to type, so `ynh help` leaves them out.
+var internalCommands = map[string]bool{"mcp-exec": true, "mcp-headers": true}
+
+func TestInternalCommandsAreNotInUsage(t *testing.T) {
+	usage := captureUsage(t)
+	for name := range internalCommands {
+		if strings.Contains(usage, name) {
+			t.Errorf("internal command %q is listed in `ynh help`", name)
+		}
+	}
+}
+
 func TestEveryDispatchedCommandAppearsInUsage(t *testing.T) {
 	usage := captureUsage(t)
 	for _, name := range dispatchedCommands(t) {
-		if canonicalCommand(name) != name {
+		if canonicalCommand(name) != name || internalCommands[name] {
 			continue // aliases need not be listed separately
 		}
 		// Match the command at the start of a usage line, so "install" is not

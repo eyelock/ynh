@@ -127,6 +127,12 @@ func (c *Cursor) LaunchResume(configPath, sessionID, prompt string, interactive 
 	return launchCursor(configPath, append(resumeArgs, extraArgs...))
 }
 
+// IsolateMCP cannot isolate on Cursor: ynh knows no way to keep the user's
+// configured servers out, so it says so and launches normally.
+func (c *Cursor) IsolateMCP(configPath string) ([]string, string) {
+	return nil, "MCP isolation is not supported by Cursor: servers in your Cursor config will still load"
+}
+
 func (c *Cursor) ApplyRuntimeInstructions(runDir, text string) ([]string, error) {
 	cursorrules := filepath.Join(runDir, ".cursorrules")
 	f, err := os.OpenFile(cursorrules, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
@@ -440,12 +446,12 @@ type cursorMCPServer struct {
 // requires: renamed from .md to .mdc with Cursor's frontmatter. Plain .md
 // files under .cursor/rules are silently ignored by Cursor. Other artifact
 // types pass through unchanged.
-func (c *Cursor) TransformArtifact(artifactType, name string, data []byte) (string, []byte) {
+func (c *Cursor) TransformArtifact(artifactType, name string, data []byte) (string, []byte, error) {
 	if artifactType != "rules" || !strings.HasSuffix(name, ".md") {
-		return name, data
+		return name, data, nil
 	}
 	stem := strings.TrimSuffix(name, ".md")
-	return stem + ".mdc", cursorRule(stem, data)
+	return stem + ".mdc", cursorRule(stem, data), nil
 }
 
 // cursorRule renders a rule as an .mdc file with exactly one frontmatter

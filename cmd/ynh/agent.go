@@ -40,6 +40,8 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 	structured := detectJSONFormat(args)
 	resultFormat := "text"
 	relayFlag := false
+	var profileValues []string // --profile repeats, one per harness
+	var labelFlags []string    // --label repeats; key: removes a label
 	opts := agent.RunOptions{
 		Stdout: stdout,
 		Stderr: stderr,
@@ -79,7 +81,7 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 			if i >= len(args) {
 				return cliError(stderr, structured, errCodeInvalidInput, "--profile requires a value")
 			}
-			opts.Profile = args[i]
+			profileValues = append(profileValues, args[i])
 
 		case "--focus":
 			i++
@@ -174,6 +176,13 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 		case "--telemetry-relay":
 			relayFlag = true
 
+		case "--label":
+			i++
+			if i >= len(args) {
+				return cliError(stderr, structured, errCodeInvalidInput, "--label requires a value (key:value, or key: to remove)")
+			}
+			labelFlags = append(labelFlags, args[i])
+
 		case "--interactive":
 			opts.Interactive = true
 
@@ -236,13 +245,19 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 		}
 	}
 
+	sel, selErr := harness.ParseSelection(profileValues, opts.Focus)
+	if selErr != nil {
+		return cliError(stderr, structured, errCodeInvalidInput, selErr.Error())
+	}
+	opts.Profile, opts.IncludedProfiles = sel.Profile, sel.Included
+
 	// Mutual exclusion guards mirror `ynh run`:
 	// focus already provides both prompt and bound profile.
 	if opts.Focus != "" && opts.Task != "" {
 		return cliError(stderr, structured, errCodeInvalidInput,
 			"cannot use --focus and --task together (focus includes a prompt)")
 	}
-	if opts.Focus != "" && opts.Profile != "" {
+	if opts.Focus != "" && len(profileValues) > 0 {
 		return cliError(stderr, structured, errCodeInvalidInput,
 			"cannot use --focus and --profile together (focus includes a profile)")
 	}
@@ -254,9 +269,24 @@ func cmdAgentRun(args []string, stdout, stderr io.Writer, stdin io.Reader) error
 			"--task or --focus is required")
 	}
 
+	// The run's labels, from the root harness's manifest among other
+	// sources. The harness may be one a checkpoint restores; if it cannot be
+	// loaded here RunLoop refuses the run with its own error.
+	var root *harness.Harness
+	if name := agent.ResumedIdentity(opts).HarnessName; name != "" {
+		root, _ = harness.LoadIDOrPath(name)
+	}
+	runLabels, err := resolveRunLabels(labelFlags, root)
+	if err != nil {
+		return cliError(stderr, structured, errCodeInvalidInput, err.Error())
+	}
+	opts.Labels = runLabels
+	telemetryOpts := telemetryOptions
+	telemetryOpts.Labels = runLabels
+
 	// Telemetry starts only once the arguments are good: an argument error is
 	// not a run. With no destination this is a no-op and changes nothing.
-	tel := telemetry.Setup(config.Version, telemetryOptions, stderr)
+	tel := telemetry.Setup(config.Version, telemetryOpts, stderr)
 	defer tel.Shutdown()
 	// On --resume the run is described by the identity its checkpoint
 	// restores, not only by the flags given.

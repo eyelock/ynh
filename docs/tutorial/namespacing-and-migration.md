@@ -134,8 +134,13 @@ The `name@<registry>` form picks one registry's entry. The chosen entry's
 ynh install david@eyelock-registry
 ```
 
-Expected:
+Expected: the harness's four includes are fetched first, all from the same repository:
 ```
+Fetching 4 include(s) and 0 delegate(s)...
+  Fetched eyelock/assistants
+  Fetched eyelock/assistants
+  Fetched eyelock/assistants
+  Fetched eyelock/assistants
 Installed harness "david"
   Location: /Users/<you>/.ynh/harnesses/github.com--eyelock--assistants--david
   Launcher: /Users/<you>/.ynh/bin/david
@@ -199,9 +204,13 @@ this tree, names the fix, and leaves the tree exactly as it was:
 ynd validate /tmp/ynh-ns-tutorial/legacy
 ```
 
-Expected: the harness is reported `INVALID` (exit 1) with this issue:
+Expected: the harness is reported `INVALID` (exit 1) with this issue, and no manifest to check:
 ```
+/tmp/ynh-ns-tutorial/legacy: INVALID
   - /tmp/ynh-ns-tutorial/legacy uses the legacy .harness.json manifest, which ynh no longer reads; convert it with: ynd migrate /tmp/ynh-ns-tutorial/legacy
+  checked:
+    manifest     missing
+Error: validation failed
 ```
 
 `ynd preview`, `ynd export` and `ynh install` refuse it the same way, and so
@@ -264,7 +273,23 @@ ynd validate /tmp/ynh-ns-tutorial/legacy
 ynh install /tmp/ynh-ns-tutorial/legacy
 ```
 
+Expected: `ynd validate` reads the new manifest and finds nothing else to check, then the install succeeds:
 ```
+/tmp/ynh-ns-tutorial/legacy: valid
+  checked:
+    manifest     /tmp/ynh-ns-tutorial/legacy/.agents/harness/plugin.json against https://eyelock.github.io/ynh/schema/plugin.schema.json
+    includes     none
+    mcp_servers  none
+    hooks        none
+    profiles     none
+    focuses      none
+    sensors      none
+    delegates_to none
+    skills       none
+    agents       none
+    rules        none
+    commands     none
+    instructions none
 Installed harness "legacy-demo"
   Location: /tmp/ynh-ns-tutorial/legacy
   Launcher: /Users/<you>/.ynh/bin/legacy-demo

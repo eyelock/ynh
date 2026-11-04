@@ -258,6 +258,43 @@ func includeBase(p *harness.Harness, inc harness.Include) (base, source string, 
 	return b, "include " + inc.Git, nil
 }
 
+// ResolveIncludesLocal resolves the includes of p, and of every harness they
+// reach, without touching the network: a git include that is not cached is an
+// error, as it is for the sensors. The harness's own repo is the exception
+// (IsOwnRepoSource), refreshed as a run refreshes it. sel applies the
+// profiles of included harnesses a run could select (--profile ns:name).
+// `ynh trust` reads what a run would carry through it.
+func ResolveIncludesLocal(p *harness.Harness, sel harness.Selection) ([]ResolveResult, error) {
+	results, _, err := ResolveSelectedLocal(p, sel)
+	return results, err
+}
+
+// ResolveSelectedLocal is ResolveIncludesLocal that also returns the focus of
+// an included harness when sel names one (--focus ns:name), as
+// ResolveSelectedFromCache does for a run. `ynh info` reads it to say which
+// profile that focus applied.
+func ResolveSelectedLocal(p *harness.Harness, sel harness.Selection) ([]ResolveResult, *plugin.Focus, error) {
+	return resolveSelected(p, nil, func(gs harness.GitSource, dir string) (string, *RepoResult, error) {
+		fetch := repoFunc(lookupOnlyRepo)
+		if IsOwnRepoSource(gs, dir) {
+			fetch = EnsureRepo
+		}
+		return resolveGitSourceWith(gs, dir, fetch)
+	}, sel)
+}
+
+// ResolveDelegateLocal resolves a delegate's source to its directory without
+// touching the network, as ResolveIncludesLocal does for includes: a delegate
+// that is not cached is an error, and the harness's own repo is refreshed.
+func ResolveDelegateLocal(gs harness.GitSource, harnessDir string) (string, error) {
+	fetch := repoFunc(lookupOnlyRepo)
+	if IsOwnRepoSource(gs, harnessDir) {
+		fetch = EnsureRepo
+	}
+	base, _, err := resolveGitSourceWith(gs, harnessDir, fetch)
+	return base, err
+}
+
 // ReadIncludeSensors reports the sensors one include declares, for static
 // validation. Unlike the merge it never fetches, not even the harness's own
 // repo: a local include is read from disk and a git include only from the

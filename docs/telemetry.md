@@ -5,8 +5,15 @@ each sensor check, and an event when the run starts and when it ends. A factory
 can then follow a run from the step that started it, through the run, into the
 vendor CLI and the sensors.
 
-It is the only ynh command that does. Every other command launches the vendor
-CLI and gets out of the way, so none lives long enough to report.
+It is the only ynh command that does. The commands that launch a vendor CLI
+(`ynh run` and the like) emit nothing, whatever the vendor, and what ynh does
+with its own process differs by vendor:
+
+- **Claude, Copilot and OpenCode:** ynh replaces itself with the vendor CLI
+  (`syscall.Exec`). No ynh process is left, so there is nothing to report from.
+- **Codex and Cursor:** ynh stays the parent process while the vendor CLI runs
+  as its child, forwards signals, and exits with the child's exit code. It is
+  running throughout, but these commands still emit no telemetry.
 
 Telemetry is off unless something gives it a destination, and it never changes
 a run: the result, the output and the exit code are the same with it and
@@ -16,10 +23,13 @@ without it.
 
 ynh chooses when the run starts, in this order:
 
-1. **`OTEL_EXPORTER_OTLP_*`.** Any non-empty variable with this prefix means the
-   operator chose an OTLP endpoint, and that choice wins. This version of ynh
-   cannot export over OTLP yet (see [Not yet](#not-yet)), so it prints one note
-   on stderr and writes nothing.
+1. **`OTEL_EXPORTER_OTLP_*`.** An OTLP endpoint (`OTEL_EXPORTER_OTLP_ENDPOINT`
+   or a per-signal one), or a setting ynh cannot honour (below), means the
+   operator chose, and that choice wins. ynh posts its spans and logs to the
+   endpoint over OTLP/HTTP with JSON bodies, in the same batches, with the same
+   resource and the same 2-second bound on every flush as the spool, and writes
+   nothing to the spool. Settings that name no endpoint, such as a lone
+   `OTEL_EXPORTER_OTLP_TIMEOUT`, ask for nothing, and the order goes on.
 2. **The spool.** `YNR_SPOOL` names a spool folder, or the laptop default
    `$XDG_STATE_HOME/ynr/spool/local` exists (`~/.local/state/ynr/spool/local`
    when `XDG_STATE_HOME` is unset). ynh writes OTLP JSON lines into it.
@@ -35,6 +45,35 @@ time: the started event and the span carry the time the run began, not the time
 the spool appeared. A worker already running keeps the environment it started
 with; every process started after that gets the trace and the spool. An
 operator's `OTEL_EXPORTER_OTLP_*` stops the search, since that choice is theirs.
+
+### Exporting to an OTLP endpoint
+
+ynh uses a small OTLP/HTTP exporter with JSON bodies from ynr's
+`spoolexporter`, not the standard OpenTelemetry exporters, which would bring in
+gRPC and protobuf and about sixty-five more modules. It reads these variables:
+
+| Variable | Used |
+|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | the base URL; `/v1/traces` and `/v1/logs` are appended |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | each signal's full URL, as given |
+| `OTEL_EXPORTER_OTLP_HEADERS` and the per-signal `_HEADERS` | sent with each request; the per-signal list wins by name |
+| `OTEL_EXPORTER_OTLP_TIMEOUT` and the per-signal `_TIMEOUT` | milliseconds, but each export is bounded by at least 2 seconds regardless |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | only `http/json` (or unset) |
+
+These are not supported. When one is set, ynh prints one note on stderr naming
+the setting, never a header value, and writes nothing for the run: not to the
+endpoint, and not to the spool.
+
+- `OTEL_EXPORTER_OTLP_PROTOCOL` (or a per-signal one) other than `http/json`,
+  including `grpc`, and `http/protobuf`. The ynr how-to for Claude Code exports
+  `http/protobuf`, so a shell set up that way reports the setting as
+  unsupported and exports nowhere; unset it, or set `http/json`, for ynh.
+- `OTEL_EXPORTER_OTLP_CERTIFICATE`, `_CLIENT_CERTIFICATE` and `_CLIENT_KEY`
+  (and the per-signal forms): custom certificates.
+- `OTEL_EXPORTER_OTLP_COMPRESSION` (and the per-signal forms), other than `none`.
+
+An export that fails or times out is counted and dropped, never retried, and
+never reaches the run.
 
 ynh never creates the laptop default folder, and never starts anything because
 it found [ynr](https://github.com/eyelock/ynr). It creates a folder named by
@@ -58,7 +97,10 @@ ynh-<instance id>-000001.jsonl        closed
   counted.
 - The file is flushed to disk when the run starts and when it ends. Each flush
   is abandoned after 2 seconds, so a slow network filesystem never holds up a
-  run or its exit.
+  run or its exit. One abandoned flush abandons every later one, so a stuck
+  destination costs a run 2 seconds in all. The price: a run whose first flush
+  is slow loses the span and finished event it would have flushed on exit,
+  although the batchers keep sending in between.
 - Every telemetry error is swallowed and counted. None reaches stderr, the run
   result or the exit code.
 
@@ -120,6 +162,9 @@ Every record carries the resource `service.name=ynh`, `service.version`, and
 to the resource, for example `deployment.environment.name`, but cannot replace
 those three: they say which registry describes the records.
 
+Each [run label](#run-labels) is a resource attribute too, `ynh.label.<key>`,
+on every record.
+
 ### Attributes
 
 The started event and the span carry what the run was asked for. The span and
@@ -167,15 +212,102 @@ Outcomes, one per [exit code](agent.md#exit-codes): `converged`, `refused`,
 `user_aborted`, `interrupted`. The span's status is ok for `converged` and an
 error otherwise, described by the outcome word alone.
 
-**These names are a draft.** The `ynh.*` names will move into a registry ynh
-owns, with constants generated from it, and may change then. The standard names
-follow semantic conventions 1.41.0, the last version whose Go package carries
-the `gen_ai.*` names, which upstream still marks as in development.
+## Run labels
+
+A label is a short `key:value` id the user chooses for a run, such as
+`wheelhouse:ynw`, so ynr can group runs and cost by Wheelhouse, project or
+batch. It belongs to the run, not to a vendor: it holds for every vendor ynh
+runs. The rules are ynr's, [ADR-006](https://github.com/eyelock/ynr/blob/develop/docs/adr/006-sibling-instrumentation-contract.md)
+rule 10.
+
+### Where they come from
+
+Four sources, merged per key, later winning:
+
+1. `"labels": {"wheelhouse": "ynw"}` in `~/.ynh/config.json`
+   (`$YNH_HOME/config.json`), for every run
+2. `"labels"` in the **root** harness's manifest
+   ([`plugin.json`](harnesses.md#labels-optional)). The labels of harnesses it
+   includes or delegates to are ignored; this is not `keywords`
+3. `YNH_LABELS`, comma-separated: `YNH_LABELS=wheelhouse:ynw,batch:7`
+4. `--label key:value`, repeatable. `--label key:` removes `key`, whatever
+   set it
+
+The flag is on `ynh run` and `ynh agent run`; `ynh run` does not pass it to the
+vendor.
+
+### What a label may be
+
+ynh refuses the run, before anything starts and before anything reaches the
+spool, if the merged set breaks any of these. It never exports a sanitised
+version, and its message names the key, never the refused value.
+
+- a key matches `^[a-z][a-z0-9_.-]{0,31}$`
+- a value matches `^[A-Za-z0-9._/#-]{1,64}$`: no spaces, no `@`
+- a value does not start with `/` or `~`, and does not contain your home folder
+- at most 16 labels
+
+A label is never a person's name or email, a host name, a secret, or a run or
+item id. ynh checks the shape, not the meaning: choosing ids that are none of
+these is yours.
+
+### Where they go
+
+- **Telemetry:** `ynh.label.<key>=<value>` on ynh's resource, so on every
+  record `ynh agent run` writes (the registry declares the template
+  `ynh.label`). Every `ynh.label.*` in `OTEL_RESOURCE_ATTRIBUTES` is removed from ynh's environment when the run starts (with a note on stderr naming the keys), since only these were validated; on `ynh agent run` the vendor and `ynh check` never inherit one. `ynh run` does not strip them yet, so its vendor still inherits an operator `ynh.label.*`: the strip belongs with the vendor's `OTEL_RESOURCE_ATTRIBUTES` that bead ynw-17g.17 writes on `ynh run`.
+  `ynh run` writes no record of its own yet: when it does, it carries the
+  same labels.
+- **Child processes:** ynh sets `YNH_LABELS` to the merged set in the
+  environment of every process it starts: the vendor CLI (including past
+  `env_passthrough`, which does not apply to it) and each `ynh check`. With no
+  labels it sets nothing, and removes an inherited `YNH_LABELS`.
+- **Not yet:** the vendor's own telemetry does not carry them. Appending them to
+  the vendor's `OTEL_RESOURCE_ATTRIBUTES` is a separate change.
+- **`ynh ls` and `ynh info`** show a harness's own manifest labels, and
+  `ynh ls --label key:value` (repeatable, every one must match) lists only
+  harnesses that carry them.
+
+## The registry
+
+Every name above is declared in ynh's telemetry registry, an
+[OpenTelemetry Weaver](https://github.com/open-telemetry/weaver) registry in
+[`telemetry/registry/`](https://github.com/eyelock/ynh/tree/develop/telemetry/registry)
+(ynr ADR-007): `manifest.yaml` names the tool and pins the upstream semantic
+conventions, `attributes.yaml` defines ynh's own `ynh.*` attributes with their
+types, enum members and examples, and `signals.yaml` lists each span and event
+with the attributes it carries and their requirement levels. ynh records no
+metrics yet.
+
+The registry is embedded in the binary, and `ynh telemetry registry` prints it:
+
+```bash
+ynh telemetry registry                 # the names, for a person
+ynh telemetry registry --format json   # the registry, for ynr
+```
+
+The JSON is a bare object in the shape every tool of the family prints
+(`ynf telemetry registry --format json` defined it): `tool` and `version`,
+which `service.name` and `service.version` repeat on every record,
+`semantic_conventions`, `attributes`, `standard_attributes`, `spans`, `events`
+and `metrics`. ynr reads it to learn the names. The schema is
+[`docs/schema/cli/telemetry-registry.schema.json`](https://github.com/eyelock/ynh/blob/develop/docs/schema/cli/telemetry-registry.schema.json).
+
+The Go constants ynh emits with (`internal/telemetry/names_gen.go`) are
+generated from the registry with `go generate ./internal/telemetry`, and a test
+fails when they differ from it, or when code spells a registered name as a
+string instead of using its constant. CI checks the registry itself with
+Weaver's `registry check`.
+
+The standard names follow semantic conventions 1.41.0, the last version whose
+Go package carries the `gen_ai.*` names, which upstream still marks as in
+development. The registry's attributes are at stability `development`: a name
+may still change, and when one does, the registry says so.
 
 ## Vendor telemetry through the relay
 
-Claude Code can report its own spans, metrics and events, but only over the
-network. The telemetry relay setting lets a run collect them into its spool
+Claude Code and Codex can report their own spans, metrics and events, but only
+over the network. The telemetry relay setting lets a run collect them into its spool
 too: ynh starts [`ynr relay`](https://github.com/eyelock/ynr), a small OTLP/HTTP
 receiver on a random loopback port, points the vendor CLI at it, and stops it
 when the run ends. The relay writes what it receives into the run's spool
@@ -196,7 +328,7 @@ The setting is off by default. The first of these that says anything decides:
 With the setting on, ynh starts the relay only when all of these hold, just
 before the worker starts:
 
-- the backend is `claude` (see [Other vendors](#other-vendors))
+- the backend is `claude` or `codex` (see [Other vendors](#other-vendors))
 - the run's telemetry goes to the spool: an operator's `OTEL_EXPORTER_OTLP_*`
   means the vendor's telemetry is theirs to direct, so ynh leaves it alone,
   and with no spool there is nowhere to write
@@ -328,11 +460,93 @@ tools; Claude Code's own requests are the vendor's behaviour, there is no
 documented switch to stop them short of turning spans off, and the header
 carries only random ids, never content.
 
+### What Codex receives
+
+Codex reads its telemetry settings from its `config.toml` (an `[otel]` table),
+not from `OTEL_*` variables. ynh gives each `codex exec` (one per turn) these
+`-c` overrides, which outrank `~/.codex/config.toml` and its profiles:
+
+| Override | Value | Why |
+|---|---|---|
+| `otel.trace_exporter` | `{otlp-http={endpoint="<relay>/v1/traces",protocol="binary"}}` | spans to the relay over OTLP/HTTP protobuf |
+| `otel.metrics_exporter` | `{otlp-http={endpoint="<relay>/v1/metrics",protocol="binary"}}` | metrics to the relay |
+| `otel.exporter` | `"none"` | Codex's logs (events) off: see below |
+| `otel.log_user_prompt` | `false` | the prompt, which Codex otherwise logs |
+| `otel.log_agent_responses` | `false` | the model's responses |
+| `otel.log_guardian_assessments` | `false` | the auto-reviewer's assessments |
+
+Codex's `otlp-http` endpoint is the URL it posts to, so each one carries its
+signal's path. Each exporter is given as a whole inline table, so headers, TLS
+or another endpoint in a user's `[otel]` block do not survive. Before the run,
+ynh also drops any `OTEL_EXPORTER_OTLP_*` a harness's `env_passthrough` would
+hand to Codex.
+
+**Codex's logs are off** because every Codex log record carries the signed-in
+account's email address and account id as attributes (`user.email`,
+`user.account_id`), and nothing in its `[otel]` table leaves them out. People
+appear in telemetry only by their handle, never by email ([ynr ADR-006, rule
+10](https://github.com/eyelock/ynr/blob/develop/docs/adr/006-sibling-instrumentation-contract.md)). Codex's spans and metrics carry neither. The token counts its events
+would have reported are on its turn spans too (`gen_ai.usage.*`,
+`codex.turn.token_usage.*`).
+
+**Codex joins the run's trace.** It reads `TRACEPARENT` and `TRACESTATE` from
+its environment ("TRACEPARENT detected; continuing trace from parent
+context"), and its `codex.exec` span is a child of the run's `ynh.run` span.
+
+Verified on 2026-10-31 with codex-cli 0.166.0, signed in with ChatGPT, against
+a real `ynr relay`: `ynh agent run --backend codex` with the relay on wrote
+Codex's spans and metrics into the run's spool, in the caller's trace, with
+`codex.exec` under `ynh.run`. No log records and no email address reached the
+spool. With logs on, Codex's `codex.user_prompt` event carried
+`prompt="[REDACTED]"` under `log_user_prompt=false`. An
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` or `OTEL_EXPORTER_OTLP_ENDPOINT` in Codex's
+environment did not move the traces away from the `-c` endpoint.
+
+**The relay strips paths and host names.** Codex's spans carry the working
+directory (`cwd`, ynh's run directory, which sits under the user's home and so
+names their account) and the host's name (`host.name`), and nothing in Codex's
+`[otel]` table drops an attribute. `ynr relay` removes them before anything
+reaches the spool ([ynr #86](https://github.com/eyelock/ynr/pull/86)). It drops
+`cwd`, `host.name`, `host.id`, `host.ip`, `host.mac`, `process.owner`,
+`process.command`, `process.command_line`, `process.command_args` and
+`process.executable.path`, and any attribute whose value is the user's home
+folder or a path under it, on every signal and from every vendor. Paths and host
+names are dropped rather than hashed
+([ynr ADR-006, rule 10](https://github.com/eyelock/ynr/blob/develop/docs/adr/006-sibling-instrumentation-contract.md)). This needs a `ynr` newer than v0.3.2, the
+latest release when this was written; an older relay writes those attributes
+as Codex sends them. The relay scrubs attributes only, not log bodies or span
+names; Codex's log bodies are off anyway, and its span names carry no paths.
+
+**What Codex passes on.** The commands Codex runs inherit `TRACEPARENT` and
+`OTEL_RESOURCE_ATTRIBUTES` from its environment. This was checked live on
+2026-10-31 with codex-cli 0.166.0, outside ynh. `codex exec --json` ran with
+`TRACEPARENT` and `OTEL_RESOURCE_ATTRIBUTES` set in its environment and was
+asked to run, in Codex's default shell environment policy:
+
+```sh
+env | grep -E '^(TRACEPARENT|TRACESTATE|OTEL_)' | sed 's/=.*//' ; echo done
+```
+
+The command's output in the `command_execution` event (exit code 0) was the
+variable names only, never their values:
+
+```
+OTEL_RESOURCE_ATTRIBUTES
+TRACEPARENT
+done
+```
+
+That shows the names reach the command, not whether the `TRACEPARENT` value
+is the one Codex was given or one for its own span. `TRACESTATE` was not set
+for that run, so whether it passes through is unchecked. Under ynh with the
+relay on, Codex's environment carries no `OTEL_EXPORTER_OTLP_*`, so neither do
+its commands.
+Unchecked: whether Codex passes them to the MCP servers it starts, and whether
+it sends a W3C `traceparent` header on its requests to the OpenAI API.
+
 ### Other vendors
 
-Nothing yet. Codex is configured through its `config.toml` rather than the
-environment, and whether it reads `TRACEPARENT` is unverified; Cursor is
-unexamined. With the setting on, a Codex or Cursor run starts no relay and
+Cursor is unexamined. With the setting on, a Cursor run starts no relay and
 prints one note.
 
 ## No content
@@ -347,19 +561,41 @@ particular it never carries:
   harness given as a path, or the changed files
 - people's names or email addresses
 
+A vendor's own telemetry through the relay is held to the same rules
+([ynr ADR-006, rule 10](https://github.com/eyelock/ynr/blob/develop/docs/adr/006-sibling-instrumentation-contract.md)). ynh turns the vendor's content options off,
+turns off Codex's logs (they carry the account's email), and the relay drops
+paths and host names before the spool (see
+[What Codex receives](#what-codex-receives)).
+
+## Conformance
+
+[`ynr conformance`](https://github.com/eyelock/ynr/blob/develop/docs/how-to/add-conformance-to-ci.md)
+checks ynh's telemetry against the instrumentation contract (ynr ADR-006), with
+no model and no secret. Its scenarios are in
+[`.ynr/conformance.yaml`](https://github.com/eyelock/ynh/blob/develop/.ynr/conformance.yaml).
+Each runs `ynh agent run` against ynr's stub vendor, which answers as `claude`,
+on a harness in `testdata/conformance/`. The four scenarios end converged, at the
+turn cap, at the token budget, and refused before any worker starts. Each plants
+a prompt and a credential, and the check fails if either reaches a record.
+
+CI's Conformance job downloads a pinned ynr release, with the SHA-256 of its
+`ynr` and `ynr-stub-vendor` archives pinned beside the version. The release's
+`checksums.txt` must list the same digests, and the downloads must match them,
+before anything is extracted or run. Locally, with `ynr` and `ynr-stub-vendor`
+on your `PATH`:
+
+```bash
+make conformance
+```
+
+Every rule passes or is skipped by design, including rule 1's check that a tool
+exports to the operator's `OTEL_EXPORTER_OTLP_ENDPOINT`.
+
 ## Not yet
 
 These are still to come:
 
-- **Exporting over OTLP.** The standard OTLP exporters bring in gRPC and
-  protobuf, about ninety modules; ynh does not take that on for an endpoint it
-  cannot yet use. Until then an `OTEL_EXPORTER_OTLP_*` setting writes nothing,
-  with a note.
-- **Other vendors' telemetry** through the relay, starting with Codex once its
-  behaviour is verified.
-- **The registry** and `ynh telemetry registry --format json`, which will
-  replace the draft names above.
-- **Conformance** checks with `ynr conformance` in CI.
+- **Cursor's telemetry** through the relay, once its behaviour is examined.
 - **More events**, such as one per turn, per sensor verdict or per budget
   threshold, and metrics.
 

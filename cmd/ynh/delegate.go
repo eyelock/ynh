@@ -50,6 +50,18 @@ func cmdDelegateAdd(args []string, stdout io.Writer) error {
 			}
 			i++
 			opts.Ref = args[i]
+		case "--profile":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--profile requires a value")
+			}
+			i++
+			opts.Profile = args[i]
+		case "--focus":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--focus requires a value")
+			}
+			i++
+			opts.Focus = args[i]
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				return fmt.Errorf("unknown flag: %s", args[i])
@@ -59,10 +71,15 @@ func cmdDelegateAdd(args []string, stdout io.Writer) error {
 	}
 
 	if len(positional) != 2 {
-		return fmt.Errorf("usage: ynh delegate add <harness> <url> [--ref <ref>] [--path <subdir>]")
+		return fmt.Errorf("usage: ynh delegate add <harness> <url> [--ref <ref>] [--path <subdir>] [--profile <name> | --focus <name>]")
 	}
 
 	harnessRef, url := positional[0], positional[1]
+
+	sel := harness.Delegate{GitSource: harness.GitSource{Git: url, Ref: opts.Ref, Path: opts.Path}, Profile: opts.Profile, Focus: opts.Focus}
+	if err := sel.CheckSelection(); err != nil {
+		return err
+	}
 
 	dir, installed, err := harness.ResolveEditTarget(harnessRef)
 	if err != nil {
@@ -82,6 +99,16 @@ func cmdDelegateAdd(args []string, stdout io.Writer) error {
 		if opts.Path == "" && autoPath != "" {
 			opts.Path = autoPath
 		}
+		if opts.Profile != "" || opts.Focus != "" {
+			sel.Path = opts.Path
+			dh, lErr := harness.LoadDir(filepath.Join(basePath, opts.Path))
+			if lErr != nil {
+				return fmt.Errorf("loading delegate to check its %s: %w", selectionKind(opts), lErr)
+			}
+			if cErr := sel.CheckDeclared(dh); cErr != nil {
+				return fmt.Errorf("delegate %s %w", sel.Label(), cErr)
+			}
+		}
 	}
 
 	if err := harness.AddDelegate(dir, url, opts); err != nil {
@@ -92,8 +119,21 @@ func cmdDelegateAdd(args []string, stdout io.Writer) error {
 	if opts.Path != "" {
 		msg += fmt.Sprintf(" (path: %q)", opts.Path)
 	}
+	if opts.Profile != "" {
+		msg += fmt.Sprintf(" (profile: %q)", opts.Profile)
+	}
+	if opts.Focus != "" {
+		msg += fmt.Sprintf(" (focus: %q)", opts.Focus)
+	}
 	_, _ = fmt.Fprintln(stdout, msg)
 	return nil
+}
+
+func selectionKind(opts harness.DelegateAddOptions) string {
+	if opts.Focus != "" {
+		return "focus"
+	}
+	return "profile"
 }
 
 func cmdDelegateRemove(args []string, stdout io.Writer) error {

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -30,6 +32,12 @@ func TestParseRunArgs(t *testing.T) {
 		wantArgs    []string
 		wantAction  string
 	}{
+		{
+			name:        "repeated profile flags, one per harness",
+			args:        []string{"my-harness", "--profile", "work", "--profile", "github:ci"},
+			wantName:    "my-harness",
+			wantProfile: "work,github:ci",
+		},
 		{
 			name:     "harness name as first positional",
 			args:     []string{"my-harness"},
@@ -156,6 +164,179 @@ func TestParseRunArgs(t *testing.T) {
 			wantSession: "demo-abc12345",
 			wantPrompt:  "review this",
 		},
+		// ynw-sbo: a space-separated value stays with its vendor flag when
+		// more flags follow, rather than becoming the prompt.
+		{
+			name:       "space-separated passthrough values before -p and prompt",
+			args:       []string{"my-harness", "--model", "haiku", "--max-turns", "1", "-p", "say ok"},
+			wantName:   "my-harness",
+			wantPrompt: "say ok",
+			wantArgs:   []string{"--model", "haiku", "--max-turns", "1", "-p"},
+		},
+		{
+			name:       "equals-form passthrough values before -p and prompt",
+			args:       []string{"my-harness", "--model=haiku", "--max-turns=1", "-p", "say ok"},
+			wantName:   "my-harness",
+			wantPrompt: "say ok",
+			wantArgs:   []string{"--model=haiku", "--max-turns=1", "-p"},
+		},
+		{
+			name:       "space-separated passthrough value then prompt",
+			args:       []string{"my-harness", "--model", "opus", "fix the bug"},
+			wantName:   "my-harness",
+			wantPrompt: "fix the bug",
+			wantArgs:   []string{"--model", "opus"},
+		},
+		{
+			name:       "boolean passthrough flag then prompt",
+			args:       []string{"my-harness", "--verbose", "simple prompt"},
+			wantName:   "my-harness",
+			wantPrompt: "simple prompt",
+			wantArgs:   []string{"--verbose"},
+		},
+		{
+			name:       "equals-form value then prompt after more flags",
+			args:       []string{"my-harness", "--model=opus", "fix the bug", "--verbose"},
+			wantName:   "my-harness",
+			wantPrompt: "fix the bug",
+			wantArgs:   []string{"--model=opus", "--verbose"},
+		},
+		{
+			name:       "boolean passthrough flag then prompt after more flags",
+			args:       []string{"my-harness", "--verbose", "fix the bug", "--model=opus"},
+			wantName:   "my-harness",
+			wantPrompt: "fix the bug",
+			wantArgs:   []string{"--verbose", "--model=opus"},
+		},
+		// ynw-sbo.1: the last bare word is the prompt, even when flags follow it.
+		{
+			name:       "prompt after boolean flag, before equals-form flag",
+			args:       []string{"david", "--verbose", "fix it", "--model=opus"},
+			wantName:   "david",
+			wantPrompt: "fix it",
+			wantArgs:   []string{"--verbose", "--model=opus"},
+		},
+		{
+			name:       "prompt after short boolean flag, before another flag",
+			args:       []string{"david", "-c", "fix it", "--verbose"},
+			wantName:   "david",
+			wantPrompt: "fix it",
+			wantArgs:   []string{"-c", "--verbose"},
+		},
+		{
+			name:       "ynh value flag after the prompt does not hide it",
+			args:       []string{"david", "--verbose", "fix it", "-v", "claude"},
+			wantName:   "david",
+			wantVendor: "claude",
+			wantPrompt: "fix it",
+			wantArgs:   []string{"--verbose"},
+		},
+		// ynh never interprets vendor flags, so by position this is the same
+		// shape as "--model haiku -p 'say ok'": the last bare word "opus" is
+		// the prompt and "fix it" goes with --verbose. Users write
+		// "--model=opus", or put the prompt after --, to get "fix it".
+		{
+			name:       "last bare word is the prompt, even after a space-separated flag",
+			args:       []string{"david", "--verbose", "fix it", "--model", "opus"},
+			wantName:   "david",
+			wantPrompt: "opus",
+			wantArgs:   []string{"--verbose", "fix it", "--model"},
+		},
+		{
+			name:       "lone space-separated value is the last bare word, so the prompt",
+			args:       []string{"my-harness", "--model", "opus"},
+			wantName:   "my-harness",
+			wantPrompt: "opus",
+			wantArgs:   []string{"--model"},
+		},
+		{
+			name:     "equals-form value with no prompt",
+			args:     []string{"my-harness", "--model=opus"},
+			wantName: "my-harness",
+			wantArgs: []string{"--model=opus"},
+		},
+		{
+			name:     "space-separated value then separator with no prompt",
+			args:     []string{"my-harness", "--model", "opus", "--"},
+			wantName: "my-harness",
+			wantArgs: []string{"--model", "opus"},
+		},
+		{
+			name:     "boolean flag, value and separator with no prompt",
+			args:     []string{"my-harness", "--verbose", "--model", "opus", "--"},
+			wantName: "my-harness",
+			wantArgs: []string{"--verbose", "--model", "opus"},
+		},
+		{
+			name:       "claude's own order written with separator",
+			args:       []string{"my-harness", "--verbose", "--model", "haiku", "--", "say ok"},
+			wantName:   "my-harness",
+			wantPrompt: "say ok",
+			wantArgs:   []string{"--verbose", "--model", "haiku"},
+		},
+		{
+			name:       "bare word not after a flag, then separator with no prompt",
+			args:       []string{"my-harness", "fix it", "--"},
+			wantName:   "my-harness",
+			wantPrompt: "fix it",
+		},
+		{
+			name:       "space-separated values with prompt via separator",
+			args:       []string{"my-harness", "--model", "haiku", "--max-turns", "1", "--", "say ok"},
+			wantName:   "my-harness",
+			wantPrompt: "say ok",
+			wantArgs:   []string{"--model", "haiku", "--max-turns", "1"},
+		},
+		{
+			name:       "prompt before separator, vendor flags after it",
+			args:       []string{"my-harness", "-v", "codex", "say ok", "--", "-m", "gpt-5"},
+			wantName:   "my-harness",
+			wantVendor: "codex",
+			wantPrompt: "say ok",
+			wantArgs:   []string{"-m", "gpt-5"},
+		},
+		{
+			name:       "prompt before separator, long vendor flag after it",
+			args:       []string{"my-harness", "-v", "codex", "say ok", "--", "--model=gpt-5"},
+			wantName:   "my-harness",
+			wantVendor: "codex",
+			wantPrompt: "say ok",
+			wantArgs:   []string{"--model=gpt-5"},
+		},
+		{
+			name:       "words after the prompt after separator are forwarded, not dropped",
+			args:       []string{"my-harness", "-v", "codex", "--", "say ok", "-m", "gpt-5"},
+			wantName:   "my-harness",
+			wantVendor: "codex",
+			wantPrompt: "say ok",
+			wantArgs:   []string{"-m", "gpt-5"},
+		},
+		{
+			name:       "earlier bare word is forwarded, not dropped, when the prompt follows --",
+			args:       []string{"my-harness", "first", "--", "second"},
+			wantName:   "my-harness",
+			wantPrompt: "second",
+			wantArgs:   []string{"first"},
+		},
+		{
+			name:     "flag-looking word after -- is never the prompt (value taken by earlier flag)",
+			args:     []string{"my-harness", "--verbose", "fix", "--", "-m", "x"},
+			wantName: "my-harness",
+			wantArgs: []string{"--verbose", "fix", "-m", "x"},
+		},
+		{
+			name:     "flag-looking word after -- is never the prompt (-p takes the earlier word)",
+			args:     []string{"my-harness", "-p", "say ok", "--", "--model", "haiku"},
+			wantName: "my-harness",
+			wantArgs: []string{"-p", "say ok", "--model", "haiku"},
+		},
+		{
+			name:       "known ynh flag value is not a passthrough value",
+			args:       []string{"my-harness", "-v", "claude", "fix the bug"},
+			wantName:   "my-harness",
+			wantVendor: "claude",
+			wantPrompt: "fix the bug",
+		},
 		{
 			name:        "session-name value not confused as prompt",
 			args:        []string{"my-harness", "--session-name", "demo-abc12345"},
@@ -176,8 +357,8 @@ func TestParseRunArgs(t *testing.T) {
 			if ra.VendorFlag != tt.wantVendor {
 				t.Errorf("VendorFlag = %q, want %q", ra.VendorFlag, tt.wantVendor)
 			}
-			if ra.ProfileFlag != tt.wantProfile {
-				t.Errorf("ProfileFlag = %q, want %q", ra.ProfileFlag, tt.wantProfile)
+			if got := strings.Join(ra.ProfileFlags, ","); got != tt.wantProfile {
+				t.Errorf("ProfileFlags = %q, want %q", got, tt.wantProfile)
 			}
 			if ra.FocusFlag != tt.wantFocus {
 				t.Errorf("FocusFlag = %q, want %q", ra.FocusFlag, tt.wantFocus)
@@ -1083,6 +1264,10 @@ func TestFormatDelegates(t *testing.T) {
 		{"with path and ref", []harness.Delegate{
 			{GitSource: harness.GitSource{Git: "github.com/example/mono", Path: "harnesses/ops", Ref: "v2"}},
 		}, "example/mono/harnesses/ops@v2"},
+		{"with a profile and a focus", []harness.Delegate{
+			{GitSource: harness.GitSource{Git: "github.com/example/reviewer"}, Profile: "strict"},
+			{GitSource: harness.GitSource{Git: "github.com/example/triager"}, Focus: "ci-failures"},
+		}, "example/reviewer (profile strict), example/triager (focus ci-failures)"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1638,5 +1823,104 @@ func TestCmdUninstall_PointerByBareName(t *testing.T) {
 
 	if _, err := os.Stat(harness.PointerPath("my-fork")); !os.IsNotExist(err) {
 		t.Errorf("schema-1 pointer still exists after bare-name uninstall: err=%v", err)
+	}
+}
+
+func TestParseRunArgs_IsolatedMCP(t *testing.T) {
+	t.Setenv("YNH_FOCUS", "")
+	t.Setenv("YNH_HARNESS_FILE", "")
+
+	tests := []struct {
+		name       string
+		args       []string
+		want       bool
+		wantPrompt string
+		wantVendor []string
+	}{
+		{"absent", []string{"h"}, false, "", nil},
+		{"present", []string{"h", "--isolated-mcp"}, true, "", nil},
+		{"with prompt", []string{"h", "--isolated-mcp", "--", "go"}, true, "go", nil},
+		{"not forwarded to the vendor", []string{"h", "--isolated-mcp", "--verbose"}, true, "", []string{"--verbose"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ra := parseRunArgs(tt.args)
+			if ra.IsolatedMCP != tt.want {
+				t.Errorf("IsolatedMCP = %v, want %v", ra.IsolatedMCP, tt.want)
+			}
+			if ra.Prompt != tt.wantPrompt {
+				t.Errorf("Prompt = %q, want %q", ra.Prompt, tt.wantPrompt)
+			}
+			if !reflect.DeepEqual(ra.VendorArgs, tt.wantVendor) {
+				t.Errorf("VendorArgs = %v, want %v", ra.VendorArgs, tt.wantVendor)
+			}
+		})
+	}
+}
+
+func TestIsolationLaunchArgs_Warnings(t *testing.T) {
+	dir := t.TempDir()
+	for _, tt := range []struct {
+		vendor   string
+		wantArgs int
+		wantWarn bool
+	}{
+		{"claude", 1, false},
+		{"copilot", 1, true},
+		{"codex", 0, true},
+		{"cursor", 0, true},
+	} {
+		t.Run(tt.vendor, func(t *testing.T) {
+			adapter, err := vendor.Get(tt.vendor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var buf bytes.Buffer
+			args := isolationLaunchArgs(adapter, dir, &buf)
+			if len(args) != tt.wantArgs {
+				t.Errorf("args = %v, want %d", args, tt.wantArgs)
+			}
+			out := buf.String()
+			if tt.wantWarn != (out != "") {
+				t.Errorf("stderr = %q, want warning %v", out, tt.wantWarn)
+			}
+			if tt.wantWarn && (!strings.HasPrefix(out, "warning: ") || strings.Count(out, "\n") != 1) {
+				t.Errorf("warning %q is not a single 'warning: ' line", out)
+			}
+		})
+	}
+}
+
+func TestCmdRun_RepeatedProfileRules(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	t.Setenv("YNH_FOCUS", "")
+	t.Setenv("YNH_PROFILE", "")
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"duplicate root profile", []string{"h", "--profile", "a", "--profile", "b"}, "at most one unqualified profile"},
+		{"duplicate namespace", []string{"h", "--profile", "g:a", "--profile", "g:b"}, `namespace "g"`},
+		{"focus and namespaced profile", []string{"h", "--focus", "g:f", "--profile", "g:a"}, "cannot use --focus and --profile together"},
+		{"malformed value", []string{"h", "--profile", "a:b:c"}, "expected name or namespace:name"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := cmdRun(tt.args)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want containing %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestCmdRun_EnvProfileMayBeNamespaced(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	t.Setenv("YNH_FOCUS", "")
+	t.Setenv("YNH_PROFILE", "a:b:c")
+	err := cmdRun([]string{"h"})
+	if err == nil || !strings.Contains(err.Error(), "expected name or namespace:name") {
+		t.Fatalf("YNH_PROFILE should be parsed as a selection, got: %v", err)
 	}
 }

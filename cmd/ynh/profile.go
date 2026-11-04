@@ -433,6 +433,7 @@ func cmdProfileInclude(args []string, stdout io.Writer) error {
 func cmdProfileIncludeAdd(args []string, stdout io.Writer) error {
 	var opts harness.AddOptions
 	var positional []string
+	var forceGit bool
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--path":
@@ -447,6 +448,10 @@ func cmdProfileIncludeAdd(args []string, stdout io.Writer) error {
 			}
 			i++
 			opts.Ref = args[i]
+		case "--hooks":
+			opts.Hooks = true
+		case "--git":
+			forceGit = true
 		case "--replace":
 			opts.Replace = true
 		default:
@@ -457,7 +462,7 @@ func cmdProfileIncludeAdd(args []string, stdout io.Writer) error {
 		}
 	}
 	if len(positional) != 3 {
-		return fmt.Errorf("usage: ynh profile include add <harness> <profile> <url> [--path <subdir>] [--ref <ref>] [--replace]")
+		return fmt.Errorf("usage: ynh profile include add <harness> <profile> <url|path> [--path <subdir>] [--ref <ref>] [--git] [--hooks] [--replace]")
 	}
 	harnessRef, profileName, url := positional[0], positional[1], positional[2]
 
@@ -466,7 +471,13 @@ func cmdProfileIncludeAdd(args []string, stdout io.Writer) error {
 		return err
 	}
 
-	if installed {
+	stored, local, err := prepareLocalInclude(url, dir, forceGit, opts)
+	if err != nil {
+		return err
+	}
+	if local {
+		url, opts.Local = stored, true
+	} else if installed {
 		gs := harness.GitSource{Git: url, Ref: opts.Ref, Path: opts.Path}
 		if _, _, fetchErr := resolver.ResolveGitSource(gs, dir); fetchErr != nil {
 			return fmt.Errorf("fetching include: %w", fetchErr)
@@ -511,6 +522,7 @@ func cmdProfileIncludeRemove(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	url = profileIncludeArgAsStored(dir, profileName, url)
 	if err := harness.RemoveProfileInclude(dir, profileName, url, opts); err != nil {
 		return err
 	}
@@ -563,14 +575,18 @@ func cmdProfileIncludeUpdate(args []string, stdout io.Writer) error {
 		return err
 	}
 
+	url = profileIncludeArgAsStored(dir, profileName, url)
 	if installed {
 		finalInc, ferr := harness.FindProfileIncludeUpdateTarget(dir, profileName, url, opts)
 		if ferr != nil {
 			return ferr
 		}
-		gs := harness.GitSource{Git: url, Ref: finalInc.Ref, Path: finalInc.Path}
-		if _, _, fetchErr := resolver.ResolveGitSource(gs, dir); fetchErr != nil {
-			return fmt.Errorf("fetching include: %w", fetchErr)
+		// A local include is read from disk: nothing to fetch.
+		if finalInc.Local == "" {
+			gs := harness.GitSource{Git: url, Ref: finalInc.Ref, Path: finalInc.Path}
+			if _, _, fetchErr := resolver.ResolveGitSource(gs, dir); fetchErr != nil {
+				return fmt.Errorf("fetching include: %w", fetchErr)
+			}
 		}
 	}
 
@@ -579,4 +595,10 @@ func cmdProfileIncludeUpdate(args []string, stdout io.Writer) error {
 	}
 	_, _ = fmt.Fprintf(stdout, "Updated include %q in profile %q\n", url, profileName)
 	return nil
+}
+
+// profileIncludeArgAsStored is includeArgAsStored for one profile's includes.
+func profileIncludeArgAsStored(dir, profile, arg string) string {
+	sources, err := harness.ProfileIncludeSources(dir, profile)
+	return storedIncludeArg(dir, arg, sources, err)
 }

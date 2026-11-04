@@ -48,8 +48,6 @@ david                              # personal context
 team-dev                           # full team context when you need it
 ```
 
-**Zero runtime.** ynh resolves your config, assembles it, launches the vendor CLI, and gets out of the way. No process sitting between you and the AI. Each vendor gets the launch strategy that matches its capabilities - native plugin loading for Claude, symlinks for Cursor and Codex.
-
 **Discover and share.** Search registries for harnesses by name or keyword, install with a single command. Export your harness as vendor-native plugins or as one portable [Agent Plugins](https://agent-plugins.org) package, install such a package back as a harness, or build a marketplace indexing multiple harnesses for your team or community.
 
 ```bash

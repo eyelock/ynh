@@ -95,8 +95,8 @@ Some `--format json` commands wrap their result in an envelope:
 
 ```json
 {
-  "capabilities": "0.6.0",
-  "ynh_version": "0.5.0",
+  "capabilities": "0.x.y",
+  "ynh_version": "0.x.y",
   "<payload-key>": <payload>
 }
 ```
@@ -110,7 +110,7 @@ Not every command envelopes its result. The rule is:
 | Shape | When | Commands |
 |---|---|---|
 | **Envelope** (`capabilities` + `ynh_version` + payload) | Harness-centric reads where consumers gate on the wire contract before acting on the payload | `ynh ls`, `ynh info`, `ynh fork`, `ynh doctor` |
-| **Bare value** (object or array, no envelope) | Config introspection and operation results — no per-call wire-contract gating needed; consumers call `ynh version --format json` once at startup | `ynh version`, `ynh paths`, `ynh vendors`, `ynh search`, `ynh sources list`, `ynh registry list`, `ynh sensors ls`, `ynh sensors show`, `ynh sensors run` |
+| **Bare value** (object or array, no envelope) | Config introspection and operation results — no per-call wire-contract gating needed; consumers call `ynh version --format json` once at startup | `ynh version`, `ynh paths`, `ynh vendors`, `ynh search`, `ynh sources list`, `ynh registry list`, `ynh sensors ls`, `ynh sensors show`, `ynh sensors run`, `ynh telemetry registry` (whose shape is shared with the family's other tools) |
 
 `ynh version --format json` is the canonical wire-contract probe. Consumers that need to gate on `capabilities` should call it once at startup rather than parse the envelope from every response. The envelope on harness reads is a convenience for tools whose entire job revolves around enumerating and acting on installed harnesses (the kind whose entire job is that enumeration).
 
@@ -122,9 +122,9 @@ Both `ynh version --format json` and `ynd version --format json` emit:
 
 ```json
 {
-  "version": "0.5.0",
-  "capabilities": "0.6.0",
-  "features": ["agent-run-fetches-includes", "agent-run-harness-path", "workspace-folders"]
+  "version": "0.x.y",
+  "capabilities": "0.x.y",
+  "features": ["agent-run-fetches-includes", "agent-run-harness-path", "delegate-graph-flattens", "include-cycles-resolve", "run-labels", "trust-counts-composed-mcp-servers", "workspace-folders"]
 }
 ```
 
@@ -133,9 +133,11 @@ Both `ynh version --format json` and `ynd version --format json` emit:
 
 `capabilities` is a source constant (`internal/config.CapabilitiesVersion`), so developer builds report the contract they actually support — not whatever tag the repo was last released at. Bumped when consumer-visible contracts change; additive fields older clients can ignore do **not** bump it.
 
-- `features`: optional array of strings naming capabilities a consumer can gate on without comparing versions, for example `agent-run-harness-path` (`ynh agent run --harness` takes a path) `agent-run-fetches-includes` (a run fetches its git includes at setup) and `workspace-folders` (a harness can request workspace folders that the operator's allow-list or trust grants; `ynh trust show --format json` reports them in `workspace`). Names are stable, kebab-case and **only ever added**: a name that shipped is never renamed or removed. Consumers must tolerate names they do not know. The list is sorted and declared in one place, `internal/config.Features`. Adding a name is additive and does not bump `capabilities`.
+- `features`: optional array of strings naming capabilities a consumer can gate on without comparing versions, for example `agent-run-harness-path` (`ynh agent run --harness` takes a path) `agent-run-fetches-includes` (a run fetches its git includes at setup), `delegate-graph-flattens` (`delegates_to` is flattened: a delegate's own delegates are followed, and every harness reached is one agent, once, with the root never its own delegate), `include-cycles-resolve` (an include cycle resolves, with every harness in it included once and the include that closes it noted in `ynh info`'s `include_notes`, and one git source reached at two versions is an error), `run-labels` (run labels from config.json, the manifest, `YNH_LABELS` and `--label`; `ynh ls --label`), `trust-counts-composed-mcp-servers` (`ynh trust` and `ynh trust show` list in `mcp_servers` the servers of included harnesses, each with its `source`, and those carried by delegates, each with its `delegate`; a delegate's servers are not the session's) and `workspace-folders` (a harness can request workspace folders that the operator's allow-list or trust grants; `ynh trust show --format json` reports them in `workspace`). Names are stable, kebab-case and **only ever added**: a name that shipped is never renamed or removed. Consumers must tolerate names they do not know. The list is sorted and declared in one place, `internal/config.Features`. Adding a name is additive and does not bump `capabilities`.
 
 Downstream tooling (for example) reads `capabilities` and refuses to run against an older ynh than it requires.
+
+Capabilities `0.10.0` is a breaking bump. `ynh info`'s harness carries `mcp_servers`, the servers a run would get with its includes composed, as a required field (with an optional `mcp_servers_error` when an include could not be read, and an optional `selection` when `--profile` or `--focus` chose what a run carries) and `hooks`, the hooks a run carries with their source, also as a required field (with an optional `hooks_not_active` for included hooks without consent and an optional `hooks_error` when an include could not be read), and the trajectory's `session_start` no longer writes the deprecated `model` (read `model_requested`, and `worker_model` for what ran). `ynh trust` and `ynh trust show` are not enveloped, so the change in what their `mcp_servers` counts is reported by the `trust-counts-composed-mcp-servers` feature instead.
 
 ## Scope
 
@@ -200,9 +202,8 @@ completely. Each is absent when unknown, and `model` is never filled in from
 `model_requested`. In the trajectory, `session_start` and `session_resumed`
 carry `model_requested`, and a new `worker_model` event records the model that
 ran, since the header is written before the worker reports one.
-`session_start.model` is still written, as a deprecated copy of
-`model_requested`, until a release that bumps the capabilities version
-([#443](https://github.com/eyelock/ynh/issues/443)). See
+`session_start.model`, a deprecated copy of `model_requested`, was removed at
+capabilities `0.10.0` ([#443](https://github.com/eyelock/ynh/issues/443)). See
 [Agent](agent.md#the-model).
 
 A convergence verifier's `sensor_result` in the trajectory used to carry

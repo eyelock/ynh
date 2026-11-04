@@ -6,12 +6,24 @@ import (
 )
 
 // SupportsTelemetryRelay reports whether ynh knows how to point backend's own
-// telemetry at a relay. Only Claude Code, whose settings were verified
-// against a real CLI (ynr ADR-004). Codex is configured through its
-// config.toml rather than the environment, and that is unverified, so it
-// gets nothing for now; so does Cursor.
+// telemetry at a relay: Claude Code, whose settings were verified against a
+// real CLI (ynr ADR-004), and Codex, whose -c overrides were verified against
+// codex-cli 0.166.0 (codex_telemetry.go). Cursor is unexamined and gets
+// nothing.
 func SupportsTelemetryRelay(backend string) bool {
-	return backend == "claude"
+	return backend == "claude" || backend == "codex"
+}
+
+// withBackendRelayEnv returns env with what backend's relay configuration
+// puts in, and takes out of, the worker's environment.
+func withBackendRelayEnv(backend string, env []string, endpoint string) []string {
+	switch backend {
+	case "claude":
+		return withRelayEnv(env, endpoint)
+	case "codex":
+		return withCodexRelayEnv(env)
+	}
+	return env
 }
 
 // claudeTelemetrySettings is what Claude Code is given when the run has a

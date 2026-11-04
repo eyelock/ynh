@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,13 +39,22 @@ func cmdRun(args []string) error {
 	}
 
 	// Mutual exclusivity: --focus + --profile
-	profileName := ra.ProfileFlag
-	if profileName == "" {
-		profileName = os.Getenv("YNH_PROFILE")
+	// --profile may repeat, one per harness (see harness.Selection). YNH_PROFILE
+	// is a single value, used only when no flag was given.
+	profileValues := ra.ProfileFlags
+	if len(profileValues) == 0 {
+		if env := os.Getenv("YNH_PROFILE"); env != "" {
+			profileValues = []string{env}
+		}
 	}
-	if ra.FocusFlag != "" && profileName != "" {
+	if ra.FocusFlag != "" && len(profileValues) > 0 {
 		return fmt.Errorf("cannot use --focus and --profile together (focus includes a profile)")
 	}
+	sel, selErr := harness.ParseSelection(profileValues, ra.FocusFlag)
+	if selErr != nil {
+		return selErr
+	}
+	profileName := sel.Profile
 
 	// Mutual exclusivity: --focus + trailing prompt
 	if ra.FocusFlag != "" && ra.Prompt != "" {
@@ -113,7 +123,7 @@ func cmdRun(args []string) error {
 	explicitPrompt := ra.Prompt
 
 	// Resolve focus → profile + prompt
-	if ra.FocusFlag != "" {
+	if ra.FocusFlag != "" && sel.FocusNS == "" {
 		focus, ok := p.Focuses[ra.FocusFlag]
 		if !ok {
 			return fmt.Errorf("focus %q not defined in harness", ra.FocusFlag)
@@ -153,6 +163,15 @@ func cmdRun(args []string) error {
 	// travel through the same -v flag / YNH_VENDOR / default_vendor
 	// precedence chain, so a local model backend is just another vendor
 	// spec, not a separate flag.
+	// The run's labels, refused here when they break the rule. They go to
+	// every process this run starts as YNH_LABELS. `ynh run` writes no record
+	// of its own yet, so nothing else carries them (docs/telemetry.md).
+	if action == "" {
+		if _, err := resolveRunLabels(ra.Labels, loaded); err != nil {
+			return err
+		}
+	}
+
 	spec, err := resolveVendor(ra.VendorFlag, p, cfg)
 	if err != nil {
 		return err
@@ -194,9 +213,14 @@ func cmdRun(args []string) error {
 	if len(p.Includes) > 0 {
 		fmt.Fprintf(os.Stderr, "Resolving %d include(s)...\n", len(p.Includes))
 	}
-	resolved, err := resolver.ResolveFromCache(p, cfg)
+	resolved, nsFocus, err := resolver.ResolveSelectedFromCache(p, cfg, sel)
 	if err != nil {
 		return fmt.Errorf("resolving includes: %w", err)
+	}
+	if nsFocus != nil {
+		// A focus of an included harness: its prompt is the run's prompt, and
+		// its profile has been applied to that harness during resolution.
+		prompt = nsFocus.Prompt
 	}
 
 	// Print per-source status
@@ -263,49 +287,46 @@ func cmdRun(args []string) error {
 		}
 
 		// Assemble delegate harnesses as agent files
-		if err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo, p.Dir); err != nil {
+		delegateMCP, err := assembler.AssembleDelegates(runDir, adapter, p.DelegatesTo, p.Dir, assembler.DelegateOptions{Config: cfg, Launch: true, RootName: p.Name})
+		if err != nil {
 			return fmt.Errorf("assembling delegates: %w", err)
 		}
 
 		// Generate vendor-native hook config files, and copy in the scripts
-		// those hooks run from the harness
-		if len(p.Hooks) > 0 {
-			warnings, err := assembler.WriteSessionHooks(runDir, adapter, harnessDir, p.Hooks)
-			if err != nil {
-				return err
-			}
-			for _, w := range warnings {
-				fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
-			}
+		// those hooks run from the harness. The hooks are the root's and
+		// those of the included harnesses that consented to them.
+		hookWarnings, err := assembler.WriteComposedSessionHooks(runDir, adapter, p, resolved, assembler.DelegateServerNames(delegateMCP)...)
+		if err != nil {
+			return err
+		}
+		for _, w := range hookWarnings {
+			fmt.Fprintf(os.Stderr, "  warning: %s\n", w)
 		}
 
-		// Generate vendor-native MCP config files
-		if len(p.MCPServers) > 0 {
-			// ynh is the client here in the Agent Plugins sense: it resolves
-			// the plugin's placeholders and ./ paths against where the package
-			// really is, and gives the package a data directory that outlives
-			// this run. The vendor CLI that launches the server sees only
-			// absolute paths.
-			dataDir := harness.PluginDataDir(p)
+		// Generate vendor-native MCP config files. The servers are the
+		// root's and those of every included harness, composed.
+		//
+		// ynh is the client here in the Agent Plugins sense: it resolves
+		// the plugin's placeholders and ./ paths against where the package
+		// really is, and gives the package a data directory that outlives
+		// this run. The vendor CLI that launches the server sees only
+		// absolute paths.
+		dataDir := harness.PluginDataDir(p)
+		servers, _, expErr := harness.ComposeMCPServers(p, resolver.IncludedHarnesses(resolved), dataDir, os.LookupEnv)
+		if expErr != nil {
+			return expErr
+		}
+		if len(servers) > 0 {
 			if err := os.MkdirAll(dataDir, 0o755); err != nil {
 				return fmt.Errorf("creating plugin data dir: %w", err)
-			}
-			servers, expErr := harness.AssembleMCPServers(p, dataDir, os.LookupEnv)
-			if expErr != nil {
-				return expErr
 			}
 			mcpFiles, err := adapter.GenerateMCPConfig(servers)
 			if err != nil {
 				return fmt.Errorf("generating MCP config: %w", err)
 			}
-			for relPath, content := range mcpFiles {
-				absPath := filepath.Join(runDir, relPath)
-				if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
-					return fmt.Errorf("creating MCP config dir: %w", err)
-				}
-				if err := os.WriteFile(absPath, content, 0o644); err != nil {
-					return fmt.Errorf("writing MCP config %s: %w", relPath, err)
-				}
+			// The servers are expanded, so these files hold secrets: 0600 in 0700.
+			if err := vendor.WriteSecretFiles(runDir, mcpFiles); err != nil {
+				return fmt.Errorf("writing MCP config: %w", err)
 			}
 		}
 
@@ -323,6 +344,16 @@ func cmdRun(args []string) error {
 		manifestFiles, mErr := adapter.GeneratePluginManifest(pj, runDir)
 		if mErr != nil {
 			return fmt.Errorf("writing plugin manifest: %w", mErr)
+		}
+		// The plugin the vendor loads is named from its own manifest. Without
+		// one the vendor falls back to the directory name, and the harness's
+		// MCP tools come out as plugin:.claude:<server>.
+		if namer, ok := adapter.(vendor.SessionPluginNamer); ok {
+			extra, nErr := namer.GenerateSessionPluginManifest(pj, runDir)
+			if nErr != nil {
+				return fmt.Errorf("writing plugin manifest: %w", nErr)
+			}
+			maps.Copy(manifestFiles, extra)
 		}
 		for relPath, content := range manifestFiles {
 			absPath := filepath.Join(runDir, relPath)
@@ -407,6 +438,12 @@ func cmdRun(args []string) error {
 			}
 		}
 
+		// MCP isolation: the harness's own declaration, or --isolated-mcp,
+		// which can only turn it on.
+		if p.MCPIsolation || ra.IsolatedMCP {
+			vendorArgs = append(vendorArgs, isolationLaunchArgs(adapter, runDir, os.Stderr)...)
+		}
+
 		// Workspace folders the harness requested and the operator granted,
 		// as the vendor's own flags, ahead of the caller's pass-through args.
 		wsArgs, wsErr := workspaceLaunchArgs(loaded, harnessID, adapter.Name(), ra.NoWorkspace, os.Stderr)
@@ -422,6 +459,16 @@ func cmdRun(args []string) error {
 		fmt.Fprintf(os.Stderr, "Launching %s...\n", adapter.CLIName())
 		return launchSession(adapter, runDir, runDirName, ra, prompt, explicitPrompt, vendorArgs, os.Stderr)
 	}
+}
+
+// isolationLaunchArgs returns the vendor arguments that isolate the run's MCP
+// servers, printing the vendor's warning when it cannot isolate fully.
+func isolationLaunchArgs(adapter vendor.Adapter, runDir string, stderr io.Writer) []string {
+	args, warning := adapter.IsolateMCP(runDir)
+	if warning != "" {
+		_, _ = fmt.Fprintf(stderr, "warning: %s\n", warning)
+	}
+	return args
 }
 
 // launchFocus is the outcome of resolveLaunchFocus.
@@ -746,24 +793,42 @@ func resolveVendor(flag string, p *harness.Harness, cfg *config.Config) (string,
 //   - --install     : install symlinks for the vendor
 //   - --clean       : remove symlinks for the vendor
 //
-// All other arguments are passed through to the vendor CLI verbatim.
-// Use -- to separate vendor flags from the prompt when vendor flags take values:
+// All other arguments are passed through to the vendor CLI verbatim, in order:
 //
 //	ynh run david "simple prompt"
 //	ynh run david --verbose "simple prompt"
+//	ynh run david --model opus --max-turns 1 "fix this bug"
 //	ynh run david --model opus -- "fix this bug"
 //	ynh run david -v codex -- "deploy it"
 //	ynh run david -v cursor --install
 //
-// Without --, the first non-flag argument is treated as the prompt. Flag values
-// like "opus" in "--model opus" would be mistaken for the prompt, so use -- when
-// vendor flags take values.
+// ynh does not know which vendor flags take a value, so without -- it reads a
+// bare word by where it stands. After the harness name, a bare word that
+// directly follows a passed-through flag (one without "=") stays with that
+// flag as its value only if a later bare word exists to be the prompt: the
+// last bare word is the prompt. Any other bare word is the prompt if there is
+// none yet. So "--model opus --max-turns 1 'fix it'" forwards
+// "--model opus --max-turns 1" and prompts "fix it", "--verbose 'fix it'
+// --model=opus" prompts "fix it", while "--model opus" on its own makes "opus"
+// the prompt, and so does "--verbose 'fix it' --model opus": position alone
+// cannot tell a boolean flag from one that takes a value.
+//
+// With --, the prompt is the word after it, so a bare word before -- that
+// directly follows a passed-through flag is always that flag's value:
+// "--model opus --" forwards "--model opus" with no prompt. Write
+// "--model=opus", or put the prompt after --, to be unambiguous.
+//
+// After --, the first word is the prompt unless it starts with "-", and every
+// later word is forwarded to the vendor. A first word that starts with "-" is
+// a vendor flag, never the prompt: "'say ok' -- -m gpt-5" prompts "say ok" and
+// forwards "-m gpt-5". A bare word before -- that is not the prompt is
+// forwarded too: "first -- second" prompts "second" and forwards "first".
 // runArgs holds parsed arguments for ynh run.
 type runArgs struct {
 	HarnessName  string   // positional name, if given
 	HarnessFile  string   // --harness-file or YNH_HARNESS_FILE
 	VendorFlag   string   // -v or YNH_VENDOR
-	ProfileFlag  string   // --profile or YNH_PROFILE
+	ProfileFlags []string // --profile, repeatable; YNH_PROFILE is read by cmdRun
 	FocusFlag    string   // --focus or YNH_FOCUS
 	SessionName  string   // --session-name: binds --resume to this name where the vendor allows; not forwarded
 	Instructions string   // --instructions: per-invocation context injected into vendor pipeline
@@ -771,9 +836,19 @@ type runArgs struct {
 	VendorArgs   []string // passthrough args for vendor CLI
 	Action       string   // "install", "clean", or ""
 	Interactive  bool     // --interactive: stay in session after initial prompt
+	IsolatedMCP  bool     // --isolated-mcp: run with only the harness's MCP servers
 	Resume       bool     // --resume: continue a previous session
 	ResumeID     string   // --resume=<id>: continue one specific session
 	NoWorkspace  bool     // --no-workspace: grant none of the harness's workspace folders; not forwarded
+	Labels       []string // --label key:value, repeatable; key: removes a label; not forwarded
+}
+
+// ynhValueFlags are ynh's own run flags that take the next argument as their
+// value. parseRunArgs handles each one in its switch.
+var ynhValueFlags = map[string]bool{
+	"-v": true, "--profile": true, "--focus": true,
+	"--harness-file": true, "--session-name": true, "--instructions": true,
+	"--label": true,
 }
 
 func parseRunArgs(args []string) runArgs {
@@ -781,25 +856,52 @@ func parseRunArgs(args []string) runArgs {
 	flagArgs := args
 
 	// First pass: find -- separator and extract prompt
+	separated := false
+	var tail []string // everything after --
 	for i, arg := range args {
 		if arg == "--" {
+			separated = true
 			flagArgs = args[:i]
-			if i+1 < len(args) {
-				ra.Prompt = args[i+1]
+			tail = args[i+1:]
+			// A first word starting with "-" is a vendor flag, never the
+			// prompt. Otherwise it is the prompt, and an earlier bare word
+			// is forwarded to the vendor as it always was.
+			if len(tail) > 0 && !strings.HasPrefix(tail[0], "-") {
+				ra.Prompt = tail[0]
+				tail = tail[1:]
 			}
 			break
 		}
 	}
 
+	// The last bare word is the prompt, so find it first. A word that one of
+	// ynh's own flags takes as its value is not a bare word.
+	lastBare := -1
+	for j := 0; j < len(flagArgs); j++ {
+		if ynhValueFlags[flagArgs[j]] && j+1 < len(flagArgs) {
+			j++
+			continue
+		}
+		if !strings.HasPrefix(flagArgs[j], "-") {
+			lastBare = j
+		}
+	}
+
 	// Second pass: process flags
 	firstPositional := true
+	// afterPassthrough is true while the previous argument was a flag ynh does
+	// not know and forwards, written without "=": a bare word now may be its
+	// value.
+	afterPassthrough := false
 	for i := 0; i < len(flagArgs); i++ {
+		prevPassthrough := afterPassthrough
+		afterPassthrough = false
 		switch {
 		case flagArgs[i] == "-v" && i+1 < len(flagArgs):
 			ra.VendorFlag = flagArgs[i+1]
 			i++
 		case flagArgs[i] == "--profile" && i+1 < len(flagArgs):
-			ra.ProfileFlag = flagArgs[i+1]
+			ra.ProfileFlags = append(ra.ProfileFlags, flagArgs[i+1])
 			i++
 		case flagArgs[i] == "--focus" && i+1 < len(flagArgs):
 			ra.FocusFlag = flagArgs[i+1]
@@ -823,26 +925,44 @@ func parseRunArgs(args []string) runArgs {
 			ra.ResumeID = strings.TrimPrefix(flagArgs[i], "--resume=")
 		case flagArgs[i] == "--no-workspace":
 			ra.NoWorkspace = true
+		case flagArgs[i] == "--label" && i+1 < len(flagArgs):
+			ra.Labels = append(ra.Labels, flagArgs[i+1])
+			i++
+		case strings.HasPrefix(flagArgs[i], "--label="):
+			ra.Labels = append(ra.Labels, strings.TrimPrefix(flagArgs[i], "--label="))
 		case flagArgs[i] == "--install":
 			ra.Action = "install"
 		case flagArgs[i] == "--clean":
 			ra.Action = "clean"
 		case flagArgs[i] == "--interactive":
 			ra.Interactive = true
+		case flagArgs[i] == "--isolated-mcp":
+			ra.IsolatedMCP = true
 		case !strings.HasPrefix(flagArgs[i], "-"):
-			if firstPositional {
+			switch {
+			case firstPositional:
 				// First positional arg is the harness name
 				ra.HarnessName = flagArgs[i]
 				firstPositional = false
-			} else if ra.Prompt == "" {
+			case prevPassthrough && (separated || i < lastBare):
+				// The value of the vendor flag before it ("--model haiku"),
+				// not the prompt: the prompt follows --, or is a later bare
+				// word.
+				ra.VendorArgs = append(ra.VendorArgs, flagArgs[i])
+			case ra.Prompt == "":
 				ra.Prompt = flagArgs[i]
-			} else {
+			default:
 				ra.VendorArgs = append(ra.VendorArgs, flagArgs[i])
 			}
 		default:
 			ra.VendorArgs = append(ra.VendorArgs, flagArgs[i])
+			afterPassthrough = !strings.Contains(flagArgs[i], "=")
 		}
 	}
+
+	// Everything after the prompt (or all of it, when the first word after --
+	// is a flag) goes to the vendor in order, after the flags before --.
+	ra.VendorArgs = append(ra.VendorArgs, tail...)
 
 	// Env var fallbacks
 	if ra.FocusFlag == "" {

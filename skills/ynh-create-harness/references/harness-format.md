@@ -67,10 +67,16 @@ Lowercase, hyphens and dots allowed. Regex: `^[a-zA-Z0-9][a-zA-Z0-9._-]*$`. This
       "git": "github.com/user/other-harness",
       "ref": "main",
       "path": "harnesses/team-ops"
+    },
+    {
+      "git": "github.com/user/triager",
+      "focus": "ci-failures"
     }
   ]
 }
 ```
+
+An entry may name one of the delegate's own `profile`s or `focus`es, not both. A focus applies its profile and adds its prompt to the delegate's agent as standing instructions; the calling session still gives the task.
 
 ## Install and run
 

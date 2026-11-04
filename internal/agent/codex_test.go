@@ -511,3 +511,25 @@ func TestRunLoop_ResumePassesUsageBase(t *testing.T) {
 		})
 	}
 }
+
+// TestBuildCodexArgs_RegistersRunDirAgents: a worker registers the agents
+// ynh wrote in the run directory, though it runs in the worktree, and keeps
+// the git check, which guards the worktree.
+func TestBuildCodexArgs_RegistersRunDirAgents(t *testing.T) {
+	runDir := t.TempDir()
+	dir := filepath.Join(runDir, ".codex", "agents")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "rev.toml"), []byte("name = \"rev\"\ndescription = \"Reviews.\"\ndeveloper_instructions = \"\"\"\nx\"\"\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := buildCodexArgs(StartOptions{ConfigPath: runDir}, "")
+	want := []string{"exec",
+		"-c", `agents.rev.config_file="` + filepath.Join(dir, "rev.toml") + `"`,
+		"-c", `agents.rev.description="Reviews."`,
+		"--json", "-"}
+	if !slices.Equal(got, want) {
+		t.Errorf("args =\n%q\nwant\n%q", got, want)
+	}
+}

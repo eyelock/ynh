@@ -26,6 +26,7 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
       artifacts: ${{ steps.filter.outputs.artifacts }}
       packaging: ${{ steps.filter.outputs.packaging }}
+      registry: ${{ steps.filter.outputs.registry }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d  # v4
@@ -48,9 +49,22 @@ jobs:
               # docs/schema/ — embedded into the binary by docs/schema/embed.go
               #              (//go:embed all:cli all:shared *.schema.json), and
               #              internal/clischema validates the goldens against it.
+              # docs/:     internal/docs checks every link, anchor, sidebar
+              #              entry and tutorial Next link, and cmd/ynd reads
+              #              the tutorials; a docs-only PR must run them.
               - 'testdata/**'
               - 'test/**'
-              - 'docs/schema/**'
+              - 'docs/**'
+              # telemetry/registry/ — embedded into the binary, and
+              #              internal/telemetry checks names_gen.go against it.
+              - 'telemetry/**'
+              # .ynr/ — the ynr conformance scenarios the Conformance job runs.
+              - '.ynr/**'
+            # ynh's telemetry registry, an OpenTelemetry Weaver registry
+            # (ynr ADR-007), which Weaver itself checks.
+            registry:
+              - 'telemetry/registry/**'
+              - '.github/workflows/ci.yml'
             # The harness artifacts this repo ships and uses on itself. Before
             # this filter existed, a PR touching only skills/ or agents/ matched
             # no filter, skipped every job, and All Clear went green having run
@@ -242,10 +256,89 @@ jobs:
       - name: Build the container image
         run: docker buildx build --load --tag ynh:ci-check .
 
+  registry:
+    # ynh's telemetry registry is an OpenTelemetry Weaver registry (ynr
+    # ADR-007): Weaver checks it, against the semantic conventions it pins.
+    # The build reads only the subset it uses (internal/telemetry/weaver),
+    # so this is the one check that the registry is valid Weaver.
+    name: Telemetry Registry
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.registry == 'true'
+    env:
+      WEAVER_VERSION: v0.27.0
+      # The tarball's SHA-256, pinned beside the version: the release's own
+      # .sha256 must agree with it, and the download must match it, before
+      # anything is extracted or run. Move both together.
+      WEAVER_SHA256: 7e497eb48215a5240a0bf77747cf431596c468f1039d481807b1f1e096cb5ac2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - name: Install Weaver, checked against its pinned checksum
+        run: |
+          set -eu
+          dir="$RUNNER_TEMP/weaver"
+          mkdir -p "$dir"
+          asset="weaver-x86_64-unknown-linux-gnu.tar.xz"
+          base="https://github.com/open-telemetry/weaver/releases/download/${WEAVER_VERSION}"
+          curl -fsSL --output-dir "$dir" -O "$base/$asset" -O "$base/$asset.sha256"
+          # The release's published checksum names the same digest as the pin.
+          grep -q "^${WEAVER_SHA256} " "$dir/$asset.sha256"
+          (cd "$dir" && echo "${WEAVER_SHA256}  ${asset}" | sha256sum -c -)
+          tar -xJf "$dir/$asset" -C "$dir"
+          "$dir/weaver-x86_64-unknown-linux-gnu/weaver" --version
+          echo "$dir/weaver-x86_64-unknown-linux-gnu" >> "$GITHUB_PATH"
+      - name: weaver registry check
+        run: weaver registry check -r telemetry/registry
+
+  conformance:
+    # ynr conformance (ynr ADR-008): ynh's own scenarios in .ynr/conformance.yaml
+    # run `ynh agent run` against ynr's stub vendor, offline, with no model and
+    # no secret, against a pinned ynr release. Among All Clear's needs, so a red
+    # run turns All Clear red.
+    name: Conformance
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    env:
+      # The ynr release, without the leading v, and the SHA-256 of the two
+      # archives the job runs, pinned beside it: the release's checksums.txt
+      # must list the same digests, and the downloads must match them, before
+      # anything is extracted or run. Move all three together.
+      YNR_VERSION: 0.3.2
+      YNR_SHA256: 2b090aa3449988fed220490e0483401b1fd9b02bd2e2aa3e7def24dc693a6d12
+      YNR_STUB_SHA256: 56272956659f1b4ef5f49899089743f99288112fa02aad4a6bfeb68cbe130e32
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7
+        with:
+          go-version-file: go.mod
+      - name: Install ynr and its stub vendor, checked against their pinned checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          dl="$RUNNER_TEMP/ynr-download"
+          bin="$RUNNER_TEMP/ynr-bin"
+          mkdir -p "$dl" "$bin"
+          ynr="ynr_${YNR_VERSION}_linux_amd64.tar.gz"
+          stub="ynr-stub-vendor_${YNR_VERSION}_linux_amd64.tar.gz"
+          gh release download "v${YNR_VERSION}" -R eyelock/ynr -D "$dl" -p "$ynr" -p "$stub" -p checksums.txt
+          cd "$dl"
+          # The release's published checksums name the same digests as the pins.
+          grep -qx "${YNR_SHA256}  ${ynr}" checksums.txt
+          grep -qx "${YNR_STUB_SHA256}  ${stub}" checksums.txt
+          printf '%s  %s\n%s  %s\n' "$YNR_SHA256" "$ynr" "$YNR_STUB_SHA256" "$stub" | sha256sum --check --strict -
+          tar -xzf "$ynr" -C "$bin" ynr
+          tar -xzf "$stub" -C "$bin" ynr-stub-vendor
+          "$bin/ynr" version
+          echo "$bin" >> "$GITHUB_PATH"
+      - name: ynr conformance
+        run: make conformance CONFORMANCE_FORMAT=text
+
   all-clear:
     name: All Clear
     runs-on: ubuntu-latest
-    needs: [changes, build, test, lint, format, artifacts, skill-security, packaging]
+    needs: [changes, build, test, lint, format, artifacts, skill-security, packaging, registry, conformance]
     if: always()
     steps:
       - name: Check results
@@ -259,6 +352,8 @@ jobs:
           echo "  artifacts: ${{ needs.artifacts.result }}"
           echo "  skill-security: ${{ needs['skill-security'].result }}"
           echo "  packaging: ${{ needs.packaging.result }}"
+          echo "  registry: ${{ needs.registry.result }}"
+          echo "  conformance: ${{ needs.conformance.result }}"
 
           if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
             echo "One or more required checks failed"

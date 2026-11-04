@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -25,7 +26,8 @@ func TestCheckpoint_RoundTrip(t *testing.T) {
 			WallConsumedMS: 83000,
 			PlanIterations: 2,
 		},
-		Task: "fix the bug",
+		Task:             "fix the bug",
+		IncludedProfiles: map[string]string{"github": "ci"},
 	}
 
 	if err := writeCheckpoint(dir, want); err != nil {
@@ -48,7 +50,7 @@ func TestCheckpoint_RoundTrip(t *testing.T) {
 	got.Version, got.UpdatedAt = 0, ""
 	wantCopy := *want
 	wantCopy.Version, wantCopy.UpdatedAt = 0, ""
-	if *got != wantCopy {
+	if !reflect.DeepEqual(*got, wantCopy) {
 		t.Errorf("roundtrip mismatch:\n got  %+v\n want %+v", *got, wantCopy)
 	}
 }
@@ -145,5 +147,21 @@ func TestSessionDirFromEmit(t *testing.T) {
 	// The derived directory must match where a checkpoint would land.
 	if got := filepath.Dir("/a/b/trajectory.jsonl"); got != sessionDirFromEmit("/a/b/trajectory.jsonl") {
 		t.Errorf("sessionDirFromEmit disagrees with filepath.Dir")
+	}
+}
+
+func TestRestoreIdentity_IncludedProfiles(t *testing.T) {
+	cp := &Checkpoint{Profile: "work", IncludedProfiles: map[string]string{"github": "ci"}}
+
+	var restored RunOptions
+	restoreIdentity(&restored, cp)
+	if restored.Profile != "work" || restored.IncludedProfiles["github"] != "ci" {
+		t.Errorf("resume with no profiles should restore them: %+v", restored)
+	}
+
+	named := RunOptions{IncludedProfiles: map[string]string{"github": "local"}}
+	restoreIdentity(&named, cp)
+	if named.IncludedProfiles["github"] != "local" {
+		t.Errorf("profiles named on the resume should win: %+v", named.IncludedProfiles)
 	}
 }

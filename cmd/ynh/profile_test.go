@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -403,5 +404,80 @@ func TestCmdProfileIncludeUpdate_NoFlags(t *testing.T) {
 	err := cmdProfileTo([]string{"include", "update", dir, "p", "github.com/example-org/tools"}, &buf, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "at least one") {
 		t.Errorf("expected at-least-one error, got: %v", err)
+	}
+}
+
+// ---- profile include with local paths ---------------------------
+
+func TestCmdProfileIncludeLocalPath(t *testing.T) {
+	dir := t.TempDir()
+	hj := &plugin.HarnessJSON{Name: "h", Version: "0.1.0", Profiles: map[string]plugin.Profile{"ci": {}}}
+	if err := plugin.SavePluginJSON(dir, hj); err != nil {
+		t.Fatal(err)
+	}
+	mkIncludeSource(t, filepath.Join(dir, "vendored", "up"))
+	incs := func() []plugin.IncludeMeta {
+		got, err := plugin.LoadPluginJSON(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got.Profiles["ci"].Includes
+	}
+	var buf bytes.Buffer
+	if err := cmdProfileInclude([]string{"add", dir, "ci", filepath.Join(dir, "vendored", "up")}, &buf); err != nil {
+		t.Fatal(err)
+	}
+	if got := incs(); len(got) != 1 || got[0].Local != "vendored/up" || got[0].Git != "" {
+		t.Fatalf("includes = %+v, want one local vendored/up", got)
+	}
+	if err := cmdProfileInclude([]string{"update", dir, "ci", "vendored/up", "--path", "skills"}, &buf); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if got := incs(); got[0].Path != "skills" {
+		t.Errorf("update did not apply: %+v", got)
+	}
+	if err := cmdProfileInclude([]string{"remove", dir, "ci", filepath.Join(dir, "vendored", "up"), "--path", "skills"}, &buf); err != nil {
+		t.Fatalf("remove by typed path: %v", err)
+	}
+	if got := incs(); len(got) != 0 {
+		t.Errorf("not removed: %+v", got)
+	}
+
+	// --ref is Git-only, and a missing directory is refused; nothing written.
+	if err := cmdProfileInclude([]string{"add", dir, "ci", filepath.Join(dir, "vendored", "up"), "--ref", "v1"}, &buf); err == nil || !strings.Contains(err.Error(), "--ref") {
+		t.Errorf("--ref on a local include: %v", err)
+	}
+	if err := cmdProfileInclude([]string{"add", dir, "ci", "./nope"}, &buf); err == nil {
+		t.Error("a path that is not a directory must be refused")
+	}
+	if got := incs(); len(got) != 0 {
+		t.Errorf("refused adds wrote %+v", got)
+	}
+
+	// --git keeps a path a Git source.
+	if err := cmdProfileInclude([]string{"add", dir, "ci", filepath.Join(dir, "vendored", "up"), "--git"}, &buf); err != nil {
+		t.Fatal(err)
+	}
+	if got := incs(); len(got) != 1 || got[0].Git == "" || got[0].Local != "" {
+		t.Errorf("--git: %+v", got)
+	}
+}
+
+func TestCmdProfileIncludeLocalPathWithHooks(t *testing.T) {
+	dir := t.TempDir()
+	hj := &plugin.HarnessJSON{Name: "h", Version: "0.1.0", Profiles: map[string]plugin.Profile{"ci": {}}}
+	if err := plugin.SavePluginJSON(dir, hj); err != nil {
+		t.Fatal(err)
+	}
+	mkIncludeSource(t, filepath.Join(dir, "up"))
+	if err := cmdProfileInclude([]string{"add", dir, "ci", filepath.Join(dir, "up"), "--hooks"}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := plugin.LoadPluginJSON(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if incs := got.Profiles["ci"].Includes; len(incs) != 1 || incs[0].Local != "up" || !incs[0].Hooks {
+		t.Errorf("includes = %+v, want local up with hooks", incs)
 	}
 }

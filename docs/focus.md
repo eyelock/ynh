@@ -42,6 +42,18 @@ Focus is selected through a flag or environment variable:
 
 The `--focus` flag is supported on `ynh run`, `ynd preview`, `ynd diff`, and `ynd export`. When both the flag and the environment variable are set, the flag wins.
 
+## Focuses of Included Harnesses
+
+A focus of an included harness is selected as `namespace:name`, where the namespace is the included harness's name or the `as` alias on the include:
+
+```bash
+ynh run my-harness --focus github:triage
+```
+
+The focus's prompt is the run's prompt, and its `profile`, if any, is applied to that included harness only. The root's configuration is unchanged. The namespace, the `:` separator and the ambiguity rule are described in [Profiles and focuses of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses).
+
+`--focus namespace:name` is the only way to run an included harness's focus. A harness's [launch focus](#launch-focus) cannot name one.
+
 ## Mutual Exclusivity
 
 `--focus` and `--profile` are mutually exclusive. A focus already names a profile (or names "no profile" by omission); accepting `--profile` alongside it would create ambiguity over which profile wins.
@@ -71,7 +83,7 @@ A harness can declare the focus it always wakes with, so launching it with no ar
 }
 ```
 
-`launch_focus` is the name of one of the harness's own `focuses`. It is read by `ynh run` and nothing else.
+`launch_focus` is the name of one of the harness's own `focuses`, never an included harness's `namespace:name` focus or a delegate's focus. It is read by `ynh run` and nothing else. To run an included harness's focus, pass it explicitly with `--focus namespace:name` (see [Focuses of Included Harnesses](#focuses-of-included-harnesses)).
 
 | You run | What happens |
 |---------|--------------|
@@ -79,7 +91,7 @@ A harness can declare the focus it always wakes with, so launching it with no ar
 | `ynh run h --focus other` | Unchanged: that focus, one-shot unless `--interactive`. The launch focus is not involved: not its prompt, not its profile, and its interactive session does not leak in. A dispatcher running `worker --focus next` still gets a run that exits. |
 | `ynh run h -- "text"` | Your prompt replaces the launch focus's prompt, but the launch focus's profile still applies. Interactivity is as it always was: one-shot unless `--interactive`. |
 | `ynh run h --resume` | The launch focus's profile applies. Its prompt is not sent, for the same reason a focus prompt is not: a resume continues a task. If there is nothing to resume and ynh starts a new session, that session is a bare launch and the prompt is sent. |
-| `ynh agent run`, delegation | Not applied: no wake prompt, no forced interactive session. Neither goes through `ynh run`, and nothing on their paths reads the field. |
+| `ynh agent run`, delegation | Not applied: no wake prompt, no forced interactive session. Neither goes through `ynh run`, and nothing on their paths reads the field. A delegate runs a focus only when its `delegates_to` entry names one (see [Focus of a delegate](#focus-of-a-delegate)). |
 
 There is no off switch. An explicit prompt is how you get a session that does not wake with the launch focus. A `--profile` (or `YNH_PROFILE`) you pass wins over the launch focus's profile.
 
@@ -87,7 +99,7 @@ On a vendor that cannot start an interactive session with a first message, ynh w
 
 Because the launch focus's prompt steers every session of the harness, `ynh trust show` lists it and the trust digest covers it. A harness without `launch_focus` keeps the digest it had.
 
-`ynd validate` errors when `launch_focus` names a focus that does not exist, or one that has no prompt. It also warns, for the vendors the harness targets, when a vendor has no way to deliver `on_session_start` output to the model (see [Hooks](hooks.md#on-session-start-output-becomes-model-context)), since a wake prompt that relies on that output would find nothing.
+`ynd validate` errors when `launch_focus` names a focus that is not one of the harness's own (including a `namespace:name` value or a delegate's focus), or one that has no prompt, and `ynh run` refuses to start such a harness. It also warns, for the vendors the harness targets, when a vendor has no way to deliver `on_session_start` output to the model (see [Hooks](hooks.md#on-session-start-output-becomes-model-context)), since a wake prompt that relies on that output would find nothing.
 
 ## Resuming a Session
 
@@ -109,6 +121,7 @@ instead of starting one. What reaches the resumed session:
 | Codex | One-shot only (`codex exec resume`); refused with `--interactive` |
 | Copilot | Refused: no documented form |
 | Cursor | Refused: no documented form |
+| OpenCode | Supported, interactive (`--prompt`) and one-shot (`opencode run -s <id> -- <prompt>`); confirmed by hand on OpenCode 2.2.3 |
 
 Where a vendor refuses, ynh stops before launching with an error naming it
 (for example `codex cannot resume a session interactively with a prompt; drop
@@ -134,6 +147,18 @@ binds the resume to that name instead:
 Two names in one directory keep separate sessions. Codex, Copilot and Cursor
 are unchanged: `--session-name` is only a label there, and `--resume` still
 continues the newest session in the directory.
+
+## Focus of a Delegate
+
+A `delegates_to` entry may name one of the delegate harness's own focuses:
+
+```json
+{ "delegates_to": [ { "git": "github.com/eyelock/triager", "focus": "ci-failures" } ] }
+```
+
+The focus's profile, if it has one, is applied to the delegate, and its prompt is added to the delegate's agent as standing instructions, under `## Focus: ci-failures`. It does not become the delegate's task: the calling session still gives the task each time it delegates. An entry names a profile or a focus, not both, since a focus carries its profile.
+
+Because that prompt steers the delegate for every task, `ynh trust show` lists it against the delegate, with its profile, and the trust digest covers it, as it does a [launch focus](#launch-focus). Changing the prompt, or selecting another focus, asks for review again. A harness whose `delegates_to` entries select no focus keeps the digest it had. See [delegates_to](harnesses.md#profile-or-focus-of-a-delegate).
 
 ## Missing Focus Behavior
 

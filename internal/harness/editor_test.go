@@ -685,10 +685,15 @@ func TestArtifactTypes_SchemaAgreement(t *testing.T) {
 		}
 	}
 
-	// Bare basenames must always fail.
-	for _, bare := range []string{"foo", "foo.md"} {
-		if re.MatchString(bare) {
-			t.Errorf("schema pattern wrongly accepts bare basename %q", bare)
+	// A bare name is a top-level skill folder (TopLevelSkill): the schema
+	// accepts its shape, and ValidatePicks and the assembler check it against
+	// the include. Dot segments and unknown types stay refused.
+	if !re.MatchString("bash-scripting") {
+		t.Error("schema pattern refuses a top-level skill folder name")
+	}
+	for _, bad := range []string{".", "..", ".hidden", "widgets/foo", "foo/bar"} {
+		if re.MatchString(bad) {
+			t.Errorf("schema pattern wrongly accepts %q", bad)
 		}
 	}
 }

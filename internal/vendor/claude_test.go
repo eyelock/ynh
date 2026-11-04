@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/eyelock/ynh/internal/plugin"
@@ -474,6 +475,38 @@ func TestClaudeApplyRuntimeInstructions(t *testing.T) {
 	}
 }
 
+func TestClaudeIsolateMCP(t *testing.T) {
+	withServers := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(withServers, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mcpPath := filepath.Join(withServers, ".claude", ".mcp.json")
+	if err := os.WriteFile(mcpPath, []byte(`{"mcpServers":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	noServers := t.TempDir()
+
+	tests := []struct {
+		name string
+		dir  string
+		want []string
+	}{
+		{"with servers", withServers, []string{"--strict-mcp-config", "--mcp-config=" + mcpPath}},
+		{"without servers", noServers, []string{"--strict-mcp-config"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args, warning := (&Claude{}).IsolateMCP(tt.dir)
+			if warning != "" {
+				t.Errorf("unexpected warning %q", warning)
+			}
+			if !reflect.DeepEqual(args, tt.want) {
+				t.Errorf("args = %v, want %v", args, tt.want)
+			}
+		})
+	}
+}
+
 func TestClaudeSessionExists(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -513,4 +546,78 @@ func TestClaudeSessionIDArgs(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Isolation arguments ride after a positional prompt and a non-interactive -p
+// prompt: the "=" spelling keeps variadic --mcp-config from swallowing them,
+// and without isolation the argv is unchanged.
+func TestBuildClaudeArgs_Isolation(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mcpPath := filepath.Join(dir, ".claude", ".mcp.json")
+	if err := os.WriteFile(mcpPath, []byte(`{"mcpServers":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pluginDir := filepath.Join(dir, ".claude")
+
+	plain := buildClaudeArgs(dir, "hello", nil)
+	wantPlain := []string{"claude", "hello", "--plugin-dir", pluginDir, "--add-dir", dir}
+	if !reflect.DeepEqual(plain, wantPlain) {
+		t.Errorf("plain argv = %v, want %v", plain, wantPlain)
+	}
+
+	iso, _ := (&Claude{}).IsolateMCP(dir)
+	got := buildClaudeArgs(dir, "hello", iso)
+	wantIso := []string{"claude", "hello", "--plugin-dir", pluginDir, "--add-dir", dir,
+		"--strict-mcp-config", "--mcp-config=" + mcpPath}
+	if !reflect.DeepEqual(got, wantIso) {
+		t.Errorf("isolated argv = %v, want %v", got, wantIso)
+	}
+}
+
+// Delegates that declare MCP servers reach the CLI as --agents, because Claude
+// ignores the field in a plugin's agents.
+func TestBuildClaudeArgs_DelegateAgents(t *testing.T) {
+	dir := t.TempDir()
+	if args := buildClaudeArgs(dir, "", nil); slices.Contains(args, "--agents") {
+		t.Errorf("no launch file, no --agents: %v", args)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ClaudeDelegateAgentsFile), []byte(`{"probe":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	args := buildClaudeArgs(dir, "", nil)
+	i := slices.Index(args, "--agents")
+	if i < 0 || args[i+1] != `{"probe":{}}` {
+		t.Errorf("--agents missing or wrong: %v", args)
+	}
+}
+
+// The plugin ynh hands to --plugin-dir is <run>/.claude, so its manifest must
+// be inside it: a plugin with none is named after the directory, and every MCP
+// tool came out as plugin:.claude:<server>.
+func TestClaudeGenerateSessionPluginManifest(t *testing.T) {
+	run := t.TempDir()
+	files, err := (&Claude{}).GenerateSessionPluginManifest(&plugin.HarnessJSON{Name: "myharness", Version: "1.0.0"}, run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rel := filepath.Join(".claude", ".claude-plugin", "plugin.json")
+	data, ok := files[rel]
+	if !ok || len(files) != 1 {
+		t.Fatalf("files = %v, want only %s", files, rel)
+	}
+	var got struct {
+		Name       string `json:"name"`
+		Hooks      string `json:"hooks"`
+		MCPServers string `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != "myharness" || got.Hooks != "" || got.MCPServers != "" {
+		t.Errorf("manifest = %+v", got)
+	}
+	var _ SessionPluginNamer = &Claude{}
 }

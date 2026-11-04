@@ -248,3 +248,81 @@ func mustUnder(t *testing.T, root, path string) {
 		t.Fatalf("refusing to delete %s: not under %s", path, root)
 	}
 }
+
+// An included harness's own includes are baked too: a run resolves them
+// transitively, and in the image there is nothing to fetch them from.
+func TestBakeIncludeCache_Transitive(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("YNH_HOME", filepath.Join(root, "buildhome"))
+
+	leaf := filepath.Join(root, "leaf")
+	gitRepo(t, leaf, "leaf-sensor")
+
+	mid := filepath.Join(root, "mid")
+	mustMkdir(t, mid)
+	data, err := json.Marshal(map[string]any{
+		"name": "mid", "version": "1.0.0",
+		"includes": []any{map[string]any{"git": "file://" + leaf}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writePluginJSONFile(mid, data); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main"},
+		{"add", "-A"},
+		{"-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init"},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", mid}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	harnessDir := filepath.Join(root, "work", "h")
+	mustMkdir(t, harnessDir)
+	incs := []harness.Include{{GitSource: harness.GitSource{Git: "file://" + mid}}}
+	p := &harness.Harness{Name: "h", Dir: harnessDir, Includes: incs}
+	if _, err := resolver.Resolve(p, nil); err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+
+	imgHome := filepath.Join(root, "image", ".ynh")
+	runtimeDir := filepath.Join(imgHome, "harnesses", "local--h")
+	ctxHome := filepath.Join(root, "ctx", "home")
+	mustMkdir(t, ctxHome)
+	if err := bakeIncludeCache(p, incs, ctxHome, runtimeDir); err != nil {
+		t.Fatalf("bake: %v", err)
+	}
+	if entries, _ := os.ReadDir(filepath.Join(ctxHome, "cache")); len(entries) != 2 {
+		t.Fatalf("cache has %d entries, want 2 (the include and its own include)", len(entries))
+	}
+
+	if err := copyTreeWithGit(ctxHome, imgHome); err != nil {
+		t.Fatal(err)
+	}
+	if err := assembler.CopyDir(harnessDir, runtimeDir); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{leaf, mid} {
+		mustUnder(t, root, s)
+		if err := os.RemoveAll(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("YNH_HOME", imgHome)
+
+	res, err := resolver.ResolveFromCache(&harness.Harness{Name: "h", Dir: runtimeDir, Includes: incs}, nil)
+	if err != nil {
+		t.Fatalf("resolve inside the image: %v", err)
+	}
+	if len(res) != 2 {
+		t.Errorf("resolved %d includes, want 2", len(res))
+	}
+	for _, r := range res {
+		if r.Cloned {
+			t.Errorf("%s was fetched at runtime, want a cache hit", r.Source)
+		}
+	}
+}

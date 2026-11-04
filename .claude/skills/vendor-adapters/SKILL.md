@@ -20,6 +20,7 @@ its adapter.
 | OpenAI Codex | [`references/codex.md`](references/codex.md) | `internal/vendor/codex.go` |
 | Cursor | [`references/cursor.md`](references/cursor.md) | `internal/vendor/cursor.go` |
 | GitHub Copilot CLI | [`references/copilot.md`](references/copilot.md) | `internal/vendor/copilot.go` |
+| OpenCode (2.x) | [`references/opencode.md`](references/opencode.md) | `internal/vendor/opencode.go` |
 
 `ynh vendors` is the authority on which vendors exist. If it lists one with no
 row here, that is the bug to fix first.
@@ -84,6 +85,17 @@ and available models change often." Verify flags against `copilot help`
 output before hardcoding into the adapter, don't trust docs/blog snapshots
 alone.
 
+### OpenCode (2.x)
+
+| Area | URL |
+|------|-----|
+| v2 Config | https://opencode.ai/v2/docs/config |
+| v2 Plugins (loading) | https://opencode.ai/v2/docs/plugins |
+| v2 Build a plugin (hooks) | https://opencode.ai/v2/docs/build/plugins |
+| v2 MCP servers | https://opencode.ai/v2/docs/mcp-servers |
+| Config schema | https://opencode.ai/config.json |
+| GitHub Repo | https://github.com/anomalyco/opencode |
+
 ### Cross-Vendor Standards
 
 | Area | URL |
@@ -144,15 +156,36 @@ converted only by `ynd migrate` and refused by every other command.
 | ynh               | Claude Code                      | Codex                            | Cursor                           |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | Source:            |                                  |                                  |                                  |
-| agents/<name>.md  | agents/<name>.md                 | NOT SUPPORTED in plugins         | agents/<name>.md                 |
+| agents/<name>.md  | agents/<name>.md                 | NOT SUPPORTED in plugins; a run  | agents/<name>.md                 |
+|                   |                                  | writes .codex/agents/<name>.toml |                                  |
+|                   |                                  | (TOML custom agent), registered  |                                  |
+|                   |                                  | at launch with -c agents.<name>. |                                  |
+|                   |                                  | config_file; CONFIRMED live on   |                                  |
+|                   |                                  | 0.166.0 (ynw-t7i)                |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
-| Frontmatter:      | name, description, model,        |                                  | name, description                |
-|                   | tools, disallowedTools, skills,  |                                  |                                  |
-|                   | maxTurns, effort, memory,        |                                  |                                  |
-|                   | background, isolation            |                                  |                                  |
+| Frontmatter:      | name, description, model,        | name, description; the body      | name, description                |
+|                   | tools, disallowedTools, skills,  | becomes developer_instructions;  |                                  |
+|                   | maxTurns, effort, memory,        | effort low/medium/high becomes   |                                  |
+|                   | background, isolation            | model_reasoning_effort (xhigh,   |                                  |
+|                   |                                  | max dropped). tools and          |                                  |
+|                   |                                  | disallowedTools dropped with a   |                                  |
+|                   |                                  | warning naming the agent (no     |                                  |
+|                   |                                  | tool allowlist); tools without   |                                  |
+|                   |                                  | Bash writes features.shell_tool  |                                  |
+|                   |                                  | = false. Every other field       |                                  |
+|                   |                                  | dropped (model names differ)     |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
-| Delegation:       | Native subagent system           | NOT SUPPORTED                    | NEEDS RESEARCH                   |
-| (delegates_to)    | via agent .md files              |                                  |                                  |
+| Delegation:       | Markdown subagent in             | TOML custom agent in             | Markdown subagent in             |
+| (delegates_to)    | .claude/agents/<name>.md (name,  | .codex/agents/<name>.toml (name, | .cursor/agents/<name>.md (name,  |
+|                   | description); the delegate's MCP | description,                     | description), per                |
+|                   | servers carried (mcpServers,     | developer_instructions); MCP     | cursor.com/docs/subagents; the   |
+|                   | plus --agents at launch)         | servers inherited from the       | delegate's MCP servers not       |
+|                   |                                  | session, the delegate's own not  | carried (warning); live pickup   |
+|                   |                                  | carried (warning); run only, not | not checked                      |
+|                   |                                  | export; registered at launch     |                                  |
+|                   |                                  | with -c agents.<name>.           |                                  |
+|                   |                                  | config_file; CONFIRMED live on   |                                  |
+|                   |                                  | 0.166.0 (ynw-t7i)                |                                  |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 ```
 
@@ -274,8 +307,9 @@ the format, its reverse-domain namespace, where its artifacts, hooks and MCP
 config go, and whether the manifest needs a hooks pointer. `ynd export
 --format agent-plugin` and `ynd marketplace build --format agent-plugin`
 read those declarations; `internal/agentplugin` holds the spec's reader and
-validator. Adding a vendor means declaring its layout there, and nothing
-else. Verified sources: the specification and the four vendors' plugin
+validator. For Agent Plugins, adding a vendor means declaring its layout
+there and nothing else; the rest of a new vendor is in
+[`add-vendor-adapter`](../add-vendor-adapter/SKILL.md). Verified sources: the specification and the four vendors' plugin
 docs, 2026-09-25.
 
 ### GitHub Copilot CLI Mapping
@@ -293,7 +327,7 @@ lands and the shape stabilizes.
 | Rules | `rules/<name>.md` | No "rules" concept by that name. Closest analog: `NAME.instructions.md` under `.github/instructions/` with `applyTo: <glob>` frontmatter — no defined precedence when multiple files match. |
 | Commands | `commands/<name>.md` | **Not supported.** No user-definable `.prompt.md`-style custom slash commands as of 2026-07-29 (open feature requests: github/copilot-cli#618, #942, #1113). Only a fixed built-in command set. Plugin manifests can declare a "commands" component, but how that surfaces isn't confirmed. |
 | Hooks | `.agents/harness/plugin.json` `hooks: {}` | **CONFIRMED, complete (14 events).** Canonical source: `docs.github.com/en/copilot/reference/hooks-reference`. See the dedicated Hooks section below for the full event table and canonical-event mapping. | Config file: `.github/hooks/*.json` (repo, any filename) or `~/.copilot/hooks/*.json` (user). Entry shape: `{"type": "command", "bash": "...", "powershell": "...", "cwd": "...", "timeoutSec": 30, "env": {...}, "matcher": "regex"}`. Top-level also supports `"disableAllHooks": false`. |
-| MCP servers | `.agents/harness/plugin.json` `mcp_servers: {}` | **CONFIRMED exact schema by hand-testing** (`copilot mcp add`/`get`/`list`, v1.0.75). `.mcp.json` (project root) or `.github/mcp.json` (repo-shared) — both work, both live-read (no restart), both labeled "Workspace" source, verified interchangeable by moving the file between them mid-session. `~/.copilot/mcp-config.json` is user scope, lower precedence. SSE flagged by GitHub's own docs as legacy/deprecated. No documented OAuth — static credentials only. **CONFIRMED (adapter shipped): a `.mcp.json` bundled inside a `--plugin-dir`-loaded plugin is NOT read** (`copilot mcp list` shows nothing, tested both `.mcp.json` and `.github/mcp.json` placements inside the plugin dir). The Copilot adapter's `GenerateMCPConfig` still writes `.copilot/.mcp.json` for interface consistency, but `buildCopilotArgs` re-reads that file and projects it into the real project's `.github/mcp.json` — the path that actually works. |
+| MCP servers | `.agents/harness/plugin.json` `mcp_servers: {}` | **CONFIRMED exact schema by hand-testing** (`copilot mcp add`/`get`/`list`, v1.0.75). Copilot reads a workspace-level MCP file from either the project root or the project's `.github` directory — both work, both live-read (no restart), both labeled "Workspace" source, verified interchangeable by moving the file between them mid-session. `~/.copilot/mcp-config.json` is user scope, lower precedence. SSE flagged by GitHub's own docs as legacy/deprecated. No documented OAuth — static credentials only. **CONFIRMED (adapter shipped): an MCP file bundled inside a `--plugin-dir`-loaded plugin is NOT read** (`copilot mcp list` shows nothing, tested at both workspace-file placements inside the plugin dir). The Copilot adapter's `GenerateMCPConfig` still generates the file under the run's `.copilot` directory for interface consistency, but `buildCopilotArgs` passes that file with `--additional-mcp-config @<abs path>` (**CONFIRMED live on Copilot CLI 1.0.105**: the server starts, Copilot also expands `${VAR}` in its `env`, and nothing is written into the project). It used to project the file into the project's `.github` directory, which left expanded secrets where they could be committed (ynw-18ln); never write expanded MCP values into the project tree. Because a run's MCP files hold `${VAR}` values already expanded, write them with `vendor.WriteSecretFiles` (0600 files, 0700 directories), never `os.WriteFile` at 0644 |
 | Marketplace | n/a (ynh-generated) | `marketplace.json` at `.github/plugin/` for repos acting as a marketplace. Two pre-registered defaults: `copilot-plugins`, `awesome-copilot`. Install via `copilot plugin install`, `/plugin install`, or declarative `enabledPlugins` in `settings.json`. |
 | Instructions file | `instructions.md` | Reads **multiple formats simultaneously**, no defined precedence: `AGENTS.md`, `.github/copilot-instructions.md`, `.github/instructions/*.instructions.md`, `CLAUDE.md`/`.claude/CLAUDE.md`, `GEMINI.md`, plus `~/.copilot/copilot-instructions.md` (user-level, cross-repo). Reads `AGENTS.md` natively — no workaround needed (contrast Claude's `@AGENTS.md` import hack). Never shell out to `copilot init` — it's an LLM-invoking scaffolder that infers its own content from the repo (confirmed via `copilot init --help`, v1.0.75), fundamentally incompatible with ynh's model of authoritative harness-authored instructions. **CONFIRMED (adapter shipped): an `AGENTS.md` bundled inside a `--plugin-dir`-loaded plugin is NOT read as instructions** — verified with a behavioral canary test (positive control: same file at cwd/repo root, adopted; negative: same file at the plugin-dir root, ignored — tested twice with `AGENTS.md` and `.github/copilot-instructions.md`, and again with `--add-dir` added, all negative). `GenerateSystemPrompt` (used only by `ynd export`) still emits `AGENTS.md` for consistency with the other three adapters, but the actual `ynh run` delivery mechanism is different: `buildCopilotArgs` reads the assembled `AGENTS.md` from the staging dir and projects it into the real project directory as `.github/instructions/ynh-harness.instructions.md` with `applyTo: "**/*"` frontmatter (confirmed required — Copilot's path-scoped instructions files do nothing without it). This file is uniquely-namespaced and fully ynh-owned, so it's safe to overwrite on every run without touching anything the user authored themselves. |
 | Config dir | `.claude`/`.codex`/`.cursor` | No single project dotfolder — spread across `.github/*` subpaths plus root files. User-level home is `~/.copilot/` (override: `COPILOT_HOME`). |
@@ -305,7 +339,7 @@ lands and the shape stabilizes.
 | Add-dir / cwd | vendor-specific flag | `--add-dir <dir>` (repeatable); `-C <directory>` to change cwd before startup. |
 | Session resume | vendor-specific | **CONFIRMED, caller-chosen ID:** `--session-id <id>` sets the UUID for a *new* session; `-r, --resume[=id]` resumes by session ID, task ID, ID prefix (7+ hex chars), or exact case-insensitive name; `--continue` resumes the most recent session. Better than Cursor's backend (which must generate and track its own ID) — ynh can choose the UUID up front. |
 | AGENTS.md toggle | n/a | `--no-custom-instructions` disables loading from `AGENTS.md` and related files — confirms native `AGENTS.md` reading end-to-end. |
-| Additional MCP config | n/a | `--additional-mcp-config <json-or-@file>` — session-scoped MCP servers passed as a launch arg, additive to `~/.copilot/mcp-config.json`. A third MCP-wiring option beyond writing `.mcp.json`/`.github/mcp.json` into the staging dir — compare both in Phase 1 of the adapter work. |
+| Additional MCP config | n/a | `--additional-mcp-config <json-or-@file>` — session-scoped MCP servers passed as a launch arg, additive to `~/.copilot/mcp-config.json`. This is how `ynh run` delivers Copilot's MCP config: `buildCopilotArgs` passes the generated file (outside the project tree) with this flag, so nothing is written into the project. |
 | Sandbox | n/a | **CONFIRMED ABSENT** (`copilot help permissions`, 2026-07-29) — no `--sandbox`/`--no-sandbox` flag exists. Permission model is tool/URL/path-scoped instead (see next row), not a sandbox toggle. Drop this row from the adapter design — there's nothing to map. |
 | Permission model detail | n/a | `--allow-tool`/`--deny-tool` take `kind(argument)` patterns: `shell(cmd:*)`, `write(path?)`, `<mcp-server-name>(tool-name?)`, `url(domain-or-url?)`. **Deny always wins over allow**, even against `--allow-all-tools`. `--available-tools`/`--excluded-tools` filter which tools the model *sees* at all (separate from the approval-prompt layer). Doc explicitly says wildcard matching is expected to expand "in the very near future" — don't over-fit the adapter to today's exact pattern syntax if ynh ever exposes fine-grained permission passthrough. |
 
@@ -352,9 +386,10 @@ spelling rather than passing the struct through:
   files not written through the CLI.
 - **`copilot mcp add` only writes to user-level `~/.copilot/mcp-config.json`**
   — there is no flag to target the workspace file. This confirms (same
-  pattern as the `copilot init` finding above): **ynh's adapter must write
-  `.mcp.json`/`.github/mcp.json` directly as a file, not shell out to
-  `copilot mcp add`**, exactly like it already does for Claude and Cursor.
+  pattern as the `copilot init` finding above): **ynh's adapter must generate the
+  MCP file itself, not shell out to `copilot mcp add`**, as it does for Claude and
+  Cursor. The file is passed with `--additional-mcp-config` from outside the
+  project tree, never written into the project.
 
 ### Copilot CLI Hook Events (confirmed complete, 2026-07-29)
 

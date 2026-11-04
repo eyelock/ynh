@@ -24,6 +24,16 @@ type HarnessJSON struct {
 	DelegatesTo   []DelegateMeta         `json:"delegates_to,omitempty"`
 	Hooks         map[string][]HookEntry `json:"hooks,omitempty"`
 	MCPServers    map[string]MCPServer   `json:"mcp_servers,omitempty"`
+	// MCPRemovals names the servers the manifest sets to null in
+	// mcp_servers: a server inherited from an included harness that this
+	// harness does not want. It is not a field of its own on the wire (see
+	// MarshalJSON and UnmarshalJSON), and MCPServers never holds those names.
+	MCPRemovals []string `json:"-"`
+	// MCPIsolation runs the harness with only the MCP servers it composes (its
+	// own and its included harnesses'), instead of alongside the operator's
+	// configured servers. A launch concern: it
+	// changes how `ynh run` starts the vendor CLI, not what an export ships.
+	MCPIsolation bool `json:"mcp_isolation,omitempty"`
 	// Agent carries loop defaults a harness can set once rather than every
 	// caller passing flags.
 	Agent *AgentConfig `json:"agent,omitempty"`
@@ -37,9 +47,14 @@ type HarnessJSON struct {
 	// grants nothing: the operator's allow-list or `ynh trust accept` does
 	// (docs/workspace.md). Relative entries resolve against the harness's own
 	// directory.
-	Workspace []string           `json:"workspace,omitempty"`
-	Profiles  map[string]Profile `json:"profiles,omitempty"`
-	Focuses   map[string]Focus   `json:"focuses,omitempty"`
+	Workspace []string `json:"workspace,omitempty"`
+	// Labels are run labels (key to value) a run of this harness carries,
+	// when it is the root harness. Labels of included harnesses are ignored.
+	// Not keywords: a label is exported on the run's telemetry as
+	// ynh.label.<key> (docs/telemetry.md).
+	Labels   map[string]string  `json:"labels,omitempty"`
+	Profiles map[string]Profile `json:"profiles,omitempty"`
+	Focuses  map[string]Focus   `json:"focuses,omitempty"`
 	// LaunchFocus names the focus a bare `ynh run` wakes with: no --focus and
 	// no prompt. It applies to nothing else (docs/focus.md, "Launch focus").
 	LaunchFocus string            `json:"launch_focus,omitempty"`
@@ -61,6 +76,58 @@ type HarnessJSON struct {
 	// `ynd lint` checks it.
 	Reads         map[string][]string `json:"reads,omitempty"`
 	InstalledFrom *ProvenanceMeta     `json:"installed_from,omitempty"`
+}
+
+// hjAlias has HarnessJSON's fields and none of its methods, so the JSON
+// methods below can reuse the default encoding without recursing.
+type hjAlias HarnessJSON
+
+// UnmarshalJSON decodes the manifest, unknown fields still rejected, and
+// reads a null entry in mcp_servers as the removal of that server (see
+// MCPRemovals) instead of as an empty server definition.
+func (h *HarnessJSON) UnmarshalJSON(data []byte) error {
+	aux := struct {
+		*hjAlias
+		MCPServers map[string]*MCPServer `json:"mcp_servers"`
+	}{hjAlias: (*hjAlias)(h)}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&aux); err != nil {
+		return err
+	}
+	h.MCPServers = nil
+	h.MCPRemovals = nil
+	for name, srv := range aux.MCPServers {
+		if srv == nil {
+			h.MCPRemovals = append(h.MCPRemovals, name)
+			continue
+		}
+		if h.MCPServers == nil {
+			h.MCPServers = make(map[string]MCPServer, len(aux.MCPServers))
+		}
+		h.MCPServers[name] = *srv
+	}
+	sort.Strings(h.MCPRemovals)
+	return nil
+}
+
+// MarshalJSON is the inverse of UnmarshalJSON: each removal is written back
+// as a null entry in mcp_servers.
+func (h HarnessJSON) MarshalJSON() ([]byte, error) {
+	if len(h.MCPRemovals) == 0 {
+		return json.Marshal(hjAlias(h))
+	}
+	servers := make(map[string]*MCPServer, len(h.MCPServers)+len(h.MCPRemovals))
+	for name, srv := range h.MCPServers {
+		servers[name] = &srv
+	}
+	for _, name := range h.MCPRemovals {
+		servers[name] = nil
+	}
+	return json.Marshal(struct {
+		hjAlias
+		MCPServers map[string]*MCPServer `json:"mcp_servers"`
+	}{hjAlias: hjAlias(h), MCPServers: servers})
 }
 
 // Sensor declares an observation surface — a feedforward signal a loop
@@ -467,6 +534,10 @@ type Profile struct {
 	// editing the base manifest. Replacement rather than union: a profile
 	// meant to restrict must be able to.
 	EnvPassthrough []string `json:"env_passthrough,omitempty"`
+	// MCPIsolation overrides the harness-level mcp_isolation when set, either
+	// way. A pointer so that unset (inherit) and false (opt out) differ.
+	MCPIsolation *bool `json:"mcp_isolation,omitempty"`
+
 	// SensorOverrides softens or hardens sensors while this profile is
 	// selected. Tolerance only: a ratchet decides how the committed baseline
 	// is recorded, and the baseline belongs to the repository, not to a
@@ -699,7 +770,11 @@ type ProvenanceMeta struct {
 // IncludeMeta is the JSON representation of an include source. Exactly one
 // of `git` (remote) or `local` (path-based) must be set. For both forms
 // `path` scopes into a subdirectory of the source and `pick` filters paths.
-// `ref` is Git-only.
+// `ref` is Git-only. `as` names the namespace an included harness's focuses
+// and profiles are selected under ("alias:name"); it defaults to the included
+// harness's own name. `hooks` consents to the included harness's hooks
+// running in the session; it is false unless set, because a hook is command
+// execution the root author has not written.
 type IncludeMeta struct {
 	Git   string   `json:"git,omitempty"`
 	Local string   `json:"local,omitempty"`
@@ -708,7 +783,9 @@ type IncludeMeta struct {
 	Pick  []string `json:"pick,omitempty"`
 	// Sensors, when false, drops the sensors the include declares. Absent
 	// means true: sensors travel with the include.
-	Sensors *bool `json:"sensors,omitempty"`
+	Sensors *bool  `json:"sensors,omitempty"`
+	As      string `json:"as,omitempty"`
+	Hooks   bool   `json:"hooks,omitempty"`
 	// Instructions, when false, leaves out the include's instructions file
 	// (instructions.md / AGENTS.md) when instructions are composed. Absent
 	// means true: the include contributes a section.
@@ -720,6 +797,12 @@ type DelegateMeta struct {
 	Git  string `json:"git"`
 	Ref  string `json:"ref,omitempty"`
 	Path string `json:"path,omitempty"`
+	// Profile names one of the delegate harness's own profiles to apply to
+	// it. Focus names one of its own focuses: its profile applies and its
+	// prompt becomes standing instructions in the delegate's agent. At most
+	// one of the two; neither runs the delegate on its base config.
+	Profile string `json:"profile,omitempty"`
+	Focus   string `json:"focus,omitempty"`
 }
 
 // HarnessFile is the legacy single-file harness manifest. ynh reads it only to
@@ -1035,6 +1118,39 @@ const EnvPassthroughField = "env_passthrough"
 // it collides with ordinary shell and path content in a manifest, and a
 // credential mechanism should not depend on guessing intent.
 var envRef = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+
+// EnvRefNames returns the names of the ${VAR} references in v, in order of
+// appearance and with repeats kept. It is the grammar ExpandMCPEnv uses.
+func EnvRefNames(v string) []string {
+	var names []string
+	for _, m := range envRef.FindAllStringSubmatch(v, -1) {
+		names = append(names, m[1])
+	}
+	return names
+}
+
+// ExpandEnvRefs replaces every ${VAR} reference in v with what resolve
+// returns for its name. The first error resolve returns stops the expansion.
+// The result is not scanned again, so a value that itself contains ${...} is
+// left as it is.
+func ExpandEnvRefs(v string, resolve func(name string) (string, error)) (string, error) {
+	var firstErr error
+	out := envRef.ReplaceAllStringFunc(v, func(match string) string {
+		if firstErr != nil {
+			return ""
+		}
+		val, err := resolve(envRef.FindStringSubmatch(match)[1])
+		if err != nil {
+			firstErr = err
+			return ""
+		}
+		return val
+	})
+	if firstErr != nil {
+		return "", firstErr
+	}
+	return out, nil
+}
 
 // ExpandMCPEnv resolves ${VAR} references in every server's env values and
 // headers, drawing only from allowed.

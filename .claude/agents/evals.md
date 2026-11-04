@@ -62,6 +62,7 @@ If another eval may be running on the same machine, put a run tag in every root,
 ### The rules the sandbox enforces
 
 - **Every tutorial path is rewritten into the sandbox.** `/tmp/ynh-tutorial/x` becomes `/tmp/ynh-eval-<slug>/work/ynh-tutorial/x`; the same for `/tmp/ynh-t20`, `/tmp/ynh-edge` and every other `/tmp` path.
+- **A pattern matched against a full path also sees the sandbox prefix.** `find -path`, or `grep` over output that prints paths, matches `ynh-eval-<slug>`, `work` and `home` too, so `find -path '*hooks*'` in the hooks tutorial matched every file. A block whose pattern the prefix can satisfy is a tutorial bug: report it and fix the tutorial by anchoring the pattern below its own directory (#631 made it `-path '*/hook-export/*hooks*'`), rather than working around it in the eval.
 - **Never a bare `cd /tmp`, and no `cd` outside the sandbox.** A tutorial's `cd /` becomes `cd` to the sandbox root. The guard aborts any block that tries to leave, and any block whose `cd` fails, so its commands never run in the wrong directory.
 - **Skip the whole block** if any line in it is skipped. A skipped `cd` followed by a `git init` that did run is how an empty repository ended up at `/private/tmp/.git`.
 - **Never `rm` outside the sandbox.** The guard resolves every `rm` and `rmdir` target and refuses anything that is not strictly inside the sandbox root, or that contains a `..` component. If a refusal fires, stop and report it; do not work around it.
@@ -91,6 +92,7 @@ A stub runs nothing: it appends its name and arguments to
 | `claude` | the Claude vendor adapter, `ynh agent run`, `ynd compress` and `ynd inspect` |
 | `codex` | the Codex vendor adapter, `ynh agent run`, `ynd compress` and `ynd inspect` |
 | `copilot` | the Copilot vendor adapter, `ynd compress` and `ynd inspect` |
+| `opencode` | the OpenCode vendor adapter, the OpenCode backend of `ynh agent run`, `ynd compress` and `ynd inspect` |
 | `agent` | the Cursor vendor adapter, the Cursor backend of `ynh agent run`, `ynd compress` and `ynd inspect`: Cursor's CLI is named `agent` |
 | `cursor` | nothing: it is the Cursor editor's launcher, which the `ynh agent run` backend once ran by mistake (#524). Stubbed so a regression cannot open the editor |
 | `cursor-agent` | nothing: the older name of Cursor's CLI, still installed as an alias of `agent`. Stubbed so it cannot be reached instead |
@@ -182,7 +184,7 @@ Once at tutorial start, in a single Bash invocation from the checkout. Fill in `
 YNH_REPO=$(git rev-parse --show-toplevel)
 SLUG=<slug>                                  # e.g. sensors for tutorial/sensors.md
 SANDBOX=/tmp/ynh-eval-$SLUG
-STUBS="claude codex copilot agent cursor cursor-agent srt gh docker ynr"
+STUBS="claude codex copilot opencode agent cursor cursor-agent srt gh docker ynr"
 case $SANDBOX in /tmp/ynh-eval-?*) rm -rf "$SANDBOX" ;; *) echo "bad sandbox: $SANDBOX"; exit 1 ;; esac
 mkdir -p "$SANDBOX/home/.ynh/bin" "$SANDBOX/work" "$SANDBOX/tmp" "$SANDBOX/blocks" "$SANDBOX/state" "$SANDBOX/stubs"
 cp "$YNH_REPO/bin/ynh" "$YNH_REPO/bin/ynd" "$SANDBOX/home/.ynh/bin/"   # what make install would put there
@@ -372,7 +374,9 @@ sandbox's `~/.gitconfig` so that git serves them in place of GitHub, through
 `url.<local repository>.insteadOf` entries for both the `git@github.com:` form
 ynh clones with and the `https://github.com/` form. Because only the transport
 changes, the ids ynh derives (`github.com/eyelock/assistants/david`), the
-allow-list checks and every line of output are what a reader sees.
+allow-list checks and every line of output are what a reader sees, as long as
+each stand-in matches the real repository (see [Stand-ins match the real
+harnesses](#stand-ins-match-the-real-harnesses)).
 `GIT_ALLOW_PROTOCOL=file` still refuses any other repository, so a command that
 would reach GitHub for something not served here fails instead of connecting.
 
@@ -382,7 +386,7 @@ which is why this is done below the commands and not in them.
 
 | Repository | What the tutorials take from it |
 |------------|---------------------------------|
-| `eyelock/assistants` | `skills/<category>/skills/<name>` (`dev` has seven, `tech` three, `infra` two, `pause` two), the harnesses `ynh/david` (four includes), `ynh/planner`, `ynh/tester` and `ynh/researcher`, and `plugins/media-management`. Branch `main` and tag `v1.0.0` |
+| `eyelock/assistants` | `skills/<category>/skills/<name>` (`dev` has nine, `tech` three, `infra` four, `pause` two), the harnesses `ynh/david` (four includes), `ynh/planner`, `ynh/tester` and `ynh/researcher`, each with the real one's name, description, includes and delegates and none of its own instructions, rules or skills (the real ones have none), and `plugins/media-management`. Branch `main` and tag `v1.0.0` |
 | `anthropics/skills` | `skills/frontend-design`, `skills/pdf`, `skills/docx` |
 | `vercel-labs/skills` | `skills/find-skills`, `skills/vercel-deploy` |
 | `agentplugins/agent-plugins-example` | A stand-in for the specification project's reference package: a root `plugin.json`, one skill (`migrate-agent-plugin`), `README.md` and `LICENSE` |
@@ -393,6 +397,37 @@ When it names a new repository, add that there too: `make check-vendor-parity`
 fails on a `github.com/<org>/<repo>` in a tutorial command that nothing serves
 (check E), and builds the fixtures once to prove the script works. The manual
 test plan does not use the fixtures, and its sandbox does not serve them.
+
+#### Stand-ins match the real harnesses
+
+An eval compares tutorial output only with the stand-ins, so it cannot notice
+a stand-in that has drifted from the real harness: the stand-in `ynh/tester`
+once had one include while the real one had two, and a tutorial block printing
+the stand-in's count passed review. `make check-eval-stand-ins`
+(`scripts/eval-stand-ins.sh`) closes that gap. It builds the stand-ins, clones
+each repository that has stand-in harnesses from GitHub (its default branch,
+which is what `ynh install` fetches), and compares every stand-in harness with
+the real one. It compares the whole manifest except `version` and `$schema`, so
+a field the stand-in lacks (a profile, a hook, an include's options, a local
+include) fails the check rather than passing unseen; each git address is
+compared without its scheme or `.git`. It also compares which of the harness's
+own files are present (`instructions.md`, `AGENTS.md`, `CLAUDE.md`, `rules/`,
+`skills/`, `agents/`, `commands/`). Those files change what a reader sees: a
+delegate's agent file has an Instructions section, and an export an
+`AGENTS.md`, only when the harness has instructions. It prints a diff for each
+harness that differs and fails. The files' contents are not compared. It also
+fails when it finds no stand-in harness at all, since then it has checked
+nothing: if the stand-ins move, update the script to find them.
+
+It needs the network, so it is not part of `make check` and an eval does not
+run it. It runs daily, and on any change to the stand-ins, in
+`.github/workflows/eval-stand-ins.yml`. Run it yourself before an eval that
+leans on a stand-in harness's output.
+
+When it fails, **update the stand-in** in `scripts/eval-remotes.sh` to match
+the real harness, adding any skill a new pick needs, and then any tutorial
+output that changes with it. Never change the real harness to suit the evals:
+the tutorials document what a reader installs.
 
 ### Run each block
 
@@ -461,6 +496,7 @@ Many tutorials do not require network access or vendor CLIs and must be run:
 - **MCP servers** (`mcp-servers.md`): Same pattern: define mcp_servers, validate, preview. Output is local assembly only.
 - **Profiles** (`profiles.md`): Create harness with profiles, run `ynd preview --profile <name>`, and verify merged output. Fully local.
 - **Focus** (`focus.md`): Create harness with focus entries, run `ynd preview --focus <name>`, and verify prompt + profile. Fully local.
+- **Composing tools** (`composing-tools.md`): Builds three local harnesses that include each other and a stdlib-only Python MCP server, then runs `ynd preview` for servers, namespaced profiles and focuses, and hook consent. Two `ynh run` launches and one `--focus` launch are checked against the stubs; the blocks under "Your output will differ" are skipped. Python 3 must be on `PATH`. Run every other block.
 - **Project-local config** (`project-local-config.md`): Create a `.agents/harness/plugin.json` in the sandbox, run `ynd preview` from that directory. Also creates a `.ynh-plugin/plugin.json` project to prove it is refused with the `ynd migrate` fix, then migrates it. No network.
 - **Include editing** (`include-editing.md`): The add/remove/update commands work on the manifest directly when the harness is path-referenced, and for an installed harness `ynh include add` pre-fetches the include, which the [served repositories](#github-repositories-served-offline) cover. Run every block.
 - **Tutorials that fetch from GitHub** (`composition.md`, `delegation.md`, `export.md`, `marketplace.md`, `registry-and-discovery.md`, `namespacing-and-migration.md`, `include-editing.md`): installs, includes, delegates, `ynd export` from a Git URL and registry entries all resolve against the served repositories. Run their blocks; skip only a block that calls a stubbed program directly, such as `claude plugin validate` or `copilot ...`.

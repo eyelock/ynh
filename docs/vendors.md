@@ -13,9 +13,50 @@ claude   claude   .claude
 codex    codex    .codex
 copilot  copilot  .copilot
 cursor   agent    .cursor
+opencode opencode .opencode
 ```
 
 If `~/.ynh/config.json` declares any [local model backends](#local-model-backends), `ynh vendors` (including `--format json`) also lists one extra row per configured `<backend>/<vendor>` pair — the exact spec string `-v` accepts — so a caller can discover what's launchable on this machine without parsing config.json itself.
+
+## Known gaps
+
+ynh claims more than each vendor yet gets. In v0.16.0:
+
+- **Codex** does not yet receive instructions, MCP servers, hooks, session context, rules or commands. Skills, agents, focuses and profiles do. Resume fails when the harness asks for workspace folders. Under `ynh run`, Codex starts in the run directory without `-C`, so the project's own `AGENTS.md` is never read.
+- **Rules** do not reach Claude Code, Codex or Copilot.
+- **OpenCode**: agents and delegates cannot run as subagents, `on_session_start` does not fire, `on_session_end` cannot fire (OpenCode has no such event, a vendor limit), session context is not injected, and workspace folders are not granted. `ynd export -v opencode` drops delegates silently.
+- **Cursor**: workspace folders are not granted, and print mode skips `before_prompt` and `on_stop`.
+- **Delegates** carry only their instructions on Codex, Cursor and Copilot. On Claude Code a delegate also carries its MCP servers, not its hooks or workspace. A delegate does not run on OpenCode. "A full harness" holds for includes, not yet for delegates.
+- **Resume**: Cursor and Copilot refuse a prompt on resume.
+- **Telemetry**: `ynh run` emits none on any vendor; only `ynh agent run` does.
+- **Project instructions** (the project's own `AGENTS.md` or `CLAUDE.md` under `ynh run`) are unverified on every vendor except Codex, where they are not read.
+
+These are fixed in v0.17.0 (parity) and later, except what a vendor cannot do. See [ynh #679](https://github.com/eyelock/ynh/issues/679).
+
+## Feature Support
+
+What each vendor receives from a harness in v0.16.0, from the vendor parity audit (live runs of every vendor CLI against ynh develop, 2026-11). **Y** works, **N** does not yet work (ynh can fix it), **X** the vendor cannot, **U** unverified.
+
+| Feature | Claude Code | Codex | Cursor | Copilot CLI | OpenCode |
+|---|---|---|---|---|---|
+| Instructions | Y | N | Y | Y | Y |
+| Project instructions under `ynh run` | U | N | U | U | U |
+| Skills | Y | Y | Y | Y | Y |
+| Agents | Y | Y | Y | Y | N |
+| Rules | N | N | Y | N | Y |
+| Commands | Y | N | Y | Y | U |
+| MCP servers | Y | N | Y | Y | Y |
+| Hooks | Y | N | X | Y | N |
+| Session context | Y | N | Y | Y | N |
+| Profiles | Y | Y | Y | Y | Y |
+| Focuses, includes, sensors | Y | Y | Y | Y | Y |
+| Workspace folders | Y | Y | N | Y | N |
+| `delegates_to` | N | N | N | N | N |
+| Resume | Y | N | U | U | Y |
+| `ynd export` | Y | Y | Y | Y | N |
+| Telemetry from `ynh run` | N | N | N | N | N |
+
+Notes: Cursor print mode skips `before_prompt` and `on_stop`. OpenCode has no `on_session_end` event. Codex commands should ship as skills. Cursor and Copilot refuse a prompt on resume. OpenCode `ynd export` drops delegates silently. Only `ynh agent run` emits telemetry.
 
 ## Launch Strategies
 
@@ -27,8 +68,9 @@ Each vendor gets the strategy that matches its capabilities:
 | **Codex** | Child process with `cmd.Dir` | Symlinks into project | Managed (signal forwarding) |
 | **Cursor** | Child process with `cmd.Dir` | Symlinks into project | Managed (signal forwarding) |
 | **Copilot** | `syscall.Exec` with `--plugin-dir` | Native plugin loading | Clean handoff (ynh exits) |
+| **OpenCode** | `syscall.Exec` of `opencode --standalone` with `OPENCODE_CONFIG_DIR` | Native config-directory loading | Clean handoff (ynh exits) |
 
-Claude and Copilot support `--plugin-dir` natively, so ynh can exec directly into them. Codex and Cursor don't have plugin loading, so ynh installs symlinks and manages the child process for signal forwarding.
+Claude and Copilot support `--plugin-dir` natively, and OpenCode loads a whole config directory named by `OPENCODE_CONFIG_DIR`, so ynh can exec directly into all three. Codex and Cursor don't have plugin loading, so ynh installs symlinks and manages the child process for signal forwarding.
 
 ### Symlink Installation (Codex/Cursor)
 
@@ -39,6 +81,8 @@ david -v cursor --install     # creates .cursor/ symlinks in current project
 david -v cursor               # launches normally
 david -v cursor --clean       # removes symlinks
 ```
+
+Codex reads a project's custom agents only as TOML files in `.codex/agents/` ([Codex's subagent docs](https://learn.chatgpt.com/docs/agent-configuration/subagents)), so a harness's own agents are written there as `<name>.toml`, not linked as Markdown. Each sets the three fields a custom agent must: `name` and `description` from the agent's frontmatter (the file name, and a description naming the agent, when it has none) and `developer_instructions` from its body. An `effort` of `low`, `medium` or `high` becomes `model_reasoning_effort` at the same level, the mapping `ynh agent run --effort` uses for Codex ([Effort](agent.md#effort)); `xhigh` and `max` are dropped, as ynh maps only those three. Codex has no tool allowlist, so `tools` and `disallowedTools` cannot carry over: the run prints a warning naming the agent for each of them it declares, such as `warning: agent "reviewer": Codex custom agents cannot restrict tools, so its tools list is dropped`. When `tools` leaves out `Bash` (whole, or as `Bash(...)` for some commands), the agent file sets `features.shell_tool = false`, so the agent has no shell tool, and the warning says so; whether a custom agent honours that setting has not been checked live. No other frontmatter field carries over: Claude Code's `model` names are not Codex models, and a custom agent inherits the session's permissions and MCP servers. Codex registers custom agents only from enabled config layers, and a project's `.codex/` is enabled only when the project is trusted. So on every Codex launch, `ynh run` (interactive, one-shot, with a first prompt, or resumed) and `ynh agent run` register each agent file they wrote in the run directory with `-c agents.<name>.config_file="<absolute path>"` and `-c agents.<name>.description=...`. Codex treats those flags as a config layer that is always enabled, so no trust is needed, whatever Codex's working directory. Codex splits a `-c` key on every `.`, so an agent whose `name` holds anything but letters, digits, `-` and `_` (a `.`, for instance) is not registered, and the run prints a warning naming it. OBSERVED live on codex-cli 0.166.0 (2026-10-31, ynw-t7i): through `ynh run` one-shot and resumed, and through `ynh agent run --backend codex`, a `spawn_agent` call naming the agent or delegate as its `agent_type` succeeded, and Codex's session log for the subagent records it under that agent role. The interactive `codex` has not been run live. A Codex export carries no agents, since Codex plugins have none.
 
 Installations are tracked in `~/.ynh/symlinks.json`. Use `ynh status` to see all installations and `ynh prune` to clean up orphaned ones.
 
@@ -159,6 +203,7 @@ claude                Claude Code                   claude  .claude     true
 codex                 OpenAI Codex                   codex   .codex      true
 copilot               GitHub Copilot CLI             copilot .copilot    true
 cursor                Cursor                         agent   .cursor     true
+opencode              OpenCode                       opencode .opencode  true
 ollama/claude/qwen3   Claude Code (ollama · qwen3)   claude  .claude     true
 ```
 
@@ -181,23 +226,25 @@ These come from Ollama's own docs, not ynh:
 
 **Cursor Agent** - Full interactive and non-interactive support. Uses symlink-based artifact installation. Requires `agent` CLI installed (`curl https://cursor.com/install -fsS | bash`). Uses `-p` for non-interactive prompts. See [cursor.com/cli](https://cursor.com/cli).
 
-**GitHub Copilot CLI** - Full interactive and non-interactive support. Uses `--plugin-dir` for artifact loading, like Claude. Requires `copilot` CLI installed. Non-interactive runs need `--allow-all-tools` (added automatically). Harness instructions and MCP servers are projected into the calling project's `.github/instructions/ynh-harness.instructions.md` and `.github/mcp.json`, because Copilot doesn't read plugin-bundled `AGENTS.md`/`.mcp.json` via `--plugin-dir`. The instructions file gets one frontmatter block, `applyTo: "**/*"` so it is always on, followed by any fields of the harness instructions' own frontmatter except `applyTo`. **Hooks** are written into the `--plugin-dir` plugin (`.copilot/hooks/hooks.json`), not into your repository, and fire in an untrusted folder (verified on Copilot CLI 1.0.105). See [Hooks: Copilot format and trust](hooks.md#copilot-format-and-trust). See [github.com/features/copilot/cli](https://github.com/features/copilot/cli).
+**GitHub Copilot CLI** - Full interactive and non-interactive support. Uses `--plugin-dir` for artifact loading, like Claude. Requires `copilot` CLI installed. Non-interactive runs need `--allow-all-tools` (added automatically). Harness instructions are projected into the calling project's `.github/instructions/ynh-harness.instructions.md`, because Copilot doesn't read plugin-bundled `AGENTS.md` via `--plugin-dir`; that file is left behind after the run and holds no secrets. MCP servers are not projected: Copilot doesn't read a plugin-bundled `.mcp.json` either, so ynh passes the run directory's 0600 `.copilot/.mcp.json` with `--additional-mcp-config @<file>`, which keeps the expanded credentials out of your project. The instructions file gets one frontmatter block, `applyTo: "**/*"` so it is always on, followed by any fields of the harness instructions' own frontmatter except `applyTo`. **Hooks** are written into the `--plugin-dir` plugin (`.copilot/hooks/hooks.json`), not into your repository, and fire in an untrusted folder (verified on Copilot CLI 1.0.105). See [Hooks: Copilot format and trust](hooks.md#copilot-format-and-trust). See [github.com/features/copilot/cli](https://github.com/features/copilot/cli).
+
+**OpenCode** - Full interactive and non-interactive support, for **OpenCode 2.x only**; 1.x is refused with a clear message (the two differ in launch model, config schema and plugin API, and both install an `opencode` binary). Install 2.x with `brew install anomalyco/tap/opencode-v2`. OpenCode 2 runs every command through a shared background service that ignores the client's environment, so ynh launches `opencode --standalone` with `OPENCODE_CONFIG_DIR` pointing at the run directory's `.opencode/`; no symlinks. Skills load from `skills/`. Agents load from `agents/`, with their frontmatter translated: OpenCode silently drops an agent that has a comma-string `tools:`, a bare model alias such as `sonnet`, or a `color:`, so ynh keeps `description`, `mode`, `permissions` and a `provider/model` model, and Claude `tools:` become deny-by-default permissions (an agent whose `permissions:` is written inline as well is refused at assembly, as its tool lists could not be enforced; write `permissions:` as a block list instead). Commands go to `commands/`; whether a bundle slash command expands under `opencode run` is unconfirmed. OpenCode 2 reads `AGENTS.md` only (its `instructions` config key is accepted but ignored) and has no concept of rules, so ynh composes `.opencode/AGENTS.md` at launch from the harness instructions, the rules and the runtime context. MCP servers go in `.opencode/opencode.json` under `mcp.servers`; by default OpenCode reaches MCP tools through its Code Mode, so the model calls them from inside one `execute` tool; an agent with a Claude `tools:` list may not use `execute`, so Code Mode is off for it and the MCP tools it is granted are ordinary tools. **Hooks** are supported through a generated plugin, `.opencode/plugins/ynh-hooks.ts`, because OpenCode 2 has no declarative hooks; see [Hooks](hooks.md#opencode-hooks-are-a-generated-plugin) for the event mapping and caveats. Resume with `-s <id>` or `-c` works, but ynh cannot pin the session itself because OpenCode keeps sessions in SQLite, so it is the same as Codex. There is no plugin manifest and no marketplace format, and OpenCode does not read Agent Plugins packages: `ynd export -v opencode` writes the run-directory layout with no manifest (see [Export Output by Vendor](#export-output-by-vendor)), and `ynd marketplace build` adds no OpenCode manifest or index, only its `.opencode/` MCP and hooks files when the harness has them. For `ynh agent run --backend opencode`, effort is refused (select a variant with `--model provider/model#variant`) and auto-approve accepts `all` only. OpenCode is not a [`ynd compress`/`ynd inspect`](ynd.md) LLM vendor: it has no argument that turns its tools off. The `opencode/nemotron-3-ultra-free` model needs no login, which makes it handy for a smoke test. See [opencode.ai/v2/docs](https://opencode.ai/v2/docs).
 
 ## Export Output by Vendor
 
 `ynd export` produces vendor-native plugin layouts. Each vendor has a different file structure:
 
-| | Claude | Cursor | Codex | Copilot |
-|---|---|---|---|---|
-| **Manifest** | `.claude-plugin/plugin.json` | `.cursor-plugin/plugin.json` | `.codex-plugin/plugin.json` | `.claude-plugin/plugin.json` |
-| **Skills** | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` |
-| **Agents** | `agents/<name>.md` | `agents/<name>.md` | *excluded* | `agents/<name>.md` |
-| **Rules** | `rules/<name>.md` | `rules/<name>.mdc` | *excluded* | *excluded* |
-| **Commands** | `commands/<name>.md` | `commands/<name>.md` | *excluded* | *excluded* |
-| **Instructions** | `AGENTS.md` | `.cursorrules` + `AGENTS.md` | `AGENTS.md` | `AGENTS.md` |
-| **Hooks** | `hooks/claude.json` | `hooks/cursor.json` | `hooks/codex.json` | `hooks.json` (Copilot-only; a merged package with Claude uses `hooks/claude.json`) |
-| **MCP servers** | `mcp/claude.json` | `mcp.json` | `.mcp.json` | `.github/mcp.json` |
-| **Marketplace** | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` | `.agents/plugins/marketplace.json` | `.github/plugin/marketplace.json` (best-effort, unverified) |
+| | Claude | Cursor | Codex | Copilot | OpenCode |
+|---|---|---|---|---|---|
+| **Manifest** | `.claude-plugin/plugin.json` | `.cursor-plugin/plugin.json` | `.codex-plugin/plugin.json` | `.claude-plugin/plugin.json` | *none* |
+| **Skills** | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` | `skills/<name>/SKILL.md` |
+| **Agents** | `agents/<name>.md` | `agents/<name>.md` | *excluded* | `agents/<name>.md` | `agents/<name>.md` |
+| **Rules** | `rules/<name>.md` | `rules/<name>.mdc` | *excluded* | *excluded* | `rules/<name>.md` |
+| **Commands** | `commands/<name>.md` | `commands/<name>.md` | *excluded* | *excluded* | `commands/<name>.md` |
+| **Instructions** | `AGENTS.md` | `.cursorrules` + `AGENTS.md` | `AGENTS.md` | `AGENTS.md` | `AGENTS.md` |
+| **Hooks** | `hooks/claude.json` | `hooks/cursor.json` | `hooks/codex.json` | `hooks.json` (Copilot-only; a merged package with Claude uses `hooks/claude.json`) | `.opencode/plugins/ynh-hooks.ts` |
+| **MCP servers** | `mcp/claude.json` | `mcp.json` | `.mcp.json` | `.github/mcp.json` | `.opencode/opencode.json` |
+| **Marketplace** | `.claude-plugin/marketplace.json` | `.cursor-plugin/marketplace.json` | `.agents/plugins/marketplace.json` | `.github/plugin/marketplace.json` (best-effort, unverified) | *not supported* |
 
 Key differences between runtime and export:
 
@@ -208,6 +255,7 @@ Key differences between runtime and export:
 - Hooks go to the session path at runtime (`.claude/hooks/hooks.json`, `.cursor/hooks.json`, `.codex/hooks.json`, `.copilot/hooks/hooks.json`) and to `hooks/<vendor>.json` at the plugin root in an export, named by the `"hooks"` field of that vendor's manifest, never both. A plugin never reads the session path, and there is no shared `hooks/hooks.json`, so a merged package never hands one vendor's format to another (see [Hooks: Config File Locations](hooks.md#config-file-locations))
 - MCP config goes to the session path at runtime (`.claude/.mcp.json`, `.cursor/mcp.json`) and to the plugin path in an export (`mcp/claude.json`, named by the `"mcpServers"` field of `.claude-plugin/plugin.json`, and Cursor's root `mcp.json`), never both, for the same reason. Every vendor in a merged package has its own MCP file, and each manifest names only a file that is there (see [MCP Servers: Config File Locations](mcp.md#config-file-locations))
 - Codex is included in merged export (`--merged`) and in `ynd marketplace build`, which exports each harness the same way: `.codex-plugin/plugin.json` sits beside the other vendors' manifests and points only at `skills/`, so Codex ignores the agents, rules and commands the other vendors read from the same directory. `ynd export --merged` says so with the same warning a per-vendor Codex export prints. Pass `-v` without `codex` to leave it out
+- OpenCode has no plugin manifest, no marketplace format and no Agent Plugins support. `ynd export -v opencode` writes the same layout the run directory holds (artifacts, `AGENTS.md`, `.opencode/opencode.json` and the generated hooks plugin), but nothing installs it as a plugin and no marketplace entry is produced. Rules are exported as files rather than composed into `AGENTS.md`, which only happens at launch. In `--merged` mode and in `ynd marketplace build` OpenCode adds no manifest and no index, only its `.opencode/` MCP and hooks files when the harness has them
 - Copilot export is limited to skills and agents — rules and commands are excluded with warnings
 - Copilot uses Claude's plugin manifest format (`.claude-plugin/plugin.json`), since Copilot's own plugin loader reads the same schema. At runtime the manifest and MCP config nest under `.copilot/`, the `--plugin-dir` target; an export always puts the manifest at the plugin root beside the skills, and MCP config at `.github/mcp.json` there. In a package that also carries Claude, the shared manifest's `"mcpServers"` names Claude's `mcp/claude.json`; see [MCP Servers: Config File Locations](mcp.md#config-file-locations) for what that means for Copilot
 
@@ -226,6 +274,7 @@ join it, each where that client documents reading them:
 | Codex | yes | `com.openai/hooks/hooks.json`, named under `extensions.com.openai` |
 | Copilot / VS Code | yes | `com.github.copilot/agents/` (same subset as the vendor export) and `com.github.copilot/hooks/hooks.json` |
 | Cursor | yes, core only | nothing: Cursor has published no extension namespace, and does not expand `${PLUGIN_ROOT}` or `${PLUGIN_DATA}` |
+| OpenCode | no | nothing: OpenCode does not read Agent Plugins packages |
 | Claude Code | no | `.claude-plugin/plugin.json`, `mcp/claude.json` and `hooks/claude.json` (named by that manifest, as in its own plugin export), `agents/`, `rules/`, `commands/`, `CLAUDE.md` at the root: a compatibility package, as the spec's migration guide describes |
 
 Anything the selected vendors cannot receive is reported as a warning rather
@@ -238,4 +287,4 @@ Vendor plugin formats evolve frequently. The `vendor-adapters` skill (`.claude/s
 
 ## Adding a New Vendor
 
-See [CONTRIBUTING.md](https://github.com/eyelock/ynh/blob/main/.github/CONTRIBUTING.md) for how to implement a vendor adapter.
+Adding a vendor touches more than its adapter file. The [`add-vendor-adapter`](https://github.com/eyelock/ynh/blob/main/.claude/skills/add-vendor-adapter/SKILL.md) skill is the checklist of every file to change, and [CONTRIBUTING.md](https://github.com/eyelock/ynh/blob/main/.github/CONTRIBUTING.md#vendor-adapters) describes the `Adapter` interface and the launch patterns.

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"os/exec"
@@ -10,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/plugin"
+	"github.com/eyelock/ynh/internal/vendor"
 )
 
 func TestDirOf(t *testing.T) {
@@ -100,7 +103,7 @@ func TestNewSessionID_NonEmptyAndUnique(t *testing.T) {
 
 func TestAssembleHarness_UnknownBackend(t *testing.T) {
 	h := &harness.Harness{Name: "x", Dir: t.TempDir()}
-	_, err := assembleHarness(h, "no-such-vendor")
+	_, _, err := assembleHarness(h, "no-such-vendor", harness.Selection{})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -155,5 +158,108 @@ func TestGitAutoCommit_CommitsChanges(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "turn 2") {
 		t.Errorf("expected 'turn 2' in log, got: %s", out)
+	}
+}
+
+// The loop assembles a harness's delegates the way `ynh run` does: an agent
+// file for each, carrying the delegate's own MCP servers.
+func TestAssembleHarness_AssemblesDelegates(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	t.Setenv("YNH_HOME", t.TempDir())
+	t.Setenv("PROBE_TOKEN", "loop-s3cret")
+
+	del := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(del, ".agents", "harness"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"name":"probe","version":"0.1.0","env_passthrough":["PROBE_TOKEN"],"mcp_servers":{"probe-srv":{"command":"/bin/probe","env":{"PROBE_TOKEN":"${PROBE_TOKEN}"}}}}`
+	if err := os.WriteFile(filepath.Join(del, ".agents", "harness", "plugin.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"init"}, {"config", "user.email", "t@t"}, {"config", "user.name", "t"}, {"add", "."}, {"commit", "-m", "init"}} {
+		if out, err := exec.Command("git", append([]string{"-C", del}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	h := &harness.Harness{
+		Name:        "root",
+		Dir:         t.TempDir(),
+		DelegatesTo: []harness.Delegate{{GitSource: harness.GitSource{Git: del}}},
+	}
+	dir, _, err := assembleHarness(h, "claude", harness.Selection{})
+	if err != nil {
+		t.Fatalf("assembleHarness: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+
+	data, err := os.ReadFile(filepath.Join(dir, ".claude", "agents", "probe.md"))
+	if err != nil {
+		t.Fatalf("delegate agent not assembled: %v", err)
+	}
+	if !strings.Contains(string(data), `mcpServers: [{"probe-srv":{"command":"/bin/probe","env":{"PROBE_TOKEN":"${PROBE_TOKEN}"}}}]`) {
+		t.Errorf("agent should carry the delegate's server, unexpanded:\n%s", data)
+	}
+
+	// The run directory is the loop's config path: the launch file is read
+	// from it, and the secret is in the env file beside it, never in the
+	// --agents argument.
+	args := vendor.ClaudeDelegateAgentArgs(dir)
+	if len(args) != 2 || strings.Contains(args[1], "loop-s3cret") || !strings.Contains(args[1], "mcp-exec") {
+		t.Errorf("--agents should go through the launcher without the secret: %v", args)
+	}
+	env, err := os.ReadFile(filepath.Join(dir, "delegates", "probe", ".env.ynh"))
+	if err != nil || string(env) != "PROBE_TOKEN=\"loop-s3cret\"\n" {
+		t.Errorf("env file = %q, %v", env, err)
+	}
+}
+
+// The worker loads <config>/.claude as its plugin. Without a manifest inside
+// it Claude Code names the plugin after the directory, and the harness's MCP
+// tools come out as plugin:.claude:<server>, not plugin:<harness>:<server>.
+func TestAssembleHarness_ClaudeWritesSessionPluginManifest(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	h := &harness.Harness{
+		Name:       "myharness",
+		Version:    "1.2.3",
+		Dir:        t.TempDir(),
+		MCPServers: map[string]plugin.MCPServer{"docs": {Command: "docs-mcp"}},
+	}
+	dir, _, err := assembleHarness(h, "claude", harness.Selection{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	// The same folder buildClaudeStreamArgs hands to --plugin-dir.
+	pluginDir := filepath.Join(dir, (&vendor.Claude{}).ConfigDir())
+	data, err := os.ReadFile(filepath.Join(pluginDir, ".claude-plugin", "plugin.json"))
+	if err != nil {
+		t.Fatalf("no session plugin manifest: %v", err)
+	}
+	var got struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != "myharness" || got.Version != "1.2.3" {
+		t.Errorf("manifest = %+v, want name myharness, version 1.2.3", got)
+	}
+}
+
+func TestAssembleHarness_NonClaudeWritesNoSessionPluginManifest(t *testing.T) {
+	t.Setenv("YNH_HOME", t.TempDir())
+	h := &harness.Harness{Name: "myharness", Dir: t.TempDir()}
+	dir, _, err := assembleHarness(h, "codex", harness.Selection{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	if _, err := os.Stat(filepath.Join(dir, ".claude", ".claude-plugin", "plugin.json")); !os.IsNotExist(err) {
+		t.Errorf("codex worker got a Claude session manifest (stat err %v)", err)
 	}
 }

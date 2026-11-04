@@ -31,6 +31,21 @@ import (
 // TestEveryDispatchedCommandHasHelp, which is what stops this drifting the way
 // printUsage did when `migrate` and `quarantine` were added without it.
 var commandHelp = map[string]string{
+	"mcp-exec": `ynh mcp-exec --env-file <path> -- <command> [args...]
+
+Internal. Start an MCP server with its secrets filled in from an env file.
+
+ynh writes server definitions that call this; it is not meant to be typed. It
+reads the env file, replaces ${VAR} in the command's arguments and in its own
+environment values with the file's variables only (an unknown reference is an
+error), then becomes the command, so stdin and stdout are the server's.`,
+
+	"mcp-headers": `ynh mcp-headers --env-file <path> -- "Name: value" ...
+
+Internal. Print the headers of a remote MCP server as a JSON object, with
+${VAR} in each value replaced from an env file. It is the headersHelper ynh
+writes for a delegate's remote server, so a token is never on a command line.`,
+
 	"init": `ynh init
 
 Show the resolved ynh home path and setup instructions.
@@ -88,6 +103,8 @@ Flags:
                            non-interactive)
   --profile <name>         Apply a named profile overlay
   --interactive            Stay in session after a focus or prompt
+  --isolated-mcp           Run with only the harness's MCP servers (a harness can
+                           declare mcp_isolation; this flag can only turn it on)
   --instructions "<text>"  Inject per-invocation context after harness instructions
   --harness-file <path>    Load a harness from one manifest file, of any name
                            except a legacy .harness.json
@@ -99,15 +116,28 @@ Flags:
                            a --focus prompt is not; some vendors refuse it
   --no-workspace           Grant none of the harness's requested workspace folders
                            for this run (see docs/workspace.md)
+  --label key:value        A label for the run (repeatable; key: removes one).
+                           Merged over config.json, the harness manifest and
+                           YNH_LABELS; see docs/telemetry.md
   --install                Install symlinks for the vendor in this project
   --clean                  Remove symlinks for the vendor in this project
 
-All other flags are passed through to the vendor CLI. Use -- to separate the
-prompt from flags.
+All other flags are passed through to the vendor CLI, in order. ynh does not
+know which vendor flags take a value: a bare word right after a passed-through
+flag is that flag's value ("--model haiku"), except the last bare word, which
+is the prompt. Write the value with "=" ("--model=haiku"), or put the prompt
+after --, when that would read your words the wrong way. Before --, a word
+right after a flag is always its value. After --, the first word is the
+prompt unless it starts with "-"; a word starting with "-" there is a vendor
+flag, never the prompt. Every later word is forwarded to the vendor, so
+'say ok' -- -m gpt-5 prompts "say ok" and forwards -m gpt-5. A prompt that
+itself starts with "-" cannot be given this way. The safest form for a value
+is "--model=gpt-5".
 
 Examples:
   ynh run local/david
   ynh run local/david "review this PR"
+  ynh run local/david --model haiku -- "say ok"    # claude -p "say ok" --model haiku
   ynh run local/david --focus code-review
   ynh run local/david -v codex -- "refactor auth"
   ynh run ./my-harness -v claude`,
@@ -118,15 +148,31 @@ List installed harnesses.
 
 Flags:
   --format text|json   Output format (default text)
-  --check-updates      Check each harness's source for newer content`,
+  --check-updates      Check each harness's source for newer content
+  --label key:value    Only harnesses whose own manifest labels include this
+                       (repeatable; every one must match)`,
 
 	"info": `ynh info <name> [flags]
 
 Show a harness's resolved configuration: vendor, includes, delegates, hooks,
 MCP servers, profiles, focuses and sensors.
 
+Hooks and MCP servers are what a run carries, included harnesses' with
+their source; an included harness's hooks run only where its include says
+"hooks": true, and the rest are listed as not active. With no --profile or
+--focus they are those of a run with no profile; a selection shows what a
+run with it carries. Profiles and focuses are still listed as declared. A
+bare run's launch_focus is not applied: pass it as --focus to see what a
+bare run wakes with.
+
 Flags:
-  --format text|json   Output format (default text)`,
+  --format text|json   Output format (default text)
+  --profile <name>     Apply a profile, as ynh run does. Repeatable: at most one
+                       unqualified (the harness's own) and one namespace:name
+                       per included harness
+  --focus <name>       Apply a focus's profile; namespace:name selects an
+                       included harness's focus. Not with --profile
+  --check-updates      With --format json, check the source for newer content`,
 
 	"installed": `ynh installed <name> [flags]
 
@@ -161,6 +207,18 @@ Manage local harness source directories.
   ynh sources remove <name>   Remove a source
 
 Run 'ynh sources <subcommand> --help' for a subcommand's arguments and flags.`,
+
+	"telemetry": `ynh telemetry registry [flags]
+
+Print ynh's telemetry registry: the names it emits in OpenTelemetry under the
+ynh. prefix (attributes, spans and events), the OpenTelemetry names it uses
+beside them, and the semantic-conventions version it follows. The registry is
+an OpenTelemetry Weaver registry embedded in the binary; its tool name and
+version are what service.name and service.version say on every record.
+The JSON shape is the one every tool of the family prints, which ynr reads.
+
+Flags:
+  --format text|json   Output format (default text)`,
 
 	"paths": `ynh paths [flags]
 
@@ -226,7 +284,7 @@ Flags:
 
 Manage a harness's Git includes.
 
-  ynh include add <harness> <url>      Add an include
+  ynh include add <harness> <url|path> Add an include (Git URL or local path)
   ynh include remove <harness> <url>   Remove an include
   ynh include update <harness> <url>   Change an include's path, picks or ref
 
@@ -399,11 +457,13 @@ Flags:
   --task <text|@file>         The task to work on
   --focus <name>              Load a named focus instead of a task
   --profile <name>            Apply a named profile overlay
-  --backend <name>            Worker backend: claude (default), codex, cursor.
+  --backend <name>            Worker backend: claude (default), codex, cursor,
+                              opencode.
                               On --resume, the session's backend
   --model <name>              Model override
   --effort low|medium|high    Reasoning effort, mapped to the backend's own
-                              setting (claude, codex; refused on cursor).
+                              setting (claude, codex; refused on cursor and
+                              opencode).
                               Overrides the harness's agent.effort. Not
                               restored on --resume.
   --worktree <path>          Run against a specific worktree
@@ -417,18 +477,21 @@ Flags:
                               write allowlist (claude only); none by default
   --auto-approve edits|all    Approve the worker's file edits, or everything,
                               without prompting (off by default; claude,
-                              codex, cursor). Only for runs inside containment
-                              you own; refused if the project sets its own
-                              permission mode. Not restored on --resume.
+                              codex, cursor, opencode). Only for runs inside
+                              containment you own; refused if the project sets
+                              its own permission mode. Not restored on --resume.
   --convergence-sensor <name> Sensor that decides the run is done
   --sensor-overlay <json>     Substitute sensor declarations
   --emit-jsonl <path>         Write the trajectory as NDJSON
   --auto-commit               Commit the result (opt-in; off by default)
   --resume <dir>              Continue a run from its --emit-jsonl folder
   --telemetry-relay           Start ynr relay for the run and send the
-                              vendor's own telemetry to the spool (claude
-                              only). Also YNH_TELEMETRY_RELAY, or
+                              vendor's own telemetry to the spool (claude,
+                              codex). Also YNH_TELEMETRY_RELAY, or
                               "telemetry_relay": true in config.json
+  --label key:value           A label for the run (repeatable; key: removes
+                              one). Merged over config.json, the harness
+                              manifest and YNH_LABELS; see docs/telemetry.md
   --format text|json          Output format (default text)`,
 
 	"image": `ynh image <name> [flags]

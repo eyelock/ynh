@@ -244,11 +244,36 @@ func TestCursorMatcherOnToolEventsOnly(t *testing.T) {
 // TestHookWarnings: a hook a vendor cannot carry as declared is reported by
 // name, never dropped silently.
 func TestHookWarnings(t *testing.T) {
-	t.Run("all six events map everywhere", func(t *testing.T) {
+	t.Run("all six events map everywhere but OpenCode", func(t *testing.T) {
 		for _, v := range Available() {
+			if v == "opencode" {
+				continue
+			}
 			if w := HookWarnings(v, allCanonicalHooks()); len(w) != 0 {
 				t.Errorf("%s: unexpected warnings %q", v, w)
 			}
+		}
+	})
+
+	// OpenCode has no session-end event, and its session-start hook cannot
+	// reach the model: both say so, and nothing else does.
+	t.Run("opencode names what it cannot carry", func(t *testing.T) {
+		w := HookWarnings("opencode", allCanonicalHooks())
+		if len(w) != 2 ||
+			!strings.Contains(w[0], "on_session_start output does not reach the model on opencode") ||
+			!strings.Contains(w[1], "hook event on_session_end has no equivalent on opencode") ||
+			!strings.Contains(w[1], "no session-end") {
+			t.Fatalf("warnings = %q", w)
+		}
+	})
+
+	t.Run("opencode matcher on a non-tool event", func(t *testing.T) {
+		w := HookWarnings("opencode", map[string][]plugin.HookEntry{"on_stop": {{Matcher: "x", Command: "x"}}})
+		if len(w) != 1 || !strings.Contains(w[0], "ignored on opencode") {
+			t.Fatalf("warnings = %q", w)
+		}
+		if w := HookWarnings("opencode", map[string][]plugin.HookEntry{"before_tool": {{Matcher: "Bash", Command: "x"}}}); len(w) != 0 {
+			t.Errorf("tool matcher warnings = %q, want none (the plugin maps Claude names)", w)
 		}
 	})
 

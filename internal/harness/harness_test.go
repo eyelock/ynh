@@ -75,7 +75,8 @@ func TestLoadDir_FullMetadata(t *testing.T) {
 		],
 		"delegates_to": [
 			{"git": "github.com/example/team-harness"},
-			{"git": "github.com/company/monorepo", "path": "harnesses/team-ops"}
+			{"git": "github.com/company/monorepo", "path": "harnesses/team-ops", "focus": "triage"},
+			{"git": "github.com/example/ci-harness", "profile": "ci"}
 		]
 	}`
 	if err := writePluginJSONFile(dir, []byte(hj)); err != nil {
@@ -108,8 +109,14 @@ func TestLoadDir_FullMetadata(t *testing.T) {
 	if p.Includes[1].Path != "packages/ai-config" {
 		t.Errorf("Include[1] path = %q", p.Includes[1].Path)
 	}
-	if len(p.DelegatesTo) != 2 {
-		t.Fatalf("DelegatesTo length = %d, want 2", len(p.DelegatesTo))
+	if len(p.DelegatesTo) != 3 {
+		t.Fatalf("DelegatesTo length = %d, want 3", len(p.DelegatesTo))
+	}
+	if p.DelegatesTo[1].Focus != "triage" || p.DelegatesTo[1].Profile != "" {
+		t.Errorf("Delegate[1] selection = profile %q, focus %q", p.DelegatesTo[1].Profile, p.DelegatesTo[1].Focus)
+	}
+	if p.DelegatesTo[2].Profile != "ci" || p.DelegatesTo[2].Focus != "" {
+		t.Errorf("Delegate[2] selection = profile %q, focus %q", p.DelegatesTo[2].Profile, p.DelegatesTo[2].Focus)
 	}
 	if p.DelegatesTo[0].Git != "github.com/example/team-harness" {
 		t.Errorf("Delegate[0] git = %q", p.DelegatesTo[0].Git)
@@ -898,5 +905,53 @@ func TestLoadDir_EnvPassthroughAndAgentDoNotRequireMCPServers(t *testing.T) {
 	}
 	if h.Agent.MaxTurns != 7 {
 		t.Errorf("agent.max_turns = %d, want 7", h.Agent.MaxTurns)
+	}
+}
+
+func TestLoadDir_MCPIsolation(t *testing.T) {
+	for _, declared := range []bool{false, true} {
+		dir := t.TempDir()
+		hj := &plugin.HarnessJSON{Name: "iso", Version: "0.1.0", MCPIsolation: declared}
+		if err := plugin.SavePluginJSON(dir, hj); err != nil {
+			t.Fatal(err)
+		}
+		p, err := LoadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.MCPIsolation != declared {
+			t.Errorf("MCPIsolation = %v, want %v", p.MCPIsolation, declared)
+		}
+	}
+}
+
+func TestResolveProfile_MCPIsolation(t *testing.T) {
+	yes, no := true, false
+	tests := []struct {
+		name    string
+		base    bool
+		profile *bool
+		want    bool
+	}{
+		{"profile sets true over false", false, &yes, true},
+		{"profile sets false over true", true, &no, false},
+		{"profile unset inherits false", false, nil, false},
+		{"profile unset inherits true", true, nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &Harness{
+				Name:         "x",
+				MCPIsolation: tt.base,
+				Profiles:     map[string]plugin.Profile{"p": {MCPIsolation: tt.profile}},
+			}
+			resolved, err := ResolveProfile(h, "p")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resolved.MCPIsolation != tt.want {
+				t.Errorf("MCPIsolation = %v, want %v", resolved.MCPIsolation, tt.want)
+			}
+		})
 	}
 }

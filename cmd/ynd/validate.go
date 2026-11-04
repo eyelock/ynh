@@ -322,6 +322,9 @@ func validateHarness(dir string) error {
 			issues = append(issues, validateHarnessLaunchFocus(hj)...)
 			issues = append(issues, validateHarnessSensors(hj)...)
 			issues = append(issues, validateHarnessIncludes(hj)...)
+			delIssues, delNotes := validateHarnessDelegates(dir, data)
+			issues = append(issues, delIssues...)
+			notes = append(notes, delNotes...)
 			wsIssues, wsNotes := validateHarnessWorkspace(dir, hj)
 			issues = append(issues, wsIssues...)
 			notes = append(notes, wsNotes...)
@@ -738,6 +741,7 @@ func validateHarnessWorkspace(dir string, hj map[string]any) (issues, notes []st
 }
 
 // validateHarnessMCPServers validates the mcp_servers section inside harness.json.
+// A null entry removes a server inherited from an include and is accepted.
 func validateHarnessMCPServers(hj map[string]any) []string {
 	var issues []string
 
@@ -752,9 +756,12 @@ func validateHarnessMCPServers(hj map[string]any) []string {
 	}
 
 	for name, entry := range serversMap {
+		if entry == nil {
+			continue // null = remove a server inherited from an include
+		}
 		serverMap, ok := entry.(map[string]any)
 		if !ok {
-			issues = append(issues, fmt.Sprintf("mcp_servers.%s must be an object", name))
+			issues = append(issues, fmt.Sprintf("mcp_servers.%s must be an object or null", name))
 			continue
 		}
 		cmd, _ := serverMap["command"].(string)
@@ -902,6 +909,48 @@ func validateProfileMCPServers(profile map[string]any) []string {
 	}
 
 	return issues
+}
+
+// validateHarnessDelegates checks each delegates_to entry's selection. An
+// entry may name a profile or a focus of the delegate harness, not both,
+// since a focus carries its profile; the name must be one the delegate
+// declares, as launch_focus must name one of the harness's own focuses. The
+// delegate is read from disk or the cache only, never the network: one that
+// cannot be read is a note, not checked, rather than an error.
+func validateHarnessDelegates(dir string, data []byte) (issues, notes []string) {
+	var meta plugin.HarnessJSON
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return nil, nil
+	}
+	for i, dm := range meta.DelegatesTo {
+		if dm.Profile == "" && dm.Focus == "" {
+			continue
+		}
+		del := harness.Delegate{
+			GitSource: harness.GitSource{Git: dm.Git, Ref: dm.Ref, Path: dm.Path},
+			Profile:   dm.Profile,
+			Focus:     dm.Focus,
+		}
+		prefix := fmt.Sprintf("delegates_to[%d] (%s):", i, del.Label())
+		if dm.Profile != "" && dm.Focus != "" {
+			issues = append(issues, fmt.Sprintf("%s names both profile %q and focus %q; a focus already carries its profile, so name one", prefix, dm.Profile, dm.Focus))
+			continue
+		}
+		base, err := resolver.ResolveDelegateLocal(del.GitSource, dir)
+		if err != nil {
+			notes = append(notes, fmt.Sprintf("%s selection not checked: the delegate could not be read (%v)", prefix, err))
+			continue
+		}
+		dh, err := harness.LoadDir(base)
+		if err != nil {
+			notes = append(notes, fmt.Sprintf("%s selection not checked: the delegate could not be loaded (%v)", prefix, err))
+			continue
+		}
+		if err := del.CheckDeclared(dh); err != nil {
+			issues = append(issues, fmt.Sprintf("%s %v", prefix, err))
+		}
+	}
+	return issues, notes
 }
 
 // validateHarnessLaunchFocus checks launch_focus: it must name a focus that
@@ -1229,6 +1278,19 @@ func validateHarnessIncludes(hj map[string]any) []string {
 		if sub, ok := obj["path"].(string); ok && sub != "" {
 			if err := pathutil.CheckSubpath(sub); err != nil {
 				issues = append(issues, fmt.Sprintf("includes[%d].path: %v", i, err))
+			}
+		}
+		// The alias is the namespace of the include's focuses and profiles,
+		// so it is held to the harness-name rule, and may not hold the ":"
+		// that separates namespace from name.
+		if as, ok := obj["as"].(string); ok {
+			if err := harness.ValidateIncludeAlias(as); err != nil {
+				issues = append(issues, fmt.Sprintf("includes[%d].as: %v", i, err))
+			}
+		}
+		if hooks, ok := obj["hooks"]; ok {
+			if _, isBool := hooks.(bool); !isBool {
+				issues = append(issues, fmt.Sprintf("includes[%d].hooks must be true or false", i))
 			}
 		}
 	}

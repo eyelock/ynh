@@ -125,7 +125,7 @@ func TestWriteSessionHooks(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			warnings, err := WriteSessionHooks(runDir, adapter, harnessDir, hooks)
+			warnings, err := WriteSessionHooks(runDir, adapter, harnessDir, HookSet{Hooks: hooks})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -178,7 +178,7 @@ func TestWriteSessionHooks_Copilot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	warnings, err := WriteSessionHooks(runDir, adapter, harnessDir, hooks)
+	warnings, err := WriteSessionHooks(runDir, adapter, harnessDir, HookSet{Hooks: hooks})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +226,7 @@ func TestWriteSessionHooks_Warnings(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			warnings, err := WriteSessionHooks(runDir, adapter, harnessDir, hooks)
+			warnings, err := WriteSessionHooks(runDir, adapter, harnessDir, HookSet{Hooks: hooks})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -273,7 +273,7 @@ func TestCopyHookScripts_NoWriteThroughSymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	warnings, err := CopyHookScripts(harnessDir, destDir, hooks, "the session")
+	warnings, err := CopyHookScripts(harnessDir, destDir, HookSet{Hooks: hooks}, "the session")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +309,7 @@ func TestWriteSessionHooks_SessionStartWrapper(t *testing.T) {
 				t.Fatal(err)
 			}
 			hooks := map[string][]plugin.HookEntry{"on_session_start": {{Command: "echo wake"}}}
-			if _, err := WriteSessionHooks(runDir, adapter, t.TempDir(), hooks); err != nil {
+			if _, err := WriteSessionHooks(runDir, adapter, t.TempDir(), HookSet{Hooks: hooks}); err != nil {
 				t.Fatal(err)
 			}
 			_, statErr := os.Stat(filepath.Join(runDir, filepath.FromSlash(tt.wrapper)))
@@ -323,5 +323,26 @@ func TestWriteSessionHooks_SessionStartWrapper(t *testing.T) {
 				t.Errorf("wrapper missing: %v", statErr)
 			}
 		})
+	}
+}
+
+// TestWriteSessionHooks_OpenCodeKnowsServers: a session's hook set names its
+// MCP servers, and OpenCode's plugin carries them, longest first, so it can
+// split a "<server>_<tool>" id on a known server name.
+func TestWriteSessionHooks_OpenCodeKnowsServers(t *testing.T) {
+	dir := t.TempDir()
+	hs := HookSet{
+		Hooks:      map[string][]plugin.HookEntry{"before_tool": {{Command: "true"}}},
+		MCPServers: []string{"my", "my_srv"},
+	}
+	if _, err := WriteSessionHooks(dir, &vendor.OpenCode{}, t.TempDir(), hs); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, ".opencode", "plugins", "ynh-hooks.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `const SERVERS: string[] = ["my_srv","my"]`) {
+		t.Errorf("the plugin does not carry the server names, longest first:\n%s", data)
 	}
 }

@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eyelock.github.io/ynh/schema/cli/telemetry-registry.schema.json",
+  "title": "ynh telemetry registry --format json",
+  "description": "Output of `ynh telemetry registry --format json`: ynh's OpenTelemetry Weaver registry (ynr ADR-007), the names it emits. A bare object, not an envelope: the shape is the one every tool of the family prints (`ynf telemetry registry --format json` defined it), which ynr reads. tool and version identify the registry, as service.name and service.version do on every record.",
+  "x-capabilities": "0.10",
+  "type": "object",
+  "required": ["tool", "version", "semantic_conventions", "attributes", "standard_attributes", "spans", "events", "metrics"],
+  "properties": {
+    "tool": {"type": "string", "description": "The tool's name, ynh. Also its prefix."},
+    "version": {"type": "string", "description": "The binary's version."},
+    "semantic_conventions": {
+      "type": "object",
+      "description": "The upstream semantic-conventions release the registry is pinned to.",
+      "required": ["name", "version", "schema_url"],
+      "properties": {
+        "name": {"type": "string"},
+        "version": {"type": "string"},
+        "schema_url": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "attributes": {
+      "type": "array",
+      "description": "The attributes ynh defines, under its ynh. prefix.",
+      "items": {"$ref": "#/$defs/attribute"}
+    },
+    "standard_attributes": {
+      "type": "array",
+      "description": "The OpenTelemetry attributes ynh uses by name, defined upstream.",
+      "items": {"type": "string"}
+    },
+    "spans": {"type": "array", "items": {"$ref": "#/$defs/span"}},
+    "events": {"type": "array", "description": "Events: log records with an event name.", "items": {"$ref": "#/$defs/event"}},
+    "metrics": {"type": "array", "description": "Metrics ynh records. None yet.", "items": {"$ref": "#/$defs/metric"}}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "attribute": {
+      "type": "object",
+      "required": ["id", "type", "brief", "stability"],
+      "properties": {
+        "id": {"type": "string"},
+        "type": {"type": "string", "description": "A Weaver type such as string, int, double or boolean, or enum when members are listed."},
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "value", "brief"],
+            "properties": {
+              "id": {"type": "string"},
+              "value": {"type": "string"},
+              "brief": {"type": "string"}
+            },
+            "additionalProperties": false
+          }
+        },
+        "brief": {"type": "string"},
+        "stability": {"type": "string"},
+        "examples": {"type": "array"},
+        "annotations": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "use": {
+      "type": "object",
+      "description": "An attribute a signal carries.",
+      "required": ["name", "requirement_level"],
+      "properties": {
+        "name": {"type": "string"},
+        "requirement_level": {"type": "string"},
+        "cardinality": {"type": "integer", "description": "On a metric, the most distinct values the attribute may take (the ynr.cardinality annotation), where declared."}
+      },
+      "additionalProperties": false
+    },
+    "span": {
+      "type": "object",
+      "required": ["name", "kind", "brief", "attributes"],
+      "properties": {
+        "name": {"type": "string"},
+        "kind": {"type": "string"},
+        "brief": {"type": "string"},
+        "attributes": {"type": "array", "items": {"$ref": "#/$defs/use"}}
+      },
+      "additionalProperties": false
+    },
+    "event": {
+      "type": "object",
+      "required": ["name", "brief", "attributes"],
+      "properties": {
+        "name": {"type": "string"},
+        "brief": {"type": "string"},
+        "attributes": {"type": "array", "items": {"$ref": "#/$defs/use"}}
+      },
+      "additionalProperties": false
+    },
+    "metric": {
+      "type": "object",
+      "required": ["name", "instrument", "unit", "brief", "attributes"],
+      "properties": {
+        "name": {"type": "string"},
+        "instrument": {"type": "string"},
+        "unit": {"type": "string"},
+        "brief": {"type": "string"},
+        "attributes": {"type": "array", "items": {"$ref": "#/$defs/use"}}
+      },
+      "additionalProperties": false
+    }
+  }
+}

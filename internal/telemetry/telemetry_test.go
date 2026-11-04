@@ -5,11 +5,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -177,26 +181,107 @@ func TestChooseDestination(t *testing.T) {
 	}
 }
 
-// An OTLP endpoint is the operator's choice, and this build cannot honour it:
-// one note, nothing written, and no spool even if one is configured.
-func TestSetup_OTLPNotSupported(t *testing.T) {
+// An OTLP endpoint is the operator's choice: the run's spans and logs are
+// posted to it as OTLP/JSON, with the operator's headers, and nothing is
+// written to the spool, even one that is configured.
+func TestSetup_OTLPExports(t *testing.T) {
 	clearTelemetryEnv(t)
+	type hit struct {
+		path, auth, ctype string
+		body              []byte
+	}
+	var mu sync.Mutex
+	var hits []hit
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		hits = append(hits, hit{r.URL.Path, r.Header.Get("Authorization"), r.Header.Get("Content-Type"), body})
+		mu.Unlock()
+	}))
+	defer srv.Close()
 	spoolDir := t.TempDir()
 	t.Setenv("YNR_SPOOL", spoolDir)
-	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", srv.URL)
+	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "Authorization=Bearer s3cret")
 	var stderr bytes.Buffer
 	tel := Setup("1.0.0", Options{}, &stderr)
 	run := tel.StartRun()
 	run.Finish("converged", true)
 	tel.Shutdown()
-	if tel.Active() || tel.Destination() != DestinationOTLP {
-		t.Errorf("active=%v destination=%q, want inactive otlp", tel.Active(), tel.Destination())
+	if !tel.Active() || tel.Destination() != DestinationOTLP {
+		t.Errorf("active=%v destination=%q, want active otlp", tel.Active(), tel.Destination())
 	}
-	if n := strings.Count(stderr.String(), "\n"); n != 1 || !strings.Contains(stderr.String(), "OTEL_EXPORTER_OTLP_") {
-		t.Errorf("stderr = %q, want one note naming OTEL_EXPORTER_OTLP_*", stderr.String())
+	if tel.SpoolDir() != "" {
+		t.Errorf("SpoolDir() = %q, want none", tel.SpoolDir())
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("stderr = %q, want nothing", stderr.String())
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	seen := map[string]bool{}
+	for _, h := range hits {
+		seen[h.path] = true
+		if h.auth != "Bearer s3cret" || !strings.HasPrefix(h.ctype, "application/json") {
+			t.Errorf("%s: Authorization=%q Content-Type=%q", h.path, h.auth, h.ctype)
+		}
+		if !strings.Contains(string(h.body), `"service.name"`) || !strings.Contains(string(h.body), `"ynh"`) {
+			t.Errorf("%s body lacks the ynh resource: %s", h.path, h.body)
+		}
+	}
+	if !seen["/v1/traces"] || !seen["/v1/logs"] {
+		t.Errorf("posted to %v, want /v1/traces and /v1/logs", seen)
 	}
 	if recs := readSpool(t, spoolDir); len(recs) != 0 {
 		t.Errorf("wrote %d records to the spool", len(recs))
+	}
+}
+
+// A setting the exporter cannot honour is the operator's choice too: one
+// note naming it, never a header value, and nothing written anywhere.
+func TestSetup_OTLPUnsupported(t *testing.T) {
+	for _, env := range []map[string]string{
+		{"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc"},
+		{"OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf"},
+		{"OTEL_EXPORTER_OTLP_CERTIFICATE": "/ca.pem"},
+		{"OTEL_EXPORTER_OTLP_COMPRESSION": "gzip"},
+	} {
+		clearTelemetryEnv(t)
+		spoolDir := t.TempDir()
+		t.Setenv("YNR_SPOOL", spoolDir)
+		t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+		t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "Authorization=Bearer s3cret")
+		for k, v := range env {
+			t.Setenv(k, v)
+		}
+		var stderr bytes.Buffer
+		tel := Setup("1.0.0", Options{}, &stderr)
+		run := tel.StartRun()
+		run.Finish("converged", true)
+		tel.Shutdown()
+		if tel.Active() || tel.Destination() != DestinationOTLP {
+			t.Errorf("%v: active=%v destination=%q, want inactive otlp", env, tel.Active(), tel.Destination())
+		}
+		if n := strings.Count(stderr.String(), "\n"); n != 1 || !strings.Contains(stderr.String(), "OTEL_EXPORTER_OTLP_") {
+			t.Errorf("%v: stderr = %q, want one note naming the setting", env, stderr.String())
+		}
+		if strings.Contains(stderr.String(), "s3cret") {
+			t.Errorf("%v: the note prints a header value: %q", env, stderr.String())
+		}
+		if recs := readSpool(t, spoolDir); len(recs) != 0 {
+			t.Errorf("%v: wrote %d records to the spool", env, len(recs))
+		}
+	}
+}
+
+// Settings that name no endpoint ask for nothing: the spool order goes on.
+func TestChooseDestination_OTLPWithoutEndpoint(t *testing.T) {
+	clearTelemetryEnv(t)
+	spoolDir := t.TempDir()
+	t.Setenv("YNR_SPOOL", spoolDir)
+	t.Setenv("OTEL_EXPORTER_OTLP_TIMEOUT", "5000")
+	if got, _ := ChooseDestination(); got != DestinationSpool {
+		t.Errorf("ChooseDestination() = %q, want spool", got)
 	}
 }
 
@@ -262,7 +347,7 @@ func TestRun_SpoolRecords(t *testing.T) {
 			if !tel.Active() || tel.Destination() != DestinationSpool {
 				t.Fatalf("active=%v destination=%q, want the spool", tel.Active(), tel.Destination())
 			}
-			run := tel.StartRun(AttrFocus.String("review"))
+			run := tel.StartRun(AttrRunFocus.String("review"))
 
 			// The started event is on disk before StartRun returns.
 			started := find(readSpool(t, spoolDir), "log", EventRunStarted)
@@ -271,7 +356,7 @@ func TestRun_SpoolRecords(t *testing.T) {
 			}
 
 			env := run.WorkerEnv()
-			run.Finish(tt.outcome, tt.succeeded, AttrTurns.Int(3))
+			run.Finish(tt.outcome, tt.succeeded, AttrRunTurns.Int(3))
 			tel.Shutdown()
 
 			recs := readSpool(t, spoolDir)
@@ -308,11 +393,11 @@ func TestRun_SpoolRecords(t *testing.T) {
 			if !tt.succeeded && span.status["message"] != tt.outcome {
 				t.Errorf("status message = %v, want the outcome alone", span.status["message"])
 			}
-			if span.attrs[string(AttrOutcome)] != tt.outcome || span.attrs[string(AttrFocus)] != "review" ||
-				span.attrs[string(AttrTurns)] != "3" {
+			if span.attrs[string(AttrRunOutcome)] != tt.outcome || span.attrs[string(AttrRunFocus)] != "review" ||
+				span.attrs[string(AttrRunTurns)] != "3" {
 				t.Errorf("span attributes = %v", span.attrs)
 			}
-			if finished.attrs[string(AttrOutcome)] != tt.outcome || finished.attrs[string(AttrFocus)] != "review" {
+			if finished.attrs[string(AttrRunOutcome)] != tt.outcome || finished.attrs[string(AttrRunFocus)] != "review" {
 				t.Errorf("finished attributes = %v", finished.attrs)
 			}
 			res := span.resources
@@ -414,7 +499,7 @@ func TestRun_StartCall(t *testing.T) {
 	}
 	envs := map[string][]string{}
 	for _, tt := range tests {
-		env, end := run.StartCall(tt.name, AttrTurn.Int(2))
+		env, end := run.StartCall(tt.name, AttrRunTurn.Int(2))
 		envs[tt.name] = env
 		end(tt.outcome, tt.ok)
 	}
@@ -434,7 +519,7 @@ func TestRun_StartCall(t *testing.T) {
 		if call.traceID != runSpan.traceID || call.parentID != runSpan.spanID {
 			t.Errorf("%s: trace %s parent %s, want a child of the run span %s", tt.name, call.traceID, call.parentID, runSpan.spanID)
 		}
-		if call.attrs[string(AttrCallOutcome)] != tt.outcome || call.attrs[string(AttrTurn)] != "2" || call.status["code"] != tt.wantStatus {
+		if call.attrs[string(AttrCallOutcome)] != tt.outcome || call.attrs[string(AttrRunTurn)] != "2" || call.status["code"] != tt.wantStatus {
 			t.Errorf("%s: attrs %v status %v", tt.name, call.attrs, call.status)
 		}
 		env := envs[tt.name]
@@ -454,7 +539,7 @@ func TestRun_SpoolAppearsMidRun(t *testing.T) {
 
 	tel := Setup("1.0.0", Options{RecheckInterval: 10 * time.Millisecond}, &bytes.Buffer{})
 	before := time.Now()
-	run := tel.StartRun(AttrFocus.String("review"))
+	run := tel.StartRun(AttrRunFocus.String("review"))
 	if tel.Active() {
 		t.Fatal("active with no destination")
 	}
@@ -485,7 +570,7 @@ func TestRun_SpoolAppearsMidRun(t *testing.T) {
 	if span == nil || find(recs, "log", EventRunFinished) == nil || find(recs, "span", SpanCheck) == nil {
 		t.Fatalf("records %+v, want the run span, the check span and both events", recs)
 	}
-	if span.attrs[string(AttrFocus)] != "review" {
+	if span.attrs[string(AttrRunFocus)] != "review" {
 		t.Errorf("run span attributes %v, want the run's start attributes", span.attrs)
 	}
 	if span.start.After(before.Add(time.Second)) || span.start.Before(before.Add(-time.Second)) {
@@ -535,5 +620,201 @@ func TestSetup_InstallsNoGlobalPropagator(t *testing.T) {
 	}
 	if len(otel.GetTextMapPropagator().Fields()) != 0 {
 		t.Errorf("global propagator fields %v, want none", otel.GetTextMapPropagator().Fields())
+	}
+}
+
+// A hung endpoint costs the run one FlushTimeout in all, however many times
+// it flushes: once a flush has run out of time, later ones give up at once.
+func TestSetup_HungEndpointBoundsTheWholeRun(t *testing.T) {
+	clearTelemetryEnv(t)
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
+	defer srv.Close()
+	defer close(release)
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", srv.URL)
+	tel := Setup("1.0.0", Options{}, io.Discard)
+	run := tel.StartRun()
+	start := time.Now()
+	run.Finish("converged", true)
+	tel.Shutdown()
+	if d := time.Since(start); d > FlushTimeout+time.Second {
+		t.Errorf("flush and shutdown took %v, want about %v", d, FlushTimeout)
+	}
+}
+
+// A run's labels are resource attributes, ynh.label.<key>, on every record
+// ynh writes. Every operator ynh.label.* in OTEL_RESOURCE_ATTRIBUTES, under
+// a key ynh set or another, is dropped, since only ynh's were validated;
+// other operator attributes stay. The note names the keys, never the values.
+func TestLabelsAreResourceAttributes(t *testing.T) {
+	clearTelemetryEnv(t)
+	dir := filepath.Join(t.TempDir(), "spool")
+	t.Setenv("YNR_SPOOL", dir)
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "ynh.label.wheelhouse=operator,ynh.label.other=/home/me/secret,deployment.environment.name=lab")
+	var note bytes.Buffer
+	tel := Setup("1.0.0", Options{Labels: map[string]string{"wheelhouse": "ynw", "batch": "7"}}, &note)
+	run := tel.StartRun()
+	run.Finish(RunOutcomeConverged, true)
+	tel.Shutdown()
+
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("no spool files: %v", err)
+	}
+	seen := 0
+	for _, e := range entries {
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+			var req struct {
+				ResourceSpans []struct{ Resource resourceDoc }
+				ResourceLogs  []struct{ Resource resourceDoc }
+			}
+			if err := json.Unmarshal([]byte(line), &req); err != nil {
+				t.Fatal(err)
+			}
+			var resources []resourceDoc
+			for _, r := range req.ResourceSpans {
+				resources = append(resources, r.Resource)
+			}
+			for _, r := range req.ResourceLogs {
+				resources = append(resources, r.Resource)
+			}
+			for _, r := range resources {
+				seen++
+				got := r.attrs()
+				for k, want := range map[string]string{
+					"ynh.label.wheelhouse":        "ynw",
+					"ynh.label.batch":             "7",
+					"ynh.label.other":             "",
+					"deployment.environment.name": "lab",
+					"service.name":                "ynh",
+				} {
+					if got[k] != want {
+						t.Errorf("resource %s = %q, want %q", k, got[k], want)
+					}
+				}
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no resource found in the spool")
+	}
+	if n := note.String(); !strings.Contains(n, "ynh.label.other") || strings.Contains(n, "secret") {
+		t.Errorf("note = %q, want it to name the dropped keys and no value", n)
+	}
+}
+
+type resourceDoc struct {
+	Attributes []struct {
+		Key   string
+		Value struct{ StringValue string }
+	}
+}
+
+func (r resourceDoc) attrs() map[string]string {
+	m := map[string]string{}
+	for _, a := range r.Attributes {
+		m[a.Key] = a.Value.StringValue
+	}
+	return m
+}
+
+func TestLabelAttributes(t *testing.T) {
+	if got := LabelAttributes(nil); len(got) != 0 {
+		t.Errorf("no labels gave %v", got)
+	}
+	got := LabelAttributes(map[string]string{"b": "2", "a": "1"})
+	if len(got) != 2 || string(got[0].Key) != "ynh.label.a" || got[1].Value.AsString() != "2" {
+		t.Errorf("attributes = %v, want sorted ynh.label.<key>", got)
+	}
+}
+
+// The operator's ynh.label.* are removed from the process environment once,
+// at Setup, before the recheck goroutine exists, and stay removed: a spool
+// that appears mid-run activates telemetry without touching the variable, so
+// a child started in that window never sees it change, and no child ever
+// inherits an unvalidated label.
+func TestOperatorLabelsStrippedOnceAndSpoolAppearsMidRun(t *testing.T) {
+	clearTelemetryEnv(t)
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "ynh.label.other=/home/me/secret,deployment.environment.name=lab")
+	laptop := filepath.Join(os.Getenv("XDG_STATE_HOME"), "ynr", "spool", "local")
+
+	var note bytes.Buffer
+	tel := Setup("1.0.0", Options{RecheckInterval: 5 * time.Millisecond, Labels: map[string]string{"wheelhouse": "ynw"}}, &note)
+	const stripped = "deployment.environment.name=lab"
+	if got := os.Getenv("OTEL_RESOURCE_ATTRIBUTES"); got != stripped {
+		t.Fatalf("after Setup, OTEL_RESOURCE_ATTRIBUTES = %q, want %q", got, stripped)
+	}
+	if n := note.String(); !strings.Contains(n, "ynh.label.other") || strings.Contains(n, "secret") {
+		t.Errorf("note = %q, want the dropped key and no value", n)
+	}
+
+	// Poll the variable from a "child" while the spool appears and
+	// telemetry activates: it never changes.
+	stop := make(chan struct{})
+	changed := make(chan string, 1)
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			if got := os.Getenv("OTEL_RESOURCE_ATTRIBUTES"); got != stripped {
+				select {
+				case changed <- got:
+				default:
+				}
+				return
+			}
+		}
+	}()
+
+	run := tel.StartRun()
+	if err := os.MkdirAll(laptop, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for !tel.Active() {
+		if time.Now().After(deadline) {
+			t.Fatal("telemetry never started after the spool appeared")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	run.Finish("converged", true)
+	tel.Shutdown()
+	close(stop)
+
+	select {
+	case got := <-changed:
+		t.Errorf("OTEL_RESOURCE_ATTRIBUTES changed to %q while telemetry started", got)
+	default:
+	}
+	if got := os.Getenv("OTEL_RESOURCE_ATTRIBUTES"); got != stripped {
+		t.Errorf("after the run, OTEL_RESOURCE_ATTRIBUTES = %q, want %q", got, stripped)
+	}
+
+	seen := 0
+	entries, _ := os.ReadDir(laptop)
+	for _, e := range entries {
+		data, _ := os.ReadFile(filepath.Join(laptop, e.Name()))
+		for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+			if line == "" {
+				continue
+			}
+			seen++
+			if strings.Contains(line, "secret") || strings.Contains(line, "ynh.label.other") {
+				t.Errorf("an operator label reached the spool: %s", line)
+			}
+			if !strings.Contains(line, "ynh.label.wheelhouse") || !strings.Contains(line, "deployment.environment.name") {
+				t.Errorf("record lacks ynh's label or the operator's other attribute: %s", line)
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatal("nothing written to the spool")
 	}
 }

@@ -3,7 +3,7 @@
   "$id": "https://eyelock.github.io/ynh/schema/agent/trajectory.schema.json",
   "title": "ynh agent run \u2014 trajectory event",
   "description": "One line of the NDJSON trajectory emitted by `ynh agent run --emit-jsonl`. Each line is a complete JSON object; the file as a whole is not JSON. Validate line by line against this schema.\n\nThis is a discriminated union on `type`, rather than one schema per event, because a consumer reads a stream of heterogeneous events and must validate whatever arrives next. A directory of per-event files would make the consumer choose the schema first, which is the job the discriminator already does.\n\nUnknown event types must be tolerated: new kinds are added additively and, per docs/cli-structured.md, consumers must not fail on members they do not know.",
-  "x-capabilities": "0.9",
+  "x-capabilities": "0.10",
   "$defs": {
     "Timestamp": {
       "type": "string",
@@ -83,10 +83,6 @@
             "model_requested": {
               "type": "string",
               "description": "The model the run asked for with --model, as given (an alias such as `sonnet` stays an alias). With the harness SHA and base commit, this is what reproduces the request. Absent when none was pinned and the backend chose. What actually ran is recorded by the `worker_model` event, since the worker reports it only after this header is written."
-            },
-            "model": {
-              "type": "string",
-              "description": "Deprecated: same as model_requested; the model that ran is in worker_model. Will be removed in a release that bumps CapabilitiesVersion."
             },
             "effort_requested": {
               "type": "string",

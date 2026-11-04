@@ -137,7 +137,13 @@ ynd preview /tmp/ynh-tutorial/hook-harness -v cursor -o /tmp/ynh-tutorial/hook-h
 find /tmp/ynh-tutorial/hook-harness-cursor -name hooks.json
 ```
 
-Expected: exactly one line, ending in `.cursor/hooks.json`.
+Expected: the Cursor matcher warning from above and a `Preview written to` line from `ynd preview`, then exactly one line from `find`, ending in `.cursor/hooks.json`:
+
+```
+  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+Preview written to /tmp/ynh-tutorial/hook-harness-cursor
+/tmp/ynh-tutorial/hook-harness-cursor/.cursor/hooks.json
+```
 
 ## Preview for Codex
 
@@ -327,11 +333,21 @@ A preview is a session layout. An exported plugin carries hooks where each vendo
 
 ```bash
 ynd export /tmp/ynh-tutorial/hook-harness -v claude,cursor,codex -o /tmp/ynh-tutorial/hook-export
-find /tmp/ynh-tutorial/hook-export -path '*hooks*' -type f | sort
+find /tmp/ynh-tutorial/hook-export -path '*/hook-export/*hooks*' -type f | sort
 cat /tmp/ynh-tutorial/hook-export/claude/.claude-plugin/plugin.json
 ```
 
-Expected: one `Exported for` line per vendor, plus `warning: codex: skipping 1 rules (not supported)` because a Codex plugin carries only skills. Then exactly three hook files, one per vendor, and no `hooks/hooks.json` or session path such as `.claude/hooks/hooks.json`:
+Expected: one `Exported for` line per vendor, with the Cursor matcher warning from above under Cursor's, and `warning: codex: skipping 1 rules (not supported)` under Codex's because a Codex plugin carries only skills:
+
+```
+Exported for claude → /tmp/ynh-tutorial/hook-export/claude (0 skills, 0 agents)
+Exported for cursor → /tmp/ynh-tutorial/hook-export/cursor (0 skills, 0 agents)
+  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+Exported for codex → /tmp/ynh-tutorial/hook-export/codex (0 skills, 0 agents)
+  warning: codex: skipping 1 rules (not supported)
+```
+
+Then exactly three hook files, one per vendor, and no `hooks/hooks.json` or session path such as `.claude/hooks/hooks.json`:
 
 ```
 /tmp/ynh-tutorial/hook-export/claude/hooks/claude.json
@@ -349,7 +365,7 @@ The Claude manifest names its file:
 }
 ```
 
-A merged export (`--merged`, and every `ynd marketplace build` package) puts all three files in one plugin root, and each manifest still names only its own, so no vendor reads another's format. See [Hooks: Config File Locations](../hooks.md#config-file-locations) for why there is no shared `hooks/hooks.json`.
+A merged export (`--merged`, and every `ynd marketplace build` package) puts all three files in one plugin root, and each manifest still names only its own, so no vendor reads another's format. See [Hooks: Config File Locations](../hooks.md#config-file-locations) for why there is no shared `hooks/hooks.json`. OpenCode has no declarative hook file, so its hooks travel as a generated plugin, `.opencode/plugins/ynh-hooks.ts`; see [OpenCode hooks](../hooks.md#opencode-hooks-are-a-generated-plugin).
 
 ## Write a blocking hook example
 
@@ -395,7 +411,13 @@ Use `ynd diff` to see how the same hooks translate differently:
 ynd diff /tmp/ynh-tutorial/hook-harness claude cursor codex
 ```
 
-Expected output shows:
+Expected: the Cursor matcher warning from above comes first:
+
+```
+  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+```
+
+Then the three comparisons, which show:
 - `.claude/hooks/hooks.json` is only in Claude
 - `.cursor/hooks.json` is only in Cursor
 - `.codex/hooks.json` is only in Codex

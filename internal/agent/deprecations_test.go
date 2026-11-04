@@ -19,7 +19,7 @@ var deprecatedUntilBump = []struct {
 	since   string
 	issue   string
 }{
-	{reflect.TypeFor[SessionStartData](), "Model", "session_start.model", "0.9.0", "https://github.com/eyelock/ynh/issues/443"},
+	// session_start.model went at 0.10.0 (#443). Add the next one here.
 }
 
 func TestDeprecatedFieldsGoAtTheNextCapabilityBump(t *testing.T) {

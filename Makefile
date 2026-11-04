@@ -1,4 +1,4 @@
-.PHONY: clean deps install build test test-coverage e2e format lint check check-artifacts check-vendor-parity check-marketplace scan-artifacts run docs help docker-build docker-push vulncheck
+.PHONY: clean deps install build test test-coverage e2e format lint check check-tidy check-artifacts check-vendor-parity check-marketplace check-eval-stand-ins conformance scan-artifacts run docs help docker-build docker-push vulncheck
 
 BINARY_NAME := ynh
 BINARY_NAME_DEV := ynd
@@ -19,11 +19,13 @@ LDFLAGS := -ldflags "-X github.com/eyelock/ynh/internal/config.Version=$(VERSION
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-deps: ## Install prerequisites (Go, linter, formatter)
+deps: ## Install prerequisites (Go, linter, formatter, jq) and check python3 is present
 	@echo "Checking prerequisites..."
 	@command -v go >/dev/null 2>&1 || { echo "Installing Go..."; brew install go; }
 	@command -v golangci-lint >/dev/null 2>&1 || { echo "Installing golangci-lint..."; brew install golangci-lint; }
 	@test -x $(GOIMPORTS) || { echo "Installing goimports..."; go install golang.org/x/tools/cmd/goimports@latest; }
+	@command -v jq >/dev/null 2>&1 || { echo "Installing jq..."; brew install jq; }
+	@command -v python3 >/dev/null 2>&1 || { echo "python3 not found: check-marketplace needs it. Install python3 and re-run."; exit 1; }
 	@echo "All prerequisites installed."
 	@echo ""
 	@echo "Run 'make install' to build and install binaries to ~/.ynh/bin/"
@@ -73,6 +75,13 @@ format: ## Format code
 lint: ## Lint code
 	golangci-lint run ./...
 
+check-tidy: ## Fail if go.mod or go.sum is not tidy (read-only; CI's `go mod tidy -diff`)
+	@# A direct import marked `// indirect` is invisible to build, test and lint
+	@# alike; only this sees it. -diff prints what tidy would change and exits
+	@# non-zero, writing nothing. Like build and test, it needs the network only
+	@# when the module cache is cold.
+	$(GO) mod tidy -diff
+
 # The harness artifacts this repo ships (skills/ agents/ rules/) plus the one it
 # uses on itself (.claude/). testdata/ is deliberately excluded: its fixtures are
 # malformed on purpose, so `ynd lint .` at the repo root can never be green.
@@ -112,8 +121,26 @@ scan-artifacts: ## Security-scan the harness artifacts with SkillSpector (needs 
 check-marketplace: ## Assert the committed marketplace indexes match the plugin manifests
 	@./scripts/marketplace-consistency.sh
 
+CONFORMANCE_FORMAT ?= text
+
+conformance: build ## Check ynh's telemetry with ynr conformance (needs ynr and ynr-stub-vendor on PATH)
+	@# Not part of `make check`: it needs ynr and its stub vendor, which CI
+	@# downloads from a pinned, checksum-verified ynr release. The scenarios
+	@# in .ynr/conformance.yaml run bin/ynh against the stub: no model, no secret.
+	@command -v ynr >/dev/null 2>&1 || { echo "ynr is not on your PATH: see docs/telemetry.md, Conformance"; exit 1; }
+	@command -v ynr-stub-vendor >/dev/null 2>&1 || { echo "ynr-stub-vendor is not on your PATH: see docs/telemetry.md, Conformance"; exit 1; }
+	@PATH="$(CURDIR)/bin:$$PATH" ynr conformance --file .ynr/conformance.yaml --format $(CONFORMANCE_FORMAT)
+
 check-vendor-parity: build ## Assert every vendor is documented, assembles the same artifacts and is stubbed in evals
 	@./scripts/vendor-parity.sh
+
+check-eval-stand-ins: ## Compare the evals' stand-in harnesses with the real ones on GitHub (needs the network)
+	@# Not part of `make check`: it clones eyelock/assistants, so its result
+	@# depends on the network and on a repository this one does not control.
+	@# It runs daily and on changes to the stand-ins, in
+	@# .github/workflows/eval-stand-ins.yml. On a failure, update the stand-in in
+	@# scripts/eval-remotes.sh, never the real harness.
+	@./scripts/eval-stand-ins.sh
 
 stamp-version: ## Stamp the harness version into every manifest (VERSION=X.Y.Z, or the latest tag)
 	@./scripts/stamp-harness-version.sh $(VERSION)
@@ -144,4 +171,14 @@ docker-push: ## Push base Docker image to GHCR
 	docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
 	docker push $(DOCKER_IMAGE):latest
 
-check: deps format lint test build check-artifacts ## Run full CI pipeline
+# Every check CI's CI workflow runs that needs neither Docker nor the network
+# (beyond the module downloads build and test already need on a cold cache).
+# A green `make check` is not a promise of a green CI. Left out on purpose:
+#   scan-artifacts                  Skill Security job (Docker)
+#   the container image build       Packaging Config job (Docker)
+#   vulncheck                       vulncheck.yml (network: live vuln database)
+#   check-eval-stand-ins            eval-stand-ins.yml (network: GitHub)
+#   e2e                             e2e.yml (release gate)
+# `format` rewrites files where CI's Format Check only reports them, so commit
+# what it changes.
+check: deps format lint check-tidy test build check-artifacts check-vendor-parity check-marketplace ## Run every CI check that needs neither Docker nor the network

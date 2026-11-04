@@ -15,7 +15,7 @@ ynh install github.com/myorg/david
 david
 ```
 
-`david` is now a command. It knows your skills, your team's rules, your coding standards. It works on Claude today. Switch to Codex with `-v codex`. Same harness, different engine.
+`david` is now a command. It knows your skills, your team's rules, your coding standards. It works on Claude today. Switch to Codex with `-v codex`: same harness, but Codex does not yet get everything (see [Known gaps](#known-gaps-in-v0160)).
 
 ## What this gives you
 
@@ -29,7 +29,20 @@ david -v codex                     # same harness, different vendor
 
 **Compose from anywhere.** Cherry-pick skills from community repos, your team's private config, open-source libraries — and mix them with your own. Like a package manager for AI capabilities, backed by Git.
 
-**Zero runtime.** ynh resolves your config, assembles it, launches the vendor CLI, and gets out of the way. No process sitting between you and the AI.
+## Known gaps in v0.16.0
+
+ynh claims more than each vendor yet gets. In v0.16.0:
+
+- **Codex** does not yet receive instructions, MCP servers, hooks, session context, rules or commands. Skills, agents, focuses and profiles do. Resume fails when the harness asks for workspace folders. Under `ynh run`, Codex starts in the run directory without `-C`, so the project's own `AGENTS.md` is never read.
+- **Rules** do not reach Claude Code, Codex or Copilot.
+- **OpenCode**: agents and delegates cannot run as subagents, `on_session_start` does not fire, `on_session_end` cannot fire (OpenCode has no such event, a vendor limit), session context is not injected, and workspace folders are not granted. `ynd export -v opencode` drops delegates silently.
+- **Cursor**: workspace folders are not granted, and print mode skips `before_prompt` and `on_stop`.
+- **Delegates** carry only their instructions on Codex, Cursor and Copilot. On Claude Code a delegate also carries its MCP servers, not its hooks or workspace. A delegate does not run on OpenCode. "A full harness" holds for includes, not yet for delegates.
+- **Resume**: Cursor and Copilot refuse a prompt on resume.
+- **Telemetry**: `ynh run` emits none on any vendor; only `ynh agent run` does.
+- **Project instructions** (the project's own `AGENTS.md` or `CLAUDE.md` under `ynh run`) are unverified on every vendor except Codex, where they are not read.
+
+These are fixed in v0.17.0 (parity) and later, except what a vendor cannot do. See [ynh #679](https://github.com/eyelock/ynh/issues/679).
 
 ## The 60-second version
 
@@ -63,7 +76,7 @@ Add skills, agents, rules, and commands to the harness directory. Pull from Git 
 
 The term "harness" was formalized by [Martin Fowler](https://martinfowler.com/articles/harness-engineering.html) and adopted by [OpenAI](https://openai.com/index/harness-engineering/) and [Anthropic](https://www.anthropic.com/engineering/harness-design-long-running-apps). A harness is everything in an AI coding agent except the model itself — the skills, rules, context, and constraints that shape its behavior.
 
-ynh manages the **guide layer** of that harness: the proactive steering that happens *before* the agent acts. One harness definition, assembled for Claude, Codex, Cursor or Copilot. Read more in [Harness Engineering](https://eyelock.github.io/ynh/#/harness-engineering).
+ynh manages the **guide layer** of that harness: the proactive steering that happens *before* the agent acts. One harness definition, assembled for Claude, Codex, Cursor, Copilot or OpenCode. Read more in [Harness Engineering](https://eyelock.github.io/ynh/#/harness-engineering).
 
 ## What you can do
 
@@ -83,7 +96,7 @@ Full docs at **[eyelock.github.io/ynh](https://eyelock.github.io/ynh)**:
 - **[Artifacts Guide](https://eyelock.github.io/ynh/#/artifacts)** — Skills, agents, rules, commands
 - **[CLI Reference](https://eyelock.github.io/ynh/#/reference)** — Full command reference for ynh and ynd
 - **[Agent Skills Standard](https://eyelock.github.io/ynh/#/skills-standard)** — Cross-platform spec, discovery paths, catalog budget
-- **[Vendor Support](https://eyelock.github.io/ynh/#/vendors)** — Claude, Codex, Cursor and Copilot capabilities
+- **[Vendor Support](https://eyelock.github.io/ynh/#/vendors)** — Claude, Codex, Cursor, Copilot and OpenCode capabilities
 
 ## License
 

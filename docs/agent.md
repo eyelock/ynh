@@ -27,9 +27,9 @@ ynh agent run --resume <session-dir> [flags]
 |---|---|
 | `--harness <id\|path>` | Harness whose sensors, artifacts and hooks drive the run. Takes an installed id (`local/demo`) or a path to a harness directory (`.`, `./my-harness`, an absolute path), exactly as `ynh check` does. A path needs no prior install, which matters while you are still authoring the harness |
 | `--task "<text>"` | What the agent is being asked to do |
-| `--focus <name>` | Use a declared focus for the task and its profile |
-| `--profile <name>` | Apply a profile overlay, including its [sensor overrides](sensors.md#profiles-change-severity-not-observation); the gate between turns gets the same profile (also via a `--focus` bound to one) |
-| `--backend <name>` | Backend to drive: `claude`, `codex` or `cursor` (default: `claude`; on `--resume`, the session's own) |
+| `--focus <name>` | Use a declared focus for the task and its profile. `namespace:name` takes a focus of an included harness |
+| `--profile <name>` | Apply a profile overlay, including its [sensor overrides](sensors.md#profiles-change-severity-not-observation); the gate between turns gets the same profile (also via a `--focus` bound to one). Repeatable: one unqualified value for the harness and one `namespace:name` per included harness (see [Profiles of included harnesses](profiles.md#profiles-and-focuses-of-included-harnesses)) |
+| `--backend <name>` | Backend to drive: `claude`, `codex`, `cursor` or `opencode` (default: `claude`; on `--resume`, the session's own) |
 | `--model <name>` | Model override passed to the backend |
 | `--effort <low\|medium\|high>` | Reasoning effort, mapped to the backend's own setting; overrides the harness's `agent.effort`. See [Effort](#effort) |
 | `--convergence-sensor <name>` | Sensor added to the convergence verifiers, consulted once all blocking sensors pass |
@@ -47,7 +47,8 @@ ynh agent run --resume <session-dir> [flags]
 | `--max-plan-iterations <n>` | Cap on plan revisions before acting |
 | `--emit-jsonl <path>` | Write the trajectory; `-` for stdout |
 | `--resume <dir>` | Continue a previous session from its directory (the `--emit-jsonl` file's folder) |
-| `--telemetry-relay` | Start `ynr relay` for the run and send the vendor's own telemetry into the spool (claude only). Also `YNH_TELEMETRY_RELAY`, or `"telemetry_relay": true` in `config.json`. See [Telemetry](telemetry.md#vendor-telemetry-through-the-relay) |
+| `--label <key:value>` | A [run label](telemetry.md#run-labels), repeatable; `--label key:` removes one. Merged over `config.json`, the harness manifest and `YNH_LABELS`; an invalid label refuses the run |
+| `--telemetry-relay` | Start `ynr relay` for the run and send the vendor's own telemetry into the spool (claude, codex). Also `YNH_TELEMETRY_RELAY`, or `"telemetry_relay": true` in `config.json`. See [Telemetry](telemetry.md#vendor-telemetry-through-the-relay) |
 
 ### Budgets
 
@@ -134,7 +135,63 @@ With the [telemetry relay](telemetry.md#vendor-telemetry-through-the-relay)
 on, a `claude` worker also receives Claude Code's telemetry settings pointing
 at the run's relay, with every content switch forced off, and the same
 settings as `--settings`. Those settings replace any of the same family the
-harness passes through.
+harness passes through. A `codex` worker gets its relay settings as `-c`
+overrides on each `codex exec`, with Codex's logs off, and loses any
+`OTEL_EXPORTER_OTLP_*` the harness passes through.
+
+### MCP servers
+
+A worker loads the harness's [MCP servers](mcp.md) and those of its included
+harnesses, composed as `ynh run` composes them (transitively, the root winning
+and its `null` removing; see
+[Servers from Included Harnesses](mcp.md#servers-from-included-harnesses)),
+named on the `claude` backend as `plugin:<harness>:<server>`, as `ynh run`
+names them. A harness or profile that sets `mcp_isolation` runs its worker
+with only that composed set, the same as `ynh run`; `ynh agent run` has no
+`--isolated-mcp` flag, so isolation comes from the manifest alone. It is
+applied on the `claude` backend only (its tools are then named `<server>`);
+on `codex`, `cursor` and `opencode` ynh prints one `warning:` line on stderr
+and the worker loads your own servers too. See
+[Running with only the harness's servers](mcp.md#running-with-only-the-harness-s-servers).
+
+### Delegates
+
+A worker carries the harness's delegates (`delegates_to`) as subagents, as
+`ynh run` does. Each delegate's source is checked against
+`allowed_remote_sources` first; one the allow-list refuses stops the run before
+any worker starts, with an error naming the delegate. A delegate already in the
+cache is used as it is; one that is not is cloned while the run sets up, so **a
+lane's egress must allow the hosts the delegates name** as well as the
+includes'.
+
+A delegate's own `delegates_to` are followed: every harness reached is one
+agent, once, and the root is never its own delegate (see
+[Cycles and shared delegates](harnesses.md#cycles-and-shared-delegates)). A
+delegate that is only reached through another still needs its host allowed.
+`ynh install` and `ynh update` fetch it with the rest, so it is cached before
+the run.
+
+Each delegate brings its own [MCP servers](mcp.md#mcp-servers-of-delegates),
+for its subagent only: the worker's main session does not list them, and
+`mcp_isolation` keeps them. Whether they reach the subagent depends on the
+backend:
+
+| Backend | Their MCP servers |
+|---------|-------------------|
+| `claude` | Carried, and passed to Claude with `--agents` |
+| `cursor` | Not carried. The delegate's agent file is written without them, and ynh prints one `warning:` line per delegate on stderr |
+| `codex` | Not carried. ynh writes the delegate as a TOML custom agent, `.codex/agents/<name>.toml`, without them, since a Codex custom agent inherits the session's MCP servers and cannot set its own, and prints one `warning:` line per delegate on stderr. Each launch registers it with Codex (see [Symlink Installation](vendors.md#symlink-installation-codex-cursor)), CONFIRMED live on codex-cli 0.166.0; see [MCP Servers of Delegates](mcp.md#mcp-servers-of-delegates) |
+
+On `claude`, a delegate server's `${VAR}` references are resolved from the
+delegate's own `env_passthrough`, against the environment `ynh agent run` was
+started in, and their values go to a `.env.ynh` file in the loop's temporary
+config directory, which is removed when the run ends. The worker's own
+environment is built from the root harness's `env_passthrough` only, as above,
+and does not need the delegate's variables: the launcher that starts the server
+reads the file. A reference that is undeclared or unset stops the run before
+any worker starts, with an error naming the delegate, the server and the field.
+[MCP Servers of Delegates](mcp.md#mcp-servers-of-delegates) explains how the
+values are kept off the command line.
 
 ## Redaction
 
@@ -160,7 +217,7 @@ not a default anyone chose. See [MCP credentials](mcp.md) for the declaration
 and how a profile narrows it.
 
 `--sandbox srt` is honoured by the `claude` backend only. Requesting it with
-`codex` or `cursor` is an **error**, not a warning — a containment control that
+`codex`, `cursor` or `opencode` is an **error**, not a warning — a containment control that
 silently does not apply is worse than an absent one, because it gets relied
 upon. ynh does not provide isolation; it runs inside one you configured.
 
@@ -196,16 +253,16 @@ writes.
 
 `--auto-approve` grants more, for one run:
 
-| Level | Approves | claude | codex | cursor |
-|---|---|---|---|---|
-| `edits` | file edits; commands still need approval | `--permission-mode acceptEdits` | error | error |
-| `all` | everything the worker asks to do | `--permission-mode bypassPermissions` | `--dangerously-bypass-approvals-and-sandbox` | `--force` |
+| Level | Approves | claude | codex | cursor | opencode |
+|---|---|---|---|---|---|
+| `edits` | file edits; commands still need approval | `--permission-mode acceptEdits` | error | error | error |
+| `all` | everything the worker asks to do | `--permission-mode bypassPermissions` | `--dangerously-bypass-approvals-and-sandbox` | `--force` | `--auto` |
 
 It exists for runs inside containment you own: a container, an egress policy,
 a diff gate, human review of what lands. Outside that, it hands an unattended
 agent your credentials.
 
-- **Levels are exact or refused.** codex and cursor have no mode that approves
+- **Levels are exact or refused.** codex, cursor and opencode have no mode that approves
   edits while still withholding commands, so `edits` is an error on them rather
   than something wider. Any other backend, or an unknown level, fails before
   the run starts.
@@ -335,13 +392,13 @@ same `checkpoint.json`, and the last one to write wins.
 The checkpoint records the run's identity (backend, task or focus, harness,
 profile, convergence sensor, and the turn and token caps) as well as its
 counters, so a resume restores the run it is actually resuming. For the
-harness, profile, convergence sensor and caps, flags passed on the resume take
+harness, profile (including namespaced profiles of included harnesses), convergence sensor and caps, flags passed on the resume take
 precedence and anything omitted comes from the checkpoint.
 
 The backend, task and focus cannot be changed on a resume, only repeated:
 
 - **Backend.** A resume drives the backend the run started on. The resume token
-  belongs to that backend (a codex thread id, a claude or cursor session id) and
+  belongs to that backend (a codex thread id, a claude, cursor or opencode session id) and
   means nothing to another, so `--backend` naming a different one is refused
   with exit 21. A checkpoint that records no backend predates recording it and
   resumes on `claude`.
@@ -628,9 +685,8 @@ harness SHA and base commit reproduces the request. It cannot carry the model
 that ran: the header is written before the worker has said anything. A
 `worker_model` event records that instead, when each worker process first
 reports a model and again whenever it reports a different one.
-`session_start` still writes `model` too, as a copy of `model_requested`, so
-no field disappears from the header. It is deprecated and goes in a release
-that bumps the capabilities version; read `model_requested` instead.
+Until capabilities `0.10.0`, `session_start` also wrote `model`, a deprecated
+copy of `model_requested`. It is no longer written; read `model_requested`.
 
 ### Effort
 
@@ -646,11 +702,11 @@ The backends offer more levels than these (Claude Code's `xhigh` and `max`,
 Codex's `minimal`, `xhigh` and above), which ynh does not expose, so a level
 means the same thing whichever backend runs it.
 
-| ynh | `claude` | `codex` | `cursor` |
-|---|---|---|---|
-| `low` | `--effort low` | `-c model_reasoning_effort="low"` | refused |
-| `medium` | `--effort medium` | `-c model_reasoning_effort="medium"` | refused |
-| `high` | `--effort high` | `-c model_reasoning_effort="high"` | refused |
+| ynh | `claude` | `codex` | `cursor` | `opencode` |
+|---|---|---|---|---|
+| `low` | `--effort low` | `-c model_reasoning_effort="low"` | refused | refused |
+| `medium` | `--effort medium` | `-c model_reasoning_effort="medium"` | refused | refused |
+| `high` | `--effort high` | `-c model_reasoning_effort="high"` | refused | refused |
 
 Sources:
 [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference)
@@ -661,11 +717,11 @@ model"); the Codex
 accepts (`codex-rs/utils/cli/src/config_override.rs`); and `cursor-agent
 --help` (2026.10.01), which has no effort flag. Some Cursor models take an
 effort inside the model name (`'<model>[effort=high]'`), which is per model,
-so it is yours to pass with `--model`, not something ynh can map.
+so it is yours to pass with `--model`, not something ynh can map. OpenCode is the same: it has no effort flag, and a model variant is written into the model id (`--model provider/model#variant`), with names that are the provider's own rather than low, medium and high.
 
-A level the backend cannot honour, or any level on `cursor`, is **refused
+A level the backend cannot honour, or any level on `cursor` or `opencode`, is **refused
 before the run starts**, not ignored, whether it came from the flag or the
-harness. A harness that sets `agent.effort` therefore cannot run on `cursor`;
+harness. A harness that sets `agent.effort` therefore cannot run on `cursor` or `opencode`;
 `ynd validate` rejects a level other than the three.
 
 The result keeps the request apart from what ran, as it does for the model:
@@ -711,7 +767,7 @@ a run without parsing terminal output.
 
 | Event | Emitted when |
 |---|---|
-| `session_start` | Run begins. Carries the model requested (`model_requested`, and the deprecated `model` copy of it), the effort requested (`effort_requested`), ynh version, harness version, base commit, the `--auto-approve` level, and the resolved budgets with their sources |
+| `session_start` | Run begins. Carries the model requested (`model_requested`), the effort requested (`effort_requested`), ynh version, harness version, base commit, the `--auto-approve` level, and the resolved budgets with their sources |
 | `session_resumed` | Resumed run begins, before the first new turn. Carries this process's `--auto-approve` level, model requested and effort requested |
 | `worker_model` | The worker reported the model it runs on: once per worker process, and again if it reports another |
 | `plan` / `plan_revised` | Plan produced or revised |

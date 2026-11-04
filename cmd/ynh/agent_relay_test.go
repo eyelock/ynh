@@ -203,7 +203,10 @@ func TestCmdAgentRun_TelemetryRelay(t *testing.T) {
 		{name: "no spool", relay: "serve", setting: "env", spool: "none", note: "there is no spool folder"},
 		{name: "operator's OTLP", relay: "serve", setting: "env", spool: "otlp", note: "OTEL_EXPORTER_OTLP_* is set"},
 		{name: "srt", relay: "serve", setting: "env", spool: "spool", backend: "srt", note: "--sandbox srt would block the worker", code: agent.ExitWorkerError},
-		{name: "codex", relay: "serve", setting: "env", spool: "spool", backend: "codex", note: "does not configure codex's telemetry", code: agent.ExitWorkerError},
+		// Codex's relay settings go on its command line (internal/agent's
+		// codex telemetry tests); here the relay starts for it and stops.
+		{name: "codex", relay: "serve", setting: "env", spool: "spool", backend: "codex", started: true, code: agent.ExitWorkerError},
+		{name: "cursor", relay: "serve", setting: "env", spool: "spool", backend: "cursor", note: "does not configure cursor's telemetry", code: agent.ExitWorkerError},
 		{name: "ynr exits at once", relay: "exit", setting: "env", spool: "spool", started: true, note: "relay: cannot open spool"},
 		{name: "ynr never prints its endpoint", relay: "silent", setting: "env", spool: "spool", started: true, note: "printed no endpoint within"},
 		{name: "ynr prints garbage", relay: "garbage", setting: "env", spool: "spool", started: true, note: "first line is not its endpoint"},
@@ -229,10 +232,10 @@ func TestCmdAgentRun_TelemetryRelay(t *testing.T) {
 				`{"name":"relayprobe","version":"0.1.0","default_vendor":"claude","env_passthrough":["OTEL_LOG_USER_PROMPTS","OTEL_LOG_TOOL_CONTENT"]}`)
 
 			var envFile, argsFile string
-			if tt.backend == "codex" || tt.backend == "srt" {
+			if tt.backend == "codex" || tt.backend == "cursor" || tt.backend == "srt" {
 				// srt is absent, so the worker fails to start either way.
 				hideFromPath(t, "srt")
-				vendorShims(t, "codex is a stub")
+				vendorShims(t, "the vendor CLI is a stub")
 			} else {
 				envFile, argsFile = recordingClaude(t)
 			}

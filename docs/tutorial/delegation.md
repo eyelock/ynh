@@ -116,7 +116,7 @@ Check what was generated:
 ls ~/.ynh/run/local--team-lead/.claude/agents/
 ```
 
-Expected: `specialist.md` and `researcher.md` — generated agent files with the delegate's instructions, rules, and skill lists inlined.
+Expected: `specialist.md` and `researcher.md` — generated agent files with each delegate's instructions, rules, and skill list inlined, for whichever of those the delegate has of its own. The researcher harness has none of its own (its skills come from includes, which a delegate's agent file does not list), so `researcher.md` is only its frontmatter and the line `You are the **researcher** harness, invoked as a delegate.`
 
 ```bash
 cat ~/.ynh/run/local--team-lead/.claude/agents/specialist.md
@@ -152,7 +152,7 @@ rm -rf /tmp/ynh-tutorial
 - `delegates_to` in .agents/harness/plugin.json references other harnesses as subagents
 - Delegates must be Git repos (local or remote)
 - ynh generates vendor-native agent files from delegate harnesses at runtime
-- Agent files inline the delegate's instructions, rules, and skill list
+- Agent files inline the delegate's own instructions, rules, and skill list, when it has them
 - Delegate repos are fetched at install time and cached — `ynh run` works offline
 - Use `ynh update` to refresh cached delegate repos (a delegate in the harness's own repo, `"git": "."`, is refreshed on every run)
 

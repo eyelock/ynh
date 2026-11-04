@@ -75,6 +75,7 @@ Commands:
     migrate                                Migrate the ynh home to the current schema
     quarantine <list|restore|drop>         Harnesses a failed migration set aside
     schema <name> | --all                  Print a published JSON schema
+    telemetry registry                     The names ynh emits in OpenTelemetry
     version                                Print version
     help                                   Show this help
 
@@ -87,16 +88,19 @@ Run flags:
   --profile <name>             Apply a named profile overlay (with a prompt, implies non-interactive)
   --interactive                Override non-interactive default — stay in session after focus or prompt
   --instructions "<text>"      Inject per-invocation context after harness instructions
+  --isolated-mcp               Run with only the harness's MCP servers (can only turn mcp_isolation on)
   --session-name <name>        Claude: bind --resume to this name's session; other vendors: a label
   --resume                     Continue the previous session in this directory
   --resume=<id>                Continue one specific session by id
                                A trailing prompt is sent to the resumed session
                                (not a --focus prompt); some vendors refuse it
   --no-workspace               Grant none of the harness's requested workspace folders for this run
+  --label key:value            A label for the run (repeatable; key: removes one); see docs/telemetry.md
   --install                    Install symlinks for the vendor in current project
   --clean                      Remove symlinks for the vendor in current project
-  All other flags are passed through to the vendor CLI.
-  Use -- to separate vendor flags from the prompt.
+  All other flags are passed through to the vendor CLI. The last bare word is
+  the prompt: write vendor values with = (--model=haiku), or put the prompt
+  after -- (see: ynh run --help).
 
 Examples:
   ynh init
@@ -106,6 +110,7 @@ Examples:
   ynh install github.com/org/repo --ref v1.2.0
   ynh run david
   ynh run david "review this PR"
+  ynh run david --model haiku -- "say ok"
   ynh run david --focus code-review
   ynh run david --focus code-review --interactive
   ynh run david --profile thorough -- "audit this module"

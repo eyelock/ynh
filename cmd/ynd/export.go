@@ -20,7 +20,7 @@ func cmdExport(args []string) error {
 		outputDir   string
 		vendors     string
 		subPath     string
-		profileName string
+		profiles    []string
 		focusName   string
 		clean       bool
 		skipConfirm bool
@@ -56,7 +56,7 @@ func cmdExport(args []string) error {
 				return fmt.Errorf("--profile requires a value")
 			}
 			i++
-			profileName = args[i]
+			profiles = append(profiles, args[i])
 		case "--focus":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--focus requires a value")
@@ -154,31 +154,9 @@ func cmdExport(args []string) error {
 	if focusName == "" {
 		focusName = os.Getenv("YNH_FOCUS")
 	}
-	if focusName != "" && profileName != "" {
-		return fmt.Errorf("cannot use --focus and --profile together")
-	}
-
-	// Resolve profile from flag or env var
-	if profileName == "" {
-		profileName = os.Getenv("YNH_PROFILE")
-	}
-	if focusName != "" && profileName != "" {
-		return fmt.Errorf("cannot use --focus and --profile together (focus includes a profile)")
-	}
-
-	// Resolve focus → profile
-	if focusName != "" {
-		h, _, loadErr := loadHarnessForPreview(srcDir)
-		if loadErr != nil {
-			return fmt.Errorf("loading harness for focus resolution: %w", loadErr)
-		}
-		focus, ok := h.Focuses[focusName]
-		if !ok {
-			return fmt.Errorf("focus %q not defined in harness", focusName)
-		}
-		if focus.Profile != "" {
-			profileName = focus.Profile
-		}
+	sel, err := resolveSelection(srcDir, profiles, focusName)
+	if err != nil {
+		return err
 	}
 
 	// Determine output directory. The format chain never rewrites srcDir: it
@@ -206,7 +184,7 @@ func cmdExport(args []string) error {
 		Vendors:   vendorList,
 		Mode:      mode,
 		Config:    cfg,
-		Profile:   profileName,
+		Selection: sel,
 		// Nothing above writes. Export creates the output, and runs --clean,
 		// only once the source has loaded, so a refused export leaves -o
 		// exactly as it found it (#451).

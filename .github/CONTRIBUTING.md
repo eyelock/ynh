@@ -13,7 +13,7 @@ See [Harness Engineering §"Design Stance"](../docs/harness-engineering.md#desig
 
 ## Architecture
 
-ynh is a packaging and distribution tool. It has no runtime component - the AI vendor CLI (Claude, Codex, Cursor) handles all interaction. ynh's job is to resolve, assemble, and launch.
+ynh is a packaging and distribution tool. It has no runtime component - the AI vendor CLI (Claude, Codex, Cursor, Copilot, OpenCode) handles all interaction. ynh's job is to resolve, assemble, and launch.
 
 ### Core Flow
 
@@ -50,6 +50,7 @@ internal/
     codex.go              OpenAI Codex adapter (child process + symlinks)
     copilot.go            GitHub Copilot CLI adapter (exec with --plugin-dir)
     cursor.go             Cursor adapter (child process + symlinks)
+    opencode.go           OpenCode 2.x adapter (exec of `opencode --standalone` with OPENCODE_CONFIG_DIR)
     symlinks.go           Shared symlink install/clean helpers
     process.go            Child process management with signal forwarding
     toml.go               Minimal TOML emitter for Codex MCP config
@@ -61,13 +62,13 @@ docs/                     User guide (GitHub Pages)
 
 **No build system on content.** Skills, agents, rules, and commands are standard-format files. ynh never transforms or wraps them. A skill from skills.sh works as-is.
 
-**Vendor is a deployment concern, not a content concern.** Harnesses define what artifacts to include. The vendor adapter decides where to put them and how to launch. Adding a new vendor is one file implementing the `Adapter` interface.
+**Vendor is a deployment concern, not a content concern.** Harnesses define what artifacts to include. The vendor adapter decides where to put them and how to launch. Each vendor's adapter, one file implementing the `Adapter` interface, carries most of its behaviour, but adding a vendor touches more than that file: see [Vendor Adapters](#vendor-adapters).
 
 **Git is the package manager.** No npm, no custom registry. Content lives in Git repos, versioned with Git tags, cached locally by hash.
 
 **Harnesses compose from any source.** A harness can embed its own artifacts and pull from any number of Git repos. The `path` field supports monorepos.
 
-**Vendor-adaptive launch.** Each vendor gets the strategy that matches its capabilities. Claude supports `--plugin-dir`, so ynh does a clean `exec` with no running process. Codex and Cursor lack native plugin loading, so ynh installs symlinks and manages a child process with signal forwarding. This pragmatic split avoids forcing a lowest-common-denominator approach.
+**Vendor-adaptive launch.** Each vendor gets the strategy that matches its capabilities. Claude supports `--plugin-dir`, and OpenCode loads a config directory named by `OPENCODE_CONFIG_DIR`, so ynh does a clean `exec` with no running process. Codex and Cursor lack native plugin loading, so ynh installs symlinks and manages a child process with signal forwarding. This pragmatic split avoids forcing a lowest-common-denominator approach.
 
 **Single manifest.** Harnesses use a single `plugin.json` inside `.agents/harness/` as their manifest: all config (identity, includes, hooks, MCP servers, profiles) lives in one place. The directory was `.ynh-plugin/` before it moved under `.agents/`; ynh no longer reads it (#404), and nothing creates it. `internal/plugin` knows only `PluginDir`; `LegacyPluginDir` exists for the migrator. `migration.ManifestDirMigrator` is the one place the old layout is understood, and it is in `FormatChain`, which every load runs first: in a tree ynh owns (an install under `~/.ynh/harnesses/` or a git clone under `~/.ynh/cache/`) it renames `.ynh-plugin/` to `.agents/harness/`, so a remote source that has not moved keeps working; in any other tree it returns an error naming `ynd migrate`, and a tree with both layouts (or a symlink) is an error in every tree. Only `ynd migrate` (`MigrateChain`) renames a tree the user owns, never as a side effect of reading (#406). `ynd validate` and `ynd preview` ask `migration.LegacyManifestDir` for the same answer. `resolver.EnsureRepo` resets a clone and runs `git clean` after every fetch because ynh may have renamed its manifest directory, which git would otherwise refuse to check out over. `ynh update` overlays upstream onto an install, so `migration.AdoptRefreshedManifest` keeps a still-legacy upstream's fresh `plugin.json` from being shadowed by the moved one. Every reader and writer goes through the path helpers (`PluginPath`, `InstalledPath`, `MarketplacePath`, `HarnessRoot`) rather than joining the directory name by hand. Do not confuse `LegacyPluginDir` with `IsClaudePluginDir`, which detects the unsupported `.claude-plugin/plugin.json` layout.
 
@@ -199,7 +200,7 @@ The user-facing version of this guidance lives in [`docs/marketplace.md` § Pinn
 ## Development Setup
 
 ```bash
-# Prerequisites + dev tools (Go, linter, formatter)
+# Prerequisites + dev tools (Go, linter, formatter, jq); checks python3 is present
 make deps
 
 # Build and install binaries to ~/.ynh/bin/
@@ -218,7 +219,8 @@ make format
 # Lint
 make lint
 
-# Full CI pipeline (deps, format, lint, test, build)
+# Every CI check needing no Docker or network (deps, format, lint, check-tidy,
+# test, build, check-artifacts, check-vendor-parity, check-marketplace)
 make check
 
 # E2E suite (release gate; not part of `make check`)
@@ -232,7 +234,7 @@ make e2e
 **What the suite locks:**
 
 - Every documented entry point on `ynh` and `ynd` (init, install, uninstall, update, run, ls, info, installed, schema, vendors, sources, paths, status, search, registry, backend, delegate, fork, include, focus, profile, hook, doctor, mcp, sensors, check, agent, image, prune, migrate, quarantine; create, lint, validate, fmt, compress, inspect, export, compose, preview, diff, marketplace, migrate, validate-output)
-- The Claude, Codex and Cursor adapters end-to-end (Copilot only for its exported MCP file and `--resume`): instructions files, hooks (with matchers + per-vendor event remapping), MCP servers (command + URL forms, env passthrough)
+- The Claude, Codex and Cursor adapters end-to-end (Copilot only for its exported MCP file and `--resume`; OpenCode is not in the matrix yet): instructions files, hooks (with matchers + per-vendor event remapping), MCP servers (command + URL forms, env passthrough)
 - Profile + focus resolution (hook replace + inherit, MCP deep-merge, mutex/unknown errors)
 - Schema/security guards (path traversal, --ref + local, fork update, duplicate sources)
 - JSON error envelope, override semantics (harness AGENTS.md beats include's), symlink stability across reinstall
@@ -269,7 +271,7 @@ make install
 
 # Verify the contract
 ynh version --format json
-# {"version": "dev-<branch>-<sha>", "capabilities": "0.4.0"}
+# {"version": "dev-<branch>-<sha>", "capabilities": "0.x.y"}
 
 # Downstream tooling on PATH now sees the dev build
 ```
@@ -289,7 +291,7 @@ Both are built by `make build`, installed by `make install`, and released via go
 
 ynd is self-contained in `cmd/ynd/` with its own command routing, file discovery, and signal scanning. Key patterns:
 
-- **LLM integration** (`llm.go`): Compress and inspect shell out to vendor CLIs (claude, codex, cursor, copilot) via `queryLLM()`. `llmVendors` holds each vendor's one-shot arguments; the binary is the vendor adapter's `CLIName`, never a literal. Auto-detection tries each vendor's CLI on PATH in that order.
+- **LLM integration** (`llm.go`): Compress and inspect shell out to vendor CLIs (claude, codex, cursor, copilot) via `queryLLM()`; OpenCode is deliberately absent, since no argument turns its tools off. `llmVendors` holds each vendor's one-shot arguments; the binary is the vendor adapter's `CLIName`, never a literal. Auto-detection tries each vendor's CLI on PATH in that order.
 - **Signal scanning** (`inspect.go`): Discovers project files by category (build, test, CI, lint, config) to provide context for LLM analysis.
 - **Backup system** (`compress.go`): Backups are stored in `~/.ynd/backups/` mirroring the absolute file path. Override with `YND_BACKUP_DIR` env var (used in tests).
 - **Vendor-aware output** (`inspect.go`): Inspect writes artifacts to `.{vendor}/` by default (e.g., `.claude/skills/`). Override with `-o`. Discovery searches both project root and all vendor dirs.
@@ -342,7 +344,7 @@ func (c Chain) Run(dir string) ([]string, error)  // returns descriptions of app
 
 ### Vendor Adapters
 
-To add a new vendor, create a single file in `internal/vendor/` that implements the `Adapter` interface and self-registers via `init()`. No other wiring needed - rebuild and the vendor is available.
+Each vendor is an adapter, `internal/vendor/<name>.go`, that implements the `Adapter` interface and self-registers via `init()`. The adapter file is not the whole job. A new vendor also declares its hook events, its hook timeout field (or why it has none), its session-start context and its workspace flag (or why it has none), adds itself to the per-vendor tables in `internal/vendor/` that read those declarations, and needs the schema, the Docker image, the parity checks, tests and the docs that list vendors. The [`add-vendor-adapter`](../.claude/skills/add-vendor-adapter/SKILL.md) skill is the checklist for all of it; this section covers only the interface and the two launch patterns.
 
 **Interface** (`internal/vendor/adapter.go`):
 
@@ -362,7 +364,7 @@ type Adapter interface {
 	LaunchWithInitialPrompt(configPath string, prompt string, extraArgs []string) error
 	SupportsResume() bool
 	ResolveLastSession(cwd string, notBefore time.Time) (string, error)
-	LaunchResume(configPath string, sessionID string, extraArgs []string) error
+	LaunchResume(configPath string, sessionID string, prompt string, interactive bool, extraArgs []string) error
 	GenerateSystemPrompt(content []byte) map[string][]byte
 	ApplyRuntimeInstructions(runDir, text string) ([]string, error)
 	GenerateHookConfig(hooks map[string][]plugin.HookEntry) (map[string][]byte, error)
@@ -373,13 +375,16 @@ type Adapter interface {
 	SupportsExportDelegates() bool
 	MarketplaceManifestDir() string
 	GenerateMarketplaceIndex(cfg MarketplaceIndexConfig, plugins []MarketplacePluginInfo) ([]byte, error)
+	AgentPluginLayout() AgentPluginLayout
 }
 ```
 
-**25 methods.** Regenerated from `internal/vendor/adapter.go`; that
-declaration is the only authority. This copy has drifted before (it read 10,
-11 and 18 methods in three different places while the interface had 24), which
-hid the entire resume subsystem from anyone writing a new adapter.
+**26 methods.** Regenerated from `internal/vendor/adapter.go`; that
+declaration is the only authority. This copy has drifted before: it read 10,
+11 and 18 methods in three different places while the interface had 24, which
+hid the entire resume subsystem from anyone writing a new adapter, and later
+read 25, without `AgentPluginLayout` and with an old `LaunchResume`
+signature, while the interface had 26.
 
 **Consumer-side narrow interfaces.** Packages that consume adapters define their own interfaces covering only the methods they need:
 
@@ -419,7 +424,7 @@ func launchMyVendor(configPath string, extraArgs []string) error {
 }
 ```
 
-The `init()` function registers the adapter automatically via Go's init mechanism. See `internal/vendor/claude.go`, `codex.go`, `copilot.go`, and `cursor.go` for working examples.
+The `init()` function registers the adapter automatically via Go's init mechanism. See `internal/vendor/claude.go`, `codex.go`, `copilot.go`, `cursor.go` and `opencode.go` for working examples.
 
 ### Resolver
 
@@ -683,7 +688,7 @@ are applied with Terraform. Change them there, in a pull request, not in the set
 1. Fork the repo
 2. Create a feature branch
 3. Make your changes
-4. Run `make check` (format, lint, test, build)
+4. Run `make check` (format, lint, test, build and the artifact checks)
 5. Submit a pull request
 
 All tests must pass. New features should include tests. Keep the code simple - this is a tool for developers, not a framework.

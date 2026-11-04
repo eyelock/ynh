@@ -63,6 +63,20 @@ Re-run `make install` after any code change you want to test.
 | Claude no-symlinks | [Symlinks — Claude doesn't need them](vendors-and-symlinks.md#symlinks-claude-doesn-t-need-them) |
 | Prune orphans | [Prune orphaned installations](vendors-and-symlinks.md#prune-orphaned-installations) |
 
+### OpenCode (real CLI, manual only)
+
+These need a real OpenCode 2.x install (`brew install anomalyco/tap/opencode-v2`), so the eval suite stubs `opencode` and does not run them. Use a throwaway harness under `/tmp/` that carries a skill, an agent, a rule and a stdio MCP server, and clean it up afterwards. The free model `-m opencode/nemotron-3-ultra-free` needs no login, and pinning `-m` matters because the free list changes.
+
+| Test | What to do and what to expect |
+|---|---|
+| Version gate | With OpenCode 1.x first on PATH, `ynh run <harness> -v opencode` refuses with a message naming the version found and `brew install anomalyco/tap/opencode-v2`. With 2.x it launches |
+| Skills, agents and rules load | `ynh run <harness> -v opencode -m opencode/nemotron-3-ultra-free -- "<prompt>"` (flags ynh does not know pass through to OpenCode): the model can load the bundle skill through its `skill` tool, `--agent <name>` finds the bundle agent, and an instruction that only the harness's rule carries is followed (rules are composed into `.opencode/AGENTS.md`) |
+| Blocking `before_tool` hook | Declare a `before_tool` hook with matcher `Bash` and a command that prints a reason to stderr and exits 2. Ask the model to run a shell command: the tool does not run and the model sees the reason as the tool error. A matcher of `Edit` must not fire on a shell call |
+| MCP server visible | Declare a stdio MCP server in the harness. Ask the model to call one of its tools: it connects and the tool is callable. With no `tools:` list it is reached through Code Mode, so the model calls it from inside `execute`; for an agent whose `tools:` list names it (`mcp__<server>__<tool>`), Code Mode is off and it is an ordinary tool. Add a `before_tool` hook with the matcher `mcp__<server>__<tool>` that exits 2: in both cases the call is blocked with the hook's message and the server never receives it |
+| Resume | Run a turn, then `ynh run <harness> -v opencode --resume`: OpenCode continues the last session with `-c`, with no picker. ynh cannot look a session id up itself because OpenCode keeps sessions in SQLite, as with Codex, so `--resume` always means continue-last; `--resume=<id>` resumes that id with `-s` |
+| Preview matches | `ynd preview <harness> -v opencode` lists `.opencode/opencode.json`, `.opencode/plugins/ynh-hooks.ts`, `.opencode/agents/`, `.opencode/rules/`, `.opencode/skills/` and the root `AGENTS.md`; the composed `.opencode/AGENTS.md` appears only in the run directory after launch |
+| Agent backend | `ynh agent run --backend opencode` runs a loop turn. An effort level is refused (select a variant with `--model provider/model#variant`), and auto-approve accepts `all` only |
+
 ### Composition
 
 | Test | Tutorial step |
@@ -360,6 +374,17 @@ Requires Docker installed and running.
 | Aggregate | [Aggregate](shadow-mode.md#aggregate) |
 | Summary | [Summary](shadow-mode.md#summary) |
 
+### Composing Tools
+
+| Test | Tutorial step |
+|---|---|
+| Preview shows included servers with provenance, and the unset-variable error | [Preview what the root gets](composing-tools.md#preview-what-the-root-gets) |
+| Root override, conflict error, include cycle | [The root wins, conflicts are errors, cycles resolve](composing-tools.md#the-root-wins-conflicts-are-errors-cycles-resolve) |
+| Launch with only the harness's servers | [Run with only the harness's servers](composing-tools.md#run-with-only-the-harness-s-servers) |
+| Select a profile or focus of an include as `namespace:name` | [Select a profile or a focus from an include](composing-tools.md#select-a-profile-or-a-focus-from-an-include) |
+| Ambiguous namespace, settled by an `as` alias | [Two includes with one name](composing-tools.md#two-includes-with-one-name) |
+| Include hook consent, script placement | [Turn the hook on](composing-tools.md#turn-the-hook-on) |
+
 ---
 
 ## Edge Cases
@@ -451,7 +476,7 @@ mkdir -p repo/.agents/harness
 echo '{"$schema":"https://eyelock.github.io/ynh/schema/plugin.schema.json","name":"edge","version":"0.1.0"}' > repo/.agents/harness/plugin.json
 
 ynd export /tmp/ynh-edge/e7/repo -v fakevend
-# Expected: Error: unknown vendor "fakevend" (available: [claude codex copilot cursor])
+# Expected: Error: unknown vendor "fakevend" (available: [claude codex copilot cursor opencode])
 
 cd /
 rm -rf /tmp/ynh-edge/e7
@@ -637,7 +662,7 @@ cat > some-harness/.agents/harness/plugin.json << 'EOF'
 EOF
 
 ynd preview /tmp/ynh-edge/e19/some-harness -v claude --focus review --profile ci
-# Expected (exit 1): Error: cannot use --focus and --profile together
+# Expected (exit 1): Error: cannot use --focus and --profile together (focus includes a profile)
 
 cd /
 rm -rf /tmp/ynh-edge/e19
@@ -823,7 +848,8 @@ ynh run -v ollama/codex
 # Expected: Error: backend "ollama" has no config for vendor "codex" (add backends.ollama.vendors.codex to ~/.ynh/config.json)
 
 ynh vendors --format json | jq '.[] | select(.name=="ollama/claude")'
-# Expected: a row present (name, display_name, cli, config_dir, available, supports_initial_prompt).
+# Expected: a row present (name, display_name, cli, config_dir, available, supports_initial_prompt,
+# supports_resume).
 # No live Ollama server is required for this check: model discovery is best-effort — an
 # unreachable/unconfigured-type backend falls back to the bare "<backend>/<vendor>" row
 # instead of erroring the whole `ynh vendors` listing.

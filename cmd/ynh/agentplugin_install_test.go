@@ -69,7 +69,7 @@ func TestCmdInstall_AgentPluginPointerForm(t *testing.T) {
 	}
 
 	var info bytes.Buffer
-	if err := printInfoJSON(&info, io.Discard, "local/portable", false); err != nil {
+	if err := printInfoJSON(&info, io.Discard, "local/portable", nil, "", false); err != nil {
 		t.Fatalf("printInfoJSON: %v", err)
 	}
 	var env struct {

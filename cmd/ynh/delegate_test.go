@@ -356,3 +356,50 @@ func TestCmdDelegateUpdate_FromPath(t *testing.T) {
 		t.Errorf("unexpected delegates after from-path update: %+v", dels)
 	}
 }
+
+func TestCmdDelegateAdd_ProfileAndFocus(t *testing.T) {
+	for _, tc := range []struct {
+		flag string
+		get  func(plugin.DelegateMeta) string
+	}{
+		{"--profile", func(d plugin.DelegateMeta) string { return d.Profile }},
+		{"--focus", func(d plugin.DelegateMeta) string { return d.Focus }},
+	} {
+		dir := t.TempDir()
+		writeDelegateTestHarness(t, dir, "h")
+		var buf bytes.Buffer
+		if err := cmdDelegateTo([]string{"add", dir, "github.com/example-org/agent", tc.flag, "x"}, &buf); err != nil {
+			t.Fatalf("%s: %v", tc.flag, err)
+		}
+		dels := loadTestDelegates(t, dir)
+		if len(dels) != 1 || tc.get(dels[0]) != "x" {
+			t.Errorf("%s: got %+v", tc.flag, dels)
+		}
+		if !strings.Contains(buf.String(), `"x"`) {
+			t.Errorf("%s: output should name the selection, got %q", tc.flag, buf.String())
+		}
+	}
+}
+
+func TestCmdDelegateAdd_BothProfileAndFocus(t *testing.T) {
+	dir := t.TempDir()
+	writeDelegateTestHarness(t, dir, "h")
+	var buf bytes.Buffer
+	err := cmdDelegateTo([]string{"add", dir, "github.com/example-org/agent", "--profile", "p", "--focus", "f"}, &buf)
+	if err == nil || !strings.Contains(err.Error(), "names both profile") {
+		t.Fatalf("expected both-named error, got: %v", err)
+	}
+	if got := loadTestDelegates(t, dir); len(got) != 0 {
+		t.Errorf("nothing should be written, got %+v", got)
+	}
+}
+
+func TestCmdDelegateAdd_SelectionFlagNeedsValue(t *testing.T) {
+	for _, f := range []string{"--profile", "--focus"} {
+		var buf bytes.Buffer
+		err := cmdDelegateTo([]string{"add", "h", "u", f}, &buf)
+		if err == nil || !strings.Contains(err.Error(), f+" requires a value") {
+			t.Errorf("%s: got %v", f, err)
+		}
+	}
+}

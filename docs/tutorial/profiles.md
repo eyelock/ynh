@@ -155,7 +155,7 @@ what hooks and MCP servers are configured?
 
 The `ci` profile's `before_tool` hook replaces the base, and the `ci-db` MCP server is added. The base `after_tool` hook is inherited since the profile doesn't declare it.
 
-> **Note:** These servers load alongside your own MCP servers (user config, claude.ai connectors). ynh does not isolate them yet (tracked in #548).
+> **Note:** These servers load alongside your own MCP servers (user config, claude.ai connectors). To run with only the harness's servers, set `mcp_isolation` in the manifest (a profile may set it too) or pass `--isolated-mcp`: see [Running with only the harness's servers](../mcp.md#running-with-only-the-harness-s-servers).
 
 ## Try --profile nonexistent
 
@@ -206,7 +206,26 @@ Compare base vs profile output across vendors:
 ynd diff /tmp/ynh-tutorial/profile-harness claude cursor --profile ci
 ```
 
-Expected output shows the vendor-specific differences with the `ci` profile applied to both:
+Expected output starts with a warning on stderr, because the `ci` profile's `Bash` matcher is written to Cursor as-is and Cursor matches its own tool types instead (see [Hooks: Matchers](../hooks.md#matchers)), then the comparison:
+
+```
+  warning: hook matcher "Bash" on before_tool is written to Cursor as-is, but Cursor matches tool types such as Shell, Read and Write, so a Claude tool name like Bash will not match
+=== claude vs cursor ===
+Only in claude:
+  .claude/.mcp.json
+  .claude/hooks/hooks.json
+Only in cursor:
+  .cursor/hooks.json
+  .cursor/mcp.json
+Same content, vendor-specific rendering:
+  .claude/rules/safety.md ↔ .cursor/rules/safety.mdc
+Identical:
+  .claude-plugin/plugin.json
+  .claude/skills/deploy/SKILL.md
+  CLAUDE.md
+```
+
+The differences are vendor-specific, with the `ci` profile applied to both:
 - Claude: hooks in `.claude/hooks/hooks.json`, MCP in `.claude/.mcp.json`
 - Cursor: hooks in `.cursor/hooks.json`, MCP in `.cursor/mcp.json`
 
