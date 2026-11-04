@@ -315,7 +315,11 @@ Expected `.mcp.json` (at plugin root):
 
 Note what that means: the assembled config holds the real credential, expanded.
 The manifest is safe to commit; the assembled output is not. It belongs in the
-run directory and in `.gitignore`, never in a harness you publish.
+run directory and in `.gitignore`, never in a harness you publish. ynh writes
+it there at mode 0600, in directories at 0700. For Copilot a second copy lands
+in your project at `.github/mcp.json`, is left after the run and is not
+git-ignored, so add it to `.gitignore` yourself. `ynd preview -o <dir>` writes
+the same files at 0600 in `<dir>`; do not point it at a directory you commit.
 
 ## Compare MCP config across vendors
 

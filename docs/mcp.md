@@ -204,7 +204,7 @@ Copilot requires an explicit `"type"` field on every server (`"local"` for a `co
 }
 ```
 
-**Delivery is project-root, not plugin-dir.** Copilot does not read a plugin-bundled `.mcp.json` via `--plugin-dir` (confirmed by hand-testing), so `ynh run` projects the generated config directly into the calling project's `.github/mcp.json` instead: a file fully owned by ynh, distinct from anything the user might hand-author. `ynd export` writes the same document to `.github/mcp.json` at the plugin root, where an installed Copilot plugin reads it (a plugin loaded with `--plugin-dir` ignores it, as above; an installed plugin reads it, CONFIRMED on Copilot CLI 1.0.105). The manifest sits beside it at `.claude-plugin/plugin.json` in the plugin root, next to the exported skills, whatever other files the export holds.
+**Delivery is project-root, not plugin-dir.** Copilot does not read a plugin-bundled `.mcp.json` via `--plugin-dir` (confirmed by hand-testing), so `ynh run` projects the generated config directly into the calling project's `.github/mcp.json` instead: a file fully owned by ynh, distinct from anything the user might hand-author. That file holds the servers' `${VAR}` references already expanded, so it contains real credentials. It is written at mode 0600, but it is left in your project after the run ends and ynh does not add it to `.gitignore`, so a `git add -A` after a Copilot run can commit it. Add `.github/mcp.json` to your `.gitignore` if you do not hand-author that file, and do not commit it. `ynd export` writes the same document to `.github/mcp.json` at the plugin root, where an installed Copilot plugin reads it (a plugin loaded with `--plugin-dir` ignores it, as above; an installed plugin reads it, CONFIRMED on Copilot CLI 1.0.105). The manifest sits beside it at `.claude-plugin/plugin.json` in the plugin root, next to the exported skills, whatever other files the export holds.
 
 ### OpenCode Format
 
@@ -518,6 +518,18 @@ outcome: the server cannot run without a credential the profile has withheld.
 resolves them because the config is about to be used by this operator on this
 machine; an export is a distributable artifact, and resolving there would bake
 whoever ran the export's credentials into a bundle meant to be shared.
+
+Because a local run resolves them, the vendor MCP file it writes holds the real
+values. `ynh run`, `ynh agent run` and `ynd preview` write that file (for
+example `.mcp.json` for Codex, `.claude/.mcp.json` for Claude) into the run
+directory at mode 0600, in directories at 0700, tightening any that already
+exist, the way the `.env.ynh` paragraph above does for delegates.
+`ynd preview -o <dir>` does the same in the output directory, including over a
+0644 copy an earlier preview left there, and sets `<dir>` itself to 0700. The
+values are still in plain text, so do not point `-o` at a directory that is
+committed, shared or published. Copilot is the exception to "in the run
+directory": it also writes a copy into your project (see Delivery is
+project-root, under Copilot Format).
 
 ### What this is not
 

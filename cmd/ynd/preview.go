@@ -118,6 +118,11 @@ func cmdPreview(args []string) error {
 		if err := assembler.CopyDirDeref(tmpDir, outputDir); err != nil {
 			return fmt.Errorf("copying to output: %w", err)
 		}
+		// The copy makes directories 0755 and keeps the mode of a file already
+		// there, so write the MCP files again at 0600 in 0700 directories.
+		if err := tightenSecrets(tmpDir, outputDir, report.secrets); err != nil {
+			return fmt.Errorf("securing MCP files in output: %w", err)
+		}
 		fmt.Printf("Preview written to %s\n", outputDir)
 	} else {
 		// Print tree with file contents to stdout
@@ -253,6 +258,9 @@ type previewReport struct {
 	mcp      []harness.MCPProvenance
 	delegate []assembler.DelegateMCP
 	included []resolver.ResolveResult
+	// secrets are the generated MCP files, relative to the assembled
+	// directory, that hold expanded ${VAR} values.
+	secrets []string
 }
 
 // assembleForVendor is assembleForVendorSources without the report.
@@ -360,6 +368,7 @@ func assembleForVendorSources(srcDir string, vendorName string, sel harness.Sele
 	if expErr != nil {
 		return "", previewReport{}, expErr
 	}
+	var secretRels []string
 	if len(servers) > 0 {
 		mcpFiles, err := adapter.GenerateMCPConfig(servers)
 		if err != nil {
@@ -367,6 +376,9 @@ func assembleForVendorSources(srcDir string, vendorName string, sel harness.Sele
 		}
 		if err := vendor.WriteSecretFiles(tmpDir, mcpFiles); err != nil {
 			return "", previewReport{}, fmt.Errorf("writing MCP config: %w", err)
+		}
+		for rel := range mcpFiles {
+			secretRels = append(secretRels, rel)
 		}
 	}
 
@@ -390,7 +402,7 @@ func assembleForVendorSources(srcDir string, vendorName string, sel harness.Sele
 	}
 
 	success = true
-	return tmpDir, previewReport{mcp: mcpSources, delegate: delegateMCP, included: resolved}, nil
+	return tmpDir, previewReport{mcp: mcpSources, delegate: delegateMCP, included: resolved, secrets: secretRels}, nil
 }
 
 // writeGeneratedFiles writes a map of relative paths to file contents into baseDir.
@@ -525,4 +537,19 @@ func printTreeDir(root string, dir string, prefix string) error {
 	}
 
 	return nil
+}
+
+// tightenSecrets rewrites the named files, copied from src into dst, at 0600
+// with every directory down to them 0700, including files and directories a
+// earlier preview left at 0644 and 0755.
+func tightenSecrets(src, dst string, rels []string) error {
+	files := make(map[string][]byte, len(rels))
+	for _, rel := range rels {
+		data, err := os.ReadFile(filepath.Join(src, rel))
+		if err != nil {
+			return err
+		}
+		files[rel] = data
+	}
+	return vendor.WriteSecretFiles(dst, files)
 }
