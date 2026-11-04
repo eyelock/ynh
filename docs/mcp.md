@@ -95,7 +95,7 @@ Each server must have either `command` or `url`, not both. Validation rejects se
 | Copilot | `.github/mcp.json` (project root) | JSON with `mcpServers` key, each server requires an explicit `"type": "local"|"http"` field |
 | OpenCode | `.opencode/opencode.json` (in the `OPENCODE_CONFIG_DIR` bundle) | JSON with servers under `mcp.servers`; `"type": "local"` with `command` as an array, or `"type": "remote"` with `url` |
 
-Codex is not listed here: in v0.16.0 ynh does not deliver MCP servers to a Codex session (see [Known gaps](vendors.md#known-gaps-in-v0-16-0)).
+Codex is not listed here: in v0.16.0 ynh does not deliver MCP servers to a Codex session (see [Known gaps](vendors.md#known-gaps)).
 
 Claude, Cursor and Copilot read MCP servers from a different file depending on how the harness reaches them, and ynh writes each file only where it is read:
 

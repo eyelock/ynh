@@ -18,7 +18,7 @@ opencode opencode .opencode
 
 If `~/.ynh/config.json` declares any [local model backends](#local-model-backends), `ynh vendors` (including `--format json`) also lists one extra row per configured `<backend>/<vendor>` pair — the exact spec string `-v` accepts — so a caller can discover what's launchable on this machine without parsing config.json itself.
 
-## Known gaps in v0.16.0
+## Known gaps
 
 ynh claims more than each vendor yet gets. In v0.16.0:
 

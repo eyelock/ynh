@@ -6,7 +6,8 @@ can then follow a run from the step that started it, through the run, into the
 vendor CLI and the sensors.
 
 It is the only ynh command that does. Every other command launches the vendor
-CLI and gets out of the way, so none lives long enough to report.
+CLI and, on Claude, Copilot and OpenCode, replaces itself with it, so none lives long enough to report.
+On Codex and Cursor ynh stays the parent process while the vendor CLI runs.
 
 Telemetry is off unless something gives it a destination, and it never changes
 a run: the result, the output and the exit code are the same with it and
