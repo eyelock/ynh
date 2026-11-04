@@ -47,9 +47,14 @@ type HarnessJSON struct {
 	// grants nothing: the operator's allow-list or `ynh trust accept` does
 	// (docs/workspace.md). Relative entries resolve against the harness's own
 	// directory.
-	Workspace []string           `json:"workspace,omitempty"`
-	Profiles  map[string]Profile `json:"profiles,omitempty"`
-	Focuses   map[string]Focus   `json:"focuses,omitempty"`
+	Workspace []string `json:"workspace,omitempty"`
+	// Labels are run labels (key to value) a run of this harness carries,
+	// when it is the root harness. Labels of included harnesses are ignored.
+	// Not keywords: a label is exported on the run's telemetry as
+	// ynh.label.<key> (docs/telemetry.md).
+	Labels   map[string]string  `json:"labels,omitempty"`
+	Profiles map[string]Profile `json:"profiles,omitempty"`
+	Focuses  map[string]Focus   `json:"focuses,omitempty"`
 	// LaunchFocus names the focus a bare `ynh run` wakes with: no --focus and
 	// no prompt. It applies to nothing else (docs/focus.md, "Launch focus").
 	LaunchFocus string            `json:"launch_focus,omitempty"`

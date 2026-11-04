@@ -163,6 +163,15 @@ func cmdRun(args []string) error {
 	// travel through the same -v flag / YNH_VENDOR / default_vendor
 	// precedence chain, so a local model backend is just another vendor
 	// spec, not a separate flag.
+	// The run's labels, refused here when they break the rule. They go to
+	// every process this run starts as YNH_LABELS. `ynh run` writes no record
+	// of its own yet, so nothing else carries them (docs/telemetry.md).
+	if action == "" {
+		if _, err := resolveRunLabels(ra.Labels, loaded); err != nil {
+			return err
+		}
+	}
+
 	spec, err := resolveVendor(ra.VendorFlag, p, cfg)
 	if err != nil {
 		return err
@@ -315,14 +324,9 @@ func cmdRun(args []string) error {
 			if err != nil {
 				return fmt.Errorf("generating MCP config: %w", err)
 			}
-			for relPath, content := range mcpFiles {
-				absPath := filepath.Join(runDir, relPath)
-				if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
-					return fmt.Errorf("creating MCP config dir: %w", err)
-				}
-				if err := os.WriteFile(absPath, content, 0o644); err != nil {
-					return fmt.Errorf("writing MCP config %s: %w", relPath, err)
-				}
+			// The servers are expanded, so these files hold secrets: 0600 in 0700.
+			if err := vendor.WriteSecretFiles(runDir, mcpFiles); err != nil {
+				return fmt.Errorf("writing MCP config: %w", err)
 			}
 		}
 
@@ -836,6 +840,7 @@ type runArgs struct {
 	Resume       bool     // --resume: continue a previous session
 	ResumeID     string   // --resume=<id>: continue one specific session
 	NoWorkspace  bool     // --no-workspace: grant none of the harness's workspace folders; not forwarded
+	Labels       []string // --label key:value, repeatable; key: removes a label; not forwarded
 }
 
 // ynhValueFlags are ynh's own run flags that take the next argument as their
@@ -843,6 +848,7 @@ type runArgs struct {
 var ynhValueFlags = map[string]bool{
 	"-v": true, "--profile": true, "--focus": true,
 	"--harness-file": true, "--session-name": true, "--instructions": true,
+	"--label": true,
 }
 
 func parseRunArgs(args []string) runArgs {
@@ -919,6 +925,11 @@ func parseRunArgs(args []string) runArgs {
 			ra.ResumeID = strings.TrimPrefix(flagArgs[i], "--resume=")
 		case flagArgs[i] == "--no-workspace":
 			ra.NoWorkspace = true
+		case flagArgs[i] == "--label" && i+1 < len(flagArgs):
+			ra.Labels = append(ra.Labels, flagArgs[i+1])
+			i++
+		case strings.HasPrefix(flagArgs[i], "--label="):
+			ra.Labels = append(ra.Labels, strings.TrimPrefix(flagArgs[i], "--label="))
 		case flagArgs[i] == "--install":
 			ra.Action = "install"
 		case flagArgs[i] == "--clean":

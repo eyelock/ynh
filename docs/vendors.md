@@ -18,6 +18,46 @@ opencode opencode .opencode
 
 If `~/.ynh/config.json` declares any [local model backends](#local-model-backends), `ynh vendors` (including `--format json`) also lists one extra row per configured `<backend>/<vendor>` pair — the exact spec string `-v` accepts — so a caller can discover what's launchable on this machine without parsing config.json itself.
 
+## Known gaps
+
+ynh claims more than each vendor yet gets. In v0.16.0:
+
+- **Codex** does not yet receive instructions, MCP servers, hooks, session context, rules or commands. Skills, agents, focuses and profiles do. Resume fails when the harness asks for workspace folders. Under `ynh run`, Codex starts in the run directory without `-C`, so the project's own `AGENTS.md` is never read.
+- **Rules** do not reach Claude Code, Codex or Copilot.
+- **OpenCode**: agents and delegates cannot run as subagents, `on_session_start` does not fire, `on_session_end` cannot fire (OpenCode has no such event, a vendor limit), session context is not injected, and workspace folders are not granted. `ynd export -v opencode` drops delegates silently.
+- **Cursor**: workspace folders are not granted, and print mode skips `before_prompt` and `on_stop`.
+- **Delegates** carry only their instructions on Codex, Cursor and Copilot. On Claude Code a delegate also carries its MCP servers, not its hooks or workspace. A delegate does not run on OpenCode. "A full harness" holds for includes, not yet for delegates.
+- **Resume**: Cursor and Copilot refuse a prompt on resume.
+- **Telemetry**: `ynh run` emits none on any vendor; only `ynh agent run` does.
+- **Project instructions** (the project's own `AGENTS.md` or `CLAUDE.md` under `ynh run`) are unverified on every vendor except Codex, where they are not read.
+
+These are fixed in v0.17.0 (parity) and later, except what a vendor cannot do. See [ynh #679](https://github.com/eyelock/ynh/issues/679).
+
+## Feature Support
+
+What each vendor receives from a harness in v0.16.0, from the vendor parity audit (live runs of every vendor CLI against ynh develop, 2026-11). **Y** works, **N** does not yet work (ynh can fix it), **X** the vendor cannot, **U** unverified.
+
+| Feature | Claude Code | Codex | Cursor | Copilot CLI | OpenCode |
+|---|---|---|---|---|---|
+| Instructions | Y | N | Y | Y | Y |
+| Project instructions under `ynh run` | U | N | U | U | U |
+| Skills | Y | Y | Y | Y | Y |
+| Agents | Y | Y | Y | Y | N |
+| Rules | N | N | Y | N | Y |
+| Commands | Y | N | Y | Y | U |
+| MCP servers | Y | N | Y | Y | Y |
+| Hooks | Y | N | X | Y | N |
+| Session context | Y | N | Y | Y | N |
+| Profiles | Y | Y | Y | Y | Y |
+| Focuses, includes, sensors | Y | Y | Y | Y | Y |
+| Workspace folders | Y | Y | N | Y | N |
+| `delegates_to` | N | N | N | N | N |
+| Resume | Y | N | U | U | Y |
+| `ynd export` | Y | Y | Y | Y | N |
+| Telemetry from `ynh run` | N | N | N | N | N |
+
+Notes: Cursor print mode skips `before_prompt` and `on_stop`. OpenCode has no `on_session_end` event. Codex commands should ship as skills. Cursor and Copilot refuse a prompt on resume. OpenCode `ynd export` drops delegates silently. Only `ynh agent run` emits telemetry.
+
 ## Launch Strategies
 
 Each vendor gets the strategy that matches its capabilities:
@@ -186,7 +226,7 @@ These come from Ollama's own docs, not ynh:
 
 **Cursor Agent** - Full interactive and non-interactive support. Uses symlink-based artifact installation. Requires `agent` CLI installed (`curl https://cursor.com/install -fsS | bash`). Uses `-p` for non-interactive prompts. See [cursor.com/cli](https://cursor.com/cli).
 
-**GitHub Copilot CLI** - Full interactive and non-interactive support. Uses `--plugin-dir` for artifact loading, like Claude. Requires `copilot` CLI installed. Non-interactive runs need `--allow-all-tools` (added automatically). Harness instructions and MCP servers are projected into the calling project's `.github/instructions/ynh-harness.instructions.md` and `.github/mcp.json`, because Copilot doesn't read plugin-bundled `AGENTS.md`/`.mcp.json` via `--plugin-dir`. The instructions file gets one frontmatter block, `applyTo: "**/*"` so it is always on, followed by any fields of the harness instructions' own frontmatter except `applyTo`. **Hooks** are written into the `--plugin-dir` plugin (`.copilot/hooks/hooks.json`), not into your repository, and fire in an untrusted folder (verified on Copilot CLI 1.0.105). See [Hooks: Copilot format and trust](hooks.md#copilot-format-and-trust). See [github.com/features/copilot/cli](https://github.com/features/copilot/cli).
+**GitHub Copilot CLI** - Full interactive and non-interactive support. Uses `--plugin-dir` for artifact loading, like Claude. Requires `copilot` CLI installed. Non-interactive runs need `--allow-all-tools` (added automatically). Harness instructions are projected into the calling project's `.github/instructions/ynh-harness.instructions.md`, because Copilot doesn't read plugin-bundled `AGENTS.md` via `--plugin-dir`; that file is left behind after the run and holds no secrets. MCP servers are not projected: Copilot doesn't read a plugin-bundled `.mcp.json` either, so ynh passes the run directory's 0600 `.copilot/.mcp.json` with `--additional-mcp-config @<file>`, which keeps the expanded credentials out of your project. The instructions file gets one frontmatter block, `applyTo: "**/*"` so it is always on, followed by any fields of the harness instructions' own frontmatter except `applyTo`. **Hooks** are written into the `--plugin-dir` plugin (`.copilot/hooks/hooks.json`), not into your repository, and fire in an untrusted folder (verified on Copilot CLI 1.0.105). See [Hooks: Copilot format and trust](hooks.md#copilot-format-and-trust). See [github.com/features/copilot/cli](https://github.com/features/copilot/cli).
 
 **OpenCode** - Full interactive and non-interactive support, for **OpenCode 2.x only**; 1.x is refused with a clear message (the two differ in launch model, config schema and plugin API, and both install an `opencode` binary). Install 2.x with `brew install anomalyco/tap/opencode-v2`. OpenCode 2 runs every command through a shared background service that ignores the client's environment, so ynh launches `opencode --standalone` with `OPENCODE_CONFIG_DIR` pointing at the run directory's `.opencode/`; no symlinks. Skills load from `skills/`. Agents load from `agents/`, with their frontmatter translated: OpenCode silently drops an agent that has a comma-string `tools:`, a bare model alias such as `sonnet`, or a `color:`, so ynh keeps `description`, `mode`, `permissions` and a `provider/model` model, and Claude `tools:` become deny-by-default permissions (an agent whose `permissions:` is written inline as well is refused at assembly, as its tool lists could not be enforced; write `permissions:` as a block list instead). Commands go to `commands/`; whether a bundle slash command expands under `opencode run` is unconfirmed. OpenCode 2 reads `AGENTS.md` only (its `instructions` config key is accepted but ignored) and has no concept of rules, so ynh composes `.opencode/AGENTS.md` at launch from the harness instructions, the rules and the runtime context. MCP servers go in `.opencode/opencode.json` under `mcp.servers`; by default OpenCode reaches MCP tools through its Code Mode, so the model calls them from inside one `execute` tool; an agent with a Claude `tools:` list may not use `execute`, so Code Mode is off for it and the MCP tools it is granted are ordinary tools. **Hooks** are supported through a generated plugin, `.opencode/plugins/ynh-hooks.ts`, because OpenCode 2 has no declarative hooks; see [Hooks](hooks.md#opencode-hooks-are-a-generated-plugin) for the event mapping and caveats. Resume with `-s <id>` or `-c` works, but ynh cannot pin the session itself because OpenCode keeps sessions in SQLite, so it is the same as Codex. There is no plugin manifest and no marketplace format, and OpenCode does not read Agent Plugins packages: `ynd export -v opencode` writes the run-directory layout with no manifest (see [Export Output by Vendor](#export-output-by-vendor)), and `ynd marketplace build` adds no OpenCode manifest or index, only its `.opencode/` MCP and hooks files when the harness has them. For `ynh agent run --backend opencode`, effort is refused (select a variant with `--model provider/model#variant`) and auto-approve accepts `all` only. OpenCode is not a [`ynd compress`/`ynd inspect`](ynd.md) LLM vendor: it has no argument that turns its tools off. The `opencode/nemotron-3-ultra-free` model needs no login, which makes it handy for a smoke test. See [opencode.ai/v2/docs](https://opencode.ai/v2/docs).
 

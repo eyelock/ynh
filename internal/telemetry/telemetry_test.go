@@ -641,3 +641,180 @@ func TestSetup_HungEndpointBoundsTheWholeRun(t *testing.T) {
 		t.Errorf("flush and shutdown took %v, want about %v", d, FlushTimeout)
 	}
 }
+
+// A run's labels are resource attributes, ynh.label.<key>, on every record
+// ynh writes. Every operator ynh.label.* in OTEL_RESOURCE_ATTRIBUTES, under
+// a key ynh set or another, is dropped, since only ynh's were validated;
+// other operator attributes stay. The note names the keys, never the values.
+func TestLabelsAreResourceAttributes(t *testing.T) {
+	clearTelemetryEnv(t)
+	dir := filepath.Join(t.TempDir(), "spool")
+	t.Setenv("YNR_SPOOL", dir)
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "ynh.label.wheelhouse=operator,ynh.label.other=/home/me/secret,deployment.environment.name=lab")
+	var note bytes.Buffer
+	tel := Setup("1.0.0", Options{Labels: map[string]string{"wheelhouse": "ynw", "batch": "7"}}, &note)
+	run := tel.StartRun()
+	run.Finish(RunOutcomeConverged, true)
+	tel.Shutdown()
+
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("no spool files: %v", err)
+	}
+	seen := 0
+	for _, e := range entries {
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+			var req struct {
+				ResourceSpans []struct{ Resource resourceDoc }
+				ResourceLogs  []struct{ Resource resourceDoc }
+			}
+			if err := json.Unmarshal([]byte(line), &req); err != nil {
+				t.Fatal(err)
+			}
+			var resources []resourceDoc
+			for _, r := range req.ResourceSpans {
+				resources = append(resources, r.Resource)
+			}
+			for _, r := range req.ResourceLogs {
+				resources = append(resources, r.Resource)
+			}
+			for _, r := range resources {
+				seen++
+				got := r.attrs()
+				for k, want := range map[string]string{
+					"ynh.label.wheelhouse":        "ynw",
+					"ynh.label.batch":             "7",
+					"ynh.label.other":             "",
+					"deployment.environment.name": "lab",
+					"service.name":                "ynh",
+				} {
+					if got[k] != want {
+						t.Errorf("resource %s = %q, want %q", k, got[k], want)
+					}
+				}
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no resource found in the spool")
+	}
+	if n := note.String(); !strings.Contains(n, "ynh.label.other") || strings.Contains(n, "secret") {
+		t.Errorf("note = %q, want it to name the dropped keys and no value", n)
+	}
+}
+
+type resourceDoc struct {
+	Attributes []struct {
+		Key   string
+		Value struct{ StringValue string }
+	}
+}
+
+func (r resourceDoc) attrs() map[string]string {
+	m := map[string]string{}
+	for _, a := range r.Attributes {
+		m[a.Key] = a.Value.StringValue
+	}
+	return m
+}
+
+func TestLabelAttributes(t *testing.T) {
+	if got := LabelAttributes(nil); len(got) != 0 {
+		t.Errorf("no labels gave %v", got)
+	}
+	got := LabelAttributes(map[string]string{"b": "2", "a": "1"})
+	if len(got) != 2 || string(got[0].Key) != "ynh.label.a" || got[1].Value.AsString() != "2" {
+		t.Errorf("attributes = %v, want sorted ynh.label.<key>", got)
+	}
+}
+
+// The operator's ynh.label.* are removed from the process environment once,
+// at Setup, before the recheck goroutine exists, and stay removed: a spool
+// that appears mid-run activates telemetry without touching the variable, so
+// a child started in that window never sees it change, and no child ever
+// inherits an unvalidated label.
+func TestOperatorLabelsStrippedOnceAndSpoolAppearsMidRun(t *testing.T) {
+	clearTelemetryEnv(t)
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "ynh.label.other=/home/me/secret,deployment.environment.name=lab")
+	laptop := filepath.Join(os.Getenv("XDG_STATE_HOME"), "ynr", "spool", "local")
+
+	var note bytes.Buffer
+	tel := Setup("1.0.0", Options{RecheckInterval: 5 * time.Millisecond, Labels: map[string]string{"wheelhouse": "ynw"}}, &note)
+	const stripped = "deployment.environment.name=lab"
+	if got := os.Getenv("OTEL_RESOURCE_ATTRIBUTES"); got != stripped {
+		t.Fatalf("after Setup, OTEL_RESOURCE_ATTRIBUTES = %q, want %q", got, stripped)
+	}
+	if n := note.String(); !strings.Contains(n, "ynh.label.other") || strings.Contains(n, "secret") {
+		t.Errorf("note = %q, want the dropped key and no value", n)
+	}
+
+	// Poll the variable from a "child" while the spool appears and
+	// telemetry activates: it never changes.
+	stop := make(chan struct{})
+	changed := make(chan string, 1)
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			if got := os.Getenv("OTEL_RESOURCE_ATTRIBUTES"); got != stripped {
+				select {
+				case changed <- got:
+				default:
+				}
+				return
+			}
+		}
+	}()
+
+	run := tel.StartRun()
+	if err := os.MkdirAll(laptop, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for !tel.Active() {
+		if time.Now().After(deadline) {
+			t.Fatal("telemetry never started after the spool appeared")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	run.Finish("converged", true)
+	tel.Shutdown()
+	close(stop)
+
+	select {
+	case got := <-changed:
+		t.Errorf("OTEL_RESOURCE_ATTRIBUTES changed to %q while telemetry started", got)
+	default:
+	}
+	if got := os.Getenv("OTEL_RESOURCE_ATTRIBUTES"); got != stripped {
+		t.Errorf("after the run, OTEL_RESOURCE_ATTRIBUTES = %q, want %q", got, stripped)
+	}
+
+	seen := 0
+	entries, _ := os.ReadDir(laptop)
+	for _, e := range entries {
+		data, _ := os.ReadFile(filepath.Join(laptop, e.Name()))
+		for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+			if line == "" {
+				continue
+			}
+			seen++
+			if strings.Contains(line, "secret") || strings.Contains(line, "ynh.label.other") {
+				t.Errorf("an operator label reached the spool: %s", line)
+			}
+			if !strings.Contains(line, "ynh.label.wheelhouse") || !strings.Contains(line, "deployment.environment.name") {
+				t.Errorf("record lacks ynh's label or the operator's other attribute: %s", line)
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatal("nothing written to the spool")
+	}
+}

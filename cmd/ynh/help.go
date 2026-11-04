@@ -116,6 +116,9 @@ Flags:
                            a --focus prompt is not; some vendors refuse it
   --no-workspace           Grant none of the harness's requested workspace folders
                            for this run (see docs/workspace.md)
+  --label key:value        A label for the run (repeatable; key: removes one).
+                           Merged over config.json, the harness manifest and
+                           YNH_LABELS; see docs/telemetry.md
   --install                Install symlinks for the vendor in this project
   --clean                  Remove symlinks for the vendor in this project
 
@@ -145,7 +148,9 @@ List installed harnesses.
 
 Flags:
   --format text|json   Output format (default text)
-  --check-updates      Check each harness's source for newer content`,
+  --check-updates      Check each harness's source for newer content
+  --label key:value    Only harnesses whose own manifest labels include this
+                       (repeatable; every one must match)`,
 
 	"info": `ynh info <name> [flags]
 
@@ -484,6 +489,9 @@ Flags:
                               vendor's own telemetry to the spool (claude,
                               codex). Also YNH_TELEMETRY_RELAY, or
                               "telemetry_relay": true in config.json
+  --label key:value           A label for the run (repeatable; key: removes
+                              one). Merged over config.json, the harness
+                              manifest and YNH_LABELS; see docs/telemetry.md
   --format text|json          Output format (default text)`,
 
 	"image": `ynh image <name> [flags]

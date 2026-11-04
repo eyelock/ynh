@@ -86,7 +86,7 @@ func TestCmdVersion_JSONFeatures(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Every shipped name: a name is never renamed or removed once it ships.
-	for _, want := range []string{"agent-run-harness-path", "agent-run-fetches-includes", "trust-counts-composed-mcp-servers", "workspace-folders"} {
+	for _, want := range []string{"agent-run-harness-path", "agent-run-fetches-includes", "trust-counts-composed-mcp-servers", "workspace-folders", "run-labels"} {
 		if !slices.Contains(payload.Features, want) {
 			t.Errorf("features %v is missing %q", payload.Features, want)
 		}

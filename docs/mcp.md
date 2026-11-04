@@ -92,19 +92,19 @@ Each server must have either `command` or `url`, not both. Validation rejects se
 |--------|------|--------|
 | Claude Code | `.claude/.mcp.json` in a session, `mcp/claude.json` in a plugin | JSON with `mcpServers` key; remote servers carry `"type": "http"` or `"sse"` |
 | Cursor | `.cursor/mcp.json` | JSON with `mcpServers` key; no transport field, Cursor infers it |
-| Codex | `.mcp.json` | JSON with `mcpServers` key (at plugin root), same shape as Claude Code |
-| Copilot | `.github/mcp.json` (project root) | JSON with `mcpServers` key, each server requires an explicit `"type": "local"|"http"` field |
+| Copilot | `.copilot/.mcp.json` in the run directory (`.github/mcp.json` at the plugin root in an export) | JSON with `mcpServers` key, each server requires an explicit `"type": "local"|"http"` field |
 | OpenCode | `.opencode/opencode.json` (in the `OPENCODE_CONFIG_DIR` bundle) | JSON with servers under `mcp.servers`; `"type": "local"` with `command` as an array, or `"type": "remote"` with `url` |
+
+Codex is not listed here: in v0.16.0 ynh does not deliver MCP servers to a Codex session (see [Known gaps](vendors.md#known-gaps)).
 
 Claude, Cursor and Copilot read MCP servers from a different file depending on how the harness reaches them, and ynh writes each file only where it is read:
 
 | Vendor | `ynh run`, `ynd preview`, `ynh agent` (a session) | `ynd export`, `ynd marketplace build` (a plugin) |
 |--------|------|------|
 | Claude Code | `.claude/.mcp.json`: `.mcp.json` at the root of the `.claude/` plugin directory the session loads | `mcp/claude.json`, named by the `mcpServers` field of `.claude-plugin/plugin.json` ([plugin reference](https://code.claude.com/docs/en/plugins-reference)) |
-| Codex | `.mcp.json` | `.mcp.json` at the plugin root, named by the `mcpServers` field of `.codex-plugin/plugin.json` |
 | Cursor | `.cursor/mcp.json`, the only project-level path Cursor reads ([cursor.com/docs/context/mcp](https://cursor.com/docs/context/mcp)) | `mcp.json` (no dot) at the plugin root, which a Cursor plugin discovers automatically ([cursor.com/docs/reference/plugins](https://cursor.com/docs/reference/plugins)) |
 | OpenCode | `.opencode/opencode.json` in the run directory, the config bundle OpenCode launches with | `.opencode/opencode.json`, the same document; nothing loads it as a plugin, since OpenCode has no plugin manifest |
-| Copilot | `.copilot/.mcp.json` in the run directory, projected into the calling project's `.github/mcp.json` at launch (see [Copilot Format](#copilot-format)) | `.github/mcp.json` at the plugin root, a default MCP path for a Copilot plugin ([Copilot CLI plugin reference](https://docs.github.com/en/copilot/reference/cli-plugin-reference)) |
+| Copilot | `.copilot/.mcp.json` in the run directory, passed to Copilot with `--additional-mcp-config` at launch, never copied into the project (see [Copilot Format](#copilot-format)) | `.github/mcp.json` at the plugin root, a default MCP path for a Copilot plugin ([Copilot CLI plugin reference](https://docs.github.com/en/copilot/reference/cli-plugin-reference)) |
 
 The document is identical in both places; only the path differs. A manifest names a file only when the plugin carries it.
 
@@ -204,7 +204,7 @@ Copilot requires an explicit `"type"` field on every server (`"local"` for a `co
 }
 ```
 
-**Delivery is project-root, not plugin-dir.** Copilot does not read a plugin-bundled `.mcp.json` via `--plugin-dir` (confirmed by hand-testing), so `ynh run` projects the generated config directly into the calling project's `.github/mcp.json` instead: a file fully owned by ynh, distinct from anything the user might hand-author. `ynd export` writes the same document to `.github/mcp.json` at the plugin root, where an installed Copilot plugin reads it (a plugin loaded with `--plugin-dir` ignores it, as above; an installed plugin reads it, CONFIRMED on Copilot CLI 1.0.105). The manifest sits beside it at `.claude-plugin/plugin.json` in the plugin root, next to the exported skills, whatever other files the export holds.
+**Delivery is by file, outside the project, not plugin-dir.** Copilot does not read a plugin-bundled `.mcp.json` via `--plugin-dir` (confirmed by hand-testing), so `ynh run` passes the generated config, `<run dir>/.copilot/.mcp.json`, with `--additional-mcp-config @<absolute path>` (session-scoped; confirmed on Copilot CLI 1.0.105: the server starts and nothing is written into the project). ynh never writes your project's `.github/mcp.json`. That run-directory file holds the servers' `${VAR}` references already expanded, so it contains real credentials. It is written at mode 0600 in the run directory and stays there, so it cannot be committed from your project. An older ynh wrote the same expanded document to your project's `.github/mcp.json`; if a Copilot run on an older version left one, delete it and rotate the credentials in it. `ynd export` writes the same document to `.github/mcp.json` at the plugin root, where an installed Copilot plugin reads it (a plugin loaded with `--plugin-dir` ignores it, as above; an installed plugin reads it, CONFIRMED on Copilot CLI 1.0.105). The manifest sits beside it at `.claude-plugin/plugin.json` in the plugin root, next to the exported skills, whatever other files the export holds.
 
 ### OpenCode Format
 
@@ -518,6 +518,18 @@ outcome: the server cannot run without a credential the profile has withheld.
 resolves them because the config is about to be used by this operator on this
 machine; an export is a distributable artifact, and resolving there would bake
 whoever ran the export's credentials into a bundle meant to be shared.
+
+Because a local run resolves them, the vendor MCP file it writes holds the real
+values. `ynh run`, `ynh agent run` and `ynd preview` write that file (for
+example `.mcp.json` for Codex, `.claude/.mcp.json` for Claude) into the run
+directory at mode 0600, in directories at 0700, tightening any that already
+exist, the way the `.env.ynh` paragraph above does for delegates.
+`ynd preview -o <dir>` does the same in the output directory, including over a
+0644 copy an earlier preview left there, and sets `<dir>` itself to 0700. The
+values are still in plain text, so do not point `-o` at a directory that is
+committed, shared or published. Copilot's file stays in the run directory too:
+it is passed to Copilot with `--additional-mcp-config` (see Delivery under
+Copilot Format), and no copy is written into your project.
 
 ### What this is not
 
