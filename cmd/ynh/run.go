@@ -365,6 +365,16 @@ func cmdRun(args []string) error {
 			}
 		}
 
+		// Codex runs in the run directory, so it never reads the project's own
+		// AGENTS.md: compose it in after the harness's (ynh #690).
+		if adapter.Name() == "codex" {
+			if cwd, cwdErr := os.Getwd(); cwdErr == nil {
+				if _, err := vendor.ComposeProjectInstructions(runDir, cwd); err != nil {
+					return err
+				}
+			}
+		}
+
 		// Keep the legacy bare-name run path resolving for project symlinks
 		// planted before run dirs were keyed by canonical id.
 		if harnessID != "" {
