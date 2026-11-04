@@ -1748,16 +1748,10 @@ func assembleHarness(h *harness.Harness, backendName string, sel harness.Selecti
 			_ = os.RemoveAll(dir)
 			return "", nil, fmt.Errorf("generating MCP config: %w", err)
 		}
-		for relPath, data := range mcpFiles {
-			absPath := fmt.Sprintf("%s/%s", dir, relPath)
-			if mkdirErr := os.MkdirAll(dirOf(absPath), 0o755); mkdirErr != nil {
-				_ = os.RemoveAll(dir)
-				return "", nil, mkdirErr
-			}
-			if writeErr := os.WriteFile(absPath, data, 0o644); writeErr != nil {
-				_ = os.RemoveAll(dir)
-				return "", nil, writeErr
-			}
+		// The servers are expanded, so these files hold secrets: 0600 in 0700.
+		if err := vendor.WriteSecretFiles(dir, mcpFiles); err != nil {
+			_ = os.RemoveAll(dir)
+			return "", nil, err
 		}
 	}
 

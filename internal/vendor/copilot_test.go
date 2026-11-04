@@ -134,7 +134,7 @@ func TestBuildCopilotArgs_NoInstructionsFile_NoProjection(t *testing.T) {
 	}
 }
 
-func TestBuildCopilotArgs_ProjectsMCPConfig(t *testing.T) {
+func TestBuildCopilotArgs_PassesMCPConfigByFileNotIntoProject(t *testing.T) {
 	configPath := t.TempDir()
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
@@ -143,21 +143,66 @@ func TestBuildCopilotArgs_ProjectsMCPConfig(t *testing.T) {
 	if err := os.MkdirAll(mcpDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mcpContent := `{"mcpServers":{"github":{"type":"local","command":"npx","tools":["*"]}}}` + "\n"
-	if err := os.WriteFile(filepath.Join(mcpDir, ".mcp.json"), []byte(mcpContent), 0o644); err != nil {
+	const secret = "s3cret-xyz"
+	mcpContent := `{"mcpServers":{"probe":{"type":"local","command":"npx","env":{"T":"` + secret + `"},"tools":["*"]}}}` + "\n"
+	mcpPath := filepath.Join(mcpDir, ".mcp.json")
+	if err := os.WriteFile(mcpPath, []byte(mcpContent), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := buildCopilotArgs(configPath, "", nil); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := os.ReadFile(filepath.Join(projectDir, copilotProjectMCPRelPath))
+	args, err := buildCopilotArgs(configPath, "", nil)
 	if err != nil {
-		t.Fatalf("expected .github/mcp.json to be written: %v", err)
+		t.Fatal(err)
 	}
-	if string(got) != mcpContent {
-		t.Errorf("projected MCP config = %q, want %q", got, mcpContent)
+
+	want := []string{"--additional-mcp-config", "@" + mcpPath}
+	found := false
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == want[0] && args[i+1] == want[1] {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("args = %v, want %v among them", args, want)
+	}
+	for _, a := range args {
+		if strings.Contains(a, secret) {
+			t.Errorf("argument %q carries the secret", a)
+		}
+	}
+
+	// No file in the project tree holds the secret (or exists at all).
+	err = filepath.WalkDir(projectDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		data, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return rerr
+		}
+		if strings.Contains(string(data), secret) {
+			t.Errorf("%s holds the secret", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(projectDir, ".github", "mcp.json")); !os.IsNotExist(err) {
+		t.Errorf(".github/mcp.json must not be written, stat err = %v", err)
+	}
+}
+
+func TestBuildCopilotArgs_NoMCPFlagWithoutMCPConfig(t *testing.T) {
+	t.Chdir(t.TempDir())
+	args, err := buildCopilotArgs(t.TempDir(), "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range args {
+		if a == "--additional-mcp-config" {
+			t.Errorf("unexpected --additional-mcp-config in %v", args)
+		}
 	}
 }
 
@@ -299,8 +344,8 @@ func TestCopilotManifestLayouts(t *testing.T) {
 }
 
 // TestCopilotMCPConfigPaths locks where each Copilot MCP generator writes. A
-// run dir carries .copilot/.mcp.json, which buildCopilotArgs projects into the
-// project's .github/mcp.json. An exported plugin carries .github/mcp.json at
+// run dir carries .copilot/.mcp.json, which buildCopilotArgs passes to Copilot with
+// --additional-mcp-config. An exported plugin carries .github/mcp.json at
 // its root, a default MCP path for a .claude-plugin Copilot plugin, and not
 // .mcp.json, which Codex writes in a merged package (#471).
 func TestCopilotMCPConfigPaths(t *testing.T) {

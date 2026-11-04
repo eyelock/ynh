@@ -132,6 +132,9 @@ grep -rniE "all (four|five|six) |(four|five|six) vendors" \
 - [ ] `SessionBinder` (`adapter.go`) is optional: implement it only if the CLI
   takes a caller-chosen id for a new session and ynh can read its store
   (Claude alone today, for `ynh run --session-name`). No stub otherwise.
+- [ ] A run's MCP files hold expanded `${VAR}` values: write them with
+  `vendor.WriteSecretFiles` (0600 files, 0700 directories), as `ynh run`,
+  `ynh agent run` and `ynd preview` do, never with a 0644 `os.WriteFile`.
 - [ ] MCP transports: map ynh's canonical names (`internal/plugin/plugin.go`,
   `MCPType*`) to the vendor's spelling.
 - [ ] `mcpPluginRootVar` (`internal/vendor/mcpanchor.go`): add the vendor only

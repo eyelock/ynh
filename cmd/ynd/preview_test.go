@@ -728,3 +728,82 @@ func TestPreviewNotesAnIncludeCycle(t *testing.T) {
 		t.Errorf("no notes should print nothing, got %q", none.String())
 	}
 }
+
+// The output directory holds expanded MCP values, so its MCP file is 0600 and
+// the directories down to it 0700, also over a 0644 copy an earlier run left.
+func TestCmdPreviewOutputMCPFileIsPrivate(t *testing.T) {
+	srcDir := createPreviewHarness(t)
+	outputDir := filepath.Join(t.TempDir(), "preview-private")
+
+	mcpDir := filepath.Join(outputDir, ".claude")
+	if err := os.MkdirAll(mcpDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mcpPath := filepath.Join(mcpDir, ".mcp.json")
+	if err := os.WriteFile(mcpPath, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(mcpPath, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, round := range []string{"over an existing copy", "fresh run again"} {
+		if err := cmdPreview([]string{srcDir, "-v", "claude", "-o", outputDir}); err != nil {
+			t.Fatalf("%s: cmdPreview failed: %v", round, err)
+		}
+		for path, want := range map[string]os.FileMode{
+			mcpPath:   0o600,
+			mcpDir:    0o700,
+			outputDir: 0o700,
+		} {
+			info, err := os.Stat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := info.Mode().Perm(); got != want {
+				t.Errorf("%s: %s mode = %o, want %o", round, path, got, want)
+			}
+		}
+		data, _ := os.ReadFile(mcpPath)
+		if !strings.Contains(string(data), "test-server") {
+			t.Errorf("%s: .mcp.json not rewritten: %s", round, data)
+		}
+	}
+}
+
+// The MCP file is made private before the copy, not after: when the copy fails
+// partway, an MCP file an earlier run left at 0644 is already 0600 in a 0700
+// directory, so there is no window in which the expanded values are readable.
+func TestCmdPreviewOutputSecuredBeforeCopy(t *testing.T) {
+	srcDir := createPreviewHarness(t)
+	outputDir := filepath.Join(t.TempDir(), "preview-early")
+
+	mcpDir := filepath.Join(outputDir, ".claude")
+	if err := os.MkdirAll(mcpDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mcpPath := filepath.Join(mcpDir, ".mcp.json")
+	if err := os.WriteFile(mcpPath, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(mcpPath, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A directory where the preview wants a file makes the copy fail.
+	if err := os.Mkdir(filepath.Join(outputDir, "CLAUDE.md"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cmdPreview([]string{srcDir, "-v", "claude", "-o", outputDir}); err == nil {
+		t.Fatal("expected the copy to fail on the directory in the way")
+	}
+	for path, want := range map[string]os.FileMode{mcpPath: 0o600, mcpDir: 0o700, outputDir: 0o700} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode().Perm(); got != want {
+			t.Errorf("%s mode = %o after a failed copy, want %o", path, got, want)
+		}
+	}
+}
