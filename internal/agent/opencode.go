@@ -41,6 +41,10 @@ func (b *OpenCodeBackend) Start(ctx context.Context, opts StartOptions) (WorkerS
 	if err := vendor.PrepareOpenCode(opts.ConfigPath, bin); err != nil {
 		return nil, err
 	}
+	// A granted folder is a rule in each agent file; OpenCode has no flag.
+	if err := vendor.GrantOpenCodeWorkspace(opts.ConfigPath, opts.Workspace); err != nil {
+		return nil, err
+	}
 	return &openCodeSession{
 		ctx:       ctx,
 		bin:       bin,

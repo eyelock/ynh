@@ -446,7 +446,7 @@ func cmdRun(args []string) error {
 
 		// Workspace folders the harness requested and the operator granted,
 		// as the vendor's own flags, ahead of the caller's pass-through args.
-		wsArgs, wsErr := workspaceLaunchArgs(loaded, harnessID, adapter.Name(), ra.NoWorkspace, os.Stderr)
+		wsArgs, wsErr := workspaceLaunchArgs(loaded, harnessID, adapter.Name(), runDir, ra.NoWorkspace, os.Stderr)
 		if wsErr != nil {
 			return wsErr
 		}

@@ -1163,10 +1163,117 @@ func launchOpencodeArgs(configPath string, args []string) error {
 }
 
 // OpenCode 2 has no flag that grants a folder beside the project (v2.2.3
-// --help lists no add-dir equivalent), and needs none: its external_directory
-// permission, which governs paths outside the project, is allowed by default
-// (proved live: a file in a sibling folder is read with no grant). So a granted
-// folder is reachable by default and nothing is rendered.
+// --help lists no add-dir equivalent). The grant is a rule instead: its
+// external_directory permission governs paths outside the project. A build,
+// plan or mode-less agent carries `* * allow`, so it reaches every folder with
+// no grant at all (proved live), but an agent ynh translates from a `tools:`
+// list starts with `* * deny` and loses that. GrantOpenCodeWorkspace therefore
+// appends an explicit external_directory allow per granted folder to every
+// agent that has a permissions block. A global opencode.json rule does not
+// work: the agent's own rules come after it, so its deny wins (proved live
+// with `opencode debug agents`).
 var opencodeWorkspaceFlag = ""
 var opencodeWorkspaceUnsupported = ""
-var opencodeWorkspaceDefault = "OpenCode's external_directory permission allows folders outside the project by default"
+var opencodeWorkspaceDefault = "OpenCode has no flag; a granted folder is an external_directory allow rule in each agent file (GrantOpenCodeWorkspace)"
+
+// GrantOpenCodeWorkspace appends an external_directory allow rule for each of
+// dirs to every agent under <configPath>/.opencode/agents that has a block
+// `permissions:` list, after the rules already there (the last match wins).
+// An agent with no permissions inherits `* * allow` and is left alone. A rule
+// already present is not added twice. An agent whose permissions are written
+// inline cannot be appended to and is refused rather than left without the
+// grant it was promised.
+func GrantOpenCodeWorkspace(configPath string, dirs []string) error {
+	if len(dirs) == 0 {
+		return nil
+	}
+	agentsDir := filepath.Join(configPath, ".opencode", "agents")
+	files, err := os.ReadDir(agentsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("reading %s: %w", agentsDir, err)
+	}
+	for _, f := range files {
+		if f.IsDir() || !strings.HasSuffix(f.Name(), ".md") {
+			continue
+		}
+		path := filepath.Join(agentsDir, f.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", path, err)
+		}
+		out, err := grantAgentWorkspace(data, dirs)
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		if out == nil {
+			continue
+		}
+		if err := os.WriteFile(path, out, 0o644); err != nil {
+			return fmt.Errorf("writing %s: %w", path, err)
+		}
+	}
+	return nil
+}
+
+// grantAgentWorkspace returns the agent's text with the allow rules added, or
+// nil when there is nothing to change.
+func grantAgentWorkspace(data []byte, dirs []string) ([]byte, error) {
+	lines, body, ok := splitFrontmatter(data)
+	if !ok {
+		return nil, nil
+	}
+	entries := frontmatterEntries(lines)
+	var perm *frontmatterEntry
+	for i := range entries {
+		if entries[i].key == "permissions" {
+			perm = &entries[i]
+		}
+	}
+	if perm == nil {
+		return nil, nil
+	}
+	if perm.value != "" {
+		if strings.Join(strings.Fields(perm.value), "") == "[]" {
+			return nil, nil
+		}
+		return nil, errors.New("inline permissions cannot take a workspace grant")
+	}
+	indent := "  "
+	for _, l := range perm.cont {
+		if t := strings.TrimLeft(l, " \t"); strings.HasPrefix(t, "-") {
+			indent = l[:len(l)-len(t)]
+			break
+		}
+	}
+	existing := strings.Join(perm.cont, "\n")
+	var add strings.Builder
+	for _, d := range dirs {
+		r := opencodeRule{"external_directory", strings.TrimRight(d, "/") + "/**", "allow"}
+		if strings.Contains(existing, strconv.Quote(r.resource)) {
+			continue
+		}
+		add.WriteString(r.yaml(indent))
+	}
+	if add.Len() == 0 {
+		return nil, nil
+	}
+	// Insert after the permissions entry's last line, found in the original
+	// lines so comments and blank lines inside the block stay put.
+	last := -1
+	for i, l := range lines {
+		if l == perm.raw[0] {
+			last = i + len(perm.raw) - 1
+			break
+		}
+	}
+	if last < 0 {
+		return nil, nil
+	}
+	newLines := append([]string{}, lines[:last+1]...)
+	newLines = append(newLines, strings.Split(strings.TrimRight(add.String(), "\n"), "\n")...)
+	newLines = append(newLines, lines[last+1:]...)
+	return []byte("---\n" + strings.Join(newLines, "\n") + "\n---\n" + string(body)), nil
+}

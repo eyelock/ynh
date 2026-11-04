@@ -32,7 +32,7 @@ for v in "$@"; do
 	udecl=$(grep -cE '^(const |var )?[a-z]+WorkspaceUnsupported = "' "$src" || true)
 	dflt=$(sed -nE 's/^(const |var )?[a-z]+WorkspaceDefault = "([^"]*)".*/\2/p' "$src")
 	if [ -n "$dflt" ] && [ -z "$flag" ] && [ -z "$unsup" ]; then
-		echo "  ok       $v: workspace reachable by default"
+		echo "  ok       $v: workspace granted without a flag (see <x>WorkspaceDefault)"
 		continue
 	fi
 	if [ -n "$dflt" ]; then

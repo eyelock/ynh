@@ -50,13 +50,13 @@ What each vendor receives from a harness in v0.16.0, from the vendor parity audi
 | Session context | Y | N | Y | Y | N |
 | Profiles | Y | Y | Y | Y | Y |
 | Focuses, includes, sensors | Y | Y | Y | Y | Y |
-| Workspace folders | Y | Y | Y | Y | Y |
+| Workspace folders | Y | Y | U | Y | Y |
 | `delegates_to` | N | N | N | N | N |
 | Resume | Y | N | U | U | Y |
 | `ynd export` | Y | Y | Y | Y | N |
 | Telemetry from `ynh run` | N | N | N | N | N |
 
-Notes: Cursor print mode skips `before_prompt` and `on_stop`. OpenCode has no `on_session_end` event. Codex commands should ship as skills. Cursor and Copilot refuse a prompt on resume. OpenCode `ynd export` drops delegates silently. Only `ynh agent run` emits telemetry.
+Notes: Cursor receives `--add-dir` for a granted folder, but its effect is unverified: in print mode with the sandbox on, Cursor wrote to `/tmp`, `/var/tmp` and `/Users/Shared` with or without the flag. OpenCode has no flag; ynh appends an `external_directory` allow rule per folder to each agent, which a deny-by-default agent needs (live run, 2.2.3: denied without the rule, read with it). Cursor print mode skips `before_prompt` and `on_stop`. OpenCode has no `on_session_end` event. Codex commands should ship as skills. Cursor and Copilot refuse a prompt on resume. OpenCode `ynd export` drops delegates silently. Only `ynh agent run` emits telemetry.
 
 ## Launch Strategies
 

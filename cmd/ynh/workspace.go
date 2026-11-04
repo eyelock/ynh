@@ -134,14 +134,23 @@ func workspaceGrant(loaded *harness.Harness, id, vendorName, projectDir string, 
 
 // workspaceLaunchArgs is workspaceGrant rendered as the vendor's flags for
 // `ynh run`.
-func workspaceLaunchArgs(loaded *harness.Harness, id, vendorName string, noWorkspace bool, stderr io.Writer) ([]string, error) {
+func workspaceLaunchArgs(loaded *harness.Harness, id, vendorName, runDir string, noWorkspace bool, stderr io.Writer) ([]string, error) {
 	projectDir, err := os.Getwd()
 	if err != nil {
 		return nil, err
 	}
 	granted := workspaceGrant(loaded, id, vendorName, projectDir, noWorkspace, stderr)
 	args, _, err := vendor.WorkspaceArgs(vendorName, granted)
-	return args, err
+	if err != nil {
+		return nil, err
+	}
+	if vendorName == "opencode" {
+		// No flag: the grant is a rule in each agent file of the run dir.
+		if err := vendor.GrantOpenCodeWorkspace(runDir, granted); err != nil {
+			return nil, err
+		}
+	}
+	return args, nil
 }
 
 // workspaceReport is the `trust show` view of a harness's workspace request.
