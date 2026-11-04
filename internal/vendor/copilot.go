@@ -694,7 +694,16 @@ func projectCopilotMCPConfig(configPath, projectDir string) error {
 	if err != nil || len(content) == 0 {
 		return nil
 	}
-	return writeCopilotProjectFile(projectDir, copilotProjectMCPRelPath, content)
+	// The expanded servers may carry secrets, so this one file is 0600. Its
+	// directory, .github, is the project's own and keeps its mode.
+	path := filepath.Join(projectDir, copilotProjectMCPRelPath)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("creating %s: %w", filepath.Dir(copilotProjectMCPRelPath), err)
+	}
+	if err := WriteSecretFile(path, content); err != nil {
+		return fmt.Errorf("writing %s: %w", copilotProjectMCPRelPath, err)
+	}
+	return nil
 }
 
 // buildCopilotArgs constructs the argument list for the Copilot CLI and

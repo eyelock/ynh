@@ -324,14 +324,9 @@ func cmdRun(args []string) error {
 			if err != nil {
 				return fmt.Errorf("generating MCP config: %w", err)
 			}
-			for relPath, content := range mcpFiles {
-				absPath := filepath.Join(runDir, relPath)
-				if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
-					return fmt.Errorf("creating MCP config dir: %w", err)
-				}
-				if err := os.WriteFile(absPath, content, 0o644); err != nil {
-					return fmt.Errorf("writing MCP config %s: %w", relPath, err)
-				}
+			// The servers are expanded, so these files hold secrets: 0600 in 0700.
+			if err := vendor.WriteSecretFiles(runDir, mcpFiles); err != nil {
+				return fmt.Errorf("writing MCP config: %w", err)
 			}
 		}
 

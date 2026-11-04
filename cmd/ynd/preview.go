@@ -365,7 +365,7 @@ func assembleForVendorSources(srcDir string, vendorName string, sel harness.Sele
 		if err != nil {
 			return "", previewReport{}, fmt.Errorf("generating MCP config: %w", err)
 		}
-		if err := writeGeneratedFiles(tmpDir, mcpFiles); err != nil {
+		if err := vendor.WriteSecretFiles(tmpDir, mcpFiles); err != nil {
 			return "", previewReport{}, fmt.Errorf("writing MCP config: %w", err)
 		}
 	}
