@@ -84,9 +84,13 @@ func (c *Codex) LaunchWithInitialPrompt(configPath, prompt string, extraArgs []s
 	return launchCodex(configPath, args)
 }
 
-// codexAgentArgsWarned is CodexAgentArgs, printing its warnings on w.
+// codexAgentArgsWarned is CodexAgentArgs and CodexMCPArgs, printing their
+// warnings on w.
 func codexAgentArgsWarned(runDir string, w io.Writer) []string {
 	args, warnings := CodexAgentArgs(runDir)
+	mcpArgs, mcpWarnings := CodexMCPArgs(runDir)
+	args = append(args, mcpArgs...)
+	warnings = append(warnings, mcpWarnings...)
 	for _, msg := range warnings {
 		_, _ = fmt.Fprintf(w, "warning: %s\n", msg)
 	}

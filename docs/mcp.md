@@ -92,7 +92,7 @@ Each server must have either `command` or `url`, not both. Validation rejects se
 |--------|------|--------|
 | Claude Code | `.claude/.mcp.json` in a session, `mcp/claude.json` in a plugin | JSON with `mcpServers` key; remote servers carry `"type": "http"` or `"sse"` |
 | Cursor | `.cursor/mcp.json` | JSON with `mcpServers` key; no transport field, Cursor infers it |
-| Codex | `.mcp.json` | JSON with `mcpServers` key (at plugin root), same shape as Claude Code |
+| Codex | `.mcp.json` in the run directory, passed to Codex as `-c mcp_servers.<name>.*` overrides; `.mcp.json` at the plugin root in an export | JSON with `mcpServers` key (at plugin root), same shape as Claude Code |
 | Copilot | `.github/mcp.json` (project root) | JSON with `mcpServers` key, each server requires an explicit `"type": "local"|"http"` field |
 | OpenCode | `.opencode/opencode.json` (in the `OPENCODE_CONFIG_DIR` bundle) | JSON with servers under `mcp.servers`; `"type": "local"` with `command` as an array, or `"type": "remote"` with `url` |
 
@@ -101,7 +101,7 @@ Claude, Cursor and Copilot read MCP servers from a different file depending on h
 | Vendor | `ynh run`, `ynd preview`, `ynh agent` (a session) | `ynd export`, `ynd marketplace build` (a plugin) |
 |--------|------|------|
 | Claude Code | `.claude/.mcp.json`: `.mcp.json` at the root of the `.claude/` plugin directory the session loads | `mcp/claude.json`, named by the `mcpServers` field of `.claude-plugin/plugin.json` ([plugin reference](https://code.claude.com/docs/en/plugins-reference)) |
-| Codex | `.mcp.json` | `.mcp.json` at the plugin root, named by the `mcpServers` field of `.codex-plugin/plugin.json` |
+| Codex | `.mcp.json` in the run directory, which Codex does not read itself: every launch registers each server in it with `-c mcp_servers.<name>.*` overrides (see [Codex Format](#codex-format)) | `.mcp.json` at the plugin root, named by the `mcpServers` field of `.codex-plugin/plugin.json` |
 | Cursor | `.cursor/mcp.json`, the only project-level path Cursor reads ([cursor.com/docs/context/mcp](https://cursor.com/docs/context/mcp)) | `mcp.json` (no dot) at the plugin root, which a Cursor plugin discovers automatically ([cursor.com/docs/reference/plugins](https://cursor.com/docs/reference/plugins)) |
 | OpenCode | `.opencode/opencode.json` in the run directory, the config bundle OpenCode launches with | `.opencode/opencode.json`, the same document; nothing loads it as a plugin, since OpenCode has no plugin manifest |
 | Copilot | `.copilot/.mcp.json` in the run directory, projected into the calling project's `.github/mcp.json` at launch (see [Copilot Format](#copilot-format)) | `.github/mcp.json` at the plugin root, a default MCP path for a Copilot plugin ([Copilot CLI plugin reference](https://docs.github.com/en/copilot/reference/cli-plugin-reference)) |
@@ -171,7 +171,9 @@ Cursor uses `.cursor/mcp.json` in a project, or `mcp.json` at the root of an exp
 
 ### Codex Format
 
-Codex uses `.mcp.json` at the plugin root with the same JSON format as Claude:
+Codex uses `.mcp.json` at the plugin root with the same JSON format as Claude. In a run, though, Codex reads no MCP file from its working directory: it reads `mcp_servers` only from its config layers, and a project's `.codex/` layer only when the project is trusted. So `ynh run` (interactive, one-shot, with a first prompt or resumed) passes each server in the run directory's `.mcp.json` as `-c mcp_servers.<name>.command`, `.args`, `.env` and `.cwd` for a stdio server, or `.url` and `.http_headers` for a remote one. Codex treats `-c` as a config layer that is always enabled, so no trust is needed and nothing is written to your Codex config. A server whose name holds anything but letters, digits, `-` and `_` cannot be a `-c` key; the run prints a warning naming it and does not load it. Observed live on codex-cli 0.166.0 (2026-11-04, ynw-81jp.5): through `ynh run`, Codex lists the server's tool and calls it. A one-shot run still stops at Codex's own approval policy (`MCP tool call requires approval, but approval policy is never`) until you pass an approval for the tool yourself, such as `-- -c 'mcp_servers.<name>.tools.<tool>.approval_mode="approve"'`; ynh does not set one.
+
+The file, as an export carries it:
 
 ```json
 {

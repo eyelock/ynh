@@ -160,3 +160,40 @@ func TestCodexLaunchArgs_PrintWarnings(t *testing.T) {
 		t.Errorf("stderr = %q, want a warning naming the agent", w.String())
 	}
 }
+
+func TestCodexMCPArgs_LoadsEachServer(t *testing.T) {
+	runDir := t.TempDir()
+	doc := `{"mcpServers":{
+"local":{"command":"py","args":["a b","-x"],"env":{"K":"v\"q"},"cwd":"/w"},
+"remote":{"type":"http","url":"https://x/mcp","headers":{"Authorization":"t"}},
+"bad.name":{"command":"x"}}}`
+	if err := os.WriteFile(filepath.Join(runDir, ".mcp.json"), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	args, warnings := CodexMCPArgs(runDir)
+	got := strings.Join(args, "\n")
+	for _, want := range []string{
+		`mcp_servers.local.command="py"`,
+		`mcp_servers.local.args=["a b", "-x"]`,
+		`mcp_servers.local.env={"K" = "v\"q"}`,
+		`mcp_servers.local.cwd="/w"`,
+		`mcp_servers.remote.url="https://x/mcp"`,
+		`mcp_servers.remote.http_headers={"Authorization" = "t"}`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s in:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "bad.name") {
+		t.Errorf("bad name was passed:\n%s", got)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "bad.name") {
+		t.Errorf("warnings = %v", warnings)
+	}
+}
+
+func TestCodexMCPArgs_NoFile(t *testing.T) {
+	if args, w := CodexMCPArgs(t.TempDir()); args != nil || w != nil {
+		t.Errorf("got %v %v", args, w)
+	}
+}
