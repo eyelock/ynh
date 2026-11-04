@@ -68,30 +68,3 @@ func TestWriteSecretFiles_AllVendors(t *testing.T) {
 		})
 	}
 }
-
-func TestProjectCopilotMCPConfig_Mode0600(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX modes")
-	}
-	configPath, projectDir := t.TempDir(), t.TempDir()
-	if err := os.MkdirAll(filepath.Join(configPath, ".copilot"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(configPath, ".copilot", ".mcp.json"), []byte(`{"mcpServers":{}}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	// An existing 0644 file from an older ynh is tightened.
-	target := filepath.Join(projectDir, copilotProjectMCPRelPath)
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(target, []byte("old"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := projectCopilotMCPConfig(configPath, projectDir); err != nil {
-		t.Fatal(err)
-	}
-	assertMode(t, target, 0o600)
-	// The project's own .github directory keeps its mode.
-	assertMode(t, filepath.Dir(target), 0o755)
-}
