@@ -132,8 +132,8 @@ OpenCode has no concept of rules. For OpenCode ynh strips a rule's frontmatter a
 
 Claude Code, Copilot and Codex do not read the rules ynh stages for them (Claude
 Code reads rules from a project's own `.claude/rules/`, not from a plugin
-directory; Copilot has no rules; Codex has no rules directory). So under
-`ynh run` and `ynd preview`, ynh appends each rule to the instructions file the
+directory; Copilot has no rules; Codex has no rules directory). So wherever ynh
+assembles a run directory (`ynh run`, `ynh agent run`, `ynh image` and `ynd preview`), ynh appends each rule to the instructions file the
 vendor does read, as a `## Rule: <name>` section after the harness
 instructions, in file-name order:
 
