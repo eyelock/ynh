@@ -162,16 +162,18 @@ cd /tmp/ynh-tutorial/ws/project
 YNH_WORKSPACE_ROOTS=/tmp/ynh-tutorial/ws ynh run local/seat -v codex -- "hello"
 ```
 
-The Cursor CLI has no flag that adds a directory, so ynh says so and grants nothing, rather than dropping the folder silently:
+Cursor takes `--add-dir` as well:
 
-*This launches:* `agent -p hello`
+*This launches:* `agent --add-dir .../ynh-tutorial/ws/ynh -p hello`
 
 ```bash
 cd /tmp/ynh-tutorial/ws/project
 YNH_WORKSPACE_ROOTS=/tmp/ynh-tutorial/ws ynh run local/seat -v cursor -- "hello"
 ```
 
-Expected on stderr includes `warning: workspace: /tmp/ynh-tutorial/ws/ynh not granted: cursor: the Cursor CLI has no flag that adds a directory to a session`.
+Expected on stderr includes `workspace: granted /tmp/ynh-tutorial/ws/ynh`. Whether the flag changes what Cursor can reach is unverified: in print mode it wrote to sibling folders with and without it. See [the vendor table](../workspace.md#per-vendor).
+
+OpenCode has no flag. ynh instead adds an `external_directory` allow rule for each granted folder to the agents in the run directory, and prints the same `workspace: granted` line.
 
 ## Switch it off for one run
 

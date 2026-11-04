@@ -542,11 +542,8 @@ func launchCursor(configPath string, extraArgs []string) error {
 	return runChildProcess(cmd)
 }
 
-// Workspace folders: Cursor's CLI has no flag that adds a directory. Its
-// documented global options (cursor.com/docs/cli/reference/parameters) hold
-// --workspace <path>, which names the one workspace directory, and
-// `sandbox run --allow-paths`, which belongs to a different command. Neither
-// grants an extra folder to an agent session, so a requested folder is
-// refused with a warning rather than dropped.
-var cursorWorkspaceFlag = ""
-var cursorWorkspaceUnsupported = "the Cursor CLI has no flag that adds a directory to a session (--workspace names the single workspace)"
+// Workspace folders: Cursor's agent CLI (2026.10.22) takes --add-dir <path>,
+// "an additional workspace root directory", repeatable; --workspace still
+// names the single primary workspace.
+var cursorWorkspaceFlag = "--add-dir"
+var cursorWorkspaceUnsupported = ""

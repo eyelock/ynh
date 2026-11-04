@@ -68,17 +68,17 @@ Every launch prints one line per folder on stderr, in the style of the hook warn
 
 ## Per vendor
 
-Each granted folder becomes the vendor's own flag. `ynh run` and the worker that `ynh agent run` starts both use it.
+Each granted folder becomes the vendor's own flag, or needs none. `ynh run` and the worker that `ynh agent run` starts both use it.
 
 | Vendor | Flag | Notes |
 |--------|------|-------|
 | Claude Code | `--add-dir <dir>` | [CLI reference](https://code.claude.com/docs/en/cli-reference): "Add additional working directories for Claude to read and edit files." File access only: Claude Code does not discover most `.claude/` configuration from an added directory. |
 | GitHub Copilot CLI | `--add-dir <dir>` | The [command reference](https://docs.github.com/en/copilot/reference/cli-command-reference) describes `/add-dir` as allowing file access to a directory and loading its `.github/skills` and `.github/agents` as trusted configurations. **A granted folder's agent configuration is loaded as trusted**, a wider grant than file access. Treat a Copilot workspace root accordingly. |
 | OpenAI Codex | `--add-dir <dir>` | [CLI reference](https://developers.openai.com/codex/cli/reference): "Grant additional directories write access alongside the main workspace. Repeat for multiple paths." Listed as a global flag; `codex exec resume` rejects it (0.166.0), so a resume with a prompt passes the folders as `-c sandbox_workspace_write.writable_roots=[...]` instead. That key applies only under the `workspace-write` sandbox: under read-only (the `codex exec` default when nothing sets `sandbox_mode`) the grant does nothing, and ynh warns on stderr. `-c` replaces the key rather than adding to it, so ynh merges in the `writable_roots` from your `config.toml` (`$CODEX_HOME`, else `~/.codex`) and from any earlier `-c` on the key. |
-| Cursor | none | The [CLI parameters](https://cursor.com/docs/cli/reference/parameters) have no flag that adds a directory (`--workspace` names the single workspace). ynh warns, naming the vendor and the folder, and grants nothing. |
-| OpenCode | none | `opencode --help` (2.2.3) lists no flag that adds a directory; its positional `<directory>` names the single project. ynh warns, naming the vendor and the folder, and grants nothing. |
+| Cursor | `--add-dir <dir>` | `agent --help` (2026.10.22): "Add an additional workspace root directory", repeatable. `--workspace` still names the single primary workspace. **Effect unverified**: in print mode with `--sandbox enabled`, Cursor wrote to a sibling folder under `/tmp`, `/var/tmp` and `/Users/Shared` with and without the flag, so no folder was found that it cannot reach without it. Without `--force` it blocked writes both ways. |
+| OpenCode | `external_directory` rule | `opencode --help` (2.2.3) lists no flag that adds a directory. ynh appends `external_directory` allow `<dir>/**` for each granted folder to every agent in the run directory that has a permissions block (an agent with none inherits `* * allow`). Proved live with a deny-by-default agent (`* * deny`, as a `tools:` allow-list translates to): `Permission denied: external_directory` without the rule, the file read with it. A rule in `opencode.json` does not work, because the agent's own deny comes after it. A pre-assembled run directory (a `ynh image`) gets no grant: it is reused and never reassembled, so ynh leaves it unedited and reports each folder once as `not granted` on stderr. Bake the folder into the image instead. |
 
-A vendor with no equivalent is never silently dropped: `scripts/workspace-parity.sh` (run by `make check-vendor-parity`) requires every vendor adapter to declare its flag or the reason it has none.
+A vendor with no equivalent is never silently dropped: `scripts/workspace-parity.sh` (run by `make check-vendor-parity`) requires every vendor adapter to declare its flag, the reason it has none, or why it needs none.
 
 ynh already passes `--add-dir` for its own assembled directory on Claude and Copilot. The granted folders are additional `--add-dir` flags beside it.
 
