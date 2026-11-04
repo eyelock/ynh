@@ -183,7 +183,7 @@ func TestCodexMCP_LoadsEachServerWithoutSecretsOnTheCommandLine(t *testing.T) {
 		`mcp_servers.local.cwd="/w"`,
 		`mcp_servers.plain.command="py2"`,
 		`mcp_servers.remote.url="https://x/mcp"`,
-		`mcp_servers.remote.env_http_headers={"Authorization" = "YNH_MCP_HEADER_`,
+		`mcp_servers.remote.env_http_headers={"Authorization" = "YNH_MCP_HEADER_SECRET_`,
 	} {
 		if !strings.Contains(line, want) {
 			t.Errorf("missing %s in:\n%s", want, line)
@@ -236,7 +236,7 @@ func TestCodexMCP_NumberingIsDeterministic(t *testing.T) {
 	}
 	first := CodexMCP(runDir)
 	firstFile, _ := os.ReadFile(filepath.Join(runDir, ".env.ynh"))
-	wantEnv := []string{"YNH_MCP_HEADER_8=vh1", "YNH_MCP_HEADER_9=vh2", "YNH_MCP_HEADER_10=vh3", "YNH_MCP_HEADER_11=vh4"}
+	wantEnv := []string{"YNH_MCP_HEADER_SECRET_8=vh1", "YNH_MCP_HEADER_SECRET_9=vh2", "YNH_MCP_HEADER_SECRET_10=vh3", "YNH_MCP_HEADER_SECRET_11=vh4"}
 	sorted := append([]string(nil), first.Env...)
 	sort.Strings(sorted)
 	sort.Strings(wantEnv)
@@ -260,17 +260,29 @@ func TestCodexMCP_NumberingIsDeterministic(t *testing.T) {
 	}
 }
 
-func TestCodexMCP_HeaderSecretsExcludedFromShellTool(t *testing.T) {
+func TestCodexMCP_HeaderVariablesMatchCodexDefaultExcludes(t *testing.T) {
 	runDir := t.TempDir()
 	doc := `{"mcpServers":{"r":{"type":"http","url":"https://x/mcp","headers":{"Authorization":"Bearer t0ken"}}}}`
 	if err := os.WriteFile(filepath.Join(runDir, ".mcp.json"), []byte(doc), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	line := strings.Join(CodexMCP(runDir).Args, "\n")
-	if !strings.Contains(line, `shell_environment_policy.exclude=["YNH_MCP_HEADER_*"]`) {
-		t.Errorf("no shell_environment_policy exclude in:\n%s", line)
+	launch := CodexMCP(runDir)
+	got := strings.Join(launch.Args, "\n")
+	if strings.Contains(got, "shell_environment_policy.exclude") {
+		t.Errorf("user's shell_environment_policy.exclude overridden:\n%s", got)
 	}
-	if got := strings.Join(CodexMCP(t.TempDir()).Args, ""); strings.Contains(got, "shell_environment_policy") {
-		t.Errorf("exclude added without headers: %s", got)
+	if !strings.Contains(got, "shell_environment_policy.ignore_default_excludes=false") {
+		t.Errorf("Codex's default excludes not switched on:\n%s", got)
+	}
+	if g := strings.Join(CodexMCP(t.TempDir()).Args, ""); strings.Contains(g, "shell_environment_policy") {
+		t.Errorf("policy touched without headers: %s", g)
+	}
+	if len(launch.Env) != 1 {
+		t.Fatalf("env = %v", launch.Env)
+	}
+	// Codex's default policy drops names containing KEY, SECRET or TOKEN.
+	name := strings.ToUpper(strings.SplitN(launch.Env[0], "=", 2)[0])
+	if !strings.Contains(name, "SECRET") {
+		t.Errorf("%s would not be caught by Codex's default excludes", name)
 	}
 }

@@ -134,7 +134,7 @@ func CodexMCP(runDir string) CodexMCPLaunch {
 				table := make(map[string]string, len(s.Headers))
 				for _, k := range sortedStringKeys(s.Headers) {
 					v := s.Headers[k]
-					ref := fmt.Sprintf("YNH_MCP_HEADER_%d", n)
+					ref := fmt.Sprintf("YNH_MCP_HEADER_SECRET_%d", n)
 					n++
 					out.Env = append(out.Env, ref+"="+v)
 					table[k] = ref
@@ -144,13 +144,16 @@ func CodexMCP(runDir string) CodexMCPLaunch {
 		}
 	}
 	if len(out.Env) > 0 {
-		// Codex's shell tool inherits the Codex process's environment unless
-		// shell_environment_policy removes variables, so the header values
-		// would be readable by the model. Checked against codex-cli 0.166.0:
-		// without this, `env` in the tool listed YNH_MCP_HEADER_0; with it, not.
-		// The MCP client reads the variables from the process itself. This
-		// replaces any shell_environment_policy.exclude of the user's.
-		out.Args = append(out.Args, "-c", `shell_environment_policy.exclude=["YNH_MCP_HEADER_*"]`)
+		// Codex's shell tool inherits the Codex process's environment, so the
+		// header values would be readable by the model. Codex's default policy
+		// drops names containing KEY, SECRET or TOKEN, but only when
+		// ignore_default_excludes is false, and it is true unless the user
+		// sets it. Checked against codex-cli 0.166.0: renaming the variables
+		// alone left YNH_MCP_HEADER_SECRET_0 in `env`. Setting exclude would
+		// replace the user's own list, so this sets only that flag: the
+		// user's exclude stays, and the default excludes (which also drop the
+		// user's own *KEY*, *SECRET* and *TOKEN* variables) apply for the run.
+		out.Args = append(out.Args, "-c", "shell_environment_policy.ignore_default_excludes=false")
 	}
 	if len(secrets) > 0 {
 		if err := writeMCPEnvFile(absDir, secrets); err != nil {
