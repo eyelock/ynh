@@ -27,7 +27,7 @@ ynh claims more than each vendor yet gets. In v0.16.0:
 - **OpenCode**: agents and delegates cannot run as subagents, `on_session_start` does not fire, `on_session_end` cannot fire (OpenCode has no such event, a vendor limit), session context is not injected, and workspace folders are not granted. `ynd export -v opencode` drops delegates silently.
 - **Cursor**: workspace folders are not granted, and print mode skips `before_prompt` and `on_stop`.
 - **Delegates** carry only their instructions on Codex, Cursor and Copilot. On Claude Code a delegate also carries its MCP servers, not its hooks or workspace. A delegate does not run on OpenCode. "A full harness" holds for includes, not yet for delegates.
-- **Resume**: Cursor and Copilot refuse a prompt on resume.
+- **Resume**: Cursor and Copilot refuse a prompt on resume. On Codex a resume with a prompt passes workspace folders as `writable_roots`, which takes effect only under the `workspace-write` sandbox (ynh warns on stderr otherwise; ynh does not change Codex's sandbox, and `codex exec` defaults to read-only).
 - **Telemetry**: `ynh run` emits none on any vendor; only `ynh agent run` does.
 - **Project instructions** (the project's own `AGENTS.md` or `CLAUDE.md` under `ynh run`) are unverified on every vendor except Codex, where they are not read.
 
@@ -52,7 +52,7 @@ What each vendor receives from a harness in v0.16.0, from the vendor parity audi
 | Focuses, includes, sensors | Y | Y | Y | Y | Y |
 | Workspace folders | Y | Y | N | Y | N |
 | `delegates_to` | N | N | N | N | N |
-| Resume | Y | N | U | U | Y |
+| Resume | Y | Y | U | U | Y |
 | `ynd export` | Y | Y | Y | Y | N |
 | Telemetry from `ynh run` | N | N | N | N | N |
 

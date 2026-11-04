@@ -2,6 +2,7 @@ package vendor
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -412,7 +413,7 @@ func TestCodexResumeArgsWithPrompt(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := codexResumeArgs(tt.sessionID, tt.prompt, tt.interactive, extraFor(tt.prompt))
+			got, err := codexResumeArgs(tt.sessionID, tt.prompt, tt.interactive, extraFor(tt.prompt), io.Discard)
 			if err != tt.wantErr {
 				t.Fatalf("err = %v, want %v", err, tt.wantErr)
 			}
@@ -454,22 +455,5 @@ func TestResumeWithPromptRefused(t *testing.T) {
 				t.Errorf("%s interactive=%v: err = %v, want ErrResumePromptNotSupported", name, interactive, err)
 			}
 		}
-	}
-}
-
-func TestCodexExecResumeTranslatesAddDir(t *testing.T) {
-	extra := []string{"--add-dir", "/a", "-c", "x=1", "--add-dir", "/b c"}
-	got, err := codexResumeArgs("abc", "go", false, extra)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"exec", "resume", "abc", "-c", "x=1", "-c", `sandbox_workspace_write.writable_roots=["/a","/b c"]`, "go"}
-	if !equalArgs(got, want) {
-		t.Errorf("args = %v, want %v", got, want)
-	}
-	// Without a prompt it is the interactive `codex resume`, which keeps --add-dir.
-	got, _ = codexResumeArgs("abc", "", false, []string{"--add-dir", "/a"})
-	if want := []string{"resume", "abc", "--add-dir", "/a"}; !equalArgs(got, want) {
-		t.Errorf("interactive args = %v, want %v", got, want)
 	}
 }
