@@ -2,6 +2,7 @@ package vendor
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -412,7 +413,7 @@ func TestCodexResumeArgsWithPrompt(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := codexResumeArgs(tt.sessionID, tt.prompt, tt.interactive, extraFor(tt.prompt))
+			got, err := codexResumeArgs(tt.sessionID, tt.prompt, tt.interactive, extraFor(tt.prompt), io.Discard)
 			if err != tt.wantErr {
 				t.Fatalf("err = %v, want %v", err, tt.wantErr)
 			}
