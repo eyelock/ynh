@@ -492,9 +492,21 @@ func workspaceWarnings(p *harness.Harness) []string {
 // them, so both say the same thing.
 func skippedArtifactWarnings(vendorName string, adapter VendorExporter, p *harness.Harness, content []resolver.ResolvedContent) []string {
 	exportDirs := adapter.ExportArtifactDirs()
-	if exportDirs == nil {
-		return nil
+	var warnings []string
+	if exportDirs != nil {
+		warnings = skippedArtifactTypeWarnings(vendorName, adapter, exportDirs, content)
 	}
+	// A vendor with no export restriction (OpenCode) can still carry no
+	// delegates, so the delegate warning does not depend on exportDirs.
+	if len(p.DelegatesTo) > 0 && !adapter.SupportsExportDelegates() {
+		warnings = append(warnings, fmt.Sprintf("%s: skipping %d delegates (not supported)", vendorName, len(p.DelegatesTo)))
+	}
+	return warnings
+}
+
+// skippedArtifactTypeWarnings notes the artifact types the vendor's export
+// restricts itself to leave out.
+func skippedArtifactTypeWarnings(vendorName string, adapter VendorExporter, exportDirs map[string]string, content []resolver.ResolvedContent) []string {
 	skippedCounts := map[string]int{}
 	for artifactType := range adapter.ArtifactDirs() {
 		if _, ok := exportDirs[artifactType]; ok {
@@ -513,9 +525,6 @@ func skippedArtifactWarnings(vendorName string, adapter VendorExporter, p *harne
 	}
 	if len(parts) > 0 {
 		warnings = append(warnings, fmt.Sprintf("%s: skipping %s (not supported)", vendorName, joinParts(parts)))
-	}
-	if len(p.DelegatesTo) > 0 && !adapter.SupportsExportDelegates() {
-		warnings = append(warnings, fmt.Sprintf("%s: skipping %d delegates (not supported)", vendorName, len(p.DelegatesTo)))
 	}
 	return warnings
 }
