@@ -499,8 +499,9 @@ func launchCodex(configPath string, extraArgs []string) error {
 
 	// Launch as child process so ynh stays alive for signal handling.
 	// Use cmd.Dir instead of --cd for CWD control.
-	// The hooks ynh wrote run only when Codex trusts them (CodexHookTrustArgs).
-	cmd := exec.Command(codexBin, append(CodexHookTrustArgs(configPath), extraArgs...)...)
+	// The hooks ynh wrote run only when Codex trusts them; `ynh run` adds the
+	// overrides (CodexHookTrustArgs) to extraArgs when the harness is accepted.
+	cmd := exec.Command(codexBin, extraArgs...)
 	cmd.Dir = configPath
 	// The values of the servers' headers are passed in the environment, never
 	// on the command line (CodexMCP).

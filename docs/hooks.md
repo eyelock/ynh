@@ -56,9 +56,20 @@ Each vendor declares how it delivers this as `<vendor>SessionStartContext` in it
 
 Codex runs a hook only when it trusts both the project layer holding it and the hook itself, and it records neither for ynh's run directory, so before this was handled a harness's hooks (and its `on_session_start` context) were written to `.codex/hooks.json` and never ran. A project's `.codex/` layer loads only for a trusted project, and a non-managed hook runs only when `hooks.state."<key>".trusted_hash` holds the hash Codex computes for its current definition ([learn.chatgpt.com/docs/hooks](https://learn.chatgpt.com/docs/hooks)).
 
-`ynh run` now passes both for the one invocation, as `-c` overrides: the run directory as a trusted project, and the hash of each hook ynh wrote. Nothing is written to your `~/.codex/config.toml`, and your own Codex hooks keep their own trust. The hook file is ynh's, assembled from a harness you chose to run (and, if installed, accepted with `ynh trust`); Claude Code, Copilot and Cursor run a harness's hooks without asking either. The hash is Codex's own and undocumented; ynh reproduces it and a test pins it against values Codex reported. If a Codex release changes it, hooks go back to being skipped rather than run untrusted.
+`ynh run` passes both for the one invocation, as `-c` overrides: the run directory as a trusted project, and the hash of each hook ynh wrote. It does so only when the installed harness is accepted and current in `ynh trust` (the rule that gates [workspace folders](workspace.md)):
 
-This covers `ynh run` and the agent loop. A package from `ynd export` is a plugin: Codex reads its hooks only after you trust them with `/hooks`.
+| Harness | Hooks under Codex |
+|---------|-------------------|
+| Installed and accepted, unchanged since | Trusted for that run; they run |
+| Installed, `unreviewed` | Not trusted; Codex skips them |
+| Installed, `changed` since you accepted it | Not trusted; Codex skips them |
+| Run from a path (`ynh run ./dir`), which has no trust record | Not trusted; Codex skips them |
+
+When the grant is withheld, ynh prints one line on stderr saying Codex will skip the hooks, and what to run: `ynh trust accept local/<name>` (for a path run, install the harness first). A harness with no hooks needs no grant and prints nothing. Nothing refuses to run: only the hooks are withheld, as before this was handled.
+
+Nothing is written to your `~/.codex/config.toml`. The overrides set the `projects` and `hooks.state` tables for the session. Whether that replaces or merges with the entries you persisted there has not been verified, so do not rely on your own Codex hooks or other project trust surviving an `ynh run` of a harness with hooks. Trusting the run directory as a project also lets Codex load the rest of what ynh wrote under its `.codex/` (for example the agent files), and ynh is the only writer there. The hash is Codex's own and undocumented; ynh reproduces it and a test pins it against values Codex reported. If a Codex release changes it, hooks go back to being skipped rather than run untrusted.
+
+This covers `ynh run` only. `ynh agent run --backend codex` does not pass these overrides, so a harness's hooks do not fire there. A package from `ynd export` is a plugin: Codex reads its hooks only after you trust them with `/hooks`.
 
 ### on_session_end semantics
 

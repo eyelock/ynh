@@ -452,6 +452,9 @@ func cmdRun(args []string) error {
 		}
 		vendorArgs = append(wsArgs, vendorArgs...)
 
+		// Codex hook and project trust, granted only for an accepted harness.
+		vendorArgs = append(codexHookTrustLaunchArgs(loaded, harnessID, adapter.Name(), runDir, os.Stderr), vendorArgs...)
+
 		// Launch
 		if launch.Bare {
 			fmt.Fprintf(os.Stderr, "Using launch_focus %q (pass --focus or a prompt to run something else)\n", launch.Name)

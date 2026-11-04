@@ -24,11 +24,10 @@ import (
 //     against the hook's current hash"). Persisted trust is recorded in the
 //     user's ~/.codex/config.toml by the /hooks screen, never by ynh.
 //
-// The run directory is ynh's own, written from a harness the human chose to
-// run (and, for an installed one, accepted with ynh trust), so ynh grants both
-// for the one invocation with session -c overrides and persists nothing in the
-// user's Codex config. Claude, Copilot and Cursor run a harness's hooks with no
-// prompt either.
+// The run directory is ynh's own, so ynh grants both for the one invocation
+// with session -c overrides and persists nothing in the user's Codex config,
+// but only when the installed harness is accepted and current in ynh trust:
+// cmd/ynh decides that (codexHookTrustLaunchArgs) before calling this.
 //
 // The hash is Codex's own and undocumented. It was established live
 // (codex-cli 0.166.0) by comparing hooks/list's currentHash with the SHA-256 of
