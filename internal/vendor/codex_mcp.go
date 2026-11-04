@@ -45,7 +45,11 @@ type CodexMCPLaunch struct {
 //     delegate's servers.
 //   - A remote server's headers are passed with env_http_headers, which names
 //     the environment variable of the Codex process that holds each value; the
-//     values are returned in Env.
+//     values are returned in Env, and shell_environment_policy.exclude keeps
+//     them out of the environment of Codex's shell tool.
+//
+// Secrets are numbered in sorted server-name and key order, so the same file
+// gives the same numbering on every call (each call re-reads the file).
 //
 // Codex has no legacy HTTP+SSE transport, only stdio and streamable HTTP, so
 // a server declared "type": "sse" is not loaded and a warning says so. A name
@@ -106,7 +110,8 @@ func CodexMCP(runDir string) CodexMCPLaunch {
 				}
 				command, args = mcpexec.Launcher, append([]string{"mcp-exec", "--env-file", filepath.Join(absDir, mcpexec.EnvFileName), "--", s.Command}, s.Args...)
 				envTable = make(map[string]string, len(s.Env))
-				for k, v := range s.Env {
+				for _, k := range sortedStringKeys(s.Env) {
+					v := s.Env[k]
 					ref := fmt.Sprintf("YNH_MCP_%d", n)
 					n++
 					secrets[ref] = v
@@ -127,7 +132,8 @@ func CodexMCP(runDir string) CodexMCPLaunch {
 			add("url", tomlString(s.URL))
 			if len(s.Headers) > 0 {
 				table := make(map[string]string, len(s.Headers))
-				for k, v := range s.Headers {
+				for _, k := range sortedStringKeys(s.Headers) {
+					v := s.Headers[k]
 					ref := fmt.Sprintf("YNH_MCP_HEADER_%d", n)
 					n++
 					out.Env = append(out.Env, ref+"="+v)
@@ -137,6 +143,15 @@ func CodexMCP(runDir string) CodexMCPLaunch {
 			}
 		}
 	}
+	if len(out.Env) > 0 {
+		// Codex's shell tool inherits the Codex process's environment unless
+		// shell_environment_policy removes variables, so the header values
+		// would be readable by the model. Checked against codex-cli 0.166.0:
+		// without this, `env` in the tool listed YNH_MCP_HEADER_0; with it, not.
+		// The MCP client reads the variables from the process itself. This
+		// replaces any shell_environment_policy.exclude of the user's.
+		out.Args = append(out.Args, "-c", `shell_environment_policy.exclude=["YNH_MCP_HEADER_*"]`)
+	}
 	if len(secrets) > 0 {
 		if err := writeMCPEnvFile(absDir, secrets); err != nil {
 			// Without the file the wrapped servers cannot start; load none of
@@ -145,6 +160,15 @@ func CodexMCP(runDir string) CodexMCPLaunch {
 		}
 	}
 	return out
+}
+
+func sortedStringKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func mustAbs(p string) string {
