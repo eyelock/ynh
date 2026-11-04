@@ -56,6 +56,11 @@ func (c *Codex) GenerateSystemPrompt(content []byte) map[string][]byte {
 	}
 }
 
+// FoldsRulesIntoInstructions: Codex does not read the rules ynh stages in the
+// config dir, so the assembler appends them to the instructions file it does
+// read (assembler.RuleFolder).
+func (c *Codex) FoldsRulesIntoInstructions() bool { return true }
+
 func (c *Codex) NeedsSymlinks() bool { return true }
 
 func (c *Codex) Install(stagingDir string, projectDir string) ([]SymlinkEntry, error) {

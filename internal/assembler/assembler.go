@@ -26,6 +26,16 @@ type LayoutProvider interface {
 	InstructionsFile() string
 }
 
+// RuleFolder is an optional capability a LayoutProvider may implement when its
+// CLI does not read a harness's rules from the place ynh stages them (a Claude
+// Code plugin dir, Copilot's plugin dir, Codex's .codex/rules). The assembler
+// then appends each staged rule to the vendor's instructions file, which the
+// vendor does read, so the rule reaches the model. Rules are always-on there:
+// any path scoping in a rule's frontmatter is dropped with the frontmatter.
+type RuleFolder interface {
+	FoldsRulesIntoInstructions() bool
+}
+
 // ArtifactTransform rewrites a single artifact file's name and content before
 // it is written to the target directory. Used by vendors whose plugin format
 // differs from the raw source layout (e.g. Cursor's .mdc rules with frontmatter).
@@ -141,7 +151,15 @@ func assembleInto(workDir string, adapter LayoutProvider, content []resolver.Res
 	// instructions file.
 	instructionsFile := adapter.InstructionsFile()
 	if instructionsFile != "" {
-		if composed := ComposeInstructions(content); len(composed) > 0 {
+		composed := ComposeInstructions(content)
+		if rf, ok := adapter.(RuleFolder); ok && rf.FoldsRulesIntoInstructions() {
+			rules, err := foldedRules(filepath.Join(configDir, artifactDirs["rules"]))
+			if err != nil {
+				return err
+			}
+			composed = appendRules(composed, rules)
+		}
+		if len(composed) > 0 {
 			dst := filepath.Join(workDir, instructionsFile)
 			if err := os.WriteFile(dst, composed, 0o644); err != nil {
 				return fmt.Errorf("writing instructions: %w", err)
@@ -636,4 +654,70 @@ func ComposeInstructions(content []resolver.ResolvedContent) []byte {
 		return nil
 	}
 	return []byte(strings.Join(parts, "\n\n") + "\n")
+}
+
+// foldedRules reads the rule files staged in rulesDir, sorted by name, with
+// each one's frontmatter stripped. It returns nothing when there are none.
+func foldedRules(rulesDir string) ([]foldedRule, error) {
+	entries, err := os.ReadDir(rulesDir)
+	if err != nil {
+		return nil, nil
+	}
+	var rules []foldedRule
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(rulesDir, e.Name()))
+		if err != nil {
+			return nil, fmt.Errorf("reading rule %s: %w", e.Name(), err)
+		}
+		body := stripFrontmatter(string(data))
+		if strings.TrimSpace(body) == "" {
+			continue
+		}
+		rules = append(rules, foldedRule{
+			name: strings.TrimSuffix(e.Name(), ".md"),
+			body: strings.TrimSpace(body),
+		})
+	}
+	return rules, nil
+}
+
+type foldedRule struct{ name, body string }
+
+// appendRules adds each rule to the composed instructions as its own section.
+func appendRules(composed []byte, rules []foldedRule) []byte {
+	if len(rules) == 0 {
+		return composed
+	}
+	var b strings.Builder
+	b.WriteString(strings.TrimRight(string(composed), "\n"))
+	for _, r := range rules {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString("## Rule: " + r.name + "\n\n" + r.body)
+	}
+	b.WriteString("\n")
+	return []byte(b.String())
+}
+
+// stripFrontmatter drops a leading ---/--- block, if the file opens with one.
+func stripFrontmatter(s string) string {
+	t := strings.ReplaceAll(s, "\r\n", "\n")
+	if !strings.HasPrefix(t, "---\n") {
+		return s
+	}
+	rest := t[4:]
+	if strings.HasPrefix(rest, "---\n") {
+		return rest[4:]
+	}
+	if i := strings.Index(rest, "\n---\n"); i >= 0 {
+		return rest[i+5:]
+	}
+	if strings.HasSuffix(rest, "\n---") {
+		return ""
+	}
+	return s
 }

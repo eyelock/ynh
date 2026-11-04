@@ -61,6 +61,11 @@ func (c *Copilot) GenerateSystemPrompt(content []byte) map[string][]byte {
 	}
 }
 
+// FoldsRulesIntoInstructions: Copilot does not read the rules ynh stages in the
+// config dir, so the assembler appends them to the instructions file it does
+// read (assembler.RuleFolder).
+func (c *Copilot) FoldsRulesIntoInstructions() bool { return true }
+
 func (c *Copilot) NeedsSymlinks() bool { return false }
 
 func (c *Copilot) Install(stagingDir string, projectDir string) ([]SymlinkEntry, error) {

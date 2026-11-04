@@ -130,6 +130,24 @@ is kept whole as the rule's body.
 
 OpenCode has no concept of rules. For OpenCode ynh strips a rule's frontmatter and concatenates the bodies into `.opencode/AGENTS.md` at launch, after the harness instructions.
 
+Claude Code, Copilot and Codex do not read the rules ynh stages for them (Claude
+Code reads rules from a project's own `.claude/rules/`, not from a plugin
+directory; Copilot has no rules; Codex has no rules directory). So under
+`ynh run` and `ynd preview`, ynh appends each rule to the instructions file the
+vendor does read, as a `## Rule: <name>` section after the harness
+instructions, in file-name order:
+
+| Vendor | Where the rules land |
+|---|---|
+| Claude | `CLAUDE.md`, which ynh passes as appended system prompt |
+| Copilot | `AGENTS.md`, projected into `.github/instructions/ynh-harness.instructions.md` |
+| Codex | the run directory's instructions file; Codex reads it as `AGENTS.md` once [ynh #689](https://github.com/eyelock/ynh/pull/689) lands |
+
+Rules folded this way are always on: a rule's frontmatter, including Claude
+Code's `paths` scoping, is dropped. No plugin package carries a rule that these
+three vendors would read, so `ynd export` is unchanged for them: Claude's export
+still ships `rules/`, and Copilot's and Codex's still exclude them.
+
 ## Commands
 
 A command defines a reusable action. Commands are vendor-specific markdown files.
