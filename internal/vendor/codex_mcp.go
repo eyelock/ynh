@@ -45,8 +45,10 @@ type CodexMCPLaunch struct {
 //     delegate's servers.
 //   - A remote server's headers are passed with env_http_headers, which names
 //     the environment variable of the Codex process that holds each value; the
-//     values are returned in Env, and shell_environment_policy.exclude keeps
-//     them out of the environment of Codex's shell tool.
+//     values are returned in Env, under names (YNH_MCP_HEADER_SECRET_n) that
+//     Codex's default excludes match, and
+//     shell_environment_policy.ignore_default_excludes=false keeps them out of
+//     the environment of Codex's shell tool.
 //
 // Secrets are numbered in sorted server-name and key order, so the same file
 // gives the same numbering on every call (each call re-reads the file).
