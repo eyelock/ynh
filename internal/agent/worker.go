@@ -35,6 +35,7 @@ func lookWorkerCLI(backend string) (string, error) {
 const (
 	vendorClaude   = "claude"
 	vendorCodex    = "codex"
+	vendorCursor   = "cursor"
 	vendorOpenCode = "opencode"
 )
 

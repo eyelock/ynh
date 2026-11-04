@@ -185,9 +185,9 @@ func TestWorkspaceGrant(t *testing.T) {
 		{
 			name:   "unsupported vendor warns naming vendor and folder",
 			setup:  func(t *testing.T, w wsWorld, p *harness.Harness) { w.writeConfig(t, w.home) },
-			vendor: "cursor",
+			vendor: "nope",
 			want:   func(w wsWorld) []string { return nil },
-			stderr: []string{"%SIB% not granted: cursor:", "no flag that adds a directory"},
+			stderr: []string{"%SIB% not granted: nope:", "no workspace declaration"},
 			absent: []string{"workspace: granted"},
 		},
 		{
@@ -252,7 +252,7 @@ func TestWorkspaceLaunchArgsPerVendor(t *testing.T) {
 	w := newWSWorld(t)
 	w.writeConfig(t, w.home)
 	t.Chdir(w.project)
-	for _, v := range []string{"claude", "codex", "copilot"} {
+	for _, v := range []string{"claude", "codex", "copilot", "cursor"} {
 		var stderr bytes.Buffer
 		args, err := workspaceLaunchArgs(w.harness("../ynh"), "local/seat", v, false, &stderr)
 		if err != nil {
@@ -263,9 +263,9 @@ func TestWorkspaceLaunchArgsPerVendor(t *testing.T) {
 		}
 	}
 	var stderr bytes.Buffer
-	args, err := workspaceLaunchArgs(w.harness("../ynh"), "local/seat", "cursor", false, &stderr)
-	if err != nil || len(args) != 0 || !strings.Contains(stderr.String(), "cursor") {
-		t.Errorf("cursor: args %v, err %v, stderr %q", args, err, stderr.String())
+	args, err := workspaceLaunchArgs(w.harness("../ynh"), "local/seat", "opencode", false, &stderr)
+	if err != nil || len(args) != 0 || !strings.Contains(stderr.String(), "workspace: granted") || strings.Contains(stderr.String(), "not granted") {
+		t.Errorf("opencode: args %v, err %v, stderr %q", args, err, stderr.String())
 	}
 }
 

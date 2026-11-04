@@ -140,6 +140,7 @@ func buildCursorArgs(opts StartOptions, chatID string, firstTurn bool, msg strin
 	if opts.WorktreeDir != "" {
 		args = append(args, "--workspace", opts.WorktreeDir)
 	}
+	args = append(args, workspaceArgs(vendorCursor, opts.Workspace)...)
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}

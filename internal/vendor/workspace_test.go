@@ -16,8 +16,8 @@ func TestWorkspaceArgs(t *testing.T) {
 		{"claude", []string{"--add-dir", "/a/one", "--add-dir", "/a/two"}, ""},
 		{"copilot", []string{"--add-dir", "/a/one", "--add-dir", "/a/two"}, ""},
 		{"codex", []string{"--add-dir", "/a/one", "--add-dir", "/a/two"}, ""},
-		{"cursor", nil, "no flag"},
-		{"opencode", nil, "no flag"},
+		{"cursor", []string{"--add-dir", "/a/one", "--add-dir", "/a/two"}, ""},
+		{"opencode", nil, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.vendor, func(t *testing.T) {
@@ -47,8 +47,14 @@ func TestEveryVendorDeclaresWorkspace(t *testing.T) {
 			t.Errorf("%s has no workspace declaration", name)
 			continue
 		}
-		if (d.flag == "") == (d.unsupported == "") {
-			t.Errorf("%s must declare exactly one of a workspace flag or an unsupported reason", name)
+		n := 0
+		for _, s := range []string{d.flag, d.unsupported, d.byDefault} {
+			if s != "" {
+				n++
+			}
+		}
+		if n != 1 {
+			t.Errorf("%s must declare exactly one of a workspace flag, an unsupported reason or a default", name)
 		}
 	}
 }

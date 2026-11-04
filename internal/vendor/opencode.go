@@ -1162,8 +1162,11 @@ func launchOpencodeArgs(configPath string, args []string) error {
 	return opencodeExec(bin, append([]string{opencodeCLI}, args...), opencodeEnviron(os.Environ(), dir))
 }
 
-// OpenCode 2 has no flag that grants a folder beside the project: the
-// positional <directory> names the one directory it starts in, and --help
-// (v2.2.3) lists no add-dir equivalent.
+// OpenCode 2 has no flag that grants a folder beside the project (v2.2.3
+// --help lists no add-dir equivalent), and needs none: its external_directory
+// permission, which governs paths outside the project, is allowed by default
+// (proved live: a file in a sibling folder is read with no grant). So a granted
+// folder is reachable by default and nothing is rendered.
 var opencodeWorkspaceFlag = ""
-var opencodeWorkspaceUnsupported = "the OpenCode CLI has no flag that adds a directory to a session (its <directory> argument names the single project)"
+var opencodeWorkspaceUnsupported = ""
+var opencodeWorkspaceDefault = "OpenCode's external_directory permission allows folders outside the project by default"

@@ -8,7 +8,9 @@
 # Reads internal/vendor/<vendor>.go for exactly one of each:
 #   <x>WorkspaceFlag        the CLI flag that grants a directory, or ""
 #   <x>WorkspaceUnsupported the reason there is none, required when the flag is ""
-# Exactly one of the two is non-empty.
+#   <x>WorkspaceDefault     optional: why no flag is needed, because the vendor
+#                           reaches a granted folder by default
+# Exactly one of the three is non-empty.
 
 set -euo pipefail
 
@@ -28,6 +30,16 @@ for v in "$@"; do
 	fdecl=$(grep -cE '^(const |var )?[a-z]+WorkspaceFlag = "' "$src" || true)
 	unsup=$(sed -nE 's/^(const |var )?[a-z]+WorkspaceUnsupported = "([^"]*)".*/\2/p' "$src")
 	udecl=$(grep -cE '^(const |var )?[a-z]+WorkspaceUnsupported = "' "$src" || true)
+	dflt=$(sed -nE 's/^(const |var )?[a-z]+WorkspaceDefault = "([^"]*)".*/\2/p' "$src")
+	if [ -n "$dflt" ] && [ -z "$flag" ] && [ -z "$unsup" ]; then
+		echo "  ok       $v: workspace reachable by default"
+		continue
+	fi
+	if [ -n "$dflt" ]; then
+		echo "  CONFLICT $v: declares a workspace default and also a flag or an unsupported reason"
+		fail=1
+		continue
+	fi
 	if [ "$fdecl" -ne 1 ] || [ "$udecl" -ne 1 ]; then
 		echo "  MISSING  $v: must declare <x>WorkspaceFlag and <x>WorkspaceUnsupported exactly once (a flag, or a reason it has none)"
 		fail=1
