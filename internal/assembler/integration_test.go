@@ -327,7 +327,7 @@ func TestIntegration_InstructionsFileCrossVendor(t *testing.T) {
 		expected string
 	}{
 		{"claude", "CLAUDE.md"},
-		{"codex", "codex.md"},
+		{"codex", "AGENTS.md"},
 		{"cursor", ".cursorrules"},
 		{"copilot", "AGENTS.md"},
 	}

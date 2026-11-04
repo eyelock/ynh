@@ -182,7 +182,7 @@ These come from Ollama's own docs, not ynh:
 
 **Claude Code** - Full interactive and non-interactive support. Uses `--plugin-dir` for artifact loading and `--append-system-prompt` for harness instructions. Requires `claude` CLI installed. See [claude.ai/code](https://claude.ai/code).
 
-**OpenAI Codex** - Full interactive and non-interactive support. Uses symlink-based artifact installation. Requires `codex` CLI installed. Codex requires a Git working tree — if running in a non-Git directory (e.g. Docker containers), pass `--skip-git-repo-check` as a vendor flag. See [openai.com/codex](https://openai.com/codex).
+**OpenAI Codex** - Full interactive and non-interactive support. Uses symlink-based artifact installation. Harness instructions are composed into `AGENTS.md` in the run directory, the file Codex reads (OBSERVED live on codex-cli, 2026-11-04: a codeword set only in the harness instructions was returned by `codex exec` run in the run directory). Requires `codex` CLI installed. Codex requires a Git working tree — if running in a non-Git directory (e.g. Docker containers), pass `--skip-git-repo-check` as a vendor flag. See [openai.com/codex](https://openai.com/codex).
 
 **Cursor Agent** - Full interactive and non-interactive support. Uses symlink-based artifact installation. Requires `agent` CLI installed (`curl https://cursor.com/install -fsS | bash`). Uses `-p` for non-interactive prompts. See [cursor.com/cli](https://cursor.com/cli).
 
