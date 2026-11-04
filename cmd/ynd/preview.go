@@ -111,17 +111,18 @@ func cmdPreview(args []string) error {
 
 	// Output
 	if outputDir != "" {
+		// Write the MCP files, which hold expanded values, at 0600 in 0700
+		// directories before anything is copied: the copy keeps the mode of a
+		// file already there, so no secret is ever written at 0644 or 0755.
+		if err := tightenSecrets(tmpDir, outputDir, report.secrets); err != nil {
+			return fmt.Errorf("securing MCP files in output: %w", err)
+		}
 		// Copy tmpDir to outputDir
 		if err := os.MkdirAll(outputDir, 0o755); err != nil {
 			return fmt.Errorf("creating output dir: %w", err)
 		}
 		if err := assembler.CopyDirDeref(tmpDir, outputDir); err != nil {
 			return fmt.Errorf("copying to output: %w", err)
-		}
-		// The copy makes directories 0755 and keeps the mode of a file already
-		// there, so write the MCP files again at 0600 in 0700 directories.
-		if err := tightenSecrets(tmpDir, outputDir, report.secrets); err != nil {
-			return fmt.Errorf("securing MCP files in output: %w", err)
 		}
 		fmt.Printf("Preview written to %s\n", outputDir)
 	} else {
@@ -539,9 +540,10 @@ func printTreeDir(root string, dir string, prefix string) error {
 	return nil
 }
 
-// tightenSecrets rewrites the named files, copied from src into dst, at 0600
-// with every directory down to them 0700, including files and directories a
-// earlier preview left at 0644 and 0755.
+// tightenSecrets writes the named files, read from src, into dst at 0600 with
+// every directory down to them 0700, tightening files and directories an
+// earlier preview left at 0644 and 0755. Call it before the copy into dst, so
+// the copy only overwrites files that are already private.
 func tightenSecrets(src, dst string, rels []string) error {
 	files := make(map[string][]byte, len(rels))
 	for _, rel := range rels {
