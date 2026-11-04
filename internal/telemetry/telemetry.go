@@ -14,7 +14,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,27 +39,23 @@ const (
 	DestinationNone Destination = "none"
 	// DestinationSpool writes OTLP JSON lines into a spool folder.
 	DestinationSpool Destination = "spool"
-	// DestinationOTLP is an operator's OTEL_EXPORTER_OTLP_* endpoint. This
-	// build does not export over OTLP, so it writes nothing and says so.
+	// DestinationOTLP is an operator's OTEL_EXPORTER_OTLP_* endpoint, sent to
+	// over OTLP/HTTP with JSON bodies. A setting that exporter cannot honour
+	// (grpc, custom certificates, compression) writes nothing and says so.
 	DestinationOTLP Destination = "otlp"
 )
 
 // FlushTimeout bounds every flush to disk, including the one on exit.
 const FlushTimeout = 2 * time.Second
 
-// otlpEnvPrefix marks the operator's OTLP exporter settings.
-const otlpEnvPrefix = "OTEL_EXPORTER_OTLP_"
-
 // ChooseDestination applies the contract's order: the operator's
-// OTEL_EXPORTER_OTLP_*, then YNR_SPOOL, then the laptop default
+// OTEL_EXPORTER_OTLP_* (an endpoint is set, or a setting the exporter cannot
+// honour, which is still the operator's choice), then YNR_SPOOL, then the laptop default
 // $XDG_STATE_HOME/ynr/spool/local if that folder exists, then nothing. It
 // returns the spool folder, made absolute, for DestinationSpool.
 func ChooseDestination() (Destination, string) {
-	for _, kv := range os.Environ() {
-		name, value, _ := strings.Cut(kv, "=")
-		if strings.HasPrefix(name, otlpEnvPrefix) && value != "" {
-			return DestinationOTLP, ""
-		}
+	if _, configured, unsupported := spool.HTTPOptionsFromEnv(os.Getenv); configured || unsupported != "" {
+		return DestinationOTLP, ""
 	}
 	if dir := os.Getenv("YNR_SPOOL"); dir != "" {
 		// Absolute, because children are handed this folder and run in
@@ -110,6 +105,10 @@ type Telemetry struct {
 	version string
 	opts    Options
 	errors  atomic.Int64
+	// abandoned is set once a flush has run out of time: the destination is
+	// stuck, so later flushes give up at once rather than wait again, and the
+	// process exits within one FlushTimeout in all.
+	abandoned atomic.Bool
 
 	mu       sync.Mutex
 	dest     Destination
@@ -119,6 +118,7 @@ type Telemetry struct {
 	tp       *sdktrace.TracerProvider
 	lp       *sdklog.LoggerProvider
 	writer   *spool.Writer
+	sender   *spool.HTTPSender
 	run      *Run
 	stop     chan struct{}
 	stopped  bool
@@ -127,9 +127,9 @@ type Telemetry struct {
 // Setup chooses a destination and builds the providers for it. It never
 // fails: anything that goes wrong leaves telemetry off.
 //
-// stderr receives one note when the operator's OTLP settings are present,
-// since this build cannot honour them and the spool would otherwise appear
-// to have been skipped for no reason.
+// stderr receives one note when the operator's OTLP settings include one the
+// exporter cannot honour (naming the setting, never a value), since the spool
+// would otherwise appear to have been skipped for no reason.
 //
 // With no destination at all, Setup keeps looking for the spool folder every
 // RecheckInterval, in the background, and starts writing when it appears
@@ -148,9 +148,14 @@ func Setup(version string, opts Options, stderr io.Writer) *Telemetry {
 	switch dest {
 	case DestinationOTLP:
 		// The operator chose; ynh does not look for a spool behind them.
-		_, _ = fmt.Fprintln(stderr, "ynh: OTEL_EXPORTER_OTLP_* is set, but this ynh cannot export over OTLP yet; no telemetry is written for this run")
+		opts, _, unsupported := spool.HTTPOptionsFromEnv(os.Getenv)
+		if unsupported != "" {
+			_, _ = fmt.Fprintf(stderr, "ynh: %s; no telemetry is written for this run\n", unsupported)
+		} else {
+			t.activate("", spool.NewHTTPSender(opts))
+		}
 	case DestinationSpool:
-		t.activate(dir)
+		t.activate(dir, nil)
 	case DestinationNone:
 		interval := opts.RecheckInterval
 		if interval <= 0 {
@@ -172,16 +177,17 @@ func (t *Telemetry) recheck(interval time.Duration) {
 			return
 		case <-ticker.C:
 			if dest, dir := ChooseDestination(); dest == DestinationSpool {
-				t.activate(dir)
+				t.activate(dir, nil)
 				return
 			}
 		}
 	}
 }
 
-// activate builds the providers writing to the spool folder dir, and brings
-// a run already under way onto them.
-func (t *Telemetry) activate(dir string) {
+// activate builds the providers and brings a run already under way onto
+// them. They write to the spool folder dir, or, when sender is not nil, post
+// to the operator's OTLP endpoint and write no spool.
+func (t *Telemetry) activate(dir string, sender *spool.HTTPSender) {
 	instanceID := newInstanceID()
 	// The operator's OTEL_RESOURCE_ATTRIBUTES are honoured, but ynh's own
 	// identity wins: service.name and service.version say which registry
@@ -200,34 +206,50 @@ func (t *Telemetry) activate(dir string) {
 		// OTEL_RESOURCE_ATTRIBUTES must not cost the run its telemetry.
 		t.errors.Add(1)
 	}
-	writer := spool.NewWriter(spool.Options{
-		Dir:          dir,
-		Service:      "ynh",
-		InstanceID:   instanceID,
-		MaxFileBytes: t.opts.MaxFileBytes,
-		MaxBytes:     t.opts.MaxBytes,
-		SyncTimeout:  FlushTimeout,
-	})
+	var (
+		writer  *spool.Writer
+		traceEx *spool.TraceExporter
+		logEx   *spool.LogExporter
+	)
+	if sender != nil {
+		traceEx, logEx = spool.NewHTTPTraceExporter(sender), spool.NewHTTPLogExporter(sender)
+	} else {
+		writer = spool.NewWriter(spool.Options{
+			Dir:          dir,
+			Service:      "ynh",
+			InstanceID:   instanceID,
+			MaxFileBytes: t.opts.MaxFileBytes,
+			MaxBytes:     t.opts.MaxBytes,
+			SyncTimeout:  FlushTimeout,
+		})
+		traceEx, logEx = spool.NewTraceExporter(writer), spool.NewLogExporter(writer)
+	}
 
 	t.mu.Lock()
 	if t.stopped {
 		// Shut down while the spool was being found: write nothing.
 		t.mu.Unlock()
+		if writer != nil {
+			writer.Close()
+		}
 		return
 	}
 	// SDK errors are counted, never printed: telemetry must not change what
 	// the operator sees.
 	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(error) { t.errors.Add(1) }))
-	t.dest, t.spoolDir, t.writer = DestinationSpool, dir, writer
+	t.dest, t.spoolDir, t.writer, t.sender = DestinationSpool, dir, writer, sender
+	if sender != nil {
+		t.dest = DestinationOTLP
+	}
 	t.tp = sdktrace.NewTracerProvider(
 		sdktrace.WithResource(res),
-		sdktrace.WithBatcher(spool.NewTraceExporter(writer),
+		sdktrace.WithBatcher(traceEx,
 			sdktrace.WithBatchTimeout(time.Second),
 			sdktrace.WithExportTimeout(FlushTimeout)),
 	)
 	t.lp = sdklog.NewLoggerProvider(
 		sdklog.WithResource(res),
-		sdklog.WithProcessor(sdklog.NewBatchProcessor(spool.NewLogExporter(writer),
+		sdklog.WithProcessor(sdklog.NewBatchProcessor(logEx,
 			sdklog.WithExportInterval(time.Second),
 			sdklog.WithExportTimeout(FlushTimeout))),
 	)
@@ -282,23 +304,31 @@ func (t *Telemetry) state() state {
 func (t *Telemetry) Errors() int64 {
 	n := t.errors.Load()
 	t.mu.Lock()
-	w := t.writer
+	w, h := t.writer, t.sender
 	t.mu.Unlock()
 	if w != nil {
 		n += w.Stats().Errors
 	}
+	if h != nil {
+		n += h.Stats().Errors
+	}
 	return n
 }
 
-// Dropped counts records the spool could not take.
+// Dropped counts records the spool could not take, or the endpoint was not
+// sent.
 func (t *Telemetry) Dropped() int64 {
 	t.mu.Lock()
-	w := t.writer
+	w, h := t.writer, t.sender
 	t.mu.Unlock()
-	if w == nil {
-		return 0
+	var n int64
+	if w != nil {
+		n += w.Stats().Dropped
 	}
-	return w.Stats().Dropped
+	if h != nil {
+		n += h.Stats().Dropped
+	}
+	return n
 }
 
 // Flush writes everything pending and flushes it to disk, within
@@ -313,7 +343,9 @@ func (t *Telemetry) Flush() {
 	t.bounded(func(ctx context.Context) {
 		_ = tp.ForceFlush(ctx)
 		_ = lp.ForceFlush(ctx)
-		w.Sync()
+		if w != nil {
+			w.Sync()
+		}
 	})
 }
 
@@ -336,12 +368,17 @@ func (t *Telemetry) Shutdown() {
 	t.bounded(func(ctx context.Context) {
 		_ = tp.Shutdown(ctx)
 		_ = lp.Shutdown(ctx)
-		w.Close()
+		if w != nil {
+			w.Close()
+		}
 	})
 }
 
 // bounded runs f, returning at FlushTimeout whether or not it has finished.
 func (t *Telemetry) bounded(f func(ctx context.Context)) {
+	if t.abandoned.Load() {
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), FlushTimeout)
 	defer cancel()
 	done := make(chan struct{})
@@ -352,6 +389,7 @@ func (t *Telemetry) bounded(f func(ctx context.Context)) {
 	select {
 	case <-done:
 	case <-ctx.Done():
+		t.abandoned.Store(true)
 		t.errors.Add(1)
 	}
 }

@@ -16,10 +16,13 @@ without it.
 
 ynh chooses when the run starts, in this order:
 
-1. **`OTEL_EXPORTER_OTLP_*`.** Any non-empty variable with this prefix means the
-   operator chose an OTLP endpoint, and that choice wins. This version of ynh
-   cannot export over OTLP yet (see [Not yet](#not-yet)), so it prints one note
-   on stderr and writes nothing.
+1. **`OTEL_EXPORTER_OTLP_*`.** An OTLP endpoint (`OTEL_EXPORTER_OTLP_ENDPOINT`
+   or a per-signal one), or a setting ynh cannot honour (below), means the
+   operator chose, and that choice wins. ynh posts its spans and logs to the
+   endpoint over OTLP/HTTP with JSON bodies, in the same batches, with the same
+   resource and the same 2-second bound on every flush as the spool, and writes
+   nothing to the spool. Settings that name no endpoint, such as a lone
+   `OTEL_EXPORTER_OTLP_TIMEOUT`, ask for nothing, and the order goes on.
 2. **The spool.** `YNR_SPOOL` names a spool folder, or the laptop default
    `$XDG_STATE_HOME/ynr/spool/local` exists (`~/.local/state/ynr/spool/local`
    when `XDG_STATE_HOME` is unset). ynh writes OTLP JSON lines into it.
@@ -35,6 +38,35 @@ time: the started event and the span carry the time the run began, not the time
 the spool appeared. A worker already running keeps the environment it started
 with; every process started after that gets the trace and the spool. An
 operator's `OTEL_EXPORTER_OTLP_*` stops the search, since that choice is theirs.
+
+### Exporting to an OTLP endpoint
+
+ynh uses a small OTLP/HTTP exporter with JSON bodies from ynr's
+`spoolexporter`, not the standard OpenTelemetry exporters, which would bring in
+gRPC and protobuf and about sixty-five more modules. It reads these variables:
+
+| Variable | Used |
+|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | the base URL; `/v1/traces` and `/v1/logs` are appended |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | each signal's full URL, as given |
+| `OTEL_EXPORTER_OTLP_HEADERS` and the per-signal `_HEADERS` | sent with each request; the per-signal list wins by name |
+| `OTEL_EXPORTER_OTLP_TIMEOUT` and the per-signal `_TIMEOUT` | milliseconds, but each export is bounded by at least 2 seconds regardless |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | only `http/json` (or unset) |
+
+These are not supported. When one is set, ynh prints one note on stderr naming
+the setting, never a header value, and writes nothing for the run: not to the
+endpoint, and not to the spool.
+
+- `OTEL_EXPORTER_OTLP_PROTOCOL` (or a per-signal one) other than `http/json`,
+  including `grpc`, and `http/protobuf`. The ynr how-to for Claude Code exports
+  `http/protobuf`, so a shell set up that way reports the setting as
+  unsupported and exports nowhere; unset it, or set `http/json`, for ynh.
+- `OTEL_EXPORTER_OTLP_CERTIFICATE`, `_CLIENT_CERTIFICATE` and `_CLIENT_KEY`
+  (and the per-signal forms): custom certificates.
+- `OTEL_EXPORTER_OTLP_COMPRESSION` (and the per-signal forms), other than `none`.
+
+An export that fails or times out is counted and dropped, never retried, and
+never reaches the run.
 
 ynh never creates the laptop default folder, and never starts anything because
 it found [ynr](https://github.com/eyelock/ynr). It creates a folder named by
@@ -58,7 +90,10 @@ ynh-<instance id>-000001.jsonl        closed
   counted.
 - The file is flushed to disk when the run starts and when it ends. Each flush
   is abandoned after 2 seconds, so a slow network filesystem never holds up a
-  run or its exit.
+  run or its exit. One abandoned flush abandons every later one, so a stuck
+  destination costs a run 2 seconds in all. The price: a run whose first flush
+  is slow loses the span and finished event it would have flushed on exit,
+  although the batchers keep sending in between.
 - Every telemetry error is swallowed and counted. None reaches stderr, the run
   result or the exit code.
 
@@ -487,20 +522,13 @@ on your `PATH`:
 make conformance
 ```
 
-Every rule passes or is skipped by design, except one: rule 1's check that a
-tool writes to the operator's `OTEL_EXPORTER_OTLP_ENDPOINT` fails, because ynh
-cannot export over OTLP yet (see below). Until it can, the job is not among the
-checks All Clear needs.
+Every rule passes or is skipped by design, including rule 1's check that a tool
+exports to the operator's `OTEL_EXPORTER_OTLP_ENDPOINT`.
 
 ## Not yet
 
 These are still to come:
 
-- **Exporting over OTLP.** The standard OTLP exporters bring in gRPC and
-  protobuf, about ninety modules; ynh does not take that on for an endpoint it
-  cannot yet use. Until then an `OTEL_EXPORTER_OTLP_*` setting writes nothing,
-  with a note, and [conformance](#conformance) fails rule 1's operator-endpoint
-  check.
 - **Cursor's telemetry** through the relay, once its behaviour is examined.
 - **More events**, such as one per turn, per sensor verdict or per budget
   threshold, and metrics.

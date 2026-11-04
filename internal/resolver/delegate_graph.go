@@ -2,6 +2,9 @@ package resolver
 
 import (
 	"fmt"
+	"os/exec"
+	"path/filepath"
+	"strings"
 
 	"github.com/eyelock/ynh/internal/harness"
 )
@@ -49,7 +52,12 @@ func FlattenDelegates(entries []harness.Delegate, rootDir, rootName string, reso
 		dir    string
 		route  string
 	}
-	rootID := dirIdentity(rootDir)
+	ids := newIdentities()
+	// The root is known the way a delegate is, by source, so a seat that
+	// reaches the root through a clone of its repository is recognised as the
+	// root. A root with uncommitted work, or at a commit the clone does not
+	// hold, differs in source, and is still caught by its name.
+	rootID := ids.of(rootDir)
 
 	var out []FlatDelegate
 	routes := []string{}
@@ -84,7 +92,7 @@ func FlattenDelegates(entries []harness.Delegate, rootDir, rootName string, reso
 		if err != nil {
 			return nil, fmt.Errorf("delegate: %w", err)
 		}
-		id := dirIdentity(base)
+		id := ids.of(base)
 		loaded, err := harness.LoadDir(base)
 		if err != nil {
 			return nil, fmt.Errorf("loading delegate harness %s: %w", p.entry.Git, err)
@@ -94,7 +102,7 @@ func FlattenDelegates(entries []harness.Delegate, rootDir, rootName string, reso
 			note(p.parent, fmt.Sprintf("delegate %s is the root harness %s, which is no agent of its own; skipped", p.entry.Label(), rootName))
 			continue
 		}
-		if p.parent >= 0 && id == dirIdentity(routesDir(out, p.parent)) {
+		if p.parent >= 0 && id == ids.of(routesDir(out, p.parent)) {
 			note(p.parent, fmt.Sprintf("harness %s names itself as a delegate; skipped", loaded.Name))
 			continue
 		}
@@ -128,6 +136,82 @@ func FlattenDelegates(entries []harness.Delegate, rootDir, rootName string, reso
 		}
 	}
 	return out, nil
+}
+
+// identities names harness directories by source (see sourceIdentity),
+// remembering each answer: a walk asks about the same directories again for
+// every edge, and the repository behind many of them is one, and each answer
+// costs git processes on the launch path.
+type identities struct {
+	byDir map[string]string
+	byTop map[string]topSource
+}
+
+// topSource is what a clone's top-level directory resolves to: where it came
+// from, and the commit it holds.
+type topSource struct{ origin, sha string }
+
+func newIdentities() *identities {
+	return &identities{byDir: map[string]string{}, byTop: map[string]topSource{}}
+}
+
+// of is the identity of a harness directory by what it was resolved from
+// rather than where it sits. A directory in a git clone is the clone's
+// origin, the commit it holds and its path in the clone; when the origin is
+// itself a local repository (a relative git source resolved from inside a
+// cached clone is cloned again from that clone), the walk follows it back to
+// the source, so two clones of one repository at one commit give one harness
+// one identity. A directory in no clone is known by its path (dirIdentity).
+func (c *identities) of(dir string) string {
+	abs := dirIdentity(dir)
+	if id, ok := c.byDir[abs]; ok {
+		return id
+	}
+	id := c.compute(abs)
+	c.byDir[abs] = id
+	return id
+}
+
+func (c *identities) compute(abs string) string {
+	top := gitToplevel(abs)
+	if top == "" {
+		return abs
+	}
+	rel, err := filepath.Rel(top, abs)
+	if err != nil {
+		return abs
+	}
+	src, ok := c.byTop[top]
+	if !ok {
+		src = topSource{origin: followOrigin(top), sha: gitHead(top)}
+		c.byTop[top] = src
+	}
+	if src.sha == "" {
+		return abs
+	}
+	return src.origin + "@" + src.sha + "//" + filepath.ToSlash(rel)
+}
+
+// followOrigin is the origin of the clone at top, following it through local
+// clones back to the source; bounded in case of a loop. A repository with no
+// origin is its own.
+func followOrigin(top string) string {
+	origin := top
+	for i := 0; i < 16; i++ {
+		out, err := exec.Command(gitBin, "-C", origin, "remote", "get-url", "origin").Output()
+		if err != nil {
+			break
+		}
+		url := strings.TrimSpace(string(out))
+		if !filepath.IsAbs(url) {
+			return url
+		}
+		if gitToplevel(url) == "" {
+			return url
+		}
+		origin = dirIdentity(url)
+	}
+	return origin
 }
 
 func routesDir(out []FlatDelegate, i int) string { return out[i].BasePath }
