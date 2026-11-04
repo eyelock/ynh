@@ -164,7 +164,7 @@ the vendor's own file — there is no `AGENTS.md` to import, and no import.
 | Vendor | Reads `AGENTS.md` natively | `ynh run` / `ynd preview` | `ynd export` |
 |---|---|---|---|
 | Claude | No | instructions inlined into `CLAUDE.md` | `AGENTS.md` + `CLAUDE.md` containing `@AGENTS.md` |
-| Codex | Yes | `codex.md` | `AGENTS.md` |
+| Codex | Yes | `AGENTS.md` | `AGENTS.md` |
 | Cursor | Yes | `.cursorrules` | `AGENTS.md` |
 | Copilot | Yes | `AGENTS.md` | `AGENTS.md` |
 | OpenCode | Yes (`AGENTS.md` only; its `instructions` key is ignored) | `.opencode/AGENTS.md`, composed at launch from the instructions, the rules and the runtime context | `AGENTS.md` |

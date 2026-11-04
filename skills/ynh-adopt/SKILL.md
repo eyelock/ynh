@@ -66,7 +66,7 @@ So a project whose instructions live in `CLAUDE.md` will adopt into a harness
 that appears to work and has no instructions at all.
 
 **Rename it to `AGENTS.md`.** That is the cross-vendor form; ynh adapts it per
-vendor — `CLAUDE.md` for Claude, `codex.md` for Codex, `.cursorrules` for
+vendor — `CLAUDE.md` for Claude, `AGENTS.md` for Codex, `.cursorrules` for
 Cursor, a projected instructions file for Copilot, and `.opencode/AGENTS.md`
 for OpenCode.
 

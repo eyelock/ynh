@@ -421,7 +421,7 @@ Then the three comparisons, which show:
 - `.claude/hooks/hooks.json` is only in Claude
 - `.cursor/hooks.json` is only in Cursor
 - `.codex/hooks.json` is only in Codex
-- Shared files (like `CLAUDE.md`, `.cursorrules`, `codex.md`) may be listed as identical or different depending on instructions content
+- Shared files (like `CLAUDE.md`, `.cursorrules`, `AGENTS.md`) may be listed as identical or different depending on instructions content
 
 The key difference: the same three hooks declared once in `.agents/harness/plugin.json` produce three structurally different config files, each native to the vendor.
 

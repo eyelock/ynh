@@ -514,7 +514,7 @@ for the full scaffolding checklist once these are resolved):
 |                   |                                  |                                  |  deprecated)                     |
 |                   |                                  |                                  | .cursor/rules/*.mdc (current)    |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
-| ynh runtime:      | --append-system-prompt           | Written as codex.md in           | Written as .cursorrules in       |
+| ynh runtime:      | --append-system-prompt           | Written as AGENTS.md in          | Written as .cursorrules in       |
 |                   | (injected, no file conflict)     |   staging dir                    |   staging dir                    |
 +-------------------+----------------------------------+----------------------------------+----------------------------------+
 | ynh export:       | AGENTS.md + CLAUDE.md            | AGENTS.md                        | .cursorrules + AGENTS.md         |

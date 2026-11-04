@@ -126,7 +126,7 @@ redistributable plugin directory.
 | Vendor | `ynh run` / `ynd preview` | `ynd export` |
 |--------|---------------------------|--------------|
 | Claude | `CLAUDE.md`, instructions **inlined** — no `AGENTS.md` emitted | `AGENTS.md` + `CLAUDE.md` containing `@AGENTS.md` |
-| Codex  | `codex.md` | `AGENTS.md` |
+| Codex  | `AGENTS.md` | `AGENTS.md` |
 | Cursor | `.cursorrules` | `.cursorrules` + `AGENTS.md` |
 | Copilot | `AGENTS.md` in the staging dir, which `ynh run` projects into the project as `.github/instructions/ynh-harness.instructions.md` (a plugin's bundled `AGENTS.md` is not read) | `AGENTS.md` |
 | OpenCode | `.opencode/AGENTS.md`, composed at launch from the instructions, the rules and the runtime context (OpenCode 2 reads `AGENTS.md` only) | `AGENTS.md` |
