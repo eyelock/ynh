@@ -767,7 +767,39 @@ func warnLegacyProjectMCP(w io.Writer, configPath, projectDir string) {
 	if !ok || strings.Join(projNames, "\x00") != strings.Join(runNames, "\x00") {
 		return
 	}
+	if !holdsLiteralSecret(proj) {
+		return
+	}
 	_, _ = fmt.Fprintf(w, "warning: %s looks like one an older ynh wrote, and may hold your MCP credentials in plain text. ynh no longer writes it and has not touched it. If you did not write it yourself, delete it and rotate those credentials.\n", path)
+}
+
+// holdsLiteralSecret reports whether any env or headers value in a Copilot MCP
+// document is a literal rather than a ${VAR} reference. The document an older
+// ynh wrote into the project held the expanded values; the one ynd export
+// writes keeps the references, so it holds nothing to rotate and must not
+// draw the warning. A value is a reference when it contains "${". The values
+// themselves are never reported.
+func holdsLiteralSecret(data []byte) bool {
+	var doc struct {
+		MCPServers map[string]struct {
+			Env     map[string]string `json:"env"`
+			Headers map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		// Unexpected value types: err on the side of warning.
+		return true
+	}
+	for _, srv := range doc.MCPServers {
+		for _, m := range []map[string]string{srv.Env, srv.Headers} {
+			for _, v := range m {
+				if !strings.Contains(v, "${") {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // copilotMCPServerNames returns the sorted server names of a Copilot MCP

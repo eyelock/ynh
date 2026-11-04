@@ -564,6 +564,12 @@ func TestWarnLegacyProjectMCP(t *testing.T) {
 	}{
 		{"ynh-shaped, same servers", runDoc, true},
 		{"no project file", "", false},
+		{"export-shaped, unexpanded refs", `{"mcpServers":{"a":{"type":"local","command":"x","env":{"K":"${SECRET}"},"tools":["*"]}}}`, false},
+		{"export-shaped, header ref with prefix", `{"mcpServers":{"a":{"type":"http","url":"https://x","headers":{"Authorization":"Bearer ${TOKEN}"},"tools":["*"]}}}`, false},
+		{"export-shaped, no env or headers", `{"mcpServers":{"a":{"type":"local","command":"x","tools":["*"]}}}`, false},
+		{"one literal among refs", `{"mcpServers":{"a":{"type":"local","env":{"K":"${SECRET}","L":"literal"},"tools":["*"]}}}`, true},
+		{"literal header", `{"mcpServers":{"a":{"type":"http","url":"https://x","headers":{"Authorization":"Bearer abc"},"tools":["*"]}}}`, true},
+		{"missing type", `{"mcpServers":{"a":{"command":"x","env":{"K":"secret"},"tools":["*"]}}}`, false},
 		{"different server names", `{"mcpServers":{"b":{"type":"local","tools":["*"]}}}`, false},
 		{"hand-written without tools", `{"mcpServers":{"a":{"type":"local","command":"x"}}}`, false},
 		{"extra top-level key", `{"mcpServers":{"a":{"type":"local","tools":["*"]}},"other":{}}`, false},
