@@ -57,8 +57,8 @@ func TestCodexAdapter(t *testing.T) {
 	dirs := adapter.ArtifactDirs()
 	assertArtifactDirs(t, dirs)
 
-	if adapter.InstructionsFile() != "codex.md" {
-		t.Errorf("InstructionsFile = %q, want %q", adapter.InstructionsFile(), "codex.md")
+	if adapter.InstructionsFile() != "AGENTS.md" {
+		t.Errorf("InstructionsFile = %q, want %q", adapter.InstructionsFile(), "AGENTS.md")
 	}
 }
 

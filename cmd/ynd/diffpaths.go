@@ -21,7 +21,7 @@ const (
 // Three prefixes differ per vendor and all three must be mapped, not just the
 // config directory: claude writes `.claude/` + `.claude-plugin/` + `CLAUDE.md`,
 // cursor writes `.cursor/` + `.cursor-plugin/` + `.cursorrules`, codex writes
-// `.codex/` + `.codex-plugin/` + `codex.md`, copilot `.copilot/` +
+// `.codex/` + `.codex-plugin/` + `AGENTS.md`, copilot `.copilot/` +
 // `.copilot/.claude-plugin/` + `AGENTS.md`.
 //
 // The manifest dir is the plugin manifest's, never the marketplace index's.

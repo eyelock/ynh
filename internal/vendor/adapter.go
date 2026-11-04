@@ -105,7 +105,7 @@ type Adapter interface {
 	ArtifactDirs() map[string]string
 
 	// InstructionsFile returns the filename for project-level instructions
-	// (e.g. "CLAUDE.md", "codex.md", ".cursorrules"). The file is placed at
+	// (e.g. "CLAUDE.md", "AGENTS.md", ".cursorrules"). The file is placed at
 	// the project root, not inside the config directory.
 	InstructionsFile() string
 

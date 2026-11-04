@@ -45,7 +45,7 @@ func (c *Codex) ConfigDir() string {
 	return ".codex"
 }
 
-func (c *Codex) InstructionsFile() string { return "codex.md" }
+func (c *Codex) InstructionsFile() string { return "AGENTS.md" }
 
 func (c *Codex) ArtifactDirs() map[string]string { return DefaultArtifactDirs() }
 

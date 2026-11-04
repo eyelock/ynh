@@ -15,7 +15,7 @@ import (
 // of adapter.InstructionsFile()):
 //
 //   - Claude: CLAUDE.md
-//   - Codex:  codex.md
+//   - Codex:  AGENTS.md
 //   - Cursor: .cursorrules
 //
 // This is the "documentation == code" backstop: silently breaking the
@@ -30,7 +30,7 @@ func TestVendorInstructions_Propagation(t *testing.T) {
 		instructionsFile string
 	}{
 		{vendor: "claude", instructionsFile: "CLAUDE.md"},
-		{vendor: "codex", instructionsFile: "codex.md"},
+		{vendor: "codex", instructionsFile: "AGENTS.md"},
 		{vendor: "cursor", instructionsFile: ".cursorrules"},
 	}
 
