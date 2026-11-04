@@ -533,3 +533,26 @@ func TestBuildCodexArgs_RegistersRunDirAgents(t *testing.T) {
 		t.Errorf("args =\n%q\nwant\n%q", got, want)
 	}
 }
+
+// A worker loads the run directory's MCP servers on every turn, with their
+// secrets off the command line and in the process environment.
+func TestCodexWorkerLoadsMCPServers(t *testing.T) {
+	dir := t.TempDir()
+	doc := `{"mcpServers":{"web":{"type":"http","url":"https://x/mcp","headers":{"Authorization":"Bearer s3cret"}}}}`
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opts := StartOptions{ConfigPath: dir}
+	for _, thread := range []string{"", "th_1"} {
+		got := strings.Join(buildCodexArgs(opts, thread), "\n")
+		if !strings.Contains(got, `mcp_servers.web.url="https://x/mcp"`) || !strings.Contains(got, "mcp_servers.web.env_http_headers=") {
+			t.Errorf("thread %q: no MCP override in:\n%s", thread, got)
+		}
+		if strings.Contains(got, "s3cret") {
+			t.Errorf("thread %q: the secret is on the command line:\n%s", thread, got)
+		}
+	}
+	if env := vendor.CodexMCP(dir).Env; len(env) != 1 || !strings.HasSuffix(env[0], "=Bearer s3cret") {
+		t.Errorf("env = %v", env)
+	}
+}
