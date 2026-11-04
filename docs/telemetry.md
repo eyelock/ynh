@@ -5,8 +5,15 @@ each sensor check, and an event when the run starts and when it ends. A factory
 can then follow a run from the step that started it, through the run, into the
 vendor CLI and the sensors.
 
-It is the only ynh command that does. Every other command launches the vendor
-CLI and gets out of the way, so none lives long enough to report.
+It is the only ynh command that does. The commands that launch a vendor CLI
+(`ynh run` and the like) emit nothing, whatever the vendor, and what ynh does
+with its own process differs by vendor:
+
+- **Claude, Copilot and OpenCode:** ynh replaces itself with the vendor CLI
+  (`syscall.Exec`). No ynh process is left, so there is nothing to report from.
+- **Codex and Cursor:** ynh stays the parent process while the vendor CLI runs
+  as its child, forwards signals, and exits with the child's exit code. It is
+  running throughout, but these commands still emit no telemetry.
 
 Telemetry is off unless something gives it a destination, and it never changes
 a run: the result, the output and the exit code are the same with it and
