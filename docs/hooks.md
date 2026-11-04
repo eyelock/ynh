@@ -36,7 +36,7 @@ The vendors do not agree on how the output is read. Verified on 2026-10-30 with 
 | Vendor | Plain stdout reaches the model? | The field that does | ynh |
 |--------|---------------------------------|---------------------|-----|
 | Claude Code | Yes | also `hookSpecificOutput.additionalContext` | writes the command as declared |
-| Codex | Per its docs ("Plain text on stdout is added as extra developer context"); **not verified live** | also `hookSpecificOutput.additionalContext` | writes the command as declared |
+| Codex | Yes (CONFIRMED live, codex-cli 0.166.0, once the hook is trusted; see [Codex hook trust](#codex-hook-trust)) | also `hookSpecificOutput.additionalContext` | writes the command as declared |
 | Copilot CLI 1.0.105 | No | `{"additionalContext": "..."}` | wraps the command |
 | Cursor (cursor-agent 2026.10.01) | No | `{"additional_context": "..."}` | wraps the command |
 | OpenCode 2 | No | none: the hook runs from the event stream (`session.created`), which cannot add context, and the generated plugin discards its stdout | declares `unsupported`, so assembly warns |
@@ -51,6 +51,14 @@ On Copilot and Cursor ynh writes the hook as `sh <root>/hooks/ynh-session-contex
 In a package that Claude Code and Copilot share one hook file for, the wrapper emits both shapes at once. Other events are untouched.
 
 Each vendor declares how it delivers this as `<vendor>SessionStartContext` in its adapter (`plain`, `json-field:<name>` or `unsupported:<reason>`), and `make check-vendor-parity` requires it. A vendor that declares `unsupported` makes `ynd validate`, `ynd lint` and assembly warn that the hook's output does not reach the model there.
+
+### Codex hook trust
+
+Codex runs a hook only when it trusts both the project layer holding it and the hook itself, and it records neither for ynh's run directory, so before this was handled a harness's hooks (and its `on_session_start` context) were written to `.codex/hooks.json` and never ran. A project's `.codex/` layer loads only for a trusted project, and a non-managed hook runs only when `hooks.state."<key>".trusted_hash` holds the hash Codex computes for its current definition ([learn.chatgpt.com/docs/hooks](https://learn.chatgpt.com/docs/hooks)).
+
+`ynh run` now passes both for the one invocation, as `-c` overrides: the run directory as a trusted project, and the hash of each hook ynh wrote. Nothing is written to your `~/.codex/config.toml`, and your own Codex hooks keep their own trust. The hook file is ynh's, assembled from a harness you chose to run (and, if installed, accepted with `ynh trust`); Claude Code, Copilot and Cursor run a harness's hooks without asking either. The hash is Codex's own and undocumented; ynh reproduces it and a test pins it against values Codex reported. If a Codex release changes it, hooks go back to being skipped rather than run untrusted.
+
+This covers `ynh run` and the agent loop. A package from `ynd export` is a plugin: Codex reads its hooks only after you trust them with `/hooks`.
 
 ### on_session_end semantics
 

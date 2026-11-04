@@ -224,7 +224,8 @@ var codexHookEventMap = map[string]string{
 
 // How on_session_start output reaches the model: Per
 // learn.chatgpt.com/docs/hooks: "Plain text on stdout is added as extra
-// developer context." UNVERIFIED live: Codex was not installed to test.
+// developer context." Verified live (codex-cli 0.166.0) once the hook is
+// trusted, which ynh grants per run (CodexHookTrustArgs).
 var codexSessionStartContext = "plain"
 
 // codexUnsupportedHookEvents names the canonical events Codex cannot express,
@@ -498,7 +499,8 @@ func launchCodex(configPath string, extraArgs []string) error {
 
 	// Launch as child process so ynh stays alive for signal handling.
 	// Use cmd.Dir instead of --cd for CWD control.
-	cmd := exec.Command(codexBin, extraArgs...)
+	// The hooks ynh wrote run only when Codex trusts them (CodexHookTrustArgs).
+	cmd := exec.Command(codexBin, append(CodexHookTrustArgs(configPath), extraArgs...)...)
 	cmd.Dir = configPath
 	// The values of the servers' headers are passed in the environment, never
 	// on the command line (CodexMCP).
