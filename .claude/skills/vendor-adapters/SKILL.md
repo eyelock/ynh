@@ -378,7 +378,11 @@ spelling rather than passing the struct through:
   stdio, `"http"` for Streamable HTTP, `"sse"` for the legacy transport.
 - Claude Code and Codex share one `.mcp.json` shape: `"http"` or `"sse"` on a
   remote entry, no type on a stdio entry (Claude Code rejects a `url` entry
-  without a type, so this is load-bearing).
+  without a type, so this is load-bearing). That is the file ynh writes; Codex
+  does not read it in a run. `ynh run` and `ynh agent run` pass its servers as
+  `-c mcp_servers.<name>.*` overrides, with secrets kept off the command line,
+  and Codex has no legacy `sse` transport, so those servers are not loaded
+  (`internal/vendor/codex_mcp.go`, `docs/mcp.md` "Codex Format").
 - Cursor's `mcp.json` defines no transport key; the adapter drops it.
 - `tools` defaults to `["*"]` if omitted when set via `copilot mcp add`, but
   wasn't tested for omission entirely from a hand-written file — include it

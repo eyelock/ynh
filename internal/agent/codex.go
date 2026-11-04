@@ -42,6 +42,7 @@ func (b *CodexBackend) Start(ctx context.Context, opts StartOptions) (WorkerSess
 	// Each turn registers the agents again (buildCodexArgs); say once which
 	// cannot be.
 	if _, warnings := vendor.CodexAgentArgs(opts.ConfigPath); opts.Stderr != nil {
+		warnings = append(warnings, vendor.CodexMCP(opts.ConfigPath).Warnings...)
 		for _, msg := range warnings {
 			_, _ = fmt.Fprintf(opts.Stderr, "warning: %s\n", msg)
 		}
@@ -82,6 +83,9 @@ func buildCodexArgs(opts StartOptions, threadID string) []string {
 	// .codex/ layer; the -c overrides do not depend on the working directory.
 	agentArgs, _ := vendor.CodexAgentArgs(opts.ConfigPath)
 	args = append(args, agentArgs...)
+	// And its MCP servers, which codex reads from no file in the worktree
+	// either. Their header values reach the process in its environment (Next).
+	args = append(args, vendor.CodexMCP(opts.ConfigPath).Args...)
 	args = append(args, "--json")
 	args = append(args, workspaceArgs(vendorCodex, opts.Workspace)...)
 	if opts.Model != "" {
@@ -286,7 +290,7 @@ func (s *codexSession) Next() (Turn, error) {
 	if s.opts.WorktreeDir != "" {
 		cmd.Dir = s.opts.WorktreeDir
 	}
-	cmd.Env = workerEnvFor(s.opts.Env)
+	cmd.Env = append(workerEnvFor(s.opts.Env), vendor.CodexMCP(s.opts.ConfigPath).Env...)
 	cmd.Stdin = strings.NewReader(msg)
 	tail := &stderrTail{}
 	cmd.Stderr = stderrSink(s.opts.Stderr, tail)

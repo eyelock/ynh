@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -158,5 +159,130 @@ func TestCodexLaunchArgs_PrintWarnings(t *testing.T) {
 	codexExecArgs(runDir, "go", nil, &w)
 	if !strings.HasPrefix(w.String(), "warning: agent \"a.b\"") {
 		t.Errorf("stderr = %q, want a warning naming the agent", w.String())
+	}
+}
+
+func TestCodexMCP_LoadsEachServerWithoutSecretsOnTheCommandLine(t *testing.T) {
+	runDir := t.TempDir()
+	doc := `{"mcpServers":{
+"local":{"command":"py","args":["a b","-x"],"env":{"K":"s3cret\"q"},"cwd":"/w"},
+"plain":{"command":"py2","args":["y"]},
+"remote":{"type":"http","url":"https://x/mcp","headers":{"Authorization":"Bearer t0ken","X-Static":"v"}},
+"legacy":{"type":"sse","url":"https://x/sse"},
+"bad.name":{"command":"x"}}}`
+	if err := os.WriteFile(filepath.Join(runDir, ".mcp.json"), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := CodexMCP(runDir)
+	line := strings.Join(got.Args, "\n")
+	for _, want := range []string{
+		`mcp_servers.local.command="ynh"`,
+		`"mcp-exec", "--env-file", "` + runDir,
+		`"--", "py", "a b", "-x"]`,
+		`mcp_servers.local.env={"K" = "${YNH_MCP_`,
+		`mcp_servers.local.cwd="/w"`,
+		`mcp_servers.plain.command="py2"`,
+		`mcp_servers.remote.url="https://x/mcp"`,
+		`mcp_servers.remote.env_http_headers={"Authorization" = "YNH_MCP_HEADER_SECRET_`,
+	} {
+		if !strings.Contains(line, want) {
+			t.Errorf("missing %s in:\n%s", want, line)
+		}
+	}
+	for _, secret := range []string{"s3cret", "t0ken", "Bearer"} {
+		if strings.Contains(line, secret) {
+			t.Errorf("%q is on the command line:\n%s", secret, line)
+		}
+	}
+	for _, name := range []string{"bad.name", "mcp_servers.legacy"} {
+		if strings.Contains(line, name) {
+			t.Errorf("%s was passed:\n%s", name, line)
+		}
+	}
+	if len(got.Warnings) != 2 || !strings.Contains(got.Warnings[0], "bad.name") && !strings.Contains(got.Warnings[1], "bad.name") {
+		t.Errorf("warnings = %v", got.Warnings)
+	}
+	if !strings.Contains(strings.Join(got.Warnings, "\n"), "legacy") {
+		t.Errorf("no warning names the sse server: %v", got.Warnings)
+	}
+	env := strings.Join(got.Env, "\n")
+	if !strings.Contains(env, "=Bearer t0ken") || !strings.Contains(env, "=v") {
+		t.Errorf("env = %v, want the header values", got.Env)
+	}
+	file := filepath.Join(runDir, ".env.ynh")
+	data, err := os.ReadFile(file)
+	if err != nil || !strings.Contains(string(data), `s3cret\"q`) {
+		t.Errorf("env file = %q, %v", data, err)
+	}
+	if fi, _ := os.Stat(file); fi == nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("env file mode = %v, want 0600", fi)
+	}
+}
+
+func TestCodexMCP_NoFile(t *testing.T) {
+	if got := CodexMCP(t.TempDir()); got.Args != nil || got.Env != nil || got.Warnings != nil {
+		t.Errorf("got %+v", got)
+	}
+}
+
+func TestCodexMCP_NumberingIsDeterministic(t *testing.T) {
+	runDir := t.TempDir()
+	doc := `{"mcpServers":{
+"a":{"command":"py","env":{"A1":"va1","A2":"va2","A3":"va3","A4":"va4"}},
+"b":{"command":"py","env":{"B1":"vb1","B2":"vb2","B3":"vb3","B4":"vb4"}},
+"r":{"type":"http","url":"https://x/mcp","headers":{"H1":"vh1","H2":"vh2","H3":"vh3","H4":"vh4"}}}}`
+	if err := os.WriteFile(filepath.Join(runDir, ".mcp.json"), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	first := CodexMCP(runDir)
+	firstFile, _ := os.ReadFile(filepath.Join(runDir, ".env.ynh"))
+	wantEnv := []string{"YNH_MCP_HEADER_SECRET_8=vh1", "YNH_MCP_HEADER_SECRET_9=vh2", "YNH_MCP_HEADER_SECRET_10=vh3", "YNH_MCP_HEADER_SECRET_11=vh4"}
+	sorted := append([]string(nil), first.Env...)
+	sort.Strings(sorted)
+	sort.Strings(wantEnv)
+	if strings.Join(sorted, ",") != strings.Join(wantEnv, ",") {
+		t.Errorf("header env = %v, want %v", first.Env, wantEnv)
+	}
+	for _, want := range []string{`YNH_MCP_0="va1"`, `YNH_MCP_3="va4"`, `YNH_MCP_4="vb1"`, `YNH_MCP_7="vb4"`} {
+		if !strings.Contains(string(firstFile), want) {
+			t.Errorf("env file lacks %s:\n%s", want, firstFile)
+		}
+	}
+	for i := 0; i < 50; i++ {
+		again := CodexMCP(runDir)
+		if strings.Join(again.Args, "\n") != strings.Join(first.Args, "\n") || strings.Join(again.Env, "\n") != strings.Join(first.Env, "\n") {
+			t.Fatalf("call %d differs from the first:\n%v\n%v", i, again, first)
+		}
+		file, _ := os.ReadFile(filepath.Join(runDir, ".env.ynh"))
+		if string(file) != string(firstFile) {
+			t.Fatalf("call %d wrote a different env file", i)
+		}
+	}
+}
+
+func TestCodexMCP_HeaderVariablesMatchCodexDefaultExcludes(t *testing.T) {
+	runDir := t.TempDir()
+	doc := `{"mcpServers":{"r":{"type":"http","url":"https://x/mcp","headers":{"Authorization":"Bearer t0ken"}}}}`
+	if err := os.WriteFile(filepath.Join(runDir, ".mcp.json"), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	launch := CodexMCP(runDir)
+	got := strings.Join(launch.Args, "\n")
+	if strings.Contains(got, "shell_environment_policy.exclude") {
+		t.Errorf("user's shell_environment_policy.exclude overridden:\n%s", got)
+	}
+	if !strings.Contains(got, "shell_environment_policy.ignore_default_excludes=false") {
+		t.Errorf("Codex's default excludes not switched on:\n%s", got)
+	}
+	if g := strings.Join(CodexMCP(t.TempDir()).Args, ""); strings.Contains(g, "shell_environment_policy") {
+		t.Errorf("policy touched without headers: %s", g)
+	}
+	if len(launch.Env) != 1 {
+		t.Fatalf("env = %v", launch.Env)
+	}
+	// Codex's default policy drops names containing KEY, SECRET or TOKEN.
+	name := strings.ToUpper(strings.SplitN(launch.Env[0], "=", 2)[0])
+	if !strings.Contains(name, "SECRET") {
+		t.Errorf("%s would not be caught by Codex's default excludes", name)
 	}
 }
