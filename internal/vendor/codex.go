@@ -153,7 +153,7 @@ func (c *Codex) ResolveLastSession(cwd string, notBefore time.Time) (string, err
 // `codex resume` documents no prompt argument, so that combination is refused
 // rather than guessed at.
 func (c *Codex) LaunchResume(configPath, sessionID, prompt string, interactive bool, extraArgs []string) error {
-	args, err := codexResumeArgs(sessionID, prompt, interactive, extraArgs)
+	args, err := codexResumeArgs(sessionID, prompt, interactive, extraArgs, os.Stderr)
 	if err != nil {
 		return err
 	}
@@ -176,7 +176,7 @@ func withCodexRunArgs(resumeArgs, agentArgs []string) []string {
 	return append(out, resumeArgs[n:]...)
 }
 
-func codexResumeArgs(sessionID, prompt string, interactive bool, extraArgs []string) ([]string, error) {
+func codexResumeArgs(sessionID, prompt string, interactive bool, extraArgs []string, warn io.Writer) ([]string, error) {
 	if prompt != "" && interactive {
 		return nil, ErrResumePromptNotSupported
 	}
@@ -188,6 +188,9 @@ func codexResumeArgs(sessionID, prompt string, interactive bool, extraArgs []str
 		args = append(args, sessionID)
 	} else {
 		args = append(args, "--last")
+	}
+	if prompt != "" {
+		extraArgs = codexExecResumeExtraArgs(extraArgs, codexUserConfigPath(), warn)
 	}
 	args = append(args, extraArgs...)
 	if prompt != "" {
