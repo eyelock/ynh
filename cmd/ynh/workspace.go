@@ -134,7 +134,7 @@ func workspaceGrant(loaded *harness.Harness, id, vendorName, projectDir string, 
 
 // workspaceLaunchArgs is workspaceGrant rendered as the vendor's flags for
 // `ynh run`.
-func workspaceLaunchArgs(loaded *harness.Harness, id, vendorName, runDir string, noWorkspace bool, stderr io.Writer) ([]string, error) {
+func workspaceLaunchArgs(loaded *harness.Harness, id, vendorName, runDir string, preassembled, noWorkspace bool, stderr io.Writer) ([]string, error) {
 	projectDir, err := os.Getwd()
 	if err != nil {
 		return nil, err
@@ -144,7 +144,14 @@ func workspaceLaunchArgs(loaded *harness.Harness, id, vendorName, runDir string,
 	if err != nil {
 		return nil, err
 	}
-	if vendorName == "opencode" {
+	if vendorName == "opencode" && preassembled && len(granted) > 0 {
+		// A baked image's run dir is reused and never reassembled, so a rule
+		// written into it would outlive this run's grant, and the image may
+		// be read-only. Leave it alone and say so.
+		for _, g := range granted {
+			_, _ = fmt.Fprintf(stderr, "  warning: workspace: %s not granted: opencode: a pre-assembled run directory is not edited; bake the folder into the image\n", g)
+		}
+	} else if vendorName == "opencode" {
 		// No flag: the grant is a rule in each agent file of the run dir.
 		if err := vendor.GrantOpenCodeWorkspace(runDir, granted); err != nil {
 			return nil, err

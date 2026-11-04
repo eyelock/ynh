@@ -254,7 +254,7 @@ func TestWorkspaceLaunchArgsPerVendor(t *testing.T) {
 	t.Chdir(w.project)
 	for _, v := range []string{"claude", "codex", "copilot", "cursor"} {
 		var stderr bytes.Buffer
-		args, err := workspaceLaunchArgs(w.harness("../ynh"), "local/seat", v, t.TempDir(), false, &stderr)
+		args, err := workspaceLaunchArgs(w.harness("../ynh"), "local/seat", v, t.TempDir(), false, false, &stderr)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -272,13 +272,41 @@ func TestWorkspaceLaunchArgsPerVendor(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(agents, "a.md"), []byte(denyAll), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	args, err := workspaceLaunchArgs(w.harness("../ynh"), "local/seat", "opencode", runDir, false, &stderr)
+	args, err := workspaceLaunchArgs(w.harness("../ynh"), "local/seat", "opencode", runDir, false, false, &stderr)
 	got, _ := os.ReadFile(filepath.Join(agents, "a.md"))
 	if !strings.Contains(string(got), "external_directory") || !strings.Contains(string(got), w.sibling+"/**") {
 		t.Errorf("opencode agent not granted the folder:\n%s", got)
 	}
 	if err != nil || len(args) != 0 || !strings.Contains(stderr.String(), "workspace: granted") || strings.Contains(stderr.String(), "not granted") {
 		t.Errorf("opencode: args %v, err %v, stderr %q", args, err, stderr.String())
+	}
+}
+
+// A pre-assembled (baked) run dir is never edited: a rule written there would
+// survive a later run whose grant no longer names the folder.
+func TestWorkspaceLaunchArgsPreassembledOpenCodeNotEdited(t *testing.T) {
+	w := newWSWorld(t)
+	w.writeConfig(t, w.home)
+	t.Chdir(w.project)
+	runDir := t.TempDir()
+	agents := filepath.Join(runDir, ".opencode", "agents")
+	if err := os.MkdirAll(agents, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	denyAll := "---\ndescription: d\npermissions:\n  - action: \"*\"\n    resource: \"*\"\n    effect: deny\n---\nbody\n"
+	if err := os.WriteFile(filepath.Join(agents, "a.md"), []byte(denyAll), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stderr bytes.Buffer
+	if _, err := workspaceLaunchArgs(w.harness("../ynh"), "local/seat", "opencode", runDir, true, false, &stderr); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(filepath.Join(agents, "a.md"))
+	if string(got) != denyAll {
+		t.Errorf("pre-assembled agent was edited:\n%s", got)
+	}
+	if !strings.Contains(stderr.String(), "not granted") {
+		t.Errorf("no warning: %q", stderr.String())
 	}
 }
 
