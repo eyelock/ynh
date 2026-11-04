@@ -454,7 +454,7 @@ func TestOpenCodeTransformArtifact(t *testing.T) {
 		{
 			"claude agent", "agents", "code-reviewer.md",
 			"---\nname: code-reviewer\ndescription: Reviews code\nmodel: sonnet\ncolor: blue\n---\nBody\n",
-			"---\ndescription: Reviews code\n---\nBody\n",
+			"---\ndescription: Reviews code\nmode: all\n---\nBody\n",
 		},
 		{
 			"keeps mode and provider model", "agents", "a.md",
@@ -464,57 +464,57 @@ func TestOpenCodeTransformArtifact(t *testing.T) {
 		{
 			"tools comma string", "agents", "a.md",
 			"---\ndescription: d\ntools: Read, Grep\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + denyAll + allow("read", "*") + allow("grep", "*") + "---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n" + denyAll + allow("read", "*") + allow("grep", "*") + "---\nB\n",
 		},
 		{
 			"tools yaml list, dupes and unknown", "agents", "a.md",
 			"---\ndescription: d\ntools:\n  - Edit\n  - Write\n  - mcp__x__y\n  - Bash\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + denyAll + allow("edit", "*") + allow("x_y", "*") + allow("shell", "*") + "---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n" + denyAll + allow("edit", "*") + allow("x_y", "*") + allow("shell", "*") + "---\nB\n",
 		},
 		{
 			"granted MCP tool is allowed, not denied", "agents", "a.md",
 			"---\ndescription: d\ntools: [Read, mcp__srv__do_it, mcp__bad, mcp__srv__x(y)]\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + denyAll + allow("read", "*") + allow("srv_do_it", "*") + "---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n" + denyAll + allow("read", "*") + allow("srv_do_it", "*") + "---\nB\n",
 		},
 		{
 			"granted MCP tool with existing permissions is not denied", "agents", "a.md",
 			"---\ndescription: d\ntools: Read, Glob, Grep, Edit, Bash, WebFetch, WebSearch, Task, Skill, mcp__srv__do_it\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: ask\n---\nB\n",
-			"---\ndescription: d\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: ask\n---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: ask\n---\nB\n",
 		},
 		{
 			"tools flow list, only unknown", "agents", "a.md",
 			"---\ndescription: d\ntools: [Foo, Bar]\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + denyAll + "---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n" + denyAll + "---\nB\n",
 		},
 		{
 			"scoped Bash keeps commas in parens and maps to a command pattern", "agents", "a.md",
 			"---\ndescription: d\ntools: Read, Bash(git status:*), Bash(git add -A, x), Read(./src/**)\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + denyAll + allow("read", "*") + allow("shell", "git status *") + allow("shell", "git add -A, x") + "---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n" + denyAll + allow("read", "*") + allow("shell", "git status *") + allow("shell", "git add -A, x") + "---\nB\n",
 		},
 		{
 			"empty tools inherits", "agents", "a.md",
 			"---\ndescription: d\ntools:\n---\nB\n",
-			"---\ndescription: d\n---\nB\n",
+			"---\ndescription: d\nmode: all\n---\nB\n",
 		},
 		{
 			"disallowedTools alone denies after the default allow-all", "agents", "a.md",
 			"---\ndescription: d\ndisallowedTools: Bash, Write, mcp__srv__do_it, Foo\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + deny("shell", "*") + deny("edit", "*") + deny("srv_do_it", "*") + "---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n" + deny("shell", "*") + deny("edit", "*") + deny("srv_do_it", "*") + "---\nB\n",
 		},
 		{
 			"disallowed-tools scoped Bash and scoped Read", "agents", "a.md",
 			"---\ndescription: d\ndisallowed-tools: Bash(rm:*), Read(./.env)\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + deny("shell", "rm *") + deny("read", "*") + "---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n" + deny("shell", "rm *") + deny("read", "*") + "---\nB\n",
 		},
 		{
 			"disallowed denies come after the allows", "agents", "a.md",
 			"---\ndescription: d\ntools: Bash\ndisallowedTools: Bash(rm:*)\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + denyAll + allow("shell", "*") + deny("shell", "rm *") + "---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n" + denyAll + allow("shell", "*") + deny("shell", "rm *") + "---\nB\n",
 		},
 		{
 			"existing permissions are kept and only denies are appended", "agents", "a.md",
 			"---\ndescription: d\ntools: Bash\ndisallowedTools: Write\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: ask\n---\nB\n",
-			"---\ndescription: d\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: ask\n" +
+			"---\ndescription: d\nmode: all\npermissions:\n  - action: edit\n    resource: \"*\"\n    effect: ask\n" +
 				"  - action: read\n    resource: \"*\"\n    effect: deny\n" +
 				"  - action: edit\n    resource: \"*\"\n    effect: deny\n" +
 				"  - action: glob\n    resource: \"*\"\n    effect: deny\n" +
@@ -528,36 +528,36 @@ func TestOpenCodeTransformArtifact(t *testing.T) {
 		{
 			"existing permissions untouched without tool lists", "agents", "a.md",
 			"---\ndescription: d\npermissions:\n    - action: edit\n      resource: \"*\"\n      effect: deny\n---\nB\n",
-			"---\ndescription: d\npermissions:\n    - action: edit\n      resource: \"*\"\n      effect: deny\n---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n    - action: edit\n      resource: \"*\"\n      effect: deny\n---\nB\n",
 		},
 		{
 			"empty inline permissions are no permissions, so the lists still apply", "agents", "a.md",
 			"---\ndescription: d\ntools: Read\ndisallowedTools: Bash\npermissions: [ ]\n---\nB\n",
-			"---\ndescription: d\npermissions:\n" + denyAll + allow("read", "*") + deny("shell", "*") + "---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions:\n" + denyAll + allow("read", "*") + deny("shell", "*") + "---\nB\n",
 		},
 		{
 			"empty inline permissions without tool lists are dropped", "agents", "a.md",
 			"---\ndescription: d\npermissions: []\n---\nB\n",
-			"---\ndescription: d\n---\nB\n",
+			"---\ndescription: d\nmode: all\n---\nB\n",
 		},
 		{
 			"inline permissions without tool lists are kept as written", "agents", "a.md",
 			"---\ndescription: d\npermissions: [{action: edit, resource: \"*\", effect: ask}]\n---\nB\n",
-			"---\ndescription: d\npermissions: [{action: edit, resource: \"*\", effect: ask}]\n---\nB\n",
+			"---\ndescription: d\nmode: all\npermissions: [{action: edit, resource: \"*\", effect: ask}]\n---\nB\n",
 		},
 		{
 			"no description", "agents", "plan-helper.md",
 			"---\nname: x\ntools: Read\n---\nBody\n",
-			"---\ndescription: \"Plan Helper\"\npermissions:\n" + denyAll + allow("read", "*") + "---\nBody\n",
+			"---\ndescription: \"Plan Helper\"\nmode: all\npermissions:\n" + denyAll + allow("read", "*") + "---\nBody\n",
 		},
 		{
 			"empty description", "agents", "e.md",
 			"---\ndescription:\n---\nBody\n",
-			"---\ndescription: \"E\"\n---\nBody\n",
+			"---\ndescription: \"E\"\nmode: all\n---\nBody\n",
 		},
 		{
 			"no frontmatter", "agents", "bare.md", "Just a body\n",
-			"---\ndescription: \"Bare\"\n---\nJust a body\n",
+			"---\ndescription: \"Bare\"\nmode: all\n---\nJust a body\n",
 		},
 	}
 	for _, tc := range cases {

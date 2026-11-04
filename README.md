@@ -33,9 +33,9 @@ david -v codex                     # same harness, different vendor
 
 ynh claims more than each vendor yet gets. In v0.16.0:
 
-- **Codex** does not yet receive instructions, MCP servers, hooks, session context, rules or commands. Skills, agents, focuses and profiles do. Under `ynh run`, Codex starts in the run directory without `-C`, so the project's own `AGENTS.md` is never read.
-- **Rules** do not reach Claude Code, Codex or Copilot.
-- **OpenCode**: agents and delegates cannot run as subagents, `on_session_start` does not fire, `on_session_end` cannot fire (OpenCode has no such event, a vendor limit), and session context is not injected. `ynd export -v opencode` drops delegates silently.
+- **Codex** does not yet receive hooks, session context or commands. Instructions (written to `AGENTS.md`), rules (folded into them), MCP servers, skills, agents, focuses and profiles do. Under `ynh run`, Codex starts in the run directory without `-C`, so the project's own `AGENTS.md` is never read.
+- **Rules** reach Claude Code, Codex and Copilot only by being folded into their instructions under `ynh run`: always on, with no path scoping.
+- **OpenCode**: delegates cannot run as subagents (a harness's own agents can), `on_session_start` does not fire, `on_session_end` cannot fire (OpenCode has no such event, a vendor limit), and session context is not injected. `ynd export -v opencode` drops delegates silently.
 - **Cursor**: print mode skips `before_prompt` and `on_stop`.
 - **Delegates** carry only their instructions on Codex, Cursor and Copilot. On Claude Code a delegate also carries its MCP servers, not its hooks or workspace. A delegate does not run on OpenCode. "A full harness" holds for includes, not yet for delegates.
 - **Resume**: Cursor and Copilot refuse a prompt on resume. On Codex a resume with a prompt passes workspace folders as `writable_roots`, which takes effect only under the `workspace-write` sandbox (ynh warns on stderr otherwise; ynh does not change Codex's sandbox, and `codex exec` defaults to read-only).
