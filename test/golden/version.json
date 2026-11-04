@@ -6,6 +6,7 @@
     "agent-run-harness-path",
     "delegate-graph-flattens",
     "include-cycles-resolve",
+    "run-labels",
     "trust-counts-composed-mcp-servers",
     "workspace-folders"
   ]

@@ -199,10 +199,7 @@ func writeMCPEnvFile(dir string, secrets map[string]string) error {
 		return err
 	}
 	path := filepath.Join(dir, mcpexec.EnvFileName)
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		return err
-	}
-	return os.Chmod(path, 0o600)
+	return WriteSecretFile(path, data)
 }
 
 func tomlStringArray(ss []string) string {

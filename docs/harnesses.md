@@ -395,6 +395,10 @@ Boolean, default `false`. When `true`, `ynh run` launches the harness with only 
 
 Extra folders the vendor CLI should be able to reach, such as sibling repositories: `"workspace": ["../ynh", "~/code/shared"]`. A request, not a grant. The operator's allow-list (`workspace_roots`, `YNH_WORKSPACE_ROOTS`) or `ynh trust accept` grants it, and some paths are never granted. See [Workspace Folders](workspace.md).
 
+### labels (optional)
+
+Run labels for a run of this harness, as an object of `key` to `value`: `"labels": {"wheelhouse": "ynw"}`. They are merged with `config.json` labels, `YNH_LABELS` and `--label`, exported on the run's telemetry as `ynh.label.<key>`, and refused if they break the limits. Only the root harness's labels count; those of harnesses it includes are ignored. See [Run labels](telemetry.md#run-labels).
+
 ### launch_focus (optional)
 
 The name of the focus a bare `ynh run` wakes with: interactive, the focus prompt as the first message, the focus's profile applied. It must name a key of the harness's own `focuses` whose prompt is not empty: never an included harness's `namespace:name` focus or a delegate's focus. `ynd validate` errors on any other value and `ynh run` refuses it; run an included harness's focus with `--focus namespace:name` instead. An explicit `--focus` or prompt overrides it, and `ynh agent run` and delegation ignore it. See [Focus: Launch focus](focus.md#launch-focus).

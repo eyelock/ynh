@@ -14,6 +14,7 @@ import (
 	"github.com/eyelock/ynh/internal/assembler"
 	"github.com/eyelock/ynh/internal/config"
 	"github.com/eyelock/ynh/internal/harness"
+	"github.com/eyelock/ynh/internal/labels"
 	"github.com/eyelock/ynh/internal/migration"
 	"github.com/eyelock/ynh/internal/plugin"
 	"github.com/eyelock/ynh/internal/resolver"
@@ -75,8 +76,10 @@ type infoEntry struct {
 	// Selection is the profile or focus --profile or --focus selected, when
 	// one was. MCPServers and Hooks are then what a run with that selection
 	// carries.
-	Selection *infoSelection  `json:"selection,omitempty"`
-	Manifest  json.RawMessage `json:"manifest"`
+	Selection *infoSelection `json:"selection,omitempty"`
+	// Labels are the harness's own run labels — see listEntry.Labels.
+	Labels   map[string]string `json:"labels,omitempty"`
+	Manifest json.RawMessage   `json:"manifest"`
 }
 
 // infoSelection is what `ynh info --profile/--focus` selected. Focus is the
@@ -342,6 +345,9 @@ func printInfoText(w io.Writer, name string, profiles []string, focus string) er
 	_, _ = fmt.Fprintf(w, "ID:           %s\n", name)
 	_, _ = fmt.Fprintf(w, "Name:         %s\n", p.Name)
 	_, _ = fmt.Fprintf(w, "Vendor:       %s\n", vendorName)
+	if len(loaded.Labels) > 0 {
+		_, _ = fmt.Fprintf(w, "Labels:       %s\n", labels.Encode(loaded.Labels))
+	}
 	if sel := view.selection; sel != nil {
 		var parts []string
 		if sel.Focus != "" {
@@ -620,6 +626,7 @@ func printInfoJSON(stdout, stderr io.Writer, name string, profiles []string, foc
 		InstalledFrom:    base.InstalledFrom,
 		Includes:         base.Includes,
 		DelegatesTo:      base.DelegatesTo,
+		Labels:           base.Labels,
 		Manifest:         compacted,
 	}
 	entry.MCPServers = view.servers

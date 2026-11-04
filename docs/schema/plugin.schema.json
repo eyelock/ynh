@@ -107,6 +107,18 @@
         "minLength": 1
       }
     },
+    "labels": {
+      "description": "Run labels the harness carries when it is the root of a run: key to value, at most 16. Merged per key with config.json labels, YNH_LABELS and --label (later wins), exported as ynh.label.<key> on the run's telemetry and as YNH_LABELS to every process ynh starts. Labels of included harnesses are ignored. A key matches ^[a-z][a-z0-9_.-]{0,31}$; a value matches ^[A-Za-z0-9._/#-]{1,64}$, does not start with / or ~ and does not contain the home folder. A run with an invalid label is refused.",
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_.-]{0,31}$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._/#-]{1,64}$"
+      }
+    },
     "mcp_servers": {
       "$ref": "#/$defs/mcp_servers"
     },

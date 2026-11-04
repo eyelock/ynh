@@ -105,3 +105,11 @@ groups:
           On a call span, the call's outcome: the gate's verdict (pass, blocked), the sensor's status
           word, or error when the call could not run.
         examples: ["pass", "blocked", "error"]
+      - id: ynh.label
+        type: template[string]
+        stability: development
+        brief: >
+          A run label, one attribute per key under the prefix: ynh.label.<key>, on ynh's resource. The key
+          and value are the user's own ids, within ynr ADR-006 rule 10 (key ^[a-z][a-z0-9_.-]{0,31}$, value
+          ^[A-Za-z0-9._/#-]{1,64}$, at most 16 per run), and ynh refuses a run whose labels break them.
+        examples: ["wheelhouse:ynw"]

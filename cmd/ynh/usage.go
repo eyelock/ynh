@@ -95,6 +95,7 @@ Run flags:
                                A trailing prompt is sent to the resumed session
                                (not a --focus prompt); some vendors refuse it
   --no-workspace               Grant none of the harness's requested workspace folders for this run
+  --label key:value            A label for the run (repeatable; key: removes one); see docs/telemetry.md
   --install                    Install symlinks for the vendor in current project
   --clean                      Remove symlinks for the vendor in current project
   All other flags are passed through to the vendor CLI. The last bare word is

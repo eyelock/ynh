@@ -45,7 +45,7 @@ func (c *Codex) ConfigDir() string {
 	return ".codex"
 }
 
-func (c *Codex) InstructionsFile() string { return "codex.md" }
+func (c *Codex) InstructionsFile() string { return "AGENTS.md" }
 
 func (c *Codex) ArtifactDirs() map[string]string { return DefaultArtifactDirs() }
 
@@ -55,6 +55,11 @@ func (c *Codex) GenerateSystemPrompt(content []byte) map[string][]byte {
 		"AGENTS.md": content,
 	}
 }
+
+// FoldsRulesIntoInstructions: Codex does not read the rules ynh stages in the
+// config dir, so the assembler appends them to the instructions file it does
+// read (assembler.RuleFolder).
+func (c *Codex) FoldsRulesIntoInstructions() bool { return true }
 
 func (c *Codex) NeedsSymlinks() bool { return true }
 

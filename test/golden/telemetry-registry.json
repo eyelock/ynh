@@ -244,6 +244,15 @@
         "blocked",
         "error"
       ]
+    },
+    {
+      "id": "ynh.label",
+      "type": "template[string]",
+      "brief": "A run label, one attribute per key under the prefix: ynh.label.\u003ckey\u003e, on ynh's resource. The key and value are the user's own ids, within ynr ADR-006 rule 10 (key ^[a-z][a-z0-9_.-]{0,31}$, value ^[A-Za-z0-9._/#-]{1,64}$, at most 16 per run), and ynh refuses a run whose labels break them.",
+      "stability": "development",
+      "examples": [
+        "wheelhouse:ynw"
+      ]
     }
   ],
   "standard_attributes": [

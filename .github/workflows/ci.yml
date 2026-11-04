@@ -293,8 +293,8 @@ jobs:
   conformance:
     # ynr conformance (ynr ADR-008): ynh's own scenarios in .ynr/conformance.yaml
     # run `ynh agent run` against ynr's stub vendor, offline, with no model and
-    # no secret, against a pinned ynr release. Not yet among All Clear's needs:
-    # making it required is a ruleset change, which waits on a human.
+    # no secret, against a pinned ynr release. Among All Clear's needs, so a red
+    # run turns All Clear red.
     name: Conformance
     runs-on: ubuntu-latest
     needs: changes
@@ -338,7 +338,7 @@ jobs:
   all-clear:
     name: All Clear
     runs-on: ubuntu-latest
-    needs: [changes, build, test, lint, format, artifacts, skill-security, packaging, registry]
+    needs: [changes, build, test, lint, format, artifacts, skill-security, packaging, registry, conformance]
     if: always()
     steps:
       - name: Check results
@@ -353,6 +353,7 @@ jobs:
           echo "  skill-security: ${{ needs['skill-security'].result }}"
           echo "  packaging: ${{ needs.packaging.result }}"
           echo "  registry: ${{ needs.registry.result }}"
+          echo "  conformance: ${{ needs.conformance.result }}"
 
           if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
             echo "One or more required checks failed"

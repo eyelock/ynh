@@ -47,6 +47,11 @@
         "delegates_to": {
           "type": "array",
           "items": {"$ref": "#/$defs/Delegate"}
+        },
+        "labels": {
+          "type": "object",
+          "description": "The harness's own run labels, from its manifest (key to value). Absent when it declares none.",
+          "additionalProperties": {"type": "string"}
         }
       },
       "required": [
@@ -80,6 +85,11 @@
         "delegates_to": {
           "type": "array",
           "items": {"$ref": "#/$defs/Delegate"}
+        },
+        "labels": {
+          "type": "object",
+          "description": "The harness's own run labels, from its manifest (key to value). Absent when it declares none.",
+          "additionalProperties": {"type": "string"}
         },
         "mcp_servers": {
           "type": "array",
