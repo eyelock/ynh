@@ -18,6 +18,46 @@ opencode opencode .opencode
 
 If `~/.ynh/config.json` declares any [local model backends](#local-model-backends), `ynh vendors` (including `--format json`) also lists one extra row per configured `<backend>/<vendor>` pair — the exact spec string `-v` accepts — so a caller can discover what's launchable on this machine without parsing config.json itself.
 
+## Known gaps
+
+ynh claims more than each vendor yet gets. In v0.16.0:
+
+- **Codex** does not yet receive instructions, MCP servers, hooks, session context, rules or commands. Skills, agents, focuses and profiles do. Resume fails when the harness asks for workspace folders. Under `ynh run`, Codex starts in the run directory without `-C`, so the project's own `AGENTS.md` is never read.
+- **Rules** do not reach Claude Code, Codex or Copilot.
+- **OpenCode**: agents and delegates cannot run as subagents, `on_session_start` does not fire, `on_session_end` cannot fire (OpenCode has no such event, a vendor limit), session context is not injected, and workspace folders are not granted. `ynd export -v opencode` drops delegates silently.
+- **Cursor**: workspace folders are not granted, and print mode skips `before_prompt` and `on_stop`.
+- **Delegates** carry only their instructions on Codex, Cursor and Copilot. On Claude Code a delegate also carries its MCP servers, not its hooks or workspace. A delegate does not run on OpenCode. "A full harness" holds for includes, not yet for delegates.
+- **Resume**: Cursor and Copilot refuse a prompt on resume.
+- **Telemetry**: `ynh run` emits none on any vendor; only `ynh agent run` does.
+- **Project instructions** (the project's own `AGENTS.md` or `CLAUDE.md` under `ynh run`) are unverified on every vendor except Codex, where they are not read.
+
+These are fixed in v0.17.0 (parity) and later, except what a vendor cannot do. See [ynh #679](https://github.com/eyelock/ynh/issues/679).
+
+## Feature Support
+
+What each vendor receives from a harness in v0.16.0, from the vendor parity audit (live runs of every vendor CLI against ynh develop, 2026-11). **Y** works, **N** does not yet work (ynh can fix it), **X** the vendor cannot, **U** unverified.
+
+| Feature | Claude Code | Codex | Cursor | Copilot CLI | OpenCode |
+|---|---|---|---|---|---|
+| Instructions | Y | N | Y | Y | Y |
+| Project instructions under `ynh run` | U | N | U | U | U |
+| Skills | Y | Y | Y | Y | Y |
+| Agents | Y | Y | Y | Y | N |
+| Rules | N | N | Y | N | Y |
+| Commands | Y | N | Y | Y | U |
+| MCP servers | Y | N | Y | Y | Y |
+| Hooks | Y | N | X | Y | N |
+| Session context | Y | N | Y | Y | N |
+| Profiles | Y | Y | Y | Y | Y |
+| Focuses, includes, sensors | Y | Y | Y | Y | Y |
+| Workspace folders | Y | Y | N | Y | N |
+| `delegates_to` | N | N | N | N | N |
+| Resume | Y | N | U | U | Y |
+| `ynd export` | Y | Y | Y | Y | N |
+| Telemetry from `ynh run` | N | N | N | N | N |
+
+Notes: Cursor print mode skips `before_prompt` and `on_stop`. OpenCode has no `on_session_end` event. Codex commands should ship as skills. Cursor and Copilot refuse a prompt on resume. OpenCode `ynd export` drops delegates silently. Only `ynh agent run` emits telemetry.
+
 ## Launch Strategies
 
 Each vendor gets the strategy that matches its capabilities:

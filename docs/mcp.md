@@ -92,16 +92,16 @@ Each server must have either `command` or `url`, not both. Validation rejects se
 |--------|------|--------|
 | Claude Code | `.claude/.mcp.json` in a session, `mcp/claude.json` in a plugin | JSON with `mcpServers` key; remote servers carry `"type": "http"` or `"sse"` |
 | Cursor | `.cursor/mcp.json` | JSON with `mcpServers` key; no transport field, Cursor infers it |
-| Codex | `.mcp.json` | JSON with `mcpServers` key (at plugin root), same shape as Claude Code |
 | Copilot | `.copilot/.mcp.json` in the run directory (`.github/mcp.json` at the plugin root in an export) | JSON with `mcpServers` key, each server requires an explicit `"type": "local"|"http"` field |
 | OpenCode | `.opencode/opencode.json` (in the `OPENCODE_CONFIG_DIR` bundle) | JSON with servers under `mcp.servers`; `"type": "local"` with `command` as an array, or `"type": "remote"` with `url` |
+
+Codex is not listed here: in v0.16.0 ynh does not deliver MCP servers to a Codex session (see [Known gaps](vendors.md#known-gaps)).
 
 Claude, Cursor and Copilot read MCP servers from a different file depending on how the harness reaches them, and ynh writes each file only where it is read:
 
 | Vendor | `ynh run`, `ynd preview`, `ynh agent` (a session) | `ynd export`, `ynd marketplace build` (a plugin) |
 |--------|------|------|
 | Claude Code | `.claude/.mcp.json`: `.mcp.json` at the root of the `.claude/` plugin directory the session loads | `mcp/claude.json`, named by the `mcpServers` field of `.claude-plugin/plugin.json` ([plugin reference](https://code.claude.com/docs/en/plugins-reference)) |
-| Codex | `.mcp.json` | `.mcp.json` at the plugin root, named by the `mcpServers` field of `.codex-plugin/plugin.json` |
 | Cursor | `.cursor/mcp.json`, the only project-level path Cursor reads ([cursor.com/docs/context/mcp](https://cursor.com/docs/context/mcp)) | `mcp.json` (no dot) at the plugin root, which a Cursor plugin discovers automatically ([cursor.com/docs/reference/plugins](https://cursor.com/docs/reference/plugins)) |
 | OpenCode | `.opencode/opencode.json` in the run directory, the config bundle OpenCode launches with | `.opencode/opencode.json`, the same document; nothing loads it as a plugin, since OpenCode has no plugin manifest |
 | Copilot | `.copilot/.mcp.json` in the run directory, passed to Copilot with `--additional-mcp-config` at launch, never copied into the project (see [Copilot Format](#copilot-format)) | `.github/mcp.json` at the plugin root, a default MCP path for a Copilot plugin ([Copilot CLI plugin reference](https://docs.github.com/en/copilot/reference/cli-plugin-reference)) |

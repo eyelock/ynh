@@ -16,7 +16,7 @@ skill owns the per-vendor references this skill asks you to write.
    CLI's own `--help`, not blog posts. Vendor CLIs change fast and secondary
    sources go stale. Cover every row of the feature map below.
 2. Write `.claude/skills/vendor-adapters/references/<vendor>.md`, modelled on
-   `references/copilot.md`: doc URLs, plugin format, directory layout, hook
+   `references/opencode.md`: doc URLs, plugin format, directory layout, hook
    events, MCP schema, CLI flags, and known gaps. Mark what you hand-tested as
    **CONFIRMED** and leave the rest as documentation claims.
 3. Add the vendor's row to the per-vendor reference index and a documentation
@@ -73,15 +73,15 @@ genuinely differs in that way; each doc comment names the vendor that needed it.
 
 ## Checklist: files to touch
 
-The fastest completeness check is the last vendor added. At any point:
+The fastest completeness check is the last vendor added, OpenCode (#580). At any point:
 
 ```bash
-grep -rli copilot --include="*.go" --include="*.md" --include="*.json" \
+grep -rli opencode --include="*.go" --include="*.md" --include="*.json" \
   --include="*.sh" --include="*.yaml" . | grep -v '^./.git/'
 ```
 
 Every hit is a candidate. Most need the new vendor added; a few are about
-Copilot alone. The grep misses prose that counts vendors rather than naming
+OpenCode alone. The grep misses prose that counts vendors rather than naming
 them, so also look for spelled-out counts:
 
 ```bash
@@ -95,7 +95,7 @@ grep -rniE "all (four|five|six) |(four|five|six) vendors" \
   Self-register in `init()` via `Register(&<Name>{})`. Spell the binary only in
   `CLIName`; everything else asks the adapter (#524).
 - [ ] `internal/vendor/<name>_test.go`: table-driven tests for every method,
-  matching the depth of `internal/vendor/copilot_test.go`. The shared contract
+  matching the depth of `internal/vendor/opencode_test.go`. The shared contract
   tests in `adapter_contract_test.go` run over every registered adapter, so
   read their failures first.
 - [ ] `internal/vendor/adapter_contract_test.go`: add the vendor's row to
@@ -106,10 +106,8 @@ grep -rniE "all (four|five|six) |(four|five|six) vendors" \
   `TestBuildDefaultsToEveryRegisteredVendor` in
   `internal/marketplace/agentplugin_build_test.go` (skip a vendor with an empty
   `MarketplaceManifestDir`). OpenCode (#580) needed all three.
-- [ ] Tests that count or list vendors: `TestExportAllVendors`
-  (`internal/exporter/exporter_test.go`) checks the number of export results,
-  and `cmd/ynh/image_test.go` lists every vendor's `COPY` line. The
-  per-vendor tables in `internal/vendor/workspace_test.go`
+- [ ] Tests that list vendors: `cmd/ynh/image_test.go` lists every vendor's
+  `COPY` line. The per-vendor tables in `internal/vendor/workspace_test.go`
   (`TestWorkspaceArgs`) and `internal/agent/workspace_test.go`
   (`TestWorkerArgsRenderWorkspace`) need a row or subtest for the vendor.
   `TestHookWarnings` in `internal/vendor/hook_events_test.go` assumes every
@@ -257,7 +255,7 @@ both in the same PR since they share research.
   - A: the vendor has a row in the reference index.
   - B: every vendor assembles the same artifact set, `plugin/` manifest
     included. A vendor with no plugin manifest format goes in
-    `NO_MANIFEST_VENDORS` in the script (added for OpenCode in #580), which
+    `NO_MANIFEST_VENDORS` in the script (today only `opencode`), which
     compares it on everything else and fails if it writes `plugin/` anyway.
     Name it there explicitly; the list is not inferred, so a broken manifest
     cannot exempt itself.
