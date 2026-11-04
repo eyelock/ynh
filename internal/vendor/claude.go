@@ -70,6 +70,11 @@ func (c *Claude) GenerateSystemPrompt(content []byte) map[string][]byte {
 	}
 }
 
+// FoldsRulesIntoInstructions: Claude does not read the rules ynh stages in the
+// config dir, so the assembler appends them to the instructions file it does
+// read (assembler.RuleFolder).
+func (c *Claude) FoldsRulesIntoInstructions() bool { return true }
+
 func (c *Claude) NeedsSymlinks() bool { return false }
 
 func (c *Claude) Install(stagingDir string, projectDir string) ([]SymlinkEntry, error) {

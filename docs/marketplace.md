@@ -574,7 +574,7 @@ For the architectural rationale and contributor-facing rules, see [`.github/CONT
 |---------|------------|--------|-------|---------|----------|
 | Skills | Yes | Yes | Yes | Yes | Yes |
 | Agents | Yes | Yes | No | Yes | Yes |
-| Rules | Yes | Yes | No | No | Composed into `.opencode/AGENTS.md` at launch (no native concept) |
+| Rules | Folded into `CLAUDE.md` at run time (the export ships `rules/`, but Claude Code does not read rules from a plugin directory) | Yes | Folded into the instructions file (`AGENTS.md`) at run time; not exported | Folded into `AGENTS.md` at run time; not exported | Composed into `.opencode/AGENTS.md` at launch (no native concept) |
 | Commands | Yes | Yes | No | No | Yes (bundle slash commands unconfirmed under `opencode run`) |
 | Instructions | AGENTS.md | .cursorrules + AGENTS.md | AGENTS.md | AGENTS.md (projected to `.github/instructions/`, see [MCP/Instructions delivery](vendors.md#vendor-notes)) | AGENTS.md (`.opencode/AGENTS.md`, composed at launch) |
 | Plugin manifest | .claude-plugin/ | .cursor-plugin/ | .codex-plugin/ | .claude-plugin/ | None |
